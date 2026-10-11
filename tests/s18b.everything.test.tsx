@@ -147,6 +147,7 @@ describe('the project Documents root (port 1e)', () => {
     fireEvent.click(screen.getByTestId('project-docs-root-edit'));
     fireEvent.change(screen.getByTestId('project-docs-root-input'), { target: { value: 'rel' } });
     await act(async () => { fireEvent.click(screen.getByTestId('project-docs-root-save')); });
-    expect(screen.getByTestId('project-docs-root-error').textContent).toBe('root must be absolute');
+    expect(screen.getByTestId('project-docs-root-error')).toHaveTextContent('root must be absolute');
+    expect(screen.getByTestId('project-docs-root-error-detail')).toBeInTheDocument();
   });
 });

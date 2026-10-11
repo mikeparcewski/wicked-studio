@@ -1,3 +1,4 @@
+import { TechDetails } from './ui/TechDetails.js';
 import { useState, useEffect, useMemo } from 'react';
 import { api } from '../api/client.js';
 import type { RepoEntry, CodeGraphNode, CodeGraphEdge, CodeGraphData, DomainGraph, DomainCoverage } from '../api/types.js';
@@ -110,6 +111,8 @@ function NodeDetailPanel({
         <button
           type="button"
           onClick={onClose}
+          aria-label="Close details"
+          title="Close details"
           className="shrink-0 leading-none text-base"
           style={{ color: T.faint }}
         >
@@ -125,10 +128,9 @@ function NodeDetailPanel({
                 type="button"
                 onClick={() => onBlast(node)}
                 disabled={blastBusy}
-                className="flex-1 px-2 py-1 rounded-lg text-[10px] font-mono font-semibold disabled:opacity-50"
-                style={{ background: 'var(--status-fail-dim)', color: T.deny, border: `1px solid ${T.hairline}` }}
+                className="wk-btn wk-btn--secondary wk-btn--sm flex-1"
               >
-                {blastBusy ? 'Computing…' : '⚡ Blast radius'}
+                {blastBusy ? 'Computing…' : 'Blast radius'}
               </button>
             )}
             {onExpand !== undefined && (
@@ -136,22 +138,21 @@ function NodeDetailPanel({
                 type="button"
                 onClick={() => onExpand(node)}
                 disabled={expandBusy}
-                className="flex-1 px-2 py-1 rounded-lg text-[10px] font-mono font-semibold disabled:opacity-50"
-                style={{ background: 'var(--accent-subtle)', color: T.link, border: `1px solid ${T.hairline}` }}
+                className="wk-btn wk-btn--secondary wk-btn--sm flex-1"
               >
-                {expandBusy ? 'Expanding…' : '⤢ Expand neighbors'}
+                {expandBusy ? 'Expanding…' : 'Expand neighbors'}
               </button>
             )}
           </div>
         )}
         {blast != null && (
           <div className="flex flex-col gap-1">
-            <span className="text-[10px] font-mono uppercase" style={{ color: T.faint }}>
-              blast radius · {blast.dependents.length} dependents
+            <span className="text-xs font-medium" style={{ color: T.muted }}>
+              Blast radius: {blast.dependents.length} {blast.dependents.length === 1 ? 'dependent' : 'dependents'}
             </span>
             {blast.unresolved > 0 && (
               <span
-                className="text-[10px] font-mono"
+                className="text-[11px]"
                 style={{ color: T.deny }}
                 title="References no resolver could bind — repeat call sites of resolved relationships are not counted; 0 is normal for fully-resolved symbols"
               >
@@ -159,7 +160,7 @@ function NodeDetailPanel({
               </span>
             )}
             {blast.unresolved === -1 && (
-              <span className="text-[10px] font-mono" style={{ color: T.deny }}>blast radius failed to compute</span>
+              <span className="text-[11px]" style={{ color: T.deny }}>Couldn’t work out the blast radius</span>
             )}
             <ul className="flex flex-col gap-0.5 max-h-48 overflow-y-auto">
               {blast.dependents.slice(0, 30).map((d) => (
@@ -176,7 +177,7 @@ function NodeDetailPanel({
                 </li>
               ))}
               {blast.dependents.length > 30 && (
-                <li className="text-[10px] font-mono" style={{ color: T.faint }}>+{blast.dependents.length - 30} more</li>
+                <li className="text-[11px]" style={{ color: T.faint }}>+{blast.dependents.length - 30} more</li>
               )}
             </ul>
           </div>
@@ -184,57 +185,57 @@ function NodeDetailPanel({
         {node.kind && (
           <div className="flex items-center gap-2">
             <span
-              className="px-1.5 py-0.5 rounded text-[9px] font-semibold uppercase"
+              className="wk-tag"
               style={{ background: T.surface, color: T.muted }}
             >
               {node.kind}
             </span>
-            <span className="capitalize font-mono" style={{ color: T.faint }}>{node.lang || ''}</span>
+            <span className="capitalize" style={{ color: T.faint }}>{node.lang || ''}</span>
           </div>
         )}
 
         {node.file && (
           <div>
-            <p className="text-[10px] mb-0.5 font-mono uppercase tracking-wide" style={{ color: T.faint }}>File</p>
+            <p className="text-xs font-medium mb-0.5" style={{ color: T.faint }}>File</p>
             <p className="font-mono text-[10px] break-all" style={{ color: T.muted }}>{node.file}</p>
           </div>
         )}
 
         <div className="flex gap-4">
           <div>
-            <p className="text-[10px] font-mono uppercase tracking-wide mb-0.5" style={{ color: T.faint }}>Callers</p>
+            <p className="text-xs font-medium mb-0.5" style={{ color: T.faint }}>Callers</p>
             <p className="font-mono font-bold" style={{ color: T.ink }}>{node.inDeg}</p>
           </div>
           <div>
-            <p className="text-[10px] font-mono uppercase tracking-wide mb-0.5" style={{ color: T.faint }}>Calls</p>
+            <p className="text-xs font-medium mb-0.5" style={{ color: T.faint }}>Calls</p>
             <p className="font-mono font-bold" style={{ color: T.ink }}>{node.outDeg}</p>
           </div>
         </div>
 
         {calledBy.length > 0 && (
           <div>
-            <p className="text-[10px] font-mono uppercase tracking-wide mb-1" style={{ color: T.faint }}>
+            <p className="text-xs font-medium mb-1" style={{ color: T.faint }}>
               Called by (in view) <span style={{ color: T.muted }}>{calledBy.length}</span>
             </p>
             <div className="flex flex-col gap-0.5">
               {calledBy.slice(0, 10).map((e) => (
                 <p key={e.src} className="font-mono text-[10px] truncate" style={{ color: T.muted }} title={e.src}>{shortName(e.src)}</p>
               ))}
-              {calledBy.length > 10 && <p className="text-[10px] font-mono" style={{ color: T.faint }}>+{calledBy.length - 10} more</p>}
+              {calledBy.length > 10 && <p className="text-[11px]" style={{ color: T.faint }}>+{calledBy.length - 10} more</p>}
             </div>
           </div>
         )}
 
         {calls.length > 0 && (
           <div>
-            <p className="text-[10px] font-mono uppercase tracking-wide mb-1" style={{ color: T.faint }}>
+            <p className="text-xs font-medium mb-1" style={{ color: T.faint }}>
               Calls (in view) <span style={{ color: T.muted }}>{calls.length}</span>
             </p>
             <div className="flex flex-col gap-0.5">
               {calls.slice(0, 10).map((e) => (
                 <p key={e.tgt} className="font-mono text-[10px] truncate" style={{ color: T.muted }} title={e.tgt}>{shortName(e.tgt)}</p>
               ))}
-              {calls.length > 10 && <p className="text-[10px] font-mono" style={{ color: T.faint }}>+{calls.length - 10} more</p>}
+              {calls.length > 10 && <p className="text-[11px]" style={{ color: T.faint }}>+{calls.length - 10} more</p>}
             </div>
           </div>
         )}
@@ -323,14 +324,14 @@ function DomainGraphView({ graph }: { graph: DomainGraph }): React.ReactElement 
   if (nodes.length === 0) {
     return (
       <div className="h-full overflow-y-auto p-4">
-        <p className="text-sm text-center mt-8 font-mono" style={{ color: T.faint }}>No domains in this graph.</p>
+        <p className="text-sm text-center mt-8" style={{ color: T.faint }}>No domains in this graph.</p>
       </div>
     );
   }
   return (
     <div className="h-full flex flex-col">
       <div className="flex items-center gap-3 px-4 py-2 shrink-0 border-b" style={{ borderColor: T.hairline }}>
-        <span className="text-[11px] font-mono shrink-0" style={{ color: T.muted }}>
+        <span className="text-[11px] shrink-0" style={{ color: T.muted }}>
           {nodes.length} domains · {[...reqCounts.values()].reduce((a, b) => a + b, 0)} requirements
         </span>
         <input
@@ -338,11 +339,11 @@ function DomainGraphView({ graph }: { graph: DomainGraph }): React.ReactElement 
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Filter domains + requirement titles…"
-          className="flex-1 text-[11px] font-mono px-3 py-1.5 rounded-lg border outline-none"
+          className="flex-1 text-[11px] px-3 py-1.5 rounded-lg border outline-none"
           style={{ border: `1px solid ${T.hairlineS}`, background: T.canvas2, color: T.ink }}
         />
         {q !== '' && (
-          <span className="text-[10px] font-mono shrink-0" style={{ color: T.faint }}>
+          <span className="text-[11px] shrink-0" style={{ color: T.faint }}>
             {visible.nodes.length === 1 ? '1 match' : `${visible.nodes.length} matches`}
           </span>
         )}
@@ -386,7 +387,7 @@ function DomainDetailPanel({
     >
       <div className="px-4 py-2.5 border-b flex items-center gap-2 shrink-0" style={{ borderColor: T.hairline, background: T.canvas2 }}>
         <span className="text-[11px] font-semibold font-mono truncate" style={{ color: T.ink }}>{domainId}</span>
-        <span className="text-[10px] font-mono ml-auto shrink-0" style={{ color: T.faint }}>{reqs.length} reqs</span>
+        <span className="text-[11px] ml-auto shrink-0" style={{ color: T.faint }}>{reqs.length} reqs</span>
         <button type="button" onClick={onClose} aria-label="Close domain details" className="text-sm shrink-0 px-1" style={{ color: T.muted }}>
           ×
         </button>
@@ -396,7 +397,7 @@ function DomainDetailPanel({
           <p className="text-[11px] px-4 pt-3 pb-1" style={{ color: T.muted }}>{domain.description}</p>
         )}
         {reqs.length === 0 ? (
-          <p className="text-[11px] px-4 py-3 font-mono" style={{ color: T.faint }}>No requirements recorded for this domain.</p>
+          <p className="text-[11px] px-4 py-3" style={{ color: T.faint }}>No requirements recorded for this domain.</p>
         ) : (
           <div className="divide-y" style={{ borderColor: T.hairline }}>
             {reqs.slice(0, REQ_CAP).map(([reqId, req]) => (
@@ -405,7 +406,7 @@ function DomainDetailPanel({
                   <span className="text-[10px] font-mono" style={{ color: T.faint }}>{reqId}</span>
                   {req.status && (
                     <span
-                      className="text-[9px] uppercase font-semibold px-1.5 py-0.5 rounded font-mono"
+                      className="text-[11px] font-semibold px-1.5 py-0.5 rounded"
                       style={{
                         background: req.status === 'active' ? 'var(--status-run-dim)' : req.status === 'deprecated' ? 'var(--status-fail-dim)' : T.surface,
                         color: req.status === 'active' ? T.ok : req.status === 'deprecated' ? T.deny : T.muted,
@@ -422,7 +423,7 @@ function DomainDetailPanel({
               </div>
             ))}
             {reqs.length > REQ_CAP && (
-              <p className="text-[10px] font-mono px-4 py-2" style={{ color: T.faint }}>
+              <p className="text-[11px] px-4 py-2" style={{ color: T.faint }}>
                 +{reqs.length - REQ_CAP} more requirements
               </p>
             )}
@@ -608,7 +609,7 @@ export function RepoGraphModal({ repo, onClose, onSelectRun, initialFocus }: Pro
       <button
         type="button"
         onClick={() => onChange(value)}
-        className="rounded px-2.5 py-1 text-[11px] font-mono font-medium transition-colors"
+        className="rounded px-2.5 py-1 text-[11px] font-medium transition-colors"
         style={{
           background: active ? T.surface : 'transparent',
           color: active ? T.ink : T.muted,
@@ -641,7 +642,7 @@ export function RepoGraphModal({ repo, onClose, onSelectRun, initialFocus }: Pro
           style={{ background: T.blue2, borderColor: T.hairline }}
         >
           {/* Repo name */}
-          <span className="text-[13px] font-semibold font-mono mr-1" style={{ color: T.ink }}>
+          <span className="text-[13px] font-semibold mr-1" style={{ color: T.ink }}>
             {repo.name}
           </span>
 
@@ -672,14 +673,14 @@ export function RepoGraphModal({ repo, onClose, onSelectRun, initialFocus }: Pro
             <button
               type="button"
               onClick={() => setHideTests((h) => !h)}
-              className="flex items-center gap-1.5 px-2 py-1 rounded text-[10px] font-mono font-medium transition-colors border"
+              className="flex items-center gap-1.5 px-2 py-1 rounded text-[11px] font-medium transition-colors border"
               style={{
                 borderColor: hideTests ? T.hairline : 'var(--accent-dim)',
                 background:  hideTests ? 'var(--surface-rail)' : 'var(--accent-subtle)',
                 color:       hideTests ? T.faint : T.accent,
               }}
             >
-              {hideTests ? 'tests hidden' : 'tests shown'}
+              {hideTests ? 'Tests hidden' : 'Tests shown'}
             </button>
           )}
 
@@ -688,7 +689,7 @@ export function RepoGraphModal({ repo, onClose, onSelectRun, initialFocus }: Pro
             <span
               data-testid="graph-node-stats"
               data-hidden-tests={hiddenTests}
-              className="text-[10px] font-mono px-2 py-0.5 rounded"
+              className="text-[11px] px-2 py-0.5 rounded"
               style={{ background: 'var(--surface-rail)', color: T.muted }}
             >
               {localNodes.length} nodes
@@ -700,6 +701,8 @@ export function RepoGraphModal({ repo, onClose, onSelectRun, initialFocus }: Pro
           <button
             type="button"
             onClick={onClose}
+            aria-label="Close graph"
+            title="Close graph"
             className="ml-auto text-xl leading-none w-7 h-7 flex items-center justify-center rounded transition-colors"
             style={{ color: T.faint }}
             onMouseEnter={(e) => (e.currentTarget.style.color = T.ink)}
@@ -713,12 +716,12 @@ export function RepoGraphModal({ repo, onClose, onSelectRun, initialFocus }: Pro
         <div className="flex-1 overflow-hidden" style={{ background: T.blue }}>
           {loading ? (
             <div className="flex items-center justify-center h-full">
-              <span className="text-sm font-mono" style={{ color: T.muted }}>Loading…</span>
+              <span className="text-sm" style={{ color: T.muted }}>Loading…</span>
             </div>
           ) : graphType === 'domain' ? (
             domainLoading ? (
               <div className="flex items-center justify-center h-full">
-                <span className="text-sm font-mono" style={{ color: T.muted }}>Loading domain graph…</span>
+                <span className="text-sm" style={{ color: T.muted }}>Loading domain graph…</span>
               </div>
             ) : !domainData ? (
               <div className="flex items-center justify-center h-full">
@@ -726,22 +729,19 @@ export function RepoGraphModal({ repo, onClose, onSelectRun, initialFocus }: Pro
                   className="max-w-sm w-full mx-auto p-6 rounded-xl border flex flex-col gap-4"
                   style={{ border: `1px solid ${T.hairlineS}`, background: T.canvas2 }}
                 >
-                  <p className="text-sm font-semibold font-mono" style={{ color: T.ink }}>Domain graph not yet generated</p>
+                  <p className="text-sm font-semibold" style={{ color: T.ink }}>No domain map yet</p>
                   <p className="text-xs leading-relaxed" style={{ color: T.muted }}>
-                    The domain model requires full annotation coverage — every behavior-bearing
-                    node in the code graph must be linked to a requirement. To get there: run the
-                    <span className="font-mono"> domain-extraction</span> workflow for this repo
-                    (it annotates behavior nodes with requirement claims), then re-run Onboard —
-                    its domain phase runs <span className="font-mono">wicked-core domain-graph</span>.
+                    The domain map needs every part of the code linked to a requirement first. Run the
+                    domain extraction workflow for this repository, then re-run onboarding to build it.
                   </p>
                   {domainCoverage ? (
                     <div className="rounded-lg p-4 flex flex-col gap-2 border" style={{ border: `1px solid ${T.hairline}` }}>
                       <div className="flex justify-between items-baseline">
-                        <span className="text-[11px] font-mono" style={{ color: T.muted }}>Annotation coverage</span>
+                        <span className="text-[11px]" style={{ color: T.muted }}>Annotation coverage</span>
                         {/* 0/0 is undefined, not 100% (FINDING-009). The engine documents coverage
                             as "vacuously 1.0 when behavior_bearing == 0", so an unannotated repo
                             rendered here as a full green bar reading 100.0%. */}
-                        <span className="text-[11px] font-mono font-bold" style={{ color: T.ink }}>
+                        <span className="text-[11px] font-bold" style={{ color: T.ink }}>
                           {domainCoverage.behavior_bearing === 0
                             ? 'not extracted'
                             : domainCoverage.coverage < 1 && domainCoverage.coverage * 100 >= 99.95
@@ -761,14 +761,14 @@ export function RepoGraphModal({ repo, onClose, onSelectRun, initialFocus }: Pro
                           }}
                         />
                       </div>
-                      <div className="flex gap-4 mt-1 text-[10px] font-mono tabular-nums" style={{ color: T.faint }}>
+                      <div className="flex gap-4 mt-1 text-[11px] tabular-nums" style={{ color: T.faint }}>
                         <span>{domainCoverage.resolved.toLocaleString()} resolved</span>
                         <span>{domainCoverage.behavior_bearing.toLocaleString()} behavior-bearing</span>
                         <span>{domainCoverage.total.toLocaleString()} total</span>
                       </div>
                     </div>
                   ) : (
-                    <p className="text-[11px] font-mono" style={{ color: T.faint }}>
+                    <p className="text-[11px]" style={{ color: T.faint }}>
                       No coverage data — run onboarding first, or re-run the annotation workflow below after a graph re-index.
                     </p>
                   )}
@@ -782,12 +782,12 @@ export function RepoGraphModal({ repo, onClose, onSelectRun, initialFocus }: Pro
                     {annotating ? 'Starting…' : 'Run annotation workflow →'}
                   </button>
                   {/* §7.8 (slice AC, EC43): the named action's blast radius. */}
-                  <p data-testid="action-preview" className="text-[10px] font-mono" style={{ color: T.faint }}>
+                  <p data-testid="action-preview" className="text-[11px]" style={{ color: T.faint }}>
                     launches the annotation workflow as a governed run — writes behavior
                     annotations into this repo's domain model; typically minutes
                   </p>
                   {annotateError && (
-                    <p className="text-[11px] font-mono" style={{ color: T.deny }}>{annotateError}</p>
+                    <div><p className="wk-field-note wk-field-note--bad">Couldn’t start the annotation. Try again in a moment.</p><TechDetails text={annotateError} /></div>
                   )}
                 </div>
               </div>
@@ -796,7 +796,7 @@ export function RepoGraphModal({ repo, onClose, onSelectRun, initialFocus }: Pro
             )
           ) : codeEmpty ? (
             <div className="flex items-center justify-center h-full">
-              <p className="text-sm font-mono" style={{ color: T.muted }}>
+              <p className="text-sm" style={{ color: T.muted }}>
                 Code graph not yet available — run onboarding first.
               </p>
             </div>
@@ -826,7 +826,7 @@ export function RepoGraphModal({ repo, onClose, onSelectRun, initialFocus }: Pro
                       code-graph · <span style={{ color: T.link }}>{repo.name}</span>
                     </span>
                     <span
-                      className="ml-auto font-mono text-[9px] px-2 py-0.5 rounded"
+                      className="ml-auto font-mono text-[11px] px-2 py-0.5 rounded"
                       style={{ background: T.surface, color: T.muted }}
                     >
                       {localNodes.length} nodes

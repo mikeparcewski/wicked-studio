@@ -44,21 +44,24 @@ describe('Coverage (studio#158)', () => {
     apiFetch.mockResolvedValue(COVERAGE);
     const navigate = vi.fn();
     render(<ProjectCoverage projectId="shop" navigate={navigate} />);
-    expect(await screen.findByTestId('project-coverage-totals')).toHaveTextContent('Resolved 12 of 40 behavior-bearing nodes (30.0%) · 1 of 4 repositories read');
+    expect(await screen.findByTestId('project-coverage-totals')).toHaveTextContent('12 of 40 parts of the code traced to a requirement (30.0%) · 1 of 4 repositories read');
     expect(apiFetch).toHaveBeenCalledWith('/projects/shop/coverage');
     const rows = screen.getAllByTestId('project-coverage-row');
     expect(rows.map((r) => r.dataset.state)).toEqual(['ok', 'absent', 'error', 'dangling']);
-    expect(rows[0]).toHaveTextContent('api32.5% · resolved 12 of 40 · 1 risk-flagged · 27 unaccounted');
-    expect(rows[1]).toHaveTextContent('web' + 'not generated yet — the graph is not indexed');
-    expect(rows[2]).toHaveTextContent('r3could not be read — timed out after 15 s');
+    expect(rows[0]).toHaveTextContent('api12 of 40 traced (32.5%) · 1 at risk · 27 still to check');
+    expect(rows[1]).toHaveTextContent('No requirements map yet for web.');
+    expect(within(rows[1]!).getByTestId('tech-details')).not.toHaveAttribute('open');
+    expect(rows[2]).toHaveTextContent('Couldn’t read requirements for this repository.');
+    expect(within(rows[2]!).getByTestId('tech-details')).toHaveTextContent('timed out after 15 s');
     expect(rows[3]).toHaveTextContent('no longer registered — repo r4 is not registered');
     await userEvent.click(within(rows[0]!).getByRole('link', { name: 'api' }));
     expect(navigate).toHaveBeenCalledWith('/repo-detail/r1');
   });
 
   it('0/0 is undefined, not complete — and "nothing read" is not "nothing behavior-bearing"', () => {
-    expect(coverageTotalsLine({ ...totals, behavior_bearing: 0, resolved: 0, coverage: null })).toBe('The repositories read have nothing behavior-bearing yet, so project coverage is undefined · 1 of 4 repositories read');
-    expect(coverageTotalsLine({ ...totals, ok: 0, behavior_bearing: 0, resolved: 0, coverage: null })).toBe("No repository's coverage could be read, so project coverage is unknown · 0 of 4 repositories read");
+    expect(coverageTotalsLine({ ...totals, behavior_bearing: 0, resolved: 0, coverage: null })).toBe('No requirements to cover yet in the repositories read.');
+    expect(coverageTotalsLine({ ...totals, ok: 0, behavior_bearing: 0, resolved: 0, coverage: null })).toBe("Coverage is unknown because no repository could be read.");
+    expect(coverageTotalsLine({ ...totals, behavior_bearing: 0, resolved: 0, coverage: 0 })).toBe('');
   });
 
   it('a ratio below 1 never rounds up to 100%', () => {
@@ -77,8 +80,8 @@ describe('Coverage (studio#158)', () => {
     apiFetch.mockRejectedValueOnce(new ApiError(404, 'Not Found'));
     const { container } = render(<ProjectCoverage projectId="shop" navigate={vi.fn()} />);
     await vi.waitFor(() => expect(apiFetch).toHaveBeenCalled());
-    await Promise.resolve();
-    expect(container).toBeEmptyDOMElement();
+    // A skeleton holds the place while the read is out; the absent route then draws nothing.
+    await vi.waitFor(() => expect(container).toBeEmptyDOMElement());
     cleanup();
     apiFetch.mockRejectedValueOnce(new ApiError(404, 'project shop not found'));
     render(<ProjectCoverage projectId="shop" navigate={vi.fn()} />);
@@ -99,9 +102,10 @@ describe('Coverage (studio#158)', () => {
     await screen.findByTestId('project-coverage-totals');
     rerender(<ProjectCoverage projectId="b" navigate={vi.fn()} />);
     rerender(<ProjectCoverage projectId="a" navigate={vi.fn()} />);
-    expect(screen.queryByTestId('project-coverage')).toBeNull();
+    expect(screen.queryByTestId('project-coverage-totals')).toBeNull();
+    expect(screen.getByTestId('project-coverage-loading')).toBeInTheDocument();
     releaseA2({ ...COVERAGE, totals: { ...COVERAGE.totals, resolved: 7 } });
-    expect(await screen.findByTestId('project-coverage-totals')).toHaveTextContent('Resolved 7 of 40');
+    expect(await screen.findByTestId('project-coverage-totals')).toHaveTextContent('7 of 40 parts of the code traced');
   });
 
   it('a switch of project never shows the previous project\'s answer', async () => {
@@ -112,7 +116,7 @@ describe('Coverage (studio#158)', () => {
     await screen.findByTestId('project-coverage-totals');
     release({ ...COVERAGE, totals: { ...COVERAGE.totals, resolved: 999 } });
     await Promise.resolve();
-    expect(screen.getByTestId('project-coverage-totals')).toHaveTextContent('Resolved 12 of 40');
+    expect(screen.getByTestId('project-coverage-totals')).toHaveTextContent('12 of 40 parts of the code traced');
   });
 });
 
@@ -120,7 +124,7 @@ describe('Domain (studio#158)', () => {
   it('the merged domains, then each repo\'s own, with reasons for the unread', async () => {
     apiFetch.mockResolvedValue(DOMAIN);
     render(<ProjectDomain projectId="shop" navigate={vi.fn()} />);
-    expect(await screen.findByTestId('project-domain-totals')).toHaveTextContent('2 domains · 30 requirements · 9 entities · 1 of 4 repositories read');
+    expect(await screen.findByTestId('project-domain-totals')).toHaveTextContent('2 domains · 30 requirements · 9 entities');
     expect(apiFetch).toHaveBeenCalledWith('/projects/shop/domain');
     expect(screen.getAllByTestId('project-domain-merged-row').map((r) => r.textContent)).toEqual([
       'billing20 requirements · 6 entities · in 2 repositories',
@@ -128,6 +132,7 @@ describe('Domain (studio#158)', () => {
     ]);
     const rows = screen.getAllByTestId('project-domain-row');
     expect(rows[0]).toHaveTextContent('apibilling · auth');
-    expect(rows[1]).toHaveTextContent('not generated yet — no requirements_graph.json');
+    expect(rows[1]).toHaveTextContent('No requirements map yet for web.');
+    expect(within(rows[1]!).getByTestId('tech-details')).not.toHaveAttribute('open');
   });
 });

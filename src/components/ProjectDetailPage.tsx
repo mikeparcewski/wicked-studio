@@ -1,142 +1,90 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../api/client.js';
-import type { ActivityEntry, ProjectDetail, ProjectMember } from '../api/types.js';
+import { readErrorKind } from '../api/errors.js';
+import type { ActivityEntry, ProjectDetail, ProjectMember, SessionView } from '../api/types.js';
 import { useProjectsStore } from '../store/projects.js';
 import { ProjectRepositories } from './ProjectRepositories.js';
 import { ProjectDocumentsRoot } from './ProjectDocumentsRoot.js';
-import { ProjectCoverage, ProjectDomain } from './product/ProjectAggregates.js';
+import { ProjectCoverage, ProjectDomain, type ProjectReadIssue, type ProjectIssueHandler } from './product/ProjectAggregates.js';
 import { everythingPath } from '../board/everythingModel.js';
+import { sessionPath, sessionTitle } from '../board/sessionModel.js';
+import { statusWord } from '../board/statusWords.js';
+import { relTime } from '../board/relTime.js';
+import { PageFrame, SectionTitle } from './ui/PageFrame.js';
+import { StateBanner, Skeleton, EmptyState } from './ui/StateBanner.js';
+import { StatLine } from './ui/StatLine.js';
+import { TechDetails } from './ui/TechDetails.js';
+import { OverflowMenu } from './ui/OverflowMenu.js';
 
-/** The Repositories section owns these rows; the generic Members list shows the rest. */
 const REPO_KIND = 'crew.repo';
 
-const S = {
-  card:   'var(--surface-card)',
-  border: 'var(--surface-raised)',
-  ink:    'var(--ink-high)',
-  muted:  'var(--ink-muted)',
-  faint:  'var(--ink-dim)',
-  accent: 'var(--accent)',
-  green:  'var(--status-run)',
-  red:    'var(--status-fail)',
-  hover:  'var(--surface-raised)',
-};
-
-function IconBack(): React.ReactElement {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden>
-      <polyline points="15 18 9 12 15 6" />
-    </svg>
-  );
-}
-
-function Pill({ label, color }: { label: string; color: string }): React.ReactElement {
-  return (
-    <span style={{
-      fontSize: '10px', fontFamily: 'monospace', color,
-      border: `1px solid ${color}`, borderRadius: '4px', padding: '1px 5px',
-    }}>
-      {label}
-    </span>
-  );
-}
-
-function MemberKindLabel({ kind }: { kind: string }): React.ReactElement {
-  const colors: Record<string, string> = {
-    'crew.run': 'var(--accent)',
-    'crew.chat': 'var(--accent)',
-    'crew.repo': 'var(--accent)',
-    'crew.workflow': 'var(--accent)',
-    'interactive.doc': 'var(--accent-dim)',
-  };
-  const color = colors[kind] ?? S.faint;
-  return <Pill label={kind} color={color} />;
-}
-
 function ActivityRow({ entry }: { entry: ActivityEntry }): React.ReactElement {
-  const ts = new Date(entry.ts);
-  return (
-    <div style={{
-      display: 'flex', gap: '12px', padding: '10px 0',
-      borderBottom: `1px solid ${S.border}`, alignItems: 'flex-start',
-    }}>
-      <span style={{ fontSize: '10px', fontFamily: 'monospace', color: S.faint, flexShrink: 0, paddingTop: '1px' }}>
-        {ts.toLocaleTimeString()}
-      </span>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <p style={{ fontSize: '12px', color: S.muted, margin: 0, marginBottom: '2px' }}>
-          <span style={{ color: S.faint, fontFamily: 'monospace' }}>{entry.kind}</span>
-          {' '}
-          <span style={{ color: S.ink }}>{entry.summary}</span>
-        </p>
-        <span style={{ fontSize: '10px', fontFamily: 'monospace', color: S.faint }}>{entry.ref}</span>
-      </div>
-      <span style={{
-        fontSize: '10px', fontFamily: 'monospace', flexShrink: 0,
-        color: entry.source === 'crew' ? 'var(--accent)' : 'var(--accent-dim)',
-      }}>
-        {entry.source}
-      </span>
-    </div>
-  );
+  return <div className="wk-list-row wk-pg-proj-row"><div>
+    <span className="wk-list-row-title">{entry.summary.trim() !== '' ? entry.summary : 'Project activity'}</span>
+    <p className="wk-list-row-meta" title={new Date(entry.ts).toLocaleString()}>{relTime(entry.ts)}</p>
+    <TechDetails text={[entry.kind, entry.ref, entry.source]} />
+  </div></div>;
 }
 
-function MemberRow({
-  member,
-  onDetach,
-}: {
-  member: ProjectMember;
-  onDetach: (id: string) => void;
+function MemberRow({ member, known, onDetach, navigate, onIssue }: {
+  member: ProjectMember; known: SessionView | undefined; onDetach: (id: string) => void; navigate: (path: string) => void; onIssue: ProjectIssueHandler;
 }): React.ReactElement {
   const [busy, setBusy] = useState(false);
-  const [hovered, setHovered] = useState(false);
-
-  async function detach(): Promise<void> {
-    setBusy(true);
-    onDetach(member.id);
-  }
-
-  return (
-    <div
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      style={{
-        display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 12px',
-        borderRadius: '7px', background: hovered ? S.hover : 'transparent',
-        transition: 'background 0.1s',
-      }}
-    >
-      <MemberKindLabel kind={member.member_kind} />
-      <span style={{ fontSize: '12px', fontFamily: 'monospace', color: S.muted, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-        {member.member_ref}
-      </span>
-      <span style={{ fontSize: '10px', color: S.faint, flexShrink: 0 }}>
-        {member.attached_by} · {new Date(member.attached_at).toLocaleDateString()}
-      </span>
-      {hovered && (
-        <button
-          type="button"
-          onClick={() => void detach()}
-          disabled={busy}
-          style={{
-            background: 'transparent', border: `1px solid ${S.red}`, color: S.red,
-            borderRadius: '5px', padding: '3px 8px', fontSize: '11px', cursor: 'pointer',
-            flexShrink: 0,
-          }}
-        >
-          {busy ? '…' : 'Detach'}
-        </button>
+  const [title, setTitle] = useState('Untitled session');
+  const [view, setView] = useState<SessionView | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [attempt, setAttempt] = useState(0);
+  const isRun = member.member_kind === 'crew.run';
+  const isChat = member.member_kind === 'crew.chat';
+  const retry = useCallback(() => setAttempt((n) => n + 1), []);
+  useEffect(() => {
+    let cancelled = false;
+    const key = `session:${member.id}`;
+    setLoading(true);
+    onIssue(key, null);
+    void Promise.resolve().then(async () => {
+      if (isRun) {
+        const run = known ?? (await api.getRun(member.member_ref)).run;
+        if (!cancelled) { setView(run); setTitle(run.session.problem?.trim() ? sessionTitle([], [run]) : 'Untitled session'); }
+      } else if (isChat) {
+        const chat = await api.getChat(member.member_ref);
+        if (!cancelled) setTitle((chat.messages ?? []).some((m) => m.kind === 'user' && m.text?.trim()) ? sessionTitle(chat.messages ?? [], []) : 'Untitled session');
+      } else if (!cancelled) setTitle(member.member_kind === 'crew.workflow' ? 'Attached workflow' : 'Attached document');
+    }).catch((e: unknown) => {
+      if (!cancelled) onIssue(key, { what: 'session titles', error: e instanceof Error ? e.message : String(e), retry });
+    }).finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; onIssue(key, null); };
+  }, [member.id, member.member_ref, member.member_kind, isRun, isChat, attempt, retry, onIssue, known]);
+  const href = sessionPath(isRun ? `run:${member.member_ref}` : member.member_ref);
+  const status = view !== null ? statusWord(view) : null;
+  return <div className="wk-list-row wk-pg-proj-row">
+    <div>
+      {loading ? <Skeleton rows={1} variant="line" /> : isRun || isChat
+        ? <a className="wk-link wk-list-row-title" href={href} onClick={(e) => { e.preventDefault(); navigate(href); }}>{title}</a>
+        : <span className="wk-list-row-title">{title}</span>}
+      <p className="wk-list-row-meta" title={new Date(member.attached_at).toLocaleString()}>Added {relTime(member.attached_at)}</p>
+      {status !== null && <span className="wk-list-row-status wk-tag"><span className="wk-status-dot" data-status={status.tone} aria-hidden /> {status.word}</span>}
+    </div>
+    <div className="wk-list-row-actions">
+      {busy ? <p className="wk-field-note">Removing…</p> : (
+        <OverflowMenu label={`More actions for ${title}`} items={[
+          { id: 'detach', label: 'Remove from project', danger: true, onSelect: () => { setBusy(true); onDetach(member.id); } },
+        ]} />
       )}
     </div>
-  );
+  </div>;
 }
+
+const NO_RUNS: readonly SessionView[] = [];
 
 interface Props {
   projectId: string;
   navigate: (path: string) => void;
+  /** The runs App already holds: member titles and status come from here, no per-row read. */
+  runs?: readonly SessionView[];
 }
 
-export function ProjectDetailPage({ projectId, navigate }: Props): React.ReactElement {
+export function ProjectDetailPage({ projectId, navigate, runs = NO_RUNS }: Props): React.ReactElement {
   const { updateProject } = useProjectsStore();
   const [detail, setDetail] = useState<ProjectDetail | null>(null);
   const [activity, setActivity] = useState<ActivityEntry[]>([]);
@@ -154,6 +102,10 @@ export function ProjectDetailPage({ projectId, navigate }: Props): React.ReactEl
   const isDefault = projectId === 'default';
   const project = detail?.project ?? null;
   const members = detail?.members ?? [];
+  const [issues, setIssues] = useState<Record<string, ProjectReadIssue>>({});
+  const onIssue = useCallback<ProjectIssueHandler>((key, issue) => {
+    setIssues((old) => { const next = { ...old }; if (issue === null) delete next[key]; else next[key] = issue; return next; });
+  }, []);
   const otherMembers = members.filter((m) => m.member_kind !== REPO_KIND);
 
   const load = useCallback(async () => {
@@ -162,7 +114,10 @@ export function ProjectDetailPage({ projectId, navigate }: Props): React.ReactEl
     try {
       const [det, act] = await Promise.all([
         api.getProject(projectId),
-        api.getProjectActivity(projectId).catch(() => ({ entries: [], nextCursor: null, projectId })),
+        api.getProjectActivity(projectId).catch((e: unknown) => {
+          setError(e instanceof Error ? e.message : String(e));
+          return { entries: [], nextCursor: null, projectId };
+        }),
       ]);
       setDetail(det);
       setActivity(act.entries);
@@ -212,8 +167,8 @@ export function ProjectDetailPage({ projectId, navigate }: Props): React.ReactEl
       const { project: updated } = await api.updateProject(project.id, { status: newStatus });
       setDetail((d) => d ? { ...d, project: updated } : d);
       updateProject(updated);
-    } catch {
-      /* show nothing, the button will re-enable */
+    } catch (e) {
+      setEditErr(e instanceof Error ? e.message : String(e));
     } finally {
       setArchiveBusy(false);
     }
@@ -225,210 +180,48 @@ export function ProjectDetailPage({ projectId, navigate }: Props): React.ReactEl
     setDetail((d) => d ? { ...d, members: d.members.filter((m) => m.id !== memberId) } : d);
   }
 
-  if (loading) {
-    return (
-      <div style={{ padding: '28px 32px' }}>
-        <p style={{ fontSize: '13px', color: S.faint, fontFamily: 'monospace' }}>Loading…</p>
-      </div>
-    );
-  }
-
-  if (error || !project) {
-    return (
-      <div style={{ padding: '28px 32px' }}>
-        <button
-          type="button"
-          onClick={() => navigate(everythingPath({ tab: 'projects' }))}
-          style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'transparent', border: 'none', cursor: 'pointer', color: S.muted, fontSize: '13px', marginBottom: '16px', padding: 0 }}
-        >
-          <IconBack /> Projects
-        </button>
-        <p style={{ fontSize: '13px', color: S.red }}>{error ?? 'Project not found.'}</p>
-      </div>
-    );
-  }
-
+  const childIssues = Object.values(issues);
+  const failures = [...(error !== null ? [{ what: 'project details', error, retry: () => void load() }] : []),
+    ...(editErr !== null ? [{ what: 'project changes', error: editErr, retry: () => setEditErr(null) }] : []), ...childIssues];
+  const failure = failures.find((f) => readErrorKind(f.error) === 'offline') ?? failures[0];
+  const backHref = everythingPath({ tab: 'projects' });
   return (
-    <div style={{ padding: '28px 32px', maxWidth: '800px' }}>
-      {/* Back */}
-      <button
-        type="button"
-        onClick={() => navigate(everythingPath({ tab: 'projects' }))}
-        style={{
-          display: 'flex', alignItems: 'center', gap: '6px', background: 'transparent',
-          border: 'none', cursor: 'pointer', color: S.muted, fontSize: '12px',
-          marginBottom: '20px', padding: 0,
-        }}
-      >
-        <IconBack /> All projects
-      </button>
-
-      {/* Header */}
-      {editing ? (
-        <div style={{ marginBottom: '24px' }}>
-          <input
-            type="text"
-            value={editName}
-            maxLength={120}
-            onChange={(e) => setEditName(e.target.value)}
-            autoFocus
-            style={{
-              width: '100%', background: 'var(--surface-raised)', border: `1px solid ${S.border}`,
-              borderRadius: '6px', padding: '8px 10px', fontSize: '18px', fontWeight: 700,
-              color: S.ink, outline: 'none', marginBottom: '8px', boxSizing: 'border-box',
-            }}
-          />
-          <textarea
-            value={editDesc}
-            onChange={(e) => setEditDesc(e.target.value)}
-            rows={2}
-            placeholder="Description (optional)"
-            style={{
-              width: '100%', background: 'var(--surface-raised)', border: `1px solid ${S.border}`,
-              borderRadius: '6px', padding: '8px 10px', fontSize: '13px', color: S.ink,
-              outline: 'none', resize: 'vertical', marginBottom: '10px', boxSizing: 'border-box',
-              fontFamily: 'inherit',
-            }}
-          />
-          {editErr && <p style={{ fontSize: '12px', color: S.red, marginBottom: '8px' }}>{editErr}</p>}
-          <div style={{ display: 'flex', gap: '8px' }}>
-            <button
-              type="button"
-              onClick={() => void saveEdit()}
-              disabled={editBusy || !editName.trim()}
-              style={{
-                background: S.accent, color: 'var(--accent-fg)', border: 'none', borderRadius: '6px',
-                padding: '6px 14px', fontSize: '12px', fontWeight: 700, cursor: 'pointer',
-                opacity: editBusy ? 0.5 : 1,
-              }}
-            >
-              {editBusy ? 'Saving…' : 'Save'}
-            </button>
-            <button
-              type="button"
-              onClick={() => setEditing(false)}
-              style={{
-                background: 'transparent', color: S.muted, border: `1px solid ${S.border}`,
-                borderRadius: '6px', padding: '6px 12px', fontSize: '12px', cursor: 'pointer',
-              }}
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      ) : (
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '24px', gap: '16px' }}>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
-              <h1 style={{ fontSize: '20px', fontWeight: 700, color: S.ink, margin: 0 }}>
-                {project.name}
-              </h1>
-              {project.status === 'archived' && <Pill label="archived" color={S.faint} />}
-              {isDefault && <Pill label="default" color={S.faint} />}
-            </div>
-            {project.description && (
-              <p style={{ fontSize: '13px', color: S.muted, margin: 0 }}>{project.description}</p>
-            )}
-            {project.created_at > 0 && (
-              <p style={{ fontSize: '11px', color: S.faint, margin: 0, marginTop: '6px', fontFamily: 'monospace' }}>
-                Created {new Date(project.created_at).toLocaleDateString()}
-                {project.updated_at !== project.created_at && (
-                  <> · Updated {new Date(project.updated_at).toLocaleDateString()}</>
-                )}
-              </p>
-            )}
-          </div>
-          {!isDefault && (
-            <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
-              <button
-                type="button"
-                onClick={startEdit}
-                style={{
-                  background: 'transparent', color: S.muted, border: `1px solid ${S.border}`,
-                  borderRadius: '6px', padding: '6px 12px', fontSize: '12px', cursor: 'pointer',
-                }}
-              >
-                Edit
-              </button>
-              <button
-                type="button"
-                onClick={() => void toggleArchive()}
-                disabled={archiveBusy}
-                style={{
-                  background: 'transparent', color: S.faint, border: `1px solid ${S.border}`,
-                  borderRadius: '6px', padding: '6px 12px', fontSize: '12px', cursor: 'pointer',
-                  opacity: archiveBusy ? 0.5 : 1,
-                }}
-              >
-                {project.status === 'active' ? 'Archive' : 'Restore'}
-              </button>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Repositories — attach/detach `crew.repo` members (studio#207); omitted for `default`.
-          The Documents root (studio#279, S18b) sits beside it; also omitted for `default`. */}
-      <div style={{ marginBottom: '28px' }}>
-        <ProjectDocumentsRoot
-          projectId={projectId}
-          project={project}
-          onChanged={(updated) => setDetail((d) => (d !== null && d.project.id === updated.id ? { ...d, project: updated } : d))}
-        />
-        <ProjectRepositories
-          projectId={projectId}
-          members={members}
-          onMembersChange={(update) => setDetail((d) => (
-            // Applied to the members held NOW — a run member detached through the
-            // Members list while a repo attach was in flight must stay gone — and
-            // only while `detail` is still this project's: the page stays mounted
-            // across a navigation, so a mutation begun on the previous project can
-            // resolve after the next one loaded.
-            d !== null && d.project.id === projectId ? { ...d, members: update(d.members) } : d
-          ))}
-        />
-      </div>
-
-      {/* studio#158: coverage and the domain model across the project's repositories (crew#371).
-          The synthesized `default` project has no members; neither section is drawn for it. */}
-      {projectId !== 'default' && (
-        <>
-          <ProjectCoverage projectId={projectId} navigate={navigate} />
-          <ProjectDomain projectId={projectId} navigate={navigate} />
-        </>
-      )}
-
-      {/* Members */}
-      <section style={{ marginBottom: '28px' }}>
-        <h2 style={{ fontSize: '13px', fontWeight: 600, color: S.muted, margin: 0, marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '0.06em', fontFamily: 'monospace' }}>
-          Members ({otherMembers.length})
-        </h2>
-        {otherMembers.length === 0 ? (
-          <p style={{ fontSize: '13px', color: S.faint }}>No members attached yet.</p>
-        ) : (
-          <div style={{ background: S.card, border: `1px solid ${S.border}`, borderRadius: '10px', overflow: 'hidden', padding: '4px' }}>
-            {otherMembers.map((m) => (
-              <MemberRow key={m.id} member={m} onDetach={handleDetach} />
-            ))}
-          </div>
-        )}
-      </section>
-
-      {/* Activity */}
-      <section>
-        <h2 style={{ fontSize: '13px', fontWeight: 600, color: S.muted, margin: 0, marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '0.06em', fontFamily: 'monospace' }}>
-          Activity
-        </h2>
-        {activity.length === 0 ? (
-          <p style={{ fontSize: '13px', color: S.faint }}>No activity yet.</p>
-        ) : (
-          <div style={{ background: S.card, border: `1px solid ${S.border}`, borderRadius: '10px', padding: '0 12px' }}>
-            {activity.map((e) => (
-              <ActivityRow key={e.id} entry={e} />
-            ))}
-          </div>
-        )}
-      </section>
-    </div>
+    <PageFrame title={project?.name ?? 'Project'} intro="Manage this project’s repositories, documents, and sessions." actions={<>
+      <a className="wk-link" href={backHref} onClick={(e) => { e.preventDefault(); navigate(backHref); }}>All projects</a>
+      {project && !isDefault && !editing && <>
+        <button type="button" className="wk-btn wk-btn--primary" onClick={startEdit}>Edit</button>
+        <button type="button" className="wk-btn wk-btn--secondary" onClick={() => void toggleArchive()} disabled={archiveBusy}>{project.status === 'active' ? 'Archive' : 'Restore'}</button>
+        {archiveBusy && <p className="wk-field-note">Saving the project’s status…</p>}
+      </>}
+    </>}>
+      {failure && <StateBanner kind={readErrorKind(failure.error)} what={failure.what} error={failures.map((f) => f.error).join('\n')} onRetry={() => failures.forEach((f) => f.retry())} retrying={loading} />}
+      {loading ? <Skeleton rows={3} variant="card" /> : !project ? !error && <EmptyState title="Project not found" /> : <>
+        {editing ? <section className="wk-card wk-pg-proj-stack">
+          <SectionTitle>Edit project</SectionTitle>
+          <label className="wk-pg-proj-field">Project name<input type="text" className="wk-field" value={editName} maxLength={120} onChange={(e) => setEditName(e.target.value)} autoFocus /></label>
+          <label className="wk-pg-proj-field">Description<textarea className="wk-field" value={editDesc} onChange={(e) => setEditDesc(e.target.value)} rows={2} placeholder="Describe this project" /></label>
+          <div className="wk-pg-proj-actions"><button type="button" className="wk-btn wk-btn--primary" onClick={() => void saveEdit()} disabled={editBusy || !editName.trim()}>{editBusy ? 'Saving…' : 'Save'}</button>
+            <button type="button" className="wk-btn wk-btn--quiet" onClick={() => setEditing(false)}>Cancel</button></div>
+          {(editBusy || !editName.trim()) && <p className="wk-field-note">{editBusy ? 'Saving your changes…' : 'Enter a project name to save.'}</p>}
+        </section> : <div className="wk-pg-proj-stack">
+          {project.description && <p className="wk-pg-proj-note">{project.description}</p>}
+          {(project.status === 'archived' || isDefault || project.created_at > 0) && <p className="wk-pg-proj-meta">
+            {project.status === 'archived' && <span className="wk-tag">Archived</span>}
+            {isDefault && <span className="wk-tag">Default project</span>}
+            {project.created_at > 0 && <span className="wk-list-row-meta" title={new Date(project.created_at).toLocaleString()}>Created {relTime(project.created_at)}</span>}
+          </p>}
+        </div>}
+        <ProjectDocumentsRoot projectId={projectId} project={project} onIssue={onIssue} onChanged={(updated) => setDetail((d) => d !== null && d.project.id === updated.id ? { ...d, project: updated } : d)} />
+        <ProjectRepositories projectId={projectId} members={members} onIssue={onIssue} onMembersChange={(update) => setDetail((d) => d !== null && d.project.id === projectId ? { ...d, members: update(d.members) } : d)} />
+        {projectId !== 'default' && <><ProjectCoverage projectId={projectId} navigate={navigate} onIssue={onIssue} /><ProjectDomain projectId={projectId} navigate={navigate} onIssue={onIssue} /></>}
+        <section className="wk-card" aria-label="Sessions"><SectionTitle>Sessions</SectionTitle>
+          <StatLine items={[{ label: otherMembers.length === 1 ? 'session' : 'sessions', value: failures.length === 0 ? otherMembers.length : null }]} />
+          {otherMembers.length === 0 ? <EmptyState title="No sessions yet" body="Start work in this project to add a session." /> : otherMembers.map((m) => <MemberRow key={m.id} member={m} known={m.member_kind === 'crew.run' ? runs.find((v) => v.session.id === m.member_ref) : undefined} onDetach={handleDetach} navigate={navigate} onIssue={onIssue} />)}
+        </section>
+        <section className="wk-card"><SectionTitle>Activity</SectionTitle>
+          {activity.length === 0 ? error === null && <EmptyState title="No activity yet" /> : activity.map((entry) => <ActivityRow key={entry.id} entry={entry} />)}
+        </section>
+      </>}
+    </PageFrame>
   );
 }

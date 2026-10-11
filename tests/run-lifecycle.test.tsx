@@ -78,13 +78,15 @@ describe('RepositoriesPanel register form — validation and ambient project', (
     const user = userEvent.setup();
     render(<RepositoriesPanel navigate={vi.fn()} autoShowRegister />);
 
-    const btn = screen.getByRole('button', { name: 'Register & onboard' });
+    const btn = screen.getByRole('button', { name: 'Register and onboard' });
+    // Audit row 81: the disabled submit says what is missing, in a visible line.
+    expect(screen.getByTestId('repo-register-why').textContent).toMatch(/Enter the repository folder/);
     // Neither field filled — canSubmit = false.
     expect(btn).toBeDisabled();
 
     // Name filled, path still empty. Typing a name sets nameEditedRef so the path
     // auto-derive does not override it — only the path stays empty, keeping canSubmit false.
-    await user.type(screen.getByPlaceholderText('Repo name'), 'my-repo');
+    await user.type(screen.getByTestId('repo-name'), 'my-repo');
     expect(btn).toBeDisabled();
   });
 
@@ -92,9 +94,9 @@ describe('RepositoriesPanel register form — validation and ambient project', (
     const user = userEvent.setup();
     render(<RepositoriesPanel navigate={vi.fn()} autoShowRegister />);
 
-    const btn = screen.getByRole('button', { name: 'Register & onboard' });
-    await user.type(screen.getByPlaceholderText('Repo name'), 'my-repo');
-    await user.type(screen.getByPlaceholderText('Absolute path to git repo'), '/tmp/r');
+    const btn = screen.getByRole('button', { name: 'Register and onboard' });
+    await user.type(screen.getByTestId('repo-name'), 'my-repo');
+    await user.type(screen.getByTestId('repo-path'), '/tmp/r');
     expect(btn).toBeEnabled();
   });
 

@@ -1,100 +1,97 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   getProjectCoverage, getProjectDomain, rowWhy,
-  type AggregateRead, type ProjectCoverageResponse, type ProjectDomainResponse,
+  type AggregateRead, type ProjectCoverageResponse,
 } from '../../api/product.js';
-import { coveragePct } from '../CoverageView.js';
+import { readErrorKind } from '../../api/errors.js';
+import { SectionTitle } from '../ui/PageFrame.js';
+import { EmptyState, Skeleton, StateBanner } from '../ui/StateBanner.js';
+import { StatLine } from '../ui/StatLine.js';
+import { TechDetails } from '../ui/TechDetails.js';
 
-/**
- * studio#158: the Settings panels that had no context, back where they mean something. One project,
- * every member repository, read from crew's own folds (crew#371): `GET /projects/:id/coverage` and
- * `GET /projects/:id/domain`. Every member repo is a row, never dropped — an unread one says why in
- * crew's words. A daemon without the routes (an older crew) draws neither section.
- */
+/** Nested sections report failures to the page's single banner; standalone sections own theirs. */
+export type ProjectReadIssue = { what: string; error: string; retry: () => void };
+export type ProjectIssueHandler = (key: string, issue: ProjectReadIssue | null) => void;
 
-const CSS = {
-  head: { fontSize: 'var(--text-2xs)', fontWeight: 'var(--weight-bold)', letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--ink-muted)', margin: '0 0 8px' },
-  list: { display: 'flex', flexDirection: 'column', gap: '2px', background: 'var(--surface-card)', border: '1px solid var(--surface-raised)', borderRadius: 'var(--radius-lg)', padding: '4px', listStyle: 'none', margin: 0 },
-  row: { display: 'flex', alignItems: 'baseline', gap: '10px', padding: '6px 8px', fontSize: 'var(--text-xs)', color: 'var(--ink-high)', minWidth: 0 },
-  dim: { color: 'var(--ink-dim)' },
-  bad: { color: 'var(--status-fail)' },
-  line: { fontSize: 'var(--text-xs)', color: 'var(--ink-muted)', margin: '0 0 8px' },
-} as const satisfies Record<string, React.CSSProperties>;
-
-/** One read per project id; a later project's answer never lands on the previous one. */
-function useAggregate<T>(projectId: string, load: (id: string) => Promise<AggregateRead<T>>): AggregateRead<T> | null {
+function useAggregate<T>(projectId: string, load: (id: string) => Promise<AggregateRead<T>>) {
   const [got, setGot] = useState<{ id: string; read: AggregateRead<T> } | null>(null);
+  const [attempt, setAttempt] = useState(0);
+  const retry = useCallback(() => { setGot(null); setAttempt((n) => n + 1); }, []);
   useEffect(() => {
     let cancelled = false;
     void load(projectId).then((read) => { if (!cancelled) setGot({ id: projectId, read }); });
     return () => { cancelled = true; };
-  }, [projectId, load]);
-  return got !== null && got.id === projectId ? got.read : null;
+  }, [projectId, load, attempt]);
+  return { read: got !== null && got.id === projectId ? got.read : null, retry };
 }
 
 function RepoLink({ repo, navigate }: { repo: { id: string; name: string | null }; navigate: (p: string) => void }): React.ReactElement {
   const href = `/repo-detail/${encodeURIComponent(repo.id)}`;
-  return (
-    <a href={href} onClick={(e) => { e.preventDefault(); navigate(href); }} className="wk-since-toggle" style={{ fontWeight: 600 }}>
-      {repo.name ?? repo.id}
-    </a>
-  );
+  return <a href={href} onClick={(e) => { e.preventDefault(); navigate(href); }} className="wk-link wk-list-row-title">{repo.name ?? 'Unnamed repository'}</a>;
 }
 
-/** "Resolved 12 of 40 behavior-bearing nodes (30.0%)", or why there is no ratio. `coverage` is null
- *  when crew's denominator (over the repos it could READ) is 0: either nothing was read, or what was
- *  read has nothing behavior-bearing — two different sentences (codex on #158). A ratio below 1 never
- *  rounds up to 100% (the CoverageView rule, FINDING-009). */
 export function coverageTotalsLine(t: ProjectCoverageResponse['totals']): string {
-  const repos = `${t.ok} of ${t.repos} ${t.repos === 1 ? 'repository' : 'repositories'} read`;
-  if (t.coverage === null) {
-    return t.ok === 0
-      ? `No repository's coverage could be read, so project coverage is unknown · ${repos}`
-      : `The repositories read have nothing behavior-bearing yet, so project coverage is undefined · ${repos}`;
-  }
+  if (t.coverage === null) return t.ok === 0
+    ? 'Coverage is unknown because no repository could be read.'
+    : 'No requirements to cover yet in the repositories read.';
+  if (t.behavior_bearing === 0 && t.resolved === 0) return '';
   const shown = t.resolved < t.behavior_bearing && t.coverage * 100 >= 99.95 ? '<100%' : `${(t.coverage * 100).toFixed(1)}%`;
-  return `Resolved ${t.resolved} of ${t.behavior_bearing} behavior-bearing nodes (${shown}) · ${repos}`;
+  return `${t.resolved} of ${t.behavior_bearing} parts of the code traced to a requirement (${shown}) · ${t.ok} of ${t.repos} ${t.repos === 1 ? 'repository' : 'repositories'} read`;
 }
 
-type SectionProps = { projectId: string; navigate: (p: string) => void };
-
-/** Keyed by the project: a new project is a new section with no answer yet, so A → B → A never shows
- *  A's earlier answer while A is read again (codex on #158). */
-export function ProjectCoverage(props: SectionProps): React.ReactElement {
-  return <CoverageSection key={props.projectId} {...props} />;
+/** Engine reasons belong in the disclosure, with a useful sentence in the default layer. */
+export function requirementReadWords(row: { state: string; repo: { name: string | null } }): string {
+  const name = row.repo.name ?? 'this repository';
+  return row.state === 'absent' ? `No requirements map yet for ${name}.`
+    : row.state === 'dangling' ? 'This repository is no longer registered.'
+    : `Couldn’t read requirements for ${name}.`;
 }
 
-export function ProjectDomain(props: SectionProps): React.ReactElement {
-  return <DomainSection key={props.projectId} {...props} />;
+type SectionProps = { projectId: string; navigate: (p: string) => void; onIssue?: ProjectIssueHandler };
+export function ProjectCoverage(props: SectionProps): React.ReactElement { return <CoverageSection key={props.projectId} {...props} />; }
+export function ProjectDomain(props: SectionProps): React.ReactElement { return <DomainSection key={props.projectId} {...props} />; }
+
+function useIssue(key: string, what: string, error: string | null, retry: () => void, onIssue?: ProjectIssueHandler): void {
+  useEffect(() => {
+    onIssue?.(key, error === null ? null : { what, error, retry });
+    return () => onIssue?.(key, null);
+  }, [key, what, error, retry, onIssue]);
 }
 
-function CoverageSection({ projectId, navigate }: SectionProps): React.ReactElement | null {
-  const read = useAggregate<ProjectCoverageResponse>(projectId, getProjectCoverage);
-  if (read === null || read.state === 'absent') return null;
+function CoverageSection({ projectId, navigate, onIssue }: SectionProps): React.ReactElement | null {
+  const { read, retry } = useAggregate(projectId, getProjectCoverage);
+  const error = read?.state === 'failed' ? read.why : read?.state === 'ok'
+    ? read.body.rows.filter((r) => r.state === 'error').map(rowWhy).join('\n') || null : null;
+  useIssue('coverage', 'coverage', error, retry, onIssue);
+  if (read?.state === 'absent') return null;
+  if (read === null) return <Skeleton data-testid="project-coverage-loading" />;
   return (
-    <section data-testid="project-coverage" data-state={read.state} aria-labelledby="project-coverage-head" style={{ marginBottom: '28px' }}>
-      <h2 id="project-coverage-head" style={CSS.head}>Coverage</h2>
-      {read.state === 'failed' ? (
-        <p data-testid="project-coverage-error" role="alert" style={{ ...CSS.line, ...CSS.bad }}>The project's coverage could not be read — {read.why}</p>
-      ) : read.body.rows.length === 0 ? (
-        <p data-testid="project-coverage-empty" style={CSS.line}>No repository in this project yet, so there is no coverage to show.</p>
+    <section data-testid="project-coverage" data-state={read.state} aria-label="Coverage" className="wk-card">
+      <SectionTitle>Coverage</SectionTitle>
+      {error !== null && onIssue === undefined && <StateBanner data-testid="project-coverage-error" kind={readErrorKind(error)} what="coverage" error={error} onRetry={retry} />}
+      {read.state === 'failed' ? onIssue !== undefined && <TechDetails data-testid="project-coverage-error" text={read.why} /> : read.body.rows.length === 0 ? (
+        <EmptyState data-testid="project-coverage-empty" title="No coverage yet" body="Attach a repository to see which requirements are covered." />
       ) : (
         <>
-          <p data-testid="project-coverage-totals" style={CSS.line}>{coverageTotalsLine(read.body.totals)}</p>
-          <ul style={CSS.list}>
-            {read.body.rows.map((r) => (
-              <li key={r.repo.id} data-testid="project-coverage-row" data-repo={r.repo.id} data-state={r.state} style={CSS.row}>
-                <RepoLink repo={r.repo} navigate={navigate} />
-                {r.state === 'ok' && r.report !== null ? (
-                  <span>
-                    {coveragePct(r.report)}
-                    <span style={CSS.dim}> · resolved {r.report.resolved} of {r.report.behavior_bearing} · {r.report.risk_flagged} risk-flagged · {r.report.unaccounted} unaccounted</span>
-                  </span>
-                ) : (
-                  <span style={r.state === 'error' ? CSS.bad : CSS.dim}>{rowWhy(r)}</span>
-                )}
-              </li>
-            ))}
+          {coverageTotalsLine(read.body.totals) !== '' && <p data-testid="project-coverage-totals" className="wk-pg-proj-note">{coverageTotalsLine(read.body.totals)}</p>}
+          <ul className="wk-pg-proj-list">
+            {read.body.rows.map((r) => {
+              const report = r.state === 'ok' ? r.report : null;
+              const facts = report !== null ? [
+                report.behavior_bearing > 0 ? `${report.resolved} of ${report.behavior_bearing} traced${report.coverage !== null && report.coverage !== undefined ? ` (${(report.coverage * 100).toFixed(1)}%)` : ''}` : '',
+                report.risk_flagged > 0 ? `${report.risk_flagged} at risk` : '',
+                report.unaccounted > 0 ? `${report.unaccounted} still to check` : '',
+              ].filter(Boolean).join(' · ') : '';
+              return (
+                <li key={r.repo.id} data-testid="project-coverage-row" data-repo={r.repo.id} data-state={r.state} className="wk-list-row wk-pg-proj-row">
+                  <div>
+                    <RepoLink repo={r.repo} navigate={navigate} />
+                    {facts !== '' && <p className="wk-list-row-meta">{facts}</p>}
+                    {r.state !== 'ok' && <><p className="wk-list-row-meta">{requirementReadWords(r)}</p><TechDetails text={rowWhy(r)} /></>}
+                  </div>
+                </li>
+              );
+            })}
           </ul>
         </>
       )}
@@ -102,38 +99,41 @@ function CoverageSection({ projectId, navigate }: SectionProps): React.ReactElem
   );
 }
 
-function DomainSection({ projectId, navigate }: SectionProps): React.ReactElement | null {
-  const read = useAggregate<ProjectDomainResponse>(projectId, getProjectDomain);
-  if (read === null || read.state === 'absent') return null;
+function DomainSection({ projectId, navigate, onIssue }: SectionProps): React.ReactElement | null {
+  const { read, retry } = useAggregate(projectId, getProjectDomain);
+  const error = read?.state === 'failed' ? read.why : read?.state === 'ok'
+    ? read.body.rows.filter((r) => r.state === 'error').map(rowWhy).join('\n') || null : null;
+  useIssue('domain', 'the domain model', error, retry, onIssue);
+  if (read?.state === 'absent') return null;
+  if (read === null) return <Skeleton data-testid="project-domain-loading" />;
   return (
-    <section data-testid="project-domain" data-state={read.state} aria-labelledby="project-domain-head" style={{ marginBottom: '28px' }}>
-      <h2 id="project-domain-head" style={CSS.head}>Domain</h2>
-      {read.state === 'failed' ? (
-        <p data-testid="project-domain-error" role="alert" style={{ ...CSS.line, ...CSS.bad }}>The project's domain model could not be read — {read.why}</p>
-      ) : read.body.rows.length === 0 ? (
-        <p data-testid="project-domain-empty" style={CSS.line}>No repository in this project yet, so there is no domain model to show.</p>
+    <section data-testid="project-domain" data-state={read.state} aria-label="Domain" className="wk-card">
+      <SectionTitle>Domain</SectionTitle>
+      {error !== null && onIssue === undefined && <StateBanner data-testid="project-domain-error" kind={readErrorKind(error)} what="the domain model" error={error} onRetry={retry} />}
+      {read.state === 'failed' ? onIssue !== undefined && <TechDetails data-testid="project-domain-error" text={read.why} /> : read.body.rows.length === 0 ? (
+        <EmptyState data-testid="project-domain-empty" title="No domain model yet" body="Attach a repository to see its domains." />
       ) : (
         <>
-          <p data-testid="project-domain-totals" style={CSS.line}>
-            {read.body.totals.domains} {read.body.totals.domains === 1 ? 'domain' : 'domains'} · {read.body.totals.requirements} requirements · {read.body.totals.entities} entities · {read.body.totals.ok} of {read.body.totals.repos} {read.body.totals.repos === 1 ? 'repository' : 'repositories'} read
-          </p>
+          <StatLine data-testid="project-domain-totals" items={[
+            { label: 'domains', value: read.body.totals.domains },
+            { label: 'requirements', value: read.body.totals.requirements },
+            { label: 'entities', value: read.body.totals.entities },
+          ]} />
           {read.body.merged.length > 0 && (
-            <ul data-testid="project-domain-merged" aria-label="Domains across the project" style={{ ...CSS.list, marginBottom: '8px' }}>
+            <ul data-testid="project-domain-merged" aria-label="Domains across the project" className="wk-pg-proj-list">
               {read.body.merged.map((d) => (
-                <li key={d.name} data-testid="project-domain-merged-row" data-domain={d.name} style={CSS.row}>
-                  <span style={{ fontWeight: 600 }}>{d.name}</span>
-                  <span style={CSS.dim}>{d.requirements} requirements · {d.entities} entities · in {d.repoIds.length} {d.repoIds.length === 1 ? 'repository' : 'repositories'}</span>
+                <li key={d.name} data-testid="project-domain-merged-row" data-domain={d.name} className="wk-list-row wk-pg-proj-row">
+                  <div><span className="wk-list-row-title">{d.name}</span><span className="wk-list-row-meta">{d.requirements} requirements · {d.entities} entities · in {d.repoIds.length} {d.repoIds.length === 1 ? 'repository' : 'repositories'}</span></div>
                 </li>
               ))}
             </ul>
           )}
-          <ul aria-label="Domains per repository" style={CSS.list}>
+          <ul aria-label="Domains per repository" className="wk-pg-proj-list">
             {read.body.rows.map((r) => (
-              <li key={r.repo.id} data-testid="project-domain-row" data-repo={r.repo.id} data-state={r.state} style={CSS.row}>
-                <RepoLink repo={r.repo} navigate={navigate} />
-                {r.state === 'ok'
-                  ? <span style={CSS.dim}>{r.domains.length === 0 ? 'no domains' : r.domains.map((d) => d.name).join(' · ')}</span>
-                  : <span style={r.state === 'error' ? CSS.bad : CSS.dim}>{rowWhy(r)}</span>}
+              <li key={r.repo.id} data-testid="project-domain-row" data-repo={r.repo.id} data-state={r.state} className="wk-list-row wk-pg-proj-row">
+                <div><RepoLink repo={r.repo} navigate={navigate} /><p className="wk-list-row-meta">{r.state === 'ok' ? r.domains.length === 0 ? 'No domains yet' : r.domains.map((d) => d.name).join(' · ') : requirementReadWords(r)}</p>
+                  {r.state !== 'ok' && <TechDetails text={rowWhy(r)} />}
+                </div>
               </li>
             ))}
           </ul>

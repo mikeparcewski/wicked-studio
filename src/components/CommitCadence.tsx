@@ -75,7 +75,7 @@ export function CommitCadence({ commits, now }: Props): React.ReactElement {
 
   if (commits === null) {
     return (
-      <p className="text-sm font-mono italic" style={{ color: 'var(--ink-dim)', margin: 0 }}>
+      <p className="wk-pg-repo-empty">
         Loading commit history…
       </p>
     );
@@ -84,7 +84,7 @@ export function CommitCadence({ commits, now }: Props): React.ReactElement {
   if (commits.length === 0) {
     return (
       <div data-testid="commit-cadence" data-state="empty">
-        <p className="text-sm font-mono italic" style={{ color: 'var(--ink-dim)', margin: 0 }}>
+        <p className="wk-pg-repo-empty">
           No commits yet.
         </p>
       </div>
@@ -101,16 +101,13 @@ export function CommitCadence({ commits, now }: Props): React.ReactElement {
       {inWindow > 0 ? (
         <RunSparkline counts={counts} width={280} height={36} color="var(--accent)" testId="commit-cadence-svg" />
       ) : (
-        <p className="text-sm font-mono italic" style={{ color: 'var(--ink-dim)', margin: 0 }}>
+        <p className="wk-pg-repo-empty">
           Nothing in the last 30 days.
         </p>
       )}
-      <p
-        className="text-[10px] font-mono"
-        style={{ color: 'var(--ink-dim)', margin: '6px 0 0' }}
-      >
-        last {commits.length} {commits.length === 1 ? 'commit' : 'commits'}
-        {older > 0 ? ` · ${older} older than 30d` : ''} · day precision from git relative dates
+      <p className="wk-field-note">
+        From the last {commits.length} {commits.length === 1 ? 'commit' : 'commits'}
+        {older > 0 ? ` (${older} older than 30 days)` : ''}
       </p>
     </div>
   );
