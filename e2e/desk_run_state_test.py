@@ -87,8 +87,8 @@ with sync_playwright() as p:
     check("retry-reads-again", page.get_by_test_id("desk-runs-failed").count() == 0)
     set_fixture(origin, repo=False)
 
-    # ── 2. #473: ⌘K from the composer /chat/new focuses ─────────────────────────
-    page.goto(f"{origin}/chat/new", wait_until="networkidle")
+    # ── 2. #473: ⌘K from the Desk composer focuses ──────────────────────────────
+    page.goto(f"{origin}/", wait_until="networkidle")
     page.wait_for_timeout(600)
     focused = page.evaluate("() => { const a = document.activeElement; return a ? a.tagName.toLowerCase() : ''; }")
     if focused not in ("textarea", "input"):

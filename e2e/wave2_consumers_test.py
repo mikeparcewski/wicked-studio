@@ -182,22 +182,19 @@ with sync_playwright() as p:
     # ── 4. #248 → S16a-4e: a new chat starts in the Desk composer ─────────────────────
     # GroupChat's Scope row ("Unfiled" blocked, the System chip, "Choose repos…", the admitted
     # subset, the 501 fallback) retired with the `/chat/*` addresses — a chat is its session, and a
-    # new one starts in the Desk composer, scoped by its `@` project chip. Replaced by that chip:
-    # `/chat/new` lands on the Desk, nothing POSTed; `/p/<pid>/chat` lands with the project's chip.
+    # new one starts in the Desk composer, scoped by its `@` project chip. X1: `/chat/new` and
+    # `/p/<pid>/chat` no longer redirect — they are dead addresses (not-found, nothing POSTed).
     posts.clear()
-    page.goto(f"{ORIGIN}/chat/new")
-    page.wait_for_function("() => location.pathname === '/'", timeout=15000)
+    page.goto(f"{ORIGIN}/")
     page.get_by_test_id("desk-composer-input").wait_for(timeout=15000)
     page.wait_for_timeout(600)
     check("new_chat_lands_on_the_desk_composer", not [u for m, u in posts if "/api/v1/chats" in u and m == "POST"],
           posts=[u for m, u in posts if "/api/v1/chats" in u])
     page.goto(f"{ORIGIN}/p/upload-endpoint/chat")
-    page.wait_for_function("() => location.pathname === '/'", timeout=15000)
-    chip = page.locator('[data-composer="desk"] [data-testid="composer-chip"][data-kind="project"]')
-    chip.wait_for(timeout=10000)
+    page.get_by_test_id("not-found").wait_for(timeout=15000)
     page.screenshot(path=str(VSHOTS / "wave2-chat-scope.png"))
-    check("project_chat_carries_the_project_chip", "upload-endpoint" in (chip.inner_text() or "")
-          and not [u for m, u in posts if "/api/v1/chats" in u and m == "POST"], chip=chip.inner_text())
+    check("retired_project_chat_is_not_found", page.get_by_test_id("not-found-path").inner_text().strip() == "/p/upload-endpoint/chat"
+          and not [u for m, u in posts if "/api/v1/chats" in u and m == "POST"], url=page.url)
 
     browser.close()
 

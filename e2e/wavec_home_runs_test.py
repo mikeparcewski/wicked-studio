@@ -114,7 +114,7 @@ with sync_playwright() as p:
 
     def section_reuse() -> None:
         reset(origin)
-        page.goto(f"{origin}/work", wait_until="networkidle")
+        page.goto(f"{origin}/everything?tab=sessions", wait_until="networkidle")
         row = page.locator('[data-testid="run-finished-row"][data-run-id="r-reuse"]')
         row.wait_for(state="visible", timeout=15000)
         check("next-use-moves", row.get_by_test_id("run-reuse-preset").count() == 1

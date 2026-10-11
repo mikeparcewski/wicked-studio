@@ -85,8 +85,8 @@ with sync_playwright() as p:
         page.locator('[data-testid="session-run"][data-run-id="b1"]').wait_for(state="visible", timeout=15000)
 
     def runs_list() -> None:
-        # S15c: /work moved onto "See everything › Sessions"; a live run is a session row there.
-        page.goto(f"{origin}/work", wait_until="networkidle")
+        # S15c: the runs list is "See everything › Sessions"; a live run is a session row there.
+        page.goto(f"{origin}/everything?tab=sessions", wait_until="networkidle")
         page.locator('[data-testid="everything-session"][data-run-id="b1"]').first.wait_for(state="visible", timeout=15000)
 
     # ── 1. off by default ───────────────────────────────────────────────────────

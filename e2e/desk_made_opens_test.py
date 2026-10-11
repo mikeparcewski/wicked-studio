@@ -6,10 +6,11 @@ Desk. Against the in-process fixture: project `notes`, doc `offsite-plan` bound 
 
   1. MADE ROW: the Made list's `offsite-plan` row opens its session with the document at full size
      (`/s/<session>/a/<key>?size=full`).
-  2. OLD BOOKMARK: `/p/notes/document/offsite-plan?v=1` lands on that address with `v=1` — the lens.
-  3. UNBOUND: `/p/notes/document/loose-notes` lands on the Made list with the document open at full
-     size (`open=loose-notes`); Esc closes it back to the list.
-  4. BARE VIDEO: `/p/notes/video` lands on the project's Made › Videos list.
+  2. VERSION: that address with `v=1` opens the lens.
+  3. UNBOUND: the Made list with `open=loose-notes` shows the document open at full size; Esc closes
+     it back to the list.
+  4. RETIRED (X1): `/p/notes/document/offsite-plan` and `/p/notes/video` are dead addresses — the
+     not-found page, the typed address kept.
   5. 0 page errors.
 
 Captures: e2e/shots/desk-made-opens-*.png. Env: FEEDBACK_PORT (default 4476). JSON report; exit 0/1.
@@ -92,15 +93,14 @@ with sync_playwright() as p:
     check("made-row-opens-the-session-at-full", "/a/" in (href or "") and "size=full" in (href or "")
           and page.evaluate(SIZE) == "full", href=href, url=page.url)
 
-    # ── 2. an old bookmark with ?v=1 lands on the lens ─────────────────────────────────────────
-    page.goto(f"{origin}/p/{PID}/document/{DOC}?v=1", wait_until="networkidle")
+    # ── 2. the document's own address with ?v=1 is the lens ────────────────────────────────────
+    page.goto(f"{origin}{href}{'&' if '?' in (href or '') else '?'}v=1", wait_until="networkidle")
     page.wait_for_function("() => location.pathname.includes('/a/') && new URLSearchParams(location.search).get('v') === '1'", timeout=15000)
     page.get_by_test_id("artifact-lens-line").wait_for(state="visible", timeout=15000)
     check("bookmark-lands-on-the-lens", page.get_by_test_id("artifact-version-frame").get_attribute("data-version") == "1", url=page.url)
 
     # ── 3. an unbound document opens on the Made list ──────────────────────────────────────────
-    page.goto(f"{origin}/p/{PID}/document/loose-notes", wait_until="networkidle")
-    page.wait_for_function("() => location.pathname === '/everything' && new URLSearchParams(location.search).get('open') === 'loose-notes'", timeout=15000)
+    page.goto(f"{origin}/everything?tab=made&kind=documents&project={PID}&open=loose-notes", wait_until="networkidle")
     page.locator('[data-testid="everything-made-open"] [data-testid="artifact"]').wait_for(state="visible", timeout=15000)
     page.wait_for_function("() => document.querySelector('[data-testid=\"everything-made-open\"] [data-testid=\"artifact\"]')?.dataset.size === 'full'", timeout=10000)
     page.screenshot(path=str(SHOTS / "desk-made-opens-unbound.png"))
@@ -110,11 +110,12 @@ with sync_playwright() as p:
     page.wait_for_function("() => !document.querySelector('[data-testid=\"everything-made-open\"]')", timeout=8000)
     check("esc-closes-to-the-list", "open=" not in page.url, url=page.url)
 
-    # ── 4. bare /p/<pid>/video ─────────────────────────────────────────────────────────────────
-    page.goto(f"{origin}/p/{PID}/video", wait_until="networkidle")
-    page.wait_for_function("() => location.pathname === '/everything'", timeout=10000)
-    q = urllib.parse.parse_qs(urllib.parse.urlparse(page.url).query)
-    check("bare-video-lands-on-videos", q.get("kind") == ["videos"] and q.get("project") == [PID] and q.get("tab") == ["made"], url=page.url)
+    # ── 4. the retired shell addresses are dead (X1) ───────────────────────────────────────────
+    for old in (f"/p/{PID}/document/{DOC}", f"/p/{PID}/video"):
+        page.goto(f"{origin}{old}", wait_until="networkidle")
+        page.get_by_test_id("not-found").wait_for(state="visible", timeout=10000)
+        check(f"retired {old}", urllib.parse.urlparse(page.url).path == old
+              and page.get_by_test_id("not-found-path").inner_text().strip() == old, url=page.url)
 
     check("no-page-errors", not errors, errors=errors[:5])
     browser.close()

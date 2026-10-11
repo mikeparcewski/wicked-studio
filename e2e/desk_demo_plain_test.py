@@ -111,10 +111,9 @@ with sync_playwright() as p:
     page.route(f"**/api/v1/runs/{RID}/gate", lambda r: r.fulfill(status=200, content_type="application/json", body=json.dumps(
         {"runId": RID, "ord": 3, "prompt": GATE_PROMPT, "lifecycle": "pending", "receivedAt": "2026-10-05T12:00:00.000Z"})))
 
-    # ── 1. the videos list, in plain words (#520) — S16a-4c: the project's Video mode moved onto
+    # ── 1. the videos list, in plain words (#520) — S16a-4c: the project's videos are
     #       "See everything › Made › Videos" for the project ─────────────────────────────────────
-    page.goto(f"{origin}/p/{PROJECT}/video", wait_until="networkidle")
-    page.wait_for_function("() => location.pathname === '/everything' && new URLSearchParams(location.search).get('kind') === 'videos'", timeout=15000)
+    page.goto(f"{origin}/everything?tab=made&kind=videos&project={PROJECT}", wait_until="networkidle")
     row = page.locator(f'[data-testid="everything-made-row"][data-run-id="{RID}"]')
     row.wait_for(state="visible", timeout=10000)
     text = row.inner_text().replace("\n", " ")
