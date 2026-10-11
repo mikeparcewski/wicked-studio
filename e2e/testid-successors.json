@@ -731,6 +731,12 @@
     "stat-campaigns": "campaigns-kpis",
     "steering-usage-denials": "steering-usage",
     "steering-usage-evals": "steering-usage",
-    "steering-usage-split": "steering-usage"
+    "steering-usage-split": "steering-usage",
+    "desk-rail-additional": "settings-overview",
+    "rail-governance-store-path": "rail-governance-detail",
+    "rail-governance-outbox": "rail-governance-detail",
+    "rail-governance-by-type": "rail-governance-detail",
+    "rail-governance-by-reason": "rail-governance-detail",
+    "rail-governance-range": "rail-governance-detail"
   }
 }

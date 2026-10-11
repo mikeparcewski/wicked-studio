@@ -112,26 +112,34 @@ describe('the rail redesign', () => {
     expect(screen.getByTestId('session-rail').textContent).not.toContain('Start something');
   });
 
-  it('"Additional settings" is a button with a lucide chevron — the label first, the control real', () => {
-    render(<SessionRail runs={[]} needRows={[]} navigate={() => {}} pathname="/" />);
+  it('"Additional settings" is a LINK to the /settings page — no dropdown', () => {
+    const navigate = vi.fn();
+    render(<SessionRail runs={[]} needRows={[]} navigate={navigate} pathname="/" />);
     const more = screen.getByTestId('desk-rail-more');
-    expect(more.tagName).toBe('BUTTON');
-    expect(more.textContent?.trim().startsWith('Additional settings')).toBe(true);
-    expect(more.querySelector('svg.lucide-chevron-down')).not.toBeNull();
+    expect(more.tagName).toBe('A');
+    expect(more).toHaveAttribute('href', '/settings');
+    expect(more.textContent?.trim()).toBe('Additional settings');
     fireEvent.click(more);
-    expect(screen.getByTestId('desk-rail-additional')).toBeInTheDocument();
-    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(navigate).toHaveBeenCalledWith('/settings');
     expect(screen.queryByTestId('desk-rail-additional')).toBeNull();
   });
 
-  it('Health is a rail LINK with a live dot (fetched on mount), between Steering and Additional settings', async () => {
+  it('the foot order: Workspace links, then Additional settings, then Health last; the links are the secondary tier', () => {
+    render(<SessionRail runs={[]} needRows={[]} navigate={() => {}} pathname="/" />);
+    const foot = screen.getByTestId('session-rail').querySelector('.wk-rail-foot')!;
+    const ids = [...foot.querySelectorAll('[data-testid]')].map((e) => e.getAttribute('data-testid') ?? '').filter((id) => id.startsWith('desk-rail-'));
+    expect(ids).toEqual(['desk-rail-product', 'desk-rail-skills', 'desk-rail-mcp', 'desk-rail-steering', 'desk-rail-testing', 'desk-rail-more', 'desk-rail-health']);
+    for (const id of ['desk-rail-product', 'desk-rail-more', 'desk-rail-health']) expect(screen.getByTestId(id)).toHaveClass('wk-rail-link--secondary');
+  });
+
+  it('Health is a rail LINK with a live dot (fetched on mount), below Additional settings', async () => {
     const navigate = vi.fn();
     render(<SessionRail runs={[]} needRows={[]} navigate={navigate} pathname="/" />);
     const nav = screen.getByTestId('session-rail');
     const order = [...nav.querySelectorAll('[data-testid]')]
       .map((e) => e.getAttribute('data-testid') ?? '')
       .filter((id) => ['desk-rail-steering', 'desk-rail-health', 'desk-rail-more'].includes(id));
-    expect(order).toEqual(['desk-rail-steering', 'desk-rail-health', 'desk-rail-more']);
+    expect(order).toEqual(['desk-rail-steering', 'desk-rail-more', 'desk-rail-health']);
     const health = screen.getByTestId('desk-rail-health');
     expect(health.tagName).toBe('A');
     expect(health).toHaveAttribute('href', '/health');

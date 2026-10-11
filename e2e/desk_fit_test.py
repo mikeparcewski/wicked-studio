@@ -112,13 +112,9 @@ with sync_playwright() as p:
     set_fixture(origin, wave1=True, home_runs=True, reset_home_runs=True, standing_orders=True, reset_standing=True, home_paths=True)
     page.goto(f"{origin}/", wait_until="networkidle")
     page.get_by_test_id("desk").wait_for(state="visible", timeout=15000)
-    # The rail menu is navigation-only: no standing-orders control in it any more.
-    if page.get_by_test_id("desk-rail-more").count():
-        page.get_by_test_id("desk-rail-more").click()
-        page.get_by_test_id("desk-rail-additional").wait_for(state="visible", timeout=5000)
-        check("rail-menu-has-no-orders-control",
-              page.get_by_test_id("desk-rail-additional").locator('[data-testid="standing-orders-toggle"], [data-testid="delivery-freeze-open"]').count() == 0)
-        page.keyboard.press("Escape")
+    # "Additional settings" is a link to /settings (navigation only): no standing-orders control in the rail.
+    check("rail-menu-has-no-orders-control",
+          page.get_by_test_id("session-rail").locator('[data-testid="standing-orders-toggle"], [data-testid="delivery-freeze-open"]').count() == 0)
     page.get_by_test_id("desk-sheet-open").click()
     page.locator('[data-testid="sheet-tab"][data-tab="hold"]').click()
     hold = page.get_by_test_id("sheet-hold")

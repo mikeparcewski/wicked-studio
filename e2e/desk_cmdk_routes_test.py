@@ -77,7 +77,7 @@ with sync_playwright() as p:
         page.wait_for_timeout(150)
 
     # ── 1. the GO TO group (a word lists the per-item rows too) ─────────────────────
-    # 25 destinations: main's 23 plus Learn (/learn) and Health (/health, the rail polish).
+    # 26 destinations: main's 23 plus Learn (/learn), Health (/health, the rail polish) and Settings (/settings).
     open_palette("go:")
     dest_rows = page.get_by_test_id("palette-row").count()
     page.keyboard.press("Escape")
@@ -87,7 +87,7 @@ with sync_playwright() as p:
     page.screenshot(path=str(SHOTS / "desk-cmdk-go.png"))
     page.keyboard.press("Escape")
     groups = {r["group"] for r in rows}
-    check("go-group", groups == {"go"} and dest_rows == 25 and len(rows) > 25, groups=sorted(groups), destinations=dest_rows, rows=len(rows))
+    check("go-group", groups == {"go"} and dest_rows == 26 and len(rows) > 26, groups=sorted(groups), destinations=dest_rows, rows=len(rows))
 
     def reach(href: str, label: str) -> dict:
         open_palette(f"go: {label}")

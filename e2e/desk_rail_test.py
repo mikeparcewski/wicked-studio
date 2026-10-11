@@ -15,7 +15,7 @@ Against the in-process fixture (wave-1 + wave-2b corpus):
   4. HEALTH: the rail's Health link opens /health and is marked current there.
   5. 0 page errors.
 
-Captures: e2e/shots/desk-rail.png, desk-rail-additional.png, and the rail-polish evidence set
+Captures: e2e/shots/desk-rail.png, desk-rail-additional.png (the /settings page), and the rail-polish evidence set
 rail-polish-{rail,health}-{1440x700,390x844}-{light,dark}.png (dark = no data-theme). Env:
 FEEDBACK_PORT (default 4366).
 """
@@ -50,7 +50,7 @@ def check(step: str, ok: bool, **detail) -> None:
 RAIL = """() => {
   const rail = document.querySelector('[data-testid="session-rail"]');
   const ids = ['desk-rail-home', 'desk-rail-watch', 'rail-group', 'desk-rail-product', 'desk-rail-skills', 'desk-rail-mcp',
-               'desk-rail-steering', 'desk-rail-testing', 'desk-rail-health', 'desk-rail-more'];
+               'desk-rail-steering', 'desk-rail-testing', 'desk-rail-more', 'desk-rail-health'];
   const seen = [];
   for (const el of rail.querySelectorAll('[data-testid]')) {
     const id = el.dataset.testid;
@@ -69,8 +69,8 @@ RAIL = """() => {
 }"""
 
 MENU = """() => {
-  const m = document.querySelector('[data-testid="desk-rail-additional"]');
-  const links = [...m.querySelectorAll('a[data-nav-dest]')];
+  const m = document.querySelector('[data-testid="settings-overview"]');
+  const links = [...m.querySelectorAll('[data-testid="settings-overview-row"] a')];
   return {
     labels: links.map(a => a.innerText.trim()),
     hrefs: links.map(a => a.getAttribute('href')),
@@ -104,17 +104,18 @@ with sync_playwright() as p:
     r = page.evaluate(RAIL)
     check("order",
           r["order"] == ['desk-rail-home', 'desk-rail-watch', 'rail-group', 'desk-rail-product', 'desk-rail-skills', 'desk-rail-mcp',
-                         'desk-rail-steering', 'desk-rail-testing', 'desk-rail-health', 'desk-rail-more']
-          and r["dests"] == ["watch", "section:product", "section:skills", "section:mcp", "section:steering", "section:testing", "health"]
+                         'desk-rail-steering', 'desk-rail-testing', 'desk-rail-more', 'desk-rail-health']
+          and r["dests"] == ["watch", "section:product", "section:skills", "section:mcp", "section:steering", "section:testing", "settings", "health"]
           and not r["bell"] and "Rules" not in r["text"] and "Everything else" not in r["text"]
           and "Steering" in r["text"] and "Skills" in r["text"] and "MCP tools" in r["text"]
           and r["steering"] == "/rules" and (r["more"] or "").startswith("Additional settings")
           and r["footLabel"] == "Workspace",
           **{k: v for k, v in r.items() if k != "text"})
 
-    # ── 2. the menu ──────────────────────────────────────────────────────────────
+    # ── 2. the settings page (operator 2026-10-11: a page, not a dropdown) ─────────
     page.get_by_test_id("desk-rail-more").click()
-    page.get_by_test_id("desk-rail-additional").wait_for(state="visible", timeout=5000)
+    page.wait_for_function("() => window.location.pathname === '/settings'", timeout=5000)
+    page.get_by_test_id("settings-overview").wait_for(state="visible", timeout=5000)
     page.wait_for_timeout(200)
     page.screenshot(path=str(SHOTS / "desk-rail-additional.png"))
     m = page.evaluate(MENU)
@@ -124,7 +125,7 @@ with sync_playwright() as p:
           # studio#421 r3 (change 17): the menu is navigation-only — the orders/freeze controls are
           # the Desk's "⋯ › Hold" sheet.
           and not m["controls"], **m)
-    page.locator('[data-testid="desk-rail-additional"] a[href="/system"]').click()
+    page.locator('[data-testid="settings-overview"] a[href="/system"]').click()
     page.wait_for_function("() => window.location.pathname === '/system'", timeout=5000)
     page.get_by_test_id("settings-testing-link").wait_for(state="visible", timeout=5000)
     testing_href = page.locator('[data-testid="settings-testing-link"] a').get_attribute("href")
@@ -186,8 +187,8 @@ with sync_playwright() as p:
 
     # r3: the same matrix with the (now navigation-only) Additional settings popover OPEN.
     page.get_by_test_id("desk-rail-more").click()
-    page.get_by_test_id("desk-rail-additional").wait_for(state="visible", timeout=5000)
-    shots("rail-menu")
+    page.get_by_test_id("settings-overview").wait_for(state="visible", timeout=5000)
+    shots("settings")
     page.keyboard.press("Escape")
 
     page.get_by_test_id("desk-rail-health").click()

@@ -151,18 +151,20 @@ with sync_playwright() as p:
     gov.wait_for(timeout=10000)
     gov_text = gov.inner_text()
     finding = gov.locator(TID("rail-governance-finding"))
+    # Reel UX gate ch56: the raw store/outbox/tally/finding lines sit behind Technical details.
+    detail = gov.locator(TID("rail-governance-detail")).text_content() or ""
     check("governance_rows",
           gov.get_attribute("data-state") == "error"
           and gov.get_attribute("data-deadletters") == "128"
           and gov.get_attribute("data-store") == "flag"
-          and "via flag" in gov_text
-          and "0 records" in gov_text
+          and "via flag" in detail
+          and "0 records" in gov_text and "/" not in gov_text.replace("Yes/no", "")
           and "128+" in gov_text
-          and "wicked.crew.governance.conformance_recorded ×96" in gov.locator(TID("rail-governance-by-type")).inner_text()
-          and "no shared store (WICKED_ESTATE_DB unset) ×128" in gov.locator(TID("rail-governance-by-reason")).inner_text()
+          and "wicked.crew.governance.conformance_recorded ×96" in detail
+          and "no shared store (WICKED_ESTATE_DB unset) ×128" in detail
           and finding.get_attribute("data-kind") == "governance.deadletter"
           and finding.get_attribute("data-severity") == "error"
-          and "wicked-crew governance replay" in finding.inner_text(),
+          and "wicked-crew governance replay" in detail and finding.inner_text().startswith("Problem:"),
           state=gov.get_attribute("data-state"), deadletters=gov.get_attribute("data-deadletters"))
     check("governance_heart_unhealthy",
           page.locator(TID("rail-health-heart")).get_attribute("data-health") == "unhealthy")  # (codex is inactive on this roster too)

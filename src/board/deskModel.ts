@@ -306,16 +306,18 @@ export const DESK_RAIL_LINKS: readonly { dest: string; label: string; path: stri
   { dest: 'section:testing', label: 'Testing', path: testingPath('campaigns'), testId: 'desk-rail-testing' },
 ];
 
+/** The Settings overview page (`/settings`) — where the rail's "Additional settings" link lands. */
+export const SETTINGS_PATH = '/settings';
+
 /**
- * "ADDITIONAL SETTINGS" (Amendment 5, as revised), in this order: Configuration (today's Settings),
- * Repositories, Workflows, Evals, Theme — plus the orders/away and freeze controls the rail renders
- * under them. Nothing that redirects is here; Testing (campaigns) is reached by ⌘K and from
- * Configuration.
+ * "ADDITIONAL SETTINGS" — the pages the `/settings` overview lists, in this order, each with the one
+ * plain sentence that says what it is for (operator 2026-10-11: a page, not a dropdown). Navigation
+ * only: the orders/away and delivery-freeze controls are the Desk's.
  */
-export const ADDITIONAL_SETTINGS: readonly { dest: string; label: string; path: string }[] = [
-  { dest: 'settings:/system', label: 'Configuration', path: '/system' },
-  { dest: 'section:repos', label: 'Repositories', path: '/repos' },
-  { dest: 'settings:/workflows', label: 'Workflows', path: '/workflows' },
-  { dest: 'section:testing', label: 'Evals', path: testingPath('evals') },
-  { dest: 'settings:/theme', label: 'Theme', path: '/theme' },
+export const ADDITIONAL_SETTINGS: readonly { dest: string; label: string; path: string; about: string }[] = [
+  { dest: 'settings:/system', label: 'Configuration', path: '/system', about: 'How studio runs: helpers and their sign-ins, how many helpers review a decision, technical details, notifications and editor plugins.' },
+  { dest: 'section:repos', label: 'Repositories', path: '/repos', about: 'The code studio knows about: add a repository, and set one up so helpers can read it.' },
+  { dest: 'settings:/workflows', label: 'Workflows', path: '/workflows', about: 'The step-by-step recipes work follows, and the ones you can start from / in the composer.' },
+  { dest: 'section:testing', label: 'Evals', path: testingPath('evals'), about: 'Check your steering rules against sample work, and see which behaviours they catch or miss.' },
+  { dest: 'settings:/theme', label: 'Theme', path: '/theme', about: 'How studio looks: light or dark, your logo and the site name.' },
 ];

@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronDown, LayoutGrid, Plus } from 'lucide-react';
+import { useMemo } from 'react';
+import { LayoutGrid, Plus } from 'lucide-react';
 import { useDeliveredNow } from '../../store/postHocDeliver.js';
 import type { SessionView } from '../../api/types.js';
-import { ADDITIONAL_SETTINGS, DESK_RAIL_LINKS, needsByRun, needTextByRun, railGroups } from '../../board/deskModel.js';
+import { DESK_RAIL_LINKS, SETTINGS_PATH, needsByRun, needTextByRun, railGroups } from '../../board/deskModel.js';
 import { needCount } from '../../board/needsQueue.js';
 import type { NeedRow } from '../../board/needsYou.js';
 import { MoveToProject, MoveProjectStatus, useMovableBoardModel } from './MoveToProject.js';
@@ -10,7 +10,6 @@ import { useCapabilities } from '../../store/capabilities.js';
 import { projectDetailPath, type Navigate } from '../../hooks/useRoute.js';
 import { everythingPath } from '../../board/everythingModel.js';
 import { useAppearanceStore } from '../../theming/appearance.js';
-import { anyModalOpen, useLayerStore } from '../../store/layers.js';
 import { seedNewChat } from '../../board/chatMoves.js';
 import { useRailHealthDot } from '../../hooks/useRailHealthDot.js';
 import { WatchPill } from './WatchPill.js';
@@ -35,12 +34,11 @@ export const SESSION_RAIL_PX = 236;
  *  - the "Workspace" group label, then Skills · MCP tools · Steering and the HEALTH LINK with its
  *    answered dot — what in-flight work is, one click away (`DESK_RAIL_LINKS`). The foot's top
  *    border separates the Product/support links above it from the run levers below, and carries a
- *    group label ("Workspace", studio#421 r3 change 18) styled like the project groups. Health is a
- *    link to `/health` (`desk-rail-health`); when it is not healthy the link names the state in
- *    muted text ("Health · degraded" / "Health · needs attention", change 16) and its dot is the
- *    rail-level heartbeat (`useRailHealthDot`). Then "Additional settings" — Configuration,
- *    Repositories, Workflows, Evals, Theme (`ADDITIONAL_SETTINGS`) — NAVIGATION ONLY (change 17:
- *    the orders/away and delivery-freeze controls are the Desk's, not the rail's).
+ *    group label ("Workspace", studio#421 r3 change 18) styled like the project groups; the foot's
+ *    links are the rail's secondary tier (smaller than Desk/Watchtower). Then "Additional settings",
+ *    a link to the `/settings` overview page (one sentence and a link per settings page,
+ *    `ADDITIONAL_SETTINGS`), and LAST the Health link to `/health` (`desk-rail-health`); when it is
+ *    not healthy it names the state in muted text and its dot is the rail heartbeat (`useRailHealthDot`).
  *
  * Render only: the groups are `railGroups` (board/deskModel.ts) over `useBoardModel` + the fold.
  */
@@ -59,30 +57,7 @@ export function SessionRail({ runs, needRows, navigate, pathname }: {
     [items, unfiled, needRows, runChatId, deliveredNow],
   );
   const dot = useRailHealthDot();
-  const [more, setMore] = useState(false);
-  const moreRef = useRef<HTMLDivElement | null>(null);
-  const moreTrigger = useRef<HTMLButtonElement | null>(null);
-  const go = (path: string) => (e: React.MouseEvent): void => { e.preventDefault(); setMore(false); navigate(path); };
-  // "Additional settings" is a popover beside the rail (studio#421), on the overlay contract
-  // (hooks/useDismissable): a click outside closes it; Escape closes it and returns focus to its
-  // trigger — but only when no higher layer owns that Escape (store/layers.ts precedence: the
-  // shortcut overlay, an open modal, or a surface that already handled it, like the palette).
-  useEffect(() => {
-    if (!more) return;
-    const onDown = (e: PointerEvent): void => {
-      if (moreRef.current !== null && e.target instanceof Node && !moreRef.current.contains(e.target)) setMore(false);
-    };
-    const onKey = (e: KeyboardEvent): void => {
-      if (e.key !== 'Escape' || e.defaultPrevented) return;
-      if (useLayerStore.getState().shortcutOverlayOpen || anyModalOpen()) return;
-      e.stopPropagation();
-      setMore(false);
-      moreTrigger.current?.focus();
-    };
-    document.addEventListener('pointerdown', onDown);
-    document.addEventListener('keydown', onKey);
-    return () => { document.removeEventListener('pointerdown', onDown); document.removeEventListener('keydown', onKey); };
-  }, [more]);
+  const go = (path: string) => (e: React.MouseEvent): void => { e.preventDefault(); navigate(path); };
   const current = (path: string): 'page' | undefined => (pathname === path || pathname.startsWith(`${path}/`) ? 'page' : undefined);
   const siteName = useAppearanceStore((s) => s.appearance.site_name?.trim() || null);
   // studio#512 (S18b): Theme › Logo takes the dot's place — the classic chrome's §3.1 slot, 32 px, contain-fit.
@@ -138,7 +113,7 @@ export function SessionRail({ runs, needRows, navigate, pathname }: {
                     aria-label={`Open ${g.name}`}
                     title={`Open ${g.name}`}
                     className="wk-rail-icon-btn"
-                    onClick={() => { setMore(false); navigate(projectDetailPath(g.projectId!)); }}
+                    onClick={() => { navigate(projectDetailPath(g.projectId!)); }}
                   >
                     <LayoutGrid size={14} aria-hidden />
                   </button>
@@ -152,7 +127,7 @@ export function SessionRail({ runs, needRows, navigate, pathname }: {
                     aria-label="Open work not in a project"
                     title="Open work not in a project"
                     className="wk-rail-icon-btn"
-                    onClick={() => { setMore(false); navigate(everythingPath({ tab: 'projects' })); }}
+                    onClick={() => { navigate(everythingPath({ tab: 'projects' })); }}
                   >
                     <LayoutGrid size={14} aria-hidden />
                   </button>
@@ -191,54 +166,30 @@ export function SessionRail({ runs, needRows, navigate, pathname }: {
             project groups — the Product/support links below are the "Workspace". */}
         <p className="wk-rail-group" data-testid="rail-foot-label">Workspace</p>
         {DESK_RAIL_LINKS.map((l) => (
-          <a key={l.dest} href={l.path} onClick={go(l.path)} data-testid={l.testId} data-nav-dest={l.dest} aria-current={current(l.path)} className="wk-rail-link">
+          <a key={l.dest} href={l.path} onClick={go(l.path)} data-testid={l.testId} data-nav-dest={l.dest} aria-current={current(l.path)} className="wk-rail-link wk-rail-link--secondary">
             {l.label}
           </a>
         ))}
+        {/* Operator 2026-10-11: "Additional settings" is a PAGE (/settings: one sentence per settings
+            page, a link to each), not a dropdown. Health sits below it, last in the rail. */}
+        <a href={SETTINGS_PATH} onClick={go(SETTINGS_PATH)} data-testid="desk-rail-more" data-nav-dest="settings" aria-current={current(SETTINGS_PATH)} className="wk-rail-link wk-rail-link--secondary">
+          Additional settings
+        </a>
         <a
           href="/health"
-          onClick={(e) => { e.preventDefault(); setMore(false); navigate('/health'); }}
+          onClick={go('/health')}
           data-testid="desk-rail-health"
           data-nav-dest="health"
           aria-current={current('/health')}
           aria-label={dot.heartState === 'healthy' ? undefined : `Health, ${dot.heartState === 'unhealthy' ? 'a check is failing' : 'a check needs attention'}`}
-          className="wk-rail-link wk-rail-health"
+          className="wk-rail-link wk-rail-link--secondary wk-rail-health"
         >
-          {/* studio#421 r4 (image-review row 1): the label + state word are one flex item so the link's
-              gap never separates them — the dot's `margin-left:auto` (components.css) parks it at the
-              right edge. Change 16: when not healthy the state word rides inside the same wrapper. */}
+          {/* studio#421 r4: the label + state word are one flex item; the dot parks at the right edge. */}
           <span>Health{dot.heartState !== 'healthy' && (
             <span data-testid="rail-health-state" className="wk-rail-health-state"> · {dot.heartState === 'degraded' ? 'degraded' : 'needs attention'}</span>
           )}</span>
           <span aria-hidden data-testid="rail-health-heart" data-health={dot.heartState} className="wk-rail-health-dot" style={{ background: dot.heartColor }} />
         </a>
-        <div ref={moreRef}>
-          <button
-            ref={moreTrigger}
-            type="button"
-            data-testid="desk-rail-more"
-            aria-expanded={more}
-            aria-controls={more ? 'desk-rail-additional' : undefined}
-            onClick={() => setMore((v) => !v)}
-            className="wk-rail-link wk-rail-more"
-            style={{ width: '100%' }}
-          >
-            <span>Additional settings</span>
-            <ChevronDown size={14} aria-hidden className="wk-rail-chevron" />
-          </button>
-          {more && (
-            <div id="desk-rail-additional" data-testid="desk-rail-additional" className="wk-rail-everything">
-              {/* studio#421 r3 (change 17): NAVIGATION ONLY. The orders/away and delivery-freeze
-                  controls live on the Desk (standing orders in the header, the freeze in the Desk's
-                  "⋯" sheet) — the rail menu never carries a control that changes behaviour. */}
-              {ADDITIONAL_SETTINGS.map((d) => (
-                <a key={d.dest} href={d.path} data-nav-dest={d.dest} onClick={go(d.path)} className="wk-rail-link">
-                  {d.label}
-                </a>
-              ))}
-            </div>
-          )}
-        </div>
       </div>
     </nav>
   );
