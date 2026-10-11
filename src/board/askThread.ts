@@ -179,11 +179,71 @@ export function askPathOf(rows: readonly TeamRow[]): AskPath {
 export function askShapeFooter(path: AskPath): string | null {
   if (path.shape.length === 0) return null;
   const reviewer = path.reviewer !== null && path.reviewer.status === 'attached' ? path.reviewer.seat : null;
-  return `Shape: ${path.shape.map((s) => s.label).join(' → ')}${path.pa !== null ? ` · ${path.pa} answers` : ''}${reviewer !== null ? ` · ${reviewer} reviews` : ''}`;
+  // Audit row 67: plain words — who answers and who checks it; the steps only when there is more
+  // than the one answer step (never the internal "Shape:" label).
+  const parts = [
+    // Only when the path does more than answer ("answer → answer" says nothing new).
+    ...(path.shape.some((s) => s.label !== 'answer') ? [`Steps: ${path.shape.map((s) => s.label).join(' → ')}`] : []),
+    ...(path.pa !== null ? [`${path.pa} answers`] : []),
+    ...(reviewer !== null ? [`${reviewer} checks it`] : []),
+  ];
+  return parts.length === 0 ? null : parts.join(' · ');
+}
+
+/**
+ * Studio#682 row 6: a failed tool call inside a helper's reply — "[tool call failed] grep: The user
+ * has specified a rule which prevents you from using this specific tool call. Here are some of the
+ * relevant rules [{"permission":…}]" or "[tool call failed] tool call: ``` User refused permission
+ * to run tool" — read as one plain fact: what it could not do, and why in a few words. `null` when
+ * the text does not open with the marker. Pure.
+ */
+export function toolFailureOf(text: string): { tool: string | null; verb: string; why: string } | null {
+  const m = /^\s*\[tool call failed\]\s*([\w.-]+)?\s*(call)?\s*:?\s*([\s\S]*)$/i.exec(text);
+  if (m === null) return null;
+  const named = m[2] === undefined && m[1] !== undefined && !/^tool$/i.test(m[1]) ? m[1] : null;
+  const rest = m[3] ?? '';
+  const verb = named === null ? 'use a tool'
+    : /^(grep|glob|search|find|rg)$/i.test(named) ? 'search'
+      : /^(read|cat|view)$/i.test(named) ? 'read a file'
+        : /^(write|edit|patch|apply_patch)$/i.test(named) ? 'change a file'
+          : /^(bash|shell|exec|run)$/i.test(named) ? 'run a command'
+            : `use ${named}`;
+  const why = /rule which prevents/i.test(rest) ? 'blocked by a permission rule'
+    : /permission/i.test(rest) ? 'permission was refused'
+    : /not found|no such file/i.test(rest) ? 'it couldn’t find what it looked for'
+      : 'the tool call failed';
+  return { tool: named, verb, why };
+}
+
+/**
+ * A reply with its failed tool calls taken out: each "[tool call failed] …" line starts a block that
+ * runs to the next blank line (its ruleset JSON, an unclosed fence); the blocks are returned raw for
+ * Technical details, the rest of the reply is the answer. Pure.
+ */
+export function splitToolFailures(text: string): { text: string; failures: Array<{ raw: string; verb: string; why: string }> } {
+  const lines = text.split('\n');
+  const keep: string[] = [];
+  const failures: Array<{ raw: string; verb: string; why: string }> = [];
+  for (let i = 0; i < lines.length; i += 1) {
+    if (!/^\s*\[tool call failed\]/i.test(lines[i]!)) { keep.push(lines[i]!); continue; }
+    const block = [lines[i]!];
+    // A fence the block opened, when a later line closes it (an unclosed fence does not swallow the reply).
+    // Only a standalone ``` line closes it — a later answer's own ```ts opener does not.
+    const next = lines.slice(i + 1).findIndex((l) => /```/.test(l));
+    const closes = next >= 0 && /^\s*```\s*$/.test(lines[i + 1 + next]!) ? next : -1;
+    const fenceEnd = (block[0]!.match(/```/g)?.length ?? 0) % 2 === 1 && closes >= 0 ? i + 1 + closes : -1;
+    const fenceOpen = (): boolean => fenceEnd >= 0 && i < fenceEnd;
+    // The block runs to the next blank line — or, while a fence it opened is still open, to its close.
+    if (fenceEnd >= 0) { while (fenceOpen()) { i += 1; block.push(lines[i]!); } }
+    else while (i + 1 < lines.length && lines[i + 1]!.trim() !== '' && !/^\s*\[tool call failed\]/i.test(lines[i + 1]!)) { i += 1; block.push(lines[i]!); }
+    const raw = block.join('\n');
+    const f = toolFailureOf(raw)!;
+    failures.push({ raw, verb: f.verb, why: f.why });
+  }
+  return { text: keep.join('\n').trim(), failures };
 }
 
 const ROSTER_JOIN = (xs: readonly string[]): string => xs.join(', ');
-const bandWords = (band: string | null): string | null => (band === null ? null : `band ${band.replace('-', '–')}`);
 
 /** `plan.refused.reason` in the operator's words (§4.7 one seat; F11 repo-less). */
 function refusedWords(reason: string, pa: string | null): { text: string; action?: 'signin' } {
@@ -223,7 +283,7 @@ export function askLines(rows: readonly TeamRow[]): AskLine[] {
       case 'path.started': {
         const cli = str(b['cli']) ?? 'a helper';
         paNow = str(b['cli']);
-        who = { key, at: t, kind: 'who', text: `${cli} answers · ${b['selection'] === 'chosen' ? 'your pick' : 'picked at random'}`, detail: [], tone: 'quiet', ord: null };
+        who = { key, at: t, kind: 'who', text: `${cli} answers${b['selection'] === 'chosen' ? ' · your pick' : ''}`, detail: [], tone: 'quiet', ord: null };
         out.push(who);
         break;
       }
@@ -237,7 +297,7 @@ export function askLines(rows: readonly TeamRow[]): AskLine[] {
           const signedIn = path.roster.length > 0 ? `Signed in: ${ROSTER_JOIN(path.roster)}.` : null;
           out.push({ key, at: t, kind: 'reviewer', text: `No reviewer — only ${paNow ?? path.pa ?? 'one helper'} is signed in.`, detail: [str(b['error']), signedIn, `A reviewer must be a different helper from the one answering · at ${when(t)}`].filter((x): x is string => x !== null), tone: 'quiet', ord, action: 'signin' });
         } else {
-          out.push({ key, at: t, kind: 'reviewer', text: `No reviewer — ${seat} can't join: ${str(b['error']) ?? 'it could not attach'}`, detail: [`${seat} · ${str(b['error']) ?? 'could not attach'} · at ${when(t)}`], tone: 'quiet', ord });
+          out.push({ key, at: t, kind: 'reviewer', text: `No reviewer this time: ${seat} couldn’t join`, detail: [`${seat} · ${str(b['error']) ?? 'could not attach'} · at ${when(t)}`], tone: 'quiet', ord });
         }
         break;
       }
@@ -354,8 +414,8 @@ export function askLines(rows: readonly TeamRow[]): AskLine[] {
       : `Picked ${first} at random${path.roster.length > 0 ? ` from ${ROSTER_JOIN(path.roster)}` : ''}.`;
     who.detail = [
       pick,
-      ...(path.score !== null ? [[`Score ${path.score.score}`, bandWords(path.score.band), ...path.score.reasons].filter((x): x is string => x !== null).join(' · ') + '.'] : []),
-      ...(path.shape.length > 0 ? [`Shape: ${path.shape.map((s) => s.label).join(' → ')}.`] : []),
+      // Audit row 67: the routing score ("Score 0 · band 0–19 · …") is internal; it is not said.
+      ...(path.shape.length > 0 ? [`Steps: ${path.shape.map((s) => s.label).join(' → ')}.`] : []),
     ];
   }
   return out;

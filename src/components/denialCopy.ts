@@ -67,6 +67,51 @@ export function parseDenial(raw: string | null | undefined, structured?: Structu
   return { kind, ruleIds, claimId, raw: text };
 }
 
+/**
+ * The session card's headline (studio#682 row 5): the step by its NAME, in plain words — never
+ * "unit #N", env vars or the engine's prose (that stays in the card's Technical details).
+ */
+export function stepDenialHeadline(f: DenialFacts, step: string): string {
+  switch (f.kind) {
+    case 'sandbox-write':
+      return `${step} tried to change files outside its workspace and was stopped to protect your files.`;
+    case 'sandbox-read':
+      return `${step} tried to read outside its workspace; the read was blocked.`;
+    case 'phase-scope':
+      return `${step} tried to change a kind of file this step isn't allowed to touch.`;
+    case 'rule':
+      return f.ruleIds.length > 0
+        ? `A steering rule (${f.ruleIds.join(', ')}) stopped ${step}.`
+        : `A rule stopped one of ${step}'s actions.`;
+    case 'triage':
+      return `${step} failed and was sent to you for review.`;
+    case 'worker-failed':
+      return /skills snapshot/i.test(f.raw)
+        ? `${step} couldn't start: its helper's skills aren't set up on this machine.`
+        : `${step} failed: its helper stopped with an error.`;
+    default:
+      return `${step} failed.`;
+  }
+}
+
+/** The session card's advice, in plain words (studio#682 row 5). */
+export function stepDenialAdvice(f: DenialFacts): string {
+  switch (f.kind) {
+    case 'sandbox-read':
+      return 'Usually harmless: the helper adapts. If the run stopped for another reason, that is the one to chase.';
+    case 'rule':
+      return f.ruleIds.length > 0
+        ? 'Open the rule to review it, or change what you asked for and start over.'
+        : 'Look at what the step did, then change what you asked for and start over.';
+    case 'worker-failed':
+      return /skills snapshot/i.test(f.raw)
+        ? 'Check Health, then resume. The technical details below say what was missing.'
+        : 'Look at what the step did, then resume or start over.';
+    default:
+      return 'Look at what the step did, then resume or start over.';
+  }
+}
+
 /** One plain sentence saying what stopped the unit. */
 export function denialHeadline(f: DenialFacts, ord: number): string {
   switch (f.kind) {

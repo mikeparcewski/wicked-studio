@@ -1,6 +1,7 @@
-import { useEffect, useId, useRef } from 'react';
+import { useCallback, useEffect, useId, useRef } from 'react';
 import type { SheetTab } from '../../board/objectActions.js';
 import { useModalEscape } from '../Modal.js';
+import { Tabs } from '../ui/index.js';
 
 /**
  * THE SHEET (DES-STUDIO-REBUILD-001 §5.5, slice S11; DESIGN-interaction rule 9): an object's depth,
@@ -26,7 +27,13 @@ export function Sheet({ title, sub, objectAttr, tabs, tab, onTab, primary, onClo
 }): React.ReactElement {
   const ref = useRef<HTMLDivElement | null>(null);
   const uid = useId().replace(/:/g, '');
-  useModalEscape(onClose);
+  // Escape is one layer at a time: an open "More" menu closes first (focus back on its button).
+  const onEscape = useCallback(() => {
+    const more = ref.current?.querySelector<HTMLButtonElement>('[aria-haspopup="menu"][aria-expanded="true"]');
+    if (more) { more.click(); more.focus(); return; }
+    onClose();
+  }, [onClose]);
+  useModalEscape(onEscape);
   useEffect(() => {
     const prev = document.activeElement as HTMLElement | null;
     ref.current?.focus();
@@ -48,41 +55,10 @@ export function Sheet({ title, sub, objectAttr, tabs, tab, onTab, primary, onClo
           {sub !== undefined && sub !== null && <p data-testid="sheet-sub" className="wk-sheet-sub">{sub}</p>}
           {actions}
         </div>
-        <button type="button" data-testid="sheet-close" aria-label="Close" onClick={onClose} className="wk-sheet-x">×</button>
+        <button type="button" data-testid="sheet-close" aria-label="Close" onClick={onClose} className="wk-btn wk-btn--quiet wk-sheet-x">×</button>
       </header>
-      <div
-        role="tablist"
-        aria-label={`${title}: look underneath`}
-        className="wk-sheet-tabs"
-        onKeyDown={(e) => {
-          // A composite control's own keys (keyboard model rule 2): arrows, Home and End move the tab.
-          const i = tabs.findIndex((t) => t.id === tab);
-          const to = e.key === 'ArrowRight' ? (i + 1) % tabs.length
-            : e.key === 'ArrowLeft' ? (i - 1 + tabs.length) % tabs.length
-              : e.key === 'Home' ? 0 : e.key === 'End' ? tabs.length - 1 : -1;
-          if (to < 0) return;
-          e.preventDefault();
-          onTab(tabs[to]!.id);
-          requestAnimationFrame(() => document.getElementById(`${uid}-tab-${tabs[to]!.id}`)?.focus());
-        }}
-      >
-        {tabs.map((t) => (
-          <button
-            key={t.id}
-            id={`${uid}-tab-${t.id}`}
-            type="button"
-            role="tab"
-            aria-selected={t.id === tab}
-            aria-controls={`${uid}-panel`}
-            tabIndex={t.id === tab ? 0 : -1}
-            data-testid="sheet-tab"
-            data-tab={t.id}
-            onClick={() => onTab(t.id)}
-            className={`wk-sheet-tab${t.id === tab ? ' wk-sheet-tab--on' : ''}`}
-          >
-            {t.label}
-          </button>
-        ))}
+      <div className="wk-sheet-tabs">
+        <Tabs tabs={tabs} active={tab} onChange={onTab} aria-label={`${title}: look underneath`} idBase={uid} data-testid="sheet-tabs" tabTestId={/* testid */ 'sheet-tab'} />
       </div>
       <div id={`${uid}-panel`} role="tabpanel" aria-labelledby={`${uid}-tab-${tab}`} data-testid="sheet-body" data-tab={tab} className="wk-sheet-body">{children}</div>
       <footer className="wk-sheet-foot">
@@ -93,13 +69,13 @@ export function Sheet({ title, sub, objectAttr, tabs, tab, onTab, primary, onClo
             disabled={primary.disabled !== undefined && primary.disabled !== null}
             title={primary.disabled ?? undefined}
             onClick={primary.onClick}
-            className="wk-prop-btn wk-prop-btn--primary"
+            className="wk-btn wk-btn--primary"
           >
             {primary.label}
           </button>
         )}
         {primary?.disabled !== undefined && primary.disabled !== null && <span data-testid="sheet-primary-why" className="wk-sheet-hint">{primary.disabled}</span>}
-        <span className="wk-sheet-hint">Everything else for this: ⌘K</span>
+        <span className="wk-sheet-hint wk-sheet-hint--keys">Everything else for this: ⌘K</span>
       </footer>
     </aside>
   );

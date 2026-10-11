@@ -2,6 +2,8 @@ import type { CoreEvent, WorkUnit } from '../api/types.js';
 import { useRunEventStore } from '../store/events.js';
 import { gateUngated, gateUngatedReason, judgeSkippedOf, judgeVerdictOf } from '../api/wave6-wire.js';
 import { phaseLabel } from './gateVerdictModel.js';
+import { unitStepName } from '../board/chainModel.js';
+import { useDisplayText } from '../hooks/useHomePath.js';
 
 /**
  * The evaluator verdict card (DES-UX-001 §1.3-2, slice R).
@@ -32,6 +34,9 @@ interface Props {
   runId: string;
   /** The run's units (snapshot) — resolves the deciding ord to a phase name. */
   units: readonly WorkUnit[];
+  /** Audit row 30: the run COMPLETED — the verdict that stood is its last evaluation; an earlier
+   *  denial it recovered from (a retried step) is not what decided it. */
+  completed?: boolean;
 }
 
 /** A `gateEvaluated` frame narrowed to the fields the card states. */
@@ -82,9 +87,10 @@ function toView(ev: CoreEvent): GateEvalView {
  * combined-deny), else the last evaluation overall — arrival order is the
  * daemon's order, so "last" is the verdict that stood when the run halted.
  */
-export function decidingEval(events: readonly CoreEvent[]): GateEvalView | null {
+export function decidingEval(events: readonly CoreEvent[], completed = false): GateEvalView | null {
   const evals = events.filter((e) => e.type === 'gateEvaluated').map(toView);
   if (evals.length === 0) return null;
+  if (completed) return evals[evals.length - 1] ?? null;
   const denies = evals.filter((g) => g.denialReason !== null || !g.combined);
   return denies[denies.length - 1] ?? evals[evals.length - 1] ?? null;
 }
@@ -94,9 +100,10 @@ export function decidingEval(events: readonly CoreEvent[]): GateEvalView | null 
 
 const EMPTY_EVENTS: CoreEvent[] = [];
 
-export function VerdictDetail({ runId, units }: Props): React.ReactElement {
+export function VerdictDetail({ runId, units, completed = false }: Props): React.ReactElement {
+  const showText = useDisplayText();
   const events = useRunEventStore((s) => s.byRun[runId]) ?? EMPTY_EVENTS;
-  const deciding = decidingEval(events);
+  const deciding = decidingEval(events, completed);
 
   if (deciding === null) {
     // The empty dress (§1.4): dim ink on a raised surface, NO status color — an
@@ -105,10 +112,10 @@ export function VerdictDetail({ runId, units }: Props): React.ReactElement {
       <div
         data-testid="verdict-detail"
         data-empty="true"
-        className="rounded-lg p-3 text-xs font-mono"
+        className="wk-session-verdict wk-verdict wk-verdict--ungated"
         style={{ background: 'var(--surface-raised)', border: '1px solid var(--surface-raised)' }}
       >
-        <p style={{ color: 'var(--ink-dim)' }}>no evaluator record survives for this run</p>
+        <p style={{ color: 'var(--ink-muted)' }}>No checks record survives for this run.</p>
         <p className="mt-1" style={{ color: 'var(--ink-dim)' }}>
           Event retention predates this run, or its log was pruned — the gate&apos;s reasoning
           was not kept. The status above is the only record.
@@ -118,30 +125,43 @@ export function VerdictDetail({ runId, units }: Props): React.ReactElement {
   }
 
   const vacuous = deciding.evaluatorPolicies.length === 0 && deciding.evaluatorPass === true;
-  const phase = phaseLabel(runId, units, deciding.ord);
+  // The step by its plain name ("Security check"), not its key ("security_review").
+  const decidingUnit = deciding.ord === null ? undefined : units.find((u) => u.ord === deciding.ord);
+  const phase = decidingUnit !== undefined ? unitStepName(decidingUnit) : phaseLabel(runId, units, deciding.ord);
+  const failed = deciding.denialReason !== null || !deciding.combined
+    || (deciding.hasDeterministicFloor && !deciding.deterministicPass)
+    || deciding.evaluatorPass === false || /^(?:fail|deny|denied|not pass)$/i.test(deciding.agentVerdict ?? '');
+  const unverified = !deciding.hasDeterministicFloor && deciding.agentVerdict === null && deciding.evaluatorPolicies.length === 0;
+  const headline = failed ? `${phase} was stopped by a check`
+    : unverified ? `No checks were set for ${phase} — it passed by default, nothing was verified`
+      : deciding.ungated ? (deciding.hasDeterministicFloor
+        ? `Repository checks ran for ${phase} — no independent review ran`
+        : `${phase} passed its automatic checks — no independent review ran`)
+        : vacuous ? `Checks passed for ${phase} — no additional checks were set`
+      : `Checks passed for ${phase}`;
 
   return (
     <div
       data-testid="verdict-detail"
       {...(deciding.ord !== null ? { 'data-phase-ord': deciding.ord } : {})}
       {...(vacuous ? { 'data-vacuous': 'true' } : {})}
-      className="rounded-lg p-3 flex flex-col gap-1.5"
-      style={{ background: 'var(--status-fail-dim)', border: '1px solid var(--status-fail-dim)' }}
+      className={`wk-session-verdict wk-verdict wk-verdict--${failed ? 'fail' : 'ungated'}`}
     >
-      <p className="text-xs font-semibold font-mono" style={{ color: 'var(--status-fail)' }}>
-        Evaluator verdict — {phase}
-      </p>
+      <p className="wk-verdict-head">{headline.charAt(0).toUpperCase() + headline.slice(1)}</p>
+      <details className="wk-tech-details">
+        <summary className="wk-tech-details-summary">Technical details</summary>
+        <div className="wk-session-verdict-details" data-tech="on">
 
       {deciding.criterion !== null && (
         <p className="text-[11px] font-mono" data-testid="verdict-criterion" style={{ color: 'var(--ink-muted)' }}>
-          criterion: {deciding.criterion}
+          criterion: {showText(deciding.criterion)}
         </p>
       )}
 
       {deciding.agentVerdict !== null && (
         <p className="text-xs" style={{ color: 'var(--ink-body)' }}>
           <span className="font-mono font-semibold">{deciding.agentVerdict}</span>
-          {deciding.agentReasoning !== null && <span> — {deciding.agentReasoning}</span>}
+          {deciding.agentReasoning !== null && <span> — {showText(deciding.agentReasoning)}</span>}
         </p>
       )}
       {deciding.judgeSkipped !== null && (
@@ -151,17 +171,17 @@ export function VerdictDetail({ runId, units }: Props): React.ReactElement {
           data-judge-distinct={deciding.judgeDistinct === null ? 'unknown' : String(deciding.judgeDistinct)}
           style={{ color: 'var(--status-gate)' }}
         >
-          judge skipped — {deciding.judgeSkipped}
+          judge skipped — {showText(deciding.judgeSkipped)}
           {deciding.judgeDistinct === false ? ' · judgeDistinct: false' : ''}
         </p>
       )}
       {deciding.agentVerdict === null && deciding.agentReasoning !== null && (
-        <p className="text-xs" style={{ color: 'var(--ink-body)' }}>{deciding.agentReasoning}</p>
+        <p className="text-xs" style={{ color: 'var(--ink-body)' }}>{showText(deciding.agentReasoning)}</p>
       )}
 
       {deciding.denialReason !== null && (
         <p className="text-xs font-mono" data-testid="verdict-denial" style={{ color: 'var(--status-fail)' }}>
-          denied: {deciding.denialReason}
+          denied: {showText(deciding.denialReason)}
         </p>
       )}
 
@@ -179,6 +199,7 @@ export function VerdictDetail({ runId, units }: Props): React.ReactElement {
                 deciding.evaluatorPolicies.length === 1 ? 'policy' : 'policies'
               })`}
       </p>
+      {deciding.evaluatorPolicies.length > 0 && <p>policies: {showText(deciding.evaluatorPolicies.join(', '))}</p>}
       {/* Wave 6 (F-7R2-005 / -017): the engine's own word that no judge could be convened. */}
       {deciding.ungated && (
         <p
@@ -187,9 +208,11 @@ export function VerdictDetail({ runId, units }: Props): React.ReactElement {
           {...(deciding.ungatedReason !== null ? { 'data-ungated-reason': deciding.ungatedReason } : {})}
           style={{ color: 'var(--status-gate)' }}
         >
-          UNGATED — {deciding.ungatedReason ?? 'the engine convened no judge'}; evaluator ≠ creator was not held on this verdict
+          UNGATED — {showText(deciding.ungatedReason ?? 'the engine convened no judge')}; evaluator ≠ creator was not held on this verdict
         </p>
       )}
+        </div>
+      </details>
     </div>
   );
 }

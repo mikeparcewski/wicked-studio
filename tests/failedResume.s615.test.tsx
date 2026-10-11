@@ -43,8 +43,8 @@ describe('studio#615 — Resume a failed run in place', () => {
   it('a failed run says what to do and Resume makes exactly one POST /resume — no launch form', async () => {
     const navigate = vi.fn();
     render(<RunBlock view={run('failed')} badge={1} sessionId={`run:${RUN}`} navigate={navigate} />);
-    expect(screen.getByTestId('session-failed-resume').textContent).toMatch(/It stopped: Resume or start over/);
-    expect(screen.getByTestId('session-run-retry')).toBeTruthy(); // start over stays its own action
+    expect(screen.getByTestId('session-failed-resume-button').textContent).toBe('Resume');
+    expect(screen.getByTestId('session-run-retry').textContent).toBe('Start over'); // start over stays its own action (audit row 27)
     await userEvent.click(screen.getByTestId('session-failed-resume-button'));
     await waitFor(() => expect(screen.getByTestId('session-failed-resume-asked')).toBeTruthy());
     expect(posts()).toEqual([{ method: 'POST', url: expect.stringMatching(/\/runs\/r-failed\/resume$/) }]);
@@ -55,7 +55,8 @@ describe('studio#615 — Resume a failed run in place', () => {
     resumeStatus = 409;
     render(<RunBlock view={run('failed')} badge={1} sessionId={`run:${RUN}`} navigate={() => {}} />);
     await userEvent.click(screen.getByTestId('session-failed-resume-button'));
-    await waitFor(() => expect(screen.getByTestId('session-failed-resume-error').textContent).toMatch(/not resumable/));
+    await waitFor(() => expect(screen.getByTestId('session-failed-resume-error').textContent).toBe('Resume was refused.'));
+    expect(screen.getByTestId('session-failed-resume-error-detail').textContent).toMatch(/not resumable/);
     expect(screen.getByTestId('session-failed-resume-button')).toBeTruthy();
   });
 
@@ -81,7 +82,10 @@ describe('studio#615 — Resume a failed run in place', () => {
   it('no Resume on a running, finished, cancelled or archived run', () => {
     for (const v of [run('executing'), run('completed'), run('cancelled'), run('failed', { archived_at: 1_700_000_000_000 })]) {
       render(<RunBlock view={v} badge={0} sessionId={`run:${RUN}`} navigate={() => {}} />);
-      expect(screen.queryByTestId('session-failed-resume')).toBeNull();
+      expect(screen.queryByTestId('session-failed-resume-button')).toBeNull();
+      // Start over (a new launch) stays offered on a stopped run — failed or cancelled — never on a live or finished one.
+      const stopped = v.session.status === 'failed' || v.session.status === 'cancelled';
+      expect(screen.queryByTestId('session-run-retry') !== null).toBe(stopped);
       cleanup();
     }
   });

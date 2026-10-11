@@ -4,6 +4,8 @@
     "Empty until the S16 deletion slices: before then a removal fails. Add entries as \"<removed>\": \"<successor>\" in the PR that removes the testid."
   ],
   "successors": {
+    "session-chat-retry": "*-retry",
+    "session-run-detail-retry": "*-retry",
     "launch-workflow": "composer-menu-item",
     "steering-form-rule-type": "steering-form-rule-type-label",
     "desk-start-chip": "composer-menu-item",

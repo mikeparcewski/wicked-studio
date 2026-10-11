@@ -111,7 +111,13 @@ function RunGateRow({ view, gate, navigate }: { view: RunView; gate: OpenGate | 
   const fullVerdict = useFullVerdict(runId, view.units, events, gate);
   const model = useMemo<GateRowModel | null>(() => {
     if (gate === undefined || events === null) return null;
-    return sessionGateChoices({ runId, gate, units: view.units, events, pool, roster, rerun: rerunOffer, fullVerdict });
+    const result = sessionGateChoices({ runId, gate, units: view.units, events, pool, roster, rerun: rerunOffer, fullVerdict });
+    if (result === null) return null;
+    // The existing denied-step handler sends approve:true, which re-runs the step.
+    const effectLabel = (choice: GateRowChoice): GateRowChoice => choice.key === 'approve'
+      && /^Re-run the step from the start\b/.test(choice.title)
+      ? { ...choice, label: 'Approve and re-run this step' } : choice;
+    return { ...result, choices: result.choices.map(effectLabel), overflow: result.overflow.map(effectLabel) };
   }, [runId, gate, view.units, events, pool, roster, rerunOffer, fullVerdict]);
   // S16a-1b: the creator seat's record on Approve and the standing-order offer (review gates).
   const seat = useSeatTrust(view, gate, {
@@ -188,8 +194,8 @@ export function CreatorSeatRefusal({ view, navigate }: { view: RunView; navigate
   return (
     <div data-testid="session-gate-creator-seat" role="status" className="wk-gate-consequence">
       <p className="wk-assurance-lead">
-        <b>Stopped: no second seat to review this.</b> This run requires a distinct evaluator, and the
-        only seat that could review the work is the one that built it. Sign a second seat in and Approve
+        <b>Stopped: no second helper to review this.</b> This run requires an independent check, and the
+        only helper that could review the work is the one that built it. Sign a second helper in and Approve
         to retry, or run it again with reduced assurance.
       </p>
       {can && navigate !== undefined
@@ -201,13 +207,13 @@ export function CreatorSeatRefusal({ view, navigate }: { view: RunView; navigate
               data-testid="session-gate-reduced-relaunch"
               title="Open the launch form with this run's brief and reduced assurance ticked; nothing starts until you launch, and this run stays at its gate."
               onClick={() => { setRetryPrefill({ ...retryPrefillOf(view), reducedAssurance: true }); navigate('/runs/new'); }}
-              className="wk-session-gate-send"
+              className="wk-btn wk-btn--secondary"
             >
               {REDUCED_OPT_IN_LABEL}…
             </button>
           </>
         )
-        : !can && <p data-testid="session-gate-creator-seat-nocap" className="wk-assurance-optin-why">This daemon does not take a reduced-assurance launch; sign a second seat in.</p>}
+        : !can && <p data-testid="session-gate-creator-seat-nocap" className="wk-assurance-optin-why">Studio's service does not support reduced assurance; sign a second helper in.</p>}
     </div>
   );
 }
@@ -220,13 +226,12 @@ export function CreatorSeatRefusal({ view, navigate }: { view: RunView; navigate
 export function JudgeWaitLine({ navigate }: { navigate?: Navigate }): React.ReactElement {
   return (
     <p data-testid="session-gate-judge-wait" role="status" className="wk-gate-consequence">
-      <b>Waiting for a judge seat.</b> This run requires a judge, and no seat distinct from the one that
-      built the work could judge it. The work was not rejected: sign a judge seat in, then Approve to
-      re-run the step with the judge.{' '}
+      <b>Waiting for an independent check.</b> No helper other than the one that built the work could
+      check it. Sign another helper in, then approve to re-run the step with that check.{' '}
       {navigate !== undefined
         ? (
-          <button type="button" data-testid="session-gate-judge-signin" onClick={() => navigate('/system')} className="wk-since-toggle">
-            Sign a judge seat in ›
+          <button type="button" data-testid="session-gate-judge-signin" onClick={() => navigate('/system')} className="wk-btn wk-btn--secondary">
+            Sign another helper in ›
           </button>
         )
         : <span data-testid="session-gate-judge-signin">Sign one in from Settings.</span>}
@@ -371,7 +376,7 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
           <button
             type="button"
             onClick={() => { undoDecision(pending.id); setChosen(null); }}
-            className="wk-session-gate-undo"
+            className="wk-btn wk-btn--quiet wk-session-gate-undo"
           >
             Undo
           </button>
@@ -403,7 +408,7 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
         <button
           type="button"
           data-testid="session-gate-events-retry"
-          className="wk-session-gate-send"
+          className="wk-btn wk-btn--secondary"
           onClick={retryEvents}
         >
           Retry
@@ -486,9 +491,9 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
 
   // studio#612: the floor fix's note is the fixing seat's whole task, not a steer.
   const notePlaceholder = noteChoice?.key === 'steer' && noteChoice.label === FLOOR_FIX_LABEL
-    ? 'What should the fixing seat change…'
+    ? 'What should the fixing helper change…'
     : noteChoice?.key === 'steer'
-    ? 'Steer the next creator phase…'
+    ? 'Steer the next step…'
     : noteChoice?.key === 'send-back'
       ? 'Explain what to fix…'
       : 'Add a note…';
@@ -510,16 +515,11 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
       }}
     >
       <p data-testid="session-gate-question" className="wk-session-gate-question">{question}</p>
-      {drift !== null && <DriftLine drift={drift} />}
-      {assurance}
-      {refusalLines !== null && (
-        <>
-          <p data-testid="session-gate-refusal" className="wk-session-gate-detail-item">{refusalLines.lead}</p>
-          <p data-testid="session-gate-deliver-consent" className="wk-gate-consequence">{refusalLines.consent}</p>
-        </>
-      )}
-      {/* S16a-1c (TR-W8): a watch finding attached to this gate, as one quiet line (nothing when absent). */}
-      {gate !== undefined && <WatchGateLine runId={runId} ord={typeof gate.ord === 'number' ? gate.ord : null} />}
+      {/* A refused hand-over says what Deliver again does BEFORE the choice that takes it. */}
+      {refusalLines !== null && <>
+        <p data-testid="session-gate-refusal" className="wk-session-gate-detail-item">{refusalLines.lead}</p>
+        <p data-testid="session-gate-deliver-consent" className="wk-gate-consequence">{refusalLines.consent}</p>
+      </>}
       {/* S16a-1b: the recommended move's consequence, above the choice that takes it. */}
       {model.consequence !== null && (
         <p data-testid="session-gate-consequence" className="wk-gate-consequence">{model.consequence}</p>
@@ -545,6 +545,8 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
             title={choice.title}
             className={[
               'wk-session-gate-choice',
+              'wk-btn',
+              i === model.recommended ? 'wk-btn--primary' : 'wk-btn--secondary',
               pick.focus === i ? 'wk-session-gate-choice--focus' : '',
               i === model.recommended ? 'wk-session-gate-choice--suggested' : '',
               choice.disabled === true ? 'wk-session-gate-choice--disabled' : '',
@@ -575,9 +577,14 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
           </button>
         ))}
       </div>
+      {drift !== null && <DriftLine drift={drift} />}
+      {assurance}
+      {/* S16a-1c (TR-W8): a watch finding attached to this gate, as one quiet line (nothing when absent). */}
+      {gate !== undefined && <WatchGateLine runId={runId} ord={typeof gate.ord === 'number' ? gate.ord : null} />}
       {/* core#820: what each install choice writes, before it is taken — the operator's own files said so. */}
       {[...model.choices, ...model.overflow].filter((c) => c.writes !== undefined).map((c) => (
-        <div key={`writes-${c.key}`} data-testid="session-gate-consent-writes" data-choice-key={c.key} className="wk-session-gate-detail-item">
+        <details key={`writes-${c.key}`} data-testid="session-gate-consent-writes" data-choice-key={c.key} className="wk-tech-details">
+          <summary className="wk-tech-details-summary">Files this choice writes</summary>
           <p><b>{c.label}</b>{c.isDefault === true ? ' (default)' : ''} writes {c.writes!.length === 0 ? 'nothing it could list' : `${c.writes!.length} file${c.writes!.length === 1 ? '' : 's'}`}:</p>
           <ul>
             {c.writes!.map((w, j) => (
@@ -586,7 +593,7 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
               </li>
             ))}
           </ul>
-        </div>
+        </details>
       ))}
       {model.overflow.length > 0 && (
         <details className="wk-session-gate-overflow">
@@ -601,6 +608,7 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
                 title={choice.title}
                 className={[
                   'wk-session-gate-choice',
+                  'wk-btn wk-btn--secondary',
                   choice.disabled === true ? 'wk-session-gate-choice--disabled' : '',
                 ].filter(Boolean).join(' ')}
                 disabled={action.busy || choice.disabled === true}
@@ -637,11 +645,11 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
               data-testid="session-gate-rerun-confirm"
               disabled={action.busy}
               onClick={() => { const c = allChoices.find((x) => x.key === 'rerun'); setConfirmRerun(false); if (c !== undefined) sendDirect({ ...c, key: 'rerun-confirmed' }); }}
-              className="wk-session-gate-send"
+              className="wk-btn wk-btn--primary"
             >
               Rerun from {rerunOffer.phase}
             </button>
-            <button type="button" onClick={() => setConfirmRerun(false)} className="wk-session-gate-cancel">Cancel</button>
+            <button type="button" onClick={() => setConfirmRerun(false)} className="wk-btn wk-btn--quiet">Cancel</button>
           </div>
         </div>
       )}
@@ -650,9 +658,9 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
           review, "Why it failed" (the failing criteria beside the creator's claims), the source line. */}
       {model.detailItems.length > 0 && (
         <details className="wk-session-gate-prompt-detail">
-          <summary className="wk-session-gate-prompt-summary">Details</summary>
+          <summary className="wk-session-gate-prompt-summary">Technical details</summary>
           {model.detailItems.map((item, idx) => (
-            <p key={idx} data-testid={idx === 0 ? 'session-gate-raw-prompt' : undefined} className="wk-session-gate-detail-item">{showText(item)}</p>
+            <p key={idx} data-testid={idx === 0 ? 'session-gate-raw-prompt' : undefined} className="wk-session-gate-detail-item wk-session-verdict-details">{showText(item)}</p>
           ))}
           {depth}
         </details>
@@ -676,19 +684,18 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
             }}
           />
           <div className="wk-session-gate-note-actions">
-            <button type="button" data-testid="session-gate-send" onClick={sendNote} disabled={action.busy || !noteText.trim()} className="wk-session-gate-send">
+            <button type="button" data-testid="session-gate-send" onClick={sendNote} disabled={action.busy || !noteText.trim()} className="wk-btn wk-btn--primary">
               Send
             </button>
-            <button type="button" onClick={cancelNote} className="wk-session-gate-cancel">
+            <button type="button" onClick={cancelNote} className="wk-btn wk-btn--quiet">
               Cancel
             </button>
           </div>
         </details>
       )}
       {action.error !== null && (
-        <p data-testid="session-gate-error" role="alert" className="wk-session-gate-error">
-          {action.error}
-        </p>
+        // The refusal in its own words (a 409 names what moved); paths read `~` (studio#650).
+        <p data-testid="session-gate-error" role="alert" className="wk-session-gate-error">{showText(action.error)}</p>
       )}
     </div>
   );

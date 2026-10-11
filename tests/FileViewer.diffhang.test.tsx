@@ -42,6 +42,19 @@ describe('FileViewer — the diff hang is dead (slice R)', () => {
     expect(screen.getByTestId('diff-error')).toHaveTextContent("Couldn't load the diff");
   });
 
+  it('audit row 9: an answer that lands AFTER the budget replaces the slow notice (the pane never hangs)', async () => {
+    let resolve: (v: unknown) => void = () => {};
+    vi.spyOn(client.api, 'getRunDiff').mockImplementation(() => new Promise((r) => { resolve = r; }) as never);
+    render(<FileViewer runId="r-slow" defaultTab="diff" onClose={() => {}} onUnsupported={() => {}} />);
+    act(() => { vi.advanceTimersByTime(DIFF_TIMEOUT_MS + 1); });
+    const slow = screen.getByTestId('diff-error');
+    expect(slow).not.toHaveTextContent('daemon');
+    expect(screen.getByTestId('diff-retry')).toHaveClass('wk-btn');
+    await act(async () => { resolve({ diff: '', truncated: false, source: 'branch' }); await Promise.resolve(); });
+    expect(screen.queryByTestId('diff-error')).not.toBeInTheDocument();
+    expect(screen.getByTestId('viewer-clean-tree')).toHaveTextContent('This run changed no files.');
+  });
+
   it('Retry re-dispatches the request', async () => {
     const getRunDiff = vi
       .spyOn(client.api, 'getRunDiff')
@@ -64,7 +77,7 @@ describe('FileViewer — the diff hang is dead (slice R)', () => {
     expect(screen.getByTestId('viewer-clean-tree')).toBeInTheDocument();
     // The §8.1 interim baseline note rides every resolved diff view.
     expect(screen.getByTestId('diff-baseline-note')).toHaveTextContent(
-      'showing uncommitted changes vs HEAD; committed work is not shown here',
+      'Showing uncommitted changes only; committed work is not shown here.',
     );
     act(() => { vi.advanceTimersByTime(DIFF_TIMEOUT_MS + 10); });
     expect(screen.queryByTestId('diff-error')).not.toBeInTheDocument();

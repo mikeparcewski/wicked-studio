@@ -1,1 +1,57 @@
 /* Section CSS: session (design/UI-CONTRACT.md §6). Only that section edits this file. */
+
+/* ── w9-s2-session (lane-owned rules; UI-CONTRACT §6 S2) ───────────────────────────────── */
+/* Audit row 62: the session title while its reads settle. */
+.wk-session-title-skeleton { width: min(420px, 70%); padding: 6px 0; }
+/* Audit row 26: "nothing checked" — a finished-but-unverified step reads neutral, never verified green. */
+.wk-chain--unchecked .wk-chain-dot--done { border-color: var(--ink-dim); background: var(--ink-dim); }
+/* Audit row 26: the run's record lines sit on the card's own grid (no extra inset, no band). */
+.wk-session-run .wk-watch-run-lines { padding: 0; border-bottom: 0; background: transparent; margin: 0 0 6px; }
+/* Row 27: Resume / Start over as two separated buttons. */
+.wk-session-recovery { margin: 4px 0 8px; display: flex; flex-direction: column; gap: 4px; }
+.wk-session-recovery-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+/* The council-degraded disclosure: one plain line + Technical details (UI-CONTRACT §3). */
+.wk-session-checkers { margin: 0 0 6px; }
+.wk-session-story-link { margin-left: var(--space-2); }
+.wk-session-helper-link { font-size: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
+/* Row 6: a failed tool call read as one line. */
+.wk-session-tool-failure { margin: 0; }
+.wk-session-tool-failures { margin: var(--space-2) 0 0; }
+/* Row 9: the diff viewer's plain states and its in-place (sheet tab) form. */
+.wk-viewer-state { padding: var(--space-4); display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-2); }
+.wk-viewer-state-line { margin: 0; font-size: var(--text-sm); color: var(--ink-muted); }
+.wk-viewer-baseline { margin: 0; padding: 6px 12px; font-size: var(--text-xs); color: var(--ink-muted); border-bottom: 1px solid var(--border-subtle); }
+.wk-viewer-title { font-family: var(--font-sans); font-size: var(--text-sm); font-weight: var(--weight-semi); }
+.wk-viewer--inline { flex: 1; min-height: 0; border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); background: var(--surface-card); }
+.wk-session-verdict { padding: var(--space-3); border-radius: var(--radius-md); font-family: var(--font-sans); font-size: var(--text-sm); }
+.wk-session-verdict > .wk-verdict-head { margin: 0 0 var(--space-2); font-weight: var(--weight-semi); }
+.wk-session-verdict-details { font-family: var(--font-mono); font-size: var(--text-xs); overflow-wrap: anywhere; }
+.wk-session-verdict-details p { margin: var(--space-2) 0; }
+.wk-sheet-tabs > .wk-tabs { width: 100%; }
+.wk-sheet-brief, .wk-sheet-brief-full { overflow-wrap: anywhere; }
+.wk-sheet-brief table { font-family: var(--font-sans); }
+.wk-sheet-brief a { color: var(--accent); text-decoration: underline; }
+.wk-sheet-brief-full { margin-top: var(--space-2); }
+/* The hand-over receipt inside a session card wraps instead of cutting "Finished · deliv…" on a phone. */
+.wk-session-run .wk-prop-status { flex-wrap: wrap; }
+.wk-session-run .wk-prop-live { white-space: normal; overflow: visible; }
+
+/* ── Phone (UI-CONTRACT §3, one breakpoint): the session and its sheets ─────────────────── */
+@media (max-width: 767px) {
+  /* Header stacks: the title wraps (two lines) instead of cutting "About Claude C…"; actions follow. */
+  .wk-session-head { flex-wrap: wrap; align-items: center; padding: 12px 16px 8px; }
+  .wk-session-head-body { flex: 1 1 0; min-width: 55%; }
+  .wk-session-title { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; font-size: var(--text-lg); }
+  /* Every control on the session and in a sheet gets a 44 px target. */
+  .wk-session .wk-btn, .wk-session .wk-prop-btn, .wk-session .wk-sheet-open,
+  .wk-sheet .wk-btn, .wk-sheet .wk-prop-btn, .wk-sheet .wk-menu-item,
+  .wk-session-run .wk-tech-details-summary, .wk-sheet .wk-tech-details-summary, .wk-sheet-brief-full > summary { min-height: var(--tap-min); }
+  .wk-session .wk-sheet-open { min-width: var(--tap-min); }
+  .wk-session-run .wk-link, .wk-sheet .wk-link { display: inline-flex; align-items: center; min-height: var(--tap-min); }
+  /* Steps wrap onto rows: no connector stroke left dangling at a row start. */
+  .wk-session-run .wk-chain-join { display: none; }
+  .wk-session-run .wk-chain-line { gap: 6px 14px; }
+  /* "Everything else for this: ⌘K" names a keyboard shortcut a phone has no key for. */
+  .wk-sheet-foot .wk-sheet-hint--keys { display: none; }
+}
+.wk-sheet-goal-label { margin: 0 0 var(--space-1); font-size: var(--text-sm); }

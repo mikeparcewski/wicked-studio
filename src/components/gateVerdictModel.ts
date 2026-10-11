@@ -916,4 +916,3 @@ export function layerLine(view: GateVerdictView): string | null {
   if (judge !== 'pass') return null;
   return `judge${view.judgeCli !== null ? ` (${view.judgeCli})` : ''}: pass · evaluator’s own verdict: FAIL — the evaluator is what denied it`;
 }
-

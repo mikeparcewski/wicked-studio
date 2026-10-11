@@ -25,14 +25,14 @@ describe('FileViewer — the diff source (F-7R2-013)', () => {
     render(<FileViewer runId="r-gt-done" defaultTab="diff" onClose={() => {}} onUnsupported={() => {}} />);
     const note = await screen.findByTestId('diff-baseline-note');
     expect(note).toHaveAttribute('data-source', 'branch');
-    expect(note).toHaveTextContent('showing the run branch vs its base — the worktree is gone, so this is the committed work the run left on its branch');
+    expect(note).toHaveTextContent('Showing the work the run committed on its branch.');
     expect(screen.getByTestId('diff-line-add')).toBeInTheDocument();
   });
 
-  it('source: "branch" with an empty diff ⇒ "the run branch carries no change over its base."', async () => {
+  it('source: "branch" with an empty diff ⇒ "This run changed no files."', async () => {
     vi.spyOn(client.api, 'getRunDiff').mockResolvedValue({ diff: '', truncated: false, source: 'branch' } as never);
     render(<FileViewer runId="r-gt-done" defaultTab="diff" onClose={() => {}} onUnsupported={() => {}} />);
-    expect(await screen.findByTestId('viewer-clean-tree')).toHaveTextContent('the run branch carries no change over its base.');
+    expect(await screen.findByTestId('viewer-clean-tree')).toHaveTextContent('This run changed no files.');
   });
 
   it('source: "worktree" and a pre-0.36 answer (no source) keep the HEAD-baseline note (data-source=worktree)', async () => {
@@ -40,8 +40,8 @@ describe('FileViewer — the diff source (F-7R2-013)', () => {
     render(<FileViewer runId="r-1" defaultTab="diff" onClose={() => {}} onUnsupported={() => {}} />);
     const note = await screen.findByTestId('diff-baseline-note');
     expect(note).toHaveAttribute('data-source', 'worktree');
-    expect(note).toHaveTextContent('showing uncommitted changes vs HEAD; committed work is not shown here');
-    expect(screen.getByTestId('viewer-clean-tree')).toHaveTextContent('clean tree — no changes.');
+    expect(note).toHaveTextContent('Showing uncommitted changes only; committed work is not shown here.');
+    expect(screen.getByTestId('viewer-clean-tree')).toHaveTextContent('No uncommitted changes.');
     cleanup();
     getRunDiff.mockResolvedValue({ diff: DIFF, truncated: false, source: 'worktree' } as never);
     render(<FileViewer runId="r-1" defaultTab="diff" onClose={() => {}} onUnsupported={() => {}} />);

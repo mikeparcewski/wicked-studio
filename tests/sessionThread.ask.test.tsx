@@ -97,11 +97,11 @@ describe('one thread, one voice', () => {
     expect(screen.queryByTestId('session-run')).toBeNull();
     expect(screen.queryByTestId('chain')).toBeNull();
     expect(texts('ask-line')).toStrictEqual([
-      'claude answers · picked at random',
+      'claude answers',
       'codex is reviewing',
       'reviewer · 1 finding: the line cited is the signature',
     ]);
-    expect(screen.getByTestId('session-ask-shape').textContent).toBe('Shape: answer · claude answers · codex reviews');
+    expect(screen.getByTestId('session-ask-shape').textContent).toBe('claude answers · codex checks it');
   });
 
   it('a quiet line expands to its row: the pick, the score and the shape under who answers; evidence and suggestion under a finding', async () => {
@@ -109,7 +109,7 @@ describe('one thread, one voice', () => {
     await waitFor(() => expect(screen.queryAllByTestId('ask-line-toggle').length).toBeGreaterThan(1));
     const toggles = screen.getAllByTestId('ask-line-toggle');
     fireEvent.click(toggles[0]!);
-    expect(texts('ask-line-detail')).toStrictEqual(['Picked claude at random from claude, codex.Score 0 · band 0–19 · no creator step and no declared scope.Shape: answer.']);
+    expect(texts('ask-line-detail')).toStrictEqual(['Picked claude at random from claude, codex.Steps: answer.']);
     fireEvent.click(toggles[toggles.length - 1]!);
     expect(screen.getAllByTestId('ask-line-detail').at(-1)!.textContent).toBe('Evidence: greet.js:2Suggestion: cite line 3');
   });
@@ -150,7 +150,7 @@ describe('the absent reviewer, a re-pick, the one-seat refusal, the end', () => 
     page();
     await waitFor(() => expect(screen.queryAllByTestId('ask-line').length).toBe(5));
     expect(texts('ask-line')).toStrictEqual([
-      'claude answers · picked at random',
+      'claude answers',
       'No reviewer — only claude is signed in. Sign in', // the PA of THAT moment (the re-pick came after — codex #10)
       'codex takes over — claude stopped answering',
       'Can’t build from here: only codex is signed in; sign in another helper so review can run. Sign in',
@@ -251,7 +251,7 @@ describe('§8 F13 — an older daemon', () => {
     teamBody = null;
     page();
     await screen.findByText(/greet\(\) does not trim its input/);
-    expect(screen.getByTestId('session-ask-older').textContent).toContain('Older daemon: every helper answers at once');
+    expect(screen.getByTestId('session-ask-older').textContent).toContain('Every helper answers at once');
     expect(screen.queryAllByTestId('ask-line')).toHaveLength(0);
   });
 

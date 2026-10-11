@@ -137,10 +137,10 @@ with sync_playwright() as p:
     pa = t1["lines"][0]["text"].split(" answers")[0]
     reviewer = t1["lines"][1]["text"].split(" is reviewing")[0]
     check("quiet-lines",
-          t1["lines"][0]["text"] == f"{pa} answers · picked at random"
+          t1["lines"][0]["text"] == f"{pa} answers"
           and t1["lines"][1]["text"] == f"{reviewer} is reviewing"
           and t1["lines"][2]["text"].startswith("reviewer · 1 finding: the cited line is the signature")
-          and t1["shape"] == f"Shape: answer · {pa} answers · {reviewer} reviews", lines=t1["lines"], shape=t1["shape"])
+          and t1["shape"] == f"{pa} answers · {reviewer} checks it", lines=t1["lines"], shape=t1["shape"])
 
     # ── 2. the look-underneath ────────────────────────────────────────────────────
     page.locator('[data-testid="ask-line"][data-kind="who"] [data-testid="ask-line-toggle"]').click()
@@ -149,8 +149,8 @@ with sync_playwright() as p:
     page.screenshot(path=str(SHOTS / "desk-ask-team-underneath.png"))
     check("look-underneath",
           len(details) == 2
-          and details[0][0].startswith(f"Picked {pa} at random from ") and details[0][1].startswith("Score 0 · band 0–19")
-          and details[0][2] == "Shape: answer."
+          and details[0][0].startswith(f"Picked {pa} at random from ")
+          and details[0][1] == "Steps: answer."
           and details[1] == ["Evidence: greet.js:2 is the template literal; the signature is line 1", "Suggestion: cite greet.js:2 as the body"],
           details=details)
 
@@ -298,7 +298,7 @@ with sync_playwright() as p:
         fail("older", page.evaluate(THREAD))
     t4 = page.evaluate(THREAD)
     page.screenshot(path=str(SHOTS / "desk-ask-team-older.png"))
-    check("older-daemon", t4["older"].startswith("Older daemon: every helper answers at once") and not any(k.startswith("line:") for k in t4["order"]), thread=t4)
+    check("older-daemon", t4["older"].startswith("Every helper answers at once") and not any(k.startswith("line:") for k in t4["order"]), thread=t4)
     page.close()
 
     check("no-page-errors", errors == [], errors=errors)

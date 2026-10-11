@@ -43,6 +43,27 @@ class SectionFailed(Exception):
     pass
 
 
+def sheet_tab_ids(page) -> list:
+    """Every tab of the open sheet: the tablist, then the ones behind "More" (UI-CONTRACT §4.4)."""
+    ids = page.locator('[data-testid="sheet"] [role="tab"]').evaluate_all("els => els.map(e => e.dataset.tab)")
+    more = page.get_by_test_id("sheet-tabs-more-button")
+    if more.count() > 0:
+        more.click()
+        ids += page.locator('[data-testid="sheet-tabs-more-list"] [data-item]').evaluate_all("els => els.map(e => e.dataset.item)")
+        more.click()
+    return ids
+
+
+def sheet_tab(page, tab: str) -> None:
+    """Open a sheet tab, through "More" when it is not in the visible tablist."""
+    loc = page.locator(f'[data-testid="sheet"] [role="tab"][data-tab="{tab}"]')
+    if loc.count() > 0:
+        loc.first.click()
+        return
+    page.get_by_test_id("sheet-tabs-more-button").click()
+    page.locator(f'[data-testid="sheet-tabs-more-list"] [data-item="{tab}"]').click()
+
+
 def fail(step: str, why: str) -> None:
     report["steps"][step] = {"ok": False, "error": why}
     print(json.dumps(report, indent=2))
@@ -90,7 +111,7 @@ with sync_playwright() as p:
         page.goto(f"{origin}/s/run%3A{rid}", wait_until="networkidle")
         page.get_by_test_id("session-run-look").first.wait_for(state="visible", timeout=15000)
         page.get_by_test_id("session-run-look").first.click()
-        page.locator('[data-testid="sheet-tab"][data-tab="whatwhere"]').click()
+        sheet_tab(page, "whatwhere")
 
     def section_rerun() -> None:
         # S16a-1b: "Rerun from <step>" is one more ⋯ choice on the session thread's gate row.

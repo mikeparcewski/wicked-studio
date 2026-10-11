@@ -7,6 +7,7 @@ import { diffSource, type RunDiffSource } from '../api/wave6-wire.js';
 import { classifyDiff, isDimLine } from '../viewer/colorize.js';
 import { useDisplayPath } from '../hooks/useHomePath.js';
 import type { DiffLineKind } from '../viewer/colorize.js';
+import { TechDetails } from './ui/TechDetails.js';
 
 /**
  * The in-studio file & diff viewer (DES-FEEDBACK-002 §3.4, slice I).
@@ -50,6 +51,8 @@ interface Props {
   onClose: () => void;
   /** The daemon has no file/diff routes (generic route-absent 404). */
   onUnsupported: () => void;
+  /** Audit row 9: render in place (a sheet's Changes tab) instead of as a full-screen overlay. */
+  inline?: boolean;
 }
 
 type Fetched<T> =
@@ -96,8 +99,10 @@ function formatBytes(n: number): string {
 
 /** §3.5/§3.6 — kind → token-resolved dress (EC15: tokens only, never hex). */
 const DIFF_STYLE: Record<DiffLineKind, CSSProperties> = {
-  add: { color: 'var(--status-run)', background: 'var(--status-run-dim)' },
-  del: { color: 'var(--status-fail)', background: 'var(--status-fail-dim)' },
+  // The wash carries added/removed; the text stays high-contrast ink on it (the status hue as text
+  // on its own dim wash read under 4.5:1 in wicked-dark).
+  add: { color: 'var(--ink-high)', background: 'var(--status-run-dim)', boxShadow: 'inset 2px 0 0 var(--status-run)' },
+  del: { color: 'var(--ink-high)', background: 'var(--status-fail-dim)', boxShadow: 'inset 2px 0 0 var(--status-fail)' },
   hunk: { color: 'var(--ink-dim)', background: 'var(--surface-raised)' },
   file: { color: 'var(--ink-muted)', fontWeight: 'var(--weight-semi)' as CSSProperties['fontWeight'] },
   meta: { color: 'var(--ink-dim)' },
@@ -128,21 +133,21 @@ function TruncationBanner({ text }: { text: string }): React.ReactElement {
   );
 }
 
-function ErrorPane({ message }: { message: string }): React.ReactElement {
+/** A failed read: one plain sentence; the service's own words only inside Technical details. */
+function ErrorPane({ message, what }: { message: string; what: string }): React.ReactElement {
   return (
-    <p data-testid="viewer-error" className="p-4 text-xs font-mono break-all" style={{ color: 'var(--status-fail)' }}>
-      {message}
-    </p>
+    <div data-testid="viewer-error" className="wk-viewer-state">
+      <p className="wk-viewer-state-line">Couldn’t load {what}.</p>
+      <TechDetails data-testid="viewer-error-detail" text={message} />
+    </div>
   );
 }
 
-function LoadingPane(): React.ReactElement {
-  return (
-    <p className="p-4 text-xs font-mono" style={{ color: 'var(--ink-dim)' }}>Loading…</p>
-  );
+function LoadingPane({ what }: { what: string }): React.ReactElement {
+  return <p data-testid="viewer-loading" className="wk-viewer-state wk-viewer-state-line">Loading {what}…</p>;
 }
 
-export function FileViewer({ runId, path, defaultTab, base, onClose, onUnsupported }: Props): React.ReactElement {
+export function FileViewer({ runId, path, defaultTab, base, onClose, onUnsupported, inline = false }: Props): React.ReactElement {
   const [tab, setTab] = useState<ViewerTab>(path === undefined ? 'diff' : defaultTab);
   const showPath = useDisplayPath();
   const [file, setFile] = useState<Fetched<RunFileContent> | null>(null);
@@ -193,6 +198,10 @@ export function FileViewer({ runId, path, defaultTab, base, onClose, onUnsupport
   // late resolution lands harmlessly (React no-ops setState after unmount),
   // and the timer stays live so a hung request ALWAYS reaches the error state.
   const diffFetchKey = useRef<string | null>(null);
+  // Late answers are accepted only while this viewer is mounted: a reply (or a route-absent refusal)
+  // landing after the sheet tab or route changed must not move the operator (codex r1 on S2).
+  const mounted = useRef(true);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   useEffect(() => {
     if (tab !== 'diff') return;
     const key = `${runId} ${path ?? ''} ${diffAttempt}`;
@@ -200,22 +209,24 @@ export function FileViewer({ runId, path, defaultTab, base, onClose, onUnsupport
     diffFetchKey.current = key;
     let settled = false;
     setDiff({ state: 'loading' });
+    // Audit row 9: the budget says "this is slow" (with Retry) — it never drops the answer. A diff
+    // that lands after the budget replaces the slow notice, so the pane cannot hang on a late reply.
     const timer = setTimeout(() => {
-      if (settled) return;
-      settled = true;
-      setDiff({ state: 'timeout' });
+      if (settled || !current()) return;
+      setDiff((d) => (d?.state === 'loading' ? { state: 'timeout' } : d));
     }, DIFF_TIMEOUT_MS);
+    const current = (): boolean => mounted.current && diffFetchKey.current === key;
     // `base` rides the call only when set: the file tab and a plain viewer keep the two-argument
     // call byte-for-byte (their pins hold); the Full-diff button's `merge-base` is the one change (BC-54).
     (base === undefined ? api.getRunDiff(runId, path) : api.getRunDiff(runId, path, base))
       .then((data) => {
-        if (settled) return;
+        if (settled || !current()) return;
         settled = true;
         clearTimeout(timer);
         setDiff({ state: 'ok', data });
       })
       .catch((e: unknown) => {
-        if (settled) return;
+        if (settled || !current()) return;
         settled = true;
         clearTimeout(timer);
         if (isRouteAbsent(e)) { onUnsupported(); return; }
@@ -245,17 +256,15 @@ export function FileViewer({ runId, path, defaultTab, base, onClose, onUnsupport
 
   // studio#479: the header and the hovers say `~/…` for a path under the home directory in the
   // default layer; the absolute path still drives the reads, the open and the copy.
-  const title = path !== undefined ? showPath(path) : 'whole-run diff';
+  const title = path !== undefined ? showPath(path) : 'Changes in this run';
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'var(--scrim)' }}>
+  const panel = (
       <div
         data-testid="file-viewer"
-        role="dialog"
-        aria-modal="true"
+        {...(inline ? { 'data-inline': 'true', role: 'region' } : { role: 'dialog', 'aria-modal': 'true' })}
         aria-label={title}
-        className="flex flex-col overflow-hidden"
-        style={{
+        className={`flex flex-col overflow-hidden${inline ? ' wk-viewer--inline' : ''}`}
+        style={inline ? undefined : {
           width: 'min(1100px, 86vw)',
           height: '82vh',
           background: 'var(--surface-overlay)',
@@ -269,13 +278,14 @@ export function FileViewer({ runId, path, defaultTab, base, onClose, onUnsupport
           style={{ borderBottom: '1px solid var(--surface-raised)' }}
         >
           <span
-            className="min-w-0 flex-1 truncate text-xs font-mono"
+            className={`min-w-0 flex-1 truncate text-xs${path !== undefined ? ' font-mono' : ' wk-viewer-title'}`}
             style={{ color: 'var(--ink-high)' }}
             title={title}
           >
             {title}
           </span>
-          <div className="flex items-center gap-1 shrink-0" role="tablist" aria-label="Viewer mode">
+          {/* In a sheet tab the whole-run diff is the only view: no one-tab tablist, no close. */}
+          {!(inline && path === undefined) && <div className="flex items-center gap-1 shrink-0" role="tablist" aria-label="Viewer mode">
             {path !== undefined && (
               <button
                 type="button"
@@ -306,7 +316,7 @@ export function FileViewer({ runId, path, defaultTab, base, onClose, onUnsupport
             >
               Diff
             </button>
-          </div>
+          </div>}
           <div className="flex items-center gap-2 shrink-0">
             {path !== undefined && (
               <>
@@ -332,7 +342,7 @@ export function FileViewer({ runId, path, defaultTab, base, onClose, onUnsupport
                 </button>
               </>
             )}
-            <button
+            {!inline && <button
               type="button"
               onClick={onClose}
               aria-label="Close viewer"
@@ -340,7 +350,7 @@ export function FileViewer({ runId, path, defaultTab, base, onClose, onUnsupport
               style={{ color: 'var(--ink-dim)' }}
             >
               ✕
-            </button>
+            </button>}
           </div>
         </div>
 
@@ -351,6 +361,11 @@ export function FileViewer({ runId, path, defaultTab, base, onClose, onUnsupport
           <DiffBody diff={diff} narrowed={path !== undefined} onRetry={retryDiff} onClose={onClose} />
         )}
       </div>
+  );
+  if (inline) return panel;
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'var(--scrim)' }}>
+      {panel}
     </div>
   );
 }
@@ -359,8 +374,8 @@ function FileBody({ file, onOpenExternally }: {
   file: Fetched<RunFileContent> | null;
   onOpenExternally: () => void;
 }): React.ReactElement {
-  if (file === null || file.state === 'loading') return <LoadingPane />;
-  if (file.state === 'error') return <ErrorPane message={file.message} />;
+  if (file === null || file.state === 'loading') return <LoadingPane what="the file" />;
+  if (file.state === 'error') return <ErrorPane message={file.message} what="this file" />;
   const { content, size, truncated, binary } = file.data;
 
   if (binary) {
@@ -472,12 +487,11 @@ function BaselineNote({ source }: { source: RunDiffSource | null }): React.React
     <p
       data-testid="diff-baseline-note"
       data-source={source ?? 'worktree'}
-      className="px-3 py-1.5 text-[10px] font-mono shrink-0"
-      style={{ color: 'var(--ink-dim)', borderBottom: '1px solid var(--surface-raised)' }}
+      className="wk-viewer-baseline shrink-0"
     >
       {branch
-        ? 'showing the run branch vs its base — the worktree is gone, so this is the committed work the run left on its branch'
-        : 'showing uncommitted changes vs HEAD; committed work is not shown here'}
+        ? 'Showing the work the run committed on its branch.'
+        : 'Showing uncommitted changes only; committed work is not shown here.'}
     </p>
   );
 }
@@ -488,29 +502,20 @@ function DiffBody({ diff, narrowed, onRetry, onClose }: {
   onRetry: () => void;
   onClose: () => void;
 }): React.ReactElement {
-  if (diff === null || diff.state === 'loading') return <LoadingPane />;
+  if (diff === null || diff.state === 'loading') return <LoadingPane what="the changes" />;
   if (diff.state === 'timeout') {
     // §1.3-4b: a never-resolving diff lands HERE within the timeout budget —
-    // never an indefinite "Loading…". The request WAS dispatched; retry re-fires it.
+    // never an indefinite "Loading…". The request WAS dispatched and is still
+    // listened to (a late answer replaces this); Retry re-fires it.
     return (
-      <div data-testid="diff-error" className="p-4 flex flex-col items-start gap-2">
-        <p className="text-xs font-mono" style={{ color: 'var(--status-fail)' }}>
-          Couldn&apos;t load the diff — the daemon did not answer in time.
-        </p>
-        <button
-          type="button"
-          data-testid="diff-retry"
-          onClick={onRetry}
-          className="text-xs font-mono underline transition-opacity hover:opacity-70"
-          style={{ color: 'var(--accent)', background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
-        >
-          Retry
-        </button>
+      <div data-testid="diff-error" className="wk-viewer-state">
+        <p className="wk-viewer-state-line">Couldn&apos;t load the diff yet: it is taking longer than usual. It still shows here when it arrives.</p>
+        <button type="button" data-testid="diff-retry" onClick={onRetry} className="wk-btn wk-btn--secondary wk-btn--sm">Retry</button>
       </div>
     );
   }
   if (diff.state === 'cause') return <DiffCauseCard cause={diff.cause} onClose={onClose} />;
-  if (diff.state === 'error') return <ErrorPane message={diff.message} />;
+  if (diff.state === 'error') return <ErrorPane message={diff.message} what="the changes" />;
   const { diff: text, truncated } = diff.data;
   const source = diffSource(diff.data);
 
@@ -521,12 +526,12 @@ function DiffBody({ diff, narrowed, onRetry, onClose }: {
     return (
       <div className="flex-1 min-h-0 flex flex-col">
         <BaselineNote source={source} />
-        <p data-testid="viewer-clean-tree" className="p-4 text-xs font-mono" style={{ color: 'var(--ink-dim)' }}>
+        <p data-testid="viewer-clean-tree" className="wk-viewer-state wk-viewer-state-line">
           {narrowed
-            ? 'no changes to this file.'
+            ? 'No changes to this file.'
             : source === 'branch'
-              ? 'the run branch carries no change over its base.'
-              : 'clean tree — no changes.'}
+              ? 'This run changed no files.'
+              : 'No uncommitted changes.'}
         </p>
       </div>
     );

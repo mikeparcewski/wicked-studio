@@ -30,7 +30,7 @@ describe('FileViewer — File tab states', () => {
 
     // Switching IS the gesture — now the diff fetch fires, narrowed to the path.
     fireEvent.click(screen.getByTestId('viewer-tab-diff'));
-    expect(await screen.findByText('no changes to this file.')).toBeInTheDocument();
+    expect(await screen.findByText('No changes to this file.')).toBeInTheDocument();
     expect(getRunDiff).toHaveBeenCalledExactlyOnceWith('r-1', PATH);
   });
 
@@ -146,7 +146,7 @@ describe('FileViewer — Diff tab states', () => {
     vi.spyOn(client.api, 'getRunDiff').mockResolvedValue({ diff: '', truncated: false });
     render(<FileViewer runId="r-1" defaultTab="diff" onClose={() => {}} onUnsupported={() => {}} />);
 
-    expect(await screen.findByTestId('viewer-clean-tree')).toHaveTextContent('clean tree — no changes.');
+    expect(await screen.findByTestId('viewer-clean-tree')).toHaveTextContent('No uncommitted changes.');
     expect(screen.queryByTestId('viewer-error')).not.toBeInTheDocument();
   });
 
