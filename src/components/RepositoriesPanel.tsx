@@ -18,7 +18,6 @@ import { ago } from './AgeStamp.js';
 import { ProjectSwitcher } from './ProjectSwitcher.js';
 import { RepoFindings } from './RepoFindings.js';
 import { useNeedsSources } from '../store/needsSources.js';
-import { useDisplayText } from '../hooks/useHomePath.js';
 
 type SourceMode = 'local' | 'remote';
 
@@ -125,7 +124,6 @@ const CAPTURE_TONE: Record<string, 'quiet' | 'run' | 'fail'> = {
 };
 
 export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, ambientProject = null }: Props): React.ReactElement {
-  const showPath = useDisplayText();
   const [repos, setRepos] = useState<RepoEntry[]>([]);
   const [runs, setRuns] = useState<SessionView[]>([]);
   const [loading, setLoading] = useState(true);
@@ -685,7 +683,8 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
                     <h3 className="wk-pg-repo-card-name">{repo.name}</h3>
                     <span className="wk-tag" title="Default branch">{repo.default_branch}</span>
                   </div>
-                  <p className="wk-pg-repo-card-path" title={showPath(repo.root_path)}>{showPath(repo.root_path)}</p>
+                  {/* Reel ch59 (studio 0.7.8): the card names the repo; where its checkout lives is detail. */}
+                  <TechDetails data-testid="repo-card-path" summary="Where it is" text={repo.root_path} />
 
                   {/* Attention routing beats navigation: the gate jump, straight to the waiting run. */}
                   {waiting.length > 0 && firstGate !== undefined && (

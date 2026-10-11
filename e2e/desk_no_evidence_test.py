@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 desk_no_evidence_test.py — S17c (DES-STUDIO-REBUILD-001 Amendment 5): a terminal run with no
-checked governance entries says so once ("No governance evidence was recorded for this run —
+checked governance entries says so once ("Nothing was checked on this run —
 it ended <ago>"), the reasons are only under ⋯ (closed by default), and the chain sentence
 adds "· nothing checked".
 
@@ -10,7 +10,7 @@ Against the in-process fixture at 1440x700 on the Desk:
   1. NO-EVIDENCE LINE: r-pay-1's session (S16a-2d: the run page moved there) shows the one line, not individual reason bullets.
   2. REASONS CLOSED: the disclosure starts closed; ⋯ opens it; 8 entries visible.
   3. CHAIN SENTENCE: the session thread's RunBlock for r-pay-1 says "2 of 2 done · nothing checked".
-  4. LIVE-RUN BOUNDARY: b1's session still shows the live "Not checked on this run: …" line.
+  4. LIVE-RUN BOUNDARY: b1's session still shows the live "N checks didn’t run on this run." line.
   5. 0 page errors.
 
 Captures: e2e/shots/desk-no-evidence*.png.
@@ -100,21 +100,22 @@ with sync_playwright() as p:
     cov = page.get_by_test_id("watch-coverage").inner_text()
     check(
         "no-evidence-line",
-        cov.startswith("No governance evidence was recorded for this run — it ended "),
+        cov.startswith("Nothing was checked on this run — it ended "),
         line=cov,
     )
 
     # ── 2a. disclosure closed by default ───────────────────────────────────────────
-    reasons_count_before = page.get_by_test_id("watch-coverage-reasons").count()
-    check("reasons-closed", reasons_count_before == 0, count=reasons_count_before)
+    # studio 0.7.8: the reasons are Technical details — a closed <details> under the line.
+    reasons_open_before = page.get_by_test_id("watch-coverage-reasons").get_attribute("open")
+    check("reasons-closed", reasons_open_before is None, open=reasons_open_before)
 
     # ── 2b. ⋯ opens the disclosure with all 8 entries ──────────────────────────────
-    page.get_by_test_id("watch-coverage-toggle").click()
+    page.locator('[data-testid="watch-coverage-reasons"] summary').click()
     try:
-        page.get_by_test_id("watch-coverage-reasons").wait_for(state="visible", timeout=5000)
+        page.locator('[data-testid="watch-coverage-reasons"] pre').wait_for(state="visible", timeout=5000)
     except Exception:  # noqa: BLE001
-        fail("reasons-open", "watch-coverage-reasons not visible after clicking ⋯")
-    li_count = page.get_by_test_id("watch-coverage-reasons").locator("li").count()
+        fail("reasons-open", "watch-coverage-reasons body not visible after opening Technical details")
+    li_count = len([l for l in page.locator('[data-testid="watch-coverage-reasons"] pre').inner_text().split("\n") if l.strip()])
     check("reasons-count", li_count == 8, count=li_count)
     page.screenshot(path=str(SHOTS / "desk-no-evidence.png"))
 
@@ -145,7 +146,7 @@ with sync_playwright() as p:
     cov_b1 = page.get_by_test_id("watch-coverage").inner_text()
     check(
         "live-run-unchanged",
-        cov_b1 == "Not checked on this run: scope drift (no declared scope)",
+        cov_b1 == "1 check didn’t run on this run.",
         line=cov_b1,
     )
     page.screenshot(path=str(SHOTS / "desk-no-evidence-b1.png"))

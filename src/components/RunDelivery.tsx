@@ -1,4 +1,5 @@
 import { CodebaseDownload, DeliverCredentialsNotice } from './session/CodebaseDownload.js';
+import { TechDetails } from './ui/TechDetails.js';
 import { useEffect, useMemo } from 'react';
 import type { CoreEvent, SessionView } from '../api/types.js';
 import { useDeliveryStore } from '../store/delivery.js';
@@ -450,11 +451,7 @@ export function RunDelivery({ view, navigate }: Props): React.ReactElement {
         * VERBATIM — never re-worded, never silent. */}
       {claim === 'stranded' && (
         <>
-          {workdir !== undefined && workdir !== null && (
-            <p className="font-mono" style={{ color: 'var(--ink-dim)' }} title={workdir}>
-              the work is in {compactPath(workdir)}
-            </p>
-          )}
+          {workdir !== undefined && workdir !== null && <WorkLocation workdir={workdir} />}
           <div>
             <button
               type="button"
@@ -520,24 +517,14 @@ export function RunDelivery({ view, navigate }: Props): React.ReactElement {
                 so `??` cannot paint a blank paragraph here. */}
             {reason !== null ? showText(reason) : 'crew recorded no reason'}
           </p>
-          {workdir !== undefined && workdir !== null && (
-            <p className="font-mono" style={{ color: 'var(--ink-dim)' }} title={workdir}>
-              the work is in {compactPath(workdir)}
-            </p>
-          )}
+          {workdir !== undefined && workdir !== null && <WorkLocation workdir={workdir} />}
         </>
       )}
 
       {claim === 'none' && ((workdir !== undefined && workdir !== null) || remedyLicensed) && (
-        <p className="font-mono" style={{ color: 'var(--ink-dim)' }}
-          {...(workdir !== undefined && workdir !== null ? { title: workdir } : {})}
-        >
-          {workdir !== undefined && workdir !== null
-            ? remedyLicensed
-              ? `the work is in ${compactPath(workdir)} — launch with deliver: pr to open a PR from it`
-              : `the work is in ${compactPath(workdir)}`
-            : 'launch with deliver: pr to have the run open a PR from its worktree'}
-        </p>
+        workdir !== undefined && workdir !== null
+          ? <WorkLocation workdir={workdir} {...(remedyLicensed ? { next: 'launch with deliver: pr to open a PR from it' } : {})} />
+          : <p style={{ color: 'var(--ink-dim)' }}>launch with deliver: pr to have the run open a PR from its worktree</p>
       )}
 
       {/* What the engine did before the push — and, when it refused, why (wicked-core#431). Last, so
@@ -551,6 +538,19 @@ export function RunDelivery({ view, navigate }: Props): React.ReactElement {
       {/* crew#720: the credentials-missing state, and the final-codebase zip in every outcome. */}
       <DeliverCredentialsNotice view={view} />
       <CodebaseDownload view={view} testId="run-delivery-codebase-zip" />
+    </div>
+  );
+}
+
+/**
+ * Where the run's work sits, said in plain words (reel ch59, studio 0.7.8): the worktree path is
+ * Technical details (`~/…` in the default layer), never the line itself.
+ */
+function WorkLocation({ workdir, next }: { workdir: string; next?: string }): React.ReactElement {
+  return (
+    <div data-testid="run-delivery-worktree">
+      <p style={{ color: 'var(--ink-dim)' }}>The work is saved on this machine{next !== undefined ? ` — ${next}` : ''}.</p>
+      <TechDetails summary="Where it is" text={workdir} />
     </div>
   );
 }

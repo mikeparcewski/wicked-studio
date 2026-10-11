@@ -1,11 +1,11 @@
 import { useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { TechDetails } from '../ui/TechDetails.js';
 import type { SessionView } from '../../api/types.js';
 import { strandedCard } from '../../board/proposalCard.js';
 import { DELIVER_HASH } from '../../board/needsYou.js';
 import { deliverUnit } from '../delivery.js';
 import { DeliverLift } from '../DeliverLift.js';
 import { deliverLift } from '../deliverLiftModel.js';
-import { compactPath } from '../WhatWhere.js';
 import { useDisplayPath } from '../../hooks/useHomePath.js';
 import { useRunEvents } from '../../hooks/useRunEvents.js';
 import { usePostHocDeliverStore } from '../../store/postHocDeliver.js';
@@ -94,7 +94,10 @@ export function StrandedCard({ view }: { view: SessionView }): React.ReactElemen
       <p data-testid="session-proposal-outcome" className="wk-prop-text">{card.out}</p>
       {lift !== null && lift.outcome === 'conflict' && <DeliverLift view={lift} />}
       {workdir !== null && (
-        <p data-testid="session-stranded-worktree" className="wk-prop-why" title={workdir}>The work is in <code>{compactPath(workdir)}</code>.</p>
+        <div data-testid="session-stranded-worktree" className="wk-prop-why">
+          <p className="wk-prop-why">The work is saved on this machine.</p>
+          <TechDetails summary="Where it is" text={workdir} />
+        </div>
       )}
       {card.error !== null && (
         <div data-testid="session-stranded-error" role="alert" className="wk-prop-why">

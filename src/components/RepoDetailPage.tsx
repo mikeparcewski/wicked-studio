@@ -11,7 +11,6 @@ import { statusWord } from '../board/statusWords.js';
 import { relTime } from '../board/relTime.js';
 import { plainRunTitle } from '../board/deskWords.js';
 import { useMembershipStore } from '../store/membership.js';
-import { useDisplayText } from '../hooks/useHomePath.js';
 import { readErrorKind } from '../api/errors.js';
 import { EmptyState, PageFrame, SectionTitle, Skeleton, StateBanner, StatLine, TechDetails } from './ui/index.js';
 
@@ -55,7 +54,6 @@ export function dedupeContributors(rows: readonly GitContributor[]): GitContribu
 }
 
 export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph }: Props): React.ReactElement {
-  const showPath = useDisplayText();
   const [requirementsOpen, setRequirementsOpen] = useState(false);
   const [repo, setRepo] = useState<RepoEntry | null>(null);
   const [runs, setRuns] = useState<SessionView[]>([]);
@@ -215,7 +213,7 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph }: P
       <PageFrame
         data-testid="repo-detail-page"
         title={repo.name}
-        intro={`Branch ${repo.default_branch} · ${showPath(repo.root_path)}`}
+        intro={`Branch ${repo.default_branch}`}
         actions={(
           <>
             <button type="button" className="wk-btn wk-btn--primary" data-testid="repo-open-graph" onClick={() => onOpenGraph()}>
@@ -239,6 +237,8 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph }: P
           </>
         )}
       >
+        {/* Reel ch59 (studio 0.7.8): the checkout path is detail, not the page's intro. */}
+        <TechDetails data-testid="repo-detail-path" summary="Where it is" text={repo.root_path} />
         {/* §7.8 (slice AC, EC43): the named action previews what it does and writes. */}
         <p data-testid="action-preview" className="wk-field-note wk-pg-repo-preview">
           Onboarding rebuilds this repository’s code map as a tracked run you can watch; it usually takes a few minutes.

@@ -44,7 +44,8 @@ describe('S16a-1a: the stranded card in the thread', () => {
     render(<StrandedCard view={strandedView()} />);
     expect(screen.getByTestId('session-stranded').dataset.state).toBe('ask');
     expect(screen.getByTestId('session-proposal-outcome')).toHaveTextContent('Finished, but the work hasn’t been pushed anywhere yet');
-    expect(screen.getByTestId('session-stranded-worktree')).toHaveTextContent('/w/trees/r-str');
+    expect(screen.getByTestId('session-stranded-worktree')).toHaveTextContent('The work is saved on this machine.');
+    expect(screen.getByTestId('session-stranded-worktree').querySelector('details')!.textContent).toContain('/w/trees/r-str');
     expect(screen.getByTestId('session-stranded-deliver')).toHaveTextContent('Deliver — open a PR');
     expect(deliver).not.toHaveBeenCalled();
   });

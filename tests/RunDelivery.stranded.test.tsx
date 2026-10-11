@@ -76,8 +76,8 @@ describe('the stranded card', () => {
     expect(card.textContent).toMatch(/sitting uncommitted in its worktree/i);
     expect(card.textContent).toMatch(/No PR is on record/);
     // The DTO fact: where the work is.
-    expect(card.textContent).toContain('the work is in');
-    expect(screen.getByTitle('/w/trees/r-str')).toBeInTheDocument();
+    expect(card.textContent).toContain('The work is saved on this machine');
+    expect(screen.getByTestId('run-delivery-worktree').querySelector('details')!.textContent).toContain('/w/trees/r-str');
     // The remedy, armed.
     expect(screen.getByTestId('run-deliver-button')).toBeEnabled();
     expect(screen.getByTestId('run-deliver-button').textContent).toMatch(/Deliver/);
