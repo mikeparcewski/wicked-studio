@@ -135,6 +135,8 @@ describe('the page', () => {
     // A short line whose tail is internal tokens still keeps them behind the disclosure.
     const tokens = 'The reviewer could not join on claude: team plan monitors=1.';
     expect(plainWatchLine(tokens)).toEqual({ line: 'The reviewer could not join on claude', detail: tokens });
+    const paren = 'claude takes over — copilot stopped answering (quota_exhausted).';
+    expect(plainWatchLine(paren)).toEqual({ line: 'claude takes over — copilot stopped answering.', detail: paren });
   });
 
   it('says time plainly', () => {

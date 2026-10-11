@@ -159,7 +159,7 @@ export function StandingOrdersPanel(): React.ReactElement | null {
                 <input
                   data-testid="standing-order-input"
                   aria-label="A standing instruction in plain words"
-                  placeholder="e.g. approve intake on recipe-cards while I’m away"
+                  placeholder="e.g. approve intake steps while I’m away"
                   value={text}
                   onChange={(e) => setText(e.target.value)}
                   className="wk-field"

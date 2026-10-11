@@ -27,7 +27,7 @@
 .wk-desk-underline { text-decoration-skip-ink: none; text-underline-offset: 3px; }
 
 /* ── The Orders popover (row 33): one empty sentence, a field, a note. ── */
-.wk-orders-pop { display: flex; flex-direction: column; gap: var(--space-2); font-size: var(--text-xs); color: var(--ink-body); }
+.wk-orders-pop { white-space: normal; display: flex; flex-direction: column; gap: var(--space-2); font-size: var(--text-xs); color: var(--ink-body); }
 .wk-orders-pop p { margin: 0; line-height: 1.45; }
 .wk-orders-pop-form { display: flex; gap: var(--space-2); align-items: center; }
 .wk-orders-pop-form .wk-field { flex: 1; min-width: 0; padding: 4px 10px; min-height: var(--control-h); }
@@ -59,7 +59,9 @@
   /* Toasts: one compact card docked bottom, above the composer, never a stack over the page. */
   [data-testid="gate-notification-layer"] { left: var(--space-4); right: var(--space-4) !important; align-items: stretch !important; }
   .wk-desk-toast { width: auto; padding: 8px 10px; }
-  .wk-desk-toast-work { display: none; }
+  .wk-desk-toast-open { display: none; }
+  /* Row moves size to their words on phone (still 44 px tall), so a group's answers share a line. */
+  .wk-desk-need .wk-need-act { min-width: 0; padding: 0 var(--space-3); }
   .wk-watchtower-head { padding: var(--space-4); }
   .wk-watchtower-body { padding: var(--space-3) var(--space-4) var(--space-6); }
   .wk-watchtower-row { flex-wrap: wrap; }

@@ -3,6 +3,7 @@ import type { SessionView } from '../../api/types.js';
 import type { WatchKind } from '../../api/watch-wire.js';
 import { readErrorKind } from '../../api/errors.js';
 import { absTime, relTime } from '../../board/relTime.js';
+import { plainRunTitle } from '../../board/deskWords.js';
 import { readWatch, useWatchFeed } from '../../hooks/useWatchFeed.js';
 import type { Navigate } from '../../hooks/useRoute.js';
 import { jumpPath, orphanedRuns, runPath, useWatchStore, type WatchRow } from '../../store/watch.js';
@@ -27,6 +28,11 @@ export function plainWatchLine(sentence: string): { line: string; detail: string
   // Long engine prose, or a tail carrying internal tokens ("monitors=1", "run_unit", a path), goes
   // behind the disclosure; a short plain sentence stays whole.
   const internal = colon !== -1 && /[=_/\\]/.test(sentence.slice(colon + 2));
+  // A parenthetical of internal tokens ("(quota_exhausted)") drops from the line, kept in the detail.
+  const paren = /\s*\(([^()]*[=_/\\][^()]*)\)/u;
+  if (colon === -1 && paren.test(sentence)) {
+    return { line: sentence.replace(paren, '').trim(), detail: sentence };
+  }
   if (colon !== -1 && (sentence.length > 60 || internal)) {
     return { line: sentence.slice(0, colon).trim().replace(/[\p{P}\s]+$/u, ''), detail: sentence };
   }
@@ -72,6 +78,12 @@ export function WatchtowerPage({ runs, navigate, now }: {
   const orphaned = useWatchStore((s) => Object.keys(orphanedRuns(s.fold)).length);
   const [retrying, setRetrying] = useState(false);
   const go = (path: string) => (e: React.MouseEvent): void => { e.preventDefault(); navigate(path); };
+  // Rows that say the same thing about different work tell the work apart (UX gate S1: DUP).
+  const workOf = (runId: string | null): string | null => {
+    if (runId === null) return null;
+    const t = plainRunTitle(runs.find((v) => v.session.id === runId)?.session.problem ?? '').trim();
+    return t === '' ? null : t;
+  };
 
   return (
     <div data-testid="watchtower" data-registry={registry} className="wk-watchtower">
@@ -133,7 +145,9 @@ export function WatchtowerPage({ runs, navigate, now }: {
                 <div className="wk-desk-need-body">
                   <span className="wk-watchtower-sentence">{line}</span>
                   <span className="wk-desk-need-line">
-                    <span title={absTime(r.at)}>{relTime(r.at, now)}</span> · {STATE_WORD[r.state]}
+                    <span title={absTime(r.at)}>{relTime(r.at, now)}</span>
+                    {workOf(r.runId) !== null && <> · <span data-testid="watchtower-row-work">{workOf(r.runId)}</span></>}
+                    {' · '}{STATE_WORD[r.state]}
                     {r.stateLine !== null && r.stateLine !== STATE_WORD[r.state] && ` — ${r.stateLine}`}
                     {r.rolledUp > 0 && ` · and ${r.rolledUp} more like it`}
                     {r.corroboratedBy.length > 0 && ' · also seen by the team'}
