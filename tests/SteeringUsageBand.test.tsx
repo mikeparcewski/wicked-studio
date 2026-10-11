@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { SteeringUsageBand } from '../src/components/SteeringUsageBand.js';
 import { SteeringPage } from '../src/components/SteeringPage.js';
@@ -132,45 +132,48 @@ describe('SteeringUsageBand — the folds', () => {
     });
     band();
 
-    await waitFor(() => expect(screen.getByTestId('steering-usage-evals')).toHaveAttribute('data-value', '3'));
+    const facts = () => screen.getByTestId('steering-usage');
+    await waitFor(() => expect(facts()).toHaveAttribute('data-evals', '3'));
     // Delta vs the proven prior window: 3 now, 2 before → +1.
-    expect(screen.getByTestId('steering-usage-evals')).toHaveAttribute('data-delta', '1');
-    expect(screen.getByTestId('steering-usage-denials')).toHaveAttribute('data-value', '1');
-    expect(screen.getByTestId('steering-usage-split')).toHaveAttribute('data-value', '2 / 1');
+    expect(facts()).toHaveAttribute('data-evals-delta', '1');
+    expect(facts()).toHaveAttribute('data-denials', '1');
+    expect(facts()).toHaveAttribute('data-split', '2 / 1');
     // run-1 is claimed, run-2 not → 50%.
-    expect(screen.getByTestId('steering-usage-governed')).toHaveAttribute('data-value', '50%');
-    expect(screen.getByTestId('steering-usage-governed')).toHaveTextContent('1 of 2 runs saw ≥1 gate evaluation');
+    expect(facts()).toHaveAttribute('data-governed', '50%');
+    expect(screen.getByTestId('steering-usage-governed')).toHaveTextContent('50% of runs checked (1 of 2)');
+    expect(screen.getByTestId('steering-usage-delta')).toHaveTextContent('+1 vs the 7 days before');
+    // One sentence-case line of facts — KPI tiles are retired (UI-CONTRACT §4.6).
+    expect(facts()).toHaveTextContent('3 gate checks in the last 7 days');
   });
 
   it('ZERO history: 0 evaluations with NO delta ("—", never a fabricated 0%)', async () => {
     listClaims.mockResolvedValue({ claims: [] });
     band();
 
-    await waitFor(() => expect(screen.getByTestId('steering-usage-evals')).toHaveAttribute('data-value', '0'));
-    expect(screen.getByTestId('steering-usage-evals')).toHaveAttribute('data-delta', 'none');
-    expect(within(screen.getByTestId('steering-usage-evals')).getByTestId('stat-delta')).toHaveTextContent('—');
-    expect(screen.getByTestId('steering-usage-evals')).toHaveTextContent('no proven prior window');
-    expect(screen.getByTestId('steering-usage-denials')).toHaveAttribute('data-delta', 'none');
+    await waitFor(() => expect(screen.getByTestId('steering-usage')).toHaveAttribute('data-evals', '0'));
+    expect(screen.getByTestId('steering-usage')).toHaveAttribute('data-evals-delta', 'none');
+    expect(screen.getByTestId('steering-usage-delta')).toHaveTextContent('Nothing to compare with yet');
+    expect(screen.getByTestId('steering-usage')).toHaveAttribute('data-denials-delta', 'none');
   });
 
-  it('a daemon without the claims wire gets "—" tiles that SAY so', async () => {
+  it('a service without the claims wire hides the numbers and SAYS so', async () => {
     listClaims.mockRejectedValue(new ApiError(404, 'not found'));
     band();
 
     await waitFor(() =>
-      expect(screen.getByTestId('steering-usage-evals')).toHaveTextContent('claims not served by this daemon'),
+      expect(screen.getByTestId('steering-usage-claims-note')).toHaveTextContent('doesn’t report gate checks yet'),
     );
-    expect(screen.getByTestId('steering-usage-evals')).toHaveAttribute('data-value', '—');
-    expect(screen.getByTestId('steering-usage-governed')).toHaveAttribute('data-value', '—');
+    expect(screen.getByTestId('steering-usage')).toHaveAttribute('data-evals', '—');
+    expect(screen.getByTestId('steering-usage')).toHaveAttribute('data-governed', '—');
+    expect(screen.getByTestId('steering-usage').textContent).not.toMatch(/\b0 gate checks/);
   });
 
-  it('unused rules count active zero-evidence rules; context names the top-fired rule', async () => {
+  it('unused rules count active zero-evidence rules; the meta line names the most-used rule', async () => {
     listClaims.mockResolvedValue({ claims: [] });
     band();
 
-    const tile = await screen.findByTestId('steering-usage-rules');
-    expect(tile).toHaveAttribute('data-value', '2'); // PAT-002 + PAT-003 (security)
-    expect(tile).toHaveTextContent('top fired: PAT-001 ×10');
+    await waitFor(() => expect(screen.getByTestId('steering-usage')).toHaveAttribute('data-unused', '2')); // PAT-002 + PAT-003 (security)
+    expect(screen.getByTestId('steering-usage-top')).toHaveTextContent('most used: PAT-001 (10×)');
   });
 
   it('unused-rules click-through navigates to the majority type page with ?usage=unused', async () => {
@@ -183,24 +186,24 @@ describe('SteeringUsageBand — the folds', () => {
     expect(navigate).toHaveBeenCalledWith('/steering/policies?type=security&usage=unused');
   });
 
-  it('scoreboard unsupported → the rules tile is honestly absent, not zero', async () => {
+  it('scoreboard unsupported → the unused count is honestly absent, not zero', async () => {
     listClaims.mockResolvedValue({ claims: [] });
     band({ sb: null });
 
-    const tile = await screen.findByTestId('steering-usage-rules');
-    expect(tile).toHaveAttribute('data-value', '—');
-    expect(tile).toHaveTextContent('scoreboard not served by this daemon');
+    await waitFor(() => expect(screen.getByTestId('steering-usage-rules-note')).toHaveTextContent('Rule usage isn’t reported'));
+    expect(screen.getByTestId('steering-usage')).toHaveAttribute('data-unused', '—');
+    expect(screen.queryByTestId('steering-usage-rules')).toBeNull();
   });
 
-  it('latest eval: absent → the honest absent tile pointing at Testing › Evals', async () => {
+  it('latest eval: absent → a door to Testing › Evals', async () => {
     listClaims.mockResolvedValue({ claims: [] });
     const navigate = vi.fn();
     band({ navigate });
 
-    const tile = await screen.findByTestId('steering-usage-eval');
-    expect(tile).toHaveAttribute('data-value', '—');
-    expect(tile).toHaveTextContent('no eval run this session');
-    await userEvent.setup().click(tile);
+    const door = await screen.findByTestId('steering-usage-eval');
+    expect(screen.getByTestId('steering-usage')).toHaveAttribute('data-eval', '—');
+    expect(door).toHaveTextContent('Run an eval');
+    await userEvent.setup().click(door);
     expect(navigate).toHaveBeenCalledWith('/testing/evals');
   });
 
@@ -209,9 +212,9 @@ describe('SteeringUsageBand — the folds', () => {
     useEvalReportStore.getState().deposit(report, 'dev-behaviors');
     band();
 
-    const tile = await screen.findByTestId('steering-usage-eval');
-    expect(tile).toHaveAttribute('data-value', '9/12');
-    expect(tile).toHaveTextContent('2 gaps');
+    const door = await screen.findByTestId('steering-usage-eval');
+    expect(screen.getByTestId('steering-usage')).toHaveAttribute('data-eval', '9/12');
+    expect(door).toHaveTextContent('2 gaps');
   });
 });
 
@@ -248,7 +251,7 @@ describe('the ?usage=unused click-through — the grid filters to the unused ids
     render(<SteeringPage type="security" navigate={() => undefined} search="?usage=unused" />);
 
     await waitFor(() => expect(screen.getByTestId('steering-usage-filter-note')).toBeInTheDocument());
-    expect(screen.getByTestId('steering-usage-filter-note')).toHaveTextContent('cannot be computed');
+    expect(screen.getByTestId('steering-usage-filter-note')).toHaveTextContent('can’t say which rules are unused');
     await waitFor(() => expect(screen.getAllByTestId('steering-grid-row')).toHaveLength(2)); // both security rules
   });
 });

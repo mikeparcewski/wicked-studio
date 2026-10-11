@@ -584,3 +584,23 @@ export function deliveryRollupWord(r: DeliveryRollup): string | null {
   if (!r.onWire) return null;
   return `${r.delivered} of ${r.total} delivered`;
 }
+
+/**
+ * The card's display title (studio#685 row 50): a New-test group label `qe-tests-<repo>` reads as
+ * the repository's name ("wicked-bus tests"); anything else shows as authored. The raw label stays
+ * on the model (`title`) for search and the card's `data-campaign-id`.
+ */
+export function cardTitleWord(m: Pick<CampaignCardModel, 'kind' | 'title'>): string {
+  const repo = m.kind === 'group' ? /^qe-tests-(.+)$/.exec(m.title)?.[1] : undefined;
+  return repo !== undefined && repo !== '' ? `${repo} tests` : m.title;
+}
+
+/**
+ * A member run's workflow in plain words, or `null` when the id is a generated one-off
+ * (`wf-<hash>…`, a launch-time synthesized workflow: an internal handle, never a name).
+ */
+export function workflowWord(id: string): string | null {
+  if (/^wf-/.test(id)) return null;
+  if (id === 'qe-author-tests') return 'Test authoring';
+  return id.replace(/[-_]+/g, ' ').replace(/^./, (c) => c.toUpperCase());
+}

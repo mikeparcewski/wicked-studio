@@ -87,7 +87,7 @@ describe('T24 — the §1.5 probe states', () => {
     listCampaigns.mockRejectedValue(new ApiError(404, 'Not Found'));
     page();
     await waitFor(() => expect(screen.getByTestId('campaigns-unsupported')).toBeInTheDocument());
-    expect(screen.getByTestId('campaigns-unsupported').textContent).toContain('predates test grouping');
+    expect(screen.getByTestId('campaigns-unsupported').textContent).toContain('can’t list tests');
     expect(screen.getByTestId('testing-recon-open')).toBeInTheDocument();
     expect(screen.getByTestId('testing-campaign-open')).toBeInTheDocument();
     expect(screen.getByTestId('testing-author-open')).toBeInTheDocument();
@@ -99,8 +99,8 @@ describe('T24 — the §1.5 probe states', () => {
     await waitFor(() => expect(screen.getByTestId('campaigns-empty')).toBeInTheDocument());
     // Wave 6 (F-7R2-014): the empty state says what fills it — a New test's launch, then the
     // produced set's counts — not "run recon".
-    expect(screen.getByTestId('campaigns-empty').textContent).toContain('New test launches it');
-    expect(screen.getByTestId('campaigns-empty').textContent).toContain('executed / passed / failed');
+    expect(screen.getByTestId('campaigns-empty').textContent).toContain('as soon as you start one');
+    expect(screen.getByTestId('campaigns-empty').textContent).toContain('fills in with its results');
     fireEvent.click(screen.getByTestId('campaigns-empty-cta'));
     expect(await screen.findByTestId('testing-launch-panel')).toHaveAttribute('data-intent', 'campaign');
   });
@@ -112,7 +112,7 @@ describe('T24 — the §1.5 probe states', () => {
     });
     page(() => {}, [view('run-1', 'completed')]);
     await screen.findByTestId('campaigns-kpis');
-    expect(screen.getByTestId('stat-campaigns')).toHaveAttribute('data-value', '1');
+    expect(screen.getByTestId('campaigns-kpis')).toHaveAttribute('data-tests', '1');
     expect(screen.getAllByTestId('campaigns-filter-chip').length).toBeGreaterThan(0);
     expect(screen.getAllByTestId('campaign-card')).toHaveLength(1);
     expect(screen.queryByTestId('campaigns-empty')).toBeNull();
@@ -201,13 +201,17 @@ describe('the KPI band — folds from the wire fixtures, ≤6 tiles under the th
     page(() => {}, runs);
     await screen.findByTestId('campaigns-kpis');
 
-    expect(screen.getByTestId('stat-campaigns')).toHaveAttribute('data-value', '2');
+    const facts = screen.getByTestId('campaigns-kpis');
+    expect(facts).toHaveAttribute('data-tests', '2');
     // Campaign-member runs in the window: all 3 live member runs.
-    expect(screen.getByTestId('stat-campaign-runs')).toHaveAttribute('data-value', '3');
-    expect(screen.getByTestId('stat-campaign-running')).toHaveAttribute('data-value', '1');
-    expect(screen.getByTestId('stat-campaign-gates')).toHaveAttribute('data-value', '2');
+    expect(facts).toHaveAttribute('data-runs', '3');
+    expect(facts).toHaveAttribute('data-running', '1');
+    expect(facts).toHaveAttribute('data-gates', '2');
     // Failed in the positional window, from the run list — run-2.
-    expect(screen.getByTestId('stat-campaign-failed')).toHaveAttribute('data-value', '1');
+    expect(facts).toHaveAttribute('data-failed', '1');
+    // One sentence-case line of facts (UI-CONTRACT §4.6), zeros hidden.
+    expect(facts.textContent).toContain('2 tests');
+    expect(facts.textContent).toContain('2 need you');
     // Pass rate: 9 landed of 10 finished = 90%.
     const pass = screen.getByTestId('stat-campaign-pass-rate');
     expect(pass).toHaveAttribute('data-value', '90%');
@@ -225,7 +229,7 @@ describe('the KPI band — folds from the wire fixtures, ≤6 tiles under the th
     expect(screen.getByTestId('stat-campaign-pass-rate').textContent).toContain('no finished runs yet');
   });
 
-  it('the needs-you tile deep-links STRAIGHT to the waiting run (its pinned approval dock)', async () => {
+  it('the facts line deep-links STRAIGHT to the waiting run (its pinned approval dock)', async () => {
     listCampaigns.mockResolvedValue({
       campaigns: [makeCampaign('alpha', [{ status: 'awaiting_human', runId: 'run-g' }, { status: 'running' }])],
       groups: [],
@@ -233,7 +237,7 @@ describe('the KPI band — folds from the wire fixtures, ≤6 tiles under the th
     const navigate = vi.fn();
     page(navigate, [view('run-g', 'awaiting_human')]);
     await screen.findByTestId('campaigns-kpis');
-    fireEvent.click(screen.getByTestId('stat-campaign-gates'));
+    fireEvent.click(screen.getByTestId('campaigns-first-waiting'));
     expect(navigate).toHaveBeenCalledWith('/s/run%3Arun-g');
   });
 });
@@ -266,9 +270,12 @@ describe('the cards — scoreboard stats condensed, needs-you FIRST', () => {
     // §3.3: a campaign's DAG is a DECLARED denominator — no "so far" on campaign cards.
     expect(within(cards[0]!).getByTestId('campaign-card-progress').textContent).toBe('2 of 6 landed');
     expect(within(cards[1]!).getByTestId('campaign-card-progress').textContent).toBe('15 of 18 landed');
-    expect(within(cards[1]!).getByTestId('campaign-card-split').textContent).toContain('✓15');
-    expect(within(cards[1]!).getByTestId('campaign-card-split').textContent).toContain('✕1');
-    expect(within(cards[0]!).getByTestId('campaign-card-bar')).toBeInTheDocument();
+    expect(within(cards[1]!).getByTestId('campaign-card-split').textContent).toBe('1 failed');
+    // studio#685 row 8: the bar fills only what landed / failed / waits / runs — pending is empty track.
+    const bar = within(cards[0]!).getByTestId('campaign-card-bar');
+    expect(bar.getAttribute('aria-label')).toBe('2 landed, 0 failed of 6');
+    const widths = [...bar.children].map((c) => parseFloat((c as HTMLElement).style.width));
+    expect(widths.reduce((a, w) => a + w, 0)).toBeCloseTo((4 / 6) * 100, 5);
 
     fireEvent.click(cards[1]!);
     expect(navigate).toHaveBeenCalledWith('/testing/campaigns/DES-MERGE-001');
@@ -311,11 +318,11 @@ describe('the delivery rollup on the card (#27) — wire facts, gated links, str
     const prs = within(card).getAllByTestId('campaign-card-pr');
     expect(prs).toHaveLength(1);
     expect(prs[0]!.getAttribute('href')).toBe('https://github.com/o/x/pull/12');
-    expect(prs[0]!.textContent).toBe('#12');
+    expect(prs[0]!.textContent).toBe('PR #12');
 
     // Stranded = needs-you: the chip names the count and jumps to the stranded run.
     const stranded = within(card).getByTestId('campaign-card-stranded');
-    expect(stranded.textContent).toContain('stranded · 1');
+    expect(stranded.textContent).toContain('1 not delivered');
     fireEvent.click(stranded);
     expect(navigate).toHaveBeenCalledWith('/s/run%3Ar-str');
   });
@@ -478,7 +485,7 @@ describe('the filterable grid — search / status / window', () => {
     expect(screen.getAllByTestId('campaign-card')[0]!.dataset.campaignId).toBe('current');
 
     const older = screen.getByTestId('campaigns-show-older');
-    expect(older.textContent).toContain('+1 older');
+    expect(older.textContent).toContain('Show 1 older');
     fireEvent.click(older);
     await waitFor(() => expect(screen.getAllByTestId('campaign-card')).toHaveLength(2));
   });

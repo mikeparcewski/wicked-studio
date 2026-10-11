@@ -1,160 +1,116 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  isMemoryUnsupported,
-  listMemories,
-  memoryCoverage,
-  MEMORY_UNSUPPORTED_COPY,
-  retireMemory,
-  retireMemoryItem,
-  isEraseByIdUnsupported,
-  type MemoryCoverage,
-  type MemoryItem,
+  isMemoryUnsupported, listMemories, memoryCoverage, retireMemory, retireMemoryItem,
+  isEraseByIdUnsupported, type MemoryCoverage, type MemoryItem,
 } from '../api/memory.js';
+import { readErrorKind } from '../api/errors.js';
 import { FacetAutocomplete } from './FacetAutocomplete.js';
-import { KeyValueChips } from './ProposalChips.js';
-import { KpiBand, KpiGroup, StatTile } from './dashboardKit.js';
+import { KeyValueChips, shortContent } from './ProposalChips.js';
+import { StateBanner, EmptyState, Skeleton, StatLine, Segmented, OverflowMenu, TechDetails } from './ui/index.js';
 
-/**
- * The Steering surface's MEMORIES sub-section (`/steering/memories`, DES-MEM-FACETED-001 unified
- * surface; governed-knowledge dashboard). The "manage existing memories" deep-dive — the REVIEW of
- * memory proposals now lives in the dashboard's consolidated inbox (`/steering/dashboard`), so it
- * is no longer buried below this browser:
- *
- *  - the store BROWSER (`GET /memory`): every stored memory, with a text search that re-queries the
- *    wire and a client-side FACET filter — the facet `key=value` TYPEAHEAD (FacetAutocomplete),
- *    whose vocabulary is derived from the loaded set. Each row shows content, tier, scope, and
- *    facets, with a RETIRE action.
- *  - RETIRE comes in two widths, each named for what it erases (studio#206: the one row action used
- *    to erase the row's whole scope subtree). "Retire" removes exactly this memory
- *    (`POST /memory/retire-item`); "Retire scope…" erases the SUBTREE (`POST /memory/retire` with
- *    `scope_prefix`) — everything filed at or under the scope — and its confirm says so. A daemon
- *    that cannot erase one memory is said to, and nothing falls back to the subtree.
- *
- * Every write goes through crew's API (the governed operator path) — estate MCP stays read-only.
- */
+type Failure = { kind: 'offline' | 'error'; message: string };
+function failure(e: unknown): Failure {
+  return { kind: readErrorKind(e), message: e instanceof Error ? e.message : String(e) };
+}
+function kindLabel(kind: string): string {
+  return kind.charAt(0).toUpperCase() + kind.slice(1).toLowerCase();
+}
 
 export function MemoriesPanel(): React.ReactElement {
   const [memories, setMemories] = useState<MemoryItem[]>([]);
   const [coverage, setCoverage] = useState<MemoryCoverage | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<Failure | null>(null);
+  const [coverageError, setCoverageError] = useState<Failure | null>(null);
   const [unsupported, setUnsupported] = useState(false);
-  /** The applied recall query (drives the wire read); the input holds the in-flight text. */
   const [query, setQuery] = useState('');
   const [queryInput, setQueryInput] = useState('');
-  /** The active facet filter (`key=value`) applied client-side over the loaded set, or null. */
   const [facet, setFacet] = useState<string | null>(null);
-  /** The memory a retire confirm is open for, or null. */
+  const [kind, setKind] = useState('all');
   const [retiring, setRetiring] = useState<MemoryItem | null>(null);
-  /** What that confirm erases: this one memory, or its whole scope subtree. */
   const [retireWidth, setRetireWidth] = useState<'item' | 'scope'>('item');
-  /** Scoped memory count for the retire confirm (null = not yet loaded or unavailable). */
   const [retireCount, setRetireCount] = useState<number | null>(null);
   const [retireBusy, setRetireBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
-
-  // Keyed on the SCOPE STRING, not the row object: re-selecting the same row (or another row
-  // with the same scope) must neither drop the count nor refetch it (studio#324 D1).
-  // Only a SUBTREE confirm needs the scope's count; a one-memory confirm erases exactly one.
+  const [retireError, setRetireError] = useState<Failure | null>(null);
+  const [scopeError, setScopeError] = useState<Failure | null>(null);
+  const [scopeGeneration, setScopeGeneration] = useState(0);
   const retiringScope = retireWidth === 'scope' ? (retiring?.scope ?? null) : null;
-  // Fetch the scoped coverage count whenever the retiring scope changes.
-  // The `active` flag discards stale resolutions from a prior scope's in-flight request
-  // (two rapid retire clicks would otherwise let the first request's late resolution
-  // overwrite the second scope's correct count — the race described in studio#race).
+
   useEffect(() => {
     if (retiringScope === null) return;
     let active = true;
+    setScopeError(null);
     void memoryCoverage({ scope_prefix: retiringScope })
       .then(({ total }) => { if (active) setRetireCount(total ?? null); })
-      .catch(() => { if (active) setRetireCount(null); });
+      .catch((e: unknown) => { if (active) { setRetireCount(null); setScopeError(failure(e)); } });
     return () => { active = false; };
-  }, [retiringScope]);
+  }, [retiringScope, scopeGeneration]);
 
+  const loadGeneration = useRef(0);
   const load = useCallback(async (q: string): Promise<void> => {
+    const generation = ++loadGeneration.current;
     setLoading(true);
     setError(null);
     setUnsupported(false);
     try {
       const rows = await listMemories(q === '' ? {} : { query: q });
-      setMemories(rows);
+      if (generation === loadGeneration.current) setMemories(rows);
     } catch (e) {
-      // Clear stale rows so the facet chips (derived from `memories`) don't linger on the
-      // unsupported/error view — otherwise a prior successful load's chips render over the notice.
-      setMemories([]);
-      if (isMemoryUnsupported(e)) setUnsupported(true);
-      else setError(e instanceof Error ? e.message : String(e));
+      if (generation === loadGeneration.current) {
+        setMemories([]);
+        if (isMemoryUnsupported(e)) setUnsupported(true);
+        else setError(failure(e));
+      }
     } finally {
-      setLoading(false);
+      if (generation === loadGeneration.current) setLoading(false);
     }
   }, []);
+  useEffect(() => { void load(query); }, [load, query]);
 
-  useEffect(() => {
-    void load(query);
-  }, [load, query]);
-
-  // The coverage summary is a bonus header line — a daemon that cannot answer just omits it. Re-read
-  // after every retire: the empty state reads the total to tell "no hits" from "empty store" (#406),
-  // so a stale count after erasing the last row would call an empty store non-empty (codex, MEDIUM).
-  // Generation-guarded: only the NEWEST read may land (a pre-retire read resolving after the
-  // post-retire one would otherwise put the stale count back — codex round 2 on this PR).
   const coverageGen = useRef(0);
   const loadCoverage = useCallback((): void => {
-    const gen = ++coverageGen.current;
+    const generation = ++coverageGen.current;
+    setCoverage(null);
+    setCoverageError(null);
     void memoryCoverage()
-      .then((c) => { if (gen === coverageGen.current) setCoverage(c); })
-      .catch(() => { if (gen === coverageGen.current) setCoverage(null); });
+      .then((value) => { if (generation === coverageGen.current) setCoverage(value); })
+      .catch((e: unknown) => {
+        if (generation === coverageGen.current) {
+          setCoverage(null);
+          if (!isMemoryUnsupported(e)) setCoverageError(failure(e));
+        }
+      });
   }, []);
+  useEffect(() => { loadCoverage(); }, [loadCoverage]);
 
-  useEffect(() => {
-    loadCoverage();
-  }, [loadCoverage]);
-
-  /** Every `key=value` facet pair the loaded set carries — the filter's chips. */
-  const facetPairs = useMemo(() => {
-    const seen = new Set<string>();
-    for (const m of memories) {
-      for (const [k, v] of Object.entries(m.facets)) seen.add(`${k}=${v}`);
-    }
-    return [...seen].sort();
-  }, [memories]);
-
+  const facetPairs = useMemo(() => [...new Set(memories.flatMap((memory) => Object.entries(memory.facets).map(([key, value]) => `${key}=${value}`)))].sort(), [memories]);
+  // The selected kind always stays an option, so the Kind control never loses its checked choice.
+  const kinds = useMemo(() => [...new Set(['episodic', 'procedural', 'semantic', ...memories.map((memory) => memory.tier), ...(kind !== 'all' ? [kind] : [])])], [memories, kind]);
   const visible = useMemo(() => {
-    if (facet === null) return memories;
-    const [k, v] = facet.split(/=(.*)/s);
-    return memories.filter((m) => m.facets[k ?? ''] === v);
-  }, [memories, facet]);
-
-  const applyQuery = (): void => {
-    setFacet(null);
-    setQuery(queryInput.trim());
-  };
-
-  /** The zero-hit search's Clear: back to the unfiltered listing (the `query` effect re-reads). */
-  const clearQuery = (): void => {
-    setQueryInput('');
-    setFacet(null);
-    setQuery('');
-  };
+    const [key, value] = facet?.split(/=(.*)/s) ?? [];
+    return memories.filter((memory) => (kind === 'all' || memory.tier === kind) && (facet === null || memory.facets[key ?? ''] === value));
+  }, [memories, facet, kind]);
+  const applyQuery = (): void => { setFacet(null); setQuery(queryInput.trim()); };
+  const clearQuery = (): void => { setQueryInput(''); setFacet(null); setKind('all'); setQuery(''); };
 
   const confirmRetire = (): void => {
     if (retiring === null) return;
     const target = retiring;
     setRetireBusy(true);
     setNote(null);
+    setRetireError(null);
     if (retireWidth === 'item') {
       void retireMemoryItem({ memory_id: target.id })
         .then(() => {
           setRetiring(null);
-          setNote(`Retired 1 memory from ${target.scope === '' ? 'the root scope' : target.scope}. Nothing else in the scope was touched.`);
+          setNote(`Retired: ${shortContent(target.content)}`);
           void load(query);
           loadCoverage();
         })
         .catch((e: unknown) => {
-          setNote(
-            isEraseByIdUnsupported(e)
-              ? 'This daemon cannot retire a single memory yet (its wicked-estate predates erase-by-id). Nothing was deleted. Upgrade wicked-estate, or use Retire scope… to erase the whole scope.'
-              : `Could not retire the memory: ${e instanceof Error ? e.message : String(e)}`,
-          );
+          if (isEraseByIdUnsupported(e)) setNote("Studio's service cannot retire a single memory yet. Nothing was deleted. You can retire everything in this scope using More actions.");
+          else setRetireError(failure(e));
         })
         .finally(() => setRetireBusy(false));
       return;
@@ -163,265 +119,95 @@ export function MemoriesPanel(): React.ReactElement {
       .then(({ erased }) => {
         setRetiring(null);
         setRetireCount(null);
-        setNote(`Retired scope ${target.scope} — erased ${erased} memor${erased === 1 ? 'y' : 'ies'}.`);
+        setNote(`Retired everything in this scope: erased ${erased} memor${erased === 1 ? 'y' : 'ies'}.`);
         void load(query);
         loadCoverage();
       })
-      .catch((e: unknown) => {
-        setNote(`Could not retire ${target.scope}: ${e instanceof Error ? e.message : String(e)}`);
-      })
+      .catch((e: unknown) => setRetireError(failure(e)))
       .finally(() => setRetireBusy(false));
   };
 
   const coverageTotal = typeof coverage?.total === 'number' ? coverage.total : null;
-  // Per-tier tiles (session / project / global / …) from the coverage wire — the store's shape at a
-  // glance, capped so the band stays a band. Absent → no tier group.
-  const tierTiles = useMemo(() => {
-    const byTier = coverage?.by_tier;
-    if (byTier === undefined || byTier === null) return [];
-    return Object.entries(byTier)
-      .filter(([, n]) => typeof n === 'number')
-      .slice(0, 3)
-      .map(([tier, n]) => <StatTile key={tier} testId={`mem-stat-tier-${tier}`} label={tier} value={n} />);
-  }, [coverage]);
+  const partial = query === '' && coverageTotal !== null && coverageTotal > memories.length;
+  const countKnown = !loading && !unsupported && error === null && !partial;
+  const listedCount = countKnown ? visible.length : null;
+  const startRetire = (memory: MemoryItem, width: 'item' | 'scope'): void => {
+    if (width === 'scope' && retiringScope !== memory.scope) setRetireCount(null);
+    setRetireError(null);
+    setScopeError(null);
+    setRetireWidth(width);
+    setRetiring(memory);
+  };
 
   return (
-    <div
-      data-testid="memories-panel"
-      className="flex h-full min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto p-6"
-    >
-      <div className="flex items-start gap-2">
-        <div>
-          <h2 className="text-sm font-semibold" style={{ color: 'var(--ink-high)' }}>Steering · Memories</h2>
-          <p className="mt-1 text-[11px]" style={{ color: 'var(--ink-muted)' }}>
-            The agent memory store — browse and filter what has been remembered, and retire a memory or a whole scope.
-            Agent-proposed memories are reviewed in the governed-knowledge dashboard.
-            {coverageTotal !== null && (
-              <span data-testid="memories-coverage" className="ml-1 font-mono" style={{ color: 'var(--ink-dim)' }}>
-                · {coverageTotal} in store
-              </span>
-            )}
-          </p>
+    <div data-testid="memories-panel" className="wk-gk-page">
+      <header className="wk-gk-stack">
+        <div className="wk-gk-row">
+          <h1 className="wk-page-title">Memories</h1>
+          <button type="button" data-testid="memories-refresh" onClick={() => { void load(query); loadCoverage(); }} className="wk-btn wk-btn--quiet wk-btn--sm">Refresh</button>
         </div>
-        <button
-          type="button"
-          data-testid="memories-refresh"
-          onClick={() => void load(query)}
-          className="ml-auto text-[10px] hover:underline"
-          style={{ color: 'var(--ink-dim)' }}
-        >
-          Refresh
-        </button>
+        <p className="wk-gk-muted">Browse what helpers remembered, search for a memory, or retire what is no longer useful.</p>
+      </header>
+      <div data-testid="memories-stats" className="wk-gk-stats">
+        <div data-testid="mem-stat-total"><div data-testid="memories-coverage"><StatLine items={[{ label: listedCount === 1 ? 'memory' : 'memories', value: listedCount }]} showZero /></div></div>
+        {Object.keys(coverage?.by_tier ?? {}).slice(0, 3).map((tier) => (
+          <div key={tier} data-testid={`mem-stat-tier-${tier}`}><StatLine items={[{ label: kindLabel(tier).toLowerCase(), value: countKnown ? visible.filter((memory) => memory.tier === tier).length : null }]} /></div>
+        ))}
+        <div data-testid="mem-stat-facets"><StatLine items={[{ label: 'tags', value: countKnown ? new Set(visible.flatMap((memory) => Object.entries(memory.facets).map(([key, value]) => `${key}=${value}`))).size : null }]} /></div>
       </div>
-
-      {/* The store stats — mirrors the Policies store-health band (usability wave): the memory
-          store's size and its per-tier split come from the store-wide coverage wire; the facet-value
-          count is over the loaded set (the current query/recall page), not store-wide — its context
-          says so. An absent coverage wire omits the band rather than fabricating zeros. */}
-      {coverage !== null && (
-        <KpiBand testId="memories-stats">
-          <KpiGroup label="Store" grow={1}>
-            <StatTile
-              testId="mem-stat-total"
-              label="Memories"
-              value={coverageTotal ?? '—'}
-              context="in the store"
-            />
-          </KpiGroup>
-          {tierTiles.length > 0 && (
-            <KpiGroup label="By tier" grow={Math.min(3, tierTiles.length)}>
-              {tierTiles}
-            </KpiGroup>
-          )}
-          <KpiGroup label="Annotation" grow={1}>
-            <StatTile
-              testId="mem-stat-facets"
-              label="Facet values"
-              value={facetPairs.length}
-              context="distinct key=value, loaded set"
-            />
-          </KpiGroup>
-        </KpiBand>
-      )}
-
-      {/* The store browser — search re-queries the wire; the facet chips narrow client-side. */}
-      <div className="flex flex-wrap items-center gap-2">
-        <input
-          data-testid="memories-search"
-          type="text"
-          value={queryInput}
-          spellCheck={false}
-          placeholder="Search memories (recall query)…"
-          onChange={(e) => setQueryInput(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); applyQuery(); } }}
-          className="min-w-[16rem] flex-1 rounded px-2 py-1 text-[11px] focus:outline-none focus-visible:ring-1"
-          style={{ background: 'var(--surface-base)', border: '1px solid var(--surface-raised)', color: 'var(--ink-high)' }}
-        />
-        <button
-          type="button"
-          data-testid="memories-search-go"
-          onClick={applyQuery}
-          className="rounded px-2 py-1 text-[11px] font-semibold focus:outline-none focus-visible:ring-1"
-          style={{ color: 'var(--accent)', border: '1px solid var(--surface-raised)' }}
-        >
-          Search
-        </button>
+      {coverageError !== null && <StateBanner kind={coverageError.kind} what="the memory summary" error={coverageError.message} onRetry={loadCoverage} />}
+      <div className="wk-gk-search">
+        <label className="wk-gk-field" htmlFor="memories-search">Search memories
+          <input id="memories-search" data-testid="memories-search" type="text" value={queryInput} spellCheck={false} placeholder="Words to look for" onChange={(e) => setQueryInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); applyQuery(); } }} className="wk-field" />
+        </label>
+        <button type="button" data-testid="memories-search-go" onClick={applyQuery} className="wk-btn wk-btn--secondary">Search</button>
       </div>
-
-      {facetPairs.length > 0 && (
-        <FacetAutocomplete
-          testId="memories-facet-filter"
-          options={facetPairs}
-          value={facet}
-          onChange={setFacet}
-          label="Filter memories by facet"
-          placeholder="Filter by facet (key=value)…"
-        />
+      <div className="wk-gk-stack">
+        <span className="wk-gk-muted">Kind</span>
+        <Segmented label="Kind" value={kind} options={[{ value: 'all', label: 'All' }, ...kinds.map((value) => ({ value, label: kindLabel(value) }))]} onChange={setKind} />
+      </div>
+      {facetPairs.length > 0 && !loading && error === null && !unsupported && (
+        <FacetAutocomplete testId="memories-facet-filter" options={facetPairs} value={facet} onChange={setFacet} label="Filter memories by tags" placeholder="Choose a tag" />
       )}
-
-      {note !== null && (
-        <p
-          data-testid="memories-note"
-          className="rounded px-3 py-2 text-[11px]"
-          style={{ background: 'var(--surface-rail)', border: '1px solid var(--surface-raised)', color: 'var(--ink-muted)' }}
-        >
-          {note}
-        </p>
-      )}
-
+      {note !== null && <p data-testid="memories-note" role="status" className="wk-gk-note">{note}</p>}
+      {retireError !== null && <StateBanner kind={retireError.kind} what="the retirement result" error={retireError.message} onRetry={confirmRetire} />}
       {retiring !== null && (
-        <div
-          data-testid="memory-retire-confirm-banner"
-          className="flex flex-col gap-2 rounded p-3"
-          style={{ background: 'var(--status-fail-dim)', border: '1px solid var(--status-fail)' }}
-        >
+        <div data-testid="memory-retire-confirm-banner" className="wk-gk-card">
           {retireWidth === 'item' ? (
-            <p className="text-[11px]" style={{ color: 'var(--ink-high)' }}>
-              Retire this memory? Only this one row is erased; the rest of{' '}
-              <span className="font-mono">{retiring.scope === '' ? 'the root scope' : retiring.scope}</span> stays. This cannot be undone.
-            </p>
+            <p className="wk-gk-content">Retire this memory? Only this memory is erased. Other memories in this scope stay. This cannot be undone.</p>
           ) : (
-            <p className="text-[11px]" style={{ color: 'var(--ink-high)' }}>
-              Retire the scope <span className="font-mono">{retiring.scope}</span>?{' '}
-              {retireCount !== null
-                ? <>{retireCount} {retireCount === 1 ? 'memory' : 'memories'} will be erased — retire covers the whole</>
-                : <>Retire erases the whole</>
-              }{' '}
-              SUBTREE — every memory filed at or under this scope — not just this one row. This cannot be undone.
-            </p>
+            <p className="wk-gk-content">Retire everything in this scope? {retireCount !== null ? `${retireCount} ${retireCount === 1 ? 'memory' : 'memories'} will be erased. ` : ''}Every memory in this scope and its child scopes will be erased. This cannot be undone.</p>
           )}
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              data-testid="memory-retire-confirm"
-              disabled={retireBusy}
-              onClick={confirmRetire}
-              className="rounded px-2 py-1 text-[10px] font-semibold disabled:opacity-50"
-              style={{ color: 'var(--status-fail)', border: '1px solid var(--status-fail)' }}
-            >
-              {retireBusy ? 'Retiring…' : retireWidth === 'item' ? 'Retire this memory' : `Retire ${retiring.scope}`}
-            </button>
-            <button
-              type="button"
-              data-testid="memory-retire-cancel"
-              onClick={() => { setRetiring(null); setRetireCount(null); }}
-              className="rounded px-2 py-1 text-[10px]"
-              style={{ color: 'var(--ink-dim)', border: '1px solid var(--surface-raised)' }}
-            >
-              Cancel
-            </button>
+          <p className="wk-gk-content">{shortContent(retiring.content)}</p>
+          <TechDetails text={[`memory_id: ${retiring.id}`, `scope: ${retiring.scope}`]} />
+          {retireWidth === 'scope' && scopeError !== null && <StateBanner kind={scopeError.kind} what="the number of memories in this scope" error={scopeError.message} onRetry={() => setScopeGeneration((value) => value + 1)} />}
+          <div className="wk-gk-row">
+            <button type="button" data-testid="memory-retire-confirm" disabled={retireBusy} onClick={confirmRetire} className="wk-btn wk-btn--primary">{retireBusy ? 'Retiring…' : retireWidth === 'item' ? 'Retire this memory' : 'Retire everything in this scope'}</button>
+            <button type="button" data-testid="memory-retire-cancel" onClick={() => { setRetiring(null); setRetireCount(null); setRetireError(null); }} className="wk-btn wk-btn--secondary">Cancel</button>
           </div>
         </div>
       )}
-
-      {loading ? (
-        <p data-testid="memories-loading" className="text-xs" style={{ color: 'var(--ink-dim)' }}>Loading memories…</p>
-      ) : unsupported ? (
-        <p data-testid="memories-unsupported" className="rounded px-3 py-2 text-xs" style={{ background: 'var(--surface-rail)', border: '1px solid var(--surface-raised)', color: 'var(--ink-muted)' }}>
-          {MEMORY_UNSUPPORTED_COPY}
-        </p>
+      {loading ? <Skeleton data-testid="memories-loading" variant="card" /> : unsupported ? (
+        <EmptyState data-testid="memories-unsupported" title="Studio's service does not support memory management yet." />
       ) : error !== null ? (
-        <p data-testid="memories-error" className="rounded px-2 py-1 text-xs" style={{ background: 'var(--status-fail-dim)', color: 'var(--status-fail)' }}>
-          {error}
-        </p>
+        <StateBanner data-testid="memories-error" kind={error.kind} what="memories" error={error.message} onRetry={() => void load(query)} />
       ) : visible.length === 0 ? (
-        <p data-testid="memories-empty" className="rounded px-3 py-2 text-xs" style={{ background: 'var(--surface-rail)', border: '1px solid var(--surface-raised)', color: 'var(--ink-muted)' }}>
-          {/* #406: `memories` is the SEARCH result, not the store — a zero-hit query must not say the
-              store is empty while the header says "N in store". "No memories in the store." is only
-              for a store whose coverage total is 0 (or unknown with nothing to narrow by). */}
-          {memories.length > 0 ? (
-            'No memories match this facet.'
-          ) : query !== '' && coverageTotal !== 0 ? (
-            <>
-              No memories match &ldquo;{query}&rdquo;.{' '}
-              <button
-                type="button"
-                onClick={clearQuery}
-                className="font-semibold underline focus:outline-none focus-visible:ring-1"
-                style={{ color: 'var(--accent)' }}
-              >
-                Clear search
-              </button>
-            </>
-          ) : coverageTotal !== null && coverageTotal > 0 ? (
-            `The store holds ${coverageTotal} memor${coverageTotal === 1 ? 'y' : 'ies'} but the listing returned none — try a search.`
-          ) : (
-            'No memories in the store.'
-          )}
-        </p>
+        <EmptyState data-testid="memories-empty" title={memories.length > 0 ? 'No memories match these filters.' : query !== '' && coverageTotal !== 0 ? `No memories match “${query}”.` : partial ? 'No memories are listed yet. Try a search.' : 'No memories listed yet.'} {...(query !== '' && coverageTotal !== 0 ? { action: <button type="button" onClick={clearQuery} className="wk-btn wk-btn--quiet wk-btn--sm">Clear search</button> } : {})} />
       ) : (
-        <ul data-testid="memories-list" className="flex flex-col gap-2">
-          {visible.map((m) => (
-            <li
-              key={m.id}
-              data-testid="memory-row"
-              data-memory-id={m.id}
-              className="flex flex-col gap-1.5 rounded p-3"
-              style={{ background: 'var(--surface-card)', border: '1px solid var(--surface-raised)' }}
-            >
-              <div className="flex items-start gap-2">
-                <span data-testid="memory-content" className="min-w-0 flex-1 break-words text-[11px]" style={{ color: 'var(--ink-body)' }}>
-                  {m.content}
-                </span>
-                <button
-                  type="button"
-                  data-testid="memory-retire-one"
-                  onClick={() => {
-                    setRetireWidth('item');
-                    setRetiring(m);
-                  }}
-                  title="Retire this memory (only this row)"
-                  className="shrink-0 rounded px-2 py-0.5 text-[10px] font-semibold focus:outline-none focus-visible:ring-1"
-                  style={{ color: 'var(--status-fail)', border: '1px solid var(--status-fail-dim)' }}
-                >
-                  Retire
-                </button>
-                <button
-                  type="button"
-                  data-testid="memory-retire"
-                  onClick={() => {
-                    // Clear the count only when the scope actually changes — otherwise the
-                    // effect (keyed on the scope) does not re-fire and nothing would refill it.
-                    if (retiringScope !== m.scope) setRetireCount(null);
-                    setRetireWidth('scope');
-                    setRetiring(m);
-                  }}
-                  title={`Retire the scope ${m.scope} (erases the whole subtree)`}
-                  className="shrink-0 rounded px-2 py-0.5 text-[10px] focus:outline-none focus-visible:ring-1"
-                  style={{ color: 'var(--ink-dim)', border: '1px solid var(--surface-raised)' }}
-                >
-                  Retire scope…
-                </button>
+        <ul data-testid="memories-list" className="wk-gk-list">
+          {visible.map((memory) => (
+            <li key={memory.id} data-testid="memory-row" data-memory-id={memory.id} className="wk-gk-card">
+              <div className="wk-gk-row wk-gk-row--top">
+                <span data-testid="memory-content" className="wk-gk-content wk-gk-grow">{memory.content}</span>
+                <div data-testid="memory-retire">
+                  <OverflowMenu data-testid="memory-retire-one" label={`More actions for ${shortContent(memory.content)}`} items={[
+                    { id: 'retire', label: 'Retire', danger: true, onSelect: () => startRetire(memory, 'item') },
+                    { id: 'retire-scope', label: 'Retire everything in this scope…', onSelect: () => startRetire(memory, 'scope') },
+                  ]} />
+                </div>
               </div>
-              <div className="flex flex-wrap items-center gap-2 text-[10px]">
-                <span data-testid="memory-tier" className="rounded px-1.5 py-0.5 font-mono" style={{ background: 'var(--surface-raised)', color: 'var(--ink-muted)' }}>
-                  {m.tier}
-                </span>
-                <span data-testid="memory-scope" className="font-mono" style={{ color: 'var(--ink-dim)' }}>
-                  {m.scope}
-                </span>
-                <KeyValueChips testid="memory-facets" entries={m.facets} />
-              </div>
+              <span data-testid="memory-tier" className="wk-tag">{kindLabel(memory.tier)}</span>
+              <div data-testid="memory-scope"><KeyValueChips testid="memory-facets" entries={{ ...memory.facets, memory_id: memory.id, scope: memory.scope }} /></div>
             </li>
           ))}
         </ul>

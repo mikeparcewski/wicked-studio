@@ -62,14 +62,9 @@ export function SteeringTypeFilter({ rules, activeType, navigate, mcp = false }:
         data-type={type ?? 'all'}
         data-active={active}
         onClick={() => navigate(policiesPath(type, mcp))}
-        className="rounded px-2 py-1 text-[11px] font-semibold transition-colors"
-        style={{
-          background: active ? 'var(--surface-raised)' : 'transparent',
-          color: active ? 'var(--ink-high)' : 'var(--ink-muted)',
-          border: '1px solid var(--surface-raised)',
-        }}
+        className="wk-chip wk-steer-typechip"
       >
-        {label} <span style={{ color: 'var(--ink-dim)' }}>({count})</span>
+        {label} <span className="wk-steer-typechip-count">({count})</span>
       </button>
     );
   };
@@ -81,8 +76,9 @@ export function SteeringTypeFilter({ rules, activeType, navigate, mcp = false }:
       className="flex flex-wrap gap-1.5"
     >
       {chip(null, 'All', activeCount(rules))}
+      {/* Every type stays, even at zero: a type chip is also the way to author that type's first rule. */}
       {STEERING_TYPES.map((t) => chip(t, STEERING_TYPE_LABELS[t], counts[t].active))}
-      <span aria-hidden className="mx-1 self-stretch" style={{ borderLeft: '1px solid var(--surface-raised)' }} />
+      <span aria-hidden className="wk-steer-typechip-sep" />
       <button
         type="button"
         role="switch"
@@ -91,14 +87,9 @@ export function SteeringTypeFilter({ rules, activeType, navigate, mcp = false }:
         data-active={mcp}
         title="Only the rules that govern MCP calls (they name an mcp token)"
         onClick={() => navigate(policiesPath(activeType, !mcp))}
-        className="rounded px-2 py-1 text-[11px] font-semibold transition-colors"
-        style={{
-          background: mcp ? 'var(--surface-raised)' : 'transparent',
-          color: mcp ? 'var(--ink-high)' : 'var(--ink-muted)',
-          border: '1px solid var(--surface-raised)',
-        }}
+        className="wk-chip wk-steer-typechip"
       >
-        MCP <span style={{ color: 'var(--ink-dim)' }}>({mcpCount})</span>
+        MCP <span className="wk-steer-typechip-count">({mcpCount})</span>
       </button>
     </div>
   );

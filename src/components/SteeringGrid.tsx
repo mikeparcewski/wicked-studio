@@ -68,6 +68,15 @@ export function filterSteeringRules(rules: SteeringRule[], type: GridScope, f: G
 }
 
 const SEVERITIES = ['info', 'warn', 'error', 'critical'] as const;
+const SEVERITY_WORD: Record<(typeof SEVERITIES)[number], string> = { info: 'Info', warn: 'Warning', error: 'Error', critical: 'Critical' };
+
+/** A rule id as the grid's first column shows it (studio#689 row 45): a proposal-promoted id
+ *  (`proposal:<ulid>`) is a handle, not a name — it reads "Proposed rule" plus a short tail, the full
+ *  id in the cell's title and the drawer. */
+export function ruleIdWord(id: string): string {
+  const m = /^proposal:(.+)$/.exec(id);
+  return m !== null ? `Proposed · ${m[1]!.replace(/-/g, '').slice(-6)}` : id;
+}
 
 /** The engine stores weight as an f32 — 1.2 comes back 1.2000000476837158. Display (and
  *  re-edit) the honest 6-significant-digit value, never the float noise. */
@@ -75,18 +84,12 @@ export function fmtWeight(w: number): string {
   return String(Number(w.toPrecision(6)));
 }
 
-const CELL_TEXT: React.CSSProperties = { color: 'var(--ink-muted)', fontSize: '11px' };
+const CELL_TEXT: React.CSSProperties = { color: 'var(--ink-body)', fontSize: 'var(--text-xs)' };
 const CELL_INPUT: React.CSSProperties = {
   background: 'var(--surface-base)',
   border: '1px solid var(--accent)',
   color: 'var(--ink-high)',
-  fontSize: '11px',
-};
-const SELECT_STYLE: React.CSSProperties = {
-  background: 'transparent',
-  border: '1px solid transparent',
-  color: 'var(--ink-muted)',
-  fontSize: '11px',
+  fontSize: 'var(--text-xs)',
 };
 
 /** Display-mode cell: a real focusable control so Tab walks the sheet; Enter/click edits. */
@@ -115,7 +118,7 @@ function DisplayCell({ testid, label, onEdit, disabled, children, title }: {
 }
 
 /** Inline text/number editor: Esc reverts, Enter/blur commits (only when changed). */
-function TextCell({ testid, label, value, display, mono, number, disabled, onCommit }: {
+function TextCell({ testid, label, value, display, mono, number, wrap, disabled, onCommit }: {
   testid: string;
   label: string;
   value: string;
@@ -123,6 +126,8 @@ function TextCell({ testid, label, value, display, mono, number, disabled, onCom
   display?: React.ReactNode;
   mono?: boolean;
   number?: boolean;
+  /** Show up to three lines instead of one truncated line (the statement column). */
+  wrap?: boolean;
   disabled: boolean;
   onCommit: (next: string) => void;
 }): React.ReactElement {
@@ -157,7 +162,7 @@ function TextCell({ testid, label, value, display, mono, number, disabled, onCom
         title={typeof display === 'string' ? display : value}
         disabled={disabled}
         onClick={() => { setDraft(value); setEditing(true); }}
-        className={`block w-full truncate rounded px-1.5 py-1 text-left focus:outline-none focus-visible:ring-1 ${mono === true ? 'font-mono' : ''}`}
+        className={`w-full ${wrap === true ? 'wk-steer-wrapcell' : 'block truncate'} rounded px-1.5 py-1 text-left focus:outline-none focus-visible:ring-1 ${mono === true ? 'font-mono' : ''}`}
         style={{ ...CELL_TEXT, background: 'transparent' }}
       >
         {display ?? (value === '' ? '—' : value)}
@@ -201,8 +206,8 @@ function SelectCell({ testid, label, value, options, disabled, onCommit }: {
       value={value}
       disabled={disabled}
       onChange={(e) => { if (e.target.value !== value) onCommit(e.target.value); }}
-      className="w-full rounded px-1 py-0.5 focus:outline-none focus-visible:ring-1 disabled:opacity-60"
-      style={SELECT_STYLE}
+      className="wk-steer-cellselect"
+      data-value={value}
     >
       {options.map((o) => (
         <option key={o.value} value={o.value}>{o.label}</option>
@@ -216,7 +221,7 @@ function Chips({ values }: { values: string[] }): React.ReactElement {
   return (
     <span className="inline-flex flex-wrap gap-1">
       {values.map((v) => (
-        <span key={v} className="rounded px-1 font-mono text-[10px]" style={{ background: 'var(--surface-raised)', color: 'var(--ink-muted)' }}>
+        <span key={v} className="wk-tag">
           {v}
         </span>
       ))}
@@ -283,7 +288,7 @@ export function ChipsCell({ testid, label, values, disabled, onCommit }: {
       }}
     >
       {draftValues.map((v) => (
-        <span key={v} className="inline-flex items-center gap-1 rounded px-1 font-mono text-[10px]" style={{ background: 'var(--surface-raised)', color: 'var(--ink-muted)' }}>
+        <span key={v} className="wk-tag">
           {v}
           <button
             type="button"
@@ -374,7 +379,7 @@ export function draftRule(d: Pick<DraftState, 'id' | 'steering_type' | 'severity
 // ── The grid ──────────────────────────────────────────────────────────────────────────────────
 
 const TYPE_OPTIONS = STEERING_TYPES.map((t) => ({ value: t, label: STEERING_TYPE_LABELS[t] }));
-const SEVERITY_OPTIONS = SEVERITIES.map((s) => ({ value: s, label: s }));
+const SEVERITY_OPTIONS = SEVERITIES.map((s) => ({ value: s, label: SEVERITY_WORD[s] }));
 
 export function SteeringGrid({ rules, type, loading, error, selectedId, onSelect, onCommit, onCreate, onRetired, addRequestTick = 0, idFilter = null, unseeded = false }: {
   /** The FULL store — this grid applies the page scope itself, one predicate everywhere. */
@@ -482,29 +487,29 @@ export function SteeringGrid({ rules, type, loading, error, selectedId, onSelect
       );
     }
     return (
-      <div className="overflow-x-auto rounded" style={{ border: '1px solid var(--surface-raised)' }}>
+      <div className="wk-steer-gridwrap overflow-x-auto rounded" style={{ border: '1px solid var(--surface-raised)' }}>
         {/* table-fixed + explicit column widths: auto layout would hand a LONG statement the
             whole table and squeeze every select to min-content (measured live). The statement
             column takes the slack and truncates; minWidth keeps every column legible — the
             wrapping container scrolls horizontally instead (the page never does). */}
-        <table data-testid="steering-grid" className="w-full table-fixed border-collapse" style={{ minWidth: '64rem' }}>
+        <table data-testid="steering-grid" className="wk-steer-grid w-full table-fixed border-collapse" style={{ minWidth: '60rem' }}>
           <colgroup>
-            <col style={{ width: '6.5rem' }} />
             <col style={{ width: '8rem' }} />
+            <col style={{ width: '7.5rem' }} />
             <col style={{ width: '6rem' }} />
             <col />
-            <col style={{ width: '4rem' }} />
-            <col style={{ width: '10rem' }} />
-            <col style={{ width: '10rem' }} />
-            <col style={{ width: '7.5rem' }} />
+            <col style={{ width: '3.75rem' }} />
+            <col style={{ width: '9rem' }} />
+            <col style={{ width: '6.5rem' }} />
+            <col style={{ width: '7rem' }} />
           </colgroup>
           <thead>
             <tr style={{ background: 'var(--surface-rail)' }}>
-              {['id', 'type', 'severity', 'statement', 'weight', 'applies to', 'excludes', 'status'].map((h) => (
+              {['ID', 'Type', 'Severity', 'Statement', 'Weight', 'Applies to', 'Excludes', 'Status'].map((h) => (
                 <th
                   key={h}
                   scope="col"
-                  className="px-1.5 py-1.5 text-left text-[10px] font-semibold uppercase tracking-wider"
+                  className="px-1.5 py-1.5 text-left text-xs font-semibold"
                   style={{ color: 'var(--ink-dim)', borderBottom: '1px solid var(--surface-raised)' }}
                 >
                   {h}
@@ -536,12 +541,12 @@ export function SteeringGrid({ rules, type, loading, error, selectedId, onSelect
                       type="button"
                       data-testid="steering-grid-id"
                       aria-expanded={selectedId === r.id}
-                      title={`Open ${r.id} — full detail, advanced fields, edit/retire`}
+                      title={`${r.id}: open the full rule`}
                       onClick={() => onSelect(r.id)}
-                      className="block w-full rounded px-1.5 py-1 text-left font-mono text-[11px] hover:underline focus:outline-none focus-visible:ring-1"
-                      style={{ color: 'var(--accent)', textDecoration: retired ? 'line-through' : undefined }}
+                      className="wk-steer-idcell"
+                      style={{ textDecoration: retired ? 'line-through' : undefined }}
                     >
-                      {r.id}
+                      {ruleIdWord(r.id)}
                     </button>
                   </td>
                   <td className="px-0.5 py-0.5">
@@ -569,6 +574,7 @@ export function SteeringGrid({ rules, type, loading, error, selectedId, onSelect
                       testid="steering-cell-statement"
                       label={`${r.id} statement`}
                       value={r.statement}
+                      wrap
                       disabled={retired}
                       onCommit={(v) => { if (v.trim() !== '') commitField(r, { statement: v.trim() }); }}
                     />
@@ -611,22 +617,20 @@ export function SteeringGrid({ rules, type, loading, error, selectedId, onSelect
                       <span
                         data-testid="steering-rule-retired-chip"
                         title="withdrawn from recall and enforcement; kept listed because past decisions cite it — no un-retire wire exists"
-                        className="rounded px-1.5 text-[9px] font-semibold uppercase"
-                        style={{ background: 'var(--surface-raised)', color: 'var(--ink-dim)' }}
+                        className="wk-tag"
                       >
-                        retired
+                        Retired
                       </span>
                     ) : (
                       <span className="inline-flex items-center gap-1.5">
-                        <span className="text-[10px]" style={{ color: 'var(--status-done)' }}>active</span>
+                        <span className="wk-tag wk-tag--ok">Active</span>
                         <button
                           type="button"
                           data-testid="steering-grid-retire"
                           title={`Retire ${r.id} — withdraw from recall (typed confirmation + reason)`}
                           aria-label={`Retire ${r.id}`}
                           onClick={() => setRetiring(r)}
-                          className="rounded px-1.5 py-0.5 text-[10px] focus:outline-none focus-visible:ring-1"
-                          style={{ color: 'var(--status-fail)', border: '1px solid var(--status-fail-dim)' }}
+                          className="wk-btn wk-btn--quiet wk-btn--sm"
                         >
                           Retire…
                         </button>
@@ -765,8 +769,9 @@ export function SteeringGrid({ rules, type, loading, error, selectedId, onSelect
         onQuery={(q) => setFacets((f) => ({ ...f, query: q }))}
         placeholder="Search id or statement…"
         chips={[
-          { id: 'all', label: 'all', count: severityCounts.all ?? 0 },
-          ...SEVERITIES.map((s) => ({ id: s, label: s, count: severityCounts[s] ?? 0 })),
+          { id: 'all', label: 'All', count: severityCounts.all ?? 0 },
+          ...SEVERITIES.filter((s) => (severityCounts[s] ?? 0) > 0 || facets.severity === s)
+            .map((s) => ({ id: s, label: SEVERITY_WORD[s], count: severityCounts[s] ?? 0 })),
         ]}
         active={facets.severity}
         onChip={(id) => setFacets((f) => ({ ...f, severity: id }))}
@@ -775,18 +780,11 @@ export function SteeringGrid({ rules, type, loading, error, selectedId, onSelect
           type="button"
           data-testid="steering-filter-retired"
           aria-pressed={facets.includeRetired}
-          title="include_retired — retired rows stay listed (struck/dimmed); retire never deletes"
+          title="Retired rules stay listed, struck through; retiring never deletes"
           onClick={() => setFacets((f) => ({ ...f, includeRetired: !f.includeRetired }))}
-          style={{
-            borderRadius: 'var(--radius-full)', padding: '3px 10px',
-            fontSize: 'var(--text-2xs)', fontFamily: 'var(--font-mono)', cursor: 'pointer',
-            border: '1px solid',
-            borderColor: facets.includeRetired ? 'var(--accent)' : 'var(--surface-raised)',
-            background: facets.includeRetired ? 'var(--accent-subtle)' : 'transparent',
-            color: facets.includeRetired ? 'var(--accent)' : 'var(--ink-muted)',
-          }}
+          className="wk-chip"
         >
-          retired {facets.includeRetired ? 'shown' : 'hidden'}
+          {facets.includeRetired ? 'Hide retired' : 'Show retired'}
         </button>
       </FilterStrip>
 
@@ -808,10 +806,9 @@ export function SteeringGrid({ rules, type, loading, error, selectedId, onSelect
           type="button"
           data-testid="steering-grid-add"
           onClick={() => setDraft(freshDraft(rules, type))}
-          className="self-start rounded px-2 py-1 text-[11px] font-semibold focus:outline-none focus-visible:ring-1"
-          style={{ color: 'var(--accent)', border: '1px dashed var(--surface-raised)' }}
+          className="wk-btn wk-btn--secondary wk-btn--sm self-start"
         >
-          + Add row
+          Add a rule
         </button>
       )}
 

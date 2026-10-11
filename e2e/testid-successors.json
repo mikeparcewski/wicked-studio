@@ -718,6 +718,18 @@
     "skills-kpi-total": "skills-kpis",
     "logo-upload": "logo-file",
     "logo-file-input": "logo-file",
-    "theme-*": "theme-picker"
+    "theme-*": "theme-picker",
+    "campaigns-header-copy": "campaigns-frame",
+    "proposal-facets-chips": "proposal-facets",
+    "proposal-provenance-chips": "proposal-provenance",
+    "rules-retry": "rules-error",
+    "stat-campaign-failed": "campaigns-kpis",
+    "stat-campaign-gates": "campaigns-kpis",
+    "stat-campaign-running": "campaigns-kpis",
+    "stat-campaign-runs": "campaigns-kpis",
+    "stat-campaigns": "campaigns-kpis",
+    "steering-usage-denials": "steering-usage",
+    "steering-usage-evals": "steering-usage",
+    "steering-usage-split": "steering-usage"
   }
 }

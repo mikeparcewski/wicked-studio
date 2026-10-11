@@ -25,7 +25,7 @@ import {
  */
 
 const ROLES: McpPhaseRole[] = ['creator', 'evaluator', 'recon'];
-const SEATS = ['claude', 'codex', 'opencode', 'copilot', 'pi', 'agy'];
+const SEATS = ['claude', 'codex', 'opencode', 'copilot', 'pi'];
 const CLASSES: McpToolClass[] = ['read', 'write', 'destructive'];
 
 function toggle<T>(xs: T[], x: T): T[] {
@@ -59,7 +59,6 @@ export function SteeringMcpBuilder({ appliesTo, onAppliesTo, onTrigger }: {
   };
   const compiled = compileWhen(when);
   const issue = triggerIssue(compiled);
-  const box = 'flex items-center gap-1 text-[10px]';
   const subjects = appliesTo.filter(isMcpToken);
 
   return (
@@ -115,30 +114,27 @@ export function SteeringMcpBuilder({ appliesTo, onAppliesTo, onTrigger }: {
       )}
 
       <div className="flex flex-col gap-1">
-        <span className="text-[11px]" style={{ color: 'var(--ink-muted)' }}>When (all that are set must hold; none = always)</span>
+        <span className="wk-field-label">When it applies (every group you set must match; pick none to always apply)</span>
         <div className="flex flex-wrap gap-3">
-          <span className="flex flex-wrap items-center gap-2" data-testid="steering-mcp-when-roles">
+          <span className="flex flex-wrap items-center gap-2" role="group" aria-label="Step roles" data-testid="steering-mcp-when-roles">
             {ROLES.map((r) => (
-              <label key={r} className={box} style={{ color: 'var(--ink-muted)' }}>
-                <input type="checkbox" data-testid="steering-mcp-role" data-role={r} checked={when.roles.includes(r)} onChange={() => setWhen({ ...when, roles: toggle(when.roles, r) })} />
+              <button key={r} type="button" className="wk-chip" aria-pressed={when.roles.includes(r)} data-testid="steering-mcp-role" data-role={r} onClick={() => setWhen({ ...when, roles: toggle(when.roles, r) })}>
                 {ROLE_LABELS[r]}
-              </label>
+              </button>
             ))}
           </span>
-          <span className="flex flex-wrap items-center gap-2" data-testid="steering-mcp-when-classes">
+          <span className="flex flex-wrap items-center gap-2" role="group" aria-label="Tool classes" data-testid="steering-mcp-when-classes">
             {CLASSES.map((c) => (
-              <label key={c} className={box} style={{ color: 'var(--ink-muted)' }}>
-                <input type="checkbox" data-testid="steering-mcp-class" data-class={c} checked={when.classes.includes(c)} onChange={() => setWhen({ ...when, classes: toggle(when.classes, c) })} />
+              <button key={c} type="button" className="wk-chip" aria-pressed={when.classes.includes(c)} data-testid="steering-mcp-class" data-class={c} onClick={() => setWhen({ ...when, classes: toggle(when.classes, c) })}>
                 {c}
-              </label>
+              </button>
             ))}
           </span>
-          <span className="flex flex-wrap items-center gap-2" data-testid="steering-mcp-when-seats">
+          <span className="flex flex-wrap items-center gap-2" role="group" aria-label="Helpers" data-testid="steering-mcp-when-seats">
             {SEATS.map((s) => (
-              <label key={s} className={box} style={{ color: 'var(--ink-muted)' }}>
-                <input type="checkbox" data-testid="steering-mcp-seat" data-seat={s} checked={when.seats.includes(s)} onChange={() => setWhen({ ...when, seats: toggle(when.seats, s) })} />
-                <span className="font-mono">{s}</span>
-              </label>
+              <button key={s} type="button" className="wk-chip" aria-pressed={when.seats.includes(s)} data-testid="steering-mcp-seat" data-seat={s} onClick={() => setWhen({ ...when, seats: toggle(when.seats, s) })}>
+                {s}
+              </button>
             ))}
           </span>
         </div>
@@ -164,13 +160,12 @@ export function SteeringMcpBuilder({ appliesTo, onAppliesTo, onTrigger }: {
             data-testid="steering-mcp-use-when"
             disabled={issue !== null}
             onClick={() => onTrigger(compiled)}
-            className="rounded px-2 py-1 text-[11px] font-semibold disabled:opacity-40"
-            style={{ color: 'var(--accent)', border: '1px solid var(--surface-raised)' }}
+            className="wk-btn wk-btn--secondary wk-btn--sm"
           >
             Use as trigger
           </button>
           {issue !== null && (
-            <span data-testid="steering-mcp-when-issue" className="text-[10px]" style={{ color: 'var(--status-fail)' }}>{issue}</span>
+            <p data-testid="steering-mcp-when-issue" className="wk-field-note wk-field-note--bad w-full">{issue}</p>
           )}
         </div>
       </div>

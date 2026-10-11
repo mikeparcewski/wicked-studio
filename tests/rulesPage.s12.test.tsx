@@ -1,5 +1,5 @@
 import { StrictMode } from 'react';
-import { cleanup, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, renderHook, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { RULES_PATH, rulePath } from '../src/api/decisions.js';
 import type { SteeringRule } from '../src/api/steering.js';
@@ -148,7 +148,9 @@ describe('the page', () => {
     const rows = screen.getAllByTestId('rules-row');
     expect(rows.map((r) => r.getAttribute('data-rule-id'))).toStrictEqual(['proposal:pr-auto', 'TST-1002', 'PAT-100']);
     // The row's line is DC's sentence for the rule, with the project's NAME.
-    expect(rows[0]?.querySelector('[data-testid="rules-row-line"]')?.textContent).toBe('A Development rule for Kestrel — helpers are told about it when it applies; it never blocks.');
+    expect(rows[0]?.querySelector('[data-testid="rules-row-line"]')?.getAttribute('data-sentence')).toBe('A Development rule for Kestrel — helpers are told about it when it applies; it never blocks.');
+    // studio#689 row 46: tags, not the sentence repeated under every rule.
+    expect(rows[0]?.querySelector('[data-testid="rules-row-line"]')?.textContent).toBe('DevelopmentKestrelGuidanceWarning');
     expect(screen.queryByTestId('rules-row-aside')).toBeNull();
     const open = rows[0]?.querySelector('[data-testid="rules-row-open"]') as HTMLAnchorElement;
     expect(open.getAttribute('href')).toBe('/rules/proposal%3Apr-auto');
@@ -274,9 +276,10 @@ describe('the page', () => {
     listConformanceRules.mockRejectedValueOnce(new Error('daemon away')).mockResolvedValueOnce({ rules: [PATTERN] });
     render(<RulesPage ruleId={null} runs={[]} navigate={vi.fn()} />);
     const err = await screen.findByTestId('rules-error');
-    expect(err.textContent).toContain('daemon away');
+    expect(err.textContent).toContain('Couldn’t load the rules.');
+    expect(within(err).getByTestId('rules-error-detail')).toHaveTextContent('daemon away');
     expect(screen.queryByTestId('rules-sentence')).toBeNull();
-    fireEvent.click(screen.getByTestId('rules-retry'));
+    fireEvent.click(screen.getByTestId('rules-error-retry'));
     await waitFor(() => expect(screen.getByTestId('rules-sentence').textContent).toBe('1 rule in force'));
     expect(listConformanceRules).toHaveBeenCalledTimes(2);
   });

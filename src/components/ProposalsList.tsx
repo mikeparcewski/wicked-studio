@@ -5,69 +5,23 @@ import {
   proposalKind,
   type Proposal,
 } from '../api/proposals.js';
-import { SeverityChip } from './SteeringChips.js';
-import { KeyValueChips, KindChip } from './ProposalChips.js';
+import { readErrorKind } from '../api/errors.js';
+import { KindChip, severityWord } from './ProposalChips.js';
+import { StateBanner, EmptyState, Skeleton, TechDetails } from './ui/index.js';
 
-/**
- * The proposal QUEUE list — one card per pending proposal, the review-surface twin of
- * SteeringGrid's spreadsheet. Each card shows the kind chip, the payload (memory: content +
- * tier; policy: the rule + severity), the facets, and the provenance (which run/agent proposed
- * it), with Approve / Reject actions. The page owns the wire calls + optimistic state; this
- * component is presentational (loading / error / empty states handled here, exactly like
- * SteeringGrid).
- */
+const cap = (w: string): string => (w === '' ? w : w.charAt(0).toUpperCase() + w.slice(1));
 
-/** One label:value detail line — the drawer's DetailRow grammar. */
-function DetailRow({ label, testid, children }: {
-  label: string;
-  testid: string;
-  children: React.ReactNode;
-}): React.ReactElement {
-  return (
-    <div className="flex gap-2 text-[11px]">
-      <span className="w-24 shrink-0 text-[10px] uppercase tracking-wider" style={{ color: 'var(--ink-dim)' }}>{label}</span>
-      <span data-testid={testid} className="min-w-0 break-words" style={{ color: 'var(--ink-muted)' }}>{children}</span>
-    </div>
-  );
-}
-
-/** The payload, rendered by kind — memory shows content + tier, policy shows the rule +
- *  severity chip, an unrecognized kind shows the raw JSON so nothing is silently swallowed. */
-function PayloadDetail({ proposal }: { proposal: Proposal }): React.ReactElement {
+function PayloadText({ proposal }: { proposal: Proposal }): React.ReactElement {
   const kind = proposalKind(proposal);
   if (kind === 'memory') {
-    const { content, tier } = memoryPayload(proposal);
-    return (
-      <>
-        <DetailRow label="Content" testid="proposal-memory-content">
-          {content ?? <span style={{ color: 'var(--ink-dim)' }}>— (no content)</span>}
-        </DetailRow>
-        <DetailRow label="Tier" testid="proposal-memory-tier">
-          {tier !== null ? <span className="font-mono">{tier}</span> : <span style={{ color: 'var(--ink-dim)' }}>—</span>}
-        </DetailRow>
-      </>
-    );
+    const { content } = memoryPayload(proposal);
+    return <p data-testid="proposal-memory-content" className="wk-gk-content">{content ?? 'No content provided.'}</p>;
   }
   if (kind === 'policy') {
-    const { rule, severity } = policyPayload(proposal);
-    return (
-      <>
-        <DetailRow label="Rule" testid="proposal-policy-rule">
-          {rule ?? <span style={{ color: 'var(--ink-dim)' }}>— (no rule text)</span>}
-        </DetailRow>
-        <DetailRow label="Severity" testid="proposal-policy-severity">
-          {severity !== null ? <SeverityChip severity={severity} /> : <span style={{ color: 'var(--ink-dim)' }}>—</span>}
-        </DetailRow>
-      </>
-    );
+    const { rule } = policyPayload(proposal);
+    return <p data-testid="proposal-policy-rule" className="wk-gk-content">{rule ?? 'No rule text provided.'}</p>;
   }
-  return (
-    <DetailRow label="Payload" testid="proposal-raw-payload">
-      <code className="whitespace-pre-wrap break-all font-mono text-[10px]">
-        {proposal.payload === undefined ? '(no payload)' : JSON.stringify(proposal.payload)}
-      </code>
-    </DetailRow>
-  );
+  return <p data-testid="proposal-raw-payload" className="wk-gk-content">A proposal Studio can&rsquo;t show in words; its details are below.</p>;
 }
 
 function ProposalCard({ proposal, deciding, onApprove, onReject }: {
@@ -76,97 +30,62 @@ function ProposalCard({ proposal, deciding, onApprove, onReject }: {
   onApprove: (id: string) => void;
   onReject: (id: string) => void;
 }): React.ReactElement {
-  const steeringType = policySteeringType(proposal);
+  const kind = proposalKind(proposal);
+  const steeringType = kind === 'policy' ? policySteeringType(proposal) : null;
+  const severity = policyPayload(proposal).severity;
+  const tier = kind === 'memory' ? memoryPayload(proposal).tier : null;
+  const proposer = proposal.provenance.agent ?? proposal.provenance.helper;
+  // One disclosure for every internal: the proposal id, provenance and tags (studio#689 row 47).
+  const details = [
+    `proposal_id: ${proposal.id}`,
+    ...Object.entries(proposal.provenance).map(([k, v]) => `${k}: ${String(v)}`),
+    ...Object.entries(proposal.facets).map(([k, v]) => `${k}: ${String(v)}`),
+    ...(kind === 'other' && proposal.payload !== undefined ? [JSON.stringify(proposal.payload) ?? ''] : []),
+  ];
   return (
-    <li
-      data-testid="proposal-card"
-      data-proposal-id={proposal.id}
-      data-kind={proposalKind(proposal)}
-      className="flex flex-col gap-2 rounded p-3"
-      style={{ background: 'var(--surface-card)', border: '1px solid var(--surface-raised)' }}
-    >
-      <div className="flex items-center gap-2">
+    <li data-testid="proposal-card" data-proposal-id={proposal.id} data-kind={kind} className="wk-gk-card">
+      <div className="wk-gk-row">
         <KindChip proposal={proposal} />
-        {steeringType !== null && (
-          <span data-testid="proposal-policy-target" className="text-[10px]" style={{ color: 'var(--ink-dim)' }}>
-            → {steeringType}
-          </span>
-        )}
-        <span className="font-mono text-[10px]" style={{ color: 'var(--ink-dim)' }}>{proposal.id}</span>
+        {steeringType !== null && <span data-testid="proposal-policy-target" className="wk-tag">{cap(steeringType)}</span>}
+        {tier != null && <span data-testid="proposal-memory-tier" className="wk-tag">{cap(tier)}</span>}
       </div>
-
-      <div className="flex flex-col gap-1.5">
-        <PayloadDetail proposal={proposal} />
-        <DetailRow label="Facets" testid="proposal-facets">
-          <KeyValueChips testid="proposal-facets-chips" entries={proposal.facets} />
-        </DetailRow>
-        <DetailRow label="Proposed by" testid="proposal-provenance">
-          <KeyValueChips testid="proposal-provenance-chips" entries={proposal.provenance} />
-        </DetailRow>
-      </div>
-
-      <div className="flex items-center justify-end gap-2 pt-0.5">
-        <button
-          data-testid="proposal-reject"
-          type="button"
-          disabled={deciding}
-          onClick={() => onReject(proposal.id)}
-          className="rounded px-2 py-1 text-[10px] font-semibold disabled:opacity-50"
-          style={{ color: 'var(--status-fail)', border: '1px solid var(--status-fail-dim)' }}
-        >
-          Reject
-        </button>
-        <button
-          data-testid="proposal-approve"
-          type="button"
-          disabled={deciding}
-          onClick={() => onApprove(proposal.id)}
-          className="rounded px-2 py-1 text-[10px] font-semibold disabled:opacity-50"
-          style={{ color: 'var(--status-done)', border: '1px solid var(--surface-raised)' }}
-        >
-          Approve
-        </button>
+      <PayloadText proposal={proposal} />
+      {/* studio#689 row 79: what approving does, said once, in plain words. */}
+      {kind === 'policy' && (
+        <p className="wk-gk-muted">
+          Approving adds a {steeringType ?? 'steering'} rule
+          {severity !== null && <> (<span data-testid="proposal-policy-severity">{severityWord(severity)}</span>)</>}.
+        </p>
+      )}
+      <p data-testid="proposal-provenance" className="wk-gk-muted">Proposed by {proposer ?? 'a helper'}</p>
+      <div data-testid="proposal-facets"><TechDetails text={details} /></div>
+      <div className="wk-gk-actions">
+        <button data-testid="proposal-reject" type="button" disabled={deciding} onClick={() => onReject(proposal.id)} className="wk-btn wk-btn--secondary">Reject</button>
+        <button data-testid="proposal-approve" type="button" disabled={deciding} onClick={() => onApprove(proposal.id)} className="wk-btn wk-btn--primary">Approve</button>
       </div>
     </li>
   );
 }
 
-export function ProposalsList({ proposals, loading, error, decidingIds, onApprove, onReject }: {
+export function ProposalsList({ proposals, loading, error, decidingIds, onApprove, onReject, onRetry, errorKind }: {
   proposals: Proposal[];
   loading: boolean;
   error: string | null;
-  /** Ids whose approve/reject is in flight — their buttons disable. */
   decidingIds: ReadonlySet<string>;
   onApprove: (id: string) => void;
   onReject: (id: string) => void;
+  onRetry?: () => void;
+  errorKind?: 'offline' | 'error';
 }): React.ReactElement {
-  if (loading) {
-    return <p data-testid="proposals-loading" className="text-xs" style={{ color: 'var(--ink-dim)' }}>Loading proposals…</p>;
-  }
+  if (loading) return <Skeleton data-testid="proposals-loading" variant="card" />;
   if (error !== null) {
-    return (
-      <p data-testid="proposals-error" className="rounded px-2 py-1 text-xs" style={{ background: 'var(--status-fail-dim)', color: 'var(--status-fail)' }}>
-        {error}
-      </p>
-    );
+    return <StateBanner data-testid="proposals-error" kind={errorKind ?? readErrorKind(error)} what="proposals" error={error} {...(onRetry !== undefined ? { onRetry } : {})} />;
   }
-  if (proposals.length === 0) {
-    return (
-      <p data-testid="proposals-empty" className="rounded px-3 py-2 text-xs" style={{ background: 'var(--surface-rail)', border: '1px solid var(--surface-raised)', color: 'var(--ink-muted)' }}>
-        No proposals to review.
-      </p>
-    );
-  }
+  if (proposals.length === 0) return <EmptyState data-testid="proposals-empty" title="No proposals to review." />;
   return (
-    <ul data-testid="proposals-list" className="flex flex-col gap-3">
-      {proposals.map((p) => (
-        <ProposalCard
-          key={p.id}
-          proposal={p}
-          deciding={decidingIds.has(p.id)}
-          onApprove={onApprove}
-          onReject={onReject}
-        />
+    <ul data-testid="proposals-list" className="wk-gk-list">
+      {proposals.map((proposal) => (
+        <ProposalCard key={proposal.id} proposal={proposal} deciding={decidingIds.has(proposal.id)} onApprove={onApprove} onReject={onReject} />
       ))}
     </ul>
   );

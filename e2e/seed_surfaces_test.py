@@ -3500,7 +3500,7 @@ def run_scenarios(rig: Rig, page) -> None:
              "signals": {"phase": "build", "tool": "Edit", "files": ["src/api/wire.ts"], "content": "post the body with project and repo named explicitly"}},
         ]
         tid(page, "testing-corpus-name").fill(CORPUS_NAME)
-        tid(page, "testing-corpus-file").set_input_files([{"name": f"{CORPUS_NAME}.json", "mimeType": "application/json", "buffer": json.dumps(samples).encode()}])
+        tid(page, "testing-corpus-file-input").set_input_files([{"name": f"{CORPUS_NAME}.json", "mimeType": "application/json", "buffer": json.dumps(samples).encode()}])
         seen = wait_any(page, ["testing-corpus-summary", "testing-corpus-error", "testing-corpus-unsupported"], 60_000)
         if seen == "testing-corpus-unsupported":
             st, _ = api("POST", "/testing/corpora/import", {"name": "x", "samples": samples})

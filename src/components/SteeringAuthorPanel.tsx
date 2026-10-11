@@ -1,4 +1,5 @@
-import { useRef, useState } from 'react';
+import { FilePick, StateBanner, TechDetails } from './ui/index.js';
+import { useState } from 'react';
 import {
   authorSteeringRules,
   isSteeringUnsupported,
@@ -30,7 +31,6 @@ export function AuthorPanel({ type, onClose, onAuthored }: {
   const [error, setError] = useState<string | null>(null);
   const [unsupported, setUnsupported] = useState(false);
   const [runId, setRunId] = useState<string | null>(null);
-  const fileInput = useRef<HTMLInputElement>(null);
   // The propose gate arrives as a normal awaitingHuman frame on the launched run — the app's
   // one /ws subscription already folds it into the gate store; this panel watches for it, points
   // at the thread that answers it, and fires onAuthored when the store clears it.
@@ -82,38 +82,27 @@ export function AuthorPanel({ type, onClose, onAuthored }: {
 
       {runId === null ? (
         <>
-          <p className="text-[10px]" style={{ color: 'var(--ink-dim)' }}>
-            Launches a governed authoring run: it reads what you attach, drafts{' '}
-            <span className="font-mono">{type}</span> steering rules, and stops at a propose gate —
-            nothing is written until you approve it in the run&rsquo;s thread.
+          <p className="wk-field-note">
+            A helper reads what you attach and drafts {type} rules. Nothing is saved until you approve
+            them in the run&rsquo;s thread.
           </p>
           <textarea
             data-testid="steering-author-instructions"
             value={instructions}
             onChange={(e) => setInstructions(e.target.value)}
             placeholder="What should these rules steer? Paste context or attach the docs below."
-            className="min-h-[4rem] resize-y rounded px-2 py-1 text-[11px] focus:outline-none"
-            style={{ background: 'var(--surface-base)', border: '1px solid var(--surface-raised)', color: 'var(--ink-high)' }}
+            aria-label="What should these rules steer?"
+            className="wk-field min-h-[4rem] resize-y"
           />
           <div className="flex flex-wrap items-center gap-2">
-            <input
-              ref={fileInput}
+            <FilePick
               data-testid="steering-author-files"
-              type="file"
-              multiple
-              aria-label="Attach files for the authoring run"
-              onChange={(e) => {
-                // Read the FileList EAGERLY: the value reset below clears `files`, and a lazy
-                // read inside the state updater would see the already-emptied list.
-                const picked = Array.from(e.target.files ?? []);
-                setFiles((cur) => [...cur, ...picked]);
-                e.target.value = '';
-              }}
-              className="text-[10px]"
-              style={{ color: 'var(--ink-muted)' }}
+              label="Attach a file…"
+              file={null}
+              onChange={(f) => { if (f !== null) setFiles((cur) => [...cur, f]); }}
             />
             {files.map((f, i) => (
-              <span key={`${f.name}-${i}`} data-testid="steering-author-file-chip" className="inline-flex items-center gap-1 rounded px-1.5 text-[10px] font-mono" style={{ background: 'var(--surface-raised)', color: 'var(--ink-muted)' }}>
+              <span key={`${f.name}-${i}`} data-testid="steering-author-file-chip" className="wk-chip">
                 {f.name}
                 <button
                   type="button"
@@ -127,14 +116,14 @@ export function AuthorPanel({ type, onClose, onAuthored }: {
             ))}
           </div>
           {unsupported && (
-            <p data-testid="steering-author-unsupported" className="rounded px-2 py-1 text-[10px]" style={{ background: 'var(--surface-raised)', color: 'var(--ink-muted)' }}>
+            <p data-testid="steering-author-unsupported" className="wk-field-note">
               {STEERING_UNSUPPORTED_COPY}
             </p>
           )}
           {error !== null && (
-            <p data-testid="steering-author-error" className="rounded px-2 py-1 text-[10px]" style={{ background: 'var(--status-fail-dim)', color: 'var(--status-fail)' }}>
-              {error}
-            </p>
+            <div data-testid="steering-author-error">
+              <StateBanner kind="error" what="the authoring run" error={error} />
+            </div>
           )}
           <div>
             <button
@@ -142,18 +131,17 @@ export function AuthorPanel({ type, onClose, onAuthored }: {
               type="button"
               disabled={busy || instructions.trim() === ''}
               onClick={() => void launch()}
-              className="rounded px-3 py-1 text-[11px] font-semibold disabled:opacity-40"
-              style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}
+              className="wk-btn wk-btn--primary wk-btn--sm"
             >
               {busy ? 'Launching…' : 'Launch authoring run'}
             </button>
           </div>
         </>
       ) : gate === undefined ? (
-        <p data-testid="steering-author-waiting" className="text-[11px]" style={{ color: 'var(--ink-muted)' }}>
-          Authoring run <span className="font-mono">{runId.slice(0, 8)}</span> launched — its propose
-          gate will appear here the moment the run asks. It also shows up everywhere gates do.
-        </p>
+        <div data-testid="steering-author-waiting" className="wk-field-note">
+          <p>The authoring run started. Its proposed rules appear here, and on the Desk, as soon as they are ready.</p>
+          <TechDetails text={`run: ${runId}`} />
+        </div>
       ) : (
         // S16a-4g: the propose gate is answered in the run's thread (approving — optionally with a
         // steer — writes the proposed rules; rejecting writes nothing). One line, no card here.

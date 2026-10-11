@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '../../api/client.js';
 import { RULES_PATH, rulePath } from '../../api/decisions.js';
-import { policiesPath, steeringTypeOf, type SteeringRule } from '../../api/steering.js';
+import { policiesPath, STEERING_TYPE_LABELS, steeringTypeOf, type SteeringRule } from '../../api/steering.js';
+import { readErrorKind } from '../../api/errors.js';
+import { Skeleton, StateBanner, TechDetails } from '../ui/index.js';
 import type { SessionView } from '../../api/types.js';
 import { ruleSentence } from '../../board/ruleOrigin.js';
 import { GROUP_LABELS, GROUP_ORDER, groupOf, orderRules, rulesSentence, type RulesGroup } from '../../board/rulesPage.js';
@@ -10,7 +12,20 @@ import { useProjectsStore } from '../../store/projects.js';
 import { SteeringRuleDrawer } from '../SteeringRuleDrawer.js';
 import { SteeringRuleFormModal } from '../SteeringRuleForm.js';
 
-type Read = { kind: 'loading' } | { kind: 'ok'; rules: SteeringRule[] } | { kind: 'failed'; message: string };
+type Read = { kind: 'loading' } | { kind: 'ok'; rules: SteeringRule[] } | { kind: 'failed'; message: string; error: unknown };
+
+const SEVERITY_WORD: Record<string, string> = { info: 'Info', warn: 'Warning', error: 'Error', critical: 'Critical' };
+
+/** What a rule does when it fires, as one short tag (the full sentence stays the tags' title). */
+function effectWord(r: SteeringRule): string {
+  switch (r.effect) {
+    case 'deny': return 'Blocks';
+    case 'allow_with_conditions': return 'Adds conditions';
+    case 'allow': return 'Allows';
+    case undefined: return 'Guidance';
+    default: return String(r.effect);
+  }
+}
 
 /**
  * THE RULES PAGE (`/rules`, `/rules/:ruleId`; DES-STUDIO-REBUILD-001 §5.4, slice S12): decision
@@ -55,7 +70,7 @@ export function RulesPage({ ruleId, runs, navigate }: {
       const { rules } = await api.listConformanceRules();
       if (mine === seq.current) setRead({ kind: 'ok', rules: rules as SteeringRule[] });
     } catch (e) {
-      if (mine === seq.current) setRead({ kind: 'failed', message: e instanceof Error ? e.message : String(e) });
+      if (mine === seq.current) setRead({ kind: 'failed', message: e instanceof Error ? e.message : String(e), error: e });
     }
   }, []);
   useEffect(() => { void load(); }, [load]);
@@ -71,41 +86,67 @@ export function RulesPage({ ruleId, runs, navigate }: {
 
   const row = (r: SteeringRule): React.ReactElement => (
     <li key={r.id} data-testid="rules-row" data-rule-id={r.id} data-group={groupOf(r)} data-retired={r.retired === true} className="wk-rules-row">
-      <a href={rulePath(r.id)} onClick={go(rulePath(r.id))} data-testid="rules-row-open" className="wk-rules-statement">{r.statement}</a>
-      <span data-testid="rules-row-line" className="wk-rules-line">{ruleSentence(r, projectName(r.targets.project))}</span>
+      <a href={rulePath(r.id)} onClick={go(rulePath(r.id))} data-testid="rules-row-open" className="wk-rules-statement" title={r.statement}>{r.statement}</a>
+      {/* studio#689 row 46: type, scope and effect as tags, not the same sentence under every rule;
+          the sentence stays as the tags' accessible description. */}
+      <span data-testid="rules-row-line" data-sentence={ruleSentence(r, projectName(r.targets.project) ?? 'one project')} title={ruleSentence(r, projectName(r.targets.project) ?? 'one project')} className="wk-rules-tags">
+        <span className="wk-tag">{STEERING_TYPE_LABELS[steeringTypeOf(r)] ?? steeringTypeOf(r)}</span>
+        {r.targets.project !== undefined && r.targets.project !== '' ? (
+          <span className="wk-tag" title={projectName(r.targets.project) === null ? 'A project that is no longer listed' : undefined}>{projectName(r.targets.project) ?? 'One project'}</span>
+        ) : <span className="wk-tag">Everywhere</span>}
+        <span className={`wk-tag${r.effect === 'deny' ? ' wk-tag--fail' : r.effect === 'allow_with_conditions' ? ' wk-tag--gate' : ''}`}>{effectWord(r)}</span>
+        {r.severity !== undefined && r.severity !== 'info' && (
+          <span className={`wk-tag${r.severity === 'critical' || r.severity === 'error' ? ' wk-tag--fail' : ' wk-tag--warn'}`}>{SEVERITY_WORD[r.severity] ?? r.severity}</span>
+        )}
+      </span>
+      {r.statement.length > 160 && (
+        <a href={rulePath(r.id)} onClick={go(rulePath(r.id))} data-testid="rules-row-more" className="wk-link wk-rules-more">Read the full rule</a>
+      )}
     </li>
   );
 
   const group = (g: RulesGroup | 'retired', label: string, rows: SteeringRule[]): React.ReactElement | null => (rows.length === 0 ? null : (
     <section key={g} data-testid="rules-group" data-group={g} aria-label={label} className="wk-rules-group">
-      <p className="wk-desk-label">{label}</p>
+      <h2 className="wk-section-title">{label}</h2>
       <ul className="wk-rules-list">{rows.map(row)}</ul>
     </section>
   ));
 
   return (
     <div data-testid="rules-page" data-object="rules" className="wk-rules">
-      <header className="wk-rules-head">
-        <h1 className="wk-session-title">Rules</h1>
-        {read.kind === 'loading' && <p data-testid="rules-loading" aria-busy="true" className="wk-session-status">Reading the rules…</p>}
-        {read.kind === 'failed' && (
-          <p data-testid="rules-error" className="wk-session-status">
-            Could not read the rules — {read.message}.{' '}
-            <button type="button" data-testid="rules-retry" onClick={() => { setRead({ kind: 'loading' }); void load(); }} className="wk-since-toggle">Try again</button>
-          </p>
-        )}
-        {read.kind === 'ok' && <p data-testid="rules-sentence" data-count={live.length} className="wk-session-status">{rulesSentence(rules)}</p>}
+      <header className="wk-page-head wk-rules-head">
+        <div className="wk-page-head-text">
+          <h1 className="wk-page-title">Rules</h1>
+          <p className="wk-page-intro">What helpers are told to follow. Open a rule to see where it came from and where it applied.</p>
+          {read.kind === 'ok' && <p data-testid="rules-sentence" data-count={live.length} className="wk-rules-count">{rulesSentence(rules)}</p>}
+        </div>
+        <div className="wk-page-actions">
+          <a href={policiesPath()} onClick={go(policiesPath())} data-testid="rules-manage" className="wk-btn wk-btn--secondary wk-btn--sm">Manage rules</a>
+        </div>
       </header>
+      {read.kind === 'loading' && <div data-testid="rules-loading" className="wk-rules-state"><Skeleton rows={5} /></div>}
+      {read.kind === 'failed' && (
+        <div className="wk-rules-state">
+          <StateBanner
+            data-testid="rules-error"
+            kind={readErrorKind(read.error)}
+            what="the rules"
+            error={read.message}
+            onRetry={() => { setRead({ kind: 'loading' }); void load(); }}
+          />
+        </div>
+      )}
       <div className="wk-rules-body">
         {read.kind === 'ok' && ruleId !== null && open === null && (
           <p data-testid="rules-missing" className="wk-desk-quiet">
-            No rule <span className="font-mono">{ruleId}</span> here — it may have been removed, or it lives on another daemon.
+            That rule isn&rsquo;t here; it may have been removed.
+            <TechDetails text={ruleId} summary="Rule id" />
           </p>
         )}
         {GROUP_ORDER.map((g) => group(g, GROUP_LABELS[g], live.filter((r) => groupOf(r) === g)))}
         {group('retired', 'Retired', retired)}
         <p className="wk-desk-more">
-          <a href={policiesPath()} onClick={go(policiesPath())} data-testid="rules-all" className="wk-desk-more">All rules → the full grid, with import and the assistant</a>
+          <a href={policiesPath()} onClick={go(policiesPath())} data-testid="rules-all" className="wk-link">Manage rules: edit, import or draft rules with the assistant</a>
         </p>
       </div>
 

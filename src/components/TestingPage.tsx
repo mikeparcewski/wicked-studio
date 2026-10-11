@@ -1,5 +1,6 @@
 import { Fragment, useState } from 'react';
 import type { SessionView } from '../api/types.js';
+import { readErrorKind } from '../api/errors.js';
 import { rulePath } from '../api/decisions.js';
 import { STEERING_TYPE_LABELS, STEERING_TYPES } from '../api/steering.js';
 import {
@@ -19,8 +20,9 @@ import type { Navigate } from '../hooks/useRoute.js';
 import { useEvalReportStore } from '../store/evalReport.js';
 import { CampaignScoreboard } from './CampaignScoreboard.js';
 import { CampaignsPage } from './CampaignsPage.js';
-import { EvalHistory } from './EvalHistory.js';
+import { EVAL_FACET_MATCH_EXPLANATION, EvalHistory } from './EvalHistory.js';
 import { readFileText } from './fileText.js';
+import { EmptyState, FilePick, PageFrame, StateBanner, TechDetails } from './ui/index.js';
 
 /**
  * The Testing surface (`/testing/:page`) — ONE page component parameterized by sub-page,
@@ -46,7 +48,7 @@ type EvalsRunState =
   | { kind: 'idle' }
   | { kind: 'busy' }
   | { kind: 'unsupported' }
-  | { kind: 'failed'; message: string }
+  | { kind: 'failed'; error: unknown }
   // `corpus` records what THIS report ran against (null = the built-in default
   // set) — the report header's provenance line, pinned at run time so a later
   // edit of the corpus field cannot relabel finished numbers.
@@ -56,7 +58,7 @@ type CorpusImportState =
   | { kind: 'idle' }
   | { kind: 'busy'; filename: string }
   | { kind: 'unsupported' }
-  | { kind: 'failed'; message: string }
+  | { kind: 'failed'; error: unknown }
   | { kind: 'done'; filename: string; result: CorpusImportResult };
 
 // Gap wears the attention amber, not failure red (qe finding: a gap is an
@@ -83,9 +85,7 @@ export function evalVerdictWord(r: { verdict: EvalResult['verdict']; sample: { k
 /** The honest engine-gap callout — 501 / route-absent, shared by run + import. */
 function UnsupportedNote({ testid }: { testid: string }): React.ReactElement {
   return (
-    <p data-testid={testid} className="rounded px-2 py-1 text-[10px]" style={{ background: 'var(--surface-raised)', color: 'var(--ink-muted)' }}>
-      {TESTING_UNSUPPORTED_COPY}
-    </p>
+    <EmptyState data-testid={testid} title={TESTING_UNSUPPORTED_COPY} />
   );
 }
 
@@ -102,16 +102,16 @@ function GapNearestRules({ result, navigate }: {
       className="flex flex-col gap-1 rounded px-3 py-2"
       style={{ background: 'var(--surface-rail)', border: '1px solid var(--surface-raised)' }}
     >
-      <span className="text-[10px] font-semibold" style={{ color: 'var(--ink-muted)' }}>
+      <span className="text-xs font-semibold" style={{ color: 'var(--ink-muted)' }}>
         Nearest rules — how close recall came to firing the right one
       </span>
       {nearest.length === 0 ? (
-        <span data-testid="testing-evals-nearest-empty" className="text-[10px]" style={{ color: 'var(--ink-dim)' }}>
+        <span data-testid="testing-evals-nearest-empty" className="text-xs" style={{ color: 'var(--ink-dim)' }}>
           No nearby rules recalled — nothing in the store is close to this sample.
         </span>
       ) : (
         nearest.map((n) => (
-          <span key={n.rule_id} data-testid="testing-evals-nearest-rule" className="flex items-baseline gap-2 text-[10px] font-mono">
+          <span key={n.rule_id} data-testid="testing-evals-nearest-rule" className="flex flex-wrap items-baseline gap-2 text-xs">
             <a
               data-testid="testing-evals-nearest-link"
               data-rule-id={n.rule_id}
@@ -120,7 +120,7 @@ function GapNearestRules({ result, navigate }: {
                 e.preventDefault();
                 navigate(rulePath(n.rule_id));
               }}
-              className="underline"
+              className="font-mono underline"
               style={{ color: 'var(--accent)' }}
             >
               {n.rule_id}
@@ -150,22 +150,20 @@ function EvalReportView({ report, corpus, navigate }: {
   return (
     <div className="flex flex-col gap-3">
       {/* Corpus provenance (qe finding): which samples produced these numbers. */}
-      <p data-testid="testing-evals-provenance" className="text-[10px] font-mono" style={{ color: 'var(--ink-dim)' }}>
-        corpus: {corpus ?? 'built-in default'} · {s.total} sample{s.total === 1 ? '' : 's'}
+      <p data-testid="testing-evals-provenance" className="text-xs" style={{ color: 'var(--ink-dim)' }}>
+        Corpus: {corpus ?? 'built-in sample set'} · {s.total} sample{s.total === 1 ? '' : 's'}
       </p>
       {report.degraded === 'facet-only' && (
         <p
           data-testid="testing-evals-degraded"
-          className="rounded px-2 py-1 text-[10px]"
-          style={{ background: 'var(--status-gate-dim)', color: 'var(--status-gate)' }}
+          className="wk-field-note"
         >
-          Degraded run — this engine has no embedder, so recall matched on facets alone and
-          nearest-rule similarity is unavailable. The verdicts are real; the gap analysis is
-          weaker than an embedded run&rsquo;s.
+          <span className="wk-tag wk-tag--gate" title={EVAL_FACET_MATCH_EXPLANATION}
+            aria-label={`Facet match only: ${EVAL_FACET_MATCH_EXPLANATION}`}>Facet match only</span>: {EVAL_FACET_MATCH_EXPLANATION}
         </p>
       )}
 
-      <p data-testid="testing-evals-summary" className="flex flex-wrap items-baseline gap-3 text-[11px]">
+      <p data-testid="testing-evals-summary" className="flex flex-wrap items-baseline gap-3 text-xs">
         <span style={{ color: 'var(--ink-high)', fontWeight: 600 }}>{s.total} samples</span>
         {report.results.length > 0 ? (
           <>
@@ -187,7 +185,7 @@ function EvalReportView({ report, corpus, navigate }: {
           doesn't target — not that your rules are broken. Import a corpus that mirrors your steering,
           or add rules for the behaviors you DO want caught. Facet-only recall also widens gaps. */}
       {s.gaps > 0 && corpus === null && (
-        <p data-testid="testing-evals-gap-hint" className="rounded px-2 py-1 text-[10px]" style={{ background: 'var(--surface-rail)', color: 'var(--ink-muted)' }}>
+        <p data-testid="testing-evals-gap-hint" className="rounded px-2 py-1 text-xs" style={{ background: 'var(--surface-rail)', color: 'var(--ink-muted)' }}>
           A gap is a behavior no steering rule matched. These are from the built-in <em>generic</em>
           corpus — if your steering targets your own codebase&rsquo;s concerns rather than these, that
           is expected, not broken rules. Import a corpus that mirrors your steering (Import a corpus,
@@ -196,20 +194,18 @@ function EvalReportView({ report, corpus, navigate }: {
       )}
 
       {report.results.length === 0 ? (
-        <p data-testid="testing-evals-empty" className="text-[11px]" style={{ color: 'var(--ink-dim)' }}>
-          The corpus served no samples — import one below, or run against the built-in default
-          corpus by leaving the corpus field blank.
-        </p>
+        <EmptyState data-testid="testing-evals-empty" title="The corpus served no samples."
+          body="Import one below, or run against the built-in default corpus by leaving the corpus field blank." />
       ) : (
         <div className="overflow-x-auto">
-          <table data-testid="testing-evals-table" className="w-full text-left text-[11px]" style={{ borderCollapse: 'collapse' }}>
+          <table data-testid="testing-evals-table" className="w-full text-left text-xs" style={{ borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ color: 'var(--ink-dim)' }}>
-                <th className="px-2 py-1 font-semibold">sample</th>
-                <th className="px-2 py-1 font-semibold">type</th>
-                <th className="px-2 py-1 font-semibold">expected</th>
-                <th className="px-2 py-1 font-semibold">fired</th>
-                <th className="px-2 py-1 font-semibold">verdict</th>
+                <th className="px-2 py-1 font-semibold">Sample</th>
+                <th className="px-2 py-1 font-semibold">Type</th>
+                <th className="px-2 py-1 font-semibold">Expected</th>
+                <th className="px-2 py-1 font-semibold">Fired</th>
+                <th className="px-2 py-1 font-semibold">Verdict</th>
               </tr>
             </thead>
             <tbody>
@@ -228,18 +224,17 @@ function EvalReportView({ report, corpus, navigate }: {
                         <span className="font-mono" style={{ color: 'var(--ink-high)' }}>{r.sample.id}</span>
                         <p className="mt-0.5" style={{ color: 'var(--ink-muted)' }}>{r.sample.description}</p>
                       </td>
-                      <td className="px-2 py-1.5 align-top font-mono" style={{ color: 'var(--ink-muted)' }}>
+                      <td className="px-2 py-1.5 align-top" style={{ color: 'var(--ink-muted)' }}>
                         {r.sample.steering_type}
                       </td>
-                      <td className="px-2 py-1.5 align-top font-mono" style={{ color: 'var(--ink-muted)' }}>{r.expected}</td>
-                      <td className="px-2 py-1.5 align-top font-mono" style={{ color: 'var(--ink-muted)' }}>
-                        {r.fired.length === 0 ? '—' : r.fired.join(', ')}
+                      <td className="px-2 py-1.5 align-top" style={{ color: 'var(--ink-muted)' }}>{r.expected}</td>
+                      <td className="px-2 py-1.5 align-top" style={{ color: 'var(--ink-muted)' }}>
+                        {r.fired.length === 0 ? '—' : <span className="font-mono">{r.fired.join(', ')}</span>}
                       </td>
                       <td className="px-2 py-1.5 align-top">
                         <span
                           data-testid="testing-evals-verdict-word"
-                          className="rounded px-1.5 text-[10px] font-semibold"
-                          style={{ color: EVAL_VERDICT_COLOR[r.verdict], border: `1px solid ${EVAL_VERDICT_COLOR[r.verdict]}` }}
+                          className={`wk-tag ${r.verdict === 'caught' ? 'wk-tag--ok' : r.verdict === 'gap' ? 'wk-tag--gate' : 'wk-tag--fail'}`}
                         >
                           {evalVerdictWord(r)}
                         </span>
@@ -249,10 +244,9 @@ function EvalReportView({ report, corpus, navigate }: {
                             data-testid="testing-evals-gap-toggle"
                             aria-expanded={expanded}
                             onClick={() => setExpandedId(expanded ? null : r.sample.id)}
-                            className="ml-2 text-[10px] underline"
-                            style={{ color: 'var(--ink-dim)' }}
+                            className="wk-btn wk-btn--quiet wk-btn--sm"
                           >
-                            {expanded ? 'hide nearest' : 'nearest rules'}
+                            {expanded ? 'Hide nearest rules' : 'Nearest rules'}
                           </button>
                         )}
                       </td>
@@ -282,6 +276,7 @@ function EvalsPage({ navigate }: { navigate: (path: string) => void }): React.Re
   const [corpus, setCorpus] = useState('');
   const [state, setState] = useState<EvalsRunState>({ kind: 'idle' });
   const [corpusName, setCorpusName] = useState('');
+  const [corpusFile, setCorpusFile] = useState<File | null>(null);
   const [importState, setImportState] = useState<CorpusImportState>({ kind: 'idle' });
   /** Bumped after a successful run so the persisted history (EvalHistory) re-fetches. */
   const [historyKey, setHistoryKey] = useState(0);
@@ -303,7 +298,7 @@ function EvalsPage({ navigate }: { navigate: (path: string) => void }): React.Re
       useEvalReportStore.getState().deposit(report, corpusUsed);
     } catch (e) {
       if (isTestingUnsupported(e)) setState({ kind: 'unsupported' });
-      else setState({ kind: 'failed', message: e instanceof Error ? e.message : String(e) });
+      else setState({ kind: 'failed', error: e });
     }
   };
 
@@ -331,135 +326,109 @@ function EvalsPage({ navigate }: { navigate: (path: string) => void }): React.Re
       })
       .then((result) => {
         setImportState({ kind: 'done', filename: file.name, result });
+        setCorpusFile(null);
         // The imported scope is what the next run should target — pre-fill it, editable.
         setCorpus(result.scope);
       })
       .catch((e: unknown) => {
         if (isTestingUnsupported(e)) setImportState({ kind: 'unsupported' });
-        else setImportState({ kind: 'failed', message: e instanceof Error ? e.message : String(e) });
+        else setImportState({ kind: 'failed', error: e });
       });
   };
 
   return (
     <div data-testid="testing-evals" className="flex flex-col gap-4">
-      <p className="text-[11px]" style={{ color: 'var(--ink-muted)' }}>
-        Evals replay a corpus of good/bad behavior samples against the steering-rule store and
-        report what recall caught, what it missed, and what it flagged wrongly — the measured
-        answer to &ldquo;do the rules actually steer?&rdquo;.
-      </p>
-
       {/* The run controls — type (one of the seven, or all) + corpus scope. */}
-      <div className="flex flex-wrap items-end gap-3">
-        <label className="flex flex-col gap-0.5 text-[10px]" style={{ color: 'var(--ink-dim)' }}>
-          steering type
-          <select
-            data-testid="testing-evals-type"
-            value={type}
-            onChange={(e) => setType(e.target.value)}
-            className="rounded px-1 py-0.5 text-[11px] font-mono"
-            style={{ background: 'var(--surface-base)', border: '1px solid var(--surface-raised)', color: 'var(--ink-high)' }}
-          >
-            <option value="">all types</option>
-            {STEERING_TYPES.map((t) => (
-              <option key={t} value={t}>
-                {STEERING_TYPE_LABELS[t]}
-              </option>
-            ))}
+      <div className="wk-evals-controls">
+        <div className="wk-evals-field">
+          <label className="wk-field-label" htmlFor="evals-steering-type">Steering type</label>
+          <select id="evals-steering-type" data-testid="testing-evals-type" className="wk-field"
+            value={type} onChange={(e) => setType(e.target.value)}>
+            <option value="">All types</option>
+            {STEERING_TYPES.map((t) => <option key={t} value={t}>{STEERING_TYPE_LABELS[t]}</option>)}
           </select>
-        </label>
-        <label className="flex flex-col gap-0.5 text-[10px]" style={{ color: 'var(--ink-dim)' }}>
-          corpus (leave blank for the built-in sample set)
-          <input
-            data-testid="testing-evals-corpus"
-            value={corpus}
-            onChange={(e) => setCorpus(e.target.value)}
-            placeholder="evals:dev-behaviors"
-            className="rounded px-2 py-0.5 text-[11px] font-mono"
-            style={{ background: 'var(--surface-base)', border: '1px solid var(--surface-raised)', color: 'var(--ink-high)' }}
-          />
-        </label>
-        <button
-          data-testid="testing-evals-run"
-          type="button"
-          disabled={state.kind === 'busy'}
-          onClick={() => void run()}
-          className="rounded px-3 py-1 text-[11px] font-semibold disabled:opacity-40"
-          style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}
-        >
+        </div>
+        <div className="wk-evals-field">
+          <label className="wk-field-label" htmlFor="evals-corpus">Corpus</label>
+          <input id="evals-corpus" data-testid="testing-evals-corpus" className="wk-field"
+            value={corpus} onChange={(e) => setCorpus(e.target.value)}
+            placeholder="Built-in sample set" aria-describedby="evals-corpus-note" />
+          <p id="evals-corpus-note" className="wk-field-note">Leave blank to run the built-in sample set.</p>
+        </div>
+        <button data-testid="testing-evals-run" type="button" disabled={state.kind === 'busy'}
+          onClick={() => void run()} className="wk-btn wk-btn--primary">
           {state.kind === 'busy' ? 'Running…' : 'Run evals'}
         </button>
       </div>
 
       {state.kind === 'busy' && (
-        <p data-testid="testing-evals-busy" className="text-[10px]" style={{ color: 'var(--ink-dim)' }}>
+        <p data-testid="testing-evals-busy" className="text-xs" style={{ color: 'var(--ink-dim)' }}>
           Running evals…
         </p>
       )}
       {state.kind === 'unsupported' && <UnsupportedNote testid="testing-evals-unsupported" />}
       {state.kind === 'failed' && (
-        <p data-testid="testing-evals-error" className="rounded px-2 py-1 text-[10px]" style={{ background: 'var(--status-fail-dim)', color: 'var(--status-fail)' }}>
-          {state.message}
-        </p>
+        <div data-testid="testing-evals-error">
+          <StateBanner kind={readErrorKind(state.error)} what="the eval results"
+            error={state.error instanceof Error ? state.error.message : String(state.error)}
+            onRetry={() => void run()} />
+        </div>
       )}
       {state.kind === 'done' && (
         <EvalReportView report={state.report} corpus={state.corpus} navigate={navigate} />
       )}
 
       {/* Corpus import — a JSON file of samples lands in the estate as `evals:<name>`. */}
-      <div
-        className="flex flex-col gap-2 rounded p-3"
-        style={{ border: '1px solid var(--surface-raised)', background: 'var(--surface-rail)' }}
-      >
-        <span className="text-[11px] font-semibold" style={{ color: 'var(--ink-high)' }}>
-          Import a corpus
-        </span>
-        <p className="text-[10px]" style={{ color: 'var(--ink-dim)' }}>
-          A .json file — a bare array of samples, or {'{name, samples}'}. Each sample:{' '}
-          <span className="font-mono">
-            {'{id, description, kind: good|bad, steering_type, signals}'}
-          </span>
-          .
-        </p>
-        <div className="flex flex-wrap items-center gap-2">
-          <input
-            data-testid="testing-corpus-name"
-            value={corpusName}
-            onChange={(e) => setCorpusName(e.target.value)}
-            placeholder="corpus name (blank = from the file)"
-            className="rounded px-2 py-0.5 text-[11px] font-mono"
-            style={{ background: 'var(--surface-base)', border: '1px solid var(--surface-raised)', color: 'var(--ink-high)' }}
-          />
-          <input
-            data-testid="testing-corpus-file"
-            type="file"
-            accept=".json,application/json"
-            aria-label="Import an eval corpus"
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              if (file !== undefined) onCorpusPick(file);
-              e.target.value = '';
-            }}
-            className="text-[10px]"
-            style={{ color: 'var(--ink-muted)' }}
-          />
+      <div className="wk-card wk-evals-import">
+        <h2 className="wk-section-title">Import a corpus</h2>
+        <p className="wk-field-note">Choose a JSON file containing an array of samples, or a name and samples.</p>
+        <TechDetails summary="Corpus JSON format"
+          text={'A JSON array of samples, or {name, samples}. Each sample: {id, description, kind: good|bad, steering_type, signals}.'} />
+        <div className="wk-evals-controls">
+          <div className="wk-evals-field">
+            <label className="wk-field-label" htmlFor="evals-corpus-name">Corpus name</label>
+            <input id="evals-corpus-name" data-testid="testing-corpus-name" className="wk-field"
+              value={corpusName} onChange={(e) => setCorpusName(e.target.value)}
+              placeholder="Name (optional)" aria-describedby="evals-corpus-name-note" />
+            <p id="evals-corpus-name-note" className="wk-field-note">Leave blank to use the file's name.</p>
+          </div>
+          <div className="wk-evals-file">
+            <FilePick data-testid="testing-corpus-file" label="Choose a file…"
+              accept=".json,application/json" file={corpusFile} onChange={(file) => {
+                setCorpusFile(file);
+                if (file !== null) onCorpusPick(file);
+              }} />
+          </div>
         </div>
         {importState.kind === 'busy' && (
-          <p data-testid="testing-corpus-busy" className="text-[10px]" style={{ color: 'var(--ink-dim)' }}>
+          <p data-testid="testing-corpus-busy" className="text-xs" style={{ color: 'var(--ink-dim)' }}>
             Importing {importState.filename}…
           </p>
         )}
         {importState.kind === 'unsupported' && <UnsupportedNote testid="testing-corpus-unsupported" />}
         {importState.kind === 'failed' && (
-          <p data-testid="testing-corpus-error" className="rounded px-2 py-1 text-[10px]" style={{ background: 'var(--status-fail-dim)', color: 'var(--status-fail)' }}>
-            {importState.message}
-          </p>
+          <div data-testid="testing-corpus-error">
+            {importState.error instanceof Error && importState.error.message.includes('not an eval corpus') ? (
+              <>
+                <p className="wk-field-note wk-field-note--bad">That file isn&rsquo;t an eval corpus.</p>
+                <TechDetails text={importState.error.message} />
+              </>
+            ) : (
+              <StateBanner kind={readErrorKind(importState.error)} what="the corpus"
+                error={importState.error instanceof Error ? importState.error.message : String(importState.error)}
+                onRetry={() => { if (corpusFile !== null) onCorpusPick(corpusFile); }} />
+            )}
+          </div>
         )}
         {importState.kind === 'done' && (
-          <p data-testid="testing-corpus-summary" className="text-[10px]" style={{ color: 'var(--ink-muted)' }}>
+          <p data-testid="testing-corpus-summary" className="text-xs" style={{ color: 'var(--ink-muted)' }}>
             {importState.filename}: imported {importState.result.imported} sample
             {importState.result.imported === 1 ? '' : 's'} into{' '}
-            <span className="font-mono" style={{ color: 'var(--ink-high)' }}>{importState.result.scope}</span>
-            {importState.result.embedded ? ' (embedded)' : ' — stored facet-only: this engine has no embedder, so evals over it run degraded'}
+            <span style={{ color: 'var(--ink-high)' }}>{importState.result.scope}</span>
+            {importState.result.embedded ? ' (embedded)' : (
+              <> · <span className="wk-tag wk-tag--gate" title={EVAL_FACET_MATCH_EXPLANATION}
+                aria-label={`Facet match only: ${EVAL_FACET_MATCH_EXPLANATION}`}>Facet match only</span></>
+            )}
             .
           </p>
         )}
@@ -488,16 +457,8 @@ export function TestingPage({ page, campaignId, runs, navigate, launchIntent = n
 }): React.ReactElement {
   return (
     <div data-testid="testing-page" data-testing-page={page} className="flex flex-col">
-      {/* Test and Evals are now SEPARATE rail sections (usability wave), so the header is just the
-          section name — no "Testing ·" prefix and no sibling-tab strip (each is standalone). */}
-      <div className="flex flex-col gap-4 px-6 pt-6">
-        <h2 className="text-sm font-semibold" style={{ color: 'var(--ink-high)' }}>
-          {TESTING_PAGE_LABELS[page]}
-        </h2>
-      </div>
-
-      {/* Test (the recon landing + scoreboard) keeps its own internal padding and full width;
-          Evals content shares this shell's gutter. */}
+      {/* Each sub-page owns its PageFrame (UI-CONTRACT §4.6): the landing and the scoreboard carry
+          their own title and actions; Evals is framed here. */}
       {page === 'campaigns' ? (
         campaignId !== null ? (
           <CampaignScoreboard campaignId={campaignId} runs={runs} navigate={navigate} />
@@ -505,9 +466,13 @@ export function TestingPage({ page, campaignId, runs, navigate, launchIntent = n
           <CampaignsPage runs={runs} navigate={navigate} launchIntent={launchIntent} projectId={projectId} />
         )
       ) : (
-        <div className="max-w-5xl px-6 py-4">
+        <PageFrame
+          title={TESTING_PAGE_LABELS.evals}
+          intro="Check whether your steering rules catch what they should: replay good and bad samples and see what was caught, missed or wrongly flagged."
+          data-testid="testing-evals-frame"
+        >
           <EvalsPage navigate={navigate} />
-        </div>
+        </PageFrame>
       )}
     </div>
   );

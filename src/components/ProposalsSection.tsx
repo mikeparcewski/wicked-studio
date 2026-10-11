@@ -3,7 +3,8 @@ import {
   approveProposal,
   isProposalsUnsupported,
   listProposals,
-  PROPOSALS_UNSUPPORTED_COPY,
+  memoryPayload,
+  policyPayload,
   proposalKind,
   rejectProposal,
   type Proposal,
@@ -11,23 +12,9 @@ import {
 } from '../api/proposals.js';
 import { ProposalsList } from './ProposalsList.js';
 import { useNeedsSources } from '../store/needsSources.js';
-
-/**
- * The governed-knowledge PROPOSAL-review section — the reusable "proposals (review)" half that
- * both Steering sub-sections embed (DES-MEM-FACETED-001, unified surface): the Policies view
- * embeds it with `kind="policy"`, the Memories view with `kind="memory"`. It lists the PENDING
- * proposals of that one kind and lets a human approve/reject each — the read/decide twin of the
- * management surface beside it.
- *
- *  - Loads every pending proposal once (`GET /proposals?state=pending`) and narrows to the section's
- *    kind client-side (a policy proposal's `kind_type` is `policy:<type>`, so a server-side exact
- *    filter can't gather them — one load, filtered here).
- *  - Approve / Reject ride crew's `/api/v1/proposals/:id/{approve,reject}` (the governed operator
- *    path — estate MCP stays read-only); on success the row leaves the queue and the list reloads
- *    for the server's state.
- *  - Loading / error / empty and the forward-compat unsupported state all render honestly in-band —
- *    a daemon that predates the routes is never an error card.
- */
+import { readErrorKind } from '../api/errors.js';
+import { shortContent } from './ProposalChips.js';
+import { EmptyState, StateBanner } from './ui/index.js';
 
 export function ProposalsSection({ kind, heading, onDecision }: {
   /** Which proposals this section reviews — the sub-section it lives in. */
@@ -46,6 +33,8 @@ export function ProposalsSection({ kind, heading, onDecision }: {
   const [decidingIds, setDecidingIds] = useState<ReadonlySet<string>>(new Set<string>());
   /** The post-decision note (approved / rejected / a failed decision), in-band. */
   const [note, setNote] = useState<string | null>(null);
+  const [decisionError, setDecisionError] = useState<{ kind: 'offline' | 'error'; message: string; id: string; verb: 'approve' | 'reject' } | null>(null);
+  const [errorKind, setErrorKind] = useState<'offline' | 'error'>('error');
 
   const loadProposals = useCallback(async (): Promise<void> => {
     setLoading(true);
@@ -58,6 +47,8 @@ export function ProposalsSection({ kind, heading, onDecision }: {
       // decided proposal leaves the rail and peek as soon as this list reconciles.
       useNeedsSources.getState().depositProposals(ps);
     } catch (e) {
+      setProposals([]);
+      setErrorKind(readErrorKind(e));
       if (isProposalsUnsupported(e)) setUnsupported(true);
       else setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -76,6 +67,9 @@ export function ProposalsSection({ kind, heading, onDecision }: {
 
   const decide = useCallback((id: string, verb: 'approve' | 'reject'): void => {
     setNote(null);
+    setDecisionError(null);
+    const proposal = proposals.find((p) => p.id === id);
+    const title = proposal === undefined ? 'Proposal' : shortContent(memoryPayload(proposal).content ?? policyPayload(proposal).rule ?? 'Proposal');
     setDecidingIds((cur) => new Set(cur).add(id));
     const call = verb === 'approve' ? approveProposal(id) : rejectProposal(id);
     void call
@@ -83,12 +77,12 @@ export function ProposalsSection({ kind, heading, onDecision }: {
         // The row leaves the queue optimistically; a background reload reconciles with the
         // server's state (another reviewer may have decided others in the meantime).
         setProposals((cur) => cur.filter((p) => p.id !== id));
-        setNote(`${verb === 'approve' ? 'Approved' : 'Rejected'} ${id}.`);
+        setNote(`${verb === 'approve' ? 'Approved' : 'Rejected'}: ${title}`);
         onDecision?.();
         void loadProposals();
       })
       .catch((e: unknown) => {
-        setNote(`Could not ${verb} ${id}: ${e instanceof Error ? e.message : String(e)}`);
+        setDecisionError({ kind: readErrorKind(e), message: e instanceof Error ? e.message : String(e), id, verb });
       })
       .finally(() => {
         setDecidingIds((cur) => {
@@ -97,67 +91,31 @@ export function ProposalsSection({ kind, heading, onDecision }: {
           return next;
         });
       });
-  }, [loadProposals, onDecision]);
+  }, [loadProposals, onDecision, proposals]);
 
   const onApprove = useCallback((id: string) => decide(id, 'approve'), [decide]);
   const onReject = useCallback((id: string) => decide(id, 'reject'), [decide]);
 
   return (
-    <section
-      data-testid="proposals-section"
-      data-kind={kind}
-      className="flex flex-col gap-3 border-t pt-4"
-      style={{ borderColor: 'var(--surface-raised)' }}
-    >
-      <div className="flex items-center gap-2">
-        <h3 className="text-xs font-semibold" style={{ color: 'var(--ink-high)' }}>
+    <section data-testid="proposals-section" data-kind={kind} className="wk-gk-stack">
+      <div className="wk-gk-row">
+        <h2 className="wk-section-title">
           {heading}
-          {!unsupported && !loading && (
-            <span className="ml-1.5 font-mono" style={{ color: 'var(--ink-dim)' }}>({visible.length})</span>
-          )}
-        </h3>
-        <p className="text-[10px]" style={{ color: 'var(--ink-muted)' }}>
-          Agent-proposed {kind === 'policy' ? 'steering policies' : 'memories'}, each pending until you
-          approve or reject it.
-        </p>
-        <button
-          type="button"
-          data-testid="proposals-section-refresh"
-          onClick={() => void loadProposals()}
-          className="ml-auto text-[10px] hover:underline"
-          style={{ color: 'var(--ink-dim)' }}
-        >
-          Refresh
-        </button>
+          {!unsupported && !loading && error === null && <span className="wk-gk-count"> ({visible.length})</span>}
+        </h2>
+        <button type="button" data-testid="proposals-section-refresh" onClick={() => void loadProposals()} className="wk-btn wk-btn--quiet wk-btn--sm">Refresh</button>
       </div>
-
-      {note !== null && (
-        <p
-          data-testid="proposals-section-note"
-          className="rounded px-3 py-2 text-[11px]"
-          style={{ background: 'var(--surface-rail)', border: '1px solid var(--surface-raised)', color: 'var(--ink-muted)' }}
-        >
-          {note}
-        </p>
+      {note !== null && <p data-testid="proposals-section-note" role="status" className="wk-gk-note">{note}</p>}
+      {decisionError !== null && (
+        <div data-testid="proposals-section-note">
+          <p className="wk-gk-muted">Could not {decisionError.verb} this proposal.</p>
+          <StateBanner kind={decisionError.kind} what="the decision result" error={decisionError.message} onRetry={() => decide(decisionError.id, decisionError.verb)} />
+        </div>
       )}
-
       {unsupported ? (
-        <p
-          data-testid="proposals-section-unsupported"
-          className="rounded px-3 py-2 text-xs"
-          style={{ background: 'var(--surface-rail)', border: '1px solid var(--surface-raised)', color: 'var(--ink-muted)' }}
-        >
-          {PROPOSALS_UNSUPPORTED_COPY}
-        </p>
+        <EmptyState data-testid="proposals-section-unsupported" title="Studio's service does not support proposal review yet." />
       ) : (
-        <ProposalsList
-          proposals={visible}
-          loading={loading}
-          error={error}
-          decidingIds={decidingIds}
-          onApprove={onApprove}
-          onReject={onReject}
-        />
+        <ProposalsList proposals={visible} loading={loading} error={error} errorKind={errorKind} decidingIds={decidingIds} onApprove={onApprove} onReject={onReject} onRetry={() => void loadProposals()} />
       )}
     </section>
   );

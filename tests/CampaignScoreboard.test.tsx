@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type { CoreEvent, SessionView } from '../src/api/types.js';
 import type { SessionWithDelivery } from '../src/api/types.js';
 import { attachedRun, makeCampaign, type NodeFixture } from './campaignFactories.js';
@@ -85,7 +85,7 @@ describe('one surface groups the sibling runs', () => {
     expect(rows.map((r) => r.getAttribute('data-run-id'))).toEqual(['r1', 'r2', null, 'r-adhoc']);
     expect(rows.map((r) => r.getAttribute('data-kind'))).toEqual(['node', 'node', 'node', 'attached']);
     // The attached run is provenance, said so on the row.
-    expect(rows[3]!.textContent).toContain('attached');
+    expect(rows[3]!.textContent).toContain('Attached');
   });
 
   it('the delivery rollup reads the wire facts + session.delivery — ZERO fetches', async () => {
@@ -100,7 +100,7 @@ describe('one surface groups the sibling runs', () => {
     board([deliveredView('r1', 'https://github.com/o/x/pull/5'), makeView({ id: 'r2', status: 'executing' })]);
 
     await waitFor(() =>
-      expect(screen.getByTestId('campaign-delivery-rollup').textContent).toBe('2 of 3 siblings delivered'),
+      expect(screen.getByTestId('campaign-delivery-rollup').textContent).toBe('2 of 3 delivered'),
     );
     // The AC's hard rule: the rollup NEVER costs a transcript fetch — no network at all
     // beyond the mocked GET /campaigns/:id this surface owns.
@@ -119,7 +119,7 @@ describe('one surface groups the sibling runs', () => {
     ]));
     board([]);
     await waitFor(() => expect(screen.getByTestId('campaign-scoreboard')).toBeInTheDocument());
-    expect(screen.queryAllByRole('link')).toHaveLength(0);
+    expect(within(screen.getByTestId('campaign-ladder')).queryAllByRole('link').filter((l) => l.getAttribute('data-testid') !== 'campaign-run-link')).toHaveLength(0);
   });
 
   it('a stranded sibling is surfaced on the header chip AND its row', async () => {
@@ -129,7 +129,7 @@ describe('one surface groups the sibling runs', () => {
     ]));
     board([]);
     await waitFor(() => expect(screen.getByTestId('campaign-stranded-chip')).toBeInTheDocument());
-    expect(screen.getByTestId('campaign-stranded-chip').textContent).toContain('stranded · 1');
+    expect(screen.getByTestId('campaign-stranded-chip').textContent).toContain('1 not delivered');
     // The row itself wears the daemon's own word.
     const cells = screen.getAllByTestId('campaign-run-delivery').map((c) => c.textContent);
     expect(cells).toContain('stranded');
@@ -143,7 +143,7 @@ describe('one surface groups the sibling runs', () => {
     await waitFor(() => expect(screen.getAllByTestId('campaign-run-delivery').length).toBeGreaterThan(0));
     const cells = screen.getAllByTestId('campaign-run-delivery').map((c) => c.textContent);
     expect(cells).toContain('branch pushed');
-    expect(screen.queryAllByRole('link')).toHaveLength(0);
+    expect(within(screen.getByTestId('campaign-ladder')).queryAllByRole('link').filter((l) => l.getAttribute('data-testid') !== 'campaign-run-link')).toHaveLength(0);
     expect(screen.queryByTestId('campaign-stranded-chip')).toBeNull();
   });
 

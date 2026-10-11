@@ -302,6 +302,8 @@ export const DESK_RAIL_LINKS: readonly { dest: string; label: string; path: stri
   { dest: 'section:skills', label: 'Skills', path: skillsPath(), testId: 'desk-rail-skills' },
   { dest: 'section:mcp', label: 'MCP tools', path: mcpPath(), testId: 'desk-rail-mcp' },
   { dest: 'section:steering', label: 'Steering', path: '/rules', testId: 'desk-rail-steering' },
+  // studio#685 row 51 (UI-CONTRACT §3, S5): Testing sits in the Workspace group with the other levers.
+  { dest: 'section:testing', label: 'Testing', path: testingPath('campaigns'), testId: 'desk-rail-testing' },
 ];
 
 /**

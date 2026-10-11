@@ -78,11 +78,11 @@ describe('MemoriesPanel — the store browser', () => {
     expect(rows.map((r) => r.getAttribute('data-memory-id'))).toEqual(['m1', 'm2']);
     const m1 = rows[0]!;
     expect(within(m1).getByTestId('memory-content')).toHaveTextContent('gh account flips');
-    expect(within(m1).getByTestId('memory-tier')).toHaveTextContent('project');
+    expect(within(m1).getByTestId('memory-tier')).toHaveTextContent(/project/i);
     expect(within(m1).getByTestId('memory-scope')).toHaveTextContent('brain:wicked/doc:ops');
     expect(within(m1).getByTestId('memory-facets')).toHaveTextContent('domain:');
     // The coverage summary line renders when the wire answers it.
-    expect(screen.getByTestId('memories-coverage')).toHaveTextContent('2 in store');
+    expect(screen.getByTestId('memories-coverage')).toHaveTextContent('2 memories');
     // The default browse is unqueried.
     expect(apiFetch).toHaveBeenCalledWith('/memory');
   });
@@ -124,7 +124,7 @@ describe('MemoriesPanel — the store browser', () => {
   it('shows the empty state when the store has no memories', async () => {
     wire([]);
     render(<MemoriesPanel />);
-    expect(await screen.findByTestId('memories-empty')).toHaveTextContent('No memories in the store.');
+    expect(await screen.findByTestId('memories-empty')).toHaveTextContent('No memories listed yet.');
   });
 
   it('a zero-hit search says so — never "No memories in the store." under a "2 in store" header — and Clear restores the listing (#406)', async () => {
@@ -147,9 +147,9 @@ describe('MemoriesPanel — the store browser', () => {
 
     const empty = await screen.findByTestId('memories-empty');
     expect(empty).toHaveTextContent('No memories match “quantum sigils”.');
-    expect(empty).not.toHaveTextContent('No memories in the store.');
+    expect(empty).not.toHaveTextContent('No memories listed yet.');
     // The header still says what the store holds.
-    expect(screen.getByText(/2 in store/)).toBeInTheDocument();
+    expect(screen.getByTestId('memories-coverage')).toHaveTextContent('0 memories');
 
     await user.click(within(empty).getByRole('button', { name: 'Clear search' }));
     expect(await screen.findAllByTestId('memory-row')).toHaveLength(2);
@@ -165,10 +165,10 @@ describe('MemoriesPanel — the store browser', () => {
     });
     render(<MemoriesPanel />);
     const user = userEvent.setup();
-    expect(await screen.findByTestId('memories-empty')).toHaveTextContent('No memories in the store.');
+    expect(await screen.findByTestId('memories-empty')).toHaveTextContent('No memories listed yet.');
     await user.type(screen.getByTestId('memories-search'), 'anything');
     await user.click(screen.getByTestId('memories-search-go'));
-    await waitFor(() => expect(screen.getByTestId('memories-empty')).toHaveTextContent('No memories in the store.'));
+    await waitFor(() => expect(screen.getByTestId('memories-empty')).toHaveTextContent('No memories listed yet.'));
     expect(screen.queryByRole('button', { name: 'Clear search' })).toBeNull();
   });
 
@@ -181,8 +181,9 @@ describe('MemoriesPanel — the store browser', () => {
     });
     render(<MemoriesPanel />);
     const empty = await screen.findByTestId('memories-empty');
-    expect(empty).toHaveTextContent('The store holds 3 memories but the listing returned none');
-    expect(empty).not.toHaveTextContent('No memories in the store.');
+    expect(empty).toHaveTextContent('No memories are listed yet. Try a search.');
+    expect(screen.getByTestId('memories-coverage')).toBeEmptyDOMElement();
+    expect(empty).not.toHaveTextContent('No memories listed yet.');
   });
 
   it('renders the honest unsupported state on a daemon that predates the memory routes', async () => {
@@ -192,7 +193,7 @@ describe('MemoriesPanel — the store browser', () => {
       return Promise.reject(new ApiError(404, 'Not Found'));
     });
     render(<MemoriesPanel />);
-    expect(await screen.findByTestId('memories-unsupported')).toHaveTextContent(/predates memory management/);
+    expect(await screen.findByTestId('memories-unsupported')).toHaveTextContent("Studio's service does not support memory management yet.");
   });
 
   it('no longer renders the buried proposals-review section — that moved to the dashboard', async () => {
@@ -210,11 +211,12 @@ describe('MemoriesPanel — retire is a SUBTREE erase (honest granularity)', () 
     const user = userEvent.setup();
 
     const rows = await screen.findAllByTestId('memory-row');
-    await user.click(within(rows[0]!).getByTestId('memory-retire'));
+    await user.click(within(within(rows[0]!).getByTestId('memory-retire')).getByRole('button'));
+    await user.click(screen.getByRole('menuitem', { name: 'Retire everything in this scope…' }));
 
     // The confirm is explicit that this reaches the whole subtree, not one row.
     const confirm = await screen.findByTestId('memory-retire-confirm-banner');
-    expect(confirm).toHaveTextContent(/whole\s+SUBTREE/i);
+    expect(confirm).toHaveTextContent('Every memory in this scope and its child scopes will be erased.');
     expect(confirm).toHaveTextContent('brain:wicked/doc:ops');
 
     await user.click(screen.getByTestId('memory-retire-confirm'));
@@ -237,13 +239,14 @@ describe('MemoriesPanel — retire is a SUBTREE erase (honest granularity)', () 
     const user = userEvent.setup();
 
     const rows = await screen.findAllByTestId('memory-row');
-    expect(await screen.findByText(/1 in store/)).toBeInTheDocument();
-    await user.click(within(rows[0]!).getByTestId('memory-retire'));
+    expect(screen.getByTestId('memories-coverage')).toHaveTextContent('1 memory');
+    await user.click(within(within(rows[0]!).getByTestId('memory-retire')).getByRole('button'));
+    await user.click(screen.getByRole('menuitem', { name: 'Retire everything in this scope…' }));
     await user.click(await screen.findByTestId('memory-retire-confirm'));
     await waitFor(() => expect(calls).toContain('/memory/retire'));
 
     const empty = await screen.findByTestId('memories-empty');
-    await waitFor(() => expect(empty).toHaveTextContent('No memories in the store.'));
+    await waitFor(() => expect(empty).toHaveTextContent('No memories listed yet.'));
     expect(empty).not.toHaveTextContent(/holds 1 memory/);
     expect(calls.filter((c) => c === '/memory/coverage').length).toBeGreaterThanOrEqual(2);
   });
@@ -276,16 +279,17 @@ describe('MemoriesPanel — retire is a SUBTREE erase (honest granularity)', () 
     render(<MemoriesPanel />);
     const user = userEvent.setup();
     const rowEls = await screen.findAllByTestId('memory-row');
-    await user.click(within(rowEls[0]!).getByTestId('memory-retire'));
+    await user.click(within(within(rowEls[0]!).getByTestId('memory-retire')).getByRole('button'));
+    await user.click(screen.getByRole('menuitem', { name: 'Retire everything in this scope…' }));
     await user.click(await screen.findByTestId('memory-retire-confirm'));
     await waitFor(() => expect(calls.filter((c) => c === '/memory/coverage').length).toBe(2));
     const empty = await screen.findByTestId('memories-empty');
-    await waitFor(() => expect(empty).toHaveTextContent('No memories in the store.'));
+    await waitFor(() => expect(empty).toHaveTextContent('No memories listed yet.'));
 
     // Now the stale mount read resolves — it must be ignored.
     await act(async () => { releaseFirst!(); await Promise.resolve(); });
-    expect(screen.getByTestId('memories-empty')).toHaveTextContent('No memories in the store.');
-    expect(screen.queryByText(/1 in store/)).toBeNull();
+    expect(screen.getByTestId('memories-empty')).toHaveTextContent('No memories listed yet.');
+    expect(screen.getByTestId('memories-coverage')).not.toHaveTextContent('1 memory');
   });
 
   it('Cancel closes the confirm without touching the wire', async () => {
@@ -294,7 +298,8 @@ describe('MemoriesPanel — retire is a SUBTREE erase (honest granularity)', () 
     const user = userEvent.setup();
 
     const rows = await screen.findAllByTestId('memory-row');
-    await user.click(within(rows[0]!).getByTestId('memory-retire'));
+    await user.click(within(within(rows[0]!).getByTestId('memory-retire')).getByRole('button'));
+    await user.click(screen.getByRole('menuitem', { name: 'Retire everything in this scope…' }));
     await user.click(await screen.findByTestId('memory-retire-cancel'));
 
     expect(screen.queryByTestId('memory-retire-confirm-banner')).toBeNull();
@@ -316,7 +321,8 @@ describe('MemoriesPanel — retire is a SUBTREE erase (honest granularity)', () 
     const user = userEvent.setup();
 
     const rows = await screen.findAllByTestId('memory-row');
-    await user.click(within(rows[0]!).getByTestId('memory-retire'));
+    await user.click(within(within(rows[0]!).getByTestId('memory-retire')).getByRole('button'));
+    await user.click(screen.getByRole('menuitem', { name: 'Retire everything in this scope…' }));
 
     // findByTestId resolves when the banner MOUNTS, before the async count arrives.
     // Use waitFor on the text content so the test genuinely fails if the count never renders.
@@ -346,9 +352,11 @@ describe('MemoriesPanel — retire is a SUBTREE erase (honest granularity)', () 
 
     const rows = await screen.findAllByTestId('memory-row');
     // Click retire on M1 (ops) — slow fetch in flight.
-    await user.click(within(rows[0]!).getByTestId('memory-retire'));
+    await user.click(within(within(rows[0]!).getByTestId('memory-retire')).getByRole('button'));
+    await user.click(screen.getByRole('menuitem', { name: 'Retire everything in this scope…' }));
     // Immediately switch to M2 (macos) — fast fetch in flight.
-    await user.click(within(rows[1]!).getByTestId('memory-retire'));
+    await user.click(within(within(rows[1]!).getByTestId('memory-retire')).getByRole('button'));
+    await user.click(screen.getByRole('menuitem', { name: 'Retire everything in this scope…' }));
 
     // B (macos) completes first: banner must show 500 for scope macos.
     resolveMacos({ total: 500 });
@@ -382,13 +390,15 @@ describe('MemoriesPanel — retire is a SUBTREE erase (honest granularity)', () 
     const user = userEvent.setup();
     const rows = await screen.findAllByTestId('memory-row');
 
-    await user.click(within(rows[0]!).getByTestId('memory-retire'));
+    await user.click(within(within(rows[0]!).getByTestId('memory-retire')).getByRole('button'));
+    await user.click(screen.getByRole('menuitem', { name: 'Retire everything in this scope…' }));
     await waitFor(() =>
       expect(screen.getByTestId('memory-retire-confirm-banner')).toHaveTextContent(/3\s+memor/i),
     );
 
     // Same row again — the count must survive, not silently regress to the count-less warning.
-    await user.click(within(rows[0]!).getByTestId('memory-retire'));
+    await user.click(within(within(rows[0]!).getByTestId('memory-retire')).getByRole('button'));
+    await user.click(screen.getByRole('menuitem', { name: 'Retire everything in this scope…' }));
     await act(async () => { await new Promise<void>((r) => setTimeout(r, 0)); });
     expect(screen.getByTestId('memory-retire-confirm-banner')).toHaveTextContent(/3\s+memor/i);
   });
@@ -404,9 +414,10 @@ describe('MemoriesPanel — Retire removes ONE memory (studio#206)', () => {
     const user = userEvent.setup();
 
     const rows = await screen.findAllByTestId('memory-row');
-    await user.click(within(rows[0]!).getByTestId('memory-retire-one'));
+    await user.click(within(within(rows[0]!).getByTestId('memory-retire-one')).getByRole('button'));
+    await user.click(screen.getByRole('menuitem', { name: 'Retire' }));
     const confirm = await screen.findByTestId('memory-retire-confirm-banner');
-    expect(confirm).toHaveTextContent(/Only this one row is erased/);
+    expect(confirm).toHaveTextContent('Only this memory is erased.');
     expect(confirm).not.toHaveTextContent(/SUBTREE/);
     // A one-memory confirm never asks for the scope's count.
     expect(calls.filter((c) => c.startsWith('/memory/coverage?'))).toEqual([]);
@@ -416,7 +427,7 @@ describe('MemoriesPanel — Retire removes ONE memory (studio#206)', () => {
     const call = apiFetch.mock.calls.find((c) => c[0] === '/memory/retire-item')!;
     expect(JSON.parse((call[1] as { body: string }).body)).toEqual({ memory_id: 'm1' });
     expect(calls).not.toContain('/memory/retire');
-    expect(await screen.findByTestId('memories-note')).toHaveTextContent(/Retired 1 memory from brain:wicked\/doc:ops/);
+    expect(await screen.findByTestId('memories-note')).toHaveTextContent('Retired: gh account flips to a secondary → push 403');
     await waitFor(() => {
       const ids = screen.getAllByTestId('memory-row').map((r) => r.getAttribute('data-memory-id'));
       expect(ids).toEqual(['m1b', 'm2']);
@@ -435,7 +446,8 @@ describe('MemoriesPanel — Retire removes ONE memory (studio#206)', () => {
     const user = userEvent.setup();
 
     const rows = await screen.findAllByTestId('memory-row');
-    await user.click(within(rows[0]!).getByTestId('memory-retire-one'));
+    await user.click(within(within(rows[0]!).getByTestId('memory-retire-one')).getByRole('button'));
+    await user.click(screen.getByRole('menuitem', { name: 'Retire' }));
     await user.click(await screen.findByTestId('memory-retire-confirm'));
 
     expect(await screen.findByTestId('memories-note')).toHaveTextContent(/cannot retire a single memory yet.*Nothing was deleted/);
