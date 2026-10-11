@@ -9,6 +9,7 @@ import { useViewPrefsStore } from '../store/viewPrefs.js';
 import { setCachedRoster } from '../store/rosterCache.js';
 import { Modal } from './Modal.js';
 import { NotificationSettings } from './NotificationSettings.js';
+import { DeveloperSettings } from './editors/EditorPluginsSettings.js';
 import { Terminal } from './Terminal.js';
 import { SignInPanel } from './SignInPanel.js';
 import { testingPath } from '../api/testing.js';
@@ -670,6 +671,10 @@ export function SystemSettings({ navigate = (p) => { history.pushState(null, '',
           </div>
         )}
       </section>
+
+      {/* ── Developer (operator ruling X3): Settings → Developer → Editor plugins. Owned by the editors
+          section (UI-CONTRACT §6); this page only places it. */}
+      <DeveloperSettings navigate={navigate} />
 
       {/* ── Seat log-out terminal ──────────────────────────────────────────────
           crew#615: the daemon opens the PTY running the seat's own documented logout

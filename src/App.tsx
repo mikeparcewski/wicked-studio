@@ -427,7 +427,7 @@ export function App(): React.ReactElement {
     }
     // `/editors/{dev,conformance}` (EP-P1): one editor plugin in its sandboxed host, behind a dev route.
     if (panel === 'editors' && (artifactId === 'dev' || artifactId === 'conformance')) {
-      return <EditorHostPage mode={artifactId} />;
+      return <EditorHostPage mode={artifactId} navigate={navigate} />;
     }
     // `/s/:id` (S6a): a session — under every skin (a route is not a skin concern).
     if (panel === 'session' && artifactId !== null) {

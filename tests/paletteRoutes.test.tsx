@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ALL_PANELS, parseRoute } from '../src/hooks/useRoute.js';
-import { NOT_A_DESTINATION, REACHED_BY_OTHER_GROUPS, ROUTE_SHAPES, routeTargets } from '../src/palette/routeTargets.js';
+import { NOT_A_DESTINATION, NOT_IN_PALETTE, REACHED_BY_OTHER_GROUPS, ROUTE_SHAPES, routeTargets } from '../src/palette/routeTargets.js';
 import { makeView } from './factories.js';
 
 /**
@@ -42,6 +42,11 @@ describe('the router, enumerated', () => {
       if (REACHED_BY_OTHER_GROUPS.includes(s.id)) continue;
       // S16a-4a: a grown artifact's address is reached from the artifact itself (its ⤢), not GO TO.
       if (s.id === 'session-artifact') continue;
+      // X3: the CI-only conformance host has no ⌘K entry, and must not grow one.
+      if (NOT_IN_PALETTE.includes(s.id)) {
+        expect(targets.some((t) => t.shape === s.id), `${s.id} must stay off ⌘K`).toBe(false);
+        continue;
+      }
       const mine = targets.filter((t) => t.shape === s.id);
       expect(mine.length, `no ⌘K entry for ${s.id}`).toBeGreaterThan(0);
       for (const t of mine) expect(s.is(parseRoute(t.href)), `${t.label} → ${t.href}`).toBe(true);

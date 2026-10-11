@@ -5,6 +5,7 @@ import { FakeDocAdapter } from '../../editors/fakeAdapter.js';
 import { bundleUrl, fetchGrants, type Chip } from '../../editors/model.js';
 import { PERMISSIONS, SIZES, type PermissionId, type Size } from '../../editors/protocol.js';
 import { readThemeTokens } from '../../editors/theme.js';
+import { EditorTestPagePicker } from './EditorPluginsSettings.js';
 
 /**
  * THE EDITOR HOST PAGE (DES-EDITOR-PLUGINS-001 §10 step 2, §12.1; slice EP-P1): one editor plugin in
@@ -60,7 +61,7 @@ declare global {
   }
 }
 
-export function EditorHostPage({ mode }: { mode: 'dev' | 'conformance' }): React.ReactElement {
+export function EditorHostPage({ mode, navigate }: { mode: 'dev' | 'conformance'; navigate?: (path: string) => void }): React.ReactElement {
   // The page is its address: a different query (back/forward between two editors) is a different page.
   const search = window.location.search;
   const page = useMemo(() => readPage(search, mode), [search, mode]);
@@ -160,9 +161,11 @@ export function EditorHostPage({ mode }: { mode: 'dev' | 'conformance' }): React
   }, [adapter]);
 
   if (page.editor === '' || page.version === '' || page.sha === '') {
+    // UX audit row 39: with no editor named, the test page lists the installed ones to open (X3).
     return (
-      <div data-testid="editor-host-page" className="wk-editor-page">
-        <p className="wk-session-grey">Name an editor: <code>?editor=&lt;id&gt;&amp;version=&lt;v&gt;&amp;sha=&lt;sha256&gt;</code>.</p>
+      // A single scrolling column (codex): not the two-column host frame, which reserves the host's side panel.
+      <div data-testid="editor-host-page" data-mode={mode} className="flex-1 min-w-0 overflow-y-auto">
+        <EditorTestPagePicker navigate={navigate ?? ((p) => { history.pushState(null, '', p); window.dispatchEvent(new PopStateEvent('popstate')); })} />
       </div>
     );
   }

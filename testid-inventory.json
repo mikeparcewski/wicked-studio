@@ -11,9 +11,9 @@
   "version": 1,
   "studioVersion": "0.7.4",
   "counts": {
-    "files": 192,
-    "occurrences": 2103,
-    "static": 1834,
+    "files": 193,
+    "occurrences": 2119,
+    "static": 1850,
     "dynamic": 54,
     "computed": 17
   },
@@ -1844,6 +1844,12 @@
       ]
     },
     {
+      "testId": "developer-settings",
+      "files": [
+        "src/components/editors/EditorPluginsSettings.tsx"
+      ]
+    },
+    {
       "testId": "diff-baseline-note",
       "files": [
         "src/components/FileViewer.tsx"
@@ -2072,9 +2078,99 @@
       ]
     },
     {
+      "testId": "editor-host-pick",
+      "files": [
+        "src/components/editors/EditorPluginsSettings.tsx"
+      ]
+    },
+    {
       "testId": "editor-notes",
       "files": [
         "src/components/editors/EditorHostPage.tsx"
+      ]
+    },
+    {
+      "testId": "editor-plugin-internet",
+      "files": [
+        "src/components/editors/EditorPluginsSettings.tsx"
+      ]
+    },
+    {
+      "testId": "editor-plugin-off",
+      "files": [
+        "src/components/editors/EditorPluginsSettings.tsx"
+      ]
+    },
+    {
+      "testId": "editor-plugin-open",
+      "files": [
+        "src/components/editors/EditorPluginsSettings.tsx"
+      ]
+    },
+    {
+      "testId": "editor-plugin-permissions",
+      "files": [
+        "src/components/editors/EditorPluginsSettings.tsx"
+      ]
+    },
+    {
+      "testId": "editor-plugin-row",
+      "files": [
+        "src/components/editors/EditorPluginsSettings.tsx"
+      ]
+    },
+    {
+      "testId": "editor-plugin-source",
+      "files": [
+        "src/components/editors/EditorPluginsSettings.tsx"
+      ]
+    },
+    {
+      "testId": "editor-plugins-create",
+      "files": [
+        "src/components/editors/EditorPluginsSettings.tsx"
+      ]
+    },
+    {
+      "testId": "editor-plugins-devhost",
+      "files": [
+        "src/components/editors/EditorPluginsSettings.tsx"
+      ]
+    },
+    {
+      "testId": "editor-plugins-empty",
+      "files": [
+        "src/components/editors/EditorPluginsSettings.tsx"
+      ]
+    },
+    {
+      "testId": "editor-plugins-error",
+      "files": [
+        "src/components/editors/EditorPluginsSettings.tsx"
+      ]
+    },
+    {
+      "testId": "editor-plugins-list",
+      "files": [
+        "src/components/editors/EditorPluginsSettings.tsx"
+      ]
+    },
+    {
+      "testId": "editor-plugins-loading",
+      "files": [
+        "src/components/editors/EditorPluginsSettings.tsx"
+      ]
+    },
+    {
+      "testId": "editor-plugins-settings",
+      "files": [
+        "src/components/editors/EditorPluginsSettings.tsx"
+      ]
+    },
+    {
+      "testId": "editor-plugins-unsupported",
+      "files": [
+        "src/components/editors/EditorPluginsSettings.tsx"
       ]
     },
     {
