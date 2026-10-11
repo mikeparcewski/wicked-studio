@@ -117,12 +117,12 @@ export function GateNotifications({ onSelect, runId, projectId = null, runs = []
 
   return (
     <div
-      className="fixed right-4 flex flex-col items-end gap-2 z-50"
+      // studio#722: a strip in the main column's FLOW (App mounts it above the page), never an
+      // overlay — it pushes the page down, so it cannot cover a composer, a card's buttons or a thread.
+      className="wk-gate-strip"
       data-testid="gate-notification-layer"
-      // EC38 layout safety: the LAYER reserves no pointer surface — only the
-      // visible cards (pointerEvents: auto below) accept clicks. 12 px off the bottom edge:
-      // the classic runs bar it once sat above is retired (S18c).
-      style={{ bottom: 12, pointerEvents: 'none' }}
+      role="region"
+      aria-label="Waiting on you"
     >
       {cards.map((gate) => (
         <div
@@ -130,8 +130,7 @@ export function GateNotifications({ onSelect, runId, projectId = null, runs = []
           data-testid="gate-notification"
           data-run-id={gate.runId}
           data-variant="desk"
-          className="wk-desk-toast"
-          // EC38: only the cards accept clicks (inline, so the layer contract holds without the stylesheet).
+          className="wk-desk-toast wk-gate-strip-card"
           style={{ pointerEvents: 'auto' }}
         >
           <button

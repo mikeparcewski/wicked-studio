@@ -112,6 +112,20 @@ with sync_playwright() as p:
           and r["footLabel"] == "Workspace",
           **{k: v for k, v in r.items() if k != "text"})
 
+    # ── 1b. the Workspace tier MEASURED (operator 2026-10-11 20:50Z: "still large"): computed font
+    #        sizes in the browser — every Workspace link is smaller than the session rows and Desk.
+    sizes = page.evaluate("""() => {
+      const px = (el) => el ? parseFloat(getComputedStyle(el).fontSize) : null;
+      const foot = [...document.querySelectorAll('[data-testid="session-rail"] .wk-rail-foot .wk-rail-link')];
+      return { desk: px(document.querySelector('[data-testid="desk-rail-home"]')),
+               watch: px(document.querySelector('[data-testid="watch-pill"]')),
+               session: px(document.querySelector('[data-testid="rail-session"] .wk-rail-session-title')),
+               workspace: foot.map(px), label: px(document.querySelector('[data-testid="rail-foot-label"]')) };
+    }""")
+    ws = sizes["workspace"]
+    check("workspace-tier-measured", len(ws) == 7 and None not in ws and sizes["desk"] and sizes["session"]
+          and max(ws) < sizes["session"] and max(ws) < sizes["desk"] and max(ws) < (sizes["watch"] or 99), **sizes)
+
     # ── 2. the settings page (operator 2026-10-11: a page, not a dropdown) ─────────
     page.get_by_test_id("desk-rail-more").click()
     page.wait_for_function("() => window.location.pathname === '/settings'", timeout=5000)

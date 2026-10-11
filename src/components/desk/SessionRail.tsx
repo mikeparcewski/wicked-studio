@@ -3,7 +3,7 @@ import { LayoutGrid, Plus } from 'lucide-react';
 import { useDeliveredNow } from '../../store/postHocDeliver.js';
 import type { SessionView } from '../../api/types.js';
 import { DESK_RAIL_LINKS, SETTINGS_PATH, needsByRun, needTextByRun, railGroups } from '../../board/deskModel.js';
-import { needCount } from '../../board/needsQueue.js';
+import { useSettledNeeds } from '../../hooks/useNeedsRows.js';
 import type { NeedRow } from '../../board/needsYou.js';
 import { MoveToProject, MoveProjectStatus, useMovableBoardModel } from './MoveToProject.js';
 import { useCapabilities } from '../../store/capabilities.js';
@@ -43,14 +43,20 @@ export const SESSION_RAIL_PX = 236;
  *
  * Render only: the groups are `railGroups` (board/deskModel.ts) over `useBoardModel` + the fold.
  */
-export function SessionRail({ runs, needRows, navigate, pathname }: {
+export function SessionRail({ runs, needRows, navigate, pathname, runsKnown = true, runsFailed = false }: {
   runs: SessionView[];
   needRows: NeedRow[];
   navigate: Navigate;
   pathname: string;
+  /** Whether the first runs read answered, and whether the newest one failed (studio#723, #684):
+   *  the badge is the Desk's settled count — nothing while it moves, the last count while a read fails. */
+  runsKnown?: boolean;
+  runsFailed?: boolean;
 }): React.ReactElement {
   const { items, unfiled } = useMovableBoardModel(runs);
-  const count = needCount(needRows);
+  const settled = useSettledNeeds(needRows, runsKnown, runsFailed);
+  const count = settled.count ?? 0;
+  const badgeText = settled.phase === 'partial' ? `${count}+` : String(count);
   const runChatId = useCapabilities((s) => s.runChatId);
   const deliveredNow = useDeliveredNow();
   const groups = useMemo(
@@ -83,7 +89,7 @@ export function SessionRail({ runs, needRows, navigate, pathname }: {
       </div>
       <a href="/" onClick={go('/')} data-testid="desk-rail-home" aria-current={pathname === '/' ? 'page' : undefined} className="wk-rail-desk">
         <span>Desk</span>
-        {count > 0 && <span data-testid="desk-rail-badge" className="wk-rail-badge" aria-label={`${count} need you`}>{count}</span>}
+        {count > 0 && <span data-testid="desk-rail-badge" data-phase={settled.phase} className="wk-rail-badge" aria-label={`${badgeText} need you`}>{badgeText}</span>}
       </a>
       {/* Watchtower, where the bell was — outside every scroller, so its card is never clipped. */}
       <div className="wk-rail-watch" data-testid="desk-rail-watch" data-nav-dest="watch">

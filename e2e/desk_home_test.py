@@ -140,6 +140,9 @@ with sync_playwright() as p:
     page.screenshot(path=str(SHOTS / "desk-home.png"))
 
     # ── 2. one count ──────────────────────────────────────────────────────────────
+    # studio#723: the count is said only once it holds still (NEEDS_QUIET_MS) — wait for it.
+    page.get_by_test_id("desk-headline").wait_for(state="visible", timeout=10000)
+    page.get_by_test_id("desk-rail-badge").wait_for(state="visible", timeout=10000)
     c = page.evaluate(COUNTS)
     # Open every group so the members' keys are on the page.
     for t in page.locator('[data-testid="need-group-toggle"][aria-expanded="false"]').all():

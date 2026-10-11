@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState, useLayoutEffect } from 'react';
 import { FolderInput } from 'lucide-react';
 import { create } from 'zustand';
 import { api } from '../../api/client.js';
@@ -130,6 +130,28 @@ export function MoveToProject({ session, projectId, runs }: { session: RailSessi
   const close = useCallback(() => { if (!busy) setOpen(false); }, [busy]);
   useDismissable(open, close, container, trigger);
   useEffect(() => { if (open) picker.current?.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus(); }, [open]);
+  // studio#723: the picker is placed against the VIEWPORT (fixed), below the trigger or above it when
+  // there is more room there, and never taller than that room — so the rail's scroller and its fixed
+  // Workspace footer can no longer clip the last projects; it scrolls within its own box.
+  const [place, setPlace] = useState<React.CSSProperties | null>(null);
+  useLayoutEffect(() => {
+    if (!open || trigger.current === null) { setPlace(null); return; }
+    const r = trigger.current.getBoundingClientRect();
+    const vh = window.innerHeight; const vw = window.innerWidth; const w = Math.min(240, vw - 16);
+    const below = vh - r.bottom - 8; const above = r.top - 8;
+    const left = Math.max(8, Math.min(r.right - w, vw - w - 8));
+    setPlace(below >= 220 || below >= above
+      ? { position: 'fixed', top: r.bottom + 4, bottom: 'auto', left, right: 'auto', width: w, maxHeight: Math.max(120, below) }
+      : { position: 'fixed', top: 'auto', bottom: vh - r.top + 4, left, right: 'auto', width: w, maxHeight: Math.max(120, above) });
+  }, [open]);
+  // A fixed picker would detach from its row when the rail scrolls or the window resizes: close it.
+  useEffect(() => {
+    if (!open) return;
+    const onMove = (e: Event): void => { if (picker.current !== null && e.target instanceof Node && picker.current.contains(e.target)) return; close(); };
+    window.addEventListener('scroll', onMove, true);
+    window.addEventListener('resize', onMove);
+    return () => { window.removeEventListener('scroll', onMove, true); window.removeEventListener('resize', onMove); };
+  }, [open, close]);
   async function choose(target: string | null): Promise<void> {
     if (busy) return;
     setBusy(true); setError(null);
@@ -160,16 +182,16 @@ export function MoveToProject({ session, projectId, runs }: { session: RailSessi
         onClick={() => { setError(null); setOpen((v) => !v); }}>
         <FolderInput size={16} aria-hidden="true" />
       </button>
-      {open && <div ref={picker} id={pickerId} data-testid="session-move-picker" className="wk-desk-move-picker" role="group" aria-label={`Move ${session.title} to a project`} aria-busy={busy}>
+      {open && <div ref={picker} id={pickerId} data-testid="session-move-picker" className="wk-desk-move-picker" role="group" aria-label={`Move ${session.title} to a project`} aria-busy={busy} style={place ?? undefined}>
         <p className="wk-desk-label">Move to project…</p>
         {projects.filter((p) => p.id !== 'default' && p.status === 'active').map((p) => (
           p.id === projectId
             ? <p key={p.id} className="wk-desk-move-here" aria-current="true">{p.name} · here now</p>
-            : <button key={p.id} type="button" className="wk-btn wk-btn--secondary wk-btn--sm" disabled={busy} onClick={() => { void choose(p.id); }}>{p.name}</button>
+            : <button key={p.id} type="button" className="wk-btn wk-btn--quiet wk-btn--sm wk-desk-move-item" disabled={busy} onClick={() => { void choose(p.id); }}>{p.name}</button>
         ))}
         {projectId === null || projectId === ''
           ? <p className="wk-desk-move-here" aria-current="true">Not in a project · here now</p>
-          : <button type="button" className="wk-btn wk-btn--secondary wk-btn--sm" disabled={busy} onClick={() => { void choose(null); }}>Not in a project</button>}
+          : <button type="button" className="wk-btn wk-btn--quiet wk-btn--sm wk-desk-move-item" disabled={busy} onClick={() => { void choose(null); }}>Not in a project</button>}
         {busy && <p className="wk-desk-quiet">Moving…</p>}
         {error !== null && <p role="alert" className="wk-desk-move-error">{error}</p>}
         <button type="button" className="wk-btn wk-btn--quiet wk-btn--sm" disabled={busy} onClick={() => { setOpen(false); trigger.current?.focus(); }}>Cancel</button>

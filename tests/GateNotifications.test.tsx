@@ -149,12 +149,12 @@ describe('GateNotifications — expiry (§7.1)', () => {
 });
 
 describe('GateNotifications — layout safety (EC38)', () => {
-  it('the layer reserves no pointer surface; only cards accept clicks; the stack is capped', () => {
+  it('only cards accept clicks; the stack is capped', () => {
     seed(gate('r-1'), gate('r-2'), gate('r-3'), gate('r-4'), gate('r-5'));
     render(<GateNotifications onSelect={() => {}} />);
 
-    const layer = screen.getByTestId('gate-notification-layer');
-    expect(layer.style.pointerEvents).toBe('none');
+    // studio#722: the layer is an in-flow strip now — it covers nothing, so it needs no pass-through.
+    expect(screen.getByTestId('gate-notification-layer')).toBeInTheDocument();
 
     const cards = screen.getAllByTestId('gate-notification');
     expect(cards).toHaveLength(MAX_TOAST_CARDS);
@@ -219,5 +219,16 @@ describe('GateNotifications — cross-project context (B4)', () => {
       />,
     );
     expect(screen.getByTestId('gate-notification')).toBeInTheDocument();
+  });
+});
+
+describe('studio#722: the announcement never covers content', () => {
+  it('renders in the page flow (a strip above the page), never a fixed overlay', () => {
+    seed(gate('run-1'), gate('run-2'));
+    render(<GateNotifications onSelect={() => {}} />);
+    const layer = screen.getByTestId('gate-notification-layer');
+    expect(layer.className).toContain('wk-gate-strip');
+    expect(layer.className).not.toMatch(/\bfixed\b/);
+    expect(layer.getAttribute('style') ?? '').not.toMatch(/position|bottom/);
   });
 });

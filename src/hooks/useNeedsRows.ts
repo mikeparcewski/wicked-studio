@@ -160,40 +160,65 @@ const NEEDS_SOURCE_NAMES: Readonly<Record<NeedsSource, string>> = {
 };
 /** The last complete count, kept across refreshes so a re-read never flickers to a smaller number. */
 let lastComplete: number | null = null;
+/** The count the sources settled on, and since when it has held still (studio#723). */
+let candidate: { count: number; since: number } | null = null;
+/** How long a settled count must hold still before it is said (studio#723: a reload read 26, then 43,
+ *  as gates, memberships and the slower sources landed one after another). */
+export const NEEDS_QUIET_MS = 1500;
 /** Test seam. */
-export function resetSettledNeedsForTest(): void { lastComplete = null; }
+export function resetSettledNeedsForTest(): void { lastComplete = null; candidate = null; }
 
 /**
  * HONEST COUNTS (design/UI-CONTRACT.md §5; studio#681 row 4): the needs count is shown only once
- * every source has settled — answered, failed, or {@link NEEDS_SETTLE_MS} passed — so the Desk never
- * says "2 things need you" for seven seconds before it says 77.
- *  - `loading`: runs not known yet, or a source still out inside the window — `count` null.
- *  - `complete`: every source answered — the number.
+ * every source has settled — answered, failed, or {@link NEEDS_SETTLE_MS} passed — AND the count has
+ * held still for {@link NEEDS_QUIET_MS}, so the Desk never says "26 things need you" before it says 43.
+ *  - `loading`: runs not known yet, a source still out inside the window, or the count still moving — `count` null.
+ *  - `complete`: every source answered and the count held still — the number.
  *  - `partial`: a source failed or timed out — the number of what was read, with `missing` named
  *    (the Desk says "At least N"; the rail badge "N+").
- * After the first `complete`, a refresh keeps that number until the next `complete`.
+ * After the first `complete`, a refresh keeps that number until the next `complete`, and a FAILED
+ * runs read (`runsFailed`, studio#684) keeps it too: a read that failed never changes a count.
  */
-export function useSettledNeeds(needRows: readonly NeedRow[], runsKnown: boolean): { phase: 'loading' | 'complete' | 'partial'; count: number | null; missing: string[] } {
+export function useSettledNeeds(needRows: readonly NeedRow[], runsKnown: boolean, runsFailed = false): { phase: 'loading' | 'complete' | 'partial'; count: number | null; missing: string[] } {
   const s = useNeedsSources();
   const [since] = useState(() => Date.now());
   const [, tick] = useState(0);
-  useEffect(() => {
-    const t = setTimeout(() => tick((n) => n + 1), Math.max(0, since + NEEDS_SETTLE_MS - Date.now()) + 10);
-    return () => clearTimeout(t);
-  }, [since]);
   const count = needCount(needRows as NeedRow[]);
-  if (!runsKnown) return { phase: 'loading', count: null, missing: [] };
-  const expired = Date.now() - since >= NEEDS_SETTLE_MS;
+  const now = Date.now();
+  const held = (): { phase: 'loading' | 'complete'; count: number | null; missing: string[] } =>
+    lastComplete === null ? { phase: 'loading', count: null, missing: [] } : { phase: 'complete', count: lastComplete, missing: [] };
+  // Decide first (no early return before the effects): what to say, and when to look again.
+  let out: { phase: 'loading' | 'complete' | 'partial'; count: number | null; missing: string[] };
+  let wakeAt: number | null = null;
   const sources = Object.keys(NEEDS_SOURCE_NAMES) as NeedsSource[];
+  const expired = now - since >= NEEDS_SETTLE_MS;
   const pending = sources.filter((k) => s.readAt[k] === undefined);
-  if (pending.length > 0 && !expired) {
-    return lastComplete === null ? { phase: 'loading', count: null, missing: [] } : { phase: 'complete', count: lastComplete, missing: [] };
+  if (runsFailed) {
+    out = held();
+  } else if (!runsKnown) {
+    out = { phase: 'loading', count: null, missing: [] };
+  } else if (pending.length > 0 && !expired) {
+    out = held();
+    wakeAt = since + NEEDS_SETTLE_MS;
+  } else {
+    const valueOf = (k: NeedsSource): unknown => (k === 'campaigns' ? true : s[k]);
+    const missing = sources.filter((k) => s.readAt[k] === undefined || valueOf(k) === null).map((k) => NEEDS_SOURCE_NAMES[k]);
+    // Complete or partial alike, a number is said only once it has held still (codex r1 on studio#723).
+    if (candidate === null || candidate.count !== count) candidate = { count, since: now };
+    if (now - candidate.since < NEEDS_QUIET_MS) {
+      out = held();
+      wakeAt = candidate.since + NEEDS_QUIET_MS;
+    } else if (missing.length === 0) {
+      lastComplete = count;
+      out = { phase: 'complete', count, missing };
+    } else {
+      out = { phase: 'partial', count, missing };
+    }
   }
-  const valueOf = (k: NeedsSource): unknown => (k === 'campaigns' ? true : s[k]);
-  const missing = sources.filter((k) => s.readAt[k] === undefined || valueOf(k) === null).map((k) => NEEDS_SOURCE_NAMES[k]);
-  if (missing.length === 0) {
-    lastComplete = count;
-    return { phase: 'complete', count, missing };
-  }
-  return { phase: 'partial', count, missing };
+  useEffect(() => {
+    if (wakeAt === null) return;
+    const t = setTimeout(() => tick((n) => n + 1), Math.max(0, wakeAt - Date.now()) + 20);
+    return () => clearTimeout(t);
+  }, [wakeAt]);
+  return out;
 }
