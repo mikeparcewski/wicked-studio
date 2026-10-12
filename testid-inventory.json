@@ -11,10 +11,10 @@
   "version": 1,
   "studioVersion": "0.7.12",
   "counts": {
-    "files": 203,
-    "occurrences": 2301,
-    "static": 1994,
-    "dynamic": 62,
+    "files": 202,
+    "occurrences": 2322,
+    "static": 2021,
+    "dynamic": 63,
     "computed": 23
   },
   "static": [
@@ -5972,6 +5972,24 @@
       ]
     },
     {
+      "testId": "project-actions",
+      "files": [
+        "src/components/ProjectDetailPage.tsx"
+      ]
+    },
+    {
+      "testId": "project-band",
+      "files": [
+        "src/components/ProjectDetailPage.tsx"
+      ]
+    },
+    {
+      "testId": "project-chat",
+      "files": [
+        "src/components/ProjectDetailPage.tsx"
+      ]
+    },
+    {
       "testId": "project-counts",
       "files": [
         "src/components/everything/ProjectsTab.tsx"
@@ -6011,6 +6029,18 @@
       "testId": "project-coverage-totals",
       "files": [
         "src/components/product/ProjectAggregates.tsx"
+      ]
+    },
+    {
+      "testId": "project-dashboard",
+      "files": [
+        "src/components/ProjectDetailPage.tsx"
+      ]
+    },
+    {
+      "testId": "project-desc",
+      "files": [
+        "src/components/ProjectDetailPage.tsx"
       ]
     },
     {
@@ -6062,6 +6092,12 @@
       ]
     },
     {
+      "testId": "project-documents",
+      "files": [
+        "src/components/ProjectDetailPage.tsx"
+      ]
+    },
+    {
       "testId": "project-domain",
       "files": [
         "src/components/product/ProjectAggregates.tsx"
@@ -6110,9 +6146,87 @@
       ]
     },
     {
+      "testId": "project-feed",
+      "files": [
+        "src/components/ProjectDetailPage.tsx"
+      ]
+    },
+    {
       "testId": "project-field",
       "files": [
         "src/components/ProjectSwitcher.tsx"
+      ]
+    },
+    {
+      "testId": "project-first-job",
+      "files": [
+        "src/components/ProjectDetailPage.tsx"
+      ]
+    },
+    {
+      "testId": "project-first-run",
+      "files": [
+        "src/components/ProjectDetailPage.tsx"
+      ]
+    },
+    {
+      "testId": "project-job",
+      "files": [
+        "src/components/ProjectDetailPage.tsx"
+      ]
+    },
+    {
+      "testId": "project-jobs",
+      "files": [
+        "src/components/ProjectDetailPage.tsx"
+      ]
+    },
+    {
+      "testId": "project-member-row",
+      "files": [
+        "src/components/ProjectDetailPage.tsx"
+      ]
+    },
+    {
+      "testId": "project-meta",
+      "files": [
+        "src/components/ProjectDetailPage.tsx"
+      ]
+    },
+    {
+      "testId": "project-needs",
+      "files": [
+        "src/components/ProjectDetailPage.tsx"
+      ]
+    },
+    {
+      "testId": "project-new-job",
+      "files": [
+        "src/components/ProjectDetailPage.tsx"
+      ]
+    },
+    {
+      "testId": "project-open-repo",
+      "files": [
+        "src/components/ProjectDetailPage.tsx"
+      ]
+    },
+    {
+      "testId": "project-quiet",
+      "files": [
+        "src/components/ProjectDetailPage.tsx"
+      ]
+    },
+    {
+      "testId": "project-repo-attach-used",
+      "files": [
+        "src/components/ProjectRepositories.tsx"
+      ]
+    },
+    {
+      "testId": "project-repo-branch",
+      "files": [
+        "src/components/ProjectRepositories.tsx"
       ]
     },
     {
@@ -6182,6 +6296,12 @@
       ]
     },
     {
+      "testId": "project-repo-used",
+      "files": [
+        "src/components/ProjectRepositories.tsx"
+      ]
+    },
+    {
       "testId": "project-repos",
       "files": [
         "src/components/ProjectRepositories.tsx"
@@ -6191,6 +6311,48 @@
       "testId": "project-repos-empty",
       "files": [
         "src/components/ProjectRepositories.tsx"
+      ]
+    },
+    {
+      "testId": "project-repos-used",
+      "files": [
+        "src/components/ProjectRepositories.tsx"
+      ]
+    },
+    {
+      "testId": "project-stat-delivered",
+      "files": [
+        "src/components/ProjectDetailPage.tsx"
+      ]
+    },
+    {
+      "testId": "project-stat-quality",
+      "files": [
+        "src/components/ProjectDetailPage.tsx"
+      ]
+    },
+    {
+      "testId": "project-stat-spend",
+      "files": [
+        "src/components/ProjectDetailPage.tsx"
+      ]
+    },
+    {
+      "testId": "project-stat-started",
+      "files": [
+        "src/components/ProjectDetailPage.tsx"
+      ]
+    },
+    {
+      "testId": "project-stat-states",
+      "files": [
+        "src/components/ProjectDetailPage.tsx"
+      ]
+    },
+    {
+      "testId": "project-stat-typical",
+      "files": [
+        "src/components/ProjectDetailPage.tsx"
       ]
     },
     {
@@ -6221,6 +6383,12 @@
       "testId": "project-switcher-unfiled",
       "files": [
         "src/components/ProjectSwitcher.tsx"
+      ]
+    },
+    {
+      "testId": "project-window",
+      "files": [
+        "src/components/ProjectDetailPage.tsx"
       ]
     },
     {
@@ -9762,15 +9930,8 @@
       ]
     },
     {
-      "testId": "stat-context",
-      "files": [
-        "src/components/dashboardKit.tsx"
-      ]
-    },
-    {
       "testId": "stat-delta",
       "files": [
-        "src/components/dashboardKit.tsx",
         "src/components/ui/StatTile.tsx"
       ]
     },
@@ -9789,7 +9950,7 @@
     {
       "testId": "stat-value",
       "files": [
-        "src/components/dashboardKit.tsx",
+        "src/components/ProjectDetailPage.tsx",
         "src/components/ui/StatTile.tsx"
       ]
     },
@@ -12343,6 +12504,12 @@
       ]
     },
     {
+      "pattern": "project-window-*",
+      "files": [
+        "src/components/ProjectDetailPage.tsx"
+      ]
+    },
+    {
       "pattern": "rail-accordion-*",
       "files": [
         "src/components/RightPanel.tsx"
@@ -12442,10 +12609,8 @@
         "src/components/AnchoredOverlay.tsx",
         "src/components/AppearanceSettings.tsx",
         "src/components/CaptureDrop.tsx",
-        "src/components/DashboardTiles.tsx",
         "src/components/FacetAutocomplete.tsx",
         "src/components/HealthRailSection.tsx",
-        "src/components/MetricTile.tsx",
         "src/components/NeedsYouQueue.tsx",
         "src/components/ProvenanceLine.tsx",
         "src/components/RepoFindings.tsx",

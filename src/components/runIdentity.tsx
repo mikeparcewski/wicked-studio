@@ -1,7 +1,14 @@
 import type { AgentSession, CoreEvent, SessionStatus } from '../api/types.js';
 import { useRunEventStore } from '../store/events.js';
 import { useRuntimeStore, type LoggedEvent } from '../store/runtime.js';
-import { ageWord } from './DashboardTiles.js';
+
+/** Coarse age word — "45s", "12m", "3h", "2d" (kept here when the retired DashboardTiles went). */
+export function ageWord(ms: number): string {
+  if (ms < 60_000) return `${Math.max(0, Math.floor(ms / 1_000))}s`;
+  if (ms < 3_600_000) return `${Math.floor(ms / 60_000)}m`;
+  if (ms < 86_400_000) return `${Math.floor(ms / 3_600_000)}h`;
+  return `${Math.floor(ms / 86_400_000)}d`;
+}
 
 // Status metadata — colors speak the §2.6 status layer (moved from the classic RunCard, S18c)
 export const STATUS_STYLE: Record<SessionStatus, { label: string; color: string }> = {
