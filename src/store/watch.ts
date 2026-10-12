@@ -40,6 +40,10 @@ export interface WatchRow {
   sentence: string;
   /** Unix millis the row was raised. */
   at: number;
+  /** Which clock `at` is, when it is not the row's own moment (a Finished / Delivered row): the
+   *  run's launch (`started`: the wire carries no terminal clock for it), or none at all
+   *  (`unknown`: `at` is 0, sorts last). Absent = `at` is the moment itself. */
+  clock?: 'started' | 'unknown';
   state: WatchRowState;
   /** The line under a cleared row ("Fixed", "Dismissed by …", "Moving again"). */
   stateLine: string | null;
@@ -313,30 +317,48 @@ export function foldRuns(fold: WatchFold, runs: readonly SessionView[], projectO
     if (pid !== undefined) { rows[r.id] = { ...r, projectId: pid }; changed = true; }
   }
   for (const v of runs) {
-    const s = v.session as unknown as { id: string; status: string; ended_at?: number };
+    const s = v.session as unknown as { id: string; status: string; ended_at?: number | null; finished_at?: number | null; created_at?: number | null };
     // The delivery verdict on either wire: the 0.18.0 string, or a legacy daemon's
     // `{kind:'pull_request', url}` object (board/windowStats `wireDelivery`, Copilot).
     const delivery = wireDelivery(v);
-    const at = typeof s.ended_at === 'number' ? s.ended_at * 1000 : null;
+    // The run's own terminal clock: the daemon's `ended_at` (unix SECONDS), then the engine's
+    // `finished_at` (unix MILLIS). A run that ended before either field existed carries neither
+    // (crew 0.9.11 serves 44 such completed runs, `created_at` only, sometimes `null`): it is still
+    // Finished, dated by its launch and SAID to be (`clock: 'started'`), or undated (`'unknown'`).
+    // Dropping it hid every finished run from the Watchtower.
+    const ended = num(s.ended_at) !== null ? num(s.ended_at)! * 1000 : num(s.finished_at) !== null && num(s.finished_at)! > 0 ? num(s.finished_at) : null;
+    const started = num(s.created_at) !== null ? num(s.created_at)! * 1000 : null;
+    const at = ended ?? started ?? 0;
+    const clock = ended !== null ? undefined : started !== null ? 'started' as const : 'unknown' as const;
     // studio#545: an orphan row stays open only while its run is still `executing`.
     const orphan = rows[`orphan:${s.id}`];
     if (orphan !== undefined && orphan.state === 'open' && s.status !== 'executing') {
       rows[orphan.id] = { ...orphan, state: 'fixed', stateLine: s.status === 'completed' ? 'Finished' : `Ended (${s.status})` };
       changed = true;
     }
-    if (s.status !== 'completed' || at === null) continue;
+    if (s.status !== 'completed') continue;
     const base = {
-      source: 'run' as const, runId: s.id, projectId: projectOf?.(s.id) ?? sessionProject(v), at, state: 'done' as const, stateLine: null,
+      source: 'run' as const, runId: s.id, projectId: projectOf?.(s.id) ?? sessionProject(v), at, ...(clock !== undefined ? { clock } : {}), state: 'done' as const, stateLine: null,
       severity: null, attach: null, anchor: { run_id: s.id, ord: null, attempt: null, at }, rolledUp: 0,
       corroboratedBy: [], foldedInto: null, place: null, ord: null, emit: null,
     };
+    // A row first dated by a stand-in clock takes the run's own clock when the wire later carries
+    // it (codex r1); a row already on its own clock never moves.
+    const redate = (id: string): void => {
+      const prev = rows[id];
+      if (prev === undefined || prev.clock === undefined || clock === prev.clock) return;
+      const next: WatchRow = { ...prev, at, anchor: { run_id: s.id, ord: null, attempt: null, at } };
+      if (clock === undefined) delete next.clock; else next.clock = clock;
+      rows[id] = next;
+      changed = true;
+    };
     const finished = `finished:${s.id}`;
-    if (rows[finished] === undefined) { rows[finished] = { ...base, id: finished, kind: 'done', sentence: 'Finished' }; changed = true; }
+    if (rows[finished] === undefined) { rows[finished] = { ...base, id: finished, kind: 'done', sentence: 'Finished' }; changed = true; } else redate(finished);
     const delivered = `delivered:${s.id}`;
     if ((delivery === 'delivered' || delivery === 'pushed') && rows[delivered] === undefined) {
       rows[delivered] = { ...base, id: delivered, kind: 'delivery', sentence: delivery === 'delivered' ? 'Delivered' : 'Delivered as a pushed branch' };
       changed = true;
-    }
+    } else redate(delivered);
   }
   return changed ? { ...fold, rows } : fold;
 }

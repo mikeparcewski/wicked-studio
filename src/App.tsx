@@ -524,7 +524,7 @@ export function App(): React.ReactElement {
     if (panel === 'watch') {
       return (
         <div className="flex flex-1 overflow-hidden">
-          <WatchtowerPage count={needCount(needRows)} runs={runs} navigate={navigate} now={needsNow} />
+          <WatchtowerPage count={needCount(needRows)} runs={runs} runsLoaded={runsLoaded} runsError={runsError} onRetryRuns={refresh} navigate={navigate} now={needsNow} />
         </div>
       );
     }

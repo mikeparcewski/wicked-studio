@@ -1,0 +1,506 @@
+{
+ "recorded": "GET /api/v1/runs on crew 0.9.11 (:7701), 2026-10-12T00:10Z; sessions verbatim except: local paths replaced by 'worktree', problem cut to its first line, units dropped",
+ "runs": [
+  {
+   "session": {
+    "archive_note": null,
+    "archived_at": null,
+    "assurance": {
+     "mode": "full",
+     "required": [
+      "distinct_evaluator",
+      "judge"
+     ]
+    },
+    "attempt": 0,
+    "auto_deliver": false,
+    "clis": [
+     "claude",
+     "codex",
+     "pi",
+     "copilot",
+     "opencode"
+    ],
+    "collection_scope": "wicked-agent/1aba96f6-350d-4582-8491-21424c7073c3/shared",
+    "entity_mode": "shared",
+    "extra_read_roots": [],
+    "extra_write_roots": [],
+    "human_confirm": {
+     "before": 1
+    },
+    "id": "1aba96f6-350d-4582-8491-21424c7073c3",
+    "problem": "Recon the Tests feature in wicked-studio, meaning the Test rail section at /testing/campaigns with CampaignsPage and Tes",
+    "project_graph": null,
+    "project_id": null,
+    "repo_ref": "wicked-studio",
+    "status": "completed",
+    "unit_ix": 1,
+    "workdir": "worktree",
+    "workflow_id": "wf-1aba96f6-350d-4582-8491-21424c7073c3",
+    "run_identity": {
+     "kind": "free_text",
+     "name": null,
+     "user_plan": false,
+     "system": false
+    },
+    "document_id": null,
+    "created_at": 1788915736,
+    "delivery": "vacuous"
+   },
+   "units": []
+  },
+  {
+   "session": {
+    "archive_note": null,
+    "archived_at": null,
+    "assurance": {
+     "mode": "full",
+     "required": [
+      "distinct_evaluator",
+      "judge"
+     ]
+    },
+    "attempt": 0,
+    "auto_deliver": false,
+    "clis": [
+     "claude",
+     "codex",
+     "pi",
+     "copilot",
+     "opencode"
+    ],
+    "collection_scope": "wicked-agent/d97de01f-f2bd-4234-a2ea-d3cd97d09df9/shared",
+    "entity_mode": "shared",
+    "extra_read_roots": [],
+    "extra_write_roots": [],
+    "human_confirm": "none",
+    "id": "d97de01f-f2bd-4234-a2ea-d3cd97d09df9",
+    "problem": "Capture learnings from wicked-crew",
+    "project_graph": null,
+    "project_id": null,
+    "repo_ref": "wicked-crew",
+    "status": "completed",
+    "unit_ix": 3,
+    "workdir": "worktree",
+    "workflow_id": "capture-learnings",
+    "run_identity": {
+     "kind": "workflow",
+     "name": "capture-learnings",
+     "user_plan": false,
+     "system": true
+    },
+    "document_id": null,
+    "created_at": 1788763074,
+    "delivery": "none",
+    "deliver_requested": false
+   },
+   "units": []
+  },
+  {
+   "session": {
+    "archive_note": null,
+    "archived_at": null,
+    "assurance": {
+     "mode": "full",
+     "required": [
+      "distinct_evaluator",
+      "judge"
+     ]
+    },
+    "attempt": 0,
+    "auto_deliver": false,
+    "clis": [
+     "claude",
+     "codex",
+     "pi",
+     "copilot",
+     "opencode"
+    ],
+    "collection_scope": "wicked-agent/0d6897e8-685c-493f-9396-113345176a88/shared",
+    "entity_mode": "shared",
+    "extra_read_roots": [],
+    "extra_write_roots": [],
+    "human_confirm": "none",
+    "id": "0d6897e8-685c-493f-9396-113345176a88",
+    "problem": "Onboard repository: wicked-crew",
+    "project_graph": null,
+    "project_id": null,
+    "repo_ref": "wicked-crew",
+    "status": "completed",
+    "unit_ix": 2,
+    "workdir": "worktree",
+    "workflow_id": "onboarding",
+    "run_identity": {
+     "kind": "workflow",
+     "name": "onboarding",
+     "user_plan": false,
+     "system": true
+    },
+    "document_id": null,
+    "delivery": "none"
+   },
+   "units": []
+  },
+  {
+   "session": {
+    "archive_note": null,
+    "archived_at": null,
+    "assurance": {
+     "mode": "full",
+     "required": [
+      "distinct_evaluator",
+      "judge"
+     ]
+    },
+    "attempt": 1,
+    "auto_deliver": false,
+    "base_commit": "a13fbcdcdaf5145f8f42c7b1f2aa519a05d45ff4",
+    "benched_seats": [
+     {
+      "cli": "codex",
+      "reason": "signed out",
+      "source": "launcher"
+     },
+     {
+      "cli": "pi",
+      "reason": "signed out",
+      "source": "launcher"
+     }
+    ],
+    "clis": [
+     "claude",
+     "codex",
+     "pi",
+     "copilot",
+     "opencode"
+    ],
+    "collection_scope": "wicked-agent/db708484-0ba0-45f6-b6d8-7f3804d403f7/shared",
+    "entity_mode": "shared",
+    "extra_read_roots": [],
+    "extra_write_roots": [],
+    "finished_at": 1789309841436,
+    "human_confirm": {
+     "before": 1
+    },
+    "id": "db708484-0ba0-45f6-b6d8-7f3804d403f7",
+    "problem": "repo-learn / search ladder: ground through the estate stdio shim (--readonly) in governed mode; never the raw write CLI",
+    "project_graph": null,
+    "project_id": "proj_178884108858700000",
+    "repo_ref": "wicked-garden",
+    "run_branch": "wicked/db708484-0ba0-45f6-b6d8-7f3804d403f7",
+    "status": "failed",
+    "unit_ix": 0,
+    "workdir": "worktree",
+    "workflow_id": "bug",
+    "run_identity": {
+     "kind": "workflow",
+     "name": "bug",
+     "user_plan": false,
+     "system": false
+    },
+    "document_id": null,
+    "created_at": 1789309448,
+    "delivery": "none",
+    "deliver_requested": true
+   },
+   "units": []
+  },
+  {
+   "session": {
+    "archive_note": null,
+    "archived_at": null,
+    "assurance": {
+     "mode": "full",
+     "required": [
+      "distinct_evaluator",
+      "judge"
+     ]
+    },
+    "attempt": 0,
+    "auto_deliver": false,
+    "base_commit": "273d57894037fefcf8f40f3f733e5edd927ce0b9",
+    "benched_seats": [
+     {
+      "cli": "codex",
+      "reason": "signed out",
+      "source": "launcher"
+     },
+     {
+      "cli": "pi",
+      "reason": "signed out",
+      "source": "launcher"
+     },
+     {
+      "cli": "copilot",
+      "reason": "benched by recent councils (5 non zero exit)",
+      "source": "launcher"
+     },
+     {
+      "cli": "opencode",
+      "reason": "benched by recent councils (4 timed out)",
+      "source": "launcher"
+     }
+    ],
+    "clis": [
+     "claude",
+     "codex",
+     "pi",
+     "copilot",
+     "opencode"
+    ],
+    "collection_scope": "wicked-agent/1d0a4f7c-6ff0-4022-a8b9-c2f69012e62c/shared",
+    "entity_mode": "shared",
+    "extra_read_roots": [],
+    "extra_write_roots": [],
+    "finished_at": 1789310664240,
+    "human_confirm": {
+     "before": 1
+    },
+    "id": "1d0a4f7c-6ff0-4022-a8b9-c2f69012e62c",
+    "problem": "Governance: allowlist the estate stdio shim (--readonly) and read-only wicked-estate subcommands in governed units; deny",
+    "project_graph": null,
+    "project_id": "proj_178884108858700000",
+    "repo_ref": "wicked-core",
+    "run_branch": "wicked/1d0a4f7c-6ff0-4022-a8b9-c2f69012e62c",
+    "status": "cancelled",
+    "unit_ix": 0,
+    "workdir": "worktree",
+    "workflow_id": "bug",
+    "run_identity": {
+     "kind": "workflow",
+     "name": "bug",
+     "user_plan": false,
+     "system": false
+    },
+    "document_id": null,
+    "created_at": 1789309604,
+    "delivery": "none",
+    "deliver_requested": true
+   },
+   "units": []
+  },
+  {
+   "session": {
+    "archive_note": null,
+    "archived_at": null,
+    "assurance": {
+     "mode": "full",
+     "required": [
+      "distinct_evaluator",
+      "judge"
+     ]
+    },
+    "attempt": 0,
+    "auto_deliver": false,
+    "clis": [
+     "opencode",
+     "claude",
+     "codex",
+     "pi"
+    ],
+    "collection_scope": "wicked-agent/200fa059-c1b7-4d65-8a6d-8959797ecfb9/shared",
+    "entity_mode": "shared",
+    "extra_read_roots": [],
+    "extra_write_roots": [],
+    "human_confirm": "none",
+    "id": "200fa059-c1b7-4d65-8a6d-8959797ecfb9",
+    "problem": "Add a policy around going with managed cloud native services as the first option for designing new applications",
+    "project_graph": null,
+    "project_id": null,
+    "repo_ref": null,
+    "status": "awaiting_human",
+    "team": {
+     "gate_seq": 1,
+     "plan_rev": 1,
+     "primary": {
+      "cli": "opencode",
+      "pick_seq": 0,
+      "selection": "random"
+     },
+     "stream_floor": 6,
+     "transport": "bus"
+    },
+    "team_plan": {
+     "accepted": {
+      "auto": true,
+      "band": "0-19",
+      "by": "engine",
+      "floor_override": null,
+      "high_risk": false,
+      "proposal_id": "p-22cd8781f7ada174dff923d3b3c435a1",
+      "rev": 1,
+      "steps": {
+       "monitors": {
+        "asked": 1
+       },
+       "steps": [
+        {
+         "added_by": "plan",
+         "budget_secs": 600,
+         "catalog": "understand",
+         "gate": {
+          "human_confirm": {
+           "unconditional": true
+          }
+         },
+         "id": "answer-1",
+         "instructions": "# Chat scope\n\nThis directory is the scratch root of wicked-crew chat `7695ee6a-8f0d-40db-a91c-805c16832eb8`. It is the ONLY place you may write.\n\n## Scope: everything\n\nThis chat covers every repository registered with this daemon, across all projects.\n\n## Repositories in scope (READ-ONLY)\n\n- **wicked-crew** (`wicked-crew`): `worktree (fast-forwarded 178 commit(s) to `origin/main` when this chat opened)\n- **wicked-garden** (`wicked-garden`): `worktree (fast-forwarded 53 commit(s) to `origin/main` when this chat opened)\n- **wicked-estate** (`wicked-estate`): `worktree (fast-forwarded 63 commit(s) to `origin/main` when this chat opened)\n- **wicked-core** (`wicked-core`): `worktree (fast-forwarded 154 commit(s) to `origin/main` when this chat opened)\n- **wicked-studio** (`wicked-studio`): `worktree (fast-forwarded 99 commit(s) to `origin/main` when this chat opened)\n- **wicked-interactive** (`wicked-interactive`): `worktree (fast-forwarded 47 commit(s) to `origin/main` when this chat opened)\n- **wicked-bus** (`wicked-bus`): `worktree (fast-forwarded 18 commit(s) to `origin/main` when this chat opened)\n- **wicked-vault** (`wicked-vault`): `worktree (fast-forwarded 8 commit(s) to `origin/main` when this chat opened)\n- **wicked-ledger** (`wicked-ledger`): `worktree (fast-forwarded 3 commit(s) to `origin/main` when this chat opened)\n- **wicked-installer** (`wicked-installer`): `worktree (fast-forwarded 11 commit(s) to `origin/main` when this chat opened)\n\nExplore and answer questions about these repositories by reading them at the paths above.\nCite files relative to their repository root, prefixed with the repository name\n(for example `alpha/src/foo.ts` for a file at `/srv/repos/alpha/src/foo.ts`).\nDo NOT read from any `wicked-worktrees/` subdirectory \u2014 those are engine-managed run\ncheckouts, not source code. Do NOT modify, create or delete anything inside these\nrepositories \u2014 this chat is read-only exploration; write scratch files only under this\ndirectory. Nothing outside these repositories and this directory is in scope.\n\n## Grounding\n\nNo code graph is bound: 10 registered repos across all projects and no single code graph spans them, so this chat gets no code graph; scope it to a project to ground on its graph. \u2014 read the repositories directly and say so.\n\n## Answer format\n\nReply with the answer itself: no working notes or status blocks (no \"Work State\", \"Next Move\"\nor \"Relevant Files\" sections), no tool monologue, no compaction notices. Cite files relative\nto their repository root (e.g. `alpha/src/foo.ts`, not the host path). If a claim could not\nbe grounded, say so in one line rather than asserting it.\n\n## Requests for work\n\nThis chat cannot change anything: writes outside this directory are refused. When the message\nasks for work (build, fix, add, change, write code or docs), do NOT attempt it. Answer with a\nshort plan: what changes, in which files, and how it will be checked.\nThen tell the operator to start it with Continue in Build and to pick the repository there:\nthis chat has no single repository a build could run in.\n\n## Rules in force\n\nThese steering rules apply here. Where you follow one, cite it as `[rule:<id>]`; crew shows it\nas cited \u2014 unchecked (a citation, never a verdict).\n\n- [rule:MCPS-1004] Every tool and resource is authenticated per the upstream's scheme (bearer, API key, basic or OAuth2 client credentials); the server reads ONE secret from the environment variable <SERVER>_TOKEN, named in .env.example, and every non-secret authentication parameter from its committed mcp-server.config.json \u2014 because the broker and the registry inject exactly one variable; a secret never appears in code, tool arguments, logs or results; a missing secret fails at startup naming the variable; the httpStream transport requires the authenticate callback and every tool carries canAccess; a stdio server inherits the broker's environment injection (MCP-D2).\n- [rule:proposal:01a07bbd-887f-7110-9edc-7fb627d35820] scripts/qe/vault_gate.py resolve_vault()'s run-the-vault path (allow_npx=True) must remain loom-authoritative with no in-process fallback: if wicked-loom is unresolvable, disabled, or errors, resolve_vault must return None so the downstream gate fails closed rather than producing a vacuous pass.\n- [rule:proposal:01a07bc6-fedc-71b0-b2ba-cd554a95c73b] Never key a graph node by content hash or line number; identity must route through SymbolId (ADR-002). A change that introduces a content-hash- or line-derived node id is a regression of the rename-safety invariant.\n- [rule:proposal:01a07bc7-0d50-70f0-b9b9-a94222268c60] index_path's delete-sweep must scope 'previously indexed' strictly to file paths carrying a digest row this indexer wrote (indexed_files()), never to the full node population (all_nodes()) \u2014 a shared store can hold non-file domain objects that must never be swept by a subdirectory reindex (FINDING-067).\n- [rule:proposal:01a07bc7-2f63-79b2-9aef-2bdc705808fe] Every write/destructive MCP tool must be both omitted from tools/list under --readonly AND refused by name inside the tools/call dispatch backstop (is_write_tool check) before any domain dispatch runs \u2014 a new write tool that skips either layer is a --readonly bypass.\n- [rule:proposal:01a07cdb-e555-70e0-bdc1-675ec1149bf7] Any new wicked-interactive feature that fetches a user-supplied URL server-side must reuse the SSRF guard pattern in src/service/theme-grab.js (assertPublicUrl + resolveRedirectChain): validate the initial host AND every redirect hop before rendering, and pin the validated IP into the browser launch (--host-resolver-rules) to prevent DNS-rebinding between validation and fetch. Never hand a raw user-supplied URL straight to a headless browser or fetch call.\n- [rule:proposal:01a07ce3-6fcb-7a63-b60b-4dee98dbed38] attest() must refuse a self-grade (G10/D4): the evaluator identity must be a deliberately-asserted, non-ambient identity (not bare $USER/anonymous) and must differ from the artifact's created_by. Any change to attest()'s identity-resolution logic (resolveActor, WEAK_IDENTITY_SOURCES) must preserve this fail-closed behavior rather than weakening it for convenience.\n- [rule:EDITOR-GRANTS] The editor permission approvals ledger. Allowing a permission for an editor adds the token editor:<editor-id>@<version>#<sha256>/<permission> (the full 64-hex sha256 of the editor's entry file, and its version) to this rule's excludes through the audited rule upsert; revoking removes it. A new version or a changed entry hash is a different token, so the permission asks again. The engine reads the ledger whether the rule is active or retired, and an explicit deny still dominates an approval.\n- [rule:MCP-FIRST-USE] The first use of an MCP server asks for the operator's approval, in every run mode (engine gate engine:mcp-first-use). This rule is the approvals ledger: approving a server (mcp:<server>) or one tool (mcp:<server>/<tool>) adds that token to its excludes through the audited rule upsert, and a changed tool schema withdraws the approval so the next call asks again. The engine reads the ledger whether the rule is active or retired, so retiring it never lifts the ask.\n- [rule:MCP-MODE-ASK-WRITE] Gate every step (Ask): every write or destructive MCP call asks, approved tool or not.\n- [rule:MCP-POSTURE-WRITE] P-2, gate by risk (Balanced): a write or destructive MCP tool asks until the operator approves it. Approving the tool (mcp:<server>/<tool>) or the server (mcp:<server>) adds that token to this rule's excludes.\n- [rule:MCPS-1001] An MCP server this platform builds is TypeScript on Node 22 or later using the fastmcp package (punkpeye/fastmcp; not the Python FastMCP), one src/server.ts entry, the stdio transport by default and httpStream behind a flag, and every tool declares its annotations honestly so the broker's class derivation (MCP-D4) reads it as intended.\n- [rule:MCPS-1002] Traces and metrics are OpenTelemetry through @opentelemetry/sdk-node started before the server: one span per tool call (mcp.tool.call with mcp.server.name, mcp.tool.name, mcp.request.id and the outcome) and one child span per upstream request, the instruments mcp.tool.calls, mcp.tool.duration and mcp.tool.errors, and OTLP exporters armed only by the standard OTEL_EXPORTER_OTLP_* environment variables \u2014 with none set, nothing leaves the process.\n- [rule:MCPS-1003] Logs go through loglayer with the OpenTelemetry plugin stamping trace_id and span_id, a request-scoped child logger per tool call carried in AsyncLocalStorage, the OpenTelemetry transport for log records and a console transport on stderr \u2014 never stdout, which carries protocol frames \u2014 with the redaction plugin over credential fields and fastmcp's own logger routed into the same root.\n- [rule:MCPS-1005] Every tool validates its input before the handler runs \u2014 a zod schema for hand-written tools, the OpenAPI-derived JSON Schema for converted ones \u2014 and every upstream request is pinned to the configured base URL (scheme, host, port, base path), sends only allowlisted arguments, never sets authentication or hop-by-hop headers from an argument, follows no redirect, and a per-tool rate limit answers a user error when exhausted.\n- [rule:MCPS-1006] Every tool has a contract test (from the OpenAPI examples for converted tools, hand-written otherwise) and the server has a stdio conformance smoke covering initialize, tools/list, tools/call, the missing-credential startup failure and the httpStream 401 path, all under npm test, with typecheck, lint and test scripts present so the verify floor runs them.\n- [rule:RVWL-1001] An evaluator re-deriving a verdict on a reworked unit receives the done-when checklist, every prior verdict and every human ruling on that unit, and the floor's record; it marks each item PASS, FAIL or RULED, never re-raises a RULED item (a RULED item is never Critical), and names why a new item was not visible in an earlier round \u2014 otherwise the item is a follow-up, not a FAIL cause; a verdict with conditions and no Critical recommends approve with carried conditions, and a verdict produced without that record is advisory, not a gate.\n- [rule:RVWL-1002] A worker turn ends only after every check it started has finished; the record carries each command run and its exit code, in the done-when recipe's order; a failure called pre-existing cites its run on the base; and every item of a reviewer's verdict is in scope unless a human ruling strikes it by name.\n- [rule:RVWL-1003] An evaluator may send a unit back at most twice; the third FAIL pauses for a human adjudication that lists re-raised versus new items and offers land with carried items, one more round, or re-slice; no seat error (a quota or auth refusal as the sole output) counts as a completed turn, no floor result stands across a rework, and no stalled unit is handed to a benched seat.\n- [rule:proposal:01a07b85-e09f-77e0-93fa-df59c0525b06] wicked-interactive bridge spawns must use an explicit pinned npm version/range, never a bare `npx --yes wicked-interactive`.\n- \u2026 and 49 more rules (ask for them if a step turns on one).\n\n## Decisions\n\nEnd every reply with this block, one item per operator decision (read the message with your\nprevious reply: a go-ahead approves what you proposed):\n\n```wicked-decisions\n{\"items\":[{\"quote\":\"<operator words, exact>\",\"decision_text\":\"<one sentence; for a go-ahead,\nfrom your proposal>\",\"type\":\"rule|correction|scope|exception|choice|confirmation\",\"codify\":false,\n\"ambiguous\":false,\"steering_type\":\"architecture|development|security|testing|operations|\ncompliance|design-ux\",\"approves_proposal\":false,\"same_as\":null}]}\n```\n\nNo decision: `{\"items\":[]}`. `codify`: a standing rule in their own words. `same_as`: the\nin-force rule it restates. Label only the operator's words; crew decides.\n\n\n\nAdd a policy around going with managed cloud native services as the first option for designing new applications\n\n---\n[studio context pack \u2014 assembled 2026-10-10T21:03:46.598Z]\nwhere: Steering (/rules)\nruns (the studio's live list): 51 total \u2014 0 active, 0 awaiting a human, 3 failed, 44 done, 4 cancelled\nlive chat sessions this client knows about: 0\ndiagnostics (GET /api/v1/diagnostics):\n  components: crew 0.9.3 \u00b7 studio bundle 0.7.3 \u00b7 core-ts 0.8.1 \u00b7 engines: wicked-core 0.4.0, wicked-estate 0.25.0\n  daemon: up 1h 25m on port 7701 (started 2026-10-10T19:35:33.133Z)\n  stores: core.db 11.0 MB \u00b7 core.db-shm 32.0 KB \u00b7 core.db-wal 0 B \u00b7 core.db.bus 216.3 KB \u00b7 core.db.events 1.6 MB \u00b7 core.db.governance 508.0 KB \u00b7 core.db.knowledge 244.0 KB \u00b7 core.db.knowledge-shm 32.0 KB \u00b7 core.db.knowledge-wal 0 B \u00b7 core.db.mem 420.0 KB \u00b7 core.db.mem-shm 32.0 KB \u00b7 core.db.mem-wal 0 B \u00b7 core.db.mem.embedder 9 B \u00b7 core.db.mem.memext 20.0 KB \u00b7 repo-graphs/wicked-estate-19e73079b2bb/estate.db 45.9 MB\n  recent errors: none recorded\n  acp (from the durable run event logs): claude 42 sessions/0 fallbacks \u00b7 opencode 2 sessions/0 fallbacks \u00b7 pi 3 sessions/0 fallbacks\nAnswer from what you can actually read (the estate/garden tooling reaches the code graph,\nstores, and run record); when a fact is not reachable, say so instead of guessing."
+        }
+       ]
+      },
+      "touch_source": "none"
+     },
+     "accepted_high_risk": false,
+     "accepted_rev": 1,
+     "approved_high_risk": false,
+     "destructive": false,
+     "max_score": 0,
+     "rev": 1,
+     "roster": [
+      {
+       "acp": {
+        "acp_input_governance": true,
+        "binary": "opencode",
+        "os_sandbox": false,
+        "start_args": [
+         "acp"
+        ],
+        "transport": "stdio"
+       },
+       "alt_binaries": [],
+       "binary": "opencode",
+       "category": "agentic-coder",
+       "confidence": "verified",
+       "credential": "optional",
+       "display_name": "opencode",
+       "enabled_for_council": true,
+       "headless_invocation": "opencode run {PROMPT}",
+       "health": {
+        "usable": true
+       },
+       "input_mode": "prompt-arg",
+       "key": "opencode",
+       "login_invocation": "XDG_CONFIG_HOME=\"worktree\" XDG_DATA_HOME=\"worktree\" XDG_STATE_HOME=\"worktree\" opencode auth login",
+       "logout_invocation": "XDG_CONFIG_HOME=\"worktree\" XDG_DATA_HOME=\"worktree\" XDG_STATE_HOME=\"worktree\" opencode auth logout",
+       "seat_eligible_for_work": true,
+       "trust_flags": [],
+       "version_probe": [
+        "opencode",
+        "--version"
+       ]
+      },
+      {
+       "acp": {
+        "acp_input_governance": true,
+        "binary": "claude-agent-acp",
+        "os_sandbox": false,
+        "start_args": [],
+        "transport": "stdio"
+       },
+       "alt_binaries": [],
+       "binary": "claude",
+       "category": "agentic-coder",
+       "confidence": "verified",
+       "credential": "required",
+       "display_name": "Claude Code",
+       "enabled_for_council": true,
+       "headless_invocation": "claude -p --plugin-dir worktree {PROMPT}",
+       "health": {
+        "usable": true
+       },
+       "input_mode": "prompt-arg",
+       "key": "claude",
+       "login_invocation": "CLAUDE_CONFIG_DIR=\"worktree\" claude",
+       "logout_invocation": "CLAUDE_CONFIG_DIR=\"worktree\" claude auth logout",
+       "seat_eligible_for_work": true,
+       "trust_flags": [
+        "--dangerously-skip-permissions"
+       ],
+       "version_probe": [
+        "claude",
+        "--version"
+       ]
+      },
+      {
+       "alt_binaries": [],
+       "binary": "codex",
+       "category": "agentic-coder",
+       "confidence": "verified",
+       "credential": "required",
+       "display_name": "Codex",
+       "enabled_for_council": true,
+       "headless_invocation": "codex exec --skip-git-repo-check {PROMPT}",
+       "health": {
+        "usable": true
+       },
+       "input_mode": "prompt-arg",
+       "key": "codex",
+       "login_invocation": "CODEX_HOME=\"worktree\" codex login",
+       "logout_invocation": "CODEX_HOME=\"worktree\" codex logout",
+       "seat_eligible_for_work": true,
+       "trust_flags": [
+        "--sandbox",
+        "workspace-write"
+       ],
+       "version_probe": [
+        "codex",
+        "--version"
+       ]
+      },
+      {
+       "acp": {
+        "acp_governance_env": [
+         "WICKED_PI_GOVERNANCE",
+         "1"
+        ],
+        "acp_input_governance": true,
+        "binary": "pi-acp",
+        "os_sandbox": false,
+        "start_args": [],
+        "transport": "stdio"
+       },
+       "alt_binaries": [],
+       "binary": "pi",
+       "capabilities": "conversational reasoning, nuanced analysis, cross-language tasks, explanation and documentation",
+       "category": "agentic-coder",
+       "confidence": "verified",
+       "credential": "required",
+       "display_name": "Pi CLI",
+       "enabled_for_council": true,
+       "headless_invocation": "pi -p \"{PROMPT}\"",
+       "health": {
+        "usable": true
+       },
+       "input_mode": "prompt-arg",
+       "key": "pi",
+       "login_invocation": "PI_CODING_AGENT_DIR=\"worktree\" pi",
+       "seat_eligible_for_work": true,
+       "trust_flags": [],
+       "version_probe": [
+        "pi",
+        "--version"
+       ]
+      }
+     ]
+    },
+    "unit_ix": 1,
+    "workdir": null,
+    "workflow_id": "wf-200fa059-c1b7-4d65-8a6d-8959797ecfb9",
+    "run_identity": {
+     "kind": "user_plan",
+     "name": null,
+     "user_plan": true,
+     "system": false
+    },
+    "document_id": null,
+    "created_at": 1791666226,
+    "delivery": "none",
+    "deliver_requested": false,
+    "chat_id": "7695ee6a-8f0d-40db-a91c-805c16832eb8",
+    "ask_path": true,
+    "ask_turn": true
+   },
+   "units": []
+  }
+ ]
+}

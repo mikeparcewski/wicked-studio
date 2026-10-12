@@ -15,7 +15,10 @@ Against the in-process fixture (wave-1 corpus, b1 waiting at a gate, `watch_feed
   5. THE PILL: its card is hidden at rest, shows on hover (the sentence + the newest open row),
      and the pill opens /watch.
   6. NO REGISTRY: with the registry off the page says so and still shows studio's own fold.
-  7. 0 page errors, no horizontal scroll.
+  7. EMPTY KINDS: every kind with no rows says why (never "Nothing of this kind yet.") and offers
+     Show everything, which lands on Everything (DEST); at 390x844 that button is a 44 px tap target
+     (MEASURE, getComputedStyle + the box).
+  8. 0 page errors, no horizontal scroll.
 
 Captures: e2e/shots/desk-watchtower*.png. Env: FEEDBACK_PORT (default 4352).
 """
@@ -137,6 +140,34 @@ with sync_playwright() as p:
     page.screenshot(path=str(SHOTS / "desk-watchtower-absent.png"))
     overflow = page.evaluate("() => document.documentElement.scrollWidth > document.documentElement.clientWidth")
     check("no-registry", said and "watch" not in own and not overflow, sources=own, overflow=overflow)
+
+    # ── 7. empty kinds say why, and Show everything widens back ───────────────────
+    set_fixture(origin, **CORPUS, watch_feed=True)
+    empties: dict = {}
+    for vw, vh in ((W, H), (390, 844)):
+        page.set_viewport_size({"width": vw, "height": vh})
+        page.goto(f"{origin}/watch", wait_until="networkidle")
+        page.get_by_test_id("watchtower").wait_for(state="visible", timeout=15000)
+        page.wait_for_timeout(500)
+        for kind in ("problem", "decision", "quiet", "done", "delivery"):
+            page.locator(f'[data-testid="watchtower-kind"][data-kind="{kind}"]').click()
+            page.wait_for_timeout(250)
+            if page.get_by_test_id("watchtower-row").count() > 0:
+                continue
+            empty = page.get_by_test_id("watchtower-empty")
+            text = empty.locator("p").inner_text() if empty.count() else None
+            btn = page.get_by_test_id("watchtower-show-all")
+            box = btn.bounding_box() if btn.count() else None
+            min_h = btn.evaluate("e => getComputedStyle(e).minHeight") if btn.count() else None
+            page.screenshot(path=str(SHOTS / f"desk-watchtower-empty-{kind}-{vw}.png"))
+            btn.click()
+            page.wait_for_timeout(250)
+            landed = page.locator('[data-testid="watchtower-kind"][data-kind="all"]').get_attribute("aria-pressed")
+            empties[f"{kind}@{vw}"] = {"text": text, "h": box["height"] if box else None, "min_h": min_h, "landed": landed}
+    page.set_viewport_size({"width": W, "height": H})
+    check("empty-kinds", bool(empties) and all(
+        e["text"] and e["text"] != "Nothing of this kind yet." and e["landed"] == "true"
+        and (not k.endswith("@390") or (e["h"] or 0) >= 44) for k, e in empties.items()), empties=empties)
 
     check("no-errors", not errors, errors=errors)
     browser.close()
