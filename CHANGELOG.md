@@ -12,6 +12,16 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+## [0.7.12] — 2026-10-12
+
+Watchtower.
+
+### Added
+- New Approved and Rejected filters list your gate answers (approved, approved with a note, rejected, sent back) with the session, step, time and note, and an Open link to the session (#739).
+
+### Fixed
+- Finished and Delivered now list runs that ended before finish times were recorded, dated by when they started. Every empty filter says why and offers Show everything. A failed session read shows a banner instead of an empty list (#738).
+
 ## [0.7.11] — 2026-10-12
 
 ### Fixed
@@ -2086,7 +2096,8 @@ The merged interactive layer: wicked-interactive's UI moved into this skin (DES-
   `git subtree split` (92 commits).
 - The SPA as a pure HTTP/WS client of the wicked-crew daemon: runs, gates, live CoreEvents.
 
-[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.7.11...HEAD
+[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.7.12...HEAD
+[0.7.12]: https://github.com/mikeparcewski/wicked-studio/compare/v0.7.11...v0.7.12
 [0.7.11]: https://github.com/mikeparcewski/wicked-studio/compare/v0.7.10...v0.7.11
 [0.7.10]: https://github.com/mikeparcewski/wicked-studio/compare/v0.7.9...v0.7.10
 [0.7.9]: https://github.com/mikeparcewski/wicked-studio/compare/v0.7.8...v0.7.9
