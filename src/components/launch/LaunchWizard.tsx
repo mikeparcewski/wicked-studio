@@ -23,16 +23,22 @@ import { useProvenanceStore } from '../../store/provenance.js';
 import { fetchReposCached, getCachedRepos } from '../../store/repoCache.js';
 import { useWorkflowDefs } from '../../store/workflowCache.js';
 import { workflowLabel } from '../../board/workflowNames.js';
-import { useLaunchWizard, type LaunchDraft } from '../../store/launchWizard.js';
+import { DRAFT_EPICS_ID, useLaunchWizard, type LaunchDraft } from '../../store/launchWizard.js';
+import { composeProduct } from '../../api/product.js';
+import { COMPOSE_MAX, RequirementsBrowser, reqKey, type ChosenRequirement } from '../product/RequirementsBrowser.js';
 
-type Step = 'workflow' | 'what' | 'where' | 'options' | 'review';
+type Step = 'workflow' | 'what' | 'where' | 'options' | 'requirements' | 'review';
 const STEP_TITLE: Record<Step, string> = {
   workflow: 'Choose the kind of job',
   what: 'The work',
   where: 'Where does it work?',
   options: 'How should it run?',
+  requirements: 'Choose the requirements',
   review: 'Check and launch',
 };
+/** "Draft epics" (operator 2026-10-12): a project's requirements become epics, features and stories. */
+const DRAFT_EPICS_LINE = 'Turn a project’s requirements into a draft plan of epics, features and stories';
+const INSTRUCTIONS_MAX = 500;
 
 /**
  * THE LAUNCH WIZARD (operator 2026-10-11 15:15Z: "someone just starts a new job by selecting a
@@ -81,7 +87,8 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
   const [force, setForce] = useState(false);
   const [launching, setLaunching] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [step, setStep] = useState<Step>(draft.workflowId === null ? 'workflow' : 'what');
+  const drafting = draft.workflowId === DRAFT_EPICS_ID;
+  const [step, setStep] = useState<Step>(draft.workflowId === null ? 'workflow' : drafting ? 'requirements' : 'what');
 
   useEffect(() => { if (repos === null) fetchReposCached().then(setRepos, () => setRepos([])); }, [repos]);
   useEffect(() => { if ((useProjectsStore.getState().projects ?? []).length === 0) void useProjectsStore.getState().load(); }, []);
@@ -119,13 +126,25 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
   const autoDeliver = draft.confirmMode === 'none';
   const deliver: 'pr' | 'none' | null = deliverVisible ? (draft.deliverOn ? 'pr' : 'none') : null;
   const preview = useLaunchPreview({
-    plan: null, workflow: draft.workflowId ?? '', projectId: draft.projectId, repoRef, deliver, mode: undefined,
+    plan: null, workflow: draft.workflowId === DRAFT_EPICS_ID ? '' : draft.workflowId ?? '', projectId: draft.projectId, repoRef, deliver, mode: undefined,
     confirm: draft.confirmMode, beforeOrd,
   });
 
+  const chosen = useMemo(() => new Map(draft.requirements.map((r) => [reqKey(r.repoId, r.key), r] as const)), [draft.requirements]);
+  const toggleReq = (r: ChosenRequirement): void => {
+    const k = reqKey(r.repoId, r.key);
+    const next = chosen.has(k) ? draft.requirements.filter((x) => reqKey(x.repoId, x.key) !== k)
+      : draft.requirements.length >= COMPOSE_MAX ? draft.requirements : [...draft.requirements, r];
+    update({ requirements: next });
+  };
+  const draftBlocker: string | null = draft.projectId === null || draft.projectId === 'default' ? 'Choose the project to draft from.'
+    : draft.requirements.length === 0 ? 'Choose at least one requirement to draft from.'
+      // What the review shows is what is sent (codex on S5): words carried in from another job may be longer.
+      : draft.intent.trim().length > INSTRUCTIONS_MAX ? `Shorten the instructions to ${INSTRUCTIONS_MAX} characters.` : null;
   // What each step needs before Next: words; a repository; a helper and, for a skip, its reason.
   const blocker: string | null =
-    step === 'workflow' ? (draft.workflowId === null ? 'Choose the kind of job.' : null)
+    step === 'requirements' ? draftBlocker
+    : step === 'workflow' ? (draft.workflowId === null ? 'Choose the kind of job.' : null)
       : step === 'what' ? (draft.intent.trim() === '' ? 'Say what you want done.' : null)
         : step === 'where' ? (repoRef === null ? 'Choose the repository this works in.' : null)
           : step === 'options' ? (eligible.length > 0 && seats.length === 0 ? 'Turn on at least one helper.'
@@ -133,12 +152,13 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
             : null;
   // Review re-checks every rule (codex r1: another tab may have dropped the last helper meanwhile).
   const launchBlocker: string | null =
-    draft.workflowId === null ? 'Choose the kind of job.'
+    drafting ? draftBlocker
+    : draft.workflowId === null ? 'Choose the kind of job.'
       : draft.intent.trim() === '' ? 'Say what you want done.'
         : repoRef === null ? 'Choose the repository this works in.'
           : eligible.length > 0 && seats.length === 0 ? 'Turn on at least one helper.'
             : offerQe && draft.skipQe && draft.skipQeReason.trim() === '' ? 'Say why QE acceptance is skipped.' : null;
-  const order: Step[] = ['workflow', 'what', 'where', 'options', 'review'];
+  const order: Step[] = drafting ? ['workflow', 'requirements', 'review'] : ['workflow', 'what', 'where', 'options', 'review'];
   const goNext = (): void => {
     if (blocker !== null) return;
     const i = order.indexOf(step);
@@ -167,6 +187,27 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
 
   const launch = async (): Promise<void> => {
     if (draft.workflowId === null || launching || launchBlocker !== null) return;
+    if (drafting) {
+      launchingRef.current = true;
+      setLaunching(true);
+      setError(null);
+      try {
+        const steer = draft.intent.trim();
+        const out = await composeProduct(draft.projectId!, {
+          requirements: draft.requirements.map(({ repoId, key }) => ({ repoId, key })),
+          ...(steer !== '' ? { instructions: steer.slice(0, INSTRUCTIONS_MAX) } : {}),
+        });
+        useProvenanceStore.getState().markLaunchedHere(out.runId);
+        finish();
+        navigate?.(sessionPath(`run:${out.runId}`));
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err));
+      } finally {
+        launchingRef.current = false;
+        setLaunching(false);
+      }
+      return;
+    }
     launchingRef.current = true;
     setLaunching(true);
     setError(null);
@@ -200,7 +241,7 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
     }
   };
 
-  const title = draft.workflowId !== null ? `New job: ${workflowLabel(row?.key ?? draft.workflowId)}` : 'New job';
+  const title = drafting ? 'New job: Draft epics' : draft.workflowId !== null ? `New job: ${workflowLabel(row?.key ?? draft.workflowId)}` : 'New job';
   return (
     <div className="wk-launch-wizard-scrim" data-testid="launch-wizard-scrim" onMouseDown={(e) => { if (e.target === e.currentTarget) close(); }}>
       <div
@@ -216,7 +257,7 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
           <div>
             <h2 id={titleId} className="wk-launch-wizard-title">{title}</h2>
             <p className="wk-launch-wizard-progress" data-testid="launch-wizard-progress">
-              Step {order.indexOf(step) + (draft.workflowId === null || step === 'workflow' ? 1 : 0)} of {draft.workflowId === null || step === 'workflow' ? 5 : 4}: {STEP_TITLE[step]}
+              Step {order.indexOf(step) + (draft.workflowId === null || step === 'workflow' ? 1 : 0)} of {draft.workflowId === null || step === 'workflow' ? order.length : order.length - 1}: {STEP_TITLE[step]}
             </p>
           </div>
           <button type="button" className="wk-btn wk-btn--icon wk-btn--quiet" aria-label="Close (your choices are kept)" title="Close (your choices are kept)" data-testid="launch-wizard-close" disabled={launching} onClick={close}>×</button>
@@ -246,6 +287,19 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
                     <span className="wk-launch-wizard-choice-line">{r.line}</span>
                   </button>
                 ))}
+                <button
+                  type="button"
+                  data-testid={`launch-wizard-workflow-${DRAFT_EPICS_ID}`}
+                  aria-pressed={drafting}
+                  className={`wk-launch-wizard-choice${drafting ? ' wk-launch-wizard-choice--on' : ''}`}
+                  onClick={() => {
+                    if (!drafting) update({ workflowId: DRAFT_EPICS_ID, reduced: false, skipQe: false, skipQeReason: '' });
+                    setStep('requirements');
+                  }}
+                >
+                  <span className="wk-launch-wizard-choice-name">Draft epics</span>
+                  <span className="wk-launch-wizard-choice-line">{DRAFT_EPICS_LINE}</span>
+                </button>
               </div>
             </fieldset>
           )}
@@ -362,7 +416,53 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
             </>
           )}
 
-          {step === 'review' && (
+          {step === 'requirements' && (
+            <div className="wk-launch-wizard-reqs" data-testid="launch-wizard-requirements">
+              <label className="wk-launch-wizard-field">
+                <span className="wk-field-label">Project</span>
+                <select
+                  data-testid="launch-wizard-draft-project"
+                  data-autofocus={draft.projectId === null ? 'true' : undefined}
+                  className="wk-field"
+                  value={draft.projectId ?? ''}
+                  onChange={(e) => update({ projectId: e.target.value === '' ? null : e.target.value, requirements: [] })}
+                >
+                  <option value="">Choose a project…</option>
+                  {projects.filter((p) => p.id !== 'default' && p.status !== 'archived').map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                  {/* Opened from a project the list has not read yet (or no longer lists): it stays the choice, never silently blank. */}
+                  {draft.projectId !== null && !projects.some((p) => p.id === draft.projectId && p.id !== 'default' && p.status !== 'archived') && <option value={draft.projectId}>This project</option>}
+                </select>
+                <span className="wk-field-note">The requirements come from this project’s repositories.</span>
+              </label>
+              {/* What is chosen sits above the list (codex on S5), not under a long one. */}
+              <p data-testid="launch-wizard-chosen" className="wk-field-note" aria-live="polite">
+                {draft.requirements.length === 0 ? `Choose the requirements to draft from (at most ${COMPOSE_MAX}).`
+                  : `${draft.requirements.length} ${draft.requirements.length === 1 ? 'requirement' : 'requirements'} chosen${draft.requirements.length >= COMPOSE_MAX ? ', the most one draft takes' : ''}.`}
+                {draft.requirements.length > 0 && <> <button type="button" data-testid="launch-wizard-clear" onClick={() => update({ requirements: [] })} className="wk-btn wk-btn--quiet wk-btn--sm">Clear</button></>}
+              </p>
+              {draft.projectId !== null && draft.projectId !== 'default' && (
+                <RequirementsBrowser projectId={draft.projectId} navigate={(p) => { closeStore(); navigate?.(p); }}
+                  selection={{ chosen, onToggle: toggleReq, max: COMPOSE_MAX }} data-testid="launch-wizard-requirements-browser" />
+              )}
+              <label className="wk-launch-wizard-field">
+                <span className="wk-field-label">Instructions for the draft</span>
+                <textarea data-testid="launch-wizard-draft-instructions" className="wk-field" rows={2} maxLength={INSTRUCTIONS_MAX}
+                  value={draft.intent} onChange={(e) => update({ intent: e.target.value })} placeholder="Optional: how to group the requirements" />
+                <span className="wk-field-note">The draft opens in a session for review and approval. Nothing is published.</span>
+              </label>
+            </div>
+          )}
+
+          {step === 'review' && drafting && (
+            <dl className="wk-launch-wizard-review" data-testid="launch-wizard-review">
+              <div><dt>Job</dt><dd>Draft epics</dd></div>
+              <div><dt>Project</dt><dd>{projectName ?? 'No project'}</dd></div>
+              <div><dt>Requirements</dt><dd>{draft.requirements.map((r) => r.title).join(' · ')}</dd></div>
+              {draft.intent.trim() !== '' && <div><dt>Instructions</dt><dd className="wk-launch-wizard-review-intent">{draft.intent.trim()}</dd></div>}
+            </dl>
+          )}
+
+          {step === 'review' && !drafting && (
             <dl className="wk-launch-wizard-review" data-testid="launch-wizard-review">
               <div><dt>Job</dt><dd>{workflowLabel(row?.key ?? draft.workflowId ?? '')}</dd></div>
               <div><dt>What</dt><dd className="wk-launch-wizard-review-intent">{draft.intent.trim()}</dd></div>
@@ -386,10 +486,10 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
         <footer className="wk-launch-wizard-foot">
           {(step === 'review' ? launchBlocker : blocker) !== null && step !== 'workflow' && <p className="wk-field-note" data-testid="launch-wizard-blocker" role="status">{step === 'review' ? launchBlocker : blocker}</p>}
           <div className="wk-launch-wizard-actions">
-            {step !== 'workflow' && step !== 'what' && (
+            {step !== 'workflow' && step !== 'what' && step !== 'requirements' && (
               <button type="button" className="wk-btn wk-btn--secondary" data-testid="launch-wizard-back" onClick={goBack}>Back</button>
             )}
-            {step === 'what' && (
+            {(step === 'what' || step === 'requirements') && (
               <button type="button" className="wk-btn wk-btn--secondary" data-testid="launch-wizard-change" onClick={() => setStep('workflow')}>Change job</button>
             )}
             {step === 'review' ? (

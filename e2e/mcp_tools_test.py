@@ -10,7 +10,8 @@ it cell by cell): D-1 denies a write in an evaluator or recon row, the first use
 until it is approved, then the mode decides (Gate every step asks for writes, Gate by risk asks for
 an unapproved write, Auto runs).
 
-  0. The rail carries "MCP tools" between Skills and Steering, and /mcp is its page (empty).
+  0. The rail carries "MCP" right after Steering and Skills (operator 2026-10-12: renamed from
+     "MCP tools"), and /mcp is its page (empty).
   1. Add existing server: name + command → Preview lists the three tools with their class and the
      decision matrix if saved now (every creator cell asks for first use; the writes are denied to
      evaluator and recon); nothing is registered yet.
@@ -277,15 +278,15 @@ with sync_playwright() as p:
     except Exception:
         page.screenshot(path=str(SHOTS / f"mcp-tools-missing-desk.png"))
         fail("page-shows", page.locator("body").inner_text()[:2000])
-    # Amendment 5: Skills · MCP tools · Steering sit in the Desk's rail itself (they change what
-    # in-flight work does) — MCP tools between Skills and Steering.
+    # Operator 2026-10-12: the Workspace runs Steering · Skills · MCP · Plugins … (they change what
+    # in-flight work does) — MCP right after Skills, which follows Steering.
     dests = page.evaluate("""() => [...document.querySelectorAll('[data-testid="session-rail"] [data-nav-dest]')]
         .map(e => e.getAttribute('data-nav-dest'))""")
     nav = {"dests": dests}
     order = dests
-    want = ["section:skills", "section:mcp", "section:steering"]
+    want = ["section:steering", "section:skills", "section:mcp"]
     idx = [order.index(x) if x in order else -1 for x in want]
-    check("nav-between-skills-and-steering", -1 not in idx and idx[1] == idx[0] + 1 and idx[2] == idx[1] + 1, nav=nav)
+    check("nav-after-steering-and-skills", -1 not in idx and idx[1] == idx[0] + 1 and idx[2] == idx[1] + 1, nav=nav)
 
     # ── 1. paste → preview ────────────────────────────────────────────────────────
     page.get_by_test_id("mcp-add-open").click()

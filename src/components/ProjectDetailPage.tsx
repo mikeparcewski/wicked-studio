@@ -6,6 +6,7 @@ import type { ProjectDetail, ProjectMember, RepoEntry, SessionView } from '../ap
 import { useProjectsStore } from '../store/projects.js';
 import { ProjectRepositories } from './ProjectRepositories.js';
 import { ProjectDocumentsRoot } from './ProjectDocumentsRoot.js';
+import { ProjectRequirementsSection } from './product/ProjectRequirementsSection.js';
 import { ProjectCoverage, ProjectDomain, type ProjectReadIssue, type ProjectIssueHandler } from './product/ProjectAggregates.js';
 import { everythingPath } from '../board/everythingModel.js';
 import { sessionIdOf, sessionPath, sessionTitle } from '../board/sessionModel.js';
@@ -133,6 +134,23 @@ export function ProjectDetailPage({ projectId, navigate, runs = NO_RUNS, needRow
     }
   }, [projectId]);
   useEffect(() => { void load(); }, [load]);
+  // `/projects/:id#requirements` (the retired /product address lands here): bring the section into view.
+  // The hash is read on each render (the /product redirect changes the path, so it re-renders) and on
+  // hashchange/popstate (Back or Forward between hash entries changes no path; codex on S5 r2). No in-app
+  // link navigates hash-only to the anchor.
+  const [hashTick, setHashTick] = useState(0);
+  useEffect(() => {
+    const on = (): void => setHashTick((n) => n + 1);
+    window.addEventListener('hashchange', on);
+    window.addEventListener('popstate', on);
+    return () => { window.removeEventListener('hashchange', on); window.removeEventListener('popstate', on); };
+  }, []);
+  const hash = typeof window === 'undefined' ? '' : window.location.hash;
+  useEffect(() => {
+    if (loading || hash !== '#requirements') return;
+    const t = setTimeout(() => document.getElementById('requirements')?.scrollIntoView({ block: 'start' }), 300);
+    return () => clearTimeout(t);
+  }, [loading, hash, hashTick]);
 
   // A run member the run list does not serve (an archived run, an older one) is read on its own, so the
   // project shows every job it holds (the page read each member's run before concept P too).
@@ -416,6 +434,7 @@ export function ProjectDetailPage({ projectId, navigate, runs = NO_RUNS, needRow
               </section>
             )}
             {!isDefault && <div id="project-repos"><ProjectRepositories projectId={projectId} members={members} used={used} onIssue={onIssue} onMembersChange={(update) => setDetail((d) => d !== null && d.project.id === projectId ? { ...d, members: update(d.members) } : d)} /></div>}
+            {!isDefault && <ProjectRequirementsSection projectId={projectId} navigate={navigate} onIssue={onIssue} />}
             {others.length > 0 && (
               <section className="wk-card" aria-labelledby="project-others-title">
                 <h2 id="project-others-title" className="wk-section-title">Chats and other items</h2>

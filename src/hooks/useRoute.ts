@@ -46,18 +46,26 @@ import { announceNavigateAway, inAppEntryState, isInAppEntry, replacedEntryState
 // worktree files/diff as REAL routes — `/runs/:id/events`, `/runs/:id/files` — so the palette
 // verb that opens them is one history entry and browser Back returns to where you were. The run
 // id rides in `artifactId` (NOT `runId`: no run-selected machinery, no legacy shell redirect).
-export type Panel = 'home' | 'runs' | 'run-events' | 'run-files' | 'workflows' | 'skills' | 'mcp' | 'steering' | 'testing' | 'repos' | 'system' | 'theme' | 'repo-detail' | 'project-detail' | 'session' | 'editors' | 'watch' | 'rules' | 'everything' | 'product' | 'learn' | 'health' | 'settings' | 'not-found';
+export type Panel = 'home' | 'runs' | 'run-events' | 'run-files' | 'workflows' | 'skills' | 'mcp' | 'steering' | 'testing' | 'repos' | 'system' | 'theme' | 'repo-detail' | 'project-detail' | 'session' | 'editors' | 'watch' | 'rules' | 'everything' | 'product' | 'project-requirements' | 'plugins' | 'learn' | 'health' | 'settings' | 'not-found';
 
 /** Every panel, exhaustively (the compile-time check below fails when the union grows without it). */
-export const ALL_PANELS = ['home', 'runs', 'run-events', 'run-files', 'workflows', 'skills', 'mcp', 'steering', 'testing', 'repos', 'system', 'theme', 'repo-detail', 'project-detail', 'session', 'editors', 'watch', 'rules', 'everything', 'product', 'learn', 'health', 'settings', 'not-found'] as const satisfies readonly Panel[];
+export const ALL_PANELS = ['home', 'runs', 'run-events', 'run-files', 'workflows', 'skills', 'mcp', 'steering', 'testing', 'repos', 'system', 'theme', 'repo-detail', 'project-detail', 'session', 'editors', 'watch', 'rules', 'everything', 'product', 'project-requirements', 'plugins', 'learn', 'health', 'settings', 'not-found'] as const satisfies readonly Panel[];
 type MissingPanel = Exclude<Panel, (typeof ALL_PANELS)[number]>;
 export const PANELS_EXHAUSTIVE: MissingPanel extends never ? true : MissingPanel = true;
 
-const PANELS: Panel[] = ['runs', 'workflows', 'skills', 'mcp', 'repos', 'system', 'theme', 'repo-detail', 'watch', 'learn', 'health', 'settings'];
-/** studio#157: the Product view — `/product[?project=<id>]` (the project rides the query, like Testing's). */
-const PRODUCT_PATH = '/product';
-export function productPath(projectId?: string | null): string {
-  return projectId ? `${PRODUCT_PATH}?project=${encodeURIComponent(projectId)}` : PRODUCT_PATH;
+const PANELS: Panel[] = ['runs', 'workflows', 'skills', 'mcp', 'plugins', 'repos', 'system', 'theme', 'repo-detail', 'watch', 'learn', 'health', 'settings'];
+/** studio#157's Product view retired (operator 2026-10-12): `/product[?project=<id>]` only redirects —
+ *  to that project's dashboard (its Requirements section), or to the projects list. */
+export function productRedirectPath(search: string): string {
+  const projectId = new URLSearchParams(search).get('project');
+  return projectId !== null && projectId !== '' && projectId !== 'default'
+    ? `${projectDetailPath(projectId)}#requirements`
+    : '/everything?tab=projects';
+}
+
+/** A project's requirements list (`/projects/:id/requirements`), the dashboard section's "See all". */
+export function projectRequirementsPath(projectId: string): string {
+  return `/projects/${encodeURIComponent(projectId)}/requirements`;
 }
 
 /**
@@ -268,6 +276,9 @@ function parse(pathname: string): Route {
   }
   if (first === 'product') {
     return second === '' && restEmpty(2) ? route({ panel: 'product' }) : route({ panel: 'not-found' });
+  }
+  if (first === 'projects' && second && third === 'requirements' && restEmpty(4)) {
+    return route({ panel: 'project-requirements', projectId: safeDecode(second) });
   }
   if (first === 'projects' && second) {
     return route({ panel: 'project-detail', projectId: safeDecode(second) });

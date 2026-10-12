@@ -5,14 +5,15 @@ S15c) at 1440x700 on the Desk.
 
 Against the in-process fixture (wave-1 + wave-2b corpus):
 
-  1. ORDER: top to bottom — Desk · Watchtower · the sessions list · Product · Skills · MCP tools ·
-     Steering · Health · "Additional settings"; no Notifications entry (no bell, no "notifications" nav-dest);
-     no "Rules", no "Everything else".
-  2. MENU: "Additional settings" lists exactly Configuration, Repositories, Workflows, Evals, Theme —
-     in that order — plus the orders/away and freeze controls; nothing that redirects.
-  3. NAVIGATES: Steering opens /rules and is marked current; Skills opens /skills; MCP tools opens /mcp;
-     Watchtower opens /watch; Configuration opens /system (and Configuration links to Testing campaigns).
-  4. HEALTH: the rail's Health link opens /health and is marked current there.
+  1. ORDER (operator 2026-10-12): top to bottom — Desk · Watchtower · the sessions list · then the
+     Workspace: Steering · Skills · MCP · Plugins · Evals · Repositories · "General settings" · Health
+     (set apart, last); no Product, no Testing; no Notifications entry (no bell, no "notifications"
+     nav-dest); no "Rules", no "Everything else".
+  2. PAGE: "General settings" (/settings) lists exactly Configuration, Workflows, Theme — in that
+     order — and no orders/away or freeze controls; Configuration no longer links to Testing.
+  3. NAVIGATES: Steering opens /rules and is marked current; Skills, MCP, Plugins, Evals and
+     Repositories open their pages; Watchtower opens /watch.
+  4. HEALTH: the rail's Health link says its state word, opens /health and is marked current there.
   5. 0 page errors.
 
 Captures: e2e/shots/desk-rail.png, desk-rail-additional.png (the /settings page), and the rail-polish evidence set
@@ -49,8 +50,8 @@ def check(step: str, ok: bool, **detail) -> None:
 
 RAIL = """() => {
   const rail = document.querySelector('[data-testid="session-rail"]');
-  const ids = ['desk-rail-home', 'desk-rail-watch', 'rail-group', 'desk-rail-product', 'desk-rail-skills', 'desk-rail-mcp',
-               'desk-rail-steering', 'desk-rail-testing', 'desk-rail-more', 'desk-rail-health'];
+  const ids = ['desk-rail-home', 'desk-rail-watch', 'rail-group', 'desk-rail-steering', 'desk-rail-skills', 'desk-rail-mcp',
+               'desk-rail-plugins', 'desk-rail-evals', 'desk-rail-repos', 'desk-rail-more', 'desk-rail-health', 'desk-rail-product', 'desk-rail-testing'];
   const seen = [];
   for (const el of rail.querySelectorAll('[data-testid]')) {
     const id = el.dataset.testid;
@@ -103,12 +104,13 @@ with sync_playwright() as p:
     # ── 1. the order ─────────────────────────────────────────────────────────────
     r = page.evaluate(RAIL)
     check("order",
-          r["order"] == ['desk-rail-home', 'desk-rail-watch', 'rail-group', 'desk-rail-product', 'desk-rail-skills', 'desk-rail-mcp',
-                         'desk-rail-steering', 'desk-rail-testing', 'desk-rail-more', 'desk-rail-health']
-          and r["dests"] == ["watch", "section:product", "section:skills", "section:mcp", "section:steering", "section:testing", "settings", "health"]
-          and not r["bell"] and "Rules" not in r["text"] and "Everything else" not in r["text"]
-          and "Steering" in r["text"] and "Skills" in r["text"] and "MCP tools" in r["text"]
-          and r["steering"] == "/rules" and (r["more"] or "").startswith("Additional settings")
+          r["order"] == ['desk-rail-home', 'desk-rail-watch', 'rail-group', 'desk-rail-steering', 'desk-rail-skills', 'desk-rail-mcp',
+                         'desk-rail-plugins', 'desk-rail-evals', 'desk-rail-repos', 'desk-rail-more', 'desk-rail-health']
+          and r["dests"] == ["watch", "section:steering", "section:skills", "section:mcp", "section:plugins", "section:evals", "section:repos", "settings", "health"]
+          and not r["bell"] and "Rules" not in r["text"] and "Everything else" not in r["text"] and "Product" not in r["text"]
+          and "Steering" in r["text"] and "Skills" in r["text"] and "MCP" in r["text"] and "MCP tools" not in r["text"]
+          and r["steering"] == "/rules" and (r["more"] or "").startswith("General settings")
+          and (r["healthState"] or "").strip() in ("· all good", "· needs attention", "· failing")
           and r["footLabel"] == "Workspace",
           **{k: v for k, v in r.items() if k != "text"})
 
@@ -147,20 +149,22 @@ with sync_playwright() as p:
     page.screenshot(path=str(SHOTS / "desk-rail-additional.png"))
     m = page.evaluate(MENU)
     check("menu",
-          m["labels"] == ["Configuration", "Repositories", "Workflows", "Evals", "Theme"]
-          and m["hrefs"] == ["/system", "/repos", "/workflows", "/testing/evals", "/theme"]
+          m["labels"] == ["Configuration", "Workflows", "Theme"]
+          and m["hrefs"] == ["/system", "/workflows", "/theme"]
           # studio#421 r3 (change 17): the menu is navigation-only — the orders/freeze controls are
           # the Desk's "⋯ › Hold" sheet.
           and not m["controls"], **m)
     page.locator('[data-testid="settings-overview"] a[href="/system"]').click()
     page.wait_for_function("() => window.location.pathname === '/system'", timeout=5000)
-    page.get_by_test_id("settings-testing-link").wait_for(state="visible", timeout=5000)
-    testing_href = page.locator('[data-testid="settings-testing-link"] a').get_attribute("href")
-    check("configuration", testing_href == "/testing/campaigns", testing_href=testing_href)
+    page.get_by_role("heading", name="Configuration").first.wait_for(state="visible", timeout=8000)
+    cfg = page.evaluate("""() => ({ testing: !!document.querySelector('[data-testid="settings-testing-link"]'),
+      developer: !!document.querySelector('[data-testid="developer-settings"]') })""")
+    check("configuration", not cfg["testing"] and not cfg["developer"], **cfg)
 
     # ── 3. the rail entries navigate and mark the current one ────────────────────
     went = {}
-    for tid, path in (("desk-rail-product", "/product"), ("desk-rail-steering", "/rules"), ("desk-rail-skills", "/skills"), ("desk-rail-mcp", "/mcp"), ("desk-rail-testing", "/testing/campaigns")):
+    for tid, path in (("desk-rail-steering", "/rules"), ("desk-rail-skills", "/skills"), ("desk-rail-mcp", "/mcp"), ("desk-rail-plugins", "/plugins"),
+                      ("desk-rail-evals", "/testing/evals"), ("desk-rail-repos", "/repos")):
         page.get_by_test_id(tid).click()
         page.wait_for_function(f"() => window.location.pathname === '{path}'", timeout=5000)
         went[tid] = {"path": page.evaluate("() => window.location.pathname"),
@@ -209,10 +213,10 @@ with sync_playwright() as p:
 
     page.get_by_test_id("desk-rail-home").click()
     page.wait_for_function("() => window.location.pathname === '/'", timeout=5000)
-    page.get_by_test_id("desk-rail-product").wait_for(state="visible", timeout=5000)
+    page.get_by_test_id("desk-rail-plugins").wait_for(state="visible", timeout=5000)
     shots("rail")
 
-    # r3: the same matrix with the (now navigation-only) Additional settings popover OPEN.
+    # r3: the same matrix on the General settings page.
     page.get_by_test_id("desk-rail-more").click()
     page.get_by_test_id("settings-overview").wait_for(state="visible", timeout=5000)
     shots("settings")

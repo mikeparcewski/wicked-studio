@@ -54,7 +54,7 @@ CORPUS = {"home_runs": True, "trust_rules": True, "project_dto": True, "reset_ho
 # Every top-level page the rail and the palette reach, plus a run paused at a tall gate card.
 PAGES = ["/everything?tab=sessions", "/everything?tab=made&kind=documents", "/everything?tab=made&kind=videos",
          "/everything?tab=projects", "/repos", "/skills",
-         "/steering/dashboard", "/testing/evals", "/testing/campaigns", "/system", "/theme", "/workflows",
+         "/steering/dashboard", "/testing/evals", "/plugins", "/system", "/theme", "/workflows",
          "/runs/new", "/s/run%3Ar-review"]
 
 # The clipping class: a big pane whose content is taller than its box behind overflow hidden/clip.

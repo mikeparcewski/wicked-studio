@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { Project, ProjectMember } from '../src/api/types.js';
 
 const getProject = vi.fn();
@@ -18,7 +18,7 @@ vi.mock('../src/api/client.js', () => ({
   },
 }));
 const { ProjectDetailPage } = await import('../src/components/ProjectDetailPage.js');
-const { ProductPage } = await import('../src/components/product/ProductPage.js');
+const { ProjectRequirementsPage } = await import('../src/components/product/ProjectRequirementsPage.js');
 const { useProjectsStore } = await import('../src/store/projects.js');
 
 const project: Project = { id: 'shop', name: 'Shop', description: null, status: 'active', scope: 'project:shop', created_at: 1, updated_at: 1 };
@@ -38,7 +38,7 @@ beforeEach(() => {
 });
 afterEach(cleanup);
 
-describe('S6 project and Product presentation', () => {
+describe('S6 project and requirements presentation', () => {
   it('renders member session titles and shared status words, linking to the existing session route', async () => {
     const navigate = vi.fn();
     const { container } = render(<ProjectDetailPage projectId="shop" navigate={navigate} />);
@@ -59,26 +59,6 @@ describe('S6 project and Product presentation', () => {
     expect(container.textContent).not.toContain(uuid);
   });
 
-  it('disables Draft epics and Search with visible reasons when a project has no repository', async () => {
-    const navigate = vi.fn();
-    render(<ProductPage search="?project=shop" navigate={navigate} />);
-    await screen.findByTestId('product-empty');
-    const draft = screen.getByTestId('product-draft');
-    const search = screen.getByRole('button', { name: 'Search' });
-    for (const control of [draft, search]) {
-      expect(control).toBeDisabled();
-      const reason = document.getElementById(control.getAttribute('aria-describedby')!);
-      expect(reason).toBeVisible();
-      expect(reason).toHaveClass('wk-field-note');
-      expect(reason).toHaveTextContent('Attach a repository to this project first.');
-    }
-    const attach = screen.getByRole('link', { name: 'Attach a repository' });
-    expect(attach).toHaveClass('wk-btn--primary');
-    expect(attach).toHaveAttribute('href', '/repos/new?project=shop');
-    fireEvent.click(attach);
-    expect(navigate).toHaveBeenCalledWith('/repos/new?project=shop');
-  });
-
   it('uses the page frame and sans-serif body text on both routes', async () => {
     const detail = render(<ProjectDetailPage projectId="shop" navigate={vi.fn()} />);
     await screen.findByRole('link', { name: 'Improve checkout accessibility' });
@@ -86,8 +66,8 @@ describe('S6 project and Product presentation', () => {
     expect(detail.container.querySelector('.font-mono')).toBeNull();
     expect(detail.container.querySelector('[style*="monospace"], [style*="font-mono"]')).toBeNull();
     cleanup();
-    const product = render(<ProductPage search="" navigate={vi.fn()} />);
-    expect(within(screen.getByTestId('product-page')).getByLabelText('Project')).toHaveClass('wk-field');
+    const product = render(<ProjectRequirementsPage projectId="shop" navigate={vi.fn()} />);
+    expect(screen.getByTestId('project-requirements-page')).toHaveClass('wk-page');
     expect(product.container.querySelector('.font-mono')).toBeNull();
     expect(product.container.querySelector('[style*="monospace"], [style*="font-mono"]')).toBeNull();
   });
@@ -99,10 +79,11 @@ describe('S6 project and Product presentation', () => {
     render(<ProjectDetailPage projectId="shop" navigate={vi.fn()} />);
     await screen.findByRole('link', { name: 'Improve checkout accessibility' });
     await waitFor(() => expect(screen.getAllByTestId('state-banner')).toHaveLength(1));
-    await waitFor(() => expect(apiFetch).toHaveBeenCalledTimes(2));
+    // Coverage, domain and the requirements count: three reads, one banner.
+    await waitFor(() => expect(apiFetch).toHaveBeenCalledTimes(3));
     expect(screen.getByTestId('state-banner')).toHaveAttribute('data-kind', 'offline');
     expect(screen.queryByTestId('project-coverage-totals')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
-    await waitFor(() => expect(apiFetch).toHaveBeenCalledTimes(4));
+    await waitFor(() => expect(apiFetch).toHaveBeenCalledTimes(6));
   });
 });

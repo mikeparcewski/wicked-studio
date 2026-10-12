@@ -111,27 +111,27 @@ describe('the rail redesign', () => {
     expect(screen.getByTestId('session-rail').textContent).not.toContain('Start something');
   });
 
-  it('"Additional settings" is a LINK to the /settings page — no dropdown', () => {
+  it('"General settings" is a LINK to the /settings page — no dropdown', () => {
     const navigate = vi.fn();
     render(<SessionRail runs={[]} needRows={[]} navigate={navigate} pathname="/" />);
     const more = screen.getByTestId('desk-rail-more');
     expect(more.tagName).toBe('A');
     expect(more).toHaveAttribute('href', '/settings');
-    expect(more.textContent?.trim()).toBe('Additional settings');
+    expect(more.textContent?.trim()).toBe('General settings');
     fireEvent.click(more);
     expect(navigate).toHaveBeenCalledWith('/settings');
     expect(screen.queryByTestId('desk-rail-additional')).toBeNull();
   });
 
-  it('the foot order: Workspace links, then Additional settings, then Health last; the links are the secondary tier', () => {
+  it('the foot order: Workspace links, then General settings, then Health last; the links are the secondary tier', () => {
     render(<SessionRail runs={[]} needRows={[]} navigate={() => {}} pathname="/" />);
     const foot = screen.getByTestId('session-rail').querySelector('.wk-rail-foot')!;
     const ids = [...foot.querySelectorAll('[data-testid]')].map((e) => e.getAttribute('data-testid') ?? '').filter((id) => id.startsWith('desk-rail-'));
-    expect(ids).toEqual(['desk-rail-product', 'desk-rail-skills', 'desk-rail-mcp', 'desk-rail-steering', 'desk-rail-testing', 'desk-rail-more', 'desk-rail-health']);
-    for (const id of ['desk-rail-product', 'desk-rail-more', 'desk-rail-health']) expect(screen.getByTestId(id)).toHaveClass('wk-rail-link--secondary');
+    expect(ids).toEqual(['desk-rail-steering', 'desk-rail-skills', 'desk-rail-mcp', 'desk-rail-plugins', 'desk-rail-evals', 'desk-rail-repos', 'desk-rail-more', 'desk-rail-health']);
+    for (const id of ['desk-rail-steering', 'desk-rail-more', 'desk-rail-health']) expect(screen.getByTestId(id)).toHaveClass('wk-rail-link--secondary');
   });
 
-  it('Health is a rail LINK with a live dot (fetched on mount), below Additional settings', async () => {
+  it('Health is a rail LINK with a live dot (fetched on mount), below General settings', async () => {
     const navigate = vi.fn();
     render(<SessionRail runs={[]} needRows={[]} navigate={navigate} pathname="/" />);
     const nav = screen.getByTestId('session-rail');
@@ -152,9 +152,11 @@ describe('the rail redesign', () => {
     await waitFor(() => expect(heart).toHaveAttribute('data-health', 'healthy'));
     expect(getRoster).toHaveBeenCalled();
     expect(screen.queryByTestId('rail-health-summary-dot')).toBeNull();
-    // Healthy: the visible "Health" text is the name — no state word, no announcement to make.
-    expect(health).not.toHaveAttribute('aria-label');
-    expect(screen.queryByTestId('rail-health-state')).toBeNull();
+    // Operator 2026-10-12: the state is always said in words (colour is never the only signal), and
+    // the link wears its state's muted tint.
+    expect(health).toHaveAttribute('aria-label', 'Health, all good');
+    expect(screen.getByTestId('rail-health-state')).toHaveTextContent('· all good');
+    expect(health).toHaveAttribute('data-health', 'healthy');
   });
 
   it('the Health link names the state — visible muted text AND for screen readers — when it is not healthy', async () => {
@@ -164,17 +166,17 @@ describe('the rail redesign', () => {
     await waitFor(() => expect(screen.getByTestId('rail-health-heart')).toHaveAttribute('data-health', 'degraded'));
     expect(health).toHaveAttribute('aria-label', 'Health, a check needs attention');
     expect(health).toHaveTextContent('Health');
-    // Change 16: the word rides beside the label, in the rail's muted ink. A degraded dot says
-    // "degraded" (a warning); only an unhealthy dot says "needs attention".
-    expect(screen.getByTestId('rail-health-state')).toHaveTextContent('· degraded');
+    // A degraded dot (yellow tint) says "needs attention"; only an unhealthy one (red) says "failing".
+    expect(screen.getByTestId('rail-health-state')).toHaveTextContent('· needs attention');
+    expect(health).toHaveAttribute('data-health', 'degraded');
   });
 
-  it('the Health link says "needs attention" in words when a check is unhealthy', async () => {
+  it('the Health link says "failing" in words when a check is unhealthy', async () => {
     getRoster.mockResolvedValueOnce({ roster: [{ ...ROSTER[0]!, health: { status: 'inactive', since: '2026-08-20T00:00:00Z' } }] });
     render(<SessionRail runs={[]} needRows={[]} navigate={() => {}} pathname="/" />);
     const health = screen.getByTestId('desk-rail-health');
     await waitFor(() => expect(screen.getByTestId('rail-health-heart')).toHaveAttribute('data-health', 'unhealthy'));
-    expect(screen.getByTestId('rail-health-state')).toHaveTextContent('· needs attention');
+    expect(screen.getByTestId('rail-health-state')).toHaveTextContent('· failing');
     expect(health).toHaveAttribute('aria-label', 'Health, a check is failing');
   });
 
@@ -187,15 +189,15 @@ describe('the rail redesign', () => {
     expect(navigate).toHaveBeenCalledWith('/health');
   });
 
-  it("the separator above Product is the foot's own top border — no spacer element", () => {
+  it("the separator above the Workspace group is the foot's own top border — no spacer element", () => {
     render(<SessionRail runs={[]} needRows={[]} navigate={() => {}} pathname="/" />);
     const rail = screen.getByTestId('session-rail');
     expect(rail.querySelector('.wk-rail-spacer')).toBeNull();
-    const product = screen.getByTestId('desk-rail-product');
-    // Product sits in the foot — the foot's border-top (components.css) is the separator.
-    expect(product.closest('.wk-rail-foot')).not.toBeNull();
-    // Change 18: the foot's group label leads the links; Product is the first link under it.
-    expect((product.previousElementSibling as HTMLElement).getAttribute('data-testid')).toBe('rail-foot-label');
+    const first = screen.getByTestId('desk-rail-steering');
+    // The group sits in the foot — the foot's border-top (components.css) is the separator.
+    expect(first.closest('.wk-rail-foot')).not.toBeNull();
+    // Change 18: the foot's group label leads the links; Steering is the first (the Agents slot comes later).
+    expect((first.previousElementSibling as HTMLElement).getAttribute('data-testid')).toBe('rail-foot-label');
     expect(screen.getByTestId('rail-foot-label')).toHaveTextContent('Workspace');
   });
 });

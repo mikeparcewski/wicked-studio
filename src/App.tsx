@@ -16,7 +16,9 @@ import { RepoGraphModal } from './components/RepoGraphModal.js';
 import { RightPanel } from './components/RightPanel.js';
 import { RunRawView } from './components/RunRawView.js';
 import { SkillsPage } from './components/SkillsPage.js';
-import { ProductPage } from './components/product/ProductPage.js';
+import { ProjectRequirementsPage } from './components/product/ProjectRequirementsPage.js';
+import { CampaignsRedirect, RouteRedirect } from './components/RouteRedirect.js';
+import { PluginsPage } from './components/editors/EditorPluginsSettings.js';
 import { McpToolsPage } from './components/McpToolsPage.js';
 import { SteeringPage } from './components/SteeringPage.js';
 import { MemoriesPanel } from './components/MemoriesPanel.js';
@@ -54,7 +56,7 @@ import { altChord, setShortcutsPaletteOpen, useGlobalShortcuts } from './hooks/u
 import { useTypeToComposer } from './hooks/useTypeToComposer.js';
 import { useRetiredSettingsRedirect, useSteeringRedirect, useTestingRedirect } from './hooks/useLegacyRedirect.js';
 import { EverythingPage } from './components/everything/EverythingPage.js';
-import { useRoute } from './hooks/useRoute.js';
+import { productRedirectPath, useRoute } from './hooks/useRoute.js';
 import { useRuns } from './hooks/useRuns.js';
 import { useAnnotationStore } from './store/annotations.js';
 import { useCampaignsStore } from './store/campaigns.js';
@@ -204,7 +206,7 @@ export function App(): React.ReactElement {
   useRetiredSettingsRedirect(pathname, navigate);
 
   // The retired flat campaign addresses (`/campaigns`, `/campaigns/:id`) rewrite onto
-  // `/testing/campaigns[...]`, and any page-less `/testing` address normalizes onto Evals
+  // `/testing/campaigns[...]`, and any page-less `/testing` address normalizes onto Evals (2026-10-12)
   // (the nav-reorg's renamed section home; Campaigns moved into the project shell).
   useTestingRedirect(panel, testingPage, pathname, navigate);
 
@@ -550,6 +552,13 @@ export function App(): React.ReactElement {
     if (panel === 'learn') {
       return <LearnPage navigate={navigate} />;
     }
+    if (panel === 'plugins') {
+      return (
+        <div className="flex-1 overflow-y-auto">
+          <PluginsPage navigate={navigate} />
+        </div>
+      );
+    }
     if (panel === 'mcp') {
       return (
         <div className="flex flex-1 overflow-hidden">
@@ -588,6 +597,12 @@ export function App(): React.ReactElement {
     // (Campaigns / Evals; the retired Harness folded into the Campaigns landing's verbs).
     // The campaign list + scoreboard (TH-14) live under it; a page-less address renders the
     // Campaigns landing for the tick before useTestingRedirect lands.
+    // QE campaigns are a workflow (operator 2026-10-12): the old Testing landing opens the launch
+    // wizard on the test workflow (the project from `?project=` pre-chosen) over the Desk. A campaign's
+    // own scoreboard (`/testing/campaigns/:id`) and Evals stay.
+    if (panel === 'testing' && testingPage === 'campaigns' && campaignId === null) {
+      return <CampaignsRedirect search={search} navigate={navigate} />;
+    }
     if (panel === 'testing') {
       return (
         <div className="flex-1 overflow-y-auto">
@@ -614,12 +629,16 @@ export function App(): React.ReactElement {
     if (panel === 'settings') {
       return <SettingsOverviewPage navigate={navigate} />;
     }
-    // `/product[?project=]` — the Product view (studio#157): a project's requirements across its
-    // repositories, and "Draft epics" as a governed run (crew#371/#372).
+    // `/product[?project=]` — the Product page retired (operator 2026-10-12): the address only redirects,
+    // to that project's dashboard (its Requirements section) or to the projects list.
     if (panel === 'product') {
+      return <RouteRedirect to={productRedirectPath(search)} navigate={navigate} />;
+    }
+    // `/projects/:id/requirements` — a project's requirements (the dashboard section's "See all").
+    if (panel === 'project-requirements' && projectId) {
       return (
         <div className="flex-1 overflow-y-auto">
-          <ProductPage navigate={navigate} search={search} />
+          <ProjectRequirementsPage key={projectId} projectId={projectId} navigate={navigate} />
         </div>
       );
     }

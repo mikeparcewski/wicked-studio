@@ -171,3 +171,83 @@ describe('launch wizard', () => {
     expect(useComposerSeats.getState().picked).toContain('opencode');
   });
 });
+
+describe('Draft epics — a launch-wizard job (operator 2026-10-12: the Product page retired)', () => {
+  const REQS = {
+    projectId: 'shop', offset: 0, limit: 50, totals: { repos: 1, ok: 1, absent: 0, errors: 0, dangling: 0, total: 2, corpus: 2 },
+    rows: [{ repo: { id: 'r-api', name: 'shop-api' }, state: 'ok', total: 2, corpus: 2, orphanedOverrides: 0, items: [
+      { key: 'k1', domain: 'billing', reqId: 'REQ-1', title: 'Refund rule 1', category: 'functional', statement: 's', status: 'draft', risk: false, riskSource: null, edited: false },
+      { key: 'k2', domain: 'billing', reqId: 'REQ-2', title: 'Refund rule 2', category: 'functional', statement: 's', status: 'draft', risk: false, riskSource: null, edited: false },
+    ] }],
+  };
+  function wireDraft(): void {
+    posts = [];
+    vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
+      const path = new URL(url, 'http://x').pathname.replace(/^\/api\/v1/, '');
+      if (init?.method === 'POST') {
+        posts.push({ path, body: JSON.parse(String(init.body ?? '{}')) as Record<string, unknown> });
+        return Promise.resolve(new Response(JSON.stringify({ runId: 'r-draft', requirements: 1 }), { status: 200, headers: { 'content-type': 'application/json' } }));
+      }
+      const body = path === '/projects' ? { projects: [{ id: 'shop', name: 'Shop', description: null, status: 'active', scope: 'project:shop', created_at: 1, updated_at: 1 }] }
+        : path === '/projects/shop/requirements' ? REQS : path === '/workflows' ? { workflows: WF } : path === '/roster' ? { roster: ROSTER } : {};
+      return Promise.resolve(new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } }));
+    }));
+  }
+
+  it('is offered beside the daemon’s workflows, asks for the requirements, and launches crew’s compose run', async () => {
+    wireDraft();
+    const navigate = vi.fn();
+    render(<LaunchWizard navigate={navigate} />);
+    act(() => openLaunchWizard({ projectId: 'shop' }));
+    fireEvent.click(await screen.findByTestId('launch-wizard-workflow-draft-epics'));
+    expect(screen.getByTestId('launch-wizard-step')).toHaveAttribute('data-step', 'requirements');
+    expect(screen.getByTestId('launch-wizard-next')).toBeDisabled();
+    const picks = await screen.findAllByTestId('requirement-pick');
+    fireEvent.click(picks[1]!);
+    fireEvent.change(screen.getByTestId('launch-wizard-draft-instructions'), { target: { value: 'one epic per domain' } });
+    expect(screen.getByTestId('launch-wizard-chosen')).toHaveTextContent('1 requirement chosen');
+    next();
+    expect(screen.getByTestId('launch-wizard-review')).toHaveTextContent('Refund rule 2');
+    fireEvent.click(screen.getByTestId('launch-wizard-launch'));
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith('/s/run%3Ar-draft'));
+    expect(posts).toEqual([{ path: '/projects/shop/product/compose', body: { requirements: [{ repoId: 'r-api', key: 'k2' }], instructions: 'one epic per domain' } }]);
+  });
+
+  it('opened from a project with picks already chosen, it starts on its requirements step with them', async () => {
+    wireDraft();
+    render(<LaunchWizard navigate={vi.fn()} />);
+    act(() => openLaunchWizard({ workflowId: 'draft-epics', projectId: 'shop', requirements: [{ repoId: 'r-api', key: 'k1', title: 'Refund rule 1' }] }));
+    expect(await screen.findByTestId('launch-wizard-requirements')).toBeInTheDocument();
+    expect(screen.getByTestId('launch-wizard-chosen')).toHaveTextContent('1 requirement chosen');
+    expect(screen.getByTestId('launch-wizard-next')).toBeEnabled();
+    expect(useLaunchWizard.getState().draft?.requirements).toHaveLength(1);
+  });
+
+  it('instructions carried in longer than a draft takes block the launch, so the review is what is sent', async () => {
+    wireDraft();
+    render(<LaunchWizard navigate={vi.fn()} />);
+    act(() => openLaunchWizard({ workflowId: 'draft-epics', projectId: 'shop', intent: 'x'.repeat(600), requirements: [{ repoId: 'r-api', key: 'k1', title: 'Refund rule 1' }] }));
+    await screen.findByTestId('launch-wizard-requirements');
+    expect(screen.getByTestId('launch-wizard-next')).toBeDisabled();
+    expect(screen.getByTestId('launch-wizard-blocker')).toHaveTextContent('Shorten the instructions to 500 characters.');
+    expect(posts).toEqual([]);
+  });
+
+  it('a refused draft keeps the choice and says crew’s words; nothing navigates', async () => {
+    wireDraft();
+    vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
+      const path = new URL(url, 'http://x').pathname.replace(/^\/api\/v1/, '');
+      if (init?.method === 'POST') return Promise.resolve(new Response(JSON.stringify({ error: 'requirement r-api/k1 is not in the project' }), { status: 400, headers: { 'content-type': 'application/json' } }));
+      return Promise.resolve(new Response(JSON.stringify(path === '/projects/shop/requirements' ? REQS : {}), { status: 200, headers: { 'content-type': 'application/json' } }));
+    }));
+    const navigate = vi.fn();
+    render(<LaunchWizard navigate={navigate} />);
+    act(() => openLaunchWizard({ workflowId: 'draft-epics', projectId: 'shop', requirements: [{ repoId: 'r-api', key: 'k1', title: 'Refund rule 1' }] }));
+    await screen.findByTestId('launch-wizard-requirements');
+    next();
+    fireEvent.click(screen.getByTestId('launch-wizard-launch'));
+    expect(await screen.findByTestId('launch-wizard-error')).toBeInTheDocument();
+    expect(useLaunchWizard.getState().draft?.requirements).toHaveLength(1);
+    expect(navigate).not.toHaveBeenCalled();
+  });
+});

@@ -12,7 +12,7 @@ import { NotFoundPage } from '../src/components/NotFoundPage.js';
  *
  *  - an address matching NO page parses to the `not-found` panel;
  *  - NO redirect fires for it (the typed URL is preserved);
- *  - the view echoes the address and links Home / Work / Steering / Testing;
+ *  - the view echoes the address and links Home / Work / Steering / Evals (Testing left the rail, 2026-10-12);
  *  - the steering / settings / testing normalizers (wiki/policies,
  *    coverage/domain, flat campaigns) keep their redirects;
  *  - X1 (operator ruling 2026-10-09, "we should just remove these"): the S15c / S16a
@@ -111,12 +111,12 @@ describe('NotFoundPage — the honest dead-address view', () => {
     expect(screen.getByTestId('not-found-path')).toHaveTextContent('/steering/zzz');
   });
 
-  it('offers Home / Work / Steering / Testing as real links that navigate', () => {
+  it('offers Home / Work / Steering / Evals as real links that navigate', () => {
     const navigate = vi.fn();
     render(<NotFoundPage pathname="/zzz" navigate={navigate} />);
     const links = screen.getAllByTestId('not-found-link');
     expect(links.map((l) => l.getAttribute('data-path'))).toEqual([
-      '/', '/everything', '/steering', '/testing/campaigns',
+      '/', '/everything', '/steering', '/testing/evals',
     ]);
     // Real hrefs (middle-click / copy-link work) AND SPA navigation on click.
     expect(links[1]).toHaveAttribute('href', '/everything');

@@ -1,6 +1,6 @@
+import { everythingPath } from '../board/everythingModel.js';
 import { useEffect, useMemo, useState } from 'react';
 import { getCampaign, type Campaign, type CampaignNodeStatus } from '../api/campaigns.js';
-import { testingPath } from '../api/testing.js';
 import { downloadRunEvidence } from '../api/client.js';
 import { apiStatus, readErrorKind } from '../api/errors.js';
 import type { SessionView } from '../api/types.js';
@@ -189,11 +189,11 @@ export function CampaignScoreboard({ campaignId, runs, navigate }: Props): React
 
   const allTests = (
     <a
-      href={testingPath('campaigns')}
-      onClick={(e) => { e.preventDefault(); navigate(testingPath('campaigns')); }}
+      href={everythingPath({ tab: 'sessions' })}
+      onClick={(e) => { e.preventDefault(); navigate(everythingPath({ tab: 'sessions' })); }}
       className="wk-link"
     >
-      All tests
+      All jobs
     </a>
   );
   if (notFound) {

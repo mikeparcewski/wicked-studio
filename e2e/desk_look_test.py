@@ -13,7 +13,7 @@ with the stored appearance set to wicked-light + the harbor accent, and proves:
   2. NO MONOSPACE in the default layer: no visible text in the session rail or the Desk computes
      to a monospace font-family while "Show technical details" is off. With it on, a technical
      handle ([data-tech]) keeps the mono face.
-  3. EVERYTHING ELSE FITS (studio#421): opening "Additional settings" at 1440x900 covers neither the
+  3. EVERYTHING ELSE FITS (studio#421): opening "General settings" at 1440x900 covers neither the
      sessions nor "+ Start something", and every destination is reachable — on screen, or in a
      scroller of its own — and still navigates.
   4. 0 page errors, no horizontal scroll.
@@ -179,7 +179,7 @@ with sync_playwright() as p:
     page.wait_for_function("() => document.querySelectorAll('[data-testid=\"rail-session\"]').length >= 6",
                            timeout=10000)
 
-    # ── 3. "Additional settings" is a PAGE (operator 2026-10-11): the rail link opens /settings, every
+    # ── 3. "General settings" is a PAGE (operator 2026-10-11/12): the rail link opens /settings, every
     #       settings page is a reachable link there, Health (now last in the rail) stays in view.
     rail = page.evaluate("""(h) => {
       const shown = (el) => { const b = el.getBoundingClientRect(); return b.height > 0 && b.bottom <= h + 0.5 && b.top >= -0.5; };
@@ -194,7 +194,7 @@ with sync_playwright() as p:
     rows = page.evaluate("""() => [...document.querySelectorAll('[data-testid="settings-overview-row"]')].map(r => ({
       dest: r.dataset.dest, href: r.querySelector('a')?.getAttribute('href'), about: r.querySelector('[data-testid="settings-overview-sentence"]')?.innerText ?? '' }))""")
     check("everything-else-fits", rail["healthShown"] and rail["sessions"] >= 6 and rail["sessionsShown"] >= 6
-          and [r["dest"] for r in rows] == ["settings:/system", "section:repos", "settings:/workflows", "section:testing", "settings:/theme"]
+          and [r["dest"] for r in rows] == ["settings:/system", "settings:/workflows", "settings:/theme"]
           and all(r["href"] and len(r["about"]) > 10 for r in rows), rail=rail, rows=rows)
     page.locator('[data-testid="settings-overview-row"][data-dest="settings:/theme"] a').click()
     page.wait_for_function("() => window.location.pathname === '/theme'", timeout=5000)

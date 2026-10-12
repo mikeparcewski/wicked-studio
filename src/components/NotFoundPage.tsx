@@ -16,7 +16,7 @@ const LINKS: { label: string; path: string }[] = [
   { label: 'Home', path: '/' },
   { label: 'Everything', path: '/everything' },
   { label: 'Steering', path: '/steering' },
-  { label: 'Testing', path: '/testing/campaigns' },
+  { label: 'Evals', path: '/testing/evals' },
 ];
 
 export function NotFoundPage({ pathname, navigate }: {

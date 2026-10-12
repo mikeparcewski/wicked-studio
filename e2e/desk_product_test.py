@@ -1,8 +1,9 @@
-"""Journey: the project's Coverage and Domain sections (studio#158) and the Product view (studio#157)
-at 1440x700 on the Desk.
+"""Journey: the project's Coverage and Domain sections (studio#158) and its Requirements (studio#157's
+Product view, retired into the project dashboard and the launch wizard on 2026-10-12) at 1440x700 on
+the Desk.
 
 crew's project folds (crew#371: GET /projects/:id/{coverage,domain}) are stubbed with page.route,
-and the Product view's fold and compose launch (crew#371/#372: GET /projects/:id/requirements,
+and the requirements fold and the Draft epics compose launch (crew#371/#372: GET /projects/:id/requirements,
 POST /projects/:id/product/compose) are stubbed with page.route, so the journey pins studio's
 rendering of the published wire. Every member repo is a row with its
 state, an unread one names crew's reason, and the synthesized `default` project draws neither section.
@@ -123,7 +124,10 @@ with sync_playwright() as p:
     on_default = page.get_by_test_id("project-coverage").count() + page.get_by_test_id("project-domain").count()
     check("default-none", on_default == 0 and folds == [], on_default=on_default, folds=folds)
 
-    # ── 5. Product: the rail entry, one project's requirements, Draft epics → the run's session ──
+    # ── 5. Requirements (operator 2026-10-12: the Product page retired into the project) ─────────
+    #   the dashboard's section counts them and links the list; the list's Draft epics opens the
+    #   launch wizard's requirements step; the compose launch lands on the run's session; /product
+    #   only redirects; there is no rail entry.
     def req(n, **extra):
         return {"key": f"k{n}", "domain": "billing", "reqId": f"REQ-{n}", "title": f"Refund rule {n}", "category": "functional",
                 "statement": "s", "status": "draft", "risk": False, "riskSource": None, "edited": False, **extra}
@@ -141,27 +145,57 @@ with sync_playwright() as p:
 
     page.route("**/api/v1/projects/shop/requirements*", lambda r: r.fulfill(status=200, json=REQS))
     page.route("**/api/v1/projects/shop/product/compose", compose_route)
-    page.goto(f"{origin}/", wait_until="networkidle")
-    page.get_by_test_id("desk-rail-product").click()
-    page.wait_for_function("() => window.location.pathname === '/product'", timeout=5000)
-    page.get_by_test_id("product-page").wait_for(state="visible", timeout=8000)
-    rail_current = page.get_by_test_id("desk-rail-product").get_attribute("aria-current")
-    page.goto(f"{origin}/product?project=shop", wait_until="networkidle")
-    page.get_by_test_id("product-repo").wait_for(state="visible", timeout=15000)
-    reqs = page.get_by_test_id("product-requirement").evaluate_all("els => els.map(e => e.dataset.key)")
-    unread = page.get_by_test_id("product-repo-unread").inner_text()
-    picks = page.get_by_test_id("product-requirement-pick")
-    picks.nth(0).check()
-    picks.nth(2).check()
-    page.get_by_test_id("product-instructions").fill("one epic per domain")
-    chosen = page.get_by_test_id("product-chosen").inner_text()
+    page.goto(f"{origin}/projects/shop", wait_until="networkidle")
+    page.get_by_test_id("project-requirements-line").wait_for(state="visible", timeout=15000)
+    line = page.get_by_test_id("project-requirements-line").inner_text()
+    unread_line = page.get_by_test_id("project-requirements-unread").inner_text()
+    no_rail = page.locator('[data-testid="desk-rail-product"], [data-nav-dest="section:product"]').count()
+    page.get_by_test_id("project-requirements").scroll_into_view_if_needed()
+    page.screenshot(path=str(SHOTS / "desk-product-section.png"))
+    check("dashboard-section", line == "3 requirements across 1 repository" and unread_line == "shop-web has no requirements map yet."
+          and no_rail == 0, line=line, unread=unread_line, no_rail=no_rail)
+
+    page.get_by_test_id("project-requirements-link").click()
+    page.wait_for_function("() => window.location.pathname === '/projects/shop/requirements'", timeout=5000)
+    page.get_by_test_id("requirements-repo").wait_for(state="visible", timeout=15000)
+    reqs = page.get_by_test_id("requirement").evaluate_all("els => els.map(e => e.dataset.key)")
+    unread = page.get_by_test_id("requirements-repo-unread").inner_text()
+    picks = page.get_by_test_id("requirement-pick")
+    picks.nth(0).click()
+    picks.nth(2).click()
+    draft_label = page.get_by_test_id("requirements-draft").inner_text()
     page.screenshot(path=str(SHOTS / "desk-product-view.png"))
-    check("product-list", rail_current == "page" and reqs == ["k1", "k2", "k3"] and "No requirements map yet for shop-web" in unread
-          and chosen.startswith("2 requirements chosen"), rail_current=rail_current, reqs=reqs, unread=unread, chosen=chosen)
-    page.get_by_test_id("product-draft").click()
+    check("requirements-list", reqs == ["k1", "k2", "k3"] and "No requirements map yet for shop-web" in unread
+          and draft_label == "Draft epics from 2", reqs=reqs, unread=unread, draft_label=draft_label)
+
+    page.get_by_test_id("requirements-draft").click()
+    wiz = page.get_by_test_id("launch-wizard-requirements")
+    wiz.wait_for(state="visible", timeout=8000)
+    chosen = page.get_by_test_id("launch-wizard-chosen").inner_text()
+    page.get_by_test_id("launch-wizard-draft-instructions").fill("one epic per domain")
+    page.screenshot(path=str(SHOTS / "desk-product-wizard.png"))
+    page.get_by_test_id("launch-wizard-next").click()
+    page.get_by_test_id("launch-wizard-launch").click()
     page.wait_for_function("() => window.location.pathname.startsWith('/s/')", timeout=8000)
-    check("product-draft", composes == [{"requirements": [{"repoId": "r-api", "key": "k1"}, {"repoId": "r-api", "key": "k3"}], "instructions": "one epic per domain"}]
-          and page.url.endswith("/s/run%3Ar-auth"), composes=composes, url=page.url)
+    check("draft-epics", chosen.startswith("2 requirements chosen")
+          and composes == [{"requirements": [{"repoId": "r-api", "key": "k1"}, {"repoId": "r-api", "key": "k3"}], "instructions": "one epic per domain"}]
+          and page.url.endswith("/s/run%3Ar-auth"), chosen=chosen, composes=composes, url=page.url)
+
+    # The dashboard's own Draft epics opens the same step with the project chosen and nothing picked.
+    page.goto(f"{origin}/projects/shop", wait_until="networkidle")
+    page.get_by_test_id("project-draft-epics").click()
+    wiz.wait_for(state="visible", timeout=8000)
+    dash_draft = {"project": page.get_by_test_id("launch-wizard-draft-project").input_value(),
+                  "next_disabled": page.get_by_test_id("launch-wizard-next").is_disabled()}
+    page.keyboard.press("Escape")
+    check("dashboard-draft", dash_draft == {"project": "shop", "next_disabled": True}, **dash_draft)
+
+    # /product only redirects: with a project to its dashboard's section, without one to Projects.
+    page.goto(f"{origin}/product?project=shop", wait_until="networkidle")
+    page.wait_for_function("() => window.location.pathname === '/projects/shop' && window.location.hash === '#requirements'", timeout=8000)
+    page.goto(f"{origin}/product", wait_until="networkidle")
+    page.wait_for_function("() => window.location.pathname === '/everything' && window.location.search === '?tab=projects'", timeout=8000)
+    check("product-redirects", True)
 
     check("no-page-errors", not errors, errors=errors[:5])
     browser.close()

@@ -44,6 +44,7 @@
 .wk-launch-wizard-title { margin: 0; font-size: var(--text-lg); font-weight: var(--weight-semi); color: var(--ink-high); }
 .wk-launch-wizard-progress { margin: 2px 0 0; font-size: var(--text-xs); color: var(--ink-muted); }
 .wk-launch-wizard-body { flex: 1 1 auto; overflow-y: auto; display: flex; flex-direction: column; gap: var(--space-4); padding: var(--space-4) var(--space-5); }
+.wk-launch-wizard-reqs { display: flex; flex-direction: column; gap: var(--space-3); min-width: 0; }
 .wk-launch-wizard-field, .wk-launch-wizard-fieldset { display: flex; flex-direction: column; gap: var(--space-1); margin: 0; padding: 0; border: 0; min-width: 0; }
 .wk-launch-wizard-intent { min-height: 120px; padding: 8px 10px; font-size: var(--text-sm); resize: vertical; }
 .wk-launch-wizard-choices { display: flex; flex-direction: column; gap: var(--space-2); }

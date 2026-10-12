@@ -15,10 +15,8 @@ import { useViewPrefsStore } from '../store/viewPrefs.js';
 import { setCachedRoster } from '../store/rosterCache.js';
 import { Modal } from './Modal.js';
 import { NotificationSettings } from './NotificationSettings.js';
-import { DeveloperSettings } from './editors/EditorPluginsSettings.js';
 import { Terminal } from './Terminal.js';
 import { SignInPanel } from './SignInPanel.js';
-import { testingPath } from '../api/testing.js';
 import { homeDirsIn } from '../board/homePath.js';
 import { PAGE_NAMES } from '../board/pageNames.js';
 import { Segmented } from './ui/Segmented.js';
@@ -239,9 +237,6 @@ export function SystemSettings({ navigate = (p) => { history.pushState(null, '',
 
       {/* Notification section: owned by NotificationSettings. */}
       <NotificationSettings />
-      <p data-testid="settings-testing-link" className="wk-field-note">
-        <a className="wk-link" href={testingPath('campaigns')} onClick={(e) => { e.preventDefault(); navigate(testingPath('campaigns')); }}>Open {PAGE_NAMES.testing}</a>
-      </p>
 
       {/* View section */}
       <section data-testid="view-settings" className="wk-card">
@@ -364,9 +359,7 @@ export function SystemSettings({ navigate = (p) => { history.pushState(null, '',
         </div>}
       </section>
 
-      {/* ── Developer (operator ruling X3): Settings → Developer → Editor plugins. Owned by the editors
-          section (UI-CONTRACT §6); this page only places it. */}
-      <DeveloperSettings navigate={navigate} />
+      {/* Editor plugins moved to their own Plugins page (`/plugins`, operator ruling 2026-10-12). */}
       </div>
       {signInSeat !== null && <SignInPanel seat={signInSeat} onClose={() => setSignInSeat(null)} onChecked={(r) => setRoster(r)} />}
       {logoutSeat !== null && <Modal title={`Log out — ${seatLabel(logoutSeat)}`} onClose={() => setLogoutSeat(null)}>

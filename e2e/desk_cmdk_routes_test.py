@@ -77,7 +77,7 @@ with sync_playwright() as p:
         page.wait_for_timeout(150)
 
     # ── 1. the GO TO group (a word lists the per-item rows too) ─────────────────────
-    # 26 destinations: main's 23 plus Learn (/learn), Health (/health, the rail polish) and Settings (/settings).
+    # 25 destinations (operator 2026-10-12): Product and the Testing landing left GO TO (both only redirect now), Plugins joined.
     open_palette("go:")
     dest_rows = page.get_by_test_id("palette-row").count()
     page.keyboard.press("Escape")
@@ -87,7 +87,7 @@ with sync_playwright() as p:
     page.screenshot(path=str(SHOTS / "desk-cmdk-go.png"))
     page.keyboard.press("Escape")
     groups = {r["group"] for r in rows}
-    check("go-group", groups == {"go"} and dest_rows == 26 and len(rows) > 26, groups=sorted(groups), destinations=dest_rows, rows=len(rows))
+    check("go-group", groups == {"go"} and dest_rows == 25 and len(rows) > 25, groups=sorted(groups), destinations=dest_rows, rows=len(rows))
 
     def reach(href: str, label: str) -> dict:
         open_palette(f"go: {label}")
@@ -118,8 +118,8 @@ with sync_playwright() as p:
     # ── 2. every parameterless destination ──────────────────────────────────────────
     FIXED = {"/", "/watch", "/rules", "/everything?tab=sessions", "/everything?tab=made", "/everything?tab=helpers",
              "/everything?tab=handed", "/everything?tab=projects", "/steering/dashboard",
-             "/steering/policies", "/steering/memories", "/testing/campaigns", "/testing/evals", "/repos", "/repos/new",
-             "/runs/new", "/workflows", "/product", "/skills", "/mcp", "/learn", "/system", "/theme", "/editors/dev"}
+             "/steering/policies", "/steering/memories", "/testing/evals", "/repos", "/repos/new",
+             "/runs/new", "/workflows", "/skills", "/mcp", "/plugins", "/learn", "/system", "/theme", "/editors/dev"}
     open_palette("go:")
     fixed = page.get_by_test_id("palette-row").evaluate_all(
         "els => els.map(e => ({ href: e.getAttribute('href'), label: e.innerText.split('\\n')[0] }))")
@@ -134,7 +134,7 @@ with sync_playwright() as p:
     # ── 3. one of each parametric shape the corpus holds ────────────────────────────
     # S16a-4e: a project's " · chat" row is gone (`/p/:pid/chat` moved to the Desk composer); a
     # chat's own row is a session (" · chat" on `/s/<chat>`), and this corpus lists no live chat.
-    want = (" · sessions", " · campaigns", " · raw events", " · files and diff", " · session", " · details")
+    want = (" · sessions", " · requirements", " · raw events", " · files and diff", " · session", " · details")
     picked: dict = {}
     for r in rows:
         for w in want:

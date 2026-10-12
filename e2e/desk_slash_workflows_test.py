@@ -315,9 +315,10 @@ with sync_playwright() as p:
         page.get_by_test_id("palette-input").fill("> New job")
         page.locator('[data-testid="palette-row"]', has_text="New job").first.click()
         page.get_by_test_id("launch-wizard").wait_for(state="visible", timeout=8000)
-        # The catalog may still be on its way (the Desk no longer warms it with a composer).
+        # The catalog may still be on its way (the Desk no longer warms it with a composer). Draft
+        # epics is studio's own choice, always listed (operator 2026-10-12), so wait past it.
         try:
-            page.wait_for_function("() => document.querySelectorAll('[data-testid^=\"launch-wizard-workflow-\"]').length > 0", timeout=8000)
+            page.wait_for_function("() => document.querySelectorAll('[data-testid^=\"launch-wizard-workflow-\"]').length > 1", timeout=8000)
         except Exception:  # noqa: BLE001 — reported by the check
             pass
         st = page.evaluate("""() => ({ path: location.pathname,
