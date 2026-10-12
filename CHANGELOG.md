@@ -12,6 +12,23 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+## [0.7.13] — 2026-10-12
+
+The front door: a mission-control Desk, a project dashboard, and a Workspace rail without Product or Testing.
+
+### Added
+- The Desk is attention-first mission control. One sentence says what started, what waits on you, what is running, what failed and what waits on review. A pulse band (7 / 30 / 90 days) shows jobs started, waiting, failed, delivered, typical job and spend. Needs you is split into Decisions, Failures, Also worth a look and To review. The bottom composer is replaced by a ⌘K bar, Chat and New job. The rail badge counts decisions and failures only (#741).
+- The project page is a dashboard: quick actions (New job, Chat in this project, Open repository, Documents), How it's going (jobs by state, started, delivered, quality checks passed, typical time, spend), and a three-step "Get this project going" for an empty project (#742).
+- A Plugins page (`/plugins`) lists editor plugins, opens one on the editor test page and starts the editor-plugin workflow; it was under Settings → Developer → Editor plugins (#744).
+- The project dashboard has a Requirements section and a list page (`/projects/:id/requirements`); Draft epics is a launch-wizard job with a choose-requirements step (#744).
+
+### Changed
+- The rail's Workspace group is Steering, Skills, MCP, Plugins, Evals, Repositories, General settings, with Health at the foot. Health is tinted by state and always says its state word. "Additional settings" is now "General settings" (Configuration, Workflows, Theme); "MCP tools" is now "MCP" (#744).
+- Studio pins `wicked-crew-api-types` 0.114.0 exactly (#743).
+
+### Removed
+- The Product page: `/product` redirects to the project dashboard's Requirements section (or See everything › Projects). The rail's Testing link: writing tests is the wizard's "Write tests" job, and `/testing/campaigns` opens it (#744).
+
 ## [0.7.12] — 2026-10-12
 
 Watchtower.
@@ -2096,7 +2113,8 @@ The merged interactive layer: wicked-interactive's UI moved into this skin (DES-
   `git subtree split` (92 commits).
 - The SPA as a pure HTTP/WS client of the wicked-crew daemon: runs, gates, live CoreEvents.
 
-[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.7.12...HEAD
+[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.7.13...HEAD
+[0.7.13]: https://github.com/mikeparcewski/wicked-studio/compare/v0.7.12...v0.7.13
 [0.7.12]: https://github.com/mikeparcewski/wicked-studio/compare/v0.7.11...v0.7.12
 [0.7.11]: https://github.com/mikeparcewski/wicked-studio/compare/v0.7.10...v0.7.11
 [0.7.10]: https://github.com/mikeparcewski/wicked-studio/compare/v0.7.9...v0.7.10
