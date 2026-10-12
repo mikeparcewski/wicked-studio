@@ -23,11 +23,11 @@ import { Modal } from './Modal.js';
 import { ProjectSwitcher } from './ProjectSwitcher.js';
 import { humanTitle, runTitle, runWhenWord, WHEN_TITLE } from './runIdentity.js';
 import { Terminal } from './Terminal.js';
-import { addAboutChip } from '../store/composerChips.js';
 import { everythingPath } from '../board/everythingModel.js';
 import { seedNewChat } from '../board/chatMoves.js';
+import { openAskDock } from '../store/askDock.js';
 import { openLaunchWizard } from '../store/launchWizard.js';
-import { pageComposerKey, seedComposer } from '../store/composerSeed.js';
+import { pageComposerKey } from '../store/composerSeed.js';
 
 /**
  * The universal command palette (DES-FEEDBACK-002 §1, slice G): Cmd+K / Ctrl+K /
@@ -252,16 +252,13 @@ export function CommandPalette({
   const restoreRef = useRef<HTMLElement | null>(null);
 
   const projects = useProjectsStore((s) => s.projects);
-  // S16a-4c: "New Demo" seeds the Desk composer (and the project's @ chip); nothing is sent.
-  // studio#622: the words go through the composer seed (the store the Desk composer TAKES once, the
-  // way New Build seeds `/workflow-`) — a session draft keyed `desk` was read by no composer.
+  // S16a-4c: "New Demo" opens a chat (the Ask dock, concept A: the Desk has no composer) in the
+  // project, with "Make a demo of " in its box; nothing is sent.
   const seedDemo = useCallback((pid: string | null): void => {
     const p = pid !== null && pid !== 'default' && pid !== UNFILED_MOUNT ? projects.find((x) => x.id === pid) ?? null : null;
-    if (p !== null) addAboutChip('desk', { kind: 'project', key: `project:${p.id}`, label: p.name, projectId: p.id });
     onClose();
-    navigate('/');
-    seedComposer('desk', 'Make a demo of ');
-  }, [projects, onClose, navigate]);
+    openAskDock({ projectId: p?.id ?? null, seedText: 'Make a demo of ' });
+  }, [projects, onClose]);
   const gates = useGateStore((s) => s.gates);
 
   // Open: remember focus and focus the input; fetch the repo list only when the
@@ -558,12 +555,11 @@ export function CommandPalette({
         },
       },
       {
-        // S16a-4e: a new chat starts in the Desk composer (the project's @ chip when one is ambient).
+        // S16a-4e: a new chat — the Ask dock, in the ambient project when there is one.
         name: 'New Chat',
         action: () => {
           onClose();
-          navigate('/');
-          seedNewChat(projectId, projectId === null ? null : projects.find((p) => p.id === projectId)?.name ?? null);
+          seedNewChat(projectId);
         },
       },
       // The §3.4 fork's other two tines (DES-FEEDBACK-003 §8.4, slice N): the

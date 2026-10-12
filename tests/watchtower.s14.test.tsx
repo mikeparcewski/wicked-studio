@@ -26,7 +26,7 @@ describe('the route', () => {
   });
 });
 
-const need = (key: string, at: number | null): NeedRow => ({ key, at } as unknown as NeedRow);
+const need = (key: string, at: number | null): NeedRow => ({ key, at, kind: 'gate' } as unknown as NeedRow);
 
 describe('the pill opens itself only for something new that needs you', () => {
   it('a new row raised after the page opened opens it; a row that was already waiting does not', () => {

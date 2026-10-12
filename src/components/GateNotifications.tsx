@@ -4,7 +4,7 @@ import { sessionProjectId } from '../hooks/ambientProject.js';
 import { useGateStore } from '../store/gates.js';
 import type { OpenGate } from '../store/gates.js';
 import { useMembershipStore } from '../store/membership.js';
-import { plainGateQuestion, plainRunTitle } from '../board/deskWords.js';
+import { jobTitle, plainGateQuestion } from '../board/deskWords.js';
 
 /**
  * §7.1 (DES-UX-001, slice AA): how long an announcement dwells before it
@@ -108,8 +108,8 @@ export function GateNotifications({ onSelect, runId, projectId = null, runs = []
   if (visible.length === 0) return <></>;
 
   const workOf = (id: string): string | null => {
-    const problem = runs.find((r) => r.session.id === id)?.session.problem ?? '';
-    const t = plainRunTitle(problem).trim();
+    const v = runs.find((r) => r.session.id === id);
+    const t = v === undefined ? '' : jobTitle(v.session).trim();
     return t === '' ? null : t;
   };
 

@@ -21,6 +21,11 @@ const STEP_NOUN: Readonly<Record<string, string>> = {
   deliver: 'delivery', demo: 'demo', record: 'recording',
 };
 
+/** A step id in plain words ("recon" → "research"); an id not listed reads as its words. */
+export function stepNoun(id: string): string {
+  return STEP_NOUN[id.toLowerCase()] ?? id.replace(/[_-]+/g, ' ');
+}
+
 /** Engine text a default-layer line never carries — the ` ||| PHASE SCOPE:` scaffold included (studio#464). */
 const ENGINE_TEXT = /\b(?:unit|rev|band|ord)\s*\d|\b(?:manual|auto) mode\b|→|\bgate_?kind\b|\|\|\|/i;
 
@@ -118,6 +123,24 @@ function pausedStepQuestion(p: string, gateKind: string | undefined): string | n
  *  the title fold cut "Onboard repository: <name>" at its colon, so every one read the same. */
 export function plainRunTitle(problem: string): string {
   return onboardTitle(problem) ?? askTitle(problem) ?? humanTitle(problem);
+}
+
+/**
+ * A run's title on every surface (operator ruling 2026-10-12: crew derives short job titles). crew's
+ * `session.title` (api-types 0.113.0, read tolerantly until studio's pinned contract carries it) when
+ * the daemon serves one; otherwise the run's own first-clause cut ({@link plainRunTitle}) — never an
+ * invented title. The full words stay in `problem`, for the hover title.
+ */
+export function jobTitle(session: { problem?: string | null; id: string; title?: unknown }): string {
+  const t = (session as { title?: unknown }).title;
+  if (typeof t === 'string' && t.trim() !== '') return t.trim();
+  return plainRunTitle(session.problem || session.id);
+}
+
+/** The words a run's hover title shows: the whole problem, uncut, when it says more than the title. */
+export function jobTitleFull(session: { problem?: string | null; id: string; title?: unknown }): string {
+  const problem = (session.problem ?? '').trim();
+  return problem === '' ? jobTitle(session) : fullRunTitle(problem);
 }
 
 /** The same title, uncut (for a hover/focus title when the rail or a card clamps it). */

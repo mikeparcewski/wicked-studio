@@ -3,7 +3,8 @@
 desk_calm_test.py — S15a: the Desk is DARK WHEN HEALTHY, a STALL IS AN EXCEPTION, and ZERO IS QUIET
 (1440x700, on the Desk). The desk counterpart of wave1_dark, wave1_stall and wave1_tone:
 Home showed these through its bands and count tiles; the Desk has neither, so the same behaviours are
-read off its one sentence, its list and its project sentences.
+read off its one sentence, its list and the rail (concept A: the count is the rail badge — decisions
++ failures — and the sentence says what waits and what failed).
 
   healthy   the `wave1` corpus (3 executing runs, 1 completed, no gates, no failures): the sentence
             reads "Nothing needs you." with no highlight; the list has no row; the 3 executing runs read
@@ -57,13 +58,18 @@ ANIMATED = """() => [...document.querySelectorAll('[data-testid="desk"] *')].fil
 ROWS = """() => [...document.querySelectorAll('[data-testid="need-row"], [data-testid="need-member"]')]
   .map((r) => ({ key: r.dataset.key, kind: r.dataset.kind }))"""
 
-SESSIONS = """() => [...document.querySelectorAll('[data-testid="desk-session"]')]
+SESSIONS = """() => [...document.querySelectorAll('[data-testid="rail-session"]')]
   .map((s) => ({ run: s.dataset.runId, state: s.dataset.state }))"""
 
 
 def headline(page) -> dict:
-    return page.evaluate("""() => { const h = document.querySelector('[data-testid="desk-headline"]');
-      return h ? { count: h.dataset.count, text: h.textContent.trim(), marked: !!h.querySelector('mark') } : null; }""")
+    # Concept A: the count is the rail badge (absent = 0); "marked" = the sentence is not calm.
+    return page.evaluate("""() => { const h = document.querySelector('[data-testid="desk-story"]');
+      const b = document.querySelector('[data-testid="desk-rail-badge"]');
+      if (!h) return null;
+      const text = h.textContent.trim();
+      const calm = /nothing is waiting for you/.test(text) && !/failed|stopped moving/.test(text);
+      return { count: b ? b.textContent.trim() : '0', text, marked: !calm }; }""")
 
 
 dist = ensure_build(fail)
@@ -84,7 +90,9 @@ with sync_playwright() as p:
         page.goto(f"{origin}/", wait_until="networkidle")
         page.get_by_test_id("desk").wait_for(state="visible", timeout=15000)
         try:
-            page.wait_for_selector(f'[data-testid="desk-headline"][data-count="{count}"]', timeout=15000)
+            page.wait_for_function("""(c) => { const h = document.querySelector('[data-testid="desk-story"]');
+              const b = document.querySelector('[data-testid="desk-rail-badge"]');
+              return !!h && (b ? b.textContent.trim() : '0') === c; }""", arg=count, timeout=15000)
         except Exception:  # noqa: BLE001 — the check that follows reports what it read
             pass
         page.wait_for_timeout(500)
@@ -95,7 +103,7 @@ with sync_playwright() as p:
     page.screenshot(path=str(SHOTS / "desk-calm-healthy.png"))
     h = headline(page)
     check("healthy-sentence-is-calm", h is not None and h["count"] == "0" and not h["marked"]
-          and h["text"].startswith("Nothing needs you"), headline=h)
+          and "nothing is waiting for you" in h["text"], headline=h)
     rows = page.evaluate(ROWS)
     check("healthy-no-row", rows == [], rows=rows)
     sessions = page.evaluate(SESSIONS)
@@ -129,8 +137,7 @@ with sync_playwright() as p:
         pass
     # studio#723: the headline waits until the count holds still — wait for its marked number.
     try:
-        page.wait_for_function("""() => { const h = document.querySelector('[data-testid="desk-headline"]');
-            return !!h && h.dataset.count !== '0'; }""", timeout=8000)
+        page.wait_for_function("""() => !!document.querySelector('[data-testid="desk-rail-badge"]')""", timeout=8000)
     except Exception:  # noqa: BLE001 — reported below
         pass
     page.screenshot(path=str(SHOTS / "desk-calm-stall.png"))

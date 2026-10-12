@@ -2,7 +2,7 @@ import type { Project, RepoEntry, SessionView } from '../api/types.js';
 import type { Diagnostics } from '../api/diagnostics.js';
 import { newestFailedRun, type NeedRow } from '../board/needsYou.js';
 import { statusCounts } from '../board/windowStats.js';
-import { humanTitle } from './runIdentity.js';
+import { jobTitle } from '../board/deskWords.js';
 import { PACK_OPENING } from '../board/askPack.js';
 
 /**
@@ -244,33 +244,33 @@ export function askPrompts({ runs, needRows, projects, repos }: AskPromptSeed): 
   const prompts: { label: string; text: string }[] = [];
   const failed = newestFailedRun(needRows, runs);
   if (failed !== undefined) {
-    const title = humanTitle(failed.session.problem);
+    const title = jobTitle(failed.session);
     prompts.push({
-      label: `Why did run ${failed.session.id.slice(0, 8)} fail?`,
-      text: `Why did run ${failed.session.id} ("${title}") fail? Walk the run record and its evidence.`,
+      label: `Why did “${title}” fail?`,
+      text: `Why did the job “${title}” (${failed.session.id}) fail? Walk its record and its evidence.`,
     });
   }
   const project = projects.find((p) => p.id !== 'default');
   if (project !== undefined) {
     prompts.push({
-      label: `What's in project ${project.name}?`,
-      text: `What's in project "${project.name}" (${project.id}) — runs, docs, repos, and how healthy is it?`,
+      label: `What’s in ${project.name}?`,
+      text: `What’s in the project “${project.name}”: its jobs, documents and repositories, and how healthy is it?`,
     });
   }
   const repo = repos[0];
   if (repo !== undefined) {
     prompts.push({
-      label: `What changed in repo ${repo.name}?`,
-      text: `What changed in repo "${repo.name}" recently? Use its code graph and run history.`,
+      label: `What changed in ${repo.name}?`,
+      text: `What changed in the repository “${repo.name}” recently? Use its code and its job history.`,
     });
   }
   prompts.push({
-    label: 'Diagnose studio',
-    text: 'Diagnose this studio installation — the app, its daemon, and its dependencies. Anything unhealthy in the context pack or the stores?',
+    label: 'Is studio healthy?',
+    text: 'Is this studio healthy: the app, its service and what they depend on? Flag anything that is not.',
   });
   prompts.push({
-    label: 'Is ACP healthy across the CLIs?',
-    text: 'Is ACP healthy across the CLIs? Compare sessions started vs fallbacks per CLI and flag anything degrading.',
+    label: 'Are the helpers working well?',
+    text: 'Are the helpers working well? Compare how often each one started its sessions against how often it fell back, and flag any that are getting worse.',
   });
   return prompts;
 }

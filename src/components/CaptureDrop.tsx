@@ -38,7 +38,7 @@ const S = {
   },
 } as const satisfies Record<string, React.CSSProperties>;
 
-export function CaptureDrop({ runs, pathname = '/', inline = false, opens = 'down', onReview }: {
+export function CaptureDrop({ runs, pathname = '/', inline = false, opens = 'down', align = 'start', onReview }: {
   runs: readonly SessionView[];
   /** The route the drop sits on: its project (if any) is the default target. */
   pathname?: string;
@@ -47,6 +47,9 @@ export function CaptureDrop({ runs, pathname = '/', inline = false, opens = 'dow
   /** Which way the popover opens from its button: `down` (Home's verb row), or `up` where the
    *  button sits in a bottom band (the Desk's Start row) and a downward form would leave the screen. */
   opens?: 'down' | 'up';
+  /** Which edge of the button the popover lines up with: `end` where the button sits at the right
+   *  of its row (the Desk's tools row), so the form never runs off the screen. */
+  align?: 'start' | 'end';
   /** Where "Review" goes: Home's Needs You triage. Absent = already there (no link). */
   onReview?: (() => void) | undefined;
 }): React.ReactElement | null {
@@ -111,7 +114,7 @@ export function CaptureDrop({ runs, pathname = '/', inline = false, opens = 'dow
           maxHeight: '60dvh', overflowY: 'auto',
         } : {
           position: 'absolute', ...(opens === 'up' ? { bottom: 'calc(100% + 6px)' } : { top: 'calc(100% + 6px)' }),
-          left: 0, width: 'min(440px, 90vw)', zIndex: 45,
+          ...(align === 'end' ? { right: 0 } : { left: 0 }), width: 'min(440px, 90vw)', zIndex: 45,
         }),
       }}
     >
@@ -190,7 +193,7 @@ export function CaptureDrop({ runs, pathname = '/', inline = false, opens = 'dow
         style={inline ? { alignSelf: 'flex-start' } : undefined}
         title="Drop notes, a transcript or a whiteboard photo; the team files what they say as proposals"
       >
-        Capture
+        Capture notes
         {/* Home: the last capture's count rides the verb itself (one row; the Needs You group below
             carries the consequence split, the full line is the title and the open drop's). */}
         {!inline && statusData !== null && cap.filed !== null && (

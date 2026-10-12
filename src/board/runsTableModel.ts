@@ -1,5 +1,5 @@
 import type { SessionView } from '../api/types.js';
-import { plainRunTitle } from './deskWords.js';
+import { jobTitle } from './deskWords.js';
 import { endedAtMs, finishedAtMs } from './needsYou.js';
 import { sessionIdOf, sessionState, type SessionState } from './sessionModel.js';
 import { matchesSessionFilter, type SessionFilter } from './everythingModel.js';
@@ -71,7 +71,7 @@ export function runRows(
       runId: v.session.id,
       sessionId: sessionIdOf(v, opts.runChatId),
       status: sessionState(v.session.status),
-      title: plainRunTitle(v.session.problem || v.session.id),
+      title: jobTitle(v.session),
       projectId,
       project: opts.nameOf(projectId),
       repo,

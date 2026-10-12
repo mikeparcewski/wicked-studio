@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """
-desk_chat_moves_test.py — S16a-4e: a chat IS its session, and a new chat starts in the Desk
-composer. X1 (operator ruling 2026-10-09): the old chat addresses no longer redirect. At 1440x700
+desk_chat_moves_test.py — S16a-4e: a chat IS its session, and a new chat starts from the Desk's
+Chat (concept A: the Ask dock). X1 (operator ruling 2026-10-09): the old chat addresses no longer redirect. At 1440x700
 on the Desk, against the in-process fixture.
 
   1. RETIRED: /chat/new, /p/upload-endpoint/chat, /chat/<id> and /p/upload-endpoint/chat/r-pay-2
      each show the not-found page with the typed address kept; nothing is POSTed.
-  3. FIRST SEND: the Desk send opens exactly ONE chat (POST /chats) and one message.
+  3. FIRST SEND: the Desk's Chat send opens exactly ONE chat (POST /chats) and one message.
   4. CHAT ADDRESS: /s/<id>?q=1#t is the chat's session; a reply from the session composer posts to
      THAT chat — one POST /chats/<id>/messages, no second POST /chats.
   6. 0 page errors.
@@ -52,8 +52,6 @@ from playwright.sync_api import sync_playwright  # noqa: E402
 
 SHOTS.mkdir(parents=True, exist_ok=True)
 errors: list[str] = []
-FOCUSED = "() => document.activeElement?.getAttribute('data-testid') === 'desk-composer-input'"
-CHIP = f'[data-testid="composer"][data-composer="desk"] [data-testid="composer-chip"][data-kind="project"]'
 
 
 def chat_posts(posts: list) -> dict:
@@ -89,10 +87,12 @@ with sync_playwright() as p:
 
     # ── 3. the first send opens one chat ───────────────────────────────────────────────
     page.goto(f"{origin}/", wait_until="networkidle")
-    composer = page.get_by_test_id("desk-composer-input")
+    # Concept A: the Desk's Chat opens the Ask dock — the one chat surface — and its Send opens the chat.
+    page.get_by_test_id("desk-chat").click()
+    composer = page.get_by_test_id("assist-input")
     composer.wait_for(timeout=15000)
     composer.fill("summarize the last 10 commits as release notes")
-    composer.press("Enter")
+    page.get_by_test_id("assist-send").click()
     try:
         page.wait_for_function("() => !!JSON.parse(sessionStorage.getItem('wicked.ask.session') || '{}').chatId", timeout=15000)
     except Exception as e:  # noqa: BLE001

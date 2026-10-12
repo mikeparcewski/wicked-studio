@@ -16,7 +16,6 @@ import {
   askPrompts,
   buildContextPack,
   PACK_JOIN,
-  contextPackSummary,
   sectionLabel,
   type DiagnosticsState,
 } from './askContext.js';
@@ -88,7 +87,12 @@ function stillAnswering(chatId: string): (e: unknown) => never {
   };
 }
 
-export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoffTaken, sendProjectId, sendFresh = false, sendPrimary, sendChatId }: {
+/** "the Desk" for Home: the place words the dock's header uses. */
+function placeWords(label: string): string {
+  return label === 'Home' ? 'the Desk' : label;
+}
+
+export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoffTaken, sendProjectId, sendFresh = false, sendPrimary, sendChatId, startProjectId, startText, startFresh = false }: {
   runs: SessionView[];
   pathname: string;
   /** Collapsing the dock closes Ask entirely — the launcher bubble/shortcut reopen it. */
@@ -112,6 +116,12 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
   /** S16a-4e: the handoff is a reply into THIS chat (the chat session on screen): the dock resumes
    *  it (and stores it as its session) instead of its own stored chat. */
   sendChatId?: string;
+  /** Concept A (`openAskDock`): open a FRESH chat scoped to this project, nothing sent. */
+  startProjectId?: string;
+  /** Words placed in the box when the dock opens, never sent (⌘K "New demo"). */
+  startText?: string;
+  /** Open a FRESH chat (the Desk's Chat): the stored chat is not resumed. */
+  startFresh?: boolean;
 }): React.ReactElement {
   // The letters that opened the dock (type-to-composer, §5.6 rule 4): read on mount, cleared
   // in an effect (a StrictMode double initializer must not read an already-emptied seed).
@@ -179,7 +189,7 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
   // handoff naming a project is always fresh: an open chat's scope cannot change, so the project
   // is honoured by a chat opened in it (before the composer's first send that IS its chat).
   const [resumed] = useState(() => {
-    if (sendText !== undefined && (sendFresh || sendProjectId !== undefined)) {
+    if ((sendText !== undefined && (sendFresh || sendProjectId !== undefined)) || (sendText === undefined && (startProjectId !== undefined || startFresh))) {
       forgetAskSession();
       return null;
     }
@@ -210,7 +220,7 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
   // from the CURRENT route each render; only a manual pick is state, and it survives navigation.
   // `ambientProjectId` is the one project-from-route rule (`/p/default` = Unfiled = none).
   const [manualScope, setManualScope] = useState<AskScopeChoice | null>(() =>
-    (sendProjectId !== undefined ? `project:${sendProjectId}` : null));
+    (sendProjectId !== undefined ? `project:${sendProjectId}` : startProjectId !== undefined ? `project:${startProjectId}` : null));
   const scopeChoice: AskScopeChoice = manualScope ?? defaultAskScope(ambientProjectId(pathname));
   const scopeChoiceRef = useRef(scopeChoice);
   scopeChoiceRef.current = scopeChoice;
@@ -355,16 +365,16 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
       context={{
         surface: 'ask',
         title: 'Ask',
+        // Concept A (DES-frontdoor): the Desk's Chat lands here, so the default layer speaks plainly;
+        // what the question carries stays in the context pack, never in this line.
         contextLabel:
           openedScope === undefined
-            ? `here: ${sectionLabel(pathname)}`
-            : `here: ${sectionLabel(pathname)} · ${describeResolvedScope(openedScope)}`,
-        placeholder: 'Ask about projects, repos, runs — or this studio itself…',
+            ? `from ${placeWords(sectionLabel(pathname))}`
+            : `from ${placeWords(sectionLabel(pathname))} · ${describeResolvedScope(openedScope)}`,
+        placeholder: 'Ask about your projects, repositories and jobs, or studio itself…',
         hint:
-          'Your question opens a governed chat session — the agents carry the estate/garden ' +
-          'tooling that reads the code graph, the stores, and the run record, so they can answer ' +
-          'about your projects AND diagnose the app itself. ' +
-          contextPackSummary(diag),
+          'Ask a question and helpers answer it from your code, your jobs and studio’s own records. ' +
+          'Nothing changes until you say so.',
         prompts,
         controls:
           openedScope === undefined ? (
@@ -397,7 +407,7 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
       }}
       fill
       typeTarget="ask"
-      initialText={handoff ?? typedSeed}
+      initialText={handoff ?? (typedSeed !== '' ? typedSeed : startText ?? '')}
       sendOnOpen={handoff !== undefined && handoff.trim() !== ''}
       onExpandChat={
         navigate === undefined

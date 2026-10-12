@@ -105,11 +105,13 @@ with sync_playwright() as p:
     # ── 1. one voice: ask from the Desk, read the session ─────────────────────────
     page = new_page(browser)
     page.goto(f"{origin}/", wait_until="networkidle")
-    page.get_by_test_id("desk-composer-input").wait_for(state="visible", timeout=15000)
+    page.get_by_test_id("desk-chat").wait_for(state="visible", timeout=15000)
     # The Desk's rows BEFORE the ask (by key): the ask's turn gate must add no row and remove none.
     rows_before = page.evaluate("""() => [...document.querySelectorAll('[data-testid="need-row"]')].map((n) => n.dataset.key)""")
-    page.get_by_test_id("desk-composer-input").fill("why does greet() not trim its input?")
-    page.get_by_test_id("desk-composer-input").press("Enter")
+    page.get_by_test_id("desk-chat").click()
+    page.get_by_test_id("assist-input").wait_for(state="visible", timeout=10000)
+    page.get_by_test_id("assist-input").fill("why does greet() not trim its input?")
+    page.get_by_test_id("assist-send").click()
     for _ in range(60):
         posts = ask_posts(origin)
         if posts:
@@ -208,13 +210,13 @@ with sync_playwright() as p:
     # ── 4. the turn gate draws nothing ────────────────────────────────────────────
     check("session-waiting", t2["state"] == "waiting", state=t2["state"])
     page.goto(f"{origin}/", wait_until="networkidle")
-    page.get_by_test_id("desk-composer-input").wait_for(state="visible", timeout=15000)
+    page.get_by_test_id("desk-chat").wait_for(state="visible", timeout=15000)
     page.wait_for_timeout(500)
     with urllib.request.urlopen(f"{origin}/api/v1/chats/{chat_id}", timeout=10) as res:
         ask_run = json.loads(res.read())["path"]["runId"]
     desk = page.evaluate("""(rid) => ({
       keys: [...document.querySelectorAll('[data-testid="need-row"]')].map((n) => n.dataset.key),
-      session: [...document.querySelectorAll('[data-testid="desk-session"]')].filter((s) => s.dataset.runId === rid).map((s) => s.dataset.state) })""", ask_run)
+      session: [...document.querySelectorAll('[data-testid="rail-session"]')].filter((s) => s.dataset.runId === rid).map((s) => s.dataset.state) })""", ask_run)
     page.screenshot(path=str(SHOTS / "desk-ask-team-desk.png"))
     # The ask run waits at its turn gate: no row is keyed to it (`gate:<run>`, or any key naming the run),
     # the rows that were there before the ask are all still there, and its session is listed, waiting.
@@ -231,11 +233,11 @@ with sync_playwright() as p:
     page = fresh_ctx.new_page()
     page.on("pageerror", lambda e: errors.append(str(e)))
     page.goto(f"{origin}/", wait_until="networkidle")
-    page.get_by_test_id("desk-composer-input").wait_for(state="visible", timeout=15000)
+    page.get_by_test_id("desk-chat").wait_for(state="visible", timeout=15000)
     page.wait_for_timeout(500)
     fresh = page.evaluate("""(rid) => ({
       keys: [...document.querySelectorAll('[data-testid="need-row"]')].map((n) => n.dataset.key),
-      session: [...document.querySelectorAll('[data-testid="desk-session"]')].filter((s) => s.dataset.runId === rid).map((s) => s.dataset.state) })""", ask_run)
+      session: [...document.querySelectorAll('[data-testid="rail-session"]')].filter((s) => s.dataset.runId === rid).map((s) => s.dataset.state) })""", ask_run)
     with urllib.request.urlopen(f"{origin}/api/v1/runs/{ask_run}", timeout=10) as res:
         wire = json.loads(res.read())["run"]["session"]
     page.screenshot(path=str(SHOTS / "desk-ask-team-fresh-desk.png"))
@@ -251,9 +253,11 @@ with sync_playwright() as p:
     set_fixture(origin, ask_one_seat=True)
     page = new_page(browser)  # a fresh page: a fresh sessionStorage, so the dock opens a NEW chat
     page.goto(f"{origin}/", wait_until="networkidle")
-    page.get_by_test_id("desk-composer-input").wait_for(state="visible", timeout=15000)
-    page.get_by_test_id("desk-composer-input").fill("should greet() trim?")
-    page.get_by_test_id("desk-composer-input").press("Enter")
+    page.get_by_test_id("desk-chat").wait_for(state="visible", timeout=15000)
+    page.get_by_test_id("desk-chat").click()
+    page.get_by_test_id("assist-input").wait_for(state="visible", timeout=10000)
+    page.get_by_test_id("assist-input").fill("should greet() trim?")
+    page.get_by_test_id("assist-send").click()
     for _ in range(60):
         posts = ask_posts(origin)
         if len(posts) == 3:

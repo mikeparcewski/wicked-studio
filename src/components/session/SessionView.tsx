@@ -14,7 +14,7 @@ import {
 import type { Navigate } from '../../hooks/useRoute.js';
 import { useCapabilities } from '../../store/capabilities.js';
 import { readSessionVisit, useSessionDrafts, writeSessionVisit } from '../../store/sessionDrafts.js';
-import { plainRunTitle } from '../../board/deskWords.js';
+import { jobTitle } from '../../board/deskWords.js';
 import type { ChatCitations } from '../../api/chat-wire.js';
 import { IDLE_GATE_ACTION, useGateActionStore } from '../../board/gateActions.js';
 import { finishedDeliveryArm, proposalKindOf, statusSentence } from '../../board/proposalCard.js';
@@ -827,7 +827,7 @@ export function RunBlock({ view, badge, sessionId, navigate, solo = null }: {
     const mine = pinned !== null ? pinned === id : sessionId === `run:${id}`;
     return mine ? parseJump(searchNow) : null;
   }, [searchNow, id, sessionId]);
-  const runTitleText = plainRunTitle(view.session.problem || id);
+  const runTitleText = jobTitle(view.session);
   const soloHead = solo !== null && solo === runTitleText;
   return (
     <section data-testid="session-run" data-run-id={id} data-state={state} {...(acceptance !== null ? { 'data-acceptance': 'read' } : {})} className="wk-session-run">

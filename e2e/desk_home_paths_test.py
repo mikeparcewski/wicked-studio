@@ -17,7 +17,7 @@ graph file's absolute path — plus the wave-1 and team corpora, and proves:
      left out — and the technical-details switch is off (the default layer is what was scanned).
   3. #459: with GET /runs held 2.5 s, a fresh `/` shows `desk-loading` and no headline, no calm copy
      in the needs-you fold (rows already known may show), no "Nothing has been started yet."; when
-     /runs answers, the headline appears, the loading line goes, and the projects sentence is back.
+     /runs answers, the Desk's sentence appears, the loading line goes, and the projects are back.
   4. #464: the Desk row of a run paused before its first unit (crew's unit prompt: the goal and the
      ` ||| PHASE SCOPE:` scaffold) reads "Start the triage step?"; no "|||" on the Desk.
   5. #479: the delivered run's page — What / Where (worktree), Files referenced, Data used, Delivery (the push
@@ -116,7 +116,7 @@ with sync_playwright() as p:
                 sheets=True, home_paths=True, runs_delay_ms=0)
     page.goto(f"{origin}/", wait_until="networkidle")
     page.get_by_test_id("desk").wait_for(state="visible", timeout=15000)
-    page.get_by_test_id("desk-headline").wait_for(state="visible", timeout=15000)
+    page.get_by_test_id("desk-story").wait_for(state="visible", timeout=15000)
     page.wait_for_timeout(500)
 
     # ── the addresses: the ⌘K GO TO group — every destination, and one row of each parametric shape ──
@@ -202,13 +202,13 @@ with sync_playwright() as p:
       const d = document.querySelector('[data-testid="desk"]');
       const t = d ? d.innerText : '';
       return {
-        loading: d ? d.innerText.includes('Checking what needs you') : false,
-        headline: document.querySelectorAll('[data-testid="desk-headline"]').length,
+        loading: d ? d.innerText.includes('Checking what is going on') : false,
+        headline: document.querySelectorAll('[data-testid="desk-story"]').length,
         calm: document.querySelectorAll('[data-testid="home-calm"]').length,
         fold: document.querySelectorAll('[data-testid="needs-you-queue"]').length,
         nothingNeeds: t.includes('Nothing needs you'),
         nothingStarted: t.includes('Nothing has been started yet'),
-        projectsLoading: document.querySelectorAll('[data-testid="desk-projects-loading"]').length,
+        projectsLoading: document.querySelectorAll('[data-testid="desk-side-loading"]').length,
       };
     }""")
     page.screenshot(path=str(SHOTS / "desk-home-paths-loading.png"))
@@ -216,10 +216,10 @@ with sync_playwright() as p:
     # fold's calm copy, the headline's all-clear and the projects sentence may not.
     check("desk-holds-its-verdict", held["loading"] and held["headline"] == 0 and held["calm"] == 0
           and not held["nothingNeeds"] and not held["nothingStarted"] and held["projectsLoading"] == 1, **held)
-    page.get_by_test_id("desk-headline").wait_for(state="visible", timeout=15000)
+    page.get_by_test_id("desk-story").wait_for(state="visible", timeout=15000)
     after = page.evaluate("""() => ({
-      loading: document.querySelectorAll('[data-testid="desk-loading"], [data-testid="desk-projects-loading"]').length,
-      headline: (document.querySelector('[data-testid="desk-headline"]') || {}).innerText || '',
+      loading: document.querySelectorAll('[data-testid="desk-loading"], [data-testid="desk-side-loading"]').length,
+      headline: (document.querySelector('[data-testid="desk-story"]') || {}).innerText || '',
       fold: document.querySelectorAll('[data-testid="needs-you-queue"]').length,
       projects: document.querySelectorAll('[data-testid="desk-project"]').length,
     })""")
@@ -244,7 +244,7 @@ with sync_playwright() as p:
 
     # ── 4. #464: the pre-unit gate's Desk row says the step, never the engine's unit prompt ──
     page.goto(f"{origin}/", wait_until="networkidle")
-    page.get_by_test_id("desk-headline").wait_for(state="visible", timeout=15000)
+    page.get_by_test_id("desk-story").wait_for(state="visible", timeout=15000)
     page.wait_for_timeout(500)
     desk_text = page.evaluate("() => (document.querySelector('[data-testid=\"desk\"]') || document.body).innerText")
     page.screenshot(path=str(SHOTS / "desk-home-paths-prerun-gate.png"))

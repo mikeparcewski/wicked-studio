@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { SessionView } from '../api/types.js';
 import { calmCopy, type NeedRow } from '../board/needsYou.js';
-import { focusLockNote, memberPage, visibleMembers } from '../board/needsQueue.js';
+import { focusLockNote, memberPage, needCount, needSection, SECTIONS, visibleMembers, type NeedSection } from '../board/needsQueue.js';
 import { acceptMemoryPreview } from '../board/proposalTriage.js';
 import { useNeedsQueue, type NeedsQueue } from '../hooks/useNeedsQueue.js';
 import { useFocusLockStore } from '../store/focusLock.js';
@@ -14,6 +14,7 @@ import { ApprovalGroupActions } from './desk/ApprovalGroupActions.js';
 import { needRunId } from '../board/deskModel.js';
 import { deskVerb, plainRunTitle } from '../board/deskWords.js';
 import { Switch } from './ui/index.js';
+import { FailureWhy } from './desk/FailureWhy.js';
 
 /**
  * THE NEEDS-YOU QUEUE (DES-HOME-COMMAND-CENTER §3) — the home page's spine.
@@ -37,6 +38,14 @@ import { Switch } from './ui/index.js';
  * SAME fold that counts failures and gates, so a queue with rows can never
  * render calm (pinned by HomeBoard.queue.test.tsx).
  */
+
+/** "2 decisions", "1 failure", "81 to review" — the summary beside "Needs you". */
+const SECTION_WORDS: Record<NeedSection, (n: number) => string> = {
+  decision: (n) => (n === 1 ? 'decision' : 'decisions'),
+  failure: (n) => (n === 1 ? 'failure' : 'failures'),
+  other: () => 'worth a look',
+  review: () => 'to review',
+};
 
 const CSS = {
   row: {
@@ -64,6 +73,10 @@ export function NeedsYouQueue({ queue, runs, navigate, now }: {
 }): React.ReactElement {
   const at = now ?? Date.now();
   const sectionEl = useRef<HTMLElement | null>(null);
+  // "See why" on a failed job (DES-frontdoor §4 requirement 3): which rows have their reason open.
+  const [whyOpen, setWhyOpen] = useState<ReadonlySet<string>>(() => new Set());
+  const toggleWhy = (key: string): void => setWhyOpen((cur) => { const next = new Set(cur); if (next.has(key)) next.delete(key); else next.add(key); return next; });
+  const sectionCounts = SECTIONS.map((x) => ({ ...x, count: needCount(queue.rows.filter((r) => needSection(r) === x.id)) })).filter((x) => x.count > 0);
   const revealed = useRevealed(queue, sectionEl);
   const link = (path: string): { href: string; onClick: (e: React.MouseEvent) => void } => ({
     href: path,
@@ -224,7 +237,7 @@ export function NeedsYouQueue({ queue, runs, navigate, now }: {
           {isGroup ? (
             <span title={row.subject} className="wk-desk-need-title">{row.subject}</span>
           ) : (
-            <a {...link(row.subjectPath)} title={row.subject} className="wk-desk-need-title">{plainRunTitle(row.subject)}</a>
+            <a {...link(row.subjectPath)} title={row.subjectFull ?? row.subject} className="wk-desk-need-title">{plainRunTitle(row.subject)}</a>
           )}
           <span className="wk-desk-need-line">
             {/* studio#422: the question in plain words; the engine's prompt is underneath. */}
@@ -236,20 +249,43 @@ export function NeedsYouQueue({ queue, runs, navigate, now }: {
         {/* One slot for the row's moves (phone: its own line under the title, UX gate S1). */}
         {isGroup ? (
           <span className="wk-need-acts">
+            {/* Looking first (UX gate S3: HIER): "Show each" leads, the batch answers follow. */}
+            <button type="button" data-testid="need-group-toggle" aria-expanded={open} onClick={() => queue.toggle(row.key)} className="wk-need-act wk-need-act--quiet">
+              {open ? 'Fold' : 'Show each'}
+            </button>
             {row.action.kind === 'batch-onboard' && batchAct(row.action, row.text)}
             {row.action.kind === 'accept-memory' && acceptAct(row.action)}
             {row.action.kind === 'batch-approve' && <ApprovalGroupActions runIds={row.action.runIds} label={row.action.label} />}
-            <button type="button" data-testid="need-group-toggle" aria-expanded={open} onClick={() => queue.toggle(row.key)} className="wk-need-act">
-              {open ? 'Fold' : 'Show each'}
-            </button>
           </span>
         ) : row.kind === 'gate' && row.action.kind === 'open' ? (
           // S5: a gate is answered in its row (deliver, retry and escalation gates open their card).
           deskGate(row, row.action)
+        ) : row.kind === 'failed-run' && failedView(row) !== null ? (
+          <span className="wk-need-acts">
+            <button type="button" data-testid="need-why-toggle" aria-expanded={whyOpen.has(row.key)} onClick={() => toggleWhy(row.key)} className="wk-need-act">
+              {whyOpen.has(row.key) ? 'Hide why' : 'See why'}
+            </button>
+            {act(row)}
+          </span>
         ) : (
           <span className="wk-need-acts">{act(row)}</span>
         )}
       </div>
+    );
+  };
+
+  /** The failed run a `failed-run` row names, when the run list holds it. */
+  const failedView = (row: NeedRow): SessionView | null => {
+    const id = row.key.startsWith('fail:') ? row.key.slice('fail:'.length) : null;
+    return id === null ? null : runs.find((v) => v.session.id === id) ?? null;
+  };
+
+  const sectionTitle = (id: NeedSection): React.ReactElement => {
+    const sec = sectionCounts.find((x) => x.id === id);
+    return (
+      <p data-testid="need-section" data-section={id} className="wk-need-section">
+        {sec?.title}
+      </p>
     );
   };
 
@@ -280,7 +316,14 @@ export function NeedsYouQueue({ queue, runs, navigate, now }: {
       data-focus-lock={queue.focus.on ? 'on' : 'off'}
       className="wk-desk-needs"
     >
-      <p className="wk-desk-label">Needs you <span className="wk-desk-label-aside">most urgent first</span></p>
+      <h2 className="wk-desk-section-title">
+        Needs you
+        {sectionCounts.length > 0 && (
+          <span data-testid="needs-summary" className="wk-desk-section-aside">
+            {' · '}{sectionCounts.map((x) => `${x.count} ${SECTION_WORDS[x.id](x.count)}`).join(' · ')}
+          </span>
+        )}
+      </h2>
       {/* Just the top one (idea 10): the rest are hidden, never dropped — they come back when the
           held item clears, or at once with "Show all". */}
       {queue.focus.on && (
@@ -313,9 +356,11 @@ export function NeedsYouQueue({ queue, runs, navigate, now }: {
         </p>
       ) : (
         <div>
-          {queue.rows.map((row) => (
-            <div key={row.key} role="group">
+          {queue.rows.map((row, i) => (
+            <div key={row.key} role="group" data-section={needSection(row)}>
+              {(i === 0 || needSection(queue.rows[i - 1]!) !== needSection(row)) && sectionTitle(needSection(row))}
               {line(row, 'need-row')}
+              {whyOpen.has(row.key) && failedView(row) !== null && <FailureWhy view={failedView(row)!} />}
               {row.action.kind === 'accept-memory' && acceptPreview()}
               {row.members !== undefined && queue.expanded.has(row.key) && (
                 <div data-testid="need-members" data-group={row.key}>
@@ -397,7 +442,7 @@ export function FocusLockToggle({ items }: { items: number }): React.ReactElemen
   // UX audit row 31: a real switch (role="switch", label beside it), not an empty radio circle.
   return (
     <span className="wk-desk-focus-switch" title="Show only the most urgent item; the rest come back when it clears">
-      <Switch data-testid="home-focus-toggle" label="Just the top one" checked={on} onChange={(v) => useFocusLockStore.getState().setOn(v)} />
+      <Switch data-testid="home-focus-toggle" label="Show only the most urgent need" checked={on} onChange={(v) => useFocusLockStore.getState().setOn(v)} />
     </span>
   );
 }

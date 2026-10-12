@@ -12,8 +12,8 @@ main_scroll_test.py — the main pane scrolls; nothing on a top-level page sits 
            was) — a pane taller than its box must be one the user can scroll.
 
 On the Desk (the one shell since S18d) Home is the Desk: its own
-scroller must bring the last block of its list column fully into view above the Start row + composer
-band by the wheel alone, and the session rail and that band stay where they were. "pages" is the same.
+scroller must bring the last block of its list column fully into view (concept A: no composer
+band) by the wheel alone, and the session rail stays where it was. "pages" is the same.
 
 Captures (e2e/shots/): main-scroll-desk-home-top.png, main-scroll-desk-home-bottom.png.
 Env: FEEDBACK_PORT (default 4499). JSON report; exit 0/1.
@@ -94,7 +94,7 @@ LAST_SECTION = """() => {
 # The Desk (the one shell since S18d): its own scroller holds the list and the chores; the
 # floor is the Start row + composer band, which never scrolls.
 DESK_LAST_SECTION = """() => {
-  const main = document.querySelector('[data-place-scroll="desk"] .wk-desk-main');
+  const main = document.querySelector('[data-place-scroll="desk"] .wk-desk-a-main');
   if (!main) return null;
   const last = main.lastElementChild || main;
   const r = last.getBoundingClientRect();

@@ -7,6 +7,7 @@ import {
 } from '../../board/questionRow.js';
 import { secondsLeft, takeRestoredNote, undoDecision, useUndoQueue } from '../../board/undoQueue.js';
 import { useGateStore } from '../../store/gates.js';
+import { DecisionPreview } from './DecisionPreview.js';
 
 /**
  * A QUESTION, ANSWERED IN ITS DESK ROW (DES-STUDIO-REBUILD-001 §3 scenes 02/03/32, slice S5).
@@ -171,6 +172,7 @@ export function QuestionRow({ runId, units, openPath, openLabel, onOpen }: {
           <a href={openPath} onClick={onOpen} data-testid="need-act" data-act="open" className="wk-need-act">{openLabel}</a>
         </span>
       )}
+      {cls.kind === 'answer' && <DecisionPreview runId={runId} units={units} gateOrd={gate?.ord} events={events} revision={gate?.prompt ?? ''} openPath={openPath} onOpen={onOpen} />}
       {cls.kind === 'answer' && (
         <div
           ref={groupRef}

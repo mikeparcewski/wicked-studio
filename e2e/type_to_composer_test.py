@@ -21,9 +21,8 @@ SIMPLE gate waiting on b1:
             and fixture both) and no undo toast ever appeared.
 
 Captures: e2e/shots/type-to-composer-{home,gate,page}.png.
-On the Desk (the one shell since S18d) Home is the Desk, whose
-composer IS the page's composer (rule 4: the page's composer if one is mounted): body / card / button
-type into `desk-composer-input` and open no dock. "card" is b1's Desk row selected with ⌥J inside the
+On the Desk (the one shell since S18d) Home is the Desk, which has no composer since concept A
+(DES-frontdoor): body / card / button open the Ask dock with the letters in `assist-input`. "card" is b1's Desk row selected with ⌥J inside the
 needs-you list; "button" is that row's Answer button. page / gate / composite / zero are unchanged.
 
 Env: FEEDBACK_PORT (default 4362). Prints a JSON report; exit 0/1.
@@ -115,8 +114,8 @@ with sync_playwright() as p:
         page.get_by_test_id("gate-chip-b1").wait_for(state="visible", timeout=15000)
 
     def typed_into_dock(step: str) -> None:
-        # Under desk the Desk's composer is the page's composer: the letters land there, no dock opens.
-        target = "desk-composer-input"
+        # Concept A: the Desk has no composer, so the letters open the Ask dock and land in its box.
+        target = "assist-input"
         page.keyboard.type(TEXT)
         try:
             page.wait_for_function(f"() => ({VALUE})({json.dumps(target)}) === {json.dumps(TEXT)}", timeout=5000)
@@ -128,7 +127,7 @@ with sync_playwright() as p:
         active = page.evaluate(ACTIVE)
         ok = page.evaluate(VALUE, target) == TEXT and active == target and not toasts
         dock = page.get_by_test_id("assist-input").count()
-        ok = ok and dock == 0
+        ok = ok and dock == 1
         check(step, ok, composer=page.evaluate(VALUE, target), active=active, toasts=toasts, dock_open=dock)
 
     # ── body: nothing focused on Home ──────────────────────────────────────────────

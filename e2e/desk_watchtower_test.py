@@ -5,7 +5,7 @@ desk_watchtower_test.py — S14 (DES-STUDIO-REBUILD-001 §5.4, §11 S14): the Wa
 
 Against the in-process fixture (wave-1 corpus, b1 waiting at a gate, `watch_feed` on):
 
-  1. ONE COUNT: the Desk's "N things need you" and the rail pill's count are the same number; the
+  1. ONE COUNT: the Desk sentence's count and the rail pill's count are the same number; the
      Watchtower's sentence counts the open items its own feed shows (UX audit row 55).
   2. THE FEED: /watch lists TR's rows newest first — the open claim finding with "Jump in", the
      fixed older one, finished runs — and never the gate-attached finding (that is a line on the
@@ -74,7 +74,7 @@ with sync_playwright() as p:
     page.goto(f"{origin}/", wait_until="networkidle")
     page.get_by_test_id("desk").wait_for(state="visible", timeout=15000)
     page.wait_for_timeout(800)
-    desk = int(page.get_by_test_id("desk-headline").get_attribute("data-count") or "-1")
+    desk = int(page.get_by_test_id("desk-story").get_attribute("data-count") or "-1")
     pill = int(page.get_by_test_id("watch-pill").get_attribute("data-count") or "-2")
     card_hidden = not page.get_by_test_id("watch-pill-card").is_visible()
 

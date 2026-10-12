@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { Project } from '../src/api/types.js';
+import { useAskDock } from '../src/store/askDock.js';
 import { resetLaunchWizard, useLaunchWizard } from '../src/store/launchWizard.js';
 import { makeView } from './factories.js';
 
@@ -44,9 +45,7 @@ const { CommandPalette, clearPaletteRepoCache } = await import('../src/component
 const { useProjectsStore } = await import('../src/store/projects.js');
 const { useGateStore } = await import('../src/store/gates.js');
 const { useAppearanceStore } = await import('../src/theming/appearance.js');
-const { chipsOf, useComposerChips } = await import('../src/store/composerChips.js');
 const { useSessionDrafts } = await import('../src/store/sessionDrafts.js');
-const { useComposerSeed } = await import('../src/store/composerSeed.js');
 
 function proj(id: string, name: string, updated_at: number): Project {
   return { id, name, description: null, status: 'active', scope: `project:${id}`, created_at: 1, updated_at };
@@ -255,17 +254,13 @@ describe('the verb table (§1.3)', () => {
     expect(useSessionDrafts.getState().drafts['desk'] ?? '').toBe('');
   });
 
-  it('studio#622: New Demo seeds the Desk composer through the composer seed (with the project\'s @ chip), and writes no draft', () => {
-    useComposerChips.setState({ byComposer: {} });
-    useComposerSeed.setState({ seed: null });
-    useSessionDrafts.setState({ drafts: {} });
+  it('studio#622 + concept A: New Demo opens a chat in the project with "Make a demo of " typed, and sends nothing', () => {
+    useAskDock.setState({ request: null });
     const { navigate } = renderPalette({ projectId: 'q3-review-deck' });
     fireEvent.change(screen.getByTestId('palette-input'), { target: { value: '> new demo' } });
     fireEvent.click(rows().find((r) => r.textContent?.includes('New Demo'))!);
-    expect(navigate).toHaveBeenCalledWith('/');
-    expect(useComposerSeed.getState().seed).toEqual({ composerKey: 'desk', text: 'Make a demo of ' });
-    expect(chipsOf(useComposerChips.getState(), 'desk').map((c) => c.key)).toEqual(['project:q3-review-deck']);
-    expect(useSessionDrafts.getState().drafts['desk'] ?? '').toBe('');
+    expect(navigate).not.toHaveBeenCalled();
+    expect(useAskDock.getState().request).toMatchObject({ projectId: 'q3-review-deck', seedText: 'Make a demo of ' });
   });
 
   it('on a session page New job opens the wizard for THAT composer (its launch lands in that chat)', () => {

@@ -1,3 +1,4 @@
+import { Paperclip } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client.js';
 import { executingOrd } from '../api/run-state.js';
@@ -704,7 +705,7 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
       {/* Header */}
       <div className="flex shrink-0 items-center gap-2 px-3 py-2" style={{ borderBottom: '1px solid var(--surface-raised)' }}>
         <span className="text-[11px] font-semibold" style={{ color: 'var(--ink-high)' }}>{context.title}</span>
-        <span data-testid="assist-context" className="truncate font-mono text-[10px]" style={{ color: 'var(--ink-dim)' }}>
+        <span data-testid="assist-context" className="truncate text-[11px]" style={{ color: 'var(--ink-muted)' }}>
           {context.contextLabel}
         </span>
         {onExpandChat !== undefined && latestChatId !== null && (
@@ -724,14 +725,13 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
         <button
           type="button"
           data-testid="assist-dock-toggle"
-          aria-label={`Collapse ${context.title}`}
+          aria-label={`Close ${context.title}`}
           aria-expanded
-          title="Collapse (remembered)"
+          title="Close (your conversation is kept)"
           onClick={() => onOpenChange(false)}
-          className={`${onExpandChat !== undefined && latestChatId !== null ? '' : 'ml-auto '}rounded px-1 text-sm focus:outline-none focus-visible:ring-1`}
-          style={{ color: 'var(--ink-dim)' }}
+          className={`${onExpandChat !== undefined && latestChatId !== null ? '' : 'ml-auto '}wk-btn wk-btn--quiet wk-btn--sm`}
         >
-          »
+          Close
         </button>
       </div>
 
@@ -756,7 +756,7 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
                       setText(p.text);
                       textareaRef.current?.focus();
                     }}
-                    className="rounded-full px-2.5 py-1 text-left text-[10px] focus:outline-none focus-visible:ring-1"
+                    className="wk-assist-prompt rounded-full px-2.5 py-1 text-left text-[11px] focus:outline-none focus-visible:ring-1"
                     style={{ border: '1px solid var(--surface-overlay)', color: 'var(--accent)', background: 'transparent' }}
                   >
                     {p.label}
@@ -874,10 +874,9 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
           aria-label="Attach files"
           title="Attach files (or drop them anywhere on the panel)"
           onClick={() => fileInput.current?.click()}
-          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-base font-light focus:outline-none focus-visible:ring-1"
-          style={{ background: 'var(--surface-raised)', color: 'var(--ink-dim)' }}
+          className="wk-btn wk-btn--icon wk-btn--quiet shrink-0"
         >
-          +
+          <Paperclip size={15} aria-hidden />
         </button>
         <div className="flex min-w-0 flex-1 items-end gap-2 rounded-2xl px-3 py-2" style={{ background: 'var(--surface-card)', border: '1px solid var(--surface-raised)' }}>
           <textarea

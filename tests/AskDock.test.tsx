@@ -130,10 +130,9 @@ describe('the context pack — diagnostics presence-gated, both fixtures', () =>
     wireDiagnostics('present');
     dock();
 
-    // The dock's empty state names what the pack will carry.
-    await waitFor(() =>
-      expect(screen.getByTestId('assist-empty')).toHaveTextContent('diagnostics cited (crew 0.7.6 · 1 stores · ACP health for 2 CLIs)'),
-    );
+    // Concept A: the dock's empty state speaks plainly; what the pack carries rides the send (below).
+    await waitFor(() => expect(screen.getByTestId('assist-empty')).toHaveTextContent('Nothing changes until you say so.'));
+    expect(screen.getByTestId('assist-empty')).not.toHaveTextContent('Context pack');
 
     await user.type(screen.getByTestId('assist-input'), 'diagnose the studio');
     await user.click(screen.getByTestId('assist-send'));
@@ -159,9 +158,7 @@ describe('the context pack — diagnostics presence-gated, both fixtures', () =>
     wireDiagnostics('absent');
     dock();
 
-    await waitFor(() =>
-      expect(screen.getByTestId('assist-empty')).toHaveTextContent('Diagnostics are NOT served by this daemon (older crew — no GET /api/v1/diagnostics)'),
-    );
+    await waitFor(() => expect(screen.getByTestId('assist-empty')).toHaveTextContent('Nothing changes until you say so.'));
 
     await user.type(screen.getByTestId('assist-input'), 'diagnose the studio');
     await user.click(screen.getByTestId('assist-send'));
@@ -182,17 +179,17 @@ describe('nothing launches without the user sending', () => {
     await waitFor(() => expect(screen.getByTestId('assist-prompts')).toBeInTheDocument());
     const chips = screen.getAllByTestId('assist-prompt');
     // The failed-run chip prefills with THAT run's identity.
-    const failChip = chips.find((c) => c.getAttribute('data-prompt')?.startsWith('Why did run'));
+    const failChip = chips.find((c) => c.getAttribute('data-prompt')?.startsWith('Why did'));
     expect(failChip).toBeDefined();
-    expect(failChip).toHaveAttribute('data-prompt', 'Why did run run-dead fail?');
+    expect(failChip).toHaveAttribute('data-prompt', 'Why did “ship the parser” fail?');
     await user.click(failChip!);
     const input = screen.getByTestId('assist-input');
     expect((input as HTMLTextAreaElement).value).toContain('run-dead-1');
     expect((input as HTMLTextAreaElement).value).toContain('ship the parser');
 
     // The always-on diagnostics chips exist too.
-    expect(chips.some((c) => c.getAttribute('data-prompt') === 'Diagnose studio')).toBe(true);
-    expect(chips.some((c) => c.getAttribute('data-prompt') === 'Is ACP healthy across the CLIs?')).toBe(true);
+    expect(chips.some((c) => c.getAttribute('data-prompt') === 'Is studio healthy?')).toBe(true);
+    expect(chips.some((c) => c.getAttribute('data-prompt') === 'Are the helpers working well?')).toBe(true);
 
     // NOTHING was sent by any of that.
     expect(openChat).not.toHaveBeenCalled();
@@ -214,10 +211,10 @@ describe('nothing launches without the user sending', () => {
 
     await waitFor(() => expect(screen.getByTestId('assist-prompts')).toBeInTheDocument());
     const chips = screen.getAllByTestId('assist-prompt');
-    const failChips = chips.filter((c) => c.getAttribute('data-prompt')?.startsWith('Why did run'));
+    const failChips = chips.filter((c) => c.getAttribute('data-prompt')?.startsWith('Why did'));
     // ONE failed-run chip, and it names the queue's newest failure.
     expect(failChips).toHaveLength(1);
-    expect(failChips[0]).toHaveAttribute('data-prompt', 'Why did run fresh-ru fail?');
+    expect(failChips[0]).toHaveAttribute('data-prompt', 'Why did “fresh breakage” fail?');
   });
 });
 

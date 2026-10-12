@@ -28,7 +28,7 @@ import { useDeliveredNow } from '../../store/postHocDeliver.js';
 import { useProjectsStore } from '../../store/projects.js';
 import { seatStandingWord } from '../HealthRailSection.js';
 import { SignInPanel } from '../SignInPanel.js';
-import { plainRunTitle } from '../../board/deskWords.js';
+import { jobTitle } from '../../board/deskWords.js';
 import { runTechParts, Tech } from '../Tech.js';
 import { ProjectEntry, ProjectsTab } from './ProjectsTab.js';
 import { projectRows } from '../../board/projectsModel.js';
@@ -632,7 +632,7 @@ function ArchivedRuns({ navigate, project, onChanged }: { navigate: Navigate; pr
               <li key={v.session.id} data-testid="everything-archived-run" data-run-id={v.session.id} className="wk-desk-session wk-everything-row wk-everything-actrow">
                 <a href={path} onClick={(e) => { e.preventDefault(); navigate(path); }} className="wk-desk-need-body wk-everything-grow">
                   {/* studio#510: the same word the rail uses — an onboarding run names its repository. */}
-                  <span className="wk-desk-session-title">{showText(plainRunTitle(v.session.problem || v.session.id))}</span>
+                  <span className="wk-desk-session-title">{showText(jobTitle(v.session))}</span>
                   {v.session.archive_note ? <span className="wk-desk-need-line">{showText(v.session.archive_note)}</span> : null}
                 </a>
                 <button type="button" data-testid="everything-unarchive" onClick={() => unarchive(v.session.id)} className="wk-btn wk-btn--secondary wk-btn--sm">Unarchive</button>

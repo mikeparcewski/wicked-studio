@@ -1,20 +1,10 @@
-import { useSessionDrafts } from '../store/sessionDrafts.js';
-import { addAboutChip } from '../store/composerChips.js';
+import { openAskDock } from '../store/askDock.js';
 
 /**
- * S16a-4e (DES-STUDIO-REBUILD-001 §4.1, §5.4; Amendment 5 §1): a chat IS its session, and a new one
- * starts in the Desk composer. (X1 retired the `/chat/…` and `/p/:pid/chat…` addresses that once
- * redirected here.)
+ * S16a-4e (DES-STUDIO-REBUILD-001 §4.1, §5.4; Amendment 5 §1): a chat IS its session. Concept A
+ * (DES-frontdoor, 2026-10-12): the Desk has no composer any more, so a new chat opens the one real
+ * chat surface, the Ask dock — a fresh chat scoped to the project when one is named; nothing is sent.
  */
-/** A new chat starts in the Desk composer: focused, with the project's `@` chip; nothing is sent. */
-export function seedNewChat(projectId: string | null, projectName: string | null): void {
-  if (projectId !== null && projectId !== 'default') {
-    addAboutChip('desk', { kind: 'project', key: `project:${projectId}`, label: projectName ?? projectId, projectId });
-  }
-  const draft = useSessionDrafts.getState().drafts['desk'];
-  if (draft === undefined) useSessionDrafts.getState().setDraft('desk', '');
-  requestAnimationFrame(() => {
-    const el = document.querySelector<HTMLTextAreaElement>('[data-testid="composer"][data-composer="desk"] textarea');
-    el?.focus();
-  });
+export function seedNewChat(projectId: string | null): void {
+  openAskDock({ projectId: projectId !== null && projectId !== 'default' ? projectId : null, fresh: true });
 }

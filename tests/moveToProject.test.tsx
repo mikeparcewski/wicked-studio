@@ -64,7 +64,7 @@ afterEach(cleanup);
 function surfaces(runs: SessionView[], both = false): void {
   render(<>
     <SessionRail runs={runs} needRows={[]} navigate={() => {}} pathname="/" />
-    {both && <Desk runs={runs} runsLoaded needRows={[]} now={1} navigate={() => {}} onAsk={() => {}} />}
+    {both && <Desk runs={runs} runsLoaded needRows={[]} now={1} navigate={() => {}} />}
   </>);
 }
 function run(projectId: string | null = null): SessionView {
@@ -82,10 +82,9 @@ function group(surface: 'rail' | 'desk'): HTMLElement | null {
 
 describe('move work into a project', () => {
   it('unfiled → attach only; both board models and membership update without reloading', async () => {
-    surfaces([run()], true);
+    surfaces([run()]);
     await pick('Beta');
     await waitFor(() => expect(group('rail')).toHaveAttribute('data-project-id', 'beta'));
-    expect(group('desk')).toHaveAttribute('data-project-id', 'beta');
     expect(wire.detachProjectMember).not.toHaveBeenCalled();
     expect(wire.attachProjectMember).toHaveBeenCalledExactlyOnceWith('beta', { kind: 'crew.run', ref: 'r1', attachedBy: 'studio' });
     expect(useMembershipStore.getState().projectIdByRun.r1).toBe('beta');
@@ -104,12 +103,11 @@ describe('move work into a project', () => {
     await waitFor(() => expect(group('rail')).toHaveAttribute('data-project-id', 'alpha'));
   });
 
-  it('Not in a project → detach only, including when chosen from the Desk', async () => {
+  it('Not in a project → detach only', async () => {
     members.alpha = [member('alpha', 'crew.run', 'r1')];
-    surfaces([run('alpha')], true);
-    await pick('Not in a project', 'desk');
-    await waitFor(() => expect(group('desk')).toHaveAttribute('data-project-id', ''));
-    expect(group('rail')).toHaveAttribute('data-project-id', '');
+    surfaces([run('alpha')]);
+    await pick('Not in a project');
+    await waitFor(() => expect(group('rail')).toHaveAttribute('data-project-id', ''));
     expect(wire.detachProjectMember).toHaveBeenCalledExactlyOnceWith('alpha', 'alpha:crew.run:r1');
     expect(wire.attachProjectMember).not.toHaveBeenCalled();
     expect(useMembershipStore.getState().projectIdByRun.r1).toBeUndefined();
@@ -130,11 +128,10 @@ describe('move work into a project', () => {
   it('failed attach → inline error shown and the row stays in its old group', async () => {
     members.alpha = [member('alpha', 'crew.run', 'r1')];
     wire.attachProjectMember.mockRejectedValueOnce(new Error('internal failure'));
-    surfaces([run('alpha')], true);
+    surfaces([run('alpha')]);
     await pick('Beta');
     await waitFor(() => expect(within(screen.getByTestId('session-move-picker')).getByRole('alert')).toHaveTextContent('Couldn’t move this work'));
     expect(group('rail')).toHaveAttribute('data-project-id', 'alpha');
-    expect(group('desk')).toHaveAttribute('data-project-id', 'alpha');
     expect(members.alpha).toEqual([member('alpha', 'crew.run', 'r1')]);
     expect(members.beta).toEqual([]);
     expect(within(screen.getByTestId('session-rail')).getByRole('status')).toHaveTextContent('Couldn’t move this work');
@@ -165,12 +162,12 @@ describe('move work into a project', () => {
     }
   });
 
-  it('desk-new-project is a small secondary .wk-btn with a Plus icon, opening the existing modal', async () => {
+  it('desk-new-project is a small quiet .wk-btn with a Plus icon in the Projects card, opening the existing modal', async () => {
     surfaces([], true);
     const button = screen.getByTestId('desk-new-project');
-    expect(button).toHaveClass('wk-btn', 'wk-btn--secondary', 'wk-btn--sm');
+    expect(button).toHaveClass('wk-btn', 'wk-btn--quiet', 'wk-btn--sm');
     expect(button.querySelector('svg.lucide-plus')).not.toBeNull();
-    expect(button.parentElement?.querySelector('p')).toHaveTextContent('Your projects');
+    expect(screen.getByTestId('desk-projects')).toContainElement(button);
     fireEvent.click(button);
     expect(screen.getByTestId('new-project-modal')).toBeInTheDocument();
   });

@@ -9,7 +9,7 @@ import { RequirementsModal } from './RequirementsModal.js';
 import type { CodeGraphData, GitCommit, GitContributor, RepoEntry, SessionView } from '../api/types.js';
 import { statusWord } from '../board/statusWords.js';
 import { relTime } from '../board/relTime.js';
-import { plainRunTitle } from '../board/deskWords.js';
+import { jobTitle } from '../board/deskWords.js';
 import { useMembershipStore } from '../store/membership.js';
 import { readErrorKind } from '../api/errors.js';
 import { EmptyState, PageFrame, SectionTitle, Skeleton, StateBanner, StatLine, TechDetails } from './ui/index.js';
@@ -442,7 +442,7 @@ function RunRow({ view, onSelect }: { view: SessionView; onSelect: (id: string) 
     <button type="button" data-testid="run-link" data-run-id={session.id} className="wk-list-row wk-pg-repo-run" onClick={() => onSelect(session.id)}>
       <span className="wk-list-row-status"><span className="wk-status-dot" data-status={status.tone} aria-hidden /></span>
       <span className="wk-pg-repo-run-text">
-        <span className="wk-list-row-title">{plainRunTitle(session.problem || 'Untitled run')}</span>
+        <span className="wk-list-row-title">{session.problem || (session as { title?: unknown }).title ? jobTitle(session) : 'Untitled run'}</span>
         <span className="wk-list-row-meta">
           {status.word}{at !== undefined ? <> · <span title={new Date(at).toLocaleString()}>{relTime(at)}</span></> : null}
         </span>
