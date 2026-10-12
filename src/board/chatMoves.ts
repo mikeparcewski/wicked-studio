@@ -6,5 +6,5 @@ import { openAskDock } from '../store/askDock.js';
  * chat surface, the Ask dock — a fresh chat scoped to the project when one is named; nothing is sent.
  */
 export function seedNewChat(projectId: string | null): void {
-  openAskDock({ projectId: projectId !== null && projectId !== 'default' ? projectId : null });
+  openAskDock({ projectId: projectId !== null && projectId !== 'default' ? projectId : null, fresh: true });
 }

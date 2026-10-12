@@ -128,7 +128,9 @@ export function Desk({ runs, runsLoaded, runsError = null, onRetryRuns, needRows
   }, [projects]);
   const runChatId = useCapabilities((s) => s.runChatId);
   const proposals = useNeedsSources((s) => s.proposals);
-  const spend = useWindowSpend(days);
+  // Spend is read again when work moves (a step finishes anywhere), never on a timer.
+  const workPrint = useMemo(() => String(runs.reduce((n, v) => n + (v.units ?? []).filter((u) => u.status === 'done').length, 0)), [runs]);
+  const spend = useWindowSpend(days, undefined, workPrint);
 
   const p = useMemo(() => pulse(runs, days, now), [runs, days, now]);
   const decisions = useMemo(() => needRows.filter((r) => needSection(r) === 'decision'), [needRows]);
@@ -161,7 +163,10 @@ export function Desk({ runs, runsLoaded, runsError = null, onRetryRuns, needRows
   const chartDone = useMemo(() => createdAtSeries(runs.filter((v) => v.session.archived_at == null && v.session.status === 'completed'), CHART_DAYS, now), [runs, now]);
   const working = p.running;
   const lastEnded = lastEndedWords(runs, now);
-  const asOf = new Date(now).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+  // "As of" is when the run list last changed (a read or a live update), never the render's clock.
+  const [readAt, setReadAt] = useState(() => Date.now());
+  useEffect(() => { if (runsLoaded) setReadAt(Date.now()); }, [runs, runsLoaded]);
+  const asOf = new Date(readAt).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
 
   const choresBlock = (chores.length > 0 || states.frozen || states.away || dead !== null || replaying) && (
     <section data-testid="desk-chores" aria-label="For whoever runs studio" data-lead={leadWithSignIn ? 'true' : 'false'} className="wk-desk-chores wk-card">
@@ -214,7 +219,9 @@ export function Desk({ runs, runsLoaded, runsError = null, onRetryRuns, needRows
 
   const spendNote = spend.phase === 'loading' ? 'Reading spend…'
     : spend.current === null ? 'Spend could not be read for this window'
-      : spend.previous !== null ? `${moneyWords(spend.previous)} the ${days} days before` : 'no earlier spend to compare';
+      : spend.partial ? 'at least: some helpers report no price'
+        : spend.truncated ? 'the newest jobs only: older ones were not read'
+          : spend.previous !== null ? `${moneyWords(spend.previous)} the ${days} days before` : 'no earlier spend to compare';
 
   return (
     <div data-testid="desk" data-object="desk" className="wk-desk wk-desk--a">
@@ -231,7 +238,7 @@ export function Desk({ runs, runsLoaded, runsError = null, onRetryRuns, needRows
         <header className="wk-desk-a-head">
           <div className="wk-desk-a-titles">
             <h1 className="wk-desk-a-title">Desk</h1>
-            <p data-testid="desk-as-of" className="wk-desk-a-when">As of {asOf} · all projects</p>
+            <p data-testid="desk-as-of" className="wk-desk-a-when">{readState === 'known' ? `As of ${asOf} · all projects` : readState === 'stale' ? 'As of the last read · all projects' : 'All projects'}</p>
           </div>
           <button type="button" data-testid="desk-command" className="wk-desk-cmd" onClick={onCommand} aria-label="Search, jump to anything, or start a job (Command K)">
             <Search size={15} aria-hidden className="wk-desk-cmd-icon" />
@@ -286,8 +293,8 @@ export function Desk({ runs, runsLoaded, runsError = null, onRetryRuns, needRows
                 <StatTile data-testid="desk-stat-started" label="Jobs started" value={p.started.count}
                   delta={hasPrev ? { current: p.started.count, previous: p.started.previous, versus: `vs the ${days} days before` } : null}
                   note={hasPrev ? null : 'no earlier window'} spark={days === 90 ? coarsen(p.started.series, 7) : p.started.series} />
-                <StatTile data-testid="desk-stat-waiting" label="Waiting on you" value={settledNeeds ? waiting : null}
-                  note={!settledNeeds ? 'Checking…' : waiting === 0 ? 'nothing is waiting' : oldestWait !== null ? `oldest ${relTime(oldestWait, now)}` : null} />
+                <StatTile data-testid="desk-stat-waiting" label="Waiting on you" value={!settledNeeds ? null : settled.phase === 'partial' ? `${waiting}+` : waiting}
+                  note={!settledNeeds ? 'Checking…' : settled.phase === 'partial' ? 'at least: some of what needs you could not be read' : waiting === 0 ? 'nothing is waiting' : oldestWait !== null ? `oldest ${relTime(oldestWait, now)}` : null} />
                 <StatTile data-testid="desk-stat-failed" label="Failed" value={p.failed.count}
                   note={p.failed.overall > p.failed.count ? `${p.failed.overall} failed in all` : p.failed.count === 0 ? `none in ${windowWords(days)}` : null} spark={days === 90 ? coarsen(p.failed.series, 7) : p.failed.series} sparkTone="fail" />
                 <StatTile data-testid="desk-stat-delivered" label="Delivered" value={p.delivered}
@@ -372,7 +379,7 @@ export function Desk({ runs, runsLoaded, runsError = null, onRetryRuns, needRows
                     {glances.map((g) => (
                       <li key={g.id} data-testid="desk-project" data-project-id={g.id} className="wk-desk-glance">
                         <div className="wk-desk-glance-text">
-                          <a href={projectDetailPath(g.id)} onClick={go(projectDetailPath(g.id))} data-testid="desk-project-view" className="wk-desk-glance-name">{g.name}</a>
+                          <a href={glancePath(g.id)} onClick={go(glancePath(g.id))} data-testid="desk-project-view" className="wk-desk-glance-name">{g.name}</a>
                           <span className="wk-desk-glance-meta">{glanceFacts(g)}</span>
                         </div>
                         {coarsen(g.series, 7).filter((x) => x > 0).length >= 2 && <RunSparkline counts={coarsen(g.series, 7)} width={72} height={22} color="var(--accent)" />}
@@ -412,6 +419,11 @@ export function Desk({ runs, runsLoaded, runsError = null, onRetryRuns, needRows
   );
 }
 
+/** A project row opens its dashboard; the unfiled shelf opens the work in no project (the rail's door). */
+function glancePath(id: string): string {
+  return id === 'default' ? everythingPath({ tab: 'projects' }) : projectDetailPath(id);
+}
+
 function pathOfRun(runs: readonly SessionView[], runId: string, pathOf: (v: SessionView) => string): string {
   const v = runs.find((x) => x.session.id === runId);
   return v === undefined ? sessionPath(`run:${runId}`) : pathOf(v);
@@ -423,10 +435,17 @@ const MARK_WORDS: Record<StepMark, string> = { done: 'done', fail: 'failed', gat
 export function StepTrack({ steps }: { steps: readonly StepMark[] }): React.ReactElement {
   const done = steps.filter((s) => s === 'done').length;
   return (
-    <span className="wk-steptrack" role="img" aria-label={steps.length === 0 ? 'No steps yet' : `${done} of ${steps.length} steps done`}>
+    <span className="wk-steptrack" role="img" aria-label={steps.length === 0 ? 'No steps yet' : trackWords(steps, done)}>
       {steps.length === 0 ? <i className="wk-steptrack-mark" data-mark="todo" /> : steps.map((s, i) => <i key={i} className="wk-steptrack-mark" data-mark={s} title={MARK_WORDS[s]} />)}
     </span>
   );
+}
+
+/** "3 of 7 steps done; step 4 failed" / "…; waiting on you at step 4" — every mark that is not plain. */
+function trackWords(steps: readonly StepMark[], done: number): string {
+  const notes = steps.map((s, i) => (s === 'fail' ? `step ${i + 1} failed` : s === 'gate' ? `waiting on you at step ${i + 1}` : s === 'run' ? `step ${i + 1} working` : s === 'stopped' ? `stopped at step ${i + 1}` : null))
+    .filter((x): x is string => x !== null);
+  return [`${done} of ${steps.length} steps done`, ...notes].join('; ');
 }
 
 export function StepLegend(): React.ReactElement {

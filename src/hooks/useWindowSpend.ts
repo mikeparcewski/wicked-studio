@@ -16,47 +16,62 @@ export interface WindowSpend {
   phase: 'loading' | 'done';
   current: number | null;
   previous: number | null;
+  /** Some helper worked in the window without a price on its usage: `current` is what was priced. */
+  partial: boolean;
   /** The daemon read only its newest runs (its per-read cap). */
   truncated: boolean;
 }
 
-/** Summed price of the seats' usage; null when no frame carried a price but usage happened. */
-export function spendOf(res: SeatRecordResponse | null, projectId?: string): number | null {
+/** Summed price of the seats' usage; null when nothing carried a price but usage happened. `partial`
+ *  says some seat worked without a price (its cost is unknown, so the sum is a floor, never a total). */
+export function spendOf(res: SeatRecordResponse | null, projectId?: string): { usd: number; partial: boolean } | null {
   if (res === null) return null;
   if (projectId !== undefined && (res as { project?: string }).project !== projectId) return null;
   const priced = res.seats.filter((s) => typeof s.costUsd === 'number');
-  if (priced.length === 0) return res.seats.some((s) => s.units > 0) ? null : 0;
-  return Math.round(priced.reduce((a, s) => a + (s.costUsd as number), 0) * 100) / 100;
+  const unpriced = res.seats.some((s) => s.costUsd === null && s.units > 0);
+  if (priced.length === 0) return unpriced ? null : { usd: 0, partial: false };
+  return { usd: Math.round(priced.reduce((a, s) => a + (s.costUsd as number), 0) * 100) / 100, partial: unpriced };
 }
 
-const cache = new Map<string, { at: number; res: SeatRecordResponse | null }>();
+/** Both reads of a window are taken together and cached together, so the window before is the
+ *  difference of two reads that end at the same moment (never two reads taken a minute apart). */
+const cache = new Map<string, { at: number; work: string; now: SeatRecordResponse | null; twice: SeatRecordResponse | null }>();
 const FRESH_MS = 60_000;
 
-async function read(days: number, projectId?: string): Promise<SeatRecordResponse | null> {
+const read = (days: number, projectId?: string): Promise<SeatRecordResponse | null> =>
+  Promise.resolve().then(() => api.getSeatRecord(days, projectId)).catch(() => null);
+
+async function readPair(days: number, projectId: string | undefined, work: string): Promise<{ now: SeatRecordResponse | null; twice: SeatRecordResponse | null }> {
   const key = `${days}\u0000${projectId ?? ''}`;
   const hit = cache.get(key);
-  if (hit !== undefined && Date.now() - hit.at < FRESH_MS) return hit.res;
-  const res = await Promise.resolve().then(() => api.getSeatRecord(days, projectId)).catch(() => null);
-  cache.set(key, { at: Date.now(), res });
-  return res;
+  // The same work and a fresh read: reuse it. New work (a step finished somewhere) reads again.
+  if (hit !== undefined && hit.work === work && Date.now() - hit.at < FRESH_MS) return hit;
+  const [now, twice] = await Promise.all([read(days, projectId), days * 2 <= 90 ? read(days * 2, projectId) : Promise.resolve(null)]);
+  const pair = { at: Date.now(), work, now, twice };
+  cache.set(key, pair);
+  return pair;
 }
 
-export function useWindowSpend(days: number, projectId?: string): WindowSpend {
+/**
+ * `work` is a fingerprint of the work the caller sees (e.g. how many steps have finished): when it
+ * changes, spend is read again, so a mounted Desk never keeps a total that new work has moved.
+ */
+export function useWindowSpend(days: number, projectId?: string, work = ''): WindowSpend {
   const [state, setState] = useState<{ key: string; spend: WindowSpend } | null>(null);
   const key = `${days}\u0000${projectId ?? ''}`;
   useEffect(() => {
     let live = true;
-    void (async () => {
-      const now = await read(days, projectId);
-      const twice = days * 2 <= 90 ? await read(days * 2, projectId) : null;
-      const current = spendOf(now, projectId);
+    void readPair(days, projectId, work).then(({ now, twice }) => {
+      const cur = spendOf(now, projectId);
       const both = spendOf(twice, projectId);
-      const previous = current !== null && both !== null && twice?.truncated !== true ? Math.max(0, Math.round((both - current) * 100) / 100) : null;
-      if (live) setState({ key, spend: { phase: 'done', current, previous, truncated: now?.truncated === true || twice?.truncated === true } });
-    })();
+      // Two reads a moment apart: the window before is real only when both are whole and unclipped.
+      const prev = cur !== null && both !== null && !cur.partial && !both.partial && twice?.truncated !== true && now?.truncated !== true
+        ? Math.round((both.usd - cur.usd) * 100) / 100 : null;
+      if (live) setState({ key, spend: { phase: 'done', current: cur?.usd ?? null, previous: prev !== null && prev >= 0 ? prev : null, partial: cur?.partial === true, truncated: now?.truncated === true || twice?.truncated === true } });
+    });
     return () => { live = false; };
-  }, [days, projectId, key]);
-  return state !== null && state.key === key ? state.spend : { phase: 'loading', current: null, previous: null, truncated: false };
+  }, [days, projectId, key, work]);
+  return state !== null && state.key === key ? state.spend : { phase: 'loading', current: null, previous: null, partial: false, truncated: false };
 }
 
 /** Test hook. */

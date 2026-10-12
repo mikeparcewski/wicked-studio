@@ -11,15 +11,17 @@ import { TechDetails } from '../ui/TechDetails.js';
  */
 export function FailureWhy({ view }: { view: SessionView }): React.ReactElement {
   const runId = view.session.id;
+  // A run that fails again (a new attempt, a new end) is read again while the reason is open.
+  const revision = `${runId}\u0000${view.session.attempt}\u0000${view.session.ended_at ?? ''}\u0000${view.session.status}`;
   const [frames, setFrames] = useState<{ id: string; list: readonly Record<string, unknown>[] | null } | null>(null);
   useEffect(() => {
     let live = true;
     api.getRunEvents(runId, ['stepFailed'])
-      .then(({ events }) => { if (live) setFrames({ id: runId, list: events as unknown as Record<string, unknown>[] }); })
-      .catch(() => { if (live) setFrames({ id: runId, list: null }); });
+      .then(({ events }) => { if (live) setFrames({ id: revision, list: events as unknown as Record<string, unknown>[] }); })
+      .catch(() => { if (live) setFrames({ id: revision, list: null }); });
     return () => { live = false; };
-  }, [runId]);
-  const read = frames !== null && frames.id === runId ? frames.list : undefined;
+  }, [runId, revision]);
+  const read = frames !== null && frames.id === revision ? frames.list : undefined;
   const why = failureWhy(view, read ?? []);
   return (
     <div data-testid="need-why" data-run-id={runId} className="wk-need-why">

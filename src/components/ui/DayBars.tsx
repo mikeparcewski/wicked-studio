@@ -43,7 +43,8 @@ export function DayBars({ series, part, now, label, partLabel, restLabel, height
             if (n <= 0) return null;
             const h = Math.max(2, (n / top) * height);
             const p = Math.min(n, part?.[i] ?? 0);
-            const ph = p > 0 ? Math.max(2, (p / top) * height) : 0;
+            // The share is of the drawn bar (after its 2 px floor), so a mixed day never paints all one colour.
+            const ph = p > 0 ? (p / n) * h : 0;
             const x = i * (bw + gap);
             return (
               <g key={i}>
@@ -67,8 +68,12 @@ export function DayBars({ series, part, now, label, partLabel, restLabel, height
       )}
       <table className="wk-visually-hidden">
         <caption>{label}</caption>
+        {part !== undefined && <thead><tr><th scope="col">Day</th><th scope="col">All</th><th scope="col">{partLabel ?? 'Part'}</th><th scope="col">{restLabel ?? 'Rest'}</th></tr></thead>}
         <tbody>
-          {busy.map(({ n, i }) => <tr key={i}><th scope="row">{fmt(dayOf(i))}</th><td>{n}</td></tr>)}
+          {busy.map(({ n, i }) => {
+            const p = Math.min(n, part?.[i] ?? 0);
+            return <tr key={i}><th scope="row">{fmt(dayOf(i))}</th><td>{n}</td>{part !== undefined && <><td>{p}</td><td>{n - p}</td></>}</tr>;
+          })}
         </tbody>
       </table>
     </figure>

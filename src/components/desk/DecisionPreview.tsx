@@ -19,27 +19,30 @@ export function previewLines(output: string, max = PREVIEW_LINES): { lines: stri
  * the finished step's output under the row's answers — read (`GET /runs/:id/units/:key/output`) only
  * when the row is opened. The intake gate (nothing ran yet) shows nothing; a failed read says so.
  */
-export function DecisionPreview({ runId, units, gateOrd, events, openPath, onOpen }: {
+export function DecisionPreview({ runId, units, gateOrd, events, revision = '', openPath, onOpen }: {
   runId: string;
   units: readonly WorkUnit[];
   gateOrd: number | undefined;
   events: readonly CoreEvent[] | null;
+  /** The gate's own words: a new gate on the same step (a retry) reads its output again. */
+  revision?: string;
   openPath: string;
   onOpen: (e: React.MouseEvent) => void;
 }): React.ReactElement | null {
   const showText = useDisplayText();
   const reviewing = events === null ? null : gateFrameFor(events, gateOrd)?.reviewingOrd ?? null;
   const reviewed = reviewedUnitFor(units, gateOrd, reviewing);
-  const key = reviewed === null ? null : unitKey(runId, reviewed.id, reviewed.ord);
+  const unit = reviewed === null ? null : unitKey(runId, reviewed.id, reviewed.ord);
+  const key = unit === null ? null : `${unit}\u0000${revision}`;
   const [read, setRead] = useState<{ key: string; text: string | null; failed: boolean } | null>(null);
   useEffect(() => {
     if (key === null) return;
     let live = true;
-    api.getUnitOutput(runId, key)
+    api.getUnitOutput(runId, unit!)
       .then(({ output }) => { if (live) setRead({ key, text: output, failed: false }); })
       .catch(() => { if (live) setRead({ key, text: null, failed: true }); });
     return () => { live = false; };
-  }, [runId, key]);
+  }, [runId, key, unit]);
   if (key === null) return null;
   const shown = read !== null && read.key === key ? read : null;
   const preview = shown?.text ? previewLines(shown.text) : null;

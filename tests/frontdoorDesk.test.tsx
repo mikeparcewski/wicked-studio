@@ -165,14 +165,15 @@ describe('spend from the seat record', () => {
   const res = (seats: Partial<SeatRecordResponse['seats'][number]>[], project?: string): SeatRecordResponse =>
     ({ days: 7, since: 0, until: 0, runsRead: 1, truncated: false, seats: seats as never, ...(project !== undefined ? { project } : {}) }) as SeatRecordResponse;
   it('sums the priced seats; unknown is null, never 0', () => {
-    expect(spendOf(res([{ costUsd: 1.234, units: 1 }, { costUsd: null, units: 1 }]))).toBe(1.23);
+    expect(spendOf(res([{ costUsd: 1.234, units: 1 }, { costUsd: null, units: 1 }]))).toEqual({ usd: 1.23, partial: true });
+    expect(spendOf(res([{ costUsd: 1.234, units: 1 }]))).toEqual({ usd: 1.23, partial: false });
     expect(spendOf(res([{ costUsd: null, units: 2 }]))).toBeNull();
-    expect(spendOf(res([]))).toBe(0);
+    expect(spendOf(res([]))).toEqual({ usd: 0, partial: false });
     expect(spendOf(null)).toBeNull();
   });
   it('trusts a project spend only when the daemon echoes the project', () => {
     expect(spendOf(res([{ costUsd: 2, units: 1 }]), 'p')).toBeNull();
-    expect(spendOf(res([{ costUsd: 2, units: 1 }], 'p'), 'p')).toBe(2);
+    expect(spendOf(res([{ costUsd: 2, units: 1 }], 'p'), 'p')).toEqual({ usd: 2, partial: false });
   });
 });
 

@@ -14,7 +14,7 @@ describe('S16a-4e — a new chat', () => {
 
   it('outside a project (or Unfiled) it opens the dock with its own default scope', () => {
     seedNewChat('default');
-    expect(useAskDock.getState().request?.projectId).toBeNull();
+    expect(useAskDock.getState().request).toMatchObject({ projectId: null, fresh: true });
     const first = useAskDock.getState().request!.nonce;
     seedNewChat(null);
     expect(useAskDock.getState().request!.nonce).toBe(first + 1);

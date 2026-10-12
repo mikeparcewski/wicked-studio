@@ -442,7 +442,7 @@ function RunRow({ view, onSelect }: { view: SessionView; onSelect: (id: string) 
     <button type="button" data-testid="run-link" data-run-id={session.id} className="wk-list-row wk-pg-repo-run" onClick={() => onSelect(session.id)}>
       <span className="wk-list-row-status"><span className="wk-status-dot" data-status={status.tone} aria-hidden /></span>
       <span className="wk-pg-repo-run-text">
-        <span className="wk-list-row-title">{session.problem ? jobTitle(session) : 'Untitled run'}</span>
+        <span className="wk-list-row-title">{session.problem || (session as { title?: unknown }).title ? jobTitle(session) : 'Untitled run'}</span>
         <span className="wk-list-row-meta">
           {status.word}{at !== undefined ? <> · <span title={new Date(at).toLocaleString()}>{relTime(at)}</span></> : null}
         </span>
