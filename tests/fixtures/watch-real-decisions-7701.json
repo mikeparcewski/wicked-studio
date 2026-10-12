@@ -1,0 +1,126 @@
+{
+ "recorded": "GET /api/v1/decisions on crew 0.9.11 (:7701), 2026-10-12T00:20Z: host=gate rows verbatim (one per choice/words shape); their run ids are crew test runs (crew#986), absent from GET /runs",
+ "mode": "ledger",
+ "decisions": [
+  {
+   "id": "dec_01a10c81-a74f-7ea5-939a-7dfd4c3e66a9",
+   "at": 1791211185999,
+   "project_id": null,
+   "host": "gate",
+   "origin": {
+    "actor": {
+     "id": "local",
+     "kind": "human",
+     "trust": "admin"
+    },
+    "auth_mode": "off",
+    "run_id": "it-run-1",
+    "words": "",
+    "choice": "approve",
+    "words_source": "typed",
+    "redacted": false
+   },
+   "derived": {
+    "statement": null,
+    "polarity": null,
+    "key": null,
+    "scope": "everywhere",
+    "steering_type": "development",
+    "template": null,
+    "exclusions": []
+   },
+   "route": "ledger",
+   "state": "recorded"
+  },
+  {
+   "id": "dec_01a10c7e-997f-735c-a947-a530616ed856",
+   "at": 1791210985855,
+   "project_id": null,
+   "host": "gate",
+   "origin": {
+    "actor": {
+     "id": "local",
+     "kind": "human",
+     "trust": "admin"
+    },
+    "auth_mode": "off",
+    "run_id": "land-amend-1",
+    "words": "also mention the change-freeze calendar next time",
+    "choice": "approve",
+    "words_source": "typed",
+    "redacted": false
+   },
+   "derived": {
+    "statement": null,
+    "polarity": null,
+    "key": null,
+    "scope": "everywhere",
+    "steering_type": "development",
+    "template": null,
+    "exclusions": []
+   },
+   "route": "ledger",
+   "state": "recorded"
+  },
+  {
+   "id": "dec_01a10c7e-992c-7935-97e5-a5522bdf7dc9",
+   "at": 1791210985772,
+   "project_id": null,
+   "host": "gate",
+   "origin": {
+    "actor": {
+     "id": "local",
+     "kind": "human",
+     "trust": "admin"
+    },
+    "auth_mode": "off",
+    "run_id": "land-reject-1",
+    "words": "",
+    "choice": "reject",
+    "words_source": "typed",
+    "redacted": false
+   },
+   "derived": {
+    "statement": null,
+    "polarity": null,
+    "key": null,
+    "scope": "everywhere",
+    "steering_type": "development",
+    "template": null,
+    "exclusions": []
+   },
+   "route": "ledger",
+   "state": "recorded"
+  },
+  {
+   "id": "dec_01a10c7c-0863-7898-9020-d51f561cd5f0",
+   "at": 1791210817635,
+   "project_id": null,
+   "host": "gate",
+   "origin": {
+    "actor": {
+     "id": "local",
+     "kind": "human",
+     "trust": "admin"
+    },
+    "auth_mode": "off",
+    "run_id": "r1",
+    "words": "",
+    "choice": "edit_plan",
+    "words_source": "typed",
+    "redacted": false
+   },
+   "derived": {
+    "statement": null,
+    "polarity": null,
+    "key": null,
+    "scope": "everywhere",
+    "steering_type": "development",
+    "template": null,
+    "exclusions": []
+   },
+   "route": "ledger",
+   "state": "recorded"
+  }
+ ]
+}

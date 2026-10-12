@@ -149,7 +149,7 @@ with sync_playwright() as p:
         page.goto(f"{origin}/watch", wait_until="networkidle")
         page.get_by_test_id("watchtower").wait_for(state="visible", timeout=15000)
         page.wait_for_timeout(500)
-        for kind in ("problem", "decision", "quiet", "done", "delivery"):
+        for kind in ("problem", "decision", "approved", "rejected", "quiet", "done", "delivery"):
             page.locator(f'[data-testid="watchtower-kind"][data-kind="{kind}"]').click()
             page.wait_for_timeout(250)
             if page.get_by_test_id("watchtower-row").count() > 0:
