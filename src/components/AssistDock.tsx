@@ -1,3 +1,4 @@
+import { Paperclip } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client.js';
 import { executingOrd } from '../api/run-state.js';
@@ -873,10 +874,9 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
           aria-label="Attach files"
           title="Attach files (or drop them anywhere on the panel)"
           onClick={() => fileInput.current?.click()}
-          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-base font-light focus:outline-none focus-visible:ring-1"
-          style={{ background: 'var(--surface-raised)', color: 'var(--ink-dim)' }}
+          className="wk-btn wk-btn--icon wk-btn--quiet shrink-0"
         >
-          +
+          <Paperclip size={15} aria-hidden />
         </button>
         <div className="flex min-w-0 flex-1 items-end gap-2 rounded-2xl px-3 py-2" style={{ background: 'var(--surface-card)', border: '1px solid var(--surface-raised)' }}>
           <textarea
