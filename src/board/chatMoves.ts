@@ -5,6 +5,6 @@ import { openAskDock } from '../store/askDock.js';
  * (DES-frontdoor, 2026-10-12): the Desk has no composer any more, so a new chat opens the one real
  * chat surface, the Ask dock — a fresh chat scoped to the project when one is named; nothing is sent.
  */
-export function seedNewChat(projectId: string | null, _projectName: string | null = null): void {
+export function seedNewChat(projectId: string | null): void {
   openAskDock({ projectId: projectId !== null && projectId !== 'default' ? projectId : null });
 }

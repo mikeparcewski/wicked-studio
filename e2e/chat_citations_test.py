@@ -89,15 +89,17 @@ with sync_playwright() as p:
         "document.addEventListener('DOMContentLoaded', () => { const s = document.createElement('style'); "
         f"s.textContent = {json.dumps(HIDE_GATE_TOASTS)}; document.head.appendChild(s); }});")
 
-    # S16a-4e: a new chat starts in the Desk composer (`/`); the send opens the
+    # S16a-4e + concept A: a new chat starts from the Desk's Chat (the Ask dock); the send opens the
     # chat, and the chat IS its session (/s/<chat>), whose thread wears the daemon's verdicts. The
     # fixture keeps the daemon's stored transcript (`chat_transcripts`), as GET /chats/:id answers.
     set_fixture(origin, repo=True, chat_scope=True, chat_transcripts=True)
     page.goto(f"{origin}/", wait_until="networkidle")
-    composer = page.get_by_test_id("desk-composer-input")
+    # Concept A: the Desk's Chat opens the Ask dock, and its Send opens the chat.
+    page.get_by_test_id("desk-chat").click()
+    composer = page.get_by_test_id("assist-input")
     composer.wait_for(timeout=15000)
     composer.fill("summarize the last 10 commits as release notes")
-    composer.press("Enter")
+    page.get_by_test_id("assist-send").click()
     page.wait_for_function("() => !!JSON.parse(sessionStorage.getItem('wicked.ask.session') || '{}').chatId", timeout=15000)
     chat_id = page.evaluate("() => JSON.parse(sessionStorage.getItem('wicked.ask.session') || '{}').chatId || ''")
     seat = "claude"

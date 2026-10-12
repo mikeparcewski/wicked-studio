@@ -88,7 +88,7 @@ function stillAnswering(chatId: string): (e: unknown) => never {
   };
 }
 
-export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoffTaken, sendProjectId, sendFresh = false, sendPrimary, sendChatId, startProjectId, startText }: {
+export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoffTaken, sendProjectId, sendFresh = false, sendPrimary, sendChatId, startProjectId, startText, startFresh = false }: {
   runs: SessionView[];
   pathname: string;
   /** Collapsing the dock closes Ask entirely — the launcher bubble/shortcut reopen it. */
@@ -116,6 +116,8 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
   startProjectId?: string;
   /** Words placed in the box when the dock opens, never sent (⌘K "New demo"). */
   startText?: string;
+  /** Open a FRESH chat (the Desk's Chat): the stored chat is not resumed. */
+  startFresh?: boolean;
 }): React.ReactElement {
   // The letters that opened the dock (type-to-composer, §5.6 rule 4): read on mount, cleared
   // in an effect (a StrictMode double initializer must not read an already-emptied seed).
@@ -183,7 +185,7 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
   // handoff naming a project is always fresh: an open chat's scope cannot change, so the project
   // is honoured by a chat opened in it (before the composer's first send that IS its chat).
   const [resumed] = useState(() => {
-    if ((sendText !== undefined && (sendFresh || sendProjectId !== undefined)) || (sendText === undefined && startProjectId !== undefined)) {
+    if ((sendText !== undefined && (sendFresh || sendProjectId !== undefined)) || (sendText === undefined && (startProjectId !== undefined || startFresh))) {
       forgetAskSession();
       return null;
     }

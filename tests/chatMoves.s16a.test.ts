@@ -8,15 +8,15 @@ afterEach(() => { useAskDock.setState({ request: null }); });
 
 describe('S16a-4e — a new chat', () => {
   it('opens the Ask dock scoped to the project, with nothing typed and nothing sent', () => {
-    seedNewChat('notes', 'Notes');
-    expect(useAskDock.getState().request).toMatchObject({ projectId: 'notes', seedText: '' });
+    seedNewChat('notes');
+    expect(useAskDock.getState().request).toMatchObject({ projectId: 'notes', seedText: '', fresh: true });
   });
 
   it('outside a project (or Unfiled) it opens the dock with its own default scope', () => {
-    seedNewChat('default', null);
+    seedNewChat('default');
     expect(useAskDock.getState().request?.projectId).toBeNull();
     const first = useAskDock.getState().request!.nonce;
-    seedNewChat(null, null);
+    seedNewChat(null);
     expect(useAskDock.getState().request!.nonce).toBe(first + 1);
   });
 });

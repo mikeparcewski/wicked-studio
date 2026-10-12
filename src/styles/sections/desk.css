@@ -64,7 +64,7 @@
 .wk-desk-cmd-kbd { flex-shrink: 0; font-family: var(--font-mono); font-size: var(--text-xs); color: var(--ink-muted); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 0 6px; background: var(--surface-raised); }
 .wk-desk-a-actions { display: flex; gap: var(--space-2); align-items: center; }
 .wk-desk-a-actions .wk-btn svg { margin-right: 4px; }
-.wk-desk-a-tools { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; margin-top: calc(-1 * var(--space-2)); }
+.wk-desk-a-tools { grid-column: 1 / -1; display: flex; align-items: center; justify-content: flex-end; gap: var(--space-3); flex-wrap: wrap; margin-top: calc(-1 * var(--space-3)); }
 .wk-desk-a-tools .wk-desk-orders { display: inline-flex; }
 .wk-desk-a-intro { display: flex; flex-direction: column; gap: var(--space-1); }
 .wk-desk-story { margin: 0; font-size: var(--text-md); line-height: var(--leading-body); color: var(--ink-body); max-width: 92ch; }
@@ -81,6 +81,8 @@
 .wk-desk-a-main, .wk-desk-a-side { display: flex; flex-direction: column; gap: var(--space-4); min-width: 0; }
 .wk-desk-a-card { min-width: 0; }
 .wk-desk--a .wk-desk-chores { padding: var(--space-4); }
+/* "While you were away" is one line in the page's own rhythm (the scroller's gap spaces it). */
+.wk-desk--a .wk-handover--desk-away { margin: 0; }
 
 /* Needs you inside its card: rows on hairlines (no card-in-card), sections labelled. */
 .wk-desk--a .wk-desk-needs .wk-desk-section-title { margin-bottom: var(--space-1); }
@@ -164,7 +166,7 @@
   .wk-desk-story { font-size: var(--text-sm); }
   .wk-desk-cmd-kbd { display: none; }
   /* The utility controls share one wrapping row (not one line each). */
-  .wk-desk--a .wk-desk-a-tools { margin-top: 0; gap: var(--space-2) var(--space-3); }
+  .wk-desk--a .wk-desk-a-tools { margin-top: 0; gap: var(--space-2) var(--space-3); justify-content: flex-start; }
   .wk-desk--a .wk-desk-a-tools .wk-desk-orders { flex-basis: auto; order: 0; }
   /* Four numbers on a phone: failures and deliveries are said in Needs you and the jobs list. */
   .wk-desk--a [data-testid="desk-stat-failed"], .wk-desk--a [data-testid="desk-stat-delivered"] { display: none; }

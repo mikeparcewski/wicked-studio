@@ -154,7 +154,7 @@ with sync_playwright() as p:
     page.get_by_test_id("desk").wait_for(state="visible", timeout=15000)
     page.get_by_test_id("desk-signin-lead").wait_for(state="visible", timeout=10000)
     lead = page.evaluate("""() => {
-      const main = document.querySelector('.wk-desk-main');
+      const main = document.querySelector('.wk-desk-a-main');
       const first = main ? main.firstElementChild?.dataset.testid : null;
       const chores = document.querySelector('[data-testid="desk-chores"]');
       return { first, lead: chores?.dataset.lead, text: document.querySelector('[data-testid="desk-signin-lead"]')?.innerText,

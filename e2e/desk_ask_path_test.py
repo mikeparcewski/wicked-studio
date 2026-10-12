@@ -93,24 +93,17 @@ def new_page(browser):
 
 
 def ask_from_desk(page, origin: str, text: str, expect_posts: int, project: str | None = "upload-endpoint") -> str:
-    """Ask from the Desk composer. With `project`, the message names it with an `@project` chip (the
-    composer's menu), so the chat is scoped to that project and its repo — the only kind of ask a
+    """Ask from the Desk's Chat (concept A: a fresh chat in the Ask dock). With `project`, the dock's
+    scope names it, so the chat is scoped to that project and its repo — the only kind of ask a
     creator proposal can be built from (§4.7; an `everything` ask is repo-less for building)."""
     page.goto(f"{origin}/", wait_until="networkidle")
-    box = page.get_by_test_id("desk-composer-input")
+    page.get_by_test_id("desk-chat").click()
+    box = page.get_by_test_id("assist-input")
     box.wait_for(state="visible", timeout=15000)
     if project is not None:
-        box.type("@")
-        page.locator('[data-testid="composer-menu"][data-trigger="@"]').wait_for(timeout=10000)
-        page.locator('[data-testid="composer-menu-item"]', has_text=project).first.click()
-        page.locator('[data-testid="composer-chip"][data-kind="project"]').wait_for(timeout=5000)
-        # The chip took the `@` token out of the box; type only once the caret is back at the end of it.
-        box.focus()
-        box.press("End")
-        page.wait_for_timeout(150)
-    box.type(text)
-    page.wait_for_function("(v) => (document.querySelector('[data-testid=\"desk-composer-input\"]') || {}).value === v", arg=text, timeout=5000)
-    box.press("Enter")
+        page.get_by_test_id("ask-scope").select_option(f"project:{project}")
+    box.fill(text)
+    page.get_by_test_id("assist-send").click()
     for _ in range(60):
         posts = fixture_get(origin, "/__fixture/ask-posts")["posts"]
         if len(posts) >= expect_posts:

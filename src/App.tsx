@@ -713,6 +713,7 @@ export function App(): React.ReactElement {
             {...(askHandoff === null && askStart !== null ? {
               ...(askStart.projectId !== null ? { startProjectId: askStart.projectId } : {}),
               ...(askStart.seedText !== '' ? { startText: askStart.seedText } : {}),
+              ...(askStart.fresh ? { startFresh: true } : {}),
             } : {})}
           />
         )}

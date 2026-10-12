@@ -13,21 +13,23 @@ export interface AskRequest {
   projectId: string | null;
   /** Words placed in the dock's box, never sent. */
   seedText: string;
+  /** A new chat even without a project (the Desk's Chat): the dock's stored chat is not resumed. */
+  fresh: boolean;
 }
 
 interface AskDockStore {
   request: AskRequest | null;
-  open: (opts?: { projectId?: string | null; seedText?: string }) => void;
+  open: (opts?: { projectId?: string | null; seedText?: string; fresh?: boolean }) => void;
 }
 
 export const useAskDock = create<AskDockStore>((set, get) => ({
   request: null,
   open: (opts = {}) => set({
-    request: { nonce: (get().request?.nonce ?? 0) + 1, projectId: opts.projectId ?? null, seedText: opts.seedText ?? '' },
+    request: { nonce: (get().request?.nonce ?? 0) + 1, projectId: opts.projectId ?? null, seedText: opts.seedText ?? '', fresh: opts.fresh === true || (opts.projectId ?? null) !== null },
   }),
 }));
 
 /** Open the Ask dock (a real chat); nothing is sent. */
-export function openAskDock(opts?: { projectId?: string | null; seedText?: string }): void {
+export function openAskDock(opts?: { projectId?: string | null; seedText?: string; fresh?: boolean }): void {
   useAskDock.getState().open(opts);
 }

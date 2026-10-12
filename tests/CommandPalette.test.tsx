@@ -45,9 +45,7 @@ const { CommandPalette, clearPaletteRepoCache } = await import('../src/component
 const { useProjectsStore } = await import('../src/store/projects.js');
 const { useGateStore } = await import('../src/store/gates.js');
 const { useAppearanceStore } = await import('../src/theming/appearance.js');
-const { chipsOf, useComposerChips } = await import('../src/store/composerChips.js');
 const { useSessionDrafts } = await import('../src/store/sessionDrafts.js');
-const { useComposerSeed } = await import('../src/store/composerSeed.js');
 
 function proj(id: string, name: string, updated_at: number): Project {
   return { id, name, description: null, status: 'active', scope: `project:${id}`, created_at: 1, updated_at };

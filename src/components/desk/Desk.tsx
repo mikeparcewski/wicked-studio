@@ -236,22 +236,22 @@ export function Desk({ runs, runsLoaded, runsError = null, onRetryRuns, needRows
             <kbd className="wk-desk-cmd-kbd">⌘K</kbd>
           </button>
           <div className="wk-desk-a-actions">
-            <button type="button" data-testid="desk-chat" className="wk-btn wk-btn--secondary" onClick={() => openAskDock()}>
+            <button type="button" data-testid="desk-chat" className="wk-btn wk-btn--secondary" onClick={() => openAskDock({ fresh: true })}>
               <MessageSquare size={14} aria-hidden />Chat
             </button>
             <button type="button" data-testid="desk-new-job" className="wk-btn wk-btn--primary" onClick={() => openLaunchWizard({ composerKey: 'desk' })}>
               <Plus size={14} aria-hidden />New job
             </button>
           </div>
-        </header>
-        <div className="wk-desk-a-tools">
+          <div className="wk-desk-a-tools">
           <span className="wk-desk-orders">
             <StandingOrdersPanel />
             {readState === 'known' && <FocusLockToggle items={needRows.length} />}
           </span>
-          <CaptureDrop runs={runs} opens="down" />
+          <CaptureDrop runs={runs} opens="down" align="end" />
           <button type="button" data-testid="desk-sheet-open" aria-label="Look underneath the Desk" title="Look underneath (⌘K for everything else)" onClick={() => openSheet({ kind: 'desk' })} className="wk-btn wk-btn--icon wk-btn--quiet">⋯</button>
-        </div>
+          </div>
+        </header>
 
         <div className="wk-desk-a-intro">
           {readState === 'failed' && <p data-testid="desk-unread" className="wk-desk-story wk-desk-quiet">I can’t say what is going on until your work loads.</p>}
