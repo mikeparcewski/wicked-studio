@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { EditorHostPage } from './components/editors/EditorHostPage.js';
 import { AskDock } from './components/AskDock.js';
+import { useAskDock, type AskRequest } from './store/askDock.js';
 import { useAskThreadStore } from './store/askThread.js';
 import { AskLauncher } from './components/AskLauncher.js';
 import { CommandPalette, paletteShortcutEntries } from './components/CommandPalette.js';
@@ -72,7 +73,7 @@ import { useWatchStore } from './store/watch.js';
 import { useWatchHydrate } from './hooks/useWatchFeed.js';
 import { WatchtowerPage } from './components/watch/WatchtowerPage.js';
 import { RulesPage } from './components/rules/RulesPage.js';
-import { needCount } from './board/needsQueue.js';
+import { badgeCount } from './board/needsQueue.js';
 import type { CoreEvent, RepoEntry } from './api/types.js';
 import { readSteeringTypeFilter } from './api/steering.js';
 import { isTestingSubPage, readLaunchIntent } from './api/testing.js';
@@ -309,9 +310,25 @@ export function App(): React.ReactElement {
     setAskOpen(true);
   }, []);
   const takeHandoff = useCallback(() => setAskHandoff(null), []);
+  // Concept A (DES-frontdoor): "Chat", ⌘K "New chat" and a project's "Chat in this project" open
+  // the dock through `openAskDock` — a fresh chat in the project when one is named.
+  const askRequest = useAskDock((s) => s.request);
+  const [askStart, setAskStart] = useState<AskRequest | null>(null);
+  useEffect(() => {
+    if (askRequest === null) return;
+    setAskKey((k) => k + 1);
+    setAskHandoff(null);
+    setAskStart(askRequest);
+    setAskOpen(true);
+  }, [askRequest]);
+  useEffect(() => {
+    if (!askOpen) setAskStart(null);
+  }, [askOpen]);
   // §5.6 rule 4 (S2b): letters always type — into the open Ask dock, else the page's
   // composer, else the Ask dock opened with them (opening it only reads).
   useTypeToComposer(useCallback(() => setAskOpen(true), []));
+  // The Desk's ⌘K command bar (concept A) opens the plain palette.
+  const openPalette = useCallback(() => { setPaletteSeed(''); setPaletteObject(null); setPaletteOpen(true); }, []);
 
   const shortcutEntries = useMemo(
     () => [
@@ -455,7 +472,7 @@ export function App(): React.ReactElement {
     // still at `/runs`, which the `panel === 'runs'` fallback below keeps rendering.
     if (panel === 'home') {
       // The Desk (S4) — the one shell since the classic skins retired (S18d).
-      return <Desk runs={runs} runsLoaded={runsLoaded} runsError={runsError} onRetryRuns={refresh} needRows={needRows} now={needsNow} navigate={navigate} onAsk={handToAsk} />;
+      return <Desk runs={runs} runsLoaded={runsLoaded} runsError={runsError} onRetryRuns={refresh} needRows={needRows} now={needsNow} navigate={navigate} onCommand={openPalette} />;
     }
     if (panel === 'workflows') {
       return (
@@ -524,7 +541,7 @@ export function App(): React.ReactElement {
     if (panel === 'watch') {
       return (
         <div className="flex flex-1 overflow-hidden">
-          <WatchtowerPage count={needCount(needRows)} runs={runs} runsLoaded={runsLoaded} runsError={runsError} onRetryRuns={refresh} navigate={navigate} now={needsNow} />
+          <WatchtowerPage count={badgeCount(needRows)} runs={runs} runsLoaded={runsLoaded} runsError={runsError} onRetryRuns={refresh} navigate={navigate} now={needsNow} />
         </div>
       );
     }
@@ -674,8 +691,8 @@ export function App(): React.ReactElement {
         open={askOpen}
         onToggle={() => setAskOpen((v) => !v)}
         rightOffsetPx={selected !== null ? RIGHT_PANEL_PX : 0}
-        bottomOffsetPx={panel === 'home' || panel === 'session' ? DESK_COMPOSER_PX : 0}
-        // The Desk and a session have their own composer in this corner: there the bubble stands down.
+        bottomOffsetPx={panel === 'session' ? DESK_COMPOSER_PX : 0}
+        // A session has its own composer in this corner, and the Desk its own Chat button: there the bubble stands down.
         bubble={!(panel === 'home' || panel === 'session')}
       >
         {askOpen && (
@@ -693,13 +710,17 @@ export function App(): React.ReactElement {
               ...(askHandoff.primary !== undefined ? { sendPrimary: askHandoff.primary } : {}),
               ...(askHandoff.chatId !== undefined ? { sendChatId: askHandoff.chatId } : {}),
             } : {})}
+            {...(askHandoff === null && askStart !== null ? {
+              ...(askStart.projectId !== null ? { startProjectId: askStart.projectId } : {}),
+              ...(askStart.seedText !== '' ? { startText: askStart.seedText } : {}),
+            } : {})}
           />
         )}
       </AskLauncher>
 
       {/* S11: the open "look underneath" sheet (a step, a helper, a session, the Desk). */}
-      <ObjectSheet runs={runs} navigate={navigate} needCount={needCount(needRows)} />
-      <AltPeek runs={runs} needCount={needCount(needRows)} />
+      <ObjectSheet runs={runs} navigate={navigate} needCount={badgeCount(needRows)} />
+      <AltPeek runs={runs} needCount={badgeCount(needRows)} />
 
       {/* The universal command palette (DES-FEEDBACK-002 §1, slice G) — corpus
           from already-loaded stores + the runs prop; repos cached on first open. */}

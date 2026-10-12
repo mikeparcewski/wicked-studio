@@ -1,5 +1,5 @@
 import type { SessionView } from '../api/types.js';
-import { plainRunTitle } from './deskWords.js';
+import { jobTitle, plainRunTitle } from './deskWords.js';
 import { endedAtMs } from './needsYou.js';
 
 /**
@@ -140,7 +140,7 @@ export function sessionTitle(messages: readonly TranscriptLike[], runs: readonly
   const first = messages.find((m) => m.kind === 'user' && typeof m.text === 'string' && m.text.trim() !== '');
   if (first !== undefined) return plainRunTitle(String(first.text));
   const v = runs[0];
-  return v === undefined ? 'A session' : plainRunTitle(v.session.problem || v.session.id);
+  return v === undefined ? 'A session' : jobTitle(v.session);
 }
 
 export type Conversation = 'live' | 'closed' | 'none';

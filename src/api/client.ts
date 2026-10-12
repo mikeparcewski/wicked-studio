@@ -198,8 +198,8 @@ export const api = {
   /** A run's durably-persisted event trail (`GET /runs/:id/events`). Used to backfill the event
    * store on a reload with no live `/ws` replay so Burn/insight panels are not empty (FINDING-013).
    * Rejects (503) when the engine build has no event-log binding — callers treat that as "no backfill". */
-  getRunEvents: (id: string) =>
-    apiFetch<{ events: CoreEvent[] }>(`/runs/${encodeURIComponent(id)}/events`),
+  getRunEvents: (id: string, types?: readonly string[]) =>
+    apiFetch<{ events: CoreEvent[] }>(`/runs/${encodeURIComponent(id)}/events${types !== undefined && types.length > 0 ? `?type=${types.map(encodeURIComponent).join(',')}` : ''}`),
 
   /** The acceptance view (`GET /runs/:id/acceptance`): the QE gate plus — on crew ≥ 0.8 — the
    * conformance section (run-scoped governance claims with wiki-rule citations + enforcement
@@ -366,8 +366,10 @@ export const api = {
     return apiFetch<import('./watch-wire.js').WatchFeedResponse>(`/watch${tail === '' ? '' : `?${tail}`}`);
   },
   /** Each seat's week (`GET /roster/record`, crew#690) — the Health panel's weekly 1:1. */
-  getSeatRecord: (days = 7) =>
-    apiFetch<import('./seatRecord.js').SeatRecordResponse>(`/roster/record?days=${days}`),
+  getSeatRecord: (days = 7, projectId?: string) =>
+    apiFetch<import('./seatRecord.js').SeatRecordResponse & { project?: string }>(
+      `/roster/record?days=${days}${projectId !== undefined ? `&project=${encodeURIComponent(projectId)}` : ''}`,
+    ),
 
   /** Registered repos → the target-repo picker. */
   listRepos: () => apiFetch<{ repos: RepoEntry[] }>('/repos'),

@@ -10,7 +10,7 @@ import { useCapabilities } from '../../store/capabilities.js';
 import { projectDetailPath, type Navigate } from '../../hooks/useRoute.js';
 import { everythingPath } from '../../board/everythingModel.js';
 import { useAppearanceStore } from '../../theming/appearance.js';
-import { seedNewChat } from '../../board/chatMoves.js';
+import { openLaunchWizard } from '../../store/launchWizard.js';
 import { useRailHealthDot } from '../../hooks/useRailHealthDot.js';
 import { PAGE_NAMES } from '../../board/pageNames.js';
 import { WatchPill } from './WatchPill.js';
@@ -110,7 +110,7 @@ export function SessionRail({ runs, needRows, navigate, pathname, runsKnown = tr
                     aria-label={`New work in ${g.name}`}
                     title={`New work in ${g.name}`}
                     className="wk-rail-icon-btn"
-                    onClick={() => { navigate('/'); seedNewChat(g.projectId, g.name); }}
+                    onClick={() => openLaunchWizard({ projectId: g.projectId, composerKey: 'desk' })}
                   >
                     <Plus size={14} aria-hidden />
                   </button>

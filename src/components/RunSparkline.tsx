@@ -34,7 +34,9 @@ export function RunSparkline({
 }: Props): React.ReactElement {
   const n = Math.max(1, counts.length);
   const max = counts.reduce((a, c) => Math.max(a, c), 0);
-  const colW = (width - BAR_GAP * (n - 1)) / n;
+  // Many buckets in a small width (a 60-day series in 96 px): the gap shrinks so a bar never goes negative.
+  const gap = Math.min(BAR_GAP, (width / n) * 0.25);
+  const colW = (width - gap * (n - 1)) / n;
   return (
     <svg
       width={width}
@@ -52,7 +54,7 @@ export function RunSparkline({
         return (
           <rect
             key={i}
-            x={i * (colW + BAR_GAP)}
+            x={i * (colW + gap)}
             y={height - h}
             width={colW}
             height={h}

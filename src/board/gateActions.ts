@@ -4,7 +4,7 @@ import { ApiError } from '../api/errors.js';
 import { isDeliveriesFrozen } from '../api/deliveryFreeze.js';
 import { useDeliveryFreezeStore } from '../store/deliveryFreeze.js';
 import type { GateDecision, SessionView } from '../api/types.js';
-import { plainGateQuestion, plainRunTitle } from './deskWords.js';
+import { jobTitle, plainGateQuestion } from './deskWords.js';
 import type { LaunchPlan } from '../api/teamPlan.js';
 import { sessionPath } from './sessionModel.js';
 import { choicesOf, recommendedOf, useGateStore } from '../store/gates.js';
@@ -177,7 +177,7 @@ const workTitles = new Map<string, string>();
 export function rememberWorkTitles(runs: readonly SessionView[]): void {
   workTitles.clear();
   for (const v of runs) {
-    const title = plainRunTitle(v.session.problem ?? '').trim();
+    const title = jobTitle(v.session).trim();
     if (title !== '') workTitles.set(v.session.id, title);
   }
 }

@@ -47,6 +47,86 @@
 /* ── Watchtower (row 55) ── */
 .wk-watchtower-row .wk-tech-details, .wk-watchtower-row details { margin-top: 4px; }
 
+/* ══ Concept A (DES-frontdoor, 2026-10-12): header + command bar, one sentence, the pulse band,
+   needs in sections, jobs lanes, and the right column (chart, projects, what happened). ══ */
+.wk-desk--a .wk-desk-scroll { padding: var(--space-5, 20px) var(--space-6) var(--space-8); display: flex; flex-direction: column; gap: var(--space-4); }
+.wk-desk-a-head { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: var(--space-5, 20px); align-items: center; }
+.wk-desk-a-title { margin: 0; font-size: var(--text-xl); font-weight: 650; color: var(--ink-high); line-height: var(--leading-tight); }
+.wk-desk-a-when { margin: 2px 0 0; font-size: var(--text-xs); color: var(--ink-muted); }
+.wk-desk-cmd {
+  justify-self: center; width: 100%; max-width: 620px; display: flex; align-items: center; gap: var(--space-2);
+  min-height: 38px; padding: 0 var(--space-3); border-radius: var(--radius-md); border: 1px solid var(--border-input);
+  background: var(--surface-card); color: var(--ink-placeholder); font: inherit; font-size: var(--text-sm); text-align: left; cursor: text;
+}
+.wk-desk-cmd:hover { border-color: var(--border-strong); }
+.wk-desk-cmd-icon { color: var(--ink-muted); flex-shrink: 0; }
+.wk-desk-cmd-text { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wk-desk-cmd-kbd { flex-shrink: 0; font-family: var(--font-mono); font-size: var(--text-xs); color: var(--ink-muted); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 0 6px; background: var(--surface-raised); }
+.wk-desk-a-actions { display: flex; gap: var(--space-2); align-items: center; }
+.wk-desk-a-actions .wk-btn svg { margin-right: 4px; }
+.wk-desk-a-tools { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; margin-top: calc(-1 * var(--space-2)); }
+.wk-desk-a-tools .wk-desk-orders { display: inline-flex; }
+.wk-desk-a-intro { display: flex; flex-direction: column; gap: var(--space-1); }
+.wk-desk-story { margin: 0; font-size: var(--text-md); line-height: var(--leading-body); color: var(--ink-body); max-width: 92ch; }
+.wk-desk-section-title { margin: 0; font-size: var(--text-md); font-weight: var(--weight-semi); color: var(--ink-high); }
+.wk-desk-section-aside { font-weight: var(--weight-normal, 400); color: var(--ink-muted); font-size: var(--text-sm); }
+.wk-desk-pulse { display: flex; flex-direction: column; gap: var(--space-2); }
+.wk-desk-band-head, .wk-desk-card-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); flex-wrap: wrap; }
+.wk-desk-card-head { margin-bottom: var(--space-2); }
+.wk-desk-card-meta, .wk-desk-card-note { font-size: var(--text-xs); color: var(--ink-muted); margin: 0; }
+.wk-desk-card-note { margin-top: var(--space-2); }
+.wk-desk-card-foot { display: inline-block; margin-top: var(--space-3); font-size: var(--text-sm); }
+.wk-desk-card-link { font-size: var(--text-sm); }
+.wk-desk-a-body { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(300px, 1fr); gap: var(--space-5, 20px); align-items: start; }
+.wk-desk-a-main, .wk-desk-a-side { display: flex; flex-direction: column; gap: var(--space-4); min-width: 0; }
+.wk-desk-a-card { min-width: 0; }
+.wk-desk--a .wk-desk-chores { padding: var(--space-4); }
+
+/* Needs you inside its card: rows on hairlines (no card-in-card), sections labelled. */
+.wk-desk--a .wk-desk-needs .wk-desk-section-title { margin-bottom: var(--space-1); }
+.wk-need-section { margin: var(--space-3) 0 var(--space-1); font-size: var(--text-xs); font-weight: var(--weight-semi); color: var(--ink-muted); }
+.wk-need-section-count { font-weight: var(--weight-normal, 400); }
+.wk-desk--a .wk-desk-need { background: none; border: none; border-top: 1px solid var(--border-subtle); border-radius: 0; margin: 0; padding: var(--space-2) var(--space-1); }
+.wk-desk--a .wk-desk-need--member { margin-left: var(--space-5, 20px); }
+.wk-desk--a .wk-desk-need--selected { outline: none; background: var(--accent-wash); box-shadow: inset 3px 0 0 var(--accent); }
+.wk-need-why, .wk-need-preview { margin: 0 0 var(--space-2) 18px; padding: var(--space-2) var(--space-3); border-left: 2px solid var(--border); font-size: var(--text-sm); color: var(--ink-body); }
+.wk-need-why-line, .wk-need-why-retry, .wk-need-preview-note { margin: 0; }
+.wk-need-why-retry, .wk-need-preview-note { font-size: var(--text-xs); color: var(--ink-muted); margin-top: 2px; }
+.wk-need-preview { flex-basis: 100%; margin: var(--space-1) 0 var(--space-2); }
+.wk-need-preview-head { margin: 0 0 2px; font-size: var(--text-xs); font-weight: var(--weight-semi); color: var(--ink-muted); }
+.wk-need-preview-text { margin: 0; color: var(--ink-body); }
+.wk-need-preview-text p { margin: 0; overflow-wrap: anywhere; }
+.wk-need-preview-more { font-size: var(--text-xs); }
+.wk-need-answer { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+
+/* Jobs: lanes with a step track. */
+.wk-desk-jobs-quiet { display: flex; align-items: baseline; gap: var(--space-3); flex-wrap: wrap; margin: 0 0 var(--space-2); color: var(--ink-muted); font-size: var(--text-sm); }
+.wk-desk-lanes, .wk-desk-glances, .wk-desk-feed { list-style: none; margin: 0; padding: 0; }
+.wk-desk-lane { display: grid; grid-template-columns: minmax(0, 1fr) minmax(120px, 200px) 8.5rem; gap: var(--space-3); align-items: center; padding: var(--space-2) 0; border-top: 1px solid var(--border-subtle); }
+.wk-desk-lane-text, .wk-desk-glance-text, .wk-desk-feed-text { display: flex; flex-direction: column; min-width: 0; }
+.wk-desk-lane-title, .wk-desk-glance-name, .wk-desk-feed-title { color: var(--ink-high); font-weight: var(--weight-semi); text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wk-desk-lane-title:hover, .wk-desk-glance-name:hover, .wk-desk-feed-title:hover { text-decoration: underline; text-underline-offset: 2px; }
+.wk-desk-lane-meta, .wk-desk-glance-meta, .wk-desk-feed-meta { font-size: var(--text-xs); color: var(--ink-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wk-desk-lane-word { font-size: var(--text-xs); color: var(--ink-body); display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.wk-steptrack { display: flex; gap: 3px; height: 8px; min-width: 0; }
+.wk-steptrack-mark { flex: 1 1 0; min-width: 4px; max-width: 28px; height: 8px; border-radius: 2px; background: var(--border); display: inline-block; }
+.wk-steptrack-mark[data-mark="done"] { background: var(--status-ok); }
+.wk-steptrack-mark[data-mark="fail"] { background: var(--status-fail); }
+.wk-steptrack-mark[data-mark="gate"] { background: var(--status-gate); }
+.wk-steptrack-mark[data-mark="run"] { background: var(--accent); }
+.wk-steptrack-mark[data-mark="stopped"] { background: var(--ink-dim); }
+.wk-steptrack-legend { display: flex; flex-wrap: wrap; gap: var(--space-3); margin: var(--space-2) 0 0; font-size: var(--text-xs); color: var(--ink-muted); }
+.wk-steptrack-legend .wk-steptrack-mark { width: 12px; flex: none; vertical-align: 0; }
+.wk-desk-glance { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); padding: var(--space-2) 0; border-top: 1px solid var(--border-subtle); }
+.wk-desk-feed-row { display: grid; grid-template-columns: 10px minmax(0, 1fr); gap: var(--space-2); align-items: baseline; padding: var(--space-2) 0; border-top: 1px solid var(--border-subtle); }
+.wk-desk-feed-text { font-size: var(--text-sm); color: var(--ink-body); }
+.wk-desk-feed-title { display: inline; white-space: normal; overflow-wrap: anywhere; }
+.wk-desk-feed-sentence { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+
+@media (max-width: 1100px) and (min-width: 768px) {
+  .wk-desk-a-body { grid-template-columns: minmax(0, 1fr); }
+}
+
 /* ── Phone (one breakpoint, UI-CONTRACT §2) ── */
 @media (max-width: 767px) {
   /* A row's moves take their own line under the title, so a two-button row never clips it. */
@@ -73,6 +153,21 @@
   .wk-watchtower-row .wk-desk-need-line { white-space: normal; }
   .wk-watchtower-row > .wk-desk-need-body { flex: 1 1 calc(100% - 24px); }
   .wk-watchtower-row > a { margin-left: 18px; }
+  /* Concept A on a phone: the header stacks (title, then the bar, then Chat / New job), one column. */
+  .wk-desk--a .wk-desk-scroll { padding: var(--space-4); gap: var(--space-3); }
+  .wk-desk-a-head { grid-template-columns: minmax(0, 1fr); gap: var(--space-3); }
+  .wk-desk-cmd { min-height: var(--tap-min); max-width: none; }
+  .wk-desk-a-actions { display: grid; grid-template-columns: 1fr 1fr; }
+  .wk-desk-a-body { grid-template-columns: minmax(0, 1fr); }
+  .wk-desk-lane { grid-template-columns: minmax(0, 1fr) auto; }
+  .wk-desk-lane .wk-steptrack { grid-column: 1 / -1; order: 3; }
+  .wk-desk-story { font-size: var(--text-sm); }
+  .wk-desk-cmd-kbd { display: none; }
+  /* The utility controls share one wrapping row (not one line each). */
+  .wk-desk--a .wk-desk-a-tools { margin-top: 0; gap: var(--space-2) var(--space-3); }
+  .wk-desk--a .wk-desk-a-tools .wk-desk-orders { flex-basis: auto; order: 0; }
+  /* Four numbers on a phone: failures and deliveries are said in Needs you and the jobs list. */
+  .wk-desk--a [data-testid="desk-stat-failed"], .wk-desk--a [data-testid="desk-stat-delivered"] { display: none; }
 }
 
 /* studio#660: the Watchtower pill's card is a preview with no controls of its own; when it opens

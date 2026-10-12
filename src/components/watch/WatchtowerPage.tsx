@@ -7,7 +7,7 @@ import type { SessionView } from '../../api/types.js';
 import type { WatchKind } from '../../api/watch-wire.js';
 import { readErrorKind } from '../../api/errors.js';
 import { absTime, relTime } from '../../board/relTime.js';
-import { fullRunTitle, plainRunTitle } from '../../board/deskWords.js';
+import { fullRunTitle, jobTitle } from '../../board/deskWords.js';
 import { deskReadState } from '../../board/deskModel.js';
 import { wireDelivery } from '../../board/windowStats.js';
 import { readWatch, useWatchFeed } from '../../hooks/useWatchFeed.js';
@@ -194,7 +194,8 @@ export function WatchtowerPage({ runs, runsLoaded = true, runsError = null, onRe
   };
   const workOf = (runId: string | null): string | null => {
     if (runId === null) return null;
-    const t = plainRunTitle(runs.find((v) => v.session.id === runId)?.session.problem ?? '').trim();
+    const v = runs.find((x) => x.session.id === runId);
+    const t = v === undefined ? '' : jobTitle(v.session).trim();
     return t === '' ? null : t;
   };
 

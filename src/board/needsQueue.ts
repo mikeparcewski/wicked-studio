@@ -1,6 +1,6 @@
 import { plausibleClock } from './ageHonesty.js';
 import { needRunId } from './deskModel.js';
-import { rankNeeds, type NeedAction, type NeedGroupKey, type NeedRow } from './needsYou.js';
+import { rankNeeds, type NeedAction, type NeedGroupKey, type NeedKind, type NeedRow } from './needsYou.js';
 import { batchOnboardConsequence, batchOnboardLabel } from './repairMoves.js';
 import { plainRunTitle } from './deskWords.js';
 import { acceptMemoryLabel, consequenceRank, PROPOSAL_PAGE, type ProposalConsequence } from './proposalTriage.js';
@@ -190,6 +190,48 @@ export function groupAlike(rows: readonly NeedRow[], now: number): NeedRow[] {
 /** A folded duplicate's line: "2 alike: Run failed". */
 export function sameGroupLine(n: number, text: string): string {
   return `${n} alike: ${text}`;
+}
+
+// ── Sections (DES-frontdoor concept A; operator ruling 2026-10-12) ──────────────────────────────
+
+/**
+ * Which part of "Needs you" a row belongs to. DECISIONS wait on your answer; FAILURES broke and only
+ * a person moves them; REVIEWS are proposals waiting on review (nothing is blocked); OTHER is work
+ * worth a look that is neither (finished work not yet delivered, a test campaign, a repository with
+ * no graph, a quiet chat). The badge counts decisions and failures only; reviews are counted on their
+ * own (operator ruling 2026-10-12).
+ */
+export type NeedSection = 'decision' | 'failure' | 'review' | 'other';
+
+export const SECTION_OF: Readonly<Record<NeedKind, NeedSection>> = {
+  gate: 'decision', elicitation: 'decision', 'steer-request': 'decision',
+  'failed-run': 'failure', 'orphaned-run': 'failure', 'stall-escalated': 'failure', 'stalled-run': 'failure',
+  proposal: 'review',
+  'stranded-run': 'other', campaign: 'other', 'repo-graph': 'other', 'stalled-chat': 'other',
+};
+
+/** The sections in the order the Desk shows them, with their headings. */
+export const SECTIONS: readonly { id: NeedSection; title: string }[] = [
+  { id: 'decision', title: 'Decisions' },
+  { id: 'failure', title: 'Failures' },
+  { id: 'other', title: 'Also worth a look' },
+  { id: 'review', title: 'To review' },
+];
+
+export function needSection(row: NeedRow): NeedSection {
+  return SECTION_OF[row.kind];
+}
+
+/** Rows in section order (decisions, failures, other, reviews), the ranking kept inside each, so
+ *  the keyboard walks the list in the order it is drawn. */
+export function inSectionOrder<T extends NeedRow>(rows: readonly T[]): T[] {
+  const at = (r: NeedRow): number => SECTIONS.findIndex((x) => x.id === needSection(r));
+  return rows.map((r, i) => ({ r, i })).sort((a, b) => at(a.r) - at(b.r) || a.i - b.i).map((x) => x.r);
+}
+
+/** THE "need you" number (the rail and phone badge, the Desk): decisions + failures, never reviews. */
+export function badgeCount(rows: readonly NeedRow[]): number {
+  return needCount(rows.filter((r) => { const s = needSection(r); return s === 'decision' || s === 'failure'; }));
 }
 
 /** How many items a set of queue rows stands for (a group counts its members). */

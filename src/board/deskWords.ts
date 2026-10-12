@@ -120,6 +120,24 @@ export function plainRunTitle(problem: string): string {
   return onboardTitle(problem) ?? askTitle(problem) ?? humanTitle(problem);
 }
 
+/**
+ * A run's title on every surface (operator ruling 2026-10-12: crew derives short job titles). crew's
+ * `session.title` (api-types 0.111.0, read tolerantly until studio's pinned contract carries it) when
+ * the daemon serves one; otherwise the run's own first-clause cut ({@link plainRunTitle}) — never an
+ * invented title. The full words stay in `problem`, for the hover title.
+ */
+export function jobTitle(session: { problem?: string | null; id: string; title?: unknown }): string {
+  const t = (session as { title?: unknown }).title;
+  if (typeof t === 'string' && t.trim() !== '') return t.trim();
+  return plainRunTitle(session.problem || session.id);
+}
+
+/** The words a run's hover title shows: the whole problem, uncut, when it says more than the title. */
+export function jobTitleFull(session: { problem?: string | null; id: string; title?: unknown }): string {
+  const problem = (session.problem ?? '').trim();
+  return problem === '' ? jobTitle(session) : fullRunTitle(problem);
+}
+
 /** The same title, uncut (for a hover/focus title when the rail or a card clamps it). */
 export function fullRunTitle(problem: string): string {
   return onboardTitle(problem) ?? askTitle(problem) ?? humanTitle(problem, 240);

@@ -3,7 +3,7 @@ import { mcpPath } from '../api/mcp.js';
 import { skillsPath } from '../api/skills.js';
 import { testingPath } from '../api/testing.js';
 import type { NeedRow } from './needsYou.js';
-import { DELIVERED_LINE, KEPT_LINE, fullRunTitle, keptLocally, plainRunTitle } from './deskWords.js';
+import { DELIVERED_LINE, KEPT_LINE, jobTitle, jobTitleFull, keptLocally } from './deskWords.js';
 import { PAGE_NAMES } from './pageNames.js';
 import { sessionIdOf, sessionPath, summarize, type SessionState } from './sessionModel.js';
 
@@ -167,8 +167,8 @@ function toSessions(
       runIds: sum.runIds,
       title: sum.title,
       fullTitle: (() => {
-        const v = views.find((x) => plainRunTitle(x.session.problem || x.session.id) === sum.title);
-        return v === undefined ? sum.title : fullRunTitle(v.session.problem || v.session.id);
+        const v = views.find((x) => jobTitle(x.session) === sum.title);
+        return v === undefined ? sum.title : jobTitleFull(v.session);
       })(),
       state: sum.state,
       badge: sum.badge,

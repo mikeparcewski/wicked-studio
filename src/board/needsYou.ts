@@ -6,7 +6,7 @@ import { decisionRowText, statementOf } from './decisionLine.js';
 import type { RepoEntry, SessionView } from '../api/types.js';
 import { deliveryOf } from '../components/delivery.js';
 import { narrate, narrateStranded, type NarrationTone } from '../components/narrator.js';
-import { keptLocally, plainGateQuestion } from './deskWords.js';
+import { jobTitle, jobTitleFull, keptLocally, plainGateQuestion } from './deskWords.js';
 import type { RetryPrefill } from '../store/retryPrefill.js';
 import { campaignCounts, campaignMemberRunIds } from './campaignStats.js';
 import { STALLED_IDLE_SECS, stalledLiveChats, type LiveChatSnapshot } from './chatStats.js';
@@ -113,6 +113,8 @@ export interface NeedRow {
   proposal?: { id: string; consequence: ProposalConsequence; captured?: boolean };
   /** The row's subject (run title, repo name, campaign, chat id). */
   subject: string;
+  /** A run row's whole words, for the hover title when {@link subject} is crew's short title. */
+  subjectFull?: string;
   /** The narrated one-liner (narrator vocabulary — gate rows via `narrate()`). */
   text: string;
   /** A gate row's question in plain words (`deskWords.plainGateQuestion`, studio#422): what the
@@ -432,7 +434,8 @@ export function needsYouRows(inputs: NeedsYouInputs): NeedRow[] {
         severity: SEVERITY.gate,
         stakes: 1 + repoStake(v),
         ...(simpleGate(gate) ? { groupKey: 'approval' as const } : {}),
-        subject: s.problem,
+        subject: jobTitle(s),
+        subjectFull: jobTitleFull(s),
         text: line?.text ?? 'Gate: waiting on you',
         question: plainGateQuestion(gate?.prompt, gate?.gateKind),
         tone: 'gate',
@@ -453,7 +456,8 @@ export function needsYouRows(inputs: NeedsYouInputs): NeedRow[] {
         kind: 'failed-run',
         severity: SEVERITY['failed-run'],
         stakes: 1 + repoStake(v),
-        subject: s.problem,
+        subject: jobTitle(s),
+        subjectFull: jobTitleFull(s),
         text: 'Run failed',
         tone: 'fail',
         // The daemon's own terminal clock first (api-types 0.38 `ended_at`), then the engine's
@@ -473,7 +477,8 @@ export function needsYouRows(inputs: NeedsYouInputs): NeedRow[] {
         kind: 'orphaned-run',
         severity: SEVERITY['orphaned-run'],
         stakes: 1 + repoStake(v),
-        subject: s.problem,
+        subject: jobTitle(s),
+        subjectFull: jobTitleFull(s),
         text: ORPHANED_LINE,
         tone: 'gate',
         at: orphanedAt[s.id]!,
@@ -501,7 +506,8 @@ export function needsYouRows(inputs: NeedsYouInputs): NeedRow[] {
         kind: 'stall-escalated',
         severity: SEVERITY['stall-escalated'],
         stakes: 1 + repoStake(v),
-        subject: s.problem,
+        subject: jobTitle(s),
+        subjectFull: jobTitleFull(s),
         text: line?.text ?? 'Needs you — the watchdog could not recover this run',
         tone: 'gate',
         at: esc.at,
@@ -516,7 +522,8 @@ export function needsYouRows(inputs: NeedsYouInputs): NeedRow[] {
         kind: 'stalled-run',
         severity: SEVERITY['stalled-run'],
         stakes: 1 + repoStake(v),
-        subject: s.problem,
+        subject: jobTitle(s),
+        subjectFull: jobTitleFull(s),
         text: `No activity for ${silentWord(silent)} — the run may be wedged`,
         tone: 'gate',
         at: stalledAt[s.id]!,
@@ -540,7 +547,8 @@ export function needsYouRows(inputs: NeedsYouInputs): NeedRow[] {
         kind: 'stranded-run',
         severity: SEVERITY['stranded-run'],
         stakes: 1 + repoStake(v),
-        subject: s.problem,
+        subject: jobTitle(s),
+        subjectFull: jobTitleFull(s),
         text: line.text,
         tone: line.tone,
         // S16a-1a (studio#587): the daemon's own terminal clocks first, as the failed row reads them.
@@ -623,7 +631,8 @@ export function needsYouRows(inputs: NeedsYouInputs): NeedRow[] {
       kind: 'elicitation',
       severity: SEVERITY.elicitation,
       stakes: 1 + repoStake(v),
-      subject: v.session.problem,
+      subject: jobTitle(v.session),
+      subjectFull: jobTitleFull(v.session),
       text: `Question: ${clipLine(e.message)}`,
       tone: 'gate',
       at: Number.isFinite(at) ? at : null,
@@ -647,7 +656,8 @@ export function needsYouRows(inputs: NeedsYouInputs): NeedRow[] {
       kind: 'steer-request',
       severity: SEVERITY['steer-request'],
       stakes: asks.length + repoStake(v),
-      subject: v.session.problem,
+      subject: jobTitle(v.session),
+      subjectFull: jobTitleFull(v.session),
       text: `Agent asks for direction — ${clipLine(newest.message)}`,
       tone: 'gate',
       at: oldest.ts,

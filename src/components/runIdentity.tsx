@@ -113,7 +113,10 @@ export function onboardTitle(problem: string): string | null {
  * (and keeps to the same length budget: a long repository name is trimmed too).
  */
 export function runTitle(session: AgentSession, intentMax: number = INTENT_MAX): string {
-  return `${humanTitle(onboardTitle(session.problem) ?? session.problem, intentMax)} · ${runShortId(session.id)} · #${session.attempt + 1}`;
+  // crew's short job title (api-types 0.111.0) leads when the daemon serves one.
+  const crewTitle = (session as { title?: unknown }).title;
+  const intent = typeof crewTitle === 'string' && crewTitle.trim() !== '' ? crewTitle.trim() : onboardTitle(session.problem) ?? session.problem;
+  return `${humanTitle(intent, intentMax)} · ${runShortId(session.id)} · #${session.attempt + 1}`;
 }
 
 /**

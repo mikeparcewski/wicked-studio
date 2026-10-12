@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { focusLockView, groupAlike, needCount, queueEntries, topItem, type QueueEntry } from '../board/needsQueue.js';
+import { focusLockView, groupAlike, inSectionOrder, needCount, queueEntries, topItem, type QueueEntry } from '../board/needsQueue.js';
 import type { NeedAction, NeedRow } from '../board/needsYou.js';
 import { useFocusLockStore } from '../store/focusLock.js';
 import { useNotificationStore } from '../store/notifications.js';
@@ -75,7 +75,7 @@ export function useNeedsQueue(flat: NeedRow[], navigate: Navigate, now: number):
   // go by itself once that item leaves the fold (resolved), so the hidden items come back.
   const lockOn = useFocusLockStore((s) => s.on);
   const pinnedKey = useFocusLockStore((s) => s.pinnedKey);
-  const heldKey = lockOn ? (pinnedKey ?? topItem(grouped)?.key ?? null) : null;
+  const heldKey = lockOn ? (pinnedKey ?? topItem(inSectionOrder(grouped))?.key ?? null) : null;
   const lock = useMemo(() => focusLockView(flat, heldKey), [flat, heldKey]);
   useEffect(() => {
     if (!lockOn) return;
@@ -83,7 +83,8 @@ export function useNeedsQueue(flat: NeedRow[], navigate: Navigate, now: number):
     if (heldKey === null || lock === null) store.setOn(false);
     else if (pinnedKey === null) store.pin(heldKey);
   }, [lockOn, heldKey, pinnedKey, lock]);
-  const rows = lock?.rows ?? grouped;
+  // Concept A: drawn in sections (decisions, failures, other, reviews) and walked in that order.
+  const rows = useMemo(() => inSectionOrder(lock?.rows ?? grouped), [lock, grouped]);
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set());
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [root, setRoot] = useState<HTMLElement | null>(null);
