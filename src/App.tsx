@@ -627,7 +627,7 @@ export function App(): React.ReactElement {
     if (panel === 'project-detail' && projectId) {
       return (
         <div className="flex-1 overflow-y-auto">
-          <ProjectDetailPage projectId={projectId} navigate={navigate} runs={runs} />
+          <ProjectDetailPage projectId={projectId} navigate={navigate} runs={runs} needRows={needRows} now={needsNow} />
         </div>
       );
     }

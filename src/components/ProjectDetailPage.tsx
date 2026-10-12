@@ -1,103 +1,114 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { FileText, MessageSquare, Plus } from 'lucide-react';
 import { api } from '../api/client.js';
 import { readErrorKind } from '../api/errors.js';
-import type { ActivityEntry, ProjectDetail, ProjectMember, SessionView } from '../api/types.js';
+import type { ProjectDetail, ProjectMember, RepoEntry, SessionView } from '../api/types.js';
 import { useProjectsStore } from '../store/projects.js';
 import { ProjectRepositories } from './ProjectRepositories.js';
 import { ProjectDocumentsRoot } from './ProjectDocumentsRoot.js';
 import { ProjectCoverage, ProjectDomain, type ProjectReadIssue, type ProjectIssueHandler } from './product/ProjectAggregates.js';
 import { everythingPath } from '../board/everythingModel.js';
-import { sessionPath, sessionTitle } from '../board/sessionModel.js';
-import { statusWord } from '../board/statusWords.js';
+import { sessionIdOf, sessionPath, sessionTitle } from '../board/sessionModel.js';
 import { relTime } from '../board/relTime.js';
-import { PageFrame, SectionTitle } from './ui/PageFrame.js';
+import { durationWords, jobLanes, moneyWords, pulse, stories, WINDOWS, windowWords, type WindowDays } from '../board/deskPulse.js';
+import { newestFirst, projectMeta, projectNeeds, projectRuns, reposUsed, stateCounts } from '../board/projectModel.js';
+import { createdAtWindow } from '../board/windowStats.js';
+import { displaySeats, seatLabel } from '../board/seatNames.js';
+import type { NeedRow } from '../board/needsYou.js';
+import { useCapabilities } from '../store/capabilities.js';
+import { fetchReposCached, getCachedRepos } from '../store/repoCache.js';
+import { openLaunchWizard } from '../store/launchWizard.js';
+import { openAskDock } from '../store/askDock.js';
+import { useRoster } from '../hooks/useRoster.js';
+import { useWindowSpend } from '../hooks/useWindowSpend.js';
+import { useQualityChecks } from '../hooks/useQualityChecks.js';
+import { SectionTitle } from './ui/PageFrame.js';
 import { StateBanner, Skeleton, EmptyState } from './ui/StateBanner.js';
-import { StatLine } from './ui/StatLine.js';
+import { StatBand, StatTile } from './ui/StatTile.js';
 import { TechDetails } from './ui/TechDetails.js';
 import { OverflowMenu } from './ui/OverflowMenu.js';
+import { Segmented } from './ui/Segmented.js';
+import { NeedsQueueSurface } from './NeedsYouQueue.js';
+import { StepLegend, StepTrack } from './desk/Desk.js';
 
+const RUN_KIND = 'crew.run';
 const REPO_KIND = 'crew.repo';
 
-function ActivityRow({ entry }: { entry: ActivityEntry }): React.ReactElement {
-  return <div className="wk-list-row wk-pg-proj-row"><div>
-    <span className="wk-list-row-title">{entry.summary.trim() !== '' ? entry.summary : 'Project activity'}</span>
-    <p className="wk-list-row-meta" title={new Date(entry.ts).toLocaleString()}>{relTime(entry.ts)}</p>
-    <TechDetails text={[entry.kind, entry.ref, entry.source]} />
-  </div></div>;
-}
+/** What a first job is for: the five starts the first-run state teaches. Each opens the wizard on its
+ *  kind of job (the daemon's workflow ids), except a question, which is a chat in this project. */
+const FIRST_JOBS: readonly { label: string; workflowId: string | null; chat?: true }[] = [
+  { label: 'Fix a bug', workflowId: 'bug' },
+  { label: 'Build a feature', workflowId: 'feature' },
+  { label: 'Ask a question about the code', workflowId: null, chat: true },
+  { label: 'Learn from a repository', workflowId: 'learn' },
+  { label: 'Plan tests', workflowId: 'qe-author-tests' },
+];
 
-function MemberRow({ member, known, onDetach, navigate, onIssue }: {
-  member: ProjectMember; known: SessionView | undefined; onDetach: (id: string) => void; navigate: (path: string) => void; onIssue: ProjectIssueHandler;
-}): React.ReactElement {
-  const [busy, setBusy] = useState(false);
-  const [title, setTitle] = useState('Untitled session');
-  const [view, setView] = useState<SessionView | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [attempt, setAttempt] = useState(0);
-  const isRun = member.member_kind === 'crew.run';
+function OtherMemberRow({ member, onDetach, navigate }: { member: ProjectMember; onDetach: (id: string) => void; navigate: (path: string) => void }): React.ReactElement {
   const isChat = member.member_kind === 'crew.chat';
-  const retry = useCallback(() => setAttempt((n) => n + 1), []);
+  const [title, setTitle] = useState(isChat ? 'Chat' : member.member_kind === 'crew.workflow' ? 'Attached workflow' : 'Attached document');
+  const [busy, setBusy] = useState(false);
   useEffect(() => {
-    let cancelled = false;
-    const key = `session:${member.id}`;
-    setLoading(true);
-    onIssue(key, null);
-    void Promise.resolve().then(async () => {
-      if (isRun) {
-        const run = known ?? (await api.getRun(member.member_ref)).run;
-        if (!cancelled) { setView(run); setTitle(run.session.problem?.trim() ? sessionTitle([], [run]) : 'Untitled session'); }
-      } else if (isChat) {
-        const chat = await api.getChat(member.member_ref);
-        if (!cancelled) setTitle((chat.messages ?? []).some((m) => m.kind === 'user' && m.text?.trim()) ? sessionTitle(chat.messages ?? [], []) : 'Untitled session');
-      } else if (!cancelled) setTitle(member.member_kind === 'crew.workflow' ? 'Attached workflow' : 'Attached document');
-    }).catch((e: unknown) => {
-      if (!cancelled) onIssue(key, { what: 'session titles', error: e instanceof Error ? e.message : String(e), retry });
-    }).finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; onIssue(key, null); };
-  }, [member.id, member.member_ref, member.member_kind, isRun, isChat, attempt, retry, onIssue, known]);
-  const href = sessionPath(isRun ? `run:${member.member_ref}` : member.member_ref);
-  const status = view !== null ? statusWord(view) : null;
-  return <div className="wk-list-row wk-pg-proj-row">
-    <div>
-      {loading ? <Skeleton rows={1} variant="line" /> : isRun || isChat
-        ? <a className="wk-link wk-list-row-title" href={href} onClick={(e) => { e.preventDefault(); navigate(href); }}>{title}</a>
-        : <span className="wk-list-row-title">{title}</span>}
-      <p className="wk-list-row-meta" title={new Date(member.attached_at).toLocaleString()}>Added {relTime(member.attached_at)}</p>
-      {status !== null && <span className="wk-list-row-status wk-tag"><span className="wk-status-dot" data-status={status.tone} aria-hidden /> {status.word}</span>}
-    </div>
-    <div className="wk-list-row-actions">
-      {busy ? <p className="wk-field-note">Removing…</p> : (
-        <OverflowMenu label={`More actions for ${title}`} items={[
-          { id: 'detach', label: 'Remove from project', danger: true, onSelect: () => { setBusy(true); onDetach(member.id); } },
-        ]} />
-      )}
-    </div>
-  </div>;
+    if (!isChat) return;
+    let live = true;
+    api.getChat(member.member_ref).then((chat) => {
+      if (live && (chat.messages ?? []).some((m) => m.kind === 'user' && m.text?.trim())) setTitle(sessionTitle(chat.messages ?? [], []));
+    }, () => undefined);
+    return () => { live = false; };
+  }, [isChat, member.member_ref]);
+  const href = sessionPath(member.member_ref);
+  return (
+    <li data-testid="project-member-row" data-kind={member.member_kind} className="wk-list-row wk-pg-proj-row">
+      <div>
+        {isChat ? <a className="wk-link wk-list-row-title" href={href} onClick={(e) => { e.preventDefault(); navigate(href); }}>{title}</a> : <span className="wk-list-row-title">{title}</span>}
+        <p className="wk-list-row-meta" title={new Date(member.attached_at).toLocaleString()}>Added {relTime(member.attached_at)}</p>
+      </div>
+      <div className="wk-list-row-actions">
+        {busy ? <p className="wk-field-note">Removing…</p> : (
+          <OverflowMenu label={`More actions for ${title}`} items={[{ id: 'detach', label: 'Remove from project', danger: true, onSelect: () => { setBusy(true); onDetach(member.id); } }]} />
+        )}
+      </div>
+    </li>
+  );
 }
-
-const NO_RUNS: readonly SessionView[] = [];
 
 interface Props {
   projectId: string;
   navigate: (path: string) => void;
-  /** The runs App already holds: member titles and status come from here, no per-row read. */
+  /** The runs App already holds: the project's jobs are read from here, no per-row read. */
   runs?: readonly SessionView[];
+  /** The app's needs-you rows: the project's decisions and failures are the ones naming its runs. */
+  needRows?: readonly NeedRow[];
+  now?: number;
 }
 
-export function ProjectDetailPage({ projectId, navigate, runs = NO_RUNS }: Props): React.ReactElement {
+const NO_RUNS: readonly SessionView[] = [];
+const NO_NEEDS: readonly NeedRow[] = [];
+
+/**
+ * THE PROJECT DASHBOARD (DES-frontdoor concept P; operator decision 2026-10-12): `/projects/:id`.
+ * A breadcrumb, the name and its facts; quick actions (New job in this project, Chat in this project,
+ * Open repository, Documents, and ⋯ Edit / Archive); "How it's going" (`ui/StatTile`, 7/30/90 days):
+ * jobs by state, started, delivered, quality checks passed, typical time to finish, spend; "Needs you
+ * here"; the jobs with step tracks; repositories the jobs used beside the attached ones (Attach);
+ * what happened here; documents; coverage and domains. A quiet window says so; a project with no
+ * work and no repository teaches its first three steps instead of showing empty boxes.
+ */
+export function ProjectDetailPage({ projectId, navigate, runs = NO_RUNS, needRows = NO_NEEDS, now: nowProp }: Props): React.ReactElement {
+  const now = nowProp ?? Date.now();
   const { updateProject } = useProjectsStore();
   const [detail, setDetail] = useState<ProjectDetail | null>(null);
-  const [activity, setActivity] = useState<ActivityEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
   const [editing, setEditing] = useState(false);
   const [editName, setEditName] = useState('');
   const [editDesc, setEditDesc] = useState('');
   const [editBusy, setEditBusy] = useState(false);
   const [editErr, setEditErr] = useState<string | null>(null);
-
   const [archiveBusy, setArchiveBusy] = useState(false);
+  const [days, setDays] = useState<WindowDays>(30);
+  const [descOpen, setDescOpen] = useState(false);
+  const [register, setRegister] = useState<RepoEntry[] | null>(getCachedRepos());
 
   const isDefault = projectId === 'default';
   const project = detail?.project ?? null;
@@ -106,29 +117,62 @@ export function ProjectDetailPage({ projectId, navigate, runs = NO_RUNS }: Props
   const onIssue = useCallback<ProjectIssueHandler>((key, issue) => {
     setIssues((old) => { const next = { ...old }; if (issue === null) delete next[key]; else next[key] = issue; return next; });
   }, []);
-  const otherMembers = members.filter((m) => m.member_kind !== REPO_KIND);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const [det, act] = await Promise.all([
-        api.getProject(projectId),
-        api.getProjectActivity(projectId).catch((e: unknown) => {
-          setError(e instanceof Error ? e.message : String(e));
-          return { entries: [], nextCursor: null, projectId };
-        }),
-      ]);
-      setDetail(det);
-      setActivity(act.entries);
+      setDetail(await api.getProject(projectId));
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setLoading(false);
     }
   }, [projectId]);
-
   useEffect(() => { void load(); }, [load]);
+
+  // A run member the run list does not serve (an archived run, an older one) is read on its own, so the
+  // project shows every job it holds (the page read each member's run before concept P too).
+  const [extra, setExtra] = useState<SessionView[]>([]);
+  const missing = useMemo(() => members.filter((m) => m.member_kind === RUN_KIND && !runs.some((v) => v.session.id === m.member_ref)).map((m) => m.member_ref).slice(0, 20), [members, runs]);
+  const missingKey = missing.join('\u0000');
+  useEffect(() => {
+    if (missingKey === '') { setExtra([]); return; }
+    let live = true;
+    void Promise.all(missingKey.split('\u0000').map((id) => Promise.resolve().then(() => api.getRun(id)).then((r) => r.run, () => null)))
+      .then((got) => { if (live) setExtra(got.filter((v): v is SessionView => v !== null)); });
+    return () => { live = false; };
+  }, [missingKey]);
+  const allRuns = useMemo(() => (extra.length === 0 ? runs : [...runs, ...extra.filter((x) => !runs.some((v) => v.session.id === x.session.id))]), [runs, extra]);
+  const mine = useMemo(() => projectRuns(allRuns, members, projectId), [allRuns, members, projectId]);
+  const mineIds = useMemo(() => new Set(mine.map((v) => v.session.id)), [mine]);
+  // The membership is the truth for how many jobs a project holds, even one the run list no longer serves.
+  const jobsCount = useMemo(() => new Set([...mineIds, ...members.filter((m) => m.member_kind === RUN_KIND).map((m) => m.member_ref)]).size, [mineIds, members]);
+  // The register names the repositories the jobs used: read (the one shared cache) only when a job used one.
+  const needsRegister = register === null && mine.some((v) => typeof v.session.repo_ref === 'string' && v.session.repo_ref !== '');
+  useEffect(() => { if (needsRegister) fetchReposCached().then(setRegister, () => setRegister([])); }, [needsRegister]);
+  const used = useMemo(() => reposUsed(mine, members, register ?? getCachedRepos() ?? []), [mine, members, register]);
+  const needs = useMemo(() => projectNeeds(needRows, mineIds), [needRows, mineIds]);
+  const p = useMemo(() => pulse(mine, days, now), [mine, days, now]);
+  const states = useMemo(() => stateCounts(mine), [mine]);
+  const inWindow = useMemo(() => newestFirst(createdAtWindow([...mine], days, now).current).map((v) => v.session.id), [mine, days, now]);
+  const quality = useQualityChecks(inWindow);
+  const spend = useWindowSpend(days, isDefault ? undefined : projectId, String(mine.reduce((n, v) => n + (v.units ?? []).filter((u) => u.status === 'done').length, 0)));
+  const runChatId = useCapabilities((s) => s.runChatId);
+  const roster = useRoster();
+  const helperName = useCallback((cli: string): string | null => {
+    const seat = displaySeats(roster).find((s) => s.key === cli);
+    return seat === undefined ? null : seatLabel(seat);
+  }, [roster]);
+  const pathOf = useCallback((v: SessionView): string => sessionPath(sessionIdOf(v, runChatId)), [runChatId]);
+  const lanes = useMemo(() => jobLanes(mine, now, { max: 12, projectName: () => null, pathOf, includeUndated: true }), [mine, now, pathOf]);
+  const feed = useMemo(() => stories(mine, { max: 6, helperName }), [mine, helperName]);
+  const others = members.filter((m) => m.member_kind !== RUN_KIND && m.member_kind !== REPO_KIND);
+  const hasPrev = mine.some((v) => typeof v.session.created_at === 'number' && v.session.created_at * 1000 < now - days * 86_400_000);
+  const firstRun = !loading && project !== null && !isDefault && mine.length === 0 && !members.some((m) => m.member_kind === REPO_KIND);
+  const quiet = !firstRun && mine.length > 0 && p.started.count === 0;
+  const lastEnded = mine.map((v) => v.session.ended_at).filter((t): t is number => typeof t === 'number');
+  const openFailures = needs.filter((r) => r.kind === 'failed-run').length;
 
   function startEdit(): void {
     if (!project) return;
@@ -137,7 +181,6 @@ export function ProjectDetailPage({ projectId, navigate, runs = NO_RUNS }: Props
     setEditErr(null);
     setEditing(true);
   }
-
   async function saveEdit(): Promise<void> {
     if (!project) return;
     const trimName = editName.trim();
@@ -145,10 +188,7 @@ export function ProjectDetailPage({ projectId, navigate, runs = NO_RUNS }: Props
     setEditBusy(true);
     setEditErr(null);
     try {
-      const { project: updated } = await api.updateProject(project.id, {
-        name: trimName,
-        description: editDesc.trim(),
-      });
+      const { project: updated } = await api.updateProject(project.id, { name: trimName, description: editDesc.trim() });
       setDetail((d) => d ? { ...d, project: updated } : d);
       updateProject(updated);
       setEditing(false);
@@ -158,13 +198,11 @@ export function ProjectDetailPage({ projectId, navigate, runs = NO_RUNS }: Props
       setEditBusy(false);
     }
   }
-
   async function toggleArchive(): Promise<void> {
     if (!project || isDefault) return;
     setArchiveBusy(true);
     try {
-      const newStatus = project.status === 'active' ? 'archived' : 'active';
-      const { project: updated } = await api.updateProject(project.id, { status: newStatus });
+      const { project: updated } = await api.updateProject(project.id, { status: project.status === 'active' ? 'archived' : 'active' });
       setDetail((d) => d ? { ...d, project: updated } : d);
       updateProject(updated);
     } catch (e) {
@@ -173,7 +211,6 @@ export function ProjectDetailPage({ projectId, navigate, runs = NO_RUNS }: Props
       setArchiveBusy(false);
     }
   }
-
   function handleDetach(memberId: string): void {
     if (!project) return;
     void api.detachProjectMember(project.id, memberId).catch(() => {});
@@ -185,43 +222,217 @@ export function ProjectDetailPage({ projectId, navigate, runs = NO_RUNS }: Props
     ...(editErr !== null ? [{ what: 'project changes', error: editErr, retry: () => setEditErr(null) }] : []), ...childIssues];
   const failure = failures.find((f) => readErrorKind(f.error) === 'offline') ?? failures[0];
   const backHref = everythingPath({ tab: 'projects' });
+  const go = (path: string) => (e: React.MouseEvent): void => { e.preventDefault(); navigate(path); };
+  const newJob = (workflowId: string | null = null): void => openLaunchWizard({ projectId: isDefault ? null : projectId, workflowId, composerKey: 'desk' });
+  const chatHere = (): void => openAskDock({ projectId: isDefault ? null : projectId });
+  const scrollTo = (id: string): void => document.getElementById(id)?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+  const attachedRepos = used.filter((u) => u.repo !== null);
+  const title = isDefault ? 'Not in a project' : project?.name ?? 'Project';
+  const statesTotal = states.reduce((n, s) => n + s.count, 0);
+  const qualityValue = quality.tally === null ? null : quality.tally.recorded === 0 ? null : `${quality.tally.passed} of ${quality.tally.recorded}`;
+  const qualityNote = quality.tally === null ? 'Reading checks…'
+    : quality.tally.recorded === 0 ? (inWindow.length === 0 ? `no jobs in ${windowWords(days)}` : quality.capped ? `no checks recorded for the newest ${quality.tally.read} jobs` : `no checks recorded for these ${inWindow.length} ${inWindow.length === 1 ? 'job' : 'jobs'}`)
+      : quality.capped ? `of the newest ${quality.tally.read} jobs` : 'checks passed of those recorded';
+  const spendNote = spend.phase === 'loading' ? 'Reading spend…'
+    : spend.current === null ? (isDefault ? 'Spend could not be read' : 'Not available yet: update Studio to see spend per project')
+      : spend.partial ? 'at least: some helpers report no price'
+        : spend.previous !== null ? `${moneyWords(spend.previous)} the ${days} days before` : 'no earlier spend to compare';
+
   return (
-    <PageFrame title={project?.name ?? 'Project'} intro="Manage this project’s repositories, documents, and sessions." actions={<>
-      <a className="wk-link" href={backHref} onClick={(e) => { e.preventDefault(); navigate(backHref); }}>All projects</a>
-      {project && !isDefault && !editing && <>
-        <button type="button" className="wk-btn wk-btn--primary" onClick={startEdit}>Edit</button>
-        <button type="button" className="wk-btn wk-btn--secondary" onClick={() => void toggleArchive()} disabled={archiveBusy}>{project.status === 'active' ? 'Archive' : 'Restore'}</button>
-        {archiveBusy && <p className="wk-field-note">Saving the project’s status…</p>}
-      </>}
-    </>}>
+    <div data-testid="project-dashboard" data-project-id={projectId} className="wk-page wk-proj">
+      <nav aria-label="Breadcrumb" className="wk-proj-crumbs">
+        <a className="wk-link" href={backHref} onClick={go(backHref)}>Projects</a>
+        <span aria-hidden> / </span>
+        <span aria-current="page">{title}</span>
+      </nav>
+      <header className="wk-proj-head">
+        <div className="wk-proj-head-text">
+          <h1 className="wk-page-title">{title}</h1>
+          {project !== null && (
+            <p data-testid="project-meta" className="wk-proj-meta">
+              {project.status === 'archived' && <span className="wk-tag">Archived</span>}{project.status === 'archived' ? ' ' : ''}
+              {projectMeta(project.created_at > 0 ? `Created ${relTime(project.created_at, now)}` : null, jobsCount, used)}
+            </p>
+          )}
+          {project?.description ? <>
+            <p data-testid="project-desc" className={`wk-proj-desc${descOpen ? '' : ' wk-proj-desc--clamped'}`}>{project.description}</p>
+            {project.description.length > 220 && <button type="button" className="wk-link wk-proj-desc-toggle" aria-expanded={descOpen} onClick={() => setDescOpen((v) => !v)}>{descOpen ? 'Show less' : 'Show all'}</button>}
+          </> : null}
+        </div>
+        {project !== null && !editing && (
+          <div className="wk-proj-actions" data-testid="project-actions">
+            <button type="button" data-testid="project-new-job" className="wk-btn wk-btn--primary" onClick={() => newJob()}><Plus size={14} aria-hidden />New job</button>
+            <button type="button" data-testid="project-chat" className="wk-btn wk-btn--secondary" onClick={chatHere}><MessageSquare size={14} aria-hidden />Chat in this project</button>
+            {attachedRepos.length > 0 && (
+              <OverflowMenu
+                label="Open a repository this project uses"
+                text="Open repository"
+                tone="secondary"
+                items={attachedRepos.map((u) => ({ id: u.ref, label: u.name, onSelect: () => navigate(`/repo-detail/${encodeURIComponent(u.repo!.id)}`) }))}
+                data-testid="project-open-repo"
+              />
+            )}
+            <button type="button" data-testid="project-documents" className="wk-btn wk-btn--secondary" onClick={() => scrollTo('project-documents')}><FileText size={14} aria-hidden />Documents</button>
+            {!isDefault && (
+              <span className="wk-proj-more"><OverflowMenu label={`More actions for ${title}`} items={[
+                { id: 'edit', label: 'Edit name and description', onSelect: startEdit },
+                { id: 'archive', label: project.status === 'active' ? 'Archive this project' : 'Restore this project', onSelect: () => void toggleArchive(), disabled: archiveBusy ? 'Saving the project’s status…' : null },
+              ]} /></span>
+            )}
+          </div>
+        )}
+      </header>
       {failure && <StateBanner kind={readErrorKind(failure.error)} what={failure.what} error={failures.map((f) => f.error).join('\n')} onRetry={() => failures.forEach((f) => f.retry())} retrying={loading} />}
+
       {loading ? <Skeleton rows={3} variant="card" /> : !project ? !error && <EmptyState title="Project not found" /> : <>
-        {editing ? <section className="wk-card wk-pg-proj-stack">
+        {editing && <section className="wk-card wk-pg-proj-stack">
           <SectionTitle>Edit project</SectionTitle>
           <label className="wk-pg-proj-field">Project name<input type="text" className="wk-field" value={editName} maxLength={120} onChange={(e) => setEditName(e.target.value)} autoFocus /></label>
           <label className="wk-pg-proj-field">Description<textarea className="wk-field" value={editDesc} onChange={(e) => setEditDesc(e.target.value)} rows={2} placeholder="Describe this project" /></label>
           <div className="wk-pg-proj-actions"><button type="button" className="wk-btn wk-btn--primary" onClick={() => void saveEdit()} disabled={editBusy || !editName.trim()}>{editBusy ? 'Saving…' : 'Save'}</button>
             <button type="button" className="wk-btn wk-btn--quiet" onClick={() => setEditing(false)}>Cancel</button></div>
           {(editBusy || !editName.trim()) && <p className="wk-field-note">{editBusy ? 'Saving your changes…' : 'Enter a project name to save.'}</p>}
-        </section> : <div className="wk-pg-proj-stack">
-          {project.description && <p className="wk-pg-proj-note">{project.description}</p>}
-          {(project.status === 'archived' || isDefault || project.created_at > 0) && <p className="wk-pg-proj-meta">
-            {project.status === 'archived' && <span className="wk-tag">Archived</span>}
-            {isDefault && <span className="wk-tag">Default project</span>}
-            {project.created_at > 0 && <span className="wk-list-row-meta" title={new Date(project.created_at).toLocaleString()}>Created {relTime(project.created_at)}</span>}
-          </p>}
-        </div>}
-        <ProjectDocumentsRoot projectId={projectId} project={project} onIssue={onIssue} onChanged={(updated) => setDetail((d) => d !== null && d.project.id === updated.id ? { ...d, project: updated } : d)} />
-        <ProjectRepositories projectId={projectId} members={members} onIssue={onIssue} onMembersChange={(update) => setDetail((d) => d !== null && d.project.id === projectId ? { ...d, members: update(d.members) } : d)} />
-        {projectId !== 'default' && <><ProjectCoverage projectId={projectId} navigate={navigate} onIssue={onIssue} /><ProjectDomain projectId={projectId} navigate={navigate} onIssue={onIssue} /></>}
-        <section className="wk-card" aria-label="Sessions"><SectionTitle>Sessions</SectionTitle>
-          <StatLine items={[{ label: otherMembers.length === 1 ? 'session' : 'sessions', value: failures.length === 0 ? otherMembers.length : null }]} />
-          {otherMembers.length === 0 ? <EmptyState title="No sessions yet" body="Start work in this project to add a session." /> : otherMembers.map((m) => <MemberRow key={m.id} member={m} known={m.member_kind === 'crew.run' ? runs.find((v) => v.session.id === m.member_ref) : undefined} onDetach={handleDetach} navigate={navigate} onIssue={onIssue} />)}
-        </section>
-        <section className="wk-card"><SectionTitle>Activity</SectionTitle>
-          {activity.length === 0 ? error === null && <EmptyState title="No activity yet" /> : activity.map((entry) => <ActivityRow key={entry.id} entry={entry} />)}
-        </section>
+        </section>}
+
+        {firstRun ? (
+          <section data-testid="project-first-run" aria-labelledby="project-first-title" className="wk-proj-first">
+            <div className="wk-card wk-proj-first-steps">
+              <h2 id="project-first-title" className="wk-section-title">Get this project going</h2>
+              <ol className="wk-proj-steps">
+                <li>
+                  <span className="wk-proj-step-title">Attach the repositories it works in</span>
+                  <span className="wk-proj-step-line">Jobs in this project read and change their code. Attach them below, under Repositories and branches.</span>
+                  <button type="button" className="wk-link" onClick={() => scrollTo('project-repos')}>Go to repositories</button>
+                </li>
+                <li>
+                  <span className="wk-proj-step-title">Start the first job</span>
+                  <span className="wk-proj-step-line">Pick what it is; the wizard asks for the rest.</span>
+                  <span className="wk-proj-chips">
+                    {FIRST_JOBS.map((j) => <button key={j.label} type="button" data-testid="project-first-job" className="wk-btn wk-btn--secondary wk-btn--sm" onClick={() => (j.chat === true ? chatHere() : newJob(j.workflowId))}>{j.label}</button>)}
+                  </span>
+                </li>
+                <li>
+                  <span className="wk-proj-step-title">Answer it when it asks</span>
+                  <span className="wk-proj-step-line">A job stops for your yes before it changes anything. Its questions show here and on the Desk.</span>
+                </li>
+              </ol>
+            </div>
+            <div className="wk-card wk-proj-first-preview" aria-label="What you will see here">
+              <h2 className="wk-section-title">What you’ll see here</h2>
+              <p className="wk-proj-step-line">Once work starts: jobs by state, how many started, delivered, quality checks passed, the typical time to finish, and spend.</p>
+            </div>
+          </section>
+        ) : (
+          <section aria-labelledby="project-band-title" className="wk-proj-band">
+            <div className="wk-desk-band-head">
+              <h2 id="project-band-title" className="wk-section-title">How it’s going</h2>
+              <Segmented label="Window" data-testid="project-window" value={String(days) as `${WindowDays}`}
+                options={WINDOWS.map((d) => ({ value: String(d) as `${WindowDays}`, label: `${d} days`, testId: `project-window-${d}` }))}
+                onChange={(v) => setDays(Number(v) as WindowDays)} />
+            </div>
+            {quiet && (
+              <div data-testid="project-quiet" className="wk-proj-quiet" role="status">
+                <span>
+                  {`A quiet stretch here: no jobs started in ${windowWords(days)}`}
+                  {lastEnded.length > 0 ? `; the last one ended ${relTime(Math.max(...lastEnded) * 1000, now)}` : ''}.
+                  {openFailures > 0 ? ` ${openFailures} ${openFailures === 1 ? 'failure is' : 'failures are'} still open below.` : ''}
+                </span>
+                <button type="button" className="wk-btn wk-btn--secondary wk-btn--sm" onClick={() => newJob()}>New job</button>
+              </div>
+            )}
+            <StatBand label={`How it’s going, ${windowWords(days)}`} data-testid="project-band">
+              <div data-testid="project-stat-states" className="wk-stat">
+                <span className="wk-stat-label">Jobs by state, all time</span>
+                <span data-testid="stat-value" className="wk-stat-value">{statesTotal}</span>
+                <span className="wk-stat-note">{states.filter((s) => s.count > 0).map((s) => `${s.count} ${s.label}`).join(' · ') || 'no jobs yet'}</span>
+                {statesTotal > 0 && (
+                  <span className="wk-proj-stack" role="img" aria-label={states.filter((s) => s.count > 0).map((s) => `${s.count} ${s.label}`).join(', ')}>
+                    {states.filter((s) => s.count > 0).map((s) => <i key={s.key} data-tone={s.tone} style={{ flexGrow: s.count }} />)}
+                  </span>
+                )}
+              </div>
+              <StatTile data-testid="project-stat-started" label={`Started, last ${days} days`} value={p.started.count}
+                delta={hasPrev ? { current: p.started.count, previous: p.started.previous, versus: `vs the ${days} days before` } : null}
+                note={hasPrev ? null : 'no earlier window'} />
+              <StatTile data-testid="project-stat-delivered" label="Delivered" value={p.delivered} note={p.delivered === 0 ? `nothing delivered in ${windowWords(days)}` : null} />
+              <StatTile data-testid="project-stat-quality" label="Quality checks passed" value={qualityValue} note={qualityNote} />
+              <StatTile data-testid="project-stat-typical" label="Typical time to finish" value={p.typicalMin === null ? null : durationWords(p.typicalMin)}
+                note={p.typicalMin === null ? `no job finished in ${windowWords(days)}` : `median of ${p.typicalOf} that finished`} />
+              <StatTile data-testid="project-stat-spend" label={`Spend, last ${days} days`} value={spend.current === null ? null : moneyWords(spend.current)} note={spendNote} />
+            </StatBand>
+          </section>
+        )}
+
+        <div className="wk-proj-body">
+          <div className="wk-proj-main">
+            {needs.length > 0 && (
+              <div className="wk-card" data-testid="project-needs">
+                <NeedsQueueSurface rows={needs as NeedRow[]} runs={runs as SessionView[]} navigate={navigate} now={now} />
+              </div>
+            )}
+            {mine.length > 0 && (
+              <section aria-labelledby="project-jobs-title" data-testid="project-jobs" className="wk-card">
+                <div className="wk-desk-card-head">
+                  <h2 id="project-jobs-title" className="wk-section-title">Jobs</h2>
+                  <a className="wk-link wk-desk-card-link" href={everythingPath({ tab: 'sessions', ...(isDefault ? {} : { project: projectId }) })} onClick={go(everythingPath({ tab: 'sessions', ...(isDefault ? {} : { project: projectId }) }))}>All jobs in this project</a>
+                </div>
+                <ul className="wk-desk-lanes" aria-label="This project’s jobs">
+                  {lanes.map((l) => {
+                    const member = members.find((m) => m.member_kind === RUN_KIND && m.member_ref === l.runId);
+                    return (
+                      <li key={l.runId} data-testid="project-job" data-run-id={l.runId} className="wk-desk-lane wk-proj-lane">
+                        <div className="wk-desk-lane-text">
+                          <a href={l.path} onClick={go(l.path)} title={l.fullTitle} className="wk-desk-lane-title">{l.title}</a>
+                          {l.context !== '' && <span className="wk-desk-lane-meta">{l.context}</span>}
+                        </div>
+                        <StepTrack steps={l.steps} />
+                        <span className="wk-desk-lane-word"><span aria-hidden className="wk-status-dot" data-status={l.tone} /> {l.word}</span>
+                        {member !== undefined && !isDefault
+                          ? <OverflowMenu label={`More actions for ${l.title}`} items={[{ id: 'detach', label: 'Remove from project', danger: true, onSelect: () => handleDetach(member.id) }]} />
+                          : <span aria-hidden />}
+                      </li>
+                    );
+                  })}
+                </ul>
+                <StepLegend />
+              </section>
+            )}
+            {!isDefault && <div id="project-repos"><ProjectRepositories projectId={projectId} members={members} used={used} onIssue={onIssue} onMembersChange={(update) => setDetail((d) => d !== null && d.project.id === projectId ? { ...d, members: update(d.members) } : d)} /></div>}
+            {others.length > 0 && (
+              <section className="wk-card" aria-labelledby="project-others-title">
+                <h2 id="project-others-title" className="wk-section-title">Chats and other items</h2>
+                <ul className="wk-pg-proj-list">{others.map((m) => <OtherMemberRow key={m.id} member={m} onDetach={handleDetach} navigate={navigate} />)}</ul>
+              </section>
+            )}
+          </div>
+          <aside className="wk-proj-side" aria-label="About this project">
+            {feed.length > 0 && (
+              <section aria-labelledby="project-feed-title" data-testid="project-feed" className="wk-card">
+                <h2 id="project-feed-title" className="wk-section-title">What happened here</h2>
+                <ul className="wk-desk-feed">
+                  {feed.map((s) => {
+                    const v = mine.find((x) => x.session.id === s.runId);
+                    const href = v === undefined ? sessionPath(`run:${s.runId}`) : pathOf(v);
+                    return (
+                      <li key={s.key} className="wk-desk-feed-row">
+                        <span aria-hidden className="wk-status-dot" data-status={s.tone} />
+                        <span className="wk-desk-feed-text">
+                          <span className="wk-desk-feed-sentence"><a href={href} onClick={go(href)} title={s.fullTitle} className="wk-desk-feed-title">{s.title}</a> {s.verb}{s.count > 1 ? `, ${s.count} times` : ''}.</span>
+                          <span className="wk-desk-feed-meta">{[relTime(s.at, now), s.detail].filter((x) => x !== '').join(' · ')}</span>
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </section>
+            )}
+            <div id="project-documents"><ProjectDocumentsRoot projectId={projectId} project={project} onIssue={onIssue} onChanged={(updated) => setDetail((d) => d !== null && d.project.id === updated.id ? { ...d, project: updated } : d)} /></div>
+            {/* Coverage and domains are about attached code: with none attached they would be empty boxes. */}
+            {!isDefault && members.some((m) => m.member_kind === REPO_KIND) && <><ProjectCoverage projectId={projectId} navigate={navigate} onIssue={onIssue} /><ProjectDomain projectId={projectId} navigate={navigate} onIssue={onIssue} /></>}
+          </aside>
+        </div>
+        {isDefault && <TechDetails summary="About this list" text="Work no project holds. Move a job into a project from the rail, or start one from a project." />}
       </>}
-    </PageFrame>
+    </div>
   );
 }

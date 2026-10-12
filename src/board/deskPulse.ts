@@ -174,13 +174,15 @@ export function stepMarks(v: SessionView): StepMark[] {
 export function jobLanes(
   runs: readonly SessionView[],
   now: number,
-  opts: { max: number; projectName: (id: string | null) => string | null; pathOf: (v: SessionView) => string },
+  opts: { max: number; projectName: (id: string | null) => string | null; pathOf: (v: SessionView) => string; includeUndated?: boolean },
 ): JobLane[] {
   const on = (v: SessionView): boolean => isWorking(v) || v.session.status === 'awaiting_human';
   const all = runs.filter(live);
   const ordered = [
     ...all.filter(on).sort((a, b) => (createdAtMs(b) ?? 0) - (createdAtMs(a) ?? 0)),
     ...all.filter((v) => !on(v) && createdAtMs(v) !== null).sort((a, b) => createdAtMs(b)! - createdAtMs(a)!),
+    // A project's list shows every job it holds: the undated ones last (the Desk's lanes leave them out).
+    ...(opts.includeUndated === true ? all.filter((v) => !on(v) && createdAtMs(v) === null) : []),
   ].slice(0, opts.max);
   return ordered.map((v) => {
     const s = statusWord(v);

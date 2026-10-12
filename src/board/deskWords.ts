@@ -134,7 +134,8 @@ export function plainRunTitle(problem: string): string {
 export function jobTitle(session: { problem?: string | null; id: string; title?: unknown }): string {
   const t = (session as { title?: unknown }).title;
   if (typeof t === 'string' && t.trim() !== '') return t.trim();
-  return plainRunTitle(session.problem || session.id);
+  // A run with no words never shows its id as its title (UI-CONTRACT §1.5): it is an untitled job.
+  return (session.problem ?? '').trim() === '' ? 'Untitled job' : plainRunTitle(session.problem!);
 }
 
 /** The words a run's hover title shows: the whole problem, uncut, when it says more than the title. */

@@ -117,7 +117,8 @@ with sync_playwright() as p:
     page.route("**/api/v1/projects/default/coverage", lambda r: (folds.append("coverage"), r.fulfill(status=200, json={**COVERAGE, "projectId": "default"})))
     page.route("**/api/v1/projects/default/domain", lambda r: (folds.append("domain"), r.fulfill(status=200, json={**DOMAIN, "projectId": "default"})))
     page.goto(f"{origin}/projects/default", wait_until="networkidle")
-    page.get_by_text("Unfiled stub", exact=True).wait_for(state="visible", timeout=15000)
+    # Concept P: the synthesized default project is titled "Not in a project".
+    page.get_by_role("heading", name="Not in a project").wait_for(state="visible", timeout=15000)
     page.wait_for_timeout(500)
     on_default = page.get_by_test_id("project-coverage").count() + page.get_by_test_id("project-domain").count()
     check("default-none", on_default == 0 and folds == [], on_default=on_default, folds=folds)

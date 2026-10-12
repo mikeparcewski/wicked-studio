@@ -54,7 +54,15 @@ async function renderLoaded(projectId: string, navigate = vi.fn()): Promise<void
   render(<ProjectDetailPage projectId={projectId} navigate={navigate} />);
   await waitFor(() => expect(getProject).toHaveBeenCalledWith(projectId));
   // wait for the page to finish loading
-  await screen.findByRole('heading', { level: 1, name: `Project ${projectId}` });
+  await screen.findByRole('heading', { level: 1, name: projectId === 'default' ? 'Not in a project' : `Project ${projectId}` });
+}
+
+/** DES-frontdoor P: Edit and Archive / Restore live in the header's ⋯ menu. */
+function menuItem(name: RegExp): HTMLElement | null {
+  const button = screen.queryByRole('button', { name: /^More actions for Project / });
+  if (button === null) return null;
+  if (button.getAttribute('aria-expanded') !== 'true') fireEvent.click(button);
+  return screen.queryByRole('menuitem', { name });
 }
 
 describe('ProjectDetailPage — Edit', () => {
@@ -63,7 +71,7 @@ describe('ProjectDetailPage — Edit', () => {
     updateProject.mockResolvedValue({ project: proj('proj-1', { name: 'renamed' }) });
     await renderLoaded('proj-1');
 
-    fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+    fireEvent.click(menuItem(/^Edit/)!);
     const nameInput = screen.getByDisplayValue('Project proj-1') as HTMLInputElement;
     fireEvent.change(nameInput, { target: { value: 'renamed' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
@@ -79,7 +87,7 @@ describe('ProjectDetailPage — Edit', () => {
     getProject.mockResolvedValue(detail(proj('proj-1')));
     await renderLoaded('proj-1');
 
-    fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+    fireEvent.click(menuItem(/^Edit/)!);
     const nameInput = screen.getByDisplayValue('Project proj-1') as HTMLInputElement;
     fireEvent.change(nameInput, { target: { value: '' } });
 
@@ -95,13 +103,11 @@ describe('ProjectDetailPage — Archive / Restore', () => {
     updateProject.mockResolvedValue({ project: proj('proj-1', { status: 'archived' }) });
     await renderLoaded('proj-1');
 
-    expect(screen.getByRole('button', { name: 'Archive' })).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole('button', { name: 'Archive' }));
+    fireEvent.click(menuItem(/^Archive/)!);
 
     await waitFor(() => expect(updateProject).toHaveBeenCalledWith('proj-1', { status: 'archived' }));
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Restore' })).toBeInTheDocument());
-    expect(screen.queryByRole('button', { name: 'Archive' })).toBeNull();
+    await waitFor(() => expect(menuItem(/^Restore/)).not.toBeNull());
+    expect(menuItem(/^Archive/)).toBeNull();
   });
 
   it('Restore sends {status: "active"} and the button flips back to Archive', async () => {
@@ -110,13 +116,11 @@ describe('ProjectDetailPage — Archive / Restore', () => {
     updateProject.mockResolvedValue({ project: proj('proj-1', { status: 'active' }) });
     await renderLoaded('proj-1');
 
-    expect(screen.getByRole('button', { name: 'Restore' })).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole('button', { name: 'Restore' }));
+    fireEvent.click(menuItem(/^Restore/)!);
 
     await waitFor(() => expect(updateProject).toHaveBeenCalledWith('proj-1', { status: 'active' }));
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Archive' })).toBeInTheDocument());
-    expect(screen.queryByRole('button', { name: 'Restore' })).toBeNull();
+    await waitFor(() => expect(menuItem(/^Archive/)).not.toBeNull());
+    expect(menuItem(/^Restore/)).toBeNull();
   });
 });
 
@@ -126,8 +130,7 @@ describe('ProjectDetailPage — default-project guard', () => {
     getProjectActivity.mockResolvedValue({ entries: [], nextCursor: null, projectId: 'default' });
     await renderLoaded('default');
 
-    expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Archive' })).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Restore' })).toBeNull();
+    expect(screen.queryByRole('button', { name: /^More actions for/ })).toBeNull();
+    expect(screen.queryByRole('menuitem', { name: /^Edit|^Archive|^Restore/ })).toBeNull();
   });
 });
