@@ -23,7 +23,8 @@ afterEach(cleanup);
 it('workflowLabel says a key in plain words, acronyms kept', () => {
   expect(workflowLabel('domain-extraction')).toBe('Domain extraction');
   expect(workflowLabel('mcp-server')).toBe('MCP server');
-  expect(workflowLabel('qe-author-tests')).toBe('QE author tests');
+  expect(workflowLabel('qe-author-tests')).toBe('Write tests');
+  expect(workflowLabel('qe-sweep')).toBe('QE sweep');
   expect(workflowLabel('feature')).toBe('Feature');
 });
 

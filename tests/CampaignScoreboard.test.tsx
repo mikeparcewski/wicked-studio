@@ -249,13 +249,15 @@ describe('verdict chips — per-run acceptance behind ONE explicit gesture', () 
 });
 
 describe('honest degradation', () => {
-  it('an unknown campaign states the fact in words and offers /campaigns — never a spinner', async () => {
+  it('an unknown campaign states the fact in words and offers every job — never a spinner', async () => {
     getCampaign.mockRejectedValue(new ApiError(404, 'Unknown campaign'));
     const navigate = vi.fn();
     board([], navigate);
     await waitFor(() => expect(screen.getByTestId('campaign-notfound')).toBeInTheDocument());
-    fireEvent.click(screen.getByText('All tests'));
-    expect(navigate).toHaveBeenCalledWith('/testing/campaigns');
+    // The campaigns list retired (operator 2026-10-12: writing tests is a launch-wizard job), so the
+    // way back is every job, where a campaign's runs are.
+    fireEvent.click(screen.getByText('All jobs'));
+    expect(navigate).toHaveBeenCalledWith('/everything?tab=sessions');
   });
 
   it('a pre-0.19 payload (no node_delivery) renders NO delivery rollup — absence, never "0 of N"', async () => {

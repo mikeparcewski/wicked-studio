@@ -2,9 +2,8 @@ import type { Project, SessionView } from '../api/types.js';
 import { sessionIdOf, sessionPath } from '../board/sessionModel.js';
 import { humanTitle } from '../components/runIdentity.js';
 import { everythingPath } from '../board/everythingModel.js';
-import { projectDetailPath, runEventsPath, runFilesPath, type Route } from '../hooks/useRoute.js';
+import { projectDetailPath, projectRequirementsPath, runEventsPath, runFilesPath, type Route } from '../hooks/useRoute.js';
 import { PAGE_NAMES } from '../board/pageNames.js';
-import { projectTestsPath } from '../api/testing.js';
 
 /**
  * EVERY ROUTE IN ⌘K (the skin contract, DES-STUDIO-REBUILD-001 §10 / §14 Q2: "every route is
@@ -51,10 +50,13 @@ export const ROUTE_SHAPES: readonly RouteShape[] = [
   { id: 'run-files', example: '/runs/r1/files', is: (r) => r.panel === 'run-files' },
   { id: 'workflows', example: '/workflows', is: (r) => r.panel === 'workflows' },
   { id: 'skills', example: '/skills', is: (r) => r.panel === 'skills' },
+  { id: 'project-requirements', example: '/projects/p1/requirements', is: (r) => r.panel === 'project-requirements' },
+  // The retired Product page's address (operator 2026-10-12): it only redirects to a project dashboard.
   { id: 'product', example: '/product', is: (r) => r.panel === 'product' },
   { id: 'health', example: '/health', is: (r) => r.panel === 'health' },
   { id: 'settings', example: '/settings', is: (r) => r.panel === 'settings' },
   { id: 'mcp', example: '/mcp', is: (r) => r.panel === 'mcp' },
+  { id: 'plugins', example: '/plugins', is: (r) => r.panel === 'plugins' },
   { id: 'learn', example: '/learn', is: (r) => r.panel === 'learn' },
   { id: 'system', example: '/system', is: (r) => r.panel === 'system' },
   { id: 'theme', example: '/theme', is: (r) => r.panel === 'theme' },
@@ -78,16 +80,15 @@ const DESTINATIONS: ReadonlyArray<{ shape: string; label: string; href: string }
   { shape: 'steering-dashboard', label: 'Steering dashboard — proposals to review', href: '/steering/dashboard' },
   { shape: 'steering-policies', label: 'Steering — all rules and policies', href: '/steering/policies' },
   { shape: 'steering-memories', label: 'Steering — memories', href: '/steering/memories' },
-  { shape: 'testing-campaigns', label: `${PAGE_NAMES.testing} — campaigns`, href: '/testing/campaigns' },
   { shape: 'testing-evals', label: `${PAGE_NAMES.evals} — check steering rules against samples`, href: '/testing/evals' },
   { shape: 'repos', label: 'Repositories', href: '/repos' },
   { shape: 'repos-new', label: 'Register a repository', href: '/repos/new' },
   { shape: 'runs-new', label: 'Start a run', href: '/runs/new' },
   { shape: 'workflows', label: 'Workflows', href: '/workflows' },
-  { shape: 'product', label: 'Product', href: '/product' },
   { shape: 'health', label: "Health — the studio's checks", href: '/health' },
   { shape: 'skills', label: 'Skills', href: '/skills' },
-  { shape: 'mcp', label: 'MCP tools', href: '/mcp' },
+  { shape: 'mcp', label: `${PAGE_NAMES.mcp} — the tools helpers can call`, href: '/mcp' },
+  { shape: 'plugins', label: `${PAGE_NAMES.plugins} — editor plugins, and making one`, href: '/plugins' },
   { shape: 'learn', label: 'Learn', href: '/learn' },
   { shape: 'settings', label: `${PAGE_NAMES.settings} — every settings page`, href: '/settings' },
   { shape: 'system', label: `${PAGE_NAMES.system} — helpers, sign-ins, notifications`, href: '/system' },
@@ -141,7 +142,7 @@ export function routeTargets(d: RouteTargetData): RouteTarget[] {
       { shape: 'everything', label: `${p.name} · documents`, href: everythingPath({ tab: 'made', kind: 'documents', project: p.id }) },
       { shape: 'everything', label: `${p.name} · demos`, href: everythingPath({ tab: 'made', kind: 'videos', project: p.id }) },
       { shape: 'everything', label: `${p.name} · sessions`, href: everythingPath({ tab: 'sessions', project: p.id }) },
-      { shape: 'testing-campaigns', label: `${p.name} · campaigns`, href: projectTestsPath(p.id) },
+      { shape: 'project-requirements', label: `${p.name} · requirements`, href: projectRequirementsPath(p.id) },
     );
   }
   for (const c of d.chats) out.push({ shape: 'session', label: `${c.title} · chat`, href: sessionPath(c.id) });
@@ -159,5 +160,7 @@ export function routeTargets(d: RouteTargetData): RouteTarget[] {
 export const REACHED_BY_OTHER_GROUPS: readonly string[] = ['repo-detail'];
 
 /** Shapes with no ⌘K entry on purpose: `/editors/conformance` is the conformance host the CI harness
- *  drives (e2e/editor_conformance_test.py); operators reach editors from Settings → Developer (X3). */
-export const NOT_IN_PALETTE: readonly string[] = ['editors-conformance'];
+ *  drives (e2e/editor_conformance_test.py; operators reach editors from Plugins, X3), and the two
+ *  redirect-only addresses (operator 2026-10-12): `/product` lands on a project dashboard and
+ *  `/testing/campaigns` opens the launch wizard on the test-writing workflow. */
+export const NOT_IN_PALETTE: readonly string[] = ['editors-conformance', 'product', 'testing-campaigns'];

@@ -1,3 +1,4 @@
+import { PAGE_NAMES } from '../board/pageNames.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ageOf,
@@ -665,7 +666,7 @@ export function McpToolsPage({ navigate, search }: { navigate: (p: string) => vo
 
   return (
     <div className="wk-pg-mcp-scroll">
-      <PageFrame data-testid="mcp-tools-page" title="MCP tools" intro="Choose the tools your helpers can use and when they need your approval."
+      <PageFrame data-testid="mcp-tools-page" title={PAGE_NAMES.mcp} intro="Choose the tools your helpers can use and when they need your approval."
         actions={<>
           <a className="wk-link" href={`${policiesPath()}?mcp=1`} onClick={(e) => { e.preventDefault(); navigate(`${policiesPath()}?mcp=1`); }} data-testid="mcp-steering-link">MCP policies</a>
           {view === 'servers' && loaded !== null && !adding && <button type="button" data-testid="mcp-add-open" onClick={() => setAdding(true)} className="wk-btn wk-btn--primary">Add existing server</button>}

@@ -110,7 +110,7 @@ describe('T30 — every rendered word on the Test surfaces says Test (#203)', ()
     render(<CampaignScoreboard campaignId="suite-1" runs={[]} navigate={() => {}} />);
     const notFound = await screen.findByTestId('campaign-notfound');
     expect(notFound).toHaveTextContent('This test isn’t here.');
-    expect(within(notFound).getByRole('link')).toHaveTextContent('All tests');
+    expect(within(notFound).getByRole('link')).toHaveTextContent('All jobs'); // the tests list retired (2026-10-12): back to every job
     expectTestVocabulary(notFound);
   });
 

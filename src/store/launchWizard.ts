@@ -24,7 +24,13 @@ export interface LaunchDraft {
   composerKey: string | null;
   /** The repository the opening context already names (a session's work), used as the default. */
   contextRepo: string | null;
+  /** "Draft epics" (operator 2026-10-12): the requirements chosen to draft from (repo + key + title). */
+  requirements: readonly { repoId: string; key: string; title: string }[];
 }
+
+/** The wizard's own job kind that is not a daemon workflow: drafting epics from a project's
+ *  requirements (crew's compose route, `POST /projects/:id/product/compose`). */
+export const DRAFT_EPICS_ID = 'draft-epics';
 
 export interface OpenLaunchWizard {
   workflowId?: string | null;
@@ -32,6 +38,7 @@ export interface OpenLaunchWizard {
   projectId?: string | null;
   composerKey?: string | null;
   contextRepo?: string | null;
+  requirements?: readonly { repoId: string; key: string; title: string }[];
 }
 
 interface LaunchWizardStore {
@@ -57,6 +64,7 @@ export function freshDraft(init: OpenLaunchWizard): LaunchDraft {
     skipQeReason: '',
     composerKey: init.composerKey ?? null,
     contextRepo: init.contextRepo ?? null,
+    requirements: init.requirements ?? [],
   };
 }
 
@@ -70,7 +78,12 @@ export const useLaunchWizard = create<LaunchWizardStore>((set, get) => ({
     // caller brings fill an empty intent only). Another workflow starts fresh.
     // codex r1: a draft resumes only for the composer that made it (or a caller naming none).
     const sameOrigin = init.composerKey === undefined || init.composerKey === cur?.composerKey;
-    if (cur !== null && sameOrigin && (wf === null || wf === cur.workflowId)) {
+    // A Draft-epics open that names its project or its picks starts from them (the requirements page).
+    const freshPicks = wf === DRAFT_EPICS_ID && (init.requirements !== undefined || (init.projectId ?? null) !== cur?.projectId);
+    // An open that names another project starts fresh, whatever the job (codex on S5: /testing/campaigns
+    // ?project=B must not resume a saved test draft for A).
+    const otherProject = typeof init.projectId === 'string' && init.projectId !== cur?.projectId;
+    if (cur !== null && sameOrigin && (wf === null || wf === cur.workflowId) && !freshPicks && !otherProject) {
       const intent = cur.intent.trim() === '' && (init.intent ?? '').trim() !== '' ? init.intent ?? '' : cur.intent;
       set({ open: true, draft: { ...cur, intent } });
       return;

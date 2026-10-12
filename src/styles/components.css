@@ -705,6 +705,13 @@ select:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-
    Workspace label sits flush with the links: the same 20px inset the foot links and project group
    labels use (foot padding 10 + link/label padding 10). */
 .wk-rail-health { justify-content: flex-start; }
+/* Health apart at the foot (operator 2026-10-12): a hairline above it and a muted tint of its state. */
+.wk-rail-foot .wk-rail-health { margin-top: 6px; position: relative; }
+.wk-rail-foot .wk-rail-health::before { content: ''; position: absolute; left: 10px; right: 10px; top: -4px; border-top: 1px solid color-mix(in oklab, var(--ink-dim) 35%, transparent); }
+.wk-rail-health[data-health="healthy"] { background: var(--status-ok-dim); }
+.wk-rail-health[data-health="degraded"] { background: var(--status-warn-dim); }
+.wk-rail-health[data-health="unhealthy"] { background: var(--status-fail-dim); }
+.wk-rail-health[data-health] .wk-rail-health-state { color: var(--ink-body); }
 .wk-rail-health .wk-rail-health-dot { margin-left: auto; }
 /* studio#421 change 2: "Additional settings" reads as a control, not another link — a bordered, filled
    button (same height as the links: 4px + a 1px border = the links' 5px), label left, chevron right.

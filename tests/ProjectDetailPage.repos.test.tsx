@@ -320,3 +320,23 @@ describe('ProjectDetailPage — Repositories section (studio#207)', () => {
     expect(screen.queryByTestId('project-repo-search')).toBeNull();
   });
 });
+
+describe('ProjectDetailPage — the #requirements anchor (S5: the retired /product lands here)', () => {
+  it('a hash-only move on a loaded dashboard (Back/Forward, hashchange) brings the section into view', async () => {
+    getProject.mockResolvedValue(detail('proj-1', [member('proj-1', 'studio-api')]));
+    const scroll = vi.fn();
+    const orig = HTMLElement.prototype.scrollIntoView;
+    HTMLElement.prototype.scrollIntoView = scroll;
+    try {
+      await renderPage();
+      await waitFor(() => expect(document.getElementById('requirements')).not.toBeNull());
+      expect(scroll).not.toHaveBeenCalled();
+      window.history.replaceState(null, '', '/projects/proj-1#requirements');
+      await act(async () => { window.dispatchEvent(new HashChangeEvent('hashchange')); await new Promise((r) => setTimeout(r, 350)); });
+      await waitFor(() => expect(scroll).toHaveBeenCalled(), { timeout: 2000 });
+    } finally {
+      HTMLElement.prototype.scrollIntoView = orig;
+      window.history.replaceState(null, '', '/');
+    }
+  });
+});

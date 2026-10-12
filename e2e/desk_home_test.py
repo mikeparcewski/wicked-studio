@@ -20,9 +20,9 @@ proves the S4 acceptance:
   6. LETTERS TYPE: a letter typed with the body focused opens the Ask dock with it (the Desk has
      no composer) and sends nothing. Chat opens the same dock; its Send sends the message exactly
      once — closing and reopening the dock sends nothing.
-  7. THE RAIL (Amendment 5): Desk · Watchtower · sessions · Skills · MCP tools · Steering · Health ·
-     "Additional settings" (Configuration, Repositories, Workflows, Evals, Theme), in that order, no
-     Notifications entry; a destination navigates.
+  7. THE RAIL (operator 2026-10-12): Desk · Watchtower · sessions · Steering · Skills · MCP · Plugins ·
+     Evals · Repositories · "General settings" (Configuration, Workflows, Theme) · Health, in that
+     order, no Notifications entry; a destination navigates.
   8. 0 page errors, no horizontal scroll.
 
 Captures: e2e/shots/desk-home.png, desk-home-away.png. Env: FEEDBACK_PORT (default 4346).
@@ -225,13 +225,13 @@ with sync_playwright() as p:
     page.keyboard.press("Control+Shift+A")
     page.wait_for_function("() => !document.querySelector('[data-testid=\"ask-panel\"]')", timeout=5000)
 
-    # ── 7. the rail: Desk · Watchtower · sessions · Product · Skills · MCP tools · Steering · Testing ·
-    #       "Additional settings" (a link to /settings, which lists Configuration, Repositories,
-    #       Workflows, Evals, Theme) · Health; no Notifications entry.
+    # ── 7. the rail: Desk · Watchtower · sessions · Steering · Skills · MCP · Plugins · Evals ·
+    #       Repositories · "General settings" (a link to /settings, which lists Configuration,
+    #       Workflows, Theme) · Health; no Notifications entry.
     dests = page.evaluate("""() => [...document.querySelectorAll(
       '[data-testid="session-rail"] [data-nav-dest]')].map(e => e.dataset.navDest)""")
-    # Operator 2026-10-11: "Additional settings" is a page (/settings) and Health sits below it, last.
-    expected = ["watch", "section:product", "section:skills", "section:mcp", "section:steering", "section:testing", "settings", "health"]
+    # Operator 2026-10-11/12: "General settings" is a page (/settings) and Health sits below it, last.
+    expected = ["watch", "section:steering", "section:skills", "section:mcp", "section:plugins", "section:evals", "section:repos", "settings", "health"]
     page.get_by_test_id("desk-rail-more").click()
     page.wait_for_function("() => window.location.pathname === '/settings'", timeout=5000)
     page.locator('[data-testid="settings-overview-row"][data-dest="settings:/theme"] a').click()

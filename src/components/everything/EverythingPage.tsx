@@ -299,7 +299,7 @@ function SessionsTab({ runs, runsLoaded, runsError, onRetryRuns, needRows, q, na
             {g.projectId !== null && (
               <span className="wk-desk-card-aside wk-everything-aside">
                 <a href={projectDetailPath(g.projectId)} onClick={go(projectDetailPath(g.projectId))} data-testid="everything-group-details" className="wk-link">Details</a>
-                <a href={testsPath(g.projectId)} onClick={go(testsPath(g.projectId))} data-testid="everything-group-tests" className="wk-link">Tests</a>
+                <a href={testsPath(g.projectId)} onClick={go(testsPath(g.projectId))} data-testid="everything-group-tests" className="wk-link">Write tests</a>
               </span>
             )}
           </p>

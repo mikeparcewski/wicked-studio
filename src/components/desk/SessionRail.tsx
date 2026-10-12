@@ -32,14 +32,15 @@ export const SESSION_RAIL_PX = 236;
  *    unfiled group ("Not in a project") carries only the open icon, to See everything › Projects
  *    where its "Not in a project" card lives. A session is a chat and its runs when the
  *    daemon stamps `chat_id` (C1), else one run; each opens `/s/:id` (S6a).
- *  - the "Workspace" group label, then Skills · MCP tools · Steering and the HEALTH LINK with its
+ *  - the "Workspace" group label, then (the Agents slot) Steering · Skills · MCP · Plugins · Evals ·
+ *    Repositories · General settings (DESK_RAIL_LINKS, operator 2026-10-12) and the HEALTH LINK with its
  *    answered dot — what in-flight work is, one click away (`DESK_RAIL_LINKS`). The foot's top
- *    border separates the Product/support links above it from the run levers below, and carries a
- *    group label ("Workspace", studio#421 r3 change 18) styled like the project groups; the foot's
- *    links are the rail's secondary tier (smaller than Desk/Watchtower). Then "Additional settings",
- *    a link to the `/settings` overview page (one sentence and a link per settings page,
- *    `ADDITIONAL_SETTINGS`), and LAST the Health link to `/health` (`desk-rail-health`); when it is
- *    not healthy it names the state in muted text and its dot is the rail heartbeat (`useRailHealthDot`).
+ *    border separates the sessions above it from the Workspace links below, and carries a group
+ *    label ("Workspace", studio#421 r3 change 18) styled like the project groups; the foot's links
+ *    are the rail's secondary tier (smaller than Desk/Watchtower). Then "General settings", a link to
+ *    the `/settings` overview page (one sentence and a link per settings page, `ADDITIONAL_SETTINGS`),
+ *    and LAST, set apart, the Health link to `/health` (`desk-rail-health`): a muted tint for its
+ *    state, the state word always said, its dot the rail heartbeat (`useRailHealthDot`).
  *
  * Render only: the groups are `railGroups` (board/deskModel.ts) over `useBoardModel` + the fold.
  */
@@ -170,15 +171,15 @@ export function SessionRail({ runs, needRows, navigate, pathname, runsKnown = tr
 
       <div className="wk-rail-foot">
         {/* studio#421 r3 (change 18): the foot's group label, under the separator, styled like the
-            project groups — the Product/support links below are the "Workspace". */}
+            project groups — the links below are the "Workspace". */}
         <p className="wk-rail-group" data-testid="rail-foot-label">Workspace</p>
         {DESK_RAIL_LINKS.map((l) => (
           <a key={l.dest} href={l.path} onClick={go(l.path)} data-testid={l.testId} data-nav-dest={l.dest} aria-current={current(l.path)} className="wk-rail-link wk-rail-link--secondary">
             {l.label}
           </a>
         ))}
-        {/* Operator 2026-10-11: "Additional settings" is a PAGE (/settings: one sentence per settings
-            page, a link to each), not a dropdown. Health sits below it, last in the rail. */}
+        {/* "General settings" (operator 2026-10-12; was "Additional settings") is the /settings PAGE:
+            Configuration, Workflows and Theme. Health sits apart below it, last in the rail. */}
         <a href={SETTINGS_PATH} onClick={go(SETTINGS_PATH)} data-testid="desk-rail-more" data-nav-dest="settings" aria-current={current(SETTINGS_PATH)} className="wk-rail-link wk-rail-link--secondary">
           {PAGE_NAMES.settings}
         </a>
@@ -188,13 +189,13 @@ export function SessionRail({ runs, needRows, navigate, pathname, runsKnown = tr
           data-testid="desk-rail-health"
           data-nav-dest="health"
           aria-current={current('/health')}
-          aria-label={dot.heartState === 'healthy' ? undefined : `Health, ${dot.heartState === 'unhealthy' ? 'a check is failing' : 'a check needs attention'}`}
+          aria-label={dot.heartState === 'healthy' ? 'Health, all good' : `Health, ${dot.heartState === 'unhealthy' ? 'a check is failing' : 'a check needs attention'}`}
+          data-health={dot.heartState}
           className="wk-rail-link wk-rail-link--secondary wk-rail-health"
         >
-          {/* studio#421 r4: the label + state word are one flex item; the dot parks at the right edge. */}
-          <span>Health{dot.heartState !== 'healthy' && (
-            <span data-testid="rail-health-state" className="wk-rail-health-state"> · {dot.heartState === 'degraded' ? 'degraded' : 'needs attention'}</span>
-          )}</span>
+          {/* Operator 2026-10-12: Health sits apart with a muted tint for its state (green / yellow / red),
+              and the state word is always said — colour is never the only signal. */}
+          <span>Health<span data-testid="rail-health-state" className="wk-rail-health-state"> · {dot.heartState === 'healthy' ? 'all good' : dot.heartState === 'degraded' ? 'needs attention' : 'failing'}</span></span>
           <span aria-hidden data-testid="rail-health-heart" data-health={dot.heartState} className="wk-rail-health-dot" style={{ background: dot.heartColor }} />
         </a>
       </div>

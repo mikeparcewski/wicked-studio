@@ -11,11 +11,11 @@
   "version": 1,
   "studioVersion": "0.7.12",
   "counts": {
-    "files": 202,
-    "occurrences": 2323,
-    "static": 2022,
+    "files": 204,
+    "occurrences": 2332,
+    "static": 2026,
     "dynamic": 63,
-    "computed": 23
+    "computed": 24
   },
   "static": [
     {
@@ -1800,6 +1800,12 @@
       ]
     },
     {
+      "testId": "desk-rail-evals",
+      "files": [
+        "src/board/deskModel.ts"
+      ]
+    },
+    {
       "testId": "desk-rail-health",
       "files": [
         "src/components/desk/SessionRail.tsx"
@@ -1830,7 +1836,13 @@
       ]
     },
     {
-      "testId": "desk-rail-product",
+      "testId": "desk-rail-plugins",
+      "files": [
+        "src/board/deskModel.ts"
+      ]
+    },
+    {
+      "testId": "desk-rail-repos",
       "files": [
         "src/board/deskModel.ts"
       ]
@@ -1849,12 +1861,6 @@
     },
     {
       "testId": "desk-rail-steering",
-      "files": [
-        "src/board/deskModel.ts"
-      ]
-    },
-    {
-      "testId": "desk-rail-testing",
       "files": [
         "src/board/deskModel.ts"
       ]
@@ -1990,12 +1996,6 @@
       "testId": "desk-window",
       "files": [
         "src/components/desk/Desk.tsx"
-      ]
-    },
-    {
-      "testId": "developer-settings",
-      "files": [
-        "src/components/editors/EditorPluginsSettings.tsx"
       ]
     },
     {
@@ -2218,6 +2218,12 @@
       "testId": "editor-grants-note",
       "files": [
         "src/components/editors/EditorHostPage.tsx"
+      ]
+    },
+    {
+      "testId": "editor-host-back",
+      "files": [
+        "src/components/editors/EditorPluginsSettings.tsx"
       ]
     },
     {
@@ -3679,6 +3685,18 @@
       ]
     },
     {
+      "testId": "launch-wizard-chosen",
+      "files": [
+        "src/components/launch/LaunchWizard.tsx"
+      ]
+    },
+    {
+      "testId": "launch-wizard-clear",
+      "files": [
+        "src/components/launch/LaunchWizard.tsx"
+      ]
+    },
+    {
       "testId": "launch-wizard-close",
       "files": [
         "src/components/launch/LaunchWizard.tsx"
@@ -3692,6 +3710,18 @@
     },
     {
       "testId": "launch-wizard-deliver-toggle",
+      "files": [
+        "src/components/launch/LaunchWizard.tsx"
+      ]
+    },
+    {
+      "testId": "launch-wizard-draft-instructions",
+      "files": [
+        "src/components/launch/LaunchWizard.tsx"
+      ]
+    },
+    {
+      "testId": "launch-wizard-draft-project",
       "files": [
         "src/components/launch/LaunchWizard.tsx"
       ]
@@ -3770,6 +3800,18 @@
     },
     {
       "testId": "launch-wizard-repo",
+      "files": [
+        "src/components/launch/LaunchWizard.tsx"
+      ]
+    },
+    {
+      "testId": "launch-wizard-requirements",
+      "files": [
+        "src/components/launch/LaunchWizard.tsx"
+      ]
+    },
+    {
+      "testId": "launch-wizard-requirements-browser",
       "files": [
         "src/components/launch/LaunchWizard.tsx"
       ]
@@ -5744,6 +5786,12 @@
       ]
     },
     {
+      "testId": "plugins-page",
+      "files": [
+        "src/components/editors/EditorPluginsSettings.tsx"
+      ]
+    },
+    {
       "testId": "preflight-attach",
       "files": [
         "src/components/ChatInput.tsx"
@@ -5819,150 +5867,6 @@
       "testId": "preview-steps",
       "files": [
         "src/components/LaunchPreview.tsx"
-      ]
-    },
-    {
-      "testId": "product-absent",
-      "files": [
-        "src/components/product/ProductPage.tsx"
-      ]
-    },
-    {
-      "testId": "product-chosen",
-      "files": [
-        "src/components/product/ProductPage.tsx"
-      ]
-    },
-    {
-      "testId": "product-clear",
-      "files": [
-        "src/components/product/ProductPage.tsx"
-      ]
-    },
-    {
-      "testId": "product-compose",
-      "files": [
-        "src/components/product/ProductPage.tsx"
-      ]
-    },
-    {
-      "testId": "product-compose-error",
-      "files": [
-        "src/components/product/ProductPage.tsx"
-      ]
-    },
-    {
-      "testId": "product-draft",
-      "files": [
-        "src/components/product/ProductPage.tsx"
-      ]
-    },
-    {
-      "testId": "product-empty",
-      "files": [
-        "src/components/product/ProductPage.tsx"
-      ]
-    },
-    {
-      "testId": "product-error",
-      "files": [
-        "src/components/product/ProductPage.tsx"
-      ]
-    },
-    {
-      "testId": "product-instructions",
-      "files": [
-        "src/components/product/ProductPage.tsx"
-      ]
-    },
-    {
-      "testId": "product-loading",
-      "files": [
-        "src/components/product/ProductPage.tsx"
-      ]
-    },
-    {
-      "testId": "product-next",
-      "files": [
-        "src/components/product/ProductPage.tsx"
-      ]
-    },
-    {
-      "testId": "product-no-project",
-      "files": [
-        "src/components/product/ProductPage.tsx"
-      ]
-    },
-    {
-      "testId": "product-page",
-      "files": [
-        "src/components/product/ProductPage.tsx"
-      ]
-    },
-    {
-      "testId": "product-prev",
-      "files": [
-        "src/components/product/ProductPage.tsx"
-      ]
-    },
-    {
-      "testId": "product-project",
-      "files": [
-        "src/components/product/ProductPage.tsx"
-      ]
-    },
-    {
-      "testId": "product-project-link",
-      "files": [
-        "src/components/product/ProductPage.tsx"
-      ]
-    },
-    {
-      "testId": "product-repo",
-      "files": [
-        "src/components/product/ProductPage.tsx"
-      ]
-    },
-    {
-      "testId": "product-repo-unread",
-      "files": [
-        "src/components/product/ProductPage.tsx"
-      ]
-    },
-    {
-      "testId": "product-requirement",
-      "files": [
-        "src/components/product/ProductPage.tsx"
-      ]
-    },
-    {
-      "testId": "product-requirement-pick",
-      "files": [
-        "src/components/product/ProductPage.tsx"
-      ]
-    },
-    {
-      "testId": "product-requirements",
-      "files": [
-        "src/components/product/ProductPage.tsx"
-      ]
-    },
-    {
-      "testId": "product-search",
-      "files": [
-        "src/components/product/ProductPage.tsx"
-      ]
-    },
-    {
-      "testId": "product-status",
-      "files": [
-        "src/components/product/ProductPage.tsx"
-      ]
-    },
-    {
-      "testId": "product-totals",
-      "files": [
-        "src/components/product/ProductPage.tsx"
       ]
     },
     {
@@ -6146,6 +6050,12 @@
       ]
     },
     {
+      "testId": "project-draft-epics",
+      "files": [
+        "src/components/product/ProjectRequirementsSection.tsx"
+      ]
+    },
+    {
       "testId": "project-feed",
       "files": [
         "src/components/ProjectDetailPage.tsx"
@@ -6323,6 +6233,36 @@
       "testId": "project-repos-used",
       "files": [
         "src/components/ProjectRepositories.tsx"
+      ]
+    },
+    {
+      "testId": "project-requirements",
+      "files": [
+        "src/components/product/ProjectRequirementsSection.tsx"
+      ]
+    },
+    {
+      "testId": "project-requirements-line",
+      "files": [
+        "src/components/product/ProjectRequirementsSection.tsx"
+      ]
+    },
+    {
+      "testId": "project-requirements-link",
+      "files": [
+        "src/components/product/ProjectRequirementsSection.tsx"
+      ]
+    },
+    {
+      "testId": "project-requirements-page",
+      "files": [
+        "src/components/product/ProjectRequirementsPage.tsx"
+      ]
+    },
+    {
+      "testId": "project-requirements-unread",
+      "files": [
+        "src/components/product/ProjectRequirementsSection.tsx"
       ]
     },
     {
@@ -7169,6 +7109,96 @@
       "testId": "repos-runs-link",
       "files": [
         "src/components/RepositoriesPanel.tsx"
+      ]
+    },
+    {
+      "testId": "requirement",
+      "files": [
+        "src/components/product/RequirementsBrowser.tsx"
+      ]
+    },
+    {
+      "testId": "requirement-pick",
+      "files": [
+        "src/components/product/RequirementsBrowser.tsx"
+      ]
+    },
+    {
+      "testId": "requirements-absent",
+      "files": [
+        "src/components/product/RequirementsBrowser.tsx"
+      ]
+    },
+    {
+      "testId": "requirements-browser",
+      "files": [
+        "src/components/product/RequirementsBrowser.tsx"
+      ]
+    },
+    {
+      "testId": "requirements-draft",
+      "files": [
+        "src/components/product/ProjectRequirementsPage.tsx"
+      ]
+    },
+    {
+      "testId": "requirements-empty",
+      "files": [
+        "src/components/product/RequirementsBrowser.tsx"
+      ]
+    },
+    {
+      "testId": "requirements-error",
+      "files": [
+        "src/components/product/RequirementsBrowser.tsx"
+      ]
+    },
+    {
+      "testId": "requirements-loading",
+      "files": [
+        "src/components/product/RequirementsBrowser.tsx"
+      ]
+    },
+    {
+      "testId": "requirements-next",
+      "files": [
+        "src/components/product/RequirementsBrowser.tsx"
+      ]
+    },
+    {
+      "testId": "requirements-prev",
+      "files": [
+        "src/components/product/RequirementsBrowser.tsx"
+      ]
+    },
+    {
+      "testId": "requirements-repo",
+      "files": [
+        "src/components/product/RequirementsBrowser.tsx"
+      ]
+    },
+    {
+      "testId": "requirements-repo-open",
+      "files": [
+        "src/components/product/RequirementsBrowser.tsx"
+      ]
+    },
+    {
+      "testId": "requirements-repo-unread",
+      "files": [
+        "src/components/product/RequirementsBrowser.tsx"
+      ]
+    },
+    {
+      "testId": "requirements-search",
+      "files": [
+        "src/components/product/RequirementsBrowser.tsx"
+      ]
+    },
+    {
+      "testId": "requirements-totals",
+      "files": [
+        "src/components/product/RequirementsBrowser.tsx"
       ]
     },
     {
@@ -8625,12 +8655,6 @@
     },
     {
       "testId": "settings-path",
-      "files": [
-        "src/components/SystemSettings.tsx"
-      ]
-    },
-    {
-      "testId": "settings-testing-link",
       "files": [
         "src/components/SystemSettings.tsx"
       ]
@@ -12628,6 +12652,7 @@
         "src/components/WhatWhere.tsx",
         "src/components/dashboardKit.tsx",
         "src/components/everything/FinishedRunMenu.tsx",
+        "src/components/product/RequirementsBrowser.tsx",
         "src/components/session/AssuranceReceipt.tsx",
         "src/components/session/CodebaseDownload.tsx",
         "src/components/ui/Combobox.tsx",
@@ -12685,6 +12710,12 @@
       "expression": "testId = 'progress'",
       "files": [
         "src/components/ui/Progress.tsx"
+      ]
+    },
+    {
+      "expression": "testId = 'requirements-browser'",
+      "files": [
+        "src/components/product/RequirementsBrowser.tsx"
       ]
     },
     {

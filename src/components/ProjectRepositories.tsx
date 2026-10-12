@@ -347,7 +347,9 @@ export function ProjectRepositories({ projectId, members, onMembersChange, onIss
         <div>
           {repoMembers.map((m) => {
             const repo = repoOf(m.member_ref, repos);
-            const label = repo?.name ?? 'Repository';
+            // A member the register does not hold keeps the ref it was attached by (two unnamed rows
+            // with a Detach each could not be told apart).
+            const label = repo?.name ?? m.member_ref;
             const isConfirming = confirming === m.id;
             const note = repo !== undefined ? reonboardNote[repo.id] : undefined;
             const findings = repo !== undefined ? repoFindings(repo) : [];

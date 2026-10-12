@@ -4,7 +4,7 @@ import { PAGE_NAMES } from '../board/pageNames.js';
 import { PageFrame } from './ui/index.js';
 
 /**
- * THE SETTINGS OVERVIEW (`/settings`; operator 2026-10-11): where the rail's "Additional settings"
+ * THE SETTINGS OVERVIEW (`/settings`; operator 2026-10-11): where the rail's "General settings"
  * link lands — every settings page, said in one plain sentence, with a link to it. It replaces the
  * rail's dropdown; the list (and its order) is `ADDITIONAL_SETTINGS`.
  */

@@ -196,11 +196,13 @@ describe('chores for whoever runs studio', () => {
 });
 
 describe('the rail destinations', () => {
-  it('the rail: Product · Skills · MCP tools · Steering · Testing; Additional settings: Configuration, Repositories, Workflows, Evals, Theme (Amendment 5; Testing joined per studio#685 row 51)', () => {
-    expect(DESK_RAIL_LINKS.map((l) => [l.label, l.path])).toEqual([['Product', '/product'], ['Skills', '/skills'], ['MCP tools', '/mcp'], ['Steering', '/rules'], ['Testing', '/testing/campaigns']]);
-    expect(ADDITIONAL_SETTINGS.map((d) => [d.label, d.path])).toEqual([
-      ['Configuration', '/system'], ['Repositories', '/repos'], ['Workflows', '/workflows'], ['Evals', '/testing/evals'], ['Theme', '/theme'],
+  it('the Workspace group (operator ruling 2026-10-12): Steering · Skills · MCP · Plugins · Evals · Repositories; General settings: Configuration, Workflows, Theme', () => {
+    expect(DESK_RAIL_LINKS.map((l) => [l.label, l.path])).toEqual([
+      ['Steering', '/rules'], ['Skills', '/skills'], ['MCP', '/mcp'], ['Plugins', '/plugins'], ['Evals', '/testing/evals'], ['Repositories', '/repos'],
     ]);
+    expect(ADDITIONAL_SETTINGS.map((d) => [d.label, d.path])).toEqual([['Configuration', '/system'], ['Workflows', '/workflows'], ['Theme', '/theme']]);
+    // Product and Testing left the rail; Configuration's sentence no longer names editor plugins.
+    expect(ADDITIONAL_SETTINGS[0]!.about).not.toMatch(/plugin/i);
     // Nothing that redirects.
     for (const d of [...DESK_RAIL_LINKS, ...ADDITIONAL_SETTINGS]) {
       expect(['/projects', '/chats', '/work', '/execute', '/vibe', '/demo']).not.toContain(d.path);

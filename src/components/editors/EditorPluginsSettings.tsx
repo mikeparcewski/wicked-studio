@@ -2,9 +2,11 @@ import { useCallback, useEffect, useState } from 'react';
 import { listEditors, type EditorView } from '../../api/editors.js';
 import { openLaunchWizard } from '../../store/launchWizard.js';
 import { EmptyState, PageFrame, Skeleton, StateBanner } from '../ui/index.js';
+import { PAGE_NAMES } from '../../board/pageNames.js';
 
 /**
- * Settings → Developer → Editor plugins (operator ruling X3, 2026-10-10; DES-EDITOR-PLUGINS-001 §3.2).
+ * The Plugins page (operator 2026-10-12; was Settings → Developer → Editor plugins, ruling X3, 2026-10-10;
+ * DES-EDITOR-PLUGINS-001 §3.2).
  *
  * The editors this studio's service has: the built-in ones that ship with studio and the ones a run of
  * the `editor-plugin` workflow installed. Each opens in the editor test page (`/editors/dev`), the real
@@ -107,8 +109,8 @@ function EditorRow({ e, navigate, compact }: { e: EditorView; navigate: (p: stri
       )}
       <p style={{ marginTop: 6 }}>
         {e.enabled ? (
-          <a href={href} data-testid="editor-plugin-open" className="wk-btn wk-btn--secondary wk-btn--sm" aria-label={`Open ${e.title} in the editor test page`} onClick={(ev) => { ev.preventDefault(); navigate(href); }}>
-            {compact ? 'Open' : 'Open in the test page'}
+          <a href={href} data-testid="editor-plugin-open" className="wk-btn wk-btn--secondary wk-btn--sm" aria-label={compact ? `Open ${e.title}` : `Try it on a sample page: ${e.title}`} onClick={(ev) => { ev.preventDefault(); navigate(href); }}>
+            {compact ? 'Open' : 'Try it on a sample page'}
           </a>
         ) : (
           <span style={{ fontSize: 'var(--text-xs)', color: 'var(--ink-body)' }}>Turned off, so it opens nowhere.</span>
@@ -144,7 +146,8 @@ export function EditorTestPagePicker({ navigate }: { navigate: (p: string) => vo
     <PageFrame
       data-testid="editor-host-pick"
       title="Editor test page"
-      intro="Pick an editor to open it in the real sandbox over a sample page. Editor plugins are listed in Settings, under Developer."
+      intro="Pick an editor to open it in the real sandbox over a sample page."
+      actions={<a href="/plugins" className="wk-link" data-testid="editor-host-back" onClick={(ev) => { ev.preventDefault(); navigate('/plugins'); }}>Back to {PAGE_NAMES.plugins}</a>}
     >
       <EditorPluginList navigate={navigate} compact />
     </PageFrame>
@@ -156,47 +159,34 @@ export function startCreateEditorPlugin(): void {
   openLaunchWizard({ workflowId: CREATE_EDITOR_WORKFLOW_ID });
 }
 
-/** The Developer section of Settings. */
-export function DeveloperSettings({ navigate }: { navigate: (p: string) => void }): React.ReactElement {
+/**
+ * THE PLUGINS PAGE (operator ruling 2026-10-12: editor plugins move out of Configuration onto their
+ * own Workspace page), `/plugins`: what the Developer section did — the list, each opening in the
+ * editor test page, Create an editor plugin (the launch wizard on `editor-plugin`) and the test page.
+ * The open-in-editor door is `devHostHref` (above), the one seam the MCP inspector builds on.
+ */
+export function PluginsPage({ navigate }: { navigate: (p: string) => void }): React.ReactElement {
   return (
-    <section
-      data-testid="developer-settings"
-      aria-labelledby="developer-settings-title"
-      className="wk-card mb-6"
+    <PageFrame
+      data-testid="plugins-page"
+      title={PAGE_NAMES.plugins}
+      intro="Editor plugins open what studio makes, such as pages and documents, in a sandbox: each can do only what its row lists."
+      actions={<>
+        <a href="/editors/dev" className="wk-btn wk-btn--secondary" data-testid="editor-plugins-devhost" onClick={(ev) => { ev.preventDefault(); navigate('/editors/dev'); }}>
+          Open the editor test page
+        </a>
+        <button type="button" className="wk-btn wk-btn--primary" data-testid="editor-plugins-create" onClick={() => startCreateEditorPlugin()}>
+          Create an editor plugin
+        </button>
+      </>}
     >
-      <h2 id="developer-settings-title" className="wk-section-title">Developer</h2>
-      <div data-testid="editor-plugins-settings" className="mt-3">
-        <h3 style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--ink-high)' }}>Editor plugins</h3>
-        <p className="mt-1" style={{ fontSize: 'var(--text-xs)', color: 'var(--ink-body)' }}>
-          Editors open what studio makes, such as pages and documents, in a sandbox: each can do only what its row
-          lists. Built-in ones ship with studio. Create an editor plugin starts a session that builds one; when it
-          passes studio’s checks, that session asks you to approve the install, and the editor appears here.
+      <section data-testid="editor-plugins-settings" aria-labelledby="plugins-list-title" className="wk-card">
+        <h2 id="plugins-list-title" className="wk-section-title">Editor plugins</h2>
+        <p className="wk-pg-proj-note">
+          Built-in ones ship with studio. One you create appears here once its job passes studio’s checks and you approve the install.
         </p>
-        <div className="mt-3 flex flex-wrap items-center gap-3">
-          <button
-            type="button"
-            className="wk-btn wk-btn--primary"
-            data-testid="editor-plugins-create"
-            onClick={() => startCreateEditorPlugin()}
-          >
-            Create an editor plugin
-          </button>
-          <a
-            href="/editors/dev"
-            className="wk-btn wk-btn--secondary"
-            data-testid="editor-plugins-devhost"
-            onClick={(ev) => { ev.preventDefault(); navigate('/editors/dev'); }}
-          >
-            Open the editor test page
-          </a>
-        </div>
-        <p className="mt-1" style={{ fontSize: 'var(--text-xs)', color: 'var(--ink-body)' }}>
-          The test page opens an installed editor in the real sandbox over a sample page, so you can try one you are building.
-        </p>
-        <div className="mt-2">
-          <EditorPluginList navigate={navigate} />
-        </div>
-      </div>
-    </section>
+        <EditorPluginList navigate={navigate} />
+      </section>
+    </PageFrame>
   );
 }

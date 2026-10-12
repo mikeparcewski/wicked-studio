@@ -2,7 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   CREATE_EDITOR_WORKFLOW_ID,
-  DeveloperSettings,
+  PluginsPage,
   devHostHref,
   EditorPluginList,
   kindsInWords,
@@ -12,7 +12,7 @@ import { EditorHostPage } from '../src/components/editors/EditorHostPage.js';
 import { useLaunchWizard } from '../src/store/launchWizard.js';
 import { takeComposerSeed } from '../src/store/composerSeed.js';
 
-/** Settings → Developer → Editor plugins (operator ruling X3) and the editor test page's empty state. */
+/** The Plugins page (operator 2026-10-12; was Settings → Developer → Editor plugins, ruling X3) and the editor test page's empty state. */
 
 /** A made-up home folder, spelled at run time (the raw error must show it as ~). */
 const FAKE_HOME = ['', 'Users', 'someone'].join('/');
@@ -61,11 +61,11 @@ describe('words, never ids', () => {
   });
 });
 
-describe('Settings → Developer → Editor plugins', () => {
+describe('the Plugins page (editor plugins)', () => {
   it('lists built-in and installed editors, each with a test-page link; the Create button seeds the Desk composer and sends nothing', async () => {
     const f = stubFetch(() => json(EDITORS));
     const navigate = vi.fn();
-    render(<DeveloperSettings navigate={navigate} />);
+    render(<PluginsPage navigate={navigate} />);
     await waitFor(() => expect(screen.getAllByTestId('editor-plugin-row')).toHaveLength(2));
     const rows = screen.getAllByTestId('editor-plugin-row');
     expect(rows.map((r) => r.dataset.editor)).toEqual(['wicked-page', 'e2e-json-viewer']);

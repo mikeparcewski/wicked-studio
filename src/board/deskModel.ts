@@ -293,32 +293,33 @@ export function lapsedSeatChores(roster: readonly RosterSeat[] | null): DeskChor
 // ── Where the rail reaches ───────────────────────────────────────────────────
 
 /**
- * THE RAIL'S FIXED ENTRIES (DES-STUDIO-REBUILD-001 Amendment 5, as revised). Skills, MCP tools and
- * Steering sit in the rail itself — they change what in-flight work does, so they are one click
- * away; Steering is the Rules page (`/rules`, S12), the steering grid one link behind it.
+ * THE RAIL'S WORKSPACE GROUP (operator ruling 2026-10-12), top to bottom. Product and Testing are gone:
+ * a project's requirements live on its dashboard (Draft epics is a launch-wizard job), and QE campaigns
+ * are a workflow (`qe-author-tests` in the wizard and the composer). Evals and Repositories moved up
+ * from the settings page; Editor plugins left Configuration for their own Plugins page. "General
+ * settings" (the `/settings` overview) follows, and Health sits apart at the foot.
  */
 export const DESK_RAIL_LINKS: readonly { dest: string; label: string; path: string; testId: string }[] = [
-  // studio#157: Product — what we are building (requirements → drafted epics), above the run levers.
-  { dest: 'section:product', label: PAGE_NAMES.product, path: '/product', testId: 'desk-rail-product' },
+  // SLOT: Agents (the seats page, lane w14-seats-page) goes FIRST here when it is built.
+  { dest: 'section:steering', label: PAGE_NAMES.steering, path: '/rules', testId: 'desk-rail-steering' },
   { dest: 'section:skills', label: PAGE_NAMES.skills, path: skillsPath(), testId: 'desk-rail-skills' },
   { dest: 'section:mcp', label: PAGE_NAMES.mcp, path: mcpPath(), testId: 'desk-rail-mcp' },
-  { dest: 'section:steering', label: PAGE_NAMES.steering, path: '/rules', testId: 'desk-rail-steering' },
-  // studio#685 row 51 (UI-CONTRACT §3, S5): Testing sits in the Workspace group with the other levers.
-  { dest: 'section:testing', label: PAGE_NAMES.testing, path: testingPath('campaigns'), testId: 'desk-rail-testing' },
+  { dest: 'section:plugins', label: PAGE_NAMES.plugins, path: '/plugins', testId: 'desk-rail-plugins' },
+  { dest: 'section:evals', label: PAGE_NAMES.evals, path: testingPath('evals'), testId: 'desk-rail-evals' },
+  { dest: 'section:repos', label: PAGE_NAMES.repos, path: '/repos', testId: 'desk-rail-repos' },
 ];
 
-/** The Settings overview page (`/settings`) — where the rail's "Additional settings" link lands. */
+/** The Settings overview page (`/settings`) — where the rail's "General settings" link lands. */
 export const SETTINGS_PATH = '/settings';
 
 /**
- * "ADDITIONAL SETTINGS" — the pages the `/settings` overview lists, in this order, each with the one
- * plain sentence that says what it is for (operator 2026-10-11: a page, not a dropdown). Navigation
+ * "GENERAL SETTINGS" — the pages the `/settings` overview lists, in this order, each with the one plain
+ * sentence that says what it is for (operator 2026-10-11: a page, not a dropdown; 2026-10-12: only
+ * Configuration, Workflows and Theme — Repositories and Evals moved up into the rail). Navigation
  * only: the orders/away and delivery-freeze controls are the Desk's.
  */
 export const ADDITIONAL_SETTINGS: readonly { dest: string; label: string; path: string; about: string }[] = [
-  { dest: 'settings:/system', label: PAGE_NAMES.system, path: '/system', about: 'How studio runs: helpers and their sign-ins, how many helpers review a decision, technical details, notifications and editor plugins.' },
-  { dest: 'section:repos', label: PAGE_NAMES.repos, path: '/repos', about: 'The code studio knows about: add a repository, and set one up so helpers can read it.' },
+  { dest: 'settings:/system', label: PAGE_NAMES.system, path: '/system', about: 'How studio runs: helpers and their sign-ins, how many helpers review a decision, technical details and notifications.' },
   { dest: 'settings:/workflows', label: PAGE_NAMES.workflows, path: '/workflows', about: 'The step-by-step recipes work follows, and the ones you can start from / in the composer.' },
-  { dest: 'section:testing', label: PAGE_NAMES.evals, path: testingPath('evals'), about: 'Check your steering rules against sample work, and see which behaviours they catch or miss.' },
   { dest: 'settings:/theme', label: PAGE_NAMES.theme, path: '/theme', about: 'How studio looks: light or dark, your logo and the site name.' },
 ];

@@ -86,7 +86,15 @@
 .wk-pg-proj-pick-row { grid-template-columns: minmax(0, 1fr); }
 .wk-pg-proj-pick-row .wk-switch { width: 100%; text-align: left; }
 .wk-pg-proj-pick-row .wk-switch-label { min-width: 0; overflow-wrap: anywhere; }
-.wk-pg-proj-pick-row .wk-list-row-meta { margin: 0; overflow-wrap: anywhere; }
+/* The meta line starts under the label, not under the switch (switch padding + track + gap). */
+.wk-pg-proj-pick-row { row-gap: 0; }
+.wk-pg-proj-pick-row .wk-list-row-meta { margin: 0; padding-left: calc(2px + 32px + var(--space-2)); overflow-wrap: anywhere; }
+/* A requirement's id · domain is read to choose it: the muted ink, not the dimmest (codex on S5, 3 rounds). */
+.wk-reqs .wk-list-row-meta { color: var(--ink-muted); }
+/* The requirements browser reads at the page's small size wherever it sits (a card or the wizard). */
+.wk-reqs { font-size: var(--text-sm); }
+/* "At risk" stands out from the routine id · domain metadata (words, not only weight or colour). */
+.wk-reqs-risk { color: var(--ink-body); font-weight: 600; }
 @media (max-width: 767px) {
   .wk-pg-proj-row { grid-template-columns: minmax(0, 1fr); }
   .wk-pg-proj-row .wk-list-row-actions { flex-wrap: wrap; }
