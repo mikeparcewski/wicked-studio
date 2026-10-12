@@ -17,6 +17,14 @@ describe('useQualityChecks', () => {
     expect(result.current.failed).toBe(1);
   });
 
+  it('a read with no gate counts as read, with nothing recorded', async () => {
+    getRunAcceptance.mockResolvedValue({ runId: 'x' });
+    const { result } = renderHook(() => useQualityChecks(['x', 'y']));
+    await waitFor(() => expect(result.current.tally).not.toBeNull());
+    expect(result.current.tally).toEqual({ read: 2, recorded: 0, passed: 0 });
+    expect(result.current.failed).toBe(0);
+  });
+
   it('reads again when the work moves for the same jobs', async () => {
     getRunAcceptance.mockResolvedValue({ runId: 'a', gate: { required: true, satisfied: false, verdict: null, runStatus: null, reason: '' } });
     const { result, rerender } = renderHook(({ w }) => useQualityChecks(['a'], w), { initialProps: { w: '1' } });

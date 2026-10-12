@@ -39,7 +39,7 @@ describe('the project dashboard model', () => {
 
   it('quality checks: passed of recorded; none recorded is said, never 0%', () => {
     expect(qualityTally([{ verdict: 'PASS', satisfied: true }, { verdict: 'FAIL', satisfied: false }, { verdict: null, satisfied: false }, null]))
-      .toEqual({ read: 3, recorded: 2, passed: 1 });
+      .toEqual({ read: 4, recorded: 2, passed: 1 });
     expect(qualityTally([{ verdict: null, satisfied: false }]).recorded).toBe(0);
   });
 

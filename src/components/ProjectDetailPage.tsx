@@ -86,6 +86,7 @@ interface Props {
 
 const NO_RUNS: readonly SessionView[] = [];
 const NO_NEEDS: readonly NeedRow[] = [];
+const NO_MEMBERS: ProjectMember[] = [];
 
 /**
  * THE PROJECT DASHBOARD (DES-frontdoor concept P; operator decision 2026-10-12): `/projects/:id`.
@@ -114,7 +115,7 @@ export function ProjectDetailPage({ projectId, navigate, runs = NO_RUNS, needRow
 
   const isDefault = projectId === 'default';
   const project = detail?.project ?? null;
-  const members = detail?.members ?? [];
+  const members = detail?.members ?? NO_MEMBERS;
   const [issues, setIssues] = useState<Record<string, ProjectReadIssue>>({});
   const onIssue = useCallback<ProjectIssueHandler>((key, issue) => {
     setIssues((old) => { const next = { ...old }; if (issue === null) delete next[key]; else next[key] = issue; return next; });
@@ -246,7 +247,7 @@ export function ProjectDetailPage({ projectId, navigate, runs = NO_RUNS, needRow
       : quality.capped ? `of the newest ${quality.tally.read} jobs` : 'checks passed of those recorded';
   const spendNote = isDefault ? 'Spend is counted per project'
     : spend.phase === 'loading' ? 'Reading spend…'
-    : spend.current === null ? 'Not available yet: update Studio to see spend per project'
+    : spend.current === null ? 'Not available yet: Health shows how to update Studio'
       : spend.partial ? 'at least: some helpers report no price'
         : spend.previous !== null ? `${moneyWords(spend.previous)} the ${days} days before` : 'no earlier spend to compare';
 
@@ -365,12 +366,13 @@ export function ProjectDetailPage({ projectId, navigate, runs = NO_RUNS, needRow
               </div>
               <StatTile data-testid="project-stat-started" label={`Started, last ${days} days`} value={p.started.count}
                 delta={hasPrev ? { current: p.started.count, previous: p.started.previous, versus: `vs the ${days} days before` } : null}
-                note={hasPrev ? null : 'no earlier window'} />
+                note={hasPrev ? null : `no jobs before the last ${days} days to compare`} />
               <StatTile data-testid="project-stat-delivered" label="Delivered" value={p.delivered} note={p.delivered === 0 ? `nothing delivered in ${windowWords(days)}` : null} />
               <StatTile data-testid="project-stat-quality" label="Quality checks passed" value={qualityValue} note={qualityNote} />
               <StatTile data-testid="project-stat-typical" label="Typical time to finish" value={p.typicalMin === null ? null : durationWords(p.typicalMin)}
                 note={p.typicalMin === null ? `no job finished in ${windowWords(days)}` : `median of ${p.typicalOf} that finished`} />
-              <StatTile data-testid="project-stat-spend" label={`Spend, last ${days} days`} value={isDefault || spend.current === null ? null : moneyWords(spend.current)} note={spendNote} />
+              <StatTile data-testid="project-stat-spend" label={`Spend, last ${days} days`} value={isDefault || spend.current === null ? null : moneyWords(spend.current)} note={spendNote}
+                {...(!isDefault && spend.phase === 'done' && spend.current === null ? { href: '/health', onOpen: go('/health') } : {})} />
             </StatBand>
           </section>
         )}
@@ -381,6 +383,9 @@ export function ProjectDetailPage({ projectId, navigate, runs = NO_RUNS, needRow
               <div className="wk-card" data-testid="project-needs">
                 <NeedsQueueSurface rows={needs as NeedRow[]} runs={runs as SessionView[]} navigate={navigate} now={now} />
               </div>
+            )}
+            {unshown > 0 && (
+              <StateBanner data-testid="project-jobs-unshown" kind="partial" what={unshown === 1 ? '1 job in this project' : `${unshown} jobs in this project`} />
             )}
             {mine.length > 0 && (
               <section aria-labelledby="project-jobs-title" data-testid="project-jobs" className="wk-card">
@@ -407,7 +412,7 @@ export function ProjectDetailPage({ projectId, navigate, runs = NO_RUNS, needRow
                   })}
                 </ul>
                 <StepLegend />
-                {unshown > 0 && <p data-testid="project-jobs-unshown" className="wk-desk-card-note">{unshown === 1 ? '1 more job in this project could not be shown here.' : `${unshown} more jobs in this project could not be shown here.`}</p>}
+
               </section>
             )}
             {!isDefault && <div id="project-repos"><ProjectRepositories projectId={projectId} members={members} used={used} onIssue={onIssue} onMembersChange={(update) => setDetail((d) => d !== null && d.project.id === projectId ? { ...d, members: update(d.members) } : d)} /></div>}

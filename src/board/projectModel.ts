@@ -76,27 +76,30 @@ export function projectMeta(createdWords: string | null, jobs: number, repos: re
 }
 
 /** Jobs by state, all time: the stacked bar's parts, in a fixed order. */
-export interface StateCount { key: 'working' | 'waiting' | 'finished' | 'failed' | 'cancelled'; label: string; count: number; tone: string }
+export interface StateCount { key: 'working' | 'waiting' | 'finished' | 'failed' | 'cancelled' | 'archived'; label: string; count: number; tone: string }
 
 export function stateCounts(runs: readonly SessionView[]): StateCount[] {
   const live = runs.filter((v) => v.session.archived_at == null);
   const of = (pred: (s: string) => boolean): number => live.filter((v) => pred(v.session.status)).length;
+  // All time means every job the project holds: an archived one is counted as archived, not left out.
+  const archived = runs.length - live.length;
   return [
     { key: 'working', label: 'working', count: of((s) => s === 'planning' || s === 'distributing' || s === 'executing'), tone: 'run' },
     { key: 'waiting', label: 'waiting on you', count: of((s) => s === 'awaiting_human'), tone: 'gate' },
     { key: 'finished', label: 'finished', count: of((s) => s === 'completed'), tone: 'ok' },
     { key: 'failed', label: 'failed', count: of((s) => s === 'failed'), tone: 'fail' },
     { key: 'cancelled', label: 'cancelled', count: of((s) => s === 'cancelled'), tone: 'quiet' },
+    { key: 'archived', label: 'archived', count: archived, tone: 'quiet' },
   ];
 }
 
 /** The quality-check verdicts of the jobs read: passed of recorded; `recorded: 0` = none recorded. */
 export interface QualityTally { read: number; recorded: number; passed: number }
 
+/** One successful read per job: its gate, or null when the job carries none (read, nothing recorded). */
 export function qualityTally(gates: readonly ({ verdict: string | null; satisfied: boolean } | null)[]): QualityTally {
-  const known = gates.filter((g): g is { verdict: string | null; satisfied: boolean } => g !== null);
-  const recorded = known.filter((g) => g.verdict !== null);
-  return { read: known.length, recorded: recorded.length, passed: recorded.filter((g) => g.satisfied).length };
+  const recorded = gates.filter((g): g is { verdict: string; satisfied: boolean } => g !== null && g.verdict !== null);
+  return { read: gates.length, recorded: recorded.length, passed: recorded.filter((g) => g.satisfied).length };
 }
 
 /** Newest launch first; undated runs last. */

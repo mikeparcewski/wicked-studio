@@ -23,7 +23,7 @@ export function useQualityChecks(runIds: readonly string[], work = ''): { tally:
       .then((reads) => {
         if (!live) return;
         const gates = reads.filter((r): r is { gate: AcceptanceGateLite | null } => r !== 'failed').map((r) => r.gate);
-        setGot({ key, tally: qualityTally(gates.filter((g): g is AcceptanceGateLite => g !== null)), failed: reads.filter((r) => r === 'failed').length });
+        setGot({ key, tally: qualityTally(gates), failed: reads.filter((r) => r === 'failed').length });
       });
     return () => { live = false; };
   }, [key, work]);
