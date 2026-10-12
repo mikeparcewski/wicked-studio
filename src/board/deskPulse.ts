@@ -95,6 +95,8 @@ export interface StoryInputs {
   running: number;
   /** The open failure rows' runs (newest clock first is not required). */
   failures: readonly { projectName: string | null; at: number | null }[];
+  /** Jobs that stopped moving and only a person moves (a stall, a lost worker): failure rows that are not failed runs. */
+  stuck?: number;
   /** Proposals waiting on review; null = the read has not answered (said nothing about them). */
   reviews: number | null;
   now: number;
@@ -124,6 +126,7 @@ export function deskStory(i: StoryInputs): string {
       ? `1 job failed${where}${when} and has not been retried.`
       : `${i.failures.length} jobs failed${where}${when ? `,${when},` : ''} and have not been retried.`);
   }
+  if ((i.stuck ?? 0) > 0) parts.push(i.stuck === 1 ? '1 job has stopped moving and needs a look.' : `${i.stuck} jobs have stopped moving and need a look.`);
   if (i.reviews !== null && i.reviews > 0) parts.push(`${n(i.reviews, 'proposal is', 'proposals are')} waiting for review.`);
   return parts.join(' ');
 }

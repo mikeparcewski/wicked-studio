@@ -11,11 +11,11 @@
   "version": 1,
   "studioVersion": "0.7.12",
   "counts": {
-    "files": 199,
-    "occurrences": 2262,
-    "static": 1964,
-    "dynamic": 61,
-    "computed": 20
+    "files": 203,
+    "occurrences": 2301,
+    "static": 1994,
+    "dynamic": 62,
+    "computed": 23
   },
   "static": [
     {
@@ -1613,6 +1613,24 @@
       ]
     },
     {
+      "testId": "desk-as-of",
+      "files": [
+        "src/components/desk/Desk.tsx"
+      ]
+    },
+    {
+      "testId": "desk-chart",
+      "files": [
+        "src/components/desk/Desk.tsx"
+      ]
+    },
+    {
+      "testId": "desk-chat",
+      "files": [
+        "src/components/desk/Desk.tsx"
+      ]
+    },
+    {
       "testId": "desk-chore",
       "files": [
         "src/components/desk/Desk.tsx"
@@ -1649,6 +1667,12 @@
       ]
     },
     {
+      "testId": "desk-command",
+      "files": [
+        "src/components/desk/Desk.tsx"
+      ]
+    },
+    {
       "testId": "desk-composer-input",
       "files": [
         "src/components/session/Composer.tsx"
@@ -1661,14 +1685,49 @@
       ]
     },
     {
+      "testId": "desk-feed",
+      "files": [
+        "src/components/desk/Desk.tsx"
+      ]
+    },
+    {
       "testId": "desk-headline",
       "files": [
-        "src/board/objectActions.ts",
+        "src/board/objectActions.ts"
+      ]
+    },
+    {
+      "testId": "desk-jobs",
+      "files": [
+        "src/components/desk/Desk.tsx"
+      ]
+    },
+    {
+      "testId": "desk-jobs-quiet",
+      "files": [
+        "src/components/desk/Desk.tsx"
+      ]
+    },
+    {
+      "testId": "desk-jobs-start",
+      "files": [
+        "src/components/desk/Desk.tsx"
+      ]
+    },
+    {
+      "testId": "desk-lane",
+      "files": [
         "src/components/desk/Desk.tsx"
       ]
     },
     {
       "testId": "desk-loading",
+      "files": [
+        "src/components/desk/Desk.tsx"
+      ]
+    },
+    {
+      "testId": "desk-needs",
       "files": [
         "src/components/desk/Desk.tsx"
       ]
@@ -1686,6 +1745,12 @@
       ]
     },
     {
+      "testId": "desk-new-job",
+      "files": [
+        "src/components/desk/Desk.tsx"
+      ]
+    },
+    {
       "testId": "desk-new-project",
       "files": [
         "src/components/desk/Desk.tsx"
@@ -1698,25 +1763,25 @@
       ]
     },
     {
-      "testId": "desk-project-new",
-      "files": [
-        "src/components/desk/Desk.tsx"
-      ]
-    },
-    {
       "testId": "desk-project-view",
       "files": [
         "src/components/desk/Desk.tsx"
       ]
     },
     {
-      "testId": "desk-projects-loading",
+      "testId": "desk-projects",
       "files": [
         "src/components/desk/Desk.tsx"
       ]
     },
     {
-      "testId": "desk-projects-unread",
+      "testId": "desk-pulse",
+      "files": [
+        "src/components/desk/Desk.tsx"
+      ]
+    },
+    {
+      "testId": "desk-pulse-loading",
       "files": [
         "src/components/desk/Desk.tsx"
       ]
@@ -1826,12 +1891,6 @@
       ]
     },
     {
-      "testId": "desk-session",
-      "files": [
-        "src/components/desk/Desk.tsx"
-      ]
-    },
-    {
       "testId": "desk-sheet-controls",
       "files": [
         "src/components/sheets/ObjectSheet.tsx"
@@ -1844,7 +1903,49 @@
       ]
     },
     {
+      "testId": "desk-side-loading",
+      "files": [
+        "src/components/desk/Desk.tsx"
+      ]
+    },
+    {
       "testId": "desk-signin-lead",
+      "files": [
+        "src/components/desk/Desk.tsx"
+      ]
+    },
+    {
+      "testId": "desk-stat-delivered",
+      "files": [
+        "src/components/desk/Desk.tsx"
+      ]
+    },
+    {
+      "testId": "desk-stat-failed",
+      "files": [
+        "src/components/desk/Desk.tsx"
+      ]
+    },
+    {
+      "testId": "desk-stat-spend",
+      "files": [
+        "src/components/desk/Desk.tsx"
+      ]
+    },
+    {
+      "testId": "desk-stat-started",
+      "files": [
+        "src/components/desk/Desk.tsx"
+      ]
+    },
+    {
+      "testId": "desk-stat-typical",
+      "files": [
+        "src/components/desk/Desk.tsx"
+      ]
+    },
+    {
+      "testId": "desk-stat-waiting",
       "files": [
         "src/components/desk/Desk.tsx"
       ]
@@ -1868,7 +1969,25 @@
       ]
     },
     {
+      "testId": "desk-story",
+      "files": [
+        "src/components/desk/Desk.tsx"
+      ]
+    },
+    {
+      "testId": "desk-story-row",
+      "files": [
+        "src/components/desk/Desk.tsx"
+      ]
+    },
+    {
       "testId": "desk-unread",
+      "files": [
+        "src/components/desk/Desk.tsx"
+      ]
+    },
+    {
+      "testId": "desk-window",
       "files": [
         "src/components/desk/Desk.tsx"
       ]
@@ -4881,6 +5000,24 @@
       ]
     },
     {
+      "testId": "need-preview",
+      "files": [
+        "src/components/desk/DecisionPreview.tsx"
+      ]
+    },
+    {
+      "testId": "need-preview-note",
+      "files": [
+        "src/components/desk/DecisionPreview.tsx"
+      ]
+    },
+    {
+      "testId": "need-preview-text",
+      "files": [
+        "src/components/desk/DecisionPreview.tsx"
+      ]
+    },
+    {
       "testId": "need-row",
       "files": [
         "src/board/objectActions.ts",
@@ -4888,9 +5025,45 @@
       ]
     },
     {
+      "testId": "need-section",
+      "files": [
+        "src/components/NeedsYouQueue.tsx"
+      ]
+    },
+    {
+      "testId": "need-why",
+      "files": [
+        "src/components/desk/FailureWhy.tsx"
+      ]
+    },
+    {
+      "testId": "need-why-detail",
+      "files": [
+        "src/components/desk/FailureWhy.tsx"
+      ]
+    },
+    {
+      "testId": "need-why-line",
+      "files": [
+        "src/components/desk/FailureWhy.tsx"
+      ]
+    },
+    {
+      "testId": "need-why-toggle",
+      "files": [
+        "src/components/NeedsYouQueue.tsx"
+      ]
+    },
+    {
       "testId": "needs-review-badge",
       "files": [
         "src/components/AssumptionsPanel.tsx"
+      ]
+    },
+    {
+      "testId": "needs-summary",
+      "files": [
+        "src/components/NeedsYouQueue.tsx"
       ]
     },
     {
@@ -9597,7 +9770,8 @@
     {
       "testId": "stat-delta",
       "files": [
-        "src/components/dashboardKit.tsx"
+        "src/components/dashboardKit.tsx",
+        "src/components/ui/StatTile.tsx"
       ]
     },
     {
@@ -9607,9 +9781,16 @@
       ]
     },
     {
+      "testId": "stat-note",
+      "files": [
+        "src/components/ui/StatTile.tsx"
+      ]
+    },
+    {
       "testId": "stat-value",
       "files": [
-        "src/components/dashboardKit.tsx"
+        "src/components/dashboardKit.tsx",
+        "src/components/ui/StatTile.tsx"
       ]
     },
     {
@@ -12042,6 +12223,12 @@
       ]
     },
     {
+      "pattern": "desk-window-*",
+      "files": [
+        "src/components/desk/Desk.tsx"
+      ]
+    },
+    {
       "pattern": "editor-size-*",
       "files": [
         "src/components/editors/EditorHostPage.tsx"
@@ -12273,12 +12460,14 @@
         "src/components/session/AssuranceReceipt.tsx",
         "src/components/session/CodebaseDownload.tsx",
         "src/components/ui/Combobox.tsx",
+        "src/components/ui/DayBars.tsx",
         "src/components/ui/FilePick.tsx",
         "src/components/ui/OverflowMenu.tsx",
         "src/components/ui/PageFrame.tsx",
         "src/components/ui/Progress.tsx",
         "src/components/ui/Segmented.tsx",
         "src/components/ui/StatLine.tsx",
+        "src/components/ui/StatTile.tsx",
         "src/components/ui/StateBanner.tsx",
         "src/components/ui/Switch.tsx",
         "src/components/ui/Tabs.tsx",
@@ -12355,6 +12544,24 @@
       "expression": "testId = 'tech-details'",
       "files": [
         "src/components/ui/TechDetails.tsx"
+      ]
+    },
+    {
+      "expression": "testId ?? 'day-bars'",
+      "files": [
+        "src/components/ui/DayBars.tsx"
+      ]
+    },
+    {
+      "expression": "testId ?? 'stat-band'",
+      "files": [
+        "src/components/ui/StatTile.tsx"
+      ]
+    },
+    {
+      "expression": "testId ?? 'stat-tile'",
+      "files": [
+        "src/components/ui/StatTile.tsx"
       ]
     },
     {

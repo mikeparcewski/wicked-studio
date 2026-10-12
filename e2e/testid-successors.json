@@ -750,6 +750,10 @@
     "launch-row-gate": "launch-wizard-gate",
     "launch-row-deliver": "launch-wizard-deliver",
     "launch-row-deliver-toggle": "launch-wizard-deliver-toggle",
-    "launch-row-reduced-assurance": "launch-wizard-reduced"
+    "launch-row-reduced-assurance": "launch-wizard-reduced",
+    "desk-project-new": "rail-group-new",
+    "desk-projects-loading": "desk-side-loading",
+    "desk-projects-unread": "desk-runs-failed",
+    "desk-session": "desk-lane"
   }
 }

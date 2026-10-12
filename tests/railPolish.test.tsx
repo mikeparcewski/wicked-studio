@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type { BoardModel } from '../src/hooks/useBoardModel.js';
-import { useComposerChips } from '../src/store/composerChips.js';
+import { resetLaunchWizard, useLaunchWizard } from '../src/store/launchWizard.js';
+import { useProjectsStore } from '../src/store/projects.js';
 import { useConnectionStore } from '../src/store/connection.js';
 import { clearCachedRoster } from '../src/store/rosterCache.js';
 import { ROSTER, WEEK } from './fixtures/seatWeek.js';
@@ -101,7 +102,6 @@ beforeEach(() => {
   getSeatRecord.mockClear();
   clearCachedRoster();
   useConnectionStore.setState({ status: 'connected' });
-  useComposerChips.setState({ byComposer: {} });
 });
 afterEach(cleanup);
 
@@ -202,37 +202,29 @@ describe('the rail redesign', () => {
 });
 
 describe('project quick icons', () => {
-  it('a rail group with a project carries New-session and Open-project — and they reach their targets', async () => {
+  it('a rail group with a project carries New job and Open-project — and they reach their targets', async () => {
     withProject();
+    resetLaunchWizard();
     const navigate = vi.fn();
     render(<SessionRail runs={[]} needRows={[]} navigate={navigate} pathname="/" />);
     const group = screen.getByTestId('rail-group');
     expect(group).toHaveAttribute('data-project-id', 'kes');
-    const settle = screen.findByTestId('rail-group-view');
-    await settle;
+    await screen.findByTestId('rail-group-view');
+    // Concept A: the Desk has no composer, so "New work in <project>" opens the launch wizard there.
     fireEvent.click(screen.getByTestId('rail-group-new'));
-    expect(navigate).toHaveBeenCalledWith('/');
-    await waitFor(() => expect(
-      useComposerChips.getState().byComposer['desk']?.some((c) => c.kind === 'project' && c.projectId === 'kes'),
-    ).toBe(true));
+    expect(useLaunchWizard.getState()).toMatchObject({ open: true, draft: { projectId: 'kes' } });
     fireEvent.click(screen.getByTestId('rail-group-view'));
     // The four-boxes icon opens the project DASHBOARD (/projects/:id), never the Product flow.
     expect(navigate).toHaveBeenCalledWith('/projects/kes');
     expect(navigate).not.toHaveBeenCalledWith('/product?project=kes');
   });
 
-  it('a Desk project card carries the same quick icons onto its title row', async () => {
-    withProject();
+  it('a Desk project row opens the project dashboard', async () => {
+    useProjectsStore.setState({ projects: [KESTREL.project] as never });
     const navigate = vi.fn();
-    render(<Desk runs={[]} runsLoaded now={Date.now()} needRows={[]} navigate={navigate} onAsk={() => {}} />);
-    const card = screen.getByTestId('desk-project');
-    expect(card).toHaveAttribute('data-project-id', 'kes');
-    fireEvent.click(within(card).getByTestId('desk-project-new'));
-    await waitFor(() => expect(
-      useComposerChips.getState().byComposer['desk']?.some((c) => c.kind === 'project' && c.projectId === 'kes'),
-    ).toBe(true));
-    fireEvent.click(within(card).getByTestId('desk-project-view'));
-    // The four-boxes icon opens the project DASHBOARD (/projects/:id), never the Product flow.
+    render(<Desk runs={[]} runsLoaded now={Date.now()} needRows={[]} navigate={navigate} />);
+    const row = (await screen.findAllByTestId('desk-project')).find((r) => r.getAttribute('data-project-id') === 'kes')!;
+    fireEvent.click(within(row).getByTestId('desk-project-view'));
     expect(navigate).toHaveBeenCalledWith('/projects/kes');
     expect(navigate).not.toHaveBeenCalledWith('/product?project=kes');
   });

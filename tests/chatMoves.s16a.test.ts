@@ -1,16 +1,22 @@
-// S16a-4e: a new chat starts in the Desk composer (X1 retired the `/chat/…` addresses).
+// S16a-4e + concept A (DES-frontdoor): a new chat opens the Ask dock — fresh in the named project —
+// and sends nothing (the Desk has no composer any more).
 import { afterEach, describe, expect, it } from 'vitest';
 import { seedNewChat } from '../src/board/chatMoves.js';
-import { useComposerChips } from '../src/store/composerChips.js';
-import { useSessionDrafts } from '../src/store/sessionDrafts.js';
+import { useAskDock } from '../src/store/askDock.js';
 
-afterEach(() => { useComposerChips.setState({ byComposer: {} } as never); });
+afterEach(() => { useAskDock.setState({ request: null }); });
 
 describe('S16a-4e — a new chat', () => {
-  it('seeding a new chat puts the project\'s @ chip on the Desk composer and sends nothing', () => {
+  it('opens the Ask dock scoped to the project, with nothing typed and nothing sent', () => {
     seedNewChat('notes', 'Notes');
-    const chips = (useComposerChips.getState() as unknown as { byComposer: Record<string, { kind: string; projectId?: string }[]> }).byComposer['desk'] ?? [];
-    expect(chips.some((c) => c.kind === 'project' && c.projectId === 'notes')).toBe(true);
-    expect(useSessionDrafts.getState().drafts['desk'] ?? '').toBe('');
+    expect(useAskDock.getState().request).toMatchObject({ projectId: 'notes', seedText: '' });
+  });
+
+  it('outside a project (or Unfiled) it opens the dock with its own default scope', () => {
+    seedNewChat('default', null);
+    expect(useAskDock.getState().request?.projectId).toBeNull();
+    const first = useAskDock.getState().request!.nonce;
+    seedNewChat(null, null);
+    expect(useAskDock.getState().request!.nonce).toBe(first + 1);
   });
 });

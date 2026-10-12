@@ -16,7 +16,7 @@ paused at its plan_approval gate):
      card and the primary reads "Approve with these changes"; no gate POST until it is pressed;
      then exactly one POST /runs/r-plan-gate/gate whose plan carries test.
   6. CHIPS: a selection in the thread becomes "about: “…”"; Backspace in the empty box removes
-     it; on the Desk `@` names a project → "in: …" chip.
+     it; the Desk has no composer (concept A: Chat opens the Ask dock, New job the wizard).
   7. 0 page errors, no horizontal scroll.
 
 Captures: e2e/shots/desk-composer*.png. Env: FEEDBACK_PORT (default 4351).
@@ -178,21 +178,13 @@ with sync_playwright() as p:
           and len(plan_edits()) == 1,
           draft=draft, go=go, before_press=quiet, gate_posts=len(gate_posts), steps=steps)
 
-    # ── 6b. the Desk: @ names a project → "in: …" ─────────────────────────────────────
+    # ── 6b. concept A (DES-frontdoor): the Desk has no composer — a new chat is the Ask dock, whose
+    #        project scope is its own choice (tests/AskDock.scope.test.tsx), and a job is the wizard.
     page.goto(f"{origin}/", wait_until="networkidle")
-    desk_box = page.get_by_test_id("desk-composer-input")
-    desk_box.wait_for(state="visible", timeout=15000)
-    desk_box.click()
-    desk_box.type("@")
-    page.get_by_test_id("composer-menu").wait_for(state="visible", timeout=8000)
-    first = page.locator('[data-testid="composer-menu-item"][data-kind="project"]').first
-    first.wait_for(state="visible", timeout=8000)
-    page.keyboard.press("Enter")
-    page.get_by_test_id("composer-chip").wait_for(state="visible", timeout=8000)
-    pchip = page.get_by_test_id("composer-chip").inner_text()
-    page.screenshot(path=str(SHOTS / "desk-composer-project.png"))
+    page.get_by_test_id("desk-new-job").wait_for(state="visible", timeout=15000)
+    gone = page.locator('[data-testid="composer"][data-composer="desk"]').count()
     overflow = page.evaluate("() => document.documentElement.scrollWidth > document.documentElement.clientWidth")
-    check("project-chip", pchip.startswith("in: ") and not overflow, chip=pchip, overflow=overflow)
+    check("desk-has-no-composer", gone == 0 and not overflow, composers=gone, overflow=overflow)
 
     check("no-errors", not errors, errors=errors)
     browser.close()

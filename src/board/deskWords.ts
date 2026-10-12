@@ -122,7 +122,7 @@ export function plainRunTitle(problem: string): string {
 
 /**
  * A run's title on every surface (operator ruling 2026-10-12: crew derives short job titles). crew's
- * `session.title` (api-types 0.111.0, read tolerantly until studio's pinned contract carries it) when
+ * `session.title` (api-types 0.112.0, read tolerantly until studio's pinned contract carries it) when
  * the daemon serves one; otherwise the run's own first-clause cut ({@link plainRunTitle}) — never an
  * invented title. The full words stay in `problem`, for the hover title.
  */

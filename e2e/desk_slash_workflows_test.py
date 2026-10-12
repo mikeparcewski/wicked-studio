@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 desk_slash_workflows_test.py — S19a (DES-STUDIO-REBUILD-001 §5.5/§5.7): a workflow is named with a
-`/workflow-<key>` FIRST token in the Desk composer and Enter launches it, at 1440x700 against the
+`/workflow-<key>` FIRST token in a composer (concept A: a session's; the Desk has none) and Enter launches it, at 1440x700 against the
 in-process fixture (`workflow_catalog` serves GET /workflows; `repo` serves GET /repos; `sessions`
 records POST /runs):
 
@@ -75,6 +75,8 @@ def wait_posts(n: int, timeout: float = 6.0) -> list:
 
 from playwright.sync_api import sync_playwright  # noqa: E402
 
+SESSION = "/s/run%3Ac1"  # a finished wave-1 run's session: its composer is the page's composer
+
 SHOTS.mkdir(parents=True, exist_ok=True)
 errors: list[str] = []
 
@@ -87,13 +89,14 @@ with sync_playwright() as p:
         f"s.textContent = {json.dumps(HIDE_GATE_TOASTS)}; document.head.appendChild(s); }});")
 
     def open_desk() -> None:
-        page.goto(f"{origin}/", wait_until="networkidle")
-        page.get_by_test_id("desk-composer-input").wait_for(state="visible", timeout=15000)
+        # Concept A (DES-frontdoor): the Desk has no composer; a session's composer carries the menu.
+        page.goto(f"{origin}{SESSION}", wait_until="networkidle")
+        page.get_by_test_id("session-composer-input").wait_for(state="visible", timeout=15000)
 
     # ── 1 + 2: the menu, and naming the work ──────────────────────────────────────
-    set_fixture(origin, workflow_catalog=True, repo=True, sessions=True, reset_gate_posts=True)
+    set_fixture(origin, wave1=True, workflow_catalog=True, repo=True, sessions=True, reset_gate_posts=True)
     open_desk()
-    box = page.get_by_test_id("desk-composer-input")
+    box = page.get_by_test_id("session-composer-input")
     box.click()
     box.type("/wo")
     page.get_by_test_id("composer-menu").wait_for(state="visible", timeout=8000)
@@ -156,10 +159,10 @@ with sync_playwright() as p:
     narrow.add_init_script(
         "document.addEventListener('DOMContentLoaded', () => { const s = document.createElement('style'); "
         f"s.textContent = {json.dumps(HIDE_GATE_TOASTS)}; document.head.appendChild(s); }});")
-    set_fixture(origin, workflow_catalog=True, repo=True, sessions=True, reset_gate_posts=True)
-    narrow.goto(f"{origin}/", wait_until="networkidle")
-    narrow.get_by_test_id("desk-composer-input").wait_for(state="visible", timeout=15000)
-    narrow_box = narrow.get_by_test_id("desk-composer-input")
+    set_fixture(origin, wave1=True, workflow_catalog=True, repo=True, sessions=True, reset_gate_posts=True)
+    narrow.goto(f"{origin}{SESSION}", wait_until="networkidle")
+    narrow.get_by_test_id("session-composer-input").wait_for(state="visible", timeout=15000)
+    narrow_box = narrow.get_by_test_id("session-composer-input")
     narrow_box.click()
     narrow_box.type("/wo")
     narrow.get_by_test_id("composer-menu").wait_for(state="visible", timeout=8000)
@@ -236,7 +239,7 @@ with sync_playwright() as p:
     page.keyboard.press("Escape")
 
     def wizard_for_bug(intent: str) -> None:
-        box = page.get_by_test_id("desk-composer-input")
+        box = page.get_by_test_id("session-composer-input")
         box.click()
         box.fill("")
         box.type("/workflow-")
@@ -247,7 +250,7 @@ with sync_playwright() as p:
         page.get_by_test_id("launch-wizard-next").click()
 
     # ── 3: no repository → the wizard's Where step holds Next and says why; nothing is sent ──
-    set_fixture(origin, workflow_catalog=True, repo=False, sessions=True, reset_gate_posts=True)
+    set_fixture(origin, wave1=True, workflow_catalog=True, repo=False, sessions=True, reset_gate_posts=True)
     open_desk()
     wizard_for_bug("the charge never clears")
     page.get_by_test_id("launch-wizard-repo").wait_for(state="visible", timeout=8000)
@@ -260,7 +263,7 @@ with sync_playwright() as p:
     page.keyboard.press("Escape")
 
     # ── 4: with a repository: Next, Next, review, Launch → exactly one POST, then the session ──
-    set_fixture(origin, workflow_catalog=True, repo=True, sessions=True, reset_gate_posts=True)
+    set_fixture(origin, wave1=True, workflow_catalog=True, repo=True, sessions=True, reset_gate_posts=True)
     page.evaluate("() => { try { localStorage.removeItem('wicked_composer_dropped_seats'); } catch (e) {} }")
     open_desk()
     wizard_for_bug("the charge never clears")
@@ -289,13 +292,13 @@ with sync_playwright() as p:
     check("opens-the-run", went.startswith("/s/"), path=went)
 
     # ── 5: Escape closes the wizard, keeps the draft, and never launches ───────────
-    set_fixture(origin, workflow_catalog=True, repo=True, sessions=True, reset_gate_posts=True)
+    set_fixture(origin, wave1=True, workflow_catalog=True, repo=True, sessions=True, reset_gate_posts=True)
     open_desk()
     wizard_for_bug("keep this draft")
     page.keyboard.press("Escape")
     page.get_by_test_id("launch-wizard").wait_for(state="detached", timeout=5000)
     page.wait_for_timeout(300)
-    box = page.get_by_test_id("desk-composer-input")
+    box = page.get_by_test_id("session-composer-input")
     box.click()
     box.type("/workflow-")
     page.locator('[data-testid="composer-menu-item"][data-cmd="workflow-bug"]').click()
@@ -312,6 +315,11 @@ with sync_playwright() as p:
         page.get_by_test_id("palette-input").fill("> New job")
         page.locator('[data-testid="palette-row"]', has_text="New job").first.click()
         page.get_by_test_id("launch-wizard").wait_for(state="visible", timeout=8000)
+        # The catalog may still be on its way (the Desk no longer warms it with a composer).
+        try:
+            page.wait_for_function("() => document.querySelectorAll('[data-testid^=\"launch-wizard-workflow-\"]').length > 0", timeout=8000)
+        except Exception:  # noqa: BLE001 — reported by the check
+            pass
         st = page.evaluate("""() => ({ path: location.pathname,
             step: document.querySelector('[data-testid="launch-wizard-step"]')?.dataset.step ?? null,
             rows: document.querySelectorAll('[data-testid^="launch-wizard-workflow-"]').length })""")
@@ -319,13 +327,14 @@ with sync_playwright() as p:
         page.get_by_test_id("launch-wizard").wait_for(state="detached", timeout=5000)
         return st
 
-    set_fixture(origin, workflow_catalog=True, repo=True, sessions=True, reset_gate_posts=True)
+    set_fixture(origin, wave1=True, workflow_catalog=True, repo=True, sessions=True, reset_gate_posts=True)
     page.goto(f"{origin}/runs/new", wait_until="networkidle")
     page.get_by_test_id("launch-problem").wait_for(state="visible", timeout=15000)
     page.evaluate("() => document.activeElement && document.activeElement.blur()")
     page.evaluate("() => { try { sessionStorage.clear(); } catch (e) {} }")
     from_form = new_job()
-    open_desk()
+    page.goto(f"{origin}/", wait_until="networkidle")
+    page.get_by_test_id("desk-new-job").wait_for(state="visible", timeout=15000)
     page.evaluate("() => document.activeElement && document.activeElement.blur()")
     from_desk = new_job()
     check("new-job-opens-the-wizard",
@@ -336,7 +345,8 @@ with sync_playwright() as p:
 
     # ── 7: no "Detected:" anywhere — the Desk, and the launch form ─────────────────
     sentence = "fix the crash in checkout"
-    box = page.get_by_test_id("desk-composer-input")
+    open_desk()
+    box = page.get_by_test_id("session-composer-input")
     box.click()
     box.type(sentence)
     page.wait_for_timeout(400)

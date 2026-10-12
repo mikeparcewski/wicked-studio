@@ -142,6 +142,7 @@ export function Desk({ runs, runsLoaded, runsError = null, onRetryRuns, needRows
   const story = settledNeeds ? deskStory({
     days, started: p.started.count, waiting, running: p.running,
     failures: failures.map((r) => ({ projectName: projectName(runs.find((v) => `fail:${v.session.id}` === r.key)?.session.project_id ?? null), at: r.at })),
+    stuck: needCount(needRows.filter((r) => needSection(r) === 'failure' && r.kind !== 'failed-run')),
     reviews: proposals === null ? null : proposals.length, now,
   }) : null;
 
@@ -255,7 +256,7 @@ export function Desk({ runs, runsLoaded, runsError = null, onRetryRuns, needRows
         <div className="wk-desk-a-intro">
           {readState === 'failed' && <p data-testid="desk-unread" className="wk-desk-story wk-desk-quiet">I can’t say what is going on until your work loads.</p>}
           {story !== null
-            ? <p data-testid="desk-story" data-phase={settled.phase} className="wk-desk-story">{settled.phase === 'partial' ? `${story} Some of what needs you could not be read.` : story}</p>
+            ? <p data-testid="desk-story" data-phase={settled.phase} data-count={settled.count ?? undefined} className="wk-desk-story">{settled.phase === 'partial' ? `${story} Some of what needs you could not be read.` : story}</p>
             : (readState === 'checking' || readState === 'known') && <p data-testid="desk-loading" aria-busy="true" className="wk-desk-story wk-desk-quiet">Checking what is going on…</p>}
           <DeskRuleLine navigate={navigate} />
         </div>

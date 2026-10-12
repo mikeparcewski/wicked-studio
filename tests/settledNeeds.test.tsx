@@ -6,7 +6,7 @@ import type { NeedRow } from '../src/board/needsYou.js';
 import { NEEDS_QUIET_MS, resetSettledNeedsForTest, useSettledNeeds } from '../src/hooks/useNeedsRows.js';
 import { useNeedsSources } from '../src/store/needsSources.js';
 
-const rows = (n: number): NeedRow[] => Array.from({ length: n }, (_, i) => ({ key: `r${i}` }) as unknown as NeedRow);
+const rows = (n: number, kind = 'gate'): NeedRow[] => Array.from({ length: n }, (_, i) => ({ key: `r${i}`, kind }) as unknown as NeedRow);
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -45,5 +45,12 @@ describe('useSettledNeeds', () => {
     expect(result.current.count).toBeNull();
     act(() => { vi.advanceTimersByTime(NEEDS_QUIET_MS + 100); });
     expect(result.current).toMatchObject({ phase: 'complete', count: 5 });
+  });
+
+  it('counts decisions and failures, never reviews (operator ruling 2026-10-12)', () => {
+    const mixed = [...rows(2, 'gate'), ...rows(1, 'failed-run').map((r) => ({ ...r, key: 'f0' })), ...rows(5, 'proposal').map((r, i) => ({ ...r, key: `p${i}` }))];
+    const { result } = renderHook(() => useSettledNeeds(mixed, true));
+    act(() => { vi.advanceTimersByTime(NEEDS_QUIET_MS + 100); });
+    expect(result.current).toMatchObject({ phase: 'complete', count: 3 });
   });
 });

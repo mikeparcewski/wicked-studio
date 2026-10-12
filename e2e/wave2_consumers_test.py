@@ -188,16 +188,16 @@ with sync_playwright() as p:
           state=gov.get_attribute("data-state"), why=gov.get_attribute("data-why"))
     set_fixture(ORIGIN, governance="deadletters")
 
-    # ── 4. #248 → S16a-4e: a new chat starts in the Desk composer ─────────────────────
+    # ── 4. #248 → S16a-4e → concept A: a new chat starts from the Desk's Chat (the Ask dock) ──
     # GroupChat's Scope row ("Unfiled" blocked, the System chip, "Choose repos…", the admitted
     # subset, the 501 fallback) retired with the `/chat/*` addresses — a chat is its session, and a
     # new one starts in the Desk composer, scoped by its `@` project chip. X1: `/chat/new` and
     # `/p/<pid>/chat` no longer redirect — they are dead addresses (not-found, nothing POSTed).
     posts.clear()
     page.goto(f"{ORIGIN}/")
-    page.get_by_test_id("desk-composer-input").wait_for(timeout=15000)
+    page.get_by_test_id("desk-chat").wait_for(timeout=15000)
     page.wait_for_timeout(600)
-    check("new_chat_lands_on_the_desk_composer", not [u for m, u in posts if "/api/v1/chats" in u and m == "POST"],
+    check("new_chat_starts_from_the_desk_chat", not [u for m, u in posts if "/api/v1/chats" in u and m == "POST"],
           posts=[u for m, u in posts if "/api/v1/chats" in u])
     page.goto(f"{ORIGIN}/p/upload-endpoint/chat")
     page.get_by_test_id("not-found").wait_for(timeout=15000)

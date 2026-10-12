@@ -6,8 +6,8 @@ desk_look_test.py — THE DESK's look at 1440x900 on the Desk + theme wicked-lig
 Drives the built UI against the in-process fixture (the wave-2b queue corpus, 9 rail sessions)
 with the stored appearance set to wicked-light + the harbor accent, and proves:
 
-  1. SPARK: the highlighter behind "N things need you." and the dot on the most urgent needs-you
-     row compute to signal yellow #FFDA19 (rgb 255, 218, 25); the Desk rail badge is yellow too.
+  1. SPARK: the dot on the most urgent needs-you row computes to signal yellow #FFDA19 (rgb 255,
+     218, 25); the Desk rail badge is yellow too. Concept A retired the headline highlighter.
      No needs-you mark (rail session dot, list dot, Watchtower dot, card underline) is the
      control violet #6F42C1 — violet is only a quiet gate/rule tint.
   2. NO MONOSPACE in the default layer: no visible text in the session rail or the Desk computes
@@ -69,7 +69,7 @@ MARKS = """(violet) => {
   ];
   return {
     theme: document.documentElement.getAttribute('data-theme'),
-    mark: bg(document.querySelector('[data-testid="desk-headline"] mark')),
+    mark: document.querySelector('[data-testid="desk"] mark') ? 'present' : null,
     urgentDot: bg(first),
     urgentKey: rows[0] ? rows[0].dataset.key : null,
     badge: bg(document.querySelector('[data-testid="desk-rail-badge"]')),
@@ -86,6 +86,8 @@ MONO = """() => {
       const el = n.parentElement;
       if (!el || n.textContent.trim() === '' || el.getClientRects().length === 0) continue;
       if (getComputedStyle(el).visibility === 'hidden') continue;
+      // Keycaps are code (UI-CONTRACT §1.3): the command bar's "⌘K" may be mono.
+      if (el.closest('kbd')) continue;
       if (/mono/i.test(getComputedStyle(el).fontFamily)) out.push(n.textContent.trim().slice(0, 40));
     }
   }
@@ -93,7 +95,7 @@ MONO = """() => {
 }"""
 
 TECH_PROBE = """() => {
-  const host = document.querySelector('[data-testid="desk-headline"]');
+  const host = document.querySelector('[data-testid="desk-story"]');
   const s = document.createElement('span');
   s.setAttribute('data-tech', 'on'); s.className = 'font-mono'; s.textContent = 'run 1234abcd';
   host.appendChild(s);
@@ -149,7 +151,7 @@ with sync_playwright() as p:
         page.get_by_test_id("needs-you-queue").wait_for(state="visible", timeout=10000)
         page.wait_for_function("() => document.documentElement.getAttribute('data-theme') === 'wicked-light'",
                                timeout=10000)
-        page.wait_for_function("() => !!document.querySelector('[data-testid=\"desk-headline\"] mark')", timeout=10000)
+        page.wait_for_function("() => !!document.querySelector('[data-testid=\"desk-story\"]')", timeout=10000)
     except Exception as e:  # noqa: BLE001
         page.screenshot(path=str(SHOTS / "desk-look-missing.png"))
         fail("desk-renders", f"the Desk under wicked-light did not render: {e}")
@@ -159,7 +161,7 @@ with sync_playwright() as p:
 
     # ── 1. the spark marks ────────────────────────────────────────────────────────
     m = page.evaluate(MARKS, VIOLET)
-    check("spark-marks", m["theme"] == "wicked-light" and m["mark"] == SPARK and m["urgentDot"] == SPARK
+    check("spark-marks", m["theme"] == "wicked-light" and m["mark"] is None and m["urgentDot"] == SPARK
           and m["badge"] == SPARK and not m["violetMarks"], expected=SPARK, **m)
 
     # ── 2. no monospace in the default layer; a technical handle keeps it ─────────
@@ -168,7 +170,7 @@ with sync_playwright() as p:
     set_fixture(origin, view_prefs={"technical_details": True})
     page.goto(f"{origin}/", wait_until="networkidle")
     page.get_by_test_id("desk").wait_for(state="visible", timeout=15000)
-    page.wait_for_function("() => !!document.querySelector('[data-testid=\"desk-headline\"]')", timeout=10000)
+    page.wait_for_function("() => !!document.querySelector('[data-testid=\"desk-story\"]')", timeout=10000)
     tech_font = page.evaluate(TECH_PROBE)
     check("tech-details-keep-mono", "mono" in tech_font.lower(), font=tech_font)
     set_fixture(origin, view_prefs=None)

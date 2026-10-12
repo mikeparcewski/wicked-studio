@@ -83,19 +83,16 @@ with sync_playwright() as p:
           desk=desk[:500])
     set_fixture(origin, runs_fail=False)
     page.get_by_test_id("desk-runs-failed-retry").click()
-    page.get_by_test_id("desk-headline").wait_for(state="visible", timeout=15000)
+    page.get_by_test_id("desk-story").wait_for(state="visible", timeout=15000)
     check("retry-reads-again", page.get_by_test_id("desk-runs-failed").count() == 0)
     set_fixture(origin, repo=False)
 
-    # ── 2. #473: ⌘K from the Desk composer focuses ──────────────────────────────
+    # ── 2. #473: ⌘K from a text field (concept A: the Desk has no composer — the Chat dock's box) ──
     page.goto(f"{origin}/", wait_until="networkidle")
-    page.wait_for_timeout(600)
-    focused = page.evaluate("() => { const a = document.activeElement; return a ? a.tagName.toLowerCase() : ''; }")
-    if focused not in ("textarea", "input"):
-        # The page focuses its composer on arrival; if this build does not, focus it as an operator would.
-        # S16a-4i: /chat/new is the Desk composer.
-        page.locator('[data-testid="composer"][data-composer="desk"] textarea').first.focus()
-        focused = page.evaluate("() => document.activeElement.tagName.toLowerCase()")
+    page.get_by_test_id("desk-chat").click()
+    page.get_by_test_id("assist-input").wait_for(state="visible", timeout=10000)
+    page.get_by_test_id("assist-input").focus()
+    focused = page.evaluate("() => document.activeElement.tagName.toLowerCase()")
     page.keyboard.press("ControlOrMeta+k")
     try:
         page.get_by_test_id("palette-input").wait_for(state="visible", timeout=4000)
