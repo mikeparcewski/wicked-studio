@@ -32,6 +32,8 @@ import { NeedsQueueSurface } from './NeedsYouQueue.js';
 import { StepLegend, StepTrack } from './desk/Desk.js';
 
 const RUN_KIND = 'crew.run';
+/** At most this many run members the run list does not serve are read one by one. */
+const MISSING_READ_CAP = 60;
 const REPO_KIND = 'crew.repo';
 
 /** What a first job is for: the five starts the first-run state teaches. Each opens the wizard on its
@@ -133,31 +135,36 @@ export function ProjectDetailPage({ projectId, navigate, runs = NO_RUNS, needRow
 
   // A run member the run list does not serve (an archived run, an older one) is read on its own, so the
   // project shows every job it holds (the page read each member's run before concept P too).
-  const [extra, setExtra] = useState<SessionView[]>([]);
-  const missing = useMemo(() => members.filter((m) => m.member_kind === RUN_KIND && !runs.some((v) => v.session.id === m.member_ref)).map((m) => m.member_ref).slice(0, 20), [members, runs]);
+  const [extra, setExtra] = useState<{ key: string; runs: SessionView[]; failed: number }>({ key: '', runs: [], failed: 0 });
+  const missingAll = useMemo(() => members.filter((m) => m.member_kind === RUN_KIND && !runs.some((v) => v.session.id === m.member_ref)).map((m) => m.member_ref), [members, runs]);
+  const missing = missingAll.slice(0, MISSING_READ_CAP);
   const missingKey = missing.join('\u0000');
   useEffect(() => {
-    if (missingKey === '') { setExtra([]); return; }
+    if (missingKey === '') { setExtra({ key: '', runs: [], failed: 0 }); return; }
     let live = true;
     void Promise.all(missingKey.split('\u0000').map((id) => Promise.resolve().then(() => api.getRun(id)).then((r) => r.run, () => null)))
-      .then((got) => { if (live) setExtra(got.filter((v): v is SessionView => v !== null)); });
+      .then((got) => { if (live) setExtra({ key: missingKey, runs: got.filter((v): v is SessionView => v !== null), failed: got.filter((v) => v === null).length }); });
     return () => { live = false; };
   }, [missingKey]);
-  const allRuns = useMemo(() => (extra.length === 0 ? runs : [...runs, ...extra.filter((x) => !runs.some((v) => v.session.id === x.session.id))]), [runs, extra]);
+  // Jobs the page could not show (a failed read, or past the read cap): said, never silently dropped.
+  const unshown = extra.key === missingKey ? extra.failed + (missingAll.length - missing.length) : 0;
+  const allRuns = useMemo(() => (extra.runs.length === 0 ? runs : [...runs, ...extra.runs.filter((x) => !runs.some((v) => v.session.id === x.session.id))]), [runs, extra]);
   const mine = useMemo(() => projectRuns(allRuns, members, projectId), [allRuns, members, projectId]);
   const mineIds = useMemo(() => new Set(mine.map((v) => v.session.id)), [mine]);
   // The membership is the truth for how many jobs a project holds, even one the run list no longer serves.
   const jobsCount = useMemo(() => new Set([...mineIds, ...members.filter((m) => m.member_kind === RUN_KIND).map((m) => m.member_ref)]).size, [mineIds, members]);
   // The register names the repositories the jobs used: read (the one shared cache) only when a job used one.
-  const needsRegister = register === null && mine.some((v) => typeof v.session.repo_ref === 'string' && v.session.repo_ref !== '');
+  const needsRegister = register === null && (members.some((m) => m.member_kind === REPO_KIND) || mine.some((v) => typeof v.session.repo_ref === 'string' && v.session.repo_ref !== ''));
   useEffect(() => { if (needsRegister) fetchReposCached().then(setRegister, () => setRegister([])); }, [needsRegister]);
   const used = useMemo(() => reposUsed(mine, members, register ?? getCachedRepos() ?? []), [mine, members, register]);
   const needs = useMemo(() => projectNeeds(needRows, mineIds), [needRows, mineIds]);
   const p = useMemo(() => pulse(mine, days, now), [mine, days, now]);
   const states = useMemo(() => stateCounts(mine), [mine]);
   const inWindow = useMemo(() => newestFirst(createdAtWindow([...mine], days, now).current).map((v) => v.session.id), [mine, days, now]);
-  const quality = useQualityChecks(inWindow);
-  const spend = useWindowSpend(days, isDefault ? undefined : projectId, String(mine.reduce((n, v) => n + (v.units ?? []).filter((u) => u.status === 'done').length, 0)));
+  const workPrint = String(mine.reduce((n, v) => n + (v.units ?? []).filter((u) => u.status === 'done').length, 0)) + mine.map((v) => v.session.status).join('');
+  const quality = useQualityChecks(inWindow, workPrint);
+  // Spend is read per project; the unfiled shelf has no project to scope it to, so it is not shown there.
+  const spend = useWindowSpend(days, projectId, workPrint, !isDefault);
   const runChatId = useCapabilities((s) => s.runChatId);
   const roster = useRoster();
   const helperName = useCallback((cli: string): string | null => {
@@ -169,7 +176,7 @@ export function ProjectDetailPage({ projectId, navigate, runs = NO_RUNS, needRow
   const feed = useMemo(() => stories(mine, { max: 6, helperName }), [mine, helperName]);
   const others = members.filter((m) => m.member_kind !== RUN_KIND && m.member_kind !== REPO_KIND);
   const hasPrev = mine.some((v) => typeof v.session.created_at === 'number' && v.session.created_at * 1000 < now - days * 86_400_000);
-  const firstRun = !loading && project !== null && !isDefault && mine.length === 0 && !members.some((m) => m.member_kind === REPO_KIND);
+  const firstRun = !loading && project !== null && !isDefault && jobsCount === 0 && !members.some((m) => m.member_kind === REPO_KIND);
   const quiet = !firstRun && mine.length > 0 && p.started.count === 0;
   const lastEnded = mine.map((v) => v.session.ended_at).filter((t): t is number => typeof t === 'number');
   const openFailures = needs.filter((r) => r.kind === 'failed-run').length;
@@ -222,6 +229,8 @@ export function ProjectDetailPage({ projectId, navigate, runs = NO_RUNS, needRow
     ...(editErr !== null ? [{ what: 'project changes', error: editErr, retry: () => setEditErr(null) }] : []), ...childIssues];
   const failure = failures.find((f) => readErrorKind(f.error) === 'offline') ?? failures[0];
   const backHref = everythingPath({ tab: 'projects' });
+  // The unfiled shelf's list is See everything › Projects (the rail's door for it); a project filters Sessions.
+  const allJobsHref = isDefault ? everythingPath({ tab: 'projects' }) : everythingPath({ tab: 'sessions', project: projectId });
   const go = (path: string) => (e: React.MouseEvent): void => { e.preventDefault(); navigate(path); };
   const newJob = (workflowId: string | null = null): void => openLaunchWizard({ projectId: isDefault ? null : projectId, workflowId, composerKey: 'desk' });
   const chatHere = (): void => openAskDock({ projectId: isDefault ? null : projectId });
@@ -231,10 +240,13 @@ export function ProjectDetailPage({ projectId, navigate, runs = NO_RUNS, needRow
   const statesTotal = states.reduce((n, s) => n + s.count, 0);
   const qualityValue = quality.tally === null ? null : quality.tally.recorded === 0 ? null : `${quality.tally.passed} of ${quality.tally.recorded}`;
   const qualityNote = quality.tally === null ? 'Reading checks…'
+    : quality.failed > 0 && quality.tally.read === 0 ? 'Checks could not be read'
+    : quality.failed > 0 ? `${quality.failed} could not be read; ${quality.tally.recorded === 0 ? 'none recorded for the rest' : 'of the rest'}`
     : quality.tally.recorded === 0 ? (inWindow.length === 0 ? `no jobs in ${windowWords(days)}` : quality.capped ? `no checks recorded for the newest ${quality.tally.read} jobs` : `no checks recorded for these ${inWindow.length} ${inWindow.length === 1 ? 'job' : 'jobs'}`)
       : quality.capped ? `of the newest ${quality.tally.read} jobs` : 'checks passed of those recorded';
-  const spendNote = spend.phase === 'loading' ? 'Reading spend…'
-    : spend.current === null ? (isDefault ? 'Spend could not be read' : 'Not available yet: update Studio to see spend per project')
+  const spendNote = isDefault ? 'Spend is counted per project'
+    : spend.phase === 'loading' ? 'Reading spend…'
+    : spend.current === null ? 'Not available yet: update Studio to see spend per project'
       : spend.partial ? 'at least: some helpers report no price'
         : spend.previous !== null ? `${moneyWords(spend.previous)} the ${days} days before` : 'no earlier spend to compare';
 
@@ -255,7 +267,7 @@ export function ProjectDetailPage({ projectId, navigate, runs = NO_RUNS, needRow
             </p>
           )}
           {project?.description ? <>
-            <p data-testid="project-desc" className={`wk-proj-desc${descOpen ? '' : ' wk-proj-desc--clamped'}`}>{project.description}</p>
+            <p data-testid="project-desc" className={`wk-proj-desc${descOpen || project.description.length <= 220 ? '' : ' wk-proj-desc--clamped'}`}>{project.description}</p>
             {project.description.length > 220 && <button type="button" className="wk-link wk-proj-desc-toggle" aria-expanded={descOpen} onClick={() => setDescOpen((v) => !v)}>{descOpen ? 'Show less' : 'Show all'}</button>}
           </> : null}
         </div>
@@ -358,7 +370,7 @@ export function ProjectDetailPage({ projectId, navigate, runs = NO_RUNS, needRow
               <StatTile data-testid="project-stat-quality" label="Quality checks passed" value={qualityValue} note={qualityNote} />
               <StatTile data-testid="project-stat-typical" label="Typical time to finish" value={p.typicalMin === null ? null : durationWords(p.typicalMin)}
                 note={p.typicalMin === null ? `no job finished in ${windowWords(days)}` : `median of ${p.typicalOf} that finished`} />
-              <StatTile data-testid="project-stat-spend" label={`Spend, last ${days} days`} value={spend.current === null ? null : moneyWords(spend.current)} note={spendNote} />
+              <StatTile data-testid="project-stat-spend" label={`Spend, last ${days} days`} value={isDefault || spend.current === null ? null : moneyWords(spend.current)} note={spendNote} />
             </StatBand>
           </section>
         )}
@@ -374,7 +386,7 @@ export function ProjectDetailPage({ projectId, navigate, runs = NO_RUNS, needRow
               <section aria-labelledby="project-jobs-title" data-testid="project-jobs" className="wk-card">
                 <div className="wk-desk-card-head">
                   <h2 id="project-jobs-title" className="wk-section-title">Jobs</h2>
-                  <a className="wk-link wk-desk-card-link" href={everythingPath({ tab: 'sessions', ...(isDefault ? {} : { project: projectId }) })} onClick={go(everythingPath({ tab: 'sessions', ...(isDefault ? {} : { project: projectId }) }))}>All jobs in this project</a>
+                  <a className="wk-link wk-desk-card-link" href={allJobsHref} onClick={go(allJobsHref)}>{isDefault ? 'All work not in a project' : 'All jobs in this project'}</a>
                 </div>
                 <ul className="wk-desk-lanes" aria-label="This project’s jobs">
                   {lanes.map((l) => {
@@ -395,6 +407,7 @@ export function ProjectDetailPage({ projectId, navigate, runs = NO_RUNS, needRow
                   })}
                 </ul>
                 <StepLegend />
+                {unshown > 0 && <p data-testid="project-jobs-unshown" className="wk-desk-card-note">{unshown === 1 ? '1 more job in this project could not be shown here.' : `${unshown} more jobs in this project could not be shown here.`}</p>}
               </section>
             )}
             {!isDefault && <div id="project-repos"><ProjectRepositories projectId={projectId} members={members} used={used} onIssue={onIssue} onMembersChange={(update) => setDetail((d) => d !== null && d.project.id === projectId ? { ...d, members: update(d.members) } : d)} /></div>}

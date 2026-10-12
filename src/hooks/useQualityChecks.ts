@@ -11,16 +11,24 @@ export const QUALITY_READ_CAP = 20;
  * unknown (it is not counted either way); `null` while reading. "No checks recorded" is said as
  * such, never as 0%.
  */
-export function useQualityChecks(runIds: readonly string[]): { tally: QualityTally | null; capped: boolean } {
+export function useQualityChecks(runIds: readonly string[], work = ''): { tally: QualityTally | null; failed: number; capped: boolean } {
   const ids = runIds.slice(0, QUALITY_READ_CAP);
   const key = ids.join('\u0000');
-  const [got, setGot] = useState<{ key: string; tally: QualityTally } | null>(null);
+  const [got, setGot] = useState<{ key: string; tally: QualityTally; failed: number } | null>(null);
   useEffect(() => {
     let live = true;
-    if (key === '') { setGot({ key, tally: { read: 0, recorded: 0, passed: 0 } }); return () => { live = false; }; }
-    void Promise.all(key.split('\u0000').map((id) => Promise.resolve().then(() => api.getRunAcceptance(id)).then((a) => a.gate ?? null, () => null)))
-      .then((gates) => { if (live) setGot({ key, tally: qualityTally(gates) }); });
+    if (key === '') { setGot({ key, tally: { read: 0, recorded: 0, passed: 0 }, failed: 0 }); return () => { live = false; }; }
+    // `work` moves when a job does (a step finished, a status changed): the verdicts are read again.
+    void Promise.all(key.split('\u0000').map((id) => Promise.resolve().then(() => api.getRunAcceptance(id)).then((a): { gate: AcceptanceGateLite | null } => ({ gate: a.gate ?? null }), () => 'failed' as const)))
+      .then((reads) => {
+        if (!live) return;
+        const gates = reads.filter((r): r is { gate: AcceptanceGateLite | null } => r !== 'failed').map((r) => r.gate);
+        setGot({ key, tally: qualityTally(gates.filter((g): g is AcceptanceGateLite => g !== null)), failed: reads.filter((r) => r === 'failed').length });
+      });
     return () => { live = false; };
-  }, [key]);
-  return { tally: got !== null && got.key === key ? got.tally : null, capped: runIds.length > QUALITY_READ_CAP };
+  }, [key, work]);
+  const cur = got !== null && got.key === key ? got : null;
+  return { tally: cur?.tally ?? null, failed: cur?.failed ?? 0, capped: runIds.length > QUALITY_READ_CAP };
 }
+
+type AcceptanceGateLite = { verdict: string | null; satisfied: boolean };
