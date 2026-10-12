@@ -150,9 +150,9 @@ describe('needs sections and THE badge', () => {
 describe('failure detail', () => {
   it('names the failed step and its kind; the engine’s words go to Technical details', () => {
     const v = makeView({ id: 'r', status: 'failed', unit_ix: 1 }, [makeUnit({ id: 'r:build', ord: 0, status: 'done' }), makeUnit({ id: 'r:review', ord: 1, status: 'distributed' })]);
-    const why = failureWhy(v, [{ type: 'stepFailed', ord: 1, failureKind: 'workerError', detail: 'exit 1 in /Users/x' }, { type: 'stepFailed', ord: 1, failureKind: 'workerError', detail: 'again' }]);
+    const why = failureWhy(v, [{ type: 'stepFailed', ord: 1, failureKind: 'workerError', detail: 'exit 1 in the worktree' }, { type: 'stepFailed', ord: 1, failureKind: 'workerError', detail: 'again' }]);
     expect(why.plain).toBe('A helper could not start or finish the review step. It failed 2 times.');
-    expect(why.detail).toEqual(['exit 1 in /Users/x', 'again']);
+    expect(why.detail).toEqual(['exit 1 in the worktree', 'again']);
   });
 
   it('says a check stopped a rejected step, and is honest when nothing was recorded', () => {
