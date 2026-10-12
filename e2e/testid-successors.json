@@ -754,6 +754,7 @@
     "desk-project-new": "rail-group-new",
     "desk-projects-loading": "desk-side-loading",
     "desk-projects-unread": "desk-runs-failed",
-    "desk-session": "desk-lane"
+    "desk-session": "desk-lane",
+    "stat-context": "stat-note"
   }
 }

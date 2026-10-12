@@ -115,7 +115,7 @@
 .wk-desk-lane-meta, .wk-desk-glance-meta, .wk-desk-feed-meta { font-size: var(--text-xs); color: var(--ink-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .wk-desk-lane-word { font-size: var(--text-xs); color: var(--ink-body); display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
 .wk-steptrack { display: flex; gap: 3px; height: 8px; min-width: 0; }
-.wk-steptrack-mark { flex: 1 1 0; min-width: 4px; max-width: 28px; height: 8px; border-radius: 2px; background: var(--border); display: inline-block; }
+.wk-steptrack-mark { flex: 1 1 0; min-width: 4px; max-width: 28px; height: 8px; border-radius: 2px; background: var(--border-strong); display: inline-block; }
 .wk-steptrack-mark[data-mark="done"] { background: var(--status-ok); }
 .wk-steptrack-mark[data-mark="fail"] { background: var(--status-fail); }
 .wk-steptrack-mark[data-mark="gate"] { background: var(--status-gate); }

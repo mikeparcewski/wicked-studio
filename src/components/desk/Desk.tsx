@@ -292,7 +292,7 @@ export function Desk({ runs, runsLoaded, runsError = null, onRetryRuns, needRows
               <StatBand label={`How it is going, ${windowWords(days)}`} data-testid="desk-pulse">
                 <StatTile data-testid="desk-stat-started" label="Jobs started" value={p.started.count}
                   delta={hasPrev ? { current: p.started.count, previous: p.started.previous, versus: `vs the ${days} days before` } : null}
-                  note={hasPrev ? null : 'no earlier window'} spark={days === 90 ? coarsen(p.started.series, 7) : p.started.series} />
+                  note={hasPrev ? null : `no jobs before the last ${days} days to compare`} spark={days === 90 ? coarsen(p.started.series, 7) : p.started.series} />
                 <StatTile data-testid="desk-stat-waiting" label="Waiting on you" value={!settledNeeds ? null : settled.phase === 'partial' ? `${waiting}+` : waiting}
                   note={!settledNeeds ? 'Checking…' : settled.phase === 'partial' ? 'at least: some of what needs you could not be read' : waiting === 0 ? 'nothing is waiting' : oldestWait !== null ? `oldest ${relTime(oldestWait, now)}` : null} />
                 <StatTile data-testid="desk-stat-failed" label="Failed" value={p.failed.count}

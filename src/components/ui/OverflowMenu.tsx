@@ -8,8 +8,11 @@ export interface MenuItem { id: string; label: string; onSelect: () => void; dan
  * audit rows 35, 37, 82). Arrows move, Enter/Space picks, Escape and an outside click close and focus
  * returns to the button. A disabled item shows its reason as its second line.
  */
-export function OverflowMenu({ label, items, text, 'data-testid': testId = 'overflow-menu' }: {
-  label: string; items: readonly MenuItem[]; text?: string; 'data-testid'?: string;
+export function OverflowMenu({ label, items, text, tone = 'quiet', 'data-testid': testId = 'overflow-menu' }: {
+  label: string; items: readonly MenuItem[]; text?: string;
+  /** A labelled menu button among secondary buttons wears their look (`secondary`). */
+  tone?: 'quiet' | 'secondary';
+  'data-testid'?: string;
 }): React.ReactElement {
   const [open, setOpen] = useState(false);
   const wrap = useRef<HTMLDivElement | null>(null); const btn = useRef<HTMLButtonElement | null>(null);
@@ -20,7 +23,7 @@ export function OverflowMenu({ label, items, text, 'data-testid': testId = 'over
   return (
     <div ref={wrap} className="wk-menu-wrap" data-testid={testId}>
       <button ref={btn} type="button" aria-label={label} title={label} aria-haspopup="menu" aria-expanded={open} aria-controls={`${id}-menu`}
-        className={text !== undefined ? 'wk-btn wk-btn--quiet wk-btn--sm' : 'wk-btn wk-btn--quiet wk-btn--icon'}
+        className={text !== undefined ? (tone === 'secondary' ? 'wk-btn wk-btn--secondary' : 'wk-btn wk-btn--quiet wk-btn--sm') : 'wk-btn wk-btn--quiet wk-btn--icon'}
         data-testid={`${testId}-button`}
         onClick={() => { setOpen((o) => !o); if (!open) setTimeout(() => focusAt(0), 0); }}
         onKeyDown={(e) => { if (e.key === 'ArrowDown') { e.preventDefault(); setOpen(true); setTimeout(() => focusAt(0), 0); } }}

@@ -56,10 +56,11 @@ async function readPair(days: number, projectId: string | undefined, work: strin
  * `work` is a fingerprint of the work the caller sees (e.g. how many steps have finished): when it
  * changes, spend is read again, so a mounted Desk never keeps a total that new work has moved.
  */
-export function useWindowSpend(days: number, projectId?: string, work = ''): WindowSpend {
+export function useWindowSpend(days: number, projectId?: string, work = '', enabled = true): WindowSpend {
   const [state, setState] = useState<{ key: string; spend: WindowSpend } | null>(null);
   const key = `${days}\u0000${projectId ?? ''}`;
   useEffect(() => {
+    if (!enabled) return undefined;
     let live = true;
     void readPair(days, projectId, work).then(({ now, twice }) => {
       const cur = spendOf(now, projectId);
@@ -70,7 +71,7 @@ export function useWindowSpend(days: number, projectId?: string, work = ''): Win
       if (live) setState({ key, spend: { phase: 'done', current: cur?.usd ?? null, previous: prev !== null && prev >= 0 ? prev : null, partial: cur?.partial === true, truncated: now?.truncated === true || twice?.truncated === true } });
     });
     return () => { live = false; };
-  }, [days, projectId, key, work]);
+  }, [days, projectId, key, work, enabled]);
   return state !== null && state.key === key ? state.spend : { phase: 'loading', current: null, previous: null, partial: false, truncated: false };
 }
 

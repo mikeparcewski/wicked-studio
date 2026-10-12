@@ -44,18 +44,19 @@ describe('S6 project and Product presentation', () => {
     const { container } = render(<ProjectDetailPage projectId="shop" navigate={navigate} />);
     const link = await screen.findByRole('link', { name: 'Improve checkout accessibility' });
     expect(link).toHaveAttribute('href', `/s/run%3A${uuid}`);
-    expect(screen.getByRole('region', { name: 'Sessions' })).toHaveTextContent('Finished');
+    expect(screen.getByRole('region', { name: 'Jobs' })).toHaveTextContent('Finished');
     expect(container.textContent).not.toContain(uuid);
     expect(container.textContent).not.toContain('crew.run');
     fireEvent.click(link);
     expect(navigate).toHaveBeenCalledWith(`/s/run%3A${uuid}`);
   });
 
-  it('falls back to Untitled session when the session has no title', async () => {
+  it('falls back to Untitled job when the job has no words — never its id', async () => {
     getRun.mockResolvedValue({ run: { session: { id: uuid, problem: '', status: 'cancelled' }, units: [] } });
-    render(<ProjectDetailPage projectId="shop" navigate={vi.fn()} />);
-    expect(await screen.findByRole('link', { name: 'Untitled session' })).toBeInTheDocument();
-    expect(screen.getByRole('region', { name: 'Sessions' })).toHaveTextContent('Cancelled');
+    const { container } = render(<ProjectDetailPage projectId="shop" navigate={vi.fn()} />);
+    expect(await screen.findByRole('link', { name: 'Untitled job' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Jobs' })).toHaveTextContent('Cancelled');
+    expect(container.textContent).not.toContain(uuid);
   });
 
   it('disables Draft epics and Search with visible reasons when a project has no repository', async () => {
@@ -92,6 +93,8 @@ describe('S6 project and Product presentation', () => {
   });
 
   it('combines failed reads into one banner and retries the failed sections', async () => {
+    // Coverage and domains are read for a project with attached code (concept P: no empty boxes otherwise).
+    getProject.mockResolvedValue({ project, members: [member, { ...member, id: 'member-2', member_kind: 'crew.repo', member_ref: 'shop-web' }] });
     apiFetch.mockRejectedValue(new TypeError('Failed to fetch'));
     render(<ProjectDetailPage projectId="shop" navigate={vi.fn()} />);
     await screen.findByRole('link', { name: 'Improve checkout accessibility' });

@@ -180,3 +180,49 @@
 
 /* studio 0.7.8: the repo page's "Runs from" select is a 44 px target on a phone (S6 surface, taken by S2). */
 @media (max-width: 767px) { select.wk-field[data-testid="repos-range"] { min-height: var(--tap-min); } }
+
+/* ══ The project dashboard (DES-frontdoor concept P, 2026-10-12) ══ */
+.wk-proj { max-width: none; display: flex; flex-direction: column; gap: var(--space-4); }
+.wk-proj-crumbs { font-size: var(--text-xs); color: var(--ink-muted); }
+.wk-proj-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-4); flex-wrap: wrap; }
+.wk-proj-head-text { min-width: 0; flex: 1 1 320px; }
+.wk-proj-meta { margin: var(--space-1) 0 0; font-size: var(--text-xs); color: var(--ink-muted); }
+.wk-proj-desc { margin: var(--space-1) 0 0; color: var(--ink-body); max-width: 70ch; }
+.wk-proj-desc--clamped { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.wk-proj-desc-toggle { font-size: var(--text-xs); margin-top: 2px; }
+.wk-proj-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; }
+.wk-proj-actions .wk-btn svg { margin-right: 4px; }
+.wk-proj-band { display: flex; flex-direction: column; gap: var(--space-2); }
+.wk-proj-quiet { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); flex-wrap: wrap; padding: var(--space-3) var(--space-4); border-radius: var(--radius-md); background: var(--surface-card); box-shadow: inset 3px 0 0 var(--status-warn); color: var(--ink-body); }
+.wk-proj-stack { display: flex; height: 8px; margin-top: var(--space-1); border-radius: var(--radius-full); overflow: hidden; gap: 2px; }
+.wk-proj-stack i { display: block; min-width: 4px; }
+.wk-proj-stack i[data-tone="run"] { background: var(--accent); }
+.wk-proj-stack i[data-tone="gate"] { background: var(--status-gate); }
+.wk-proj-stack i[data-tone="ok"] { background: var(--status-ok); }
+.wk-proj-stack i[data-tone="fail"] { background: var(--status-fail); }
+.wk-proj-stack i[data-tone="quiet"] { background: var(--ink-dim); }
+.wk-proj-body { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(300px, 1fr); gap: var(--space-5, 20px); align-items: start; }
+.wk-proj-main, .wk-proj-side { display: flex; flex-direction: column; gap: var(--space-4); min-width: 0; }
+.wk-proj-lane { grid-template-columns: minmax(0, 1fr) minmax(120px, 200px) 8.5rem auto; }
+.wk-proj-first { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(260px, 1fr); gap: var(--space-4); align-items: start; }
+.wk-proj-steps { margin: var(--space-2) 0 0; padding-left: var(--space-5, 20px); display: flex; flex-direction: column; gap: var(--space-3); }
+.wk-proj-steps li { display: flex; flex-direction: column; gap: 2px; }
+.wk-proj-step-title { color: var(--ink-high); font-weight: var(--weight-semi); }
+.wk-proj-step-line { color: var(--ink-muted); font-size: var(--text-sm); margin: 0; }
+.wk-proj-chips { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-1); }
+.wk-proj-steps .wk-link { align-self: flex-start; font-size: var(--text-sm); }
+@media (max-width: 1100px) and (min-width: 768px) { .wk-proj-body { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 767px) {
+  .wk-proj-body, .wk-proj-first { grid-template-columns: minmax(0, 1fr); }
+  /* One action per row on a phone: no stranded half-row (UX gate S4: ALIGN). */
+  .wk-proj-actions { display: grid; grid-template-columns: minmax(0, 1fr); width: 100%; }
+  .wk-proj-actions > .wk-menu-wrap > .wk-btn { width: 100%; }
+  /* ⋯ sits beside the title, not alone on a row of its own (UX gate S4: SPACE). */
+  .wk-proj-head { position: relative; }
+  .wk-proj-head-text { padding-right: calc(var(--tap-min) + var(--space-2)); }
+  .wk-proj-more { position: absolute; top: 0; right: 0; }
+  /* The page ends clear of the floating Ask button. */
+  .wk-proj { padding-bottom: calc(var(--tap-min) * 2); }
+  .wk-proj-lane { grid-template-columns: minmax(0, 1fr) auto auto; }
+  .wk-proj-lane .wk-steptrack { grid-column: 1 / -1; order: 3; }
+}

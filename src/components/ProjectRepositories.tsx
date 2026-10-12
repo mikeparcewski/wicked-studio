@@ -10,6 +10,7 @@ import { StatLine } from './ui/StatLine.js';
 import { EmptyState, Skeleton, StateBanner } from './ui/StateBanner.js';
 import { TechDetails } from './ui/TechDetails.js';
 import type { ProjectIssueHandler } from './product/ProjectAggregates.js';
+import type { RepoUse } from '../board/projectModel.js';
 
 /**
  * The project's repositories — the one UI path that attaches a `crew.repo`
@@ -88,9 +89,30 @@ interface Props {
    * never applied to another project's state.
    */
   onMembersChange: (update: MembersUpdate) => void;
+  /** DES-frontdoor P: the repositories the project's jobs used (`board/projectModel.reposUsed`) —
+   *  an attached row says how many jobs used it, and a used-but-not-attached one is offered Attach. */
+  used?: readonly RepoUse[];
 }
 
-export function ProjectRepositories({ projectId, members, onMembersChange, onIssue }: Props): React.ReactElement | null {
+/** "on main" and the latest commit's first line, read once when the row is shown (`GET /repos/:id/git-history`). */
+function BranchLine({ repo }: { repo: RepoEntry }): React.ReactElement {
+  const [latest, setLatest] = useState<{ id: string; line: string | null } | null>(null);
+  useEffect(() => {
+    let live = true;
+    Promise.resolve().then(() => api.getRepoGitHistory(repo.id))
+      .then(({ commits }) => { if (live) setLatest({ id: repo.id, line: commits[0]?.message.split('\n')[0]?.trim() || null }); })
+      .catch(() => { if (live) setLatest({ id: repo.id, line: null }); });
+    return () => { live = false; };
+  }, [repo.id]);
+  const line = latest !== null && latest.id === repo.id ? latest.line : null;
+  return (
+    <p data-testid="project-repo-branch" className="wk-list-row-meta">
+      on {repo.default_branch || 'its default branch'}{line !== null ? <> · latest: <span title={line}>{line.length > 80 ? `${line.slice(0, 79)}…` : line}</span></> : null}
+    </p>
+  );
+}
+
+export function ProjectRepositories({ projectId, members, onMembersChange, onIssue, used = [] }: Props): React.ReactElement | null {
   const [repos, setRepos] = useState<RepoEntry[] | null>(getCachedRepos);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -293,15 +315,35 @@ export function ProjectRepositories({ projectId, members, onMembersChange, onIss
   }
 
   const shownError = issueError;
+  const unattached = used.filter((u) => !u.attached && u.jobs > 0);
+  const usedBy = (ref: string): number => used.find((u) => u.attached && (u.ref === ref || u.repo?.id === ref || u.repo?.name === ref))?.jobs ?? 0;
 
   const shown = options.slice(0, MAX_OPTIONS);
   const overflow = options.length - shown.length;
 
   return (
     <section data-testid="project-repos" data-count={repoMembers.length} className="wk-card wk-pg-proj-stack">
-      <SectionTitle>Repositories</SectionTitle>
-      <StatLine items={[{ label: 'repositories', value: registryError === null ? repoMembers.length : null }]} />
-      {repoMembers.length === 0 ? <EmptyState data-testid="project-repos-empty" title="No repository attached" body="Attach a repository before running this project’s tests." /> : (
+      <SectionTitle>Repositories and branches</SectionTitle>
+      <StatLine items={[{ label: 'attached', value: registryError === null ? repoMembers.length : null }, { label: 'used by jobs, not attached', value: unattached.length }]} />
+      {unattached.length > 0 && (
+        <div data-testid="project-repos-used">
+          {unattached.map((u) => (
+            <div key={u.ref} data-testid="project-repo-used" data-repo={u.ref} className="wk-list-row wk-pg-proj-row">
+              <div>
+                <span className="wk-list-row-title">{u.name}</span>
+                <p className="wk-list-row-meta">Used by {u.jobs} {u.jobs === 1 ? 'job' : 'jobs'}, not attached</p>
+                {u.repo !== null && <BranchLine repo={u.repo} />}
+              </div>
+              <div className="wk-list-row-actions">
+                {u.repo !== null
+                  ? <button type="button" data-testid="project-repo-attach-used" data-repo={u.ref} disabled={busy} onClick={() => void attach(u.repo!)} className="wk-btn wk-btn--secondary">{attaching === u.repo.id ? 'Attaching…' : 'Attach'}</button>
+                  : <span className="wk-field-note">No longer registered</span>}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      {repoMembers.length === 0 ? unattached.length === 0 && <EmptyState data-testid="project-repos-empty" title="No repository attached" body="Attach a repository before running this project’s tests." /> : (
         <div>
           {repoMembers.map((m) => {
             const repo = repoOf(m.member_ref, repos);
@@ -313,7 +355,8 @@ export function ProjectRepositories({ projectId, members, onMembersChange, onIss
               <div data-testid="project-repo-row" data-repo={m.member_ref} className="wk-list-row wk-pg-proj-row">
                 <div>
                   {repos === null && registryError === null ? <Skeleton rows={1} variant="line" /> : <span className="wk-list-row-title">{label}</span>}
-                  <p className="wk-list-row-meta" title={new Date(m.attached_at).toLocaleString()}>Attached {relTime(m.attached_at)}</p>
+                  <p className="wk-list-row-meta" title={new Date(m.attached_at).toLocaleString()}>Attached {relTime(m.attached_at)}{usedBy(m.member_ref) > 0 ? ` · used by ${usedBy(m.member_ref)} ${usedBy(m.member_ref) === 1 ? 'job' : 'jobs'}` : ''}</p>
+                  {repo !== undefined && <BranchLine repo={repo} />}
                   {repo?.root_path && <TechDetails text={repo.root_path} />}
                 </div>
                 <div className="wk-list-row-actions wk-pg-proj-actions">
