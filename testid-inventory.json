@@ -12,8 +12,8 @@
   "studioVersion": "0.7.11",
   "counts": {
     "files": 199,
-    "occurrences": 2251,
-    "static": 1959,
+    "occurrences": 2262,
+    "static": 1964,
     "dynamic": 61,
     "computed": 20
   },
@@ -11681,6 +11681,12 @@
       ]
     },
     {
+      "testId": "watchtower-gate-feed",
+      "files": [
+        "src/components/watch/WatchtowerPage.tsx"
+      ]
+    },
+    {
       "testId": "watchtower-jump",
       "files": [
         "src/components/watch/WatchtowerPage.tsx"
@@ -11688,6 +11694,12 @@
     },
     {
       "testId": "watchtower-kind",
+      "files": [
+        "src/components/watch/WatchtowerPage.tsx"
+      ]
+    },
+    {
+      "testId": "watchtower-ledger-failed",
       "files": [
         "src/components/watch/WatchtowerPage.tsx"
       ]
@@ -11730,6 +11742,24 @@
     },
     {
       "testId": "watchtower-row-kind",
+      "files": [
+        "src/components/watch/WatchtowerPage.tsx"
+      ]
+    },
+    {
+      "testId": "watchtower-row-note",
+      "files": [
+        "src/components/watch/WatchtowerPage.tsx"
+      ]
+    },
+    {
+      "testId": "watchtower-row-step",
+      "files": [
+        "src/components/watch/WatchtowerPage.tsx"
+      ]
+    },
+    {
+      "testId": "watchtower-row-verb",
       "files": [
         "src/components/watch/WatchtowerPage.tsx"
       ]

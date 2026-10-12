@@ -1170,6 +1170,7 @@ select:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-
 .wk-watchtower-kinds { display: flex; flex-wrap: wrap; gap: 6px; }
 .wk-desk-chip--on { background: var(--accent-subtle); color: var(--ink-high); }
 .wk-watchtower-work { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.wk-watchtower-note { display: block; margin-top: 4px; color: var(--ink-high); font-size: var(--text-sm); white-space: pre-wrap; }
 .wk-watchtower-empty { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
 .wk-watchtower-empty > p { margin: 0; }
 .wk-watchtower-feed { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
