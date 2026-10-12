@@ -157,12 +157,13 @@ export function WatchtowerPage({ runs, runsLoaded = true, runsError = null, onRe
   const [kind, setKind] = useState<FilterKind | null>(null);
   const gateKind = kind === 'approved' || kind === 'rejected' ? kind : null;
   // The decision record (`GET /decisions`), read when the page opens: the Approved / Rejected source.
-  const [ledger, setLedger] = useState<{ decisions: DecisionView[]; error: string | null; loaded: boolean }>({ decisions: [], error: null, loaded: false });
+  const [ledger, setLedger] = useState<{ decisions: DecisionView[]; error: string | null; loaded: boolean; unread: 'absent' | 'off' | null }>({ decisions: [], error: null, loaded: false, unread: null });
   const readLedger = useCallback((): Promise<void> => decisionsApi.list()
-    .then((r) => { setLedger({ decisions: r.decisions ?? [], error: null, loaded: true }); })
+    .then((r) => { setLedger({ decisions: r.decisions ?? [], error: null, loaded: true, unread: r.mode === 'off' ? 'off' : null }); })
     .catch((e: unknown) => {
       // A daemon without the record: nothing to list, said by the empty line, not as a failure.
-      setLedger({ decisions: [], error: isRouteUnsupported(e) ? null : e instanceof Error ? e.message : String(e), loaded: true });
+      const absent = isRouteUnsupported(e);
+      setLedger({ decisions: [], error: absent ? null : e instanceof Error ? e.message : String(e), loaded: true, unread: absent ? 'absent' : null });
     }), []);
   useEffect(() => { void readLedger(); }, [readLedger]);
   const gateRows = useMemo(() => (gateKind === null ? [] : gateDecisionRows(ledger.decisions, runs).filter((g) => g.answer === gateKind)), [gateKind, ledger.decisions, runs]);
@@ -286,7 +287,12 @@ export function WatchtowerPage({ runs, runsLoaded = true, runsError = null, onRe
         )}
         {gateKind !== null && gateRows.length === 0 && ledger.loaded && ledger.error === null && runsRead === 'known' && (
           <div data-testid="watchtower-empty" data-kind={gateKind} className="wk-watchtower-empty">
-            <p className="wk-session-grey">{emptyLine(gateKind, runs, live)}</p>
+            {/* codex r1: a service that keeps no record (or records nothing) is said, never read as "you never answered". */}
+            <p className="wk-session-grey">{ledger.unread === 'absent'
+              ? 'Studio’s service doesn’t keep a record of your gate answers, so there is nothing to list here.'
+              : ledger.unread === 'off' && gateRows.length === 0 && ledger.decisions.length === 0
+                ? 'Studio’s service is not recording your gate answers, so there is nothing to list here.'
+                : emptyLine(gateKind, runs, live)}</p>
             <button type="button" data-testid="watchtower-show-all" className="wk-btn wk-btn--secondary wk-btn--sm" onClick={() => setKind(null)}>
               Show everything
             </button>

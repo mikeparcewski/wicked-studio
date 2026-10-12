@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SessionView } from '../src/api/types.js';
 import { decisionsApi, type DecisionView } from '../src/api/decisions.js';
 import { gateDecisionRows } from '../src/board/gateDecisionRows.js';
+import { ApiError } from '../src/api/errors.js';
 import { WatchtowerPage } from '../src/components/watch/WatchtowerPage.js';
 import { useWatchStore } from '../src/store/watch.js';
 import recordedRuns from './fixtures/watch-real-runs-7701.json';
@@ -78,6 +79,14 @@ describe('the Approved and Rejected filters', () => {
     expect(screen.getByTestId('watchtower-show-all')).toBeTruthy();
     pick('rejected');
     expect(screen.getByTestId('watchtower-empty').textContent).toContain('You have not rejected or sent back anything at a gate yet.');
+  });
+
+  it('a service without the record says so, never "you have not approved" (codex r1)', async () => {
+    vi.spyOn(decisionsApi, 'list').mockRejectedValue(new ApiError(404, 'Not Found'));
+    render(<WatchtowerPage count={0} runs={runs} navigate={() => {}} now={NOW} />);
+    pick('approved');
+    await waitFor(() => expect(screen.getByTestId('watchtower-empty')).toBeTruthy());
+    expect(screen.getByTestId('watchtower-empty').textContent).not.toContain('You have not approved');
   });
 
   it('a failed read of the record is a banner, never an empty list', async () => {
