@@ -66,8 +66,10 @@ describe('runRows — row mapping', () => {
   it('A6 title from plainRunTitle (onboarding → "Set up …")', () => {
     expect(row([makeView('r1', { problem: 'Onboard repository: offsite-plan' })]).title).toBe('Set up offsite-plan');
   });
-  it('A7 title falls back to the id when problem is empty', () => {
-    expect(row([makeView('r-abc', { problem: '' })]).title).toBe('r-abc');
+  // A7, amended (DES-frontdoor job titles): an empty problem is "Untitled job" — a run id is not a
+  // title, and the fallback never invents one.
+  it('A7 title says "Untitled job" when problem is empty', () => {
+    expect(row([makeView('r-abc', { problem: '' })]).title).toBe('Untitled job');
   });
   it('A8-A12 status maps to the 5 session states', () => {
     expect(row([makeView('r1', { status: 'completed' })]).status).toBe('done');

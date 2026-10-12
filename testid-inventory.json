@@ -12,8 +12,8 @@
   "studioVersion": "0.7.12",
   "counts": {
     "files": 202,
-    "occurrences": 2322,
-    "static": 2021,
+    "occurrences": 2323,
+    "static": 2022,
     "dynamic": 63,
     "computed": 23
   },
@@ -6177,6 +6177,12 @@
     },
     {
       "testId": "project-jobs",
+      "files": [
+        "src/components/ProjectDetailPage.tsx"
+      ]
+    },
+    {
+      "testId": "project-jobs-unshown",
       "files": [
         "src/components/ProjectDetailPage.tsx"
       ]
