@@ -63,7 +63,7 @@ RAIL = """() => {
     bell: !!rail.querySelector('[data-nav-dest="notifications"], [aria-label^="Notifications"], [aria-label$="notifications"]'),
     steering: rail.querySelector('[data-testid="desk-rail-steering"]')?.getAttribute('href') ?? null,
     more: rail.querySelector('[data-testid="desk-rail-more"]')?.innerText ?? null,
-    footLabel: rail.querySelector('[data-testid="rail-foot-label"]')?.innerText ?? null,
+    footLabel: rail.querySelector('[data-testid="rail-foot-label"]')?.textContent ?? null,
     healthState: rail.querySelector('[data-testid="rail-health-state"]')?.innerText ?? null,
   };
 }"""
@@ -116,15 +116,28 @@ with sync_playwright() as p:
     #        sizes in the browser — every Workspace link is smaller than the session rows and Desk.
     sizes = page.evaluate("""() => {
       const px = (el) => el ? parseFloat(getComputedStyle(el).fontSize) : null;
-      const foot = [...document.querySelectorAll('[data-testid="session-rail"] .wk-rail-foot .wk-rail-link')];
+      // Any CSS colour (oklch, color-mix…) to sRGB through a 1×1 canvas; alpha < 0.5 counts as transparent.
+      const cv = document.createElement('canvas'); cv.width = cv.height = 1; const cx = cv.getContext('2d', { willReadFrequently: true });
+      const rgb = (c) => { cx.clearRect(0, 0, 1, 1); cx.fillStyle = '#000'; cx.fillStyle = c; cx.fillRect(0, 0, 1, 1); const d = cx.getImageData(0, 0, 1, 1).data; return [d[0], d[1], d[2], d[3] / 255]; };
+      // The background actually behind el: every translucent layer composited over the first opaque one.
+      const bgOf = (el) => { const layers = []; for (let e = el; e; e = e.parentElement) { const c = rgb(getComputedStyle(e).backgroundColor); if (c[3] > 0) layers.push(c); if (c[3] >= 1) break; }
+        let out = [255, 255, 255]; for (const c of layers.reverse()) out = [0, 1, 2].map((i) => c[3] * c[i] + (1 - c[3]) * out[i]); return out; };
+      const lum = ([r, g, b]) => { const f = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }; return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b); };
+      const contrast = (el) => { const bg = bgOf(el); const f = rgb(getComputedStyle(el).color); const ink = [0, 1, 2].map((i) => f[3] * f[i] + (1 - f[3]) * bg[i]); const a = lum(ink), b = lum(bg); return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05); };
+      const foot = [...document.querySelectorAll('[data-testid="session-rail"] .wk-rail-foot .wk-rail-link')].filter((e) => e.getAttribute('aria-current') !== 'page');
+      const label = document.querySelector('[data-testid="rail-foot-label"]');
       return { desk: px(document.querySelector('[data-testid="desk-rail-home"]')),
                watch: px(document.querySelector('[data-testid="watch-pill"]')),
                session: px(document.querySelector('[data-testid="rail-session"] .wk-rail-session-title')),
-               workspace: foot.map(px), label: px(document.querySelector('[data-testid="rail-foot-label"]')) };
+               workspace: foot.map(px), contrast: Math.min(...foot.map(contrast)), ink: foot[0] ? getComputedStyle(foot[0]).color : null, bg: foot[0] ? bgOf(foot[0]).join(',') : null, theme: document.documentElement.dataset.theme ?? null,
+               label: px(label), labelTransform: label ? getComputedStyle(label).textTransform : null, labelSpacing: label ? parseFloat(getComputedStyle(label).letterSpacing) || 0 : null };
     }""")
     ws = sizes["workspace"]
-    check("workspace-tier-measured", len(ws) == 7 and None not in ws and sizes["desk"] and sizes["session"]
-          and max(ws) < sizes["session"] and max(ws) < sizes["desk"] and max(ws) < (sizes["watch"] or 99), **sizes)
+    # Operator 23:40Z: unmistakably smaller — ≤ 11px AND ≤ 0.85× the session rows, still ≥ 4.5:1.
+    check("workspace-tier-measured", len(ws) >= 6 and None not in ws and sizes["desk"] == 13 and sizes["session"] == 13
+          and max(ws) <= 11 and max(ws) <= 0.85 * sizes["session"] and max(ws) < sizes["desk"]
+          and sizes["contrast"] >= 4.5 and sizes["labelTransform"] == "uppercase"
+          and sizes["label"] is not None and sizes["label"] <= 11 and (sizes["labelSpacing"] or 0) > 0, **sizes)
 
     # ── 2. the settings page (operator 2026-10-11: a page, not a dropdown) ─────────
     page.get_by_test_id("desk-rail-more").click()
