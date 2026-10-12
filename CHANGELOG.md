@@ -12,6 +12,11 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+## [0.7.11] — 2026-10-12
+
+### Fixed
+- The rail's Workspace links are visibly smaller and muted, under a small WORKSPACE header (#736).
+
 ## [0.7.10] — 2026-10-11
 
 Plain words, and a deliver card that never offers a refused delivery (reel UX gate findings).
@@ -2081,7 +2086,8 @@ The merged interactive layer: wicked-interactive's UI moved into this skin (DES-
   `git subtree split` (92 commits).
 - The SPA as a pure HTTP/WS client of the wicked-crew daemon: runs, gates, live CoreEvents.
 
-[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.7.10...HEAD
+[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.7.11...HEAD
+[0.7.11]: https://github.com/mikeparcewski/wicked-studio/compare/v0.7.10...v0.7.11
 [0.7.10]: https://github.com/mikeparcewski/wicked-studio/compare/v0.7.9...v0.7.10
 [0.7.9]: https://github.com/mikeparcewski/wicked-studio/compare/v0.7.8...v0.7.9
 [0.7.8]: https://github.com/mikeparcewski/wicked-studio/compare/v0.7.7...v0.7.8
