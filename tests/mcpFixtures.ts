@@ -131,7 +131,9 @@ export function approvals(approved: ReadonlySet<string> = new Set()): McpApprova
 }
 
 export function preview(name = 'jira'): McpPreviewResponse {
-  const tools = TOOLS.map((t) => ({ name: t.name, subject: `mcp:${name}/${t.name}`, description: t.description, annotations: t.annotations, inputSchema: t.inputSchema, class: t.class, schemaHash: t.schemaHash ?? '' }));
+  const tools = TOOLS.map((t) => ({ name: t.name, subject: `mcp:${name}/${t.name}`, description: t.description, annotations: t.annotations, inputSchema: t.inputSchema, class: t.class, schemaHash: t.schemaHash ?? '',
+    // api-types 0.111.0+ (crew's wire): no override kept on a fresh preview; a read tool saves on.
+    classOverride: null, enabledOnSave: t.class === 'read' }));
   return {
     previewHash: 'ph-1',
     expiresAt: new Date(Date.now() + 10 * 60_000).toISOString(),
