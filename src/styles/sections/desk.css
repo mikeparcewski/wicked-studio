@@ -81,6 +81,8 @@
 .wk-desk-a-main, .wk-desk-a-side { display: flex; flex-direction: column; gap: var(--space-4); min-width: 0; }
 .wk-desk-a-card { min-width: 0; }
 .wk-desk--a .wk-desk-chores { padding: var(--space-4); }
+/* A row's line wraps on the Desk card instead of cutting its consequence (UX gate S3: WRAP). */
+.wk-desk--a .wk-desk-need-line { white-space: normal; }
 /* "While you were away" is one line in the page's own rhythm (the scroller's gap spaces it). */
 .wk-desk--a .wk-handover--desk-away { margin: 0; }
 
@@ -107,6 +109,8 @@
 .wk-desk-lane { display: grid; grid-template-columns: minmax(0, 1fr) minmax(120px, 200px) 8.5rem; gap: var(--space-3); align-items: center; padding: var(--space-2) 0; border-top: 1px solid var(--border-subtle); }
 .wk-desk-lane-text, .wk-desk-glance-text, .wk-desk-feed-text { display: flex; flex-direction: column; min-width: 0; }
 .wk-desk-lane-title, .wk-desk-glance-name, .wk-desk-feed-title { color: var(--ink-high); font-weight: var(--weight-semi); text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* A job's title keeps two lines, so titles that start alike still show what differs (UX gate S3: WRAP). */
+.wk-desk-lane-title { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere; }
 .wk-desk-lane-title:hover, .wk-desk-glance-name:hover, .wk-desk-feed-title:hover { text-decoration: underline; text-underline-offset: 2px; }
 .wk-desk-lane-meta, .wk-desk-glance-meta, .wk-desk-feed-meta { font-size: var(--text-xs); color: var(--ink-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .wk-desk-lane-word { font-size: var(--text-xs); color: var(--ink-body); display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
@@ -166,8 +170,27 @@
   .wk-desk-story { font-size: var(--text-sm); }
   .wk-desk-cmd-kbd { display: none; }
   /* The utility controls share one wrapping row (not one line each). */
-  .wk-desk--a .wk-desk-a-tools { margin-top: 0; gap: var(--space-2) var(--space-3); justify-content: flex-start; }
+  .wk-desk--a .wk-desk-a-tools { margin-top: 0; gap: var(--space-2) var(--space-1); justify-content: flex-start; }
   .wk-desk--a .wk-desk-a-tools .wk-desk-orders { flex-basis: auto; order: 0; }
+  /* Needs you first on a phone (UX gate S3: HIER): the title, the bar, Chat / New job and the sentence,
+     then the lists, then the utilities, the numbers and the glance column. */
+  .wk-desk-a-body, .wk-desk-a-head { display: contents; }
+  .wk-desk--a .wk-desk-a-main { order: 1; }
+  .wk-desk--a .wk-desk-a-tools { order: 2; }
+  .wk-desk--a .wk-desk-pulse { order: 3; }
+  .wk-desk--a .wk-desk-a-side { order: 4; }
+  /* The Ask dock's own controls on a phone: 44 px targets (UX gate S3: PHONE). */
+  [data-testid="assist-dock"] select, [data-testid="assist-send"], [data-testid="assist-dock"] button { min-height: var(--tap-min); }
+  /* The Ask dock on a phone is a full-height sheet under the top bar, never a box over half the page. */
+  [data-testid="ask-panel"] { inset: var(--topbar-h) 0 0 0 !important; width: auto !important; height: auto !important; border-radius: 0 !important; }
+  .wk-assist-prompt { min-height: var(--tap-min); }
+  /* Standing instructions on their own row; Capture and ⋯ share the next (UX gate S3: SPACE). */
+  .wk-desk--a .wk-desk-a-tools .wk-desk-orders { flex-basis: 100%; }
+  /* "Just the top one" is a desktop triage aid; the phone keeps one compact tools row. */
+  .wk-desk--a .wk-desk-focus-switch { display: none; }
+  /* A group's answers as a deliberate 2 x 2 grid (UX gate S3: ALIGN). */
+  .wk-desk--a .wk-desk-need--acts-below > .wk-need-acts { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-2); }
+  .wk-desk--a .wk-desk-need--acts-below .wk-need-group-acts { display: contents !important; }
   /* Four numbers on a phone: failures and deliveries are said in Needs you and the jobs list. */
   .wk-desk--a [data-testid="desk-stat-failed"], .wk-desk--a [data-testid="desk-stat-delivered"] { display: none; }
 }

@@ -190,13 +190,21 @@ export function jobLanes(
       runId: v.session.id,
       title: jobTitle(v.session),
       fullTitle: jobTitleFull(v.session),
-      context: [project, v.session.repo_ref, at !== null ? relTime(at, now) : null].filter((x): x is string => x !== null && x !== '').join(' · '),
+      context: [project, v.session.repo_ref, at !== null ? relTime(at, now) : null, stepsWords(v)].filter((x): x is string => x !== null && x !== '').join(' · '),
       steps: stepMarks(v),
       word: s.word,
       tone: s.tone,
       path: opts.pathOf(v),
     };
   });
+}
+
+/** "3 of 5 steps done" — the step track in words (UX gate S3: GLYPH). */
+export function stepsWords(v: SessionView): string | null {
+  const total = (v.units ?? []).length;
+  if (total === 0) return null;
+  const done = (v.units ?? []).filter((u) => u.status === 'done').length;
+  return `${done} of ${total} ${total === 1 ? 'step' : 'steps'} done`;
 }
 
 /** "The last job ended 4 weeks ago." — or null when no run carries an end clock. */
@@ -281,19 +289,20 @@ export interface ProjectGlance {
   series: number[];
 }
 
+/**
+ * The Desk's project rows from the shell's board model — the same membership the rail groups by
+ * (a project's runs, then the unfiled shelf), so a row and its rail group never disagree.
+ */
 export function projectGlances(
-  runs: readonly SessionView[],
-  projects: readonly { id: string; name: string; status?: string }[],
+  groups: readonly { id: string; name: string; status?: string; runs: readonly SessionView[] }[],
   now: number,
   days = 60,
 ): ProjectGlance[] {
-  const all = runs.filter(live);
-  const pid = (v: SessionView): string => (typeof v.session.project_id === 'string' && v.session.project_id !== '' ? v.session.project_id : 'default');
-  const rows = projects.filter((p) => p.status !== 'archived').map((p) => {
-    const mine = all.filter((v) => pid(v) === p.id);
+  const rows = groups.filter((g) => g.status !== 'archived').map((g) => {
+    const mine = g.runs.filter(live);
     return {
-      id: p.id,
-      name: p.id === 'default' ? 'Not in a project' : p.name,
+      id: g.id,
+      name: g.id === 'default' ? 'Not in a project' : g.name,
       jobs: mine.length,
       waiting: mine.filter((v) => v.session.status === 'awaiting_human').length,
       failed: mine.filter((v) => v.session.status === 'failed').length,

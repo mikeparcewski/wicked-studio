@@ -16,7 +16,6 @@ import {
   askPrompts,
   buildContextPack,
   PACK_JOIN,
-  contextPackSummary,
   sectionLabel,
   type DiagnosticsState,
 } from './askContext.js';
@@ -86,6 +85,11 @@ function stillAnswering(chatId: string): (e: unknown) => never {
     }
     throw e;
   };
+}
+
+/** "the Desk" for Home: the place words the dock's header uses. */
+function placeWords(label: string): string {
+  return label === 'Home' ? 'the Desk' : label;
 }
 
 export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoffTaken, sendProjectId, sendFresh = false, sendPrimary, sendChatId, startProjectId, startText, startFresh = false }: {
@@ -361,16 +365,16 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
       context={{
         surface: 'ask',
         title: 'Ask',
+        // Concept A (DES-frontdoor): the Desk's Chat lands here, so the default layer speaks plainly;
+        // what the question carries stays in the context pack, never in this line.
         contextLabel:
           openedScope === undefined
-            ? `here: ${sectionLabel(pathname)}`
-            : `here: ${sectionLabel(pathname)} · ${describeResolvedScope(openedScope)}`,
-        placeholder: 'Ask about projects, repos, runs — or this studio itself…',
+            ? `from ${placeWords(sectionLabel(pathname))}`
+            : `from ${placeWords(sectionLabel(pathname))} · ${describeResolvedScope(openedScope)}`,
+        placeholder: 'Ask about your projects, repositories and jobs, or studio itself…',
         hint:
-          'Your question opens a governed chat session — the agents carry the estate/garden ' +
-          'tooling that reads the code graph, the stores, and the run record, so they can answer ' +
-          'about your projects AND diagnose the app itself. ' +
-          contextPackSummary(diag),
+          'Ask a question and helpers answer it from your code, your jobs and studio’s own records. ' +
+          'Nothing changes until you say so.',
         prompts,
         controls:
           openedScope === undefined ? (

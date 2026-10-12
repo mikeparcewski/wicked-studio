@@ -2,7 +2,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type { BoardModel } from '../src/hooks/useBoardModel.js';
 import { resetLaunchWizard, useLaunchWizard } from '../src/store/launchWizard.js';
-import { useProjectsStore } from '../src/store/projects.js';
 import { useConnectionStore } from '../src/store/connection.js';
 import { clearCachedRoster } from '../src/store/rosterCache.js';
 import { ROSTER, WEEK } from './fixtures/seatWeek.js';
@@ -220,7 +219,7 @@ describe('project quick icons', () => {
   });
 
   it('a Desk project row opens the project dashboard', async () => {
-    useProjectsStore.setState({ projects: [KESTREL.project] as never });
+    withProject();
     const navigate = vi.fn();
     render(<Desk runs={[]} runsLoaded now={Date.now()} needRows={[]} navigate={navigate} />);
     const row = (await screen.findAllByTestId('desk-project')).find((r) => r.getAttribute('data-project-id') === 'kes')!;

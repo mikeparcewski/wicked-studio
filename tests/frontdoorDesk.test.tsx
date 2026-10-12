@@ -124,8 +124,11 @@ describe('what happened', () => {
 
 describe('projects at a glance', () => {
   it('puts real projects first and the unfiled shelf last, named plainly', () => {
-    const g = projectGlances([makeView({ project_id: 'p', status: 'failed', created_at: sec(NOW - DAY) }), makeView({ id: 'u', status: 'completed' })],
-      [{ id: 'default', name: 'Unfiled' }, { id: 'p', name: 'Payments' }], NOW);
+    const g = projectGlances([
+      { id: 'default', name: 'Unfiled', runs: [makeView({ id: 'u', status: 'completed' })] },
+      { id: 'p', name: 'Payments', runs: [makeView({ project_id: 'p', status: 'failed', created_at: sec(NOW - DAY) })] },
+      { id: 'old', name: 'Old', status: 'archived', runs: [] },
+    ], NOW);
     expect(g.map((x) => [x.name, x.jobs, x.failed])).toEqual([['Payments', 1, 1], ['Not in a project', 1, 0]]);
   });
 
@@ -153,7 +156,7 @@ describe('failure detail', () => {
   });
 
   it('says a check stopped a rejected step, and is honest when nothing was recorded', () => {
-    expect(failureWhy(makeView({ id: 'r', status: 'failed' }, [makeUnit({ id: 'r:recon', ord: 0, status: 'rejected', denial_reason: 'evaluator≠creator' })]), []).plain).toBe('A check stopped the recon step.');
+    expect(failureWhy(makeView({ id: 'r', status: 'failed' }, [makeUnit({ id: 'r:recon', ord: 0, status: 'rejected', denial_reason: 'evaluator≠creator' })]), []).plain).toBe('A check stopped the research step.');
     expect(failureWhy(makeView({ status: 'failed', unit_ix: 5 }), []).plain).toBe('No reason was recorded for this failure.');
   });
 });

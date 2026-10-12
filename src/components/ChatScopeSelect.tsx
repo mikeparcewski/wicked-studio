@@ -65,15 +65,15 @@ export function ChatScopeSelect({ value, onChange, projects, repos }: {
   const valueProject = value.startsWith('project:') ? value.slice('project:'.length) : null;
   const listed = valueProject === null || projects.some((p) => p.id === valueProject);
   return (
-    <label className="flex items-center gap-1.5 text-[11px]" style={{ color: 'var(--ink-dim)' }}>
-      <span className="font-mono uppercase tracking-widest text-[10px]">Scope</span>
+    <label className="flex items-center gap-1.5 text-[11px]" style={{ color: 'var(--ink-muted)' }}>
+      <span>What it can read</span>
       <select
         data-testid="ask-scope"
         aria-label="What the agents can read"
         value={value}
         onChange={(e) => onChange(e.target.value as AskScopeChoice)}
-        className="rounded px-1 py-0.5 text-[11px]"
-        style={{ background: 'var(--surface-raised)', color: 'var(--ink-high)', border: '1px solid var(--surface-overlay)' }}
+        className="wk-field text-[11px]"
+        style={{ padding: '2px 8px' }}
       >
         <option value="system">System — the platform itself</option>
         <option value="everything">Everything — every registered repo</option>

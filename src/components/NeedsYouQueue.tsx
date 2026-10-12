@@ -249,12 +249,13 @@ export function NeedsYouQueue({ queue, runs, navigate, now }: {
         {/* One slot for the row's moves (phone: its own line under the title, UX gate S1). */}
         {isGroup ? (
           <span className="wk-need-acts">
+            {/* Looking first (UX gate S3: HIER): "Show each" leads, the batch answers follow. */}
+            <button type="button" data-testid="need-group-toggle" aria-expanded={open} onClick={() => queue.toggle(row.key)} className="wk-need-act wk-need-act--quiet">
+              {open ? 'Fold' : 'Show each'}
+            </button>
             {row.action.kind === 'batch-onboard' && batchAct(row.action, row.text)}
             {row.action.kind === 'accept-memory' && acceptAct(row.action)}
             {row.action.kind === 'batch-approve' && <ApprovalGroupActions runIds={row.action.runIds} label={row.action.label} />}
-            <button type="button" data-testid="need-group-toggle" aria-expanded={open} onClick={() => queue.toggle(row.key)} className="wk-need-act">
-              {open ? 'Fold' : 'Show each'}
-            </button>
           </span>
         ) : row.kind === 'gate' && row.action.kind === 'open' ? (
           // S5: a gate is answered in its row (deliver, retry and escalation gates open their card).
@@ -283,7 +284,7 @@ export function NeedsYouQueue({ queue, runs, navigate, now }: {
     const sec = sectionCounts.find((x) => x.id === id);
     return (
       <p data-testid="need-section" data-section={id} className="wk-need-section">
-        {sec?.title}<span className="wk-need-section-count"> · {sec?.count ?? 0}</span>
+        {sec?.title}
       </p>
     );
   };
@@ -441,7 +442,7 @@ export function FocusLockToggle({ items }: { items: number }): React.ReactElemen
   // UX audit row 31: a real switch (role="switch", label beside it), not an empty radio circle.
   return (
     <span className="wk-desk-focus-switch" title="Show only the most urgent item; the rest come back when it clears">
-      <Switch data-testid="home-focus-toggle" label="Just the top one" checked={on} onChange={(v) => useFocusLockStore.getState().setOn(v)} />
+      <Switch data-testid="home-focus-toggle" label="Show only the most urgent need" checked={on} onChange={(v) => useFocusLockStore.getState().setOn(v)} />
     </span>
   );
 }

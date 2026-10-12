@@ -193,7 +193,7 @@ export function CaptureDrop({ runs, pathname = '/', inline = false, opens = 'dow
         style={inline ? { alignSelf: 'flex-start' } : undefined}
         title="Drop notes, a transcript or a whiteboard photo; the team files what they say as proposals"
       >
-        Capture
+        Capture notes
         {/* Home: the last capture's count rides the verb itself (one row; the Needs You group below
             carries the consequence split, the full line is the title and the open drop's). */}
         {!inline && statusData !== null && cap.filed !== null && (

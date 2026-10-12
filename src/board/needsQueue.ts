@@ -72,8 +72,17 @@ function groupMove(key: NeedGroupKey, ranked: readonly NeedRow[]): { action: Nee
   const runIds = ranked.map((m) => needRunId(m)).filter((id): id is string => id !== null);
   return {
     action: { kind: 'batch-approve', runIds, label: `Approve all ${runIds.length}` },
-    text: GROUP_WORDS.approval.line,
+    // UX gate S3 (HIER): say WHAT is waiting before offering to approve it all — the members' work.
+    text: approvalSubjects(ranked),
   };
+}
+
+/** "Fix the login bug · Update the docs and 1 more" — the work an approvals group holds, in its titles. */
+function approvalSubjects(ranked: readonly NeedRow[]): string {
+  const titles = [...new Set(ranked.map((m) => plainRunTitle(m.subject)))];
+  if (titles.length === 0) return GROUP_WORDS.approval.line;
+  const head = titles.slice(0, 2).join(' · ');
+  return titles.length > 2 ? `${head} and ${titles.length - 2} more` : head;
 }
 
 /** A proposal group lists what changes enforcement first (then unknown kinds, then memories);

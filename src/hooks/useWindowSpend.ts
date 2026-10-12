@@ -6,7 +6,7 @@ import type { SeatRecordResponse } from '../api/seatRecord.js';
  * A window's SPEND (DES-frontdoor §6): the summed `cliUsage.costUsd` of every helper over the last
  * `days` days, from ONE read — `GET /roster/record?days=N` (the seat record the Health page's 1:1
  * already uses; the window is by event time). The window before is the `2N`-day read minus this one,
- * when the daemon serves that far (90 days at most from crew's api-types 0.112.0, 30 before).
+ * when the daemon serves that far (90 days at most from crew's api-types 0.113.0, 30 before).
  *
  * Honest, never 0 for unknown: `current` is null when the read failed, the daemon refuses the
  * window, no usage frame carried a price, or (for a project) the daemon did not echo the project it

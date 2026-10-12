@@ -101,7 +101,7 @@ export function Desk({ runs, runsLoaded, runsError = null, onRetryRuns, needRows
     void useNeedsSources.getState().load(0).finally(() => setRereading(false));
   };
   const displayText = useDisplayText();
-  const { failedAt } = useMovableBoardModel(runs);
+  const { failedAt, items, unfiled } = useMovableBoardModel(runs);
   const handover = useHandover(runs, failedAt);
   const chores = useMemo(() => lapsedSeatChores(roster), [roster]);
   const leadWithSignIn = noSignedInHelper(roster) && chores.length > 0;
@@ -153,7 +153,10 @@ export function Desk({ runs, runsLoaded, runsError = null, onRetryRuns, needRows
   const pathOf = useCallback((v: SessionView): string => sessionPath(sessionIdOf(v, runChatId)), [runChatId]);
   const lanes = useMemo(() => jobLanes(runs, now, { max: LANES_MAX, projectName, pathOf }), [runs, now, projectName, pathOf]);
   const feed = useMemo(() => stories(runs, { max: STORIES_MAX, helperName }), [runs, helperName]);
-  const glances = useMemo(() => projectGlances(runs, projects, now, CHART_DAYS), [runs, projects, now]);
+  const glances = useMemo(() => projectGlances([
+    ...items.map((i) => ({ id: i.project.id, name: i.project.name, status: i.project.status, runs: i.runs })),
+    ...(unfiled.length > 0 ? [{ id: 'default', name: 'Not in a project', runs: unfiled }] : []),
+  ], now, CHART_DAYS), [items, unfiled, now]);
   const chartAll = useMemo(() => createdAtSeries(runs.filter((v) => v.session.archived_at == null), CHART_DAYS, now), [runs, now]);
   const chartDone = useMemo(() => createdAtSeries(runs.filter((v) => v.session.archived_at == null && v.session.status === 'completed'), CHART_DAYS, now), [runs, now]);
   const working = p.running;
@@ -314,7 +317,7 @@ export function Desk({ runs, runsLoaded, runsError = null, onRetryRuns, needRows
             <section aria-labelledby="desk-jobs-title" data-testid="desk-jobs" className="wk-card wk-desk-a-card">
               <div className="wk-desk-card-head">
                 <h2 id="desk-jobs-title" className="wk-desk-section-title">Jobs</h2>
-                {runsShown && <span className="wk-desk-card-meta">{working === 0 ? 'nothing running' : `${working} running`} · newest first</span>}
+                {runsShown && <span className="wk-desk-card-meta">{working === 0 ? 'newest first' : `${working} running · newest first`}</span>}
               </div>
               {!runsShown ? <Skeleton rows={3} variant="row" /> : <>
                 {working === 0 && (
