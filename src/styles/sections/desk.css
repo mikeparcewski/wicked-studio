@@ -62,6 +62,7 @@
   .wk-desk-orders .wk-orders, .wk-desk-focus-switch .wk-switch-label { font-size: var(--text-sm); }
   .wk-desk-orders .wk-orders-act { min-height: var(--tap-min); }
   .wk-watchtower-row .wk-tech-details-summary { min-height: var(--tap-min); display: flex; align-items: center; }
+  .wk-watchtower-empty .wk-btn { min-height: var(--tap-min); }
   .wk-desk-bottom { padding: 8px var(--space-4) 12px; }
   /* Toasts: one compact card docked bottom, above the composer, never a stack over the page. */
   /* Row moves size to their words on phone (still 44 px tall), so a group's answers share a line. */

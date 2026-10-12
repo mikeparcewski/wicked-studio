@@ -12,8 +12,8 @@
   "studioVersion": "0.7.11",
   "counts": {
     "files": 199,
-    "occurrences": 2243,
-    "static": 1953,
+    "occurrences": 2251,
+    "static": 1959,
     "dynamic": 61,
     "computed": 20
   },
@@ -11663,6 +11663,12 @@
       ]
     },
     {
+      "testId": "watchtower-checking",
+      "files": [
+        "src/components/watch/WatchtowerPage.tsx"
+      ]
+    },
+    {
       "testId": "watchtower-empty",
       "files": [
         "src/components/watch/WatchtowerPage.tsx"
@@ -11711,7 +11717,19 @@
       ]
     },
     {
+      "testId": "watchtower-row-clock",
+      "files": [
+        "src/components/watch/WatchtowerPage.tsx"
+      ]
+    },
+    {
       "testId": "watchtower-row-detail",
+      "files": [
+        "src/components/watch/WatchtowerPage.tsx"
+      ]
+    },
+    {
+      "testId": "watchtower-row-kind",
       "files": [
         "src/components/watch/WatchtowerPage.tsx"
       ]
@@ -11723,7 +11741,25 @@
       ]
     },
     {
+      "testId": "watchtower-runs-failed",
+      "files": [
+        "src/components/watch/WatchtowerPage.tsx"
+      ]
+    },
+    {
       "testId": "watchtower-sentence",
+      "files": [
+        "src/components/watch/WatchtowerPage.tsx"
+      ]
+    },
+    {
+      "testId": "watchtower-show-all",
+      "files": [
+        "src/components/watch/WatchtowerPage.tsx"
+      ]
+    },
+    {
+      "testId": "watchtower-undated",
       "files": [
         "src/components/watch/WatchtowerPage.tsx"
       ]

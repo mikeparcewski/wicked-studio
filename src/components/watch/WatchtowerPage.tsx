@@ -3,11 +3,14 @@ import type { SessionView } from '../../api/types.js';
 import type { WatchKind } from '../../api/watch-wire.js';
 import { readErrorKind } from '../../api/errors.js';
 import { absTime, relTime } from '../../board/relTime.js';
-import { plainRunTitle } from '../../board/deskWords.js';
+import { fullRunTitle, plainRunTitle } from '../../board/deskWords.js';
+import { deskReadState } from '../../board/deskModel.js';
+import { wireDelivery } from '../../board/windowStats.js';
 import { readWatch, useWatchFeed } from '../../hooks/useWatchFeed.js';
 import type { Navigate } from '../../hooks/useRoute.js';
 import { jumpPath, orphanedRuns, runPath, useWatchStore, type WatchRow } from '../../store/watch.js';
 import { liveCount } from '../desk/WatchPill.js';
+import { useDisplayText } from '../../hooks/useHomePath.js';
 import { StateBanner, TechDetails } from '../ui/index.js';
 
 /** The feed's kinds, in the words the page uses (TR §4.10's five). */
@@ -67,6 +70,49 @@ export function foldAlike(rows: readonly WatchRow[]): { row: WatchRow; alike: nu
   return out;
 }
 
+/** Kinds folded from the session list: a failed or pending read of it gives them no verdict. */
+const FROM_RUNS: ReadonlySet<WatchKind> = new Set<WatchKind>(['done', 'delivery', 'quiet']);
+
+/** Why a kind is empty, said from what the session list holds — never "nothing" over a read
+ *  that brought nothing back (that is the banner's job). Pure. */
+export function emptyLine(kind: WatchKind | null, runs: readonly SessionView[], live: number): string {
+  const finished = runs.filter((v) => v.session.status === 'completed');
+  switch (kind) {
+    case null: return 'Nothing to show yet. Anything that needs you appears here.';
+    case 'problem': return 'No problems raised. When a check or a reviewer finds one, it appears here.';
+    case 'decision': return 'Nothing is waiting on your decision. Studio asks here when it spots a pattern worth a rule, such as a step you keep adding by hand.';
+    case 'quiet': return live === 0
+      ? 'Nothing has gone quiet. Nothing is running right now.'
+      // The watchdog's frames are folded live only, so a quiet period that began before this page
+      // opened is not here: the line says only what it can vouch for.
+      : 'Nothing has gone quiet since this page opened.';
+    case 'done': {
+      const ended = runs.filter((v) => v.session.status === 'failed' || v.session.status === 'cancelled').length;
+      return ended === 0 ? 'Nothing has finished yet.' : `Nothing has finished yet. ${ended === 1 ? 'One session' : `${ended} sessions`} ended without finishing (failed or cancelled).`;
+    }
+    case 'delivery': {
+      if (finished.length === 0) return 'Nothing delivered yet. Nothing has finished.';
+      // Only a run whose delivery the wire states can be said not to have delivered.
+      const left = finished.filter((v) => { const d = wireDelivery(v); return d !== null && d !== 'delivered' && d !== 'pushed'; }).length;
+      const silent = finished.length - left;
+      if (left === 0) return 'Nothing delivered yet. Studio’s service does not say whether the finished sessions were delivered.';
+      const did = left === 1 ? '1 finished session did' : `${left} finished sessions did`;
+      if (silent > 0) return `Nothing delivered yet. ${did} not open a pull request or push a branch; ${silent === 1 ? '1 more does' : `${silent} more do`} not say.`;
+      return left === 1
+        ? 'Nothing delivered yet. The one finished session did not open a pull request or push a branch.'
+        : `Nothing delivered yet. None of the ${left} finished sessions opened a pull request or pushed a branch.`;
+    }
+    default: return 'Nothing of this kind yet.';
+  }
+}
+
+/** A launch clock standing in for a finish time: the date and minute ("Sep 7, 14:12"), so
+ *  sessions started the same month are told apart (a relative "1 month ago" says it 44 times). */
+export function startedWhen(at: number): string {
+  const d = new Date(at);
+  return `${d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}, ${d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}`;
+}
+
 /** "just now" / "4 min ago" / "3 h ago" / the date — never a raw timestamp. */
 export function ago(at: number, now: number): string {
   const s = Math.max(0, Math.round((now - at) / 1000));
@@ -87,9 +133,14 @@ export function ago(at: number, now: number): string {
  * still shows what studio folds itself; a failed read says it failed, with Try again, and is never
  * read as an empty feed.
  */
-export function WatchtowerPage({ runs, navigate, now }: {
+export function WatchtowerPage({ runs, runsLoaded = true, runsError = null, onRetryRuns, navigate, now }: {
   count: number;
   runs: SessionView[];
+  /** Whether a `GET /runs` has answered (App's `useRuns`). */
+  runsLoaded?: boolean;
+  /** The newest `GET /runs` failed: Finished / Delivered / Gone quiet get no verdict from it. */
+  runsError?: string | null;
+  onRetryRuns?: () => void;
   navigate: Navigate;
   now: number;
 }): React.ReactElement {
@@ -100,13 +151,24 @@ export function WatchtowerPage({ runs, navigate, now }: {
   const work = live === 0 ? 'nothing is running' : live === 1 ? '1 thing is running' : `${live} things are running`;
   const sentence = openCount === 0 ? `Nothing open — ${work}.` : `${openCount} open ${openCount === 1 ? 'item' : 'items'} — ${work}.`;
   const rows = useMemo(() => (kind === null ? all : all.filter((r) => r.kind === kind)), [all, kind]);
+  // Run rows dated by their launch (or not at all): said once above the feed, not on every row.
+  const undated = new Set(rows.filter((r) => r.clock !== undefined).map((r) => r.runId)).size;
   const feedError = useWatchStore((s) => s.feedError);
   const registry = useWatchStore((s) => s.registry);
   // studio#545: runs a daemon restart orphaned — nobody is working on them until a Resume.
   const orphaned = useWatchStore((s) => Object.keys(orphanedRuns(s.fold)).length);
   const [retrying, setRetrying] = useState(false);
+  const runsRead = deskReadState(runsLoaded, runsError);
+  const displayText = useDisplayText();
   const go = (path: string) => (e: React.MouseEvent): void => { e.preventDefault(); navigate(path); };
   // Rows that say the same thing about different work tell the work apart (UX gate S1: DUP).
+  // A run row leads with the longer title, clamped by CSS, so runs whose first words match still
+  // differ on screen (UX gate: two "Recon: survey the target…" rows read the same).
+  const fullWork = (runId: string | null): string | null => {
+    if (runId === null) return null;
+    const t = fullRunTitle(runs.find((v) => v.session.id === runId)?.session.problem ?? '').trim();
+    return t === '' ? null : t;
+  };
   const workOf = (runId: string | null): string | null => {
     if (runId === null) return null;
     const t = plainRunTitle(runs.find((v) => v.session.id === runId)?.session.problem ?? '').trim();
@@ -158,11 +220,31 @@ export function WatchtowerPage({ runs, navigate, now }: {
             retrying={retrying}
           />
         )}
-        {rows.length === 0 && feedError === null && (
-          <p data-testid="watchtower-empty" className="wk-session-grey">
-            {kind === null
-              ? 'Nothing to show yet. Anything that needs you appears here.'
-              : 'Nothing of this kind yet.'}
+        {(runsRead === 'failed' || runsRead === 'stale') && runsError !== null && (
+          <StateBanner
+            data-testid="watchtower-runs-failed"
+            kind={runsRead === 'stale' ? 'stale' : readErrorKind(runsError)}
+            what="your sessions"
+            error={displayText(runsError)}
+            {...(onRetryRuns !== undefined ? { onRetry: onRetryRuns } : {})}
+          />
+        )}
+        {rows.length === 0 && feedError === null && ((kind !== null && !FROM_RUNS.has(kind)) || runsRead === 'known') && (
+          <div data-testid="watchtower-empty" data-kind={kind ?? 'all'} className="wk-watchtower-empty">
+            <p className="wk-session-grey">{emptyLine(kind, runs, live)}</p>
+            {kind !== null && (
+              <button type="button" data-testid="watchtower-show-all" className="wk-btn wk-btn--secondary wk-btn--sm" onClick={() => setKind(null)}>
+                Show everything
+              </button>
+            )}
+          </div>
+        )}
+        {rows.length === 0 && (kind === null || FROM_RUNS.has(kind)) && runsRead === 'checking' && (
+          <p data-testid="watchtower-checking" className="wk-session-grey">Reading your sessions…</p>
+        )}
+        {undated > 0 && (
+          <p data-testid="watchtower-undated" data-count={undated} className="wk-session-grey">
+            No finish time was recorded for {undated === 1 ? '1 session' : `${undated} sessions`}. {undated === 1 ? 'It shows' : 'They show'} when {undated === 1 ? 'it' : 'they'} started, where that is known.
           </p>
         )}
         <ol className="wk-watchtower-feed">
@@ -171,15 +253,27 @@ export function WatchtowerPage({ runs, navigate, now }: {
             const open = jump ?? runPath(r);
             const { line, detail: own } = plainWatchLine(r.sentence);
             const detail = details.length > 1 ? details.join('\n') : own;
+            const work = workOf(r.runId);
+            const named = r.source === 'run' && work !== null;
             return (
               <li key={r.id} data-testid="watchtower-row" data-row-id={r.id} data-kind={r.kind} data-state={r.state} data-source={r.source} className="wk-watchtower-row">
                 <span aria-hidden className={`wk-desk-dot wk-desk-dot--${r.state === 'open' ? (r.kind === 'problem' || r.kind === 'decision' ? 'waiting' : 'working') : 'done'}`} />
                 <div className="wk-desk-need-body">
-                  <span className="wk-watchtower-sentence">{line}</span>
+                  {/* A run's own row (Finished / Delivered) leads with its work and keeps the kind word
+                      in the line under it, so 44 "Finished" rows are told apart at a glance. */}
+                  <span className="wk-watchtower-sentence">
+                    {named ? <span data-testid="watchtower-row-work" className="wk-watchtower-work" title={fullWork(r.runId) ?? undefined}>{fullWork(r.runId) ?? work}</span> : line}
+                  </span>
                   <span className="wk-desk-need-line">
-                    <span title={absTime(r.at)}>{relTime(r.at, now)}</span>
-                    {workOf(r.runId) !== null && <> · <span data-testid="watchtower-row-work">{workOf(r.runId)}</span></>}
-                    {' · '}{STATE_WORD[r.state]}
+                    {named && <><span data-testid="watchtower-row-kind">{line}</span>{' · '}</>}
+                    {r.clock === 'unknown'
+                      ? <span data-testid="watchtower-row-clock" data-clock="unknown">Time not recorded</span>
+                      : r.clock === 'started'
+                        ? <span data-testid="watchtower-row-clock" data-clock="started" title={absTime(r.at)}>Started {startedWhen(r.at)}</span>
+                        : <span title={absTime(r.at)}>{relTime(r.at, now)}</span>}
+                    {r.source !== 'run' && work !== null && <> · <span data-testid="watchtower-row-work">{work}</span></>}
+                    {/* "Done" under "Finished" says it twice: the kind word is the state. */}
+                    {r.state !== 'done' && <>{' · '}{STATE_WORD[r.state]}</>}
                     {r.stateLine !== null && r.stateLine !== STATE_WORD[r.state] && ` — ${r.stateLine}`}
                     {r.rolledUp + alike > 0 && ` · and ${r.rolledUp + alike} more like it`}
                     {r.corroboratedBy.length > 0 && ' · also seen by the team'}
