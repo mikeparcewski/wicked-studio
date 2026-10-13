@@ -121,6 +121,48 @@ describe('codex r7: Understand job spend follows the job', () => {
     expect(spendOf('r8-failed')).toContain('$4.00');
   });
 
+  it('codex r9: an older read that answers late never overwrites the newer read for the same state', async () => {
+    const failed = deskRun('r9-failed', { status: 'failed' });
+    const runs = [deskRun('r9-done'), failed];
+    const late: { resolve: (v: { events: unknown[] }) => void; reject: (e: Error) => void }[] = [];
+    mocks.events.mockImplementation((id: string) => (id === 'r9-failed'
+      ? new Promise((resolve, reject) => { late.push({ resolve, reject }); })
+      : Promise.resolve(usage(5))));
+    const { rerender } = render(<DeskUnderstand {...props(runs)} />);
+    await pickJobs();
+    expect(late).toHaveLength(1); // read A is still out
+    const live = { ...failed.session, status: 'executing' as const };
+    delete live.ended_at;
+    await act(async () => { rerender(<DeskUnderstand {...props([runs[0]!, { ...failed, session: live }])} />); });
+    await act(async () => { rerender(<DeskUnderstand {...props(runs)} />); });
+    expect(late).toHaveLength(2); // read B, same state key as A
+    await act(async () => { late[1]!.resolve(usage(1, 3)); });
+    expect(spendOf('r9-failed')).toContain('$4.00');
+    await act(async () => { late[0]!.resolve(usage(1)); }); // A answers last, with the older spend
+    expect(spendOf('r9-failed')).toContain('$4.00');
+    await act(async () => { rerender(<DeskUnderstand {...props(runs)} />); });
+    expect(spendOf('r9-failed')).toContain('$4.00');
+  });
+
+  it('codex r9: an older read that fails late never marks the newer spend unknown', async () => {
+    const failed = deskRun('r9b-failed', { status: 'failed' });
+    const runs = [deskRun('r9b-done'), failed];
+    const late: { resolve: (v: { events: unknown[] }) => void; reject: (e: Error) => void }[] = [];
+    mocks.events.mockImplementation((id: string) => (id === 'r9b-failed'
+      ? new Promise((resolve, reject) => { late.push({ resolve, reject }); })
+      : Promise.resolve(usage(5))));
+    const { rerender } = render(<DeskUnderstand {...props(runs)} />);
+    await pickJobs();
+    const live = { ...failed.session, status: 'executing' as const };
+    delete live.ended_at;
+    await act(async () => { rerender(<DeskUnderstand {...props([runs[0]!, { ...failed, session: live }])} />); });
+    await act(async () => { rerender(<DeskUnderstand {...props(runs)} />); });
+    await act(async () => { late[1]!.resolve(usage(2)); });
+    await act(async () => { late[0]!.reject(new Error('503')); });
+    await act(async () => { rerender(<DeskUnderstand {...props(runs)} />); });
+    expect(spendOf('r9b-failed')).toContain('$2.00');
+  });
+
   it('a failed spend read reads as unknown and is tried again when the job moves on', async () => {
     const before = [deskRun('r7b-done'), deskRun('r7b-failed', { status: 'failed' })];
     mocks.events.mockImplementation(async (id: string) => { if (id === 'r7b-failed') throw new Error('503'); return usage(4); });

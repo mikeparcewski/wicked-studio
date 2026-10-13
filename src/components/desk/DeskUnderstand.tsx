@@ -110,12 +110,15 @@ export function DeskUnderstand({ runsShown = true, agents, agentsRead = 'done', 
       const key = keyNow.get(id);
       const h = spend.get(id);
       if (key === undefined || (h !== undefined && !h.failed)) continue;
-      spend.set(id, { key, cost: undefined, partial: false, failed: false });
+      // Each read owns its entry: only the read that is still the latest one for the job may answer
+      // (an older read for a state key that came back, e.g. failed -> executing -> failed, may not).
+      const mine: HeldSpend = { key, cost: undefined, partial: false, failed: false };
+      spend.set(id, mine);
       api.getRunEvents(id, ['cliUsage']).then(({ events }) => {
-        if (spend.get(id)?.key !== key) return; // the job moved while this read was out
+        if (spend.get(id) !== mine) return; // the job moved, or a newer read started, while this one was out
         const priced = (events as unknown as { costUsd?: unknown }[]).filter((e) => typeof e.costUsd === 'number');
         spend.set(id, { key, cost: priced.length === 0 ? null : priced.reduce((a, e) => a + (e.costUsd as number), 0), partial: priced.length > 0 && priced.length < events.length, failed: false });
-      }, () => { if (spend.get(id)?.key === key) spend.set(id, { key, cost: null, partial: false, failed: true }); })
+      }, () => { if (spend.get(id) === mine) spend.set(id, { key, cost: null, partial: false, failed: true }); })
         .finally(() => { if (mounted.current) bump((n) => n + 1); });
     }
   }, [kind, sel.join('|'), keysNow]); // eslint-disable-line react-hooks/exhaustive-deps
