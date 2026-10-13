@@ -31,15 +31,14 @@ const KINDS: readonly { value: AnalyzeKind; label: string }[] = [
 const MAX_CARDS = 4;
 
 /**
- * A job's spend, keyed by the job AND its work (workFingerprint: status + done/rejected units), so a job
- * that resumes or moves on is read again. A failed read is not cached: it reads as unknown and is
- * tried again the next time the comparison changes.
+ * A job's spend as this panel last read it, with the job's state at that read: workFingerprint (status,
+ * done and rejected units) plus `ended_at`. A held spend is dropped as soon as its job's state differs,
+ * so a job that resumes is read again even if it ends with the same counts (it passes through a live
+ * status on the way). A failed read shows as unknown and is tried again the next time the comparison
+ * changes. Held per panel, never module-wide: a fresh panel reads fresh.
  */
-const costCache = new Map<string, number | null>();
-const costFailed = new Set<string>();
-/** Jobs (by the same key) whose usage is only partly priced: a floor ("at least"), never a best-cost verdict. */
-const partlyPriced = new Set<string>();
-const costKeyOf = (id: string, kept: readonly SessionView[]): string => { const v = kept.find((x) => x.session.id === id); return v === undefined ? id : workFingerprint([v]); };
+interface HeldSpend { key: string; cost: number | null | undefined; partial: boolean; failed: boolean }
+const spendKey = (v: SessionView): string => `${workFingerprint([v])}:${v.session.ended_at ?? ''}`;
 
 export function DeskUnderstand({ runsShown = true, agents, agentsRead = 'done', agentsTruncated = false, filters = null, filterAgent = null, filterWorkflow = null, workflows, kept, allRuns, days, onDays, project, projectLabel, projectName, agentName, governance, navigate, pathOf, now }: {
   /** The job list has been read (a project's page: its member reads too). Before it, nothing is compared. */
@@ -81,6 +80,7 @@ export function DeskUnderstand({ runsShown = true, agents, agentsRead = 'done', 
   const mounted = useRef(true);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   const addRef = useRef<HTMLDivElement | null>(null);
+  const held = useRef(new Map<string, HeldSpend>());
 
   const options = useMemo(() => {
     if (kind === 'agents') return (filterWorkflow === null ? agents : []).map((a) => ({ id: a.cli, label: a.label, color: agentColor(a.cli) as string | null, meta: `${a.steps} steps` }));
@@ -100,22 +100,26 @@ export function DeskUnderstand({ runsShown = true, agents, agentsRead = 'done', 
   const intent = items.length === 0 ? '' : analysisIntent(input);
 
   // Jobs: each card's spend is that job's own usage records, read on demand (again when the job moves).
-  const costKeys = sel.map((id) => costKeyOf(id, kept));
+  const keyNow = useMemo(() => new Map(kept.map((v) => [v.session.id, spendKey(v)])), [kept]);
+  const keysNow = [...keyNow.values()].join('|');
   useEffect(() => {
+    const spend = held.current;
+    for (const [id, h] of spend) if (keyNow.get(id) !== h.key) spend.delete(id); // the job moved since
     if (kind !== 'jobs') return;
-    let live = true;
-    for (const [i, id] of sel.entries()) {
-      const key = costKeys[i]!;
-      if (costCache.has(key)) continue;
-      costFailed.delete(key); // retry a failed read now that the comparison changed
+    for (const id of sel) {
+      const key = keyNow.get(id);
+      const h = spend.get(id);
+      if (key === undefined || (h !== undefined && !h.failed)) continue;
+      spend.set(id, { key, cost: undefined, partial: false, failed: false });
       api.getRunEvents(id, ['cliUsage']).then(({ events }) => {
+        if (spend.get(id)?.key !== key) return; // the job moved while this read was out
         const priced = (events as unknown as { costUsd?: unknown }[]).filter((e) => typeof e.costUsd === 'number');
-        costCache.set(key, priced.length === 0 ? null : priced.reduce((a, e) => a + (e.costUsd as number), 0));
-        if (priced.length > 0 && priced.length < events.length) partlyPriced.add(key); else partlyPriced.delete(key);
-      }, () => { costFailed.add(key); }).finally(() => { if (live) bump((n) => n + 1); });
+        spend.set(id, { key, cost: priced.length === 0 ? null : priced.reduce((a, e) => a + (e.costUsd as number), 0), partial: priced.length > 0 && priced.length < events.length, failed: false });
+      }, () => { if (spend.get(id)?.key === key) spend.set(id, { key, cost: null, partial: false, failed: true }); })
+        .finally(() => { if (mounted.current) bump((n) => n + 1); });
     }
-    return () => { live = false; };
-  }, [kind, sel.join('|'), costKeys.join('\u0000')]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [kind, sel.join('|'), keysNow]); // eslint-disable-line react-hooks/exhaustive-deps
+  const heldFor = (id: string): HeldSpend | undefined => { const h = held.current.get(id); return h !== undefined && h.key === keyNow.get(id) ? h : undefined; };
 
   useEffect(() => {
     if (!adding) return undefined;
@@ -128,7 +132,7 @@ export function DeskUnderstand({ runsShown = true, agents, agentsRead = 'done', 
   const view: CompareView = useMemo(() => {
     if (kind === 'agents') return compareAgents(sel.map((id) => agents.find((a) => a.cli === id)!).filter(Boolean), governance, agentColor);
     if (kind === 'workflows') return compareWorkflows(sel.map((id) => workflows.find((w) => w.key === id)!).filter(Boolean));
-    if (kind === 'jobs') return compareJobs(sel.map((id) => kept.find((v) => v.session.id === id)!).filter(Boolean), (v) => jobTitle(v.session), agentName, (id) => { const key = costKeyOf(id, kept); return costCache.has(key) ? costCache.get(key)! : costFailed.has(key) ? null : undefined; }, (id) => partlyPriced.has(costKeyOf(id, kept)));
+    if (kind === 'jobs') return compareJobs(sel.map((id) => kept.find((v) => v.session.id === id)!).filter(Boolean), (v) => jobTitle(v.session), agentName, (id) => heldFor(id)?.cost, (id) => heldFor(id)?.partial === true);
     return compareProjects(sel, kept, projectName);
   }, [kind, sel.join('|'), agents, workflows, kept, governance, agentName, projectName, launch, costRev]); // eslint-disable-line react-hooks/exhaustive-deps
 

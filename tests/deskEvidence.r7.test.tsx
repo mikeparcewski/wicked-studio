@@ -103,6 +103,24 @@ describe('codex r7: Understand job spend follows the job', () => {
     expect(spendOf('r7-done')).toContain('$5.00');
   });
 
+  it('codex r8: a job that resumes and fails again with the same counts is read again', async () => {
+    const failed = deskRun('r8-failed', { status: 'failed' });
+    const runs = [deskRun('r8-done'), failed];
+    mocks.events.mockImplementation(async (id: string) => (id === 'r8-failed' ? usage(1) : usage(5)));
+    const { rerender } = render(<DeskUnderstand {...props(runs)} />);
+    await pickJobs();
+    expect(spendOf('r8-failed')).toContain('$1.00');
+    // It resumes (a live status, no ended_at yet) ...
+    const live = { ...failed.session, status: 'executing' as const };
+    delete live.ended_at;
+    await act(async () => { rerender(<DeskUnderstand {...props([runs[0]!, { ...failed, session: live }])} />); });
+    // ... spends more and fails again: same status, same unit counts, even the same ended_at.
+    mocks.events.mockImplementation(async (id: string) => (id === 'r8-failed' ? usage(1, 3) : usage(5)));
+    await act(async () => { rerender(<DeskUnderstand {...props(runs)} />); });
+    expect(mocks.events).toHaveBeenLastCalledWith('r8-failed', ['cliUsage']);
+    expect(spendOf('r8-failed')).toContain('$4.00');
+  });
+
   it('a failed spend read reads as unknown and is tried again when the job moves on', async () => {
     const before = [deskRun('r7b-done'), deskRun('r7b-failed', { status: 'failed' })];
     mocks.events.mockImplementation(async (id: string) => { if (id === 'r7b-failed') throw new Error('503'); return usage(4); });
