@@ -79,6 +79,11 @@ export function DeskInbox({ rows, runs, navigate, now, settled, agentName, extra
   // A folder is the same queue over its section's rows (the queue's own ranking, groups and keys).
   const inFolder = useMemo(() => (folder === 'all' ? rows : rows.filter((r) => needSection(r) === folder)), [rows, folder]);
   const queue = useNeedsQueue(inFolder, navigate, now);
+  // An emptied folder of a non-empty inbox says so; the calm all-clear is only for the whole queue.
+  const total = byFolder.get('all') ?? 0;
+  const folderEmpty = folder !== 'all' && total > 0
+    ? `Nothing in ${FOLDERS.find((f) => f.id === folder)?.label ?? 'this folder'} now · ${total}${settled === 'partial' ? '+' : ''} still waiting in All.`
+    : undefined;
   const flat = useMemo(() => queue.rows.flatMap((r) => [r, ...(r.members ?? [])]), [queue.rows]);
   const current = flat.find((r) => r.key === selected) ?? null;
   const runOf = (row: NeedRow): SessionView | null => { const id = needRunId(row); return id === null ? null : runs.find((v) => v.session.id === id) ?? null; };
@@ -131,7 +136,7 @@ export function DeskInbox({ rows, runs, navigate, now, settled, agentName, extra
           <div className="wk-inbox-list" data-testid="desk-inbox-list">
             {extra}
             {/* Not read yet (or the read failed): never a "nothing needs you" verdict, only the placeholder. */}
-            {settled === 'loading' && rows.length === 0 ? <div data-testid="desk-loading" aria-busy="true"><Skeleton rows={3} variant="row" /></div> : <NeedsYouQueue queue={queue} runs={runs} navigate={navigate} now={now} inbox={look} partial={settled === 'partial'} />}
+            {settled === 'loading' && rows.length === 0 ? <div data-testid="desk-loading" aria-busy="true"><Skeleton rows={3} variant="row" /></div> : <NeedsYouQueue queue={queue} runs={runs} navigate={navigate} now={now} inbox={look} partial={settled === 'partial'} {...(folderEmpty !== undefined ? { emptyCopy: folderEmpty } : {})} />}
           </div>
           {queue.rows.length > 0 && (
             <div className="wk-inbox-pane" data-testid="desk-inbox-pane" aria-live="polite">

@@ -416,3 +416,20 @@ export const DESK_RAIL_LINKS: readonly { dest: string; label: string; path: stri
   { dest: 'section:theme', label: PAGE_NAMES.theme, path: '/theme', testId: 'desk-rail-theme' },
   { dest: 'section:general', label: PAGE_NAMES.system, path: '/system', testId: 'desk-rail-general' },
 ];
+
+/**
+ * The Desk's "work moved" fingerprint for its cumulative reads (quality, record, spend): every run's
+ * own status plus how many of its units are done or rejected, so a run that fails, is cancelled or
+ * resumes — with no unit finishing — still invalidates them. A unit merely being handed out does not.
+ * Order-stable by run id.
+ */
+export function workFingerprint(runs: readonly SessionView[]): string {
+  return runs
+    .map((v) => {
+      const units = v.units ?? [];
+      const n = (s: 'done' | 'rejected'): number => units.filter((u) => u.status === s).length;
+      return `${v.session.id}:${v.session.status}:${n('done')}:${n('rejected')}`;
+    })
+    .sort()
+    .join('|');
+}

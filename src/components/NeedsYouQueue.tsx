@@ -73,9 +73,11 @@ export interface InboxRowLook {
   ageWords: (at: number | null) => string;
 }
 
-export function NeedsYouQueue({ queue, runs, navigate, now, inbox, partial = false }: {
+export function NeedsYouQueue({ queue, runs, navigate, now, inbox, partial = false, emptyCopy }: {
   /** Some needs sources did not answer: an empty queue is unknown, never the calm all-clear. */
   partial?: boolean;
+  /** The queue is one folder of a non-empty inbox: its empty line, never the global all-clear. */
+  emptyCopy?: string;
   /** The queue's behaviour (`useNeedsQueue`): rows, groups, cursor, verbs. */
   queue: NeedsQueue;
   /** Desk v2: render each row as an inbox row (sender · age, the question, the job, its moves). */
@@ -432,7 +434,7 @@ export function NeedsYouQueue({ queue, runs, navigate, now, inbox, partial = fal
             fontSize: 'var(--text-sm)', color: 'var(--ink-muted)',
           }}
         >
-          {partial ? 'Nothing to show from what could be read; some sources did not answer.' : calmCopy(runs)}
+          {emptyCopy ?? (partial ? 'Nothing to show from what could be read; some sources did not answer.' : calmCopy(runs))}
         </p>
       ) : (
         <div>

@@ -432,6 +432,11 @@ export function uncheckedFallbacks(f: AcpFallbacks[string] | undefined): number 
   return Math.max(0, Math.max(f.fallbacks ?? 0, listed) - enforced);
 }
 
+/** The fallback kinds that ran a step without its checks (neither deliberate routing nor a bench). */
+export function uncheckedKinds(f: AcpFallbacks[string]): string[] {
+  return Object.entries(f.kinds ?? {}).filter(([kind, count]) => count > 0 && !ENFORCED_ROUTES.has(kind) && !BENCHED_KINDS.has(kind)).map(([kind]) => kind);
+}
+
 export function governanceOf(cli: string, acp: AcpFallbacks | null, roster: readonly RosterSeat[]): { word: string; tone: 'ok' | 'warn' | null; unchecked: number } {
   if (acp === null) return { word: 'checks not read yet', tone: null, unchecked: 0 };
   const n = uncheckedFallbacks(acp[cli]);
@@ -481,11 +486,13 @@ export function callouts(input: {
     const n = uncheckedFallbacks(f);
     if (n <= 0) continue;
     const name = input.agents.find((a) => a.cli === cli)?.label ?? cli;
+    // Only the kinds that ran unchecked explain it: deliberate routing kept its checks, and a benched seat ran nothing.
+    const causes = uncheckedKinds(f);
     out.push({
       id: `acp:${cli}`,
       tone: 'fail',
       title: `${name} ran without its governed connection ${n} ${n === 1 ? 'time' : 'times'} across all recorded runs${input.scoped ? ' (studio-wide)' : ''}`,
-      why: `Its governed session could not start (${Object.entries(f.kinds).filter(([kind, count]) => count > 0 && !ENFORCED_ROUTES.has(kind)).map(([kind]) => plainFallback(kind)).join(', ')}), so the step ran on the plain fallback. These diagnostics cover all recorded runs across studio.`,
+      why: `Its governed session could not start (${causes.length > 0 ? causes.map(plainFallback).join(', ') : 'no reason recorded'}), so the step ran on the plain fallback. These diagnostics cover all recorded runs across studio.`,
       fix: 'Reinstall or update its connector so its tool calls are checked again.',
       evidence: { label: 'Health', path: '/health' },
     });

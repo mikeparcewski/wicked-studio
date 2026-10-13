@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import type { SessionView } from '../src/api/types.js';
+import { workFingerprint } from '../src/board/deskModel.js';
 import { DeskV2, DESK_TABS } from '../src/components/desk/DeskV2.js';
 import { useQualityChecks } from '../src/hooks/useQualityChecks.js';
 import { useProjectsStore } from '../src/store/projects.js';
@@ -88,17 +89,20 @@ describe('Report quality checks', () => {
     expect(within(screen.getByTestId('desk-stats')).getAllByRole('listitem')).toHaveLength(5);
     expect(screen.getByTestId('desk-stat-quality')).toHaveTextContent('Quality checks passed');
     expectQuality('1 of 2', 'checks passed of those recorded');
-    expect(qualityMock).toHaveBeenLastCalledWith(['newer', 'older'], '0');
+    // The work fingerprint carries each run's status and its done/rejected unit counts.
+    expect(qualityMock).toHaveBeenLastCalledWith(['newer', 'older'], expect.stringContaining('newer:completed:0:0'));
   });
 
   it('uses the refined window, newest first, and the work fingerprint', () => {
     const runs = [run('older', 2), run('outside', 31), run('newer', 1)];
     runs[2]!.units = [{ status: 'done', seat: 'claude' } as unknown as NonNullable<SessionView['units']>[number]];
     report(runs);
-    expect(qualityMock).toHaveBeenLastCalledWith(['newer', 'older'], '1');
+    expect(qualityMock).toHaveBeenLastCalledWith(['newer', 'older'], workFingerprint(runs));
+    expect(workFingerprint(runs)).toContain('newer:completed:1:0');
     fireEvent.change(screen.getByTestId('desk-refine-project'), { target: { value: 'p1' } });
     fireEvent.click(screen.getByTestId('desk-range-7'));
-    expect(qualityMock).toHaveBeenLastCalledWith(['newer', 'older'], '1');
+    // Refining narrows the ids, never the fingerprint: it is the work the whole Desk sees.
+    expect(qualityMock).toHaveBeenLastCalledWith(['newer', 'older'], workFingerprint(runs));
   });
 
   it('has a null value and reading note while checks are being read', () => {

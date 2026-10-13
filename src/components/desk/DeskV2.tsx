@@ -9,7 +9,7 @@ import {
   agentRows, agentsOf, governanceOf, AGENT_WORKFLOW_NOTE, PARTIAL_RECORD_NOTE, bucketsOf, callouts, DEFAULT_REFINE, GROUP_BYS, jobSeries, OUTCOMES, outcomeOf, projectOf, RANGES,
   refineRuns, spendAvailability, spendSeries, spendTotals as projectSpend, stepFor, outcomeRows, sum, workflowLabel, workflowOf, workflowRows, type AcpFallbacks, type Callout, type GroupBy, type GroupNames, type RangeDays, type Refine,
 } from '../../board/deskInsights.js';
-import { deskReadState, lapsedSeatChores, needRunId, noSignedInHelper } from '../../board/deskModel.js';
+import { deskReadState, lapsedSeatChores, needRunId, noSignedInHelper, workFingerprint } from '../../board/deskModel.js';
 import { deadletterChore } from '../../board/repairMoves.js';
 import { useDeadletterReplay } from '../../hooks/useRepairMoves.js';
 import { ReplayMove } from '../ReplayMove.js';
@@ -180,7 +180,9 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
   const per = step === 7 ? 'week' : 'day';
 
   // Spend + helper record (cumulative reads; read again when work moves).
-  const workPrint = useMemo(() => String(runs.reduce((n, v) => n + (v.units ?? []).filter((u) => u.status === 'done').length, 0)), [runs]);
+  // Read again when work moves: a unit finishes, fails or retries, or a run changes state (a failed,
+  // cancelled or resumed run moves quality/record/spend without finishing a unit).
+  const workPrint = useMemo(() => workFingerprint(runs), [runs]);
   const qualityIds = useMemo(() => newestFirst(kept).map((v) => v.session.id), [kept]);
   const quality = useQualityChecks(qualityIds, workPrint);
   const qualityValue = quality.tally === null ? null : quality.tally.recorded === 0 ? null : `${quality.tally.passed} of ${quality.tally.recorded}`;
