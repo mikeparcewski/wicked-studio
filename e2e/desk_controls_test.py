@@ -72,6 +72,7 @@ with sync_playwright() as p:
     def open_controls() -> None:
         """The controls live in the Desk's "⋯ › Hold" sheet, never the rail menu (change 17)."""
         if page.get_by_test_id("desk-sheet-controls").count() == 0:
+            page.get_by_test_id("desk-more").click()  # Desk v2: "Look underneath" is in the ⋯ panel
             page.get_by_test_id("desk-sheet-open").click()
             page.locator('[data-testid="sheet-tab"][data-tab="hold"]').click()
         page.get_by_test_id("desk-sheet-controls").wait_for(state="visible", timeout=5000)

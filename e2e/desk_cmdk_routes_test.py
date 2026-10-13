@@ -77,9 +77,9 @@ with sync_playwright() as p:
         page.wait_for_timeout(150)
 
     # ── 1. the GO TO group (a word lists the per-item rows too) ─────────────────────
-    # 25 destinations (operator 2026-10-12): Product and the Testing landing left GO TO (both only redirect now), Plugins joined;
-    # the MCP inspector joined (DES-MCP-INSPECTOR-001 §5); the retired "General settings" overview left (rail restructure
-    # 2026-10-13: /settings redirects to General).
+    # 28 destinations: 25 (operator 2026-10-12: Product and the Testing landing left GO TO, Plugins joined; the MCP
+    # inspector joined, DES-MCP-INSPECTOR-001 §5; the retired "General settings" overview left, rail restructure 2026-10-13)
+    # plus Desk v2's Report, Understand and Agents tabs (operator 2026-10-13).
     open_palette("go:")
     dest_rows = page.get_by_test_id("palette-row").count()
     page.keyboard.press("Escape")
@@ -89,7 +89,7 @@ with sync_playwright() as p:
     page.screenshot(path=str(SHOTS / "desk-cmdk-go.png"))
     page.keyboard.press("Escape")
     groups = {r["group"] for r in rows}
-    check("go-group", groups == {"go"} and dest_rows == 25 and len(rows) > 25, groups=sorted(groups), destinations=dest_rows, rows=len(rows))
+    check("go-group", groups == {"go"} and dest_rows == 28 and len(rows) > 28, groups=sorted(groups), destinations=dest_rows, rows=len(rows))
 
     def reach(href: str, label: str) -> dict:
         open_palette(f"go: {label}")

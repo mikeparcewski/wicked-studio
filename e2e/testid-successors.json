@@ -1,6 +1,6 @@
 {
   "$doc": [
-    "Removed data-testid -> its successor (DES-STUDIO-REBUILD-001 §6.3). tests/testidRemovals.test.ts diffs testid-inventory.json against the merge base and fails on any removed static id or dynamic pattern not listed here with a successor the current tree declares.",
+    "Removed data-testid -> its successor (DES-STUDIO-REBUILD-001 \u00a76.3). tests/testidRemovals.test.ts diffs testid-inventory.json against the merge base and fails on any removed static id or dynamic pattern not listed here with a successor the current tree declares.",
     "Empty until the S16 deletion slices: before then a removal fails. Add entries as \"<removed>\": \"<successor>\" in the PR that removes the testid."
   ],
   "successors": {
@@ -193,7 +193,7 @@
     "pre-gate-annotate-input": "session-gate-note",
     "project-board": "desk",
     "project-card": "desk-project",
-    "project-dashboard": "everything-project-header",
+    "project-dashboard": "project-desk",
     "project-kpis": "everything-project-header",
     "project-mode-picker": "session-rail",
     "project-mode-picker-stage": "session-rail",
@@ -793,6 +793,20 @@
     "settings-overview-row": "desk-rail-general",
     "settings-overview-sentence": "desk-rail-general",
     "slide-strip": "deck-strip",
-    "slide-thumb": "deck-thumb"
+    "slide-thumb": "deck-thumb",
+    "project-band": "desk-stats",
+    "project-window": "desk-range",
+    "project-window-*": "desk-range-*",
+    "project-quiet": "desk-runs-empty",
+    "project-needs": "desk-inbox",
+    "project-jobs": "desk-runs-list",
+    "project-job": "desk-runs-row",
+    "project-feed": "desk-happening",
+    "project-stat-states": "desk-runs-stats",
+    "project-stat-started": "desk-stat-started",
+    "project-stat-delivered": "desk-stat-delivered",
+    "project-stat-quality": "desk-stat-quality",
+    "project-stat-typical": "desk-runs-stats",
+    "project-stat-spend": "desk-block-spend"
   }
 }

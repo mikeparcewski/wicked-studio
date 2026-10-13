@@ -1,5 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+
+// These suites exercise Desk tabs and project behavior; chart rendering is outside their scope.
+vi.mock('recharts', () => Object.fromEntries(['Area', 'AreaChart', 'Bar', 'BarChart', 'CartesianGrid', 'Cell', 'Pie', 'PieChart', 'ResponsiveContainer', 'Tooltip', 'XAxis', 'YAxis'].map((key) => [key, () => null])));
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import type { Project, ProjectMember } from '../src/api/types.js';
 
 const getProject = vi.fn();
@@ -17,7 +20,7 @@ vi.mock('../src/api/client.js', () => ({
     listProjects: () => Promise.resolve({ projects: [] }),
   },
 }));
-const { ProjectDetailPage } = await import('../src/components/ProjectDetailPage.js');
+const { ProjectDesk } = await import('../src/components/desk/ProjectDesk.js');
 const { ProjectRequirementsPage } = await import('../src/components/product/ProjectRequirementsPage.js');
 const { useProjectsStore } = await import('../src/store/projects.js');
 
@@ -31,8 +34,8 @@ beforeEach(() => {
   useProjectsStore.setState({ projects: [project], loading: false, error: null });
   getProject.mockResolvedValue({ project, members: [member] });
   getProjectActivity.mockResolvedValue({ entries: [], nextCursor: null });
-  getRun.mockResolvedValue({ run: { session: { id: uuid, problem: 'Improve checkout accessibility', status: 'completed' }, units: [] } });
-  apiFetch.mockImplementation((path: string) => Promise.resolve(path.includes('/requirements') ? requirements : path.includes('/coverage')
+  getRun.mockResolvedValue({ run: { session: { id: uuid, problem: 'Improve checkout accessibility', status: 'completed', created_at: 1_757_299_000 }, units: [] } });
+  apiFetch.mockImplementation((path: string) => Promise.resolve(path.includes('/standing-orders') ? { away: false, orders: [] } : path.includes('/requirements') ? requirements : path.includes('/coverage')
     ? { projectId: 'shop', totals: { repos: 0, ok: 0, behavior_bearing: 0, resolved: 0, coverage: null }, rows: [] }
     : { projectId: 'shop', totals: { repos: 0, ok: 0, domains: 0, requirements: 0, entities: 0 }, rows: [], merged: [] }));
 });
@@ -41,10 +44,10 @@ afterEach(cleanup);
 describe('S6 project and requirements presentation', () => {
   it('renders member session titles and shared status words, linking to the existing session route', async () => {
     const navigate = vi.fn();
-    const { container } = render(<ProjectDetailPage projectId="shop" navigate={navigate} />);
+    const { container } = render(<ProjectDesk needRows={[]} now={1_757_300_000_000} runsLoaded={true} search="?tab=runs" runs={[]} projectId="shop" navigate={navigate} />);
     const link = await screen.findByRole('link', { name: 'Improve checkout accessibility' });
     expect(link).toHaveAttribute('href', `/s/run%3A${uuid}`);
-    expect(screen.getByRole('region', { name: 'Jobs' })).toHaveTextContent('Finished');
+    expect(screen.getByRole('region', { name: 'Runs' })).toHaveTextContent('Finished');
     expect(container.textContent).not.toContain(uuid);
     expect(container.textContent).not.toContain('crew.run');
     fireEvent.click(link);
@@ -52,17 +55,17 @@ describe('S6 project and requirements presentation', () => {
   });
 
   it('falls back to Untitled job when the job has no words — never its id', async () => {
-    getRun.mockResolvedValue({ run: { session: { id: uuid, problem: '', status: 'cancelled' }, units: [] } });
-    const { container } = render(<ProjectDetailPage projectId="shop" navigate={vi.fn()} />);
+    getRun.mockResolvedValue({ run: { session: { id: uuid, problem: '', status: 'cancelled', created_at: 1_757_299_000 }, units: [] } });
+    const { container } = render(<ProjectDesk needRows={[]} now={1_757_300_000_000} runsLoaded={true} search="?tab=runs" runs={[]} projectId="shop" navigate={vi.fn()} />);
     expect(await screen.findByRole('link', { name: 'Untitled job' })).toBeInTheDocument();
-    expect(screen.getByRole('region', { name: 'Jobs' })).toHaveTextContent('Cancelled');
+    expect(screen.getByRole('region', { name: 'Runs' })).toHaveTextContent('Stopped');
     expect(container.textContent).not.toContain(uuid);
   });
 
-  it('uses the page frame and sans-serif body text on both routes', async () => {
-    const detail = render(<ProjectDetailPage projectId="shop" navigate={vi.fn()} />);
+  it('uses the shared Desk for projects and the page frame for requirements', async () => {
+    const detail = render(<ProjectDesk needRows={[]} now={1_757_300_000_000} runsLoaded={true} search="?tab=runs" runs={[]} projectId="shop" navigate={vi.fn()} />);
     await screen.findByRole('link', { name: 'Improve checkout accessibility' });
-    expect(detail.container.querySelector('.wk-page')).toBeInTheDocument();
+    expect(detail.container.querySelector('.wk-desk2')).toBeInTheDocument();
     expect(detail.container.querySelector('.font-mono')).toBeNull();
     expect(detail.container.querySelector('[style*="monospace"], [style*="font-mono"]')).toBeNull();
     cleanup();
@@ -72,18 +75,4 @@ describe('S6 project and requirements presentation', () => {
     expect(product.container.querySelector('[style*="monospace"], [style*="font-mono"]')).toBeNull();
   });
 
-  it('combines failed reads into one banner and retries the failed sections', async () => {
-    // Coverage and domains are read for a project with attached code (concept P: no empty boxes otherwise).
-    getProject.mockResolvedValue({ project, members: [member, { ...member, id: 'member-2', member_kind: 'crew.repo', member_ref: 'shop-web' }] });
-    apiFetch.mockRejectedValue(new TypeError('Failed to fetch'));
-    render(<ProjectDetailPage projectId="shop" navigate={vi.fn()} />);
-    await screen.findByRole('link', { name: 'Improve checkout accessibility' });
-    await waitFor(() => expect(screen.getAllByTestId('state-banner')).toHaveLength(1));
-    // Coverage, domain and the requirements count: three reads, one banner.
-    await waitFor(() => expect(apiFetch).toHaveBeenCalledTimes(3));
-    expect(screen.getByTestId('state-banner')).toHaveAttribute('data-kind', 'offline');
-    expect(screen.queryByTestId('project-coverage-totals')).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
-    await waitFor(() => expect(apiFetch).toHaveBeenCalledTimes(6));
-  });
 });

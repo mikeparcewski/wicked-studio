@@ -110,9 +110,10 @@ with sync_playwright() as p:
 
     def section_verb() -> None:
         page.goto(f"{origin}/", wait_until="networkidle")
-        # Concept A (DES-frontdoor): the Desk has no composer; Capture sits in the Desk header's tools row.
+        # Concept A (DES-frontdoor): the Desk has no composer. Desk v2: Capture sits in the header's ⋯ panel.
+        page.get_by_test_id("desk-more").click()
         place = page.evaluate("""() => {
-            const cap = document.querySelector('[data-testid="desk"] .wk-desk-a-tools [data-testid="capture"]');
+            const cap = document.querySelector('[data-testid="desk"] header [data-testid="desk-more-panel"] [data-testid="capture"]');
             return cap ? { inTools: true, composer: document.querySelectorAll('[data-testid="composer"][data-composer="desk"]').length } : null;
         }""")
         check("capture-in-the-desk-tools", place is not None and place["composer"] == 0, place=place)
@@ -180,8 +181,8 @@ with sync_playwright() as p:
               chip.inner_text() == "· 5 waiting"
               and status.startswith("5 proposals from your capture waiting in Needs You: 4 memory-only, 1 changes enforcement"),
               chip=chip.inner_text(), status=status)
-        # The tools row (standing instructions, Capture, ⋯) stays one row while the status chip shows.
-        header_rows = page.evaluate("""() => { const rs = [...document.querySelector('[data-testid="desk"] .wk-desk-a-tools').children]
+        # The header's actions row (Chat, New job, ⋯ — Capture rides in ⋯ since Desk v2) stays one row while the status chip shows.
+        header_rows = page.evaluate("""() => { const rs = [...document.querySelector('[data-testid="desk"] .wk-desk2-actions').children]
             .map(c => c.getBoundingClientRect()).filter(r => r.height > 0);
             return Math.max(...rs.map(r => r.top)) < Math.min(...rs.map(r => r.bottom)) ? 1 : 2; }""")
         check("verb-row-stays-one-row", header_rows == 1, rows=header_rows)
@@ -206,6 +207,9 @@ with sync_playwright() as p:
         run_id = captures(origin)[0]["runId"]
         want = sorted(f"{run_id}-p{i}" for i in (1, 2, 3, 4))
         check("accepts-exactly-the-captured-memories", sorted(approves(origin)) == want, posts=approves(origin))
+        # Desk v2: Capture's status rides in the header's ⋯ panel; open it again to read it.
+        if page.get_by_test_id("desk-more-panel").count() == 0:
+            page.get_by_test_id("desk-more").click()
         page.wait_for_function(
             """() => document.querySelector('[data-testid="capture-status"]')?.dataset.waiting === '1'""", timeout=15000)
         status = page.get_by_test_id("capture-status-line").get_attribute("title") or ""

@@ -99,6 +99,8 @@ with sync_playwright() as p:
     page.goto(f"{origin}/", wait_until="domcontentloaded")
     # GET /settings is slowed (settings_delay_ms); every read below waits for the Desk's shell first.
     wait_for_skin(page)
+    # Desk v2: standing instructions sit in the header's ⋯ panel.
+    page.get_by_test_id("desk-more").click()
     try:
         page.get_by_test_id("standing-orders-panel").wait_for(state="visible", timeout=15000)
     except Exception:

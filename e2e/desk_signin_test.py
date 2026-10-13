@@ -154,7 +154,8 @@ with sync_playwright() as p:
     page.get_by_test_id("desk").wait_for(state="visible", timeout=15000)
     page.get_by_test_id("desk-signin-lead").wait_for(state="visible", timeout=10000)
     lead = page.evaluate("""() => {
-      const main = document.querySelector('.wk-desk-a-main');
+      // Desk v2: the chores lead the Needs-you inbox's list (the first thing in it).
+      const main = document.querySelector('[data-testid="desk-inbox-list"]');
       const first = main ? main.firstElementChild?.dataset.testid : null;
       const chores = document.querySelector('[data-testid="desk-chores"]');
       return { first, lead: chores?.dataset.lead, text: document.querySelector('[data-testid="desk-signin-lead"]')?.innerText,
@@ -162,7 +163,7 @@ with sync_playwright() as p:
     }""")
     page.screenshot(path=str(SHOTS / "desk-signin-firstrun.png"))
     check("first-run", lead["first"] == "desk-chores" and lead["lead"] == "true" and lead["rows"] >= 4
-          and "No AI helper is signed in yet" in (lead["text"] or ""), **lead)
+          and "No AI agent is signed in yet" in (lead["text"] or ""), **lead)  # Desk v2: Helpers became Agents
 
     check("no-errors", not errors, errors=errors[:5])
     browser.close()

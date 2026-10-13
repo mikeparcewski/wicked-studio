@@ -105,34 +105,6 @@ with sync_playwright() as p:
     def text(testid: str) -> str:
         return (page.get_by_test_id(testid).first.text_content() or "").strip()
 
-    def section_top() -> None:
-        reset(origin)
-        page.goto(f"{origin}/", wait_until="networkidle")
-        queue = page.get_by_test_id("needs-you-queue")
-        queue.wait_for(state="visible", timeout=15000)
-        page.wait_for_function("""() => Number(document.querySelector('[data-testid="needs-you-queue"]')
-            ?.getAttribute('data-count')) >= 3""", timeout=15000)
-        before = int(queue.get_attribute("data-count") or "0")
-        rows_before = page.get_by_test_id("need-row").count()
-        toggle = page.get_by_test_id("home-focus-toggle")
-        check("toggle-in-header", toggle.is_visible() and toggle.get_attribute("aria-checked") == "false"
-              and page.evaluate("""() => !!document.querySelector('header [data-testid="home-focus-toggle"]')"""),
-              before=before)
-        toggle.click()
-        page.wait_for_function("""() => document.querySelector('[data-testid="needs-you-queue"]')
-            ?.getAttribute('data-focus-lock') === 'on'""", timeout=8000)
-        shown = page.get_by_test_id("need-row").count()
-        note = text("need-focus-note")
-        check("toggle-shows-one", shown == 1 and queue.get_attribute("data-count") == "1"
-              and note.startswith(f"{before - 1} hidden, back when this clears"), shown=shown, note=note, before=before)
-        page.screenshot(path=str(SHOTS / f"wavec-desk-top.png"))
-        toggle.click()
-        page.wait_for_function("""() => document.querySelector('[data-testid="needs-you-queue"]')
-            ?.getAttribute('data-focus-lock') === 'off'""", timeout=8000)
-        check("toggle-off-restores", int(queue.get_attribute("data-count") or "0") == before
-              and page.get_by_test_id("need-row").count() == rows_before
-              and page.get_by_test_id("need-focus-note").count() == 0)
-
     def section_reuse() -> None:
         reset(origin)
         page.goto(f"{origin}/everything?tab=sessions", wait_until="networkidle")
@@ -191,6 +163,7 @@ with sync_playwright() as p:
 
     def desk_freeze_open() -> None:
         """The Desk keeps the switch under "Look underneath" › Hold deliveries."""
+        page.get_by_test_id("desk-more").click()  # Desk v2: "Look underneath" is in the ⋯ panel
         page.get_by_test_id("desk-sheet-open").click()
         sheet_tab(page, "hold")
         page.get_by_test_id("sheet-hold").wait_for(state="visible", timeout=8000)
@@ -304,7 +277,10 @@ with sync_playwright() as p:
         page.wait_for_function("""() => [...document.querySelectorAll('[data-testid="undo-result"]')]
             .some(e => e.getAttribute('data-kind') === 'sent')""", timeout=10000)
 
-    for section in (section_top, section_reuse, section_freeze):
+    # Desk v2 (DES-desk-v2 §1, operator-reviewed first cut): the Desk's "just the top one" focus
+    # switch was removed, so section_top (the switch) no longer runs; it is on the DES §7 REGRESSION
+    # list for the operator to keep removed or restore.
+    for section in (section_reuse, section_freeze):
         try:
             section()
         except SectionFailed:

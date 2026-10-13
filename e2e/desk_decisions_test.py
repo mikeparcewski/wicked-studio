@@ -26,6 +26,10 @@ and the five POST verbs on the DC-S4a wire) and proves B1–B4, B6–B9 and B12:
 Captures: e2e/shots/desk-decisions*.png. Env: FEEDBACK_PORT (default 4356).
 """
 
+import sys as _sys
+from pathlib import Path as _P
+_sys.path.insert(0, str(_P(__file__).resolve().parent))
+from desk_addr import ADDR  # noqa: E402
 import json
 import os
 import sys
@@ -203,7 +207,7 @@ with sync_playwright() as p:
     page.get_by_test_id("desk-rule-see").click()
     # S12: "see it" lands on the Rules page with THAT rule open — the drawer for the rule the Remember landed,
     # its statement in the operator's words; the address alone (or a missing-rule page) is not enough.
-    page.wait_for_function("() => decodeURIComponent(location.pathname) === '/rules/proposal:pr-offer'", timeout=8000)
+    page.wait_for_function(f"() => decodeURIComponent({ADDR}) === '/rules/proposal:pr-offer'", timeout=8000)
     try:
         page.get_by_test_id("steering-rule-drawer").wait_for(state="visible", timeout=15000)
     except Exception as e:  # noqa: BLE001

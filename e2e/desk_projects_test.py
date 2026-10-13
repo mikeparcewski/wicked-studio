@@ -81,6 +81,7 @@ with sync_playwright() as p:
     check("projects-tab", "scratch" in ids and "default" not in ids and "legacy-spike" in ids and len(ids) >= 8, ids=ids)
 
     page.goto(origin, wait_until="networkidle")
+    page.get_by_test_id("desk-more").click()  # Desk v2: New project sits in the header's ⋯ panel
     page.get_by_test_id("desk-new-project").click()
     page.get_by_test_id("new-project-modal").wait_for()
     check("desk-door", page.get_by_test_id("new-project-start").count() == 0)

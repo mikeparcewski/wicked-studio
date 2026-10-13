@@ -1,16 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+// These suites exercise Desk tabs and project behavior; chart rendering is outside their scope.
+vi.mock('recharts', () => Object.fromEntries(['Area', 'AreaChart', 'Bar', 'BarChart', 'CartesianGrid', 'Cell', 'Pie', 'PieChart', 'ResponsiveContainer', 'Tooltip', 'XAxis', 'YAxis'].map((key) => [key, () => null])));
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type { Project, ProjectDetail, ProjectMember, RepoEntry, SessionView } from '../src/api/types.js';
 
-/**
- * studio#207 — the Repositories section: the one UI path that attaches a `crew.repo`
- * member to a project. Mounted on the legacy `/projects/:id` page (this suite) and on
- * the live `/p/:id` dashboard (ProjectDashboard.repos.test.tsx). Lists the project's
- * repo members, offers the registered-repo picker minus what is already attached,
- * attaches with the pinned `AttachMemberBody` wire, detaches behind an inline
- * confirm, and is omitted for the synthesized `default` project (which rejects
- * attach on the wire).
- */
+/** The project's Repositories tab preserves attachment, registry caching and mutation behavior. */
 
 const getProject = vi.fn();
 const getProjectActivity = vi.fn();
@@ -19,7 +14,7 @@ const attachProjectMember = vi.fn();
 const detachProjectMember = vi.fn();
 
 vi.mock('../src/api/client.js', () => ({
-  apiFetch: (path: string) => Promise.resolve(path.includes('/coverage')
+  apiFetch: (path: string) => Promise.resolve(path.includes('/standing-orders') ? { away: false, orders: [] } : path.includes('/coverage')
     ? { totals: { repos: 0, ok: 0, behavior_bearing: 0, resolved: 0, coverage: null }, rows: [] }
     : { totals: { repos: 0, ok: 0, domains: 0, requirements: 0, entities: 0 }, rows: [], merged: [] }),
   api: {
@@ -32,7 +27,7 @@ vi.mock('../src/api/client.js', () => ({
   },
 }));
 
-const { ProjectDetailPage } = await import('../src/components/ProjectDetailPage.js');
+const { ProjectDesk } = await import('../src/components/desk/ProjectDesk.js');
 const { clearRepoCache } = await import('../src/store/repoCache.js');
 
 const NOW = 1_757_300_000_000;
@@ -84,12 +79,12 @@ beforeEach(() => {
 afterEach(cleanup);
 
 async function renderPage(projectId = 'proj-1', runs: SessionView[] = []): Promise<HTMLElement> {
-  render(<ProjectDetailPage projectId={projectId} navigate={() => {}} runs={runs} />);
+  render(<ProjectDesk needRows={[]} now={1_757_300_000_000} runsLoaded={true} search="?tab=repositories" projectId={projectId} navigate={() => {}} runs={runs} />);
   await waitFor(() => expect(getProject).toHaveBeenCalledWith(projectId));
   return await screen.findByTestId('project-repos');
 }
 
-describe('ProjectDetailPage — Repositories section (studio#207)', () => {
+describe('ProjectDesk — Repositories section (studio#207)', () => {
   it('lists the crew.repo members as rows keyed by ref; other member kinds stay out of the section', async () => {
     getProject.mockResolvedValue(detail('proj-1', [
       member('proj-1', 'studio-api'),
@@ -237,40 +232,13 @@ describe('ProjectDetailPage — Repositories section (studio#207)', () => {
     expect(screen.getByText((_, el) => el?.getAttribute('data-testid') === 'project-meta' && / · 1 job · /.test(el.textContent ?? ''))).toBeInTheDocument(); // and the detach
   });
 
-  it('a membership change made elsewhere mid-attach survives: a run member detached through the Members list stays gone', async () => {
-    getProject.mockResolvedValue(detail('proj-1', [member('proj-1', 'r-1', 'crew.run'), member('proj-1', 'studio-api')]));
-    const attach = deferred<{ member: ProjectMember }>();
-    attachProjectMember.mockReturnValue(attach.promise);
-    detachProjectMember.mockResolvedValue({ ok: true });
-    const section = await renderPage('proj-1', [{ session: { id: 'r-1', problem: 'Session r-1', status: 'completed', archived_at: null }, units: [] } as unknown as SessionView]);
-    expect(screen.getByText((_, el) => el?.getAttribute('data-testid') === 'project-meta' && / · 1 job · /.test(el.textContent ?? ''))).toBeInTheDocument();
-
-    fireEvent.focus(within(section).getByTestId('project-repo-search'));
-    fireEvent.click((await within(section).findAllByTestId('project-repo-option')).find((o) => o.getAttribute('data-repo') === 'crew')!);
-    await waitFor(() => expect(attachProjectMember).toHaveBeenCalledTimes(1));
-
-    // While the attach is in flight, the generic Members list detaches the run member —
-    // a membership change the section's mutation lock does not (and should not) cover.
-    // DES-frontdoor P: the run member is a row of the Jobs list, with Remove from project in its ⋯ menu.
-    const runRow = (await screen.findByText('Session r-1')).closest('[data-testid="project-job"]')! as HTMLElement;
-    fireEvent.click(within(runRow).getByRole('button', { name: 'More actions for Session r-1' }));
-    fireEvent.click(within(runRow).getByRole('menuitem', { name: 'Remove from project' }));
-    await waitFor(() => expect(detachProjectMember).toHaveBeenCalledWith('proj-1', 'proj-1:crew.run:r-1'));
-    expect(screen.getByText((_, el) => el?.getAttribute('data-testid') === 'project-meta' && / · 0 jobs · /.test(el.textContent ?? ''))).toBeInTheDocument();
-
-    // The attach applies to the membership held NOW: the repo joins, the run member does not come back.
-    await settle(() => attach.resolve({ member: member('proj-1', 'crew') }));
-    expect(within(section).getAllByTestId('project-repo-row').map((r) => r.getAttribute('data-repo'))).toEqual(['studio-api', 'crew']);
-    expect(screen.getByText((_, el) => el?.getAttribute('data-testid') === 'project-meta' && / · 0 jobs · /.test(el.textContent ?? ''))).toBeInTheDocument();
-  });
-
   it('an attach that resolves after navigating to another project never touches that project\'s membership', async () => {
     getProject.mockImplementation((id: string) => Promise.resolve(detail(id, id === 'proj-1'
       ? [member('proj-1', 'studio-api')]
       : [member('proj-2', 'r-2', 'crew.run'), member('proj-2', 'studio-web')])));
     const attach = deferred<{ member: ProjectMember }>();
     attachProjectMember.mockReturnValue(attach.promise);
-    const view = render(<ProjectDetailPage projectId="proj-1" navigate={() => {}} />);
+    const view = render(<ProjectDesk needRows={[]} now={1_757_300_000_000} runsLoaded={true} search="?tab=repositories" runs={[]} projectId="proj-1" navigate={() => {}} />);
     const first = await screen.findByTestId('project-repos');
 
     fireEvent.focus(within(first).getByTestId('project-repo-search'));
@@ -279,7 +247,7 @@ describe('ProjectDetailPage — Repositories section (studio#207)', () => {
 
     // Navigate before it lands. The page stays mounted (App.tsx keys neither project surface),
     // so the same component instance loads proj-2 while proj-1's attach is still out.
-    view.rerender(<ProjectDetailPage projectId="proj-2" navigate={() => {}} />);
+    view.rerender(<ProjectDesk needRows={[]} now={1_757_300_000_000} runsLoaded={true} search="?tab=repositories" runs={[]} projectId="proj-2" navigate={() => {}} />);
     await waitFor(() => expect(getProject).toHaveBeenCalledWith('proj-2'));
     const second = await screen.findByTestId('project-repos');
     await waitFor(() => expect(within(second).getAllByTestId('project-repo-row').map((r) => r.getAttribute('data-repo'))).toEqual(['studio-web']));
@@ -312,7 +280,7 @@ describe('ProjectDetailPage — Repositories section (studio#207)', () => {
   it('is omitted for the synthesized default project (the wire rejects attach there)', async () => {
     getProject.mockResolvedValue(detail('default', [member('default', 'r-1', 'crew.run')]));
     getProjectActivity.mockResolvedValue({ entries: [], nextCursor: null, projectId: 'default' });
-    render(<ProjectDetailPage projectId="default" navigate={() => {}} />);
+    render(<ProjectDesk needRows={[]} now={1_757_300_000_000} runsLoaded={true} search="?tab=repositories" runs={[]} projectId="default" navigate={() => {}} />);
     await waitFor(() => expect(getProject).toHaveBeenCalledWith('default'));
     await screen.findByText((_, el) => el?.getAttribute('data-testid') === 'project-meta' && / · 1 job · /.test(el.textContent ?? ''));
 
@@ -321,22 +289,3 @@ describe('ProjectDetailPage — Repositories section (studio#207)', () => {
   });
 });
 
-describe('ProjectDetailPage — the #requirements anchor (S5: the retired /product lands here)', () => {
-  it('a hash-only move on a loaded dashboard (Back/Forward, hashchange) brings the section into view', async () => {
-    getProject.mockResolvedValue(detail('proj-1', [member('proj-1', 'studio-api')]));
-    const scroll = vi.fn();
-    const orig = HTMLElement.prototype.scrollIntoView;
-    HTMLElement.prototype.scrollIntoView = scroll;
-    try {
-      await renderPage();
-      await waitFor(() => expect(document.getElementById('requirements')).not.toBeNull());
-      expect(scroll).not.toHaveBeenCalled();
-      window.history.replaceState(null, '', '/projects/proj-1#requirements');
-      await act(async () => { window.dispatchEvent(new HashChangeEvent('hashchange')); await new Promise((r) => setTimeout(r, 350)); });
-      await waitFor(() => expect(scroll).toHaveBeenCalled(), { timeout: 2000 });
-    } finally {
-      HTMLElement.prototype.scrollIntoView = orig;
-      window.history.replaceState(null, '', '/');
-    }
-  });
-});

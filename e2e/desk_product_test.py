@@ -82,7 +82,8 @@ with sync_playwright() as p:
     page.route("**/api/v1/projects/shop/domain", lambda r: r.fulfill(status=200, json=DOMAIN))
 
     # ── 1. Coverage: one row per member repo, the unread one with crew's reason ──────────────────
-    page.goto(f"{origin}/projects/shop", wait_until="networkidle")
+    # Desk v2: a project's coverage and domains sit on its Repositories tab.
+    page.goto(f"{origin}/projects/shop?tab=repositories", wait_until="networkidle")
     page.get_by_test_id("project-coverage").wait_for(state="visible", timeout=15000)
     totals = page.get_by_test_id("project-coverage-totals").inner_text()
     rows = page.get_by_test_id("project-coverage-row").evaluate_all("els => els.map(e => ({ repo: e.dataset.repo, state: e.dataset.state, text: e.innerText }))")
@@ -117,7 +118,7 @@ with sync_playwright() as p:
     page.route("**/api/v1/projects/default/activity*", lambda r: r.fulfill(status=200, json={"entries": [], "nextCursor": None, "projectId": "default"}))
     page.route("**/api/v1/projects/default/coverage", lambda r: (folds.append("coverage"), r.fulfill(status=200, json={**COVERAGE, "projectId": "default"})))
     page.route("**/api/v1/projects/default/domain", lambda r: (folds.append("domain"), r.fulfill(status=200, json={**DOMAIN, "projectId": "default"})))
-    page.goto(f"{origin}/projects/default", wait_until="networkidle")
+    page.goto(f"{origin}/projects/default?tab=repositories", wait_until="networkidle")
     # Concept P: the synthesized default project is titled "Not in a project".
     page.get_by_role("heading", name="Not in a project").wait_for(state="visible", timeout=15000)
     page.wait_for_timeout(500)

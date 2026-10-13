@@ -63,9 +63,21 @@ const CSS = {
   },
 } as const satisfies Record<string, React.CSSProperties>;
 
-export function NeedsYouQueue({ queue, runs, navigate, now }: {
+/** Desk v2's inbox look for the queue's rows (the inbox owns sender, unread and the reading pane). */
+export interface InboxRowLook {
+  sender: (row: NeedRow) => { label: string; color: string | null };
+  snippet: (row: NeedRow) => string;
+  unread: (row: NeedRow) => boolean;
+  selectedKey: string | null;
+  onSelect: (row: NeedRow) => void;
+  ageWords: (at: number | null) => string;
+}
+
+export function NeedsYouQueue({ queue, runs, navigate, now, inbox }: {
   /** The queue's behaviour (`useNeedsQueue`): rows, groups, cursor, verbs. */
   queue: NeedsQueue;
+  /** Desk v2: render each row as an inbox row (sender · age, the question, the job, its moves). */
+  inbox?: InboxRowLook;
   /** For the calm line's live working count — `calmCopy` reads `runStats`. */
   runs: SessionView[];
   navigate: Navigate;
@@ -211,6 +223,72 @@ export function NeedsYouQueue({ queue, runs, navigate, now }: {
 
   /** The Desk's row (skin `desk`, S4): a plain card — the subject in words, one line under it
    *  ("project · what · age"), and ONE plain action on the right. Same keys, verbs and testids. */
+  /** Desk v2's inbox row: the same keys, testids and moves as the Desk row, laid out as mail. */
+  const inboxLine = (row: NeedRow, testId: 'need-row' | 'need-member', look: InboxRowLook): React.ReactElement => {
+    const selected = queue.selectedKey === row.key;
+    const isGroup = row.members !== undefined;
+    const open = isGroup && queue.expanded.has(row.key);
+    const from = look.sender(row);
+    const unread = look.unread(row);
+    const current = look.selectedKey === row.key;
+    // The one spark mark (UI-CONTRACT §2): the most urgent row, the list's first.
+    const urgent = testId === 'need-row' && queue.rows[0]?.key === row.key;
+    return (
+      <div
+        key={row.key}
+        data-testid={testId}
+        data-kind={row.kind}
+        data-key={row.key}
+        data-count={row.members?.length ?? 1}
+        data-queue-item={row.key}
+        data-kbd-selected={selected ? 'true' : undefined}
+        data-reveal={revealed.has(row.key) ? 'true' : undefined}
+        data-unread={unread ? 'true' : undefined}
+        data-section={needSection(row)}
+        aria-current={current ? 'true' : undefined}
+        tabIndex={-1}
+        className={`wk-inbox-row${testId === 'need-member' ? ' wk-inbox-row--member' : ''}${revealed.has(row.key) ? ' wk-need-row--reveal' : ''}`}
+        onClick={(e) => { if ((e.target as Element).closest('a, button, input, textarea, select, [role="radio"]') === null) look.onSelect(row); }}
+      >
+        <span aria-hidden className="wk-inbox-mark" data-section={needSection(row)} />
+        <span className="wk-inbox-from">
+          {urgent && <span aria-hidden data-urgent="true" className="wk-desk-dot wk-desk-dot--urgent" title="Most urgent" />}
+          {from.color !== null && <i aria-hidden className="wk-chart-swatch wk-chart-swatch--dot" style={{ background: from.color }} />}
+          <button type="button" className="wk-inbox-sender" data-testid="desk-inbox-row" data-key={row.key} onClick={() => look.onSelect(row)} aria-label={`Read: ${row.question ?? row.text}`}>{from.label}</button>
+          <AgeStamp at={row.at} now={at} testId="need-age" {...(isGroup ? {} : { href: row.subjectPath, onOpen: navigate })} />
+        </span>
+        {/* A group's line states the consequence before the click (needsYou: batch moves); its subject is the snippet. */}
+        <span data-testid="need-line" className="wk-inbox-subject" title={row.question ?? row.text}>{row.question ?? row.text}</span>
+        {isGroup
+          ? <span className="wk-inbox-snippet">{row.subject}</span>
+          : <a {...link(row.subjectPath)} title={row.subjectFull ?? row.subject} className="wk-inbox-snippet wk-desk-need-title">{look.snippet(row)}</a>}
+        <span className="wk-inbox-acts">
+          {isGroup ? (
+            <span className="wk-need-acts">
+              <button type="button" data-testid="need-group-toggle" aria-expanded={open} onClick={() => queue.toggle(row.key)} className="wk-need-act wk-need-act--quiet">
+                {open ? 'Fold' : 'Show each'}
+              </button>
+              {row.action.kind === 'batch-onboard' && batchAct(row.action, row.text)}
+              {row.action.kind === 'accept-memory' && acceptAct(row.action)}
+              {row.action.kind === 'batch-approve' && <ApprovalGroupActions runIds={row.action.runIds} label={row.action.label} />}
+            </span>
+          ) : row.kind === 'gate' && row.action.kind === 'open' ? (
+            deskGate(row, row.action)
+          ) : row.kind === 'failed-run' && failedView(row) !== null ? (
+            <span className="wk-need-acts">
+              <button type="button" data-testid="need-why-toggle" aria-expanded={whyOpen.has(row.key)} onClick={() => toggleWhy(row.key)} className="wk-need-act">
+                {whyOpen.has(row.key) ? 'Hide why' : 'See why'}
+              </button>
+              {act(row)}
+            </span>
+          ) : (
+            <span className="wk-need-acts">{act(row)}</span>
+          )}
+        </span>
+      </div>
+    );
+  };
+
   const deskLine = (row: NeedRow, testId: 'need-row' | 'need-member'): React.ReactElement => {
     const selected = queue.selectedKey === row.key;
     const isGroup = row.members !== undefined;
@@ -303,8 +381,8 @@ export function NeedsYouQueue({ queue, runs, navigate, now }: {
     );
   };
 
-  // The Desk's row is the only row since the classic skins retired (S18d).
-  const line = deskLine;
+  // The Desk's row is the only row since the classic skins retired (S18d); Desk v2 lays it out as mail.
+  const line = (row: NeedRow, testId: 'need-row' | 'need-member'): React.ReactElement => (inbox !== undefined ? inboxLine(row, testId, inbox) : deskLine(row, testId));
 
   return (
     <section
@@ -316,7 +394,7 @@ export function NeedsYouQueue({ queue, runs, navigate, now }: {
       data-focus-lock={queue.focus.on ? 'on' : 'off'}
       className="wk-desk-needs"
     >
-      <h2 className="wk-desk-section-title">
+      <h2 className={inbox !== undefined ? 'wk-sr-only' : 'wk-desk-section-title'}>
         Needs you
         {sectionCounts.length > 0 && (
           <span data-testid="needs-summary" className="wk-desk-section-aside">
@@ -419,7 +497,8 @@ function useRevealed(queue: NeedsQueue, rootEl: React.RefObject<HTMLElement | nu
  * mounted at a time (Home stands down while the rail holds the queue), so the queue's keys are
  * registered once.
  */
-export function NeedsQueueSurface({ rows, runs, navigate, now }: {
+export function NeedsQueueSurface({ rows, runs, navigate, now, inbox }: {
+  inbox?: InboxRowLook;
   /** The ranked rows — `useNeedsRows`, the one fold. */
   rows: NeedRow[];
   runs: SessionView[];
@@ -427,7 +506,7 @@ export function NeedsQueueSurface({ rows, runs, navigate, now }: {
   now: number;
 }): React.ReactElement {
   const queue = useNeedsQueue(rows, navigate, now);
-  return <NeedsYouQueue queue={queue} runs={runs} navigate={navigate} now={now} />;
+  return <NeedsYouQueue queue={queue} runs={runs} navigate={navigate} now={now} {...(inbox !== undefined ? { inbox } : {})} />;
 }
 
 /**

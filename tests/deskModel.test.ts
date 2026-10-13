@@ -181,7 +181,7 @@ describe('chores for whoever runs studio', () => {
     ] as unknown as RosterSeat[];
     const chores = lapsedSeatChores(roster);
     expect(chores.map((c) => c.seat)).toEqual(['pi', 'cx']);
-    expect(chores[0]!.title).toBe('An AI helper (Pi) needs signing in again');
+    expect(chores[0]!.title).toBe('An AI agent (Pi) needs signing in again');
     expect(chores[0]!.action).toEqual({ label: 'Sign in', path: '/system' });
     expect(chores[0]!.rosterSeat).toBe(roster[1]);
     // A first-run Desk leads with the sign-in only when NO seat is usable; an unread roster never does.

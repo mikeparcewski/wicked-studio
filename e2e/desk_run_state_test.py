@@ -83,7 +83,7 @@ with sync_playwright() as p:
           desk=desk[:500])
     set_fixture(origin, runs_fail=False)
     page.get_by_test_id("desk-runs-failed-retry").click()
-    page.get_by_test_id("desk-story").wait_for(state="visible", timeout=15000)
+    page.get_by_test_id("desk-inbox-count").wait_for(state="visible", timeout=15000)
     check("retry-reads-again", page.get_by_test_id("desk-runs-failed").count() == 0)
     set_fixture(origin, repo=False)
 

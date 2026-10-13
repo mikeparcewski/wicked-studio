@@ -17,7 +17,7 @@ import { useLaunchPreview } from '../../hooks/useLaunchPlan.js';
 import { useCapabilities } from '../../store/capabilities.js';
 import { isOptInKey, OPT_IN_NOTE, seatOff, useComposerSeats } from '../../store/composerSeats.js';
 import { clearAboutChips } from '../../store/composerChips.js';
-import { usePlanCatalog } from '../../store/planCatalog.js';
+import { loadPresets, usePlanCatalog } from '../../store/planCatalog.js';
 import { useProjectsStore } from '../../store/projects.js';
 import { useProvenanceStore } from '../../store/provenance.js';
 import { fetchReposCached, getCachedRepos } from '../../store/repoCache.js';
@@ -79,6 +79,8 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
   const defs = useWorkflowDefs();
   const presetsState = usePlanCatalog((s) => s.presets[draft.projectId ?? '']);
   const presets = Array.isArray(presetsState) ? presetsState : null;
+  // The wizard reads the kinds of job itself: it can open from a page with no composer to warm them (the Desk).
+  useEffect(() => { loadPresets(draft.projectId ?? null); }, [draft.projectId]);
   const rows = useMemo(() => workflowItems('', defs, presets), [defs, presets]);
   const roster = useRoster();
   const projects = useProjectsStore((s) => s.projects) ?? [];
