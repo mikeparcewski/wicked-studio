@@ -145,3 +145,20 @@ describe('token contrast (council M16) — measured, not estimated', () => {
     }
   }
 });
+
+// Light-theme contrast pass (2026-10-13, operator: "white version is faded"): body copy on cards reads
+// at 7:1 (AAA), the quietest labels at 4.5:1 everywhere (checked above).
+describe('wicked-light reads at AAA for copy on cards', () => {
+  const card = color(decl(wickedLight, '--_surface-2')).rgb;
+  for (const ink of ['--_ink-faint', '--_ink-soft', '--_ink-strong', '--_ink-max'] as const) {
+    it(`${ink} on the card clears 7:1`, () => {
+      expect(ratio(over(color(decl(wickedLight, ink)), card), card)).toBeGreaterThanOrEqual(7);
+    });
+  }
+  for (const surface of ['--_surface-0', '--_surface-1', '--_surface-2', '--_surface-3'] as const) {
+    it(`the quietest ink (ink-faint) clears 6:1 on ${surface}`, () => {
+      const bg = color(decl(wickedLight, surface)).rgb;
+      expect(ratio(over(color(decl(wickedLight, '--_ink-faint')), bg), bg)).toBeGreaterThanOrEqual(6);
+    });
+  }
+});
