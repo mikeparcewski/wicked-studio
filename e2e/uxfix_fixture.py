@@ -269,6 +269,10 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          # roster_login_lines — {key: line} laid over each seat's `login_invocation` (the daemon's own
          #   command, worker home included). Default {}: only pi's under seat_week.
          "roster_signed_in": {}, "roster_login_lines": {},
+         # roster_probed — (e2e/desk_signin_test.py; DES-seats-page §4.2) [key, ...]: the service has just
+         #   re-checked these seats' sign-in — each answers `probed_at` = now, and `login_check` "live"
+         #   when signed in ("status" when not), so the agent modal's check-again poll sees fresh evidence.
+         "roster_probed": [],
          # runs_fail — GET /runs answers 500 (studio#466: a failed read is not an empty list).
          "runs_fail": False,
          # gate_move_tail — studio#430 (e2e/desk_gate_moves_test.py; needs `gate_move`): r-review's
@@ -5660,6 +5664,7 @@ class W2Handler(SimpleHTTPRequestHandler):
                     home_login = state["home_paths"]
                     signed_over = dict(state["roster_signed_in"])
                     lines_over = dict(state["roster_login_lines"])
+                    probed = list(state["roster_probed"])
                 # studio#467: under home_paths the sign-in line names the worker home by its absolute path.
                 login = 'PI_CONFIG_DIR="/tmp/w2/.wicked-worker/pi" pi login' if home_login else "pi login"
                 roster = ([{**s, "login_invocation": login} if s["key"] == "pi" else s for s in ROSTER]
@@ -5670,6 +5675,9 @@ class W2Handler(SimpleHTTPRequestHandler):
                               if s["key"] in signed_over else {}),
                            **({"login_invocation": lines_over[s["key"]]} if s["key"] in lines_over else {})}
                           for s in roster]
+                now_iso = iso(int(time.time() * 1000))
+                roster = [{**s, "probed_at": now_iso, "login_check": "live" if s.get("auth") == "signed_in" or s.get("signed_in") is True else "status"}
+                          if s["key"] in probed else s for s in roster]
                 self._json(200, {"roster": roster})
             return True
         if path == "/api/v1/roster/record":

@@ -5,14 +5,14 @@ retired §5.4 moves (X1, operator ruling 2026-10-09) at 1440x700 on the Desk.
 
 Against the in-process fixture (wave-1 + wave-2b corpus: alpha/beta/gamma with runs, one failed):
 
-  1. THE PAGE: /everything renders five tabs — Sessions, Everything made, Helpers, Handed over, Projects — the
+  1. THE PAGE: /everything renders four tabs — Sessions, Everything made, Handed over, Projects — the
      tab is the address (?tab=), and the Sessions tab lists every session grouped by project.
   2. THE RETIRED MOVES: /projects, /work?filter=failed, /chats, /execute, /runs, /vibe, /demo,
      /p/beta/chronicle and /p/alpha each show the not-found page with the typed address kept (no
      redirect); /everything?tab=sessions&filter=failed presses Blocked and shows only blocked sessions.
   3. ?project= scopes the Sessions tab, including a project with nothing started.
-  4. HELPERS: the roster, one row per seat; the signed-out seat offers "Sign in" which opens the
-     sign-in panel (desk_signin proves the panel).
+  4. HELPERS MOVED: /everything?tab=helpers lands on the Agents page; the signed-out seat's fix opens
+     its modal (desk_agents and desk_signin prove the page and the modal).
   5. The Desk's "See everything →" opens /everything. 0 page errors.
 
 Captures: e2e/shots/desk-everything-*.png. Env: FEEDBACK_PORT (default 4367).
@@ -92,7 +92,7 @@ with sync_playwright() as p:
     page.wait_for_timeout(200)
     page.screenshot(path=str(SHOTS / "desk-everything-sessions.png"))
     s1 = page.evaluate(PAGE)
-    check("page", s1["present"] and s1["tabs"] == ["Sessions", "Made", "Helpers", "Handed over", "Projects"]
+    check("page", s1["present"] and s1["tabs"] == ["Sessions", "Made", "Handed over", "Projects"]
           and s1["selected"] == "sessions" and s1["count"] >= 5 and set(s1["groups"]) >= {"alpha", "beta", "gamma"},
           **s1)
     # A tab is a page (pushed): the address carries it.
@@ -135,19 +135,19 @@ with sync_playwright() as p:
     empty = page.get_by_test_id("everything-empty").inner_text()
     check("project-without-sessions", "Nothing has been started in this project yet" in empty, text=empty, address=address(page))
 
-    # ── 4. helpers ────────────────────────────────────────────────────────────────
+    # ── 4. helpers moved: the old tab address lands on the Agents page (DES-seats-page §2.2) ──
     page.goto(f"{origin}/everything?tab=helpers", wait_until="networkidle")
-    page.wait_for_function("() => document.querySelectorAll('[data-testid=\"everything-helper\"]').length >= 3", timeout=10000)
-    helpers = page.evaluate("""() => [...document.querySelectorAll('[data-testid="everything-helper"]')]
-        .map(h => ({seat: h.dataset.seat, standing: h.dataset.standing, signin: !!h.querySelector('[data-testid="everything-helper-signin"]')}))""")
+    page.wait_for_function("() => location.pathname === '/agents' && document.querySelectorAll('[data-testid=\"agents-row\"]').length >= 3", timeout=10000)
+    helpers = page.evaluate("""() => [...document.querySelectorAll('[data-testid="agents-row"]')]
+        .map(h => ({seat: h.dataset.agent, ready: h.dataset.ready, fix: h.querySelector('[data-testid="agents-fix"]')?.dataset.tone ?? null}))""")
     page.screenshot(path=str(SHOTS / "desk-everything-helpers.png"))
     codex = next((h for h in helpers if h["seat"] == "codex"), None)
-    # Sign in is offered to every seat whose sign-in lapsed (codex is signed out; claude and agy are in).
-    check("helpers", codex is not None and codex["standing"] == "signed-out" and codex["signin"]
-          and all(not h["signin"] for h in helpers if h["seat"] in ("claude", "agy")), helpers=helpers)
-    page.locator('[data-testid="everything-helper"][data-seat="codex"] [data-testid="everything-helper-signin"]').click()
-    page.get_by_test_id("signin-panel").wait_for(state="visible", timeout=5000)
-    check("helpers-signin-panel", page.get_by_test_id("signin-panel").get_attribute("data-seat") == "codex")
+    # The signed-out seat reads "Not ready" with a problem to fix (claude and agy are signed in).
+    check("helpers", address(page) == "/agents" and codex is not None and codex["ready"] == "Not ready" and codex["fix"] == "fail"
+          and all(h["ready"] != "Not ready" for h in helpers if h["seat"] in ("claude", "agy")), helpers=helpers, landed=address(page))
+    page.locator('[data-testid="agents-fix"][data-agent="codex"]').click()
+    page.get_by_test_id("agents-modal").wait_for(state="visible", timeout=5000)
+    check("helpers-signin-panel", page.get_by_test_id("agents-modal").get_attribute("data-agent") == "codex" and address(page) == "/agents?fix=codex")
     page.keyboard.press("Escape")
 
     # ── 5. from the Desk ──────────────────────────────────────────────────────────

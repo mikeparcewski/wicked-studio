@@ -57,6 +57,7 @@ export const ROUTE_SHAPES: readonly RouteShape[] = [
   { id: 'settings', example: '/settings', is: (r) => r.panel === 'settings' },
   { id: 'mcp', example: '/mcp', is: (r) => r.panel === 'mcp' },
   { id: 'plugins', example: '/plugins', is: (r) => r.panel === 'plugins' },
+  { id: 'agents', example: '/agents', is: (r) => r.panel === 'agents' },
   { id: 'learn', example: '/learn', is: (r) => r.panel === 'learn' },
   { id: 'system', example: '/system', is: (r) => r.panel === 'system' },
   { id: 'theme', example: '/theme', is: (r) => r.panel === 'theme' },
@@ -71,10 +72,10 @@ export const NOT_A_DESTINATION = 'not-found';
 const DESTINATIONS: ReadonlyArray<{ shape: string; label: string; href: string }> = [
   { shape: 'home', label: 'Desk — home', href: '/' },
   { shape: 'watch', label: 'Watchtower — the full feed', href: '/watch' },
+  { shape: 'agents', label: `${PAGE_NAMES.agents} — sign-in, safety checks and fixes`, href: '/agents' },
   { shape: 'rules', label: `${PAGE_NAMES.steering} — what helpers are told`, href: '/rules' },
   { shape: 'everything', label: 'Everything — every session', href: everythingPath({ tab: 'sessions' }) },
   { shape: 'everything', label: 'Everything made — documents, pages, decks, videos', href: everythingPath({ tab: 'made' }) },
-  { shape: 'everything', label: 'Helpers — the CLIs and their sign-in', href: everythingPath({ tab: 'helpers' }) },
   { shape: 'everything', label: 'Handed over — pull requests and pushes', href: everythingPath({ tab: 'handed' }) },
   { shape: 'everything', label: 'Projects — all your projects', href: everythingPath({ tab: 'projects' }) },
   { shape: 'steering-dashboard', label: 'Steering dashboard — proposals to review', href: '/steering/dashboard' },
@@ -91,7 +92,7 @@ const DESTINATIONS: ReadonlyArray<{ shape: string; label: string; href: string }
   { shape: 'plugins', label: `${PAGE_NAMES.plugins} — editor plugins, and making one`, href: '/plugins' },
   { shape: 'learn', label: 'Learn', href: '/learn' },
   { shape: 'settings', label: `${PAGE_NAMES.settings} — every settings page`, href: '/settings' },
-  { shape: 'system', label: `${PAGE_NAMES.system} — helpers, sign-ins, notifications`, href: '/system' },
+  { shape: 'system', label: `${PAGE_NAMES.system} — notifications, view, delivery`, href: '/system' },
   { shape: 'theme', label: `${PAGE_NAMES.theme} — light or dark, logo, site name`, href: '/theme' },
   { shape: 'editors-dev', label: 'Editor test page — try an editor plugin', href: '/editors/dev' },
 ];

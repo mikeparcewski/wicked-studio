@@ -23,6 +23,7 @@
 @import './sections/steering-testing.css';
 @import './sections/pages.css';
 @import './sections/learn.css';
+@import './sections/agents.css';
 
 @tailwind base;
 @tailwind components;

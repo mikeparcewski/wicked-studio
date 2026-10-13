@@ -19,6 +19,7 @@ import { SkillsPage } from './components/SkillsPage.js';
 import { ProjectRequirementsPage } from './components/product/ProjectRequirementsPage.js';
 import { CampaignsRedirect, RouteRedirect } from './components/RouteRedirect.js';
 import { PluginsPage } from './components/editors/EditorPluginsSettings.js';
+import { AGENTS_PATH, AgentsPage } from './components/agents/AgentsPage.js';
 import { McpToolsPage } from './components/McpToolsPage.js';
 import { SteeringPage } from './components/SteeringPage.js';
 import { MemoriesPanel } from './components/MemoriesPanel.js';
@@ -433,6 +434,8 @@ export function App(): React.ReactElement {
     }
     // "See everything" (`/everything`, S15c): the tab, filter, project and kind ride the query.
     if (panel === 'everything') {
+      // The Helpers tab moved to the Agents page (DES-seats-page §2.2): its old address redirects.
+      if (new URLSearchParams(search).get('tab') === 'helpers') return <RouteRedirect to={AGENTS_PATH} navigate={navigate} />;
       // Like the Desk: the page owns its scroller (`.wk-desk-scroll`) — no clipping wrapper (main_scroll).
       return <EverythingPage runs={runs} runsLoaded={runsLoaded} runsError={runsError} onRetryRuns={refresh} needRows={needRows} navigate={navigate} search={search} />;
     }
@@ -551,6 +554,10 @@ export function App(): React.ReactElement {
     // matrix and Approve / Revoke. `?server=<name>` deep-links a server row open.
     if (panel === 'learn') {
       return <LearnPage navigate={navigate} />;
+    }
+    // `/agents` — the Agents page (DES-seats-page): one row per AI agent, `?fix=<key>` opens its modal.
+    if (panel === 'agents') {
+      return <AgentsPage search={search} navigate={navigate} />;
     }
     if (panel === 'plugins') {
       return (

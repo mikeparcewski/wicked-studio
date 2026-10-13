@@ -150,7 +150,6 @@ describe('the rail redesign', () => {
     // The dot answers from the mount reads — no expand gesture left to fetch them.
     const heart = screen.getByTestId('rail-health-heart');
     await waitFor(() => expect(heart).toHaveAttribute('data-health', 'healthy'));
-    expect(getRoster).toHaveBeenCalled();
     expect(screen.queryByTestId('rail-health-summary-dot')).toBeNull();
     // Operator 2026-10-12: the state is always said in words (colour is never the only signal), and
     // the link wears its state's muted tint.
@@ -172,7 +171,8 @@ describe('the rail redesign', () => {
   });
 
   it('the Health link says "failing" in words when a check is unhealthy', async () => {
-    getRoster.mockResolvedValueOnce({ roster: [{ ...ROSTER[0]!, health: { status: 'inactive', since: '2026-08-20T00:00:00Z' } }] });
+    // Connection plus evidence only (DES-seats-page §2.1): a dropped socket is unhealthy; agent standing is the Agents page's.
+    useConnectionStore.setState({ status: 'disconnected' });
     render(<SessionRail runs={[]} needRows={[]} navigate={() => {}} pathname="/" />);
     const health = screen.getByTestId('desk-rail-health');
     await waitFor(() => expect(screen.getByTestId('rail-health-heart')).toHaveAttribute('data-health', 'unhealthy'));

@@ -1,0 +1,696 @@
+{
+ "$doc": "Agents page wire (DES-seats-page \u00a71.4): a rig-shaped roster, diagnostics seatGovernance + acp, and the 7-day record, privacy-scrubbed (no real home path, email or token; the home is the fixture FAKE_HOME). e2e/desk_agents_test.py stubs GET /roster, /diagnostics and /roster/record with it.",
+ "roster": [
+  {
+   "key": "claude",
+   "display_name": "Claude Code",
+   "binary": "claude",
+   "enabled_for_council": true,
+   "auth": "signed_out",
+   "login_check": "status",
+   "council_eligible": false,
+   "health": {
+    "status": "active",
+    "since": "2026-10-10T00:00:00Z"
+   },
+   "governance_mode": {
+    "unscoped": {
+     "mode": "admitted",
+     "class": null,
+     "source": "acp_input_governance",
+     "reason": "r",
+     "fence": {
+      "write_roots": [],
+      "read_roots": [],
+      "network": "open"
+     }
+    },
+    "scoped": {
+     "mode": "admitted",
+     "class": null,
+     "source": "acp_input_governance",
+     "reason": "r",
+     "fence": {
+      "write_roots": [],
+      "read_roots": [],
+      "network": "open"
+     }
+    },
+    "scoped_bound": {
+     "mode": "admitted",
+     "class": null,
+     "source": "acp_input_governance",
+     "reason": "r",
+     "fence": {
+      "write_roots": [],
+      "read_roots": [],
+      "network": "open"
+     }
+    }
+   },
+   "chat_admission": {
+    "unscoped": {
+     "ok": false,
+     "source": "auth"
+    },
+    "scoped": {
+     "ok": false,
+     "source": "auth"
+    },
+    "scoped_bound": {
+     "ok": false,
+     "source": "auth"
+    }
+   },
+   "probed_at": "2026-10-12T18:35:16.541Z",
+   "council_ineligible_reason": "signed out \u2014 the seat's own auth check says it is not logged in; sign it in from the System page",
+   "login_invocation": "CLAUDE_CONFIG_DIR=\"/Users/reel-operator/.wicked-worker/claude\" claude",
+   "logout_invocation": "CLAUDE_CONFIG_DIR=\"/Users/reel-operator/.wicked-worker/claude\" claude auth logout",
+   "signed_in": false
+  },
+  {
+   "key": "codex",
+   "display_name": "Codex",
+   "binary": "codex",
+   "enabled_for_council": true,
+   "auth": "signed_in",
+   "login_check": "live",
+   "council_eligible": true,
+   "health": {
+    "status": "active",
+    "since": "2026-10-10T00:00:00Z"
+   },
+   "governance_mode": {
+    "unscoped": {
+     "mode": "os_sandbox",
+     "class": null,
+     "source": "self",
+     "reason": "r",
+     "fence": {
+      "write_roots": [],
+      "read_roots": [],
+      "network": "open"
+     }
+    },
+    "scoped": {
+     "mode": "os_sandbox",
+     "class": null,
+     "source": "self",
+     "reason": "r",
+     "fence": {
+      "write_roots": [],
+      "read_roots": [],
+      "network": "open"
+     }
+    },
+    "scoped_bound": {
+     "mode": "os_sandbox",
+     "class": null,
+     "source": "self",
+     "reason": "r",
+     "fence": {
+      "write_roots": [],
+      "read_roots": [],
+      "network": "open"
+     }
+    }
+   },
+   "chat_admission": {
+    "unscoped": {
+     "ok": true,
+     "source": null
+    },
+    "scoped": {
+     "ok": true,
+     "source": null
+    },
+    "scoped_bound": {
+     "ok": true,
+     "source": null
+    }
+   },
+   "probed_at": "2026-10-12T18:33:48.857Z",
+   "login_invocation": "CODEX_HOME=\"/Users/reel-operator/.wicked-worker/codex\" codex login",
+   "logout_invocation": "CODEX_HOME=\"/Users/reel-operator/.wicked-worker/codex\" codex logout",
+   "signed_in": true
+  },
+  {
+   "key": "pi",
+   "display_name": "Pi CLI",
+   "binary": "pi",
+   "enabled_for_council": true,
+   "auth": "signed_in",
+   "login_check": "unverified",
+   "council_eligible": true,
+   "health": {
+    "status": "active",
+    "since": "2026-10-10T00:00:00Z"
+   },
+   "governance_mode": {
+    "unscoped": {
+     "mode": "admitted",
+     "class": null,
+     "source": "acp_input_governance",
+     "reason": "r",
+     "fence": {
+      "write_roots": [],
+      "read_roots": [],
+      "network": "open"
+     }
+    },
+    "scoped": {
+     "mode": "admitted",
+     "class": null,
+     "source": "acp_input_governance",
+     "reason": "r",
+     "fence": {
+      "write_roots": [],
+      "read_roots": [],
+      "network": "open"
+     }
+    },
+    "scoped_bound": {
+     "mode": "admitted",
+     "class": null,
+     "source": "acp_input_governance",
+     "reason": "r",
+     "fence": {
+      "write_roots": [],
+      "read_roots": [],
+      "network": "open"
+     }
+    }
+   },
+   "chat_admission": {
+    "unscoped": {
+     "ok": true,
+     "source": null
+    },
+    "scoped": {
+     "ok": true,
+     "source": null
+    },
+    "scoped_bound": {
+     "ok": true,
+     "source": null
+    }
+   },
+   "login_invocation": "PI_CODING_AGENT_DIR=\"/Users/reel-operator/.wicked-worker/pi\" pi",
+   "signed_in": true
+  },
+  {
+   "key": "copilot",
+   "display_name": "GitHub Copilot CLI",
+   "binary": "copilot",
+   "enabled_for_council": true,
+   "auth": "signed_in",
+   "login_check": "unverified",
+   "council_eligible": true,
+   "health": {
+    "status": "active",
+    "since": "2026-10-10T00:00:00Z"
+   },
+   "governance_mode": {
+    "unscoped": {
+     "mode": "none",
+     "class": null,
+     "source": "none",
+     "reason": "r",
+     "fence": {
+      "write_roots": [],
+      "read_roots": [],
+      "network": "open"
+     }
+    },
+    "scoped": {
+     "mode": "none",
+     "class": null,
+     "source": "none",
+     "reason": "r",
+     "fence": {
+      "write_roots": [],
+      "read_roots": [],
+      "network": "open"
+     }
+    },
+    "scoped_bound": {
+     "mode": "os_sandbox",
+     "class": null,
+     "source": "repo_boundary",
+     "reason": "r",
+     "fence": {
+      "write_roots": [],
+      "read_roots": [],
+      "network": "open"
+     }
+    }
+   },
+   "chat_admission": {
+    "unscoped": {
+     "ok": true,
+     "source": null
+    },
+    "scoped": {
+     "ok": false,
+     "source": "scope"
+    },
+    "scoped_bound": {
+     "ok": true,
+     "source": null
+    }
+   },
+   "login_invocation": "COPILOT_HOME=\"/Users/reel-operator/.wicked-worker/copilot\" copilot login",
+   "signed_in": true
+  },
+  {
+   "key": "opencode",
+   "display_name": "opencode",
+   "binary": "opencode",
+   "enabled_for_council": true,
+   "auth": "not_required",
+   "login_check": "unverified",
+   "council_eligible": true,
+   "health": {
+    "status": "active",
+    "since": "2026-10-10T00:00:00Z"
+   },
+   "governance_mode": {
+    "unscoped": {
+     "mode": "none",
+     "class": null,
+     "source": "none",
+     "reason": "r",
+     "fence": {
+      "write_roots": [],
+      "read_roots": [],
+      "network": "open"
+     }
+    },
+    "scoped": {
+     "mode": "none",
+     "class": null,
+     "source": "none",
+     "reason": "r",
+     "fence": {
+      "write_roots": [],
+      "read_roots": [],
+      "network": "open"
+     }
+    },
+    "scoped_bound": {
+     "mode": "none",
+     "class": null,
+     "source": "none",
+     "reason": "r",
+     "fence": {
+      "write_roots": [],
+      "read_roots": [],
+      "network": "open"
+     }
+    }
+   },
+   "chat_admission": {
+    "unscoped": {
+     "ok": true,
+     "source": null
+    },
+    "scoped": {
+     "ok": false,
+     "source": "scope"
+    },
+    "scoped_bound": {
+     "ok": true,
+     "source": null
+    }
+   },
+   "free_tier": "OpenCode Zen free models (no account needed)",
+   "optIn": true,
+   "optInNote": "opt-in: known to stall",
+   "login_invocation": "XDG_CONFIG_HOME=\"/Users/reel-operator/.wicked-worker/opencode/config\" XDG_DATA_HOME=\"/Users/reel-operator/.wicked-worker/opencode/data\" XDG_STATE_HOME=\"/Users/reel-operator/.wicked-worker/opencode/state\" opencode auth login",
+   "logout_invocation": "XDG_CONFIG_HOME=\"/Users/reel-operator/.wicked-worker/opencode/config\" XDG_DATA_HOME=\"/Users/reel-operator/.wicked-worker/opencode/data\" XDG_STATE_HOME=\"/Users/reel-operator/.wicked-worker/opencode/state\" opencode auth logout",
+   "version_pin": {
+    "cli": "opencode",
+    "binary": "opencode",
+    "pinned": "1.17.18",
+    "observed": "opencode v2.0.25",
+    "matched": false,
+    "governanceClaimed": true,
+    "disclosure": "seat 'opencode' is admitted to ACP input governance against the exact build `1.17.18`, but `opencode` reports `opencode v2.0.25` \u2014 so its governance fails closed and every governed turn on it runs unchecked. Re-prove the installed build and move the pin, or pin the install so it cannot drift."
+   },
+   "signed_in": false
+  },
+  {
+   "key": "claude-eval",
+   "display_name": "Claude Code (judge)",
+   "binary": "claude",
+   "category": "judge",
+   "enabled_for_council": true,
+   "auth": "signed_out",
+   "login_check": "status",
+   "council_eligible": false,
+   "health": {
+    "status": "active",
+    "since": "2026-10-10T00:00:00Z"
+   }
+  }
+ ],
+ "seatGovernance": {
+  "rosterFile": null,
+  "hostBoundary": "sandbox-exec",
+  "seats": [
+   {
+    "cli": "claude",
+    "enabled_for_council": true,
+    "transport": "acp",
+    "os_sandbox": false,
+    "class": null,
+    "input_governance": "enforced",
+    "governance_mode": {
+     "unscoped": {
+      "mode": "admitted",
+      "class": null,
+      "source": "acp_input_governance",
+      "reason": "r",
+      "fence": {
+       "write_roots": [],
+       "read_roots": [],
+       "network": "open"
+      }
+     },
+     "scoped": {
+      "mode": "admitted",
+      "class": null,
+      "source": "acp_input_governance",
+      "reason": "r",
+      "fence": {
+       "write_roots": [],
+       "read_roots": [],
+       "network": "open"
+      }
+     },
+     "scoped_bound": {
+      "mode": "admitted",
+      "class": null,
+      "source": "acp_input_governance",
+      "reason": "r",
+      "fence": {
+       "write_roots": [],
+       "read_roots": [],
+       "network": "open"
+      }
+     }
+    }
+   },
+   {
+    "cli": "codex",
+    "enabled_for_council": true,
+    "transport": "acp",
+    "os_sandbox": false,
+    "class": null,
+    "input_governance": "unenforced",
+    "governance_mode": {
+     "unscoped": {
+      "mode": "os_sandbox",
+      "class": null,
+      "source": "self",
+      "reason": "r",
+      "fence": {
+       "write_roots": [],
+       "read_roots": [],
+       "network": "open"
+      }
+     },
+     "scoped": {
+      "mode": "os_sandbox",
+      "class": null,
+      "source": "self",
+      "reason": "r",
+      "fence": {
+       "write_roots": [],
+       "read_roots": [],
+       "network": "open"
+      }
+     },
+     "scoped_bound": {
+      "mode": "os_sandbox",
+      "class": null,
+      "source": "self",
+      "reason": "r",
+      "fence": {
+       "write_roots": [],
+       "read_roots": [],
+       "network": "open"
+      }
+     }
+    }
+   },
+   {
+    "cli": "pi",
+    "enabled_for_council": true,
+    "transport": "acp",
+    "os_sandbox": false,
+    "class": null,
+    "input_governance": "enforced",
+    "governance_mode": {
+     "unscoped": {
+      "mode": "admitted",
+      "class": null,
+      "source": "acp_input_governance",
+      "reason": "r",
+      "fence": {
+       "write_roots": [],
+       "read_roots": [],
+       "network": "open"
+      }
+     },
+     "scoped": {
+      "mode": "admitted",
+      "class": null,
+      "source": "acp_input_governance",
+      "reason": "r",
+      "fence": {
+       "write_roots": [],
+       "read_roots": [],
+       "network": "open"
+      }
+     },
+     "scoped_bound": {
+      "mode": "admitted",
+      "class": null,
+      "source": "acp_input_governance",
+      "reason": "r",
+      "fence": {
+       "write_roots": [],
+       "read_roots": [],
+       "network": "open"
+      }
+     }
+    }
+   },
+   {
+    "cli": "copilot",
+    "enabled_for_council": true,
+    "transport": "acp",
+    "os_sandbox": false,
+    "class": null,
+    "input_governance": "unenforced",
+    "governance_mode": {
+     "unscoped": {
+      "mode": "none",
+      "class": null,
+      "source": "none",
+      "reason": "r",
+      "fence": {
+       "write_roots": [],
+       "read_roots": [],
+       "network": "open"
+      }
+     },
+     "scoped": {
+      "mode": "none",
+      "class": null,
+      "source": "none",
+      "reason": "r",
+      "fence": {
+       "write_roots": [],
+       "read_roots": [],
+       "network": "open"
+      }
+     },
+     "scoped_bound": {
+      "mode": "os_sandbox",
+      "class": null,
+      "source": "repo_boundary",
+      "reason": "r",
+      "fence": {
+       "write_roots": [],
+       "read_roots": [],
+       "network": "open"
+      }
+     }
+    }
+   },
+   {
+    "cli": "opencode",
+    "enabled_for_council": true,
+    "transport": "acp",
+    "os_sandbox": false,
+    "class": null,
+    "input_governance": "unenforced",
+    "governance_mode": {
+     "unscoped": {
+      "mode": "none",
+      "class": null,
+      "source": "none",
+      "reason": "r",
+      "fence": {
+       "write_roots": [],
+       "read_roots": [],
+       "network": "open"
+      }
+     },
+     "scoped": {
+      "mode": "none",
+      "class": null,
+      "source": "none",
+      "reason": "r",
+      "fence": {
+       "write_roots": [],
+       "read_roots": [],
+       "network": "open"
+      }
+     },
+     "scoped_bound": {
+      "mode": "none",
+      "class": null,
+      "source": "none",
+      "reason": "r",
+      "fence": {
+       "write_roots": [],
+       "read_roots": [],
+       "network": "open"
+      }
+     }
+    }
+   }
+  ]
+ },
+ "acp": {
+  "byCli": {
+   "claude": {
+    "sessionsStarted": 387,
+    "fallbacks": 8,
+    "fallbackKinds": {
+     "binary_unavailable": 4,
+     "session_died": 4
+    },
+    "lastStartedTs": null,
+    "lastFallbackTs": null
+   },
+   "pi": {
+    "sessionsStarted": 123,
+    "fallbacks": 209,
+    "fallbackKinds": {
+     "read_only_requires_wrapped": 145,
+     "binary_unavailable": 64
+    },
+    "lastStartedTs": null,
+    "lastFallbackTs": null
+   },
+   "copilot": {
+    "sessionsStarted": 4,
+    "fallbacks": 2,
+    "fallbackKinds": {
+     "read_only_requires_wrapped": 2
+    },
+    "lastStartedTs": null,
+    "lastFallbackTs": null
+   },
+   "opencode": {
+    "sessionsStarted": 139,
+    "fallbacks": 1,
+    "fallbackKinds": {
+     "session_died": 1
+    },
+    "lastStartedTs": null,
+    "lastFallbackTs": null
+   }
+  }
+ },
+ "record": {
+  "days": 7,
+  "since": 0,
+  "until": 0,
+  "runsRead": 32,
+  "truncated": false,
+  "seats": [
+   {
+    "cli": "claude",
+    "units": 91,
+    "gated": 87,
+    "firstPass": 75,
+    "rework": 20,
+    "stalls": 4,
+    "benched": 0,
+    "benchReasons": {},
+    "costUsd": null,
+    "costedUsage": 0,
+    "byPhase": {}
+   },
+   {
+    "cli": "codex",
+    "units": 17,
+    "gated": 16,
+    "firstPass": 13,
+    "rework": 4,
+    "stalls": 0,
+    "benched": 0,
+    "benchReasons": {},
+    "costUsd": null,
+    "costedUsage": 0,
+    "byPhase": {}
+   },
+   {
+    "cli": "pi",
+    "units": 42,
+    "gated": 39,
+    "firstPass": 34,
+    "rework": 13,
+    "stalls": 3,
+    "benched": 0,
+    "benchReasons": {},
+    "costUsd": null,
+    "costedUsage": 0,
+    "byPhase": {}
+   },
+   {
+    "cli": "copilot",
+    "units": 4,
+    "gated": 3,
+    "firstPass": 3,
+    "rework": 3,
+    "stalls": 0,
+    "benched": 3,
+    "benchReasons": {
+     "quota_exhausted (no success in the run)": 3
+    },
+    "costUsd": null,
+    "costedUsage": 0,
+    "byPhase": {}
+   },
+   {
+    "cli": "opencode",
+    "units": 17,
+    "gated": 13,
+    "firstPass": 13,
+    "rework": 4,
+    "stalls": 3,
+    "benched": 0,
+    "benchReasons": {},
+    "costUsd": null,
+    "costedUsage": 0,
+    "byPhase": {}
+   }
+  ]
+ }
+}
