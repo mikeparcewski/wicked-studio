@@ -84,7 +84,10 @@ export const useDeskStream = create<DeskStreamState>((set, get) => ({
     const got = events.map((e) => itemOf(e, false)).filter((x): x is StreamItem => x !== null);
     set((s) => {
       const have = new Set(s.items.map((i) => i.key));
-      const merged = [...s.items, ...got.filter((g) => !have.has(g.key))].sort((a, b) => b.at - a.at).slice(0, CAP);
+      // A live frame's key carries an arrival suffix; its content key (before '#') is what the durable
+      // copy of the same frame matches, so a frame seen live and then backfilled shows once.
+      const liveSeen = new Set(s.items.filter((i) => i.live).map((i) => i.key.split('#')[0]));
+      const merged = [...s.items, ...got.filter((g) => !have.has(g.key) && !liveSeen.has(keyOf(g.event, true)))].sort((a, b) => b.at - a.at).slice(0, CAP);
       return { items: merged, backfilled: true };
     });
   },

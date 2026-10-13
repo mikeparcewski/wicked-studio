@@ -30,6 +30,8 @@ const KINDS: readonly { value: AnalyzeKind; label: string }[] = [
 const MAX_CARDS = 4;
 
 const costCache = new Map<string, number | null>();
+/** Jobs whose usage is only partly priced: their total is a floor ("at least"), never a best-cost verdict. */
+const partlyPriced = new Set<string>();
 
 export function DeskUnderstand({ runsShown = true, agents, agentsRead = 'done', agentsTruncated = false, filters = null, filterAgent = null, filterWorkflow = null, workflows, kept, allRuns, days, onDays, project, projectLabel, projectName, agentName, governance, navigate, pathOf, now }: {
   /** The job list has been read (a project's page: its member reads too). Before it, nothing is compared. */
@@ -98,6 +100,7 @@ export function DeskUnderstand({ runsShown = true, agents, agentsRead = 'done', 
       api.getRunEvents(id, ['cliUsage']).then(({ events }) => {
         const priced = (events as unknown as { costUsd?: unknown }[]).filter((e) => typeof e.costUsd === 'number');
         costCache.set(id, priced.length === 0 ? null : priced.reduce((a, e) => a + (e.costUsd as number), 0));
+        if (priced.length > 0 && priced.length < events.length) partlyPriced.add(id); else partlyPriced.delete(id);
       }, () => costCache.set(id, null)).finally(() => { if (live) bump((n) => n + 1); });
     }
     return () => { live = false; };
@@ -114,7 +117,7 @@ export function DeskUnderstand({ runsShown = true, agents, agentsRead = 'done', 
   const view: CompareView = useMemo(() => {
     if (kind === 'agents') return compareAgents(sel.map((id) => agents.find((a) => a.cli === id)!).filter(Boolean), governance, agentColor);
     if (kind === 'workflows') return compareWorkflows(sel.map((id) => workflows.find((w) => w.key === id)!).filter(Boolean));
-    if (kind === 'jobs') return compareJobs(sel.map((id) => kept.find((v) => v.session.id === id)!).filter(Boolean), (v) => jobTitle(v.session), agentName, (id) => (costCache.has(id) ? costCache.get(id)! : undefined));
+    if (kind === 'jobs') return compareJobs(sel.map((id) => kept.find((v) => v.session.id === id)!).filter(Boolean), (v) => jobTitle(v.session), agentName, (id) => (costCache.has(id) ? costCache.get(id)! : undefined), (id) => partlyPriced.has(id));
     return compareProjects(sel, kept, projectName);
   }, [kind, sel.join('|'), agents, workflows, kept, governance, agentName, projectName, launch, costRev]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -126,7 +129,7 @@ export function DeskUnderstand({ runsShown = true, agents, agentsRead = 'done', 
   // A new window, scope or filter starts the analysis over: an edited intent or a pending launch
   // belongs to the comparison it was made for.
   useEffect(() => { setEditing(null); launchGen.current += 1; setLaunch({ phase: 'idle' }); }, [days, project, filters, filterAgent, filterWorkflow]);
-  const runInsights = (): void => { void generateInsights(insightKey, insightPrompt(kind, view, days, evidenceLinks(kind, items, days, apiBase(), project), scopeWords) + (kind === 'agents' && agentsTruncated ? `\n${PARTIAL_RECORD_NOTE}. The agent comparison is partial.` : '')); };
+  const runInsights = (): void => { if (!runsShown) return; void generateInsights(insightKey, insightPrompt(kind, view, days, evidenceLinks(kind, items, days, apiBase(), project), scopeWords) + (kind === 'agents' && agentsTruncated ? `\n${PARTIAL_RECORD_NOTE}. The agent comparison is partial.` : '')); };
   const agentsUnread = kind === 'agents' && agentsRead !== 'done';
   const agentsUnavailable = kind === 'agents' && filterWorkflow !== null;
   const suggestions = [
@@ -174,7 +177,7 @@ export function DeskUnderstand({ runsShown = true, agents, agentsRead = 'done', 
             );
           })}
           <div className="wk-und-add" ref={addRef}>
-            <button type="button" data-testid="desk-pick-add" className="wk-und-chip wk-und-chip--add" aria-expanded={adding} disabled={addable.length === 0 || sel.length >= MAX_CARDS}
+            <button type="button" data-testid="desk-pick-add" className="wk-und-chip wk-und-chip--add" aria-expanded={adding} disabled={!runsShown || addable.length === 0 || sel.length >= MAX_CARDS}
               title={sel.length >= MAX_CARDS ? `At most ${MAX_CARDS} side by side` : undefined} onClick={() => setAdding((v) => !v)}><Plus size={13} aria-hidden />Add</button>
             {adding && (
               <ul className="wk-und-menu wk-overlay" role="menu" data-testid="desk-pick-menu">
@@ -250,7 +253,7 @@ export function DeskUnderstand({ runsShown = true, agents, agentsRead = 'done', 
               ))}
             </div>
           )}
-          {view.cards.length > 0 && (
+          {runsShown && view.cards.length > 0 && (
             <section className="wk-card wk-und-differ" data-testid="desk-compare-differ" aria-labelledby="desk-differ-title" aria-busy={insight.phase === 'loading'}>
               <header className="wk-und-differ-head">
                 <h3 id="desk-differ-title" className="wk-desk2-title">Where they differ</h3>

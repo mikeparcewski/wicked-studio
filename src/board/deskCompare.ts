@@ -89,7 +89,9 @@ export function compareWorkflows(rows: readonly WorkflowRow[]): CompareView {
   return { rows: metrics.map((m) => m.label), cards, differ: differ.slice(0, 5), small: rows.reduce((a, r) => a + r.jobs, 0) < SMALL };
 }
 
-export function compareJobs(runs: readonly SessionView[], title: (v: SessionView) => string, agentName: (cli: string) => string, cost: (id: string) => number | null | undefined): CompareView {
+export function compareJobs(runs: readonly SessionView[], title: (v: SessionView) => string, agentName: (cli: string) => string, cost: (id: string) => number | null | undefined,
+  /** The job's usage is only partly priced: its total is a floor, shown as "at least" and never marked best. */
+  partial: (id: string) => boolean = () => false): CompareView {
   const metrics: Metric[] = [
     { label: 'Workflow', better: null, value: () => null, text: (i) => workflowOf(runs[i]!).label },
     { label: 'Outcome', better: null, value: () => null, text: (i) => outcomeOf(runs[i]!) ?? 'Unknown', tone: (i) => (outcomeOf(runs[i]!) === 'Failed' ? 'warn' : outcomeOf(runs[i]!) === 'Finished' ? 'ok' : null), tag: true },
@@ -97,7 +99,8 @@ export function compareJobs(runs: readonly SessionView[], title: (v: SessionView
     { label: 'Steps done', better: 'high', value: (i) => (runs[i]!.units ?? []).filter((u) => u.status === 'done').length, text: (i) => `${(runs[i]!.units ?? []).filter((u) => u.status === 'done').length} of ${(runs[i]!.units ?? []).length}` },
     { label: 'Steps refused', better: 'low', value: (i) => (runs[i]!.units ?? []).filter((u) => u.status === 'rejected').length, text: (i) => String((runs[i]!.units ?? []).filter((u) => u.status === 'rejected').length) },
     { label: 'Agents', better: null, value: () => null, text: (i) => agentsOf(runs[i]!).map(agentName).join(', ') || '—' },
-    { label: 'Spend', better: 'low', value: (i) => cost(runs[i]!.session.id) ?? null, text: (i) => { const c = cost(runs[i]!.session.id); return c === undefined ? 'Reading…' : money(c); } },
+    { label: 'Spend', better: 'low', value: (i) => (partial(runs[i]!.session.id) ? null : cost(runs[i]!.session.id) ?? null),
+      text: (i) => { const id = runs[i]!.session.id; const c = cost(id); return c === undefined ? 'Reading…' : c !== null && partial(id) ? `at least ${money(c)}` : money(c); } },
   ];
   const cards = build(runs.map((v) => ({ id: v.session.id, label: title(v), color: null })), metrics);
   const differ: string[] = [];

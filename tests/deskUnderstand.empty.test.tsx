@@ -175,4 +175,12 @@ describe('Understand empty state and insights', () => {
     expect(secondPrompt).toBe(firstPrompt);
     expect(secondPrompt).toContain(`${words} only`);
   });
+
+  it('codex r5: before the job list is read nothing can be added or asked', () => {
+    render(<DeskUnderstand {...props()} runsShown={false} />);
+    expect(screen.getByTestId('desk-und-reading')).toBeInTheDocument();
+    expect(screen.getByTestId('desk-pick-add')).toBeDisabled();
+    expect(screen.queryByTestId('desk-insights-generate')).not.toBeInTheDocument();
+    expect(mocks.generate).not.toHaveBeenCalled();
+  });
 });

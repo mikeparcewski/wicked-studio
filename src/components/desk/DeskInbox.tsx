@@ -131,7 +131,7 @@ export function DeskInbox({ rows, runs, navigate, now, settled, agentName, extra
           <div className="wk-inbox-list" data-testid="desk-inbox-list">
             {extra}
             {/* Not read yet (or the read failed): never a "nothing needs you" verdict, only the placeholder. */}
-            {settled === 'loading' && rows.length === 0 ? <div data-testid="desk-loading" aria-busy="true"><Skeleton rows={3} variant="row" /></div> : <NeedsYouQueue queue={queue} runs={runs} navigate={navigate} now={now} inbox={look} />}
+            {settled === 'loading' && rows.length === 0 ? <div data-testid="desk-loading" aria-busy="true"><Skeleton rows={3} variant="row" /></div> : <NeedsYouQueue queue={queue} runs={runs} navigate={navigate} now={now} inbox={look} partial={settled === 'partial'} />}
           </div>
           {queue.rows.length > 0 && (
             <div className="wk-inbox-pane" data-testid="desk-inbox-pane" aria-live="polite">
