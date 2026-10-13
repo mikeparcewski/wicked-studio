@@ -13,6 +13,7 @@ import { tableAddress } from '../src/components/steer/tableAddress.js';
 import { deskTabPath } from '../src/components/desk/DeskV2.js';
 import { useEvalReportStore } from '../src/store/evalReport.js';
 import { useSteerDraft } from '../src/store/steerDraft.js';
+import { importRuleFile } from '../src/board/steerImport.js';
 
 /**
  * DES-steer-eval §3.2–3.3: the Evaluate numbers carry their context, and Draft rules hands the gaps
@@ -456,5 +457,50 @@ describe('codex r4 fixes', () => {
     finish({ ok: true });
     await waitFor(() => expect(screen.getByTestId('steering-saved-note')).toHaveTextContent('Retired A-1'));
     expect(fields()[1]).toHaveValue('reason B draft');
+  });
+});
+
+describe('agy r1 fixes', () => {
+  it('valid JSON that is not a list says so, and sends nothing', async () => {
+    wire();
+    expect(await importRuleFile({ name: 'one.json', content: '{"id":"R-1"}' }, 'security')).toEqual([{ tone: 'fail', text: 'one.json is not a list of rules.' }]);
+    expect(await importRuleFile({ name: 'null.json', content: 'null' }, 'security')).toEqual([{ tone: 'fail', text: 'null.json is not a list of rules.' }]);
+    expect((await importRuleFile({ name: 'bad.json', content: '{' }, 'security'))[0]?.text).toContain('is not valid JSON');
+    expect(apiFetch.mock.calls.some(([, init]) => (init as { method?: string } | undefined)?.method === 'POST')).toBe(false);
+  });
+
+  it('a refused doctrine doc is named as the doc, not "Rule 1"', async () => {
+    apiFetch.mockResolvedValue({ results: [{ status: 'rejected', name: 'soc2.md', reason: 'duplicate' }] });
+    const notes = await importRuleFile({ name: 'soc2.md', content: '## Rules\n- x' }, 'security');
+    expect(notes[1]?.text).toMatch(/^soc2\.md skipped: /);
+  });
+
+  it('turning one filter off keeps the others, and an empty filtered list says it is the filter', async () => {
+    wire();
+    render(<SteerSurface pathname="/steering/policies" search="?type=security&mcp=1&usage=unused" runs={[]} navigate={vi.fn()} />);
+    const q = (el: HTMLElement): URLSearchParams => new URL(el.getAttribute('href')!, 'http://x').searchParams;
+    const usageClear = await screen.findByTestId('steering-usage-filter-clear');
+    expect([q(usageClear).get('type'), q(usageClear).get('mcp'), q(usageClear).get('usage')]).toEqual(['security', '1', null]);
+    const mcpClear = screen.getByTestId('steer-mcp-clear');
+    expect([q(mcpClear).get('type'), q(mcpClear).get('mcp'), q(mcpClear).get('usage')]).toEqual(['security', null, 'unused']);
+    // No rule here governs MCP calls, so the list is empty because of the filter, not the store.
+    expect(await screen.findByTestId('steer-rules-empty')).toHaveTextContent('No rule matches these filters.');
+  });
+
+  it('a finished import can not be sent twice', async () => {
+    const user = userEvent.setup();
+    wire();
+    render(<SteerSurface pathname="/rules" search="" runs={[]} navigate={vi.fn()} />);
+    await screen.findAllByTestId('rules-row');
+    apiFetch.mockImplementation((path: unknown) => String(path) === '/governance/steering/import'
+      ? Promise.resolve({ results: [{ status: 'imported', ids: ['N-1'] }] })
+      : Promise.reject(new ApiError(404, 'Not Found')));
+    await user.click(screen.getByTestId('steer-import'));
+    const input = screen.getByTestId('steer-import-file').querySelector('input[type=file]') as HTMLInputElement;
+    await user.upload(input, new File(['[{"id":"N-1","statement":"s"}]'], 'batch.json', { type: 'application/json' }));
+    await user.click(screen.getByTestId('steer-import-go'));
+    await screen.findByTestId('steer-import-notes');
+    expect(screen.getByTestId('steer-import-go')).toBeDisabled();
+    expect(apiFetch.mock.calls.filter(([p]) => p === '/governance/steering/import')).toHaveLength(1);
   });
 });

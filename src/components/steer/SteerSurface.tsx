@@ -54,6 +54,17 @@ import { SeStat, SeStats } from './SeStat.js';
 import { useDialogFocus } from './useDialogFocus.js';
 
 /**
+ * A Policies address that keeps the list's filters (type, MCP, never used) together, so turning
+ * one off never drops the others (agy r1; codex r3 #4 for the table link).
+ */
+function steerHref(type: SteeringType | null, mcp: boolean, unused: boolean, table = false): string {
+  const u = new URL(policiesPath(type, mcp), 'http://studio.local');
+  if (unused) u.searchParams.set('usage', 'unused');
+  if (table) u.searchParams.set('view', 'table');
+  return `${u.pathname}${u.search}`;
+}
+
+/**
  * THE STEER SURFACE (DES-steer-eval §2; operator-approved concept `concepts/tabs.html#steer`).
  * Desk v2's Steer tab hosts it; the standalone steering addresses render it too. One page:
  *
@@ -368,7 +379,7 @@ export function SteerSurface({ pathname, search, navigate: navigateRaw, runs = [
         <div><dt>Runs checked</dt><dd>{governed !== null && governed.pct !== null ? `${governed.pct}%` : '—'}</dd></div>
         <div><dt>Never used</dt><dd data-testid="steer-fact-unused">
           {usage !== null ? (usage.unusedIds.length > 0
-            ? <a href={`${policiesPath(type)}${type === null ? '?' : '&'}usage=unused`} onClick={go(`${policiesPath(type)}${type === null ? '?' : '&'}usage=unused`)} className="wk-link">{usage.unusedIds.length}</a>
+            ? <a href={at(steerHref(type, mcpOnly, true))} onClick={go(steerHref(type, mcpOnly, true))} className="wk-link" data-testid="steer-fact-unused-link">{usage.unusedIds.length}</a>
             : 0) : '—'}
         </dd></div>
       </dl>
@@ -409,11 +420,11 @@ export function SteerSurface({ pathname, search, navigate: navigateRaw, runs = [
       {usageAsked && (
         <p className="wk-se-filternote" data-testid="steering-usage-filter-note">
           {unusedIds !== null ? `Only the ${unusedIds.length} rules no run has cited.` : 'Studio’s service can’t say which rules are unused yet, so all rules are shown.'}{' '}
-          <a href={policiesPath(type)} onClick={go(policiesPath(type))} className="wk-link" data-testid="steering-usage-filter-clear">Show all</a>
+          <a href={at(steerHref(type, mcpOnly, false))} onClick={go(steerHref(type, mcpOnly, false))} className="wk-link" data-testid="steering-usage-filter-clear">Show all</a>
         </p>
       )}
       {mcpOnly && (
-        <p className="wk-se-filternote" data-testid="steer-mcp-note">Only rules that govern MCP calls. <a href={policiesPath(type)} onClick={go(policiesPath(type))} className="wk-link">Show all</a></p>
+        <p className="wk-se-filternote" data-testid="steer-mcp-note">Only rules that govern MCP calls. <a href={at(steerHref(type, false, usageAsked))} onClick={go(steerHref(type, false, usageAsked))} className="wk-link" data-testid="steer-mcp-clear">Show all</a></p>
       )}
     </>
   );
@@ -425,12 +436,7 @@ export function SteerSurface({ pathname, search, navigate: navigateRaw, runs = [
   };
   const word = (v: ListView, label: string): string => (counts[v] !== null && v !== 'live' ? `${label} (${counts[v]})` : label);
   // The table opens on the same filters (type, MCP, unused) the list shows (codex r3 #4).
-  const tableHref = ((): string => {
-    const t = new URL(policiesPath(type, mcpOnly), 'http://studio.local');
-    if (usageAsked) t.searchParams.set('usage', 'unused');
-    t.searchParams.set('view', 'table');
-    return `${t.pathname}${t.search}`;
-  })();
+  const tableHref = steerHref(type, mcpOnly, usageAsked, true);
 
   const list = (
     <section className="wk-card wk-se-list" data-testid="steer-rules" aria-label="Rules">
@@ -481,7 +487,7 @@ export function SteerSurface({ pathname, search, navigate: navigateRaw, runs = [
         </div>
       ) : listed.length === 0 ? (
         <p className="wk-se-quiet" data-testid="steer-rules-empty">
-          {needle !== '' ? 'No rule matches that search.' : view === 'retired' ? 'Nothing retired. A retired rule stays listed here, never deleted.' : type !== null ? `No ${STEERING_TYPE_LABELS[type]} rules yet.` : 'No rules in force.'}
+          {needle !== '' ? 'No rule matches that search.' : facet !== null || mcpOnly || unusedIds !== null ? 'No rule matches these filters.' : view === 'retired' ? 'Nothing retired. A retired rule stays listed here, never deleted.' : type !== null ? `No ${STEERING_TYPE_LABELS[type]} rules yet.` : 'No rules in force.'}
         </p>
       ) : (
         <ul className="wk-se-rules" data-testid="steer-rule-list">{listed.slice(0, shown).map(ruleRow)}</ul>
@@ -613,6 +619,9 @@ function ImportDialog({ defaultType, background, onClose, onImported }: {
     try {
       const content = await readFileText(file);
       setNotes(await importRuleFile({ name: file.name, content }, t));
+      // The file is spent: Import stays off until another is chosen, so a second press can't
+      // send the same batch again (agy r1).
+      setFile(null);
       onImported();
     } catch (e) {
       setError(e);

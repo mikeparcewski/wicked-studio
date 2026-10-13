@@ -120,7 +120,7 @@
 .wk-se-dock { padding-bottom: 76px; }
 
 /* Dialogs */
-.wk-se-scrim { position: fixed; inset: 0; z-index: 50; display: flex; align-items: center; justify-content: center; background: var(--scrim); padding: var(--space-4); }
+.wk-se-scrim { position: fixed; inset: 0; z-index: 70; display: flex; align-items: center; justify-content: center; background: var(--scrim); padding: var(--space-4); }
 .wk-se .wk-se-dialog, .wk-se-dialog { width: 480px; max-width: 100%; max-height: calc(100vh - 2 * var(--space-4)); overflow-y: auto; display: flex; flex-direction: column; gap: var(--space-4); padding: var(--space-6); border-radius: var(--radius-xl); background: var(--surface-card); box-shadow: var(--shadow-raised); }
 .wk-se-dialog-title { margin: 0; font-size: var(--text-lg); font-weight: var(--weight-semi); color: var(--ink-high); }
 .wk-se-dialog-sub { margin: 0; font-size: var(--text-sm); color: var(--ink-muted); line-height: var(--leading-body); }
@@ -192,7 +192,7 @@
   .wk-se-types > li { flex: 1 1 140px; }
   .wk-se-rule { grid-template-columns: minmax(0, 1fr) auto; }
   .wk-se-rule .wk-se-sev { grid-column: 1 / -1; }
-  .wk-se-search { width: 100%; margin-left: 0; }
+  .wk-se .wk-se-search, .wk-se-list-tools .wk-se-search { width: 100%; margin-left: 0; }
   .wk-se-dock { width: 100%; position: fixed; z-index: 60; }
 }
 @media (prefers-reduced-motion: reduce) {

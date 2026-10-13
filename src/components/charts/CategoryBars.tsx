@@ -7,8 +7,9 @@ import { Legend } from './Chart.js';
  * (DES-steer-eval §4). The Desk kit (`./Chart.tsx`) draws time series; this is its category twin,
  * on the same open-source library (Recharts) and in the same language: token colours only, the
  * kit's Legend, one tooltip with swatches and a total, rounded row ends, motion off under
- * `prefers-reduced-motion`, a visually hidden data table, and every row reachable as a link when
- * `onPick` is given (the bars are not the only way in: the table below the chart carries the links).
+ * `prefers-reduced-motion`, and a visually hidden data table. `onPick` makes bars and labels
+ * clickable for the pointer only: a caller that passes it must also offer the same moves as real
+ * links or buttons outside the chart (the hidden table carries no controls).
  */
 
 export interface CategorySeries { key: string; label: string; color: string }

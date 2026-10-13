@@ -204,11 +204,11 @@ export function EvaluateSurface({ navigate, title, intro = 'Replay good and bad 
         </button>
         <span className="wk-se-runtile-line" data-testid="evaluate-last-run">
           {ev !== null
-            ? <><span title={absTime(ev.at)}>Last run {relTime(ev.at)}</span>{ev.degraded === 'facet-only' && <> · <span title={EVAL_FACET_MATCH_EXPLANATION}>tags only</span></>}{type !== '' || corpus.trim() !== '' ? ' · options set' : ''}</>
+            ? <><span title={absTime(ev.at)}>Last run {relTime(ev.at)}</span>{ev.degraded === 'facet-only' && <> · <span title={EVAL_FACET_MATCH_EXPLANATION}>tags only</span></>}</>
             : reading ? 'Reading the last run…' : 'Never run'}
         </span>
         <button type="button" className="wk-link wk-se-linkbtn" aria-expanded={optionsOpen} data-testid="evaluate-options-toggle" onClick={() => setOptionsOpen((o) => !o)}>
-          {optionsOpen ? 'Hide options' : 'Type and corpus'}
+          {optionsOpen ? 'Hide options' : type !== '' || corpus.trim() !== '' ? 'Type and corpus (set for the next run)' : 'Type and corpus'}
         </button>
       </li>
     </SeStats>

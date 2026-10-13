@@ -12,8 +12,8 @@
   "studioVersion": "0.7.13",
   "counts": {
     "files": 216,
-    "occurrences": 2642,
-    "static": 2275,
+    "occurrences": 2644,
+    "static": 2277,
     "dynamic": 69,
     "computed": 24
   },
@@ -11342,6 +11342,12 @@
       ]
     },
     {
+      "testId": "steer-fact-unused-link",
+      "files": [
+        "src/components/steer/SteerSurface.tsx"
+      ]
+    },
+    {
       "testId": "steer-health",
       "files": [
         "src/components/steer/SteerSurface.tsx"
@@ -11385,6 +11391,12 @@
     },
     {
       "testId": "steer-import-type",
+      "files": [
+        "src/components/steer/SteerSurface.tsx"
+      ]
+    },
+    {
+      "testId": "steer-mcp-clear",
       "files": [
         "src/components/steer/SteerSurface.tsx"
       ]

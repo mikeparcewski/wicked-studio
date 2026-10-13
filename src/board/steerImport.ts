@@ -27,15 +27,20 @@ export function plainSkip(index: number, raw: string): string {
 }
 
 export async function importRuleFile(doc: { name: string; content: string }, type: SteeringType): Promise<ImportNote[]> {
-  let entries;
-  try {
-    entries = doc.name.toLowerCase().endsWith('.json')
-      ? (JSON.parse(doc.content) as Record<string, unknown>[]).map((rule) => ({ kind: 'rule' as const, rule }))
-      : [{ kind: 'doc' as const, name: doc.name, content: doc.content }];
-  } catch {
-    return [{ tone: 'fail', text: `${doc.name} is not valid JSON — fix the batch or attach it for analysis instead.` }];
+  const isJson = doc.name.toLowerCase().endsWith('.json');
+  let parsed: unknown = null;
+  if (isJson) {
+    try {
+      parsed = JSON.parse(doc.content);
+    } catch {
+      return [{ tone: 'fail', text: `${doc.name} is not valid JSON — fix the batch or attach it for analysis instead.` }];
+    }
+    // Valid JSON that isn't a list (one rule object, null) says so, not "not valid JSON" (agy r1).
+    if (!Array.isArray(parsed)) return [{ tone: 'fail', text: `${doc.name} is not a list of rules.` }];
   }
-  if (!Array.isArray(entries)) return [{ tone: 'fail', text: `${doc.name} is not a list of rules.` }];
+  const entries = isJson
+    ? (parsed as Record<string, unknown>[]).map((rule) => ({ kind: 'rule' as const, rule }))
+    : [{ kind: 'doc' as const, name: doc.name, content: doc.content }];
   try {
     const { results } = await importSteeringRules({ type, entries });
     const outcomes = results.map((r) => importEntryOutcome(r));
@@ -43,7 +48,7 @@ export async function importRuleFile(doc: { name: string; content: string }, typ
     return [
       { tone: ok === outcomes.length ? 'work' : 'gate', text: `${doc.name}: ${ok} of ${outcomes.length} entr${outcomes.length === 1 ? 'y' : 'ies'} imported.` },
       // studio#689 row 49: a skipped entry says why in plain words, not the engine's invariant log.
-      ...outcomes.map((o, i): ImportNote => ({ tone: o.ok ? 'work' : 'fail', text: o.ok ? o.text : plainSkip(i, o.text) })),
+      ...outcomes.map((o, i): ImportNote => ({ tone: o.ok ? 'work' : 'fail', text: o.ok ? o.text : isJson ? plainSkip(i, o.text) : `${doc.name} skipped: ${plainSkip(i, o.text).replace(/^Rule \d+ skipped: /, '')}` })),
     ];
   } catch (e) {
     if (isSteeringUnsupported(e)) return [{ tone: 'gate', text: STEERING_UNSUPPORTED_COPY }];
