@@ -23,7 +23,6 @@ import { McpInspectPage } from './components/editors/McpInspectPage.js';
 import { McpToolsPage } from './components/McpToolsPage.js';
 import { SteeringPage } from './components/SteeringPage.js';
 import { MemoriesPanel } from './components/MemoriesPanel.js';
-import { GovernanceDashboard } from './components/GovernanceDashboard.js';
 import { TestingPage } from './components/TestingPage.js';
 import { LaunchPanel } from './components/LaunchPanel.js';
 import { WorkflowViewer } from './components/WorkflowViewer.js';
@@ -77,7 +76,8 @@ import { useTeamPlanStore } from './store/teamPlan.js';
 import { useWatchStore } from './store/watch.js';
 import { useWatchHydrate } from './hooks/useWatchFeed.js';
 import { WatchtowerPage } from './components/watch/WatchtowerPage.js';
-import { RulesPage } from './components/rules/RulesPage.js';
+import { SteerSurface } from './components/steer/SteerSurface.js';
+import { tableAddress } from './components/steer/tableAddress.js';
 import { attentionBadge } from './board/attention.js';
 import type { CoreEvent, RepoEntry } from './api/types.js';
 import { readSteeringTypeFilter } from './api/steering.js';
@@ -189,20 +189,8 @@ export function App(): React.ReactElement {
         </div>
       );
     }
-    if (r.panel === 'rules') {
-      return (
-        <div className="flex flex-1 overflow-hidden">
-          <RulesPage ruleId={r.ruleId} runs={runs} navigate={navigate} />
-        </div>
-      );
-    }
-    if (r.steeringSection === 'dashboard') {
-      return (
-        <div className="flex flex-1 overflow-hidden">
-          <GovernanceDashboard navigate={navigate} />
-        </div>
-      );
-    }
+    // DES-steer-eval: every steering address is the one Steer surface; the memories keep their page and
+    // `?view=table` keeps the spreadsheet editor (inline cell edits).
     if (r.steeringSection === 'memories') {
       return (
         <div className="flex flex-1 overflow-hidden">
@@ -210,11 +198,17 @@ export function App(): React.ReactElement {
         </div>
       );
     }
-    return (
-      <div className="flex flex-1 overflow-hidden">
-        <SteeringPage type={readSteeringTypeFilter(hs)} navigate={navigate} search={hs} runs={runs} />
-      </div>
-    );
+    if (r.steeringSection === 'policies' && new URLSearchParams(hs).get('view') === 'table') {
+      // The table's own filter moves stay in the table, on the Steer tab's address (tableAddress).
+      const tableNavigate: typeof navigate = (path, opts) => { if (opts === undefined) navigate(tableAddress(path)); else navigate(tableAddress(path), opts); };
+      return (
+        <div className="flex flex-1 overflow-hidden">
+          <SteeringPage type={readSteeringTypeFilter(hs)} navigate={tableNavigate} search={hs} runs={runs} />
+        </div>
+      );
+    }
+    // `address`: moves inside the surface stay on the Steer tab's own address (no redirect, no remount).
+    return <SteerSurface pathname={u.pathname} search={hs} navigate={navigate} runs={runs} address={(p) => deskTabPath('steer', p)} />;
   };
 
   useEventStream(handleEvent);

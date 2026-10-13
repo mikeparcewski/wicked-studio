@@ -11,9 +11,9 @@
   "version": 1,
   "studioVersion": "0.7.13",
   "counts": {
-    "files": 214,
-    "occurrences": 2602,
-    "static": 2244,
+    "files": 216,
+    "occurrences": 2642,
+    "static": 2275,
     "dynamic": 69,
     "computed": 24
   },
@@ -3387,7 +3387,25 @@
       ]
     },
     {
+      "testId": "eval-history-detail-body",
+      "files": [
+        "src/components/EvalHistory.tsx"
+      ]
+    },
+    {
       "testId": "eval-history-detail-error",
+      "files": [
+        "src/components/EvalHistory.tsx"
+      ]
+    },
+    {
+      "testId": "eval-history-detail-other-store",
+      "files": [
+        "src/components/EvalHistory.tsx"
+      ]
+    },
+    {
+      "testId": "eval-history-detail-summary",
       "files": [
         "src/components/EvalHistory.tsx"
       ]
@@ -3423,6 +3441,12 @@
       ]
     },
     {
+      "testId": "eval-history-other-store",
+      "files": [
+        "src/components/EvalHistory.tsx"
+      ]
+    },
+    {
       "testId": "eval-history-row",
       "files": [
         "src/components/EvalHistory.tsx"
@@ -3432,6 +3456,144 @@
       "testId": "eval-history-unavailable",
       "files": [
         "src/components/EvalHistory.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-all-gaps",
+      "files": [
+        "src/components/steer/EvaluateSurface.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-caveat",
+      "files": [
+        "src/components/steer/EvaluateSurface.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-coverage",
+      "files": [
+        "src/components/steer/EvaluateSurface.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-coverage-chart",
+      "files": [
+        "src/components/steer/EvaluateSurface.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-draft",
+      "files": [
+        "src/components/steer/EvaluateSurface.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-filter",
+      "files": [
+        "src/components/steer/EvaluateSurface.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-gap-type",
+      "files": [
+        "src/components/steer/EvaluateSurface.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-gaps",
+      "files": [
+        "src/components/steer/EvaluateSurface.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-gaps-none",
+      "files": [
+        "src/components/steer/EvaluateSurface.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-import",
+      "files": [
+        "src/components/steer/EvaluateSurface.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-last-run",
+      "files": [
+        "src/components/steer/EvaluateSurface.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-measures",
+      "files": [
+        "src/components/steer/EvaluateSurface.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-options",
+      "files": [
+        "src/components/steer/EvaluateSurface.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-options-toggle",
+      "files": [
+        "src/components/steer/EvaluateSurface.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-read-error",
+      "files": [
+        "src/components/steer/EvaluateSurface.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-refresh-failed",
+      "files": [
+        "src/components/steer/EvaluateSurface.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-run",
+      "files": [
+        "src/components/steer/EvaluateSurface.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-stat-caught",
+      "files": [
+        "src/components/steer/EvaluateSurface.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-stat-fp",
+      "files": [
+        "src/components/steer/EvaluateSurface.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-stat-gaps",
+      "files": [
+        "src/components/steer/EvaluateSurface.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-surface",
+      "files": [
+        "src/components/steer/EvaluateSurface.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-tiles",
+      "files": [
+        "src/components/steer/EvaluateSurface.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-unavailable",
+      "files": [
+        "src/components/steer/EvaluateSurface.tsx"
       ]
     },
     {
@@ -4035,120 +4197,6 @@
       ]
     },
     {
-      "testId": "gk-browse-memories",
-      "files": [
-        "src/components/GovernanceDashboard.tsx"
-      ]
-    },
-    {
-      "testId": "gk-browse-memories-manage",
-      "files": [
-        "src/components/GovernanceDashboard.tsx"
-      ]
-    },
-    {
-      "testId": "gk-browse-rules",
-      "files": [
-        "src/components/GovernanceDashboard.tsx"
-      ]
-    },
-    {
-      "testId": "gk-browse-rules-manage",
-      "files": [
-        "src/components/GovernanceDashboard.tsx"
-      ]
-    },
-    {
-      "testId": "gk-memories-empty",
-      "files": [
-        "src/components/GovernanceDashboard.tsx"
-      ]
-    },
-    {
-      "testId": "gk-memories-facet",
-      "files": [
-        "src/components/GovernanceDashboard.tsx"
-      ]
-    },
-    {
-      "testId": "gk-memories-list",
-      "files": [
-        "src/components/GovernanceDashboard.tsx"
-      ]
-    },
-    {
-      "testId": "gk-memories-loading",
-      "files": [
-        "src/components/GovernanceDashboard.tsx"
-      ]
-    },
-    {
-      "testId": "gk-memories-unsupported",
-      "files": [
-        "src/components/GovernanceDashboard.tsx"
-      ]
-    },
-    {
-      "testId": "gk-memory-facets",
-      "files": [
-        "src/components/GovernanceDashboard.tsx"
-      ]
-    },
-    {
-      "testId": "gk-memory-row",
-      "files": [
-        "src/components/GovernanceDashboard.tsx"
-      ]
-    },
-    {
-      "testId": "gk-rule-row",
-      "files": [
-        "src/components/GovernanceDashboard.tsx"
-      ]
-    },
-    {
-      "testId": "gk-rules-empty",
-      "files": [
-        "src/components/GovernanceDashboard.tsx"
-      ]
-    },
-    {
-      "testId": "gk-rules-facet",
-      "files": [
-        "src/components/GovernanceDashboard.tsx"
-      ]
-    },
-    {
-      "testId": "gk-rules-list",
-      "files": [
-        "src/components/GovernanceDashboard.tsx"
-      ]
-    },
-    {
-      "testId": "gk-stat-memories",
-      "files": [
-        "src/components/GovernanceDashboard.tsx"
-      ]
-    },
-    {
-      "testId": "gk-stat-needs-review",
-      "files": [
-        "src/components/GovernanceDashboard.tsx"
-      ]
-    },
-    {
-      "testId": "gk-stat-rules",
-      "files": [
-        "src/components/GovernanceDashboard.tsx"
-      ]
-    },
-    {
-      "testId": "governance-browse",
-      "files": [
-        "src/components/GovernanceDashboard.tsx"
-      ]
-    },
-    {
       "testId": "governance-claims-unavailable",
       "files": [
         "src/components/GovernanceAudit.tsx"
@@ -4161,51 +4209,15 @@
       ]
     },
     {
-      "testId": "governance-dashboard",
-      "files": [
-        "src/components/GovernanceDashboard.tsx"
-      ]
-    },
-    {
       "testId": "governance-enforcement",
       "files": [
         "src/components/GovernanceAudit.tsx"
       ]
     },
     {
-      "testId": "governance-kpis",
-      "files": [
-        "src/components/GovernanceDashboard.tsx"
-      ]
-    },
-    {
-      "testId": "governance-manage-memories",
-      "files": [
-        "src/components/GovernanceDashboard.tsx"
-      ]
-    },
-    {
-      "testId": "governance-manage-policies",
-      "files": [
-        "src/components/GovernanceDashboard.tsx"
-      ]
-    },
-    {
-      "testId": "governance-refresh",
-      "files": [
-        "src/components/GovernanceDashboard.tsx"
-      ]
-    },
-    {
-      "testId": "governance-review",
-      "files": [
-        "src/components/GovernanceDashboard.tsx"
-      ]
-    },
-    {
       "testId": "governance-review-inbox",
       "files": [
-        "src/components/GovernanceDashboard.tsx"
+        "src/components/steer/SteerSurface.tsx"
       ]
     },
     {
@@ -8704,75 +8716,45 @@
       ]
     },
     {
-      "testId": "rules-all",
-      "files": [
-        "src/components/rules/RulesPage.tsx"
-      ]
-    },
-    {
       "testId": "rules-error",
       "files": [
-        "src/components/rules/RulesPage.tsx"
-      ]
-    },
-    {
-      "testId": "rules-group",
-      "files": [
-        "src/components/rules/RulesPage.tsx"
+        "src/components/steer/SteerSurface.tsx"
       ]
     },
     {
       "testId": "rules-loading",
       "files": [
-        "src/components/rules/RulesPage.tsx"
-      ]
-    },
-    {
-      "testId": "rules-manage",
-      "files": [
-        "src/components/rules/RulesPage.tsx"
+        "src/components/steer/SteerSurface.tsx"
       ]
     },
     {
       "testId": "rules-missing",
       "files": [
-        "src/components/rules/RulesPage.tsx"
-      ]
-    },
-    {
-      "testId": "rules-page",
-      "files": [
-        "src/components/rules/RulesPage.tsx"
+        "src/components/steer/SteerSurface.tsx"
       ]
     },
     {
       "testId": "rules-row",
       "files": [
-        "src/components/rules/RulesPage.tsx"
+        "src/components/steer/SteerSurface.tsx"
       ]
     },
     {
       "testId": "rules-row-line",
       "files": [
-        "src/components/rules/RulesPage.tsx"
-      ]
-    },
-    {
-      "testId": "rules-row-more",
-      "files": [
-        "src/components/rules/RulesPage.tsx"
+        "src/components/steer/SteerSurface.tsx"
       ]
     },
     {
       "testId": "rules-row-open",
       "files": [
-        "src/components/rules/RulesPage.tsx"
+        "src/components/steer/SteerSurface.tsx"
       ]
     },
     {
       "testId": "rules-sentence",
       "files": [
-        "src/components/rules/RulesPage.tsx"
+        "src/components/steer/SteerSurface.tsx"
       ]
     },
     {
@@ -11318,9 +11300,237 @@
       ]
     },
     {
+      "testId": "steer-add",
+      "files": [
+        "src/components/steer/SteerSurface.tsx"
+      ]
+    },
+    {
+      "testId": "steer-add-rule",
+      "files": [
+        "src/components/steer/SteerSurface.tsx"
+      ]
+    },
+    {
+      "testId": "steer-chat",
+      "files": [
+        "src/components/steer/SteerSurface.tsx"
+      ]
+    },
+    {
+      "testId": "steer-dock",
+      "files": [
+        "src/components/steer/SteerSurface.tsx"
+      ]
+    },
+    {
+      "testId": "steer-facet",
+      "files": [
+        "src/components/steer/SteerSurface.tsx"
+      ]
+    },
+    {
+      "testId": "steer-fact-checks",
+      "files": [
+        "src/components/steer/SteerSurface.tsx"
+      ]
+    },
+    {
+      "testId": "steer-fact-unused",
+      "files": [
+        "src/components/steer/SteerSurface.tsx"
+      ]
+    },
+    {
+      "testId": "steer-health",
+      "files": [
+        "src/components/steer/SteerSurface.tsx"
+      ]
+    },
+    {
+      "testId": "steer-import",
+      "files": [
+        "src/components/steer/SteerSurface.tsx"
+      ]
+    },
+    {
+      "testId": "steer-import-cancel",
+      "files": [
+        "src/components/steer/SteerSurface.tsx"
+      ]
+    },
+    {
+      "testId": "steer-import-dialog",
+      "files": [
+        "src/components/steer/SteerSurface.tsx"
+      ]
+    },
+    {
+      "testId": "steer-import-file",
+      "files": [
+        "src/components/steer/SteerSurface.tsx"
+      ]
+    },
+    {
+      "testId": "steer-import-go",
+      "files": [
+        "src/components/steer/SteerSurface.tsx"
+      ]
+    },
+    {
+      "testId": "steer-import-notes",
+      "files": [
+        "src/components/steer/SteerSurface.tsx"
+      ]
+    },
+    {
+      "testId": "steer-import-type",
+      "files": [
+        "src/components/steer/SteerSurface.tsx"
+      ]
+    },
+    {
+      "testId": "steer-mcp-note",
+      "files": [
+        "src/components/steer/SteerSurface.tsx"
+      ]
+    },
+    {
+      "testId": "steer-memories",
+      "files": [
+        "src/components/steer/SteerSurface.tsx"
+      ]
+    },
+    {
       "testId": "steer-prefill",
       "files": [
         "src/components/ChatInput.tsx"
+      ]
+    },
+    {
+      "testId": "steer-refresh",
+      "files": [
+        "src/components/steer/SteerSurface.tsx"
+      ]
+    },
+    {
+      "testId": "steer-refresh-failed",
+      "files": [
+        "src/components/steer/SteerSurface.tsx"
+      ]
+    },
+    {
+      "testId": "steer-retire",
+      "files": [
+        "src/components/steer/SteerSurface.tsx"
+      ]
+    },
+    {
+      "testId": "steer-rule-list",
+      "files": [
+        "src/components/steer/SteerSurface.tsx"
+      ]
+    },
+    {
+      "testId": "steer-rules",
+      "files": [
+        "src/components/steer/SteerSurface.tsx"
+      ]
+    },
+    {
+      "testId": "steer-rules-empty",
+      "files": [
+        "src/components/steer/SteerSurface.tsx"
+      ]
+    },
+    {
+      "testId": "steer-search",
+      "files": [
+        "src/components/steer/SteerSurface.tsx"
+      ]
+    },
+    {
+      "testId": "steer-show-all",
+      "files": [
+        "src/components/steer/SteerSurface.tsx"
+      ]
+    },
+    {
+      "testId": "steer-stat-eval",
+      "files": [
+        "src/components/steer/SteerSurface.tsx"
+      ]
+    },
+    {
+      "testId": "steer-stat-review",
+      "files": [
+        "src/components/steer/SteerSurface.tsx"
+      ]
+    },
+    {
+      "testId": "steer-stat-rules",
+      "files": [
+        "src/components/steer/SteerSurface.tsx"
+      ]
+    },
+    {
+      "testId": "steer-surface",
+      "files": [
+        "src/components/steer/SteerSurface.tsx"
+      ]
+    },
+    {
+      "testId": "steer-table",
+      "files": [
+        "src/components/steer/SteerSurface.tsx"
+      ]
+    },
+    {
+      "testId": "steer-tiles",
+      "files": [
+        "src/components/steer/SteerSurface.tsx"
+      ]
+    },
+    {
+      "testId": "steer-type",
+      "files": [
+        "src/components/steer/SteerSurface.tsx"
+      ]
+    },
+    {
+      "testId": "steer-types",
+      "files": [
+        "src/components/steer/SteerSurface.tsx"
+      ]
+    },
+    {
+      "testId": "steer-view",
+      "files": [
+        "src/components/steer/SteerSurface.tsx"
+      ]
+    },
+    {
+      "testId": "steer-view-live",
+      "files": [
+        "src/components/steer/SteerSurface.tsx"
+      ]
+    },
+    {
+      "testId": "steer-view-proposals",
+      "files": [
+        "src/components/steer/SteerSurface.tsx"
+      ]
+    },
+    {
+      "testId": "steer-view-retired",
+      "files": [
+        "src/components/steer/SteerSurface.tsx"
+      ]
+    },
+    {
+      "testId": "steering-add-mcp",
+      "files": [
+        "src/components/steer/SteerSurface.tsx"
       ]
     },
     {
@@ -12114,7 +12324,8 @@
     {
       "testId": "steering-saved-note",
       "files": [
-        "src/components/SteeringPage.tsx"
+        "src/components/SteeringPage.tsx",
+        "src/components/steer/SteerSurface.tsx"
       ]
     },
     {
@@ -12186,7 +12397,8 @@
     {
       "testId": "steering-unseeded",
       "files": [
-        "src/components/SteeringPage.tsx"
+        "src/components/SteeringPage.tsx",
+        "src/components/steer/SteerSurface.tsx"
       ]
     },
     {
@@ -12216,13 +12428,15 @@
     {
       "testId": "steering-usage-filter-clear",
       "files": [
-        "src/components/SteeringPage.tsx"
+        "src/components/SteeringPage.tsx",
+        "src/components/steer/SteerSurface.tsx"
       ]
     },
     {
       "testId": "steering-usage-filter-note",
       "files": [
-        "src/components/SteeringPage.tsx"
+        "src/components/SteeringPage.tsx",
+        "src/components/steer/SteerSurface.tsx"
       ]
     },
     {
@@ -12415,187 +12629,163 @@
     {
       "testId": "testing-corpus-busy",
       "files": [
-        "src/components/TestingPage.tsx"
+        "src/components/steer/EvaluateSurface.tsx"
       ]
     },
     {
       "testId": "testing-corpus-error",
       "files": [
-        "src/components/TestingPage.tsx"
+        "src/components/steer/EvaluateSurface.tsx"
       ]
     },
     {
       "testId": "testing-corpus-file",
       "files": [
-        "src/components/TestingPage.tsx"
+        "src/components/steer/EvaluateSurface.tsx"
       ]
     },
     {
       "testId": "testing-corpus-name",
       "files": [
-        "src/components/TestingPage.tsx"
+        "src/components/steer/EvaluateSurface.tsx"
       ]
     },
     {
       "testId": "testing-corpus-summary",
       "files": [
-        "src/components/TestingPage.tsx"
+        "src/components/steer/EvaluateSurface.tsx"
       ]
     },
     {
       "testId": "testing-corpus-unsupported",
       "files": [
-        "src/components/TestingPage.tsx"
+        "src/components/steer/EvaluateSurface.tsx"
       ]
     },
     {
       "testId": "testing-evals",
       "files": [
-        "src/components/TestingPage.tsx"
-      ]
-    },
-    {
-      "testId": "testing-evals-blocked",
-      "files": [
-        "src/components/TestingPage.tsx"
+        "src/components/steer/EvaluateSurface.tsx"
       ]
     },
     {
       "testId": "testing-evals-busy",
       "files": [
-        "src/components/TestingPage.tsx"
+        "src/components/steer/EvaluateSurface.tsx"
       ]
     },
     {
       "testId": "testing-evals-corpus",
       "files": [
-        "src/components/TestingPage.tsx"
+        "src/components/steer/EvaluateSurface.tsx"
       ]
     },
     {
       "testId": "testing-evals-degraded",
       "files": [
-        "src/components/TestingPage.tsx"
+        "src/components/steer/EvaluateSurface.tsx"
       ]
     },
     {
       "testId": "testing-evals-empty",
       "files": [
-        "src/components/TestingPage.tsx"
+        "src/components/steer/EvaluateSurface.tsx"
       ]
     },
     {
       "testId": "testing-evals-error",
       "files": [
-        "src/components/TestingPage.tsx"
-      ]
-    },
-    {
-      "testId": "testing-evals-frame",
-      "files": [
-        "src/components/TestingPage.tsx"
+        "src/components/steer/EvaluateSurface.tsx"
       ]
     },
     {
       "testId": "testing-evals-gap-detail",
       "files": [
-        "src/components/TestingPage.tsx"
-      ]
-    },
-    {
-      "testId": "testing-evals-gap-hint",
-      "files": [
-        "src/components/TestingPage.tsx"
+        "src/components/steer/EvaluateSurface.tsx"
       ]
     },
     {
       "testId": "testing-evals-gap-toggle",
       "files": [
-        "src/components/TestingPage.tsx"
-      ]
-    },
-    {
-      "testId": "testing-evals-gaps",
-      "files": [
-        "src/components/TestingPage.tsx"
+        "src/components/steer/EvaluateSurface.tsx"
       ]
     },
     {
       "testId": "testing-evals-nearest",
       "files": [
-        "src/components/TestingPage.tsx"
+        "src/components/steer/EvaluateSurface.tsx"
       ]
     },
     {
       "testId": "testing-evals-nearest-empty",
       "files": [
-        "src/components/TestingPage.tsx"
+        "src/components/steer/EvaluateSurface.tsx"
+      ]
+    },
+    {
+      "testId": "testing-evals-nearest-foreign",
+      "files": [
+        "src/components/steer/EvaluateSurface.tsx"
       ]
     },
     {
       "testId": "testing-evals-nearest-link",
       "files": [
-        "src/components/TestingPage.tsx"
+        "src/components/steer/EvaluateSurface.tsx"
       ]
     },
     {
       "testId": "testing-evals-nearest-rule",
       "files": [
-        "src/components/TestingPage.tsx"
-      ]
-    },
-    {
-      "testId": "testing-evals-passed",
-      "files": [
-        "src/components/TestingPage.tsx"
+        "src/components/steer/EvaluateSurface.tsx"
       ]
     },
     {
       "testId": "testing-evals-provenance",
       "files": [
-        "src/components/TestingPage.tsx"
+        "src/components/steer/EvaluateSurface.tsx"
       ]
     },
     {
       "testId": "testing-evals-row",
       "files": [
-        "src/components/TestingPage.tsx"
+        "src/components/steer/EvaluateSurface.tsx"
       ]
     },
     {
       "testId": "testing-evals-run",
       "files": [
-        "src/components/TestingPage.tsx"
+        "src/components/steer/EvaluateSurface.tsx"
       ]
     },
     {
       "testId": "testing-evals-summary",
       "files": [
-        "src/components/TestingPage.tsx"
+        "src/components/steer/EvaluateSurface.tsx"
       ]
     },
     {
       "testId": "testing-evals-table",
       "files": [
-        "src/components/TestingPage.tsx"
+        "src/components/steer/EvaluateSurface.tsx"
       ]
     },
     {
       "testId": "testing-evals-type",
       "files": [
-        "src/components/TestingPage.tsx"
+        "src/components/steer/EvaluateSurface.tsx"
       ]
     },
     {
       "testId": "testing-evals-unsupported",
       "files": [
-        "src/components/TestingPage.tsx"
+        "src/components/steer/EvaluateSurface.tsx"
       ]
     },
     {
       "testId": "testing-evals-verdict-word",
       "files": [
-        "src/components/TestingPage.tsx"
+        "src/components/steer/EvaluateSurface.tsx"
       ]
     },
     {
@@ -13641,7 +13831,8 @@
     {
       "pattern": "*-open",
       "files": [
-        "src/components/desk/DeskParts.tsx"
+        "src/components/desk/DeskParts.tsx",
+        "src/components/steer/SeStat.tsx"
       ]
     },
     {
@@ -14013,6 +14204,7 @@
         "src/components/SkillsPage.tsx",
         "src/components/Tech.tsx",
         "src/components/WhatWhere.tsx",
+        "src/components/charts/CategoryBars.tsx",
         "src/components/charts/Chart.tsx",
         "src/components/dashboardKit.tsx",
         "src/components/desk/DeskParts.tsx",
@@ -14020,6 +14212,7 @@
         "src/components/product/RequirementsBrowser.tsx",
         "src/components/session/AssuranceReceipt.tsx",
         "src/components/session/CodebaseDownload.tsx",
+        "src/components/steer/SeStat.tsx",
         "src/components/ui/Combobox.tsx",
         "src/components/ui/DayBars.tsx",
         "src/components/ui/FilePick.tsx",
@@ -14143,7 +14336,6 @@
         "src/components/SteeringHealth.tsx",
         "src/components/SteeringRuleDrawer.tsx",
         "src/components/SteeringRuleForm.tsx",
-        "src/components/TestingPage.tsx",
         "src/components/session/DeckReview.tsx"
       ]
     },

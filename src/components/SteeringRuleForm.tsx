@@ -181,7 +181,7 @@ export function SteeringRuleFormModal({ type, initial, onClose, onSaved, create 
       >
         <div className="flex items-center gap-2">
           <span className="text-[11px] font-semibold" style={{ color: 'var(--ink-high)' }}>
-            {create ? 'New MCP policy' : `Edit ${form.base.id}`}
+            {create ? (showMcp ? 'New MCP policy' : 'New rule') : `Edit ${form.base.id}`}
           </span>
           <span className="text-[10px]" style={{ color: 'var(--ink-dim)' }}>
             type: {STEERING_TYPE_LABELS[type]}{create ? '' : ' (this page)'}
