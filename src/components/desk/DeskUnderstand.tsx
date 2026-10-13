@@ -31,10 +31,12 @@ const MAX_CARDS = 4;
 
 const costCache = new Map<string, number | null>();
 
-export function DeskUnderstand({ agents, agentsRead = 'done', workflows, kept, allRuns, days, onDays, project, projectLabel, projectName, agentName, governance, navigate, pathOf, now }: {
+export function DeskUnderstand({ agents, agentsRead = 'done', filters = null, workflows, kept, allRuns, days, onDays, project, projectLabel, projectName, agentName, governance, navigate, pathOf, now }: {
   agents: readonly AgentRow[];
   /** The agent record's read: agents are compared only from a record that was read. */
   agentsRead?: 'loading' | 'done' | 'error';
+  /** The refine bar's agent / workflow filters in words ("agent Claude Code, workflow Bug"), or null. */
+  filters?: string | null;
   workflows: readonly WorkflowRow[];
   kept: readonly SessionView[];
   /** Every run (Past analyses lists earlier analysis jobs from all of them). */
@@ -77,7 +79,7 @@ export function DeskUnderstand({ agents, agentsRead = 'done', workflows, kept, a
   const sel = (picked[kind] ?? []).filter((id) => options.some((o) => o.id === id)).slice(0, MAX_CARDS);
   const setSel = (ids: string[]): void => { setPicked((p) => ({ ...p, [kind]: ids })); setEditing(null); launchGen.current += 1; setLaunch({ phase: 'idle' }); };
   const items = sel.map((id) => ({ id, label: options.find((o) => o.id === id)?.label ?? id }));
-  const input = { kind, items, days, api: apiBase(), project, projectLabel };
+  const input = { kind, items, days, api: apiBase(), project, projectLabel, filters };
   const intent = items.length === 0 ? '' : analysisIntent(input);
 
   // Jobs: each card's spend is that job's own usage records, read on demand.
@@ -111,9 +113,12 @@ export function DeskUnderstand({ agents, agentsRead = 'done', workflows, kept, a
 
   // The cache key is the comparison itself: kind, window, scope, selection AND the numbers on the
   // cards, so any filter that changes what is shown asks again rather than reusing another answer.
-  const insightKey = `${kind}|${days}|${project ?? ''}|${sel.join(',')}|${view.cards.map((c) => c.cells.map((x) => x.text).join('/')).join('|')}`;
+  const insightKey = `${kind}|${days}|${project ?? ''}|${filters ?? ''}|${sel.join(',')}|${view.cards.map((c) => c.cells.map((x) => x.text).join('/')).join('|')}`;
   const insight = useDeskInsights(insightKey);
-  const scopeWords = project === null ? null : `the project ${projectLabel ?? project} (${project})`;
+  const scopeWords = [project === null ? null : `the project ${projectLabel ?? project} (${project})`, filters].filter((x): x is string => x !== null && x !== '').join(', ') || null;
+  // A new window, scope or filter starts the analysis over: an edited intent or a pending launch
+  // belongs to the comparison it was made for.
+  useEffect(() => { setEditing(null); launchGen.current += 1; setLaunch({ phase: 'idle' }); }, [days, project, filters]);
   const runInsights = (): void => { void generateInsights(insightKey, insightPrompt(kind, view, days, evidenceLinks(kind, items, days, apiBase(), project), scopeWords)); };
   const agentsUnread = kind === 'agents' && agentsRead !== 'done';
   const suggestions = [

@@ -6,7 +6,7 @@ import { durationWords, RUN_STATUS_FILTERS, runsView, type RunStatusFilter } fro
 import { relTime } from '../../board/relTime.js';
 import type { Navigate } from '../../hooks/useRoute.js';
 import { agentColor, outcomeColor } from '../charts/Chart.js';
-import { Progress, Segmented, Skeleton } from '../ui/index.js';
+import { OverflowMenu, Progress, Segmented, Skeleton, type MenuItem } from '../ui/index.js';
 import { DeskStat } from './DeskParts.js';
 
 const PAGE = 40;
@@ -16,7 +16,9 @@ const PAGE = 40;
  * a status filter and a search, then one table of runs, newest first. A row opens its run.
  * Real data only: the run list App already keeps live over `/ws`.
  */
-export function DeskRuns({ runs, runsShown, refine, refineBar, now, navigate, pathOf, agentName, projectName, title, showProject, panelId, labelledBy }: {
+export function DeskRuns({ runs, runsShown, refine, refineBar, now, navigate, pathOf, agentName, projectName, title, showProject, panelId, labelledBy, rowActions }: {
+  /** A row's own actions (a project's page: Remove from project), or none. */
+  rowActions?: (runId: string, title: string) => readonly MenuItem[];
   panelId?: string;
   labelledBy?: string;
   runs: readonly SessionView[];
@@ -89,6 +91,7 @@ export function DeskRuns({ runs, runsShown, refine, refineBar, now, navigate, pa
                   <th scope="col">Steps</th>
                   <th scope="col" className="wk-num">Started</th>
                   <th scope="col" className="wk-num">Took</th>
+                  {rowActions !== undefined && <th scope="col"><span className="wk-sr-only">Actions</span></th>}
                 </tr>
               </thead>
               <tbody>
@@ -119,6 +122,7 @@ export function DeskRuns({ runs, runsShown, refine, refineBar, now, navigate, pa
                       </td>
                       <td className="wk-num" title={r.startedAt === null ? undefined : new Date(r.startedAt).toLocaleString()}>{r.startedAt === null ? '—' : relTime(r.startedAt, now)}</td>
                       <td className="wk-num">{took ?? '—'}{open && r.endedAt === null && took !== null ? <span className="wk-dr-sub"> so far</span> : null}</td>
+                      {rowActions !== undefined && <td className="wk-dr-acts">{(() => { const acts = rowActions(r.id, r.title); return acts.length === 0 ? null : <OverflowMenu label={`More actions for ${r.title}`} items={acts} data-testid="desk-runs-row-menu" />; })()}</td>}
                     </tr>
                   );
                 })}

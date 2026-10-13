@@ -15,12 +15,8 @@ const BACKFILL_RUNS = 6;
 const SHOWN = 60;
 const QUIET_MS = 10 * 60_000;
 
-let backfillStarted = false;
-/** The last backfill had failed reads: the next mount reads again (Retry does too). */
-let backfillFailed = false;
-
-/** Test hook: the next mount backfills again. */
-export function resetHappeningBackfill(): void { backfillStarted = false; backfillFailed = false; }
+/** Test hook: every scope backfills again on its next mount. */
+export function resetHappeningBackfill(): void { useDeskStream.setState({ backfills: {} }); }
 
 /**
  * HAPPENING NOW = a live stream of what is happening everywhere (DES-desk-v2 §2.2): every run's
@@ -30,7 +26,9 @@ export function resetHappeningBackfill(): void { backfillStarted = false; backfi
  * quiet stream says so, with the age of its last real event. Hovering pauses it (new items wait
  * above, counted, until the pointer leaves). Fixed height; scrolls inside.
  */
-export function DeskHappening({ runs, runsShown, navigate, now, title, pathOf, agentName, scope = null, seeAllPath }: {
+export function DeskHappening({ runs, runsShown, navigate, now, title, pathOf, agentName, scope = null, scopeKey = 'desk', seeAllPath }: {
+  /** Whose backfill this is: 'desk', or the project's id (each scope reads its own recent runs once). */
+  scopeKey?: string;
   /** A project's page: only events of these runs (the stream itself is studio-wide). */
   scope?: ReadonlySet<string> | null;
   /** Where "See all jobs" goes (a project's page scopes it). */
@@ -45,12 +43,11 @@ export function DeskHappening({ runs, runsShown, navigate, now, title, pathOf, a
 }): React.ReactElement {
   const allItems = useDeskStream((s) => s.items);
   const items = useMemo(() => (scope === null ? allItems : allItems.filter((i) => scope.has(i.runId))), [allItems, scope]);
+  const mine = useDeskStream((s) => s.backfills[scopeKey]);
+  const backfilled = mine?.phase === 'done';
   // A backfill whose reads failed is never "quiet": it says what could not be read and offers a retry.
-  const [readIssue, setReadIssue] = useState<{ failed: number; total: number } | null>(null);
-  const [retryTick, setRetryTick] = useState(0);
-  useState(() => { if (backfillFailed) backfillStarted = false; });
-  const retryBackfill = (): void => { backfillStarted = false; setReadIssue(null); setRetryTick((n) => n + 1); };
-  const backfilled = useDeskStream((s) => s.backfilled);
+  const readIssue = mine !== undefined && mine.phase === 'done' && mine.failed > 0 ? { failed: mine.failed, total: mine.total } : null;
+  const retryBackfill = (): void => { useDeskStream.getState().releaseBackfill(scopeKey); };
   const [paused, setPaused] = useState<StreamItem[] | null>(null);
   const [, tick] = useState(0);
   const listRef = useRef<HTMLUListElement | null>(null);
@@ -60,24 +57,18 @@ export function DeskHappening({ runs, runsShown, navigate, now, title, pathOf, a
   // The age ticks.
   useEffect(() => { const t = setInterval(() => tick((n) => n + 1), 30_000); return () => clearInterval(t); }, []);
 
-  // One backfill per page load, once the run list has answered (again after a failed one, on Retry).
+  // One backfill per scope and page load, once the run list has answered (again on Retry). The store
+  // holds the request's outcome, so a run-list update mid-read never loses its failure count.
   useEffect(() => {
-    if (!runsShown || backfillStarted) return;
-    backfillStarted = true;
+    if (!runsShown || mine !== undefined) return;
+    if (!useDeskStream.getState().claimBackfill(scopeKey)) return;
     const recent = [...runs]
       .filter((v) => v.session.archived_at == null)
       .sort((a, b) => activeAt(b) - activeAt(a))
       .slice(0, BACKFILL_RUNS);
-    let live = true;
     void Promise.all(recent.map((v) => api.getRunEvents(v.session.id, [...STREAM_TYPES]).then((r) => ({ ok: true, events: r.events ?? [] }), () => ({ ok: false, events: [] as CoreEvent[] }))))
-      .then((pages) => {
-        useDeskStream.getState().backfill(pages.flatMap((p) => p.events));
-        const failed = pages.filter((p) => !p.ok).length;
-        backfillFailed = failed > 0;
-        if (live) setReadIssue(failed > 0 ? { failed, total: pages.length } : null);
-      });
-    return () => { live = false; };
-  }, [runsShown, runs, retryTick]);
+      .then((pages) => useDeskStream.getState().finishBackfill(scopeKey, pages.flatMap((p) => p.events), pages.filter((p) => !p.ok).length, pages.length));
+  }, [runsShown, runs, mine, scopeKey]);
 
   const view = (paused ?? items).slice(0, SHOWN);
   const waiting = paused === null ? 0 : items.filter((i) => !paused.some((p) => p.key === i.key)).length;

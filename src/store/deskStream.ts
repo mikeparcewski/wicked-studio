@@ -29,11 +29,21 @@ export interface StreamItem {
   event: CoreEvent;
 }
 
+/** One scope's backfill (the Desk, or a project's runs): pending while it reads, then what failed. */
+export interface BackfillState { phase: 'pending' | 'done'; failed: number; total: number }
+
 interface DeskStreamState {
   items: StreamItem[];
   backfilled: boolean;
+  /** Per scope key ('desk' or a project id): each scope backfills its own recent runs once. */
+  backfills: Record<string, BackfillState>;
   ingest: (e: CoreEvent) => void;
   backfill: (events: readonly CoreEvent[]) => void;
+  /** Claims a scope's backfill; false when it was already claimed (pending or done). */
+  claimBackfill: (key: string) => boolean;
+  finishBackfill: (key: string, events: readonly CoreEvent[], failed: number, total: number) => void;
+  /** Retry: the scope reads again on its next render. */
+  releaseBackfill: (key: string) => void;
 }
 
 let arrivals = 0;
@@ -51,9 +61,20 @@ function itemOf(e: CoreEvent, live: boolean): StreamItem | null {
   return { key: live ? `${keyOf(e, true)}#${(arrivals += 1)}` : keyOf(e, false), runId: r.session, type: r.type, at, live, event: e };
 }
 
-export const useDeskStream = create<DeskStreamState>((set) => ({
+export const useDeskStream = create<DeskStreamState>((set, get) => ({
   items: [],
   backfilled: false,
+  backfills: {},
+  claimBackfill: (key) => {
+    if (get().backfills[key] !== undefined) return false;
+    set((s) => ({ backfills: { ...s.backfills, [key]: { phase: 'pending', failed: 0, total: 0 } } }));
+    return true;
+  },
+  finishBackfill: (key, events, failed, total) => {
+    get().backfill(events);
+    set((s) => ({ backfills: { ...s.backfills, [key]: { phase: 'done', failed, total } } }));
+  },
+  releaseBackfill: (key) => set((s) => { const b = { ...s.backfills }; delete b[key]; return { backfills: b }; }),
   ingest: (e) => {
     const it = itemOf(e, true);
     if (it === null) return;
@@ -70,4 +91,4 @@ export const useDeskStream = create<DeskStreamState>((set) => ({
 }));
 
 /** Test hook. */
-export function resetDeskStream(): void { useDeskStream.setState({ items: [], backfilled: false }); arrivals = 0; }
+export function resetDeskStream(): void { useDeskStream.setState({ items: [], backfilled: false, backfills: {} }); arrivals = 0; }

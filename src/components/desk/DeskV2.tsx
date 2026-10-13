@@ -53,6 +53,7 @@ import { DeskStat, RefineSelect } from './DeskParts.js';
 import { DeskRuleLine } from './DeskRuleLine.js';
 import { DeskRuns } from './DeskRuns.js';
 import { scrollBehavior } from '../ui/motion.js';
+import type { MenuItem } from '../ui/index.js';
 import { projectDetailPath } from '../../hooks/useRoute.js';
 import { DeskInbox } from './DeskInbox.js';
 import { DeskUnderstand } from './DeskUnderstand.js';
@@ -70,7 +71,9 @@ import { DeskUnderstand } from './DeskUnderstand.js';
  *  4. One visual language: every widget is a `ChartCard`; every chart is the kit in
  *     `components/charts/Chart.tsx`; a helper has one colour everywhere.
  */
-export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRuns, needRows: rawNeedRows, now, navigate, onCommand, search = '', hosted, projectId, projectHead, workExtra }: {
+export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRuns, needRows: rawNeedRows, now, navigate, onCommand, search = '', hosted, projectId, projectHead, workExtra, runActions }: {
+  /** The Runs tab's per-row actions (a project's page: Remove from project). */
+  runActions?: (runId: string, title: string) => readonly MenuItem[];
   /** Renders a hosted tab's page for an address (App owns those pages); `project` = the project page's id. */
   hosted?: (tab: HostedTab, at: string, project: string | null) => React.ReactNode;
   /**
@@ -234,6 +237,8 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
     ? { kind: 'needs-crew', text: 'Spend can’t be split by workflow yet: the agent record has no workflow filter.' }
     : record.phase === 'loading' || (byProjectOn && byProject.phase === 'loading') ? { kind: 'loading' }
       : byProjectOn && projectIds.length > 0 && projectsUnread === projectIds.length ? { kind: 'error', text: 'Couldn’t read spend for any project in this window.' }
+      // Some projects unread and the rest at $0: unknown, never a zero verdict.
+      : byProjectOn && projectsUnread > 0 && spendTotal === 0 ? { kind: 'error', text: `Couldn’t read spend for ${projectsUnread} of ${projectIds.length} projects, and the rest recorded none.` }
       : !byProjectOn && spend === null ? { kind: 'error', text: 'Couldn’t read spend for this window.' }
         : spendTotal === 0 ? { kind: 'empty', text: `No priced usage in the last ${refine.days} days${refined(refine) ? ' in this view' : ''}.` } : { kind: 'ready' };
   const money = (v: number): string => (v === 0 ? '$0' : v < 1 ? `$${v.toFixed(2)}` : `$${Math.round(v)}`);
@@ -360,7 +365,7 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
         </ul>
       </div>
       <DeskHappening runs={runs} runsShown={runsShown} navigate={navigate} now={now} title={(v) => jobTitle(v.session)} pathOf={pathOfRun} agentName={agentName}
-        scope={projectRunIds} {...(projectId !== undefined ? { seeAllPath: everythingPath({ tab: 'sessions', project: projectId }) } : {})} />
+        scope={projectRunIds} scopeKey={projectId ?? 'desk'} {...(projectId !== undefined ? { seeAllPath: everythingPath({ tab: 'sessions', project: projectId }) } : {})} />
       {/* B9: the one sentence about a rule remembered since the last visit (null when there is none). */}
       {projectId === undefined && <DeskRuleLine navigate={navigate} />}
       {workExtra}
@@ -402,7 +407,9 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
             <DeskStat icon={Send} tone="accent" label="Delivered" testId="desk-stat-delivered" value={runsShown ? String(delivered) : null}
               note={delivered === 0 ? 'no job delivered in this window' : `of ${kept.length} started`} />
             <DeskStat icon={Wallet} tone="accent" label="Spend" testId="desk-stat-spend" value={spendState.kind === 'ready' || spendState.kind === 'empty' ? moneyWords(spendTotal) : spendState.kind === 'loading' ? null : '—'}
-              note={!few && winSpend.phase === 'done' && winSpend.previous !== null && refine.agent === null ? deltaWords(spendTotal, winSpend.previous, (d) => moneyWords(Math.abs(d)), refine.days) : unpriced ? 'priced usage only' : `last ${refine.days} days`} spark={spendTotals} />
+              note={spendState.kind === 'error' ? spendState.text
+                : projectsUnread > 0 ? `at least: ${projectsUnread} ${projectsUnread === 1 ? 'project' : 'projects'} not read`
+                : !few && winSpend.phase === 'done' && winSpend.previous !== null && refine.agent === null ? deltaWords(spendTotal, winSpend.previous, (d) => moneyWords(Math.abs(d)), refine.days) : unpriced ? 'priced usage only' : `last ${refine.days} days`} spark={spendTotals} />
             <DeskStat icon={CheckCircle2} tone="ok" label="Quality checks passed" testId="desk-stat-quality" value={qualityValue}
               note={qualityNote} loading={quality.tally === null} loadingNote="Reading checks…" />
           </ul>
@@ -427,7 +434,7 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
             </ChartCard>
             <section className="wk-card wk-viz wk-viz-insights" aria-labelledby="desk-insights-title" data-testid="desk-insights">
               <header className="wk-viz-head"><h3 id="desk-insights-title" className="wk-viz-title">Improve this</h3><span className="wk-viz-meta">{refine.groupBy === 'agent' ? 'by agent' : refine.groupBy === 'workflow' ? 'by workflow' : 'from the evidence'}</span></header>
-              <InsightCards items={groupTips(tips, refine.groupBy)} loading={!runsShown || record.phase === 'loading'} recordFailed={record.phase === 'error'} navigate={navigate} />
+              <InsightCards items={groupTips(tips, refine.groupBy)} loading={!runsShown || record.phase === 'loading'} recordFailed={record.phase === 'error'} navigate={navigate} workPath={tabPath('work')} />
               {(refine.groupBy === 'project' || refine.groupBy === 'outcome') && <p className="wk-viz-note">Not grouped by {refine.groupBy}: each finding is about an agent, a workflow or failed jobs.</p>}
             </section>
           </div>
@@ -451,7 +458,7 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
   );
 
   const runsTab = (
-    <DeskRuns runs={runs} runsShown={runsShown} refine={refine} refineBar={refineBarOf(false)} now={now} navigate={navigate} pathOf={pathOfRun}
+    <DeskRuns {...(runActions !== undefined ? { rowActions: runActions } : {})} runs={runs} runsShown={runsShown} refine={refine} refineBar={refineBarOf(false)} now={now} navigate={navigate} pathOf={pathOfRun}
       panelId={panelId('runs')} labelledBy={tabId('runs')}
       agentName={agentName} projectName={projectName} title={jobTitleOf} showProject={projectId === undefined} />
   );
@@ -469,7 +476,9 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
 
   const understand = (
     <div role="tabpanel" id={panelId('understand')} aria-labelledby={tabId('understand')} data-testid="desk-understand" className="wk-understand">
-      <DeskUnderstand agents={agents} agentsRead={record.phase} workflows={flows} kept={kept} allRuns={runs} days={refine.days} onDays={(d) => set('days', d)} project={scope}
+      <DeskUnderstand agents={agents} agentsRead={record.phase}
+        filters={[refine.agent !== null ? `agent ${agentName(refine.agent)}` : null, refine.workflow !== null ? `workflow ${workflowLabel(refine.workflow)}` : null].filter((x): x is string => x !== null).join(', ') || null}
+        workflows={flows} kept={kept} allRuns={runs} days={refine.days} onDays={(d) => set('days', d)} project={scope}
         projectLabel={scope === null ? null : projectName(scope)} projectName={projectName} agentName={agentName} governance={governance}
         navigate={navigate} pathOf={pathOfRun} now={now} />
     </div>
@@ -569,7 +578,7 @@ const TONE_ICON = { fail: CircleAlert, warn: AlertTriangle, info: Info } as cons
 const INSIGHTS_SHOWN = 3;
 
 /** The top improve-this callouts as compact cards; "See all" opens the rest in place. */
-function InsightCards({ items, loading, recordFailed, navigate }: { items: readonly Callout[]; loading: boolean; recordFailed: boolean; navigate: Navigate }): React.ReactElement {
+function InsightCards({ items, loading, recordFailed, navigate, workPath }: { items: readonly Callout[]; loading: boolean; recordFailed: boolean; navigate: Navigate; workPath: string }): React.ReactElement {
   const [all, setAll] = useState(false);
   if (loading) return <div className="wk-insight-grid"><div className="wk-card wk-insight"><Skeleton rows={2} variant="line" /></div></div>;
   // A failed agent record says so: no verdict about agents is drawn from a read that did not land.
@@ -589,8 +598,18 @@ function InsightCards({ items, loading, recordFailed, navigate }: { items: reado
               <a href={c.evidence.path} data-testid="desk-callout-evidence" className="wk-link wk-insight-link"
                 onClick={(e) => {
                   e.preventDefault();
-                  if (c.evidence.path.startsWith('#')) document.getElementById(c.evidence.path.slice(1))?.scrollIntoView({ behavior: scrollBehavior(), block: 'start' });
-                  else navigate(c.evidence.path);
+                  // An in-page anchor (the inbox) lives on the Work tab: go there, then bring it into view once it mounts.
+                  if (c.evidence.path.startsWith('#')) {
+                    const id = c.evidence.path.slice(1);
+                    navigate(workPath);
+                    const t0 = Date.now();
+                    const find = (): void => {
+                      const el = document.getElementById(id);
+                      if (el !== null) { el.scrollIntoView({ behavior: scrollBehavior(), block: 'start' }); (el.querySelector<HTMLElement>('[role="tab"][aria-selected="true"], button, a') ?? el).focus?.(); }
+                      else if (Date.now() - t0 < 2000) requestAnimationFrame(find);
+                    };
+                    requestAnimationFrame(find);
+                  } else navigate(c.evidence.path);
                 }}>Evidence: {c.evidence.label}</a>
             </li>
           );
