@@ -281,6 +281,16 @@ describe('the verb table (§1.3)', () => {
     }
   });
 
+  it('codex r3: New Demo on the unfiled project\'s own route (projectId default) opens the form unfiled, never another project\'s draft', () => {
+    resetLaunchWizard();
+    useLaunchWizard.getState().openWith({ workflowId: DEMO_VIDEO_ID, projectId: 'q3-review-deck', composerKey: 'desk' });
+    useLaunchWizard.getState().close();
+    renderPalette({ projectId: 'default' });
+    fireEvent.change(screen.getByTestId('palette-input'), { target: { value: '> new demo' } });
+    fireEvent.click(rows().find((r) => r.textContent?.includes('New Demo'))!);
+    expect(useLaunchWizard.getState().draft).toMatchObject({ workflowId: DEMO_VIDEO_ID, projectId: 'default' });
+  });
+
   it('studio#664: New Demo with no project in scope opens the same form unfiled (no picker stage first)', () => {
     resetLaunchWizard();
     renderPalette({ projectId: null });

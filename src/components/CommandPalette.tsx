@@ -575,8 +575,10 @@ export function CommandPalette({
           // codex r2: a page that names Unfiled (`?project=default`) opens the form unfiled, named, like
           // the videos door — so a draft saved for another project never resumes there. With no
           // project in view, the saved draft resumes (the wizard's rule).
-          const unfiledHere = projectId === null && new URLSearchParams(window.location.search).get('project') === UNFILED_MOUNT;
-          openLaunchWizard({ workflowId: DEMO_VIDEO_ID, projectId: unfiledHere ? UNFILED_MOUNT : projectId !== UNFILED_MOUNT ? projectId : null, composerKey: pageComposerKey() ?? 'desk' });
+          // codex r3: so does a route that IS the unfiled project (`/projects/default`).
+          const unfiledHere = projectId === UNFILED_MOUNT
+            || (projectId === null && new URLSearchParams(window.location.search).get('project') === UNFILED_MOUNT);
+          openLaunchWizard({ workflowId: DEMO_VIDEO_ID, projectId: unfiledHere ? UNFILED_MOUNT : projectId, composerKey: pageComposerKey() ?? 'desk' });
         },
       },
       { name: 'New Project', action: () => setShowNewProject(true) },
