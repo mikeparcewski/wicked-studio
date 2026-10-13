@@ -264,7 +264,7 @@ export function spendSeries(reads: readonly (SeatRecordResponse | null)[], agent
       if (TOOL_SEATS.has(d.cli) || (agent !== null && d.cli !== agent)) continue;
       const row = by.get(d.cli) ?? new Array<number>(n).fill(0);
       // bucket index: k = 0 is the newest bucket; the series runs oldest first.
-      row[n - 1 - k] = round2(d.costUsd ?? 0);
+      if (d.costUsd !== null) row[n - 1 - k] = round2(d.costUsd);
       by.set(d.cli, row);
     }
   }
@@ -272,6 +272,17 @@ export function spendSeries(reads: readonly (SeatRecordResponse | null)[], agent
     .filter(([, v]) => v.some((x) => x > 0))
     .sort((a, b) => sum(b[1]) - sum(a[1]))
     .map(([key, values]) => ({ key, label: names.agent(key), values }));
+}
+
+/** Price availability alongside the numeric buckets: zero-filled chart data alone cannot
+ * distinguish no usage from usage without a price. Apply the same helper scope as spendSeries. */
+export function spendAvailability(reads: readonly (SeatRecordResponse | null)[], agent: string | null): { unpriced: boolean; anyPriced: boolean } | null {
+  if (reads.length === 0 || reads.some((r) => r === null || r.truncated)) return null;
+  const seats = reads.flatMap((r) => r!.seats).filter((s) => !TOOL_SEATS.has(s.cli) && (agent === null || s.cli === agent));
+  return {
+    unpriced: seats.some((s) => s.costUsd === null && s.units > 0),
+    anyPriced: seats.some((s) => typeof s.costUsd === 'number'),
+  };
 }
 
 export interface AgentRow {
@@ -595,7 +606,7 @@ export function spendTotals(reads: readonly (SeatRecordResponse | null)[], agent
   for (let k = 0; k < n; k += 1) {
     for (const d of seatDeltas(reads[k]!, k === 0 ? null : reads[k - 1]!)) {
       if (TOOL_SEATS.has(d.cli) || (agent !== null && d.cli !== agent)) continue;
-      out[n - 1 - k] = round2((out[n - 1 - k] ?? 0) + (d.costUsd ?? 0));
+      if (d.costUsd !== null) out[n - 1 - k] = round2((out[n - 1 - k] ?? 0) + d.costUsd);
     }
   }
   return out;
