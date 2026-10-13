@@ -397,9 +397,16 @@ export interface AcpFallbacks { [cli: string]: { fallbacks: number; kinds: Recor
 
 const ENFORCED_ROUTES = new Set(['governance_requires_wrapped', 'read_only_requires_wrapped']);
 
-/** Deliberate wrapped routing preserves enforcement; only other kinds count. */
+/**
+ * Deliberate wrapped routing preserves enforcement; every other fallback counts. Counted as the total
+ * minus the deliberate kinds, so a fallback whose kind is missing from the breakdown still counts.
+ */
 export function uncheckedFallbacks(f: AcpFallbacks[string] | undefined): number {
-  return Object.entries(f?.kinds ?? {}).reduce((n, [kind, count]) => n + (ENFORCED_ROUTES.has(kind) ? 0 : count), 0);
+  if (f === undefined) return 0;
+  const kinds = Object.entries(f.kinds ?? {});
+  const enforced = kinds.reduce((n, [kind, count]) => n + (ENFORCED_ROUTES.has(kind) ? count : 0), 0);
+  const listed = kinds.reduce((n, [, count]) => n + count, 0);
+  return Math.max(0, Math.max(f.fallbacks ?? 0, listed) - enforced);
 }
 
 export function governanceOf(cli: string, acp: AcpFallbacks | null, roster: readonly RosterSeat[]): { word: string; tone: 'ok' | 'warn' | null; unchecked: number } {

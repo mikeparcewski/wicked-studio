@@ -191,7 +191,7 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
     let alive = true;
     getDiagnostics().then((d) => {
       const by = d.acp?.byCli;
-      if (alive) setAcp(by === undefined ? null : Object.fromEntries(Object.entries(by).map(([k, v]) => [k, { fallbacks: v.fallbacks, kinds: v.fallbackKinds }])));
+      if (alive) setAcp(by === undefined ? null : Object.fromEntries(Object.entries(by).map(([k, v]) => [k, { fallbacks: v.fallbacks ?? 0, kinds: v.fallbackKinds ?? {} }])));
     }, () => undefined);
     return () => { alive = false; };
   }, []);
@@ -231,6 +231,8 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
 
   const runsState: ChartState = !runsShown ? { kind: 'loading' } : kept.length === 0 ? { kind: 'empty', text: `No jobs started in the last ${refine.days} days${refined(refine) ? ' in this view' : ''}.` } : { kind: 'ready' };
   const spendTruncated = byProjectOn ? byProject.truncated : record.truncated;
+  // Truncated: by agent nothing is drawn (spendSeries is null); by project the complete projects still
+  // draw and the truncated ones are left out as unread, under the partial note.
   const spendState: ChartState = spendTruncated && spendTotal === 0
     ? { kind: 'needs-crew', text: `${PARTIAL_RECORD_NOTE}. Spend buckets affected by truncated reads are unknown and omitted.` }
     : projectId === 'default'

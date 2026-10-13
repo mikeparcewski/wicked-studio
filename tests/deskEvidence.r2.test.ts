@@ -155,6 +155,9 @@ describe('Desk evidence review fixes', () => {
     expect(callouts({ agents: [], workflows: [], acp: { claude: routed }, openFailures: 0, days: 7 })).toEqual([]);
     const mixed = { fallbacks: 15, kinds: { ...routed.kinds, binary_unavailable: 1, session_died: 2, auth_required: 1, auth_failed: 1, unauthenticated: 1, future_kind: 2 } };
     expect(uncheckedFallbacks(mixed)).toBe(8);
+    // A fallback with no kind in the breakdown still counts (total minus the deliberate kinds).
+    expect(uncheckedFallbacks({ fallbacks: 3, kinds: {} })).toBe(3);
+    expect(uncheckedFallbacks({ fallbacks: 5, kinds: { governance_requires_wrapped: 2 } })).toBe(3);
     expect(governanceOf('claude', { claude: mixed }, []).word).toContain('8 times across all recorded runs (studio-wide)');
     const tips = callouts({ agents: [], workflows: [], acp: { claude: mixed }, openFailures: 0, days: 7, scoped: true });
     expect(tips[0]?.title).toContain('8 times across all recorded runs (studio-wide)');
