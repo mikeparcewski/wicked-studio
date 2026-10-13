@@ -71,3 +71,12 @@
    never loses its project name (in the phone drawer the whole rail is the scroller). The shadow paints
    the rail over the scroller's top padding, so no sliver of a row peeks above a stuck header. */
 .wk-rail-group-row { position: sticky; top: 0; z-index: 2; background: var(--surface-rail); box-shadow: 0 -8px 0 var(--surface-rail); }
+
+/* A session list that runs past the rail's fold fades out over its last 32 px instead of slicing a
+   row in half at the Workspace divider; at the list's end (or when it fits) there is no fade. A sticky
+   overlay, not a mask: a mask would also clip the fixed "Move to project" picker opened inside it. */
+.wk-rail-groups[data-more-below="true"]::after {
+  content: ''; display: block; position: sticky; bottom: -8px; height: 32px; margin-top: -32px;
+  pointer-events: none; z-index: 3;
+  background: linear-gradient(to bottom, transparent, var(--surface-rail));
+}

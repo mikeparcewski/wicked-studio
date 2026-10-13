@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, ChevronRight, ChevronUp, LayoutGrid, Plus } from 'lucide-react';
 import { useDeliveredNow } from '../../store/postHocDeliver.js';
 import type { SessionView } from '../../api/types.js';
@@ -75,6 +75,20 @@ export function SessionRail({ runs, needRows, navigate, pathname, runsKnown = tr
   const { collapsed, toggle } = useRailCollapsed();
   // "Show N more" is this page's choice only; folding is what persists.
   const [showAll, setShowAll] = useState<ReadonlySet<string>>(() => new Set());
+  // A list that runs past the rail's fold fades out at its foot instead of slicing a row in half;
+  // the fade lifts once the list is scrolled to its end.
+  const groupsRef = useRef<HTMLDivElement>(null);
+  const [moreBelow, setMoreBelow] = useState(false);
+  useEffect(() => {
+    const el = groupsRef.current;
+    if (el === null) return undefined;
+    const check = (): void => setMoreBelow(el.scrollHeight - el.scrollTop - el.clientHeight > 2);
+    check();
+    el.addEventListener('scroll', check, { passive: true });
+    const ro = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(check);
+    ro?.observe(el);
+    return () => { el.removeEventListener('scroll', check); ro?.disconnect(); };
+  }, [groups, collapsed, showAll]);
   const flipShowAll = (key: string): void => setShowAll((prev) => {
     const next = new Set(prev);
     if (next.has(key)) next.delete(key); else next.add(key);
@@ -113,7 +127,7 @@ export function SessionRail({ runs, needRows, navigate, pathname, runsKnown = tr
         <WatchPill needRows={needRows} runs={runs} navigate={navigate} onFeed={pathname === '/watch'} />
       </div>
 
-      <div className="wk-rail-groups">
+      <div ref={groupsRef} className="wk-rail-groups" data-more-below={moreBelow ? 'true' : 'false'}>
         <MoveProjectStatus />
         {groups.map((g, gi) => {
           const key = g.projectId ?? '';
