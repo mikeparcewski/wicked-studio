@@ -392,8 +392,8 @@ export function lapsedSeatChores(roster: readonly RosterSeat[] | null): DeskChor
         key: `seat:${s.key}`,
         seat: s.key,
         rosterSeat: s,
-        title: `An AI helper (${name}) needs signing in again`,
-        line: 'No sign-in seen for it — work given to it may pause or move to another helper',
+        title: `An AI agent (${name}) needs signing in again`,
+        line: 'No sign-in seen for it — work given to it may pause or move to another agent',
         action: { label: 'Sign in', path: '/system' },
       };
     });

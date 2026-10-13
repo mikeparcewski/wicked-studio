@@ -95,7 +95,7 @@ MONO = """() => {
 }"""
 
 TECH_PROBE = """() => {
-  const host = document.querySelector('[data-testid="desk-story"]');
+  const host = document.querySelector('[data-testid="desk-inbox-count"]');
   const s = document.createElement('span');
   s.setAttribute('data-tech', 'on'); s.className = 'font-mono'; s.textContent = 'run 1234abcd';
   host.appendChild(s);
@@ -151,7 +151,7 @@ with sync_playwright() as p:
         page.get_by_test_id("needs-you-queue").wait_for(state="visible", timeout=10000)
         page.wait_for_function("() => document.documentElement.getAttribute('data-theme') === 'wicked-light'",
                                timeout=10000)
-        page.wait_for_function("() => !!document.querySelector('[data-testid=\"desk-story\"]')", timeout=10000)
+        page.wait_for_function("() => !!document.querySelector('[data-testid=\"desk-inbox-count\"]')", timeout=10000)
     except Exception as e:  # noqa: BLE001
         page.screenshot(path=str(SHOTS / "desk-look-missing.png"))
         fail("desk-renders", f"the Desk under wicked-light did not render: {e}")
@@ -170,7 +170,7 @@ with sync_playwright() as p:
     set_fixture(origin, view_prefs={"technical_details": True})
     page.goto(f"{origin}/", wait_until="networkidle")
     page.get_by_test_id("desk").wait_for(state="visible", timeout=15000)
-    page.wait_for_function("() => !!document.querySelector('[data-testid=\"desk-story\"]')", timeout=10000)
+    page.wait_for_function("() => !!document.querySelector('[data-testid=\"desk-inbox-count\"]')", timeout=10000)
     tech_font = page.evaluate(TECH_PROBE)
     check("tech-details-keep-mono", "mono" in tech_font.lower(), font=tech_font)
     set_fixture(origin, view_prefs=None)

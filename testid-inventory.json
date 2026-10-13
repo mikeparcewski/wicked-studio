@@ -11,10 +11,10 @@
   "version": 1,
   "studioVersion": "0.7.13",
   "counts": {
-    "files": 205,
-    "occurrences": 2403,
-    "static": 2096,
-    "dynamic": 63,
+    "files": 213,
+    "occurrences": 2537,
+    "static": 2186,
+    "dynamic": 69,
     "computed": 24
   },
   "static": [
@@ -1615,13 +1615,135 @@
     {
       "testId": "desk",
       "files": [
-        "src/components/desk/Desk.tsx"
+        "src/components/desk/Desk.tsx",
+        "src/components/desk/DeskV2.tsx"
+      ]
+    },
+    {
+      "testId": "desk-agents-pending",
+      "files": [
+        "src/components/desk/AgentsTabPending.tsx"
+      ]
+    },
+    {
+      "testId": "desk-analyses-past",
+      "files": [
+        "src/components/desk/DeskUnderstand.tsx"
+      ]
+    },
+    {
+      "testId": "desk-analyze-confirm",
+      "files": [
+        "src/components/desk/DeskUnderstand.tsx"
+      ]
+    },
+    {
+      "testId": "desk-analyze-done",
+      "files": [
+        "src/components/desk/DeskUnderstand.tsx"
+      ]
+    },
+    {
+      "testId": "desk-analyze-edit",
+      "files": [
+        "src/components/desk/DeskUnderstand.tsx"
+      ]
+    },
+    {
+      "testId": "desk-analyze-edit-text",
+      "files": [
+        "src/components/desk/DeskUnderstand.tsx"
+      ]
+    },
+    {
+      "testId": "desk-analyze-failed",
+      "files": [
+        "src/components/desk/DeskUnderstand.tsx"
+      ]
+    },
+    {
+      "testId": "desk-analyze-intent",
+      "files": [
+        "src/components/desk/DeskUnderstand.tsx"
+      ]
+    },
+    {
+      "testId": "desk-analyze-start",
+      "files": [
+        "src/components/desk/DeskUnderstand.tsx"
       ]
     },
     {
       "testId": "desk-as-of",
       "files": [
-        "src/components/desk/Desk.tsx"
+        "src/components/desk/Desk.tsx",
+        "src/components/desk/DeskV2.tsx"
+      ]
+    },
+    {
+      "testId": "desk-block-agents",
+      "files": [
+        "src/components/desk/DeskV2.tsx"
+      ]
+    },
+    {
+      "testId": "desk-block-failed",
+      "files": [
+        "src/components/desk/DeskV2.tsx"
+      ]
+    },
+    {
+      "testId": "desk-block-running",
+      "files": [
+        "src/components/desk/DeskV2.tsx"
+      ]
+    },
+    {
+      "testId": "desk-block-spend",
+      "files": [
+        "src/components/desk/DeskV2.tsx"
+      ]
+    },
+    {
+      "testId": "desk-blocks",
+      "files": [
+        "src/components/desk/DeskV2.tsx"
+      ]
+    },
+    {
+      "testId": "desk-callout",
+      "files": [
+        "src/components/desk/DeskV2.tsx"
+      ]
+    },
+    {
+      "testId": "desk-callout-evidence",
+      "files": [
+        "src/components/desk/DeskV2.tsx"
+      ]
+    },
+    {
+      "testId": "desk-callouts",
+      "files": [
+        "src/components/desk/DeskV2.tsx"
+      ]
+    },
+    {
+      "testId": "desk-callouts-more",
+      "files": [
+        "src/components/desk/DeskV2.tsx"
+      ]
+    },
+    {
+      "testId": "desk-callouts-none",
+      "files": [
+        "src/components/desk/DeskV2.tsx"
+      ]
+    },
+    {
+      "testId": "desk-callouts-partial",
+      "files": [
+        "src/components/desk/DeskV2.tsx"
       ]
     },
     {
@@ -1631,51 +1753,89 @@
       ]
     },
     {
+      "testId": "desk-chart-jobs",
+      "files": [
+        "src/components/desk/DeskV2.tsx"
+      ]
+    },
+    {
+      "testId": "desk-chart-spend",
+      "files": [
+        "src/components/desk/DeskV2.tsx"
+      ]
+    },
+    {
       "testId": "desk-chat",
       "files": [
-        "src/components/desk/Desk.tsx"
+        "src/components/desk/Desk.tsx",
+        "src/components/desk/DeskV2.tsx"
       ]
     },
     {
       "testId": "desk-chore",
       "files": [
-        "src/components/desk/Desk.tsx"
+        "src/components/desk/Desk.tsx",
+        "src/components/desk/DeskV2.tsx"
       ]
     },
     {
       "testId": "desk-chore-group",
       "files": [
-        "src/components/desk/Desk.tsx"
+        "src/components/desk/Desk.tsx",
+        "src/components/desk/DeskV2.tsx"
       ]
     },
     {
       "testId": "desk-chore-group-toggle",
       "files": [
-        "src/components/desk/Desk.tsx"
+        "src/components/desk/Desk.tsx",
+        "src/components/desk/DeskV2.tsx"
       ]
     },
     {
       "testId": "desk-chore-line",
       "files": [
-        "src/components/desk/Desk.tsx"
+        "src/components/desk/Desk.tsx",
+        "src/components/desk/DeskV2.tsx"
       ]
     },
     {
       "testId": "desk-chore-signin",
       "files": [
-        "src/components/desk/Desk.tsx"
+        "src/components/desk/Desk.tsx",
+        "src/components/desk/DeskV2.tsx"
       ]
     },
     {
       "testId": "desk-chores",
       "files": [
-        "src/components/desk/Desk.tsx"
+        "src/components/desk/Desk.tsx",
+        "src/components/desk/DeskV2.tsx"
       ]
     },
     {
       "testId": "desk-command",
       "files": [
-        "src/components/desk/Desk.tsx"
+        "src/components/desk/Desk.tsx",
+        "src/components/desk/DeskV2.tsx"
+      ]
+    },
+    {
+      "testId": "desk-compare-best",
+      "files": [
+        "src/components/desk/DeskUnderstand.tsx"
+      ]
+    },
+    {
+      "testId": "desk-compare-card",
+      "files": [
+        "src/components/desk/DeskUnderstand.tsx"
+      ]
+    },
+    {
+      "testId": "desk-compare-differ",
+      "files": [
+        "src/components/desk/DeskUnderstand.tsx"
       ]
     },
     {
@@ -1697,9 +1857,141 @@
       ]
     },
     {
+      "testId": "desk-groupby",
+      "files": [
+        "src/components/desk/DeskV2.tsx"
+      ]
+    },
+    {
+      "testId": "desk-happening",
+      "files": [
+        "src/components/desk/DeskHappening.tsx"
+      ]
+    },
+    {
       "testId": "desk-headline",
       "files": [
         "src/board/objectActions.ts"
+      ]
+    },
+    {
+      "testId": "desk-hosted-note",
+      "files": [
+        "src/components/desk/DeskV2.tsx"
+      ]
+    },
+    {
+      "testId": "desk-inbox",
+      "files": [
+        "src/components/desk/DeskInbox.tsx"
+      ]
+    },
+    {
+      "testId": "desk-inbox-all",
+      "files": [
+        "src/components/desk/DeskInbox.tsx"
+      ]
+    },
+    {
+      "testId": "desk-inbox-count",
+      "files": [
+        "src/components/desk/DeskInbox.tsx"
+      ]
+    },
+    {
+      "testId": "desk-inbox-dock",
+      "files": [
+        "src/components/desk/DeskInbox.tsx"
+      ]
+    },
+    {
+      "testId": "desk-inbox-done",
+      "files": [
+        "src/components/desk/DeskInbox.tsx"
+      ]
+    },
+    {
+      "testId": "desk-inbox-done-confirm",
+      "files": [
+        "src/components/desk/DeskInbox.tsx"
+      ]
+    },
+    {
+      "testId": "desk-inbox-gate",
+      "files": [
+        "src/components/desk/DeskInbox.tsx"
+      ]
+    },
+    {
+      "testId": "desk-inbox-list",
+      "files": [
+        "src/components/desk/DeskInbox.tsx"
+      ]
+    },
+    {
+      "testId": "desk-inbox-open",
+      "files": [
+        "src/components/desk/DeskInbox.tsx"
+      ]
+    },
+    {
+      "testId": "desk-inbox-pane",
+      "files": [
+        "src/components/desk/DeskInbox.tsx"
+      ]
+    },
+    {
+      "testId": "desk-inbox-read",
+      "files": [
+        "src/components/desk/DeskInbox.tsx"
+      ]
+    },
+    {
+      "testId": "desk-inbox-retry",
+      "files": [
+        "src/components/desk/DeskInbox.tsx"
+      ]
+    },
+    {
+      "testId": "desk-inbox-row",
+      "files": [
+        "src/components/NeedsYouQueue.tsx"
+      ]
+    },
+    {
+      "testId": "desk-insights",
+      "files": [
+        "src/components/desk/DeskV2.tsx"
+      ]
+    },
+    {
+      "testId": "desk-insights-done",
+      "files": [
+        "src/components/desk/DeskUnderstand.tsx"
+      ]
+    },
+    {
+      "testId": "desk-insights-error",
+      "files": [
+        "src/components/desk/DeskUnderstand.tsx"
+      ]
+    },
+    {
+      "testId": "desk-insights-generate",
+      "files": [
+        "src/components/desk/DeskUnderstand.tsx"
+      ]
+    },
+    {
+      "testId": "desk-insights-loading",
+      "files": [
+        "src/components/desk/DeskUnderstand.tsx"
+      ]
+    },
+    {
+      "testId": "desk-insights-regenerate",
+      "files": [
+        "src/components/desk/DeskUnderstand.tsx"
       ]
     },
     {
@@ -1729,7 +2021,20 @@
     {
       "testId": "desk-loading",
       "files": [
-        "src/components/desk/Desk.tsx"
+        "src/components/desk/Desk.tsx",
+        "src/components/desk/DeskInbox.tsx"
+      ]
+    },
+    {
+      "testId": "desk-more",
+      "files": [
+        "src/components/desk/DeskV2.tsx"
+      ]
+    },
+    {
+      "testId": "desk-more-panel",
+      "files": [
+        "src/components/desk/DeskV2.tsx"
       ]
     },
     {
@@ -1753,13 +2058,45 @@
     {
       "testId": "desk-new-job",
       "files": [
-        "src/components/desk/Desk.tsx"
+        "src/components/desk/Desk.tsx",
+        "src/components/desk/DeskV2.tsx"
       ]
     },
     {
       "testId": "desk-new-project",
       "files": [
-        "src/components/desk/Desk.tsx"
+        "src/components/desk/Desk.tsx",
+        "src/components/desk/DeskV2.tsx"
+      ]
+    },
+    {
+      "testId": "desk-outcomes-table",
+      "files": [
+        "src/components/charts/Chart.tsx"
+      ]
+    },
+    {
+      "testId": "desk-pick-add",
+      "files": [
+        "src/components/desk/DeskUnderstand.tsx"
+      ]
+    },
+    {
+      "testId": "desk-pick-chip",
+      "files": [
+        "src/components/desk/DeskUnderstand.tsx"
+      ]
+    },
+    {
+      "testId": "desk-pick-kind",
+      "files": [
+        "src/components/desk/DeskUnderstand.tsx"
+      ]
+    },
+    {
+      "testId": "desk-pick-menu",
+      "files": [
+        "src/components/desk/DeskUnderstand.tsx"
       ]
     },
     {
@@ -1878,6 +2215,54 @@
       ]
     },
     {
+      "testId": "desk-range",
+      "files": [
+        "src/components/desk/DeskV2.tsx"
+      ]
+    },
+    {
+      "testId": "desk-refine",
+      "files": [
+        "src/components/desk/DeskV2.tsx"
+      ]
+    },
+    {
+      "testId": "desk-refine-agent",
+      "files": [
+        "src/components/desk/DeskV2.tsx"
+      ]
+    },
+    {
+      "testId": "desk-refine-project",
+      "files": [
+        "src/components/desk/DeskV2.tsx"
+      ]
+    },
+    {
+      "testId": "desk-refine-reset",
+      "files": [
+        "src/components/desk/DeskV2.tsx"
+      ]
+    },
+    {
+      "testId": "desk-refine-workflow",
+      "files": [
+        "src/components/desk/DeskV2.tsx"
+      ]
+    },
+    {
+      "testId": "desk-report",
+      "files": [
+        "src/components/desk/DeskV2.tsx"
+      ]
+    },
+    {
+      "testId": "desk-reports",
+      "files": [
+        "src/components/desk/DeskV2.tsx"
+      ]
+    },
+    {
       "testId": "desk-rule-line",
       "files": [
         "src/components/desk/DeskRuleLine.tsx"
@@ -1890,16 +2275,120 @@
       ]
     },
     {
+      "testId": "desk-runs",
+      "files": [
+        "src/components/desk/DeskRuns.tsx"
+      ]
+    },
+    {
+      "testId": "desk-runs-count",
+      "files": [
+        "src/components/desk/DeskRuns.tsx"
+      ]
+    },
+    {
+      "testId": "desk-runs-empty",
+      "files": [
+        "src/components/desk/DeskRuns.tsx"
+      ]
+    },
+    {
       "testId": "desk-runs-failed",
       "files": [
-        "src/components/desk/Desk.tsx"
+        "src/components/desk/Desk.tsx",
+        "src/components/desk/DeskV2.tsx"
+      ]
+    },
+    {
+      "testId": "desk-runs-list",
+      "files": [
+        "src/components/desk/DeskRuns.tsx"
+      ]
+    },
+    {
+      "testId": "desk-runs-more",
+      "files": [
+        "src/components/desk/DeskRuns.tsx"
+      ]
+    },
+    {
+      "testId": "desk-runs-open",
+      "files": [
+        "src/components/desk/DeskRuns.tsx"
+      ]
+    },
+    {
+      "testId": "desk-runs-progress",
+      "files": [
+        "src/components/desk/DeskRuns.tsx"
+      ]
+    },
+    {
+      "testId": "desk-runs-row",
+      "files": [
+        "src/components/desk/DeskRuns.tsx"
+      ]
+    },
+    {
+      "testId": "desk-runs-search",
+      "files": [
+        "src/components/desk/DeskRuns.tsx"
+      ]
+    },
+    {
+      "testId": "desk-runs-stat-failed",
+      "files": [
+        "src/components/desk/DeskRuns.tsx"
+      ]
+    },
+    {
+      "testId": "desk-runs-stat-finished",
+      "files": [
+        "src/components/desk/DeskRuns.tsx"
+      ]
+    },
+    {
+      "testId": "desk-runs-stat-running",
+      "files": [
+        "src/components/desk/DeskRuns.tsx"
+      ]
+    },
+    {
+      "testId": "desk-runs-stat-waiting",
+      "files": [
+        "src/components/desk/DeskRuns.tsx"
+      ]
+    },
+    {
+      "testId": "desk-runs-stat-window",
+      "files": [
+        "src/components/desk/DeskRuns.tsx"
+      ]
+    },
+    {
+      "testId": "desk-runs-stats",
+      "files": [
+        "src/components/desk/DeskRuns.tsx"
+      ]
+    },
+    {
+      "testId": "desk-runs-status",
+      "files": [
+        "src/components/desk/DeskRuns.tsx"
+      ]
+    },
+    {
+      "testId": "desk-runs-table",
+      "files": [
+        "src/components/desk/DeskRuns.tsx"
       ]
     },
     {
       "testId": "desk-see-everything",
       "files": [
         "src/board/objectActions.ts",
-        "src/components/desk/Desk.tsx"
+        "src/components/desk/Desk.tsx",
+        "src/components/desk/DeskHappening.tsx"
       ]
     },
     {
@@ -1911,7 +2400,8 @@
     {
       "testId": "desk-sheet-open",
       "files": [
-        "src/components/desk/Desk.tsx"
+        "src/components/desk/Desk.tsx",
+        "src/components/desk/DeskV2.tsx"
       ]
     },
     {
@@ -1923,13 +2413,15 @@
     {
       "testId": "desk-signin-lead",
       "files": [
-        "src/components/desk/Desk.tsx"
+        "src/components/desk/Desk.tsx",
+        "src/components/desk/DeskV2.tsx"
       ]
     },
     {
       "testId": "desk-stat-delivered",
       "files": [
-        "src/components/desk/Desk.tsx"
+        "src/components/desk/Desk.tsx",
+        "src/components/desk/DeskV2.tsx"
       ]
     },
     {
@@ -1939,15 +2431,29 @@
       ]
     },
     {
+      "testId": "desk-stat-quality",
+      "files": [
+        "src/components/desk/DeskV2.tsx"
+      ]
+    },
+    {
       "testId": "desk-stat-spend",
       "files": [
-        "src/components/desk/Desk.tsx"
+        "src/components/desk/Desk.tsx",
+        "src/components/desk/DeskV2.tsx"
       ]
     },
     {
       "testId": "desk-stat-started",
       "files": [
-        "src/components/desk/Desk.tsx"
+        "src/components/desk/Desk.tsx",
+        "src/components/desk/DeskV2.tsx"
+      ]
+    },
+    {
+      "testId": "desk-stat-success",
+      "files": [
+        "src/components/desk/DeskV2.tsx"
       ]
     },
     {
@@ -1981,6 +2487,12 @@
       ]
     },
     {
+      "testId": "desk-stats",
+      "files": [
+        "src/components/desk/DeskV2.tsx"
+      ]
+    },
+    {
       "testId": "desk-story",
       "files": [
         "src/components/desk/Desk.tsx"
@@ -1993,15 +2505,135 @@
       ]
     },
     {
+      "testId": "desk-stream",
+      "files": [
+        "src/components/desk/DeskHappening.tsx"
+      ]
+    },
+    {
+      "testId": "desk-stream-expand",
+      "files": [
+        "src/components/desk/DeskHappening.tsx"
+      ]
+    },
+    {
+      "testId": "desk-stream-item",
+      "files": [
+        "src/components/desk/DeskHappening.tsx"
+      ]
+    },
+    {
+      "testId": "desk-stream-quiet",
+      "files": [
+        "src/components/desk/DeskHappening.tsx"
+      ]
+    },
+    {
+      "testId": "desk-stream-retry",
+      "files": [
+        "src/components/desk/DeskHappening.tsx"
+      ]
+    },
+    {
+      "testId": "desk-stream-state",
+      "files": [
+        "src/components/desk/DeskHappening.tsx"
+      ]
+    },
+    {
+      "testId": "desk-stream-unread",
+      "files": [
+        "src/components/desk/DeskHappening.tsx"
+      ]
+    },
+    {
+      "testId": "desk-stream-waiting",
+      "files": [
+        "src/components/desk/DeskHappening.tsx"
+      ]
+    },
+    {
+      "testId": "desk-tabs",
+      "files": [
+        "src/components/desk/DeskV2.tsx"
+      ]
+    },
+    {
+      "testId": "desk-und-agents-unread",
+      "files": [
+        "src/components/desk/DeskUnderstand.tsx"
+      ]
+    },
+    {
+      "testId": "desk-und-empty",
+      "files": [
+        "src/components/desk/DeskUnderstand.tsx"
+      ]
+    },
+    {
+      "testId": "desk-und-intro",
+      "files": [
+        "src/components/desk/DeskUnderstand.tsx"
+      ]
+    },
+    {
+      "testId": "desk-und-suggest",
+      "files": [
+        "src/components/desk/DeskUnderstand.tsx"
+      ]
+    },
+    {
+      "testId": "desk-und-window",
+      "files": [
+        "src/components/desk/DeskUnderstand.tsx"
+      ]
+    },
+    {
+      "testId": "desk-understand",
+      "files": [
+        "src/components/desk/DeskV2.tsx"
+      ]
+    },
+    {
+      "testId": "desk-understand2",
+      "files": [
+        "src/components/desk/DeskUnderstand.tsx"
+      ]
+    },
+    {
       "testId": "desk-unread",
       "files": [
         "src/components/desk/Desk.tsx"
       ]
     },
     {
+      "testId": "desk-viz-jobs",
+      "files": [
+        "src/components/desk/DeskV2.tsx"
+      ]
+    },
+    {
+      "testId": "desk-viz-outcomes",
+      "files": [
+        "src/components/desk/DeskV2.tsx"
+      ]
+    },
+    {
+      "testId": "desk-viz-spend",
+      "files": [
+        "src/components/desk/DeskV2.tsx"
+      ]
+    },
+    {
       "testId": "desk-window",
       "files": [
         "src/components/desk/Desk.tsx"
+      ]
+    },
+    {
+      "testId": "desk-work",
+      "files": [
+        "src/components/desk/DeskV2.tsx"
       ]
     },
     {
@@ -6286,19 +6918,13 @@
     {
       "testId": "project-actions",
       "files": [
-        "src/components/ProjectDetailPage.tsx"
-      ]
-    },
-    {
-      "testId": "project-band",
-      "files": [
-        "src/components/ProjectDetailPage.tsx"
+        "src/components/desk/ProjectDesk.tsx"
       ]
     },
     {
       "testId": "project-chat",
       "files": [
-        "src/components/ProjectDetailPage.tsx"
+        "src/components/desk/ProjectDesk.tsx"
       ]
     },
     {
@@ -6344,15 +6970,15 @@
       ]
     },
     {
-      "testId": "project-dashboard",
+      "testId": "project-desc",
       "files": [
-        "src/components/ProjectDetailPage.tsx"
+        "src/components/desk/ProjectDesk.tsx"
       ]
     },
     {
-      "testId": "project-desc",
+      "testId": "project-desk",
       "files": [
-        "src/components/ProjectDetailPage.tsx"
+        "src/components/desk/ProjectDesk.tsx"
       ]
     },
     {
@@ -6406,7 +7032,7 @@
     {
       "testId": "project-documents",
       "files": [
-        "src/components/ProjectDetailPage.tsx"
+        "src/components/desk/ProjectDesk.tsx"
       ]
     },
     {
@@ -6464,12 +7090,6 @@
       ]
     },
     {
-      "testId": "project-feed",
-      "files": [
-        "src/components/ProjectDetailPage.tsx"
-      ]
-    },
-    {
       "testId": "project-field",
       "files": [
         "src/components/ProjectSwitcher.tsx"
@@ -6478,67 +7098,43 @@
     {
       "testId": "project-first-job",
       "files": [
-        "src/components/ProjectDetailPage.tsx"
+        "src/components/desk/ProjectDesk.tsx"
       ]
     },
     {
       "testId": "project-first-run",
       "files": [
-        "src/components/ProjectDetailPage.tsx"
-      ]
-    },
-    {
-      "testId": "project-job",
-      "files": [
-        "src/components/ProjectDetailPage.tsx"
-      ]
-    },
-    {
-      "testId": "project-jobs",
-      "files": [
-        "src/components/ProjectDetailPage.tsx"
+        "src/components/desk/ProjectDesk.tsx"
       ]
     },
     {
       "testId": "project-jobs-unshown",
       "files": [
-        "src/components/ProjectDetailPage.tsx"
+        "src/components/desk/ProjectDesk.tsx"
       ]
     },
     {
       "testId": "project-member-row",
       "files": [
-        "src/components/ProjectDetailPage.tsx"
+        "src/components/desk/ProjectDesk.tsx"
       ]
     },
     {
       "testId": "project-meta",
       "files": [
-        "src/components/ProjectDetailPage.tsx"
-      ]
-    },
-    {
-      "testId": "project-needs",
-      "files": [
-        "src/components/ProjectDetailPage.tsx"
+        "src/components/desk/ProjectDesk.tsx"
       ]
     },
     {
       "testId": "project-new-job",
       "files": [
-        "src/components/ProjectDetailPage.tsx"
+        "src/components/desk/ProjectDesk.tsx"
       ]
     },
     {
       "testId": "project-open-repo",
       "files": [
-        "src/components/ProjectDetailPage.tsx"
-      ]
-    },
-    {
-      "testId": "project-quiet",
-      "files": [
-        "src/components/ProjectDetailPage.tsx"
+        "src/components/desk/ProjectDesk.tsx"
       ]
     },
     {
@@ -6674,42 +7270,6 @@
       ]
     },
     {
-      "testId": "project-stat-delivered",
-      "files": [
-        "src/components/ProjectDetailPage.tsx"
-      ]
-    },
-    {
-      "testId": "project-stat-quality",
-      "files": [
-        "src/components/ProjectDetailPage.tsx"
-      ]
-    },
-    {
-      "testId": "project-stat-spend",
-      "files": [
-        "src/components/ProjectDetailPage.tsx"
-      ]
-    },
-    {
-      "testId": "project-stat-started",
-      "files": [
-        "src/components/ProjectDetailPage.tsx"
-      ]
-    },
-    {
-      "testId": "project-stat-states",
-      "files": [
-        "src/components/ProjectDetailPage.tsx"
-      ]
-    },
-    {
-      "testId": "project-stat-typical",
-      "files": [
-        "src/components/ProjectDetailPage.tsx"
-      ]
-    },
-    {
       "testId": "project-switcher",
       "files": [
         "src/components/ProjectSwitcher.tsx"
@@ -6740,9 +7300,9 @@
       ]
     },
     {
-      "testId": "project-window",
+      "testId": "project-title",
       "files": [
-        "src/components/ProjectDetailPage.tsx"
+        "src/components/desk/DeskV2.tsx"
       ]
     },
     {
@@ -10400,7 +10960,6 @@
     {
       "testId": "stat-value",
       "files": [
-        "src/components/ProjectDetailPage.tsx",
         "src/components/ui/StatTile.tsx"
       ]
     },
@@ -12732,6 +13291,12 @@
       ]
     },
     {
+      "pattern": "*-open",
+      "files": [
+        "src/components/desk/DeskParts.tsx"
+      ]
+    },
+    {
       "pattern": "*-option",
       "files": [
         "src/components/FacetAutocomplete.tsx"
@@ -12831,6 +13396,42 @@
       "pattern": "decision-*",
       "files": [
         "src/components/decisions/DecisionLine.tsx"
+      ]
+    },
+    {
+      "pattern": "desk-*",
+      "files": [
+        "src/components/desk/DeskV2.tsx"
+      ]
+    },
+    {
+      "pattern": "desk-groupby-*",
+      "files": [
+        "src/components/desk/DeskV2.tsx"
+      ]
+    },
+    {
+      "pattern": "desk-inbox-folder-*",
+      "files": [
+        "src/components/desk/DeskInbox.tsx"
+      ]
+    },
+    {
+      "pattern": "desk-range-*",
+      "files": [
+        "src/components/desk/DeskV2.tsx"
+      ]
+    },
+    {
+      "pattern": "desk-runs-status-*",
+      "files": [
+        "src/components/desk/DeskRuns.tsx"
+      ]
+    },
+    {
+      "pattern": "desk-tab-*",
+      "files": [
+        "src/components/desk/DeskV2.tsx"
       ]
     },
     {
@@ -12954,12 +13555,6 @@
       ]
     },
     {
-      "pattern": "project-window-*",
-      "files": [
-        "src/components/ProjectDetailPage.tsx"
-      ]
-    },
-    {
       "pattern": "rail-accordion-*",
       "files": [
         "src/components/RightPanel.tsx"
@@ -13070,7 +13665,9 @@
         "src/components/SkillsPage.tsx",
         "src/components/Tech.tsx",
         "src/components/WhatWhere.tsx",
+        "src/components/charts/Chart.tsx",
         "src/components/dashboardKit.tsx",
+        "src/components/desk/DeskParts.tsx",
         "src/components/everything/FinishedRunMenu.tsx",
         "src/components/product/RequirementsBrowser.tsx",
         "src/components/session/AssuranceReceipt.tsx",

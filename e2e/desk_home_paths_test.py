@@ -116,7 +116,7 @@ with sync_playwright() as p:
                 sheets=True, home_paths=True, runs_delay_ms=0)
     page.goto(f"{origin}/", wait_until="networkidle")
     page.get_by_test_id("desk").wait_for(state="visible", timeout=15000)
-    page.get_by_test_id("desk-story").wait_for(state="visible", timeout=15000)
+    page.get_by_test_id("desk-inbox-count").wait_for(state="visible", timeout=15000)
     page.wait_for_timeout(500)
 
     # ── the addresses: the ⌘K GO TO group — every destination, and one row of each parametric shape ──
@@ -190,7 +190,8 @@ with sync_playwright() as p:
           settings_line=settings_line, skills_root=skills_root, technical_details=str(tech))
 
     # ── 3. #459: the Desk while /runs is held ────────────────────────────────────────
-    set_fixture(origin, runs_delay_ms=2500)
+    # Desk v2: the inbox holds a skeleton (desk-loading) and the header says "Reading…" until /runs answers.
+    set_fixture(origin, runs_delay_ms=6000)
     page.goto(f"{origin}/", wait_until="commit")
     try:
         page.get_by_test_id("desk-loading").wait_for(state="visible", timeout=6000)
@@ -202,8 +203,9 @@ with sync_playwright() as p:
       const d = document.querySelector('[data-testid="desk"]');
       const t = d ? d.innerText : '';
       return {
-        loading: d ? d.innerText.includes('Checking what is going on') : false,
-        headline: document.querySelectorAll('[data-testid="desk-story"]').length,
+        loading: document.querySelectorAll('[data-testid="desk-loading"]').length > 0
+          && (document.querySelector('[data-testid="desk-as-of"]') || {}).innerText === 'Reading…',
+        headline: document.querySelectorAll('[data-testid="desk-inbox-count"]').length,
         calm: document.querySelectorAll('[data-testid="home-calm"]').length,
         fold: document.querySelectorAll('[data-testid="needs-you-queue"]').length,
         nothingNeeds: t.includes('Nothing needs you'),
@@ -215,16 +217,16 @@ with sync_playwright() as p:
     # Rows already known before /runs answers (the corpus's standing elicitation) may show; the
     # fold's calm copy, the headline's all-clear and the projects sentence may not.
     check("desk-holds-its-verdict", held["loading"] and held["headline"] == 0 and held["calm"] == 0
-          and not held["nothingNeeds"] and not held["nothingStarted"] and held["projectsLoading"] == 1, **held)
-    page.get_by_test_id("desk-story").wait_for(state="visible", timeout=15000)
+          and not held["nothingNeeds"] and not held["nothingStarted"], **held)
+    page.get_by_test_id("desk-inbox-count").wait_for(state="visible", timeout=15000)
     after = page.evaluate("""() => ({
-      loading: document.querySelectorAll('[data-testid="desk-loading"], [data-testid="desk-side-loading"]').length,
-      headline: (document.querySelector('[data-testid="desk-story"]') || {}).innerText || '',
+      loading: document.querySelectorAll('[data-testid="desk-loading"]').length,
+      headline: (document.querySelector('[data-testid="desk-inbox-count"]') || {}).innerText || '',
       fold: document.querySelectorAll('[data-testid="needs-you-queue"]').length,
-      projects: document.querySelectorAll('[data-testid="desk-project"]').length,
+      happening: document.querySelectorAll('[data-testid="desk-happening"], [data-testid="desk-now"]').length,
     })""")
     page.screenshot(path=str(SHOTS / "desk-home-paths-loaded.png"))
-    check("desk-answers-once-runs-arrive", after["loading"] == 0 and after["headline"] != "" and after["fold"] == 1 and after["projects"] >= 1, **after)
+    check("desk-answers-once-runs-arrive", after["loading"] == 0 and after["headline"] != "" and after["fold"] == 1, **after)
     set_fixture(origin, runs_delay_ms=0)
 
     def scan_now(where: str) -> dict:
@@ -244,7 +246,7 @@ with sync_playwright() as p:
 
     # ── 4. #464: the pre-unit gate's Desk row says the step, never the engine's unit prompt ──
     page.goto(f"{origin}/", wait_until="networkidle")
-    page.get_by_test_id("desk-story").wait_for(state="visible", timeout=15000)
+    page.get_by_test_id("desk-inbox-count").wait_for(state="visible", timeout=15000)
     page.wait_for_timeout(500)
     desk_text = page.evaluate("() => (document.querySelector('[data-testid=\"desk\"]') || document.body).innerText")
     page.screenshot(path=str(SHOTS / "desk-home-paths-prerun-gate.png"))

@@ -11,6 +11,10 @@
  * #919EAB, failure red #F47067 → #F6837B. Measured in tests/tokens.contrast.test.ts. */
 
 [data-theme="wicked-dark"] {
+  /* Helper colours, lifted for dark cards (DES-desk-v2 §4). */
+  --agent-claude: #f0885a; --agent-codex: #6ea8fe; --agent-pi: #a3d65c; --agent-copilot: #3cc9bd;
+  --agent-opencode: #e3b341; --agent-agy: #f27aae; --agent-gemini: #f27aae; --agent-other: #94a3b8;
+
   --_surface-0: #0d1117;
   --_surface-1: #0f1419;
   --_surface-2: #1b222e;

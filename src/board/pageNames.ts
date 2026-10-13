@@ -6,6 +6,7 @@
  */
 export const PAGE_NAMES = {
   home: 'Desk',
+  agents: 'Agents',
   watch: 'Watchtower',
   skills: 'Skills',
   mcp: 'MCP',

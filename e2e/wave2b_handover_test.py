@@ -163,6 +163,8 @@ with sync_playwright() as p:
           queue_top=None if queue_box is None else queue_box["y"],
           first_row_bottom=None if first_row is None else first_row["y"] + first_row["height"], fold=H)
     # 0 orders in force: the orders surface is a chip in the header, not a banner row.
+    # Desk v2: standing instructions sit in the header's ⋯ panel (still in the header).
+    page.get_by_test_id("desk-more").click()
     orders = page.get_by_test_id("standing-orders-panel")
     try:
         orders.wait_for(state="attached", timeout=5000)
@@ -173,6 +175,7 @@ with sync_playwright() as p:
     check("orders-none-is-a-header-chip",
           chip["inHeader"] and chip["variant"] == "chip" and chip["text"].startswith("No standing instructions")
           and "Mark me away" in chip["text"], **chip)
+    page.keyboard.press("Escape")  # close the ⋯ panel again
 
     # ── 3. decisions due / broke → the queue's rows, highlighted ──────────────
     page.locator('[data-testid="handover-chip"][data-section="decisions"]').click()
@@ -307,7 +310,8 @@ with sync_playwright() as p:
     page.wait_for_timeout(300)
     without_top = page.get_by_test_id("needs-you-queue").bounding_box()["y"]
     # The handover costs the page at most its one line — never a block that grows with its items.
-    check("handover-holds-at-most-one-line", with_top - without_top <= (52),
+    # Desk v2: one line (~38px) plus the Desk's 24px layout gap.
+    check("handover-holds-at-most-one-line", with_top - without_top <= (64),
           with_handover=with_top, without=without_top, delta=with_top - without_top)
     page.reload(wait_until="networkidle")
     page.get_by_test_id("needs-you-queue").wait_for(state="visible", timeout=15000)

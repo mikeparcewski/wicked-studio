@@ -64,7 +64,7 @@ SESSIONS = """() => [...document.querySelectorAll('[data-testid="rail-session"]'
 
 def headline(page) -> dict:
     # Concept A: the count is the rail badge (absent = 0); "marked" = the sentence is not calm.
-    return page.evaluate("""() => { const h = document.querySelector('[data-testid="desk-story"]');
+    return page.evaluate("""() => { const h = document.querySelector('[data-testid="desk-inbox-count"]');
       const b = document.querySelector('[data-testid="desk-rail-badge"]');
       if (!h) return null;
       const text = h.textContent.trim();
@@ -90,7 +90,7 @@ with sync_playwright() as p:
         page.goto(f"{origin}/", wait_until="networkidle")
         page.get_by_test_id("desk").wait_for(state="visible", timeout=15000)
         try:
-            page.wait_for_function("""(c) => { const h = document.querySelector('[data-testid="desk-story"]');
+            page.wait_for_function("""(c) => { const h = document.querySelector('[data-testid="desk-inbox-count"]');
               const b = document.querySelector('[data-testid="desk-rail-badge"]');
               return !!h && (b ? b.textContent.trim() : '0') === c; }""", arg=count, timeout=15000)
         except Exception:  # noqa: BLE001 — the check that follows reports what it read

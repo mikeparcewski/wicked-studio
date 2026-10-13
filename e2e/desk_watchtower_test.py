@@ -74,7 +74,7 @@ with sync_playwright() as p:
     page.goto(f"{origin}/", wait_until="networkidle")
     page.get_by_test_id("desk").wait_for(state="visible", timeout=15000)
     page.wait_for_timeout(800)
-    desk = int(page.get_by_test_id("desk-story").get_attribute("data-count") or "-1")
+    desk = int(page.get_by_test_id("desk-inbox-count").get_attribute("data-count") or "-1")
     pill = int(page.get_by_test_id("watch-pill").get_attribute("data-count") or "-2")
     card_hidden = not page.get_by_test_id("watch-pill-card").is_visible()
 
