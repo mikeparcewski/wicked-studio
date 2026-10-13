@@ -16,7 +16,7 @@ import { useGateStore } from '../../store/gates.js';
 import { ApprovalGroupActions } from './ApprovalGroupActions.js';
 import { FailureWhy } from './FailureWhy.js';
 import { agentColor } from '../charts/Chart.js';
-import { Skeleton } from '../ui/index.js';
+import { Skeleton, StateBanner } from '../ui/index.js';
 import { handleTabKeyDown } from '../ui/tabKeys.js';
 
 /**
@@ -49,7 +49,11 @@ function readSeen(): Set<string> {
 
 function seenId(row: NeedRow): string { return `${row.key}@${row.at ?? ''}`; }
 
-export function DeskInbox({ rows, runs, navigate, now, settled, agentName, extra = null }: {
+export function DeskInbox({ rows, runs, navigate, now, settled, agentName, extra = null, missing = [], onRetry, retrying = false }: {
+  /** Needs sources that did not answer (a partial read): named, with a retry. */
+  missing?: readonly string[];
+  onRetry?: () => void;
+  retrying?: boolean;
   /** The chores for whoever runs studio, listed above the needs (they need a person too). */
   extra?: React.ReactNode;
   rows: NeedRow[];
@@ -109,7 +113,7 @@ export function DeskInbox({ rows, runs, navigate, now, settled, agentName, extra
     <section id="desk-inbox" aria-labelledby="desk-inbox-title" data-testid="desk-inbox" className="wk-card wk-inbox">
       <header className="wk-inbox-head">
         <h2 id="desk-inbox-title" className="wk-desk2-title">Needs you</h2>
-        {settled !== 'loading' && <span className="wk-viz-meta" data-testid="desk-inbox-count" data-phase={settled} data-count={needCount(rows)}>{byFolder.get('all') === 0 ? 'nothing is waiting for you' : `${byFolder.get('all')}${settled === 'partial' ? '+' : ''} waiting${unread > 0 ? ` · ${unread} unread` : ''}`}</span>}
+        {settled !== 'loading' && <span className="wk-viz-meta" data-testid="desk-inbox-count" data-phase={settled} data-count={needCount(rows)}>{byFolder.get('all') === 0 ? (settled === 'partial' ? 'not everything could be read' : 'nothing is waiting for you') : `${byFolder.get('all')}${settled === 'partial' ? '+' : ''} waiting${unread > 0 ? ` · ${unread} unread` : ''}`}</span>}
         <div role="tablist" aria-label="Show" className="wk-inbox-folders">
           {FOLDERS.filter((f) => f.id === 'all' || (byFolder.get(f.id) ?? 0) > 0 || folder === f.id).map((f) => (
             <button key={f.id} type="button" role="tab" id={tabId(f.id)} aria-controls={panelId(f.id)} tabIndex={folder === f.id ? 0 : -1}
@@ -120,6 +124,8 @@ export function DeskInbox({ rows, runs, navigate, now, settled, agentName, extra
           ))}
         </div>
       </header>
+      {/* A partial read never reads as all clear: it names what did not answer and offers a retry. */}
+      {settled === 'partial' && missing.length > 0 && <StateBanner data-testid="desk-needs-partial" kind="partial" what={missing.join(', ')} {...(onRetry !== undefined ? { onRetry } : {})} retrying={retrying} />}
       {settled === 'loading' && rows.length === 0 && extra === null ? <div role="tabpanel" id={panelId(folder)} aria-labelledby={tabId(folder)} className="wk-inbox-empty" data-testid="desk-loading" aria-busy="true"><Skeleton rows={4} variant="row" /></div> : (
         <div role="tabpanel" id={panelId(folder)} aria-labelledby={tabId(folder)} className={`wk-inbox-split${queue.rows.length === 0 ? ' wk-inbox-split--calm' : ''}`}>
           <div className="wk-inbox-list" data-testid="desk-inbox-list">

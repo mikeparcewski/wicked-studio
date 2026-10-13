@@ -4,6 +4,7 @@ import type { CoreEvent, SessionView } from '../../api/types.js';
 import { everythingPath } from '../../board/everythingModel.js';
 import { relTime } from '../../board/relTime.js';
 import { waitsOnYou } from '../../board/attention.js';
+import { BENCHED_KINDS, ENFORCED_ROUTES } from '../../board/deskInsights.js';
 import type { Navigate } from '../../hooks/useRoute.js';
 import { STREAM_TYPES, useDeskStream, type StreamItem } from '../../store/deskStream.js';
 import { agentColor } from '../charts/Chart.js';
@@ -201,9 +202,13 @@ function sayLong(it: StreamItem, v: SessionView | undefined, agentName: (cli: st
     case 'councilSeatFailed': return { text: `${who(cli)} dropped out of a review${typeof e.reason === 'string' ? ` (${e.reason.replace(/_/g, ' ')})` : ''}`, agent: cli, tone: 'fail' };
     case 'governanceUnenforced': return { text: `${who(cli)} ran ${step} without its governance checks`, agent: cli, tone: 'fail' };
     // Two kinds are deliberate routing that keeps enforcement (the contract's AcpFallbackKind): not a failure.
-    case 'acpFallback': return e.fallbackKind === 'governance_requires_wrapped' || e.fallbackKind === 'read_only_requires_wrapped'
-      ? { text: `${who(cli)} ran ${step} single-shot, as its checks require`, agent: cli, tone: 'quiet' }
-      : { text: `${who(cli)} fell back to an ungoverned session`, agent: cli, tone: 'fail' };
+    case 'acpFallback': {
+      const kind = typeof e.fallbackKind === 'string' ? e.fallbackKind : '';
+      if (ENFORCED_ROUTES.has(kind)) return { text: `${who(cli)} ran ${step} single-shot, as its checks require`, agent: cli, tone: 'quiet' };
+      // Benched for its account: the engine does not try the wrapped fallback, so nothing ran.
+      if (BENCHED_KINDS.has(kind)) return { text: `${who(cli)} couldn’t sign in, so it was left out of this job`, agent: cli, tone: 'fail' };
+      return { text: `${who(cli)} lost its live session; ${step} went on single-shot, without per-action checks`, agent: cli, tone: 'fail' };
+    }
     case 'failureTriaged': return { text: `Studio looked into why ${step} failed`, agent: null, tone: 'quiet' };
     case 'repoChecksEvaluated': return { text: 'The repository’s own checks ran', agent: null, tone: 'quiet' };
     default: return { text: it.type, agent: null, tone: 'quiet' };

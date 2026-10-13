@@ -154,13 +154,16 @@ describe('Desk evidence review fixes', () => {
     expect(governanceOf('claude', { claude: routed }, roster('acp_input_governance')).word).toBe('can check every action');
     expect(callouts({ agents: [], workflows: [], acp: { claude: routed }, openFailures: 0, days: 7 })).toEqual([]);
     const mixed = { fallbacks: 15, kinds: { ...routed.kinds, binary_unavailable: 1, session_died: 2, auth_required: 1, auth_failed: 1, unauthenticated: 1, future_kind: 2 } };
-    expect(uncheckedFallbacks(mixed)).toBe(8);
+    // 15 total − 7 deliberate routing − 2 benched (auth_failed, unauthenticated) = 6.
+    expect(uncheckedFallbacks(mixed)).toBe(6);
     // A fallback with no kind in the breakdown still counts (total minus the deliberate kinds).
     expect(uncheckedFallbacks({ fallbacks: 3, kinds: {} })).toBe(3);
     expect(uncheckedFallbacks({ fallbacks: 5, kinds: { governance_requires_wrapped: 2 } })).toBe(3);
-    expect(governanceOf('claude', { claude: mixed }, []).word).toContain('8 times across all recorded runs (studio-wide)');
+    // codex r4: a benched seat (auth_failed / unauthenticated) never ran the wrapped fallback.
+    expect(uncheckedFallbacks({ fallbacks: 6, kinds: { auth_failed: 2, unauthenticated: 1, session_died: 3 } })).toBe(3);
+    expect(governanceOf('claude', { claude: mixed }, []).word).toContain('6 times across all recorded runs (studio-wide)');
     const tips = callouts({ agents: [], workflows: [], acp: { claude: mixed }, openFailures: 0, days: 7, scoped: true });
-    expect(tips[0]?.title).toContain('8 times across all recorded runs (studio-wide)');
+    expect(tips[0]?.title).toContain('6 times across all recorded runs (studio-wide)');
     expect(tips[0]?.why).not.toMatch(/requires wrapped/);
     expect(tips[0]?.why).toContain('all recorded runs across studio');
     const rows = agentRows(record({ seats: [seat('claude'), seat('codex')] }), [], names, []);

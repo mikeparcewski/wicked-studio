@@ -1,16 +1,19 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import type { SeatRecordResponse } from '../src/api/types.js';
 import type { WindowSpend } from '../src/hooks/useWindowSpend.js';
 import { DeskV2 } from '../src/components/desk/DeskV2.js';
 import { useProjectsStore } from '../src/store/projects.js';
 import { useAskDock } from '../src/store/askDock.js';
 import { DAY, NOW, deskRun } from './fixtures/deskV2.js';
+import type { NeedRow } from '../src/board/needsYou.js';
+import { DeskInbox } from '../src/components/desk/DeskInbox.js';
 
 const mocks = vi.hoisted(() => ({
   spend: { phase: 'done', current: 12, previous: null, partial: false, truncated: false } as WindowSpend,
   record: null as SeatRecordResponse | null,
   generate: vi.fn(),
+  handoverSince: null as number | null,
   // The Work tab reads projects and repositories; a read answers empty, and no write may be sent.
   fetch: vi.fn((_url: string, init?: RequestInit) => {
     if ((init?.method ?? 'GET') !== 'GET') throw new Error('Unexpected write');
@@ -26,7 +29,7 @@ vi.mock('../src/hooks/useDeskRecord.js', () => ({
 }));
 vi.mock('../src/hooks/useWindowSpend.js', () => ({ useWindowSpend: () => mocks.spend }));
 vi.mock('../src/hooks/useStandingOrders.js', () => ({ useStandingOrders: () => ({ state: null }) }));
-vi.mock('../src/hooks/useHandover.js', () => ({ useHandover: () => ({ since: null, sections: [], dismiss: vi.fn() }) }));
+vi.mock('../src/hooks/useHandover.js', () => ({ useHandover: () => ({ since: mocks.handoverSince, sections: [], dismiss: vi.fn() }) }));
 vi.mock('../src/hooks/useDeskInsights.js', () => ({ useDeskInsights: () => ({ phase: 'idle' }), generateInsights: mocks.generate }));
 vi.mock('../src/api/diagnostics.js', () => ({ getDiagnostics: () => Promise.resolve({ acp: { byCli: { claude: { fallbacks: 4, fallbackKinds: { session_died: 4 } } } } }) }));
 
@@ -35,6 +38,7 @@ beforeEach(() => {
   vi.stubGlobal('fetch', mocks.fetch);
   useProjectsStore.setState({ projects: [], load: vi.fn(async () => {}) });
   useAskDock.setState({ request: null });
+  mocks.handoverSince = null;
   mocks.spend = { phase: 'done', current: 12, previous: null, partial: false, truncated: false };
   mocks.record = {
     days: 30, since: NOW - 30 * DAY, until: NOW, runsRead: 2, truncated: false,
@@ -90,5 +94,53 @@ describe('Desk r3 evidence on screen', () => {
     expect(screen.getByTestId('desk-analyze-start')).toBeDisabled();
     expect(mocks.generate).not.toHaveBeenCalled();
     expect(mocks.fetch.mock.calls.every(([, init]) => ((init as RequestInit | undefined)?.method ?? 'GET') === 'GET')).toBe(true);
+  });
+});
+
+const needs: NeedRow[] = ['gate', 'failed-run'].map((kind, i): NeedRow => ({
+  key: `row-${i}`, kind: kind as NeedRow['kind'], severity: 100 - i, stakes: 1,
+  subject: `Subject ${i}`, text: `Body ${i}`, tone: 'gate', at: null,
+  subjectPath: '/watch', action: { kind: 'open', path: '/watch', label: 'Open' },
+}));
+
+describe('Desk r4 evidence (codex r4, lane half)', () => {
+  it('a partial Needs-you read with no rows is never "nothing is waiting"; it names what failed and retries', () => {
+    const retry = vi.fn();
+    render(<DeskInbox rows={[]} runs={[]} navigate={vi.fn()} now={NOW} settled="partial" agentName={(x) => x} missing={['proposals', 'reviews']} onRetry={retry} />);
+    expect(screen.getByTestId('desk-inbox-count')).toHaveTextContent('not everything could be read');
+    expect(screen.getByTestId('desk-inbox-count')).not.toHaveTextContent('nothing is waiting');
+    const banner = screen.getByTestId('desk-needs-partial');
+    expect(banner).toHaveTextContent('proposals, reviews');
+    fireEvent.click(within(banner).getByRole('button'));
+    expect(retry).toHaveBeenCalledTimes(1);
+  });
+
+  it('before the job list is read, Report quality and Understand say nothing and start nothing', async () => {
+    const p = { runs: [deskRun('a')], runsLoaded: false, needRows: [], now: NOW, navigate: vi.fn() };
+    let rerender!: ReturnType<typeof render>['rerender'];
+    await act(async () => { ({ rerender } = render(<DeskV2 {...p} search="?tab=report" />)); });
+    const q = screen.getByTestId('desk-stat-quality');
+    expect(q.querySelector('.wk-stat-value')).toHaveAttribute('aria-busy', 'true');
+    expect(q).not.toHaveTextContent('no jobs');
+    rerender(<DeskV2 {...p} search="?tab=understand" />);
+    expect(screen.getByTestId('desk-und-reading')).toBeInTheDocument();
+    expect(screen.queryByTestId('desk-insights-generate')).not.toBeInTheDocument();
+    expect(screen.getByTestId('desk-analyze-start')).toBeDisabled();
+  });
+
+  it('the handover shows on the Desk but never on a project page', async () => {
+    mocks.handoverSince = NOW - DAY;
+    const p = { runs: [], runsLoaded: true, needRows: [], now: NOW, navigate: vi.fn() };
+    let rerender!: ReturnType<typeof render>['rerender'];
+    await act(async () => { ({ rerender } = render(<DeskV2 {...p} />)); });
+    expect(screen.getByTestId('handover-panel')).toBeInTheDocument();
+    rerender(<DeskV2 {...p} projectId="studio" />);
+    expect(screen.queryByTestId('handover-panel')).not.toBeInTheDocument();
+  });
+
+  it('the focus lock is in the Desk header menu', async () => {
+    await act(async () => { render(<DeskV2 runs={[]} runsLoaded needRows={needs} now={NOW} navigate={vi.fn()} />); });
+    fireEvent.click(screen.getByTestId('desk-more'));
+    expect(within(screen.getByTestId('desk-more-panel')).getByTestId('home-focus-toggle')).toBeInTheDocument();
   });
 });

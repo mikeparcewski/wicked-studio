@@ -31,7 +31,9 @@ const MAX_CARDS = 4;
 
 const costCache = new Map<string, number | null>();
 
-export function DeskUnderstand({ agents, agentsRead = 'done', agentsTruncated = false, filters = null, filterAgent = null, filterWorkflow = null, workflows, kept, allRuns, days, onDays, project, projectLabel, projectName, agentName, governance, navigate, pathOf, now }: {
+export function DeskUnderstand({ runsShown = true, agents, agentsRead = 'done', agentsTruncated = false, filters = null, filterAgent = null, filterWorkflow = null, workflows, kept, allRuns, days, onDays, project, projectLabel, projectName, agentName, governance, navigate, pathOf, now }: {
+  /** The job list has been read (a project's page: its member reads too). Before it, nothing is compared. */
+  runsShown?: boolean;
   agents: readonly AgentRow[];
   /** The agent record's read: agents are compared only from a record that was read. */
   agentsRead?: 'loading' | 'done' | 'error';
@@ -198,7 +200,9 @@ export function DeskUnderstand({ agents, agentsRead = 'done', agentsTruncated = 
       <div className="wk-und-cols">
         <div className="wk-und-main">
           {kind === 'agents' && !agentsUnavailable && agentsTruncated && <p className="wk-viz-note">{PARTIAL_RECORD_NOTE}</p>}
-          {agentsUnavailable ? (
+          {!runsShown ? (
+            <section className="wk-card wk-und-empty" data-testid="desk-und-reading" aria-busy="true"><Skeleton rows={3} variant="line" /></section>
+          ) : agentsUnavailable ? (
             <section className="wk-card wk-und-empty" data-testid="desk-und-agents-unread">
               <p className="wk-viz-state">{AGENT_WORKFLOW_NOTE}</p>
               <ul className="wk-und-suggest">
@@ -293,7 +297,7 @@ export function DeskUnderstand({ agents, agentsRead = 'done', agentsTruncated = 
               <pre className="wk-und-intent" data-testid="desk-analyze-intent">{intent}</pre>
             )}
             <div className="wk-inbox-read-acts">
-              <button type="button" data-testid="desk-analyze-start" className="wk-btn wk-btn--primary" disabled={items.length === 0 || launch.phase === 'sending' || (editing !== null && editing.trim() === '')} onClick={start}>
+              <button type="button" data-testid="desk-analyze-start" className="wk-btn wk-btn--primary" disabled={!runsShown || items.length === 0 || launch.phase === 'sending' || (editing !== null && editing.trim() === '')} onClick={start}>
                 {launch.phase === 'sending' ? 'Starting…' : 'Start analysis'}
               </button>
               {items.length > 0 && (editing === null
