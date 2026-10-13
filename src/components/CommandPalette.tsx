@@ -1,3 +1,5 @@
+import { isAskTurnRun } from '../board/askTurn.js';
+import { waitsOnYou } from '../board/attention.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Search } from 'lucide-react';
 import type { GovernanceClaim, InteractionRequest, RepoEntry, SessionView } from '../api/types.js';
@@ -490,7 +492,8 @@ export function CommandPalette({
     // active runs, terminal runs after (§1.3 prefix table).
     for (const v of runs) {
       const id = v.session.id;
-      const gated = v.session.status === 'awaiting_human' || gates[id] !== undefined;
+      // One definition of waiting (`waitsOnYou`): an answered ask at its turn gate is not, whatever the gate store holds.
+      const gated = waitsOnYou(v.session) || (gates[id] !== undefined && !isAskTurnRun(v.session));
       const w = runWhenWord(attachedAtByRun[id], Date.now(), v.session.created_at);
       entries.push({
         id: `run-${id}`,

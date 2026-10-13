@@ -8,6 +8,7 @@ import { StandingOrdersPanel } from '../StandingOrdersPanel.js';
 import { deskReadState, lapsedSeatChores, noSignedInHelper } from '../../board/deskModel.js';
 import type { NeedRow } from '../../board/needsYou.js';
 import { needCount, needSection } from '../../board/needsQueue.js';
+import { failureCounts, openFailedIds, waitingCount, type FailureCounts } from '../../board/attention.js';
 import {
   coarsen, deskStory, durationWords, glanceFacts, jobLanes, lastEndedWords, moneyWords, projectGlances, pulse, stories, WINDOWS,
   windowWords, type StepMark, type WindowDays,
@@ -19,6 +20,7 @@ import { useDisplayText } from '../../hooks/useHomePath.js';
 import { projectDetailPath, type Navigate } from '../../hooks/useRoute.js';
 import { useRoster } from '../../hooks/useRoster.js';
 import { useWindowSpend } from '../../hooks/useWindowSpend.js';
+import { useStartClocks } from '../../hooks/useStartClocks.js';
 import { SignInPanel } from '../SignInPanel.js';
 import { useMovableBoardModel } from './MoveToProject.js';
 import type { RosterSeat } from '../../api/types.js';
@@ -79,7 +81,7 @@ const STORIES_MAX = 7;
  * Render only: the numbers and sentences are `board/deskPulse.ts` over `GET /runs`, the needs fold,
  * and one spend read (`useWindowSpend`).
  */
-export function Desk({ runs, runsLoaded, runsError = null, onRetryRuns, needRows, now, navigate, onCommand }: {
+export function Desk({ runs: wireRuns, runsLoaded, runsError = null, onRetryRuns, needRows, now, navigate, onCommand }: {
   runs: SessionView[];
   /** Whether the first `GET /runs` has answered (studio#459): before it, the Desk says it is still looking. */
   runsLoaded: boolean;
@@ -93,6 +95,8 @@ export function Desk({ runs, runsLoaded, runsError = null, onRetryRuns, needRows
   onCommand?: () => void;
 }): React.ReactElement {
   const roster = useRoster();
+  // The run list, with a start time read from the event log for any run the wire left undated.
+  const runs = useStartClocks(wireRuns);
   const readState = deskReadState(runsLoaded, runsError);
   const settled = useSettledNeeds(needRows, readState === 'known');
   const [rereading, setRereading] = useState(false);
@@ -134,16 +138,24 @@ export function Desk({ runs, runsLoaded, runsError = null, onRetryRuns, needRows
 
   const p = useMemo(() => pulse(runs, days, now), [runs, days, now]);
   const decisions = useMemo(() => needRows.filter((r) => needSection(r) === 'decision'), [needRows]);
-  const failures = useMemo(() => needRows.filter((r) => r.kind === 'failed-run'), [needRows]);
-  const waiting = needCount(decisions);
+  // The attention model (board/attention.ts): the waiting count, and the open failures split by the
+  // window — the Failed tile and the sentence count the same set Needs you and the badge do.
+  const waiting = waitingCount(needRows);
+  const fails = useMemo(() => failureCounts(runs, needRows, days, now), [runs, needRows, days, now]);
+  const failuresInWindow = useMemo(() => {
+    const ids = new Set(fails.inWindow.map((v) => v.session.id));
+    return needRows.filter((r) => r.kind === 'failed-run' && ids.has(r.key.slice('fail:'.length)));
+  }, [fails, needRows]);
   const oldestWait = decisions.map((r) => r.at).filter((t): t is number => t !== null).reduce<number | null>((a, t) => (a === null || t < a ? t : a), null);
   const hasPrev = runs.some((v) => typeof v.session.created_at === 'number' && v.session.created_at * 1000 < now - days * 86_400_000);
+  const failSeries = useMemo(() => createdAtSeries(fails.inWindow, days, now), [fails, days, now]);
   const settledNeeds = readState === 'known' && settled.phase !== 'loading';
   // Numbers from the run list show only once it has answered (a failed first read shows none).
   const runsShown = readState === 'known' || readState === 'stale';
   const story = settledNeeds ? deskStory({
     days, started: p.started.count, waiting, running: p.running,
-    failures: failures.map((r) => ({ projectName: projectName(runs.find((v) => `fail:${v.session.id}` === r.key)?.session.project_id ?? null), at: r.at })),
+    failures: failuresInWindow.map((r) => ({ projectName: projectName(runs.find((v) => `fail:${v.session.id}` === r.key)?.session.project_id ?? null), at: r.at })),
+    olderFailures: fails.older,
     stuck: needCount(needRows.filter((r) => needSection(r) === 'failure' && r.kind !== 'failed-run')),
     reviews: proposals === null ? null : proposals.length, now,
   }) : null;
@@ -158,7 +170,7 @@ export function Desk({ runs, runsLoaded, runsError = null, onRetryRuns, needRows
   const glances = useMemo(() => projectGlances([
     ...items.map((i) => ({ id: i.project.id, name: i.project.name, status: i.project.status, runs: i.runs })),
     ...(unfiled.length > 0 ? [{ id: 'default', name: 'Not in a project', runs: unfiled }] : []),
-  ], now, CHART_DAYS), [items, unfiled, now]);
+  ], now, CHART_DAYS, openFailedIds(needRows)), [items, unfiled, now, needRows]);
   const chartAll = useMemo(() => createdAtSeries(runs.filter((v) => v.session.archived_at == null), CHART_DAYS, now), [runs, now]);
   const chartDone = useMemo(() => createdAtSeries(runs.filter((v) => v.session.archived_at == null && v.session.status === 'completed'), CHART_DAYS, now), [runs, now]);
   const working = p.running;
@@ -295,8 +307,8 @@ export function Desk({ runs, runsLoaded, runsError = null, onRetryRuns, needRows
                   note={hasPrev ? null : `no jobs before the last ${days} days to compare`} spark={days === 90 ? coarsen(p.started.series, 7) : p.started.series} />
                 <StatTile data-testid="desk-stat-waiting" label="Waiting on you" value={!settledNeeds ? null : settled.phase === 'partial' ? `${waiting}+` : waiting}
                   note={!settledNeeds ? 'Checking…' : settled.phase === 'partial' ? 'at least: some of what needs you could not be read' : waiting === 0 ? 'nothing is waiting' : oldestWait !== null ? `oldest ${relTime(oldestWait, now)}` : null} />
-                <StatTile data-testid="desk-stat-failed" label="Failed" value={p.failed.count}
-                  note={p.failed.overall > p.failed.count ? `${p.failed.overall} failed in all` : p.failed.count === 0 ? `none in ${windowWords(days)}` : null} spark={days === 90 ? coarsen(p.failed.series, 7) : p.failed.series} sparkTone="fail" />
+                <StatTile data-testid="desk-stat-failed" label="Failed" value={fails.inWindow.length}
+                  note={failedNote(fails, days)} spark={days === 90 ? coarsen(failSeries, 7) : failSeries} sparkTone="fail" />
                 <StatTile data-testid="desk-stat-delivered" label="Delivered" value={p.delivered}
                   note={p.delivered === 0 ? `nothing delivered in ${windowWords(days)}` : null} />
                 <StatTile data-testid="desk-stat-typical" label="Typical job" value={p.typicalMin === null ? null : durationWords(p.typicalMin)}
@@ -363,7 +375,7 @@ export function Desk({ runs, runsLoaded, runsError = null, onRetryRuns, needRows
                 <span className="wk-desk-card-meta">{chartAll.reduce((a, b) => a + b, 0)} jobs</span>
               </div>
               <DayBars series={chartAll} part={chartDone} now={now} label={`Jobs started per day, last ${CHART_DAYS} days`} partLabel="finished" restLabel="other outcome" />
-              {p.undated > 0 && <p className="wk-desk-card-note">{p.undated === 1 ? '1 job has' : `${p.undated} jobs have`} no start time and {p.undated === 1 ? 'is' : 'are'} left out.</p>}
+              {p.undated > 0 && <p className="wk-desk-card-note">{p.undated === 1 ? '1 job has' : `${p.undated} jobs have`} no start time on record and {p.undated === 1 ? 'is' : 'are'} left out.</p>}
             </section>
 
             <section aria-labelledby="desk-projects-title" data-testid="desk-projects" className="wk-card wk-desk-a-card">
@@ -417,6 +429,14 @@ export function Desk({ runs, runsLoaded, runsError = null, onRetryRuns, needRows
       {signIn !== null && <SignInPanel seat={signIn} onClose={() => setSignIn(null)} />}
     </div>
   );
+}
+
+/** The Failed tile's note: the window and what the count leaves out, said plainly. */
+export function failedNote(f: FailureCounts, days: WindowDays): string {
+  const parts = [f.inWindow.length === 0 ? `none open in ${windowWords(days)}` : `not retried, in ${windowWords(days)}`];
+  if (f.older > 0) parts.push(`${f.older} older not retried`);
+  if (f.retried > 0) parts.push(`${f.retried} more retried`);
+  return parts.join(' · ');
 }
 
 /** A project row opens its dashboard; the unfiled shelf opens the work in no project (the rail's door). */

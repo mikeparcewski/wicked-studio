@@ -1,0 +1,3020 @@
+{
+ "source": "GET /api/v1/runs + /runs/:id/events?type=sessionStarted on a live crew 0.10.1 daemon, 2026-10-13; ids remapped, text replaced",
+ "snapshotAt": 1791851400000,
+ "runs": [
+  {
+   "session": {
+    "id": "run-01",
+    "title": "Job 01",
+    "problem": "Job 01",
+    "project_id": null,
+    "workflow_id": "wf-run-01",
+    "clis": [
+     "opencode",
+     "claude",
+     "codex",
+     "pi"
+    ],
+    "status": "awaiting_human",
+    "created_at": 1791666226,
+    "archived_at": null,
+    "ask_path": true,
+    "ask_turn": true,
+    "delivery": "none",
+    "unit_ix": 1,
+    "human_confirm": "none",
+    "entity_mode": "shared",
+    "repo_ref": null,
+    "chat_id": "chat-01"
+   },
+   "units": [
+    {
+     "id": "run-01:answer-1",
+     "session_id": "run-01",
+     "ord": 1,
+     "status": "done",
+     "catalog": "understand",
+     "assigned_cli": "opencode",
+     "tool_cmd": null
+    }
+   ]
+  },
+  {
+   "session": {
+    "id": "run-02",
+    "title": "Job 02",
+    "problem": "Job 02",
+    "project_id": null,
+    "workflow_id": "wf-run-02",
+    "clis": [
+     "pi",
+     "claude",
+     "codex"
+    ],
+    "status": "awaiting_human",
+    "created_at": 1791762847,
+    "archived_at": null,
+    "ask_path": true,
+    "ask_turn": true,
+    "delivery": "none",
+    "unit_ix": 1,
+    "human_confirm": "none",
+    "entity_mode": "shared",
+    "repo_ref": null,
+    "chat_id": "chat-02"
+   },
+   "units": [
+    {
+     "id": "run-02:answer-1",
+     "session_id": "run-02",
+     "ord": 1,
+     "status": "done",
+     "catalog": "understand",
+     "assigned_cli": "pi",
+     "tool_cmd": null
+    }
+   ]
+  },
+  {
+   "session": {
+    "id": "run-03",
+    "title": "Job 03",
+    "problem": "Job 03",
+    "project_id": "proj_a",
+    "workflow_id": "bug",
+    "clis": [
+     "claude",
+     "codex",
+     "pi",
+     "copilot",
+     "opencode"
+    ],
+    "status": "failed",
+    "created_at": 1789309448,
+    "ended_at": 1789309841,
+    "archived_at": null,
+    "delivery": "none",
+    "unit_ix": 0,
+    "human_confirm": {
+     "before": 1
+    },
+    "entity_mode": "shared",
+    "repo_ref": "wicked-garden"
+   },
+   "units": [
+    {
+     "id": "run-03:triage",
+     "session_id": "run-03",
+     "ord": 1,
+     "status": "rejected",
+     "catalog": null,
+     "assigned_cli": "opencode",
+     "tool_cmd": null
+    },
+    {
+     "id": "run-03:reproduce",
+     "session_id": "run-03",
+     "ord": 2,
+     "status": "distributed",
+     "catalog": null,
+     "assigned_cli": "copilot",
+     "tool_cmd": null
+    },
+    {
+     "id": "run-03:fix",
+     "session_id": "run-03",
+     "ord": 3,
+     "status": "distributed",
+     "catalog": null,
+     "assigned_cli": "claude",
+     "tool_cmd": null
+    },
+    {
+     "id": "run-03:verify",
+     "session_id": "run-03",
+     "ord": 4,
+     "status": "distributed",
+     "catalog": null,
+     "assigned_cli": "copilot",
+     "tool_cmd": null
+    },
+    {
+     "id": "run-03:deliver",
+     "session_id": "run-03",
+     "ord": 5,
+     "status": "distributed",
+     "catalog": null,
+     "assigned_cli": "bash",
+     "tool_cmd": null
+    }
+   ]
+  },
+  {
+   "session": {
+    "id": "run-04",
+    "title": "Job 04",
+    "problem": "Job 04",
+    "project_id": "proj_a",
+    "workflow_id": "bug",
+    "clis": [
+     "claude",
+     "codex",
+     "pi",
+     "copilot",
+     "opencode"
+    ],
+    "status": "failed",
+    "created_at": 1789310029,
+    "ended_at": 1789310031,
+    "archived_at": null,
+    "delivery": "none",
+    "unit_ix": 0,
+    "human_confirm": {
+     "before": 1
+    },
+    "entity_mode": "shared",
+    "repo_ref": "wicked-crew"
+   },
+   "units": [
+    {
+     "id": "run-04:triage",
+     "session_id": "run-04",
+     "ord": 1,
+     "status": "pending",
+     "catalog": null,
+     "assigned_cli": null,
+     "tool_cmd": null
+    },
+    {
+     "id": "run-04:reproduce",
+     "session_id": "run-04",
+     "ord": 2,
+     "status": "pending",
+     "catalog": null,
+     "assigned_cli": null,
+     "tool_cmd": null
+    },
+    {
+     "id": "run-04:fix",
+     "session_id": "run-04",
+     "ord": 3,
+     "status": "pending",
+     "catalog": null,
+     "assigned_cli": null,
+     "tool_cmd": null
+    },
+    {
+     "id": "run-04:verify",
+     "session_id": "run-04",
+     "ord": 4,
+     "status": "pending",
+     "catalog": null,
+     "assigned_cli": null,
+     "tool_cmd": null
+    },
+    {
+     "id": "run-04:deliver",
+     "session_id": "run-04",
+     "ord": 5,
+     "status": "pending",
+     "catalog": null,
+     "assigned_cli": null,
+     "tool_cmd": null
+    }
+   ]
+  },
+  {
+   "session": {
+    "id": "run-05",
+    "title": "Job 05",
+    "problem": "Job 05",
+    "project_id": "proj_a",
+    "workflow_id": "bug",
+    "clis": [
+     "claude",
+     "codex",
+     "pi",
+     "copilot",
+     "opencode"
+    ],
+    "status": "failed",
+    "created_at": 1789310601,
+    "ended_at": 1789311395,
+    "archived_at": null,
+    "delivery": "none",
+    "unit_ix": 1,
+    "human_confirm": {
+     "before": 1
+    },
+    "entity_mode": "shared",
+    "repo_ref": "wicked-garden"
+   },
+   "units": [
+    {
+     "id": "run-05:triage",
+     "session_id": "run-05",
+     "ord": 1,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "claude",
+     "tool_cmd": null
+    },
+    {
+     "id": "run-05:reproduce",
+     "session_id": "run-05",
+     "ord": 2,
+     "status": "rejected",
+     "catalog": null,
+     "assigned_cli": "copilot",
+     "tool_cmd": null
+    },
+    {
+     "id": "run-05:fix",
+     "session_id": "run-05",
+     "ord": 3,
+     "status": "distributed",
+     "catalog": null,
+     "assigned_cli": "claude",
+     "tool_cmd": null
+    },
+    {
+     "id": "run-05:verify",
+     "session_id": "run-05",
+     "ord": 4,
+     "status": "distributed",
+     "catalog": null,
+     "assigned_cli": "copilot",
+     "tool_cmd": null
+    },
+    {
+     "id": "run-05:deliver",
+     "session_id": "run-05",
+     "ord": 5,
+     "status": "distributed",
+     "catalog": null,
+     "assigned_cli": "bash",
+     "tool_cmd": null
+    }
+   ]
+  },
+  {
+   "session": {
+    "id": "run-06",
+    "title": "Job 06",
+    "problem": "Job 06",
+    "project_id": null,
+    "workflow_id": "onboarding",
+    "clis": [
+     "claude",
+     "codex",
+     "pi",
+     "copilot",
+     "opencode"
+    ],
+    "status": "completed",
+    "ended_at": 1788762887,
+    "archived_at": null,
+    "delivery": "none",
+    "unit_ix": 2,
+    "human_confirm": "none",
+    "entity_mode": "shared",
+    "repo_ref": "wicked-crew"
+   },
+   "units": [
+    {
+     "id": "run-06:index",
+     "session_id": "run-06",
+     "ord": 1,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "wicked-estate",
+     "tool_cmd": null
+    },
+    {
+     "id": "run-06:annotate",
+     "session_id": "run-06",
+     "ord": 2,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "wicked-estate",
+     "tool_cmd": null
+    }
+   ]
+  },
+  {
+   "session": {
+    "id": "run-07",
+    "title": "Job 07",
+    "problem": "Job 07",
+    "project_id": null,
+    "workflow_id": "capture-learnings",
+    "clis": [
+     "claude",
+     "codex",
+     "pi",
+     "copilot",
+     "opencode"
+    ],
+    "status": "completed",
+    "created_at": 1788763074,
+    "ended_at": 1788763219,
+    "archived_at": null,
+    "delivery": "none",
+    "unit_ix": 3,
+    "human_confirm": "none",
+    "entity_mode": "shared",
+    "repo_ref": "wicked-crew"
+   },
+   "units": [
+    {
+     "id": "run-07:churn",
+     "session_id": "run-07",
+     "ord": 1,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "claude",
+     "tool_cmd": null
+    },
+    {
+     "id": "run-07:hotspots",
+     "session_id": "run-07",
+     "ord": 2,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "claude",
+     "tool_cmd": null
+    },
+    {
+     "id": "run-07:capture",
+     "session_id": "run-07",
+     "ord": 3,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "claude",
+     "tool_cmd": null
+    }
+   ]
+  },
+  {
+   "session": {
+    "id": "run-08",
+    "title": "Job 08",
+    "problem": "Job 08",
+    "project_id": null,
+    "workflow_id": "capture-learnings",
+    "clis": [
+     "claude",
+     "codex",
+     "pi",
+     "copilot",
+     "opencode"
+    ],
+    "status": "completed",
+    "created_at": 1788778485,
+    "ended_at": 1788778776,
+    "archived_at": null,
+    "delivery": "none",
+    "unit_ix": 3,
+    "human_confirm": "none",
+    "entity_mode": "shared",
+    "repo_ref": "wicked-crew"
+   },
+   "units": [
+    {
+     "id": "run-08:churn",
+     "session_id": "run-08",
+     "ord": 1,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "claude",
+     "tool_cmd": null
+    },
+    {
+     "id": "run-08:hotspots",
+     "session_id": "run-08",
+     "ord": 2,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "claude",
+     "tool_cmd": null
+    },
+    {
+     "id": "run-08:capture",
+     "session_id": "run-08",
+     "ord": 3,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "claude",
+     "tool_cmd": null
+    }
+   ]
+  },
+  {
+   "session": {
+    "id": "run-09",
+    "title": "Job 09",
+    "problem": "Job 09",
+    "project_id": null,
+    "workflow_id": "capture-learnings",
+    "clis": [
+     "claude",
+     "codex",
+     "pi",
+     "copilot",
+     "opencode"
+    ],
+    "status": "completed",
+    "created_at": 1788780511,
+    "ended_at": 1788780828,
+    "archived_at": null,
+    "delivery": "none",
+    "unit_ix": 3,
+    "human_confirm": "none",
+    "entity_mode": "shared",
+    "repo_ref": "wicked-crew"
+   },
+   "units": [
+    {
+     "id": "run-09:churn",
+     "session_id": "run-09",
+     "ord": 1,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "claude",
+     "tool_cmd": null
+    },
+    {
+     "id": "run-09:hotspots",
+     "session_id": "run-09",
+     "ord": 2,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "claude",
+     "tool_cmd": null
+    },
+    {
+     "id": "run-09:capture",
+     "session_id": "run-09",
+     "ord": 3,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "claude",
+     "tool_cmd": null
+    }
+   ]
+  },
+  {
+   "session": {
+    "id": "run-10",
+    "title": "Job 10",
+    "problem": "Job 10",
+    "project_id": null,
+    "workflow_id": "capture-learnings",
+    "clis": [
+     "claude",
+     "codex",
+     "pi",
+     "copilot",
+     "opencode"
+    ],
+    "status": "completed",
+    "created_at": 1788781354,
+    "ended_at": 1788781734,
+    "archived_at": null,
+    "delivery": "none",
+    "unit_ix": 3,
+    "human_confirm": "none",
+    "entity_mode": "shared",
+    "repo_ref": "wicked-crew"
+   },
+   "units": [
+    {
+     "id": "run-10:churn",
+     "session_id": "run-10",
+     "ord": 1,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "claude",
+     "tool_cmd": null
+    },
+    {
+     "id": "run-10:hotspots",
+     "session_id": "run-10",
+     "ord": 2,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "claude",
+     "tool_cmd": null
+    },
+    {
+     "id": "run-10:capture",
+     "session_id": "run-10",
+     "ord": 3,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "claude",
+     "tool_cmd": null
+    }
+   ]
+  },
+  {
+   "session": {
+    "id": "run-11",
+    "title": "Job 11",
+    "problem": "Job 11",
+    "project_id": null,
+    "workflow_id": "onboarding",
+    "clis": [
+     "claude",
+     "codex",
+     "pi",
+     "copilot",
+     "opencode"
+    ],
+    "status": "completed",
+    "ended_at": 1788781982,
+    "archived_at": null,
+    "delivery": "none",
+    "unit_ix": 2,
+    "human_confirm": "none",
+    "entity_mode": "shared",
+    "repo_ref": "wicked-garden"
+   },
+   "units": [
+    {
+     "id": "run-11:index",
+     "session_id": "run-11",
+     "ord": 1,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "wicked-estate",
+     "tool_cmd": null
+    },
+    {
+     "id": "run-11:annotate",
+     "session_id": "run-11",
+     "ord": 2,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "wicked-estate",
+     "tool_cmd": null
+    }
+   ]
+  },
+  {
+   "session": {
+    "id": "run-12",
+    "title": "Job 12",
+    "problem": "Job 12",
+    "project_id": null,
+    "workflow_id": "capture-learnings",
+    "clis": [
+     "claude",
+     "codex",
+     "pi",
+     "copilot",
+     "opencode"
+    ],
+    "status": "completed",
+    "created_at": 1788782009,
+    "ended_at": 1788782436,
+    "archived_at": null,
+    "delivery": "none",
+    "unit_ix": 3,
+    "human_confirm": "none",
+    "entity_mode": "shared",
+    "repo_ref": "wicked-garden"
+   },
+   "units": [
+    {
+     "id": "run-12:churn",
+     "session_id": "run-12",
+     "ord": 1,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "claude",
+     "tool_cmd": null
+    },
+    {
+     "id": "run-12:hotspots",
+     "session_id": "run-12",
+     "ord": 2,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "claude",
+     "tool_cmd": null
+    },
+    {
+     "id": "run-12:capture",
+     "session_id": "run-12",
+     "ord": 3,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "claude",
+     "tool_cmd": null
+    }
+   ]
+  },
+  {
+   "session": {
+    "id": "run-13",
+    "title": "Job 13",
+    "problem": "Job 13",
+    "project_id": null,
+    "workflow_id": "onboarding",
+    "clis": [
+     "claude",
+     "codex",
+     "pi",
+     "copilot",
+     "opencode"
+    ],
+    "status": "completed",
+    "ended_at": 1788782570,
+    "archived_at": null,
+    "delivery": "none",
+    "unit_ix": 2,
+    "human_confirm": "none",
+    "entity_mode": "shared",
+    "repo_ref": "wicked-estate"
+   },
+   "units": [
+    {
+     "id": "run-13:index",
+     "session_id": "run-13",
+     "ord": 1,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "wicked-estate",
+     "tool_cmd": null
+    },
+    {
+     "id": "run-13:annotate",
+     "session_id": "run-13",
+     "ord": 2,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "wicked-estate",
+     "tool_cmd": null
+    }
+   ]
+  },
+  {
+   "session": {
+    "id": "run-14",
+    "title": "Job 14",
+    "problem": "Job 14",
+    "project_id": null,
+    "workflow_id": "capture-learnings",
+    "clis": [
+     "claude",
+     "codex",
+     "pi",
+     "copilot",
+     "opencode"
+    ],
+    "status": "completed",
+    "created_at": 1788782581,
+    "ended_at": 1788783074,
+    "archived_at": null,
+    "delivery": "none",
+    "unit_ix": 3,
+    "human_confirm": "none",
+    "entity_mode": "shared",
+    "repo_ref": "wicked-estate"
+   },
+   "units": [
+    {
+     "id": "run-14:churn",
+     "session_id": "run-14",
+     "ord": 1,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "claude",
+     "tool_cmd": null
+    },
+    {
+     "id": "run-14:hotspots",
+     "session_id": "run-14",
+     "ord": 2,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "claude",
+     "tool_cmd": null
+    },
+    {
+     "id": "run-14:capture",
+     "session_id": "run-14",
+     "ord": 3,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "claude",
+     "tool_cmd": null
+    }
+   ]
+  },
+  {
+   "session": {
+    "id": "run-15",
+    "title": "Job 15",
+    "problem": "Job 15",
+    "project_id": null,
+    "workflow_id": "onboarding",
+    "clis": [
+     "claude",
+     "codex",
+     "pi",
+     "copilot",
+     "opencode"
+    ],
+    "status": "completed",
+    "ended_at": 1788783109,
+    "archived_at": null,
+    "delivery": "none",
+    "unit_ix": 2,
+    "human_confirm": "none",
+    "entity_mode": "shared",
+    "repo_ref": "wicked-core"
+   },
+   "units": [
+    {
+     "id": "run-15:index",
+     "session_id": "run-15",
+     "ord": 1,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "wicked-estate",
+     "tool_cmd": null
+    },
+    {
+     "id": "run-15:annotate",
+     "session_id": "run-15",
+     "ord": 2,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "wicked-estate",
+     "tool_cmd": null
+    }
+   ]
+  },
+  {
+   "session": {
+    "id": "run-16",
+    "title": "Job 16",
+    "problem": "Job 16",
+    "project_id": null,
+    "workflow_id": "capture-learnings",
+    "clis": [
+     "claude",
+     "codex",
+     "pi",
+     "copilot",
+     "opencode"
+    ],
+    "status": "completed",
+    "created_at": 1788783125,
+    "ended_at": 1788784132,
+    "archived_at": null,
+    "delivery": "none",
+    "unit_ix": 3,
+    "human_confirm": "none",
+    "entity_mode": "shared",
+    "repo_ref": "wicked-core"
+   },
+   "units": [
+    {
+     "id": "run-16:churn",
+     "session_id": "run-16",
+     "ord": 1,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "claude",
+     "tool_cmd": null
+    },
+    {
+     "id": "run-16:hotspots",
+     "session_id": "run-16",
+     "ord": 2,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "claude",
+     "tool_cmd": null
+    },
+    {
+     "id": "run-16:capture",
+     "session_id": "run-16",
+     "ord": 3,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "claude",
+     "tool_cmd": null
+    }
+   ]
+  },
+  {
+   "session": {
+    "id": "run-17",
+    "title": "Job 17",
+    "problem": "Job 17",
+    "project_id": null,
+    "workflow_id": "onboarding",
+    "clis": [
+     "claude",
+     "codex",
+     "pi",
+     "copilot",
+     "opencode"
+    ],
+    "status": "completed",
+    "ended_at": 1788784171,
+    "archived_at": null,
+    "delivery": "none",
+    "unit_ix": 2,
+    "human_confirm": "none",
+    "entity_mode": "shared",
+    "repo_ref": "wicked-studio"
+   },
+   "units": [
+    {
+     "id": "run-17:index",
+     "session_id": "run-17",
+     "ord": 1,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "wicked-estate",
+     "tool_cmd": null
+    },
+    {
+     "id": "run-17:annotate",
+     "session_id": "run-17",
+     "ord": 2,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "wicked-estate",
+     "tool_cmd": null
+    }
+   ]
+  },
+  {
+   "session": {
+    "id": "run-18",
+    "title": "Job 18",
+    "problem": "Job 18",
+    "project_id": null,
+    "workflow_id": "capture-learnings",
+    "clis": [
+     "claude",
+     "codex",
+     "pi",
+     "copilot",
+     "opencode"
+    ],
+    "status": "completed",
+    "created_at": 1788784183,
+    "ended_at": 1788785896,
+    "archived_at": null,
+    "delivery": "none",
+    "unit_ix": 3,
+    "human_confirm": "none",
+    "entity_mode": "shared",
+    "repo_ref": "wicked-studio"
+   },
+   "units": [
+    {
+     "id": "run-18:churn",
+     "session_id": "run-18",
+     "ord": 1,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "claude",
+     "tool_cmd": null
+    },
+    {
+     "id": "run-18:hotspots",
+     "session_id": "run-18",
+     "ord": 2,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "claude",
+     "tool_cmd": null
+    },
+    {
+     "id": "run-18:capture",
+     "session_id": "run-18",
+     "ord": 3,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "opencode",
+     "tool_cmd": null
+    }
+   ]
+  },
+  {
+   "session": {
+    "id": "run-19",
+    "title": "Job 19",
+    "problem": "Job 19",
+    "project_id": null,
+    "workflow_id": "onboarding",
+    "clis": [
+     "claude",
+     "codex",
+     "pi",
+     "copilot",
+     "opencode"
+    ],
+    "status": "completed",
+    "ended_at": 1788785926,
+    "archived_at": null,
+    "delivery": "none",
+    "unit_ix": 2,
+    "human_confirm": "none",
+    "entity_mode": "shared",
+    "repo_ref": "wicked-interactive"
+   },
+   "units": [
+    {
+     "id": "run-19:index",
+     "session_id": "run-19",
+     "ord": 1,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "wicked-estate",
+     "tool_cmd": null
+    },
+    {
+     "id": "run-19:annotate",
+     "session_id": "run-19",
+     "ord": 2,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "wicked-estate",
+     "tool_cmd": null
+    }
+   ]
+  },
+  {
+   "session": {
+    "id": "run-20",
+    "title": "Job 20",
+    "problem": "Job 20",
+    "project_id": null,
+    "workflow_id": "capture-learnings",
+    "clis": [
+     "claude",
+     "codex",
+     "pi",
+     "copilot",
+     "opencode"
+    ],
+    "status": "completed",
+    "created_at": 1788785943,
+    "ended_at": 1788786387,
+    "archived_at": null,
+    "delivery": "none",
+    "unit_ix": 3,
+    "human_confirm": "none",
+    "entity_mode": "shared",
+    "repo_ref": "wicked-interactive"
+   },
+   "units": [
+    {
+     "id": "run-20:churn",
+     "session_id": "run-20",
+     "ord": 1,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "codex",
+     "tool_cmd": null
+    },
+    {
+     "id": "run-20:hotspots",
+     "session_id": "run-20",
+     "ord": 2,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "claude",
+     "tool_cmd": null
+    },
+    {
+     "id": "run-20:capture",
+     "session_id": "run-20",
+     "ord": 3,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "claude",
+     "tool_cmd": null
+    }
+   ]
+  },
+  {
+   "session": {
+    "id": "run-21",
+    "title": "Job 21",
+    "problem": "Job 21",
+    "project_id": null,
+    "workflow_id": "onboarding",
+    "clis": [
+     "claude",
+     "codex",
+     "pi",
+     "copilot",
+     "opencode"
+    ],
+    "status": "completed",
+    "ended_at": 1788786411,
+    "archived_at": null,
+    "delivery": "none",
+    "unit_ix": 2,
+    "human_confirm": "none",
+    "entity_mode": "shared",
+    "repo_ref": "wicked-bus"
+   },
+   "units": [
+    {
+     "id": "run-21:index",
+     "session_id": "run-21",
+     "ord": 1,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "wicked-estate",
+     "tool_cmd": null
+    },
+    {
+     "id": "run-21:annotate",
+     "session_id": "run-21",
+     "ord": 2,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "wicked-estate",
+     "tool_cmd": null
+    }
+   ]
+  },
+  {
+   "session": {
+    "id": "run-22",
+    "title": "Job 22",
+    "problem": "Job 22",
+    "project_id": null,
+    "workflow_id": "capture-learnings",
+    "clis": [
+     "claude",
+     "codex",
+     "pi",
+     "copilot",
+     "opencode"
+    ],
+    "status": "completed",
+    "created_at": 1788786416,
+    "ended_at": 1788786735,
+    "archived_at": null,
+    "delivery": "none",
+    "unit_ix": 3,
+    "human_confirm": "none",
+    "entity_mode": "shared",
+    "repo_ref": "wicked-bus"
+   },
+   "units": [
+    {
+     "id": "run-22:churn",
+     "session_id": "run-22",
+     "ord": 1,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "claude",
+     "tool_cmd": null
+    },
+    {
+     "id": "run-22:hotspots",
+     "session_id": "run-22",
+     "ord": 2,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "claude",
+     "tool_cmd": null
+    },
+    {
+     "id": "run-22:capture",
+     "session_id": "run-22",
+     "ord": 3,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "claude",
+     "tool_cmd": null
+    }
+   ]
+  },
+  {
+   "session": {
+    "id": "run-23",
+    "title": "Job 23",
+    "problem": "Job 23",
+    "project_id": null,
+    "workflow_id": "onboarding",
+    "clis": [
+     "claude",
+     "codex",
+     "pi",
+     "copilot",
+     "opencode"
+    ],
+    "status": "completed",
+    "ended_at": 1788786760,
+    "archived_at": null,
+    "delivery": "none",
+    "unit_ix": 2,
+    "human_confirm": "none",
+    "entity_mode": "shared",
+    "repo_ref": "wicked-vault"
+   },
+   "units": [
+    {
+     "id": "run-23:index",
+     "session_id": "run-23",
+     "ord": 1,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "wicked-estate",
+     "tool_cmd": null
+    },
+    {
+     "id": "run-23:annotate",
+     "session_id": "run-23",
+     "ord": 2,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "wicked-estate",
+     "tool_cmd": null
+    }
+   ]
+  },
+  {
+   "session": {
+    "id": "run-24",
+    "title": "Job 24",
+    "problem": "Job 24",
+    "project_id": null,
+    "workflow_id": "capture-learnings",
+    "clis": [
+     "claude",
+     "codex",
+     "pi",
+     "copilot",
+     "opencode"
+    ],
+    "status": "completed",
+    "created_at": 1788786767,
+    "ended_at": 1788787061,
+    "archived_at": null,
+    "delivery": "none",
+    "unit_ix": 3,
+    "human_confirm": "none",
+    "entity_mode": "shared",
+    "repo_ref": "wicked-vault"
+   },
+   "units": [
+    {
+     "id": "run-24:churn",
+     "session_id": "run-24",
+     "ord": 1,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "claude",
+     "tool_cmd": null
+    },
+    {
+     "id": "run-24:hotspots",
+     "session_id": "run-24",
+     "ord": 2,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "claude",
+     "tool_cmd": null
+    },
+    {
+     "id": "run-24:capture",
+     "session_id": "run-24",
+     "ord": 3,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "claude",
+     "tool_cmd": null
+    }
+   ]
+  },
+  {
+   "session": {
+    "id": "run-25",
+    "title": "Job 25",
+    "problem": "Job 25",
+    "project_id": null,
+    "workflow_id": "capture-learnings",
+    "clis": [
+     "claude",
+     "codex",
+     "pi",
+     "copilot",
+     "opencode"
+    ],
+    "status": "completed",
+    "created_at": 1788787148,
+    "ended_at": 1788787273,
+    "archived_at": null,
+    "delivery": "none",
+    "unit_ix": 3,
+    "human_confirm": "none",
+    "entity_mode": "shared",
+    "repo_ref": "wicked-core"
+   },
+   "units": [
+    {
+     "id": "run-25:churn",
+     "session_id": "run-25",
+     "ord": 1,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "claude",
+     "tool_cmd": null
+    },
+    {
+     "id": "run-25:hotspots",
+     "session_id": "run-25",
+     "ord": 2,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "claude",
+     "tool_cmd": null
+    },
+    {
+     "id": "run-25:capture",
+     "session_id": "run-25",
+     "ord": 3,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "claude",
+     "tool_cmd": null
+    }
+   ]
+  },
+  {
+   "session": {
+    "id": "run-26",
+    "title": "Job 26",
+    "problem": "Job 26",
+    "project_id": null,
+    "workflow_id": "capture-learnings",
+    "clis": [
+     "claude",
+     "codex",
+     "pi",
+     "copilot",
+     "opencode"
+    ],
+    "status": "completed",
+    "created_at": 1788787284,
+    "ended_at": 1788787578,
+    "archived_at": null,
+    "delivery": "none",
+    "unit_ix": 3,
+    "human_confirm": "none",
+    "entity_mode": "shared",
+    "repo_ref": "wicked-studio"
+   },
+   "units": [
+    {
+     "id": "run-26:churn",
+     "session_id": "run-26",
+     "ord": 1,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "claude",
+     "tool_cmd": null
+    },
+    {
+     "id": "run-26:hotspots",
+     "session_id": "run-26",
+     "ord": 2,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "claude",
+     "tool_cmd": null
+    },
+    {
+     "id": "run-26:capture",
+     "session_id": "run-26",
+     "ord": 3,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "claude",
+     "tool_cmd": null
+    }
+   ]
+  },
+  {
+   "session": {
+    "id": "run-27",
+    "title": "Job 27",
+    "problem": "Job 27",
+    "project_id": null,
+    "workflow_id": "capture-learnings",
+    "clis": [
+     "claude",
+     "codex",
+     "pi",
+     "copilot",
+     "opencode"
+    ],
+    "status": "completed",
+    "created_at": 1788787677,
+    "ended_at": 1788789047,
+    "archived_at": null,
+    "delivery": "none",
+    "unit_ix": 3,
+    "human_confirm": "none",
+    "entity_mode": "shared",
+    "repo_ref": "wicked-core"
+   },
+   "units": [
+    {
+     "id": "run-27:churn",
+     "session_id": "run-27",
+     "ord": 1,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "claude",
+     "tool_cmd": null
+    },
+    {
+     "id": "run-27:hotspots",
+     "session_id": "run-27",
+     "ord": 2,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "claude",
+     "tool_cmd": null
+    },
+    {
+     "id": "run-27:capture",
+     "session_id": "run-27",
+     "ord": 3,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "claude",
+     "tool_cmd": null
+    }
+   ]
+  },
+  {
+   "session": {
+    "id": "run-28",
+    "title": "Job 28",
+    "problem": "Job 28",
+    "project_id": null,
+    "workflow_id": "capture-learnings",
+    "clis": [
+     "claude",
+     "codex",
+     "pi",
+     "copilot",
+     "opencode"
+    ],
+    "status": "completed",
+    "created_at": 1788789730,
+    "ended_at": 1788790007,
+    "archived_at": null,
+    "delivery": "none",
+    "unit_ix": 3,
+    "human_confirm": "none",
+    "entity_mode": "shared",
+    "repo_ref": "wicked-vault"
+   },
+   "units": [
+    {
+     "id": "run-28:churn",
+     "session_id": "run-28",
+     "ord": 1,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "claude",
+     "tool_cmd": null
+    },
+    {
+     "id": "run-28:hotspots",
+     "session_id": "run-28",
+     "ord": 2,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "claude",
+     "tool_cmd": null
+    },
+    {
+     "id": "run-28:capture",
+     "session_id": "run-28",
+     "ord": 3,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "claude",
+     "tool_cmd": null
+    }
+   ]
+  },
+  {
+   "session": {
+    "id": "run-29",
+    "title": "Job 29",
+    "problem": "Job 29",
+    "project_id": null,
+    "workflow_id": "onboarding",
+    "clis": [
+     "claude",
+     "codex",
+     "pi",
+     "copilot",
+     "opencode"
+    ],
+    "status": "completed",
+    "ended_at": 1788790020,
+    "archived_at": null,
+    "delivery": "none",
+    "unit_ix": 2,
+    "human_confirm": "none",
+    "entity_mode": "shared",
+    "repo_ref": "wicked-ledger"
+   },
+   "units": [
+    {
+     "id": "run-29:index",
+     "session_id": "run-29",
+     "ord": 1,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "wicked-estate",
+     "tool_cmd": null
+    },
+    {
+     "id": "run-29:annotate",
+     "session_id": "run-29",
+     "ord": 2,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "wicked-estate",
+     "tool_cmd": null
+    }
+   ]
+  },
+  {
+   "session": {
+    "id": "run-30",
+    "title": "Job 30",
+    "problem": "Job 30",
+    "project_id": null,
+    "workflow_id": "capture-learnings",
+    "clis": [
+     "claude",
+     "codex",
+     "pi",
+     "copilot",
+     "opencode"
+    ],
+    "status": "completed",
+    "created_at": 1788790027,
+    "ended_at": 1788790345,
+    "archived_at": null,
+    "delivery": "none",
+    "unit_ix": 3,
+    "human_confirm": "none",
+    "entity_mode": "shared",
+    "repo_ref": "wicked-ledger"
+   },
+   "units": [
+    {
+     "id": "run-30:churn",
+     "session_id": "run-30",
+     "ord": 1,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "claude",
+     "tool_cmd": null
+    },
+    {
+     "id": "run-30:hotspots",
+     "session_id": "run-30",
+     "ord": 2,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "claude",
+     "tool_cmd": null
+    },
+    {
+     "id": "run-30:capture",
+     "session_id": "run-30",
+     "ord": 3,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "claude",
+     "tool_cmd": null
+    }
+   ]
+  },
+  {
+   "session": {
+    "id": "run-31",
+    "title": "Job 31",
+    "problem": "Job 31",
+    "project_id": null,
+    "workflow_id": "onboarding",
+    "clis": [
+     "claude",
+     "codex",
+     "pi",
+     "copilot",
+     "opencode"
+    ],
+    "status": "completed",
+    "ended_at": 1788790372,
+    "archived_at": null,
+    "delivery": "none",
+    "unit_ix": 2,
+    "human_confirm": "none",
+    "entity_mode": "shared",
+    "repo_ref": "wicked-installer"
+   },
+   "units": [
+    {
+     "id": "run-31:index",
+     "session_id": "run-31",
+     "ord": 1,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "wicked-estate",
+     "tool_cmd": null
+    },
+    {
+     "id": "run-31:annotate",
+     "session_id": "run-31",
+     "ord": 2,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "wicked-estate",
+     "tool_cmd": null
+    }
+   ]
+  },
+  {
+   "session": {
+    "id": "run-32",
+    "title": "Job 32",
+    "problem": "Job 32",
+    "project_id": null,
+    "workflow_id": "capture-learnings",
+    "clis": [
+     "claude",
+     "codex",
+     "pi",
+     "copilot",
+     "opencode"
+    ],
+    "status": "completed",
+    "created_at": 1788790378,
+    "ended_at": 1788790627,
+    "archived_at": null,
+    "delivery": "none",
+    "unit_ix": 3,
+    "human_confirm": "none",
+    "entity_mode": "shared",
+    "repo_ref": "wicked-installer"
+   },
+   "units": [
+    {
+     "id": "run-32:churn",
+     "session_id": "run-32",
+     "ord": 1,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "claude",
+     "tool_cmd": null
+    },
+    {
+     "id": "run-32:hotspots",
+     "session_id": "run-32",
+     "ord": 2,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "claude",
+     "tool_cmd": null
+    },
+    {
+     "id": "run-32:capture",
+     "session_id": "run-32",
+     "ord": 3,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "claude",
+     "tool_cmd": null
+    }
+   ]
+  },
+  {
+   "session": {
+    "id": "run-33",
+    "title": "Job 33",
+    "problem": "Job 33",
+    "project_id": null,
+    "workflow_id": "capture-learnings",
+    "clis": [
+     "claude",
+     "codex",
+     "pi",
+     "copilot",
+     "opencode"
+    ],
+    "status": "completed",
+    "created_at": 1788790496,
+    "ended_at": 1788790866,
+    "archived_at": null,
+    "delivery": "none",
+    "unit_ix": 3,
+    "human_confirm": "none",
+    "entity_mode": "shared",
+    "repo_ref": "wicked-installer"
+   },
+   "units": [
+    {
+     "id": "run-33:churn",
+     "session_id": "run-33",
+     "ord": 1,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "claude",
+     "tool_cmd": null
+    },
+    {
+     "id": "run-33:hotspots",
+     "session_id": "run-33",
+     "ord": 2,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "claude",
+     "tool_cmd": null
+    },
+    {
+     "id": "run-33:capture",
+     "session_id": "run-33",
+     "ord": 3,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "opencode",
+     "tool_cmd": null
+    }
+   ]
+  },
+  {
+   "session": {
+    "id": "run-34",
+    "title": "Job 34",
+    "problem": "Job 34",
+    "project_id": null,
+    "workflow_id": "capture-learnings",
+    "clis": [
+     "claude",
+     "codex",
+     "pi",
+     "copilot",
+     "opencode"
+    ],
+    "status": "completed",
+    "created_at": 1788791929,
+    "ended_at": 1788792155,
+    "archived_at": null,
+    "delivery": "none",
+    "unit_ix": 3,
+    "human_confirm": "none",
+    "entity_mode": "shared",
+    "repo_ref": "wicked-vault"
+   },
+   "units": [
+    {
+     "id": "run-34:churn",
+     "session_id": "run-34",
+     "ord": 1,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "claude",
+     "tool_cmd": null
+    },
+    {
+     "id": "run-34:hotspots",
+     "session_id": "run-34",
+     "ord": 2,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "claude",
+     "tool_cmd": null
+    },
+    {
+     "id": "run-34:capture",
+     "session_id": "run-34",
+     "ord": 3,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "claude",
+     "tool_cmd": null
+    }
+   ]
+  },
+  {
+   "session": {
+    "id": "run-35",
+    "title": "Job 35",
+    "problem": "Job 35",
+    "project_id": null,
+    "workflow_id": "capture-learnings",
+    "clis": [
+     "claude",
+     "codex",
+     "pi",
+     "copilot",
+     "opencode"
+    ],
+    "status": "completed",
+    "created_at": 1788792181,
+    "ended_at": 1788792487,
+    "archived_at": null,
+    "delivery": "none",
+    "unit_ix": 3,
+    "human_confirm": "none",
+    "entity_mode": "shared",
+    "repo_ref": "wicked-studio"
+   },
+   "units": [
+    {
+     "id": "run-35:churn",
+     "session_id": "run-35",
+     "ord": 1,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "claude",
+     "tool_cmd": null
+    },
+    {
+     "id": "run-35:hotspots",
+     "session_id": "run-35",
+     "ord": 2,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "claude",
+     "tool_cmd": null
+    },
+    {
+     "id": "run-35:capture",
+     "session_id": "run-35",
+     "ord": 3,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "claude",
+     "tool_cmd": null
+    }
+   ]
+  },
+  {
+   "session": {
+    "id": "run-36",
+    "title": "Job 36",
+    "problem": "Job 36",
+    "project_id": null,
+    "workflow_id": "capture-learnings",
+    "clis": [
+     "claude",
+     "codex",
+     "pi",
+     "copilot",
+     "opencode"
+    ],
+    "status": "completed",
+    "created_at": 1788792496,
+    "ended_at": 1788792622,
+    "archived_at": null,
+    "delivery": "none",
+    "unit_ix": 3,
+    "human_confirm": "none",
+    "entity_mode": "shared",
+    "repo_ref": "wicked-core"
+   },
+   "units": [
+    {
+     "id": "run-36:churn",
+     "session_id": "run-36",
+     "ord": 1,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "claude",
+     "tool_cmd": null
+    },
+    {
+     "id": "run-36:hotspots",
+     "session_id": "run-36",
+     "ord": 2,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "claude",
+     "tool_cmd": null
+    },
+    {
+     "id": "run-36:capture",
+     "session_id": "run-36",
+     "ord": 3,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "claude",
+     "tool_cmd": null
+    }
+   ]
+  },
+  {
+   "session": {
+    "id": "run-37",
+    "title": "Job 37",
+    "problem": "Job 37",
+    "project_id": null,
+    "workflow_id": "capture-learnings",
+    "clis": [
+     "claude",
+     "codex",
+     "pi",
+     "copilot",
+     "opencode"
+    ],
+    "status": "completed",
+    "created_at": 1788799874,
+    "ended_at": 1788800191,
+    "archived_at": null,
+    "delivery": "none",
+    "unit_ix": 3,
+    "human_confirm": "none",
+    "entity_mode": "shared",
+    "repo_ref": "wicked-bus"
+   },
+   "units": [
+    {
+     "id": "run-37:churn",
+     "session_id": "run-37",
+     "ord": 1,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "claude",
+     "tool_cmd": null
+    },
+    {
+     "id": "run-37:hotspots",
+     "session_id": "run-37",
+     "ord": 2,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "claude",
+     "tool_cmd": null
+    },
+    {
+     "id": "run-37:capture",
+     "session_id": "run-37",
+     "ord": 3,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "claude",
+     "tool_cmd": null
+    }
+   ]
+  },
+  {
+   "session": {
+    "id": "run-38",
+    "title": "Job 38",
+    "problem": "Job 38",
+    "project_id": null,
+    "workflow_id": "capture-learnings",
+    "clis": [
+     "claude",
+     "codex",
+     "pi",
+     "copilot",
+     "opencode"
+    ],
+    "status": "completed",
+    "created_at": 1788800215,
+    "ended_at": 1788800474,
+    "archived_at": null,
+    "delivery": "none",
+    "unit_ix": 3,
+    "human_confirm": "none",
+    "entity_mode": "shared",
+    "repo_ref": "wicked-core"
+   },
+   "units": [
+    {
+     "id": "run-38:churn",
+     "session_id": "run-38",
+     "ord": 1,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "claude",
+     "tool_cmd": null
+    },
+    {
+     "id": "run-38:hotspots",
+     "session_id": "run-38",
+     "ord": 2,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "claude",
+     "tool_cmd": null
+    },
+    {
+     "id": "run-38:capture",
+     "session_id": "run-38",
+     "ord": 3,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "claude",
+     "tool_cmd": null
+    }
+   ]
+  },
+  {
+   "session": {
+    "id": "run-39",
+    "title": "Job 39",
+    "problem": "Job 39",
+    "project_id": null,
+    "workflow_id": "capture-learnings",
+    "clis": [
+     "claude",
+     "codex",
+     "pi",
+     "copilot",
+     "opencode"
+    ],
+    "status": "completed",
+    "created_at": 1788800495,
+    "ended_at": 1788800803,
+    "archived_at": null,
+    "delivery": "none",
+    "unit_ix": 3,
+    "human_confirm": "none",
+    "entity_mode": "shared",
+    "repo_ref": "wicked-installer"
+   },
+   "units": [
+    {
+     "id": "run-39:churn",
+     "session_id": "run-39",
+     "ord": 1,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "claude",
+     "tool_cmd": null
+    },
+    {
+     "id": "run-39:hotspots",
+     "session_id": "run-39",
+     "ord": 2,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "claude",
+     "tool_cmd": null
+    },
+    {
+     "id": "run-39:capture",
+     "session_id": "run-39",
+     "ord": 3,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "claude",
+     "tool_cmd": null
+    }
+   ]
+  },
+  {
+   "session": {
+    "id": "run-40",
+    "title": "Job 40",
+    "problem": "Job 40",
+    "project_id": null,
+    "workflow_id": "capture-learnings",
+    "clis": [
+     "claude",
+     "codex",
+     "pi",
+     "copilot",
+     "opencode"
+    ],
+    "status": "completed",
+    "created_at": 1788800836,
+    "ended_at": 1788801193,
+    "archived_at": null,
+    "delivery": "none",
+    "unit_ix": 3,
+    "human_confirm": "none",
+    "entity_mode": "shared",
+    "repo_ref": "wicked-interactive"
+   },
+   "units": [
+    {
+     "id": "run-40:churn",
+     "session_id": "run-40",
+     "ord": 1,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "claude",
+     "tool_cmd": null
+    },
+    {
+     "id": "run-40:hotspots",
+     "session_id": "run-40",
+     "ord": 2,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "claude",
+     "tool_cmd": null
+    },
+    {
+     "id": "run-40:capture",
+     "session_id": "run-40",
+     "ord": 3,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "claude",
+     "tool_cmd": null
+    }
+   ]
+  },
+  {
+   "session": {
+    "id": "run-41",
+    "title": "Job 41",
+    "problem": "Job 41",
+    "project_id": null,
+    "workflow_id": "capture-learnings",
+    "clis": [
+     "claude",
+     "codex",
+     "pi",
+     "copilot",
+     "opencode"
+    ],
+    "status": "completed",
+    "created_at": 1788801207,
+    "ended_at": 1788801448,
+    "archived_at": null,
+    "delivery": "none",
+    "unit_ix": 3,
+    "human_confirm": "none",
+    "entity_mode": "shared",
+    "repo_ref": "wicked-studio"
+   },
+   "units": [
+    {
+     "id": "run-41:churn",
+     "session_id": "run-41",
+     "ord": 1,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "claude",
+     "tool_cmd": null
+    },
+    {
+     "id": "run-41:hotspots",
+     "session_id": "run-41",
+     "ord": 2,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "claude",
+     "tool_cmd": null
+    },
+    {
+     "id": "run-41:capture",
+     "session_id": "run-41",
+     "ord": 3,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "claude",
+     "tool_cmd": null
+    }
+   ]
+  },
+  {
+   "session": {
+    "id": "run-42",
+    "title": "Job 42",
+    "problem": "Job 42",
+    "project_id": null,
+    "workflow_id": "capture-learnings",
+    "clis": [
+     "claude",
+     "codex",
+     "pi",
+     "copilot",
+     "opencode"
+    ],
+    "status": "completed",
+    "created_at": 1788801458,
+    "ended_at": 1788801688,
+    "archived_at": null,
+    "delivery": "none",
+    "unit_ix": 3,
+    "human_confirm": "none",
+    "entity_mode": "shared",
+    "repo_ref": "wicked-vault"
+   },
+   "units": [
+    {
+     "id": "run-42:churn",
+     "session_id": "run-42",
+     "ord": 1,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "claude",
+     "tool_cmd": null
+    },
+    {
+     "id": "run-42:hotspots",
+     "session_id": "run-42",
+     "ord": 2,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "claude",
+     "tool_cmd": null
+    },
+    {
+     "id": "run-42:capture",
+     "session_id": "run-42",
+     "ord": 3,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "claude",
+     "tool_cmd": null
+    }
+   ]
+  },
+  {
+   "session": {
+    "id": "run-43",
+    "title": "Job 43",
+    "problem": "Job 43",
+    "project_id": null,
+    "workflow_id": "wf-run-43",
+    "clis": [
+     "claude",
+     "codex",
+     "pi",
+     "copilot",
+     "opencode"
+    ],
+    "status": "completed",
+    "created_at": 1788915736,
+    "ended_at": 1788916270,
+    "archived_at": null,
+    "delivery": "vacuous",
+    "unit_ix": 1,
+    "human_confirm": {
+     "before": 1
+    },
+    "entity_mode": "shared",
+    "repo_ref": "wicked-studio"
+   },
+   "units": [
+    {
+     "id": "run-43:u1",
+     "session_id": "run-43",
+     "ord": 1,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "claude",
+     "tool_cmd": null
+    }
+   ]
+  },
+  {
+   "session": {
+    "id": "run-44",
+    "title": "Job 44",
+    "problem": "Job 44",
+    "project_id": null,
+    "workflow_id": "wf-run-44",
+    "clis": [
+     "claude",
+     "codex",
+     "pi",
+     "copilot",
+     "opencode"
+    ],
+    "status": "completed",
+    "created_at": 1788916360,
+    "ended_at": 1788916868,
+    "archived_at": null,
+    "delivery": "vacuous",
+    "unit_ix": 1,
+    "human_confirm": {
+     "before": 1
+    },
+    "entity_mode": "shared",
+    "repo_ref": "wicked-crew"
+   },
+   "units": [
+    {
+     "id": "run-44:u1",
+     "session_id": "run-44",
+     "ord": 1,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "claude",
+     "tool_cmd": null
+    }
+   ]
+  },
+  {
+   "session": {
+    "id": "run-45",
+    "title": "Job 45",
+    "problem": "Job 45",
+    "project_id": null,
+    "workflow_id": "wf-run-45",
+    "clis": [
+     "claude",
+     "codex",
+     "pi",
+     "copilot",
+     "opencode"
+    ],
+    "status": "completed",
+    "created_at": 1788916926,
+    "ended_at": 1788917554,
+    "archived_at": null,
+    "delivery": "vacuous",
+    "unit_ix": 1,
+    "human_confirm": {
+     "before": 1
+    },
+    "entity_mode": "shared",
+    "repo_ref": "wicked-studio"
+   },
+   "units": [
+    {
+     "id": "run-45:u1",
+     "session_id": "run-45",
+     "ord": 1,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "claude",
+     "tool_cmd": null
+    }
+   ]
+  },
+  {
+   "session": {
+    "id": "run-46",
+    "title": "Job 46",
+    "problem": "Job 46",
+    "project_id": null,
+    "workflow_id": "wf-run-46",
+    "clis": [
+     "claude",
+     "codex",
+     "pi",
+     "copilot",
+     "opencode"
+    ],
+    "status": "completed",
+    "created_at": 1788917599,
+    "ended_at": 1788918077,
+    "archived_at": null,
+    "delivery": "vacuous",
+    "unit_ix": 1,
+    "human_confirm": {
+     "before": 1
+    },
+    "entity_mode": "shared",
+    "repo_ref": "wicked-studio"
+   },
+   "units": [
+    {
+     "id": "run-46:u1",
+     "session_id": "run-46",
+     "ord": 1,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "claude",
+     "tool_cmd": null
+    }
+   ]
+  },
+  {
+   "session": {
+    "id": "run-47",
+    "title": "Job 47",
+    "problem": "Job 47",
+    "project_id": null,
+    "workflow_id": "wf-run-47",
+    "clis": [
+     "claude",
+     "codex",
+     "pi",
+     "copilot",
+     "opencode"
+    ],
+    "status": "completed",
+    "created_at": 1788930376,
+    "ended_at": 1788931015,
+    "archived_at": null,
+    "delivery": "vacuous",
+    "unit_ix": 3,
+    "human_confirm": {
+     "before": 1
+    },
+    "entity_mode": "shared",
+    "repo_ref": "wicked-studio"
+   },
+   "units": [
+    {
+     "id": "run-47:u1",
+     "session_id": "run-47",
+     "ord": 1,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "claude",
+     "tool_cmd": null
+    },
+    {
+     "id": "run-47:u2",
+     "session_id": "run-47",
+     "ord": 2,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "pi",
+     "tool_cmd": null
+    },
+    {
+     "id": "run-47:u3",
+     "session_id": "run-47",
+     "ord": 3,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "claude",
+     "tool_cmd": null
+    }
+   ]
+  },
+  {
+   "session": {
+    "id": "run-48",
+    "title": "Job 48",
+    "problem": "Job 48",
+    "project_id": null,
+    "workflow_id": "wf-run-48",
+    "clis": [
+     "claude",
+     "codex",
+     "pi",
+     "copilot",
+     "opencode"
+    ],
+    "status": "completed",
+    "created_at": 1788931152,
+    "ended_at": 1788931406,
+    "archived_at": null,
+    "delivery": "vacuous",
+    "unit_ix": 3,
+    "human_confirm": {
+     "before": 1
+    },
+    "entity_mode": "shared",
+    "repo_ref": "wicked-studio"
+   },
+   "units": [
+    {
+     "id": "run-48:u1",
+     "session_id": "run-48",
+     "ord": 1,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "claude",
+     "tool_cmd": null
+    },
+    {
+     "id": "run-48:u2",
+     "session_id": "run-48",
+     "ord": 2,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "pi",
+     "tool_cmd": null
+    },
+    {
+     "id": "run-48:u3",
+     "session_id": "run-48",
+     "ord": 3,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "claude",
+     "tool_cmd": null
+    }
+   ]
+  },
+  {
+   "session": {
+    "id": "run-49",
+    "title": "Job 49",
+    "problem": "Job 49",
+    "project_id": null,
+    "workflow_id": "wf-run-49",
+    "clis": [
+     "claude",
+     "codex",
+     "pi",
+     "copilot",
+     "opencode"
+    ],
+    "status": "completed",
+    "created_at": 1788931545,
+    "ended_at": 1788931817,
+    "archived_at": null,
+    "delivery": "vacuous",
+    "unit_ix": 3,
+    "human_confirm": {
+     "before": 1
+    },
+    "entity_mode": "shared",
+    "repo_ref": "wicked-studio"
+   },
+   "units": [
+    {
+     "id": "run-49:u1",
+     "session_id": "run-49",
+     "ord": 1,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "claude",
+     "tool_cmd": null
+    },
+    {
+     "id": "run-49:u2",
+     "session_id": "run-49",
+     "ord": 2,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "pi",
+     "tool_cmd": null
+    },
+    {
+     "id": "run-49:u3",
+     "session_id": "run-49",
+     "ord": 3,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "claude",
+     "tool_cmd": null
+    }
+   ]
+  },
+  {
+   "session": {
+    "id": "run-50",
+    "title": "Job 50",
+    "problem": "Job 50",
+    "project_id": null,
+    "workflow_id": "wf-run-50",
+    "clis": [
+     "claude",
+     "codex",
+     "pi",
+     "copilot",
+     "opencode"
+    ],
+    "status": "cancelled",
+    "ended_at": 1788915662,
+    "archived_at": null,
+    "delivery": "none",
+    "unit_ix": 0,
+    "human_confirm": {
+     "before": 1
+    },
+    "entity_mode": "shared",
+    "repo_ref": "wicked-crew"
+   },
+   "units": [
+    {
+     "id": "run-50:wicked-crew:a0:u1",
+     "session_id": "run-50",
+     "ord": 1,
+     "status": "distributed",
+     "catalog": null,
+     "assigned_cli": "codex",
+     "tool_cmd": null
+    },
+    {
+     "id": "run-50:wicked-crew:a0:u2",
+     "session_id": "run-50",
+     "ord": 2,
+     "status": "distributed",
+     "catalog": null,
+     "assigned_cli": "pi",
+     "tool_cmd": null
+    },
+    {
+     "id": "run-50:wicked-crew:a0:u3",
+     "session_id": "run-50",
+     "ord": 3,
+     "status": "distributed",
+     "catalog": null,
+     "assigned_cli": "codex",
+     "tool_cmd": null
+    },
+    {
+     "id": "run-50:wicked-crew:a0:u4",
+     "session_id": "run-50",
+     "ord": 4,
+     "status": "distributed",
+     "catalog": null,
+     "assigned_cli": "codex",
+     "tool_cmd": null
+    },
+    {
+     "id": "run-50:wicked-crew:a0:u5",
+     "session_id": "run-50",
+     "ord": 5,
+     "status": "distributed",
+     "catalog": null,
+     "assigned_cli": "codex",
+     "tool_cmd": null
+    },
+    {
+     "id": "run-50:wicked-crew:a0:u6",
+     "session_id": "run-50",
+     "ord": 6,
+     "status": "distributed",
+     "catalog": null,
+     "assigned_cli": "codex",
+     "tool_cmd": null
+    },
+    {
+     "id": "run-50:wicked-crew:a0:u7",
+     "session_id": "run-50",
+     "ord": 7,
+     "status": "distributed",
+     "catalog": null,
+     "assigned_cli": "codex",
+     "tool_cmd": null
+    },
+    {
+     "id": "run-50:wicked-crew:a0:u8",
+     "session_id": "run-50",
+     "ord": 8,
+     "status": "distributed",
+     "catalog": null,
+     "assigned_cli": "claude",
+     "tool_cmd": null
+    },
+    {
+     "id": "run-50:wicked-crew:a0:u9",
+     "session_id": "run-50",
+     "ord": 9,
+     "status": "distributed",
+     "catalog": null,
+     "assigned_cli": "codex",
+     "tool_cmd": null
+    },
+    {
+     "id": "run-50:wicked-crew:a0:u10",
+     "session_id": "run-50",
+     "ord": 10,
+     "status": "distributed",
+     "catalog": null,
+     "assigned_cli": "claude",
+     "tool_cmd": null
+    },
+    {
+     "id": "run-50:wicked-crew:a0:u11",
+     "session_id": "run-50",
+     "ord": 11,
+     "status": "distributed",
+     "catalog": null,
+     "assigned_cli": "claude",
+     "tool_cmd": null
+    }
+   ]
+  },
+  {
+   "session": {
+    "id": "run-51",
+    "title": "Job 51",
+    "problem": "Job 51",
+    "project_id": null,
+    "workflow_id": "wf-run-51",
+    "clis": [
+     "claude",
+     "codex",
+     "pi",
+     "copilot",
+     "opencode"
+    ],
+    "status": "cancelled",
+    "ended_at": 1788915662,
+    "archived_at": null,
+    "delivery": "none",
+    "unit_ix": 0,
+    "human_confirm": {
+     "before": 1
+    },
+    "entity_mode": "shared",
+    "repo_ref": "wicked-studio"
+   },
+   "units": [
+    {
+     "id": "run-51:wicked-studio:a0:u1",
+     "session_id": "run-51",
+     "ord": 1,
+     "status": "pending",
+     "catalog": null,
+     "assigned_cli": null,
+     "tool_cmd": null
+    },
+    {
+     "id": "run-51:wicked-studio:a0:u2",
+     "session_id": "run-51",
+     "ord": 2,
+     "status": "pending",
+     "catalog": null,
+     "assigned_cli": null,
+     "tool_cmd": null
+    },
+    {
+     "id": "run-51:wicked-studio:a0:u3",
+     "session_id": "run-51",
+     "ord": 3,
+     "status": "pending",
+     "catalog": null,
+     "assigned_cli": null,
+     "tool_cmd": null
+    },
+    {
+     "id": "run-51:wicked-studio:a0:u4",
+     "session_id": "run-51",
+     "ord": 4,
+     "status": "pending",
+     "catalog": null,
+     "assigned_cli": null,
+     "tool_cmd": null
+    },
+    {
+     "id": "run-51:wicked-studio:a0:u5",
+     "session_id": "run-51",
+     "ord": 5,
+     "status": "pending",
+     "catalog": null,
+     "assigned_cli": null,
+     "tool_cmd": null
+    },
+    {
+     "id": "run-51:wicked-studio:a0:u6",
+     "session_id": "run-51",
+     "ord": 6,
+     "status": "pending",
+     "catalog": null,
+     "assigned_cli": null,
+     "tool_cmd": null
+    },
+    {
+     "id": "run-51:wicked-studio:a0:u7",
+     "session_id": "run-51",
+     "ord": 7,
+     "status": "pending",
+     "catalog": null,
+     "assigned_cli": null,
+     "tool_cmd": null
+    },
+    {
+     "id": "run-51:wicked-studio:a0:u8",
+     "session_id": "run-51",
+     "ord": 8,
+     "status": "pending",
+     "catalog": null,
+     "assigned_cli": null,
+     "tool_cmd": null
+    },
+    {
+     "id": "run-51:wicked-studio:a0:u9",
+     "session_id": "run-51",
+     "ord": 9,
+     "status": "pending",
+     "catalog": null,
+     "assigned_cli": null,
+     "tool_cmd": null
+    },
+    {
+     "id": "run-51:wicked-studio:a0:u10",
+     "session_id": "run-51",
+     "ord": 10,
+     "status": "pending",
+     "catalog": null,
+     "assigned_cli": null,
+     "tool_cmd": null
+    },
+    {
+     "id": "run-51:wicked-studio:a0:u11",
+     "session_id": "run-51",
+     "ord": 11,
+     "status": "pending",
+     "catalog": null,
+     "assigned_cli": null,
+     "tool_cmd": null
+    }
+   ]
+  },
+  {
+   "session": {
+    "id": "run-52",
+    "title": "Job 52",
+    "problem": "Job 52",
+    "project_id": "proj_a",
+    "workflow_id": "bug",
+    "clis": [
+     "claude",
+     "codex",
+     "pi",
+     "copilot",
+     "opencode"
+    ],
+    "status": "cancelled",
+    "created_at": 1789309604,
+    "ended_at": 1789310664,
+    "archived_at": null,
+    "delivery": "none",
+    "unit_ix": 0,
+    "human_confirm": {
+     "before": 1
+    },
+    "entity_mode": "shared",
+    "repo_ref": "wicked-core"
+   },
+   "units": [
+    {
+     "id": "run-52:triage",
+     "session_id": "run-52",
+     "ord": 1,
+     "status": "distributed",
+     "catalog": null,
+     "assigned_cli": "claude",
+     "tool_cmd": null
+    },
+    {
+     "id": "run-52:reproduce",
+     "session_id": "run-52",
+     "ord": 2,
+     "status": "distributed",
+     "catalog": null,
+     "assigned_cli": "claude",
+     "tool_cmd": null
+    },
+    {
+     "id": "run-52:fix",
+     "session_id": "run-52",
+     "ord": 3,
+     "status": "distributed",
+     "catalog": null,
+     "assigned_cli": "claude",
+     "tool_cmd": null
+    },
+    {
+     "id": "run-52:verify",
+     "session_id": "run-52",
+     "ord": 4,
+     "status": "distributed",
+     "catalog": null,
+     "assigned_cli": "claude",
+     "tool_cmd": null
+    },
+    {
+     "id": "run-52:deliver",
+     "session_id": "run-52",
+     "ord": 5,
+     "status": "distributed",
+     "catalog": null,
+     "assigned_cli": "bash",
+     "tool_cmd": null
+    }
+   ]
+  },
+  {
+   "session": {
+    "id": "run-53",
+    "title": "Job 53",
+    "problem": "Job 53",
+    "project_id": "proj_a",
+    "workflow_id": "bug",
+    "clis": [
+     "claude",
+     "codex",
+     "pi",
+     "copilot",
+     "opencode"
+    ],
+    "status": "cancelled",
+    "created_at": 1789310742,
+    "ended_at": 1789316000,
+    "archived_at": null,
+    "delivery": "none",
+    "unit_ix": 3,
+    "human_confirm": {
+     "before": 1
+    },
+    "entity_mode": "shared",
+    "repo_ref": "wicked-crew",
+    "retry_of": "run-04"
+   },
+   "units": [
+    {
+     "id": "run-53:triage",
+     "session_id": "run-53",
+     "ord": 1,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "claude",
+     "tool_cmd": null
+    },
+    {
+     "id": "run-53:reproduce",
+     "session_id": "run-53",
+     "ord": 2,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "claude",
+     "tool_cmd": null
+    },
+    {
+     "id": "run-53:fix",
+     "session_id": "run-53",
+     "ord": 3,
+     "status": "done",
+     "catalog": null,
+     "assigned_cli": "claude",
+     "tool_cmd": null
+    },
+    {
+     "id": "run-53:verify",
+     "session_id": "run-53",
+     "ord": 4,
+     "status": "rejected",
+     "catalog": null,
+     "assigned_cli": "claude",
+     "tool_cmd": null
+    },
+    {
+     "id": "run-53:deliver",
+     "session_id": "run-53",
+     "ord": 5,
+     "status": "distributed",
+     "catalog": null,
+     "assigned_cli": "bash",
+     "tool_cmd": null
+    }
+   ]
+  }
+ ],
+ "sessionStarted": {
+  "run-06": [
+   {
+    "type": "sessionStarted",
+    "ts": 1788762882888,
+    "seq": 0,
+    "session": "run-06"
+   }
+  ],
+  "run-11": [
+   {
+    "type": "sessionStarted",
+    "ts": 1788781971385,
+    "seq": 194,
+    "session": "run-11"
+   }
+  ],
+  "run-13": [
+   {
+    "type": "sessionStarted",
+    "ts": 1788782559284,
+    "seq": 436,
+    "session": "run-13"
+   }
+  ],
+  "run-15": [
+   {
+    "type": "sessionStarted",
+    "ts": 1788783104932,
+    "seq": 732,
+    "session": "run-15"
+   }
+  ],
+  "run-17": [
+   {
+    "type": "sessionStarted",
+    "ts": 1788784161234,
+    "seq": 815,
+    "session": "run-17"
+   }
+  ],
+  "run-19": [
+   {
+    "type": "sessionStarted",
+    "ts": 1788785924183,
+    "seq": 913,
+    "session": "run-19"
+   }
+  ],
+  "run-21": [
+   {
+    "type": "sessionStarted",
+    "ts": 1788786408339,
+    "seq": 1115,
+    "session": "run-21"
+   }
+  ],
+  "run-23": [
+   {
+    "type": "sessionStarted",
+    "ts": 1788786758571,
+    "seq": 1282,
+    "session": "run-23"
+   }
+  ],
+  "run-29": [
+   {
+    "type": "sessionStarted",
+    "ts": 1788790018088,
+    "seq": 1920,
+    "session": "run-29"
+   }
+  ],
+  "run-31": [
+   {
+    "type": "sessionStarted",
+    "ts": 1788790370003,
+    "seq": 2118,
+    "session": "run-31"
+   }
+  ],
+  "run-50": [
+   {
+    "type": "sessionStarted",
+    "ts": 1788915422933,
+    "seq": 25,
+    "session": "run-50"
+   }
+  ],
+  "run-51": [
+   {
+    "type": "sessionStarted",
+    "ts": 1788915422933,
+    "seq": 25,
+    "session": "run-51"
+   }
+  ]
+ }
+}

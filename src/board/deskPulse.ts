@@ -3,6 +3,7 @@ import { createdAtMs, createdAtSeries, createdAtWindow, deliveryCounts } from '.
 import { jobTitle, jobTitleFull } from './deskWords.js';
 import { relTime } from './relTime.js';
 import { statusWord, type StatusTone } from './statusWords.js';
+import { waitsOnYou } from './attention.js';
 
 /**
  * THE DESK'S NUMBERS AND SENTENCES (DES-frontdoor concept A + B's opening sentence; operator ruling
@@ -93,8 +94,10 @@ export interface StoryInputs {
   /** Decisions waiting on you (the Desk's decision rows, members counted). */
   waiting: number;
   running: number;
-  /** The open failure rows' runs (newest clock first is not required). */
+  /** The open failure rows' runs launched in the window (newest clock first is not required). */
   failures: readonly { projectName: string | null; at: number | null }[];
+  /** Open failures launched before the window (or with no launch time): still not retried. */
+  olderFailures?: number;
   /** Jobs that stopped moving and only a person moves (a stall, a lost worker): failure rows that are not failed runs. */
   stuck?: number;
   /** Proposals waiting on review; null = the read has not answered (said nothing about them). */
@@ -119,12 +122,18 @@ export function deskStory(i: StoryInputs): string {
   parts.push(i.running === 0 ? 'Nothing is running right now.' : `${n(i.running, 'job is', 'jobs are')} running now.`);
   if (i.failures.length > 0) {
     const projects = [...new Set(i.failures.map((f) => f.projectName))];
-    const where = projects.length === 1 && projects[0] !== null ? ` in ${projects[0]}` : '';
+    const where = ` in ${windowWords(i.days)}${projects.length === 1 && projects[0] !== null ? ` in ${projects[0]}` : ''}`;
     const clocks = i.failures.map((f) => f.at).filter((t): t is number => t !== null);
     const when = clocks.length > 0 ? ` ${i.failures.length === 1 ? '' : 'the latest '}${relTime(Math.max(...clocks), i.now)}` : '';
     parts.push(i.failures.length === 1
       ? `1 job failed${where}${when} and has not been retried.`
       : `${i.failures.length} jobs failed${where}${when ? `,${when},` : ''} and have not been retried.`);
+  }
+  const older = i.olderFailures ?? 0;
+  if (older > 0) {
+    parts.push(i.failures.length > 0
+      ? `${n(older, 'older failure has', 'older failures have')} not been retried either.`
+      : `${n(older, 'job', 'jobs')} that failed before ${windowWords(i.days)} ${older === 1 ? 'has' : 'have'} not been retried.`);
   }
   if ((i.stuck ?? 0) > 0) parts.push(i.stuck === 1 ? '1 job has stopped moving and needs a look.' : `${i.stuck} jobs have stopped moving and need a look.`);
   if (i.reviews !== null && i.reviews > 0) parts.push(`${n(i.reviews, 'proposal is', 'proposals are')} waiting for review.`);
@@ -154,7 +163,7 @@ export function stepMarks(v: SessionView): StepMark[] {
     if (u.status === 'done') return 'done';
     if (u.status === 'rejected') return 'fail';
     if (u.ord === v.session.unit_ix) {
-      if (status === 'awaiting_human') return 'gate';
+      if (waitsOnYou(v.session)) return 'gate';
       if (WORKING.has(status)) return 'run';
       if (status === 'failed') return 'fail';
       if (status === 'cancelled') return 'stopped';
@@ -162,7 +171,7 @@ export function stepMarks(v: SessionView): StepMark[] {
     return 'todo';
   });
   // A job waiting on you shows where: the first step not reached is the one it waits before.
-  if (status === 'awaiting_human' && !marks.includes('gate')) {
+  if (waitsOnYou(v.session) && !marks.includes('gate')) {
     const at = marks.indexOf('todo');
     if (at >= 0) marks[at] = 'gate';
     else marks.push('gate');
@@ -176,7 +185,7 @@ export function jobLanes(
   now: number,
   opts: { max: number; projectName: (id: string | null) => string | null; pathOf: (v: SessionView) => string; includeUndated?: boolean },
 ): JobLane[] {
-  const on = (v: SessionView): boolean => isWorking(v) || v.session.status === 'awaiting_human';
+  const on = (v: SessionView): boolean => isWorking(v) || waitsOnYou(v.session);
   const all = runs.filter(live);
   const ordered = [
     ...all.filter(on).sort((a, b) => (createdAtMs(b) ?? 0) - (createdAtMs(a) ?? 0)),
@@ -243,7 +252,7 @@ export function stories(
   const out: Story[] = [];
   for (const v of runs.filter(live)) {
     const s = v.session;
-    if (opts.waitingRunIds?.has(s.id) === true || s.status === 'awaiting_human') continue;
+    if (opts.waitingRunIds?.has(s.id) === true || waitsOnYou(s)) continue;
     const done = (v.units ?? []).filter((u) => u.status === 'done').length;
     const helpers = [...new Set((v.units ?? []).map((u) => u.assigned_cli).filter((c): c is string => typeof c === 'string' && c !== ''))]
       .map(opts.helperName).filter((x): x is string => x !== null);
@@ -299,6 +308,8 @@ export function projectGlances(
   groups: readonly { id: string; name: string; status?: string; runs: readonly SessionView[] }[],
   now: number,
   days = 60,
+  /** The open failures (`openFailedIds`): a row counts these, as the Failed tile does; absent = every failed run. */
+  openFailed?: ReadonlySet<string>,
 ): ProjectGlance[] {
   const rows = groups.filter((g) => g.status !== 'archived').map((g) => {
     const mine = g.runs.filter(live);
@@ -306,8 +317,8 @@ export function projectGlances(
       id: g.id,
       name: g.id === 'default' ? 'Not in a project' : g.name,
       jobs: mine.length,
-      waiting: mine.filter((v) => v.session.status === 'awaiting_human').length,
-      failed: mine.filter((v) => v.session.status === 'failed').length,
+      waiting: mine.filter((v) => waitsOnYou(v.session)).length,
+      failed: mine.filter((v) => v.session.status === 'failed' && (openFailed === undefined || openFailed.has(v.session.id))).length,
       series: createdAtSeries(mine, days, now),
     };
   });

@@ -238,10 +238,7 @@ export function inSectionOrder<T extends NeedRow>(rows: readonly T[]): T[] {
   return rows.map((r, i) => ({ r, i })).sort((a, b) => at(a.r) - at(b.r) || a.i - b.i).map((x) => x.r);
 }
 
-/** THE "need you" number (the rail and phone badge, the Desk): decisions + failures, never reviews. */
-export function badgeCount(rows: readonly NeedRow[]): number {
-  return needCount(rows.filter((r) => { const s = needSection(r); return s === 'decision' || s === 'failure'; }));
-}
+/* The "need you" badge is `attentionBadge` in `board/attention.ts` (the attention model). */
 
 /** How many items a set of queue rows stands for (a group counts its members). */
 export function needCount(rows: readonly NeedRow[]): number {

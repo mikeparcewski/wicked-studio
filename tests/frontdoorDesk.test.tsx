@@ -5,7 +5,8 @@ import { cleanup, render, screen } from '@testing-library/react';
 import {
   coarsen, deskStory, durationWords, jobLanes, moneyWords, projectGlances, pulse, stepMarks, stories,
 } from '../src/board/deskPulse.js';
-import { badgeCount, inSectionOrder, needSection } from '../src/board/needsQueue.js';
+import { inSectionOrder, needSection } from '../src/board/needsQueue.js';
+import { attentionBadge } from '../src/board/attention.js';
 import { failureWhy } from '../src/board/failureWhy.js';
 import { jobTitle, jobTitleFull } from '../src/board/deskWords.js';
 import { spendOf } from '../src/hooks/useWindowSpend.js';
@@ -65,7 +66,7 @@ describe('deskStory — B’s one sentence', () => {
     expect(deskStory({
       days: 7, started: 2, waiting: 2, running: 0, now: NOW, reviews: 81,
       failures: [{ projectName: 'My project', at: NOW - 28 * DAY }, { projectName: 'My project', at: NOW - 29 * DAY }],
-    })).toBe('2 jobs started in the last 7 days, and 2 are waiting for you. Nothing is running right now. 2 jobs failed in My project, the latest 4 weeks ago, and have not been retried. 81 proposals are waiting for review.');
+    })).toBe('2 jobs started in the last 7 days, and 2 are waiting for you. Nothing is running right now. 2 jobs failed in the last 7 days in My project, the latest 4 weeks ago, and have not been retried. 81 proposals are waiting for review.');
   });
 
   it('is calm when nothing happened, and silent about reviews it could not read', () => {
@@ -143,7 +144,7 @@ describe('needs sections and THE badge', () => {
     const rows = [row('p', 'proposal'), row('f', 'failed-run'), row('s', 'stranded-run'), row('g', 'gate')];
     expect(inSectionOrder(rows).map((r) => r.key)).toEqual(['g', 'f', 's', 'p']);
     expect(needSection(row('o', 'orphaned-run'))).toBe('failure');
-    expect(badgeCount(rows)).toBe(2);
+    expect(attentionBadge(rows)).toBe(2);
   });
 });
 

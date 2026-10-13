@@ -13,7 +13,7 @@ import { useAskThreadStore } from '../store/askThread.js';
 import { useMembershipStore } from '../store/membership.js';
 import { useDecisionsStore } from '../store/decisions.js';
 import { useNeedsSources, type NeedsSource } from '../store/needsSources.js';
-import { badgeCount } from '../board/needsQueue.js';
+import { attentionBadge } from '../board/attention.js';
 import { useNotificationStore } from '../store/notifications.js';
 import { useStallEscalationStore } from '../store/stallEscalations.js';
 import { orphanedRuns, useWatchStore } from '../store/watch.js';
@@ -184,7 +184,7 @@ export function useSettledNeeds(needRows: readonly NeedRow[], runsKnown: boolean
   const [since] = useState(() => Date.now());
   const [, tick] = useState(0);
   // Operator ruling 2026-10-12: the number counts decisions + failures; reviews are counted on their own.
-  const count = badgeCount(needRows as NeedRow[]);
+  const count = attentionBadge(needRows as NeedRow[]);
   const now = Date.now();
   const held = (): { phase: 'loading' | 'complete'; count: number | null; missing: string[] } =>
     lastComplete === null ? { phase: 'loading', count: null, missing: [] } : { phase: 'complete', count: lastComplete, missing: [] };

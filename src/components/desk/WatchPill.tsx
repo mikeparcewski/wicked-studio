@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { SessionView } from '../../api/types.js';
 import type { Navigate } from '../../hooks/useRoute.js';
 import { useWatchFeed } from '../../hooks/useWatchFeed.js';
-import { badgeCount } from '../../board/needsQueue.js';
+import { attentionBadge } from '../../board/attention.js';
 import type { NeedRow } from '../../board/needsYou.js';
 
 /** Not running: finished, or stopped at a gate (a gate is waiting on you, not working — metrics.ts). */
@@ -52,7 +52,7 @@ export function WatchPill({ needRows, runs, navigate, onFeed = false }: {
    *  at the top of the rail since Amendment 5, where the card would open over the page's header). */
   onFeed?: boolean;
 }): React.ReactElement {
-  const count = badgeCount(needRows);
+  const count = attentionBadge(needRows);
   const sentence = watchSentence(count, liveCount(runs));
   const recent = useWatchFeed({}).filter((r) => r.state === 'open').slice(0, 2);
   const [self, setSelf] = useState(false);
