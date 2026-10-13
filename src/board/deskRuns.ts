@@ -48,6 +48,8 @@ export interface RunsView {
   stats: { inWindow: number; running: number; waiting: number; finished: number; failed: number; ended: number };
   /** Runs in scope that have no start clock (left out of a time window). */
   undated: number;
+  /** How many more runs All time would show (older, undated or archived); 0 when All time is on. */
+  beyond: number;
 }
 
 function rowOf(v: SessionView, title: (v: SessionView) => string): RunRow {
@@ -73,8 +75,10 @@ function haystack(r: RunRow, names: { project: (id: string) => string; agent: (c
 }
 
 export function runsView(runs: readonly SessionView[], refine: Refine, status: RunStatusFilter, query: string, now: number,
-  title: (v: SessionView) => string, names: { project: (id: string) => string; agent: (cli: string) => string }): RunsView {
-  const { kept, undated } = refineRuns(runs, refine, now);
+  title: (v: SessionView) => string, names: { project: (id: string) => string; agent: (cli: string) => string }, allTime = false): RunsView {
+  const { kept, undated } = refineRuns(runs, refine, now, allTime);
+  // How many more an All time view would hold (older, undated or archived): the switch says so.
+  const beyond = allTime ? 0 : refineRuns(runs, refine, now, true).kept.length - kept.length;
   const all = kept.map((v) => rowOf(v, title));
   const count = (o: readonly Outcome[]): number => all.filter((r) => o.some((word) => word === r.outcome)).length;
   const words = query.trim().toLowerCase().split(/\s+/).filter((w) => w !== '');
@@ -93,6 +97,7 @@ export function runsView(runs: readonly SessionView[], refine: Refine, status: R
       ended: count([...OF_FILTER.finished, ...OF_FILTER.failed, ...OF_FILTER.stopped]),
     },
     undated,
+    beyond,
   };
 }
 

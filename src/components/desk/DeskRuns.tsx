@@ -38,10 +38,11 @@ export function DeskRuns({ runs, runsShown, refine, refineBar, now, navigate, pa
   const [status, setStatus] = useState<RunStatusFilter>('all');
   const [query, setQuery] = useState('');
   const [shown, setShown] = useState(PAGE);
-  const view = useMemo(() => runsView(runs, refine, status, query, now, title, { project: projectName, agent: agentName }),
-    [runs, refine, status, query, now, title, projectName, agentName]);
+  const [allTime, setAllTime] = useState(false);
+  const view = useMemo(() => runsView(runs, refine, status, query, now, title, { project: projectName, agent: agentName }, allTime),
+    [runs, refine, status, query, now, title, projectName, agentName, allTime]);
   const s = view.stats;
-  const win = `last ${refine.days} days`;
+  const win = allTime ? 'all time' : `last ${refine.days} days`;
   const rows = view.rows.slice(0, shown);
   const go = (path: string) => (e: React.MouseEvent): void => { if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return; e.preventDefault(); navigate(path); };
   const pick = (f: RunStatusFilter): void => { setStatus(f); setShown(PAGE); };
@@ -58,7 +59,7 @@ export function DeskRuns({ runs, runsShown, refine, refineBar, now, navigate, pa
           note={s.ended === 0 ? 'none ended yet' : `of ${s.ended} that ended`} />
         <DeskStat icon={CircleAlert} tone="fail" label="Failed" testId="desk-runs-stat-failed" value={runsShown ? String(s.failed) : null}
           note={s.failed === 0 ? 'none failed' : `of ${s.ended} that ended`} />
-        <DeskStat icon={ListChecks} tone="accent" label="In the window" testId="desk-runs-stat-window" value={runsShown ? String(s.inWindow) : null}
+        <DeskStat icon={ListChecks} tone="accent" label={allTime ? 'All time' : 'In the window'} testId="desk-runs-stat-window" value={runsShown ? String(s.inWindow) : null}
           note={view.undated > 0 ? `${win} · ${view.undated} undated left out` : win} />
       </ul>
 
@@ -67,6 +68,12 @@ export function DeskRuns({ runs, runsShown, refine, refineBar, now, navigate, pa
           <h2 id="desk-runs-title" className="wk-desk2-title">Runs</h2>
           <Segmented label="Status" data-testid="desk-runs-status" value={status}
             options={RUN_STATUS_FILTERS.map((f) => ({ value: f.value, label: f.label, testId: `desk-runs-status-${f.value}` }))} onChange={pick} />
+          {(allTime || view.beyond > 0) && (
+            <button type="button" className="wk-btn wk-btn--quiet wk-btn--sm" data-testid="desk-runs-alltime" aria-pressed={allTime}
+              onClick={() => { setAllTime((v) => !v); setShown(PAGE); }}>
+              {allTime ? `Back to the last ${refine.days} days` : `All time (+${view.beyond})`}
+            </button>
+          )}
           <label className="wk-dr-search">
             <Search size={14} aria-hidden className="wk-dr-search-icon" />
             <span className="wk-sr-only">Search runs</span>
@@ -77,7 +84,7 @@ export function DeskRuns({ runs, runsShown, refine, refineBar, now, navigate, pa
         </header>
         {!runsShown ? <Skeleton rows={6} /> : view.rows.length === 0 ? (
           <p className="wk-viz-state" data-testid="desk-runs-empty">
-            {s.inWindow === 0 ? `No runs started in the ${win} in this view. Try a longer range or clear the filters.` : 'No run matches this status or search.'}
+            {s.inWindow === 0 ? (allTime ? 'No runs in this view. Try clearing the filters.' : `No runs started in the ${win} in this view. Try a longer range or clear the filters.`) : 'No run matches this status or search.'}
           </p>
         ) : (
           <div className="wk-table-wrap">

@@ -94,7 +94,8 @@ export function DeskHappening({ runs, runsShown, navigate, now, title, pathOf, a
         <span className="wk-viz-meta" data-testid="desk-stream-state">
           {!backfilled ? 'reading…' : readIssue !== null && readIssue.failed === readIssue.total && items.length === 0 ? 'not read'
             : quiet ? (last === null ? 'quiet' : `quiet · last event ${relTime(last, clock)}`) : <><span className="wk-live-dot" aria-hidden /> live</>}
-          {readIssue !== null && readIssue.failed < readIssue.total && <> · {readIssue.failed} of {readIssue.total} jobs not read <button type="button" className="wk-link" data-testid="desk-stream-retry" onClick={retryBackfill}>retry</button></>}
+          {/* Any failed read says so with a retry, even when live events already fill the list. */}
+          {readIssue !== null && !(readIssue.failed === readIssue.total && items.length === 0) && <> · {readIssue.failed} of {readIssue.total} jobs not read <button type="button" className="wk-link" data-testid="desk-stream-retry" onClick={retryBackfill}>retry</button></>}
         </span>
         <a href={every} onClick={go(every)} className="wk-link wk-now-every" data-testid="desk-see-everything">See all jobs</a>
       </header>
@@ -193,12 +194,16 @@ function sayLong(it: StreamItem, v: SessionView | undefined, agentName: (cli: st
     case 'awaitingHuman': return v !== undefined && v.session.status === 'awaiting_human' && !waitsOnYou(v.session)
       ? { text: 'Answered your question', agent: unitAgent, tone: 'ok' }
       : { text: `Asked you to decide at ${step}`, agent: unitAgent, tone: 'gate' };
-    case 'gateDecided': return e.allow === true ? { text: `${cap(step)} passed its checks`, agent: unitAgent, tone: 'ok' } : { text: `${cap(step)} was sent back`, agent: unitAgent, tone: 'fail' };
+    // An allowed gate is an approval, not proof that checks ran (a phase can be approved by default).
+    case 'gateDecided': return e.allow === true ? { text: `${cap(step)} was approved`, agent: unitAgent, tone: 'ok' } : { text: `${cap(step)} was sent back`, agent: unitAgent, tone: 'fail' };
     case 'gateEscalated': return { text: `${cap(step)} needs a person to decide`, agent: unitAgent, tone: 'gate' };
     case 'unitReassigned': return { text: `${cap(step)} moved to another agent`, agent: unitAgent, tone: 'quiet' };
     case 'councilSeatFailed': return { text: `${who(cli)} dropped out of a review${typeof e.reason === 'string' ? ` (${e.reason.replace(/_/g, ' ')})` : ''}`, agent: cli, tone: 'fail' };
     case 'governanceUnenforced': return { text: `${who(cli)} ran ${step} without its governance checks`, agent: cli, tone: 'fail' };
-    case 'acpFallback': return { text: `${who(cli)} fell back to an ungoverned session`, agent: cli, tone: 'fail' };
+    // Two kinds are deliberate routing that keeps enforcement (the contract's AcpFallbackKind): not a failure.
+    case 'acpFallback': return e.fallbackKind === 'governance_requires_wrapped' || e.fallbackKind === 'read_only_requires_wrapped'
+      ? { text: `${who(cli)} ran ${step} single-shot, as its checks require`, agent: cli, tone: 'quiet' }
+      : { text: `${who(cli)} fell back to an ungoverned session`, agent: cli, tone: 'fail' };
     case 'failureTriaged': return { text: `Studio looked into why ${step} failed`, agent: null, tone: 'quiet' };
     case 'repoChecksEvaluated': return { text: 'The repository’s own checks ran', agent: null, tone: 'quiet' };
     default: return { text: it.type, agent: null, tone: 'quiet' };
