@@ -74,7 +74,7 @@ const DESTINATIONS: ReadonlyArray<{ shape: string; label: string; href: string }
   // Desk v2: the Desk's tabs (Steer, Agents and Evaluate host the pages that used to be Workspace links).
   { shape: 'home', label: 'Desk › Report — charts, spend and outcomes', href: '/?tab=report' },
   { shape: 'home', label: 'Desk › Understand — compare and analyze', href: '/?tab=understand' },
-  { shape: 'home', label: 'Desk › Agents — sign-in, checks, readiness', href: '/?tab=agents' },
+  { shape: 'agents', label: 'Desk › Agents — sign-in, checks, readiness', href: '/agents' },
   { shape: 'watch', label: 'Watchtower — the full feed', href: '/watch' },
   { shape: 'rules', label: `Desk › Steer — ${PAGE_NAMES.steering.toLowerCase()}: what agents are told`, href: '/rules' },
   { shape: 'everything', label: 'Everything — every session', href: everythingPath({ tab: 'sessions' }) },

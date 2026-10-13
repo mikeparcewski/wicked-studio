@@ -11,9 +11,9 @@
   "version": 1,
   "studioVersion": "0.7.13",
   "counts": {
-    "files": 217,
-    "occurrences": 2631,
-    "static": 2266,
+    "files": 218,
+    "occurrences": 2634,
+    "static": 2268,
     "dynamic": 69,
     "computed": 24
   },
@@ -1944,6 +1944,12 @@
       ]
     },
     {
+      "testId": "desk-agents-host",
+      "files": [
+        "src/App.tsx"
+      ]
+    },
+    {
       "testId": "desk-analyses-past",
       "files": [
         "src/components/desk/DeskUnderstand.tsx"
@@ -2364,7 +2370,8 @@
     {
       "testId": "desk-needs-partial",
       "files": [
-        "src/components/desk/Desk.tsx"
+        "src/components/desk/Desk.tsx",
+        "src/components/desk/DeskInbox.tsx"
       ]
     },
     {
@@ -2900,6 +2907,12 @@
     },
     {
       "testId": "desk-und-intro",
+      "files": [
+        "src/components/desk/DeskUnderstand.tsx"
+      ]
+    },
+    {
+      "testId": "desk-und-reading",
       "files": [
         "src/components/desk/DeskUnderstand.tsx"
       ]
