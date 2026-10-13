@@ -5,12 +5,13 @@ import { DeskV2, DESK_TABS } from '../src/components/desk/DeskV2.js';
 import { useQualityChecks } from '../src/hooks/useQualityChecks.js';
 import { useProjectsStore } from '../src/store/projects.js';
 
+const recordState = vi.hoisted(() => ({ truncated: false, projectTruncated: false }));
 vi.mock('recharts', () => Object.fromEntries(['Area', 'AreaChart', 'Bar', 'BarChart', 'CartesianGrid', 'Cell', 'Pie', 'PieChart', 'ResponsiveContainer', 'Tooltip', 'XAxis', 'YAxis'].map((key) => [key, () => null])));
 vi.mock('../src/hooks/useQualityChecks.js', () => ({ useQualityChecks: vi.fn() }));
 vi.mock('../src/hooks/useRoster.js', () => ({ useRoster: () => [] }));
 vi.mock('../src/hooks/useDeskRecord.js', () => ({
-  useDeskRecord: () => ({ phase: 'done', reads: [], window: null }),
-  useDeskRecordByProject: () => ({ phase: 'done', byProject: new Map() }),
+  useDeskRecord: () => ({ phase: 'done', reads: recordState.truncated ? [{ truncated: true, seats: [] }] : [], window: null, truncated: recordState.truncated }),
+  useDeskRecordByProject: () => ({ phase: 'done', byProject: new Map(), truncated: recordState.projectTruncated }),
 }));
 vi.mock('../src/hooks/useWindowSpend.js', () => ({ useWindowSpend: () => ({ phase: 'done', current: 0, previous: null, partial: false }) }));
 vi.mock('../src/hooks/useStandingOrders.js', () => ({ useStandingOrders: () => ({ state: null }) }));
@@ -25,6 +26,8 @@ const run = (id: string, days: number, project = 'p1'): SessionView => ({
 const qualityMock = vi.mocked(useQualityChecks);
 
 beforeEach(() => {
+  recordState.truncated = false;
+  recordState.projectTruncated = false;
   // Every API-backed hook used by this report is mocked; reject any unexpected fetch locally.
   vi.stubGlobal('fetch', vi.fn(() => Promise.reject(new Error('Unexpected fetch in Desk test'))));
   useProjectsStore.setState({ projects: [], load: vi.fn(async () => {}) });
@@ -45,6 +48,24 @@ function expectQuality(value: string, note: string): void {
 }
 
 describe('Report quality checks', () => {
+  it.each([undefined, 'p1'])('labels truncated spend on Desk/project %s and omits unknown buckets', (projectId) => {
+    recordState.truncated = true;
+    report(undefined, projectId);
+    const spend = screen.getByTestId('desk-viz-spend');
+    expect(spend).toHaveTextContent('Partial: the agent record left out older runs');
+    expect(spend).toHaveTextContent('Spend buckets affected by truncated reads are unknown and omitted');
+    expect(screen.queryByTestId('desk-chart-spend')).not.toBeInTheDocument();
+    expect(screen.getByTestId('desk-stat-spend').querySelector('.wk-stat-value')).toHaveTextContent('—');
+  });
+
+  it('labels truncation when spend is grouped by project', () => {
+    recordState.projectTruncated = true;
+    report();
+    fireEvent.click(screen.getByTestId('desk-groupby-project'));
+    expect(screen.getByTestId('desk-viz-spend')).toHaveTextContent('Partial: the agent record left out older runs');
+    expect(screen.queryByTestId('desk-chart-spend')).not.toBeInTheDocument();
+  });
+
   it.each([undefined, 'p1'])('shows the quality tile on the Desk/project %s', (projectId) => {
     report(undefined, projectId);
     expect(within(screen.getByTestId('desk-stats')).getAllByRole('listitem')).toHaveLength(5);

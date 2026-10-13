@@ -18,6 +18,8 @@ export interface DeskRecord {
   reads: (SeatRecordResponse | null)[];
   /** The whole window's record (the last read), or null. */
   window: SeatRecordResponse | null;
+  /** Any cumulative read left out older runs. */
+  truncated: boolean;
 }
 
 const cache = new Map<string, { work: string; at: number; reads: (SeatRecordResponse | null)[] }>();
@@ -44,18 +46,18 @@ export function useDeskRecord(days: RangeDays, step: Step, project: string | nul
     void readAll(days, step, project, work).then((reads) => {
       if (!live) return;
       const window = reads[reads.length - 1] ?? null;
-      setState({ key, rec: { phase: window === null ? 'error' : 'done', reads, window } });
+      setState({ key, rec: { phase: window === null ? 'error' : 'done', reads, window, truncated: reads.some((r) => r?.truncated === true) } });
     });
     return () => { live = false; };
   }, [days, step, project, work, key]);
-  return state !== null && state.key === key ? state.rec : { phase: 'loading', reads: [], window: null };
+  return state !== null && state.key === key ? state.rec : { phase: 'loading', reads: [], window: null, truncated: false };
 }
 
 /** Test hook. */
 export function resetDeskRecord(): void { cache.clear(); }
 
 /** Group by project: the same cumulative reads for each project (`?project=`), read together. */
-export function useDeskRecordByProject(days: RangeDays, step: Step, projects: readonly string[], work: string, enabled: boolean): { phase: 'loading' | 'done'; byProject: Map<string, (SeatRecordResponse | null)[]> } {
+export function useDeskRecordByProject(days: RangeDays, step: Step, projects: readonly string[], work: string, enabled: boolean): { phase: 'loading' | 'done'; byProject: Map<string, (SeatRecordResponse | null)[]>; truncated: boolean } {
   const key = `${days}\u0000${step}\u0000${projects.join(',')}`;
   const [state, setState] = useState<{ key: string; byProject: Map<string, (SeatRecordResponse | null)[]> } | null>(null);
   useEffect(() => {
@@ -66,5 +68,5 @@ export function useDeskRecordByProject(days: RangeDays, step: Step, projects: re
     });
     return () => { live = false; };
   }, [days, step, key, work, enabled]); // eslint-disable-line react-hooks/exhaustive-deps
-  return state !== null && state.key === key ? { phase: 'done', byProject: state.byProject } : { phase: 'loading', byProject: new Map() };
+  return state !== null && state.key === key ? { phase: 'done', byProject: state.byProject, truncated: [...state.byProject.values()].some((reads) => reads.some((r) => r?.truncated === true)) } : { phase: 'loading', byProject: new Map(), truncated: false };
 }

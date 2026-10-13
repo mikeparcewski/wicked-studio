@@ -1,4 +1,4 @@
-import type { SessionView } from '../api/types.js';
+import type { SessionStatus, SessionView } from '../api/types.js';
 import { isAskTurnRun } from './askTurn.js';
 
 /**
@@ -9,9 +9,10 @@ import { isAskTurnRun } from './askTurn.js';
 export type StatusWord = 'Archived' | 'Waiting on you' | 'Answered' | 'Working' | 'Failed' | 'Cancelled' | 'Stopped' | 'Finished' | 'Unknown';
 export type StatusTone = 'run' | 'gate' | 'ok' | 'fail' | 'quiet';
 
-const BY_STATUS: Readonly<Record<string, { word: StatusWord; tone: StatusTone }>> = {
+const BY_STATUS = {
   awaiting_human: { word: 'Waiting on you', tone: 'gate' },
   executing: { word: 'Working', tone: 'run' },
+  distributing: { word: 'Working', tone: 'run' },
   pending: { word: 'Working', tone: 'run' },
   planning: { word: 'Working', tone: 'run' },
   running: { word: 'Working', tone: 'run' },
@@ -23,7 +24,8 @@ const BY_STATUS: Readonly<Record<string, { word: StatusWord; tone: StatusTone }>
   paused: { word: 'Stopped', tone: 'quiet' },
   completed: { word: 'Finished', tone: 'ok' },
   done: { word: 'Finished', tone: 'ok' },
-};
+} satisfies Record<SessionStatus, { word: StatusWord; tone: StatusTone }> & Record<string, { word: StatusWord; tone: StatusTone }>;
+const STATUS_TABLE: Readonly<Record<string, { word: StatusWord; tone: StatusTone }>> = BY_STATUS;
 
 /**
  * Precedence: archived first; then an answered ask parked at its turn gate (crew's `ask_turn`) reads
@@ -34,7 +36,7 @@ export function statusWord(view: Pick<SessionView, 'session'>): { word: StatusWo
   const s = view.session as { status?: string; archived_at?: number | string | null };
   if (s.archived_at !== null && s.archived_at !== undefined && s.archived_at !== '') return { word: 'Archived', tone: 'quiet' };
   if (s.status === 'awaiting_human' && isAskTurnRun(view.session)) return { word: 'Answered', tone: 'ok' };
-  return BY_STATUS[String(s.status ?? '').toLowerCase()] ?? { word: 'Unknown', tone: 'quiet' };
+  return STATUS_TABLE[String(s.status ?? '').toLowerCase()] ?? { word: 'Unknown', tone: 'quiet' };
 }
 
 /** A chat (several runs) reads its newest run's word; no runs = "Unknown". */
