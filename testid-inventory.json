@@ -12,8 +12,8 @@
   "studioVersion": "0.7.13",
   "counts": {
     "files": 206,
-    "occurrences": 2463,
-    "static": 2151,
+    "occurrences": 2466,
+    "static": 2154,
     "dynamic": 63,
     "computed": 24
   },
@@ -1055,6 +1055,12 @@
     },
     {
       "testId": "chain-step-check",
+      "files": [
+        "src/components/session/ChainLine.tsx"
+      ]
+    },
+    {
+      "testId": "chain-step-now",
       "files": [
         "src/components/session/ChainLine.tsx"
       ]
@@ -3115,7 +3121,19 @@
       ]
     },
     {
+      "testId": "failure-engine",
+      "files": [
+        "src/components/session/RunRecord.tsx"
+      ]
+    },
+    {
       "testId": "failure-engine-detail",
+      "files": [
+        "src/components/session/RunRecord.tsx"
+      ]
+    },
+    {
+      "testId": "failure-engine-reason",
       "files": [
         "src/components/session/RunRecord.tsx"
       ]

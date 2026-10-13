@@ -16,6 +16,7 @@ const { useAskThreadStore } = await import('../src/store/askThread.js');
 const { useSessionDrafts } = await import('../src/store/sessionDrafts.js');
 const { makeUnit, makeView } = await import('./factories.js');
 const { setCachedRoster } = await import('../src/store/rosterCache.js');
+const { useGateStore } = await import('../src/store/gates.js');
 
 const T0 = 1_700_000_000_000;
 const RUN = 'r-follow';
@@ -70,6 +71,49 @@ afterEach(() => {
 function ok(body: unknown): Promise<Response> {
   return Promise.resolve(new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } }));
 }
+
+describe('run clarity: an open gate is the action — the thread brings its run into view and stops following', () => {
+  afterEach(() => { useGateStore.setState({ gates: {}, approaching: {} }); vi.restoreAllMocks(); });
+  it('a first visit to a session whose run waits on a gate does not follow growth below it', async () => {
+    transcript = [QUESTION];
+    const WAITING = { ...VIEW, session: { ...VIEW.session, status: 'awaiting_human' } } as typeof VIEW;
+    useGateStore.setState({ gates: { [RUN]: { runId: RUN, ord: 1, prompt: 'Approve the output of unit 1 (build) before unit 2 runs', lifecycle: 'open', receivedAt: 1, gateKind: 'def' } }, approaching: {} });
+    // The run's block sits inside the 500 px view: already in view, so no move — but no follow either.
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+      const top = this.dataset['testid'] === 'session-run' ? 100 : 0;
+      return { top, bottom: this.dataset['testid'] === 'session-thread' ? 500 : top + 50, left: 0, right: 0, width: 0, height: 0, x: 0, y: top, toJSON: () => ({}) } as DOMRect;
+    });
+    render(<SessionPage sessionId="chat-pay" runs={[WAITING]} runsLoaded needRows={[]} navigate={() => {}} onAsk={() => {}} />);
+    await waitFor(() => expect(screen.queryAllByTestId('session-turn').length).toBe(1));
+    await screen.findByTestId('session-run');
+    const el = screen.getByTestId('session-thread');
+    act(() => { useAskThreadStore.getState().ingest({ type: 'chatReply', chat: 'chat-pay', cliKey: 'claude', text: REPLY.text, ok: true, turn_id: 't1' } as never); });
+    await screen.findByText(/both post the charge/);
+    expect(el.scrollHeight - 500).toBeGreaterThan(80);
+    expect(el.scrollTop).toBe(0);
+  });
+
+  it('the run’s block below the view is scrolled to (the card leads it), as the thread’s own scroll — never saved as their place', async () => {
+    // A long reply: the box scrolls far past the block, so "scrolled to the block" and "followed to the
+    // bottom" are different numbers.
+    transcript = [QUESTION, { ...REPLY, text: `${REPLY.text} ${'More detail. '.repeat(160)}` }];
+    const WAITING = { ...VIEW, session: { ...VIEW.session, status: 'awaiting_human' } } as typeof VIEW;
+    useGateStore.setState({ gates: { [RUN]: { runId: RUN, ord: 1, prompt: 'Approve the output of unit 1 (build) before unit 2 runs', lifecycle: 'open', receivedAt: 1, gateKind: 'def' } }, approaching: {} });
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+      const top = this.dataset['testid'] === 'session-run' ? 708 - (tops.get(this.closest('[data-testid="session-thread"]') ?? this) ?? 0) : 0;
+      return { top, bottom: this.dataset['testid'] === 'session-thread' ? 500 : top + 50, left: 0, right: 0, width: 0, height: 0, x: 0, y: top, toJSON: () => ({}) } as DOMRect;
+    });
+    render(<SessionPage sessionId="chat-pay" runs={[WAITING]} runsLoaded needRows={[]} navigate={() => {}} onAsk={() => {}} />);
+    await screen.findByText(/both post the charge/);
+    await screen.findByTestId('session-run');
+    const el = screen.getByTestId('session-thread');
+    expect(el.scrollHeight - 500).toBeGreaterThan(1500);
+    // 708 − 8 = 700: the block's top, not the bottom of the thread.
+    await waitFor(() => expect(el.scrollTop).toBe(700));
+    await new Promise((r) => setTimeout(r, 5));
+    expect(useSessionDrafts.getState().scroll['chat-pay']).toBeUndefined();
+  });
+});
 
 describe('the thread follows its newest line only from the bottom', () => {
   it('a returning visitor keeps their scroll position while the transcript lands after the thread is ready (R4)', async () => {

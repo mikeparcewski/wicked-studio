@@ -74,7 +74,7 @@ CARD = """() => {
            buttons: c ? [...c.querySelectorAll('.wk-prop-btns button')].map((b) => b.innerText.trim()) : [],
            no: txt('[data-testid="session-proposal-no"]'),
            runs: document.querySelectorAll('[data-testid="session-run"]').length,
-           chain: [...document.querySelectorAll('[data-testid="chain-step"]')].map((s) => [s.innerText.replace(/\\s+/g, ' ').trim(), s.dataset.state]),
+           chain: [...document.querySelectorAll('[data-testid="chain-step"]')].map((s) => [(s.querySelector('.wk-chain-label') || s).innerText.replace(/\\s+/g, ' ').trim(), s.dataset.state]),
            shape: (document.querySelector('[data-testid="session-ask-shape"]') || {}).innerText || null,
            lines: [...document.querySelectorAll('[data-testid="ask-line"]')].map((l) => [l.dataset.kind, l.innerText.replace(/\\s+/g, ' ').trim()]),
            draft: (document.querySelector('[data-testid="session-composer-input"]') || {}).value || null,

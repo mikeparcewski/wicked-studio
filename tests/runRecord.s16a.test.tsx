@@ -10,6 +10,7 @@ import { RunRecordLines, RunStory } from '../src/components/session/RunRecord.js
 import { ObjectSheet } from '../src/components/sheets/ObjectSheet.js';
 import { useProvenanceStore } from '../src/store/provenance.js';
 import { useRunEventStore } from '../src/store/events.js';
+import { useViewPrefsStore } from '../src/store/viewPrefs.js';
 import { openSheet, useSheets } from '../src/store/sheets.js';
 import { makeUnit, makeView } from './factories.js';
 import { UNIT_DISTRIBUTED_DEGRADED, W6_DEGRADED_REASON } from './fixtures/wave6.js';
@@ -74,6 +75,50 @@ describe('S16a-1c — the cancel / stop story in the thread', () => {
     expect(detail.tagName).toBe('DETAILS');
     expect(detail).not.toHaveAttribute('open');
     expect(detail).toHaveTextContent('boundary-deny:unit-2');
+  });
+
+  it('run clarity: failed with no refused step says the engine’s own reason (rig run e5999520), details folded', () => {
+    const raw = 'council distribution failed: no eligible seat for r-rec: every configured seat is benched — 5 of 5 seats benched';
+    const events = [{ type: 'error', session: RUN, message: raw }, { type: 'sessionFailed', session: RUN, ord: 0 }] as unknown as CoreEvent[];
+    render(<RunStory view={makeView({ id: RUN, status: 'failed' }, [makeUnit({ id: `${RUN}:u1`, session_id: RUN, ord: 1, status: 'distributed' })])} events={events} />);
+    const why = screen.getByTestId('failure-engine');
+    expect(why.querySelector('.wk-session-run-story-line')).toHaveTextContent('No helper could take the work: every helper on this run was signed out or benched.');
+    const detail = screen.getByTestId('failure-engine-reason');
+    expect(detail.tagName).toBe('DETAILS');
+    expect(detail).not.toHaveAttribute('open');
+    expect(detail).toHaveTextContent('every configured seat is benched');
+  });
+
+  it('run clarity: a refused step’s story stands alone — the engine line is only for a run no step was refused for', () => {
+    const events = [{ type: 'error', session: RUN, message: 'boom' }] as unknown as CoreEvent[];
+    const view = makeView({ id: RUN, status: 'failed' }, [
+      makeUnit({ id: `${RUN}:u2`, session_id: RUN, ord: 2, status: 'rejected', denial_reason: 'input governance denied a tool-call in unit-2 (claim boundary-deny:unit-2)' }),
+    ]);
+    render(<RunStory view={view} events={events} />);
+    expect(screen.getByTestId('failure-plain')).toBeInTheDocument();
+    expect(screen.queryByTestId('failure-engine')).toBeNull();
+  });
+
+  it('run clarity: the engine headline reads home paths as ~ unless technical details are on (codex r3)', () => {
+    const events = [{ type: 'error', session: RUN, message: 'failed to open /Users/alice/private-project/worktree/file' }] as unknown as CoreEvent[];
+    render(<RunStory view={makeView({ id: RUN, status: 'failed' })} events={events} />);
+    const line = screen.getByTestId('failure-engine').querySelector('.wk-session-run-story-line')!;
+    expect(line).toHaveTextContent('It stopped with an error: failed to open ~/private-project/worktree/file');
+    expect(line.textContent).not.toMatch(/alice/);
+    // With technical details on, the operator asked for the raw text: the full path shows (agy r1).
+    cleanup();
+    useViewPrefsStore.setState((s) => ({ prefs: { ...s.prefs, technical_details: true } }));
+    try {
+      render(<RunStory view={makeView({ id: RUN, status: 'failed' })} events={events} />);
+      expect(screen.getByTestId('failure-engine').querySelector('.wk-session-run-story-line')).toHaveTextContent('failed to open /Users/alice/private-project/worktree/file');
+    } finally {
+      useViewPrefsStore.setState((s) => ({ prefs: { ...s.prefs, technical_details: false } }));
+    }
+  });
+
+  it('run clarity: no error on the trail claims no reason', () => {
+    render(<RunStory view={makeView({ id: RUN, status: 'failed' })} events={[]} />);
+    expect(screen.queryByTestId('failure-engine')).toBeNull();
   });
 
   it('a run that did not stop says nothing — and reads no audit', () => {

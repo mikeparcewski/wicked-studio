@@ -1,7 +1,7 @@
 import { CodebaseDownload, DeliverCredentialsNotice } from './CodebaseDownload.js';
 import { useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { ApiError, api } from '../../api/client.js';
-import type { ChatPathView, SessionView as RunView } from '../../api/types.js';
+import type { ChatPathView, CoreEvent, SessionView as RunView } from '../../api/types.js';
 import { needsByRun } from '../../board/deskModel.js';
 import type { NeedRow } from '../../board/needsYou.js';
 import { endedAtMs, finishedAtMs } from '../../board/needsYou.js';
@@ -20,11 +20,11 @@ import { IDLE_GATE_ACTION, useGateActionStore } from '../../board/gateActions.js
 import { finishedDeliveryArm, proposalKindOf, statusSentence } from '../../board/proposalCard.js';
 import { useGateStore } from '../../store/gates.js';
 import { useRunEventStore } from '../../store/events.js';
-import { ChainLine, useRunChain } from './ChainLine.js';
+import { ChainLine, useRunChain, type RunPhase } from './ChainLine.js';
 import { ProposalCard } from './ProposalCard.js';
 import { useRunEvents } from '../../hooks/useRunEvents.js';
 import { StrandedCard } from './StrandedCard.js';
-import { RunRecordLines } from './RunRecord.js';
+import { RunRecordLines, RunStory } from './RunRecord.js';
 import { ArtifactAddressProvider, useArtifactMissing } from './ArtifactAddress.js';
 import { chatPromotePrefill } from '../../board/chatPromote.js';
 import { setRetryPrefill } from '../../store/retryPrefill.js';
@@ -114,6 +114,8 @@ type ThreadEntry =
   | { kind: 'line'; key: string; at: number; line: AskLine }
   | { kind: 'typing'; key: string; at: number; who: string }
   | { kind: 'proposal'; key: string; at: number; view: RunView; ask: AskProposal };
+
+const NO_TRAIL: readonly CoreEvent[] = [];
 
 /** How long a just-decided proposal keeps the run's block away while the daemon's status catches up. */
 const JUST_DECIDED_MS = 15_000;
@@ -226,7 +228,8 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
   const askRunsKnown = useAskThreadStore((s) => s.runs);
   const creatorAcceptedKnown = useAskThreadStore((s) => s.creatorAccepted);
   const answerOrdsKnown = useAskThreadStore((s) => s.answerOrds);
-  const askKnow = useMemo(() => ({ runs: askRunsKnown, creatorAccepted: creatorAcceptedKnown, answerOrds: answerOrdsKnown }), [askRunsKnown, creatorAcceptedKnown, answerOrdsKnown]);
+  const chatClosedKnown = useAskThreadStore((s) => s.chatClosed);
+  const askKnow = useMemo(() => ({ runs: askRunsKnown, creatorAccepted: creatorAcceptedKnown, answerOrds: answerOrdsKnown, chatClosed: chatClosedKnown }), [askRunsKnown, creatorAcceptedKnown, answerOrdsKnown, chatClosedKnown]);
   const turnGates = useAskThreadStore((s) => s.turnGates);
   // A finished reply re-reads the transcript: its `seat`, `citations` and `decisions` records and
   // the path's reviewer / helpers land there; the live turn then yields to the record.
@@ -266,6 +269,18 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
     useAskThreadStore.getState().learnAnswerOrds(askRunId, ords);
     useGateStore.getState().reclassifyAskGates();
   }, [askRunId, askRows]);
+  // Run clarity: a CLOSED conversation's composer starts a separate ask — it can no longer answer the
+  // path's turn gate. The run is marked (a fact, like creatorAccepted) so its turn gate is a gate like
+  // any other: kept in the gate store, drawn on the run's block and answered there — never a "Waiting on
+  // you" header with nothing on the page to answer. The gate itself comes from the runs list's own gate
+  // read (asked for here, once): no cached question is replayed, so nothing spent is ever drawn (codex r5).
+  useEffect(() => {
+    if (!askPathOn || askRunId === null || conversation !== 'closed') return;
+    const ask = useAskThreadStore.getState();
+    if (ask.chatClosed[askRunId] === true) return;
+    ask.markChatClosed(askRunId);
+    if (askView?.session.status === 'awaiting_human') onRetryRuns?.();
+  }, [askPathOn, askRunId, askView?.session.status, conversation, onRetryRuns]);
   // What the thread and the fold know between them: the stored fact survives an empty fold (r3 #3).
   const creatorAccepted = askPath.creatorAccepted || (askRunId !== null && creatorAcceptedKnown[askRunId] === true);
   const lines = useMemo(() => {
@@ -517,6 +532,28 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
     }
     if (grew && nearBottom.current) scrollThread(el, el.scrollHeight);
   }, [entries, ready]);
+
+  // Run clarity: the action first. On a first visit (no saved place — a saved place means they were
+  // reading there) a run of this session with an open gate brings its block — the card leads it — into
+  // view once, and the thread stops following: a block that grows below (a plan pane, the step list)
+  // never pulls the question off screen. The thread's own scroll, so it is never saved as their place.
+  const gatedRunId = useGateStore((s) => mine.find((v) => s.gates[v.session.id] !== undefined)?.session.id ?? null);
+  const shownGate = useRef<string | null>(null);
+  useLayoutEffect(() => {
+    const el = scroller.current;
+    if (!ready || gatedRunId === null || el === null) return;
+    const key = `${sessionId}:${gatedRunId}`;
+    if (shownGate.current === key || useSessionDrafts.getState().scroll[sessionId] !== undefined) return;
+    const block = [...el.querySelectorAll<HTMLElement>('[data-testid="session-run"]')].find((b) => b.dataset['runId'] === gatedRunId);
+    if (block === undefined) return;
+    shownGate.current = key;
+    nearBottom.current = false;
+    restore.current.pending = false;
+    const view = el.getBoundingClientRect();
+    const at = block.getBoundingClientRect().top;
+    if (at >= view.top && at <= view.bottom - 160) return; // already in view
+    scrollThread(el, Math.max(0, el.scrollTop + at - view.top - 8));
+  }, [ready, gatedRunId, sessionId, entries]);
 
   // Where a source's passage can be read from: the session's runs with a worktree, newest first.
   const readers = useMemo(() => [...mine].reverse().map((v) => ({
@@ -799,6 +836,11 @@ export function RunBlock({ view, badge, sessionId, navigate, solo = null }: {
     endedMs,
     (e) => e.replace(/[-_]+/g, ' '),
   );
+  const trail = useRunEventStore((s) => s.byRun[id]) ?? NO_TRAIL;
+  // Run clarity: the "now" marker's run phase — an orphaned run is not working (OrphanedRow says so).
+  const phase: RunPhase = view.session.status === 'executing'
+    ? (orphanedOf(view.session.status, trail) === null ? 'working' : 'other')
+    : view.session.status === 'failed' || view.session.status === 'cancelled' ? 'stopped' : 'other';
   const gate = useGateStore((s) => s.gates[id]);
   const action = useGateActionStore((s) => s.byGate[id] ?? IDLE_GATE_ACTION);
   // WT-U2: "checked" comes only from the acceptance read (crew's per-step check state); the chips'
@@ -859,16 +901,9 @@ export function RunBlock({ view, badge, sessionId, navigate, solo = null }: {
           {view.session.archived_at != null && <span data-testid="session-run-archived" className="wk-session-grey"> · Archived</span>}
         </p>
       )}
-      {/* S16a-1d: the run's technical handles, when Settings › Show technical details is on. */}
-      <Tech data-testid="tech-session-run" parts={runTechParts({ id, base_commit: view.session.base_commit, clis: view.session.clis })} block />
-      <OrphanedRow view={view} />
-      {/* S16a-1c: the run's record lines — why it stopped, the amended acceptance list, a short
-          council, the Watchtower's lines (and "You jumped in" when the address carries ?jump=). */}
-      <RunRecordLines view={view} jumped={jump !== null} {...(navigate === undefined ? {} : { navigate })} />
-      {/* Audit row 27: a stopped run's two ways on, as two buttons: Resume (this run, in place) and
-          Start over (S16a-1d: the launch form prefilled; nothing starts until you send). */}
-      <RecoveryRow view={view} {...(navigate === undefined ? {} : { navigate })} />
-      {/* S15e: plan and deliver go through ProposalCard; every other gate kind is answered in the thread. */}
+      {/* S15e: plan and deliver go through ProposalCard; every other gate kind is answered in the thread.
+          Run clarity: the action comes first — the card sits right under the status sentence, above the
+          run's notes (who reviewed, what wasn't checked), so what you can do is never below the fold. */}
       {effectiveKind === 'plan' || effectiveKind === 'deliver'
         ? <ProposalCard view={view} chain={chain} acceptance={acceptance?.summary ?? null} />
         : finished === 'handed'
@@ -876,6 +911,17 @@ export function RunBlock({ view, badge, sessionId, navigate, solo = null }: {
           : finished === 'stranded'
             ? <StrandedCard view={view} />
             : <GateRow view={view} gate={gate} {...(navigate !== undefined ? { navigate } : {})} />}
+      {/* S16a-1d: the run's technical handles, when Settings › Show technical details is on. */}
+      <Tech data-testid="tech-session-run" parts={runTechParts({ id, base_commit: view.session.base_commit, clis: view.session.clis })} block />
+      <OrphanedRow view={view} />
+      {/* S16a-1c: why it stopped. Run clarity: the reason, then the ways on, then the run's notes. */}
+      <RunStory view={view} events={trail} {...(navigate === undefined ? {} : { navigate })} />
+      {/* Audit row 27: a stopped run's two ways on, as two buttons: Resume (this run, in place) and
+          Start over (S16a-1d: the launch form prefilled; nothing starts until you send). */}
+      <RecoveryRow view={view} {...(navigate === undefined ? {} : { navigate })} />
+      {/* S16a-1c: the run's record lines — the amended acceptance list, a short council, the
+          Watchtower's lines (and "You jumped in" when the address carries ?jump=). */}
+      <RunRecordLines view={view} jumped={jump !== null} withStory={false} {...(navigate === undefined ? {} : { navigate })} />
       {/* crew#720: whatever the card above says, a deliver phase that refused for want of the provider
           credential says so, and the run's final code is downloadable — every outcome. */}
       <DeliverCredentialsNotice view={view} />
@@ -883,7 +929,7 @@ export function RunBlock({ view, badge, sessionId, navigate, solo = null }: {
       {/* S16a-4g: an MCP server's question and the stall watchdog's hand-off, under the run's card. */}
       <RunQuestions view={view} />
       <PlanStepLines runId={id} />
-      <ChainLine chain={chain} runId={id} units={view.units} teamError={teamError} onRetry={retry} checks={checks} momentOf={momentOf} onOpenAt={(sec) => requestWalkthroughSeek(id, sec)} nothingChecked={noEvidenceSummary !== null} jumpOrd={jump?.ord ?? null} />
+      <ChainLine chain={chain} runId={id} units={view.units} teamError={teamError} onRetry={retry} checks={checks} momentOf={momentOf} onOpenAt={(sec) => requestWalkthroughSeek(id, sec)} nothingChecked={noEvidenceSummary !== null} jumpOrd={jump?.ord ?? null} waitOrd={gate !== undefined && effectiveKind !== 'plan' ? gate.ord : null} phase={phase} />
       {/* S8: the page the run is producing — a live preview that morphs inline → pane → full. */}
       <RunArtifacts view={view} composerKey={sessionId} chain={chain} />
       <RunHelpers view={view} />

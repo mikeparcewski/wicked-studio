@@ -1051,6 +1051,15 @@ select:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-
 .wk-chain-dot--failed { border-color: var(--status-fail); background: var(--status-fail); }
 .wk-chain-step--todo .wk-chain-label { color: var(--ink-muted); }
 .wk-chain-step--struck .wk-chain-label, .wk-chain-step--replaced .wk-chain-label { text-decoration: line-through; color: var(--ink-dim); }
+/* Run clarity: the step that is "now" — waiting on you, working, or where it stopped. */
+.wk-chain-step--now .wk-chain-label { color: var(--ink-high); font-weight: 600; }
+.wk-chain-step--now-wait .wk-chain-dot { border-color: var(--status-gate); box-shadow: 0 0 0 3px color-mix(in oklab, var(--status-gate) 30%, transparent); }
+.wk-chain-step--now-run .wk-chain-dot { box-shadow: 0 0 0 3px color-mix(in oklab, var(--status-run) 30%, transparent); }
+.wk-chain-step--now-stopped .wk-chain-dot { box-shadow: 0 0 0 3px color-mix(in oklab, var(--status-fail) 30%, transparent); }
+.wk-chain-now { font-size: var(--text-2xs); line-height: 1.6; padding: 0 7px; border-radius: var(--radius-full); color: var(--ink-high); border: 1px solid var(--border); }
+.wk-chain-now--wait { border-color: var(--status-gate); background: color-mix(in oklab, var(--status-gate) 18%, transparent); }
+.wk-chain-now--run { border-color: var(--status-run); background: color-mix(in oklab, var(--status-run) 14%, transparent); }
+.wk-chain-now--stopped { border-color: var(--status-fail); background: color-mix(in oklab, var(--status-fail) 14%, transparent); }
 .wk-chain-late { font-size: var(--text-2xs); color: var(--ink-muted); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 0 4px; }
 .wk-chain-sentence { margin: 4px 0 0; font-size: var(--text-xs); color: var(--ink-muted); }
 .wk-chain-transport { margin: 4px 0 0; font-size: var(--text-xs); color: var(--status-fail); }
