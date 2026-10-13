@@ -40,7 +40,6 @@ import { openLaunchWizard } from '../../store/launchWizard.js';
 import { useProjectsStore } from '../../store/projects.js';
 import { openSheet } from '../../store/sheets.js';
 import { CaptureDrop } from '../CaptureDrop.js';
-import { NewProjectModal } from '../NewProjectModal.js';
 import { SignInPanel } from '../SignInPanel.js';
 import { StandingOrdersPanel } from '../StandingOrdersPanel.js';
 import { agentColor, AreaChart, catColor, ChartCard, OutcomeBreakdown, outcomeColor, StackedBars, type BarSeries, type ChartState } from '../charts/Chart.js';
@@ -332,7 +331,7 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
       {projectHead !== undefined ? <div className="wk-desk2-actions">{projectHead.actions}</div> : <div className="wk-desk2-actions">
         <button type="button" data-testid="desk-chat" className="wk-btn wk-btn--secondary" onClick={() => openAskDock({ fresh: true })}><MessageSquare size={14} aria-hidden />Chat</button>
         <button type="button" data-testid="desk-new-job" className="wk-btn wk-btn--primary" onClick={() => openLaunchWizard({ composerKey: 'desk' })}><Plus size={14} aria-hidden />New job</button>
-        <DeskMore runs={runs} navigate={navigate} />
+        <DeskMore runs={runs} />
       </div>}
     </header>
   );
@@ -619,10 +618,9 @@ function InsightCards({ items, loading, recordFailed, navigate, workPath }: { it
   );
 }
 
-/** The Desk's ⋯: standing instructions, Mark me away, Capture notes and the look underneath. */
-function DeskMore({ runs, navigate }: { runs: SessionView[]; navigate: Navigate }): React.ReactElement {
+/** The Desk's ⋯: standing instructions, Mark me away, Capture notes and the look underneath (New project is the rail's). */
+function DeskMore({ runs }: { runs: SessionView[] }): React.ReactElement {
   const [open, setOpen] = useState(false);
-  const [newProject, setNewProject] = useState(false);
   const root = useRef<HTMLDivElement | null>(null);
   const btn = useRef<HTMLButtonElement | null>(null);
   useEffect(() => {
@@ -646,11 +644,9 @@ function DeskMore({ runs, navigate }: { runs: SessionView[]; navigate: Navigate 
         <div className="wk-desk2-more-panel wk-overlay" data-testid="desk-more-panel" role="group" aria-label="More for the Desk">
           <div className="wk-desk2-more-row"><StandingOrdersPanel /></div>
           <div className="wk-desk2-more-row"><CaptureDrop runs={runs} opens="down" align="end" /></div>
-          <button type="button" data-testid="desk-new-project" className="wk-btn wk-btn--quiet wk-btn--sm wk-desk2-more-item" onClick={() => { setOpen(false); setNewProject(true); }}><Plus size={14} aria-hidden />New project</button>
           <button type="button" data-testid="desk-sheet-open" className="wk-btn wk-btn--quiet wk-btn--sm wk-desk2-more-item" onClick={() => { setOpen(false); openSheet({ kind: 'desk' }); }}>Look underneath the Desk</button>
         </div>
       )}
-      {newProject && <NewProjectModal deskMode navigate={navigate} onClose={() => setNewProject(false)} />}
     </div>
   );
 }
