@@ -1,9 +1,10 @@
-import { useMemo } from 'react';
-import { LayoutGrid, Plus } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { ChevronDown, ChevronRight, ChevronUp, LayoutGrid, Plus } from 'lucide-react';
 import { useDeliveredNow } from '../../store/postHocDeliver.js';
 import type { SessionView } from '../../api/types.js';
-import { DESK_RAIL_LINKS, SETTINGS_PATH, needsByRun, needTextByRun, railGroups } from '../../board/deskModel.js';
-import { useSettledNeeds } from '../../hooks/useNeedsRows.js';
+import { DESK_RAIL_LINKS, SETTINGS_PATH, needsByRun, needTextByRun, needsYouWords, railGroups, railRowWords, type RailSession } from '../../board/deskModel.js';
+import { useRailCollapsed } from '../../hooks/useRailCollapsed.js';
+import { useNeedsClock, useSettledNeeds } from '../../hooks/useNeedsRows.js';
 import type { NeedRow } from '../../board/needsYou.js';
 import { MoveToProject, MoveProjectStatus, useMovableBoardModel } from './MoveToProject.js';
 import { useCapabilities } from '../../store/capabilities.js';
@@ -26,8 +27,13 @@ export const SESSION_RAIL_PX = 236;
  *    number — one source, so they never disagree).
  *  - Watchtower — the quiet pill (rule 10), where the bell was. There is no Notifications entry:
  *    the Desk is the notification surface, and Watchtower is the full feed.
- *  - Sessions grouped by project (the board model's order), each with a state dot and the count
- *    of needs-you items that name it. A project group carries two quick icons (new session →
+ *  - Sessions grouped by project (the board model's order), each with ONE status dot (four hues:
+ *    waiting on you, working, failed, ended — its word in the row's hover title and accessible label)
+ *    and the count of needs-you items that name it. A title is one line, cut with an ellipsis, its
+ *    full words in the hover title; same-named sessions in a group carry a short tag ("· 29d",
+ *    `disambiguate`). A group header folds its group (remembered per viewer in localStorage,
+ *    `useRailCollapsed`; a folded group still shows its needs-you count), and a group shows its first
+ *    few with "Show N more" for the rest (studio-rail-clean). A project group carries two quick icons (new session →
  *    `/` + the project's `@` chip, open project → its dashboard `/projects/:id`); the
  *    unfiled group ("Not in a project") carries only the open icon, to See everything › Projects
  *    where its "Not in a project" card lives. A session is a chat and its runs when the
@@ -60,10 +66,34 @@ export function SessionRail({ runs, needRows, navigate, pathname, runsKnown = tr
   const badgeText = settled.phase === 'partial' ? `${count}+` : String(count);
   const runChatId = useCapabilities((s) => s.runChatId);
   const deliveredNow = useDeliveredNow();
+  // The tags' and hover titles' clock: the queue's shared minute tick, so ages move while nothing else does.
+  const now = useNeedsClock();
   const groups = useMemo(
-    () => railGroups(items, unfiled, needsByRun(needRows), undefined, needTextByRun(needRows), runChatId, deliveredNow),
-    [items, unfiled, needRows, runChatId, deliveredNow],
+    () => railGroups(items, unfiled, needsByRun(needRows), undefined, needTextByRun(needRows), runChatId, deliveredNow, now),
+    [items, unfiled, needRows, runChatId, deliveredNow, now],
   );
+  const { collapsed, toggle } = useRailCollapsed();
+  // "Show N more" is this page's choice only; folding is what persists.
+  const [showAll, setShowAll] = useState<ReadonlySet<string>>(() => new Set());
+  // A list that runs past the rail's fold fades out at its foot instead of slicing a row in half;
+  // the fade lifts once the list is scrolled to its end.
+  const groupsRef = useRef<HTMLDivElement>(null);
+  const [moreBelow, setMoreBelow] = useState(false);
+  useEffect(() => {
+    const el = groupsRef.current;
+    if (el === null) return undefined;
+    const check = (): void => setMoreBelow(el.scrollHeight - el.scrollTop - el.clientHeight > 2);
+    check();
+    el.addEventListener('scroll', check, { passive: true });
+    const ro = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(check);
+    ro?.observe(el);
+    return () => { el.removeEventListener('scroll', check); ro?.disconnect(); };
+  }, [groups, collapsed, showAll]);
+  const flipShowAll = (key: string): void => setShowAll((prev) => {
+    const next = new Set(prev);
+    if (next.has(key)) next.delete(key); else next.add(key);
+    return next;
+  });
   const dot = useRailHealthDot();
   const go = (path: string) => (e: React.MouseEvent): void => { e.preventDefault(); navigate(path); };
   const current = (path: string): 'page' | undefined => (pathname === path || pathname.startsWith(`${path}/`) ? 'page' : undefined);
@@ -97,12 +127,33 @@ export function SessionRail({ runs, needRows, navigate, pathname, runsKnown = tr
         <WatchPill needRows={needRows} runs={runs} navigate={navigate} onFeed={pathname === '/watch'} />
       </div>
 
-      <div className="wk-rail-groups">
+      <div ref={groupsRef} className="wk-rail-groups" data-more-below={moreBelow ? 'true' : 'false'}>
         <MoveProjectStatus />
-        {groups.map((g) => (
-          <div key={g.projectId ?? 'unfiled'} data-testid="rail-group" data-project-id={g.projectId ?? ''}>
+        {groups.map((g, gi) => {
+          const key = g.projectId ?? '';
+          const folded = collapsed.has(key);
+          const all = showAll.has(key);
+          const listId = `rail-group-list-${gi}`;
+          const needs = [...g.sessions, ...g.more].reduce((n, s) => n + s.badge, 0);
+          const rows: RailSession[] = all ? [...g.sessions, ...g.more] : g.sessions;
+          return (
+          <div key={g.projectId ?? 'unfiled'} data-testid="rail-group" data-project-id={g.projectId ?? ''} data-folded={folded ? 'true' : 'false'}>
             <div className="wk-rail-group-row">
-              <p className="wk-rail-group" title={g.name}>{g.name}</p>
+              <button
+                type="button"
+                data-testid="rail-group-toggle"
+                className="wk-rail-group wk-rail-group-toggle"
+                aria-expanded={!folded}
+                aria-controls={folded ? undefined : listId}
+                title={g.name}
+                onClick={() => toggle(key)}
+              >
+                <ChevronRight size={12} aria-hidden className="wk-rail-fold-chevron" />
+                <span className="wk-rail-group-name">{g.name}</span>
+                {folded && needs > 0 && (
+                  <span data-testid="rail-group-needs" className="wk-rail-badge wk-rail-badge--row" title={needsYouWords(needs)} aria-label={needsYouWords(needs)}>{needs}</span>
+                )}
+              </button>
               {g.projectId !== null && g.projectId !== '' && (
                 <span className="wk-rail-group-icons">
                   <button
@@ -142,31 +193,53 @@ export function SessionRail({ runs, needRows, navigate, pathname, runsKnown = tr
                 </span>
               )}
             </div>
-            {g.sessions.map((s) => (
-              <div key={s.id} className="wk-rail-session-row" data-move-row={s.id}>
-                <a
-                  href={s.path}
-                  onClick={go(s.path)}
-                  data-testid="rail-session"
-                  data-session-id={s.id}
-                  data-run-id={s.runId}
-                  data-run-ids={s.runIds.join(' ')}
-                  data-state={s.state}
-                  data-badge={s.badge}
-                  title={`${s.fullTitle ?? s.title} — ${s.line}`}
-                  aria-label={`${s.fullTitle ?? s.title} — ${s.line}${s.badge > 0 ? `, ${s.badge} need you` : ''}`}
-                  aria-current={pathname === s.path ? 'page' : undefined}
-                  className="wk-rail-session"
-                >
-                  <span aria-hidden className={`wk-desk-dot wk-desk-dot--${s.state}`} />
-                  <span className="wk-rail-session-title">{s.fullTitle ?? s.title}</span>
-                  {s.badge > 0 && <span className="wk-rail-badge" aria-label={`${s.badge} need you`}>{s.badge}</span>}
-                </a>
-                <MoveToProject session={s} projectId={g.projectId} runs={runs} />
+            {!folded && (
+              <div id={listId} className="wk-rail-group-list">
+                {rows.map((s) => {
+                  const words = railRowWords(s, now);
+                  return (
+                  <div key={s.id} className="wk-rail-session-row" data-move-row={s.id}>
+                    <a
+                      href={s.path}
+                      onClick={go(s.path)}
+                      data-testid="rail-session"
+                      data-session-id={s.id}
+                      data-run-id={s.runId}
+                      data-run-ids={s.runIds.join(' ')}
+                      data-state={s.state}
+                      data-status={s.status.word}
+                      data-badge={s.badge}
+                      title={words.title}
+                      aria-label={words.label}
+                      aria-current={pathname === s.path ? 'page' : undefined}
+                      className="wk-rail-session"
+                    >
+                      <span aria-hidden data-testid="rail-session-dot" data-tone={s.status.tone} className={`wk-desk-dot wk-rail-dot wk-rail-dot--${s.status.tone}`} />
+                      <span className="wk-rail-session-title">{s.title}</span>
+                      {s.tag !== null && <span data-testid="rail-session-tag" className="wk-rail-session-tag">· {s.tag}</span>}
+                      {s.badge > 0 && <span aria-hidden className="wk-rail-badge wk-rail-badge--row">{s.badge}</span>}
+                    </a>
+                    <MoveToProject session={s} projectId={g.projectId} runs={runs} />
+                  </div>
+                  );
+                })}
+                {g.more.length > 0 && (
+                  <button
+                    type="button"
+                    data-testid="rail-group-more"
+                    className="wk-rail-showmore"
+                    aria-expanded={all}
+                    onClick={() => flipShowAll(key)}
+                  >
+                    {all ? <ChevronUp size={12} aria-hidden /> : <ChevronDown size={12} aria-hidden />}
+                    {all ? 'Show fewer' : `Show ${g.more.length} more`}
+                  </button>
+                )}
               </div>
-            ))}
+            )}
           </div>
-        ))}
+          );
+        })}
       </div>
 
       <div className="wk-rail-foot">

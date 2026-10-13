@@ -1,0 +1,82 @@
+/* ── THE SESSION RAIL, calm pass (studio-rail-clean; Desk v2's visual language). New rules only; the
+   rail's existing .wk-rail-* rules live in components.css. Tokens only. ── */
+
+/* The group header is its fold toggle: the project name, a chevron that turns when open, and (folded)
+   the group's needs-you count. Same type as the old label: xs semi, muted. */
+.wk-rail-group-toggle {
+  display: flex; align-items: center; gap: 6px; flex: 1 1 auto; min-width: 0; min-height: 26px;
+  padding: 0 10px 0 4px; border: none; background: none; border-radius: var(--radius-sm);
+  font: inherit; font-size: var(--text-xs); font-weight: var(--weight-semi); color: var(--ink-muted);
+  cursor: pointer; text-align: left;
+}
+.wk-rail-group-toggle:hover { color: var(--ink-high); background: var(--surface-card); }
+.wk-rail-group-name { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.wk-rail-fold-chevron { flex-shrink: 0; color: var(--ink-muted); transition: transform var(--dur-fast); transform: rotate(90deg); }
+.wk-rail-group-toggle[aria-expanded="false"] .wk-rail-fold-chevron { transform: none; }
+.wk-rail-group-toggle .wk-rail-badge { margin-left: auto; }
+@media (prefers-reduced-motion: reduce) { .wk-rail-fold-chevron { transition: none; } }
+
+/* ONE status-dot language: every row's dot is the same 8 px circle. FILLED = work that is live or wants
+   you, its hue the state: waiting on you = harbor (violet stays off the rail, desk_look), working = run
+   green, failed = red. A RING = nothing to do: work that ended (finished, cancelled, stopped, archived)
+   or an answered ask waiting on no one ("Answered"); it recedes, at full ring contrast. The status word is the row's hover title and accessible label. */
+.wk-rail-dot { border: none; }
+.wk-rail-dot--gate { background: var(--accent); }
+.wk-rail-dot--run { background: var(--status-run); }
+.wk-rail-dot--fail { background: var(--status-fail); }
+.wk-rail-dot--ok, .wk-rail-dot--quiet { background: transparent; box-shadow: inset 0 0 0 1.5px var(--status-done); }
+
+/* The tag that tells same-named rows apart ("· 29d"): secondary ink (it is the distinguishing words, so
+   --ink-muted, not the faint meta tier), never cut. */
+.wk-rail-session-tag { flex-shrink: 0; margin-left: auto; font-size: var(--text-xs); color: var(--ink-muted); white-space: nowrap; }
+
+/* A row's needs-you count: a quiet harbor-tinted pill, pushed to the row's end (the Desk's own badge
+   stays the one spark). Its words are in the row's label and hover title. */
+.wk-rail-badge.wk-rail-badge--row {
+  min-width: 18px; height: 18px; padding: 0 5px; margin-left: auto;
+  background: var(--accent-wash); color: var(--ink-high); font-weight: var(--weight-semi);
+}
+/* After a tag the tag already holds the free space: the count sits right beside it (this rule must
+   follow the one above, same specificity). */
+.wk-rail-session-tag + .wk-rail-badge.wk-rail-badge--row { margin-left: 0; }
+
+/* "Show N more" / "Show fewer": a quiet text button inset to the titles (row pad 10 + dot 8 + gap 8). */
+.wk-rail-showmore {
+  display: flex; align-items: center; gap: 4px; width: 100%; margin: 2px 0 0; padding: 4px 10px 4px 26px; min-height: 26px;
+  border: none; background: none; border-radius: var(--radius-md); text-align: left; cursor: pointer;
+  font: inherit; font-size: var(--text-xs); font-weight: var(--weight-medium); color: var(--accent);
+}
+.wk-rail-showmore:hover { background: var(--surface-card); text-decoration: underline; }
+.wk-rail-showmore svg { flex-shrink: 0; }
+
+/* The phone drawer: 44 px targets (the drawer's a/button rule sets the height; widths here). */
+@media (max-width: 767px) {
+  .wk-rail-drawer .wk-rail-group-toggle, .wk-rail-drawer .wk-rail-showmore { min-height: var(--tap-min); }
+  .wk-rail-drawer .wk-rail-session { min-height: var(--tap-min); }
+}
+
+/* Move to project (operator item 8) on the desktop rail: the trigger floats over the row's end while
+   the row is hovered or focused instead of reserving its width on every row, so titles keep it. */
+@media (min-width: 768px) {
+  .wk-rail-session-row { position: relative; }
+  .wk-rail-session-row > .wk-desk-move { position: absolute; right: 2px; top: 50%; transform: translateY(-50%); }
+  .wk-rail-session-row > .wk-desk-move .wk-desk-move-trigger { background: var(--surface-card); }
+  /* While the trigger shows, it takes the count's place at the row's end (the count stays in the row's
+     hover title and label); the row makes room for it, so a twin's tag stays readable beside it. */
+  .wk-rail-session-row:is(:hover, :focus-within) > .wk-rail-session { padding-right: 34px; }
+  .wk-rail-session-row:is(:hover, :focus-within) .wk-rail-badge--row { display: none; }
+}
+
+/* A group's header sticks to the top of the rail's scroller while its rows scroll under it, so a row
+   never loses its project name (in the phone drawer the whole rail is the scroller). The shadow paints
+   the rail over the scroller's top padding, so no sliver of a row peeks above a stuck header. */
+.wk-rail-group-row { position: sticky; top: 0; z-index: 2; background: var(--surface-rail); box-shadow: 0 -8px 0 var(--surface-rail); }
+
+/* A session list that runs past the rail's fold fades out over its last 32 px instead of slicing a
+   row in half at the Workspace divider; at the list's end (or when it fits) there is no fade. A sticky
+   overlay, not a mask: a mask would also clip the fixed "Move to project" picker opened inside it. */
+.wk-rail-groups[data-more-below="true"]::after {
+  content: ''; display: block; position: sticky; bottom: -8px; height: 32px; margin-top: -32px;
+  pointer-events: none; z-index: 3;
+  background: linear-gradient(to bottom, transparent, var(--surface-rail));
+}

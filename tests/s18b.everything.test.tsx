@@ -31,12 +31,12 @@ const { useDocsCache } = await import('../src/store/docsCache.js');
 const { useProjectsStore } = await import('../src/store/projects.js');
 
 function session(id: string, title: string, runIds: string[] = [id]): RailGroup['sessions'][number] {
-  return { id: `run:${id}`, runId: runIds[runIds.length - 1]!, runIds, title, state: 'done', badge: 0, line: 'done', path: `/s/run:${id}` };
+  return { id: `run:${id}`, runId: runIds[runIds.length - 1]!, runIds, title, state: 'done', badge: 0, line: 'done', path: `/s/run:${id}`, status: { word: 'Finished', tone: 'ok' }, at: null, launchedAt: null, tag: null };
 }
 const GROUPS: RailGroup[] = [
-  { projectId: 'pay', name: 'Payments', sessions: [session('a', 'Fix the double charge'), session('b', 'Add a refund button')] },
-  { projectId: 'docs', name: 'Docs', sessions: [session('c', 'Write the charge guide')] },
-  { projectId: null, name: 'Not in a project', sessions: [session('d', 'Tidy the readme')] },
+  { projectId: 'pay', name: 'Payments', sessions: [session('a', 'Fix the double charge'), session('b', 'Add a refund button')], more: [] },
+  { projectId: 'docs', name: 'Docs', sessions: [session('c', 'Write the charge guide')], more: [] },
+  { projectId: null, name: 'Not in a project', sessions: [session('d', 'Tidy the readme')], more: [] },
 ];
 
 describe('searchGroups (port 1c)', () => {
