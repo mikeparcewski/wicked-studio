@@ -142,4 +142,26 @@ describe('the New job cards', () => {
     expect(cardIds()).toContain('acme-docs');
     expect((document.activeElement as HTMLElement).dataset.testid).toBe('launch-wizard-workflow-feature');
   });
+
+  it('the app builder is shown as coming, never offered: a tile after the cards, not a button, nothing behind it', () => {
+    render(<LaunchWizard />);
+    act(() => openLaunchWizard({}));
+    const grid = screen.getByTestId('launch-wizard-cards');
+    const soon = screen.getByTestId('launch-wizard-soon');
+    expect(grid.lastElementChild).toBe(soon);
+    expect(soon.tagName).not.toBe('BUTTON');
+    expect(soon.querySelector('a, button, [tabindex]')).toBeNull();
+    expect(soon.getAttribute('aria-disabled')).toBe('true');
+    expect(soon.textContent).toContain('Vibe — app builder');
+    expect(soon.textContent).toContain('Coming soon');
+    expect(soon.textContent).toContain('Build and preview an app visually. Apps are already built by pipelines today.');
+    expect(cardIds()).not.toContain('vibe');
+    // End lands on the last real job; a click on the tile picks nothing and stays on the grid.
+    fireEvent.keyDown(grid, { key: 'End' });
+    const buttons = within(grid).getAllByRole('button');
+    expect(document.activeElement).toBe(buttons[buttons.length - 1]);
+    fireEvent.click(soon);
+    expect(useLaunchWizard.getState().draft?.workflowId ?? null).toBeNull();
+    expect(screen.getByTestId('launch-wizard-step').dataset.step).toBe('workflow');
+  });
 });

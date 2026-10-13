@@ -11,9 +11,9 @@
   "version": 1,
   "studioVersion": "0.7.13",
   "counts": {
-    "files": 204,
-    "occurrences": 2342,
-    "static": 2036,
+    "files": 205,
+    "occurrences": 2353,
+    "static": 2046,
     "dynamic": 63,
     "computed": 24
   },
@@ -2251,6 +2251,12 @@
       ]
     },
     {
+      "testId": "editor-plugin-elsewhere",
+      "files": [
+        "src/components/editors/EditorPluginsSettings.tsx"
+      ]
+    },
+    {
       "testId": "editor-plugin-internet",
       "files": [
         "src/components/editors/EditorPluginsSettings.tsx"
@@ -3890,6 +3896,12 @@
     },
     {
       "testId": "launch-wizard-seat",
+      "files": [
+        "src/components/launch/LaunchWizard.tsx"
+      ]
+    },
+    {
+      "testId": "launch-wizard-soon",
       "files": [
         "src/components/launch/LaunchWizard.tsx"
       ]
@@ -5825,6 +5837,54 @@
       "testId": "plugin-artifact",
       "files": [
         "src/components/session/PluginArtifact.tsx"
+      ]
+    },
+    {
+      "testId": "plugin-coming-soon",
+      "files": [
+        "src/components/editors/EditorPluginsSettings.tsx"
+      ]
+    },
+    {
+      "testId": "plugin-coming-soon-tag",
+      "files": [
+        "src/components/editors/EditorPluginsSettings.tsx"
+      ]
+    },
+    {
+      "testId": "plugin-document",
+      "files": [
+        "src/components/editors/OpenDocumentList.tsx"
+      ]
+    },
+    {
+      "testId": "plugin-documents",
+      "files": [
+        "src/components/editors/OpenDocumentList.tsx"
+      ]
+    },
+    {
+      "testId": "plugin-documents-all",
+      "files": [
+        "src/components/editors/OpenDocumentList.tsx"
+      ]
+    },
+    {
+      "testId": "plugin-documents-empty",
+      "files": [
+        "src/components/editors/OpenDocumentList.tsx"
+      ]
+    },
+    {
+      "testId": "plugin-documents-new",
+      "files": [
+        "src/components/editors/OpenDocumentList.tsx"
+      ]
+    },
+    {
+      "testId": "plugin-documents-reading",
+      "files": [
+        "src/components/editors/OpenDocumentList.tsx"
       ]
     },
     {
