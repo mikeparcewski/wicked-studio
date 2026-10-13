@@ -826,3 +826,4 @@
   .wk-dr .wk-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .wk-dr-search { margin-left: 0; flex: 1 1 100%; }
 }
+.wk-dr-acts { width: 1%; text-align: right; }

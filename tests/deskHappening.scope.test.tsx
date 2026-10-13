@@ -47,4 +47,25 @@ describe('Happening now: scope and failed reads', () => {
     mount([run('a'), run('b')]);
     await waitFor(() => expect(screen.getByTestId('desk-stream-state')).toHaveTextContent('1 of 2 jobs not read'));
   });
+
+  it('a second scope (another project) backfills its own runs after the Desk did', async () => {
+    events.mockResolvedValue({ events: [] });
+    const { unmount } = render(<DeskHappening runs={[run('a')]} runsShown navigate={() => {}} now={Date.now()} title={(v) => v.session.id} pathOf={(id) => `/s/${id}`} agentName={(c) => c} />);
+    await waitFor(() => expect(events).toHaveBeenCalledWith('a', expect.any(Array)));
+    unmount();
+    render(<DeskHappening runs={[run('p1-run')]} runsShown navigate={() => {}} now={Date.now()} title={(v) => v.session.id} pathOf={(id) => `/s/${id}`} agentName={(c) => c} scope={new Set(['p1-run'])} scopeKey="p1" />);
+    await waitFor(() => expect(events).toHaveBeenCalledWith('p1-run', expect.any(Array)));
+  });
+
+  it('keeps the failure when the run list updates while the read is in flight', async () => {
+    let fail: (e: unknown) => void = () => undefined;
+    events.mockImplementation(() => new Promise((_r, rej) => { fail = rej; }));
+    const props = { runsShown: true, navigate: () => {}, now: Date.now(), title: (v: SessionView) => v.session.id, pathOf: (id: string) => `/s/${id}`, agentName: (c: string) => c };
+    const { rerender } = render(<DeskHappening runs={[run('a')]} {...props} />);
+    await waitFor(() => expect(events).toHaveBeenCalledTimes(1));
+    rerender(<DeskHappening runs={[run('a'), run('b')]} {...props} />);
+    await act(async () => { fail(new Error('500')); });
+    await waitFor(() => expect(screen.getByTestId('desk-stream-unread')).toBeInTheDocument());
+    expect(events).toHaveBeenCalledTimes(1);
+  });
 });

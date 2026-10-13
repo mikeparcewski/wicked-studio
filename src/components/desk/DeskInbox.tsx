@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Archive, ExternalLink, RotateCcw } from 'lucide-react';
 import { api } from '../../api/client.js';
 import type { SessionView } from '../../api/types.js';
@@ -173,7 +173,10 @@ function ReadingPane({ row, view, queueAct, navigate, now, agentName }: {
 }): React.ReactElement {
   const [archive, setArchive] = useState<'idle' | 'confirm' | 'sending' | 'done' | 'failed'>('idle');
   const gate = useGateStore((st) => (view === null ? undefined : st.gates[view.session.id]));
-  useEffect(() => setArchive('idle'), [row.key]);
+  // The pane is reused across rows: an archive answers only for the row it was sent for, while mounted.
+  const current = useRef(row.key);
+  useEffect(() => { current.current = row.key; setArchive('idle'); }, [row.key]);
+  useEffect(() => () => { current.current = ''; }, []);
   const a = row.action;
   const agent = view === null ? null : leadAgentOf(view);
   const openPath = a.kind === 'open' ? a.path : row.subjectPath;
@@ -181,7 +184,11 @@ function ReadingPane({ row, view, queueAct, navigate, now, agentName }: {
   const markDone = (): void => {
     if (view === null) return;
     setArchive('sending');
-    api.archiveRun(view.session.id, true, 'Marked done from the Desk').then(() => setArchive('done'), () => setArchive('failed'));
+    const sentFor = row.key;
+    api.archiveRun(view.session.id, true, 'Marked done from the Desk').then(
+      () => { if (current.current === sentFor) setArchive('done'); },
+      () => { if (current.current === sentFor) setArchive('failed'); },
+    );
   };
   return (
     <article data-testid="desk-inbox-read" data-key={row.key} className="wk-inbox-read">

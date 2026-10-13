@@ -296,6 +296,7 @@ export function ProjectDesk({ projectId, navigate, runs, needRows, now, search, 
     {unshown > 0 && <StateBanner data-testid="project-jobs-unshown" kind="partial" what={unshown === 1 ? '1 job in this project' : `${unshown} jobs in this project`} />}
     {loading ? <Skeleton rows={3} variant="card" /> : !project ? !error && <EmptyState title="Project not found" /> : <DeskV2
       projectId={projectId} runs={mine} needRows={needRows} now={now} navigate={navigate}
+      runActions={(runId, runTitle) => { const m = members.find((x) => x.member_kind === RUN_KIND && x.member_ref === runId); return m === undefined ? [] : [{ id: 'detach', label: `Remove “${runTitle}” from this project`, danger: true, onSelect: () => handleDetach(m.id) }]; }}
       search={search} hosted={hostedForProject} runsLoaded={runsLoaded} runsError={runsError ?? null}
       {...(onRetryRuns !== undefined ? { onRetryRuns } : {})} {...(onCommand !== undefined ? { onCommand } : {})} workExtra={workExtra}
       projectHead={{ title, meta: <>

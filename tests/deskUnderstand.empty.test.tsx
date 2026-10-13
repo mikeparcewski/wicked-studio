@@ -74,8 +74,8 @@ describe('Understand empty state and insights', () => {
     expect(screen.queryByTestId('desk-und-empty')).not.toBeInTheDocument();
     expectNoRequests();
     fireEvent.click(screen.getByTestId('desk-insights-generate'));
-    // The key is kind|days|scope|selection|<the numbers on the cards>.
-    expect(mocks.generate).toHaveBeenCalledExactlyOnceWith(expect.stringMatching(new RegExp(`^agents\\|30\\|\\|${selected.join(',')}\\|`)), expect.stringContaining('Compare these agents'));
+    // The key is kind|days|project|filters|selection|<the numbers on the cards>.
+    expect(mocks.generate).toHaveBeenCalledExactlyOnceWith(expect.stringMatching(new RegExp(`^agents\\|30\\|\\|\\|${selected.join(',')}\\|`)), expect.stringContaining('Compare these agents'));
     expect(mocks.fetch).not.toHaveBeenCalled();
     expect(mocks.launch).not.toHaveBeenCalled();
   });
@@ -93,7 +93,7 @@ describe('Understand empty state and insights', () => {
     expect(mocks.events).toHaveBeenCalledWith('finished', ['cliUsage']);
     expect(mocks.generate).not.toHaveBeenCalled();
     fireEvent.click(screen.getByTestId('desk-insights-generate'));
-    expect(mocks.generate).toHaveBeenCalledExactlyOnceWith(expect.stringMatching(/^jobs\|30\|\|failed,finished\|/), expect.any(String));
+    expect(mocks.generate).toHaveBeenCalledExactlyOnceWith(expect.stringMatching(/^jobs\|30\|\|\|failed,finished\|/), expect.any(String));
     expect(mocks.fetch).not.toHaveBeenCalled();
   });
 

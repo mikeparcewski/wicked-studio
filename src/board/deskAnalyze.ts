@@ -28,6 +28,8 @@ export interface AnalyzeInput {
   /** The refine bar's other filters, said in the intent (null = all). */
   project: string | null;
   projectLabel: string | null;
+  /** The agent / workflow filters the comparison was read under, in words (null = none). */
+  filters?: string | null;
 }
 
 const ASKS: Record<AnalyzeKind, { title: (n: number) => string; questions: readonly string[] }> = {
@@ -87,11 +89,11 @@ export function evidenceLinks(kind: AnalyzeKind, items: readonly AnalyzeItem[], 
 export function analysisIntent(input: AnalyzeInput): string {
   const a = ASKS[input.kind];
   const ids = input.items.map((i) => `${i.label} (${i.id})`).join('; ');
-  const links = evidenceLinks(input.kind, input.items, input.days, input.api);
+  const links = evidenceLinks(input.kind, input.items, input.days, input.api, input.project);
   return [
     `${a.title(input.items.length)}.`,
     `Selected ${input.kind}: ${ids}.`,
-    `Window: the last ${input.days} days${input.project !== null ? `, project ${input.projectLabel ?? input.project}` : ''}.`,
+    `Window: the last ${input.days} days${input.project !== null ? `, project ${input.projectLabel ?? input.project} (${input.project}) only` : ''}${input.filters ? `, ${input.filters} only` : ''}.`,
     'Answer these questions, one section each:',
     ...a.questions.map((q, i) => `${i + 1}. ${q}`),
     'Sources: read these records from the studio service with curl -sL (they are the primary sources; cite each claim to the record and job it came from):',
