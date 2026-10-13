@@ -7,7 +7,7 @@ import { readErrorKind } from '../../api/errors.js';
 import { failureCounts } from '../../board/attention.js';
 import {
   agentRows, agentsOf, governanceOf, AGENT_WORKFLOW_NOTE, PARTIAL_RECORD_NOTE, bucketsOf, callouts, DEFAULT_REFINE, GROUP_BYS, jobSeries, OUTCOMES, outcomeOf, projectOf, RANGES,
-  refineRuns, spendSeries, spendTotals as projectSpend, stepFor, outcomeRows, sum, workflowLabel, workflowOf, workflowRows, type AcpFallbacks, type Callout, type GroupBy, type GroupNames, type RangeDays, type Refine,
+  refineRuns, spendAvailability, spendSeries, spendTotals as projectSpend, stepFor, outcomeRows, sum, workflowLabel, workflowOf, workflowRows, type AcpFallbacks, type Callout, type GroupBy, type GroupNames, type RangeDays, type Refine,
 } from '../../board/deskInsights.js';
 import { deskReadState, lapsedSeatChores, needRunId, noSignedInHelper } from '../../board/deskModel.js';
 import { deadletterChore } from '../../board/repairMoves.js';
@@ -210,7 +210,7 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
   // A project whose reads failed is unknown, never $0: it is left out and the card says how many.
   const byProjectOn = refine.groupBy === 'project' && projectId === undefined;
   const projectSeries = !byProjectOn || byProject.phase !== 'done' ? null
-    : projectIds.map((id, i) => ({ key: id, label: projectName(id), color: catColor(i), values: projectSpend(byProject.byProject.get(id) ?? [], refine.agent) }));
+    : projectIds.map((id, i) => ({ key: id, label: projectName(id), color: catColor(i), values: projectSpend(byProject.byProject.get(id) ?? [], refine.agent), availability: spendAvailability(byProject.byProject.get(id) ?? [], refine.agent) }));
   const projectsUnread = projectSeries?.filter((x) => x.values === null).length ?? 0;
   const spendByProject: BarSeries[] | null = projectSeries === null ? null
     : projectSeries.filter((x): x is typeof x & { values: number[] } => x.values !== null && x.values.some((v) => v > 0));
@@ -219,6 +219,9 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
     : refine.groupBy === 'workflow' ? 'Not grouped by workflow: the agent record has no workflow split yet (needs crew data). Showing by agent.' : null;
   const outcomeGroups = useMemo(() => outcomeRows(kept, refine.groupBy === 'outcome' ? 'workflow' : refine.groupBy, names).map((r) => ({ key: r.key, label: r.label, values: r.counts as unknown as Record<string, number> })), [kept, refine.groupBy, names]);
   const spendTotal = sum(spendBars.flatMap((s) => s.values));
+  const availability = byProjectOn ? projectSeries?.map((s) => s.availability) ?? [] : [spendAvailability(record.reads, refine.agent)];
+  const unpriced = availability.some((s) => s?.unpriced);
+  const unknownSpend = unpriced && !availability.some((s) => s?.anyPriced);
   const rosterKeys = useMemo(() => displaySeats(roster).map((s) => s.key), [roster]);
   // Agent rows exist only from a read record: an unread or failed record is never a row of zeros.
   const agents = useMemo(() => (record.window === null ? [] : agentRows(record.window, kept, names, rosterKeys, refine.workflow)).filter((a) => refine.agent === null || a.cli === refine.agent), [record.window, kept, names, rosterKeys, refine.agent, refine.workflow]);
@@ -248,9 +251,9 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
       // Some projects unread and the rest at $0: unknown, never a zero verdict.
       : byProjectOn && projectsUnread > 0 && spendTotal === 0 ? { kind: 'error', text: `Couldn’t read spend for ${projectsUnread} of ${projectIds.length} projects, and the rest recorded none.` }
       : !byProjectOn && spend === null ? { kind: 'error', text: 'Couldn’t read spend for this window.' }
+        : unknownSpend ? { kind: 'needs-crew', text: 'Spend unknown: usage recorded, no price reported.' }
         : spendTotal === 0 ? { kind: 'empty', text: `No priced usage in the last ${refine.days} days${refined(refine) ? ' in this view' : ''}.` } : { kind: 'ready' };
   const money = (v: number): string => (v === 0 ? '$0' : v < 1 ? `$${v.toFixed(2)}` : `$${Math.round(v)}`);
-  const unpriced = record.window?.seats.some((s) => s.costUsd === null && s.units > 0) === true;
 
   const heldByNeeds = useMemo(() => new Set(needRows.map(needRunId).filter((id): id is string => id !== null)), [needRows]);
   const finishedN = kept.filter((v) => { const o = outcomeOf(v); return o === 'Finished' || o === 'Answered'; }).length;
@@ -370,7 +373,7 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
           <DeskStat icon={Bot} tone="accent" label="Agents ready" testId="desk-block-agents" href={tabPath('agents')} navigate={navigate}
             value={roster === null ? null : `${ready} of ${seats.length}`} note={ready === seats.length ? 'all signed in' : `${seats.length - ready} signed out`} />
           <DeskStat icon={Wallet} tone="accent" label="Spend" testId="desk-block-spend" href={`${tabPath('report')}&focus=spend`} navigate={navigate}
-            value={projectId === 'default' ? '—' : workSpend.phase === 'loading' ? null : workSpend.current === null ? '—' : `${workSpend.truncated ? 'at least ' : ''}${moneyWords(workSpend.current)}`}
+            value={projectId === 'default' ? '—' : workSpend.phase === 'loading' ? null : workSpend.current === null ? '—' : `${workSpend.truncated || workSpend.partial ? 'at least ' : ''}${moneyWords(workSpend.current)}`}
             note={projectId === 'default' ? 'Spend is counted per project' : workSpend.truncated ? 'Partial: last 30 days · newest jobs only; older ones were not read' : workSpend.current !== null && workSpend.previous !== null ? deltaWords(workSpend.current, workSpend.previous, (d) => moneyWords(Math.abs(d)), 30) : workSpend.partial ? 'last 30 days · priced usage only' : 'last 30 days'} />
         </ul>
       </div>
@@ -416,11 +419,13 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
               note={rateNow === null ? 'no job ended yet' : few ? 'too few jobs to compare' : ratePrev === null ? 'of the jobs that ended' : deltaWords(Math.round(rateNow * 100), Math.round(ratePrev * 100), (d) => `${Math.abs(d)} pts`, refine.days)} />
             <DeskStat icon={Send} tone="accent" label="Delivered" testId="desk-stat-delivered" value={runsShown ? String(delivered) : null}
               note={delivered === 0 ? 'no job delivered in this window' : `of ${kept.length} started`} />
-            <DeskStat icon={Wallet} tone="accent" label="Spend" testId="desk-stat-spend" value={spendState.kind === 'ready' || spendState.kind === 'empty' ? moneyWords(spendTotal) : spendState.kind === 'loading' ? null : '—'}
+            <DeskStat icon={Wallet} tone="accent" label="Spend" testId="desk-stat-spend" value={spendState.kind === 'ready' || spendState.kind === 'empty' ? `${unpriced ? 'at least ' : ''}${moneyWords(spendTotal)}` : spendState.kind === 'loading' ? null : '—'}
               note={spendState.kind === 'error' ? spendState.text
                 : spendTruncated ? PARTIAL_RECORD_NOTE
+                : unknownSpend ? 'Spend unknown: usage recorded, no price reported'
                 : projectsUnread > 0 ? `at least: ${projectsUnread} ${projectsUnread === 1 ? 'project' : 'projects'} not read`
-                : !few && winSpend.phase === 'done' && winSpend.previous !== null && refine.agent === null ? deltaWords(spendTotal, winSpend.previous, (d) => moneyWords(Math.abs(d)), refine.days) : unpriced ? 'priced usage only' : `last ${refine.days} days`} {...(spendTruncated ? {} : { spark: spendTotals })} />
+                : unpriced ? 'priced usage only'
+                : !few && winSpend.phase === 'done' && winSpend.previous !== null && refine.agent === null ? deltaWords(spendTotal, winSpend.previous, (d) => moneyWords(Math.abs(d)), refine.days) : `last ${refine.days} days`} {...(spendTruncated || unknownSpend ? {} : { spark: spendTotals })} />
             <DeskStat icon={CheckCircle2} tone="ok" label="Quality checks passed" testId="desk-stat-quality" value={runsShown ? qualityValue : null}
               note={runsShown ? qualityNote : 'Reading…'} loading={!runsShown || quality.tally === null} loadingNote={runsShown ? 'Reading checks…' : 'Reading…'} />
           </ul>
@@ -432,7 +437,7 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
             </ChartCard>
             <ChartCard id="desk-focus-spend" title="Spend" state={spendState} data-testid="desk-viz-spend"
               meta={topSpender !== undefined ? `by ${per} · most on ${topSpender.x.label}` : `by ${per}`}
-              note={spendTruncated ? `${PARTIAL_RECORD_NOTE}. Spend buckets affected by truncated reads are unknown and omitted.` : projectsUnread > 0 && spendState.kind === 'ready' ? `Spend for ${projectsUnread} ${projectsUnread === 1 ? 'project' : 'projects'} couldn’t be read and is left out.` : spendGroupNote ?? (unpriced ? 'At least: some agents report no price.' : refine.days === 90 ? 'The oldest week is 6 days: the record reaches 90 days back.' : undefined)}>
+              note={[unpriced && !unknownSpend ? `At least ${moneyWords(spendTotal)} · priced usage only.` : null, spendTruncated ? `${PARTIAL_RECORD_NOTE}. Spend buckets affected by truncated reads are unknown and omitted.` : projectsUnread > 0 && spendState.kind === 'ready' ? `Spend for ${projectsUnread} ${projectsUnread === 1 ? 'project' : 'projects'} couldn’t be read and is left out.` : spendGroupNote ?? (refine.days === 90 ? 'The oldest week is 6 days: the record reaches 90 days back.' : null)].filter(Boolean).join(' ') || undefined}>
               <AreaChart buckets={buckets} series={spendBars} format={money} label={`Spend per ${per} by ${refine.groupBy === 'project' ? 'project' : 'agent'}, last ${refine.days} days`} compact height={phone ? 96 : 120} data-testid="desk-chart-spend" />
             </ChartCard>
             <ChartCard title="Outcomes" state={runsState} data-testid="desk-viz-outcomes"

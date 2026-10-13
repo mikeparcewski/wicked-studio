@@ -570,7 +570,7 @@ export function App(): React.ReactElement {
     if (panel === 'watch') {
       return (
         <div className="flex flex-1 overflow-hidden">
-          <WatchtowerPage count={attentionBadge(needRows)} runs={runs} runsLoaded={runsLoaded} runsError={runsError} onRetryRuns={refresh} navigate={navigate} now={needsNow} />
+          <WatchtowerPage count={attentionBadge(needRows)} runs={runs} runsLoaded={runsLoaded} runsError={runsError} onRetryRuns={refresh} navigate={navigate} now={needsNow} search={search} />
         </div>
       );
     }
