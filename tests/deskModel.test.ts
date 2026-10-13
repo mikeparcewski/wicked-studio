@@ -5,7 +5,6 @@ import type { NeedRow } from '../src/board/needsYou.js';
 import { groupAlike, needCount } from '../src/board/needsQueue.js';
 import { deskReadState } from '../src/board/deskModel.js';
 import {
-  ADDITIONAL_SETTINGS,
   DESK_RAIL_LINKS,
   noSignedInHelper,
   deskGreeting,
@@ -196,15 +195,14 @@ describe('chores for whoever runs studio', () => {
 });
 
 describe('the rail destinations', () => {
-  it('the Workspace group (operator ruling 2026-10-12): Steering · Skills · MCP · Plugins · Evals · Repositories; General settings: Configuration, Workflows, Theme', () => {
+  it('the Workspace group (operator IA 2026-10-13): Skills · MCP · Plugins · Workflows · Theme · General; no Desk-tab pages', () => {
     expect(DESK_RAIL_LINKS.map((l) => [l.label, l.path])).toEqual([
-      ['Steering', '/rules'], ['Skills', '/skills'], ['MCP', '/mcp'], ['Plugins', '/plugins'], ['Evals', '/testing/evals'], ['Repositories', '/repos'],
+      ['Skills', '/skills'], ['MCP', '/mcp'], ['Plugins', '/plugins'], ['Workflows', '/workflows'], ['Theme', '/theme'], ['General', '/system'],
     ]);
-    expect(ADDITIONAL_SETTINGS.map((d) => [d.label, d.path])).toEqual([['Configuration', '/system'], ['Workflows', '/workflows'], ['Theme', '/theme']]);
-    // Product and Testing left the rail; Configuration's sentence no longer names editor plugins.
-    expect(ADDITIONAL_SETTINGS[0]!.about).not.toMatch(/plugin/i);
-    // Nothing that redirects.
-    for (const d of [...DESK_RAIL_LINKS, ...ADDITIONAL_SETTINGS]) {
+    // Repositories, Steering, Evals and Agents are Desk tabs; the retired overview is not linked.
+    for (const d of DESK_RAIL_LINKS) {
+      expect(['/repos', '/rules', '/testing/evals', '/agents', '/settings']).not.toContain(d.path);
+      // Nothing that redirects.
       expect(['/projects', '/chats', '/work', '/execute', '/vibe', '/demo']).not.toContain(d.path);
     }
   });

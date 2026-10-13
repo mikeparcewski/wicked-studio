@@ -21,6 +21,7 @@ import { toggledTheme, useAppearanceStore } from '../theming/appearance.js';
 import { decideGate, GATE_HASH } from '../board/gateActions.js';
 import { statusWord } from '../board/statusWords.js';
 import { NewProjectModal } from './NewProjectModal.js';
+import { PAGE_NAMES } from '../board/pageNames.js';
 import { Modal } from './Modal.js';
 import { humanTitle, runTitle, runWhenWord, WHEN_TITLE } from './runIdentity.js';
 import { Terminal } from './Terminal.js';
@@ -590,8 +591,10 @@ export function CommandPalette({
         },
       },
       { name: 'Open Terminal', action: () => setShowTerminal(true) },
-      // Wave 1: the daemon's configuration surface, one verb away (a route — Back returns).
-      { name: 'Config', action: () => navigate('/system') },
+      // Wave 1: the daemon's configuration surface, one verb away (a route — Back returns). The page is
+      // "General" since the rail restructure (2026-10-13); the verb still starts "Configure", so `>config`
+      // finds it, and the GO TO row ("General — settings for …") answers "settings".
+      { name: `Configure studio — ${PAGE_NAMES.system}`, action: () => navigate('/system') },
       {
         name: 'Cancel run',
         when: selectedRun !== null && !TERMINAL.has(status),

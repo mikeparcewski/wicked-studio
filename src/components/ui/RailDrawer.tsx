@@ -14,7 +14,7 @@ const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), selec
  *    behind is `inert` and does not scroll; it takes the modal rung of store/layers so only it
  *    answers Escape;
  *  - Escape or the scrim closes it (focus back to the menu button); a route change or growing past
- *    767 px closes it (focus to #main).
+ *    767 px closes it (focus to #main); a modal opened from it closes it (focus stays in the modal).
  */
 export function RailDrawer({ pathname, badge, children }: {
   pathname: string; badge: React.ReactNode; children: React.ReactNode;
@@ -60,7 +60,14 @@ export function RailDrawer({ pathname, badge, children }: {
       else if (!e.shiftKey && document.activeElement === z) { e.preventDefault(); a.focus(); }
     };
     document.addEventListener('keydown', onKey, true);
+    // A modal opened from inside the drawer (New project, the launch wizard) sits under the drawer's
+    // stacking layer: once any modal is pushed above the drawer's rung, the drawer gets out of its way,
+    // leaving focus where that modal put it.
+    const offRung = useLayerStore.subscribe((s) => {
+      if (s.modalIds.includes(id) && s.modalIds[s.modalIds.length - 1] !== id) { focusAfter.current = null; setOpen(false); }
+    });
     return () => {
+      offRung();
       document.removeEventListener('keydown', onKey, true);
       useLayerStore.getState().popModal(id);
       main?.removeAttribute('inert');

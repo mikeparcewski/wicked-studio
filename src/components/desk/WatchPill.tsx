@@ -43,7 +43,7 @@ function flat(rows: readonly NeedRow[]): NeedRow[] {
  * focus expands a small card — the sentence and the newest two open rows of TR's feed; the card
  * opens itself only when something new needs you ({@link selfOpens}), for {@link SELF_OPEN_MS}.
  */
-export function WatchPill({ needRows, runs, navigate, onFeed = false }: {
+export function WatchPill({ needRows, runs, navigate, onFeed = false, secondary = false }: {
   needRows: NeedRow[];
   runs: SessionView[];
   navigate: Navigate;
@@ -51,6 +51,8 @@ export function WatchPill({ needRows, runs, navigate, onFeed = false }: {
    *  a preview of the feed — stays closed, so it never covers the feed's own controls (the pill sits
    *  at the top of the rail since Amendment 5, where the card would open over the page's header). */
   onFeed?: boolean;
+  /** In the rail's Workspace group (operator IA 2026-10-13) it is a link of that group's tier. */
+  secondary?: boolean;
 }): React.ReactElement {
   const count = attentionBadge(needRows);
   const sentence = watchSentence(count, liveCount(runs));
@@ -79,7 +81,7 @@ export function WatchPill({ needRows, runs, navigate, onFeed = false }: {
         data-count={count}
         aria-label={`Watchtower: ${sentence}`}
         aria-current={onFeed ? 'page' : undefined}
-        className="wk-rail-link wk-watch-pill"
+        className={`wk-rail-link wk-watch-pill${secondary ? ' wk-rail-link--secondary' : ''}`}
       >
         <span>Watchtower</span>
         <span aria-hidden className={`wk-desk-dot ${count > 0 ? 'wk-desk-dot--waiting' : 'wk-desk-dot--working'}`} />

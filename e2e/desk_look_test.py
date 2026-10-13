@@ -13,9 +13,9 @@ with the stored appearance set to wicked-light + the harbor accent, and proves:
   2. NO MONOSPACE in the default layer: no visible text in the session rail or the Desk computes
      to a monospace font-family while "Show technical details" is off. With it on, a technical
      handle ([data-tech]) keeps the mono face.
-  3. EVERYTHING ELSE FITS (studio#421): opening "General settings" at 1440x900 covers neither the
-     sessions nor "+ Start something", and every destination is reachable — on screen, or in a
-     scroller of its own — and still navigates.
+  3. EVERYTHING ELSE FITS (studio#421; rail restructure 2026-10-13): at 1440x900 the sessions and
+     every Workspace link — ending Workflows · Theme · General, then Health — are on screen, and a
+     settings link still navigates.
   4. 0 page errors, no horizontal scroll.
 
 Captures: e2e/shots/desk-look.png, desk-look-everything.png. Env: FEEDBACK_PORT (default 4347).
@@ -179,24 +179,21 @@ with sync_playwright() as p:
     page.wait_for_function("() => document.querySelectorAll('[data-testid=\"rail-session\"]').length >= 6",
                            timeout=10000)
 
-    # ── 3. "General settings" is a PAGE (operator 2026-10-11/12): the rail link opens /settings, every
-    #       settings page is a reachable link there, Health (now last in the rail) stays in view.
+    # ── 3. Everything fits (rail restructure 2026-10-13): the settings pages are Workspace links —
+    #       Workflows · Theme · General at the group's end — every one on screen with Health (last) and
+    #       the sessions; a settings link still navigates.
     rail = page.evaluate("""(h) => {
       const shown = (el) => { const b = el.getBoundingClientRect(); return b.height > 0 && b.bottom <= h + 0.5 && b.top >= -0.5; };
       const health = document.querySelector('[data-testid="desk-rail-health"]');
       const sessions = [...document.querySelectorAll('[data-testid="rail-session"]')];
-      return { healthShown: !!health && shown(health), sessionsShown: sessions.filter(shown).length, sessions: sessions.length };
+      const links = [...document.querySelectorAll('[data-testid="session-rail"] .wk-rail-foot [data-nav-dest]')];
+      return { healthShown: !!health && shown(health), sessionsShown: sessions.filter(shown).length, sessions: sessions.length,
+               links: links.map((e) => e.dataset.navDest), linksShown: links.every(shown) };
     }""", H)
-    page.get_by_test_id("desk-rail-more").click()
-    page.wait_for_function("() => window.location.pathname === '/settings'", timeout=5000)
-    page.get_by_test_id("settings-overview").wait_for(state="visible", timeout=5000)
     page.screenshot(path=str(SHOTS / "desk-look-everything.png"))
-    rows = page.evaluate("""() => [...document.querySelectorAll('[data-testid="settings-overview-row"]')].map(r => ({
-      dest: r.dataset.dest, href: r.querySelector('a')?.getAttribute('href'), about: r.querySelector('[data-testid="settings-overview-sentence"]')?.innerText ?? '' }))""")
     check("everything-else-fits", rail["healthShown"] and rail["sessions"] >= 6 and rail["sessionsShown"] >= 6
-          and [r["dest"] for r in rows] == ["settings:/system", "settings:/workflows", "settings:/theme"]
-          and all(r["href"] and len(r["about"]) > 10 for r in rows), rail=rail, rows=rows)
-    page.locator('[data-testid="settings-overview-row"][data-dest="settings:/theme"] a').click()
+          and rail["links"][-4:] == ["section:workflows", "section:theme", "section:general", "health"] and rail["linksShown"], rail=rail)
+    page.get_by_test_id("desk-rail-theme").click()
     page.wait_for_function("() => window.location.pathname === '/theme'", timeout=5000)
     check("everything-else-navigates", page.evaluate("() => window.location.pathname") == "/theme")
 

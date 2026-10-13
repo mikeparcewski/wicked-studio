@@ -1,7 +1,8 @@
 /**
- * ONE NAME PER PAGE (studio#725, reel UX gate): the rail, the /settings overview, the ⌘K "Go to"
- * rows and each page's own title read these words, so a link never lands on a page that calls
- * itself something else ("Configuration" opening "System"). Pure.
+ * ONE NAME PER PAGE (studio#725, reel UX gate): the rail, the ⌘K "Go to" rows and each page's
+ * own title read these words, so a link never lands on a page that calls itself something else
+ * ("Configuration" opening "System"). `/system` is "General" (rail restructure 2026-10-13; it was
+ * "Configuration", listed on the retired "General settings" overview). Pure.
  */
 export const PAGE_NAMES = {
   home: 'Desk',
@@ -15,8 +16,7 @@ export const PAGE_NAMES = {
   evals: 'Evals',
   learn: 'Learn',
   health: 'Health',
-  settings: 'General settings',
-  system: 'Configuration',
+  system: 'General',
   repos: 'Repositories',
   workflows: 'Workflows',
   theme: 'Theme',
@@ -33,7 +33,6 @@ const BY_PATH: ReadonlyArray<[string, string]> = [
   ['/rules', PAGE_NAMES.steering],
   ['/learn', PAGE_NAMES.learn],
   ['/health', PAGE_NAMES.health],
-  ['/settings', PAGE_NAMES.settings],
   ['/system', PAGE_NAMES.system],
   ['/repos', PAGE_NAMES.repos],
   ['/workflows', PAGE_NAMES.workflows],

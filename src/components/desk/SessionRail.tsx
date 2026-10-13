@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { ChevronDown, ChevronRight, ChevronUp, LayoutGrid, Plus } from 'lucide-react';
 import { useDeliveredNow } from '../../store/postHocDeliver.js';
 import type { SessionView } from '../../api/types.js';
-import { DESK_RAIL_LINKS, SETTINGS_PATH, needsByRun, needTextByRun, needsYouWords, railGroups, railRowWords, type RailSession } from '../../board/deskModel.js';
+import { DESK_RAIL_LINKS, needsByRun, needTextByRun, needsYouWords, railGroups, railRowWords, type RailSession } from '../../board/deskModel.js';
 import { useRailCollapsed } from '../../hooks/useRailCollapsed.js';
 import { useNeedsClock, useSettledNeeds } from '../../hooks/useNeedsRows.js';
 import type { NeedRow } from '../../board/needsYou.js';
@@ -15,6 +16,7 @@ import { openLaunchWizard } from '../../store/launchWizard.js';
 import { useRailHealthDot } from '../../hooks/useRailHealthDot.js';
 import { PAGE_NAMES } from '../../board/pageNames.js';
 import { WatchPill } from './WatchPill.js';
+import { NewProjectModal } from '../NewProjectModal.js';
 
 /** Width of the desk shell's session rail (px) — fixed, so nothing moves when a pane opens. */
 export const SESSION_RAIL_PX = 236;
@@ -23,10 +25,11 @@ export const SESSION_RAIL_PX = 236;
  * THE SESSION RAIL (skin `desk`, DES-STUDIO-REBUILD-001 §4.2, slice S4; Amendment 5 as revised,
  * S15c; studio#421 rail polish) — 236 px, on every route. Top to bottom:
  *
- *  - Desk, with the needs-you count as its badge (the fold's `needCount`, the Desk sentence's
- *    number — one source, so they never disagree).
- *  - Watchtower — the quiet pill (rule 10), where the bell was. There is no Notifications entry:
- *    the Desk is the notification surface, and Watchtower is the full feed.
+ *  - The wordmark (logo + site name) — ONE link to the Desk, carrying the Desk's needs-you count as its
+ *    badge (the fold's `needCount`, the Desk sentence's number — one source, so they never disagree);
+ *    its accessible name says it ("Desk, 2 need you"). Operator IA 2026-10-13: there is no separate
+ *    "Desk" item.
+ *  - "New project", where the Desk item was: the one New project modal.
  *  - Sessions grouped by project (the board model's order), each with ONE status dot (four hues:
  *    waiting on you, working, failed, ended — its word in the row's hover title and accessible label)
  *    and the count of needs-you items that name it. A title is one line, cut with an ellipsis, its
@@ -38,15 +41,14 @@ export const SESSION_RAIL_PX = 236;
  *    unfiled group ("Not in a project") carries only the open icon, to See everything › Projects
  *    where its "Not in a project" card lives. A session is a chat and its runs when the
  *    daemon stamps `chat_id` (C1), else one run; each opens `/s/:id` (S6a).
- *  - the "Workspace" group label, then (the Agents slot) Steering · Skills · MCP · Plugins · Evals ·
- *    Repositories · General settings (DESK_RAIL_LINKS, operator 2026-10-12) and the HEALTH LINK with its
- *    answered dot — what in-flight work is, one click away (`DESK_RAIL_LINKS`). The foot's top
- *    border separates the sessions above it from the Workspace links below, and carries a group
- *    label ("Workspace", studio#421 r3 change 18) styled like the project groups; the foot's links
- *    are the rail's secondary tier (smaller than Desk/Watchtower). Then "General settings", a link to
- *    the `/settings` overview page (one sentence and a link per settings page, `ADDITIONAL_SETTINGS`),
- *    and LAST, set apart, the Health link to `/health` (`desk-rail-health`): a muted tint for its
- *    state, the state word always said, its dot the rail heartbeat (`useRailHealthDot`).
+ *  - the "Workspace" group (operator IA 2026-10-13): Watchtower — the quiet pill (rule 10); there is no
+ *    Notifications entry, the Desk is the notification surface and Watchtower the full feed — then
+ *    Skills · MCP · Plugins · Workflows · Theme · General (`DESK_RAIL_LINKS`; General is the `/system`
+ *    page, and `/settings` redirects there). Repositories, Steering, Evals and Agents are Desk tabs, not
+ *    rail links. The foot's top border separates the sessions above it from the Workspace below; its
+ *    label is styled like the project groups and its links are the rail's secondary tier. LAST, set
+ *    apart, the Health link to `/health` (`desk-rail-health`): a muted tint for its state, the state
+ *    word always said, its dot the rail heartbeat (`useRailHealthDot`).
  *
  * Render only: the groups are `railGroups` (board/deskModel.ts) over `useBoardModel` + the fold.
  */
@@ -64,6 +66,9 @@ export function SessionRail({ runs, needRows, navigate, pathname, runsKnown = tr
   const settled = useSettledNeeds(needRows, runsKnown, runsFailed);
   const count = settled.count ?? 0;
   const badgeText = settled.phase === 'partial' ? `${count}+` : String(count);
+  // The wordmark link's name says where it goes and the badge — "Desk", or "Desk, 2 need you" / "Desk, 1
+  // needs you" — after the visible words (label-in-name, WCAG 2.5.3): "wicked studio — Desk, 2 need you".
+  const deskName = count > 0 ? `${PAGE_NAMES.home}, ${badgeText} ${badgeText === '1' ? 'needs' : 'need'} you` : PAGE_NAMES.home;
   const runChatId = useCapabilities((s) => s.runChatId);
   const deliveredNow = useDeliveredNow();
   // The tags' and hover titles' clock: the queue's shared minute tick, so ages move while nothing else does.
@@ -73,6 +78,7 @@ export function SessionRail({ runs, needRows, navigate, pathname, runsKnown = tr
     [items, unfiled, needRows, runChatId, deliveredNow, now],
   );
   const { collapsed, toggle } = useRailCollapsed();
+  const [newProjectOpen, setNewProjectOpen] = useState(false);
   // "Show N more" is this page's choice only; folding is what persists.
   const [showAll, setShowAll] = useState<ReadonlySet<string>>(() => new Set());
   // A list that runs past the rail's fold fades out at its foot instead of slicing a row in half;
@@ -103,29 +109,41 @@ export function SessionRail({ runs, needRows, navigate, pathname, runsKnown = tr
 
   return (
     <nav data-testid="session-rail" aria-label="Sessions" className="wk-rail" style={{ width: SESSION_RAIL_PX }}>
-      {/* studio#512: Theme › Site name is shown here under the Desk skin (the classic chrome is the other home). */}
-      <div className="wk-rail-brand" data-testid="desk-rail-brand">
-        {logoUrl !== null
-          ? <span
-              aria-hidden
-              data-testid="desk-rail-logo"
-              style={{
-                width: 32, height: 32, flexShrink: 0,
-                backgroundImage: `url(${JSON.stringify(logoUrl)})`,
-                backgroundSize: 'contain', backgroundPosition: 'center', backgroundRepeat: 'no-repeat',
-              }}
-            />
-          : <span aria-hidden className="wk-desk-dot wk-desk-dot--waiting" />}
-        {siteName !== null ? <b>{siteName}</b> : <>wicked <b>studio</b></>}
-      </div>
-      <a href="/" onClick={go('/')} data-testid="desk-rail-home" aria-current={pathname === '/' ? 'page' : undefined} className="wk-rail-desk">
-        <span>Desk</span>
-        {count > 0 && <span data-testid="desk-rail-badge" data-phase={settled.phase} className="wk-rail-badge" aria-label={`${badgeText} need you`}>{badgeText}</span>}
+      {/* Operator IA 2026-10-13: the wordmark IS the way to the Desk — logo, name and the Desk's needs-you
+          badge are one link (its accessible name says the count). studio#512: Theme › Site name and
+          Theme › Logo are shown here under the Desk skin. */}
+      <a
+        href="/"
+        onClick={go('/')}
+        data-testid="desk-rail-home"
+        aria-current={pathname === '/' ? 'page' : undefined}
+        aria-label={`${siteName ?? 'wicked studio'} — ${deskName}`}
+        title={deskName}
+        className="wk-rail-home"
+      >
+        <span data-testid="desk-rail-brand" className="wk-rail-brand">
+          {logoUrl !== null
+            ? <span
+                aria-hidden
+                data-testid="desk-rail-logo"
+                style={{
+                  width: 32, height: 32, flexShrink: 0,
+                  backgroundImage: `url(${JSON.stringify(logoUrl)})`,
+                  backgroundSize: 'contain', backgroundPosition: 'center', backgroundRepeat: 'no-repeat',
+                }}
+              />
+            : <span aria-hidden className="wk-desk-dot wk-desk-dot--waiting" />}
+          <span className="wk-rail-brand-name">{siteName !== null ? <b>{siteName}</b> : <>wicked <b>studio</b></>}</span>
+        </span>
+        {count > 0 && <span aria-hidden data-testid="desk-rail-badge" data-phase={settled.phase} className="wk-rail-badge">{badgeText}</span>}
       </a>
-      {/* Watchtower, where the bell was — outside every scroller, so its card is never clipped. */}
-      <div className="wk-rail-watch" data-testid="desk-rail-watch" data-nav-dest="watch">
-        <WatchPill needRows={needRows} runs={runs} navigate={navigate} onFeed={pathname === '/watch'} />
-      </div>
+      {/* Where the Desk item was: start a project (the one New project modal, portalled so the phone
+          drawer — which closes when a modal opens over it — never clips it). */}
+      <button type="button" data-testid="desk-rail-new-project" className="wk-rail-newproject" onClick={() => setNewProjectOpen(true)}>
+        <Plus size={14} aria-hidden />
+        <span>New project</span>
+      </button>
+      {newProjectOpen && createPortal(<NewProjectModal deskMode navigate={navigate} onClose={() => setNewProjectOpen(false)} />, document.body)}
 
       <div ref={groupsRef} className="wk-rail-groups" data-more-below={moreBelow ? 'true' : 'false'}>
         <MoveProjectStatus />
@@ -246,16 +264,15 @@ export function SessionRail({ runs, needRows, navigate, pathname, runsKnown = tr
         {/* studio#421 r3 (change 18): the foot's group label, under the separator, styled like the
             project groups — the links below are the "Workspace". */}
         <p className="wk-rail-group" data-testid="rail-foot-label">Workspace</p>
+        {/* Watchtower heads the Workspace group (operator IA 2026-10-13); its card opens beside the rail. */}
+        <div className="wk-rail-watch" data-testid="desk-rail-watch" data-nav-dest="watch">
+          <WatchPill needRows={needRows} runs={runs} navigate={navigate} onFeed={pathname === '/watch'} secondary />
+        </div>
         {DESK_RAIL_LINKS.map((l) => (
           <a key={l.dest} href={l.path} onClick={go(l.path)} data-testid={l.testId} data-nav-dest={l.dest} aria-current={current(l.path)} className="wk-rail-link wk-rail-link--secondary">
             {l.label}
           </a>
         ))}
-        {/* "General settings" (operator 2026-10-12; was "Additional settings") is the /settings PAGE:
-            Configuration, Workflows and Theme. Health sits apart below it, last in the rail. */}
-        <a href={SETTINGS_PATH} onClick={go(SETTINGS_PATH)} data-testid="desk-rail-more" data-nav-dest="settings" aria-current={current(SETTINGS_PATH)} className="wk-rail-link wk-rail-link--secondary">
-          {PAGE_NAMES.settings}
-        </a>
         <a
           href="/health"
           onClick={go('/health')}

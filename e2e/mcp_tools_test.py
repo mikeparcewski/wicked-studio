@@ -278,15 +278,15 @@ with sync_playwright() as p:
     except Exception:
         page.screenshot(path=str(SHOTS / f"mcp-tools-missing-desk.png"))
         fail("page-shows", page.locator("body").inner_text()[:2000])
-    # Operator 2026-10-12: the Workspace runs Steering · Skills · MCP · Plugins … (they change what
-    # in-flight work does) — MCP right after Skills, which follows Steering.
+    # Operator IA 2026-10-13: the Workspace runs Watchtower · Skills · MCP · Plugins … — MCP right
+    # after Skills, Plugins right after MCP (Steering is a Desk tab now).
     dests = page.evaluate("""() => [...document.querySelectorAll('[data-testid="session-rail"] [data-nav-dest]')]
         .map(e => e.getAttribute('data-nav-dest'))""")
     nav = {"dests": dests}
     order = dests
-    want = ["section:steering", "section:skills", "section:mcp"]
+    want = ["section:skills", "section:mcp", "section:plugins"]
     idx = [order.index(x) if x in order else -1 for x in want]
-    check("nav-after-steering-and-skills", -1 not in idx and idx[1] == idx[0] + 1 and idx[2] == idx[1] + 1, nav=nav)
+    check("nav-after-skills", -1 not in idx and idx[1] == idx[0] + 1 and idx[2] == idx[1] + 1, nav=nav)
 
     # ── 1. paste → preview ────────────────────────────────────────────────────────
     page.get_by_test_id("mcp-add-open").click()

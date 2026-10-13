@@ -64,14 +64,15 @@ export function useSteeringRedirect(
 
 /**
  * The retired settings panels' address normalizer (the steering-UX wave): `/coverage` and
- * `/domain` — the orphaned, context-free settings panels — retired; both parse to the System
+ * `/domain` — the orphaned, context-free settings panels — retired, and so did the "General
+ * settings" overview at `/settings` (rail restructure 2026-10-13); all parse to the General (`/system`)
  * page (so it renders instantly on the pre-redirect tick) and this hook REPLACES the address
  * with `/system`, so Back never re-enters the dead address.
  */
 export function useRetiredSettingsRedirect(pathname: string, navigate: Navigate): void {
   useEffect(() => {
     const [, first = ''] = pathname.split('/');
-    if (first !== 'coverage' && first !== 'domain') return;
+    if (first !== 'coverage' && first !== 'domain' && first !== 'settings') return;
     navigate('/system', { replace: true });
   }, [pathname, navigate]);
 }
