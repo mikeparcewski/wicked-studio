@@ -1,6 +1,6 @@
 import { apiFetch } from '../api/client.js';
 import { isRouteUnsupported } from '../api/errors.js';
-import { PERMISSIONS, type AnchorRef, type PermissionId } from './protocol.js';
+import { LEDGER_ONLY, PERMISSIONS, type AnchorRef, type PermissionId } from './protocol.js';
 
 /**
  * The editor host's small models (DES-EDITOR-PLUGINS-001 §5.1, §5.5, §5.7, §6; EP-P1). Pure, except
@@ -72,9 +72,9 @@ export function elementLabel(text: string | undefined, id: string): string {
 // ── §6 grants ───────────────────────────────────────────────────────────────────────────────
 
 /** The first-party default set (§6.1 column 4): every permission except `network.media`, which only
- *  `wicked-page` holds by default. */
+ *  `wicked-page` holds by default, and the ledger-only ones (`mcp.session`), which no default grants. */
 export function builtinDefaults(editorId: string): PermissionId[] {
-  return PERMISSIONS.filter((p) => p !== 'network.media' || editorId === 'wicked-page');
+  return PERMISSIONS.filter((p) => !LEDGER_ONLY.has(p) && (p !== 'network.media' || editorId === 'wicked-page'));
 }
 
 /** One decided grant as crew answers it (api-types `EditorGrant`, EP-C1): the permission, the engine's

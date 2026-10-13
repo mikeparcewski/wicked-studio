@@ -5,6 +5,8 @@ import { EmptyState, PageFrame, Skeleton, StateBanner } from '../ui/index.js';
 import { PAGE_NAMES } from '../../board/pageNames.js';
 import { OpenDocumentList } from './OpenDocumentList.js';
 import { VIBE_SOON } from '../../board/comingSoon.js';
+import { mcpInspectPath } from '../../api/mcpInspect.js';
+import { MCP_SERVER_KIND } from '../../api/editors.js';
 
 /**
  * The Plugins page (operator 2026-10-12; was Settings → Developer → Editor plugins, ruling X3, 2026-10-10;
@@ -35,6 +37,7 @@ const PERMISSION_WORDS: Record<string, string> = {
   'artifact.export': 'download it',
   'ui.fullscreen': 'go full screen',
   'network.media': 'load images and fonts from the internet',
+  'mcp.session': 'start and talk to the MCP servers you connect it to',
 };
 
 const KIND_WORDS: Record<string, string> = {
@@ -44,6 +47,7 @@ const KIND_WORDS: Record<string, string> = {
   'demo-video': 'demo videos',
   walkthrough: 'walkthroughs',
   'rfp-response': 'RFP responses',
+  [MCP_SERVER_KIND]: 'MCP servers',
 };
 
 /** "pages and documents" — the kinds an editor opens, in plain words. */
@@ -71,6 +75,13 @@ export function devHostHref(e: Pick<EditorView, 'id' | 'version' | 'sha256' | 't
   return `/editors/dev?${q.toString()}`;
 }
 
+/** Where a row's Open goes: an MCP inspector opens on `/mcp/inspect` (a server, not a sample page,
+ *  is what it opens: DES-MCP-INSPECTOR-001 §5); every other editor, the test page. */
+export function openHref(e: Pick<EditorView, 'id' | 'version' | 'sha256' | 'title' | 'kinds'>): { href: string; text: string } {
+  if (e.kinds.includes(MCP_SERVER_KIND)) return { href: mcpInspectPath(), text: 'Inspect an MCP server' };
+  return { href: devHostHref(e), text: 'Try it on a sample page' };
+}
+
 type Load =
   | { state: 'loading' }
   | { state: 'ready'; editors: EditorView[] }
@@ -95,7 +106,8 @@ export function useEditorList(): { load: Load; retry: () => void; retrying: bool
 }
 
 function EditorRow({ e, navigate, compact }: { e: EditorView; navigate: (p: string) => void; compact: boolean }): React.ReactElement {
-  const href = devHostHref(e);
+  const door = openHref(e);
+  const href = door.href;
   const words = permissionsInWords(e.permissions);
   // A built-in editor of documents opens the real ones from here, not only the sample.
   const opensDocuments = !compact && e.enabled && e.first_party && e.kinds.some((k) => DOCUMENT_KINDS.includes(k));
@@ -127,8 +139,8 @@ function EditorRow({ e, navigate, compact }: { e: EditorView; navigate: (p: stri
       )}
       <p style={{ marginTop: 6 }}>
         {e.enabled ? (
-          <a href={href} data-testid="editor-plugin-open" className={`wk-btn ${opensDocuments ? 'wk-btn--quiet' : 'wk-btn--secondary'} wk-btn--sm`} aria-label={compact ? `Open ${e.title}` : `Try it on a sample page: ${e.title}`} onClick={(ev) => { ev.preventDefault(); navigate(href); }}>
-            {compact ? 'Open' : 'Try it on a sample page'}
+          <a href={href} data-testid="editor-plugin-open" className={`wk-btn ${opensDocuments ? 'wk-btn--quiet' : 'wk-btn--secondary'} wk-btn--sm`} aria-label={compact ? `Open ${e.title}` : `${door.text}: ${e.title}`} onClick={(ev) => { ev.preventDefault(); navigate(href); }}>
+            {compact ? 'Open' : door.text}
           </a>
         ) : (
           <span style={{ fontSize: 'var(--text-xs)', color: 'var(--ink-body)' }}>Turned off, so it opens nowhere.</span>
@@ -181,7 +193,7 @@ export function startCreateEditorPlugin(): void {
  * THE PLUGINS PAGE (operator ruling 2026-10-12: editor plugins move out of Configuration onto their
  * own Workspace page), `/plugins`: what the Developer section did — the list, each opening in the
  * editor test page, Create an editor plugin (the launch wizard on `editor-plugin`) and the test page.
- * The open-in-editor door is `devHostHref` (above), the one seam the MCP inspector builds on.
+ * The open-in-editor door is `openHref` (above): the test page, or `/mcp/inspect` for an MCP inspector.
  */
 export function PluginsPage({ navigate }: { navigate: (p: string) => void }): React.ReactElement {
   return (
@@ -192,6 +204,9 @@ export function PluginsPage({ navigate }: { navigate: (p: string) => void }): Re
       actions={<>
         <a href="/editors/dev" className="wk-btn wk-btn--secondary" data-testid="editor-plugins-devhost" onClick={(ev) => { ev.preventDefault(); navigate('/editors/dev'); }}>
           Open the editor test page
+        </a>
+        <a href={mcpInspectPath()} className="wk-btn wk-btn--secondary" data-testid="editor-plugins-mcp-inspect" onClick={(ev) => { ev.preventDefault(); navigate(mcpInspectPath()); }}>
+          Open the MCP inspector
         </a>
         <button type="button" className="wk-btn wk-btn--primary" data-testid="editor-plugins-create" onClick={() => startCreateEditorPlugin()}>
           Create an editor plugin

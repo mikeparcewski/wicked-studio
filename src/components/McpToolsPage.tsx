@@ -1,4 +1,5 @@
 import { PAGE_NAMES } from '../board/pageNames.js';
+import { mcpInspectPath } from '../api/mcpInspect.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ageOf,
@@ -270,6 +271,11 @@ function ServerRow({ server, policies, usage, open, onToggle, mode, busy, onAct,
           {policies === null ? 'posture unavailable' : summary.text}
         </span>
         <span className="ml-auto flex flex-wrap items-center gap-2">
+          {(server.kind === 'mcp-stdio' || server.kind === 'mcp-http') && (
+            <a href={mcpInspectPath(server.name)} data-testid="mcp-server-inspect" className="wk-btn wk-btn--secondary wk-btn--sm" aria-label={`Inspect ${server.name}`} onClick={(ev) => { ev.preventDefault(); navigate(mcpInspectPath(server.name)); }}>
+              Inspect
+            </a>
+          )}
           <span data-testid={serverApproved ? 'mcp-server-revoke' : needsFirstUse ? 'mcp-server-approve' : undefined} data-disabled={busy}>
             <span data-testid="mcp-server-test"><span data-testid="mcp-server-remove" data-disabled={busy}>
               <OverflowMenu label={`More actions for ${server.name}`} items={[
@@ -669,6 +675,7 @@ export function McpToolsPage({ navigate, search }: { navigate: (p: string) => vo
       <PageFrame data-testid="mcp-tools-page" title={PAGE_NAMES.mcp} intro="Choose the tools your helpers can use and when they need your approval."
         actions={<>
           <a className="wk-link" href={`${policiesPath()}?mcp=1`} onClick={(e) => { e.preventDefault(); navigate(`${policiesPath()}?mcp=1`); }} data-testid="mcp-steering-link">MCP policies</a>
+          <a className="wk-link" href={mcpInspectPath()} onClick={(e) => { e.preventDefault(); navigate(mcpInspectPath()); }} data-testid="mcp-inspector-link">Inspector</a>
           {view === 'servers' && loaded !== null && !adding && <button type="button" data-testid="mcp-add-open" onClick={() => setAdding(true)} className="wk-btn wk-btn--primary">Add existing server</button>}
           <button type="button" className="wk-btn wk-btn--secondary" onClick={() => { void load(); setUsageRefresh((n) => n + 1); }}>Refresh</button>
         </>}>

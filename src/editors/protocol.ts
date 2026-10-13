@@ -14,15 +14,31 @@ export type Size = 'inline' | 'pane' | 'full';
 export const SIZES: readonly Size[] = ['inline', 'pane', 'full'];
 
 export type ErrorCode = 'not_granted' | 'bad_request' | 'stale' | 'head_moved' | 'refused' | 'too_large'
-  | 'rate_limited' | 'unavailable' | 'timeout' | 'unsupported';
+  | 'rate_limited' | 'unavailable' | 'timeout' | 'unsupported'
+  /** `mcp.request` only (DES-MCP-INSPECTOR-001 §4; garden `refs/mcp-server.md`): the bridge's 403 — a
+   *  write tool of a registered server no human enabled — and its 409 — the server was re-registered
+   *  since this session connected. */
+  | 'write_not_granted' | 'server_changed';
 
 export type PermissionId = 'artifact.read' | 'artifact.write' | 'selection.chip' | 'composer.draft' | 'checks.read'
-  | 'checks.contribute' | 'sources.read' | 'media.read' | 'artifact.export' | 'ui.fullscreen' | 'network.media';
+  | 'checks.contribute' | 'sources.read' | 'media.read' | 'artifact.export' | 'ui.fullscreen' | 'network.media'
+  | 'mcp.session';
 
 export const PERMISSIONS: readonly PermissionId[] = [
   'artifact.read', 'artifact.write', 'selection.chip', 'composer.draft', 'checks.read', 'checks.contribute',
-  'sources.read', 'media.read', 'artifact.export', 'ui.fullscreen', 'network.media',
+  'sources.read', 'media.read', 'artifact.export', 'ui.fullscreen', 'network.media', 'mcp.session',
 ];
+
+/** Permissions no default ever grants (core `LEDGER_ONLY_PERMISSIONS`): only the build's own token in
+ *  `EDITOR-GRANTS`, which its install consent writes (DES-MCP-INSPECTOR-001 §6). */
+export const LEDGER_ONLY: ReadonlySet<PermissionId> = new Set<PermissionId>(['mcp.session']);
+
+/** The methods `mcp.request` may send (DES-MCP-INSPECTOR-001 §3; crew `INSPECT_METHODS`). The bridge
+ *  owns `initialize`. */
+export const MCP_METHODS: ReadonlySet<string> = new Set([
+  'tools/list', 'tools/call', 'resources/list', 'resources/templates/list', 'resources/read',
+  'prompts/list', 'prompts/get', 'completion/complete', 'logging/setLevel', 'ping',
+]);
 
 export type AnchorRef =
   | { kind: 'element'; id: string }
@@ -47,6 +63,7 @@ export const REQUESTS = {
   'checks.read': 'checks.read',
   'export.request': 'artifact.export',
   'ui.fullscreen': 'ui.fullscreen',
+  'mcp.request': 'mcp.session',
 } as const satisfies Record<string, PermissionId>;
 export type RequestType = keyof typeof REQUESTS;
 
@@ -72,6 +89,11 @@ export const LIMITS = {
   pingEveryMs: 10_000,
   pingReplyMs: 2_000,
   replyMs: 10_000,
+  /** `mcp.request`'s reply limit: the bridge answers `504` after 60 s, so the host waits a little longer
+   *  to hear that answer (DES-MCP-INSPECTOR-001 §4). */
+  mcpReplyMs: 62_000,
+  /** Tool calls refused for want of a click before the frame is torn down. */
+  mcpRefusalsBeforeTeardown: 3,
   /** Messages per second before `rate_limited`; teardown after 5 s sustained. */
   ratePerSec: 200,
   writeOps: 200,
@@ -129,6 +151,9 @@ function payloadOk(type: string, p: Record<string, unknown>): boolean {
       return Array.isArray(p['checks']) && p['checks'].length <= 100
         && p['checks'].every((c) => isObj(c) && isLine(c['id'], 100) && isLine(c['text'], 300));
     case 'evidence.open': return isStr(p['checkId'], 200);
+    // The method is checked against MCP_METHODS by the host (an unlisted one is `bad_request` with its
+    // reason); here only the shape: a method name and, optionally, a params object.
+    case 'mcp.request': return isStr(p['method'], 128) && p['method'] !== '' && (p['params'] === undefined || isObj(p['params']));
     case 'ui.morph': return SIZES.includes(p['to'] as Size);
     case 'ui.key': return isStr(p['key'], 40);
     case 'ui.typed': return isStr(p['grapheme'], 64);

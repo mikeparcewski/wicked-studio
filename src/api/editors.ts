@@ -30,10 +30,14 @@ export async function listEditors(): Promise<EditorView[] | null> {
  * The editor that opens `kind` here: enabled, speaking this host's protocol, claiming the kind and
  * an inline size. A first-party editor wins over a third-party one; among equals, the id's order.
  * `null` = no plugin claims the kind (the host falls back to its own component, or a read-only view).
+ * `size`: the size the host shows it at (the MCP inspector page hosts a `pane`; a session, `inline`).
  */
-export function editorFor(editors: readonly EditorView[], kind: string): EditorView | null {
+export function editorFor(editors: readonly EditorView[], kind: string, size: 'inline' | 'pane' | 'full' = 'inline'): EditorView | null {
   const fit = editors
-    .filter((e) => e.enabled && e.protocol.includes(PROTOCOL_VERSION) && e.kinds.includes(kind) && e.sizes.includes('inline'))
+    .filter((e) => e.enabled && e.protocol.includes(PROTOCOL_VERSION) && e.kinds.includes(kind) && e.sizes.includes(size))
     .sort((a, b) => Number(b.first_party) - Number(a.first_party) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   return fit[0] ?? null;
 }
+
+/** The kind an MCP inspector plugin claims (DES-MCP-INSPECTOR-001 §5). */
+export const MCP_SERVER_KIND = 'mcp-server';

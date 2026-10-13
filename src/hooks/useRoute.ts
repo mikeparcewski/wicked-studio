@@ -256,6 +256,11 @@ function parse(pathname: string): Route {
   // any other deeper address is a dead one.
   // EP-P1: the editor plugin host's dev route and its conformance host page (no nav entry: no user
   // surface until EP-P2 places the first plugin).
+  // `/mcp/inspect` — the MCP inspector (DES-MCP-INSPECTOR-001 §5): an `mcp-server` editor plugin in the
+  // host's chrome. Under the MCP page (its rail item stays current); `?server=` preselects a server.
+  if (first === 'mcp' && second === 'inspect' && !third) {
+    return route({ panel: 'mcp', artifactId: 'inspect' });
+  }
   if (first === 'editors' && (second === 'dev' || second === 'conformance') && !third) {
     return route({ panel: 'editors', artifactId: second });
   }

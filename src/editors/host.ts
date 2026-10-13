@@ -3,7 +3,7 @@ import type { WriteVerb } from '../board/artifactMorph.js';
 import { changedBy, chipsFor, elementLabel, type Chip, type VersionKind } from './model.js';
 import { checkOps, inventoryOf, themeTokensOf, type Inventory, type WireItem } from './ops.js';
 import {
-  EVENTS, LIMITS, PROTOCOL_VERSION, REQUESTS, event, parseInbound, parseReady, refuse, reply, request,
+  EVENTS, LIMITS, MCP_METHODS, PROTOCOL_VERSION, REQUESTS, event, parseInbound, parseReady, refuse, reply, request, sizeOf,
   type AnchorRef, type ErrorCode, type PermissionId, type Size,
 } from './protocol.js';
 
@@ -25,6 +25,10 @@ import {
  *  - Chips carry host-written labels; drafted text is a separate block; forwarded keys are allowlisted
  *    and activation-bound; `ui.typed` is one grapheme with focus in the frame. Three drops tear down.
  *  - Full screen is the host's own container, never the frame.
+ *  - MCP (DES-MCP-INSPECTOR-001 §4): `mcp.request` reaches only the server the operator connected in
+ *    the host's own chrome (`HostOptions.mcp`), a `tools/call` only under the operator's click, and
+ *    every call is reported to the host's call line. `mcp.state` / `mcp.log` reach only a frame that
+ *    holds `mcp.session`; the session id, command, URL, env and headers never reach it at all.
  */
 
 export interface ArtifactRef {
@@ -42,6 +46,22 @@ export interface ArtifactRef {
  *  and posts `artifact.changed` for it right after — or alone, when the reply already timed out — so the
  *  plugin shows the head and never stays on the version it wrote or was looking at. */
 export interface MovedOn { head: number; kind: VersionKind }
+
+/** The result of one `mcp.request` the host's page made for the plugin: the server's answer, or the
+ *  protocol code the plugin is told with the host's own words. */
+export type McpBridgeResult = { response: unknown; ms: number; truncated: boolean } | { error: ErrorCode; message: string };
+
+/** What the inspector page gives the host (DES-MCP-INSPECTOR-001 §4): the one connected session, held
+ *  by the page, never by the plugin. Absent (the dev and conformance hosts) = no session: `unavailable`. */
+export interface McpHostBridge {
+  request(method: string, params: Record<string, unknown> | undefined): Promise<McpBridgeResult>;
+}
+
+/** One `mcp.request`, as the host's call line counts it: `sent` when it leaves, `done` with its outcome. */
+export type McpCall =
+  | { phase: 'sent'; method: string; tool: string | null }
+  /** `sent: false` = the host refused it before it left (no click, not connected, not a listed method). */
+  | { phase: 'done'; method: string; tool: string | null; sent: boolean; ms: number | null; outcome: 'ok' | 'server-error' | ErrorCode };
 
 export type AdapterResult<T> = (T & { moved?: MovedOn }) | { error: ErrorCode; message: string; head?: number; moved?: MovedOn };
 
@@ -75,6 +95,8 @@ export interface HostUi {
   fullscreen(): Promise<boolean>;
   torn(reason: string): void;
   log(entry: HostLogEntry): void;
+  /** Every `mcp.request` the plugin made, for the host-drawn call line (no call is quiet). */
+  mcpCall?(call: McpCall): void;
 }
 
 export type HostLogEntry =
@@ -104,6 +126,8 @@ export interface HostOptions {
   firstParty: boolean;
   adapter: HostAdapter;
   ui: HostUi;
+  /** The inspector page's session (DES-MCP-INSPECTOR-001); absent = `mcp.request` answers `unavailable`. */
+  mcp?: McpHostBridge;
   /** The host's real user activation at receipt (`navigator.userActivation.isActive`). */
   activation?: () => boolean;
   /** Whether focus is in this editor's frame (`document.activeElement === frame`). */
@@ -139,6 +163,11 @@ export class EditorHost {
   private pingWait: ReturnType<typeof setTimeout> | null = null;
   private pingSeq = 0;
   private drops = 0;
+  /** Tool calls refused for want of the operator's click; three tear the frame down. */
+  private mcpRefusals = 0;
+  /** `mcp.state` / `mcp.log` the page posted before the handshake: delivered right after `host.hello`. */
+  private pendingMcpState: Record<string, unknown> | null = null;
+  private pendingMcpLog: unknown[] = [];
   /** Window messages after the handshake: counted against the flood limit, logged only the first few. */
   private ignoredWindow = 0;
   /** One typed character per gesture (§5.10): spent by an accepted `ui.typed`, re-armed only when
@@ -211,6 +240,11 @@ export class EditorHost {
     }), '*', [channel.port2]);
     this.log({ kind: 'handshake', editor: ready.editor, version: ready.version });
     this.pingTimer = setInterval(() => this.ping(), LIMITS.pingEveryMs);
+    if (this.pendingMcpState !== null) this.post(event('mcp.state', this.pendingMcpState));
+    this.pendingMcpState = null;
+    const backlog = this.pendingMcpLog;
+    this.pendingMcpLog = [];
+    if (backlog.length > 0) this.mcpLog(backlog);
   }
 
   private frameLoaded(): void {
@@ -266,6 +300,7 @@ export class EditorHost {
     }
     const id = msg.id;
     let settled = false;
+    const limitMs = msg.type === 'mcp.request' ? LIMITS.mcpReplyMs : LIMITS.replyMs;
     const timer = setTimeout(() => {
       if (settled) return;
       settled = true;
@@ -277,8 +312,8 @@ export class EditorHost {
         this.o.ui.status('Not changed yet: no answer in 10 s — it may still land');
         this.timeoutLine = id;
       }
-      this.post(refuse(id, 'timeout', 'no answer in 10 s'));
-    }, LIMITS.replyMs);
+      this.post(refuse(id, 'timeout', `no answer in ${Math.round(limitMs / 1000)} s`));
+    }, limitMs);
     this.handleRequest(msg.type, msg.payload)
       .then((r) => {
         // Settled by the timer: the plugin heard "timeout" and no second reply follows — but what the
@@ -392,11 +427,48 @@ export class EditorHost {
         return { placed: true };
       }
       case 'ui.fullscreen': return { entered: await this.o.ui.fullscreen() };
+      case 'mcp.request': return this.mcpRequest(p);
       case 'export.request':
         return a.exportAs !== undefined ? a.exportAs(String(p['format'])) : { error: 'unsupported', message: 'no export for this artifact' };
       default:
         return { error: 'unsupported', message: `${type} is not available for this artifact` };
     }
+  }
+
+  /**
+   * `mcp.request` (DES-MCP-INSPECTOR-001 §4). Judged at receipt, before any await: the method must be
+   * on the bridge's list, and a `tools/call` needs the operator's real activation (a click or Enter in
+   * the frame activates the host) — three calls nobody clicked for tear the frame down. Every call that
+   * gets this far is reported to the host's call line, sent and done.
+   */
+  private async mcpRequest(p: Record<string, unknown>): Promise<unknown> {
+    const method = String(p['method']);
+    const params = p['params'] as Record<string, unknown> | undefined;
+    const tool = method === 'tools/call' && typeof params?.['name'] === 'string' ? params['name'].slice(0, 80) : null;
+    if (!MCP_METHODS.has(method)) {
+      this.o.ui.mcpCall?.({ phase: 'done', method: method.slice(0, 80), tool: null, sent: false, ms: null, outcome: 'bad_request' });
+      return { error: 'bad_request', message: `${method} is not a method the inspector sends` };
+    }
+    // A click in the host's own chrome (Connect, Copy log) also activates the page, so the click must
+    // be in THIS frame: real activation with focus still in it (codex r1).
+    const clicked = (this.o.activation ?? NO_ACTIVATION)() && (this.o.focusInFrame ?? ((f) => document.activeElement === f))(this.frame);
+    if (method === 'tools/call' && !clicked) {
+      this.mcpRefusals += 1;
+      this.o.ui.mcpCall?.({ phase: 'done', method, tool, ms: null, sent: false, outcome: 'refused' });
+      if (this.mcpRefusals >= LIMITS.mcpRefusalsBeforeTeardown) this.teardown('This editor called tools nobody clicked for');
+      return { error: 'refused', message: 'a tool call needs your click in the editor' };
+    }
+    if (this.o.mcp === undefined) {
+      this.o.ui.mcpCall?.({ phase: 'done', method, tool, ms: null, sent: false, outcome: 'unavailable' });
+      return { error: 'unavailable', message: 'not connected' };
+    }
+    this.o.ui.mcpCall?.({ phase: 'sent', method, tool });
+    const r = await this.o.mcp.request(method, params);
+    if (!this.torn) {
+      const outcome = 'error' in r ? r.error : (r.response as { error?: unknown } | null)?.error !== undefined ? 'server-error' : 'ok';
+      this.o.ui.mcpCall?.({ phase: 'done', method, tool, sent: true, ms: 'error' in r ? null : r.ms, outcome });
+    }
+    return r;
   }
 
   /** EP-P3: the host's own "point at it" — a finding in the checks panel becomes a composer chip, in
@@ -485,6 +557,31 @@ export class EditorHost {
   setTheme(theme: Record<string, string>): void { this.post(event('host.theme', { theme, artifactTheme: null })); }
   setGrants(grants: readonly PermissionId[]): void { this.grants = new Set(grants); }
   selectionCleared(): void { this.post(event('selection.cleared', {})); }
+
+  /** `mcp.state` (DES-MCP-INSPECTOR-001 §4): only to a frame holding `mcp.session`; the latest one is
+   *  kept until the handshake. Never carries the session id, command, URL, env or headers. */
+  mcpState(payload: Record<string, unknown>): void {
+    if (this.torn || !this.grants.has('mcp.session')) return;
+    if (!this.handshaken) { this.pendingMcpState = payload; return; }
+    this.post(event('mcp.state', payload));
+  }
+
+  /** `mcp.log {entries}`: the bridge's entries as polled, in batches that fit one message. Kept until the
+   *  handshake (at most the bridge's ring, 1000). */
+  mcpLog(entries: readonly unknown[]): void {
+    if (this.torn || !this.grants.has('mcp.session') || entries.length === 0) return;
+    if (!this.handshaken) { this.pendingMcpLog = [...this.pendingMcpLog, ...entries].slice(-1000); return; }
+    const budget = LIMITS.messageBytes - 1_024;
+    let batch: unknown[] = [];
+    let bytes = 0;
+    for (const e of entries) {
+      const size = sizeOf(e);
+      if (batch.length > 0 && bytes + size > budget) { this.post(event('mcp.log', { entries: batch })); batch = []; bytes = 0; }
+      batch.push(e);
+      bytes += size;
+    }
+    if (batch.length > 0) this.post(event('mcp.log', { entries: batch }));
+  }
 
   /**
    * The host's own Undo (the thread line's button, EP-P2): the same rule as `version.undo` — only a
