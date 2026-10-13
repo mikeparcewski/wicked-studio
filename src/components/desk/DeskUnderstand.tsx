@@ -9,6 +9,7 @@ import { generateInsights, useDeskInsights } from '../../hooks/useDeskInsights.j
 import { Markdown } from '../Markdown.js';
 import { AGENT_WORKFLOW_NOTE, outcomeOf, PARTIAL_RECORD_NOTE, projectOf, workflowLabel, workflowOf, RANGES, type AgentRow, type RangeDays, type WorkflowRow } from '../../board/deskInsights.js';
 import { jobTitle } from '../../board/deskWords.js';
+import { workFingerprint } from '../../board/deskModel.js';
 import { relTime } from '../../board/relTime.js';
 import { statusWord } from '../../board/statusWords.js';
 import { sessionPath } from '../../board/sessionModel.js';
@@ -29,9 +30,16 @@ const KINDS: readonly { value: AnalyzeKind; label: string }[] = [
 ];
 const MAX_CARDS = 4;
 
+/**
+ * A job's spend, keyed by the job AND its work (workFingerprint: status + done/rejected units), so a job
+ * that resumes or moves on is read again. A failed read is not cached: it reads as unknown and is
+ * tried again the next time the comparison changes.
+ */
 const costCache = new Map<string, number | null>();
-/** Jobs whose usage is only partly priced: their total is a floor ("at least"), never a best-cost verdict. */
+const costFailed = new Set<string>();
+/** Jobs (by the same key) whose usage is only partly priced: a floor ("at least"), never a best-cost verdict. */
 const partlyPriced = new Set<string>();
+const costKeyOf = (id: string, kept: readonly SessionView[]): string => { const v = kept.find((x) => x.session.id === id); return v === undefined ? id : workFingerprint([v]); };
 
 export function DeskUnderstand({ runsShown = true, agents, agentsRead = 'done', agentsTruncated = false, filters = null, filterAgent = null, filterWorkflow = null, workflows, kept, allRuns, days, onDays, project, projectLabel, projectName, agentName, governance, navigate, pathOf, now }: {
   /** The job list has been read (a project's page: its member reads too). Before it, nothing is compared. */
@@ -91,20 +99,23 @@ export function DeskUnderstand({ runsShown = true, agents, agentsRead = 'done', 
   const input = { kind, items, days, api: apiBase(), project, projectLabel, filters };
   const intent = items.length === 0 ? '' : analysisIntent(input);
 
-  // Jobs: each card's spend is that job's own usage records, read on demand.
+  // Jobs: each card's spend is that job's own usage records, read on demand (again when the job moves).
+  const costKeys = sel.map((id) => costKeyOf(id, kept));
   useEffect(() => {
     if (kind !== 'jobs') return;
     let live = true;
-    for (const id of sel) {
-      if (costCache.has(id)) continue;
+    for (const [i, id] of sel.entries()) {
+      const key = costKeys[i]!;
+      if (costCache.has(key)) continue;
+      costFailed.delete(key); // retry a failed read now that the comparison changed
       api.getRunEvents(id, ['cliUsage']).then(({ events }) => {
         const priced = (events as unknown as { costUsd?: unknown }[]).filter((e) => typeof e.costUsd === 'number');
-        costCache.set(id, priced.length === 0 ? null : priced.reduce((a, e) => a + (e.costUsd as number), 0));
-        if (priced.length > 0 && priced.length < events.length) partlyPriced.add(id); else partlyPriced.delete(id);
-      }, () => costCache.set(id, null)).finally(() => { if (live) bump((n) => n + 1); });
+        costCache.set(key, priced.length === 0 ? null : priced.reduce((a, e) => a + (e.costUsd as number), 0));
+        if (priced.length > 0 && priced.length < events.length) partlyPriced.add(key); else partlyPriced.delete(key);
+      }, () => { costFailed.add(key); }).finally(() => { if (live) bump((n) => n + 1); });
     }
     return () => { live = false; };
-  }, [kind, sel.join('|')]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [kind, sel.join('|'), costKeys.join('\u0000')]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!adding) return undefined;
@@ -117,7 +128,7 @@ export function DeskUnderstand({ runsShown = true, agents, agentsRead = 'done', 
   const view: CompareView = useMemo(() => {
     if (kind === 'agents') return compareAgents(sel.map((id) => agents.find((a) => a.cli === id)!).filter(Boolean), governance, agentColor);
     if (kind === 'workflows') return compareWorkflows(sel.map((id) => workflows.find((w) => w.key === id)!).filter(Boolean));
-    if (kind === 'jobs') return compareJobs(sel.map((id) => kept.find((v) => v.session.id === id)!).filter(Boolean), (v) => jobTitle(v.session), agentName, (id) => (costCache.has(id) ? costCache.get(id)! : undefined), (id) => partlyPriced.has(id));
+    if (kind === 'jobs') return compareJobs(sel.map((id) => kept.find((v) => v.session.id === id)!).filter(Boolean), (v) => jobTitle(v.session), agentName, (id) => { const key = costKeyOf(id, kept); return costCache.has(key) ? costCache.get(key)! : costFailed.has(key) ? null : undefined; }, (id) => partlyPriced.has(costKeyOf(id, kept)));
     return compareProjects(sel, kept, projectName);
   }, [kind, sel.join('|'), agents, workflows, kept, governance, agentName, projectName, launch, costRev]); // eslint-disable-line react-hooks/exhaustive-deps
 

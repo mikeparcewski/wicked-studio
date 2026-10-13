@@ -48,10 +48,29 @@ interface DeskStreamState {
 
 let arrivals = 0;
 
+/** Order-stable JSON (object keys sorted), so two copies of one payload stringify alike. */
+function stable(x: unknown): string {
+  if (Array.isArray(x)) return `[${x.map(stable).join(',')}]`;
+  if (x !== null && typeof x === 'object') return `{${Object.keys(x).sort().map((k) => `${JSON.stringify(k)}:${stable((x as Record<string, unknown>)[k])}`).join(',')}}`;
+  return JSON.stringify(x) ?? 'null';
+}
+
+/**
+ * A frame's content identity: its whole payload except what only the durable log stamps (`seq`, `ts`).
+ * A live frame and its backfilled copy share it; two different frames (another seat, kind or reason
+ * on the same run) never do.
+ */
+function contentKey(e: CoreEvent): string {
+  const rest: Record<string, unknown> = { ...(e as unknown as Record<string, unknown>) };
+  delete rest.seq;
+  delete rest.ts;
+  return stable(rest);
+}
+
 function keyOf(e: CoreEvent, live: boolean): string {
-  const r = e as unknown as { session?: string; type?: string; ord?: number; seq?: number; cli?: string; attempt?: number };
-  // A live frame lacks `seq`: it keys on its content so the backfill copy of the same frame merges.
-  return `${r.session ?? ''}|${r.type ?? ''}|${r.ord ?? ''}|${r.attempt ?? ''}|${r.cli ?? ''}|${live ? '' : r.seq ?? ''}`;
+  const r = e as unknown as { seq?: number };
+  // A live frame lacks `seq`: it keys on its content (plus an arrival count, see itemOf).
+  return live ? contentKey(e) : `${contentKey(e)}|${r.seq ?? ''}`;
 }
 
 function itemOf(e: CoreEvent, live: boolean): StreamItem | null {
@@ -84,10 +103,19 @@ export const useDeskStream = create<DeskStreamState>((set, get) => ({
     const got = events.map((e) => itemOf(e, false)).filter((x): x is StreamItem => x !== null);
     set((s) => {
       const have = new Set(s.items.map((i) => i.key));
-      // A live frame's key carries an arrival suffix; its content key (before '#') is what the durable
-      // copy of the same frame matches, so a frame seen live and then backfilled shows once.
-      const liveSeen = new Set(s.items.filter((i) => i.live).map((i) => i.key.split('#')[0]));
-      const merged = [...s.items, ...got.filter((g) => !have.has(g.key) && !liveSeen.has(keyOf(g.event, true)))].sort((a, b) => b.at - a.at).slice(0, CAP);
+      // A frame seen live and then backfilled shows once: each live item answers for ONE durable copy
+      // with the same content (one-for-one, so a frame that really repeated keeps its count). Items
+      // already backfilled are matched by their durable key (content + seq) instead.
+      const liveLeft = new Map<string, number>();
+      for (const i of s.items) if (i.live) { const k = contentKey(i.event); liveLeft.set(k, (liveLeft.get(k) ?? 0) + 1); }
+      const fresh = got.filter((g) => {
+        if (have.has(g.key)) return false;
+        const k = contentKey(g.event);
+        const n = liveLeft.get(k) ?? 0;
+        if (n > 0) { liveLeft.set(k, n - 1); return false; }
+        return true;
+      });
+      const merged = [...s.items, ...fresh].sort((a, b) => b.at - a.at).slice(0, CAP);
       return { items: merged, backfilled: true };
     });
   },
