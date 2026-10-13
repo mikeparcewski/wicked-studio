@@ -1,5 +1,5 @@
 import type { ReactElement, ReactNode } from 'react';
-import { DRAFT_EPICS_ID } from '../../store/launchWizard.js';
+import { DEMO_VIDEO_ID, DRAFT_EPICS_ID } from '../../store/launchWizard.js';
 
 /**
  * THE NEW JOB CARDS' ART (operator 2026-10-12): one small line drawing per built-in workflow, and a
@@ -143,6 +143,22 @@ function DraftEpicsArt(): ReactElement {
   );
 }
 
+function DemoVideoArt(): ReactElement {
+  return (
+    <Frame>
+      <rect className={W} x="18" y="12" width="52" height="34" rx="4" />
+      <path d="M18 20h52" />
+      <circle cx="23" cy="16" r="0.75" />
+      <circle cx="27" cy="16" r="0.75" />
+      <path className={A} d="M40 26v12l10-6z" />
+      <path d="M18 52h52" />
+      <path d="M18 52h20" strokeWidth={3} />
+      <circle cx="38" cy="52" r="2.5" />
+      <circle className={`${A} ${W}`} cx="78" cy="14" r="4" />
+    </Frame>
+  );
+}
+
 /** A workflow studio has no drawing for: a plain run of steps. */
 function FallbackArt(): ReactElement {
   return (
@@ -166,6 +182,7 @@ const ART: Readonly<Record<string, () => ReactElement>> = {
   learn: LearnArt,
   'qe-author-tests': WriteTestsArt,
   [DRAFT_EPICS_ID]: DraftEpicsArt,
+  [DEMO_VIDEO_ID]: DemoVideoArt,
 };
 
 /** Whether studio has its own drawing for a workflow key (else the neutral one is drawn). */

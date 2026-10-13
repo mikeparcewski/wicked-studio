@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { Project } from '../src/api/types.js';
 import { useAskDock } from '../src/store/askDock.js';
-import { resetLaunchWizard, useLaunchWizard } from '../src/store/launchWizard.js';
+import { DEMO_VIDEO_ID, resetLaunchWizard, useLaunchWizard } from '../src/store/launchWizard.js';
 import { makeView } from './factories.js';
 
 /**
@@ -254,13 +254,40 @@ describe('the verb table (§1.3)', () => {
     expect(useSessionDrafts.getState().drafts['desk'] ?? '').toBe('');
   });
 
-  it('studio#622 + concept A: New Demo opens a chat in the project with "Make a demo of " typed, and sends nothing', () => {
+  it('studio#664: New Demo opens the New job wizard on its Demo video form, in the project in scope; nothing is sent', () => {
+    resetLaunchWizard();
     useAskDock.setState({ request: null });
     const { navigate } = renderPalette({ projectId: 'q3-review-deck' });
     fireEvent.change(screen.getByTestId('palette-input'), { target: { value: '> new demo' } });
     fireEvent.click(rows().find((r) => r.textContent?.includes('New Demo'))!);
     expect(navigate).not.toHaveBeenCalled();
-    expect(useAskDock.getState().request).toMatchObject({ projectId: 'q3-review-deck', seedText: 'Make a demo of ' });
+    expect(useLaunchWizard.getState()).toMatchObject({ open: true, draft: { workflowId: DEMO_VIDEO_ID, projectId: 'q3-review-deck' } });
+    // No chat is seeded any more: the old "Make a demo of " text started a chat, never a demo run.
+    expect(useAskDock.getState().request).toBeNull();
+  });
+
+  it('codex r2: New Demo on a page naming Unfiled (?project=default) opens the form unfiled, never another project\'s draft', () => {
+    resetLaunchWizard();
+    useLaunchWizard.getState().openWith({ workflowId: DEMO_VIDEO_ID, projectId: 'q3-review-deck', composerKey: 'desk' });
+    useLaunchWizard.getState().close();
+    window.history.replaceState(null, '', '/everything?tab=made&kind=videos&project=default');
+    try {
+      renderPalette({ projectId: null });
+      fireEvent.change(screen.getByTestId('palette-input'), { target: { value: '> new demo' } });
+      fireEvent.click(rows().find((r) => r.textContent?.includes('New Demo'))!);
+      expect(useLaunchWizard.getState().draft).toMatchObject({ workflowId: DEMO_VIDEO_ID, projectId: 'default' });
+    } finally {
+      window.history.replaceState(null, '', '/');
+    }
+  });
+
+  it('studio#664: New Demo with no project in scope opens the same form unfiled (no picker stage first)', () => {
+    resetLaunchWizard();
+    renderPalette({ projectId: null });
+    fireEvent.change(screen.getByTestId('palette-input'), { target: { value: '> new demo' } });
+    fireEvent.click(rows().find((r) => r.textContent?.includes('New Demo'))!);
+    expect(useLaunchWizard.getState()).toMatchObject({ open: true, draft: { workflowId: DEMO_VIDEO_ID, projectId: null } });
+    expect(screen.queryByTestId('palette-project-stage')).toBeNull();
   });
 
   it('on a session page New job opens the wizard for THAT composer (its launch lands in that chat)', () => {

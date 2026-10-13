@@ -72,13 +72,14 @@
   .wk-launch-wizard-review > div { grid-template-columns: 1fr; gap: 0; }
   .wk-launch-wizard .wk-btn, .wk-launch-wizard select.wk-field, .wk-launch-wizard-choice { min-height: var(--tap-min); }
 }
-.wk-launch-wizard select.wk-field { min-height: var(--control-h); padding: 0 10px; font-size: var(--text-sm); }
+.wk-launch-wizard select.wk-field, .wk-launch-wizard input.wk-field { min-height: var(--control-h); padding: 0 10px; font-size: var(--text-sm); }
+.wk-launch-wizard textarea.wk-field { padding: 8px 10px; font-size: var(--text-sm); }
 /* Helper choices read as toggles: a visible edge, the selected ones filled (wizard UX gate, codex). */
 .wk-launch-wizard .wk-composer-seat { border: 1px solid var(--border-strong); background: var(--surface-raised); }
 .wk-launch-wizard .wk-composer-seat[aria-pressed='true'] { border-color: var(--accent); background: var(--accent-wash); color: var(--ink-high); }
 .wk-launch-wizard .wk-composer-seat--off { border-style: dashed; }
 @media (max-width: 767px) {
-  .wk-launch-wizard select.wk-field, .wk-launch-wizard .wk-composer-seat { min-height: var(--tap-min); }
+  .wk-launch-wizard select.wk-field, .wk-launch-wizard input.wk-field, .wk-launch-wizard .wk-composer-seat, .wk-launch-wizard .wk-chip { min-height: var(--tap-min); }
 }
 /* THE NEW JOB CARDS (operator 2026-10-12): the first step is a grid of cards, 4 across, exactly 3
    rows in view and the rest scrolling inside. The modal takes its full height on this step; the
