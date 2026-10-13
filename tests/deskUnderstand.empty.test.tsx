@@ -74,8 +74,8 @@ describe('Understand empty state and insights', () => {
     expect(screen.queryByTestId('desk-und-empty')).not.toBeInTheDocument();
     expectNoRequests();
     fireEvent.click(screen.getByTestId('desk-insights-generate'));
-    // The key is kind|days|project|filters|selection|<the numbers on the cards>.
-    expect(mocks.generate).toHaveBeenCalledExactlyOnceWith(expect.stringMatching(new RegExp(`^agents\\|30\\|\\|\\|${selected.join(',')}\\|`)), expect.stringContaining('Compare these agents'));
+    // The key is kind|days|project|[agent ID, workflow ID]|selection|<the numbers on the cards>.
+    expect(mocks.generate).toHaveBeenCalledExactlyOnceWith(expect.stringContaining(`agents|30||[null,null]|${selected.join(',')}|`), expect.stringContaining('Compare these agents'));
     expect(mocks.fetch).not.toHaveBeenCalled();
     expect(mocks.launch).not.toHaveBeenCalled();
   });
@@ -105,7 +105,7 @@ describe('Understand empty state and insights', () => {
     expect(mocks.events).toHaveBeenCalledWith('finished', ['cliUsage']);
     expect(mocks.generate).not.toHaveBeenCalled();
     fireEvent.click(screen.getByTestId('desk-insights-generate'));
-    expect(mocks.generate).toHaveBeenCalledExactlyOnceWith(expect.stringMatching(/^jobs\|30\|\|\|failed,finished\|/), expect.any(String));
+    expect(mocks.generate).toHaveBeenCalledExactlyOnceWith(expect.stringContaining('jobs|30||[null,null]|failed,finished|'), expect.any(String));
     expect(mocks.fetch).not.toHaveBeenCalled();
   });
 
@@ -137,5 +137,42 @@ describe('Understand empty state and insights', () => {
     fireEvent.click(within(error).getByRole('button', { name: 'Try again' }));
     expect(mocks.generate).toHaveBeenCalledTimes(2);
     expect(mocks.generate.mock.calls[1]).toEqual(mocks.generate.mock.calls[0]);
+  });
+
+  it('removes an existing agent comparison and its insights when a workflow filter is applied', () => {
+    const p = props();
+    const { rerender } = render(<DeskUnderstand {...p} />);
+    suggest('agents');
+    expect(screen.getAllByTestId('desk-compare-card')).toHaveLength(3);
+    mocks.state = { phase: 'done', text: 'An earlier agent comparison.', at: NOW };
+    rerender(<DeskUnderstand {...p} filterWorkflow="bug-fix" filters="workflow Bug fix" />);
+    expect(screen.getByTestId('desk-und-agents-unread')).toHaveTextContent('Agent numbers can’t be split by workflow yet');
+    expect(screen.getByTestId('desk-und-agents-unread')).toHaveTextContent('needs crew data');
+    expect(screen.queryByTestId('desk-compare-card')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('desk-compare-differ')).not.toBeInTheDocument();
+    expect(screen.getByTestId('desk-analyze-start')).toBeDisabled();
+    expectNoRequests();
+    mocks.state = { phase: 'idle' };
+    fireEvent.click(screen.getByRole('radio', { name: 'Workflows' }));
+    suggest('workflows');
+    expect(screen.getByTestId('desk-compare-card')).toBeInTheDocument();
+    expect(screen.getByTestId('desk-insights-generate')).toBeInTheDocument();
+  });
+
+  it.each(['filterWorkflow', 'filterAgent'] as const)('uses stable %s IDs when labels and displayed numbers are identical', (filter) => {
+    const p = props();
+    const words = filter === 'filterWorkflow' ? 'workflow Bug fix' : 'agent Bug fix';
+    const { rerender } = render(<DeskUnderstand {...p} {...{ [filter]: 'bug-fix' }} filters={words} />);
+    suggest('workflows');
+    fireEvent.click(screen.getByTestId('desk-insights-generate'));
+    const [firstKey, firstPrompt] = mocks.generate.mock.calls[0] as unknown as [string, string];
+    rerender(<DeskUnderstand {...p} {...{ [filter]: 'bug_fix' }} filters={words} />);
+    fireEvent.click(screen.getByTestId('desk-insights-generate'));
+    const [secondKey, secondPrompt] = mocks.generate.mock.calls[1] as unknown as [string, string];
+    expect(firstKey).toContain(JSON.stringify(filter === 'filterWorkflow' ? [null, 'bug-fix'] : ['bug-fix', null]));
+    expect(secondKey).toContain(JSON.stringify(filter === 'filterWorkflow' ? [null, 'bug_fix'] : ['bug_fix', null]));
+    expect(secondKey).not.toBe(firstKey);
+    expect(secondPrompt).toBe(firstPrompt);
+    expect(secondPrompt).toContain(`${words} only`);
   });
 });

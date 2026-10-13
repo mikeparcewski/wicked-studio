@@ -3,6 +3,7 @@ import type { SeatRecord, SeatRecordResponse } from '../api/seatRecord.js';
 import { statusWord, type StatusWord } from './statusWords.js';
 import { createdAtMs, wireDelivery } from './windowStats.js';
 import { waitsOnYou } from './attention.js';
+import { median } from './deskPulse.js';
 
 /**
  * DESK V2 — the pure model behind the Desk's refine bar, charts, comparisons and callouts
@@ -301,7 +302,9 @@ export interface AgentRow {
   delivered: number;
 }
 
-export function agentRows(record: SeatRecordResponse | null, kept: readonly SessionView[], names: GroupNames, roster: readonly string[]): AgentRow[] {
+export function agentRows(record: SeatRecordResponse | null, kept: readonly SessionView[], names: GroupNames, roster: readonly string[], workflow: string | null = null): AgentRow[] {
+  // The seat record can scope by project, but cannot split its metrics by workflow.
+  if (workflow !== null) return [];
   const seats = (record?.seats ?? []).filter((s) => !TOOL_SEATS.has(s.cli));
   const keys = new Set<string>([...seats.map((s) => s.cli), ...roster.filter((k) => !TOOL_SEATS.has(k))]);
   return [...keys].map((cli) => {
@@ -371,7 +374,7 @@ export function workflowRows(kept: readonly SessionView[]): WorkflowRow[] {
     return {
       key, label: workflowLabel(key), jobs: vs.length, finished, failed, stopped, open: vs.length - ended,
       successRate: ended > 0 ? finished / ended : null,
-      medianMin: mins.length === 0 ? null : mins[Math.floor((mins.length - 1) / 2)]!,
+      medianMin: mins.length === 0 ? null : median(mins),
       avgSteps: steps.length === 0 ? null : sum(steps) / steps.length,
       delivered: vs.filter(isDelivered).length,
     };
@@ -425,6 +428,7 @@ export function governanceOf(cli: string, acp: AcpFallbacks | null, roster: read
 }
 
 export const PARTIAL_RECORD_NOTE = 'Partial: the agent record left out older runs';
+export const AGENT_WORKFLOW_NOTE = 'Agent numbers can’t be split by workflow yet: the agent record has no workflow filter (needs crew data).';
 
 export function callouts(input: {
   agents: readonly AgentRow[];
@@ -434,10 +438,13 @@ export function callouts(input: {
   days: RangeDays;
   /** A project page or a refined view still reads studio-wide diagnostics. */
   scoped?: boolean;
+  /** Agent records and diagnostics cannot be split by workflow. */
+  workflow?: string | null;
 }): Callout[] {
   const out: Callout[] = [];
   const win = `in the last ${input.days} days`;
-  for (const a of input.agents) {
+  const agents = input.workflow != null ? [] : input.agents;
+  for (const a of agents) {
     if (a.benched === 0) continue;
     const [reason, n] = Object.entries(a.benchReasons).sort((x, y) => y[1] - x[1])[0] ?? ['', 0];
     const signedOut = /signed out/i.test(reason);
@@ -455,7 +462,7 @@ export function callouts(input: {
       evidence: { label: 'Agent record', path: '/health' },
     });
   }
-  for (const [cli, f] of Object.entries(input.acp ?? {})) {
+  for (const [cli, f] of Object.entries(input.workflow != null ? {} : input.acp ?? {})) {
     const n = uncheckedFallbacks(f);
     if (n <= 0) continue;
     const name = input.agents.find((a) => a.cli === cli)?.label ?? cli;
@@ -490,7 +497,7 @@ export function callouts(input: {
       evidence: { label: 'Every job', path: `/everything?tab=sessions` },
     });
   }
-  for (const a of input.agents) {
+  for (const a of agents) {
     if (a.gated < 5 || a.firstPassRate === null || a.firstPassRate >= 0.7) continue;
     out.push({
       id: `rework:${a.cli}`,
