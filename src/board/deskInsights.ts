@@ -403,16 +403,20 @@ export interface Callout {
 
 export interface AcpFallbacks { [cli: string]: { fallbacks: number; kinds: Record<string, number> } }
 
-const ENFORCED_ROUTES = new Set(['governance_requires_wrapped', 'read_only_requires_wrapped']);
+/** Deliberate routing that keeps enforcement (the contract's two `*_requires_wrapped` kinds). */
+export const ENFORCED_ROUTES: ReadonlySet<string> = new Set(['governance_requires_wrapped', 'read_only_requires_wrapped']);
+/** The seat was benched for its account and the wrapped fallback was never attempted: nothing ran. */
+export const BENCHED_KINDS: ReadonlySet<string> = new Set(['auth_failed', 'unauthenticated']);
 
 /**
- * Deliberate wrapped routing preserves enforcement; every other fallback counts. Counted as the total
- * minus the deliberate kinds, so a fallback whose kind is missing from the breakdown still counts.
+ * Deliberate wrapped routing preserves enforcement and a benched seat ran nothing; every other fallback
+ * counts. Counted as the total minus those kinds, so a fallback whose kind is missing from the breakdown still counts.
  */
 export function uncheckedFallbacks(f: AcpFallbacks[string] | undefined): number {
   if (f === undefined) return 0;
   const kinds = Object.entries(f.kinds ?? {});
-  const enforced = kinds.reduce((n, [kind, count]) => n + (ENFORCED_ROUTES.has(kind) ? count : 0), 0);
+  // Neither deliberate routing nor a benched seat ran anything without its checks.
+  const enforced = kinds.reduce((n, [kind, count]) => n + (ENFORCED_ROUTES.has(kind) || BENCHED_KINDS.has(kind) ? count : 0), 0);
   const listed = kinds.reduce((n, [, count]) => n + count, 0);
   return Math.max(0, Math.max(f.fallbacks ?? 0, listed) - enforced);
 }

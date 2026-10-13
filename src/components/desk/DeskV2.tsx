@@ -55,6 +55,8 @@ import { scrollBehavior } from '../ui/motion.js';
 import type { MenuItem } from '../ui/index.js';
 import { projectDetailPath } from '../../hooks/useRoute.js';
 import { DeskInbox } from './DeskInbox.js';
+import { FocusLockToggle } from '../NeedsYouQueue.js';
+import { useNeedsSources } from '../../store/needsSources.js';
 import { DeskUnderstand } from './DeskUnderstand.js';
 
 /**
@@ -134,6 +136,8 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
   const displayText = useDisplayText();
   const readState = deskReadState(runsLoaded, runsError);
   const settled = useSettledNeeds(needRows, readState === 'known', readState === 'failed');
+  const [rereading, setRereading] = useState(false);
+  const rereadSources = useCallback((): void => { setRereading(true); void useNeedsSources.getState().load(0).finally(() => setRereading(false)); }, []);
   const runsShown = readState === 'known' || readState === 'stale';
   const [refine, setRefine] = useState<Refine>(DEFAULT_REFINE);
   const refined = (r: Refine): boolean => r.project !== null || r.agent !== null || r.workflow !== null;
@@ -333,7 +337,7 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
       {projectHead !== undefined ? <div className="wk-desk2-actions">{projectHead.actions}</div> : <div className="wk-desk2-actions">
         <button type="button" data-testid="desk-chat" className="wk-btn wk-btn--secondary" onClick={() => openAskDock({ fresh: true })}><MessageSquare size={14} aria-hidden />Chat</button>
         <button type="button" data-testid="desk-new-job" className="wk-btn wk-btn--primary" onClick={() => openLaunchWizard({ composerKey: 'desk' })}><Plus size={14} aria-hidden />New job</button>
-        <DeskMore runs={runs} />
+        <DeskMore runs={runs} needs={readState === 'known' ? needRows.length : null} />
       </div>}
     </header>
   );
@@ -352,9 +356,11 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
   const runningPath = everythingPath({ tab: 'sessions', filter: 'active', ...(projectId !== undefined ? { project: projectId } : {}) });
   const work = (
     <div role="tabpanel" id={panelId('work')} aria-labelledby={tabId('work')} data-testid="desk-work" className="wk-work">
-      {handover.since !== null && <HandoverPanel handover={handover} navigate={navigate} now={now} runs={runs} />}
+      {/* The handover is studio-wide (the audit trail and its dismissal are global): the Desk only, never a project page. */}
+      {projectId === undefined && handover.since !== null && <HandoverPanel handover={handover} navigate={navigate} now={now} runs={runs} />}
       <div className="wk-work-top">
-        <DeskInbox rows={needRows} runs={runs} navigate={navigate} now={now} settled={readState === 'known' ? settled.phase : 'loading'} agentName={agentName} extra={projectId === undefined ? choresBlock : null} />
+        <DeskInbox rows={needRows} runs={runs} navigate={navigate} now={now} settled={readState === 'known' ? settled.phase : 'loading'} agentName={agentName} extra={projectId === undefined ? choresBlock : null}
+          missing={settled.missing} onRetry={rereadSources} retrying={rereading} />
         <ul className="wk-work-blocks" aria-label="At a glance" data-testid="desk-blocks">
           <DeskStat icon={Activity} tone="run" label="Running now" testId="desk-block-running" href={runningPath} navigate={navigate}
             value={runsShown ? String(allRunning) : null} note={allRunning === 0 ? 'nothing executing' : 'executing a step'} />
@@ -415,8 +421,8 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
                 : spendTruncated ? PARTIAL_RECORD_NOTE
                 : projectsUnread > 0 ? `at least: ${projectsUnread} ${projectsUnread === 1 ? 'project' : 'projects'} not read`
                 : !few && winSpend.phase === 'done' && winSpend.previous !== null && refine.agent === null ? deltaWords(spendTotal, winSpend.previous, (d) => moneyWords(Math.abs(d)), refine.days) : unpriced ? 'priced usage only' : `last ${refine.days} days`} {...(spendTruncated ? {} : { spark: spendTotals })} />
-            <DeskStat icon={CheckCircle2} tone="ok" label="Quality checks passed" testId="desk-stat-quality" value={qualityValue}
-              note={qualityNote} loading={quality.tally === null} loadingNote="Reading checks…" />
+            <DeskStat icon={CheckCircle2} tone="ok" label="Quality checks passed" testId="desk-stat-quality" value={runsShown ? qualityValue : null}
+              note={runsShown ? qualityNote : 'Reading…'} loading={!runsShown || quality.tally === null} loadingNote={runsShown ? 'Reading checks…' : 'Reading…'} />
           </ul>
           <div className="wk-desk2-charts">
             <ChartCard title="Jobs started" state={runsState} data-testid="desk-viz-jobs"
@@ -473,7 +479,7 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
 
   const understand = (
     <div role="tabpanel" id={panelId('understand')} aria-labelledby={tabId('understand')} data-testid="desk-understand" className="wk-understand">
-      <DeskUnderstand agents={agents} agentsRead={record.phase} agentsTruncated={record.truncated}
+      <DeskUnderstand runsShown={runsShown} agents={agents} agentsRead={record.phase} agentsTruncated={record.truncated}
         filterAgent={refine.agent} filterWorkflow={refine.workflow}
         filters={[refine.agent !== null ? `agent ${agentName(refine.agent)}` : null, refine.workflow !== null ? `workflow ${workflowLabel(refine.workflow)}` : null].filter((x): x is string => x !== null).join(', ') || null}
         workflows={flows} kept={kept} allRuns={runs} days={refine.days} onDays={(d) => set('days', d)} project={scope}
@@ -623,7 +629,7 @@ function InsightCards({ items, loading, recordFailed, navigate, workPath }: { it
 }
 
 /** The Desk's ⋯: standing instructions, Mark me away, Capture notes and the look underneath (New project is the rail's). */
-function DeskMore({ runs }: { runs: SessionView[] }): React.ReactElement {
+function DeskMore({ runs, needs }: { runs: SessionView[]; needs: number | null }): React.ReactElement {
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement | null>(null);
   const btn = useRef<HTMLButtonElement | null>(null);
@@ -647,6 +653,8 @@ function DeskMore({ runs }: { runs: SessionView[] }): React.ReactElement {
       {open && (
         <div className="wk-desk2-more-panel wk-overlay" data-testid="desk-more-panel" role="group" aria-label="More for the Desk">
           <div className="wk-desk2-more-row"><StandingOrdersPanel /></div>
+          {/* Show only the most urgent need (the focus lock), as beside standing instructions before. */}
+          {needs !== null && <div className="wk-desk2-more-row"><FocusLockToggle items={needs} /></div>}
           <div className="wk-desk2-more-row"><CaptureDrop runs={runs} opens="down" align="end" /></div>
           <button type="button" data-testid="desk-sheet-open" className="wk-btn wk-btn--quiet wk-btn--sm wk-desk2-more-item" onClick={() => { setOpen(false); openSheet({ kind: 'desk' }); }}>Look underneath the Desk</button>
         </div>

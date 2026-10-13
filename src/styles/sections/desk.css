@@ -593,6 +593,11 @@
 .wk-understand-cols { display: grid; grid-template-columns: minmax(0, 3fr) minmax(240px, 1fr); gap: var(--d2-gap); align-items: start; }
 .wk-understand-main { display: flex; flex-direction: column; gap: var(--d2-gap); min-width: 0; }
 .wk-understand .wk-stats { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+/* Five tiles beside Ask: the icon sits above the label so a label keeps its line, and a note may take two. */
+.wk-understand .wk-stats .wk-stat { grid-template-columns: minmax(0, 1fr); }
+.wk-understand .wk-stats .wk-stat-icon { grid-row: auto; margin-bottom: var(--space-2); }
+.wk-understand .wk-stats .wk-stat-value { grid-column: 1; }
+.wk-understand .wk-stats .wk-stat-note { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 .wk-understand .wk-desk2-charts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .wk-viz-insights .wk-insight-grid { grid-template-columns: minmax(0, 1fr); gap: var(--space-3); }
 .wk-viz-insights .wk-insight { box-shadow: none; background: var(--surface-raised); padding: var(--space-4); }

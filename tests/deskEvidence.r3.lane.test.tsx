@@ -32,8 +32,17 @@ describe('Happening now words (codex r3)', () => {
     const text = (await screen.findByTestId('desk-stream')).textContent ?? '';
     expect(text).toContain('codex ran');
     expect(text).toContain('single-shot, as its checks require');
-    expect(text.match(/fell back to an ungoverned session/g)).toHaveLength(1);
-    expect(text).toContain('pi fell back to an ungoverned session');
+    expect(text).not.toContain('ungoverned');
+    expect(text).toContain('pi lost its live session');
+    expect(text).toContain('without per-action checks');
+  });
+
+  it('a seat benched for its account is said as left out, not as work that ran unchecked (codex r4)', async () => {
+    act(() => { useDeskStream.getState().ingest(ev({ type: 'acpFallback', cliKey: 'pi', reason: 'r', fallbackKind: 'auth_failed', ord: 5 })); });
+    mount([run('a')]);
+    const text = (await screen.findByTestId('desk-stream')).textContent ?? '';
+    expect(text).toContain('pi couldn’t sign in, so it was left out of this job');
+    expect(text).not.toContain('single-shot');
   });
 
   it('an allowed gate says approved, never that checks passed', async () => {
