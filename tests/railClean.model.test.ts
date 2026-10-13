@@ -109,6 +109,14 @@ describe('one status word per row', () => {
     expect(c.sessions[0]!.status).toEqual({ word: 'Waiting on you', tone: 'gate' });
   });
 
+  it('a post-hoc delivery that just landed keeps "Finished" (the stranded mark is delivery state, never the run status) and says delivered', () => {
+    const v = run('kept', 'completed', 'Ship it', { created_at: secs(NOW - DAY), delivery: 'stranded' });
+    const g = railGroups(project([v]) as never, [], {}, undefined, {}, false, new Set(['kept']), NOW)[0]!;
+    expect(g.sessions[0]!.status).toEqual({ word: 'Finished', tone: 'ok' });
+    expect(g.sessions[0]!.line).toBe('Finished · delivered');
+    expect(railRowWords(g.sessions[0]!, NOW).label).toContain('Finished · delivered');
+  });
+
   it('a chat session\'s word is the run that sets its state (live work first)', () => {
     const g = railGroups(project([
       run('c1', 'executing', 'Chat', { chat_id: 'ch', created_at: 10 }),
