@@ -40,7 +40,7 @@ function FixButton({ row, onOpen, big = false }: { row: AgentRow; onOpen: () => 
   const label = f.label;
   return (
     <button type="button" data-testid="agents-fix" data-agent={row.key} data-tone={f.tone} onClick={onOpen}
-      aria-label={`${row.name}: ${f.label.replace(/^(Fix|See) /, '')}. Open what is happening and how to fix it`}
+      aria-label={`${f.label} for ${row.name}: what is happening and how to fix it`}
       className={`wk-agents-fix wk-agents-fix--${f.tone}${big ? ' wk-agents-fix--big' : ''}`}>
       <Icon aria-hidden size={14} />
       <span>{label}</span>
@@ -202,7 +202,7 @@ export function AgentsPanel({ search, navigate, basePath = AGENTS_PATH }: {
         <>
           <StateBanner kind="error" what="agents" error={v.rosterError instanceof Error ? v.rosterError.message : null} onRetry={retry} retrying={retrying} data-testid="agents-banner" />
           <p className="wk-agents-sub">If it keeps failing, Health shows whether studio’s service is working.</p>
-          <div><a href="/health" className="wk-btn wk-btn--secondary wk-agents-door" data-testid="agents-health-link" onClick={(e) => { e.preventDefault(); navigate('/health'); }}>Open Health</a></div>
+          <div><a href="/health" className="wk-btn wk-btn--secondary wk-agents-door" data-testid="agents-health-link" onClick={(e) => { if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return; e.preventDefault(); navigate('/health'); }}>Open Health</a></div>
         </>
       );
   } else if (!v.hasRoster) {

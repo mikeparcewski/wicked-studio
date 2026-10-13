@@ -95,7 +95,7 @@ describe('the page and its states (§3.3)', () => {
 describe('?fix=<key> (§2.2)', () => {
   it('the fix button opens the modal address; ?fix opens the agent’s modal', async () => {
     const { unmount } = renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: /Claude Code: 1 problem/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /Fix 1 problem for Claude Code/ }));
     expect(navigate).toHaveBeenCalledWith('/agents?fix=claude');
     unmount();
     renderPage('?fix=claude');

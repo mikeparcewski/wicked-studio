@@ -27,6 +27,7 @@ export type IssueCode =
   | 'qe_blocked'
   | 'not_admitted'
   | 'codex_worktree'
+  | 'repo_refused'
   | 'no_host_boundary'
   | 'boundary_unknown'
   | 'fence_scoped'
@@ -146,9 +147,19 @@ const WORKTREE_BENCHED_KEYS: readonly string[] = ['codex'];
 
 /** Whether the engine keeps this agent off repository-bound jobs. */
 export function worktreeBenched(seat: RosterSeat): boolean {
-  const wa = workAdmissionOf(seat, 'scoped_bound');
-  if (wa !== null) return !wa.ok && (wa.source === 'launcher' || /worktree/i.test(wa.reason_code ?? ''));
+  // The constant applies only when the seat carries no work_admission at all (codex PR r2 P2).
+  if (bag(seat)['work_admission'] !== undefined) {
+    const wa = workAdmissionOf(seat, 'scoped_bound');
+    // Crew's code for the engine's codex bench is `worktree_bench`; other launcher refusals stay repo_refused (codex PR r3).
+    return wa !== null && !wa.ok && /worktree/i.test(wa.reason_code ?? '');
+  }
   return WORKTREE_BENCHED_KEYS.includes(seat.key);
+}
+
+/** Crew refuses repository work for another reason than sign-in or the worktree bench (codex PR r1 P1). */
+export function repoRefused(seat: RosterSeat): boolean {
+  const wa = workAdmissionOf(seat, 'scoped_bound');
+  return wa !== null && !wa.ok && wa.source !== 'auth' && !worktreeBenched(seat);
 }
 
 /** The account line (crew ask A2): its kind in plain words, plus a provider-public plan when sent. */
@@ -236,16 +247,22 @@ export function commandDisplay(line: string): string {
   return out;
 }
 
-/** One row per agent name: a reviewer-only seat named like an agent rides that agent's row (#735). */
+/**
+ * One row per agent name: a reviewer-only seat named like an agent rides that agent's row (#735),
+ * but only when both carry the same sign-in reading (one login, so the row's sign-in, its fixes and
+ * its commands speak for both). A reviewer whose sign-in differs is its own row (codex PR r3/r4).
+ */
 export function foldReviewers(seats: readonly RosterSeat[]): { seat: RosterSeat; alsoReviews: boolean; keys: string[] }[] {
   const out: { seat: RosterSeat; alsoReviews: boolean; keys: string[] }[] = [];
   const reviewers = seats.filter(isReviewerOnly);
+  const folded = new Set<string>();
   for (const seat of seats) {
     if (isReviewerOnly(seat)) continue;
-    const folded = reviewers.filter((r) => seatLabel(r) === seatLabel(seat)).map((r) => r.key);
-    out.push({ seat, alsoReviews: folded.length > 0, keys: [seat.key, ...folded] });
+    const mine = reviewers.filter((r) => !folded.has(r.key) && seatLabel(r) === seatLabel(seat) && authOf(r) === authOf(seat)).map((r) => r.key);
+    mine.forEach((k) => folded.add(k));
+    out.push({ seat, alsoReviews: mine.length > 0, keys: [seat.key, ...mine] });
   }
-  for (const r of reviewers) if (!out.some((o) => seatLabel(o.seat) === seatLabel(r))) out.push({ seat: r, alsoReviews: false, keys: [r.key] });
+  for (const r of reviewers) if (!folded.has(r.key)) out.push({ seat: r, alsoReviews: false, keys: [r.key] });
   return out;
 }
 
@@ -268,7 +285,7 @@ function ago(iso: string | null | undefined, now: number): string | null {
   return Number.isFinite(t) ? relTime(t, now) : null;
 }
 
-function rowOf(seat: RosterSeat, alsoReviews: boolean, keys: string[], inp: AgentsInputs): Omit<AgentRow, 'issues'> & { issues: AgentIssue[] } {
+function rowOf(seat: RosterSeat, alsoReviews: boolean, keys: string[], inp: AgentsInputs, folded: readonly RosterSeat[] = []): Omit<AgentRow, 'issues'> & { issues: AgentIssue[] } {
   const { governance: gov, record, now } = inp;
   const b = bag(seat);
   const name = seatLabel(seat);
@@ -319,24 +336,30 @@ function rowOf(seat: RosterSeat, alsoReviews: boolean, keys: string[], inp: Agen
   else version = { word: bareVersion(ver.installed), tone: 'quiet', sub: ver.status === 'proven' ? 'approved build' : null };
 
   // Can do
-  const reviews = !signedOut && seat.council_eligible !== false && !optIn;
+  // A folded reviewer shares this row's sign-in, so its review seat counts for the row (codex PR r4).
+  const reviews = !signedOut && !optIn && (seat.council_eligible !== false || folded.some((f) => f.council_eligible !== false));
   const qeR = qeReviewerOf(seat);
-  const qe = qeR === null ? null : qeR.ok && !signedOut;
+  // A folded reviewer-only seat that can run quality checks counts for its row (codex PR r1 P2).
+  const foldedQe = folded.some((f) => qeReviewerOf(f)?.ok === true) && !signedOut;
+  const qe = qeR === null && !folded.some((f) => qeReviewerOf(f) !== null) ? null : (qeR?.ok === true && !signedOut) || foldedQe;
 
   // Week
   const rec = record?.seats.find((s) => s.cli === seat.key);
   const quota = quotaRuns(record, seat.key);
   const week = record === undefined ? null : { units: rec?.units ?? 0, quotaRuns: quota };
   const benched = worktreeBenched(seat);
+  const refused = repoRefused(seat);
 
   // Ready for work
   let ready: Cell;
   if (signedOut) ready = { word: 'Not ready', tone: 'fail', sub: 'sign in first' };
   else if (auth === 'unknown') ready = { word: 'Can’t tell', tone: 'quiet', sub: 'its sign-in couldn’t be read' };
-  else if (optIn) ready = unproven ? { word: 'Not recommended', tone: 'gate', sub: ver?.installed == null ? 'studio couldn’t read its version' : 'this version isn’t approved yet' } : { word: 'Ready if you pick it', tone: 'quiet', sub: null };
-  else if (seat.council_eligible === false) ready = { word: 'Not available', tone: 'gate', sub: 'see what’s happening' };
-  else if (benched) ready = { word: 'Ready, except repository jobs', tone: 'gate', sub: 'chats and reviews only' };
+  else if (optIn && unproven) ready = { word: 'Not recommended', tone: 'gate', sub: ver?.installed == null ? 'studio couldn’t read its version' : 'this version isn’t approved yet' };
+  else if (seat.council_eligible === false && !optIn) ready = { word: 'Not available', tone: 'gate', sub: 'see what’s happening' };
+  // Limits come before the opt-in word (codex PR r2 P1): an opt-in agent with a known limit says the limit.
+  else if (benched || refused) ready = { word: 'Ready, except repository jobs', tone: 'gate', sub: 'chats and reviews only' };
   else if (quota > 0) ready = { word: 'Quota unknown', tone: 'gate', sub: `ran out in ${quota} ${quota === 1 ? 'job' : 'jobs'} this week; studio can’t check it now` };
+  else if (optIn) ready = { word: 'Ready if you pick it', tone: 'quiet', sub: null };
   else ready = { word: 'Ready', tone: 'ok', sub: week !== null && week.units > 0 ? `worked ${week.units} ${week.units === 1 ? 'step' : 'steps'} this week` : null };
 
   // Issues
@@ -345,13 +368,14 @@ function rowOf(seat: RosterSeat, alsoReviews: boolean, keys: string[], inp: Agen
   if (auth === 'unknown') issues.push({ code: 'auth_unknown', severity: 'warning', safety: false });
   if (!signedOut && auth !== 'unknown' && seat.council_eligible === false && !optIn) issues.push({ code: 'not_admitted', severity: 'warning', safety: false });
   if (!signedOut && benched) issues.push({ code: 'codex_worktree', severity: 'warning', safety: false });
+  if (!signedOut && refused) issues.push({ code: 'repo_refused', severity: 'warning', safety: false });
   if (safe.word === 'Not checked' && safe.sub === 'no sandbox on this computer') issues.push({ code: 'no_host_boundary', severity: 'warning', safety: true });
   if (safe.word === 'Not checked' && safe.sub === 'couldn’t read this computer’s sandbox') issues.push({ code: 'boundary_unknown', severity: 'warning', safety: true });
   if (safe.word === 'Writes kept in the repository') issues.push({ code: 'fence_scoped', severity: 'warning', safety: true });
   if (unproven) issues.push({ code: 'version_unproven', severity: 'warning', safety: true });
   if (!signedOut && quota > 0) issues.push({ code: 'quota', severity: 'warning', safety: false });
   if (optIn) issues.push({ code: 'opt_in', severity: 'note', safety: false });
-  if (qeR !== null && !qeR.ok && !signedOut && !optIn) issues.push({ code: 'no_qe', severity: 'note', safety: false });
+  if (qe === false && !signedOut && !optIn) issues.push({ code: 'no_qe', severity: 'note', safety: false });
   if (auth === 'signed_in' && check === 'unverified') issues.push({ code: 'unverified', severity: 'note', safety: false });
   const acpRaw = inp.acpByCli?.[seat.key];
   const acp = acpRaw === undefined ? null : { fallbacks: acpRaw.fallbacks, sessions: acpRaw.sessionsStarted, kinds: acpRaw.fallbackKinds };
@@ -385,12 +409,17 @@ function rowOf(seat: RosterSeat, alsoReviews: boolean, keys: string[], inp: Agen
  * run them, each signed-out agent whose sign-in would restore them carries `qe_blocked`.
  */
 export function agentRows(inp: AgentsInputs): AgentRow[] {
-  const rows = foldReviewers(displaySeats([...inp.roster])).map(({ seat, alsoReviews, keys }) => rowOf(seat, alsoReviews, keys, inp));
-  const reporting = rows.filter((r) => qeReviewerOf(r.seat) !== null);
-  if (reporting.length > 0 && !reporting.some((r) => r.qe === true)) {
+  const rows = foldReviewers(displaySeats([...inp.roster])).map(({ seat, alsoReviews, keys }) =>
+    rowOf(seat, alsoReviews, keys, inp, inp.roster.filter((s) => s.key !== seat.key && keys.includes(s.key))));
+  // From the rows' aggregate qe (folded reviewers included, codex PR r2 P2).
+  if (qeAvailable(rows) === false) {
     for (const r of rows) {
-      const q = qeReviewerOf(r.seat);
-      if (q !== null && r.issues.some((i) => i.code === 'signed_out') && (q.ok || q.reason_code === 'signed_out')) {
+      // Any seat the row stands for (a folded reviewer too) whose sign-in would restore quality checks.
+      const restores = inp.roster.filter((s) => r.keys.includes(s.key)).some((s) => {
+        const q = qeReviewerOf(s);
+        return q !== null && authOf(s) === 'signed_out' && (q.ok || q.reason_code === 'signed_out');
+      });
+      if (restores) {
         r.issues.push({ code: 'qe_blocked', severity: 'problem', safety: false });
       }
     }

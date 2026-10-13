@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { agentRows, attention, type AgentRow } from '../../board/agentsModel.js';
 import { DEFAULT_CLIS_KEY } from '../../board/docSeats.js';
 import { agentsSettled, ensureAgentsRead, followRosterCache, useAgentsReads, type ReadState } from '../../store/agentsReads.js';
@@ -37,9 +37,17 @@ export interface AgentRowsView {
 export function useAgentRows(): AgentRowsView {
   const s = useAgentsReads();
   useEffect(() => { ensureAgentsRead(); return followRosterCache(); }, []);
+  // The stored defaults, re-read when another tab writes them or this window regains focus (codex PR r1).
+  const [defaultsKey, setDefaultsKey] = useState(() => JSON.stringify(storedDefaults()));
+  useEffect(() => {
+    const reread = (): void => setDefaultsKey(JSON.stringify(storedDefaults()));
+    window.addEventListener('storage', reread);
+    window.addEventListener('focus', reread);
+    return () => { window.removeEventListener('storage', reread); window.removeEventListener('focus', reread); };
+  }, []);
   const rows = useMemo(
-    () => (s.roster === null ? [] : agentRows({ roster: s.roster, governance: s.governance, acpByCli: s.acpByCli, record: s.record, defaults: storedDefaults(), now: Date.now() })),
-    [s.roster, s.governance, s.acpByCli, s.record],
+    () => (s.roster === null ? [] : agentRows({ roster: s.roster, governance: s.governance, acpByCli: s.acpByCli, record: s.record, defaults: JSON.parse(defaultsKey) as string[] | null, now: Date.now() })),
+    [s.roster, s.governance, s.acpByCli, s.record, defaultsKey],
   );
   const settled = agentsSettled(s);
   return {
@@ -52,7 +60,8 @@ export function useAgentRows(): AgentRowsView {
     settled,
     readAt: s.readAt,
     runsRead: s.record?.runsRead ?? null,
-    attention: settled && s.rosterState === 'ok' && s.roster !== null ? attention(rows) : null,
+    // A count needs every read it uses: a failed diagnostics or record read hides it (absent sources are fine).
+    attention: settled && s.rosterState === 'ok' && s.roster !== null && s.diagState !== 'failed' && s.recordState !== 'failed' ? attention(rows) : null,
     reload: s.load,
   };
 }

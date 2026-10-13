@@ -25,11 +25,15 @@ export interface AgentsReads {
   recordState: ReadState;
   /** When the last full read settled (ms). */
   readAt: number | null;
+  /** A re-read is in flight (codex PR r1: a retry is not settled until it answers). */
+  reading: boolean;
   /** Re-read all three (one at a time per source; a read in flight is not doubled). */
   load: () => Promise<void>;
 }
 
 let inflight: Promise<void> | null = null;
+/** Bumped by every roster deposit from another surface: a read that started before one is stale (codex PR r1). */
+let rosterRev = 0;
 
 export const useAgentsReads = create<AgentsReads>((set) => ({
   roster: getCachedRoster(),
@@ -41,17 +45,21 @@ export const useAgentsReads = create<AgentsReads>((set) => ({
   record: undefined,
   recordState: 'idle',
   readAt: null,
+  reading: false,
   load: () => {
     if (inflight !== null) return inflight;
-    set((s) => ({ rosterState: s.rosterState === 'ok' ? 'ok' : 'loading', diagState: s.diagState === 'idle' ? 'loading' : s.diagState, recordState: s.recordState === 'idle' ? 'loading' : s.recordState }));
+    const startRev = rosterRev;
+    set((s) => ({ reading: true, rosterState: s.rosterState === 'ok' ? 'ok' : 'loading', diagState: s.diagState === 'idle' ? 'loading' : s.diagState, recordState: s.recordState === 'idle' ? 'loading' : s.recordState }));
     const roster = Promise.resolve()
       .then(() => api.getRoster())
       .then(({ roster: r }) => {
         if (!Array.isArray(r)) throw new Error('roster: no list');
+        // A newer roster landed from another surface while this read was out: keep it.
+        if (rosterRev !== startRev) { set({ rosterState: 'ok', rosterError: null }); return; }
         set({ roster: r, rosterState: 'ok', rosterError: null });
         setCachedRoster(r);
       })
-      .catch((e: unknown) => set({ rosterState: 'failed', rosterError: e }));
+      .catch((e: unknown) => { if (rosterRev === startRev) set({ rosterState: 'failed', rosterError: e }); });
     const diag = Promise.resolve()
       .then(() => getDiagnostics())
       .then((d) => {
@@ -66,7 +74,7 @@ export const useAgentsReads = create<AgentsReads>((set) => ({
         set({ record: r as SeatRecordResponse, recordState: 'ok' });
       })
       .catch((e: unknown) => set({ record: undefined, recordState: isRouteUnsupported(e) ? 'absent' : 'failed' }));
-    inflight = Promise.all([roster, diag, record]).then(() => { set({ readAt: Date.now() }); }).finally(() => { inflight = null; });
+    inflight = Promise.all([roster, diag, record]).then(() => { set({ readAt: Date.now() }); }).finally(() => { inflight = null; set({ reading: false }); });
     return inflight;
   },
 }));
@@ -78,9 +86,9 @@ export const useAgentsReads = create<AgentsReads>((set) => ({
  */
 export function followRosterCache(): () => void {
   const cached = getCachedRoster();
-  if (cached !== null && cached !== useAgentsReads.getState().roster) useAgentsReads.setState({ roster: cached, rosterState: 'ok', rosterError: null });
+  if (cached !== null && cached !== useAgentsReads.getState().roster) { rosterRev += 1; useAgentsReads.setState({ roster: cached, rosterState: 'ok', rosterError: null }); }
   return subscribeRoster((r) => {
-    if (Array.isArray(r) && r !== useAgentsReads.getState().roster) useAgentsReads.setState({ roster: r, rosterState: 'ok', rosterError: null });
+    if (Array.isArray(r) && r !== useAgentsReads.getState().roster) { rosterRev += 1; useAgentsReads.setState({ roster: r, rosterState: 'ok', rosterError: null }); }
   });
 }
 
@@ -91,13 +99,13 @@ export function ensureAgentsRead(): void {
 }
 
 /** Whether every source the page reads has answered (ok, failed or absent). */
-export function agentsSettled(s: Pick<AgentsReads, 'rosterState' | 'diagState' | 'recordState'>): boolean {
+export function agentsSettled(s: Pick<AgentsReads, 'rosterState' | 'diagState' | 'recordState' | 'reading'>): boolean {
   const done = (r: ReadState): boolean => r === 'ok' || r === 'failed' || r === 'absent';
-  return done(s.rosterState) && done(s.diagState) && done(s.recordState);
+  return !s.reading && done(s.rosterState) && done(s.diagState) && done(s.recordState);
 }
 
 /** Test hook. */
 export function resetAgentsReads(): void {
   inflight = null;
-  useAgentsReads.setState({ roster: null, rosterState: 'idle', rosterError: null, governance: undefined, acpByCli: undefined, diagState: 'idle', record: undefined, recordState: 'idle', readAt: null });
+  useAgentsReads.setState({ roster: null, rosterState: 'idle', rosterError: null, governance: undefined, acpByCli: undefined, diagState: 'idle', record: undefined, recordState: 'idle', readAt: null, reading: false });
 }

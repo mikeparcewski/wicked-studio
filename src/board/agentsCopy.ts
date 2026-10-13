@@ -1,4 +1,4 @@
-import { commandDisplay, otherReady, qeAvailable, type AgentRow, type IssueCode } from './agentsModel.js';
+import { commandDisplay, otherReady, qeAvailable, workAdmissionOf, type AgentRow, type IssueCode } from './agentsModel.js';
 import { relTime } from './relTime.js';
 
 /**
@@ -122,6 +122,16 @@ export function issueCopy(code: IssueCode, row: AgentRow, rows: readonly AgentRo
         ],
         tech: null,
       };
+    case 'repo_refused': {
+      const wa = workAdmissionOf(row.seat, 'scoped_bound');
+      return {
+        title: 'Not given jobs in a repository right now',
+        what: `Studio’s service won’t give ${name} jobs that work in one repository at the moment.`,
+        why: `Builds, fixes and tests in a repository go to the other agents; ${name} still chats.`,
+        fix: [step('Check sign-ins now', 'in a minute; studio’s service re-checks each agent on its own.')],
+        tech: wa?.reason_code ?? null,
+      };
+    }
     case 'no_host_boundary':
       return {
         title: 'Not checked on this computer',

@@ -60,6 +60,14 @@ describe('one row per agent, in plain words (§3.1)', () => {
     expect(rows[0]!.alsoReviews).toBe(true);
   });
 
+  it('keeps a reviewer-only seat on its own row when its sign-in differs (one row = one login)', () => {
+    const roster = ROSTER.map((s) => (s.key === 'claude-eval' ? ({ ...s, auth: 'signed_in', login_check: 'live', council_eligible: true } as RosterSeat) : s));
+    const rows = agentRows({ ...base, roster });
+    expect(rows.map((r) => r.key)).toEqual(['claude', 'codex', 'pi', 'copilot', 'opencode', 'claude-eval']);
+    expect(rows[0]!.alsoReviews).toBe(false);
+    expect(rows[0]!.keys).toEqual(['claude']);
+  });
+
   it('reads each agent the way the design table says', () => {
     const r = by();
     expect([r.claude!.ready.word, r.claude!.sign.word, r.claude!.sign.sub]).toEqual(['Not ready', 'Signed out', 'checked 4 minutes ago']);
@@ -96,6 +104,13 @@ describe('one row per agent, in plain words (§3.1)', () => {
     const r = by({ ...base, roster: withQe });
     expect(r.claude!.issues.map((i) => i.code)).toContain('qe_blocked');
     expect(by().claude!.issues.map((i) => i.code)).not.toContain('qe_blocked');
+  });
+
+  it('any other refusal of repository work is never "Ready" (codex PR r1 P1)', () => {
+    const refused = ROSTER.map((s) => (s.key === 'pi' ? { ...s, work_admission: { unscoped: { ok: true }, scoped: { ok: true }, scoped_bound: { ok: false, reason_code: 'scope_unbound', source: 'scope' } } } : s));
+    const r = by({ ...base, roster: refused });
+    expect(r.pi!.ready.word).toBe('Ready, except repository jobs');
+    expect(r.pi!.issues.map((i) => i.code)).toContain('repo_refused');
   });
 
   it('the codex bench comes from work_admission when crew sends it (the studio constant is the fallback)', () => {

@@ -61,10 +61,12 @@ function SeverityIcon({ issue }: { issue: AgentIssue }): React.ReactElement {
 function Command({ c }: { c: CopyCommand }): React.ReactElement {
   const [state, setState] = useState<'idle' | 'copied' | 'failed'>('idle');
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => () => { if (timer.current !== null) clearTimeout(timer.current); }, []);
+  const mounted = useRef(true);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; if (timer.current !== null) clearTimeout(timer.current); }; }, []);
   const copy = (): void => {
     const clip = typeof navigator === 'undefined' ? undefined : navigator.clipboard;
     const flash = (s: 'copied' | 'failed'): void => {
+      if (!mounted.current) return;
       setState(s);
       if (timer.current !== null) clearTimeout(timer.current);
       timer.current = setTimeout(() => setState('idle'), 2000);
@@ -104,45 +106,81 @@ export function AgentModal({ agentKey, onClose, intent }: {
     live.current = true;
     const back = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     dialog.current?.focus();
-    return () => { live.current = false; back?.focus?.(); };
+    // aria-modal for real (codex PR r2 P1): the app behind is inert while the modal is open.
+    const root = document.getElementById('root');
+    const wasInert = root?.hasAttribute('inert') ?? true;
+    if (root !== null && !wasInert) root.setAttribute('inert', '');
+    return () => {
+      live.current = false;
+      timers.current.forEach(clearTimeout); timers.current = [];
+      if (root !== null && !wasInert) root.removeAttribute('inert');
+      back?.focus?.();
+    };
   }, []);
+
+  /** Tab and Shift+Tab stay inside the dialog. */
+  const trapTab = (e: React.KeyboardEvent): void => {
+    if (e.key !== 'Tab' || dialog.current === null) return;
+    const f = [...dialog.current.querySelectorAll<HTMLElement>('button:not([disabled]), a[href], summary, [tabindex]:not([tabindex="-1"])')].filter((el) => el.offsetParent !== null);
+    if (f.length === 0) return;
+    const first = f[0]!, last = f[f.length - 1]!;
+    if (e.shiftKey && (document.activeElement === first || document.activeElement === dialog.current)) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+  };
+
+  // One check at a time, tied to this agent (codex PR r1): a new agent or a new click retires the old poll.
+  const gen = useRef(0);
+  /** Every pending poll and deadline timer, cleared on settle, agent change and unmount (codex PR r2 P2). */
+  const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const clearTimers = (): void => { timers.current.forEach(clearTimeout); timers.current = []; };
+  useEffect(() => { gen.current += 1; clearTimers(); setOutcome({ kind: 'idle' }); }, [agentKey]);
 
   const checkAgain = (): void => {
     if (outcome.kind === 'checking') return;
     const since = Date.now();
+    const mineGen = ++gen.current;
+    const current = (): boolean => live.current && gen.current === mineGen;
     setOutcome({ kind: 'checking' });
+    // The 45 s limit holds even when a read hangs: past it, nothing a late answer says is taken.
+    clearTimers();
+    timers.current.push(setTimeout(() => { if (current()) { gen.current += 1; clearTimers(); setOutcome({ kind: 'not-rechecked' }); } }, CHECK_FOR_MS));
+    const settle = (o: Outcome): void => { clearTimers(); setOutcome(o); };
     const round = (): void => {
       Promise.resolve()
         .then(() => api.getRoster())
         .then(({ roster }) => {
-          if (!live.current) return;
+          if (!current()) return;
           setCachedRoster(roster);
           const mine = roster.find((s) => s.key === (row?.key ?? agentKey));
           const check = (mine as Record<string, unknown> | undefined)?.['login_check'];
           // An agent with no status command (pi, copilot) is never re-probed: one read is the answer.
           const probeless = mine !== undefined && authOf(mine) === 'signed_in' && check === 'unverified' && typeof mine.probed_at !== 'string';
-          if (probeless) { setOutcome({ kind: 'cant-confirm' }); return; }
+          if (probeless) { settle({ kind: 'cant-confirm' }); return; }
           if (mine !== undefined && fresh(mine, since)) {
             const auth = authOf(mine);
-            if (auth === 'signed_out') setOutcome({ kind: 'still' });
-            else if (auth === 'signed_in' && check === 'live') setOutcome({ kind: mine.council_eligible === false ? 'failed' : 'in' });
-            else if (auth === 'signed_in') setOutcome({ kind: 'status-only' });
-            else setOutcome({ kind: 'not-rechecked' });
+            if (auth === 'signed_out') settle({ kind: 'still' });
+            else if (auth === 'signed_in' && check === 'live') settle({ kind: mine.council_eligible === false ? 'failed' : 'in' });
+            else if (auth === 'signed_in') settle({ kind: 'status-only' });
+            else settle({ kind: 'not-rechecked' });
             return;
           }
-          if (Date.now() - since + CHECK_EVERY_MS > CHECK_FOR_MS) { setOutcome({ kind: 'not-rechecked' }); return; }
-          setTimeout(() => { if (live.current) round(); }, CHECK_EVERY_MS);
-        }, () => { if (live.current) setOutcome({ kind: 'couldnt' }); });
+          if (Date.now() - since + CHECK_EVERY_MS > CHECK_FOR_MS) { settle({ kind: 'not-rechecked' }); return; }
+          timers.current.push(setTimeout(() => { if (current()) round(); }, CHECK_EVERY_MS));
+        }, () => { if (current()) settle({ kind: 'couldnt' }); });
     };
     round();
   };
+
+  // The agent left the roster: close (and unmount, so the background stops being inert), codex PR r3 P1.
+  const gone = row === undefined && rosterState === 'ok';
+  useEffect(() => { if (gone) onClose(); }, [gone, onClose]);
 
   const now = Date.now();
   const cards = useMemo(() => (row === undefined ? [] : row.issues.map((i) => ({ issue: i, copy: issueCopy(i.code, row, rows, now) }))),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [row, rows]);
 
-  if (row === undefined && rosterState === 'ok') return null;
+  if (row === undefined && rosterState === 'ok') return null; // the effect above closes it
   const name = row?.name ?? '';
   const result = outcome.kind === 'idle' ? null : OUTCOME_WORDS[outcome.kind](name);
   const resultLine = result === null ? null : (
@@ -167,7 +205,7 @@ export function AgentModal({ agentKey, onClose, intent }: {
 
   return createPortal(
     <div className="wk-agents-scrim" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div ref={dialog} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby={titleId} data-testid="agents-modal" data-agent={agentKey} className="wk-agents-modal">
+      <div ref={dialog} tabIndex={-1} onKeyDown={trapTab} role="dialog" aria-modal="true" aria-labelledby={titleId} data-testid="agents-modal" data-agent={agentKey} className="wk-agents-modal">
         <div className="wk-agents-modal-head">
           <h2 id={titleId} className="wk-agents-modal-title">{name}</h2>
           <button type="button" data-testid="agents-modal-close" aria-label="Close" title="Close" onClick={onClose} className="wk-btn wk-btn--secondary wk-btn--icon wk-agents-close">✕</button>
