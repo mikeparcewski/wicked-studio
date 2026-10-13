@@ -36,6 +36,39 @@ describe('Desk stat tile: the number fits its tile (shots r10: Report Spend read
     expect(valueOf().style.fontSize).toBe('18px');
   });
 
+  it('agy r11: a number that goes back to being read drops the shrunk size', () => {
+    stubWidths(115, 130);
+    const { rerender } = render(<DeskStat icon={Wallet} tone="accent" label="Spend" value="$1.39" note="n" testId="t" />);
+    expect(valueOf().style.fontSize).toBe('42.4px');
+    rerender(<DeskStat icon={Wallet} tone="accent" label="Spend" value={null} note="n" testId="t" />);
+    expect(valueOf().style.fontSize).toBe('');
+  });
+
+  it('agy r11: a shorter number grows back to the stylesheet size', () => {
+    stubWidths(115, 130);
+    const { rerender } = render(<DeskStat icon={Wallet} tone="accent" label="Spend" value="$1.39" note="n" testId="t" />);
+    expect(valueOf().style.fontSize).toBe('42.4px');
+    vi.spyOn(HTMLElement.prototype, 'scrollWidth', 'get').mockReturnValue(60);
+    rerender(<DeskStat icon={Wallet} tone="accent" label="Spend" value="$1" note="n" testId="t" />);
+    expect(valueOf().style.fontSize).toBe('');
+  });
+
+  it('agy r11: a wider tile measures again (one frame later), and a same-width resize does not', () => {
+    const observers: (() => void)[] = [];
+    vi.stubGlobal('ResizeObserver', class { constructor(cb: () => void) { observers.push(cb); } observe(): void {} disconnect(): void {} });
+    vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => { cb(0); return 1; });
+    stubWidths(115, 130);
+    render(<DeskStat icon={Wallet} tone="accent" label="Spend" value="$1.39" note="n" testId="t" />);
+    expect(valueOf().style.fontSize).toBe('42.4px');
+    valueOf().style.fontSize = '1px'; // a same-width notification (the refit's own height change) does nothing
+    observers[0]!();
+    expect(valueOf().style.fontSize).toBe('1px');
+    vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(200);
+    observers[0]!();
+    expect(valueOf().style.fontSize).toBe('');
+    vi.unstubAllGlobals();
+  });
+
   it('a value still being read is not measured', () => {
     stubWidths(115, 130);
     render(<DeskStat icon={Wallet} tone="accent" label="Spend" value={null} note="n" testId="t" />);

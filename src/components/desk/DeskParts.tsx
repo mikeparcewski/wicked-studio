@@ -18,7 +18,6 @@ function useFitWidth(value: string | null): React.RefObject<HTMLSpanElement> {
   useLayoutEffect(() => {
     const el = ref.current;
     if (el === null || value === null) return undefined;
-    let width = -1;
     const fit = (): void => {
       el.style.fontSize = '';
       if (el.clientWidth === 0 || el.scrollWidth <= el.clientWidth) return;
@@ -27,12 +26,23 @@ function useFitWidth(value: string | null): React.RefObject<HTMLSpanElement> {
       el.style.fontSize = `${Math.max(FIT_FLOOR_PX, Math.floor(base * (el.clientWidth / el.scrollWidth) * 10) / 10)}px`;
     };
     fit();
+    let width = el.clientWidth;
     let live = true;
+    let frame = 0;
     // A web font that lands after the first measure changes the number's width, not the tile's.
     void document.fonts?.ready.then(() => { if (live) fit(); });
-    const ro = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(() => { if (el.clientWidth !== width) { width = el.clientWidth; fit(); } });
-    ro?.observe(el.parentElement ?? el);
-    return () => { live = false; ro?.disconnect(); };
+    // Only the number's own width matters (a refit changes its height, never its width); the refit waits a
+    // frame so it never resizes an observed box inside the observer's callback.
+    const ro = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(() => {
+      const w = el.clientWidth;
+      if (w === width) return;
+      width = w;
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => { if (live) fit(); });
+    });
+    ro?.observe(el);
+    // A placeholder that follows (a reload) starts again from the stylesheet's size.
+    return () => { live = false; cancelAnimationFrame(frame); ro?.disconnect(); el.style.fontSize = ''; };
   }, [value]);
   return ref;
 }
