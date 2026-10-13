@@ -171,6 +171,9 @@ export function ProjectDesk({ projectId, navigate, runs, needRows, now, search, 
   }, [missingKey]);
   // Jobs the page could not show (a failed read, or past the read cap): said, never silently dropped.
   const unshown = extra.key === missingKey ? extra.failed + (missingAll.length - missing.length) : 0;
+  // The project's job list is read only when its own member reads have settled too (Happening's one
+  // backfill per scope, the Runs stats and the Report would otherwise start from a partial list).
+  const membersRead = missingKey === '' || extra.key === missingKey;
   const allRuns = useMemo(() => (extra.key !== missingKey || extra.runs.length === 0 ? runs : [...runs, ...extra.runs.filter((x) => !runs.some((v) => v.session.id === x.session.id))]), [runs, extra, missingKey]);
   const mine = useMemo(() => projectRuns(allRuns, members, projectId), [allRuns, members, projectId]);
   const mineIds = useMemo(() => new Set(mine.map((v) => v.session.id)), [mine]);
@@ -297,7 +300,7 @@ export function ProjectDesk({ projectId, navigate, runs, needRows, now, search, 
     {loading ? <Skeleton rows={3} variant="card" /> : !project ? !error && <EmptyState title="Project not found" /> : <DeskV2
       projectId={projectId} runs={mine} needRows={needRows} now={now} navigate={navigate}
       runActions={(runId, runTitle) => { const m = members.find((x) => x.member_kind === RUN_KIND && x.member_ref === runId); return m === undefined ? [] : [{ id: 'detach', label: `Remove “${runTitle}” from this project`, danger: true, onSelect: () => handleDetach(m.id) }]; }}
-      search={search} hosted={hostedForProject} runsLoaded={runsLoaded} runsError={runsError ?? null}
+      search={search} hosted={hostedForProject} runsLoaded={runsLoaded && membersRead} runsError={runsError ?? null}
       {...(onRetryRuns !== undefined ? { onRetryRuns } : {})} {...(onCommand !== undefined ? { onCommand } : {})} workExtra={workExtra}
       projectHead={{ title, meta: <>
         <span data-testid="project-meta">

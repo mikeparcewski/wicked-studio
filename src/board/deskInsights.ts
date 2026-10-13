@@ -111,14 +111,19 @@ export function outcomeOf(v: SessionView): Outcome | null {
 
 /** The runs the refine bar keeps: unarchived, launched in the window (by the real start clock),
  *  in the project / workflow, and touched by the helper. `undated` counts the ones left out. */
-export function refineRuns(runs: readonly SessionView[], r: Refine, now: number): { kept: SessionView[]; undated: number } {
+/**
+ * The runs in the refine bar's view. `allTime` (the Runs tab's All time switch) drops the window and
+ * keeps undated and archived runs too, so every job a project holds stays reachable.
+ */
+export function refineRuns(runs: readonly SessionView[], r: Refine, now: number, allTime = false): { kept: SessionView[]; undated: number } {
   const floor = now - r.days * DAY_MS;
   let undated = 0;
   const kept = runs.filter((v) => {
-    if (v.session.archived_at != null) return false;
+    if (!allTime && v.session.archived_at != null) return false;
     if (r.project !== null && projectOf(v) !== r.project) return false;
     if (r.workflow !== null && workflowOf(v).key !== r.workflow) return false;
     if (r.agent !== null && !agentsOf(v).includes(r.agent)) return false;
+    if (allTime) return true;
     const at = createdAtMs(v);
     if (at === null) { undated += 1; return false; }
     return at >= floor && at < now;

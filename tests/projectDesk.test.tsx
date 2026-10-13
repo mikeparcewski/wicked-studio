@@ -106,6 +106,20 @@ describe('the project Desk', () => {
     expect(document.getElementById('requirements')).toBeNull();
   });
 
+  it('waits for its own member reads before the job list counts as read (codex r3)', async () => {
+    let answer: (v: unknown) => void = () => undefined;
+    getRun.mockImplementation(() => new Promise((r) => { answer = r; }));
+    const onlyFiled = runs.filter((v) => v.session.id !== 'member');
+    render(<ProjectDesk {...props} runs={onlyFiled} search="?tab=runs" />);
+    await loaded();
+    await waitFor(() => expect(getRun).toHaveBeenCalledWith('member'));
+    // While the member read is out, the Runs tab is still reading (no partial list, no counts).
+    expect(screen.queryAllByTestId('desk-runs-row')).toHaveLength(0);
+    expect(screen.getByTestId('desk-runs-stat-window').querySelector('.wk-stat-value')?.textContent ?? '').not.toMatch(/\d/);
+    answer({ run: runs.find((v) => v.session.id === 'member') });
+    await waitFor(() => expect(screen.getAllByTestId('desk-runs-row').map((r) => r.getAttribute('data-run-id')).sort()).toEqual(['filed', 'member']));
+  });
+
   it('names default honestly and offers no requirements, repositories, edit or archive', async () => {
     getProject.mockResolvedValue({ project: { ...project, id: 'default' }, members: [] });
     const view = render(<ProjectDesk {...props} projectId="default" />);
