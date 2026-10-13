@@ -1,0 +1,39 @@
+/* Section CSS: the MCP inspector (/mcp/inspect, DES-MCP-INSPECTOR-001 §5; design/UI-CONTRACT.md §6).
+   Only that section edits this file. Desk v2's language: 24 px card padding and gaps, xl radius,
+   section titles lg, secondary text --ink-dim. */
+.wk-mcpi-wrap .wk-page { max-width: 1600px; }
+.wk-mcpi { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-6); align-items: start; }
+@media (min-width: 1100px) {
+  .wk-mcpi { grid-template-columns: minmax(300px, 360px) minmax(0, 1fr); }
+  .wk-mcpi-host { position: sticky; top: 0; }
+}
+.wk-mcpi-card { padding: var(--space-6); border-radius: var(--radius-xl); display: flex; flex-direction: column; gap: var(--space-4); }
+.wk-mcpi-title { margin: 0; font-size: var(--text-lg); font-weight: var(--weight-semi); color: var(--ink-high); }
+.wk-mcpi-form, .wk-mcpi-session { display: flex; flex-direction: column; gap: var(--space-4); min-width: 0; }
+.wk-mcpi-field { display: flex; flex-direction: column; gap: var(--space-1); font-size: var(--text-sm); color: var(--ink-body); min-width: 0; }
+.wk-mcpi-field > span:first-child { color: var(--ink-high); font-weight: var(--weight-semi); }
+.wk-mcpi-field .wk-field { width: 100%; padding-inline: var(--control-px); }
+.wk-mcpi-last { margin: 0; font-size: var(--text-xs); color: var(--ink-dim); font-weight: var(--weight-semi); }
+.wk-mcpi-meta { margin: 0; font-size: var(--text-xs); color: var(--ink-dim); font-weight: normal; }
+.wk-mcpi-mono { font-family: var(--font-mono); font-size: var(--text-xs); }
+.wk-mcpi-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.wk-mcpi-error { margin: 0; font-size: var(--text-sm); color: var(--status-fail); overflow-wrap: anywhere; }
+.wk-mcpi-confirm { display: flex; flex-direction: column; gap: var(--space-3); padding: var(--space-4); border-radius: var(--radius-lg); border: 1px solid var(--border-strong); background: var(--surface-raised); }
+.wk-mcpi-confirm-q { margin: 0; font-size: var(--text-md); font-weight: var(--weight-semi); color: var(--ink-high); overflow-wrap: anywhere; }
+.wk-mcpi-name { margin: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2); font-size: var(--text-md); font-weight: var(--weight-semi); color: var(--ink-high); min-width: 0; overflow-wrap: anywhere; }
+.wk-mcpi-label { margin: 0; color: var(--ink-body); overflow-wrap: anywhere; }
+.wk-mcpi-state { margin-left: auto; font-size: var(--text-xs); font-weight: var(--weight-semi); padding: 2px var(--space-2); border-radius: 999px; border: 1px solid currentColor; color: var(--ink-muted); }
+.wk-mcpi-state--ready { color: var(--status-ok); }
+.wk-mcpi-state--connecting { color: var(--ink-body); }
+.wk-mcpi-state--failed { color: var(--status-fail); }
+.wk-mcpi-calls { margin: 0; padding-top: var(--space-3); border-top: 1px solid var(--border-subtle); font-size: var(--text-xs); color: var(--ink-body); overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.wk-mcpi-plugin { min-height: 560px; }
+@media (min-width: 1100px) { .wk-mcpi-plugin { min-height: max(520px, calc(100dvh - 200px)); } }
+.wk-mcpi-plugin-head { margin: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2); }
+.wk-mcpi-plugin-name { font-size: var(--text-md); font-weight: var(--weight-semi); color: var(--ink-high); }
+.wk-mcpi-frame { border-radius: var(--radius-lg); overflow: hidden; border: 1px solid var(--border-subtle); }
+.wk-mcpi-frame .wk-editor-frame { min-height: 480px; }
+@media (max-width: 767px) {
+  .wk-mcpi-card { padding: var(--space-4); }
+  .wk-mcpi-field .wk-field, .wk-mcpi-actions .wk-btn { min-height: var(--tap-min); }
+}

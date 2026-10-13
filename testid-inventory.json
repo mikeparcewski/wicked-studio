@@ -11,9 +11,9 @@
   "version": 1,
   "studioVersion": "0.7.13",
   "counts": {
-    "files": 205,
-    "occurrences": 2358,
-    "static": 2051,
+    "files": 206,
+    "occurrences": 2406,
+    "static": 2099,
     "dynamic": 63,
     "computed": 24
   },
@@ -2329,6 +2329,12 @@
       ]
     },
     {
+      "testId": "editor-plugins-mcp-inspect",
+      "files": [
+        "src/components/editors/EditorPluginsSettings.tsx"
+      ]
+    },
+    {
       "testId": "editor-plugins-settings",
       "files": [
         "src/components/editors/EditorPluginsSettings.tsx"
@@ -4369,6 +4375,282 @@
       ]
     },
     {
+      "testId": "mcp-inspect-back",
+      "files": [
+        "src/components/editors/McpInspectPage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-inspect-calls",
+      "files": [
+        "src/components/editors/McpInspectPage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-inspect-command",
+      "files": [
+        "src/components/editors/McpInspectPage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-inspect-confirm",
+      "files": [
+        "src/components/editors/McpInspectPage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-inspect-confirm-no",
+      "files": [
+        "src/components/editors/McpInspectPage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-inspect-confirm-text",
+      "files": [
+        "src/components/editors/McpInspectPage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-inspect-confirm-yes",
+      "files": [
+        "src/components/editors/McpInspectPage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-inspect-connect",
+      "files": [
+        "src/components/editors/McpInspectPage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-inspect-copied",
+      "files": [
+        "src/components/editors/McpInspectPage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-inspect-copy",
+      "files": [
+        "src/components/editors/McpInspectPage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-inspect-create",
+      "files": [
+        "src/components/editors/McpInspectPage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-inspect-cwd",
+      "files": [
+        "src/components/editors/McpInspectPage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-inspect-disconnect",
+      "files": [
+        "src/components/editors/McpInspectPage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-inspect-env",
+      "files": [
+        "src/components/editors/McpInspectPage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-inspect-error",
+      "files": [
+        "src/components/editors/McpInspectPage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-inspect-form-error",
+      "files": [
+        "src/components/editors/McpInspectPage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-inspect-frame",
+      "files": [
+        "src/components/editors/McpInspectPage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-inspect-headers",
+      "files": [
+        "src/components/editors/McpInspectPage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-inspect-host",
+      "files": [
+        "src/components/editors/McpInspectPage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-inspect-loading",
+      "files": [
+        "src/components/editors/McpInspectPage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-inspect-no-plugin",
+      "files": [
+        "src/components/editors/McpInspectPage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-inspect-not-granted",
+      "files": [
+        "src/components/editors/McpInspectPage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-inspect-page",
+      "files": [
+        "src/components/editors/McpInspectPage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-inspect-pick",
+      "files": [
+        "src/components/editors/McpInspectPage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-inspect-pick-command",
+      "files": [
+        "src/components/editors/McpInspectPage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-inspect-pick-server",
+      "files": [
+        "src/components/editors/McpInspectPage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-inspect-pick-url",
+      "files": [
+        "src/components/editors/McpInspectPage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-inspect-plugin",
+      "files": [
+        "src/components/editors/McpInspectPage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-inspect-ready",
+      "files": [
+        "src/components/editors/McpInspectPage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-inspect-reload",
+      "files": [
+        "src/components/editors/McpInspectPage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-inspect-restart",
+      "files": [
+        "src/components/editors/McpInspectPage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-inspect-server",
+      "files": [
+        "src/components/editors/McpInspectPage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-inspect-servers-unread",
+      "files": [
+        "src/components/editors/McpInspectPage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-inspect-session",
+      "files": [
+        "src/components/editors/McpInspectPage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-inspect-session-error",
+      "files": [
+        "src/components/editors/McpInspectPage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-inspect-session-label",
+      "files": [
+        "src/components/editors/McpInspectPage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-inspect-session-meta",
+      "files": [
+        "src/components/editors/McpInspectPage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-inspect-session-name",
+      "files": [
+        "src/components/editors/McpInspectPage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-inspect-start-error",
+      "files": [
+        "src/components/editors/McpInspectPage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-inspect-state",
+      "files": [
+        "src/components/editors/McpInspectPage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-inspect-target",
+      "files": [
+        "src/components/editors/McpInspectPage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-inspect-torn",
+      "files": [
+        "src/components/editors/McpInspectPage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-inspect-transport",
+      "files": [
+        "src/components/editors/McpInspectPage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-inspect-unsupported",
+      "files": [
+        "src/components/editors/McpInspectPage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-inspect-url",
+      "files": [
+        "src/components/editors/McpInspectPage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-inspector-link",
+      "files": [
+        "src/components/McpToolsPage.tsx"
+      ]
+    },
+    {
       "testId": "mcp-loading",
       "files": [
         "src/components/McpToolsPage.tsx"
@@ -4436,6 +4718,12 @@
     },
     {
       "testId": "mcp-server-health",
+      "files": [
+        "src/components/McpToolsPage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-server-inspect",
       "files": [
         "src/components/McpToolsPage.tsx"
       ]

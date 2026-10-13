@@ -825,8 +825,29 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          #   newest sealed take) and WT-W3 `summary` (the deliver card's line). Off: the body has neither
          #   (a daemon before WT-W2/W3) — no chips, no line.
          "acceptance_wt": True,
+         # mcp_inspect — (DES-MCP-INSPECTOR-001, e2e/desk_mcp_inspect_test.py; needs `editors`) a stand-in
+         #   for crew's /api/v1/mcp-inspect bridge over a scripted fake MCP server (tools echo, add, boom;
+         #   one resource, one prompt): POST sessions, POST :id/rpc, GET :id/log (a real long poll), DELETE.
+         #   GET /api/v1/editors also lists the third-party `acme-mcp` (kind mcp-server; its entry is
+         #   e2e/editor-fixtures/mcp-inspector.html) and GET /api/v1/mcp/servers lists two servers.
+         #   mcp_inspect_grant — acme-mcp's mcp.session decided `allow` (its install consent), else `ask`.
+         #   Every bridge write lands in mcp_inspect_posts (GET /__fixture/mcp-inspect-posts).
+         "mcp_inspect": False, "mcp_inspect_grant": True,
          }
 state_lock = threading.Lock()
+# mcp_inspect: the fake bridge's sessions (id -> dict) and the writes it received.
+mcp_inspect_cond = threading.Condition()
+mcp_inspect_sessions: dict = {}
+mcp_inspect_posts: list = []
+MCP_FAKE_TOOLS = [
+    {"name": "echo", "description": "Says the text back", "inputSchema": {"type": "object", "properties": {"text": {"type": "string"}}, "required": ["text"]}},
+    {"name": "add", "description": "Adds two numbers", "inputSchema": {"type": "object", "properties": {"a": {"type": "number"}, "b": {"type": "number"}}}},
+    {"name": "boom", "description": "Always fails", "inputSchema": {"type": "object", "properties": {}}},
+]
+MCP_FAKE_SERVERS = [
+    {"name": "fixture-tools", "kind": "mcp-stdio", "command": "node", "args": ["fixtures/inspect-server.mjs"], "url": None},
+    {"name": "docs-http", "kind": "mcp-http", "command": None, "args": [], "url": "http://127.0.0.1:3999/mcp"},
+]
 # Idea 9: every POST /governance/rules body the fixture received (GET /__fixture/rule-posts).
 rule_post_log: list = []
 # WT-U2: under `steering_rules`, a POST /governance/rules upserts here (by id) and GET serves it over
@@ -7411,6 +7432,12 @@ class W2Handler(SimpleHTTPRequestHandler):
             return self._json(200, {"posts": posts})
         if self._decisions_route("GET", {}):
             return None
+        if path == "/__fixture/mcp-inspect-posts":
+            with mcp_inspect_cond:
+                posts = list(mcp_inspect_posts)
+            return self._json(200, {"posts": posts})
+        if self._mcp_inspect("GET", path, None):
+            return None
         if path == "/__fixture/capture-posts":
             with state_lock:
                 posts = list(capture_post_log)
@@ -7431,6 +7458,131 @@ class W2Handler(SimpleHTTPRequestHandler):
             self.send_header("Content-Security-Policy",
                              f"frame-src http://{host}/api/v1/editors/ http://{host}/api/v1/projects/ blob: data:")
         super().end_headers()
+
+    def _mcp_inspect(self, method: str, path: str, body) -> bool:
+        """The mcp_inspect stand-in for crew's bridge (DES-MCP-INSPECTOR-001 §3) and its registry read."""
+        with state_lock:
+            on = state["mcp_inspect"]
+        if not on:
+            return False
+        if method == "GET" and path == "/api/v1/mcp/servers":
+            servers = [{**s, "enabled": True, "auth": None, "authState": "none", "tools": [],
+                        "counts": {"total": 0, "enabled": 0, "registered": 0, "read": 0, "write": 0, "destructive": 0},
+                        "health": {"state": "ok", "consecutiveFailures": 0, "checkedAt": "2026-10-12T18:00:00.000Z", "lastError": None},
+                        "registeredAt": "2026-10-12T18:00:00.000Z", "updatedAt": "2026-10-12T18:00:00.000Z"} for s in MCP_FAKE_SERVERS]
+            self._json(200, {"servers": servers, "discovered": []})
+            return True
+        if not path.startswith("/api/v1/mcp-inspect/sessions"):
+            return False
+        parts = path.split("/")  # ['', 'api', 'v1', 'mcp-inspect', 'sessions', id?, verb?]
+        sid = urllib.parse.unquote(parts[5]) if len(parts) > 5 else None
+        verb = parts[6] if len(parts) > 6 else None
+        now = lambda: time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())  # noqa: E731
+
+        def add(sess, **e):
+            sess["seq"] += 1
+            sess["entries"].append({"seq": sess["seq"], "at": now(), **e})
+            mcp_inspect_cond.notify_all()
+
+        with mcp_inspect_cond:
+            if method == "POST" and sid is None:
+                mcp_inspect_posts.append({"kind": "start", "body": body})
+                target = (body or {}).get("target") or {}
+                if len([x for x in mcp_inspect_sessions.values() if x["state"] in ("ready", "connecting")]) >= 4:
+                    self._json(429, {"code": "too_many_sessions", "error": "at most 4 inspector sessions at once; disconnect one first"})
+                    return True
+                if "server" in target:
+                    reg = next((x for x in MCP_FAKE_SERVERS if x["name"] == target["server"]), None)
+                    if reg is None:
+                        self._json(404, {"code": "unknown_server", "error": f"no MCP server named {target['server']} is registered"})
+                        return True
+                    kind, name = "server", reg["name"]
+                    label = " ".join([reg["command"], *reg["args"]]) if reg["command"] else reg["url"]
+                elif "command" in target:
+                    kind, name = "stdio", target["command"].split("/")[-1]
+                    label = " ".join([target["command"], *(target.get("args") or [])])
+                else:
+                    kind, name = target.get("transport") or "streamable-http", urllib.parse.urlparse(target.get("url", "")).netloc
+                    label = target.get("url", "")
+                new_id = "mcpi-" + hashlib.sha256(f"{len(mcp_inspect_posts)}-{time.time()}".encode()).hexdigest()[:16]
+                sess = {"id": new_id, "seq": 0, "entries": [], "state": "connecting", "error": None,
+                        "target": {"kind": kind, "name": name, "label": label,
+                                   "envNames": sorted((target.get("env") or {}).keys()), "headerNames": sorted((target.get("headers") or {}).keys())},
+                        "initialize": None}
+                mcp_inspect_sessions[new_id] = sess
+                add(sess, dir="out", kind="request", method="initialize", rpcId=0, text=json.dumps({"jsonrpc": "2.0", "id": 0, "method": "initialize", "params": {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "wicked-crew-inspector", "version": "0.10.1"}}}))
+                if "fail" in label:
+                    add(sess, dir="in", kind="stderr", text="Error: Cannot find module 'build/fail.js'")
+                    add(sess, dir="host", kind="state", text="exited with code 1 before it answered initialize")
+                    sess["state"], sess["error"] = "failed", "the server exited with code 1 before it answered initialize"
+                else:
+                    sess["initialize"] = {"protocolVersion": "2025-06-18", "serverInfo": {"name": "inspect-fixture", "version": "1.2.0"},
+                                          "capabilities": {"tools": {}, "resources": {}, "prompts": {}}, "instructions": "A fixture server for the inspector."}
+                    add(sess, dir="in", kind="response", method="initialize", rpcId=0, ms=4, text=json.dumps({"jsonrpc": "2.0", "id": 0, "result": sess["initialize"]}))
+                    add(sess, dir="out", kind="notification", method="notifications/initialized", text=json.dumps({"jsonrpc": "2.0", "method": "notifications/initialized"}))
+                    add(sess, dir="in", kind="stderr", text="inspect-fixture listening on stdio")
+                    sess["state"] = "ready"
+                view = {k: sess[k] for k in ("id", "target", "state", "initialize", "error")}
+                self._json(201, {"session": {**view, "startedAt": now(), "lastSeq": sess["seq"]}})
+                return True
+            sess = mcp_inspect_sessions.get(sid or "")
+            if sess is None:
+                self._json(404, {"code": "no_session", "error": "no such inspector session (it may have been closed after 10 minutes idle)"})
+                return True
+            if method == "GET" and verb == "log":
+                q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+                after = int((q.get("after") or ["0"])[0] or 0)
+                wait = min(20, int((q.get("wait") or ["0"])[0] or 0))
+                deadline = time.time() + wait
+                while sess["seq"] <= after and sess["state"] in ("ready", "connecting") and time.time() < deadline:
+                    mcp_inspect_cond.wait(timeout=max(0.05, deadline - time.time()))
+                out = [e for e in sess["entries"] if e["seq"] > after]
+                first = sess["entries"][0]["seq"] if sess["entries"] else 1
+                self._json(200, {"entries": out, "next": sess["seq"], "first": first, "state": sess["state"], "error": sess["error"]})
+                return True
+            if method == "POST" and verb == "rpc":
+                mcp_inspect_posts.append({"kind": "rpc", "session": sid, "body": body})
+                m, params = (body or {}).get("method"), (body or {}).get("params") or {}
+                if sess["state"] != "ready":
+                    self._json(409, {"code": "not_connected", "error": f"the session is {sess['state']}"})
+                    return True
+                rid = sess["seq"] + 1
+                add(sess, dir="out", kind="request", method=m, rpcId=rid, text=json.dumps({"jsonrpc": "2.0", "id": rid, "method": m, "params": params}))
+                if m == "tools/list":
+                    resp = {"result": {"tools": MCP_FAKE_TOOLS}}
+                elif m == "resources/list":
+                    resp = {"result": {"resources": [{"uri": "fixture://readme", "name": "readme", "description": "What this server is"}]}}
+                elif m == "prompts/list":
+                    resp = {"result": {"prompts": [{"name": "greet", "description": "Say hello"}]}}
+                elif m == "resources/read":
+                    resp = {"result": {"contents": [{"uri": params.get("uri"), "mimeType": "text/plain", "text": "A fixture server for the inspector."}]}}
+                elif m == "prompts/get":
+                    resp = {"result": {"messages": [{"role": "user", "content": {"type": "text", "text": "Hello!"}}]}}
+                elif m == "tools/call" and params.get("name") == "echo":
+                    resp = {"result": {"content": [{"type": "text", "text": str((params.get("arguments") or {}).get("text", ""))}]}}
+                elif m == "tools/call" and params.get("name") == "add":
+                    a = params.get("arguments") or {}
+                    resp = {"result": {"content": [{"type": "text", "text": str((a.get("a") or 0) + (a.get("b") or 0))}]}}
+                elif m == "tools/call" and params.get("name") == "boom":
+                    resp = {"error": {"code": -32000, "message": "boom: the fixture tool always fails"}}
+                elif m == "ping":
+                    resp = {"result": {}}
+                else:
+                    resp = {"error": {"code": -32601, "message": f"Method not found: {m}"}}
+                add(sess, dir="in", kind="response", method=m, rpcId=rid, ms=7, error="error" in resp,
+                    text=json.dumps({"jsonrpc": "2.0", "id": rid, **resp}))
+                self._json(200, {"response": resp, "ms": 7, "truncated": False})
+                return True
+            if method == "DELETE" and verb is None:
+                mcp_inspect_posts.append({"kind": "delete", "session": sid})
+                if sess["state"] in ("ready", "connecting"):
+                    add(sess, dir="host", kind="state", text="closed by the operator")
+                    sess["state"] = "closed"
+                del mcp_inspect_sessions[sid]
+                self.send_response(204)
+                self.end_headers()
+                return True
+        return False
 
     def _studio_editors(self) -> list:
         """The first-party editors the served dist carries, as crew's registry discovers them at boot
@@ -7469,21 +7621,37 @@ class W2Handler(SimpleHTTPRequestHandler):
                                 "kinds": m["kinds"], "sizes": m["sizes"], "permissions": m["permissions"],
                                 "sha256": e["sha256"], "bytes": len(e["body"]), "first_party": True, "enabled": True,
                                 "source": "studio-bundle", "entry_url": f"/api/v1/editors/{m['id']}/{m['version']}/entry"})
-            self._json(200, {"editors": editors, "installs": "refused_until_conformance"})
+            with state_lock:
+                mcp_on = state["mcp_inspect"]
+            if mcp_on:
+                body = (REPO / "e2e" / "editor-fixtures" / "mcp-inspector.html").read_bytes()
+                editors.append({"id": "acme-mcp", "title": "Acme MCP inspector", "version": "0.1.0", "protocol": [1],
+                                "kinds": ["mcp-server"], "sizes": ["pane", "full"],
+                                "permissions": [{"id": "artifact.read", "why": "show the server"},
+                                                {"id": "mcp.session", "why": "talk to the server you connect"},
+                                                {"id": "ui.fullscreen", "why": "go full screen"}],
+                                "sha256": hashlib.sha256(body).hexdigest(), "bytes": len(body), "first_party": False,
+                                "enabled": True, "source": "pack", "entry_url": "/api/v1/editors/acme-mcp/0.1.0/entry"})
+            self._json(200, {"editors": editors, "installs": "conformance_required" if mcp_on else "refused_until_conformance"})
             return True
         # /api/v1/editors/<id>/grants — crew's DECIDED set: {permission, decision, ruleIds, token} per permission.
         if len(parts) == 6 and parts[5] == "grants":
             q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
             version = (q.get("version") or [""])[0]
             sha = (q.get("sha") or [""])[0]
+            decided = [(g, "allow") for g in grants]
+            if parts[4] == "acme-mcp":
+                with state_lock:
+                    mcp_grant = state["mcp_inspect_grant"]
+                decided = [("artifact.read", "allow"), ("ui.fullscreen", "allow"), ("mcp.session", "allow" if mcp_grant else "ask")]
             self._json(200, {"editorId": parts[4], "version": version, "sha256": sha, "project": (q.get("project") or [None])[0],
                              "firstParty": parts[4].startswith("wicked-"),
-                             "grants": [{"permission": g, "decision": "allow", "ruleIds": [],
-                                         "token": f"editor:{parts[4]}@{version}#{sha}/{g}"} for g in grants]})
+                             "grants": [{"permission": g, "decision": d, "ruleIds": [],
+                                         "token": f"editor:{parts[4]}@{version}#{sha}/{g}"} for g, d in decided]})
             return True
         # /api/v1/editors/<id>/<version>/entry
         if len(parts) == 7 and parts[6] == "entry":
-            files = {"acme-good": "good.html", "acme-hostile": "hostile.html"}
+            files = {"acme-good": "good.html", "acme-hostile": "hostile.html", "acme-mcp": "mcp-inspector.html"}
             name = files.get(parts[4])
             first_party = next((e for e in self._studio_editors() if e["manifest"]["id"] == parts[4]), None)
             if first_party is not None:
@@ -7523,7 +7691,13 @@ class W2Handler(SimpleHTTPRequestHandler):
     def do_POST(self):  # noqa: N802 (stdlib naming)
         path = urllib.parse.urlparse(self.path).path
         body = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
+        if path.startswith("/api/v1/mcp-inspect/") and self._mcp_inspect("POST", path, body):
+            return None
         if path == "/__fixture":
+            if body.get("reset_mcp_inspect"):
+                with mcp_inspect_cond:
+                    mcp_inspect_sessions.clear()
+                    mcp_inspect_posts.clear()
             # `reset_learn` clears the learned-theme readback state between page
             # loads (the brand-learn rig re-runs the flow from a clean 404).
             if body.get("reset_repairs"):
@@ -8350,6 +8524,8 @@ class W2Handler(SimpleHTTPRequestHandler):
 
     def do_DELETE(self):  # noqa: N802 (stdlib naming)
         path = urllib.parse.urlparse(self.path).path
+        if path.startswith("/api/v1/mcp-inspect/") and self._mcp_inspect("DELETE", path, None):
+            return None
         m = re.match(r"^/api/v1/standing-orders/([^/]+)$", path)
         if m:
             oid = urllib.parse.unquote(m.group(1))

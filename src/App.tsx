@@ -19,6 +19,7 @@ import { SkillsPage } from './components/SkillsPage.js';
 import { ProjectRequirementsPage } from './components/product/ProjectRequirementsPage.js';
 import { CampaignsRedirect, RouteRedirect } from './components/RouteRedirect.js';
 import { PluginsPage } from './components/editors/EditorPluginsSettings.js';
+import { McpInspectPage } from './components/editors/McpInspectPage.js';
 import { McpToolsPage } from './components/McpToolsPage.js';
 import { SteeringPage } from './components/SteeringPage.js';
 import { MemoriesPanel } from './components/MemoriesPanel.js';
@@ -558,6 +559,9 @@ export function App(): React.ReactElement {
           <PluginsPage navigate={navigate} />
         </div>
       );
+    }
+    if (panel === 'mcp' && artifactId === 'inspect') {
+      return <McpInspectPage navigate={navigate} search={search} />;
     }
     if (panel === 'mcp') {
       return (
