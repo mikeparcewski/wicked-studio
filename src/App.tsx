@@ -751,7 +751,9 @@ export function App(): React.ReactElement {
         runs={runs}
         navigate={navigate}
         runPath={runPath}
-        projectId={projectId}
+        // codex on studio#664: the ONE ambient rule — a page outside the project shell that carries
+        // `?project=` (Made › Videos) is standing in that project too.
+        projectId={projectId ?? ambientProjectId(pathname, search)}
         selectedRun={selected}
         onKill={(id) => void onKill(id)}
         object={paletteObject}

@@ -12,8 +12,8 @@
   "studioVersion": "0.7.13",
   "counts": {
     "files": 204,
-    "occurrences": 2333,
-    "static": 2028,
+    "occurrences": 2342,
+    "static": 2036,
     "dynamic": 63,
     "computed": 24
   },
@@ -150,6 +150,12 @@
       "testId": "artifact-checks-summary",
       "files": [
         "src/components/session/ChecksPanel.tsx"
+      ]
+    },
+    {
+      "testId": "artifact-demo-video",
+      "files": [
+        "src/components/session/ArtifactMorph.tsx"
       ]
     },
     {
@@ -3721,6 +3727,48 @@
       ]
     },
     {
+      "testId": "launch-wizard-demo",
+      "files": [
+        "src/components/launch/LaunchWizard.tsx"
+      ]
+    },
+    {
+      "testId": "launch-wizard-demo-audience",
+      "files": [
+        "src/components/launch/LaunchWizard.tsx"
+      ]
+    },
+    {
+      "testId": "launch-wizard-demo-audience-pick",
+      "files": [
+        "src/components/launch/LaunchWizard.tsx"
+      ]
+    },
+    {
+      "testId": "launch-wizard-demo-gates",
+      "files": [
+        "src/components/launch/LaunchWizard.tsx"
+      ]
+    },
+    {
+      "testId": "launch-wizard-demo-project",
+      "files": [
+        "src/components/launch/LaunchWizard.tsx"
+      ]
+    },
+    {
+      "testId": "launch-wizard-demo-show",
+      "files": [
+        "src/components/launch/LaunchWizard.tsx"
+      ]
+    },
+    {
+      "testId": "launch-wizard-demo-url",
+      "files": [
+        "src/components/launch/LaunchWizard.tsx"
+      ]
+    },
+    {
       "testId": "launch-wizard-draft-instructions",
       "files": [
         "src/components/launch/LaunchWizard.tsx"
@@ -4042,6 +4090,12 @@
       "testId": "logo-wicked-mark",
       "files": [
         "src/components/WickedLogo.tsx"
+      ]
+    },
+    {
+      "testId": "made-new-demo",
+      "files": [
+        "src/components/everything/EverythingPage.tsx"
       ]
     },
     {
@@ -5468,12 +5522,6 @@
     },
     {
       "testId": "palette-input",
-      "files": [
-        "src/components/CommandPalette.tsx"
-      ]
-    },
-    {
-      "testId": "palette-project-stage",
       "files": [
         "src/components/CommandPalette.tsx"
       ]

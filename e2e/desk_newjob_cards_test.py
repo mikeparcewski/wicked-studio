@@ -56,8 +56,9 @@ CATALOG = [
 ]
 WORKFLOWS = {"workflows": [
     {"id": i, "is_system": s, "phases": [{"id": p, "executes_code": True} for p in ph]} for (i, ph, s) in CATALOG]}
-# Today's offer: the ordinary workflows in catalog order (at most 8), then Draft epics.
-EXPECTED = [i for (i, _, s) in CATALOG if not s][:8] + ["draft-epics"]
+# Today's offer: the ordinary workflows in catalog order (at most 8), then studio's own two jobs:
+# Demo video (studio#664) and Draft epics.
+EXPECTED = [i for (i, _, s) in CATALOG if not s][:8] + ["demo-video", "draft-epics"]
 
 MEASURE = r"""() => {
   const grid = document.querySelector('[data-testid=launch-wizard-cards]');

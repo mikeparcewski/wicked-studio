@@ -1,6 +1,6 @@
 import { isAskTurnRun } from '../board/askTurn.js';
 import { waitsOnYou } from '../board/attention.js';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Search } from 'lucide-react';
 import type { GovernanceClaim, InteractionRequest, RepoEntry, SessionView } from '../api/types.js';
 import { api } from '../api/client.js';
@@ -22,13 +22,11 @@ import { decideGate, GATE_HASH } from '../board/gateActions.js';
 import { statusWord } from '../board/statusWords.js';
 import { NewProjectModal } from './NewProjectModal.js';
 import { Modal } from './Modal.js';
-import { ProjectSwitcher } from './ProjectSwitcher.js';
 import { humanTitle, runTitle, runWhenWord, WHEN_TITLE } from './runIdentity.js';
 import { Terminal } from './Terminal.js';
 import { everythingPath } from '../board/everythingModel.js';
 import { seedNewChat } from '../board/chatMoves.js';
-import { openAskDock } from '../store/askDock.js';
-import { openLaunchWizard } from '../store/launchWizard.js';
+import { DEMO_VIDEO_ID, openLaunchWizard } from '../store/launchWizard.js';
 import { pageComposerKey } from '../store/composerSeed.js';
 
 /**
@@ -245,22 +243,11 @@ export function CommandPalette({
   const [repos, setRepos] = useState<RepoEntry[]>(getCachedRepos() ?? []);
   const [showNewProject, setShowNewProject] = useState(false);
   const [showTerminal, setShowTerminal] = useState(false);
-  // `> New Document` / `> New Video` outside a project (DES-FEEDBACK-003 §8.4):
-  // a doc lives in a project, so the verb opens the same project-picker stage
-  // the Make ＋ fork uses (§3.4) before navigating into the mode.
-  const [pickProjectFor, setPickProjectFor] = useState<'document' | 'video' | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const restoreRef = useRef<HTMLElement | null>(null);
 
   const projects = useProjectsStore((s) => s.projects);
-  // S16a-4c: "New Demo" opens a chat (the Ask dock, concept A: the Desk has no composer) in the
-  // project, with "Make a demo of " in its box; nothing is sent.
-  const seedDemo = useCallback((pid: string | null): void => {
-    const p = pid !== null && pid !== 'default' && pid !== UNFILED_MOUNT ? projects.find((x) => x.id === pid) ?? null : null;
-    onClose();
-    openAskDock({ projectId: p?.id ?? null, seedText: 'Make a demo of ' });
-  }, [projects, onClose]);
   const gates = useGateStore((s) => s.gates);
 
   // Open: remember focus and focus the input; fetch the repo list only when the
@@ -579,15 +566,17 @@ export function CommandPalette({
         },
       },
       {
-        // S16a-4c: a demo is made by a run — the Desk composer, seeded "Make a demo of " with the
-        // project's @ chip when one is ambient (nothing is sent).
+        // studio#664: a demo video is its own job — the New job wizard opens on its form (the app's
+        // address, who it is for, what it shows), in the ambient project when there is one. The
+        // wizard's project choice replaces the picker stage this verb used to open first.
         name: 'New Demo',
         action: () => {
-          if (projectId !== null) seedDemo(projectId);
-          else {
-            if (projects.length === 0) void useProjectsStore.getState().load();
-            setPickProjectFor('video');
-          }
+          onClose();
+          // codex r2: a page that names Unfiled (`?project=default`) opens the form unfiled, named, like
+          // the videos door — so a draft saved for another project never resumes there. With no
+          // project in view, the saved draft resumes (the wizard's rule).
+          const unfiledHere = projectId === null && new URLSearchParams(window.location.search).get('project') === UNFILED_MOUNT;
+          openLaunchWizard({ workflowId: DEMO_VIDEO_ID, projectId: unfiledHere ? UNFILED_MOUNT : projectId !== UNFILED_MOUNT ? projectId : null, composerKey: pageComposerKey() ?? 'desk' });
         },
       },
       { name: 'New Project', action: () => setShowNewProject(true) },
@@ -669,7 +658,7 @@ export function CommandPalette({
       return [...targeted, ...matched];
     }
     return matched;
-  }, [runs, projects, repos, gates, claims, prompts, projectNameByRun, attachedAtByRun, goTargets, object, scope, needle, runPath, navigate, projectId, selectedRun, onKill, seedDemo, onClose]);
+  }, [runs, projects, repos, gates, claims, prompts, projectNameByRun, attachedAtByRun, goTargets, object, scope, needle, runPath, navigate, projectId, selectedRun, onKill, onClose]);
 
   // Clamp the selection whenever the row set changes.
   const selIx = Math.min(sel, Math.max(0, rows.length - 1));
@@ -966,34 +955,6 @@ export function CommandPalette({
       {/* `> New Project` — the slice-A modal, unchanged */}
       {showNewProject && (
         <NewProjectModal navigate={(p: string) => navigate(p)} onClose={() => setShowNewProject(false)} />
-      )}
-
-      {/* `> New Document` / `> New Video` outside a project — the Make ＋ fork's
-          project-picker stage (§3.4/§8.4): pick a project, land in its mode. */}
-      {pickProjectFor !== null && (
-        <Modal
-          title={pickProjectFor === 'video' ? 'New demo' : 'New document'}
-          onClose={() => setPickProjectFor(null)}
-        >
-          <div className="flex flex-col gap-2" data-testid="palette-project-stage">
-            <p style={{ fontSize: 'var(--text-xs)', color: 'var(--ink-muted)', fontFamily: 'var(--font-sans)', margin: 0 }}>
-              Pick a project — or keep it Unfiled:
-            </p>
-            <ProjectSwitcher
-              current={null}
-              projects={projects}
-              onSelect={(pid) => {
-                // DES-UX-001 §6.2 (slice U): Unfiled routes to the `default`
-                // project's mount — the daemon's unfiled home — never a silent
-                // close (the same repair as the Make ＋ picker's stage).
-                const m = pickProjectFor;
-                setPickProjectFor(null);
-                if (m === 'video') seedDemo(pid);
-                else navigate(everythingPath({ tab: 'made', kind: 'documents', project: pid ?? UNFILED_MOUNT, new: 'document' }));
-              }}
-            />
-          </div>
-        </Modal>
       )}
 
       {/* `> Open Terminal` — the RightPanel pair (Modal + governed Terminal) */}

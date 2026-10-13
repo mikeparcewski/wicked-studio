@@ -26,11 +26,20 @@ export interface LaunchDraft {
   contextRepo: string | null;
   /** "Draft epics" (operator 2026-10-12): the requirements chosen to draft from (repo + key + title). */
   requirements: readonly { repoId: string; key: string; title: string }[];
+  /** "Demo video" (studio#664): the running app the recorder films, and who the video is for.
+   *  What it should show is the draft's `intent`. */
+  demoUrl: string;
+  demoAudience: string;
 }
 
 /** The wizard's own job kind that is not a daemon workflow: drafting epics from a project's
  *  requirements (crew's compose route, `POST /projects/:id/product/compose`). */
 export const DRAFT_EPICS_ID = 'draft-epics';
+
+/** The wizard's other own job kind (studio#664, DES-PRESENTATION-EDITOR-001 D-S1): a demo video of a
+ *  running app, launched through crew's demo route (`POST /projects/:id/demo`), which mints the run's
+ *  demo folder and brief. The `demo` preset itself stays a system preset, hidden from the `/` menu. */
+export const DEMO_VIDEO_ID = 'demo-video';
 
 export interface OpenLaunchWizard {
   workflowId?: string | null;
@@ -65,6 +74,8 @@ export function freshDraft(init: OpenLaunchWizard): LaunchDraft {
     composerKey: init.composerKey ?? null,
     contextRepo: init.contextRepo ?? null,
     requirements: init.requirements ?? [],
+    demoUrl: '',
+    demoAudience: '',
   };
 }
 

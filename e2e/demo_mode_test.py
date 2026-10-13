@@ -10,8 +10,9 @@ review gate → watch. Against the `demo_runs` fixture (crew api-types 0.61.0 wi
   S16a-4c: the project's Video mode MOVED — a demo opens in its session (the demo video at full size),
   the videos list is "See everything › Made › Videos". The start form and the demo page's own gate
   cards retired with it; the launch and the gate answers are sent on the wire here.
-  1 start     /demo (and /p/<pid>/video) land on the videos list, empty; the launch posts exactly the
-              brief to POST /projects/upload-endpoint/demo (never POST /runs).
+  1 start     the videos list is empty and says so; ⌘K "New Demo" and the list's "New demo video" door open
+              the New job wizard's Demo video form (studio#664) in the project; Launch posts the brief to
+              POST /projects/upload-endpoint/demo (never POST /runs) and lands in the run's session.
   2 plan      the plan gate holds the presenter script and the chapter list before anything records;
               the script edit is a PUT at the gate; approve is the run's own gate decision, through
               studio's one decision path (the undo window, then the gate POST naming the gate's ord).
@@ -111,16 +112,48 @@ with sync_playwright() as p:
         page.get_by_test_id("everything-made").wait_for(state="visible", timeout=10000)
         page.wait_for_function("() => document.querySelector('[data-testid=\"everything-made\"]')?.dataset.index !== 'untried'", timeout=10000)
         check("demo-page-empty-says-how", "No videos yet" in page.get_by_test_id("everything-empty").inner_text())
-        # S16a-4c: the project's videos are its Made › Videos list; a demo is started from the Desk
-        # composer now ("New Demo" seeds it). The launch the retired start form sent — POST
-        # /projects/:id/demo with the brief — is sent here directly.
-        page.goto(f"{origin}/everything?tab=made&kind=videos&project={urllib.parse.quote(PROJECT)}", wait_until="networkidle")
+        # studio#664: the project's Made › Videos list has its own door — "New demo video" opens the New
+        # job wizard's Demo video form in that project. ⌘K "New Demo" opens the same form.
+        # codex r1 (MEASURE): reach the videos list through its own chip, from the project's Made list.
+        page.goto(f"{origin}/everything?tab=made&project={urllib.parse.quote(PROJECT)}", wait_until="networkidle")
         page.get_by_test_id("everything-made").wait_for(state="visible", timeout=10000)
-        check("video-mode-lands-on-the-videos-list", f"project={PROJECT}" in page.url, url=page.url)
-        rid = api("POST", f"/projects/{PROJECT}/demo", {"url": APP, "audience": AUDIENCE, "show": SHOW})["runId"]
+        page.locator('[data-testid="everything-kind"][data-kind="videos"]').click()
+        page.wait_for_function("() => document.querySelector('[data-testid=\"everything-made\"]')?.dataset.kind === 'videos'", timeout=10000)
+        check("video-mode-lands-on-the-videos-list", "kind=videos" in page.url and f"project={PROJECT}" in page.url, url=page.url)
+        page.keyboard.press("Meta+k")
+        page.get_by_test_id("palette-input").fill("> new demo")
+        page.wait_for_timeout(200)
+        page.keyboard.press("Enter")
+        page.get_by_test_id("launch-wizard-demo").wait_for(state="visible", timeout=8000)
+        # codex r1: the palette stands in the page's `?project=` too, so the form opens in the project.
+        check("cmdk-new-demo-opens-the-form-in-the-project", page.get_by_test_id("launch-wizard-step").get_attribute("data-step") == "demo"
+              and page.locator(".wk-launch-wizard-title").inner_text() == "New job: Demo video"
+              and page.get_by_test_id("launch-wizard-demo-project").input_value() == PROJECT,
+              project=page.get_by_test_id("launch-wizard-demo-project").input_value())
+        page.get_by_test_id("launch-wizard-close").click()
+        page.get_by_test_id("launch-wizard").wait_for(state="detached", timeout=5000)
+        page.get_by_test_id("made-new-demo").click()
+        page.get_by_test_id("launch-wizard-demo").wait_for(state="visible", timeout=8000)
+        check("videos-door-opens-the-form-in-the-project",
+              page.get_by_test_id("launch-wizard-demo-project").input_value() == PROJECT,
+              project=page.get_by_test_id("launch-wizard-demo-project").input_value())
+        page.get_by_test_id("launch-wizard-demo-url").fill(APP)
+        page.get_by_test_id("launch-wizard-demo-audience").fill(AUDIENCE)
+        page.get_by_test_id("launch-wizard-demo-show").fill(SHOW)
+        page.get_by_test_id("launch-wizard-next").click()
+        page.get_by_test_id("launch-wizard-next").click()
+        review = page.get_by_test_id("launch-wizard-review").inner_text()
+        check("review-shows-what-is-sent", APP in review and AUDIENCE in review and SHOW in review, review=review)
+        page.screenshot(path=str(SHOTS / "demo-desk-launch-review.png"))
+        page.get_by_test_id("launch-wizard-launch").click()
+        page.wait_for_function("() => decodeURIComponent(location.pathname).startsWith('/s/run:')", timeout=10000)
         sent = [x for x in posts(origin) if x["route"] == "launch"]
+        body = sent[0]["body"] if len(sent) == 1 else {}
         check("one-launch-with-the-brief", len(sent) == 1 and sent[0]["projectId"] == PROJECT
-              and sent[0]["body"] == {"url": APP, "audience": AUDIENCE, "show": SHOW}, sent=sent)
+              and {k: body.get(k) for k in ("url", "audience", "show")} == {"url": APP, "audience": AUDIENCE, "show": SHOW}
+              and set(body) <= {"url", "audience", "show", "clisJson", "reducedAssurance"}, sent=sent)
+        rid = sent[0]["runId"]
+        check("lands-in-the-demo-session", urllib.parse.unquote(page.url).endswith(f"/s/run:{rid}"), url=page.url)
         check("page-never-posts-runs", run_posts == [], run_posts=run_posts)
         state["rid"] = rid
 

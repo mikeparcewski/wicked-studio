@@ -11,6 +11,7 @@ import { PageEditor, type FrameParts } from './PageEditor.js';
 import { NoEditorPage, PluginArtifact } from './PluginArtifact.js';
 import { SlideStrip } from './SlideStrip.js';
 import { useEditorFor, useEditors } from '../../store/editors.js';
+import { DEMO_VIDEO_ID, openLaunchWizard } from '../../store/launchWizard.js';
 
 /** WT-U1: a body other than the page-editor family — a run's walkthrough, a demo's video (EP-D3) —
  *  behind the same chrome: its kind (the artifact's `data-kind`) and the body drawn at each size.
@@ -246,6 +247,13 @@ export function ArtifactMorph({ artifactKey, title, projectId, docId, composerKe
       <header data-testid="artifact-head" className="wk-artifact-head">
         <span className="wk-artifact-title">{title}</span>
         <span data-testid="artifact-version">{lens !== null ? `looking at version ${lens}` : head === null ? '' : versionsOn ? `version ${head} (working)` : `version ${head}`}</span>
+        {/* studio#664 (DES-PRESENTATION-EDITOR-001 D-S1): a deck or a document opens the New job
+            wizard's Demo video form, in this document's project. */}
+        {slot === undefined && (kind === 'deck' || kind === 'document') && size !== 'inline' && (
+          <button type="button" data-testid="artifact-demo-video" title="Make a demo video of a running app"
+            onClick={() => openLaunchWizard({ workflowId: DEMO_VIDEO_ID, projectId, composerKey })}
+            className="wk-artifact-btn">Demo video</button>
+        )}
         {exportsHere.length > 0 && canExport && (
           <span className="wk-artifact-export" onKeyDown={onExportKey}>
             <button ref={exportBtn} type="button" data-testid="artifact-export" aria-haspopup="menu" aria-expanded={exportOpen} onClick={() => setExportOpen((o) => !o)} className="wk-artifact-btn">Export ▾</button>

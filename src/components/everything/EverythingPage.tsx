@@ -36,6 +36,7 @@ import { GroundingChip } from '../GroundingChip.js';
 import { madeOpenAddress } from '../../board/madeMoves.js';
 import { MadeOpen } from './MadeOpen.js';
 import { NewDocument } from './NewDocument.js';
+import { DEMO_VIDEO_ID, openLaunchWizard } from '../../store/launchWizard.js';
 import { DocDeleteConfirm } from '../DocDelete.js';
 import { EmptyState, OverflowMenu, Skeleton, StateBanner, TechDetails } from '../ui/index.js';
 import { readErrorKind } from '../../api/errors.js';
@@ -763,6 +764,11 @@ function MadeTab({ runs, q, navigate, go }: { runs: SessionView[]; q: Everything
         </div>
         {!doorOpen && (
           <button type="button" data-testid="made-new-document" onClick={() => navigate(withDoor(true), { replace: true })} className="wk-btn wk-btn--secondary wk-btn--sm">New document</button>
+        )}
+        {/* studio#664: the videos list's own door — the New job wizard's Demo video form, in the list's
+            project; an Unfiled list names the unfiled mount, so another project's saved draft never resumes. */}
+        {q.kind === 'videos' && (
+          <button type="button" data-testid="made-new-demo" onClick={() => openLaunchWizard({ workflowId: DEMO_VIDEO_ID, projectId: q.project ?? null })} className="wk-btn wk-btn--secondary wk-btn--sm">New demo video</button>
         )}
         {scopeName !== null && (
           <p data-testid="everything-scope" data-project-id={q.project ?? ''} className="wk-everything-scope">

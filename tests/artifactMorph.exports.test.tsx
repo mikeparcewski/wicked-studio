@@ -123,3 +123,32 @@ describe('downloads survive a reload (studio#234)', () => {
     expect(screen.queryByTestId('artifact-exports')).toBeNull();
   });
 });
+
+describe('the Demo video door in the header (studio#664)', () => {
+  it('a deck or a document, open, offers "Demo video": it opens the New job wizard on the demo form in its project', async () => {
+    const { resetLaunchWizard, useLaunchWizard, DEMO_VIDEO_ID } = await import('../src/store/launchWizard.js');
+    resetLaunchWizard();
+    vi.mocked(interactive.listExports).mockResolvedValue([]);
+    render(<ArtifactMorph artifactKey={KEY} title="Q3 review" projectId="p1" docId="q3" composerKey="s:q3" kind="deck" />);
+    // The inline preview has no header controls but the grow button.
+    expect(screen.queryByTestId('artifact-demo-video')).toBeNull();
+    act(() => setArtifactSize(KEY, 'pane'));
+    await userEvent.click(await screen.findByTestId('artifact-demo-video'));
+    expect(useLaunchWizard.getState()).toMatchObject({ open: true, draft: { workflowId: DEMO_VIDEO_ID, projectId: 'p1', composerKey: 's:q3' } });
+  });
+
+  it('an unfiled document opens the form unfiled; a page (its own plugin) shows no door', async () => {
+    const { resetLaunchWizard, useLaunchWizard } = await import('../src/store/launchWizard.js');
+    resetLaunchWizard();
+    vi.mocked(interactive.listExports).mockResolvedValue([]);
+    render(<ArtifactMorph artifactKey={KEY} title="Notes" projectId="default" docId="notes" composerKey="s:n" kind="document" />);
+    act(() => setArtifactSize(KEY, 'pane'));
+    await userEvent.click(await screen.findByTestId('artifact-demo-video'));
+    // The unfiled mount, named: the wizard shows it as "Not in a project" and launches there.
+    expect(useLaunchWizard.getState().draft?.projectId).toBe('default');
+    cleanup();
+    render(<ArtifactMorph artifactKey="p1/site" title="Site" projectId="p1" docId="site" composerKey="s:s" kind="page" />);
+    act(() => setArtifactSize('p1/site', 'pane'));
+    expect(screen.queryByTestId('artifact-demo-video')).toBeNull();
+  });
+});

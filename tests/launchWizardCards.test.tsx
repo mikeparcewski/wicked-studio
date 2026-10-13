@@ -35,10 +35,10 @@ const cardIds = (): string[] =>
   within(screen.getByTestId('launch-wizard-cards')).getAllByRole('button').map((b) => b.dataset.testid!.replace('launch-wizard-workflow-', ''));
 
 describe('the New job cards', () => {
-  it('one card per kind of job, in the catalog order, then Draft epics; no system workflow', () => {
+  it('one card per kind of job, in the catalog order, then Demo video and Draft epics; no system workflow', () => {
     render(<LaunchWizard />);
     act(() => openLaunchWizard({}));
-    expect(cardIds()).toEqual(['bug', 'feature', 'qe-author-tests', 'acme-release', 'draft-epics']);
+    expect(cardIds()).toEqual(['bug', 'feature', 'qe-author-tests', 'acme-release', 'demo-video', 'draft-epics']);
   });
 
   it('each card has a decorative drawing, its name and its purpose; an unknown workflow gets the neutral drawing and its phases', () => {
@@ -57,6 +57,7 @@ describe('the New job cards', () => {
     expect(custom).toHaveTextContent('Acme release');
     expect(custom).toHaveTextContent('2 phases: tag → publish');
     expect(screen.getByTestId('launch-wizard-workflow-draft-epics').dataset.art).toBe('draft-epics');
+    expect(screen.getByTestId('launch-wizard-workflow-demo-video').dataset.art).toBe('demo-video');
     // The accessible name is the words, not the drawing.
     expect(bug.textContent).toBe(`Bug${workflowPurpose('bug', '')}`);
   });
@@ -65,7 +66,8 @@ describe('the New job cards', () => {
     render(<LaunchWizard />);
     for (const [id, step, title] of [
       ['bug', 'what', 'New job: Bug'], ['feature', 'what', 'New job: Feature'], ['qe-author-tests', 'what', 'New job: Write tests'],
-      ['acme-release', 'what', 'New job: Acme release'], ['draft-epics', 'requirements', 'New job: Draft epics'],
+      ['acme-release', 'what', 'New job: Acme release'], ['demo-video', 'demo', 'New job: Demo video'],
+      ['draft-epics', 'requirements', 'New job: Draft epics'],
     ] as const) {
       act(() => resetLaunchWizard());
       act(() => openLaunchWizard({}));
@@ -77,10 +79,10 @@ describe('the New job cards', () => {
   });
 
   it('arrow keys move across the grid as laid out; Home and End go to the ends', () => {
-    // jsdom lays nothing out: place the cards 2 across.
+    // jsdom lays nothing out: place the cards 4 across (bug feature write-tests acme / demo-video draft-epics).
     const spy = vi.spyOn(HTMLElement.prototype, 'offsetTop', 'get').mockImplementation(function (this: HTMLElement) {
       const sib = this.parentElement === null ? [] : [...this.parentElement.children];
-      return Math.floor(sib.indexOf(this) / 2) * 100;
+      return Math.floor(sib.indexOf(this) / 4) * 100;
     });
     try {
       render(<LaunchWizard />);
@@ -91,9 +93,9 @@ describe('the New job cards', () => {
       fireEvent.keyDown(grid, { key: 'ArrowRight' });
       expect(focused()).toBe('feature');
       fireEvent.keyDown(grid, { key: 'ArrowDown' });
-      expect(focused()).toBe('acme-release');
+      expect(focused()).toBe('draft-epics');
       fireEvent.keyDown(grid, { key: 'ArrowLeft' });
-      expect(focused()).toBe('qe-author-tests');
+      expect(focused()).toBe('demo-video');
       fireEvent.keyDown(grid, { key: 'ArrowUp' });
       expect(focused()).toBe('bug');
       // codex r1: Up from the top row stays put (never a sideways move).
@@ -101,15 +103,14 @@ describe('the New job cards', () => {
       fireEvent.keyDown(grid, { key: 'ArrowUp' });
       expect(focused()).toBe('feature');
       // Down into the shorter last row lands on its last card; Down from the bottom row stays.
-      fireEvent.keyDown(grid, { key: 'ArrowDown' });
-      fireEvent.keyDown(grid, { key: 'ArrowDown' });
-      expect(focused()).toBe('draft-epics');
-      fireEvent.keyDown(grid, { key: 'ArrowLeft' });
-      expect(focused()).toBe('acme-release');
       fireEvent.keyDown(grid, { key: 'ArrowRight' });
-      fireEvent.keyDown(grid, { key: 'End' });
+      fireEvent.keyDown(grid, { key: 'ArrowRight' });
+      expect(focused()).toBe('acme-release');
+      fireEvent.keyDown(grid, { key: 'ArrowDown' });
       expect(focused()).toBe('draft-epics');
       fireEvent.keyDown(grid, { key: 'ArrowDown' });
+      expect(focused()).toBe('draft-epics');
+      fireEvent.keyDown(grid, { key: 'End' });
       expect(focused()).toBe('draft-epics');
       fireEvent.keyDown(grid, { key: 'Home' });
       expect(focused()).toBe('bug');
@@ -131,8 +132,8 @@ describe('the New job cards', () => {
     clearCachedWorkflows();
     render(<LaunchWizard />);
     act(() => openLaunchWizard({}));
-    // Only Draft epics until the catalog is read; the wizard focuses it.
-    expect(cardIds()).toEqual(['draft-epics']);
+    // Only studio's own jobs until the catalog is read; the wizard focuses the first.
+    expect(cardIds()).toEqual(['demo-video', 'draft-epics']);
     act(() => setCachedWorkflows(WF));
     // The catalog arrived while focus was where the wizard put it: focus moves to the first card.
     expect((document.activeElement as HTMLElement).dataset.testid).toBe('launch-wizard-workflow-bug');
