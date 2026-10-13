@@ -38,8 +38,9 @@ export function editedLine(version: number, what: string, verb: WriteVerb = 'cha
   return `${verb.charAt(0).toUpperCase()}${verb.slice(1)} ${what} — version ${version}.`;
 }
 
-/** What one write did (EP-P3): a text edit (or a mix) "changed", a remove "removed", a colour "restyled". */
-export type WriteVerb = 'changed' | 'removed' | 'restyled';
+/** What one write did (EP-P3): a text edit (or a mix) "changed", a remove "removed", a colour "restyled";
+ *  a deck's slide ops (P-D1) "added", "duplicated", "moved". */
+export type WriteVerb = 'changed' | 'removed' | 'restyled' | 'added' | 'duplicated' | 'moved';
 
 /** Undo forked the page before the change as a new head. */
 export function undoneLine(version: number): string {
@@ -119,50 +120,6 @@ export function writtenWords(anchors: readonly string[], kind: EditorKind = 'pag
 
 /** One block of the frame's inventory, as the models below read it. */
 export interface BlockText { text: string; composite: boolean }
-
-/** One slide of a deck, read from the inventory: its number, its title (the first heading's
- *  words, else the first line of text on it) and the anchor the strip scrolls to. */
-export interface Slide { index: number; title: string; first: string }
-
-/** The deck's slides, in order — every slide index that carries an anchored block. */
-export function slidesOf(blocks: Readonly<Record<string, BlockText>>): Slide[] {
-  const by = new Map<number, { first: string; heading: string | null; line: string | null }>();
-  for (const [wid, b] of Object.entries(blocks)) {
-    const m = ANCHOR.exec(wid);
-    if (m === null) continue;
-    const i = Number(m[1]);
-    const text = b.text.replace(/\s+/g, ' ').trim();
-    const cur = by.get(i) ?? { first: wid, heading: null, line: null };
-    if (cur.heading === null && m[2] === 'heading' && text !== '') cur.heading = text;
-    if (cur.line === null && !b.composite && text !== '') cur.line = text;
-    by.set(i, cur);
-  }
-  return [...by.entries()].sort((a, b) => a[0] - b[0]).map(([index, s]) => {
-    const t = s.heading ?? s.line ?? '';
-    return { index, title: t.length > QUOTE_MAX ? `${t.slice(0, QUOTE_MAX).trimEnd()}…` : t, first: s.first };
-  });
-}
-
-/** The slide in view: the last one whose first block starts at or above the middle of the frame. */
-export function slideInView(
-  slides: readonly Slide[],
-  tops: Readonly<Record<string, number>>,
-  scrollY: number,
-  frameHeight: number,
-): number | null {
-  let at: number | null = null;
-  for (const s of slides) {
-    const top = tops[s.first];
-    if (top === undefined) continue;
-    if (at === null || top - scrollY <= frameHeight / 2) at = s.index;
-  }
-  return at;
-}
-
-/** A slide as the subject of the next message. */
-export function slideChip(slide: Slide, docId: string): AboutChip {
-  return { kind: 'about', key: `el:${docId}/slide-${slide.index}`, label: slide.title === '' ? `slide ${slide.index + 1}` : `slide ${slide.index + 1} — “${slide.title}”` };
-}
 
 /** One requirement of the repo's read (`GET /repos/:id/requirements`), as the coverage slot shows it. */
 export interface RequirementRow { key: string; reqId: string; title: string; risk: boolean }

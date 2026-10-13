@@ -70,8 +70,10 @@ export function permissionsInWords(permissions: readonly { id: string }[]): { ca
 const DOCUMENT_KINDS: readonly string[] = ['page', 'document', 'deck'];
 
 /** The editor test page for one editor. */
-export function devHostHref(e: Pick<EditorView, 'id' | 'version' | 'sha256' | 'title'>): string {
+export function devHostHref(e: Pick<EditorView, 'id' | 'version' | 'sha256' | 'title'> & { kinds?: readonly string[] }): string {
   const q = new URLSearchParams({ editor: e.id, version: e.version, sha: e.sha256, title: e.title });
+  // A deck editor opens over a sample deck (P-D1); everything else over the sample page.
+  if (e.kinds?.includes('deck') === true && !e.kinds.includes('page')) q.set('kind', 'deck');
   return `/editors/dev?${q.toString()}`;
 }
 
@@ -79,7 +81,8 @@ export function devHostHref(e: Pick<EditorView, 'id' | 'version' | 'sha256' | 't
  *  is what it opens: DES-MCP-INSPECTOR-001 §5); every other editor, the test page. */
 export function openHref(e: Pick<EditorView, 'id' | 'version' | 'sha256' | 'title' | 'kinds'>): { href: string; text: string } {
   if (e.kinds.includes(MCP_SERVER_KIND)) return { href: mcpInspectPath(), text: 'Inspect an MCP server' };
-  return { href: devHostHref(e), text: 'Try it on a sample page' };
+  // A deck editor's sample is a deck (P-D1).
+  return { href: devHostHref(e), text: e.kinds.includes('deck') && !e.kinds.includes('page') ? 'Try it on a sample deck' : 'Try it on a sample page' };
 }
 
 type Load =
@@ -133,7 +136,7 @@ function EditorRow({ e, navigate, compact }: { e: EditorView; navigate: (p: stri
           <p className="wk-plugin-docs-label">Open a document in it</p>
           <OpenDocumentList kinds={e.kinds} navigate={navigate} />
           {elsewhere && (
-            <p data-testid="editor-plugin-elsewhere" className="wk-plugin-docs-note">Written documents and decks open in studio’s own editor for now.</p>
+            <p data-testid="editor-plugin-elsewhere" className="wk-plugin-docs-note">Written documents open in studio’s own editor for now; decks open in Slides.</p>
           )}
         </div>
       )}

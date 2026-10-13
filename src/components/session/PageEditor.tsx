@@ -31,9 +31,9 @@ import { addAboutChip, chipsOf, relabelAboutChip, useComposerChips } from '../..
  * bridge's `version.created` frame is the thread's, not this editor's). EP-P2 re-hosts this as the
  * `wicked-page` plugin behind the same slot (`ArtifactMorph`'s kind slot accepts a PluginHost).
  *
- * S9: the document and slide editors are this editor with another `kind` — the same frame, the
- * same touch edit, the same Undo — plus what stands beside the frame (`side`: a deck's slide strip,
- * a document's requirement coverage). The element is named in plain words (`anchorWords`: "slide
+ * S9: the document editor is this editor with another `kind` — the same frame, the same touch
+ * edit, the same Undo — plus what stands beside the frame (`side`: a document's requirement
+ * coverage). A deck opens in the `wicked-deck` plugin instead (DES-PRESENTATION-EDITOR-001 P-D1). The element is named in plain words (`anchorWords`: "slide
  * 2’s title", "paragraph 3"), never by its raw anchor id. The field opens only over text that is
  * the element's own and whole: a container of other parts, or a text the bridge had to cut, cannot
  * be replaced by typing (the engine would refuse the first and call the second stale).
@@ -59,10 +59,9 @@ export interface FrameParts {
   pick: (wid: string) => void;
 }
 
-const HINT: Readonly<Record<EditorKind, string>> = {
+const HINT: Readonly<Record<Exclude<EditorKind, 'deck'>, string>> = {
   page: 'Click an element to make it the subject · type on it to change it',
   document: 'Click a paragraph to make it the subject · type on it to change it · Enter keeps it',
-  deck: 'Click a slide’s words to make them the subject · type on them to change them',
 };
 
 /** The bridge script runs on the frame's load; ask a few times before giving up. */
@@ -92,9 +91,9 @@ export function PageEditor({ projectId, docId, composerKey, size, kind = 'page',
   /** The composer the picked element's chip goes to (the session id). */
   composerKey: string;
   size: ArtifactSize;
-  /** Which editor this is — a page, a written document, or a deck (S9). */
-  kind?: EditorKind;
-  /** What stands beside the frame at this size, if anything (the slide strip, the coverage). */
+  /** Which editor this is — a page or a written document (S9). A deck opens in `wicked-deck`. */
+  kind?: Exclude<EditorKind, 'deck'>;
+  /** What stands beside the frame at this size, if anything (the requirement coverage). */
   side?: (parts: FrameParts | null) => React.ReactNode;
   /** The head version, whenever it is (re)read — the morph's header shows it. */
   onHead?: (head: number) => void;

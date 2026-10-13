@@ -5,11 +5,12 @@ slice EP-P1), driving studio's conformance host page (/editors/conformance) agai
 served by a stand-in for crew's EP-C1 bundle route (hash-pinned, with the bundle CSP; the shell is
 served with crew's frame-src policy).
 
-  python3 e2e/editor_conformance_test.py                # all three: good, hostile, wicked-page (CI)
+  python3 e2e/editor_conformance_test.py                # all four: good, hostile, wicked-page, wicked-deck (CI)
   python3 e2e/editor_conformance_test.py --bundle both  # the two fixture bundles only
   python3 e2e/editor_conformance_test.py --bundle good  # cases 1-12 against a good plugin (pass)
   python3 e2e/editor_conformance_test.py --bundle hostile  # cases 13-18: each attack caught by the host
   python3 e2e/editor_conformance_test.py --bundle wicked-page  # cases 1-12 against the real built-in page plugin (EP-P2)
+  python3 e2e/editor_conformance_test.py --bundle wicked-deck  # cases 1-12 against the built-in deck plugin (P-D1)
 
 Honest gaps, reported in the output rather than passed: case 10 checks keyboard reachability and
 visible focus but runs no axe (not installed here); case 3 intercepts requests and cannot see
@@ -35,7 +36,7 @@ SHOTS = REPO / "e2e" / "shots"
 FIX = REPO / "e2e" / "editor-fixtures"
 
 ap = argparse.ArgumentParser()
-ap.add_argument("--bundle", choices=["good", "hostile", "both", "wicked-page", "all"], default="all")
+ap.add_argument("--bundle", choices=["good", "hostile", "both", "wicked-page", "wicked-deck", "all"], default="all")
 args = ap.parse_args()
 
 report: dict = {"ok": False, "cases": {}, "gaps": [
@@ -81,9 +82,11 @@ SHOTS.mkdir(parents=True, exist_ok=True)
 
 
 def url(editor: str, bundle: str, grants: str = GOOD_GRANTS, sha_override: str | None = None) -> str:
-    if bundle == "wicked-page":
-        e = studio_editor("wicked-page")
-        q = {"editor": "wicked-page", "version": e["version"], "sha": sha_override or e["sha"], "title": e["title"], "grants": grants}
+    if bundle in ("wicked-page", "wicked-deck"):
+        e = studio_editor(bundle)
+        q = {"editor": bundle, "version": e["version"], "sha": sha_override or e["sha"], "title": e["title"], "grants": grants}
+        if bundle == "wicked-deck":
+            q["kind"] = "deck"  # the conformance host's sample is a deck (P-D1)
     else:
         q = {"editor": editor, "version": "0.1.0", "sha": sha_override or sha(bundle), "title": f"{bundle.title()} fixture",
              "grants": grants}
@@ -445,6 +448,154 @@ with sync_playwright() as p:
         except Exception:  # noqa: BLE001
             torn = None
         check("12-hash-pinned", torn is not None and "didn’t start" in torn and count(page, "handshake") == 0, torn=torn)
+        page.close()
+
+    # ── cases 1-12 against the built-in DECK plugin (P-D1) ──────────────────────────
+    # The filmstrip, the slide ops and the notes are the plugin's own controls; the slide is a nested
+    # sandboxed frame. The sample deck (fakeAdapter SAMPLE_DECK) has four slides with stable ids.
+    if args.bundle in ("wicked-deck", "all"):
+        DECK_GRANTS = "artifact.read,artifact.write,selection.chip,ui.fullscreen"
+        page = browser.new_page(viewport={"width": W, "height": H})
+        page.on("pageerror", lambda e: errors.append(str(e)))
+        frame_requests = []
+        page.on("request", lambda r: frame_requests.append(r.url)
+                if r.frame is not None and r.frame != page.main_frame and "/entry?" not in r.url else None)
+        t0 = time.time()
+        try:
+            open_editor(page, "wicked-deck", "wicked-deck", grants=DECK_GRANTS)
+        except Exception as e:  # noqa: BLE001
+            page.screenshot(path=str(SHOTS / "editor-conformance-deck-missing.png"))
+            fail("deck-1-handshake", f"no handshake: {e}")
+        plugin = page.frame_locator('[data-testid="editor-frame"]')
+        root = plugin.locator('[data-testid="deck-editor"]')
+        plugin.locator('[data-testid="deck-thumb"]').nth(3).wait_for(state="visible", timeout=8000)
+        page.screenshot(path=str(SHOTS / "editor-conformance-deck.png"))
+        check("deck-1-handshake", time.time() - t0 < 8 and count(page, "handshake") == 1 and count(page, "ignored-window-message") == 0,
+              seconds=round(time.time() - t0, 2))
+
+        def dpf():
+            return next(f for f in page.frames if f.parent_frame == page.main_frame and "/api/v1/editors/" in f.url)
+
+        def deck_head() -> str:
+            return dpf().evaluate("() => document.querySelector('[data-testid=\"deck-editor\"]').dataset.head")
+
+        def wait_deck_head(v: int) -> None:
+            deadline = time.time() + 10
+            while time.time() < deadline:
+                if deck_head() == str(v):
+                    return
+                page.wait_for_timeout(150)
+            fail("deck-head", f"the deck never showed version {v}: {deck_head()}")
+
+        # 2. sizes: inline / full / pane — the same frame, no reload, no re-read
+        wait_deck_head(1)
+        reads_before = page.evaluate("() => window.__wickedEditor.adapter.reads")
+        for s_ in ("inline", "full", "pane"):
+            page.evaluate(f"() => window.__wickedEditor.setSize('{s_}')")
+            page.wait_for_timeout(150)
+        sizes = plugin.locator("body").get_attribute("data-size")
+        loads = count(page, "load")
+        reads_after = page.evaluate("() => window.__wickedEditor.adapter.reads")
+        check("deck-2-sizes", sizes == "pane" and loads == 1 and reads_after == reads_before, data_size=sizes, loads=loads, reads=[reads_before, reads_after])
+
+        # 5. typing never acts: the first printable key goes to the composer, the rest follow it there;
+        # bare Backspace / Delete never delete a slide
+        root.focus()
+        typed_before = count(page, "in", "ui.typed")
+        page.keyboard.type("approve this delete it", delay=60)
+        page.wait_for_timeout(300)
+        comp = page.evaluate(COMPOSER)
+        typed = count(page, "in", "ui.typed") - typed_before
+        root.focus()
+        page.keyboard.press("Backspace")
+        page.keyboard.press("Delete")
+        page.wait_for_timeout(200)
+        check("deck-5-typing-never-acts", typed == 1 and comp["text"] == "approve this delete it" and count(page, "in", "version.write") == 0
+              and count(page, "in", "composer.draft") == 0, typed=typed, composer=comp["text"], writes=count(page, "in", "version.write"))
+
+        # 6. forwarding: Esc with nothing picked, ⌘K, a navigation chord, Shift+Tab out; Tab enters the strip
+        keys_before = len(page.evaluate(COMPOSER)["keys"])
+        root.focus()
+        page.keyboard.press("Escape")
+        page.keyboard.press("Control+k")
+        page.keyboard.press("Alt+j")
+        page.keyboard.press("Shift+Tab")
+        page.wait_for_timeout(200)
+        keys = page.evaluate(COMPOSER)["keys"][keys_before:]
+        root.focus()
+        page.keyboard.press("Tab")
+        page.wait_for_timeout(150)
+        entered = dpf().evaluate("() => document.activeElement?.dataset?.testid ?? null")
+        check("deck-6-forwarding", keys == ["Escape", "Mod+K", "Alt+J", "Shift+Tab"] and entered == "deck-thumb", keys=keys, tab_entered=entered)
+
+        # 7. edits: a slide op is ONE write and the host's line; a stale base is shown, not retried
+        plugin.locator('[data-testid="deck-move-down"]').click()
+        page.wait_for_function("() => window.__wickedEditor.log.some(e => e.kind === 'written')", timeout=5000)
+        written = count(page, "written")
+        thread = page.evaluate(COMPOSER)["thread"]
+        wait_deck_head(2)
+        page.evaluate("() => window.__wickedEditor.adapter.agentEdit()")  # an agent version lands, unseen
+        plugin.locator('[data-testid="deck-duplicate"]').click()
+        page.wait_for_timeout(600)
+        status = page.evaluate(COMPOSER)["status"]
+        refused = [e for e in log(page) if e["kind"] == "refused" and e["type"] == "version.write"]
+        check("deck-7-edits", written == 1 and thread == ["You moved slide 1 · Version 2"]
+              and status == "Not changed: the deck changed meanwhile" and len(refused) == 1 and refused[0]["code"] == "head_moved",
+              written=written, thread=thread, status=status, refused=refused)
+
+        # 8. strict input: fuzzed host messages don't break it; it still points
+        for junk in ["null", "'x'", "{p:'wicked.editor'}", "{p:'wicked.editor',v:1,type:'nonsense',payload:{}}",
+                     "{p:'wicked.editor',v:1,type:'host.size',payload:null}", "{p:'wicked.editor',v:1,type:'host.theme'}"]:
+            page.evaluate(f"() => window.__wickedEditor.inject({junk})")
+        page.wait_for_timeout(200)
+        before = count(page, "in", "selection.set")
+        plugin.locator('[data-testid="deck-thumb"]').nth(2).click()
+        page.wait_for_timeout(300)
+        chips = page.evaluate(COMPOSER)["chips"]
+        check("deck-8-strict-input", count(page, "in", "selection.set") == before + 1 and count(page, "teardown") == 0 and len(chips) == 1,
+              chips=chips)
+
+        # 11. theme
+        page.evaluate("() => window.__wickedEditor.setTheme({'--accent': '#aa0000'})")
+        page.wait_for_timeout(300)
+        accent = dpf().evaluate("() => getComputedStyle(document.documentElement).getPropertyValue('--accent').trim()")
+        anims = dpf().evaluate("() => document.getAnimations().length")
+        check("deck-11-theme", accent == "#aa0000" and anims == 0, accent=accent, animations=anims)
+
+        # 10. accessibility (partial — see gaps): the editor root is reachable and shows its focus; every
+        # thumbnail is a named button
+        a11y = dpf().evaluate("""() => { const el = document.querySelector('[data-testid="deck-editor"]'); el.focus();
+            const s = getComputedStyle(el);
+            const named = [...document.querySelectorAll('[data-testid="deck-thumb"]')].every(b => (b.getAttribute('aria-label') || '').startsWith('Slide '));
+            return {tab: el.tabIndex, focused: document.activeElement === el, ring: s.boxShadow !== 'none' || s.outlineStyle !== 'none', named}; }""")
+        check("deck-10-accessibility-keyboard", a11y["tab"] >= 0 and a11y["focused"] and a11y["ring"] and a11y["named"], **a11y)
+
+        # 9. liveness
+        page.wait_for_timeout(11_500)
+        check("deck-9-liveness", count(page, "teardown") == 0 and page.evaluate("() => window.__wickedEditor.host()?.alive === true"))
+
+        # 3. no network from the plugin, the slide or the thumbnails
+        check("deck-3-no-network", frame_requests == [], requests=frame_requests)
+
+        # 4. permissions: write withdrawn mid-session → not_granted; pointing still works
+        page.evaluate("() => window.__wickedEditor.host().setGrants(['artifact.read','selection.chip'])")
+        plugin.locator('[data-testid="deck-duplicate"]').click()
+        page.wait_for_timeout(400)
+        not_granted = [e for e in log(page) if e["kind"] == "refused" and e["code"] == "not_granted"]
+        before = count(page, "in", "selection.set")
+        plugin.locator('[data-testid="deck-thumb"]').nth(1).click()
+        page.wait_for_timeout(300)
+        check("deck-4-permissions", len(not_granted) == 1 and count(page, "in", "selection.set") == before + 1
+              and page.evaluate("() => window.__wickedEditor.host()?.alive === true"), not_granted=not_granted)
+
+        # 12. the pinned hash
+        page.goto(url("wicked-deck", "wicked-deck", grants=DECK_GRANTS, sha_override="0" * 64), wait_until="networkidle")
+        try:
+            page.get_by_test_id("editor-torn").wait_for(state="visible", timeout=6000)
+            torn = page.get_by_test_id("editor-torn").inner_text()
+        except Exception:  # noqa: BLE001
+            torn = None
+        check("deck-12-hash-pinned", torn is not None and "didn’t start" in torn and count(page, "handshake") == 0, torn=torn)
         page.close()
 
     # ── cases 13-18: the host catches each attack ─────────────────────────────────

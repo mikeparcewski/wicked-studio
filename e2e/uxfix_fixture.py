@@ -540,6 +540,9 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          # catch is `400 {error: e.message}` with pptx.js's install command
          # in the message (no separate hint field on this wire).
          "export_pptx_missing": False,
+         # P-D1: how long the stand-in for crew's governed edit run takes to land an audience
+         # rewrite (a batch whose items say "Rewrite this slide for …"); < 0 = it never lands.
+         "deck_adapt_ms": 600,
          # Slice X (§7.2): when True, theme.requested still acks {ok,...} but
          # the bridge then says NOTHING — no status frame, no theme.learned,
          # no readback ripening. The brief's real failure mode (a learn that
@@ -5053,6 +5056,138 @@ def apply_remove(html: str, wid: str) -> str | None:
     return None if span is None else html[:span[0]] + html[span[1]:]
 
 
+# ── P-D1: the deck engine, mirrored (interactive I-D1 deck ops, I-D2 review store) ──────────────
+# The fixture decks have no nested slides, so a slide is one top-level `<section …data-slide-id…>`.
+# Ops land ONE deterministic version each through `POST /d/<doc>/api/deck {expect_head, op}`; the
+# review store is per doc: decisions given on a version carry forward only while the slide's hash
+# (its markup + the document outside the slides) is unchanged, along the version's lineage only.
+DECK_SLIDE_RE = re.compile(r'<section\b[^>]*\bdata-slide-id="([^"]+)"[^>]*>.*?</section>', re.S)
+NOTES_RE = re.compile(r'<aside\b[^>]*\bdata-notes-for="[^"]*"[^>]*>.*?</aside>', re.S)
+deck_reviews: dict = {}   # (pid, doc) -> {"decisions": [], "audience": None, "proposal": None}
+deck_fresh = [0]
+deck_ops_log: list = []   # every deck op the bridge received (GET /__fixture/deck-ops)
+
+
+def deck_slides(html: str) -> list:
+    return [{"id": m.group(1), "start": m.start(), "end": m.end(), "markup": m.group(0)} for m in DECK_SLIDE_RE.finditer(html)]
+
+
+def _fresh_ids(markup: str) -> str:
+    deck_fresh[0] += 1
+    tag = f"f{deck_fresh[0]}"
+    markup = re.sub(r'data-slide-id="[^"]+"', f'data-slide-id="s-{tag}"', markup, count=1)
+    # The copy's notes are re-pointed at the copy (interactive deck.js linkNotes).
+    markup = re.sub(r'data-notes-for="[^"]*"', f'data-notes-for="s-{tag}"', markup)
+    return re.sub(r'data-wid="([^"]+)"', lambda m: f'data-wid="{m.group(1)}-{tag}"', markup)
+
+
+def apply_deck_op(html: str, op: dict):
+    """One deck op on the version HTML (interactive core/deck.js applyDeckOp). (html, None) or (None, reason)."""
+    slides = deck_slides(html)
+    by = {x["id"]: x for x in slides}
+    t = by.get(op.get("slide"))
+    if t is None:
+        return None, "slide-not-found"
+    typ = op.get("type")
+    after = op.get("after")
+    if typ in ("slide-insert", "slide-move") and after not in (None, "") and after not in by:
+        return None, "after-slide-not-found"
+
+    def place(doc: str, markup: str, after_id) -> str:
+        cur = deck_slides(doc)
+        if after_id in (None, ""):
+            at = cur[0]["start"] if cur else doc.find("</body>")
+        else:
+            at = next(x["end"] for x in cur if x["id"] == after_id)
+        return doc[:at] + markup + doc[at:]
+
+    if typ == "slide-move":
+        if after == t["id"]:
+            return None, "after-is-the-slide"
+        rest = html[:t["start"]] + html[t["end"]:]
+        return place(rest, t["markup"], after), None
+    if typ == "slide-duplicate":
+        return html[:t["end"]] + _fresh_ids(t["markup"]) + html[t["end"]:], None
+    if typ == "slide-insert":
+        blank = re.sub(r">([^<]+)<", "><", NOTES_RE.sub("", t["markup"]))
+        return place(html, _fresh_ids(blank), after), None
+    if typ == "notes-set":
+        markup = NOTES_RE.sub("", t["markup"])
+        text = str(op.get("text") or "")
+        if text.strip():
+            aside = (f'<aside class="notes" data-notes-for="{t["id"]}" hidden data-wi-no-anchor>'
+                     f'{html_mod.escape(text, quote=False)}</aside>')
+            markup = markup[:-len("</section>")] + aside + "</section>"
+        return html[:t["start"]] + markup + html[t["end"]:], None
+    return None, f"not-a-deck-op:{typ}"
+
+
+def deck_hashes(html: str) -> list:
+    skeleton = re.sub(r">[ \t\n\r\f]+<", "><", DECK_SLIDE_RE.sub("", html))
+    return [{"slide_id": x["id"], "hash": hashlib.sha256((skeleton + "\u0001" + x["markup"]).encode()).hexdigest()}
+            for x in deck_slides(html)]
+
+
+def deck_lineage(versions: list, v: int) -> set:
+    by = {e["version"]: e for e in versions}
+    out: set = set()
+    while v is not None and v in by and v not in out:
+        out.add(v)
+        v = by[v].get("parent")
+    return out
+
+
+def deck_review_of(pid: str, doc: str, version: int, versions: list, html: str) -> dict:
+    store = deck_reviews.get((pid, doc)) or {"decisions": [], "audience": None, "proposal": None}
+    lineage = deck_lineage(versions, version)
+    latest: dict = {}
+    for d in store["decisions"]:
+        if d["version"] in lineage:
+            latest[d["slide_id"]] = d
+    rows = []
+    for h in deck_hashes(html):
+        d = latest.get(h["slide_id"])
+        rows.append({"slide_id": h["slide_id"], "hash": h["hash"],
+                     "decision": None if d is None or d["decision"] == "cleared" else {
+                         "decision": d["decision"], "version": d["version"], "note": d.get("note"),
+                         "at": d["at"], "current": d["hash"] == h["hash"]}})
+    return {"version": version, "head": max(e["version"] for e in versions),
+            "audience": store["audience"], "proposal": store["proposal"], "slides": rows}
+
+
+AUDIENCE_PRESETS = ("exec", "eng", "customer", "custom")
+
+
+def deck_adapt_land(pid: str, doc: str, base: int, items: list) -> None:
+    """crew's governed `interactive-edit` run, stood in for: the slides named by an audience-change
+    batch come back rewritten (their heading says for whom), as ONE new version off the base."""
+    who = "the audience"
+    m = re.match(r"Rewrite this slide for ([^.:]+)", str(items[0].get("instruction") or "")) if items else None
+    if m:
+        who = m.group(1).strip()
+    with docs_lock:
+        versions = docs_created.get(pid, {}).get(doc)
+        if versions is None:
+            return
+        head = max(e["version"] for e in versions)
+        if head != base:
+            return
+        html = doc_html_overrides.get((pid, doc, head)) or doc_html(doc, head)
+        for it in items:
+            span = _element_span(html, str(it.get("selector") or ""))
+            if span is None:
+                continue
+            seg = html[span[0]:span[1]]
+            seg2 = re.sub(r"(<h[12][^>]*>)([^<]*)(</h[12]>)", lambda mm: f"{mm.group(1)}{mm.group(2)} — for {who}{mm.group(3)}", seg, count=1)
+            html = html[:span[0]] + seg2 + html[span[1]:]
+        v = head + 1
+        versions.append({"version": v, "parent": head, "feedback_file": None, "html_file": f"_v{v}.html",
+                         "created_at": iso(NOW0 + v * SEC)})
+        doc_html_overrides[(pid, doc, v)] = html
+    queue_interactive("wicked.interactive.version.created", {
+        "project_id": pid, "document_id": doc, "version": v, "parent": head, "kind": "structural", "html_file": f"_v{v}.html"})
+
+
 def doc_html(doc: str, version: int) -> str:
     """The rendered document at one version — a light deck slide, so the canvas reads
     as a document against the app chrome and the v1→v2 headline change is visible.
@@ -5105,9 +5240,13 @@ def styled_doc_html(style: str, doc: str) -> str:
             ("Staff stay in control", "The whole day at a glance, per branch."),
             ("The pilot", "Central branch, eight weeks, then every branch."),
         ]
+        # interactive I-D1: every top-level slide of a deck carries a stable `data-slide-id`; speaker
+        # notes ride in a hidden aside inside their slide (never anchored).
         body = "".join(
-            f'<section class="wi-slide" data-wid="section-{i}"><h1 data-wid="slide-{i}-heading-1">{h}</h1>'
-            f'<p data-wid="slide-{i}-paragraph-1">{p}</p></section>'
+            f'<section class="wi-slide" data-wid="section-{i}" data-slide-id="s{i + 1}"><h1 data-wid="slide-{i}-heading-1">{h}</h1>'
+            f'<p data-wid="slide-{i}-paragraph-1">{p}</p>'
+            + ('<aside class="notes" data-notes-for="s1" hidden data-wi-no-anchor>Open with the waiting-list numbers.</aside>' if i == 0 else '')
+            + '</section>'
             for i, (h, p) in enumerate(slides))
         return (f'<!doctype html><html><head><meta charset="utf-8"><title>{doc} v1</title>'
                 "<style>body{margin:0;font-family:Georgia,serif;background:#f4f1ea;color:#1b1b1b}"
@@ -6336,6 +6475,34 @@ class W2Handler(SimpleHTTPRequestHandler):
 
     def _interactive_get(self, path: str) -> bool:
         """GET half of the slice-6 bridge surface (DES-UXFIX-001 §2.6)."""
+        # P-D1: GET /d/<doc>/api/deck/review?version= — the deck's review (interactive I-D2, mirrored).
+        m = re.match(r"^/api/v1/projects/([^/]+)/interactive/d/([^/]+)/api/deck/review$", path)
+        if m:
+            pid, doc = (urllib.parse.unquote(g) for g in m.groups())
+            q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            with docs_lock:
+                versions = list(docs_created.get(pid, {}).get(doc) or [])
+                deck = doc_styles.get((pid, doc)) == "ppt"
+            if not versions:
+                self._json(404, {"error": f"no such doc {doc}"})
+                return True
+            if not deck:
+                self._json(409, {"error": "not_a_deck"})
+                return True
+            head = max(e["version"] for e in versions)
+            try:
+                ver = int(q.get("version", [head])[0])
+            except ValueError:
+                self._json(400, {"error": "version must be a version number"})
+                return True
+            if ver not in {e["version"] for e in versions}:
+                self._json(404, {"error": f"version {ver} does not exist"})
+                return True
+            html = doc_html_overrides.get((pid, doc, ver)) or doc_html(doc, ver)
+            with docs_lock:
+                out = deck_review_of(pid, doc, ver, versions, html)
+            self._json(200, out)
+            return True
         # /api/v1/projects/<pid>/interactive/api/preflight — all deps present.
         m = re.match(r"^/api/v1/projects/([^/]+)/interactive/api/preflight$", path)
         if m:
@@ -6508,6 +6675,95 @@ class W2Handler(SimpleHTTPRequestHandler):
         """POST half: create / fork / the UI-originated bus emit. Each one commits the
         manifest move FIRST and then queues the frames the bridge would emit, so the
         client's next read is never behind the event that announced it."""
+        # ── P-D1: a deck's own ops and review (interactive I-D1 / I-D2, mirrored) ──────────
+        m = re.match(r"^/api/v1/projects/([^/]+)/interactive/d/([^/]+)/api/deck(/decisions|/proposal|/proposal/close)?$", path)
+        if m:
+            pid, doc = (urllib.parse.unquote(g) for g in m.groups()[:2])
+            sub = m.group(3) or ""
+            with docs_lock:
+                versions = docs_created.get(pid, {}).get(doc)
+                if versions is None:
+                    self._json(404, {"error": f"no such doc {doc}"})
+                    return True
+                if doc_styles.get((pid, doc)) != "ppt":
+                    self._json(409, {"error": "not_a_deck"})
+                    return True
+                head = max(e["version"] for e in versions)
+                store = deck_reviews.setdefault((pid, doc), {"decisions": [], "audience": None, "proposal": None})
+                if sub == "":
+                    expect = body.get("expect_head")
+                    op = body.get("op") if isinstance(body.get("op"), dict) else None
+                    if not isinstance(expect, int):
+                        self._json(400, {"error": "expect_head (the version you are editing) is required"})
+                        return True
+                    if op is None or op.get("type") not in ("slide-insert", "slide-duplicate", "slide-move", "notes-set"):
+                        self._json(400, {"error": "op.type must be one of slide-insert, slide-duplicate, slide-move, notes-set"})
+                        return True
+                    deck_ops_log.append({"pid": pid, "doc": doc, "expect_head": expect, "op": json.loads(json.dumps(op))})
+                    if expect != head:
+                        self._json(409, {"error": "head_moved", "head": head})
+                        return True
+                    html = doc_html_overrides.get((pid, doc, head)) or doc_html(doc, head)
+                    nxt, reason = apply_deck_op(html, op)
+                    if nxt is None:
+                        self._json(422, {"error": "refused", "reason": reason, "head": head})
+                        return True
+                    if nxt == html:
+                        self._json(200, {"unchanged": True, "head": head})
+                        return True
+                    v = head + 1
+                    versions.append({"version": v, "parent": head, "feedback_file": f"_v{v}.md",
+                                     "html_file": f"_v{v}.html", "created_at": iso(NOW0 + v * SEC)})
+                    doc_html_overrides[(pid, doc, v)] = nxt
+                    answer = {"version": v, "parent": head}
+                elif sub == "/decisions":
+                    ver = body.get("version")
+                    by = {e["version"] for e in versions}
+                    if not isinstance(ver, int) or ver not in by:
+                        self._json(404 if isinstance(ver, int) else 400, {"error": "version (the version the slide was reviewed on) is required"})
+                        return True
+                    if body.get("decision") not in ("approved", "changes_requested", "cleared"):
+                        self._json(400, {"error": "decision must be one of approved, changes_requested, cleared"})
+                        return True
+                    html = doc_html_overrides.get((pid, doc, ver)) or doc_html(doc, ver)
+                    h = next((x for x in deck_hashes(html) if x["slide_id"] == body.get("slide_id")), None)
+                    if h is None:
+                        self._json(422, {"error": f"version {ver} has no slide {body.get('slide_id')}"})
+                        return True
+                    note = body.get("note") if isinstance(body.get("note"), str) and body.get("note").strip() else None
+                    row = {"slide_id": h["slide_id"], "version": ver, "hash": h["hash"], "decision": body["decision"],
+                           "note": note, "author": "studio", "at": iso(int(time.time() * 1000))}
+                    store["decisions"].append(row)
+                    answer = {"decision": row}
+                elif sub == "/proposal":
+                    if body.get("preset") not in AUDIENCE_PRESETS or (body.get("preset") == "custom" and not str(body.get("label") or "").strip()):
+                        self._json(400, {"error": "preset must be one of exec, eng, customer, custom (custom needs its label)"})
+                        return True
+                    if store["proposal"] is not None:
+                        self._json(409, {"error": "proposal_open", "proposal": store["proposal"]})
+                        return True
+                    store["proposal"] = {"base": int(body.get("base") or 0), "preset": body["preset"],
+                                         "label": (str(body.get("label")).strip() if body.get("label") else None),
+                                         "at": iso(int(time.time() * 1000))}
+                    answer = {"proposal": store["proposal"]}
+                else:
+                    if store["proposal"] is None:
+                        self._json(409, {"error": "no_proposal"})
+                        return True
+                    p0 = store["proposal"]
+                    if body.get("outcome") == "kept":
+                        store["audience"] = {"preset": p0["preset"], "label": p0["label"], "version": body.get("version"), "at": iso(int(time.time() * 1000))}
+                    elif body.get("outcome") != "dropped":
+                        self._json(400, {"error": "outcome must be kept or dropped"})
+                        return True
+                    store["proposal"] = None
+                    answer = {"outcome": body.get("outcome"), "proposal": p0, "audience": store["audience"]}
+            if sub == "":
+                queue_interactive("wicked.interactive.version.created", {
+                    "project_id": pid, "document_id": doc, "version": answer["version"], "parent": answer["parent"],
+                    "kind": "deterministic", "html_file": f"_v{answer['version']}.html"})
+            self._json(200, answer)
+            return True
         # POST /api/v1/projects/<pid>/interactive/api/docs — create (§2.2 case 1).
         m = re.match(r"^/api/v1/projects/([^/]+)/interactive/api/docs$", path)
         if m:
@@ -6750,6 +7006,25 @@ class W2Handler(SimpleHTTPRequestHandler):
             # items ({selector, type, value|instruction, before}).
             if body.get("event_type") == "wicked.interactive.feedback.submitted" and doc:
                 items = payload.get("items") or []
+                # I-D1: an optional `expect_head` — a batch made against a head that moved lands nothing.
+                if isinstance(payload.get("expect_head"), int):
+                    with docs_lock:
+                        vs = docs_created.get(pid, {}).get(doc) or []
+                        head_now = max((e["version"] for e in vs), default=0)
+                    if head_now != payload["expect_head"]:
+                        queue_interactive("wicked.interactive.status.posted", {
+                            "project_id": pid, "document_id": doc, "state": "error", "code": "head_moved", "head": head_now,
+                            "message": f"The document changed (version {head_now}) before this edit arrived; nothing was changed."})
+                        self._json(200, {"ok": True, "event_id": "evt-fixture", "correlation_id": "c-fixture"})
+                        return True
+                # P-D1: an audience change (every item a "Rewrite this slide for …" rewrite) is answered by
+                # crew's governed edit run, stood in for: one rewritten version lands after `deck_adapt_ms`.
+                if items and all(str(i.get("type")) == "structural-change" and str(i.get("instruction") or "").startswith("Rewrite this slide for ") for i in items):
+                    with state_lock:
+                        adapt_ms = int(state["deck_adapt_ms"])
+                    if adapt_ms >= 0:
+                        base_v = payload.get("version") if isinstance(payload.get("version"), int) else 0
+                        threading.Timer(adapt_ms / 1000.0, deck_adapt_land, args=(pid, doc, base_v, json.loads(json.dumps(items)))).start()
                 with state_lock:
                     feedback_post_log.append({"pid": pid, "doc": doc, "version": payload.get("version"),
                                               "author": payload.get("author"), "items": json.loads(json.dumps(items))})
@@ -7382,6 +7657,12 @@ class W2Handler(SimpleHTTPRequestHandler):
             with state_lock:
                 posts = list(feedback_post_log)
             return self._json(200, {"posts": posts})
+        # P-D1: every deck op the bridge received, and the deck review stores.
+        if path == "/__fixture/deck-ops":
+            with docs_lock:
+                ops = list(deck_ops_log)
+                reviews = {f"{k[0]}/{k[1]}": v for k, v in deck_reviews.items()}
+            return self._json(200, {"ops": ops, "reviews": reviews})
         if path == "/__fixture/onboard-posts":
             with chat_state_lock:
                 posts = list(onboard_posts)
@@ -8440,6 +8721,21 @@ class W2Handler(SimpleHTTPRequestHandler):
             return None
         if self._demo_route("PUT", body if isinstance(body, dict) else {}):
             return None
+        # P-D1: PUT /d/<doc>/api/deck/audience — the deck's recorded audience (interactive I-D2, mirrored).
+        m = re.match(r"^/api/v1/projects/([^/]+)/interactive/d/([^/]+)/api/deck/audience$", path)
+        if m:
+            pid, doc = (urllib.parse.unquote(g) for g in m.groups())
+            b = body if isinstance(body, dict) else {}
+            if b.get("preset") not in AUDIENCE_PRESETS or (b.get("preset") == "custom" and not str(b.get("label") or "").strip()):
+                return self._json(400, {"error": "preset must be one of exec, eng, customer, custom (custom needs its label)"})
+            with docs_lock:
+                if doc_styles.get((pid, doc)) != "ppt":
+                    return self._json(409, {"error": "not_a_deck"})
+                store = deck_reviews.setdefault((pid, doc), {"decisions": [], "audience": None, "proposal": None})
+                store["audience"] = {"preset": b["preset"], "label": (str(b.get("label")).strip() if b.get("label") else None),
+                                     "version": b.get("version"), "at": iso(int(time.time() * 1000))}
+                out = {"audience": store["audience"]}
+            return self._json(200, out)
         # Behaviour 10: PUT /standing-orders/away — turning it on sweeps the open gates.
         if path == "/api/v1/standing-orders/away":
             with state_lock:

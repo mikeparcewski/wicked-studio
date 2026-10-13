@@ -48,7 +48,18 @@ export type AnchorRef =
 export type Op =
   | { op: 'text'; anchor: string; value: string; before: string }
   | { op: 'style'; anchor: string; style: { background?: string; color?: string }; before?: string }
-  | { op: 'remove'; anchor: string; before?: string };
+  | { op: 'remove'; anchor: string; before?: string }
+  // A deck's own ops (DES-PRESENTATION-EDITOR-001 I-D1, P-D1): a slide is named by its `data-slide-id`,
+  // `after` is a slide id or null for first. Each is ALONE in its write: the engine makes one version
+  // per deck op. Deleting a slide is `remove` on the slide's own anchor.
+  | { op: 'slide-insert'; slide: string; after: string | null }
+  | { op: 'slide-duplicate'; slide: string }
+  | { op: 'slide-move'; slide: string; after: string | null }
+  | { op: 'notes-set'; slide: string; text: string };
+
+/** The deck ops (each its own write). */
+export const DECK_OPS = ['slide-insert', 'slide-duplicate', 'slide-move', 'notes-set'] as const;
+export type DeckOpType = typeof DECK_OPS[number];
 
 /** Plugin → host requests, with the permission each needs (null = none). */
 export const REQUESTS = {
@@ -102,6 +113,8 @@ export const LIMITS = {
   summaryChars: 80,
   statusChars: 120,
   draftChars: 2_000,
+  /** A slide's speaker notes (interactive's own cap). */
+  notesChars: 20_000,
   /** Dropped forwarded keys/typing per session before the frame is torn down. */
   dropsBeforeTeardown: 3,
 } as const;

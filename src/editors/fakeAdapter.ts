@@ -1,3 +1,4 @@
+import { topSlideElements } from '../board/deck.js';
 import type { AdapterResult, ArtifactRef, HostAdapter } from './host.js';
 import type { WireItem } from './ops.js';
 
@@ -20,7 +21,28 @@ export const SAMPLE_PAGE = `<!doctype html><html><head><style>:root{--wi-accent:
 <p data-wid="price-body">Support is included, with answers within one working day.</p></section>
 </body></html>`;
 
+/** A DECK's own HTML (P-D1), the way interactive instruments one: top-level slides with a stable
+ *  `data-slide-id`, positional `section-{i}` / `slide-{i}-…` anchors, speaker notes in a hidden aside. */
+// eslint-disable-next-line no-restricted-syntax
+export const SAMPLE_DECK = `<!doctype html><html><head><style>body{margin:0;font-family:Georgia,serif;background:#f4f1ea;color:#1b1b1b}
+.wi-slide{box-sizing:border-box;width:1280px;height:720px;padding:96px 112px;background:#fffdf7;border-bottom:1px solid #ddd6c4}
+h1{font-size:64px;margin:0 0 28px}h2{font-size:52px;margin:0 0 28px}p,li{font-size:30px;line-height:1.4;color:#4a463c}</style></head><body data-wi-kind="deck">
+<section class="wi-slide" data-wid="section-0" data-slide-id="s-intro"><h1 data-wid="slide-0-heading-1">Library room booking</h1><p data-wid="slide-0-paragraph-1">A study room in two taps.</p><aside class="notes" data-notes-for="s-intro" hidden data-wi-no-anchor>Open with the waiting-list numbers.</aside></section>
+<section class="wi-slide" data-wid="section-1" data-slide-id="s-first"><h2 data-wid="slide-1-heading-1">Residents first</h2><ul data-wid="slide-1-list-1"><li data-wid="slide-1-item-1">Free rooms come first</li><li data-wid="slide-1-item-2">Nobody scrolls past full ones</li></ul></section>
+<section class="wi-slide" data-wid="section-2" data-slide-id="s-staff"><h2 data-wid="slide-2-heading-1">Staff stay in control</h2><p data-wid="slide-2-paragraph-1">The whole day at a glance, per branch.</p></section>
+<section class="wi-slide" data-wid="section-3" data-slide-id="s-pilot"><h2 data-wid="slide-3-heading-1">The pilot</h2><p data-wid="slide-3-paragraph-1">Central branch, eight weeks, then every branch.</p></section>
+</body></html>`;
+
 interface Version { version: number; parent: number | null; html: string; createdAt: string }
+
+let freshId = 0;
+/** Fresh anchors for a copied slide, as the engine's re-instrumenting gives one. */
+function freshen(el: Element): void {
+  freshId += 1;
+  const tag = `n${freshId}`;
+  el.setAttribute('data-slide-id', `s-${tag}`);
+  for (const a of [el, ...Array.from(el.querySelectorAll('[data-wid]'))]) if (a.hasAttribute('data-wid')) a.setAttribute('data-wid', `${a.getAttribute('data-wid')}-${tag}`);
+}
 
 export class FakeDocAdapter implements HostAdapter {
   private versionsList: Version[];
@@ -28,15 +50,18 @@ export class FakeDocAdapter implements HostAdapter {
   reads = 0;
   readonly: boolean;
 
-  constructor(html: string = SAMPLE_PAGE, private readonly title = 'Library room booking', opts: { readonly?: boolean } = {}) {
+  private readonly kind: string;
+
+  constructor(html: string = SAMPLE_PAGE, private readonly title = 'Library room booking', opts: { readonly?: boolean; kind?: string } = {}) {
     this.versionsList = [{ version: 1, parent: null, html, createdAt: new Date(0).toISOString() }];
     this.readonly = opts.readonly ?? false;
+    this.kind = opts.kind ?? 'page';
   }
 
   private get head(): Version { return this.versionsList[this.versionsList.length - 1]!; }
 
   artifact(): ArtifactRef {
-    return { kind: 'page', title: this.title, version: this.head.version, head: this.head.version, readonly: this.readonly, lockedParts: [] };
+    return { kind: this.kind, title: this.title, version: this.head.version, head: this.head.version, readonly: this.readonly, lockedParts: [] };
   }
 
   async read(version?: number): Promise<AdapterResult<{ version: number; content: { type: 'html'; html: string } }>> {
@@ -54,6 +79,53 @@ export class FakeDocAdapter implements HostAdapter {
     this.writes.push({ base, items, summary });
     const doc = new DOMParser().parseFromString(this.head.html, 'text/html');
     for (const it of items) {
+      if (it.type === 'deck') {
+        // The engine's deck ops (interactive core/deck.js), in memory: one op, one version.
+        const slides = topSlideElements(doc);
+        const byId = (id: string | null | undefined): Element | null => (id == null ? null : slides.find((x) => x.getAttribute('data-slide-id') === id) ?? null);
+        const target = byId(it.op.slide);
+        if (target === null) return { error: 'refused', message: 'Not changed: that slide is not in this version.' };
+        const place = (node: Element, after: string | null | undefined): void => {
+          const a = byId(after);
+          if (a !== null) a.after(node);
+          else if (slides[0] !== undefined && slides[0] !== node) slides[0].before(node);
+          else target.parentElement?.prepend(node);
+        };
+        if (it.op.type === 'slide-move') {
+          if (it.op.after === it.op.slide) return { error: 'refused', message: 'Not changed: a slide cannot go after itself.' };
+          // Already there (the engine's no-op): nothing is touched (codex r1 — removing the first slide to
+          // place it "first" lost it).
+          const at = slides.indexOf(target);
+          if ((it.op.after == null || it.op.after === '') ? at === 0 : slides[at - 1]?.getAttribute('data-slide-id') === it.op.after) {
+            return { error: 'refused', message: 'Nothing changed: the slide is already there.' };
+          }
+          target.remove();
+          place(target, it.op.after);
+        } else if (it.op.type === 'slide-duplicate') {
+          const copy = target.cloneNode(true) as Element;
+          freshen(copy);
+          target.after(copy);
+        } else if (it.op.type === 'slide-insert') {
+          const copy = target.cloneNode(true) as Element;
+          for (const n of Array.from(copy.querySelectorAll('aside[data-notes-for]'))) n.remove();
+          const walk = (n: Node): void => { for (const c of Array.from(n.childNodes)) { if (c.nodeType === 3) c.textContent = ''; else walk(c); } };
+          walk(copy);
+          freshen(copy);
+          place(copy, it.op.after);
+        } else {
+          for (const n of Array.from(target.querySelectorAll('aside[data-notes-for]'))) n.remove();
+          if ((it.op.text ?? '').trim() !== '') {
+            const aside = doc.createElement('aside');
+            aside.className = 'notes';
+            aside.setAttribute('data-notes-for', it.op.slide);
+            aside.setAttribute('hidden', '');
+            aside.setAttribute('data-wi-no-anchor', '');
+            aside.textContent = it.op.text ?? '';
+            target.append(aside);
+          }
+        }
+        continue;
+      }
       const el = doc.querySelector(`[data-wid="${it.selector}"]`); // the wire names the data-wid
       if (el === null) return { error: 'stale', message: 'Not changed: it moved while you typed' };
       if (it.type === 'content-edit') {

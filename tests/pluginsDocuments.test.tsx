@@ -83,7 +83,7 @@ describe('the Plugins page: the built-in Document editor opens real documents', 
     expect(navigate).toHaveBeenLastCalledWith(openDocumentHref({ projectId: 'notes', doc: { name: 'launch-page' } }));
     expect(String(navigate.mock.calls.at(-1)?.[0])).not.toContain('/editors/dev');
     // Honest about what it does not open yet.
-    expect(within(builtIn).getByTestId('editor-plugin-elsewhere').textContent).toBe('Written documents and decks open in studio’s own editor for now.');
+    expect(within(builtIn).getByTestId('editor-plugin-elsewhere').textContent).toBe('Written documents open in studio’s own editor for now; decks open in Slides.');
     // The sample page is still there, as the quieter way in.
     expect(within(builtIn).getByTestId('editor-plugin-open').className).toContain('wk-btn--quiet');
     // An installed editor keeps only its test-page link: no document door is offered for it.

@@ -1,9 +1,18 @@
-import { getVersions, HeadMovedError, interactiveDocUrl, postEvent, postFork, type VersionEntry } from '../api/interactive.js';
+import { ApiError } from '../api/errors.js';
+import { getVersions, HeadMovedError, interactiveDocUrl, postDeckOp, postEvent, postFork, type VersionEntry } from '../api/interactive.js';
 import { notUndoneLine } from '../board/artifactMorph.js';
 import { FEEDBACK_EVENT } from '../interactive/feedbackBatch.js';
 import type { AdapterResult, ArtifactRef, HostAdapter, MovedOn } from './host.js';
 import type { VersionKind } from './model.js';
 import type { WireItem } from './ops.js';
+
+/** The engine's refusal reasons for a deck op (interactive `core/deck.js`), in plain words. */
+const SLIDE_REASONS: Readonly<Record<string, string>> = {
+  'slide-not-found': 'that slide is not in this version',
+  'after-slide-not-found': 'the slide it goes after is not in this version',
+  'after-is-the-slide': 'a slide cannot go after itself',
+  'notes-hold-anchors': 'these notes hold review anchors, so they can only be changed by asking',
+};
 
 /** After a write: how often, and how long, the manifest is re-read for the edit's own version. */
 const POLL_MS = 400;
@@ -118,7 +127,56 @@ export class InteractiveDocAdapter implements HostAdapter {
     return moved === null ? null : { other: moved };
   }
 
+  /**
+   * A deck op (P-D1): the engine's own route answers with the version it made — no feedback event and
+   * no polling. `expect_head` is the base, so a version that landed meanwhile is a `head_moved` with
+   * nothing written; an op the version cannot take is `refused` with the engine's reason; an engine
+   * without the route (older than I-D1) is `unsupported`, said in plain words.
+   */
+  private async writeDeckOp(base: number, item: Extract<WireItem, { type: 'deck' }>): Promise<AdapterResult<{ version: number }>> {
+    try {
+      let r: Awaited<ReturnType<typeof postDeckOp>>;
+      try {
+        r = await postDeckOp(this.projectId, this.docId, base, item.op);
+      } catch (e: unknown) {
+        // An answer the engine gave is mapped below; one that never arrived (the network, an unreadable
+        // reply) says the outcome is not known — the op may have landed (codex r1).
+        if (e instanceof HeadMovedError || e instanceof ApiError) throw e;
+        return { error: 'unavailable', message: `Whether the slide change landed is not known (${e instanceof Error ? e.message : String(e)}): see the versions.` };
+      }
+      if ('unchanged' in r) return { error: 'refused', message: 'Nothing changed: the slide is already there.' };
+      this.writes.set(r.version, base);
+      // The manifest's head may already be past this write (another hand, just after it): the head
+      // follows the manifest, and the host is told it moved on (codex r1).
+      let headNow = r.version;
+      try {
+        const m = await getVersions(this.projectId, this.docId);
+        this.entries = m.versions;
+        headNow = Math.max(m.head, r.version);
+      } catch { /* the kind and any later head are read on the next refresh */ }
+      this.moveHead(headNow);
+      return headNow === r.version ? { version: r.version } : { version: r.version, moved: { head: headNow, kind: this.kindOf(headNow, r.version) } };
+    } catch (e: unknown) {
+      if (e instanceof HeadMovedError) {
+        const moved = this.movedTo(e.head);
+        return { error: 'head_moved', message: `The deck changed (version ${e.head}) before this was sent; nothing was changed.`, head: e.head, moved };
+      }
+      if (e instanceof ApiError) {
+        const b = e.body as { error?: unknown; reason?: unknown } | undefined;
+        if (e.status === 422) return { error: 'refused', message: `Not changed: ${SLIDE_REASONS[String(b?.reason)] ?? 'the deck cannot take that'}.` };
+        if (e.status === 409 && b?.error === 'not_a_deck') return { error: 'unsupported', message: 'This document is not a deck.' };
+        if (e.status === 404 && b?.error === undefined) return { error: 'unsupported', message: 'This document engine has no slide operations yet: update wicked-interactive.' };
+        if (e.status === 400) return { error: 'bad_request', message: String(b?.error ?? e.message) };
+      }
+      // Anything else came back after the op was posted (a gateway's 502/504, a bridge restart): the
+      // engine may have landed it, so its outcome is not known, never "not sent" (codex r2).
+      return { error: 'unavailable', message: `Whether the slide change landed is not known (${e instanceof Error ? e.message : String(e)}): see the versions.` };
+    }
+  }
+
   async write(base: number, items: WireItem[]): Promise<AdapterResult<{ version: number }>> {
+    const [first] = items;
+    if (first?.type === 'deck') return this.writeDeckOp(base, first);
     // What exists before the post: a version already there can never be the one this post makes. The
     // read is fail-CLOSED — without it, a child another tab made meanwhile could be claimed (codex r2)
     // — and a head already past the base means the edit is stale before it is sent.

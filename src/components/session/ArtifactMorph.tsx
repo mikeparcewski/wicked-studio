@@ -9,7 +9,6 @@ import { ArtifactVersions, lensVersion, useVersionList, VersionLens } from './Ar
 import { DocCoverage } from './DocCoverage.js';
 import { PageEditor, type FrameParts } from './PageEditor.js';
 import { NoEditorPage, PluginArtifact } from './PluginArtifact.js';
-import { SlideStrip } from './SlideStrip.js';
 import { useEditorFor, useEditors } from '../../store/editors.js';
 import { DEMO_VIDEO_ID, openLaunchWizard } from '../../store/launchWizard.js';
 
@@ -66,6 +65,8 @@ export function ArtifactMorph({ artifactKey, title, projectId, docId, composerKe
   const [head, setHead] = useState<number | null>(null);
   // EP-P2: which plugin opens a page here (`undefined` while the registry is read; `null` = none).
   const pageEditor = useEditorFor('page');
+  // P-D1: a deck opens in `wicked-deck` (operator decision D1: its own plugin).
+  const deckEditor = useEditorFor('deck');
   const noEditorReason = useEditors((s) => s.reason);
   const shrinkBtn = useRef<HTMLButtonElement | null>(null);
   const growBtn = useRef<HTMLButtonElement | null>(null);
@@ -93,14 +94,13 @@ export function ArtifactMorph({ artifactKey, title, projectId, docId, composerKe
   const live = useRef(true);
   useEffect(() => { live.current = true; return () => { live.current = false; }; }, []);
 
-  // What stands beside the frame: a deck's slides whenever it is open, a document's requirements
-  // at full screen (the pane has no room for a column) and only for a run that has a repository.
+  // What stands beside the frame: a document's requirements at full screen (the pane has no room for
+  // a column) and only for a run that has a repository. A deck's slides are its editor's own (P-D1).
   const side = useCallback((parts: FrameParts | null): React.ReactNode => {
     if (parts === null) return null;
-    if (kind === 'deck' && size !== 'inline') return <SlideStrip parts={parts} docId={docId} composerKey={composerKey} />;
     if (kind === 'document' && size === 'full' && repoId !== null) return <DocCoverage parts={parts} repoId={repoId} composerKey={composerKey} />;
     return null;
-  }, [kind, size, repoId, docId, composerKey]);
+  }, [kind, size, repoId, composerKey]);
 
   // studio#236: version 0 is the "Building…" placeholder — nothing to export until a version lands.
   const canExport = head !== null && head >= 1;
@@ -172,6 +172,8 @@ export function ArtifactMorph({ artifactKey, title, projectId, docId, composerKe
   const [localLens, setLocalLens] = useState<number | null>(null);
   const pinned = address === null ? localLens : address.routeKey === artifactKey ? address.routeVersion : null;
   const lens = versionsOn ? lensVersion(pinned, head, versions) : null;
+  // P-D1: a deck in its editor, at full size and not on a version lens, has the host's review rail.
+  const deckReviewOn = editorKind && kind === 'deck' && size === 'full' && lens === null && deckEditor !== null && deckEditor !== undefined;
   const look = (v: number | null): void => { if (address === null) setLocalLens(v); else address.pickVersion(artifactKey, v, 'push'); };
 
   // Esc shrinks one step (rule 1) — the topmost open artifact only, and not while something inside
@@ -244,7 +246,7 @@ export function ArtifactMorph({ artifactKey, title, projectId, docId, composerKe
       data-doc={docId}
       data-kind={slot?.kind ?? kind}
       aria-label={`${title} — ${size === 'inline' ? 'preview' : size === 'pane' ? 'open beside the thread' : 'full screen'}`}
-      className={`wk-artifact wk-artifact--${size}${versionsOn ? ' wk-artifact--versions' : ''}`}
+      className={`wk-artifact wk-artifact--${size}${versionsOn ? ' wk-artifact--versions' : ''}${deckReviewOn ? ' wk-artifact--deckreview' : ''}`}
       style={{ viewTransitionName: `artifact-${slug}` } as React.CSSProperties}
     >
       <header data-testid="artifact-head" className="wk-artifact-head">
@@ -286,7 +288,13 @@ export function ArtifactMorph({ artifactKey, title, projectId, docId, composerKe
             : pageEditor === null
               ? <NoEditorPage projectId={projectId} docId={docId} size={size} reason={noEditorReason} onHead={setHead} />
               : <PluginArtifact projectId={projectId} docId={docId} title={title} composerKey={composerKey} size={size} morph={morph} editor={pageEditor} onHead={setHead} />)
-          : <PageEditor projectId={projectId} docId={docId} composerKey={composerKey} size={size} kind={kind} side={side} onHead={setHead} />}
+          : kind === 'deck'
+            ? (deckEditor === undefined
+              ? <div className="wk-artifact-body" data-testid="artifact-opening" />
+              : deckEditor === null
+                ? <NoEditorPage projectId={projectId} docId={docId} size={size} reason={noEditorReason} onHead={setHead} what="decks" />
+                : <PluginArtifact projectId={projectId} docId={docId} title={title} composerKey={composerKey} size={size} morph={morph} editor={deckEditor} onHead={setHead} kind="deck" />)
+            : <PageEditor projectId={projectId} docId={docId} composerKey={composerKey} size={size} kind={kind} side={side} onHead={setHead} />}
       {versionsOn && (
         <ArtifactVersions
           projectId={projectId}

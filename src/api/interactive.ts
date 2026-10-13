@@ -765,3 +765,69 @@ export function injectDocMessage(
     payload: { role: 'user', text, document_id: docId, source_message_id: sourceMessageId },
   });
 }
+
+// ── A deck's own operations and review (DES-PRESENTATION-EDITOR-001 I-D1, I-D2; P-D1) ───────────
+
+/** One deck op as the engine takes it (`POST /d/:doc/api/deck {expect_head, op}`). */
+export interface DeckOpWire { type: 'slide-insert' | 'slide-duplicate' | 'slide-move' | 'notes-set'; slide: string; after?: string | null; text?: string }
+
+/** What the deck route answers: the version it made, or that nothing changed. */
+export type DeckOpResult = { version: number; parent: number } | { unchanged: true; head: number };
+
+/** `POST /d/:doc/api/deck`: one op, one version, no model. `expect_head` is required (C5): a moved
+ *  head throws {@link HeadMovedError}. A slide the version does not have is a 422 with its reason. */
+export function postDeckOp(projectId: string, docId: string, expectHead: number, op: DeckOpWire): Promise<DeckOpResult> {
+  return iFetch<DeckOpResult>(`${docBase(projectId, docId)}/api/deck`, jsonPost({ expect_head: expectHead, op })).catch((e: unknown) => {
+    if (e instanceof ApiError && e.status === 409) {
+      const b = e.body as { error?: unknown; head?: unknown } | undefined;
+      if (b?.error === 'head_moved' && typeof b.head === 'number') throw new HeadMovedError(b.head);
+    }
+    throw e;
+  });
+}
+
+export type SlideDecisionKind = 'approved' | 'changes_requested';
+export type AudiencePresetWire = 'exec' | 'eng' | 'customer' | 'custom';
+
+/** One slide of a version's review: the newest decision on it (given on this version or one it
+ *  descends from) and whether it still holds here (`current`: the slide's content hash is unchanged). */
+export interface SlideReview {
+  slide_id: string | null;
+  hash: string;
+  decision: { decision: SlideDecisionKind; version: number; note: string | null; at: string | null; current: boolean } | null;
+}
+export interface DeckAudience { preset: AudiencePresetWire; label: string | null; version: number | null; at: string | null }
+export interface DeckProposal { base: number; preset: AudiencePresetWire; label: string | null; at: string }
+export interface DeckReview { version: number; head: number; audience: DeckAudience | null; proposal: DeckProposal | null; slides: SlideReview[] }
+
+/** `GET /d/:doc/api/deck/review?version=`. `null` when the engine has no review store yet (404 on the
+ *  route itself), so the rail says so instead of guessing. */
+export async function getDeckReview(projectId: string, docId: string, version: number): Promise<DeckReview | null> {
+  try {
+    return await iFetch<DeckReview>(`${docBase(projectId, docId)}/api/deck/review?version=${encodeURIComponent(String(version))}`);
+  } catch (e) {
+    // The route missing (an older engine) answers express's own 404 page, never JSON with an `error`.
+    if (e instanceof ApiError && e.status === 404 && (e.body as { error?: unknown } | undefined)?.error === undefined) return null;
+    throw e;
+  }
+}
+
+/** `POST /d/:doc/api/deck/decisions`: a person's decision on a slide as it reads in `version`. */
+export function postSlideDecision(projectId: string, docId: string, body: { version: number; slide_id: string; decision: SlideDecisionKind | 'cleared'; note?: string }): Promise<{ decision: unknown }> {
+  return iFetch(`${docBase(projectId, docId)}/api/deck/decisions`, jsonPost({ ...body, author: 'studio' }));
+}
+
+/** `PUT /d/:doc/api/deck/audience`. */
+export function putDeckAudience(projectId: string, docId: string, body: { version: number; preset: AudiencePresetWire; label?: string }): Promise<{ audience: DeckAudience }> {
+  return iFetch(`${docBase(projectId, docId)}/api/deck/audience`, { method: 'PUT', body: JSON.stringify(body) });
+}
+
+/** `POST /d/:doc/api/deck/proposal`: one audience proposal at a time (409 `proposal_open`). */
+export function openDeckProposal(projectId: string, docId: string, body: { base: number; preset: AudiencePresetWire; label?: string }): Promise<{ proposal: DeckProposal }> {
+  return iFetch(`${docBase(projectId, docId)}/api/deck/proposal`, jsonPost(body));
+}
+
+/** `POST /d/:doc/api/deck/proposal/close`: kept (the audience becomes the proposal's) or dropped. */
+export function closeDeckProposal(projectId: string, docId: string, body: { outcome: 'kept'; version: number } | { outcome: 'dropped' }): Promise<{ outcome: string }> {
+  return iFetch(`${docBase(projectId, docId)}/api/deck/proposal/close`, jsonPost(body));
+}

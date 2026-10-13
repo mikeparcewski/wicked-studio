@@ -791,6 +791,8 @@
     "desk-rail-more": "desk-rail-general",
     "settings-overview": "desk-rail-general",
     "settings-overview-row": "desk-rail-general",
-    "settings-overview-sentence": "desk-rail-general"
+    "settings-overview-sentence": "desk-rail-general",
+    "slide-strip": "deck-strip",
+    "slide-thumb": "deck-thumb"
   }
 }

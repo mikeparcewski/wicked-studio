@@ -1,4 +1,5 @@
-import { LIMITS, type Op } from './protocol.js';
+import { deckOf, topSlideElements } from '../board/deck.js';
+import { DECK_OPS, LIMITS, type DeckOpType, type Op } from './protocol.js';
 
 /**
  * Edits, as the host checks them before anything crosses the wire (DES-EDITOR-PLUGINS-001 §5.6,
@@ -37,11 +38,15 @@ export function isColour(value: string, themeTokens: ReadonlySet<string> = new S
 
 export interface Inventory {
   /** Every `data-wid` in the version, with its slide/section ancestry. */
-  wids: ReadonlyMap<string, { slide: string | null; section: string | null; text: string }>;
+  wids: ReadonlyMap<string, { slide: string | null; section: string | null; text: string; deckN?: number }>;
+  /** A deck's slides by `data-slide-id` (P-D1): their place, their own anchor and their title. */
+  slides: ReadonlyMap<string, { n: number; wid: string | null; title: string }>;
 }
 
 /** An anchor id the wire selector `[data-wid="…"]` names exactly: the engine's ids are of this shape. */
 const SAFE_WID = /^[A-Za-z0-9_.:-]{1,100}$/;
+/** A slide id as the engine mints and accepts them (interactive `core/deck.js` SAFE_ID). */
+const SAFE_SLIDE = /^[A-Za-z0-9_-]{1,64}$/;
 
 /** The host's own anchor inventory, from the version HTML it already holds. `DOMParser` runs no script.
  *  An id the selector could not name exactly, or one two elements share, is left out: an op on it
@@ -54,7 +59,13 @@ export function inventoryOf(html: string): Inventory {
   const doc = new DOMParser().parseFromString(html, 'text/html');
   // Labels only: the parsed copy is the host's own, and no `before` is ever read from it.
   for (const el of Array.from(doc.querySelectorAll(BLOCK_PARTS))) el.append(doc.createTextNode(' '));
-  const wids = new Map<string, { slide: string | null; section: string | null; text: string }>();
+  const wids = new Map<string, { slide: string | null; section: string | null; text: string; deckN?: number }>();
+  // P-D1: the top-level slide each anchor sits in, by its PLACE in the deck (never an anchor's index).
+  const tops = topSlideElements(doc);
+  const placeOf = (el: Element): number | undefined => {
+    const i = tops.findIndex((t) => t === el || t.contains(el));
+    return i < 0 ? undefined : i + 1;
+  };
   const seen = new Map<string, number>();
   for (const el of Array.from(doc.querySelectorAll('[data-wid]'))) {
     const id = el.getAttribute('data-wid') ?? '';
@@ -65,9 +76,17 @@ export function inventoryOf(html: string): Inventory {
     if (id === null || !SAFE_WID.test(id) || (seen.get(id) ?? 0) > 1 || wids.has(id)) continue;
     const slide = el.parentElement?.closest('[data-wid^="slide-"]')?.getAttribute('data-wid') ?? null;
     const section = el.parentElement?.closest('section[data-wid], [data-wid^="section-"]')?.getAttribute('data-wid') ?? null;
-    wids.set(id, { slide, section, text: (el.textContent ?? '').replace(/\s+/g, ' ').trim().slice(0, 200) });
+    const deckN = placeOf(el);
+    wids.set(id, { slide, section, text: (el.textContent ?? '').replace(/\s+/g, ' ').trim().slice(0, 200), ...(deckN === undefined ? {} : { deckN }) });
   }
-  return { wids };
+  // A deck's slides, the engine's own (P-D1): only ids the wire can name exactly, each once.
+  const slides = new Map<string, { n: number; wid: string | null; title: string }>();
+  const ids = deckOf(html).filter((d) => d.id !== null && SAFE_SLIDE.test(d.id));
+  for (const d of ids) {
+    if (ids.filter((x) => x.id === d.id).length > 1) continue;
+    slides.set(d.id!, { n: d.n, wid: d.wid, title: d.title });
+  }
+  return { wids, slides };
 }
 
 /** The theme tokens a document defines (`--wi-*` custom properties in its own styles). */
@@ -81,7 +100,10 @@ export function themeTokensOf(html: string): Set<string> {
 export type WireItem =
   | { selector: string; type: 'content-edit'; value: string; before: string }
   | { selector: string; type: 'style-edit'; style: { background?: string; color?: string } }
-  | { selector: string; type: 'remove' };
+  | { selector: string; type: 'remove' }
+  // A deck op (P-D1) is posted to the deck route on its own (`POST /d/:doc/api/deck {expect_head, op}`),
+  // never in a feedback batch; `selector` is the slide's id, for the host's own words about it.
+  | { selector: string; type: 'deck'; op: { type: DeckOpType; slide: string; after?: string | null; text?: string } };
 
 export type OpsCheck = { ok: true; items: WireItem[] } | { ok: false; code: 'bad_request' | 'too_large'; message: string };
 
@@ -95,6 +117,12 @@ export function checkOps(ops: unknown[], inv: Inventory, themeTokens: ReadonlySe
   let bytes = 0;
   try { bytes = new TextEncoder().encode(JSON.stringify(ops)).length; } catch { return { ok: false, code: 'bad_request', message: 'ops are not data' }; }
   if (bytes > LIMITS.writeBytes) return { ok: false, code: 'too_large', message: 'ops are too large' };
+  // A deck op is its own write (the engine lands one version per deck op): never mixed, never two.
+  const deckOps = ops.filter((o) => typeof o === 'object' && o !== null && DECK_OPS.includes((o as { op?: unknown }).op as DeckOpType));
+  if (deckOps.length > 0) {
+    if (ops.length !== 1) return { ok: false, code: 'bad_request', message: 'a slide op is a write of its own' };
+    return checkDeckOp(deckOps[0] as Record<string, unknown>, inv);
+  }
   const items: WireItem[] = [];
   for (const raw of ops) {
     if (typeof raw !== 'object' || raw === null) return { ok: false, code: 'bad_request', message: 'an op is not an object' };
@@ -135,6 +163,27 @@ export function checkOps(ops: unknown[], inv: Inventory, themeTokens: ReadonlySe
     }
   }
   return { ok: true, items };
+}
+
+/** One deck op, checked against the host's own slide inventory of the current version. */
+function checkDeckOp(o: Record<string, unknown>, inv: Inventory): OpsCheck {
+  const type = o['op'] as DeckOpType;
+  const slide = o['slide'];
+  if (typeof slide !== 'string' || !inv.slides.has(slide)) return { ok: false, code: 'bad_request', message: 'a slide op names a slide not in this version' };
+  const after = o['after'];
+  const needsAfter = type === 'slide-insert' || type === 'slide-move';
+  if (needsAfter && !(after === null || (typeof after === 'string' && inv.slides.has(after)))) {
+    return { ok: false, code: 'bad_request', message: 'after names a slide not in this version (null = first)' };
+  }
+  if (type === 'notes-set' && (typeof o['text'] !== 'string' || (o['text'] as string).length > LIMITS.notesChars)) {
+    return { ok: false, code: 'bad_request', message: 'notes are text, at most 20000 characters' };
+  }
+  const op = {
+    type, slide,
+    ...(needsAfter ? { after: after as string | null } : {}),
+    ...(type === 'notes-set' ? { text: o['text'] as string } : {}),
+  };
+  return { ok: true, items: [{ selector: slide, type: 'deck', op }] };
 }
 
 export type { Op };
