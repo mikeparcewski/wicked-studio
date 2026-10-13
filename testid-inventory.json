@@ -13,7 +13,7 @@
   "counts": {
     "files": 214,
     "occurrences": 2597,
-    "static": 2241,
+    "static": 2242,
     "dynamic": 69,
     "computed": 24
   },
@@ -2407,8 +2407,7 @@
     {
       "testId": "desk-new-project",
       "files": [
-        "src/components/desk/Desk.tsx",
-        "src/components/desk/DeskV2.tsx"
+        "src/components/desk/Desk.tsx"
       ]
     },
     {
@@ -2667,6 +2666,12 @@
     },
     {
       "testId": "desk-runs-row",
+      "files": [
+        "src/components/desk/DeskRuns.tsx"
+      ]
+    },
+    {
+      "testId": "desk-runs-row-menu",
       "files": [
         "src/components/desk/DeskRuns.tsx"
       ]
