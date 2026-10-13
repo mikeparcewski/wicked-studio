@@ -840,6 +840,15 @@
     "testing-evals-frame": "evaluate-surface",
     "testing-evals-gap-hint": "evaluate-measures",
     "testing-evals-gaps": "evaluate-stat-gaps",
-    "testing-evals-passed": "evaluate-stat-caught"
+    "testing-evals-passed": "evaluate-stat-caught",
+    "everything-helpers": "agents-page",
+    "everything-helper": "agents-row",
+    "everything-helper-detail": "agents-tech",
+    "everything-helper-signin": "agents-fix",
+    "signin-panel": "agents-modal",
+    "signin-line": "agents-command",
+    "signin-no-line": "agents-issue",
+    "signin-check": "agents-check",
+    "signin-result": "agents-check-result"
   }
 }

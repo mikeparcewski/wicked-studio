@@ -132,8 +132,9 @@ with sync_playwright() as p:
         pi.get_by_test_id("rail-seat-move-button").click()
         dialog = page.get_by_role("dialog")
         dialog.wait_for(state="visible", timeout=8000)
-        check("signin-opens-terminal", "Sign in — pi" in (dialog.text_content() or "")
-              and "pi login" in (dialog.text_content() or ""))
+        # The agent's modal (DES-seats-page §4): its name, and the command to run — never a terminal.
+        check("signin-opens-terminal", page.get_by_test_id("agents-modal").get_attribute("data-agent") == "pi"
+              and "pi login" in (dialog.text_content() or "") and page.locator(".xterm").count() == 0)
         page.screenshot(path=str(SHOTS / f"agent-1on1-desk-signin.png"))
         page.keyboard.press("Escape")
         check("no-rule-for-signin", len(rule_posts(origin)) == 1)

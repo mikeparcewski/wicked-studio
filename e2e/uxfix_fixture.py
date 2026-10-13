@@ -269,6 +269,15 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          # roster_login_lines — {key: line} laid over each seat's `login_invocation` (the daemon's own
          #   command, worker home included). Default {}: only pi's under seat_week.
          "roster_signed_in": {}, "roster_login_lines": {},
+         # roster_probed — (e2e/desk_signin_test.py; DES-seats-page §4.2) [key, ...]: the service has just
+         #   re-checked these seats' sign-in — each answers `probed_at` = now, and `login_check` "live"
+         #   when signed in ("status" when not), so the agent modal's check-again poll sees fresh evidence.
+         "roster_probed": [],
+         # roster_refresh_delay_ms — (DES-seats-page A3b) how long `GET /roster?refresh=<key>` waits
+         #   before answering, like the daemon awaiting that seat's check (the modal's "checking" state
+         #   is observable). The refresh marks the key probed (as `roster_probed`) and answers
+         #   `refresh: {key, outcome: "probed"}`.
+         "roster_refresh_delay_ms": 600,
          # runs_fail — GET /runs answers 500 (studio#466: a failed read is not an empty list).
          "runs_fail": False,
          # gate_move_tail — studio#430 (e2e/desk_gate_moves_test.py; needs `gate_move`): r-review's
@@ -1214,8 +1223,12 @@ def wait_for_skin(page, timeout: int = 15000) -> None:
         timeout=timeout)
 DEFAULT_APPEARANCE = {"accent_h": 230, "accent_s": 74, "accent_l": 68,
                       "logo_url": None, "theme": "dark"}
+# `studio.setup` (DES-seats-page §5.1): an existing install has finished first use, so `/` stays on
+# the Desk; a journey seeds `setup: None` for the fresh-install case (the landing goes to Agents).
+DEFAULT_SETUP = {"completedAt": 1}
 settings_store: dict = {"graphNodeLimit": 150,
-                        "studio.appearance": dict(DEFAULT_APPEARANCE)}
+                        "studio.appearance": dict(DEFAULT_APPEARANCE),
+                        "studio.setup": dict(DEFAULT_SETUP)}
 
 # A custom logo asset for the slice-7 rig (§3.1 / EC16): deliberately NON-SQUARE
 # (2:1) so contain-fit letterboxing — never stretch, never crop — is provable.
@@ -4179,6 +4192,25 @@ ROSTER = [
      "acp": {"binary": "pi-acp", "start_args": [], "transport": "stdio"}},
 ]
 
+def crew_issues(s):
+    """crew's `seatIssues` (packages/crew/src/api/seat-agents.ts) for the facts this fixture's seats
+    carry: signed out (with its sign-in command), a live check that did not answer, opt-in, and an
+    unconfirmed sign-in. Studio owns the words; `message` is crew's one line for unknown codes."""
+    name = s.get("display_name") or s["key"]
+    auth = s.get("auth") or ("signed_in" if s.get("signed_in") is True else "signed_out" if s.get("signed_in") is False else None)
+    sign = [{"purpose": "sign_in", "display": s["login_invocation"]}] if s.get("login_invocation") else []
+    out = []
+    if auth == "signed_out":
+        out.append({"code": "signed_out", "severity": "problem", "params": {}, "message": f"{name} is signed out, so it takes no work until it is signed in", **({"commands": sign} if sign else {})})
+    if auth == "signed_in" and s.get("login_check") == "status":
+        out.append({"code": "live_check_failed", "severity": "warning", "params": {}, "message": f"{name}'s status command says signed in, but its one live request did not answer", **({"commands": sign} if sign else {})})
+    if s.get("optIn"):
+        out.append({"code": "opt_in", "severity": "note", "params": {}, "message": f"{name} is opt-in: it is left out of new work unless you pick it"})
+    if auth == "signed_in" and s.get("login_check") == "unverified":
+        out.append({"code": "unverified", "severity": "note", "params": {}, "message": f"{name}'s sign-in can't be confirmed: it has no status command", **({"commands": sign} if sign else {})})
+    return out
+
+
 # The chat-capable subset (EC44, round-4 corrected polarity): an acp OBJECT
 # is capable; explicit null is not; an ABSENT key is "no config" whenever ANY
 # seat in the roster speaks the field (skip_serializing_if — the engine never
@@ -5684,6 +5716,7 @@ class W2Handler(SimpleHTTPRequestHandler):
                     home_login = state["home_paths"]
                     signed_over = dict(state["roster_signed_in"])
                     lines_over = dict(state["roster_login_lines"])
+                    probed = list(state["roster_probed"])
                 # studio#467: under home_paths the sign-in line names the worker home by its absolute path.
                 login = 'PI_CONFIG_DIR="/tmp/w2/.wicked-worker/pi" pi login' if home_login else "pi login"
                 roster = ([{**s, "login_invocation": login} if s["key"] == "pi" else s for s in ROSTER]
@@ -5694,7 +5727,24 @@ class W2Handler(SimpleHTTPRequestHandler):
                               if s["key"] in signed_over else {}),
                            **({"login_invocation": lines_over[s["key"]]} if s["key"] in lines_over else {})}
                           for s in roster]
-                self._json(200, {"roster": roster})
+                # A3b: `?refresh=<key>` awaits that seat's sign-in check, then answers it fresh.
+                refresh = (urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query).get("refresh") or [None])[0]
+                if refresh is not None:
+                    if refresh not in [x["key"] for x in roster]:
+                        self._json(400, {"error": f"unknown seat '{refresh}'"})
+                        return True
+                    with state_lock:
+                        delay = state["roster_refresh_delay_ms"]
+                        if refresh not in state["roster_probed"]:
+                            state["roster_probed"] = [*state["roster_probed"], refresh]
+                    time.sleep(delay / 1000)
+                    probed = [*probed, refresh]
+                now_iso = iso(int(time.time() * 1000))
+                roster = [{**s, "probed_at": now_iso, "login_check": "live" if s.get("auth") == "signed_in" or s.get("signed_in") is True else "status"}
+                          if s["key"] in probed else s for s in roster]
+                # api-types 0.115.0 (A6): every seat carries crew's coded issues, derived like crew's seatIssues.
+                roster = [s if "issues" in s else {**s, "issues": crew_issues(s)} for s in roster]
+                self._json(200, {"roster": roster, **({"refresh": {"key": refresh, "outcome": "probed"}} if refresh is not None else {})})
             return True
         if path == "/api/v1/roster/record":
             with state_lock:
@@ -7827,6 +7877,12 @@ class W2Handler(SimpleHTTPRequestHandler):
                         settings_store.pop("studio.view", None)
                     else:
                         settings_store["studio.view"] = body["view_prefs"]
+                # First use: seed `studio.setup` (a dict replaces it; None removes it: a fresh install).
+                if "setup" in body:
+                    if body["setup"] is None:
+                        settings_store.pop("studio.setup", None)
+                    else:
+                        settings_store["studio.setup"] = body["setup"]
                 state.update({k: v for k, v in body.items() if k in state})
                 snapshot = dict(state)
             return self._json(200, {"ok": True, "state": snapshot})

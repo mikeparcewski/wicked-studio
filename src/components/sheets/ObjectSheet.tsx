@@ -17,7 +17,7 @@ import { splitAskContext } from '../../board/askPack.js';
 import { unitStepName } from '../../board/chainModel.js';
 import { UnitConsidered } from '../decisions/ConsideredLine.js';
 import { useRunModel } from '../../hooks/useRunModel.js';
-import type { Navigate } from '../../hooks/useRoute.js';
+import { agentFixPath, type Navigate } from '../../hooks/useRoute.js';
 import { useRoster } from '../../hooks/useRoster.js';
 import { useRunRawEvents } from '../../hooks/useRunRawEvents.js';
 import { useCapabilities } from '../../store/capabilities.js';
@@ -28,7 +28,7 @@ import { DeliveryFreezeSwitch } from '../DeliveryFreezeSwitch.js';
 import { StandingOrdersPanel } from '../StandingOrdersPanel.js';
 import { FileViewer } from '../FileViewer.js';
 import { seatStandingWord } from '../HealthRailSection.js';
-import { SignInPanel } from '../SignInPanel.js';
+import { AgentModal } from '../agents/AgentModal.js';
 import { signInLapsed } from '../../board/deskModel.js';
 import { LiveNarration } from '../LiveNarration.js';
 import { RunSectionBody, runSections, type AccordionId } from '../RightPanel.js';
@@ -90,7 +90,7 @@ export function ObjectSheet({ runs, navigate, needCount }: { runs: SessionView[]
   const { ref, tab } = open;
   switch (ref.kind) {
     case 'step': return <StepSheet key={objectAttr(ref)} r={ref} tab={tab} runs={runs} navigate={navigate} />;
-    case 'helper': return <HelperSheet key={objectAttr(ref)} r={ref} tab={tab} runs={runs} />;
+    case 'helper': return <HelperSheet key={objectAttr(ref)} r={ref} tab={tab} runs={runs} navigate={navigate} />;
     case 'session': return <SessionSheet key={objectAttr(ref)} r={ref} tab={tab} runs={runs} navigate={navigate} />;
     case 'desk': return <DeskSheet tab={tab} runs={runs} navigate={navigate} needCount={needCount} />;
   }
@@ -212,7 +212,7 @@ function StepSheet({ r, tab, runs, navigate }: { r: Extract<ObjectRef, { kind: '
   );
 }
 
-function SeatFacts({ seat }: { seat: RosterSeat | undefined }): React.ReactElement {
+function SeatFacts({ seat, navigate }: { seat: RosterSeat | undefined; navigate: Navigate }): React.ReactElement {
   // Amendment 5, decision 5: a signed-out helper's sheet offers the one plain-words sign-in panel.
   const [signIn, setSignIn] = useState(false);
   if (seat === undefined) return <p className="wk-session-grey">This helper is not on the roster.</p>;
@@ -226,12 +226,14 @@ function SeatFacts({ seat }: { seat: RosterSeat | undefined }): React.ReactEleme
       {signInLapsed(seat) && (
         <button type="button" data-testid="sheet-seat-signin" onClick={() => setSignIn(true)} className="wk-btn wk-btn--secondary">Sign in</button>
       )}
-      {signIn && <SignInPanel seat={seat} onClose={() => setSignIn(false)} />}
+      {/* DES-seats-page §2.2: the same modal inline, plus a door to the agent on the Agents page. */}
+      <p className="wk-sheet-hint"><a className="wk-link" href={agentFixPath(seat.key)} data-testid="sheet-seat-agents" onClick={(e) => { e.preventDefault(); closeSheet(); navigate(agentFixPath(seat.key)); }}>Open in Agents</a></p>
+      {signIn && <AgentModal agentKey={seat.key} onClose={() => setSignIn(false)} />}
     </div>
   );
 }
 
-function HelperSheet({ r, tab, runs }: { r: Extract<ObjectRef, { kind: 'helper' }>; tab: string; runs: SessionView[] }): React.ReactElement {
+function HelperSheet({ r, tab, runs, navigate }: { r: Extract<ObjectRef, { kind: 'helper' }>; tab: string; runs: SessionView[]; navigate: Navigate }): React.ReactElement {
   const view = runs.find((v) => v.session.id === r.runId) ?? null;
   const roster = useRoster();
   const seat = roster?.find((s) => s.key === r.cli);
@@ -275,7 +277,7 @@ function HelperSheet({ r, tab, runs }: { r: Extract<ObjectRef, { kind: 'helper' 
           ))}
         </ul>
       )}
-      {tab === 'signin' && (roster === null ? <p className="wk-session-grey">Reading the roster…</p> : <SeatFacts seat={seat} />)}
+      {tab === 'signin' && (roster === null ? <p className="wk-session-grey">Reading the roster…</p> : <SeatFacts seat={seat} navigate={navigate} />)}
     </Sheet>
   );
 }
@@ -349,7 +351,7 @@ function SessionSheet({ r, tab: asked, runs, navigate }: { r: Extract<ObjectRef,
       )}
       {tab === 'evidence' && newest !== null && <EvidenceTab runId={newest.session.id} />}
       {tab === 'activity' && newest !== null && <ActivityTail view={newest} />}
-      {tab === 'signins' && <SignIns roster={roster} />}
+      {tab === 'signins' && <SignIns roster={roster} navigate={navigate} />}
       {newest !== null && sections.some((s) => s.id === tab) && <RunSection id={tab as AccordionId} view={newest} runs={runs} navigate={navigate} />}
     </Sheet>
   );
@@ -586,7 +588,7 @@ function ActivityTail({ view }: { view: SessionView }): React.ReactElement {
   );
 }
 
-function SignIns({ roster }: { roster: RosterSeat[] | null }): React.ReactElement {
+function SignIns({ roster, navigate }: { roster: RosterSeat[] | null; navigate: Navigate }): React.ReactElement {
   // Amendment 5, decision 5: a signed-out seat's row offers the one plain-words sign-in panel.
   const [signIn, setSignIn] = useState<RosterSeat | null>(null);
   if (roster === null) return <p className="wk-session-grey">Reading the roster…</p>;
@@ -597,10 +599,10 @@ function SignIns({ roster }: { roster: RosterSeat[] | null }): React.ReactElemen
         <li key={s.key} data-testid="sheet-signin-row" data-seat={s.key} className="wk-sheet-line">
           <b>{s.display_name || s.key}</b> — {helperStanding(s)}
           {seatStandingWord(s).kind === 'ineligible' && <TechDetails text={seatStandingWord(s).detail ?? ''} />}
-          {signInLapsed(s) && <> <button type="button" data-testid="sheet-signin-action" data-seat={s.key} onClick={() => setSignIn(s)} className="wk-btn wk-btn--secondary">Sign in</button></>}
+          {signInLapsed(s) && <> <button type="button" data-testid="sheet-signin-action" data-seat={s.key} onClick={() => setSignIn(s)} className="wk-btn wk-btn--secondary">Sign in</button>{' '}<a className="wk-link" href={agentFixPath(s.key)} data-testid="sheet-signin-agents" onClick={(e) => { e.preventDefault(); closeSheet(); navigate(agentFixPath(s.key)); }}>Open in Agents</a></>}
         </li>
       ))}
-      {signIn !== null && <SignInPanel seat={signIn} onClose={() => setSignIn(null)} />}
+      {signIn !== null && <AgentModal agentKey={signIn.key} onClose={() => setSignIn(null)} />}
     </ul>
   );
 }
@@ -657,7 +659,7 @@ function DeskSheet({ tab, runs, navigate, needCount }: { tab: string; runs: Sess
           {diag === null && <li className="wk-session-grey">Asking Studio's service…</li>}
         </ul>
       )}
-      {tab === 'signins' && <SignIns roster={roster} />}
+      {tab === 'signins' && <SignIns roster={roster} navigate={navigate} />}
       {tab === 'helpers' && <HelpersList runs={live} />}
       {tab === 'hold' && (
         <div data-testid="sheet-hold" className="wk-sheet-section">

@@ -1,22 +1,19 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../api/client.js';
 import { getDiagnostics, isDiagnosticsUnsupported } from '../api/diagnostics.js';
-import type { DiagnosticsGovernance, RosterSeat } from '../api/types.js';
+import type { DiagnosticsGovernance } from '../api/types.js';
 import { useConnectionStore } from '../store/connection.js';
-import { getCachedRoster, subscribeRoster } from '../store/rosterCache.js';
 
 /**
  * The rail-level health dot (studio#421 rail polish, change 3): the answered-on-mount heartbeat
- * behind the rail's Health link — exactly the registry's pre-read (DES-STUDIO-REBUILD-001
- * §4.2 / Amendment 5): `GET /health` + `GET /roster` + `GET /diagnostics`, one guarded mount read
- * each, plus the socket. NEVER `GET /roster/record?days=7` here — the 7-day week is the health
- * page's own read; the rail dot is answered from the roster list alone (EC30-strict, DES-UX-001 §7.9-1).
+ * behind the rail's Health link — CONNECTION PLUS EVIDENCE only (DES-seats-page §2.1): the socket,
+ * `GET /health` and `GET /diagnostics`' governance store and dead letters. Agent standing (sign-in,
+ * benches, the roster read itself) left this tint for the Agents link's dot, so one concern has
+ * one signal; a failed roster read shows on the Agents link and page, never here.
  *
  * Every read is fire-and-forget `Promise.resolve().then(...).catch(...)`, so a proxy shell with none
- * of these implemented can never crash the rail (S15c); the INACTIVE / council-eligible flags read
- * the SYNC roster cache first (zero requests on first paint, DES-FEEDBACK-001 §6.2). A diagnostics
- * rejection is a DEGRADED dot, never a red one — only an answered-dirty store makes it red, the
- * section's own rule.
+ * of these implemented can never crash the rail (S15c). A diagnostics rejection is a DEGRADED dot,
+ * never a red one — only an answered-dirty store makes it red, the section's own rule.
  */
 /** Fired by /health whenever it (re)reads its checks, so the rail's dot never disagrees with the page. */
 export const HEALTH_RECHECKED = 'wicked:health-rechecked';
@@ -25,8 +22,6 @@ export function useRailHealthDot(): { heartState: 'healthy' | 'degraded' | 'unhe
   const wsStatus = useConnectionStore((s) => s.status);
   const [health, setHealth] = useState<{ status?: string } | null>(null);
   const [healthError, setHealthError] = useState(false);
-  const [roster, setRoster] = useState<RosterSeat[] | null>(() => getCachedRoster());
-  const [rosterError, setRosterError] = useState(false);
   const [gov, setGov] = useState<{ kind: 'absent' | 'error' } | { kind: 'ok'; governance: DiagnosticsGovernance }>({ kind: 'absent' });
   // The dot is re-read when it could have changed (codex review r1): each time the socket
   // (re)connects and each time the window regains focus — never a polling loop.
@@ -50,34 +45,24 @@ export function useRailHealthDot(): { heartState: 'healthy' | 'degraded' | 'unhe
       .then(() => api.getHealth())
       .then((h: { status?: string }) => { if (live) { setHealth(h); setHealthError(false); } }, () => { if (live) setHealthError(true); });
     void Promise.resolve()
-      .then(() => api.getRoster())
-      .then(({ roster: seats }: { roster: RosterSeat[] }) => {
-        if (live && Array.isArray(seats)) { setRoster(seats); setRosterError(false); }
-      }, () => { if (live) setRosterError(true); });
-    void Promise.resolve()
       .then(() => getDiagnostics())
       .then((d: { governance?: DiagnosticsGovernance }) => {
         if (!live) return;
         setGov(d.governance === undefined ? { kind: 'absent' } : { kind: 'ok', governance: d.governance });
       }, (e: unknown) => { if (live) setGov(isDiagnosticsUnsupported(e) ? { kind: 'absent' } : { kind: 'error' }); });
-    const un = subscribeRoster((r) => { if (live) { setRoster(r); setRosterError(false); } });
-    return () => { live = false; un(); };
+    return () => { live = false; };
   }, [epoch]);
 
-  const seats = roster ?? [];
   const govDirty = gov.kind === 'ok' && (gov.governance.store === null || gov.governance.findings.some((f) => f.severity === 'error'));
   const sick =
     wsStatus === 'disconnected'
-    || govDirty
-    || seats.some((s) => s.health?.status === 'inactive');
+    || govDirty;
   const warning =
     wsStatus === 'connecting'
     || healthError
-    || rosterError
     || (health !== null && health.status !== 'ok')
     || gov.kind === 'error'
-    || (gov.kind === 'ok' && gov.governance.findings.some((f) => f.severity === 'warning'))
-    || seats.some((s) => (s as { council_eligible?: unknown }).council_eligible === false && s.health?.status !== 'inactive');
+    || (gov.kind === 'ok' && gov.governance.findings.some((f) => f.severity === 'warning'));
   const heartState: 'healthy' | 'degraded' | 'unhealthy' = sick ? 'unhealthy' : warning ? 'degraded' : 'healthy';
   return {
     heartState,

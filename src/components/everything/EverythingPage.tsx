@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../../api/client.js';
 import type { Project } from '../../api/types.js';
-import type { RosterSeat, SessionView } from '../../api/types.js';
-import { deskReadState, needsByRun, needTextByRun, railGroups, sessionLine, signInLapsed, type RailGroup } from '../../board/deskModel.js';
+import type { SessionView } from '../../api/types.js';
+import { deskReadState, needsByRun, needTextByRun, railGroups, sessionLine, type RailGroup } from '../../board/deskModel.js';
 import { canDeliver, DELIVERY_LABEL, deliveryOf, resolveDelivery } from '../delivery.js';
 import { useIsSystemWorkflow } from '../../store/workflowCache.js';
 import {
@@ -14,7 +14,6 @@ import { sessionPath, type SessionState } from '../../board/sessionModel.js';
 import { filterRunRows, pageRunRows, runRows, sortRunRows, type RunSortKey, type SortDir } from '../../board/runsTableModel.js';
 import { openSheet } from '../../store/sheets.js';
 import { useBoardModel } from '../../hooks/useBoardModel.js';
-import { useRoster } from '../../hooks/useRoster.js';
 import { projectDetailPath, type Navigate } from '../../hooks/useRoute.js';
 import { projectTestsPath as testsPath } from '../../api/testing.js';
 import { useCapabilities } from '../../store/capabilities.js';
@@ -26,8 +25,6 @@ import { useDisplayText } from '../../hooks/useHomePath.js';
 import { useMembershipStore } from '../../store/membership.js';
 import { useDeliveredNow } from '../../store/postHocDeliver.js';
 import { useProjectsStore } from '../../store/projects.js';
-import { seatStandingWord } from '../HealthRailSection.js';
-import { SignInPanel } from '../SignInPanel.js';
 import { jobTitle } from '../../board/deskWords.js';
 import { runTechParts, Tech } from '../Tech.js';
 import { ProjectEntry, ProjectsTab } from './ProjectsTab.js';
@@ -42,7 +39,6 @@ import { EmptyState, OverflowMenu, Skeleton, StateBanner, TechDetails } from '..
 import { readErrorKind } from '../../api/errors.js';
 import { statusWord, chatStatusWord, type StatusTone } from '../../board/statusWords.js';
 import { absTime, relTime } from '../../board/relTime.js';
-import { displaySeats, isReviewerOnly, seatLabel } from '../../board/seatNames.js';
 import { FinishedRunMenu } from './FinishedRunMenu.js';
 
 /**
@@ -92,7 +88,7 @@ export function EverythingPage({ runs, runsLoaded, runsError = null, onRetryRuns
       <div className="wk-desk-scroll" data-place-scroll="everything">
         <header className="wk-everything-head">
           <h1 className="wk-page-title">Everything</h1>
-          <p className="wk-page-intro">Every session, everything made, your helpers, and what was handed over.</p>
+          <p className="wk-page-intro">Every session, everything made, and what was handed over.</p>
           <div role="tablist" aria-label="Everything" className="wk-everything-tabs">
             {EVERYTHING_TABS.map((tab, i) => (
               <button
@@ -120,7 +116,6 @@ export function EverythingPage({ runs, runsLoaded, runsError = null, onRetryRuns
             <SessionsTab runs={runs} runsLoaded={runsLoaded} runsError={runsError} onRetryRuns={onRetryRuns} needRows={needRows} q={{ ...q, project }} navigate={navigate} go={go} />
           )}
           {q.tab === 'made' && <MadeTab runs={runs} q={q} navigate={navigate} go={go} />}
-          {q.tab === 'helpers' && <HelpersTab />}
           {q.tab === 'handed' && <HandedTab runs={runs} runsLoaded={runsLoaded} runsError={runsError} onRetryRuns={onRetryRuns} go={go} />}
           {q.tab === 'projects' && <ProjectsTab q={q} runs={runs} runsLoaded={runsLoaded} runsError={runsError} onRetryRuns={onRetryRuns} needRows={needRows} navigate={navigate} />}
         </section>
@@ -838,91 +833,6 @@ function MadeTab({ runs, q, navigate, go }: { runs: SessionView[]; q: Everything
         </ul>
       )}
     </div>
-  );
-}
-
-// ── Helpers ──────────────────────────────────────────────────────────────────────────────────
-
-function HelpersTab(): React.ReactElement {
-  const roster = useRoster();
-  // Amendment 5, decision 5: Sign in opens the one plain-words panel; the row clears when the
-  // re-read finds the seat back (useRoster follows the deposit).
-  const [signIn, setSignIn] = useState<RosterSeat | null>(null);
-  // studio#687 row 38: the CLIs only (no non-CLI entries). A reviewer-only seat that shares its name
-  // with a helper folds into that helper's row ("Also reviews work"), so no name is listed twice.
-  const seats = roster === null ? null : foldReviewers(displaySeats(roster));
-  return (
-    <div data-testid="everything-helpers" data-count={seats?.length ?? ''}>
-      <p className="wk-everything-note">The AI helpers Studio can give work to, and whether each is signed in.</p>
-      {signIn !== null && <SignInPanel seat={signIn} onClose={() => setSignIn(null)} />}
-      {seats === null && <Skeleton data-testid="everything-checking" rows={4} />}
-      {seats !== null && seats.length === 0 && <EmptyState data-testid="everything-empty" title="No helper is set up yet." body="Add one in Settings." />}
-      {seats !== null && seats.length > 0 && (
-        <ul className="wk-everything-list">
-          {seats.map(({ seat, alsoReviews }) => <HelperRow key={seat.key} seat={seat} alsoReviews={alsoReviews} onSignIn={() => setSignIn(seat)} />)}
-        </ul>
-      )}
-    </div>
-  );
-}
-
-/**
- * One helper's line in plain words (studio#687 rows 38, 76): "Signed in", "Signed out" with a Sign in
- * button, "No sign-in needed", "Reviewer only", "Not available" with the helper's own words behind
- * technical details. Never "council", "seat" or "eligible".
- */
-function helperLine(seat: RosterSeat): { words: string[]; tone: StatusTone; signIn: boolean; detail: string | null; title: string | null } {
-  const standing = seatStandingWord(seat);
-  const health = seat.health;
-  const words: string[] = [];
-  const signIn = signInLapsed(seat);
-  if (isReviewerOnly(seat)) words.push('Reviewer only');
-  if (health?.status === 'inactive') {
-    words.push(signIn ? 'Signed out' : 'Not available');
-    const raw = health.message !== undefined && health.message !== '' ? health.message : null;
-    return { words, tone: 'fail', signIn, detail: raw, title: null };
-  }
-  const tier = typeof (seat as Record<string, unknown>)['free_tier'] === 'string' ? String((seat as Record<string, unknown>)['free_tier']) : '';
-  // The sign-in state is always said (the intro promises it); a role or "not used for checks" rides beside it.
-  const auth = standing.auth;
-  const signedWord = auth === 'not_required' ? 'No sign-in needed'
-    : auth === 'signed_in' || seat.signed_in === true ? 'Signed in'
-    : auth === 'signed_out' || seat.signed_in === false ? 'Signed out'
-    : null;
-  words.unshift(signedWord ?? (health === undefined ? 'Status unknown' : 'Ready'));
-  if (standing.kind === 'ineligible' && !isReviewerOnly(seat)) words.push('Not used for checks');
-  const tone: StatusTone = health === undefined ? 'quiet' : signIn || standing.kind === 'signed-out' ? 'gate' : 'ok';
-  return { words, tone, signIn, detail: null, title: tier !== '' ? `Free tier: ${tier}` : null };
-}
-
-/** One row per helper name: a reviewer-only seat named like a helper rides that helper's row. */
-function foldReviewers(seats: readonly RosterSeat[]): { seat: RosterSeat; alsoReviews: boolean }[] {
-  const out: { seat: RosterSeat; alsoReviews: boolean }[] = [];
-  const reviewers = seats.filter(isReviewerOnly);
-  for (const seat of seats) {
-    if (isReviewerOnly(seat)) continue;
-    out.push({ seat, alsoReviews: reviewers.some((r) => seatLabel(r) === seatLabel(seat)) });
-  }
-  for (const r of reviewers) if (!out.some((o) => seatLabel(o.seat) === seatLabel(r))) out.push({ seat: r, alsoReviews: false });
-  return out;
-}
-
-function HelperRow({ seat, alsoReviews, onSignIn }: { seat: RosterSeat; alsoReviews: boolean; onSignIn: () => void }): React.ReactElement {
-  const standing = seatStandingWord(seat);
-  const showText = useDisplayText();
-  const state = seat.health === undefined ? 'unknown' : seat.health.status;
-  const base = helperLine(seat);
-  const line = alsoReviews ? { ...base, words: [...base.words, 'Also reviews work'] } : base;
-  return (
-    <li data-testid="everything-helper" data-seat={seat.key} data-standing={standing.kind} data-health={state} className="wk-desk-session wk-everything-row wk-everything-actrow">
-      <span aria-hidden className={`wk-everything-dot wk-everything-dot--${line.tone}`} />
-      <span className="wk-desk-need-body wk-everything-grow">
-        <span className="wk-desk-session-title">{seatLabel(seat)}</span>
-        <span className="wk-desk-need-line" title={line.title ?? undefined}>{line.words.join(' · ')}</span>
-        {line.detail !== null && <TechDetails data-testid="everything-helper-detail" text={showText(line.detail)} />}
-      </span>
-      {line.signIn && <button type="button" onClick={onSignIn} data-testid="everything-helper-signin" className="wk-btn wk-btn--secondary wk-btn--sm">Sign in</button>}
-    </li>
   );
 }
 
