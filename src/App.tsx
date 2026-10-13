@@ -20,7 +20,7 @@ import { ProjectRequirementsPage } from './components/product/ProjectRequirement
 import { CampaignsRedirect, RouteRedirect } from './components/RouteRedirect.js';
 import { PluginsPage } from './components/editors/EditorPluginsSettings.js';
 import { McpInspectPage } from './components/editors/McpInspectPage.js';
-import { AGENTS_PATH, AgentsPage } from './components/agents/AgentsPage.js';
+import { AGENTS_PATH, AgentsPanel } from './components/agents/AgentsPage.js';
 import { useFirstUseLanding } from './components/agents/useFirstUseLanding.js';
 import { McpToolsPage } from './components/McpToolsPage.js';
 import { SteeringPage } from './components/SteeringPage.js';
@@ -36,9 +36,8 @@ import { ConnectionStatus } from './components/ConnectionStatus.js';
 import { SystemSettings } from './components/SystemSettings.js';
 import { ThemePage } from './components/ThemePage.js';
 import { HealthPage } from './components/HealthPage.js';
-import { parseRoute } from './hooks/useRoute.js';
+import { parseRoute, projectDetailPath } from './hooks/useRoute.js';
 import { DeskV2, deskTabPath, type HostedTab } from './components/desk/DeskV2.js';
-import { AgentsTabPending } from './components/desk/AgentsTabPending.js';
 import { useDeskStream } from './store/deskStream.js';
 import { SessionRail } from './components/desk/SessionRail.js';
 import { RailDrawer } from './components/ui/RailDrawer.js';
@@ -172,11 +171,16 @@ export function App(): React.ReactElement {
 
   /** Desk hosted tabs: render the page at the tab's address, with the project page's scope. */
   const renderHosted = (tab: HostedTab, at: string, project: string | null): React.ReactNode => {
-    if (tab === 'agents') {
-      // The Agents page (lane studio-agents-page) mounts here when it lands; until then the tab says so.
-      return <AgentsTabPending navigate={navigate} />;
-    }
     const u = new URL(at.startsWith('/') ? at : `/${at}`, 'http://studio.local');
+    if (tab === 'agents') {
+      // The Agents page is this tab (no page chrome). An agent's modal (`fix`) and first use (`setup`)
+      // ride either the old `/agents?…` address (`at`) or the tab's own query once the panel navigates.
+      const q = new URLSearchParams(u.search);
+      const page = new URLSearchParams(search);
+      for (const k of ['fix', 'setup']) { const v = page.get(k); if (v !== null) q.set(k, v); }
+      const qs = q.toString();
+      return <AgentsPanel search={qs === '' ? '' : `?${qs}`} navigate={navigate} basePath={`${project === null ? '/' : projectDetailPath(project)}?tab=agents`} />;
+    }
     const r = parseRoute(u.pathname);
     const hs = u.search;
     if (tab === 'repositories' && project === null) {
@@ -578,10 +582,6 @@ export function App(): React.ReactElement {
     // matrix and Approve / Revoke. `?server=<name>` deep-links a server row open.
     if (panel === 'learn') {
       return <LearnPage navigate={navigate} />;
-    }
-    // `/agents` — the Agents page (DES-seats-page): one row per AI agent, `?fix=<key>` opens its modal.
-    if (panel === 'agents') {
-      return <AgentsPage search={search} navigate={navigate} />;
     }
     if (panel === 'plugins') {
       return (

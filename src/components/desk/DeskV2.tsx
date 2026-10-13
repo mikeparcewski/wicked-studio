@@ -9,7 +9,7 @@ import {
   agentRows, agentsOf, governanceOf, AGENT_WORKFLOW_NOTE, PARTIAL_RECORD_NOTE, bucketsOf, callouts, DEFAULT_REFINE, GROUP_BYS, jobSeries, OUTCOMES, outcomeOf, projectOf, RANGES,
   refineRuns, spendAvailability, spendSeries, spendTotals as projectSpend, stepFor, outcomeRows, sum, workflowLabel, workflowOf, workflowRows, type AcpFallbacks, type Callout, type GroupBy, type GroupNames, type RangeDays, type Refine,
 } from '../../board/deskInsights.js';
-import { deskReadState, lapsedSeatChores, needRunId, noSignedInHelper } from '../../board/deskModel.js';
+import { deskReadState, lapsedSeatChores, needRunId } from '../../board/deskModel.js';
 import { deadletterChore } from '../../board/repairMoves.js';
 import { useDeadletterReplay } from '../../hooks/useRepairMoves.js';
 import { ReplayMove } from '../ReplayMove.js';
@@ -40,7 +40,7 @@ import { openLaunchWizard } from '../../store/launchWizard.js';
 import { useProjectsStore } from '../../store/projects.js';
 import { openSheet } from '../../store/sheets.js';
 import { CaptureDrop } from '../CaptureDrop.js';
-import { SignInPanel } from '../SignInPanel.js';
+import { AgentModal } from '../agents/AgentModal.js';
 import { StandingOrdersPanel } from '../StandingOrdersPanel.js';
 import { agentColor, AreaChart, catColor, ChartCard, OutcomeBreakdown, outcomeColor, StackedBars, type BarSeries, type ChartState } from '../charts/Chart.js';
 import { liveRows } from '../../board/deskInsights.js';
@@ -280,9 +280,8 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
   const few = kept.length < SMALL_SAMPLE;
   const delivered = kept.filter((v) => { const d = (v.session as { delivery?: unknown }).delivery; return d === 'delivered' || d === 'pushed'; }).length;
   const chores = useMemo(() => lapsedSeatChores(roster), [roster]);
-  const leadWithSignIn = noSignedInHelper(roster) && chores.length > 0;
   const [choresOpen, setChoresOpen] = useState(false);
-  const choresGrouped = chores.length > 2 && !leadWithSignIn;
+  const choresGrouped = chores.length > 2;
   const choresFolded = choresGrouped && !choresOpen;
   const [governanceSelf, setGovernanceSelf] = useState<DiagnosticsGovernance | null>(null);
   const rereadGovernance = useCallback(() => { getDiagnostics().then((d) => setGovernanceSelf(d.governance ?? null), () => undefined); }, []);
@@ -296,11 +295,8 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
   const handover = useHandover(runs, failedAt);
   // The chores ride at the top of the inbox (they need a person too); the band never changes height.
   const choresBlock = (chores.length > 0 || states.frozen || states.away || dead !== null || replaying) ? (
-    <section data-testid="desk-chores" aria-label="For whoever runs studio" data-lead={leadWithSignIn ? 'true' : 'false'} className="wk-inbox-chores">
+    <section data-testid="desk-chores" aria-label="For whoever runs studio" className="wk-inbox-chores">
       <p className="wk-need-section">For whoever runs studio{chores.length > 0 ? ` · ${chores.length}` : ''}</p>
-      {leadWithSignIn && (
-        <p data-testid="desk-signin-lead" className="wk-inbox-chore-lead">No AI agent is signed in yet, so nothing can run. Pick one below and Sign in shows the one command to run.</p>
-      )}
       <DeskStateRows frozen={states.frozen} away={states.away} />
       {(dead !== null || replaying) && (
         <div data-testid="desk-chore" data-chore="deadletters" className="wk-inbox-chore">
@@ -503,7 +499,7 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
           {projectId !== undefined && HOSTED_NOTE[tab] !== null && <p className="wk-desk2-hosted-note" data-testid="desk-hosted-note">{HOSTED_NOTE[tab]}</p>}
           {hosted?.(tab, query.get('at') ?? HOSTED_HOME[tab], projectId ?? null)}
         </div>
-        {signIn !== null && <SignInPanel seat={signIn} onClose={() => setSignIn(null)} />}
+        {signIn !== null && <AgentModal agentKey={signIn.key} onClose={() => setSignIn(null)} />}
       </div>
     );
   }
@@ -518,7 +514,7 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
         {tabs}
         {tab === 'work' ? work : tab === 'runs' ? runsTab : tab === 'report' ? report : understand}
       </div>
-      {signIn !== null && <SignInPanel seat={signIn} onClose={() => setSignIn(null)} />}
+      {signIn !== null && <AgentModal agentKey={signIn.key} onClose={() => setSignIn(null)} />}
     </div>
   );
 }

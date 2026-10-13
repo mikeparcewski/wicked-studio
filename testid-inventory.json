@@ -11,9 +11,9 @@
   "version": 1,
   "studioVersion": "0.7.13",
   "counts": {
-    "files": 218,
-    "occurrences": 2633,
-    "static": 2267,
+    "files": 217,
+    "occurrences": 2631,
+    "static": 2266,
     "dynamic": 69,
     "computed": 24
   },
@@ -1944,12 +1944,6 @@
       ]
     },
     {
-      "testId": "desk-agents-pending",
-      "files": [
-        "src/components/desk/AgentsTabPending.tsx"
-      ]
-    },
-    {
       "testId": "desk-analyses-past",
       "files": [
         "src/components/desk/DeskUnderstand.tsx"
@@ -2748,8 +2742,7 @@
     {
       "testId": "desk-signin-lead",
       "files": [
-        "src/components/desk/Desk.tsx",
-        "src/components/desk/DeskV2.tsx"
+        "src/components/desk/Desk.tsx"
       ]
     },
     {

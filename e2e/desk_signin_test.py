@@ -158,22 +158,17 @@ with sync_playwright() as p:
           and not any(r.startswith("POST /terminals") for r in requests), **{k: v for k, v in hp.items() if k != "text"})
     page.keyboard.press("Escape")
 
-    # ── 5. a first-run Desk with no signed-in helper leads with the sign-in ───────
+    # ── 5. a first run with no signed-in agent lands on the Agents tab's setup steps ───────
+    # (the Desk's old "No AI agent is signed in yet" lead is gone: the Agents tab teaches sign-in)
     set_fixture(origin, seat_week=False, roster_signed_in={"claude": False, "codex": False, "agy": False, "pi": False})
     page.goto(f"{origin}/", wait_until="networkidle")
-    page.get_by_test_id("desk").wait_for(state="visible", timeout=15000)
-    page.get_by_test_id("desk-signin-lead").wait_for(state="visible", timeout=10000)
-    lead = page.evaluate("""() => {
-      // Desk v2: the chores lead the Needs-you inbox's list (the first thing in it).
-      const main = document.querySelector('[data-testid="desk-inbox-list"]');
-      const first = main ? main.firstElementChild?.dataset.testid : null;
-      const chores = document.querySelector('[data-testid="desk-chores"]');
-      return { first, lead: chores?.dataset.lead, text: document.querySelector('[data-testid="desk-signin-lead"]')?.innerText,
-               rows: document.querySelectorAll('[data-testid="desk-chore"] [data-testid="desk-chore-signin"]').length };
-    }""")
+    page.get_by_test_id("agents-setup").wait_for(state="visible", timeout=15000)
+    lead = page.evaluate("""() => ({ tab: new URLSearchParams(location.search).get('tab'),
+      at: new URLSearchParams(location.search).get('at'),
+      deskLead: !!document.querySelector('[data-testid="desk-signin-lead"]'),
+      rows: document.querySelectorAll('[data-testid="agents-row"]').length })""")
     page.screenshot(path=str(SHOTS / "desk-signin-firstrun.png"))
-    check("first-run", lead["first"] == "desk-chores" and lead["lead"] == "true" and lead["rows"] >= 4
-          and "No AI agent is signed in yet" in (lead["text"] or ""), **lead)  # Desk v2: Helpers became Agents
+    check("first-run", lead["tab"] == "agents" and "setup=1" in (lead["at"] or "") and not lead["deskLead"] and lead["rows"] >= 4, **lead)
 
     check("no-errors", not errors, errors=errors[:5])
     browser.close()

@@ -12,7 +12,6 @@ export const PAGE_NAMES = {
   mcp: 'MCP',
   mcpInspect: 'MCP inspector',
   plugins: 'Plugins',
-  agents: 'Agents',
   steering: 'Steering',
   testing: 'Testing',
   evals: 'Evals',
