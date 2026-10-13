@@ -179,7 +179,9 @@ export function App(): React.ReactElement {
       const page = new URLSearchParams(search);
       for (const k of ['fix', 'setup']) { const v = page.get(k); if (v !== null) q.set(k, v); }
       const qs = q.toString();
-      return <AgentsPanel search={qs === '' ? '' : `?${qs}`} navigate={navigate} basePath={`${project === null ? '/' : projectDetailPath(project)}?tab=agents`} />;
+      return <div className="wk-desk2-hosted-scroll" data-testid="desk-agents-host">
+        <AgentsPanel search={qs === '' ? '' : `?${qs}`} navigate={navigate} basePath={`${project === null ? '/' : projectDetailPath(project)}?tab=agents`} />
+      </div>;
     }
     const r = parseRoute(u.pathname);
     const hs = u.search;

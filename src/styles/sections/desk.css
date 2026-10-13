@@ -636,6 +636,8 @@
 .wk-desk2--hosted { display: flex; flex-direction: column; min-height: 0; }
 .wk-desk2-hosted-head { flex: 0 0 auto; display: flex; flex-direction: column; gap: var(--space-5, 20px); padding: var(--space-6) var(--space-8) 0; }
 .wk-desk2-hosted { flex: 1 1 auto; min-height: 0; display: flex; }
+/* A hosted panel without its own frame (Agents): the Desk's gutters, scrolling inside the tab. */
+.wk-desk2-hosted-scroll { flex: 1 1 auto; min-width: 0; min-height: 0; overflow-y: auto; padding: var(--space-6) var(--space-8) var(--space-8); }
 .wk-understand2 { display: flex; flex-direction: column; gap: var(--d2-gap); }
 .wk-pick { display: flex; flex-direction: column; gap: var(--space-4); }
 .wk-pick-head { display: flex; align-items: center; gap: var(--space-4); flex-wrap: wrap; }
@@ -653,6 +655,7 @@
 .wk-analyze-done { margin: 0; font-size: var(--text-sm); color: var(--ink-body); }
 @media (max-width: 767px) {
   .wk-desk2-hosted-head { padding: var(--space-4) var(--space-4) 0; }
+  .wk-desk2-hosted-scroll { padding: var(--space-4); }
   .wk-desk2-tabs { overflow-x: auto; gap: var(--space-4); }
 }
 
