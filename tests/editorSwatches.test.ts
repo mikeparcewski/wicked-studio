@@ -31,7 +31,7 @@ describe('the swatches a page offers', () => {
   it('"Default" is a value the host lets through, and a style op carries it', () => {
     expect(DEFAULT_COLOUR).toBe('revert-layer');
     expect(isColour(DEFAULT_COLOUR)).toBe(true);
-    const inv: Inventory = { wids: new Map([['a', { slide: null, section: null, text: 'x' }]]) };
+    const inv: Inventory = { wids: new Map([['a', { slide: null, section: null, text: 'x' }]]), slides: new Map() };
     expect(checkOps([{ op: 'style', anchor: 'a', style: { background: 'revert-layer', color: '#1b1b1b' } }], inv))
       .toStrictEqual({ ok: true, items: [{ selector: 'a', type: 'style-edit', style: { background: 'revert-layer', color: '#1b1b1b' } }] });
     expect(isColour('revert')).toBe(false);

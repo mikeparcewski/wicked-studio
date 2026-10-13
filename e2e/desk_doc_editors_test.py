@@ -28,20 +28,10 @@ written document (`style: doc`) and a deck (`style: ppt`), anchored the way the 
      requirements read (404), show the document editor with NO coverage slot. A repository whose
      read holds more than one page says so: "(the first 50 of 60)", total 60, 50 rows.
 
-  THE SLIDE EDITOR
-  8. KIND + STRIP: `artifact[data-kind=deck]`; the pane holds a strip of the deck's four slides,
-     named by their titles, the first one marked.
-  9. A SLIDE IS A SUBJECT: a click on slide 3 marks it, brings its title into view in the frame and
-     puts "about: slide 3 — “Staff stay in control”" on the composer. The reader scrolling the deck
-     back to the top hands the mark to the slide in view (slide 1); a pick takes it again and holds.
-     The LAST slide — too short to reach the middle of the frame, so the view alone marks slide 3
-     at the bottom — is marked when picked, gives the mark up when the reader scrolls away, and has
-     it again back at the bottom.
- 10. A SLIDE TITLE EDIT IS ONE VERSION: typing on slide 3's title lands version 2 ("Changed slide
-     3’s title — version 2.") with Undo; the strip names the slide by its new title, the new
-     version's frame is still on slide 3 — an edit does not throw the reader back to the top —
-     and the chips already on the composer quote the slide and its title as they read now.
- 11. UNDO: version 3; the title and the strip are back; the manifest holds versions 1, 2, 3.
+  THE SLIDE EDITOR (P-D1)
+  8. A DECK OPENS IN ITS OWN EDITOR: `artifact[data-kind=deck]` hosts the `wicked-deck` plugin
+     (DES-PRESENTATION-EDITOR-001, operator decision D1), its filmstrip naming the deck's four slides
+     in order. desk_deck_editor_test.py walks the editor itself (slide ops, notes, review, audience).
  12. EXPORT: Export ▾ offers PowerPoint and PDF, by keyboard too (the first format holds the
      focus, ↓ moves, Esc closes the menu — not the artifact — and returns the focus); PowerPoint
      answers "PPTX export ready — …" with a Download link.
@@ -74,7 +64,6 @@ REQS = [
 ]
 P2 = "slide-0-paragraph-2"
 NEW_P2 = "Residents book a study room in two taps (REQ-002)."
-TITLE3 = "slide-2-heading-1"
 
 report: dict = {"ok": False, "steps": {}}
 
@@ -119,9 +108,6 @@ ARTIFACT = """() => {
            hscroll: document.documentElement.scrollWidth > document.documentElement.clientWidth };
 }"""
 CHIPS = """() => [...document.querySelectorAll('[data-testid="composer-chip"]')].map(c => ({ key: c.dataset.key, text: c.innerText.replace(/\\n×$/, '') }))"""
-STRIP = """() => { const s = document.querySelector('[data-testid="slide-strip"]');
-  return s ? { count: s.dataset.count, current: s.dataset.current,
-               titles: [...s.querySelectorAll('[data-testid="slide-thumb"]')].map(b => b.innerText.replace(/\\s+/g, ' ').trim()) } : null; }"""
 EDIT_FIELD = """() => { const i = document.querySelector('[data-testid="page-edit-input"]');
   return i ? { value: i.value, focused: document.activeElement === i } : null; }"""
 
@@ -322,123 +308,26 @@ with sync_playwright() as p:
     check("coverage-absent-elsewhere", all(a["kind"] == "document" and a["size"] == "full" and a["coverage"] == 0 and not a["hscroll"] for a in absent.values())
           and paged["total"] == "60" and paged["rows"] == "50" and paged["shown"] == 50 and "(the first 50 of 60)" in paged["line"], **absent, more_than_a_page=paged)
 
-    # ════ THE SLIDE EDITOR ═══════════════════════════════════════════════════════════
-    set_fixture(origin, doc_bound_run={"pid": PID, "doc": DECK})
+    # ════ THE SLIDE EDITOR (P-D1: the `wicked-deck` plugin; desk_deck_editor_test.py walks it) ═══
+    set_fixture(origin, doc_bound_run={"pid": PID, "doc": DECK}, editors=True)
     open_session(page, "deck")
-    wait_text(page, "slide-0-heading-1", "Library room booking")
     d0 = page.evaluate(ARTIFACT)
     page.get_by_test_id("artifact-open").click()
-    wait_pickable(page, 1)
+    deck_frame = page.frame_locator('[data-testid="editor-frame"][data-editor="wicked-deck"]')
     try:
-        page.get_by_test_id("slide-strip").wait_for(state="visible", timeout=10000)
+        deck_frame.locator('[data-testid="deck-thumb"]').first.wait_for(state="visible", timeout=15000)
     except Exception:
-        page.screenshot(path=str(SHOTS / "desk-doc-editors-strip-missing.png"))
-        fail("deck-strip", "no [data-testid=slide-strip] in the open deck")
-    s1 = page.evaluate(STRIP)
+        page.screenshot(path=str(SHOTS / "desk-doc-editors-deck-missing.png"))
+        fail("deck-plugin", "the open deck shows no wicked-deck filmstrip")
+    titles = deck_frame.locator('[data-testid="deck-thumb"]').evaluate_all("bs => bs.map(b => b.dataset.n + ' ' + b.querySelector('.t').innerText)")
     d1 = page.evaluate(ARTIFACT)
     page.wait_for_timeout(SETTLE_MS)
     page.screenshot(path=str(SHOTS / "desk-doc-editors-deck-pane.png"))
-    # ── 8. kind + strip ────────────────────────────────────────────────────────────
-    check("deck-strip", d0["kind"] == "deck" and d0["strip"] == 0 and d1["size"] == "pane" and "slide" in d1["hint"]
-          and s1["count"] == "4" and s1["current"] == "0"
-          and s1["titles"] == ["1 Library room booking", "2 Residents first", "3 Staff stay in control", "4 The pilot"],
-          inline=d0, pane=d1, strip=s1)
-
-    # ── 9. a slide is a subject ────────────────────────────────────────────────────
-    page.locator('[data-testid="slide-thumb"][data-slide="2"]').click()
-    page.wait_for_function("() => document.querySelector('[data-testid=\"slide-strip\"]').dataset.current === '2'", timeout=5000)
-    t0 = time.time()
-    where: dict = {}
-    while time.time() - t0 < 5:
-        where = frame_wid(page, TITLE3)
-        if where.get("top") is not None and 0 <= where["top"] and where["bottom"] <= where["vh"]:
-            break
-        page.wait_for_timeout(150)
-    chips9 = page.evaluate(CHIPS)
-    page.screenshot(path=str(SHOTS / "desk-doc-editors-slide-3.png"))
-    # The mark follows the reader: scrolling the deck back to the top hands it to the slide in view…
-    box = page.get_by_test_id("page-frame").bounding_box()
-    page.mouse.move(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
-    page.wait_for_timeout(400)
-    page.mouse.wheel(0, -4000)
-    try:
-        page.wait_for_function("() => document.querySelector('[data-testid=\"slide-strip\"]').dataset.current === '0'", timeout=5000)
-        back_to_view = True
-    except Exception:
-        back_to_view = False
-    after_scroll = page.evaluate(STRIP)
-    # The last slide is short — it cannot be brought to the middle of the frame, so at the bottom
-    # the view alone would mark slide 3. Picked, it is marked; scrolled away from, the view takes
-    # the mark; back at the bottom (where its jump landed) it is the last slide again.
-    WAIT_CURRENT = "(n) => document.querySelector('[data-testid=\"slide-strip\"]').dataset.current === n"
-    last: dict = {}
-    page.locator('[data-testid="slide-thumb"][data-slide="3"]').click()
-    page.wait_for_timeout(500)
-    last["picked"] = page.evaluate(STRIP)["current"]
-    t4 = frame_wid(page, "slide-3-heading-1")
-    # The premise: its title sits below the middle of the frame even at the bottom of the deck.
-    last["title_below_the_middle"] = t4.get("top") is not None and t4["top"] > t4["vh"] / 2
-    page.mouse.move(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)  # the wheel turns over the deck
-    page.mouse.wheel(0, -4000)
-    try:
-        page.wait_for_function(WAIT_CURRENT, arg="0", timeout=5000)
-    except Exception:
-        pass
-    last["scrolled_up"] = page.evaluate(STRIP)["current"]
-    page.mouse.wheel(0, 8000)
-    try:
-        page.wait_for_function(WAIT_CURRENT, arg="3", timeout=5000)
-    except Exception:
-        pass
-    last["back_at_the_bottom"] = page.evaluate(STRIP)["current"]
-    # …and a pick takes it again.
-    page.locator('[data-testid="slide-thumb"][data-slide="2"]').click()
-    page.wait_for_function("() => document.querySelector('[data-testid=\"slide-strip\"]').dataset.current === '2'", timeout=5000)
-    page.wait_for_timeout(400)
-    held = page.evaluate(STRIP)
-    check("slide-subject", where.get("top") is not None and 0 <= where["top"] and where["bottom"] <= where["vh"]
-          and any(c["key"] == f"el:{DECK}/slide-2" and c["text"] == "about: slide 3 — “Staff stay in control”" for c in chips9)
-          and back_to_view and held["current"] == "2" and last == {"picked": "3", "title_below_the_middle": True, "scrolled_up": "0", "back_at_the_bottom": "3"},
-          title_in_frame=where, chips=chips9, after_the_reader_scrolled_up=after_scroll, the_last_slide=last, after_picking_again=held)
-
-    # ── 10. a slide title edit is one version ──────────────────────────────────────
-    frame.locator(f'[data-wid="{TITLE3}"]').click()
-    page.get_by_test_id("page-selected-box").wait_for(state="visible", timeout=5000)
-    hint10 = page.get_by_test_id("page-hint").inner_text()
-    page.keyboard.press("Enter")
-    page.keyboard.type("Staff are in charge")
-    page.keyboard.press("Enter")
-    line3 = wait_line(page, "edited", "slide-title-edit")
-    after3 = wait_text(page, TITLE3, "Staff are in charge")
-    page.wait_for_function("() => [...document.querySelectorAll('[data-testid=\"slide-thumb\"]')].some(b => b.innerText.includes('Staff are in charge'))", timeout=10000)
-    s3 = page.evaluate(STRIP)
-    page.screenshot(path=str(SHOTS / "desk-doc-editors-slide-edited.png"))
-    t0 = time.time()
-    while time.time() - t0 < 5:
-        after3 = frame_wid(page, TITLE3)
-        if after3.get("top") is not None and 0 <= after3["top"] and after3["bottom"] <= after3["vh"]:
-            break
-        page.wait_for_timeout(150)
-    stays = after3.get("top") is not None and 0 <= after3["top"] and after3["bottom"] <= after3["vh"]
-    # The chips already on the composer quote the slide and its title as they read now.
-    chips10 = {c["key"]: c["text"] for c in page.evaluate(CHIPS)}
-    chips_follow = (chips10.get(f"el:{DECK}/slide-2") == "about: slide 3 — “Staff are in charge”"
-                    and chips10.get(f"el:{DECK}/{TITLE3}") == "about: “Staff are in charge”")
-    check("slide-title-edit", hint10.startswith("Type to change slide 3’s title") and line3.startswith("Changed slide 3’s title — version 2.")
-          and after3.get("text") == "Staff are in charge" and s3["titles"][2] == "3 Staff are in charge" and s3["count"] == "4" and stays and chips_follow,
-          hint=hint10, line=line3, title=after3, still_on_slide_3=stays, strip=s3, chips=chips10)
-
-    # ── 11. undo ───────────────────────────────────────────────────────────────────
-    page.get_by_test_id("page-undo").click()
-    line4 = wait_line(page, "undone", "slide-title-undo")
-    after4 = wait_text(page, TITLE3, "Staff stay in control")
-    page.wait_for_function("() => [...document.querySelectorAll('[data-testid=\"slide-thumb\"]')].some(b => b.innerText.includes('Staff stay in control'))", timeout=10000)
-    deck_versions = manifest(page, DECK)
-    chips11 = {c["key"]: c["text"] for c in page.evaluate(CHIPS)}
-    check("slide-title-undo", "version 3" in line4 and after4.get("text") == "Staff stay in control"
-          and deck_versions == [3, [1, None, False], [2, 1, True], [3, 1, False]]
-          and chips11.get(f"el:{DECK}/slide-2") == "about: slide 3 — “Staff stay in control”" and chips11.get(f"el:{DECK}/{TITLE3}") == "about: “Staff stay in control”",
-          line=line4, strip=page.evaluate(STRIP), manifest=deck_versions, chips=chips11)
+    # ── 8. kind + the deck's own editor ────────────────────────────────────────────
+    check("deck-plugin", d0["kind"] == "deck" and d1["size"] == "pane" and d1["strip"] == 0
+          and page.locator('[data-testid="plugin-artifact"][data-editor="wicked-deck"]').count() == 1
+          and titles == ["1 Library room booking", "2 Residents first", "3 Staff stay in control", "4 The pilot"],
+          inline=d0, pane=d1, filmstrip=titles)
 
     # ── 12. export ─────────────────────────────────────────────────────────────────
     FOCUS = """() => { const a = document.activeElement; return a ? (a.dataset.format || a.dataset.testid || a.tagName) : null; }"""
@@ -466,8 +355,8 @@ with sync_playwright() as p:
     page.wait_for_timeout(400)
     d2 = page.evaluate(ARTIFACT)
     page.screenshot(path=str(SHOTS / "desk-doc-editors-deck-full.png"))
-    check("export", keys_ok and formats == [["pptx", "PowerPoint"], ["pdf", "PDF"]] and ex_line.startswith(f"PPTX export ready — {DECK}_v3.pptx")
-          and ex_line.endswith("Download") and "/api/export/file/" in (ex_href or "") and d2["size"] == "full" and d2["strip"] == 1 and not d2["hscroll"],
+    check("export", keys_ok and formats == [["pptx", "PowerPoint"], ["pdf", "PDF"]] and ex_line.startswith(f"PPTX export ready — {DECK}_v1.pptx")
+          and ex_line.endswith("Download") and "/api/export/file/" in (ex_href or "") and d2["size"] == "full" and not d2["hscroll"],
           formats=formats, keyboard={"opened_on": first_focus, "after_down": next_focus, "after_esc": closed}, line=ex_line, href=ex_href, full=d2)
 
     check("no-errors", not errors, errors=errors[:5])

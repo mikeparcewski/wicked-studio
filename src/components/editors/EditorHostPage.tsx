@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { apiBase } from '../../api/client.js';
 import { EditorHost, type HostLogEntry } from '../../editors/host.js';
-import { FakeDocAdapter } from '../../editors/fakeAdapter.js';
+import { FakeDocAdapter, SAMPLE_DECK, SAMPLE_PAGE } from '../../editors/fakeAdapter.js';
 import { bundleUrl, fetchGrants, type Chip } from '../../editors/model.js';
 import { PERMISSIONS, SIZES, type PermissionId, type Size } from '../../editors/protocol.js';
 import { readThemeTokens } from '../../editors/theme.js';
@@ -28,6 +28,8 @@ interface Page {
   title: string;
   grants: PermissionId[] | null;
   firstParty: boolean;
+  /** The kind the sample is (P-D1: `deck` opens a sample deck; anything else the sample page). */
+  kind: string;
 }
 
 function readPage(search: string, mode: 'dev' | 'conformance'): Page {
@@ -43,6 +45,7 @@ function readPage(search: string, mode: 'dev' | 'conformance'): Page {
     title: q.get('title') ?? (editor === '' ? 'Editor' : editor),
     grants: grants === null ? null : grants.split(',').filter((g): g is PermissionId => PERMISSIONS.includes(g as PermissionId)),
     firstParty: editor.startsWith('wicked-'),
+    kind: q.get('kind') === 'deck' ? 'deck' : 'page',
   };
 }
 
@@ -81,7 +84,9 @@ export function EditorHostPage({ mode, navigate }: { mode: 'dev' | 'conformance'
   const keys = useRef<string[]>([]);
   const log = useRef<HostLogEntry[]>([]);
   const hostRef = useRef<EditorHost | null>(null);
-  const adapter = useMemo(() => new FakeDocAdapter(), []);
+  const adapter = useMemo(() => (page.kind === 'deck'
+    ? new FakeDocAdapter(SAMPLE_DECK, 'Library room booking (deck)', { kind: 'deck' })
+    : new FakeDocAdapter(SAMPLE_PAGE)), [page.kind]);
   const live = useRef({ text, chips, drafted, thread, status, notes });
   live.current = { text, chips, drafted, thread, status, notes };
 

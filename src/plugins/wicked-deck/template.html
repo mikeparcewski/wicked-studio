@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="wicked-editor" content="wicked-deck">
+<meta name="wicked-editor-version" content="__VERSION__">
+<title>Slides</title>
+<style>
+  /* The editor's own chrome takes the host's tokens (`host.hello.theme` / `host.theme`), with plain
+     fallbacks for a host that passes none. The DECK inside the nested frames styles itself. */
+  :root {
+    --surface-base: #ffffff; --surface-card: #f6f7f9; --surface-raised: #ffffff; --ink-high: #0d1117; --ink-body: #2b333d;
+    --ink-muted: #5b6673; --border: #d5dae1; --accent: #224a5e; --status-fail: #b4232c;
+    --font-sans: system-ui, sans-serif;
+  }
+  html, body { height: 100%; margin: 0; }
+  body { font: 13px var(--font-sans); color: var(--ink-high); background: var(--surface-base); overflow: hidden; }
+  [hidden] { display: none !important; }
+  .deck { position: relative; display: grid; grid-template-columns: 196px minmax(0, 1fr); width: 100%; height: 100%; outline: none; }
+  .deck:focus { box-shadow: inset 0 0 0 2px var(--accent); }
+  body[data-size="inline"] .deck, body[data-present="true"] .deck { grid-template-columns: minmax(0, 1fr); }
+  body[data-size="inline"] .deck { pointer-events: none; }
+  body[data-size="inline"] .strip, body[data-size="inline"] .tools, body[data-size="inline"] .notes,
+  body[data-present="true"] .strip, body[data-present="true"] .tools, body[data-present="true"] .notes { display: none; }
+
+  /* The filmstrip: the deck's slides in document order. */
+  .strip { overflow-y: auto; overflow-x: hidden; padding: 12px 8px 24px; border-right: 1px solid var(--border); background: var(--surface-card); }
+  .strip ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+  .thumb { display: grid; grid-template-columns: 16px 128px; gap: 6px; box-sizing: border-box; align-items: start; width: 100%; padding: 4px; border: 1px solid transparent; border-radius: 6px; background: transparent; color: var(--ink-body); font: inherit; text-align: left; cursor: pointer; }
+  .thumb:hover { background: var(--surface-base); }
+  .thumb[aria-current="true"] { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 16%, var(--surface-card)); }
+  .thumb[aria-current="true"] .t { color: var(--ink-high); }
+  .thumb:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .thumb[data-drop="before"] { box-shadow: 0 -3px 0 var(--accent); }
+  .thumb[data-drop="after"] { box-shadow: 0 3px 0 var(--accent); }
+  .thumb .n { font-size: 11px; color: var(--ink-muted); text-align: right; padding-top: 2px; }
+  .thumb .mini { position: relative; display: block; width: 128px; height: 72px; overflow: hidden; border: 1px solid var(--border); border-radius: 3px; background: var(--surface-base); }
+  .thumb .mini iframe { position: absolute; left: 0; top: 0; width: 1280px; height: 720px; border: 0; transform: scale(0.1); transform-origin: 0 0; pointer-events: none; }
+  .thumb .t { grid-column: 2; display: block; font-size: 11px; line-height: 1.3; color: var(--ink-body); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 128px; }
+
+  .main { position: relative; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+  .tools { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 6px 10px; border-bottom: 1px solid var(--border); background: var(--surface-card); }
+  .tools .count { margin-right: auto; font-size: 12px; color: var(--ink-muted); }
+  .tools button, .menu button, .notes button { font: inherit; font-size: 12px; line-height: 20px; padding: 1px 9px; border: 1px solid var(--border); border-radius: 4px; background: var(--surface-base); color: var(--ink-high); cursor: pointer; }
+  .tools button:disabled { opacity: .45; cursor: default; }
+  .tools button:focus-visible, .menu button:focus-visible, .notes button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .tools .danger { color: var(--status-fail); }
+  .menu { position: absolute; z-index: 4; top: 36px; left: 10px; display: flex; flex-direction: column; gap: 2px; min-width: 220px; max-height: 60%; overflow-y: auto; padding: 6px; background: var(--surface-raised); border: 1px solid var(--border); border-radius: 6px; box-shadow: 0 4px 14px rgba(0,0,0,.14); }
+  .menu .word { font-size: 11px; color: var(--ink-muted); padding: 2px 4px 4px; }
+  .menu button { text-align: left; border-color: transparent; }
+
+  .stage { position: relative; flex: 1 1 auto; min-height: 0; overflow: hidden; background: var(--surface-card); }
+  .stage iframe { position: absolute; left: 0; top: 0; border: 0; background: var(--surface-base); transform-origin: 0 0; box-shadow: 0 1px 6px rgba(0,0,0,.08); }
+  body[data-present="true"] .stage { background: #111; }
+  .box { position: absolute; pointer-events: none; border: 2px solid var(--accent); border-radius: 3px; box-sizing: border-box; z-index: 2; }
+  .box--hover { border-style: dashed; opacity: .55; }
+  .input { position: absolute; z-index: 3; box-sizing: border-box; font: inherit; font-size: 14px; line-height: 1.35; padding: 4px 6px; border: 2px solid var(--accent); border-radius: 3px; background: var(--surface-base); color: var(--ink-high); outline: none; resize: none; overflow: auto; }
+  .handle { position: absolute; left: 0; top: 0; width: 1px; height: 1px; opacity: 0; }
+  .hint, .note { margin: 0; padding: 4px 10px; font-size: 12px; color: var(--ink-muted); }
+  .note { color: var(--status-fail); }
+  .badge { position: absolute; right: 10px; bottom: 10px; z-index: 2; padding: 2px 8px; font-size: 12px; color: var(--ink-body); background: var(--surface-base); border: 1px solid var(--border); border-radius: 10px; }
+  .present-bar { position: absolute; right: 12px; bottom: 12px; z-index: 3; padding: 3px 10px; font-size: 12px; color: #eee; background: rgba(0,0,0,.55); border-radius: 10px; }
+
+  .notes { display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px; padding: 8px 10px 10px; border-top: 1px solid var(--border); background: var(--surface-base); }
+  .notes label { font-size: 11px; color: var(--ink-muted); }
+  .notes textarea { box-sizing: border-box; width: 100%; min-height: 54px; max-height: 120px; resize: vertical; font: inherit; font-size: 13px; line-height: 1.4; padding: 6px 8px; border: 1px solid var(--border); border-radius: 4px; background: var(--surface-base); color: var(--ink-high); }
+  .notes textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 0; }
+  body[data-size="pane"] .notes textarea { min-height: 40px; }
+  @media (prefers-reduced-motion: no-preference) { .box { transition: left 80ms linear, top 80ms linear; } }
+</style>
+</head>
+<body data-size="pane">
+<script>__PLUGIN__</script>
+</body>
+</html>

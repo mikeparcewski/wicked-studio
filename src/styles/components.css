@@ -1304,7 +1304,7 @@ select:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-
 .wk-artifact-btn:hover { color: var(--ink-high); border-color: var(--ink-dim); }
 .wk-artifact-row { display: flex; flex: 1 1 auto; min-height: 0; min-width: 0; }
 .wk-artifact-body { position: relative; flex: 1 1 auto; min-height: 0; min-width: 0; background: var(--surface-base); }
-/* S9: what stands beside the frame — a deck's slide strip, a document's requirements. */
+/* S9: what stands beside the frame — a document's requirements (a deck's slides are wicked-deck's own). */
 .wk-artifact-side { flex: 0 0 auto; width: 232px; overflow: auto; padding: 10px; border-right: 1px solid var(--border); background: var(--surface-card); font-size: var(--text-xs); color: var(--ink-muted); }
 .wk-artifact--pane .wk-artifact-side { width: 148px; padding: 8px; }
 /* S16a-4b: a full-size artifact's version list, a column at the right edge (the frame makes room). */
@@ -1314,11 +1314,7 @@ select:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-
 .wk-artifact-versions-list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; }
 .wk-artifact-version { padding: 4px 6px; border-radius: var(--radius-sm); }
 .wk-artifact-version--on { background: var(--accent-wash); color: var(--ink-high); }
-.wk-slide-thumb { display: flex; gap: 8px; align-items: baseline; width: 100%; margin: 0 0 6px; padding: 8px; text-align: left; font: inherit; color: var(--ink-muted); background: var(--surface-base); border: 1px solid var(--border); border-radius: var(--radius-sm); cursor: pointer; }
-.wk-slide-thumb:hover { border-color: var(--ink-dim); }
-.wk-slide-thumb--on { border-color: var(--accent); color: var(--ink-high); }
 .wk-slide-n { flex: 0 0 auto; min-width: 14px; font-weight: var(--weight-semi); color: var(--ink-high); }
-.wk-slide-title { min-width: 0; overflow-wrap: anywhere; }
 .wk-cov-head { display: block; color: var(--ink-high); font-size: var(--text-sm); }
 .wk-cov-line { margin: 2px 0 8px; }
 .wk-cov-group { margin: 10px 0 4px; color: var(--ink-dim); }
@@ -1333,6 +1329,37 @@ select:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-
 .wk-artifact-menu-item { padding: 5px 8px; text-align: left; font: inherit; color: var(--ink-high); background: none; border: 0; border-radius: var(--radius-sm); cursor: pointer; }
 .wk-artifact-menu-item:hover { background: var(--surface-base); }
 .wk-artifact-frame { display: block; width: 100%; height: 100%; border: 0; background: var(--surface-base); }
+/* P-D1: a deck's review rail, drawn by the host at full size, between the editor and the version list. */
+.wk-artifact--deckreview > .wk-artifact-body, .wk-artifact--deckreview > .wk-artifact-line, .wk-artifact--deckreview > .wk-checks { margin-right: 568px; }
+.wk-deck-review { position: absolute; top: 36px; right: 248px; bottom: 0; width: 320px; overflow: auto; box-sizing: border-box; padding: 12px 14px 24px; border-left: 1px solid var(--border); background: var(--surface-base); font-size: var(--text-xs); color: var(--ink-body); z-index: 2; display: flex; flex-direction: column; gap: 10px; }
+.wk-deck-review-head { display: flex; flex-direction: column; gap: 2px; }
+.wk-deck-review-title { margin: 0; font-size: var(--text-sm); font-weight: var(--weight-semi); color: var(--ink-high); }
+.wk-deck-review-summary { margin: 0; color: var(--ink-high); }
+.wk-deck-review-note { margin: 0; color: var(--ink-muted); line-height: 1.4; }
+.wk-deck-audience { display: flex; flex-wrap: wrap; gap: 6px; align-items: baseline; }
+.wk-deck-audience-form { margin: 0; padding: 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); display: flex; flex-direction: column; gap: 6px; background: var(--surface-card); }
+.wk-deck-audience-form legend { padding: 0 4px; color: var(--ink-high); font-weight: var(--weight-semi); }
+.wk-deck-radio { display: flex; gap: 6px; align-items: center; }
+.wk-deck-input { flex: 1 1 auto; min-width: 0; font: inherit; padding: 3px 6px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-base); color: var(--ink-high); }
+.wk-deck-form-row { margin: 0; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.wk-deck-proposal { padding: 10px; border: 1px solid var(--accent); border-radius: var(--radius-sm); background: var(--accent-wash); display: flex; flex-direction: column; gap: 6px; }
+.wk-deck-proposal p { margin: 0; }
+.wk-deck-review-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.wk-deck-review-row { padding: 8px; border: 1px solid var(--border); border-radius: var(--radius-sm); display: flex; flex-direction: column; gap: 4px; }
+.wk-deck-review-row--approved { border-color: var(--status-ok); }
+.wk-deck-review-row--stale, .wk-deck-review-row--changes { border-color: var(--status-gate); }
+.wk-deck-review-slide { margin: 0; display: flex; gap: 6px; align-items: baseline; color: var(--ink-high); overflow-wrap: anywhere; }
+.wk-deck-review-badge { margin: 0; color: var(--ink-muted); }
+.wk-deck-review-row--approved .wk-deck-review-badge { color: var(--status-ok); }
+.wk-deck-review-row--stale .wk-deck-review-badge, .wk-deck-review-row--changes .wk-deck-review-badge { color: var(--status-gate); }
+.wk-deck-compare { display: flex; flex-direction: column; gap: 6px; padding-top: 4px; }
+.wk-deck-compare-head { margin: 0; color: var(--ink-high); }
+.wk-deck-compare-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.wk-deck-compare-row { padding: 6px 8px; border-radius: var(--radius-sm); background: var(--surface-base); }
+.wk-deck-compare-title, .wk-deck-compare-text { margin: 0; overflow-wrap: anywhere; line-height: 1.45; }
+.wk-deck-compare-same { margin: 0; color: var(--ink-muted); }
+.wk-diff-add { text-decoration: none; color: var(--ink-high); background: color-mix(in srgb, var(--status-ok) 18%, transparent); border-radius: 2px; }
+.wk-diff-del { color: var(--ink-muted); background: color-mix(in srgb, var(--status-fail) 14%, transparent); border-radius: 2px; }
 /* EP-P2: the plugin's frame fills the kind slot; its box changes with the size, the element does not. */
 .wk-plugin-body { display: flex; flex-direction: column; }
 .wk-plugin-frame-box { flex: 1 1 auto; min-height: 0; display: flex; }

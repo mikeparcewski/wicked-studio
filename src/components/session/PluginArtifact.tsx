@@ -11,6 +11,7 @@ import { readThemeTokens } from '../../editors/theme.js';
 import { addAboutChip } from '../../store/composerChips.js';
 import { useSessionDrafts } from '../../store/sessionDrafts.js';
 import { ChecksPanel } from './ChecksPanel.js';
+import { DeckReview } from './DeckReview.js';
 
 /**
  * EP-P2 — the kind slot hosting an editor PLUGIN (DES-EDITOR-PLUGINS-001 §4, §5, §9.3): `wicked-page`
@@ -44,10 +45,12 @@ function pressInHost(init: KeyboardEventInit): void {
   document.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init }));
 }
 
-export function PluginArtifact({ projectId, docId, title, composerKey, size, morph, editor, onHead }: {
+export function PluginArtifact({ projectId, docId, title, composerKey, size, morph, editor, onHead, kind = 'page' }: {
   projectId: string;
   docId: string;
   title: string;
+  /** The artifact kind the editor opens (`page`, or `deck` for `wicked-deck` — P-D1). */
+  kind?: 'page' | 'deck';
   composerKey: string;
   size: ArtifactSize;
   morph: (to: ArtifactSize) => void;
@@ -76,8 +79,8 @@ export function PluginArtifact({ projectId, docId, title, composerKey, size, mor
   useEffect(() => { live.current = true; return () => { live.current = false; }; }, []);
 
   const adapter = useMemo(
-    () => new InteractiveDocAdapter(projectId, docId, title, 'page', (h) => { if (live.current) onHeadRef.current?.(h); }),
-    [projectId, docId, title],
+    () => new InteractiveDocAdapter(projectId, docId, title, kind, (h) => { if (live.current) onHeadRef.current?.(h); }),
+    [projectId, docId, title, kind],
   );
 
   // One host per mount: the frame is created once and only its box changes with the size. "Reload it"
@@ -127,7 +130,8 @@ export function PluginArtifact({ projectId, docId, title, composerKey, size, mor
           thread: () => undefined,
           // The line's words are the host's: the anchors it checked, named by it — a third-party editor's
           // line also says who changed it. The plugin's summary never reaches the thread.
-          written: (w) => { if (live.current) setLine({ kind: 'edited', version: w.version, base: w.base, what: writtenWords(w.anchors), verb: w.verb }); },
+          // A deck's slide words are the host's own, by place (P-D1); anything else names its anchors.
+          written: (w) => { if (live.current) setLine({ kind: 'edited', version: w.version, base: w.base, what: w.words ?? writtenWords(w.anchors, kind), verb: w.verb }); },
           shown: (v) => { if (live.current) setShown(v); },
           fullscreen: async () => { morphRef.current('full'); return true; },
           torn: (reason) => { if (live.current) setTorn(reason); },
@@ -143,7 +147,7 @@ export function PluginArtifact({ projectId, docId, title, composerKey, size, mor
       hostRef.current?.teardown('The page was closed');
       hostRef.current = null;
     };
-  }, [adapter, editor.id, editor.version, editor.sha256, editor.title, editor.first_party, composerKey, docId, projectId, title, mountKey]);
+  }, [adapter, editor.id, editor.version, editor.sha256, editor.title, editor.first_party, composerKey, docId, projectId, title, kind, mountKey]);
 
   // The size is posted to the live frame: the same element, a different box (EP-D2).
   useEffect(() => { hostRef.current?.setSize(size); }, [size]);
@@ -210,6 +214,10 @@ export function PluginArtifact({ projectId, docId, title, composerKey, size, mor
       {size !== 'inline' && shown !== null && (
         <ChecksPanel projectId={projectId} docId={docId} head={shown} pointAt={pointAt} />
       )}
+      {kind === 'deck' && size === 'full' && shown !== null && (
+        <DeckReview projectId={projectId} docId={docId} head={shown}
+          onForked={(h) => { void adapter.refresh().then(() => hostRef.current?.artifactChanged(h, 'fork')).catch(() => undefined); }} />
+      )}
     </>
   );
 }
@@ -218,11 +226,13 @@ export function PluginArtifact({ projectId, docId, title, composerKey, size, mor
  * The kind slot when no installed editor claims the kind (§3.1): the page as served, in the same
  * sandboxed frame, read-only — and the plain sentence saying so. Nothing is guessed, nothing edits.
  */
-export function NoEditorPage({ projectId, docId, size, reason, onHead }: {
+export function NoEditorPage({ projectId, docId, size, reason, onHead, what = 'pages' }: {
   projectId: string;
   docId: string;
   size: ArtifactSize;
   reason: string | null;
+  /** What has no editor, in words ("pages", "decks"). */
+  what?: string;
   onHead?: (head: number) => void;
 }): React.ReactElement {
   const [head, setHead] = useState<number | null>(null);
@@ -234,7 +244,7 @@ export function NoEditorPage({ projectId, docId, size, reason, onHead }: {
   return (
     <div className="wk-artifact-body" data-testid="artifact-no-editor" data-size={size} data-head={head ?? ''}>
       {head !== null && <iframe title={`${docId} version ${head}`} className="wk-artifact-frame" sandbox="allow-scripts" src={interactiveDocUrl(projectId, docId, head)} />}
-      <p className="wk-artifact-hint" data-testid="artifact-no-editor-note">No editor is installed for pages{reason === null ? '' : ` — ${reason}`}</p>
+      <p className="wk-artifact-hint" data-testid="artifact-no-editor-note">No editor is installed for {what}{reason === null ? '' : ` — ${reason}`}</p>
     </div>
   );
 }

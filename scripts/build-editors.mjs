@@ -38,6 +38,20 @@ export const EDITORS = [
       { id: 'network.media', why: 'to show the page’s web images and fonts' },
     ],
   },
+  {
+    // DES-PRESENTATION-EDITOR-001 P-D1 (operator decision D1: its own plugin, not a layout of the page editor).
+    id: 'wicked-deck',
+    title: 'Slides',
+    protocol: [1],
+    kinds: ['deck'],
+    sizes: ['inline', 'pane', 'full'],
+    permissions: [
+      { id: 'artifact.read', why: 'to show the slides and read their words and speaker notes' },
+      { id: 'artifact.write', why: 'to add, duplicate, move or delete a slide, change its words or its notes, each as one version with Undo' },
+      { id: 'selection.chip', why: 'to make the slide or the line you click the subject of your next message' },
+      { id: 'ui.fullscreen', why: 'to present the deck full screen' },
+    ],
+  },
 ];
 
 /** Nothing in the entry may load from outside it (crew's `externalReferences` check; the CSP would block it anyway). */

@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { addChip } from '../src/board/aboutChips.js';
 import {
   anchorWords, coverageLine, coverageOf, editedLine, editorKindOf, elementChip, grow, namesId, notUndoneLine,
-  requirementChip, shrink, slideChip, slideInView, slidesOf, undoneLine, writtenWords,
+  requirementChip, shrink, undoneLine, writtenWords,
 } from '../src/board/artifactMorph.js';
 
 /**
@@ -110,41 +110,6 @@ describe('anchorWords — an anchor in plain words, never its raw id', () => {
     for (const wid of ['slide-0-heading-1', 'slide-4-block-2', 'section-0']) {
       for (const kind of ['page', 'document', 'deck'] as const) expect(anchorWords(wid, kind)).not.toMatch(/slide-\d|section-\d/);
     }
-  });
-});
-
-describe('slidesOf / slideInView / slideChip — the deck, read from the frame', () => {
-  const blocks = {
-    'section-0': { text: 'Library room booking A study room in two taps.', composite: true },
-    'slide-0-heading-1': { text: 'Library room booking', composite: false },
-    'slide-0-paragraph-1': { text: 'A study room in two taps.', composite: false },
-    'section-1': { text: 'Residents first', composite: true },
-    'slide-1-heading-1': { text: 'Residents first', composite: false },
-    'slide-2-paragraph-1': { text: 'A slide with no heading — its first line names it, however long that line turns out to be.', composite: false },
-    headline: { text: 'not the engine’s', composite: false },
-  };
-  it('one slide per index that carries a block, named by its title, else its first line (cut)', () => {
-    const slides = slidesOf(blocks);
-    expect(slides.map((s) => s.index)).toStrictEqual([0, 1, 2]);
-    expect(slides[0]).toStrictEqual({ index: 0, title: 'Library room booking', first: 'slide-0-heading-1' });
-    expect(slides[1]!.title).toBe('Residents first');
-    expect(slides[2]!.title.endsWith('…')).toBe(true);
-    expect(slides[2]!.first).toBe('slide-2-paragraph-1');
-    expect(slidesOf({ headline: { text: 'x', composite: false } })).toStrictEqual([]);
-  });
-  it('the slide in view is the last one that starts at or above the middle of the frame', () => {
-    const slides = slidesOf(blocks);
-    const tops = { 'slide-0-heading-1': 60, 'slide-1-heading-1': 560, 'slide-2-paragraph-1': 1060 };
-    expect(slideInView(slides, tops, 0, 600)).toBe(0);
-    expect(slideInView(slides, tops, 300, 600)).toBe(1);
-    expect(slideInView(slides, tops, 900, 600)).toBe(2);
-    expect(slideInView(slides, {}, 0, 600)).toBeNull();
-    expect(slideInView([], tops, 0, 600)).toBeNull();
-  });
-  it('a slide is a subject, keyed by the document and the slide', () => {
-    const [first] = slidesOf(blocks);
-    expect(slideChip(first!, 'library-pitch')).toStrictEqual({ kind: 'about', key: 'el:library-pitch/slide-0', label: 'slide 1 — “Library room booking”' });
-    expect(slideChip({ index: 3, title: '', first: 'slide-3-block-1' }, 'd').label).toBe('slide 4');
   });
 });
 

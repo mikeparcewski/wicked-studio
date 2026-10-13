@@ -13,12 +13,30 @@ npm publish dates. Every version listed here exists on
 ## [Unreleased]
 
 ### Added
-- The Plugins page opens real documents in the built-in editor. Its row lists the documents it opens, newest first, and a click opens that document full size in the editor, with its versions, instead of only the sample page. Written documents and decks still open in studio's own editor, and the row says so.
+- **Slides, a built-in editor plugin for decks** (`wicked-deck`, DES-PRESENTATION-EDITOR-001 P-D1). A deck opens in it instead of studio's own editor:
+  - a filmstrip of the slides in document order, numbered by their place. Before, a moved slide kept its old number;
+  - the current slide shown large, with ← → / PgUp / PgDn / Home / End, and a number then Enter in the filmstrip;
+  - add a slide laid out like one of the deck's own, duplicate, move (drag, or ⌥↑ / ⌥↓) and delete (⌘⌫, never bare Backspace). Each is one version with Undo;
+  - speaker notes under the slide, saved when you leave the field. A version that landed meanwhile is never overwritten;
+  - typing on a slide's text, as in the page editor;
+  - Present, full screen, where ← → and Space move and Esc leaves.
+
+  It is listed on the Plugins page, and "Try it on a sample deck" opens it in the editor test page. It needs wicked-interactive with deck operations (#293). On an older engine it says so.
+- **Deck review at full size**, drawn by studio beside the editor:
+  - Approve or Ask for changes (with a note) per slide, on the version shown. An approval carries forward only while the slide is unchanged; otherwise it reads "Approved on version 4 — changed since". Approvals are a record of review and don't hold up delivery;
+  - the deck's audience (Executives, Engineers, Customers, or your own words) can be recorded, or the deck rewritten for it. That starts one helper run over the slides and opens as a proposal: compare it slide by slide, then Keep it or Drop it. Drop puts the version it adapted back.
+
+  This needs wicked-interactive's review store (#294).
+- The Plugins page opens real documents in the built-in editor. Its row lists the documents it opens, newest first, and a click opens that document full size in the editor, with its versions, instead of only the sample page. Written documents still open in studio's own editor, and the row says so.
+- **New job › Demo video** (#749, closes #664): a way back in to the demo recorder. The same form opens from ⌘K "New Demo", a deck or document's header, and Made › Videos.
 - The app builder ("Vibe") is listed as coming soon on the Plugins page and at the end of the New job cards. It is disabled and links nowhere: apps are built by pipelines today.
 
 ### Fixed
 - A document opened from Everything made (`?open=`) now opens in the editor its recorded style picks. It had passed the document's kind as its style, so an unstyled or page document opened in studio's own editor instead of the built-in plugin, and a page document opened from a `kind=documents` address was not found.
 - Picking a version of a document opened on the Made list shows that version. The list had no address to write, so the pick did nothing.
+
+### Removed
+- The deck branch of studio's own document editor, and its slide strip. Decks open in Slides.
 
 ### Changed
 - The light theme is easier to read: secondary text and timestamps are darker (at least 7:1 on cards, and the quietest labels at least 6:1 everywhere), cards stand off the page with a hairline and a soft shadow, and the page sits a clearer step under the cards. The dark theme is unchanged.

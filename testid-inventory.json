@@ -11,9 +11,9 @@
   "version": 1,
   "studioVersion": "0.7.13",
   "counts": {
-    "files": 205,
-    "occurrences": 2403,
-    "static": 2096,
+    "files": 206,
+    "occurrences": 2463,
+    "static": 2151,
     "dynamic": 63,
     "computed": 24
   },
@@ -1418,6 +1418,348 @@
       "testId": "decisions-ledger",
       "files": [
         "src/components/DecisionsLedger.tsx"
+      ]
+    },
+    {
+      "testId": "deck-add",
+      "files": [
+        "src/plugins/wicked-deck/plugin.ts"
+      ]
+    },
+    {
+      "testId": "deck-add-like",
+      "files": [
+        "src/plugins/wicked-deck/plugin.ts"
+      ]
+    },
+    {
+      "testId": "deck-add-menu",
+      "files": [
+        "src/plugins/wicked-deck/plugin.ts"
+      ]
+    },
+    {
+      "testId": "deck-audience",
+      "files": [
+        "src/components/session/DeckReview.tsx"
+      ]
+    },
+    {
+      "testId": "deck-audience-adapt",
+      "files": [
+        "src/components/session/DeckReview.tsx"
+      ]
+    },
+    {
+      "testId": "deck-audience-cancel",
+      "files": [
+        "src/components/session/DeckReview.tsx"
+      ]
+    },
+    {
+      "testId": "deck-audience-change",
+      "files": [
+        "src/components/session/DeckReview.tsx"
+      ]
+    },
+    {
+      "testId": "deck-audience-custom",
+      "files": [
+        "src/components/session/DeckReview.tsx"
+      ]
+    },
+    {
+      "testId": "deck-audience-form",
+      "files": [
+        "src/components/session/DeckReview.tsx"
+      ]
+    },
+    {
+      "testId": "deck-audience-keep-approved",
+      "files": [
+        "src/components/session/DeckReview.tsx"
+      ]
+    },
+    {
+      "testId": "deck-audience-label",
+      "files": [
+        "src/components/session/DeckReview.tsx"
+      ]
+    },
+    {
+      "testId": "deck-audience-length",
+      "files": [
+        "src/components/session/DeckReview.tsx"
+      ]
+    },
+    {
+      "testId": "deck-audience-preset",
+      "files": [
+        "src/components/session/DeckReview.tsx"
+      ]
+    },
+    {
+      "testId": "deck-audience-record",
+      "files": [
+        "src/components/session/DeckReview.tsx"
+      ]
+    },
+    {
+      "testId": "deck-compare",
+      "files": [
+        "src/components/session/DeckReview.tsx"
+      ]
+    },
+    {
+      "testId": "deck-compare-notes",
+      "files": [
+        "src/components/session/DeckReview.tsx"
+      ]
+    },
+    {
+      "testId": "deck-compare-row",
+      "files": [
+        "src/components/session/DeckReview.tsx"
+      ]
+    },
+    {
+      "testId": "deck-compare-summary",
+      "files": [
+        "src/components/session/DeckReview.tsx"
+      ]
+    },
+    {
+      "testId": "deck-compare-words",
+      "files": [
+        "src/components/session/DeckReview.tsx"
+      ]
+    },
+    {
+      "testId": "deck-count",
+      "files": [
+        "src/plugins/wicked-deck/plugin.ts"
+      ]
+    },
+    {
+      "testId": "deck-delete",
+      "files": [
+        "src/plugins/wicked-deck/plugin.ts"
+      ]
+    },
+    {
+      "testId": "deck-duplicate",
+      "files": [
+        "src/plugins/wicked-deck/plugin.ts"
+      ]
+    },
+    {
+      "testId": "deck-edit-input",
+      "files": [
+        "src/plugins/wicked-deck/plugin.ts"
+      ]
+    },
+    {
+      "testId": "deck-editor",
+      "files": [
+        "src/plugins/wicked-deck/plugin.ts"
+      ]
+    },
+    {
+      "testId": "deck-frame",
+      "files": [
+        "src/plugins/wicked-deck/plugin.ts"
+      ]
+    },
+    {
+      "testId": "deck-handle",
+      "files": [
+        "src/plugins/wicked-deck/plugin.ts"
+      ]
+    },
+    {
+      "testId": "deck-hint",
+      "files": [
+        "src/plugins/wicked-deck/plugin.ts"
+      ]
+    },
+    {
+      "testId": "deck-hover-box",
+      "files": [
+        "src/plugins/wicked-deck/plugin.ts"
+      ]
+    },
+    {
+      "testId": "deck-inline-count",
+      "files": [
+        "src/plugins/wicked-deck/plugin.ts"
+      ]
+    },
+    {
+      "testId": "deck-move-down",
+      "files": [
+        "src/plugins/wicked-deck/plugin.ts"
+      ]
+    },
+    {
+      "testId": "deck-move-up",
+      "files": [
+        "src/plugins/wicked-deck/plugin.ts"
+      ]
+    },
+    {
+      "testId": "deck-note",
+      "files": [
+        "src/plugins/wicked-deck/plugin.ts"
+      ]
+    },
+    {
+      "testId": "deck-notes",
+      "files": [
+        "src/plugins/wicked-deck/plugin.ts"
+      ]
+    },
+    {
+      "testId": "deck-notes-label",
+      "files": [
+        "src/plugins/wicked-deck/plugin.ts"
+      ]
+    },
+    {
+      "testId": "deck-present",
+      "files": [
+        "src/plugins/wicked-deck/plugin.ts"
+      ]
+    },
+    {
+      "testId": "deck-present-bar",
+      "files": [
+        "src/plugins/wicked-deck/plugin.ts"
+      ]
+    },
+    {
+      "testId": "deck-proposal",
+      "files": [
+        "src/components/session/DeckReview.tsx"
+      ]
+    },
+    {
+      "testId": "deck-proposal-compare",
+      "files": [
+        "src/components/session/DeckReview.tsx"
+      ]
+    },
+    {
+      "testId": "deck-proposal-drop",
+      "files": [
+        "src/components/session/DeckReview.tsx"
+      ]
+    },
+    {
+      "testId": "deck-proposal-keep",
+      "files": [
+        "src/components/session/DeckReview.tsx"
+      ]
+    },
+    {
+      "testId": "deck-review",
+      "files": [
+        "src/components/session/DeckReview.tsx"
+      ]
+    },
+    {
+      "testId": "deck-review-approve",
+      "files": [
+        "src/components/session/DeckReview.tsx"
+      ]
+    },
+    {
+      "testId": "deck-review-ask",
+      "files": [
+        "src/components/session/DeckReview.tsx"
+      ]
+    },
+    {
+      "testId": "deck-review-badge",
+      "files": [
+        "src/components/session/DeckReview.tsx"
+      ]
+    },
+    {
+      "testId": "deck-review-clear",
+      "files": [
+        "src/components/session/DeckReview.tsx"
+      ]
+    },
+    {
+      "testId": "deck-review-line",
+      "files": [
+        "src/components/session/DeckReview.tsx"
+      ]
+    },
+    {
+      "testId": "deck-review-note",
+      "files": [
+        "src/components/session/DeckReview.tsx"
+      ]
+    },
+    {
+      "testId": "deck-review-reading",
+      "files": [
+        "src/components/session/DeckReview.tsx"
+      ]
+    },
+    {
+      "testId": "deck-review-row",
+      "files": [
+        "src/components/session/DeckReview.tsx"
+      ]
+    },
+    {
+      "testId": "deck-review-save-changes",
+      "files": [
+        "src/components/session/DeckReview.tsx"
+      ]
+    },
+    {
+      "testId": "deck-review-slides",
+      "files": [
+        "src/components/session/DeckReview.tsx"
+      ]
+    },
+    {
+      "testId": "deck-review-summary",
+      "files": [
+        "src/components/session/DeckReview.tsx"
+      ]
+    },
+    {
+      "testId": "deck-selected-box",
+      "files": [
+        "src/plugins/wicked-deck/plugin.ts"
+      ]
+    },
+    {
+      "testId": "deck-stage",
+      "files": [
+        "src/plugins/wicked-deck/plugin.ts"
+      ]
+    },
+    {
+      "testId": "deck-strip",
+      "files": [
+        "src/plugins/wicked-deck/plugin.ts"
+      ]
+    },
+    {
+      "testId": "deck-thumb",
+      "files": [
+        "src/plugins/wicked-deck/plugin.ts"
+      ]
+    },
+    {
+      "testId": "deck-tools",
+      "files": [
+        "src/plugins/wicked-deck/plugin.ts"
       ]
     },
     {
@@ -10224,18 +10566,6 @@
       ]
     },
     {
-      "testId": "slide-strip",
-      "files": [
-        "src/components/session/SlideStrip.tsx"
-      ]
-    },
-    {
-      "testId": "slide-thumb",
-      "files": [
-        "src/components/session/SlideStrip.tsx"
-      ]
-    },
-    {
       "testId": "standing-order-cancel",
       "files": [
         "src/components/StandingOrdersPanel.tsx"
@@ -13198,7 +13528,8 @@
         "src/components/SteeringHealth.tsx",
         "src/components/SteeringRuleDrawer.tsx",
         "src/components/SteeringRuleForm.tsx",
-        "src/components/TestingPage.tsx"
+        "src/components/TestingPage.tsx",
+        "src/components/session/DeckReview.tsx"
       ]
     },
     {

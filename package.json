@@ -42,6 +42,7 @@
     "@xterm/xterm": "^5.5.0",
     "cytoscape": "^3.34.0",
     "cytoscape-fcose": "^2.2.0",
+    "diff": "^9.0.0",
     "lucide-react": "^0.439.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",

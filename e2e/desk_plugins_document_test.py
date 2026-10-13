@@ -7,7 +7,7 @@ page-style doc `launch-page`, an unstyled doc `loose-notes` and a written doc `q
 
   1. LIST: /plugins shows the built-in row named "Document", listing the documents it opens
      (launch-page, loose-notes) and not the written one (q4-brief), with the honest "written documents
-     and decks open in studio's own editor" line.
+     open in studio's own editor; decks open in Slides" line.
   2. OPEN: a click on launch-page opens THAT document full size in the plugin frame (the hash-pinned
      bundle, kind `page`), on the Made list's `open=` address — not the editor test page's sample;
      picking version 1 in its version list shows version 1 (no address to write there).

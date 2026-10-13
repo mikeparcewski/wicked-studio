@@ -89,7 +89,7 @@ export interface HostUi {
   /** A write this editor made, structured, so a host can draw its own line and Undo (EP-P2). `anchors`
    *  are the HOST-checked ids the write touched — the words of the line come from them, never from
    *  the plugin's `summary` (codex r1). */
-  written?(w: { version: number; base: number; summary: string; anchors: string[]; verb: WriteVerb }): void;
+  written?(w: { version: number; base: number; summary: string; anchors: string[]; verb: WriteVerb; words?: string }): void;
   /** EP-P3 (codex r1): the version the plugin read — the one it shows, which the checks panel describes. */
   shown?(version: number): void;
   fullscreen(): Promise<boolean>;
@@ -140,7 +140,46 @@ const NO_ACTIVATION = (): boolean => (navigator as Navigator & { userActivation?
 /** The written line (EP-P3): what the write did, in one verb — every item a remove is "removed", every
  *  item a colour "restyled", anything else (text, or a mix) "changed". */
 export function writeVerb(items: readonly WireItem[]): WriteVerb {
+  const [first] = items;
+  if (items.length === 1 && first?.type === 'deck') {
+    return first.op.type === 'slide-insert' ? 'added' : first.op.type === 'slide-duplicate' ? 'duplicated' : first.op.type === 'slide-move' ? 'moved' : 'changed';
+  }
   return items.every((it) => it.type === 'remove') ? 'removed' : items.every((it) => it.type === 'style-edit') ? 'restyled' : 'changed';
+}
+
+/**
+ * The host's own words for a write on a deck (P-D1), from ITS inventory of the version the write was
+ * made on — slide numbers are places in the deck, never anchor indexes — or null when the write is not
+ * a slide's (an element edit keeps the anchor words).
+ */
+export function deckWords(items: readonly WireItem[], inv: Inventory): string | null {
+  const [first] = items;
+  if (first === undefined || inv.slides.size === 0) return null;
+  const n = (id: string | null | undefined): number | null => (id == null ? null : inv.slides.get(id)?.n ?? null);
+  if (first.type === 'deck') {
+    const at = n(first.op.slide);
+    if (at === null) return null;
+    if (first.op.type === 'slide-insert') {
+      const after = n(first.op.after);
+      return after === null ? 'a slide at the start' : `a slide after slide ${after}`;
+    }
+    if (first.op.type === 'slide-move') {
+      const after = n(first.op.after);
+      return after === null ? `slide ${at} to the start` : `slide ${at} to after slide ${after}`;
+    }
+    if (first.op.type === 'notes-set') return `slide ${at}’s notes`;
+    return `slide ${at}`;
+  }
+  if (items.length === 1 && first.type === 'remove') {
+    for (const s of inv.slides.values()) if (s.wid === first.selector) return `slide ${s.n}`;
+  }
+  // An element edit on a deck: named by the slide it sits in, by place (codex-proofing the order bug —
+  // an anchor's own index stays what it was when the slide was first seen).
+  const places = [...new Set(items.map((it) => inv.wids.get(it.selector)?.deckN))];
+  if (places.length === 1 && places[0] !== undefined) {
+    return items.every((it) => it.type === 'content-edit') ? `slide ${places[0]}’s text` : `a part of slide ${places[0]}`;
+  }
+  return null;
 }
 
 export function threadLine(firstParty: boolean, name: string, items: readonly WireItem[], summary: string, version: number): string {
@@ -400,7 +439,8 @@ export class EditorHost {
             const summary = String(p['summary']).slice(0, LIMITS.summaryChars);
             this.timeoutLine = null;
             this.o.ui.thread(threadLine(this.o.firstParty, this.o.name, checked.items, summary, r.version));
-            this.o.ui.written?.({ version: r.version, base: p['base'] as number, summary, anchors: [...new Set(checked.items.map((it) => it.selector))], verb: writeVerb(checked.items) });
+            const words = deckWords(checked.items, inv.inv);
+            this.o.ui.written?.({ version: r.version, base: p['base'] as number, summary, anchors: [...new Set(checked.items.map((it) => it.selector))], verb: writeVerb(checked.items), ...(words === null ? {} : { words }) });
           }
           return r;
         } finally {
