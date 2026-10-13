@@ -341,6 +341,16 @@ export function chainFromUnits(view: SessionView, opts: ChainOptions = {}): Chai
   return { source: 'units', steps, proposed: false, transportLine: null, ...counts(steps) };
 }
 
+/** Run clarity: the chain step a unit ran as — on a units chain the step is `u<ord>`; on a team chain
+ *  it is the step whose id is the unit's phase id (a team step may itself be NAMED `u2`, so the `u<ord>`
+ *  key is never read there — codex). `undefined` when the chain has no step for that unit. Pure. */
+export function stepAtOrd(c: ChainModel, units: readonly SessionView['units'][number][], ord: number): ChainStep | undefined {
+  if (c.source === 'units') return c.steps.find((s) => s.id === `u${ord}`);
+  const u = units.find((x) => x.ord === ord);
+  const phase = u === undefined ? null : unitPhaseId(u);
+  return phase === null ? undefined : c.steps.find((s) => s.id === phase);
+}
+
 /** studio#445: a team step whose unit the run reports `done` is done, whether or not a
  *  `step.completed` row reached the bus (the deliver Tool unit emits none). Matched by phase id. */
 function withUnitStates(c: ChainModel, units: SessionView['units']): ChainModel {
