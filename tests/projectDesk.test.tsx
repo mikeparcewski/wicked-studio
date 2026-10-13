@@ -6,13 +6,14 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import type { Project, ProjectMember } from '../src/api/types.js';
 import { makeView } from './factories.js';
 
-const { getProject, getRun, apiFetch } = vi.hoisted(() => ({ getProject: vi.fn(), getRun: vi.fn(), apiFetch: vi.fn() }));
+const { getProject, getRun, apiFetch, detach } = vi.hoisted(() => ({ getProject: vi.fn(), getRun: vi.fn(), apiFetch: vi.fn(), detach: vi.fn() }));
 vi.mock('../src/api/client.js', () => ({
   apiBase: () => '/api/v1',
   apiFetch: (...args: unknown[]) => apiFetch(...args),
   api: {
     getProject: (...args: unknown[]) => getProject(...args),
     getRun: (...args: unknown[]) => getRun(...args),
+    detachProjectMember: (...args: unknown[]) => detach(...args),
     listProjects: () => Promise.resolve({ projects: [] }),
     listProjectMembers: () => Promise.resolve({ members: [] }),
     listRepos: () => Promise.resolve({ repos: [{ id: 'repo', name: 'Shop code', root_path: '/code', default_branch: 'main', registered_at: 1 }] }),
@@ -67,6 +68,21 @@ describe('the project Desk', () => {
     expect(screen.getByRole('tab', { name: 'Repositories' })).toHaveAttribute('href', '/projects/p1?tab=repositories');
     expect(getRun).not.toHaveBeenCalled();
     expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('a member run row offers Remove from project; a run filed by project_id has no row menu', async () => {
+    detach.mockResolvedValue({});
+    render(<ProjectDesk {...props} search="?tab=runs" />);
+    await loaded();
+    await waitFor(() => expect(screen.getAllByTestId('desk-runs-row')).toHaveLength(2));
+    const rowOf = (id: string): HTMLElement => screen.getAllByTestId('desk-runs-row').find((r) => r.getAttribute('data-run-id') === id)!;
+    expect(within(rowOf('filed')).queryByTestId('desk-runs-row-menu-button')).not.toBeInTheDocument();
+    fireEvent.click(within(rowOf('member')).getByTestId('desk-runs-row-menu-button'));
+    const item = within(rowOf('member')).getByRole('menuitem', { name: /Remove .Improve cart. from this project/ });
+    fireEvent.click(item);
+    expect(detach).toHaveBeenCalledExactlyOnceWith('p1', 'crew.run:member');
+    // The membership is gone, so the run leaves the project's list.
+    await waitFor(() => expect(screen.getAllByTestId('desk-runs-row').map((r) => r.getAttribute('data-run-id'))).toEqual(['filed']));
   });
 
   it('keeps project actions, requirements and documents under Work without duplicate dashboard sections', async () => {
