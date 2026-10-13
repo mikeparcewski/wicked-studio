@@ -26,8 +26,8 @@
   --_surface-3: #edf1f4;   /* raised */
   --_surface-4: #dbe3e9;   /* overlay */
 
-  --_ink-faint:  #45505b;   /* quietest labels, ages: >= 6:1 on every surface */
-  --_ink-soft:   #38434e;   /* secondary copy: >= 8:1 on every surface, 10:1 on cards */
+  --_ink-faint:  #45505b;   /* quietest labels, ages: >= 6:1 on every surface, 8:1 on cards */
+  --_ink-soft:   #38434e;   /* secondary copy: >= 7.7:1 on every surface, 10:1 on cards */
   --_ink-strong: #1e262e;
   --_ink-max:    #0b0f14;
 
