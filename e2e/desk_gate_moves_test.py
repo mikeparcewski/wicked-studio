@@ -119,7 +119,7 @@ with sync_playwright() as p:
 
     set_fixture(origin, steering_rules=True)
     before = len(rule_posts())
-    page.goto(f"{origin}/steering/policies", wait_until="networkidle")
+    page.goto(f"{origin}/steering/policies?view=table", wait_until="networkidle")  # the spreadsheet editor (DES-steer-eval §2.2)
     row = page.locator('[data-testid="steering-grid-row"][data-rule-id="PAT-100"]')
     row.wait_for(state="visible", timeout=15000)
     row.get_by_test_id("steering-cell-excludes").click()

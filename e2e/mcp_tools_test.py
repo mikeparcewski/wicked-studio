@@ -387,7 +387,7 @@ with sync_playwright() as p:
     page.get_by_test_id("mcp-add-cancel").click()
 
     # ── 5. Steering: the MCP filter and the Subject picker ───────────────────────
-    page.goto(f"{origin}/steering/policies?mcp=1", wait_until="domcontentloaded")
+    page.goto(f"{origin}/steering/policies?mcp=1&view=table", wait_until="domcontentloaded")  # the spreadsheet editor (DES-steer-eval §2.2)
     try:
         page.get_by_test_id("steering-mcp-chip").wait_for(state="visible", timeout=15000)
         page.wait_for_function("() => document.querySelectorAll('[data-testid=\"steering-grid-row\"]').length === 1", timeout=5000)
