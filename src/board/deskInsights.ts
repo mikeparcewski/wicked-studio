@@ -1,4 +1,4 @@
-import type { SessionView } from '../api/types.js';
+import type { RosterSeat, SessionView } from '../api/types.js';
 import type { SeatRecord, SeatRecordResponse } from '../api/seatRecord.js';
 import { statusWord, type StatusWord } from './statusWords.js';
 import { createdAtMs, wireDelivery } from './windowStats.js';
@@ -49,15 +49,17 @@ const TOOL_SEATS = new Set(['wicked-estate', 'bash']);
 /** A run's workflow key and plain name. */
 export function workflowOf(v: SessionView): { key: string; label: string } {
   const id = (v.session as { run_identity?: { kind?: string; name?: string | null } }).run_identity;
-  if (id?.kind === 'workflow' && typeof id.name === 'string' && id.name !== '') return { key: id.name, label: workflowLabel(id.name) };
+  if ((id?.kind === 'workflow' || id?.kind === 'preset') && typeof id.name === 'string' && id.name !== '') return { key: id.name, label: workflowLabel(id.name) };
   if (id?.kind === 'user_plan') return { key: 'user_plan', label: 'Your own plan' };
-  return { key: 'free_text', label: 'Free-text job' };
+  if (id?.kind === 'free_text') return { key: 'free_text', label: 'Free-text job' };
+  return { key: 'unknown', label: 'Unknown workflow' };
 }
 
 /** "capture-learnings" → "Capture learnings". */
 export function workflowLabel(key: string): string {
   if (key === 'user_plan') return 'Your own plan';
   if (key === 'free_text') return 'Free-text job';
+  if (key === 'unknown') return 'Unknown workflow';
   const words = key.replace(/[-_]+/g, ' ').trim();
   return words === '' ? key : words[0]!.toUpperCase() + words.slice(1);
 }
@@ -94,13 +96,17 @@ export function leadAgentOf(v: SessionView): string | null {
 export type Outcome = 'Finished' | 'Answered' | 'Failed' | 'Waiting on you' | 'Working' | 'Stopped';
 export const OUTCOMES: readonly Outcome[] = ['Finished', 'Answered', 'Failed', 'Waiting on you', 'Working', 'Stopped'];
 
-/** The outcome bucket of a run: statusWord's word, cancelled folded into Stopped; an answered ask
- *  parked at its turn gate is "Answered" (the attention model: it does not wait on you). */
-export function outcomeOf(v: SessionView): Outcome {
+/** Published terminal states alone enter terminal buckets. Unknown statuses have no outcome;
+ * an answered ask parked at its turn gate is "Answered" (it does not wait on you). */
+export function outcomeOf(v: SessionView): Outcome | null {
+  if (v.session.status === 'completed') return 'Finished';
+  if (v.session.status === 'failed') return 'Failed';
+  if (v.session.status === 'cancelled') return 'Stopped';
   if (v.session.status === 'awaiting_human' && !waitsOnYou(v.session)) return 'Answered';
-  const w: StatusWord = statusWord(v).word;
-  if (w === 'Finished' || w === 'Failed' || w === 'Waiting on you' || w === 'Working') return w;
-  return 'Stopped';
+  // Archiving is presentation, not a lifecycle outcome.
+  const w: StatusWord = statusWord({ session: { ...v.session, archived_at: null } }).word;
+  if (w === 'Waiting on you' || w === 'Working') return w;
+  return null;
 }
 
 /** The runs the refine bar keeps: unarchived, launched in the window (by the real start clock),
@@ -164,7 +170,7 @@ export interface GroupNames {
   project: (id: string) => string;
 }
 
-function groupKeyOf(v: SessionView, g: GroupBy): string {
+function groupKeyOf(v: SessionView, g: GroupBy): string | null {
   if (g === 'outcome') return outcomeOf(v);
   if (g === 'agent') return leadAgentOf(v) ?? 'none';
   if (g === 'project') return projectOf(v);
@@ -187,6 +193,7 @@ export function jobSeries(kept: readonly SessionView[], buckets: readonly Bucket
     const i = buckets.findIndex((b) => at >= b.start && at < b.end);
     if (i < 0) continue;
     const k = groupKeyOf(v, g);
+    if (k === null) continue;
     const row = by.get(k) ?? new Array<number>(buckets.length).fill(0);
     row[i] = (row[i] ?? 0) + 1;
     by.set(k, row);
@@ -202,8 +209,10 @@ export function outcomeRows(kept: readonly SessionView[], g: Exclude<GroupBy, 'o
   const rows = new Map<string, Record<Outcome, number>>();
   for (const v of kept) {
     const k = groupKeyOf(v, g);
+    if (k === null) continue;
     const r = rows.get(k) ?? { Finished: 0, Answered: 0, Failed: 0, 'Waiting on you': 0, Working: 0, Stopped: 0 };
-    r[outcomeOf(v)] += 1;
+    const outcome = outcomeOf(v);
+    if (outcome !== null) r[outcome] += 1;
     rows.set(k, r);
   }
   return [...rows.entries()]
@@ -221,6 +230,8 @@ function seatMap(res: SeatRecordResponse | null): Map<string, SeatRecord> {
 }
 
 export function seatDeltas(wide: SeatRecordResponse | null, narrow: SeatRecordResponse | null): SeatDelta[] {
+  // A capped read can cover a different set of runs; subtracting it invents a bucket.
+  if (wide?.truncated || narrow?.truncated) return [];
   const w = seatMap(wide);
   const n = seatMap(narrow);
   const out: SeatDelta[] = [];
@@ -234,9 +245,10 @@ export function seatDeltas(wide: SeatRecordResponse | null, narrow: SeatRecordRe
 }
 
 /** Spend per bucket, one series per helper, from the cumulative reads (oldest bucket first).
- *  `reads[k]` is the record for `recordWindows(days)[k]` days back. Null when any read failed. */
+ * `reads[k]` is the record for `recordWindows(days)[k]` days back. Null when a read failed or
+ * was truncated: omit the series because the cumulative windows may cover different run sets. */
 export function spendSeries(reads: readonly (SeatRecordResponse | null)[], agent: string | null, names: GroupNames): Series[] | null {
-  if (reads.length === 0 || reads.some((r) => r === null)) return null;
+  if (reads.length === 0 || reads.some((r) => r === null || r.truncated)) return null;
   const n = reads.length;
   const by = new Map<string, number[]>();
   for (let k = 0; k < n; k += 1) {
@@ -270,8 +282,8 @@ export interface AgentRow {
   benchReasons: Record<string, number>;
   quotaHits: number;
   costUsd: number | null;
-  /** Cost over the steps that carried a price; null when none did. */
-  costPerStep: number | null;
+  /** Cost divided by priced usage records; null when none carried a price. */
+  costPerPricedUse: number | null;
   /** Jobs (in the refined set) this helper took a step on, and how many of those finished. */
   jobs: number;
   jobsFinished: number;
@@ -290,8 +302,8 @@ export function agentRows(record: SeatRecordResponse | null, kept: readonly Sess
   return [...keys].map((cli) => {
     const s = seats.find((x) => x.cli === cli);
     const mine = kept.filter((v) => agentsOf(v).includes(cli));
-    const ended = mine.filter((v) => ['Finished', 'Answered', 'Failed', 'Stopped'].includes(outcomeOf(v)));
-    const finishedLike = (o: Outcome): boolean => o === 'Finished' || o === 'Answered';
+    const ended = mine.filter((v) => ['Finished', 'Answered', 'Failed', 'Stopped'].includes(outcomeOf(v) ?? ''));
+    const finishedLike = (o: Outcome | null): boolean => o === 'Finished' || o === 'Answered';
     const finished = mine.filter((v) => finishedLike(outcomeOf(v))).length;
     const reasons = (s?.benchReasons ?? {}) as Record<string, number>;
     const quota = Object.entries(reasons).filter(([k]) => /quota/i.test(k)).reduce((a, [, n]) => a + n, 0);
@@ -309,7 +321,7 @@ export function agentRows(record: SeatRecordResponse | null, kept: readonly Sess
       benchReasons: reasons,
       quotaHits: quota,
       costUsd: cost,
-      costPerStep: cost !== null && costed > 0 ? cost / costed : null,
+      costPerPricedUse: cost !== null && costed > 0 ? cost / costed : null,
       jobs: mine.length,
       jobsFinished: finished,
       jobsFailed: mine.filter((v) => outcomeOf(v) === 'Failed').length,
@@ -383,12 +395,33 @@ export interface Callout {
 
 export interface AcpFallbacks { [cli: string]: { fallbacks: number; kinds: Record<string, number> } }
 
+const ENFORCED_ROUTES = new Set(['governance_requires_wrapped', 'read_only_requires_wrapped']);
+
+/** Deliberate wrapped routing preserves enforcement; only other kinds count. */
+export function uncheckedFallbacks(f: AcpFallbacks[string] | undefined): number {
+  return Object.entries(f?.kinds ?? {}).reduce((n, [kind, count]) => n + (ENFORCED_ROUTES.has(kind) ? 0 : count), 0);
+}
+
+export function governanceOf(cli: string, acp: AcpFallbacks | null, roster: readonly RosterSeat[]): { word: string; tone: 'ok' | 'warn' | null; unchecked: number } {
+  if (acp === null) return { word: 'checks not read yet', tone: null, unchecked: 0 };
+  const n = uncheckedFallbacks(acp[cli]);
+  if (n > 0) return { word: `ran unchecked ${n === 1 ? 'once' : `${n} times`} across all recorded runs (studio-wide)`, tone: 'warn', unchecked: n };
+  const cls = roster.find((s) => s.key === cli)?.governance_class;
+  if (cls === 'acp_input_governance') return { word: 'can check every action', tone: null, unchecked: 0 };
+  if (cls === 'os_sandbox') return { word: 'can keep writes in a sandbox', tone: null, unchecked: 0 };
+  return { word: 'checks not reported', tone: null, unchecked: 0 };
+}
+
+export const PARTIAL_RECORD_NOTE = 'Partial: the agent record left out older runs';
+
 export function callouts(input: {
   agents: readonly AgentRow[];
   workflows: readonly WorkflowRow[];
   acp: AcpFallbacks | null;
   openFailures: number;
   days: RangeDays;
+  /** A project page or a refined view still reads studio-wide diagnostics. */
+  scoped?: boolean;
 }): Callout[] {
   const out: Callout[] = [];
   const win = `in the last ${input.days} days`;
@@ -411,13 +444,14 @@ export function callouts(input: {
     });
   }
   for (const [cli, f] of Object.entries(input.acp ?? {})) {
-    if (f.fallbacks <= 0) continue;
+    const n = uncheckedFallbacks(f);
+    if (n <= 0) continue;
     const name = input.agents.find((a) => a.cli === cli)?.label ?? cli;
     out.push({
       id: `acp:${cli}`,
       tone: 'fail',
-      title: `${name} ran without its governed connection ${f.fallbacks} ${f.fallbacks === 1 ? 'time' : 'times'}`,
-      why: `Its governed session could not start (${Object.keys(f.kinds).map(plainFallback).join(', ') || 'no reason recorded'}), so the step ran on the plain fallback.`,
+      title: `${name} ran without its governed connection ${n} ${n === 1 ? 'time' : 'times'} across all recorded runs${input.scoped ? ' (studio-wide)' : ''}`,
+      why: `Its governed session could not start (${Object.entries(f.kinds).filter(([kind, count]) => count > 0 && !ENFORCED_ROUTES.has(kind)).map(([kind]) => plainFallback(kind)).join(', ')}), so the step ran on the plain fallback. These diagnostics cover all recorded runs across studio.`,
       fix: 'Reinstall or update its connector so its tool calls are checked again.',
       evidence: { label: 'Health', path: '/health' },
     });
@@ -524,14 +558,15 @@ export function recentlyEnded(runs: readonly SessionView[], title: (v: SessionVi
   return runs
     .filter((v) => v.session.archived_at == null && typeof v.session.ended_at === 'number')
     .map((v) => ({ runId: v.session.id, title: title(v), outcome: outcomeOf(v), endedAt: (v.session.ended_at as number) * 1000, agent: leadAgentOf(v) }))
-    .filter((r) => r.outcome !== 'Working' && r.outcome !== 'Waiting on you')
+    .filter((r): r is EndedRow => r.outcome !== null && r.outcome !== 'Working' && r.outcome !== 'Waiting on you')
     .sort((a, b) => b.endedAt - a.endedAt)
     .slice(0, max);
 }
 
-/** All agents' spend per bucket (oldest first) from one project's cumulative reads; null when a read failed. */
+/** All agents' spend per bucket (oldest first) from one project's cumulative reads;
+ * null when a read failed or was truncated (the project's series is omitted). */
 export function spendTotals(reads: readonly (SeatRecordResponse | null)[], agent: string | null): number[] | null {
-  if (reads.length === 0 || reads.some((r) => r === null)) return null;
+  if (reads.length === 0 || reads.some((r) => r === null || r.truncated)) return null;
   const n = reads.length;
   const out = new Array<number>(n).fill(0);
   for (let k = 0; k < n; k += 1) {

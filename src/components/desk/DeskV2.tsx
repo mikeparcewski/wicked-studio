@@ -6,7 +6,7 @@ import { getDiagnostics } from '../../api/diagnostics.js';
 import { readErrorKind } from '../../api/errors.js';
 import { failureCounts } from '../../board/attention.js';
 import {
-  agentRows, agentsOf, bucketsOf, callouts, DEFAULT_REFINE, GROUP_BYS, jobSeries, OUTCOMES, outcomeOf, projectOf, RANGES,
+  agentRows, agentsOf, governanceOf, PARTIAL_RECORD_NOTE, bucketsOf, callouts, DEFAULT_REFINE, GROUP_BYS, jobSeries, OUTCOMES, outcomeOf, projectOf, RANGES,
   refineRuns, spendSeries, spendTotals as projectSpend, stepFor, outcomeRows, sum, workflowLabel, workflowOf, workflowRows, type AcpFallbacks, type Callout, type GroupBy, type GroupNames, type RangeDays, type Refine,
 } from '../../board/deskInsights.js';
 import { deskReadState, lapsedSeatChores, needRunId, noSignedInHelper } from '../../board/deskModel.js';
@@ -191,8 +191,8 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
   useEffect(() => {
     let alive = true;
     getDiagnostics().then((d) => {
-      const by = (d as { acp?: { byCli?: Record<string, { fallbacks?: number; fallbackKinds?: Record<string, number> }> } }).acp?.byCli ?? {};
-      if (alive) setAcp(Object.fromEntries(Object.entries(by).map(([k, v]) => [k, { fallbacks: v.fallbacks ?? 0, kinds: v.fallbackKinds ?? {} }])));
+      const by = d.acp?.byCli;
+      if (alive) setAcp(by === undefined ? null : Object.fromEntries(Object.entries(by).map(([k, v]) => [k, { fallbacks: v.fallbacks, kinds: v.fallbackKinds }])));
     }, () => undefined);
     return () => { alive = false; };
   }, []);
@@ -228,10 +228,13 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
     const ids = new Set(inScope.map((v) => v.session.id));
     return failureCounts(inScope, needRows.filter((r) => { const id = needRunId(r); return id !== null && ids.has(id); }), refine.days, now);
   }, [runs, needRows, refine, now]);
-  const tips = useMemo(() => callouts({ agents, workflows: flows, acp: refine.agent === null ? acp : acp === null ? null : Object.fromEntries(Object.entries(acp).filter(([k]) => k === refine.agent)), openFailures: openFailures.inWindow.length + openFailures.older, days: refine.days }), [agents, flows, acp, openFailures, refine.agent, refine.days]);
+  const tips = useMemo(() => callouts({ agents, workflows: flows, acp: refine.agent === null ? acp : acp === null ? null : Object.fromEntries(Object.entries(acp).filter(([k]) => k === refine.agent)), openFailures: openFailures.inWindow.length + openFailures.older, days: refine.days, scoped: projectId !== undefined || refined(refine) }), [agents, flows, acp, openFailures, refine, projectId]);
 
   const runsState: ChartState = !runsShown ? { kind: 'loading' } : kept.length === 0 ? { kind: 'empty', text: `No jobs started in the last ${refine.days} days${refined(refine) ? ' in this view' : ''}.` } : { kind: 'ready' };
-  const spendState: ChartState = projectId === 'default'
+  const spendTruncated = byProjectOn ? byProject.truncated : record.truncated;
+  const spendState: ChartState = spendTruncated && spendTotal === 0
+    ? { kind: 'needs-crew', text: `${PARTIAL_RECORD_NOTE}. Spend buckets affected by truncated reads are unknown and omitted.` }
+    : projectId === 'default'
     ? { kind: 'empty', text: 'Spend is counted per project, so work not in a project has none of its own.' }
     : refine.workflow !== null
     ? { kind: 'needs-crew', text: 'Spend can’t be split by workflow yet: the agent record has no workflow filter.' }
@@ -246,14 +249,14 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
 
   const heldByNeeds = useMemo(() => new Set(needRows.map(needRunId).filter((id): id is string => id !== null)), [needRows]);
   const finishedN = kept.filter((v) => { const o = outcomeOf(v); return o === 'Finished' || o === 'Answered'; }).length;
-  const endedN = kept.filter((v) => ['Finished', 'Answered', 'Failed', 'Stopped'].includes(outcomeOf(v))).length;
+  const endedN = kept.filter((v) => ['Finished', 'Answered', 'Failed', 'Stopped'].includes(outcomeOf(v) ?? '')).length;
   const busiest = jobsSeries.length === 0 ? null : buckets.map((b, i) => ({ b, n: sum(jobsSeries.map((x) => x.values[i] ?? 0)) })).sort((a, b) => b.n - a.n)[0]!;
   const topSpender = spendBars.map((x) => ({ x, v: sum(x.values) })).sort((a, b) => b.v - a.v)[0];
   // ── The Report stat row: five numbers that follow the refine bar. ──
   const prev = useMemo(() => refineRuns(runs, refine, now - refine.days * 86_400_000).kept, [runs, refine, now]);
   const rate = (vs: readonly SessionView[]): number | null => {
-    const ended = vs.filter((v) => ['Finished', 'Answered', 'Failed', 'Stopped'].includes(outcomeOf(v)));
-    return ended.length === 0 ? null : ended.filter((v) => ['Finished', 'Answered'].includes(outcomeOf(v))).length / ended.length;
+    const ended = vs.filter((v) => ['Finished', 'Answered', 'Failed', 'Stopped'].includes(outcomeOf(v) ?? ''));
+    return ended.length === 0 ? null : ended.filter((v) => ['Finished', 'Answered'].includes(outcomeOf(v) ?? '')).length / ended.length;
   };
   const rateNow = rate(kept);
   const ratePrev = rate(prev);
@@ -408,8 +411,9 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
               note={delivered === 0 ? 'no job delivered in this window' : `of ${kept.length} started`} />
             <DeskStat icon={Wallet} tone="accent" label="Spend" testId="desk-stat-spend" value={spendState.kind === 'ready' || spendState.kind === 'empty' ? moneyWords(spendTotal) : spendState.kind === 'loading' ? null : '—'}
               note={spendState.kind === 'error' ? spendState.text
+                : spendTruncated ? PARTIAL_RECORD_NOTE
                 : projectsUnread > 0 ? `at least: ${projectsUnread} ${projectsUnread === 1 ? 'project' : 'projects'} not read`
-                : !few && winSpend.phase === 'done' && winSpend.previous !== null && refine.agent === null ? deltaWords(spendTotal, winSpend.previous, (d) => moneyWords(Math.abs(d)), refine.days) : unpriced ? 'priced usage only' : `last ${refine.days} days`} spark={spendTotals} />
+                : !few && winSpend.phase === 'done' && winSpend.previous !== null && refine.agent === null ? deltaWords(spendTotal, winSpend.previous, (d) => moneyWords(Math.abs(d)), refine.days) : unpriced ? 'priced usage only' : `last ${refine.days} days`} {...(spendTruncated ? {} : { spark: spendTotals })} />
             <DeskStat icon={CheckCircle2} tone="ok" label="Quality checks passed" testId="desk-stat-quality" value={qualityValue}
               note={qualityNote} loading={quality.tally === null} loadingNote="Reading checks…" />
           </ul>
@@ -421,7 +425,7 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
             </ChartCard>
             <ChartCard id="desk-focus-spend" title="Spend" state={spendState} data-testid="desk-viz-spend"
               meta={topSpender !== undefined ? `by ${per} · most on ${topSpender.x.label}` : `by ${per}`}
-              note={projectsUnread > 0 && spendState.kind === 'ready' ? `Spend for ${projectsUnread} ${projectsUnread === 1 ? 'project' : 'projects'} couldn’t be read and is left out.` : spendGroupNote ?? (unpriced ? 'At least: some agents report no price.' : refine.days === 90 ? 'The oldest week is 6 days: the record reaches 90 days back.' : undefined)}>
+              note={spendTruncated ? `${PARTIAL_RECORD_NOTE}. Spend buckets affected by truncated reads are unknown and omitted.` : projectsUnread > 0 && spendState.kind === 'ready' ? `Spend for ${projectsUnread} ${projectsUnread === 1 ? 'project' : 'projects'} couldn’t be read and is left out.` : spendGroupNote ?? (unpriced ? 'At least: some agents report no price.' : refine.days === 90 ? 'The oldest week is 6 days: the record reaches 90 days back.' : undefined)}>
               <AreaChart buckets={buckets} series={spendBars} format={money} label={`Spend per ${per} by ${refine.groupBy === 'project' ? 'project' : 'agent'}, last ${refine.days} days`} compact height={phone ? 96 : 120} data-testid="desk-chart-spend" />
             </ChartCard>
             <ChartCard title="Outcomes" state={runsState} data-testid="desk-viz-outcomes"
@@ -463,20 +467,11 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
       agentName={agentName} projectName={projectName} title={jobTitleOf} showProject={projectId === undefined} />
   );
 
-  // Understand's governance words per agent: the diagnostics' governed-connection fallbacks first
-  // (a fallback = it ran unchecked), else its roster class.
-  const governance = (cli: string): { word: string; tone: 'ok' | 'warn' | null; unchecked: number } => {
-    const n = acp?.[cli]?.fallbacks ?? 0;
-    if (n > 0) return { word: n === 1 ? 'ran unchecked once' : `ran unchecked ${n} times`, tone: 'warn', unchecked: n };
-    const cls = (roster ?? []).find((x) => x.key === cli) as { governance_class?: string } | undefined;
-    if (cls?.governance_class === 'acp_input_governance') return { word: 'every action checked', tone: 'ok', unchecked: 0 };
-    if (cls?.governance_class === 'os_sandbox') return { word: 'writes kept in its sandbox', tone: 'ok', unchecked: 0 };
-    return { word: 'checks not reported', tone: null, unchecked: 0 };
-  };
+  const governance = (cli: string) => governanceOf(cli, acp, roster ?? []);
 
   const understand = (
     <div role="tabpanel" id={panelId('understand')} aria-labelledby={tabId('understand')} data-testid="desk-understand" className="wk-understand">
-      <DeskUnderstand agents={agents} agentsRead={record.phase}
+      <DeskUnderstand agents={agents} agentsRead={record.phase} agentsTruncated={record.truncated}
         filters={[refine.agent !== null ? `agent ${agentName(refine.agent)}` : null, refine.workflow !== null ? `workflow ${workflowLabel(refine.workflow)}` : null].filter((x): x is string => x !== null).join(', ') || null}
         workflows={flows} kept={kept} allRuns={runs} days={refine.days} onDays={(d) => set('days', d)} project={scope}
         projectLabel={scope === null ? null : projectName(scope)} projectName={projectName} agentName={agentName} governance={governance}

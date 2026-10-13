@@ -38,7 +38,7 @@ function props(): ComponentProps<typeof DeskUnderstand> {
     agents: agentRows(null, kept, names, ['claude', 'codex', 'pi', 'gemini']),
     workflows: workflowRows(kept), kept, allRuns: kept, days: 30, onDays: vi.fn(),
     project: null, projectLabel: null, projectName: names.project, agentName: names.agent,
-    governance: () => ({ word: 'Every action checked', tone: 'ok', unchecked: 0 }),
+    governance: () => ({ word: 'Can check every action', tone: 'ok', unchecked: 0 }),
     navigate: vi.fn(), pathOf: (id) => `/sessions/run:${id}`, now: NOW,
   };
 }
@@ -78,6 +78,18 @@ describe('Understand empty state and insights', () => {
     expect(mocks.generate).toHaveBeenCalledExactlyOnceWith(expect.stringMatching(new RegExp(`^agents\\|30\\|\\|\\|${selected.join(',')}\\|`)), expect.stringContaining('Compare these agents'));
     expect(mocks.fetch).not.toHaveBeenCalled();
     expect(mocks.launch).not.toHaveBeenCalled();
+  });
+
+  it('labels partial agent comparisons and carries the caveat into generated insights', () => {
+    render(<DeskUnderstand {...props()} agentsTruncated />);
+    expect(screen.getByText('Partial: the agent record left out older runs')).toBeInTheDocument();
+    suggest('agents');
+    const card = screen.getAllByTestId('desk-compare-card')[0]!;
+    expect(within(card).getByText('Cost per priced use')).toHaveAttribute('title', 'Cost divided by priced usage records.');
+    fireEvent.click(screen.getByTestId('desk-insights-generate'));
+    expect(mocks.generate).toHaveBeenCalledWith(expect.stringMatching(/\|partial$/), expect.stringContaining('Partial: the agent record left out older runs'));
+    fireEvent.click(screen.getByRole('radio', { name: 'Workflows' }));
+    expect(screen.queryByText('Partial: the agent record left out older runs')).not.toBeInTheDocument();
   });
 
   it('suggests one failed and one finished job, excluding a working job', async () => {

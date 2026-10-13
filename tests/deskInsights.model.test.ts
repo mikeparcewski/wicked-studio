@@ -39,7 +39,7 @@ describe('Desk v2 model', () => {
   });
   it('agent rows and callouts come only from recorded numbers', () => {
     const rows = agentRows(rec({ codex: { benched: 4 }, claude: { units: 7, gated: 5, firstPass: 4, rework: 4, costUsd: 10, costedUsage: 5 } }), [run('r')], names, []);
-    expect(rows[0]).toMatchObject({ cli: 'claude', steps: 7, firstPassRate: 0.8, costPerStep: 2 });
+    expect(rows[0]).toMatchObject({ cli: 'claude', steps: 7, firstPassRate: 0.8, costPerPricedUse: 2 });
     (rows.find((r) => r.cli === 'codex')!.benchReasons as Record<string, number>)['signed out'] = 4;
     const c = callouts({ agents: rows, workflows: workflowRows([run('r')]), acp: { pi: { fallbacks: 1, kinds: { binary_unavailable: 1 } } }, openFailures: 0, days: 30 });
     expect(c.map((x) => x.id)).toEqual(['bench:codex', 'acp:pi']);
@@ -48,7 +48,7 @@ describe('Desk v2 model', () => {
   });
   it('compare cards mark one strict best per row and say small rates as counts; the prompt carries the table', () => {
     const rows = agentRows(rec({ a: { units: 3, gated: 2, firstPass: 2, costUsd: 1, costedUsage: 2 }, b: { units: 3, gated: 2, firstPass: 1, benched: 2, costUsd: 3, costedUsage: 2 } }), [], names, []);
-    const v = compareAgents(rows, () => ({ word: 'every action checked', tone: 'ok', unchecked: 0 }), () => 'var(--x)');
+    const v = compareAgents(rows, () => ({ word: 'can check every action', tone: 'ok', unchecked: 0 }), () => 'var(--x)');
     const first = v.rows.indexOf('Passed checks first time');
     const card = (id: string) => v.cards.find((c) => c.id === id)!;
     expect([card('a').cells[first]!.text, card('b').cells[first]!.text]).toEqual(['2 of 2', '1 of 2']);

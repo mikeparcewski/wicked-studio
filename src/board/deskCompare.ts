@@ -9,12 +9,12 @@ import { agentsOf, durationMin, outcomeOf, projectOf, workflowOf, type AgentRow,
  */
 
 export type CellTone = 'ok' | 'warn' | null;
-export interface CompareCell { text: string; best: boolean; tone: CellTone; tag?: boolean }
+export interface CompareCell { text: string; best: boolean; tone: CellTone; tag?: boolean; title?: string }
 export interface CompareCard { id: string; label: string; color: string | null; cells: CompareCell[] }
 export interface CompareView { rows: string[]; cards: CompareCard[]; differ: string[]; small: boolean }
 
 type Better = 'high' | 'low' | null;
-interface Metric { label: string; better: Better; value: (i: number) => number | null; text: (i: number) => string; tone?: (i: number) => CellTone; tag?: boolean }
+interface Metric { label: string; better: Better; value: (i: number) => number | null; text: (i: number) => string; tone?: (i: number) => CellTone; tag?: boolean; title?: string }
 
 const SMALL = 20;
 const money = (v: number | null): string => (v === null ? '—' : v === 0 ? '$0' : v < 0.01 ? '<$0.01' : `$${v.toFixed(2)}`);
@@ -33,7 +33,7 @@ function build(ids: readonly { id: string; label: string; color: string | null }
   });
   return ids.map((it, i) => ({
     ...it,
-    cells: metrics.map((m, r) => ({ text: m.text(i), best: best[r] === i, tone: m.tone?.(i) ?? null, ...(m.tag === true ? { tag: true } : {}) })),
+    cells: metrics.map((m, r) => ({ text: m.text(i), best: best[r] === i, tone: m.tone?.(i) ?? null, ...(m.tag === true ? { tag: true } : {}), ...(m.title !== undefined ? { title: m.title } : {}) })),
   }));
 }
 
@@ -46,7 +46,7 @@ export function compareAgents(rows: readonly AgentRow[], governance: GovernanceO
     { label: 'Passed checks first time', better: 'high', value: (i) => rows[i]!.firstPassRate, text: (i) => rate(Math.round((rows[i]!.firstPassRate ?? 0) * rows[i]!.gated), rows[i]!.gated) },
     { label: 'Reworked', better: 'low', value: (i) => (rows[i]!.steps > 0 ? rows[i]!.rework : null), text: (i) => String(rows[i]!.rework) },
     { label: 'Sat out', better: 'low', value: (i) => rows[i]!.benched, text: (i) => String(rows[i]!.benched) },
-    { label: 'Cost per step', better: 'low', value: (i) => rows[i]!.costPerStep, text: (i) => money(rows[i]!.costPerStep) },
+    { label: 'Cost per priced use', title: 'Cost divided by priced usage records.', better: 'low', value: (i) => rows[i]!.costPerPricedUse, text: (i) => money(rows[i]!.costPerPricedUse) },
     { label: 'Governance', better: null, value: () => null, text: (i) => g[i]!.word, tone: (i) => g[i]!.tone, tag: true },
   ];
   const cards = build(rows.map((r) => ({ id: r.cli, label: r.label, color: color(r.cli) })), metrics);
@@ -54,13 +54,13 @@ export function compareAgents(rows: readonly AgentRow[], governance: GovernanceO
   if (rows.length >= 2) {
     const most = [...rows].sort((a, b) => b.steps - a.steps)[0]!;
     if (most.steps > 0) differ.push(`${most.label} does most of the work (${most.steps} steps)${most.benched === 0 ? ' and never sat out' : ''}${most.gated > 0 && most.rework / Math.max(1, most.steps) >= 0.3 ? `, but needed rework on ${most.rework} of ${most.steps} steps` : ''}.`);
-    const priced = rows.filter((r) => r.costPerStep !== null);
-    if (priced.length >= 2) { const c = [...priced].sort((a, b) => a.costPerStep! - b.costPerStep!)[0]!; differ.push(`${c.label} is the cheapest per step (${money(c.costPerStep)}).`); }
+    const priced = rows.filter((r) => r.costPerPricedUse !== null);
+    if (priced.length >= 2) { const c = [...priced].sort((a, b) => a.costPerPricedUse! - b.costPerPricedUse!)[0]!; differ.push(`${c.label} is the cheapest per priced use (${money(c.costPerPricedUse)}).`); }
     for (const [i, r] of rows.entries()) {
       if (r.benched > 0) {
         const top = Object.entries(r.benchReasons).sort((a, b) => b[1] - a[1])[0];
-        differ.push(`${r.label} sat out ${r.benched} ${r.benched === 1 ? 'time' : 'times'}${top !== undefined ? ` (mostly ${top[0].replace(/_/g, ' ')})` : ''}${g[i]!.unchecked > 0 ? ` and ran without its governance checks ${g[i]!.unchecked === 1 ? 'once' : `${g[i]!.unchecked} times`}` : ''}.`);
-      } else if (g[i]!.unchecked > 0) differ.push(`${r.label} ran without its governance checks ${g[i]!.unchecked === 1 ? 'once' : `${g[i]!.unchecked} times`}.`);
+        differ.push(`${r.label} sat out ${r.benched} ${r.benched === 1 ? 'time' : 'times'}${top !== undefined ? ` (mostly ${top[0].replace(/_/g, ' ')})` : ''}${g[i]!.unchecked > 0 ? ` and ran without its governance checks ${g[i]!.unchecked === 1 ? 'once' : `${g[i]!.unchecked} times`} across all recorded runs (studio-wide)` : ''}.`);
+      } else if (g[i]!.unchecked > 0) differ.push(`${r.label} ran without its governance checks ${g[i]!.unchecked === 1 ? 'once' : `${g[i]!.unchecked} times`} across all recorded runs (studio-wide).`);
     }
   }
   return { rows: metrics.map((m) => m.label), cards, differ: differ.slice(0, 5), small: rows.reduce((a, r) => a + r.steps, 0) < SMALL };
@@ -91,7 +91,7 @@ export function compareWorkflows(rows: readonly WorkflowRow[]): CompareView {
 export function compareJobs(runs: readonly SessionView[], title: (v: SessionView) => string, agentName: (cli: string) => string, cost: (id: string) => number | null | undefined): CompareView {
   const metrics: Metric[] = [
     { label: 'Workflow', better: null, value: () => null, text: (i) => workflowOf(runs[i]!).label },
-    { label: 'Outcome', better: null, value: () => null, text: (i) => outcomeOf(runs[i]!), tone: (i) => (outcomeOf(runs[i]!) === 'Failed' ? 'warn' : outcomeOf(runs[i]!) === 'Finished' ? 'ok' : null), tag: true },
+    { label: 'Outcome', better: null, value: () => null, text: (i) => outcomeOf(runs[i]!) ?? 'Unknown', tone: (i) => (outcomeOf(runs[i]!) === 'Failed' ? 'warn' : outcomeOf(runs[i]!) === 'Finished' ? 'ok' : null), tag: true },
     { label: 'Time', better: 'low', value: (i) => durationMin(runs[i]!), text: (i) => mins(durationMin(runs[i]!)) },
     { label: 'Steps done', better: 'high', value: (i) => (runs[i]!.units ?? []).filter((u) => u.status === 'done').length, text: (i) => `${(runs[i]!.units ?? []).filter((u) => u.status === 'done').length} of ${(runs[i]!.units ?? []).length}` },
     { label: 'Steps refused', better: 'low', value: (i) => (runs[i]!.units ?? []).filter((u) => u.status === 'rejected').length, text: (i) => String((runs[i]!.units ?? []).filter((u) => u.status === 'rejected').length) },
@@ -121,7 +121,7 @@ export function compareProjects(ids: readonly string[], kept: readonly SessionVi
     const vs = kept.filter((v) => projectOf(v) === id);
     const o = vs.map(outcomeOf);
     const fin = o.filter((x) => x === 'Finished' || x === 'Answered').length;
-    const ended = o.filter((x) => x !== 'Working' && x !== 'Waiting on you').length;
+    const ended = o.filter((x) => x !== null && x !== 'Working' && x !== 'Waiting on you').length;
     const m = vs.map(durationMin).filter((x): x is number => x !== null).sort((a, b) => a - b);
     return { id, jobs: vs.length, fin, ended, failed: o.filter((x) => x === 'Failed').length, waiting: o.filter((x) => x === 'Waiting on you').length, med: m.length === 0 ? null : m[Math.floor((m.length - 1) / 2)]!, flows: new Set(vs.map((v) => workflowOf(v).key)).size };
   });
@@ -165,6 +165,7 @@ export function insightPrompt(kind: string, view: CompareView, days: number, lin
     '2. **Likely causes**: why, from the records (quote the record or job when you can).',
     '3. **What to do**: two or three concrete recommendations.',
     `4. **How sure**: these are small numbers${view.small ? ' (under 20 jobs or steps)' : ''}; say what would change the conclusion.`,
+    'Governance capability is not a verdict. ACP diagnostics counts are studio-wide across all recorded runs, not scoped to this window or project.',
     'Do not invent numbers that are not above or in the records. Change nothing.',
   ].join('\n');
 }

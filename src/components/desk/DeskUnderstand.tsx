@@ -7,7 +7,7 @@ import { compareAgents, compareJobs, compareProjects, compareWorkflows, insightP
 import { evidenceLinks } from '../../board/deskAnalyze.js';
 import { generateInsights, useDeskInsights } from '../../hooks/useDeskInsights.js';
 import { Markdown } from '../Markdown.js';
-import { outcomeOf, projectOf, workflowLabel, workflowOf, RANGES, type AgentRow, type RangeDays, type WorkflowRow } from '../../board/deskInsights.js';
+import { outcomeOf, PARTIAL_RECORD_NOTE, projectOf, workflowLabel, workflowOf, RANGES, type AgentRow, type RangeDays, type WorkflowRow } from '../../board/deskInsights.js';
 import { jobTitle } from '../../board/deskWords.js';
 import { relTime } from '../../board/relTime.js';
 import { statusWord } from '../../board/statusWords.js';
@@ -31,10 +31,12 @@ const MAX_CARDS = 4;
 
 const costCache = new Map<string, number | null>();
 
-export function DeskUnderstand({ agents, agentsRead = 'done', filters = null, workflows, kept, allRuns, days, onDays, project, projectLabel, projectName, agentName, governance, navigate, pathOf, now }: {
+export function DeskUnderstand({ agents, agentsRead = 'done', agentsTruncated = false, filters = null, workflows, kept, allRuns, days, onDays, project, projectLabel, projectName, agentName, governance, navigate, pathOf, now }: {
   agents: readonly AgentRow[];
   /** The agent record's read: agents are compared only from a record that was read. */
   agentsRead?: 'loading' | 'done' | 'error';
+  /** The agent record left out older runs: the agent comparison is partial and says so. */
+  agentsTruncated?: boolean;
   /** The refine bar's agent / workflow filters in words ("agent Claude Code, workflow Bug"), or null. */
   filters?: string | null;
   workflows: readonly WorkflowRow[];
@@ -70,7 +72,7 @@ export function DeskUnderstand({ agents, agentsRead = 'done', filters = null, wo
     if (kind === 'workflows') return workflows.map((w) => ({ id: w.key, label: w.label, color: null, meta: `${w.jobs} ${w.jobs === 1 ? 'job' : 'jobs'}` }));
     if (kind === 'jobs') {
       return [...kept].filter((v) => typeof v.session.ended_at === 'number').sort((a, b) => (createdAtMs(b) ?? 0) - (createdAtMs(a) ?? 0)).slice(0, 30)
-        .map((v) => ({ id: v.session.id, label: jobTitle(v.session), color: null, meta: `${outcomeOf(v)}${createdAtMs(v) !== null ? ` · ${relTime(createdAtMs(v)!, now)}` : ''}` }));
+        .map((v) => ({ id: v.session.id, label: jobTitle(v.session), color: null, meta: `${outcomeOf(v) ?? 'Unknown'}${createdAtMs(v) !== null ? ` · ${relTime(createdAtMs(v)!, now)}` : ''}` }));
     }
     return [...new Set(kept.map(projectOf))].map((id) => ({ id, label: projectName(id), color: null, meta: `${kept.filter((v) => projectOf(v) === id).length} jobs` }));
   }, [kind, agents, workflows, kept, projectName, now]);
@@ -113,13 +115,13 @@ export function DeskUnderstand({ agents, agentsRead = 'done', filters = null, wo
 
   // The cache key is the comparison itself: kind, window, scope, selection AND the numbers on the
   // cards, so any filter that changes what is shown asks again rather than reusing another answer.
-  const insightKey = `${kind}|${days}|${project ?? ''}|${filters ?? ''}|${sel.join(',')}|${view.cards.map((c) => c.cells.map((x) => x.text).join('/')).join('|')}`;
+  const insightKey = `${kind}|${days}|${project ?? ''}|${filters ?? ''}|${sel.join(',')}|${view.cards.map((c) => c.cells.map((x) => x.text).join('/')).join('|')}${kind === 'agents' && agentsTruncated ? '|partial' : ''}`;
   const insight = useDeskInsights(insightKey);
   const scopeWords = [project === null ? null : `the project ${projectLabel ?? project} (${project})`, filters].filter((x): x is string => x !== null && x !== '').join(', ') || null;
   // A new window, scope or filter starts the analysis over: an edited intent or a pending launch
   // belongs to the comparison it was made for.
   useEffect(() => { setEditing(null); launchGen.current += 1; setLaunch({ phase: 'idle' }); }, [days, project, filters]);
-  const runInsights = (): void => { void generateInsights(insightKey, insightPrompt(kind, view, days, evidenceLinks(kind, items, days, apiBase(), project), scopeWords)); };
+  const runInsights = (): void => { void generateInsights(insightKey, insightPrompt(kind, view, days, evidenceLinks(kind, items, days, apiBase(), project), scopeWords) + (kind === 'agents' && agentsTruncated ? `\n${PARTIAL_RECORD_NOTE}. The agent comparison is partial.` : '')); };
   const agentsUnread = kind === 'agents' && agentsRead !== 'done';
   const suggestions = [
     { id: 'agents', label: 'Compare your agents', go: () => { setKind('agents'); setPicked((p) => ({ ...p, agents: agents.slice(0, 3).map((a) => a.cli) })); } },
@@ -191,6 +193,7 @@ export function DeskUnderstand({ agents, agentsRead = 'done', filters = null, wo
 
       <div className="wk-und-cols">
         <div className="wk-und-main">
+          {kind === 'agents' && agentsTruncated && <p className="wk-viz-note">{PARTIAL_RECORD_NOTE}</p>}
           {agentsUnread ? (
             <section className="wk-card wk-und-empty" data-testid="desk-und-agents-unread" aria-busy={agentsRead === 'loading'}>
               {agentsRead === 'loading' ? <Skeleton rows={3} variant="line" />
@@ -219,7 +222,7 @@ export function DeskUnderstand({ agents, agentsRead = 'done', filters = null, wo
                       const cell = c.cells[k]!;
                       return (
                         <div key={r} className="wk-und-row">
-                          <dt>{r}</dt>
+                          <dt title={cell.title}>{r}</dt>
                           <dd>
                             {cell.tag === true ? <span className="wk-und-tag" data-tone={cell.tone ?? undefined}>{cell.text}</span> : <b>{cell.text}</b>}
                             {cell.best && <span className="wk-und-best" data-testid="desk-compare-best">best</span>}

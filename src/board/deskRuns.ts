@@ -30,7 +30,7 @@ const OF_FILTER: Record<Exclude<RunStatusFilter, 'all'>, readonly Outcome[]> = {
 export interface RunRow {
   id: string;
   title: string;
-  outcome: Outcome;
+  outcome: Outcome | 'Unknown';
   project: string;
   workflow: string;
   agents: string[];
@@ -56,7 +56,7 @@ function rowOf(v: SessionView, title: (v: SessionView) => string): RunRow {
   return {
     id: v.session.id,
     title: title(v),
-    outcome: outcomeOf(v),
+    outcome: outcomeOf(v) ?? 'Unknown',
     project: projectOf(v),
     workflow: workflowOf(v).label,
     agents: agentsOf(v),
@@ -76,10 +76,10 @@ export function runsView(runs: readonly SessionView[], refine: Refine, status: R
   title: (v: SessionView) => string, names: { project: (id: string) => string; agent: (cli: string) => string }): RunsView {
   const { kept, undated } = refineRuns(runs, refine, now);
   const all = kept.map((v) => rowOf(v, title));
-  const count = (o: readonly Outcome[]): number => all.filter((r) => o.includes(r.outcome)).length;
+  const count = (o: readonly Outcome[]): number => all.filter((r) => o.some((word) => word === r.outcome)).length;
   const words = query.trim().toLowerCase().split(/\s+/).filter((w) => w !== '');
   const rows = all
-    .filter((r) => status === 'all' || OF_FILTER[status].includes(r.outcome))
+    .filter((r) => status === 'all' || OF_FILTER[status].some((word) => word === r.outcome))
     .filter((r) => { if (words.length === 0) return true; const h = haystack(r, names); return words.every((w) => h.includes(w)); })
     .sort((a, b) => (b.startedAt ?? 0) - (a.startedAt ?? 0));
   return {
