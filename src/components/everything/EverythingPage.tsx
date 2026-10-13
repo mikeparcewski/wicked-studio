@@ -739,7 +739,12 @@ function MadeTab({ runs, q, navigate, go }: { runs: SessionView[]; q: Everything
   const [deleting, setDeleting] = useState<{ projectId: string; name: string } | null>(null);
   const doorOpen = q.new === 'document';
   const withDoor = (open: boolean): string => everythingPath({ tab: 'made', kind: q.kind, project: q.project, ...(open ? { new: 'document' as const } : {}) });
-  const opened = q.open !== null && q.open !== undefined ? rows.find((r) => r.doc !== undefined && r.doc.name === q.open && (q.project === null || r.projectId === q.project)) ?? null : null;
+  // The opened document is looked up whatever the kind lens: a page (`style: web`) opened from a
+  // `kind=documents` address (madeOpenAddress, the Plugins page) is still the one asked for.
+  const opened = useMemo(() => {
+    if (q.open === null || q.open === undefined) return null;
+    return madeRows(byProject, [], {}, 'all', q.project).find((r) => r.doc !== undefined && r.doc.name === q.open) ?? null;
+  }, [byProject, q.open, q.project]);
   const askable = projects.filter((p) => p.id !== 'default').map((p) => p.id);
   const loadAll = (): void => { void useDocsCache.getState().loadAll(askable); };
   // studio#687 row 75: plain words — no "daemon", no "index". The complete list says nothing about itself.
@@ -754,7 +759,7 @@ function MadeTab({ runs, q, navigate, go }: { runs: SessionView[]; q: Everything
   return (
     <div data-testid="everything-made" data-count={rows.length} data-kind={q.kind} data-census={census} data-index={index}>
       {opened !== null && opened.doc !== undefined && (
-        <MadeOpen projectId={opened.projectId ?? 'default'} docId={opened.doc.name} title={showText(opened.title)} style={opened.doc.kind ?? null} onClose={() => navigate(everythingPath({ tab: 'made', kind: q.kind, project: q.project }), { replace: true })} />
+        <MadeOpen key={opened.key} projectId={opened.projectId ?? 'default'} docId={opened.doc.name} title={showText(opened.title)} style={opened.doc.style ?? null} onClose={() => navigate(everythingPath({ tab: 'made', kind: q.kind, project: q.project }), { replace: true })} />
       )}
       <div className="wk-everything-bar">
         <div role="group" aria-label="Show" className="wk-everything-chips">

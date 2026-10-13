@@ -12,8 +12,17 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+### Added
+- The Plugins page opens real documents in the built-in editor. Its row lists the documents it opens, newest first, and a click opens that document full size in the editor, with its versions, instead of only the sample page. Written documents and decks still open in studio's own editor, and the row says so.
+- The app builder ("Vibe") is listed as coming soon on the Plugins page and at the end of the New job cards. It is disabled and links nowhere: apps are built by pipelines today.
+
+### Fixed
+- A document opened from Everything made (`?open=`) now opens in the editor its recorded style picks. It had passed the document's kind as its style, so an unstyled or page document opened in studio's own editor instead of the built-in plugin, and a page document opened from a `kind=documents` address was not found.
+- Picking a version of a document opened on the Made list shows that version. The list had no address to write, so the pick did nothing.
+
 ### Changed
 - The light theme is easier to read: secondary text and timestamps are darker (at least 7:1 on cards, and the quietest labels at least 6:1 everywhere), cards stand off the page with a hairline and a soft shadow, and the page sits a clearer step under the cards. The dark theme is unchanged.
+- The built-in editor plugin is named "Document" (was "Page editor").
 - New job opens on a grid of cards, one per kind of job (the same jobs, in the same order), each with a small line drawing, its name and its purpose. Four cards across and three rows in view, with the rest scrolling inside the dialog. Two across below 900 px wide and one on a phone. Arrow keys move across the grid and Enter picks. The dialog is a little wider.
 
 ## [0.7.13] — 2026-10-12

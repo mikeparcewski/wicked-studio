@@ -234,3 +234,23 @@
   .wk-proj-lane { grid-template-columns: minmax(0, 1fr) auto auto; }
   .wk-proj-lane .wk-steptrack { grid-column: 1 / -1; order: 3; }
 }
+/* The Plugins page (editors-document, 2026-10-12): a built-in editor's documents, one link each, and
+   the coming-soon row. Quiet: hairline rows, the title in ink, the project and age dim. */
+.wk-plugin-docs-label { font-size: var(--text-xs); color: var(--ink-dim); margin: 0 0 var(--space-1); text-transform: none; }
+.wk-plugin-docs-list { display: flex; flex-direction: column; border: 1px solid var(--border-subtle); border-radius: var(--radius-md); overflow: hidden; }
+.wk-plugin-docs-list li + li { border-top: 1px solid var(--border-subtle); }
+.wk-plugin-doc {
+  display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3);
+  padding: var(--space-2) var(--space-3); color: var(--ink-high); text-decoration: none; font-size: var(--text-sm);
+}
+.wk-plugin-doc:hover { background: var(--accent-wash); }
+.wk-plugin-doc:focus-visible { outline: 2px solid transparent; box-shadow: var(--focus-ring); }
+.wk-plugin-doc-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: var(--weight-semi); }
+.wk-plugin-doc-meta { flex: none; color: var(--ink-dim); font-size: var(--text-xs); }
+.wk-plugin-docs-note { font-size: var(--text-sm); color: var(--ink-dim); margin: var(--space-1) 0 0; }
+.wk-plugin-soon-list { margin-top: var(--space-2); }
+.wk-plugin-soon { padding: var(--space-3) 0 0; border-top: 1px dashed var(--border-subtle); }
+@media (max-width: 559px) {
+  .wk-plugin-doc { flex-direction: column; gap: 2px; min-height: var(--tap-min); justify-content: center; }
+  .wk-plugin-doc-title { max-width: 100%; }
+}

@@ -3,14 +3,17 @@ import { listEditors, type EditorView } from '../../api/editors.js';
 import { openLaunchWizard } from '../../store/launchWizard.js';
 import { EmptyState, PageFrame, Skeleton, StateBanner } from '../ui/index.js';
 import { PAGE_NAMES } from '../../board/pageNames.js';
+import { OpenDocumentList } from './OpenDocumentList.js';
+import { VIBE_SOON } from '../../board/comingSoon.js';
 
 /**
  * The Plugins page (operator 2026-10-12; was Settings → Developer → Editor plugins, ruling X3, 2026-10-10;
  * DES-EDITOR-PLUGINS-001 §3.2).
  *
  * The editors this studio's service has: the built-in ones that ship with studio and the ones a run of
- * the `editor-plugin` workflow installed. Each opens in the editor test page (`/editors/dev`), the real
- * sandboxed host over a sample page. "Create an editor plugin" opens the launch wizard on the editor-plugin workflow (was: put `/workflow-editor-plugin` in the
+ * the `editor-plugin` workflow installed. A built-in one lists the documents it opens, each opening the
+ * real document in it (editors-document, 2026-10-12); every one can also be tried in the editor test
+ * page (`/editors/dev`), the real sandboxed host over a sample page. "Create an editor plugin" opens the launch wizard on the editor-plugin workflow (was: put `/workflow-editor-plugin` in the
  * Desk's message box; nothing is sent until you send it.
  *
  * The same list (compact) is the editor test page's empty state.
@@ -59,6 +62,9 @@ export function permissionsInWords(permissions: readonly { id: string }[]): { ca
   };
 }
 
+/** The kinds a document can be (`editorKindOf`): an editor claiming one of them opens real documents. */
+const DOCUMENT_KINDS: readonly string[] = ['page', 'document', 'deck'];
+
 /** The editor test page for one editor. */
 export function devHostHref(e: Pick<EditorView, 'id' | 'version' | 'sha256' | 'title'>): string {
   const q = new URLSearchParams({ editor: e.id, version: e.version, sha: e.sha256, title: e.title });
@@ -91,6 +97,9 @@ export function useEditorList(): { load: Load; retry: () => void; retrying: bool
 function EditorRow({ e, navigate, compact }: { e: EditorView; navigate: (p: string) => void; compact: boolean }): React.ReactElement {
   const href = devHostHref(e);
   const words = permissionsInWords(e.permissions);
+  // A built-in editor of documents opens the real ones from here, not only the sample.
+  const opensDocuments = !compact && e.enabled && e.first_party && e.kinds.some((k) => DOCUMENT_KINDS.includes(k));
+  const elsewhere = opensDocuments && !e.kinds.includes('document') && !e.kinds.includes('deck');
   return (
     <li data-testid="editor-plugin-row" data-editor={e.id} className="py-3 border-b last:border-b-0" style={{ borderColor: 'var(--border-subtle)' }}>
       <p className="flex flex-wrap items-center gap-2" style={{ fontSize: 'var(--text-md)', color: 'var(--ink-high)', fontWeight: 600 }}>
@@ -107,9 +116,18 @@ function EditorRow({ e, navigate, compact }: { e: EditorView; navigate: (p: stri
           {words.internet !== null && <p data-testid="editor-plugin-internet">{words.internet}</p>}
         </div>
       )}
+      {opensDocuments && (
+        <div style={{ marginTop: 10 }}>
+          <p className="wk-plugin-docs-label">Open a document in it</p>
+          <OpenDocumentList kinds={e.kinds} navigate={navigate} />
+          {elsewhere && (
+            <p data-testid="editor-plugin-elsewhere" className="wk-plugin-docs-note">Written documents and decks open in studio’s own editor for now.</p>
+          )}
+        </div>
+      )}
       <p style={{ marginTop: 6 }}>
         {e.enabled ? (
-          <a href={href} data-testid="editor-plugin-open" className="wk-btn wk-btn--secondary wk-btn--sm" aria-label={compact ? `Open ${e.title}` : `Try it on a sample page: ${e.title}`} onClick={(ev) => { ev.preventDefault(); navigate(href); }}>
+          <a href={href} data-testid="editor-plugin-open" className={`wk-btn ${opensDocuments ? 'wk-btn--quiet' : 'wk-btn--secondary'} wk-btn--sm`} aria-label={compact ? `Open ${e.title}` : `Try it on a sample page: ${e.title}`} onClick={(ev) => { ev.preventDefault(); navigate(href); }}>
             {compact ? 'Open' : 'Try it on a sample page'}
           </a>
         ) : (
@@ -186,6 +204,15 @@ export function PluginsPage({ navigate }: { navigate: (p: string) => void }): Re
           Built-in ones ship with studio. One you create appears here once its job passes studio’s checks and you approve the install.
         </p>
         <EditorPluginList navigate={navigate} />
+        <ul aria-label="Coming soon" className="wk-plugin-soon-list">
+          <li data-testid="plugin-coming-soon" data-plugin="vibe" aria-disabled="true" className="wk-plugin-soon">
+            <p className="flex flex-wrap items-center gap-2" style={{ fontSize: 'var(--text-md)', color: 'var(--ink-body)', fontWeight: 600 }}>
+              <span>{VIBE_SOON.name}</span>
+              <span className="wk-tag" data-testid="plugin-coming-soon-tag">Coming soon</span>
+            </p>
+            <p style={{ fontSize: 'var(--text-sm)', color: 'var(--ink-dim)', marginTop: 2 }}>{VIBE_SOON.line}</p>
+          </li>
+        </ul>
       </section>
     </PageFrame>
   );

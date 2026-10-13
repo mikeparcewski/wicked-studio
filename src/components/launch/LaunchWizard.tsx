@@ -27,6 +27,7 @@ import { DEMO_VIDEO_ID, DRAFT_EPICS_ID, useLaunchWizard, type LaunchDraft } from
 import { launchDemo } from '../../api/demo.js';
 import { DEMO_AUDIENCES, DEMO_AUDIENCE_MAX, DEMO_SHOW_MAX, DEMO_URL_MAX, DEMO_VIDEO_LINE, demoBlocker } from '../../board/demoLaunch.js';
 import { UNFILED_MOUNT } from '../../api/interactive.js';
+import { VIBE_SOON } from '../../board/comingSoon.js';
 import { composeProduct } from '../../api/product.js';
 import { COMPOSE_MAX, RequirementsBrowser, reqKey, type ChosenRequirement } from '../product/RequirementsBrowser.js';
 import { workflowPurpose } from '../../board/workflowPurpose.js';
@@ -378,6 +379,13 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
                       </button>
                     );
                   })}
+                  {/* The app builder (operator 2026-10-12): shown, not offered — a card that is not a button. */}
+                  <div data-testid="launch-wizard-soon" data-job="vibe" aria-disabled="true" role="group" aria-label={`${VIBE_SOON.name}, coming soon`} className="wk-launch-wizard-choice wk-launch-wizard-card wk-launch-wizard-card--soon">
+                    <span className="wk-launch-wizard-card-art"><WorkflowArt workflowKey="vibe" /></span>
+                    <span className="wk-tag">Coming soon</span>
+                    <span className="wk-launch-wizard-choice-name">{VIBE_SOON.name}</span>
+                    <span className="wk-launch-wizard-choice-line" title={VIBE_SOON.line}>{VIBE_SOON.line}</span>
+                  </div>
                 </div>
               </div>
             </fieldset>

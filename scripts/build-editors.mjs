@@ -26,7 +26,8 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 export const EDITORS = [
   {
     id: 'wicked-page',
-    title: 'Page editor',
+    // The operator's name for it (2026-10-12): the editor of an interactive document, plainly.
+    title: 'Document',
     protocol: [1],
     kinds: ['page'],
     sizes: ['inline', 'pane', 'full'],

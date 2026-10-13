@@ -139,3 +139,12 @@
 .wk-launch-wizard .wk-field-note { font-size: var(--text-sm); }
 /* studio#726: a selected helper chip has an accent edge, so a row with every chip on still reads selected. */
 .wk-composer-seat[aria-pressed='true'] { border-color: var(--accent); }
+/* The app builder's place in the grid (operator 2026-10-12: "Coming soon"): a card that is not a
+   button — dashed edge, no hover, the arrow keys pass over it (they move between buttons only). */
+.wk-launch-wizard-card--soon { cursor: default; border-style: dashed; background: transparent; color: var(--ink-body); }
+.wk-launch-wizard-card--soon:hover { border-color: var(--border); }
+.wk-launch-wizard-card--soon .wk-launch-wizard-card-art { color: var(--ink-dim); opacity: .7; }
+.wk-launch-wizard-card--soon { position: relative; }
+.wk-launch-wizard-card--soon .wk-tag { position: absolute; top: var(--space-2); right: var(--space-2); }
+/* Two columns wide where the grid has two or more, so its one line reads whole beside a full drawing. */
+@media (min-width: 560px) { .wk-launch-wizard-card--soon { grid-column: span 2; } }

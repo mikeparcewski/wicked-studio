@@ -167,9 +167,12 @@ export function ArtifactMorph({ artifactKey, title, projectId, docId, composerKe
   const editorKind = slot === undefined;
   const versionsOn = editorKind && size === 'full';
   const versions = useVersionList(projectId, docId, head, versionsOn);
-  const pinned = address !== null && address.routeKey === artifactKey ? address.routeVersion : null;
+  // With no address to write (a document opened on the Made list, `MadeOpen`), the lens is this
+  // artifact's own state, so picking a version still shows it (codex r1, editors-document).
+  const [localLens, setLocalLens] = useState<number | null>(null);
+  const pinned = address === null ? localLens : address.routeKey === artifactKey ? address.routeVersion : null;
   const lens = versionsOn ? lensVersion(pinned, head, versions) : null;
-  const look = (v: number | null): void => { address?.pickVersion(artifactKey, v, 'push'); };
+  const look = (v: number | null): void => { if (address === null) setLocalLens(v); else address.pickVersion(artifactKey, v, 'push'); };
 
   // Esc shrinks one step (rule 1) — the topmost open artifact only, and not while something inside
   // it is consuming it (a pick, an edit field), which stops the event before it reaches the document.
@@ -292,7 +295,7 @@ export function ArtifactMorph({ artifactKey, title, projectId, docId, composerKe
           list={versions}
           lens={lens}
           onLook={look}
-          onRestored={(newHead) => { setHead(newHead); if (address !== null && address.routeKey === artifactKey) address.pickVersion(artifactKey, null, 'replace'); }}
+          onRestored={(newHead) => { setHead(newHead); if (address === null) setLocalLens(null); else if (address.routeKey === artifactKey) address.pickVersion(artifactKey, null, 'replace'); }}
         />
       )}
       {exported !== null && size !== 'inline' && (

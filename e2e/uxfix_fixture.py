@@ -759,6 +759,9 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          "editors": False, "editor_grants": ["artifact.read", "artifact.write", "selection.chip",
                                               "composer.draft", "checks.contribute", "ui.fullscreen", "network.media"],
          "shell_csp": False,
+         # editors-document: `docs_index` serves the daemon-wide document index (`GET /interactive/docs`,
+         # crew ≥ 0.7.x) over the notes seeds + what this server created; off = the route is absent.
+         "docs_index": False,
          # ── Sessions (DES-STUDIO-REBUILD-001 S6a, e2e/desk_session_test.py) ──
          # sessions — SESSION_RUNS are GET /runs (they REPLACE the corpus): r-pay-1 (completed, not a team run) and r-pay-2
          #   (executing team run) launched from chat-pay, whose GET /chats/:id holds a live
@@ -6179,6 +6182,18 @@ class W2Handler(SimpleHTTPRequestHandler):
         # unknown-route body, the exact shape `isRouteAbsent` recognises — so the studio's
         # presence-check takes its `absent` branch here, not the named-refusal one.
         if path == "/api/v1/interactive/docs":
+            with state_lock:
+                index_on = state["docs_index"]
+            if index_on:
+                with docs_lock:
+                    created = [
+                        {"project_id": pid, "name": doc, "kind": "doc",
+                         **({"style": doc_styles[(pid, doc)]} if (pid, doc) in doc_styles else {}),
+                         "head": max(e["version"] for e in vs), "versions": len(vs), "updated_at": vs[-1]["created_at"]}
+                        for pid, docs in docs_created.items() for doc, vs in docs.items()
+                    ]
+                self._json(200, {"docs": [{"project_id": "notes", **d} for d in NOTES_DOCS] + created, "unreachable": []})
+                return True
             self._json(404, {"message": f"Route GET:{path} not found", "error": "Not Found", "statusCode": 404})
             return True
         if path.startswith("/api/v1/"):
