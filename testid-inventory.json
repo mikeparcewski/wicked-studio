@@ -12,8 +12,8 @@
   "studioVersion": "0.7.13",
   "counts": {
     "files": 204,
-    "occurrences": 2332,
-    "static": 2026,
+    "occurrences": 2333,
+    "static": 2028,
     "dynamic": 63,
     "computed": 24
   },
@@ -3679,6 +3679,12 @@
       ]
     },
     {
+      "testId": "launch-wizard-cards",
+      "files": [
+        "src/components/launch/LaunchWizard.tsx"
+      ]
+    },
+    {
       "testId": "launch-wizard-change",
       "files": [
         "src/components/launch/LaunchWizard.tsx"
@@ -3752,6 +3758,12 @@
     },
     {
       "testId": "launch-wizard-intent",
+      "files": [
+        "src/components/launch/LaunchWizard.tsx"
+      ]
+    },
+    {
+      "testId": "launch-wizard-keys",
       "files": [
         "src/components/launch/LaunchWizard.tsx"
       ]

@@ -12,6 +12,9 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+### Changed
+- New job opens on a grid of cards, one per kind of job (the same jobs, in the same order), each with a small line drawing, its name and its purpose. Four cards across and three rows in view, with the rest scrolling inside the dialog. Two across below 900 px wide and one on a phone. Arrow keys move across the grid and Enter picks. The dialog is a little wider.
+
 ## [0.7.13] — 2026-10-12
 
 The front door: a mission-control Desk, a project dashboard, and a Workspace rail without Product or Testing.
