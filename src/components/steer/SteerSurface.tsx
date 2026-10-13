@@ -337,11 +337,11 @@ export function SteerSurface({ pathname, search, navigate: navigateRaw, runs = [
         note={pending === 'unsupported' ? 'This crew has no proposal review' : pending === 0 ? 'Nothing waiting on you' : 'From helpers, waiting on you'}
         onClick={() => setView('proposals')} />
       <SeStat icon={Sparkles} tone={lastEval !== null && lastEval.summary.false_positives > 0 ? 'fail' : 'accent'} label="Caught in last eval" testId="steer-stat-eval"
-        value={lastEval !== null ? String(lastEval.summary.caught) : latest.kind === 'loading' ? null : 'None yet'}
+        value={lastEval !== null ? String(lastEval.summary.caught) : latest.kind === 'loading' ? null : latest.kind === 'failed' ? '—' : 'None yet'}
         of={lastEval !== null ? `/ ${lastEval.summary.total}` : undefined}
         note={lastEval !== null
           ? `${blocked} bad blocked · ${lastEval.summary.gaps} gaps · ${otherStore ? 'another rule store' : relTime(lastEval.at)}`
-          : latest.kind === 'unavailable' ? 'Evals aren’t available here' : 'Run one to test the rules'}
+          : latest.kind === 'unavailable' ? 'Evals aren’t available here' : latest.kind === 'failed' ? 'Couldn’t read the last eval' : 'Run one to test the rules'}
         title={otherStore ? 'The last eval was judged against a different rule store, not this daemon’s, so it did not test these rules.' : undefined}
         href={testingPath('evals')} navigate={navigate} />
       <li className="wk-card wk-se-addtile" data-testid="steer-add">

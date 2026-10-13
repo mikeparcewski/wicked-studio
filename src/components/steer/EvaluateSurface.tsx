@@ -182,13 +182,16 @@ export function EvaluateSurface({ navigate, title, intro = 'Replay good and bad 
   };
 
   const reading = latest.kind === 'loading';
+  // A failed read says so; it never reads as "no eval yet" or "never run" (agy UX gate, live :7701).
+  const unread = ev === null && latest.kind === 'failed';
+  const noEval = unread ? 'Couldn’t read the last eval' : 'No eval yet';
   const tiles = (
     <SeStats data-testid="evaluate-tiles">
       <SeStat icon={CircleCheck} tone={blocked > 0 ? 'ok' : 'accent'} label="Caught" testId="evaluate-stat-caught"
         value={ev !== null ? String(ev.summary.caught) : reading ? null : '—'}
         of={ev !== null ? `of ${ev.summary.total}` : undefined}
         // The bad-blocked count leads: a caught figure made only of good samples left alone protects nothing.
-        note={ev !== null ? `${blocked} of ${badCount} bad blocked · ${passed} good left alone` : 'No eval yet'}
+        note={ev !== null ? `${blocked} of ${badCount} bad blocked · ${passed} good left alone` : noEval}
         onClick={() => toResults('caught')} />
       <SeStat icon={CircleDashed} tone="warn" label="Gaps" testId="evaluate-stat-gaps"
         value={ev !== null ? String(ev.summary.gaps) : reading ? null : '—'}
@@ -196,7 +199,7 @@ export function EvaluateSurface({ navigate, title, intro = 'Replay good and bad 
       <SeStat icon={TriangleAlert} tone={ev === null ? 'accent' : ev.summary.false_positives > 0 ? 'fail' : 'ok'} label="False alarms" testId="evaluate-stat-fp"
         value={ev !== null ? String(ev.summary.false_positives) : reading ? null : '—'}
         // No eval, no claim (codex r1 #4).
-        note={ev === null ? 'No eval yet' : ev.summary.false_positives > 0 ? 'Rules that would block good work today' : 'No rule blocked good work'}
+        note={ev === null ? noEval : ev.summary.false_positives > 0 ? 'Rules that would block good work today' : 'No rule blocked good work'}
         onClick={() => toResults('false_positive')} />
       <li className="wk-card wk-se-runtile" data-testid="evaluate-run">
         <button data-testid="testing-evals-run" type="button" className="wk-btn wk-btn--primary" disabled={run.kind === 'busy'} onClick={() => void doRun()}>
@@ -205,7 +208,7 @@ export function EvaluateSurface({ navigate, title, intro = 'Replay good and bad 
         <span className="wk-se-runtile-line" data-testid="evaluate-last-run">
           {ev !== null
             ? <><span title={absTime(ev.at)}>Last run {relTime(ev.at)}</span>{ev.degraded === 'facet-only' && <> · <span title={EVAL_FACET_MATCH_EXPLANATION}>tags only</span></>}</>
-            : reading ? 'Reading the last run…' : 'Never run'}
+            : reading ? 'Reading the last run…' : unread ? 'Couldn’t read the last run' : 'Never run'}
         </span>
         <button type="button" className="wk-link wk-se-linkbtn" aria-expanded={optionsOpen} data-testid="evaluate-options-toggle" onClick={() => setOptionsOpen((o) => !o)}>
           {optionsOpen ? 'Hide options' : type !== '' || corpus.trim() !== '' ? 'Type and corpus (set for the next run)' : 'Type and corpus'}
@@ -265,7 +268,7 @@ export function EvaluateSurface({ navigate, title, intro = 'Replay good and bad 
         {ev !== null && <span className="wk-se-card-meta">{ev.summary.total} behaviours{ev.corpus !== null ? ` · ${ev.corpus}` : ' · built-in set'}</span>}
       </header>
       {reading ? <Skeleton rows={4} variant="line" /> : coverage.length === 0 ? (
-        <p className="wk-se-quiet">{ev === null ? 'Run evals to see which steering types cover their behaviours.' : 'The run carried no per-sample rows.'}</p>
+        <p className="wk-se-quiet">{unread ? 'Couldn’t read the last eval; retry above.' : ev === null ? 'Run evals to see which steering types cover their behaviours.' : 'The run carried no per-sample rows.'}</p>
       ) : (
         <>
           <CategoryBars data-testid="evaluate-coverage-chart" rowHeight={36} normalize labelWidth={120} figureWidth={88}
@@ -294,7 +297,7 @@ export function EvaluateSurface({ navigate, title, intro = 'Replay good and bad 
         <span className="wk-se-card-sub">Each gap is a behaviour no rule blocks. Draft rules opens the steering assistant with them written out; you send it.</span>
       </header>
       {reading ? <Skeleton rows={3} variant="line" /> : gapGroups.length === 0 ? (
-        <p className="wk-se-quiet" data-testid="evaluate-gaps-none">{ev === null ? 'No eval yet.'
+        <p className="wk-se-quiet" data-testid="evaluate-gaps-none">{unread ? 'Couldn’t read the last eval.' : ev === null ? 'No eval yet.'
           // "Every bad behaviour was blocked" only when there were bad behaviours to block (codex r1 #4).
           : badCount === 0 ? 'No gaps, but this corpus has no bad behaviours, so nothing could be blocked.'
           : 'No gaps. Every bad behaviour in this corpus was blocked.'}</p>

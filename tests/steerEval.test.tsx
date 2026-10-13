@@ -503,4 +503,17 @@ describe('agy r1 fixes', () => {
     expect(screen.getByTestId('steer-import-go')).toBeDisabled();
     expect(apiFetch.mock.calls.filter(([p]) => p === '/governance/steering/import')).toHaveLength(1);
   });
+
+  it('a failed eval read never says "no eval yet" or "never run"', async () => {
+    apiFetch.mockImplementation(() => Promise.reject(new Error('socket hang up')));
+    render(<EvaluateSurface navigate={vi.fn()} />);
+    await screen.findByTestId('evaluate-read-error');
+    expect(screen.getByTestId('evaluate-last-run')).toHaveTextContent('Couldn’t read the last run');
+    expect(screen.getByTestId('evaluate-stat-caught')).toHaveTextContent('Couldn’t read the last eval');
+    expect(screen.getByTestId('evaluate-tiles')).not.toHaveTextContent('No eval yet');
+    cleanup();
+    render(<SteerSurface pathname="/rules" search="" runs={[]} navigate={vi.fn()} />);
+    await waitFor(() => expect(screen.getByTestId('steer-stat-eval')).toHaveTextContent('Couldn’t read the last eval'));
+    expect(screen.getByTestId('steer-stat-eval')).not.toHaveTextContent('None yet');
+  });
 });
