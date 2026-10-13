@@ -11,8 +11,8 @@ describe('S17a project rows', () => {
   it('includes empty projects, excludes default, orders by run clock and filters by name', () => {
     const projects = [project('default', 3000), project('scratch', 2000), project('Alpha', 1000)];
     const groups: RailGroup[] = [{ projectId: 'Alpha', name: 'Alpha', sessions: [
-      { id: 'run:r1', runId: 'r1', runIds: ['r1'], title: 'A', state: 'blocked', badge: 0, line: '', path: '/s/run:r1' },
-    ] }];
+      { id: 'run:r1', runId: 'r1', runIds: ['r1'], title: 'A', state: 'blocked', badge: 0, line: '', path: '/s/run:r1', status: { word: 'Failed', tone: 'fail' }, at: 4000, launchedAt: 1000, tag: null },
+    ], more: [] }];
     const items = [{ project: projects[2], repoNames: ['Studio API'] }] as BoardProject[];
     const rows = projectRows(projects, items, groups, [run('r1', 1, 4)]);
     expect(rows.map((row) => row.project.id)).toEqual(['Alpha', 'scratch']);

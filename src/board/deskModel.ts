@@ -5,7 +5,9 @@ import { testingPath } from '../api/testing.js';
 import type { NeedRow } from './needsYou.js';
 import { DELIVERED_LINE, KEPT_LINE, jobTitle, jobTitleFull, keptLocally } from './deskWords.js';
 import { PAGE_NAMES } from './pageNames.js';
-import { sessionIdOf, sessionPath, summarize, type SessionState } from './sessionModel.js';
+import { sessionIdOf, sessionPath, sessionState as stateOfStatus, summarize, type SessionState } from './sessionModel.js';
+import { statusWord, type StatusTone, type StatusWord } from './statusWords.js';
+import { absTime, relTime } from './relTime.js';
 
 /**
  * THE DESK's model (DES-STUDIO-REBUILD-001 §5.5, slice S4) — pure folds over what studio already
@@ -117,12 +119,26 @@ export interface RailSession {
   line: string;
   /** `/s/:id` (S6a). */
   path: string;
+  /** The rail dot: the one status word and tone (`statusWord`) of the run that sets the session's
+   *  state — the dot's hue and the row's label say the same thing (an answered ask at its turn gate
+   *  is "Answered", tone ok, though its `state` stays `waiting`). */
+  status: { word: StatusWord; tone: StatusTone };
+  /** When the session last changed (its newest run's end, else its launch), ms; null when unknown. */
+  at: number | null;
+  /** When its first run launched, ms; null when no run says. Orders the "#n" tags. */
+  launchedAt: number | null;
+  /** Set only when another session in the same group has the same title: the short words that tell
+   *  them apart ("29d", else "14:04", else "#2"; `disambiguate`). */
+  tag: string | null;
 }
 
 export interface RailGroup {
   projectId: string | null;
   name: string;
+  /** The rail's first few (`max`): needs-you and live work first. */
   sessions: RailSession[];
+  /** The rest, in the same order — the rail's "Show N more". Empty when `max` is Infinity. */
+  more: RailSession[];
 }
 
 // Live work before old failures: a failure that still needs you already sorts first by its badge.
@@ -160,6 +176,10 @@ function toSessions(
     // A post-hoc delivery that just landed (this session's store) is delivered, even before the run
     // list catches up: no lifecycle frame follows it, so the DTO can say `stranded` until a reload.
     const deliveredJustNow = deliveredNow.has(newest);
+    // The dot's word: the newest run whose own state is the session's (live work first, as `summarize`).
+    // A run that really waits on you outranks an answered ask parked at its turn gate.
+    const matching = [...views].reverse().filter((v) => stateOfStatus(v.session.status) === sum.state);
+    const setter = matching.find((v) => statusWord(v).word !== 'Answered') ?? matching[0] ?? newestView ?? views[0]!;
     const kept = !deliveredJustNow && sum.state === 'done' && sum.badge === 0 && newestView !== undefined && keptLocally(newestView);
     return {
       id,
@@ -176,14 +196,106 @@ function toSessions(
       // S15e: a gated waiting session links directly to the gate so a click from the Desk lands
       // inside the thread at the answerable row (operator amendment 1 / needsYou.ts pattern).
       path: needy !== undefined && sum.state === 'waiting' ? sessionPath(id) + '#gate' : sessionPath(id),
+      status: statusWord(setter),
+      at: sum.lastChangeAt > 0 ? sum.lastChangeAt : null,
+      launchedAt: firstLaunchMs(views),
+      tag: null,
     };
   });
 }
 
-/** The newest few — but never drop a session that needs you: its badge is part of the count. */
-function capSessions(list: RailSession[], max: number): RailSession[] {
+/** "1 thing needs you", "2 things need you" — the words behind a rail count. */
+export function needsYouWords(n: number): string {
+  return n === 1 ? '1 thing needs you' : `${n} things need you`;
+}
+
+/**
+ * What a rail row says beyond its visible words: the hover `title` (one fact per line, the time also
+ * absolute) and the link's accessible label (the same facts, comma-joined). The full title with its tag (the label
+ * replaces the visible words, so a twin's tag must be in it), then the status word and
+ * when, then how many things need you, then the session's own line when it says more than the word
+ * ("Delivered", a question, "Stopped: …").
+ */
+export function railRowWords(s: RailSession, now: number): { title: string; label: string } {
+  const generic = new Set<string>([sessionLine(s.state, 0, null), s.status.word]);
+  const when = s.at !== null ? `${s.status.word} · ${relTime(s.at, now)}` : s.status.word;
+  const name = s.fullTitle ?? s.title;
+  const facts = [s.tag !== null ? `${name} · ${s.tag}` : name, when, s.badge > 0 ? needsYouWords(s.badge) : null, generic.has(s.line) ? null : s.line]
+    .filter((x): x is string => x !== null && x !== '');
+  // The hover title also says the exact time (UI-CONTRACT: relative words, the absolute time in `title`).
+  const title = s.at !== null ? [facts[0], `${when} (${absTime(s.at)})`, ...facts.slice(2)] : facts;
+  return { title: title.join('\n'), label: facts.join(', ') };
+}
+
+// ── Telling same-named sessions apart ───────────────────────────────────────
+
+/** "now", "5m", "3h", "29d", "4mo", "2y" — the rail's short age. */
+export function shortAge(at: number, now: number): string {
+  const secs = Math.floor((now - at) / 1000);
+  if (!Number.isFinite(secs) || secs < 60) return 'now';
+  const mins = Math.floor(secs / 60);
+  if (mins < 60) return `${mins}m`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days}d`;
+  if (days < 365) return `${Math.floor(days / 30)}mo`;
+  return `${Math.floor(days / 365)}y`;
+}
+
+/** "14:04" — the 24-hour local clock: five characters, no am/pm to crowd the title. */
+export function shortClock(at: number): string {
+  const d = new Date(at);
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+
+const titleKey = (s: RailSession): string => s.title.trim().toLowerCase();
+
+/**
+ * Sessions in one group that share a title get a short tag (the operator's "· 2d"): each one's short
+ * age when that tells every one of the set apart, else its 24-hour clock time ("14:04", for same-day
+ * twins), else its place in launch order ("#1" the oldest) — one rule per set, never a mix, and
+ * always short, so the title keeps the row. Sessions with a unique
+ * title get no tag; the hover title carries the full time. Pure: `now` is the caller's clock.
+ */
+export function disambiguate(list: readonly RailSession[], now: number): RailSession[] {
+  const sets = new Map<string, RailSession[]>();
+  for (const s of list) {
+    const k = titleKey(s);
+    const set = sets.get(k);
+    if (set === undefined) sets.set(k, [s]); else set.push(s);
+  }
+  const tags = new Map<RailSession, string>();
+  for (const set of sets.values()) {
+    if (set.length < 2) continue;
+    const known = set.every((s) => s.at !== null);
+    const distinct = (f: (s: RailSession) => string): boolean => new Set(set.map(f)).size === set.length;
+    const age = (s: RailSession): string => shortAge(s.at!, now);
+    const clock = (s: RailSession): string => shortClock(s.at!);
+    const rule = known && distinct(age) ? age : known && distinct(clock) ? clock : null;
+    if (rule !== null) { for (const s of set) tags.set(s, rule(s)); continue; }
+    // Launch order: the first launched is #1; an unknown launch sorts first, ties by the list's own order
+    // reversed (the list is newest first).
+    const order = set.map((s, i) => ({ s, i })).sort((a, b) => (a.s.launchedAt ?? 0) - (b.s.launchedAt ?? 0) || b.i - a.i);
+    order.forEach(({ s }, n) => tags.set(s, `#${n + 1}`));
+  }
+  return list.map((s) => (tags.has(s) ? { ...s, tag: tags.get(s)! } : s));
+}
+
+/** The first launch among a session's runs (unix seconds on the wire), ms; null when none says. */
+function firstLaunchMs(views: readonly SessionView[]): number | null {
+  const at = views
+    .map((v) => (v.session as unknown as { created_at?: unknown }).created_at)
+    .filter((c): c is number => typeof c === 'number' && Number.isFinite(c) && c > 0);
+  return at.length === 0 ? null : Math.min(...at) * 1000;
+}
+
+/** The newest few — but never drop a session that needs you: its badge is part of the count. The rest
+ *  go to `more` (the rail's "Show N more"). */
+function capSessions(list: RailSession[], max: number): { sessions: RailSession[]; more: RailSession[] } {
   const needy = list.filter((s) => s.badge > 0).length;
-  return list.slice(0, Math.max(max, needy));
+  const n = Math.max(max, needy);
+  return { sessions: list.slice(0, n), more: list.slice(n) };
 }
 
 function orderSessions(list: RailSession[]): RailSession[] {
@@ -198,7 +310,9 @@ function orderSessions(list: RailSession[]): RailSession[] {
 
 /**
  * The rail: one group per project (the board model's order), then the runs in no project.
- * Empty groups are dropped — a project with nothing in it has no session to show.
+ * Empty groups are dropped — a project with nothing in it has no session to show. Same-named
+ * sessions in a group carry a `tag` (`disambiguate`); each group keeps its first `max` in
+ * `sessions` (never dropping one that needs you) and the rest in `more`.
  */
 export function railGroups(
   projects: readonly { project: { id: string; name: string }; runs: readonly SessionView[] }[],
@@ -208,17 +322,13 @@ export function railGroups(
   texts: Record<string, string> = {},
   runChatId = false,
   deliveredNow: ReadonlySet<string> = new Set(),
+  now: number = Date.now(),
 ): RailGroup[] {
-  const groups: RailGroup[] = projects.map((p) => ({
-    projectId: p.project.id,
-    name: p.project.name,
-    sessions: capSessions(orderSessions(toSessions(p.runs, badges, texts, runChatId, deliveredNow)), max),
-  }));
-  groups.push({
-    projectId: null,
-    name: 'Not in a project',
-    sessions: capSessions(orderSessions(toSessions(unfiled, badges, texts, runChatId, deliveredNow)), max),
-  });
+  // Tags are decided over the whole group, so "Show N more" never changes a shown row's tag.
+  const sessionsOf = (runs: readonly SessionView[]) =>
+    capSessions(disambiguate(orderSessions(toSessions(runs, badges, texts, runChatId, deliveredNow)), now), max);
+  const groups: RailGroup[] = projects.map((p) => ({ projectId: p.project.id, name: p.project.name, ...sessionsOf(p.runs) }));
+  groups.push({ projectId: null, name: 'Not in a project', ...sessionsOf(unfiled) });
   return groups.filter((g) => g.sessions.length > 0);
 }
 

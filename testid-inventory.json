@@ -12,8 +12,8 @@
   "studioVersion": "0.7.13",
   "counts": {
     "files": 205,
-    "occurrences": 2353,
-    "static": 2046,
+    "occurrences": 2358,
+    "static": 2051,
     "dynamic": 63,
     "computed": 24
   },
@@ -6752,7 +6752,25 @@
       ]
     },
     {
+      "testId": "rail-group-more",
+      "files": [
+        "src/components/desk/SessionRail.tsx"
+      ]
+    },
+    {
+      "testId": "rail-group-needs",
+      "files": [
+        "src/components/desk/SessionRail.tsx"
+      ]
+    },
+    {
       "testId": "rail-group-new",
+      "files": [
+        "src/components/desk/SessionRail.tsx"
+      ]
+    },
+    {
+      "testId": "rail-group-toggle",
       "files": [
         "src/components/desk/SessionRail.tsx"
       ]
@@ -6897,6 +6915,18 @@
     },
     {
       "testId": "rail-session",
+      "files": [
+        "src/components/desk/SessionRail.tsx"
+      ]
+    },
+    {
+      "testId": "rail-session-dot",
+      "files": [
+        "src/components/desk/SessionRail.tsx"
+      ]
+    },
+    {
+      "testId": "rail-session-tag",
       "files": [
         "src/components/desk/SessionRail.tsx"
       ]
