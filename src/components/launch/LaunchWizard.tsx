@@ -26,6 +26,8 @@ import { workflowLabel } from '../../board/workflowNames.js';
 import { DRAFT_EPICS_ID, useLaunchWizard, type LaunchDraft } from '../../store/launchWizard.js';
 import { composeProduct } from '../../api/product.js';
 import { COMPOSE_MAX, RequirementsBrowser, reqKey, type ChosenRequirement } from '../product/RequirementsBrowser.js';
+import { workflowPurpose } from '../../board/workflowPurpose.js';
+import { hasWorkflowArt, WorkflowArt } from './WorkflowArt.js';
 
 type Step = 'workflow' | 'what' | 'where' | 'options' | 'requirements' | 'review';
 const STEP_TITLE: Record<Step, string> = {
@@ -37,7 +39,7 @@ const STEP_TITLE: Record<Step, string> = {
   review: 'Check and launch',
 };
 /** "Draft epics" (operator 2026-10-12): a project's requirements become epics, features and stories. */
-const DRAFT_EPICS_LINE = 'Turn a project’s requirements into a draft plan of epics, features and stories';
+const DRAFT_EPICS_LINE = 'Turn requirements into epics and stories';
 const INSTRUCTIONS_MAX = 500;
 
 /**
@@ -170,11 +172,25 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
   };
 
   // Focus: the step's first control on every step; Tab stays inside the dialog.
+  const autoFocused = useRef<HTMLElement | null>(null);
   useEffect(() => {
     const el = dialogRef.current?.querySelector<HTMLElement>('[data-autofocus="true"]')
       ?? dialogRef.current?.querySelector<HTMLElement>('button, select, textarea, input');
     el?.focus();
+    autoFocused.current = el ?? null;
   }, [step]);
+  // The catalog may arrive after the first card (Draft epics) took focus: focus then moves to the
+  // card the step names (the first, or the job already picked) — only while focus is still where the
+  // wizard put it (codex r1: a card the user has moved to keeps its focus when presets arrive).
+  const cardCount = step === 'workflow' ? rows.length : -1;
+  useEffect(() => {
+    if (cardCount < 0) return;
+    const active = document.activeElement;
+    if (active !== autoFocused.current && active !== document.body && active !== dialogRef.current) return;
+    const el = dialogRef.current?.querySelector<HTMLElement>('[data-testid="launch-wizard-cards"] [data-autofocus="true"]') ?? null;
+    el?.focus();
+    autoFocused.current = el;
+  }, [cardCount]);
   const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>): void => {
     if (e.key !== 'Tab') return;
     const nodes = [...(dialogRef.current?.querySelectorAll<HTMLElement>('button:not([disabled]), select, textarea, input, a[href], summary') ?? [])];
@@ -183,6 +199,39 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
     const last = nodes[nodes.length - 1]!;
     if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
     else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+  };
+
+  // The kinds of job, in the catalog's order, then Draft epics (studio's own): one card each.
+  const cards = [
+    ...rows.map((r) => ({ key: r.cmd, id: r.workflowId, artKey: r.key, name: workflowLabel(r.key), line: workflowPurpose(r.key, r.line) })),
+    { key: DRAFT_EPICS_ID, id: DRAFT_EPICS_ID, artKey: DRAFT_EPICS_ID, name: 'Draft epics', line: DRAFT_EPICS_LINE },
+  ];
+  const pickCard = (id: string): void => {
+    // codex r1: another kind of job starts its own options (nothing carried over).
+    if (id !== draft.workflowId) update({ workflowId: id, reduced: false, skipQe: false, skipQeReason: '' });
+    setStep(id === DRAFT_EPICS_ID ? 'requirements' : 'what');
+  };
+  // Arrow keys move across the grid (as many across as the layout shows), Home/End to the ends;
+  // Enter and Space pick (the cards are buttons).
+  const onCardKey = (e: React.KeyboardEvent<HTMLDivElement>): void => {
+    const grid = e.currentTarget;
+    const btns = [...grid.querySelectorAll<HTMLButtonElement>('button')];
+    const at = btns.indexOf(document.activeElement as HTMLButtonElement);
+    if (at < 0) return;
+    const top = btns[0]?.offsetTop ?? 0;
+    const across = Math.max(1, btns.filter((b) => b.offsetTop === top).length);
+    const last = btns.length - 1;
+    // Up from the top row and Down from the bottom row stay put (codex r1: never a sideways move);
+    // Down into a shorter last row lands on its last card.
+    const down = Math.floor(at / across) < Math.floor(last / across) ? Math.min(at + across, last) : at;
+    const to = e.key === 'ArrowRight' ? Math.min(at + 1, last) : e.key === 'ArrowLeft' ? Math.max(at - 1, 0)
+      : e.key === 'ArrowDown' ? down : e.key === 'ArrowUp' ? (at - across >= 0 ? at - across : at)
+        : e.key === 'Home' ? 0 : e.key === 'End' ? last : null;
+    if (to === null) return;
+    e.preventDefault();
+    const next = btns[to];
+    next?.focus();
+    next?.scrollIntoView?.({ block: 'nearest' });
   };
 
   const launch = async (): Promise<void> => {
@@ -250,7 +299,7 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
         aria-modal="true"
         aria-labelledby={titleId}
         data-testid="launch-wizard"
-        className="wk-launch-wizard"
+        className={`wk-launch-wizard${step === 'workflow' ? ' wk-launch-wizard--cards' : ''}`}
         onKeyDown={onKeyDown}
       >
         <header className="wk-launch-wizard-head">
@@ -268,38 +317,31 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
             <fieldset className="wk-launch-wizard-fieldset">
               <legend className="wk-field-label">The kind of job</legend>
               {defs === null && <p className="wk-field-note">{WORKFLOWS_LOADING_LINE}</p>}
-              <div className="wk-launch-wizard-choices">
-                {rows.map((r, i) => (
-                  <button
-                    key={r.cmd}
-                    type="button"
-                    data-testid={`launch-wizard-workflow-${r.workflowId}`}
-                    data-autofocus={i === 0 ? 'true' : undefined}
-                    aria-pressed={draft.workflowId === r.workflowId}
-                    className={`wk-launch-wizard-choice${draft.workflowId === r.workflowId ? ' wk-launch-wizard-choice--on' : ''}`}
-                    onClick={() => {
-                      // codex r1: another kind of job starts its own options (nothing carried over).
-                      if (r.workflowId !== draft.workflowId) update({ workflowId: r.workflowId, reduced: false, skipQe: false, skipQeReason: '' });
-                      setStep('what');
-                    }}
-                  >
-                    <span className="wk-launch-wizard-choice-name">{workflowLabel(r.key)}</span>
-                    <span className="wk-launch-wizard-choice-line">{r.line}</span>
-                  </button>
-                ))}
-                <button
-                  type="button"
-                  data-testid={`launch-wizard-workflow-${DRAFT_EPICS_ID}`}
-                  aria-pressed={drafting}
-                  className={`wk-launch-wizard-choice${drafting ? ' wk-launch-wizard-choice--on' : ''}`}
-                  onClick={() => {
-                    if (!drafting) update({ workflowId: DRAFT_EPICS_ID, reduced: false, skipQe: false, skipQeReason: '' });
-                    setStep('requirements');
-                  }}
-                >
-                  <span className="wk-launch-wizard-choice-name">Draft epics</span>
-                  <span className="wk-launch-wizard-choice-line">{DRAFT_EPICS_LINE}</span>
-                </button>
+              {/* The card grid (operator 2026-10-12): 4 across, 3 rows in view, the rest scroll inside. The
+                  frame is a size container, so a row is a third of the room the modal leaves it. */}
+              <div className="wk-launch-wizard-cards-frame">
+                <div className="wk-launch-wizard-cards" data-testid="launch-wizard-cards" onKeyDown={onCardKey}>
+                  {cards.map((c, i) => {
+                    const on = c.id === DRAFT_EPICS_ID ? drafting : draft.workflowId === c.id;
+                    const autofocus = draft.workflowId !== null && cards.some((x) => x.id === draft.workflowId) ? on : i === 0;
+                    return (
+                      <button
+                        key={c.key}
+                        type="button"
+                        data-testid={`launch-wizard-workflow-${c.id}`}
+                        data-autofocus={autofocus ? 'true' : undefined}
+                        data-art={hasWorkflowArt(c.artKey) ? c.artKey : 'fallback'}
+                        aria-pressed={on}
+                        className={`wk-launch-wizard-choice wk-launch-wizard-card${on ? ' wk-launch-wizard-choice--on' : ''}`}
+                        onClick={() => pickCard(c.id)}
+                      >
+                        <span className="wk-launch-wizard-card-art"><WorkflowArt workflowKey={c.artKey} /></span>
+                        <span className="wk-launch-wizard-choice-name">{c.name}</span>
+                        <span className="wk-launch-wizard-choice-line" title={c.line}>{c.line}</span>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             </fieldset>
           )}
@@ -484,6 +526,7 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
         </div>
 
         <footer className="wk-launch-wizard-foot">
+          {step === 'workflow' && <p className="wk-field-note wk-launch-wizard-keys" data-testid="launch-wizard-keys">Arrow keys move between the jobs; Enter picks one.</p>}
           {(step === 'review' ? launchBlocker : blocker) !== null && step !== 'workflow' && <p className="wk-field-note" data-testid="launch-wizard-blocker" role="status">{step === 'review' ? launchBlocker : blocker}</p>}
           <div className="wk-launch-wizard-actions">
             {step !== 'workflow' && step !== 'what' && step !== 'requirements' && (

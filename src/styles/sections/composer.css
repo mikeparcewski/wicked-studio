@@ -36,7 +36,7 @@
 /* The launch wizard (operator 2026-10-11): a centred modal on desktop, a full-height sheet on a phone. */
 .wk-launch-wizard-scrim { position: fixed; inset: 0; z-index: 60; background: var(--scrim); display: flex; align-items: center; justify-content: center; padding: var(--space-6); }
 .wk-launch-wizard {
-  display: flex; flex-direction: column; width: min(640px, 100%); max-height: min(720px, calc(100dvh - 48px));
+  display: flex; flex-direction: column; width: min(800px, 100%); max-height: min(720px, calc(100dvh - 48px));
   background: var(--surface-overlay); border: 1px solid var(--border-strong); border-radius: var(--radius-xl);
   box-shadow: var(--shadow-overlay); color: var(--ink-body); --focus-gap: var(--surface-overlay);
 }
@@ -47,7 +47,6 @@
 .wk-launch-wizard-reqs { display: flex; flex-direction: column; gap: var(--space-3); min-width: 0; }
 .wk-launch-wizard-field, .wk-launch-wizard-fieldset { display: flex; flex-direction: column; gap: var(--space-1); margin: 0; padding: 0; border: 0; min-width: 0; }
 .wk-launch-wizard-intent { min-height: 120px; padding: 8px 10px; font-size: var(--text-sm); resize: vertical; }
-.wk-launch-wizard-choices { display: flex; flex-direction: column; gap: var(--space-2); }
 .wk-launch-wizard-choice {
   display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; padding: 10px 12px;
   background: var(--surface-raised); border: 1px solid var(--border); border-radius: var(--radius-md); color: var(--ink-high); font: inherit; cursor: pointer;
@@ -80,6 +79,60 @@
 .wk-launch-wizard .wk-composer-seat--off { border-style: dashed; }
 @media (max-width: 767px) {
   .wk-launch-wizard select.wk-field, .wk-launch-wizard .wk-composer-seat { min-height: var(--tap-min); }
+}
+/* THE NEW JOB CARDS (operator 2026-10-12): the first step is a grid of cards, 4 across, exactly 3
+   rows in view and the rest scrolling inside. The modal takes its full height on this step; the
+   frame between header and footer is a size container, and a row is a third of its height less the
+   gaps: row = (100cqh - 2 * gap - 2 * pad) / 3. No pixel height is tuned to one screen; the floor
+   (--wk-card-min) only stops a row getting too short to read on a very short window. */
+.wk-launch-wizard--cards { height: min(720px, calc(100dvh - 48px)); }
+.wk-launch-wizard--cards .wk-launch-wizard-body { overflow: hidden; padding-bottom: var(--space-3); }
+.wk-launch-wizard--cards .wk-launch-wizard-fieldset { flex: 1 1 auto; min-height: 0; }
+.wk-launch-wizard-cards-frame { flex: 1 1 0; min-height: 0; container-type: size; }
+.wk-launch-wizard-cards {
+  --wk-cards-across: 4; --wk-cards-rows: 3; --wk-cards-gap: var(--space-3); --wk-cards-pad: 4px; --wk-card-min: 128px;
+  height: 100%; overflow-y: auto; overscroll-behavior: contain; scroll-padding: var(--wk-cards-pad);
+  display: grid; gap: var(--wk-cards-gap); padding: var(--wk-cards-pad);
+  grid-template-columns: repeat(var(--wk-cards-across), minmax(0, 1fr));
+  grid-auto-rows: max(var(--wk-card-min), calc((100cqh - (var(--wk-cards-rows) - 1) * var(--wk-cards-gap) - 2 * var(--wk-cards-pad)) / var(--wk-cards-rows)));
+}
+.wk-launch-wizard-card { min-width: 0; min-height: 0; overflow: hidden; gap: var(--space-1); padding: var(--space-3); }
+.wk-launch-wizard-card-art {
+  flex: 1 1 0; min-height: 0; width: 100%; display: flex; align-items: center; justify-content: center;
+  color: var(--ink-muted); margin-bottom: var(--space-1);
+}
+.wk-launch-wizard-card .wk-launch-wizard-choice-line {
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden;
+  font-size: var(--text-sm); line-height: 1.35; color: var(--ink-muted);
+}
+.wk-launch-wizard-card .wk-launch-wizard-choice-name { font-size: var(--text-md); }
+.wk-launch-wizard-card.wk-launch-wizard-choice--on .wk-launch-wizard-card-art { color: var(--ink-body); }
+.wk-wf-art { display: block; height: 100%; max-height: 88px; width: auto; max-width: 100%; aspect-ratio: 3 / 2; }
+.wk-wf-art * { vector-effect: non-scaling-stroke; }
+.wk-wf-art-ground { fill: color-mix(in oklab, currentColor 7%, transparent); }
+.wk-wf-art-wash { fill: var(--accent-wash); }
+.wk-wf-art-accent { stroke: var(--accent); }
+@media (max-width: 899px) {
+  .wk-launch-wizard-cards { --wk-cards-across: 2; }
+}
+/* A short window (under ~620 px tall) shows 2 whole rows rather than a third cut by the floor. */
+@media (max-height: 619px) and (min-width: 560px) {
+  .wk-launch-wizard-cards { --wk-cards-rows: 2; }
+}
+@media (max-width: 767px) {
+  .wk-launch-wizard--cards { height: 100dvh; }
+  .wk-launch-wizard--cards .wk-launch-wizard-foot { display: none; }
+}
+/* A phone: one card per row, the drawing beside the words, six in view. */
+@media (max-width: 559px) {
+  .wk-launch-wizard-cards { --wk-cards-across: 1; --wk-cards-rows: 6; --wk-card-min: 88px; }
+  .wk-launch-wizard-card {
+    display: grid; grid-template-columns: 84px minmax(0, 1fr); grid-template-rows: 1fr auto auto 1fr;
+    column-gap: var(--space-3); row-gap: 2px; align-items: start;
+  }
+  .wk-launch-wizard-card-art { grid-column: 1; grid-row: 1 / -1; height: 100%; margin: 0; }
+  .wk-launch-wizard-card .wk-launch-wizard-choice-name { grid-column: 2; grid-row: 2; }
+  .wk-launch-wizard-card .wk-launch-wizard-choice-line { grid-column: 2; grid-row: 3; }
 }
 /* studio#726: the wizard's help lines read at body size (13 px), not the 11 px meta size. */
 .wk-launch-wizard .wk-field-note { font-size: var(--text-sm); }
