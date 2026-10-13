@@ -111,34 +111,36 @@ describe('the rail redesign', () => {
     expect(screen.getByTestId('session-rail').textContent).not.toContain('Start something');
   });
 
-  it('"General settings" is a LINK to the /settings page — no dropdown', () => {
+  it('"General settings" is gone: General (the /system page) is a Workspace link — no dropdown, no overview', () => {
     const navigate = vi.fn();
     render(<SessionRail runs={[]} needRows={[]} navigate={navigate} pathname="/" />);
-    const more = screen.getByTestId('desk-rail-more');
-    expect(more.tagName).toBe('A');
-    expect(more).toHaveAttribute('href', '/settings');
-    expect(more.textContent?.trim()).toBe('General settings');
-    fireEvent.click(more);
-    expect(navigate).toHaveBeenCalledWith('/settings');
+    expect(screen.queryByTestId('desk-rail-more')).toBeNull();
+    expect(screen.getByTestId('session-rail').textContent).not.toContain('General settings');
+    const general = screen.getByTestId('desk-rail-general');
+    expect(general.tagName).toBe('A');
+    expect(general).toHaveAttribute('href', '/system');
+    expect(general.textContent?.trim()).toBe('General');
+    fireEvent.click(general);
+    expect(navigate).toHaveBeenCalledWith('/system');
     expect(screen.queryByTestId('desk-rail-additional')).toBeNull();
   });
 
-  it('the foot order: Workspace links, then General settings, then Health last; the links are the secondary tier', () => {
+  it('the foot order: Watchtower, the Workspace links ending Workflows · Theme · General, then Health last; all the secondary tier', () => {
     render(<SessionRail runs={[]} needRows={[]} navigate={() => {}} pathname="/" />);
     const foot = screen.getByTestId('session-rail').querySelector('.wk-rail-foot')!;
     const ids = [...foot.querySelectorAll('[data-testid]')].map((e) => e.getAttribute('data-testid') ?? '').filter((id) => id.startsWith('desk-rail-'));
-    expect(ids).toEqual(['desk-rail-steering', 'desk-rail-skills', 'desk-rail-mcp', 'desk-rail-plugins', 'desk-rail-evals', 'desk-rail-repos', 'desk-rail-more', 'desk-rail-health']);
-    for (const id of ['desk-rail-steering', 'desk-rail-more', 'desk-rail-health']) expect(screen.getByTestId(id)).toHaveClass('wk-rail-link--secondary');
+    expect(ids).toEqual(['desk-rail-watch', 'desk-rail-skills', 'desk-rail-mcp', 'desk-rail-plugins', 'desk-rail-workflows', 'desk-rail-theme', 'desk-rail-general', 'desk-rail-health']);
+    for (const id of ['watch-pill', 'desk-rail-skills', 'desk-rail-general', 'desk-rail-health']) expect(screen.getByTestId(id)).toHaveClass('wk-rail-link--secondary');
   });
 
-  it('Health is a rail LINK with a live dot (fetched on mount), below General settings', async () => {
+  it('Health is a rail LINK with a live dot (fetched on mount), below General', async () => {
     const navigate = vi.fn();
     render(<SessionRail runs={[]} needRows={[]} navigate={navigate} pathname="/" />);
     const nav = screen.getByTestId('session-rail');
     const order = [...nav.querySelectorAll('[data-testid]')]
       .map((e) => e.getAttribute('data-testid') ?? '')
-      .filter((id) => ['desk-rail-steering', 'desk-rail-health', 'desk-rail-more'].includes(id));
-    expect(order).toEqual(['desk-rail-steering', 'desk-rail-more', 'desk-rail-health']);
+      .filter((id) => ['desk-rail-skills', 'desk-rail-health', 'desk-rail-general'].includes(id));
+    expect(order).toEqual(['desk-rail-skills', 'desk-rail-general', 'desk-rail-health']);
     const health = screen.getByTestId('desk-rail-health');
     expect(health.tagName).toBe('A');
     expect(health).toHaveAttribute('href', '/health');
@@ -193,10 +195,10 @@ describe('the rail redesign', () => {
     render(<SessionRail runs={[]} needRows={[]} navigate={() => {}} pathname="/" />);
     const rail = screen.getByTestId('session-rail');
     expect(rail.querySelector('.wk-rail-spacer')).toBeNull();
-    const first = screen.getByTestId('desk-rail-steering');
+    const first = screen.getByTestId('desk-rail-watch');
     // The group sits in the foot — the foot's border-top (components.css) is the separator.
     expect(first.closest('.wk-rail-foot')).not.toBeNull();
-    // Change 18: the foot's group label leads the links; Steering is the first (the Agents slot comes later).
+    // Change 18: the foot's group label leads the links; Watchtower is the first (operator IA 2026-10-13).
     expect((first.previousElementSibling as HTMLElement).getAttribute('data-testid')).toBe('rail-foot-label');
     expect(screen.getByTestId('rail-foot-label')).toHaveTextContent('Workspace');
   });

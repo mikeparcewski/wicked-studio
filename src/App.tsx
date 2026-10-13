@@ -35,7 +35,6 @@ import { ConnectionStatus } from './components/ConnectionStatus.js';
 import { SystemSettings } from './components/SystemSettings.js';
 import { ThemePage } from './components/ThemePage.js';
 import { HealthPage } from './components/HealthPage.js';
-import { SettingsOverviewPage } from './components/SettingsOverviewPage.js';
 import { Desk } from './components/desk/Desk.js';
 import { SessionRail } from './components/desk/SessionRail.js';
 import { RailDrawer } from './components/ui/RailDrawer.js';
@@ -628,10 +627,6 @@ export function App(): React.ReactElement {
     // (`.wk-desk-scroll`) — no clipping wrapper, like the Desk and Everything.
     if (panel === 'health') {
       return <HealthPage />;
-    }
-    // `/settings` — the Settings overview (operator 2026-10-11): one sentence and a link per settings page.
-    if (panel === 'settings') {
-      return <SettingsOverviewPage navigate={navigate} />;
     }
     // `/product[?project=]` — the Product page retired (operator 2026-10-12): the address only redirects,
     // to that project's dashboard (its Requirements section) or to the projects list.

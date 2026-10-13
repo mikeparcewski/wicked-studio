@@ -16,6 +16,12 @@ const RUNS: SessionView[] = Array.from({ length: 8 }, (_, i) => ({
 vi.mock('../src/hooks/useBoardModel.js', () => ({
   useBoardModel: () => ({ items: [], unfiled: RUNS, loading: false, error: null, failedAt: null }),
 }));
+// The badge's settle timing is useSettledNeeds' own suite; here it has settled on the rows given.
+let settledPhase: 'complete' | 'partial' = 'complete';
+vi.mock('../src/hooks/useNeedsRows.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../src/hooks/useNeedsRows.js')>()),
+  useSettledNeeds: (rows: readonly unknown[]) => ({ phase: settledPhase, count: rows.length, missing: [] }),
+}));
 vi.mock('../src/api/client.js', () => ({
   api: new Proxy({}, { get: () => () => Promise.resolve({}) }),
   apiFetch: () => Promise.resolve({}),
@@ -31,7 +37,7 @@ function rail(): ReturnType<typeof render> {
 }
 const group = (): HTMLElement => screen.getByTestId('rail-group');
 
-beforeEach(() => window.localStorage.clear());
+beforeEach(() => { window.localStorage.clear(); settledPhase = 'complete'; });
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
 describe('rows', () => {
@@ -98,5 +104,43 @@ describe('folding a group', () => {
     expect(toggle).toHaveAttribute('aria-expanded', 'true');
     act(() => { fireEvent.click(toggle); });
     expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  });
+});
+
+describe('the top of the rail (operator IA 2026-10-13)', () => {
+  it('the wordmark is the one link to the Desk; its name carries the needs-you badge', () => {
+    rail();
+    const home = screen.getByTestId('desk-rail-home');
+    expect(home.tagName).toBe('A');
+    expect(home).toHaveAttribute('href', '/');
+    expect(home).toHaveAccessibleName('wicked studio — Desk, 1 needs you');
+    expect(within(home).getByTestId('desk-rail-badge')).toHaveTextContent('1');
+    expect(within(home).getByTestId('desk-rail-brand')).toHaveTextContent('wicked studio');
+    // No separate "Desk" item.
+    expect(screen.getByTestId('session-rail').querySelectorAll('a[href="/"]')).toHaveLength(1);
+  });
+
+  it('a partial count says so: "Desk, 2+ need you"', () => {
+    settledPhase = 'partial';
+    render(<SessionRail runs={RUNS} needRows={[...NEED, { ...NEED[0]!, key: 'fail:u1' }] as never} navigate={() => {}} pathname="/" />);
+    expect(screen.getByTestId('desk-rail-home')).toHaveAccessibleName('wicked studio — Desk, 2+ need you');
+  });
+
+  it('with nothing waiting the link is just "Desk" and carries no badge', () => {
+    render(<SessionRail runs={RUNS} needRows={[]} navigate={() => {}} pathname="/" />);
+    expect(screen.getByTestId('desk-rail-home')).toHaveAccessibleName('wicked studio — Desk');
+    expect(screen.queryByTestId('desk-rail-badge')).toBeNull();
+  });
+
+  it('"New project" sits where the Desk item was and opens the New project modal outside the rail', () => {
+    rail();
+    const btn = screen.getByTestId('desk-rail-new-project');
+    expect(btn.previousElementSibling).toBe(screen.getByTestId('desk-rail-home'));
+    expect(btn).toHaveAccessibleName('New project');
+    fireEvent.click(btn);
+    const modal = screen.getByTestId('new-project-modal');
+    expect(screen.getByTestId('session-rail').contains(modal)).toBe(false);
+    fireEvent.click(screen.getByTestId('new-project-close'));
+    expect(screen.queryByTestId('new-project-modal')).toBeNull();
   });
 });

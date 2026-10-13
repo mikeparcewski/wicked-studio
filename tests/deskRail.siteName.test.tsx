@@ -35,6 +35,8 @@ describe('the Desk rail brand and Theme › Site name (studio#512)', () => {
     const b = brand();
     expect(b.textContent?.replace(/\s+/g, ' ').trim()).toBe('Reel studio');
     expect(b.textContent).not.toContain('wicked');
+    // The Desk link's accessible name starts with the words it shows (label-in-name).
+    expect(screen.getByTestId('desk-rail-home')).toHaveAccessibleName('Reel studio — Desk');
   });
 
   it('blank keeps the default wordmark', () => {

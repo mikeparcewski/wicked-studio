@@ -1,24 +1,26 @@
 #!/usr/bin/env python3
 """
-desk_rail_test.py — THE DESK RAIL after Amendment 5 (DES-STUDIO-REBUILD-001 Amendment 5, as revised;
-S15c) at 1440x700 on the Desk.
+desk_rail_test.py — THE DESK RAIL after the operator's IA change (2026-10-13; first Amendment 5, S15c)
+at 1440x700 on the Desk.
 
 Against the in-process fixture (wave-1 + wave-2b corpus):
 
-  1. ORDER (operator 2026-10-12): top to bottom — Desk · Watchtower · the sessions list · then the
-     Workspace: Steering · Skills · MCP · Plugins · Evals · Repositories · "General settings" · Health
-     (set apart, last); no Product, no Testing; no Notifications entry (no bell, no "notifications"
-     nav-dest); no "Rules", no "Everything else".
-  2. PAGE: "General settings" (/settings) lists exactly Configuration, Workflows, Theme — in that
-     order — and no orders/away or freeze controls; Configuration no longer links to Testing.
-  3. NAVIGATES: Steering opens /rules and is marked current; Skills, MCP, Plugins, Evals and
-     Repositories open their pages; Watchtower opens /watch.
-  4. HEALTH: the rail's Health link says its state word, opens /health and is marked current there.
-  5. 0 page errors.
+  1. ORDER (operator IA 2026-10-13): top to bottom — the wordmark (ONE link to the Desk, its name
+     saying the needs-you badge) · New project · the sessions list · then the Workspace: Watchtower ·
+     Skills · MCP · Plugins · Workflows · Theme · General · Health (set apart, last); no separate Desk
+     item, no Product, no Testing, none of the Desk tabs (Repositories, Steering, Evals, Agents), no
+     "General settings"; no Notifications entry (no bell, no "notifications" nav-dest).
+  2. NEW PROJECT: the button opens the New project modal; Escape closes it.
+  3. RETIRED /settings: the address REPLACES itself with /system, the page titled "General"; General
+     no longer links to Testing.
+  4. NAVIGATES: Skills, MCP, Plugins, Workflows, Theme and General open their pages and are marked
+     current; Watchtower opens /watch; the wordmark opens the Desk.
+  5. HEALTH: the rail's Health link says its state word, opens /health and is marked current there.
+  6. 0 page errors.
 
-Captures: e2e/shots/desk-rail.png, desk-rail-additional.png (the /settings page), and the rail-polish evidence set
-rail-polish-{rail,health}-{1440x700,390x844}-{light,dark}.png (dark = no data-theme). Env:
-FEEDBACK_PORT (default 4366).
+Captures: e2e/shots/desk-rail.png, desk-rail-general.png (/settings landing on General), and the
+rail-polish evidence set rail-polish-{rail,general,health}-{1440x700,390x844}-{light,dark}.png (dark =
+no data-theme). Env: FEEDBACK_PORT (default 4366).
 """
 
 import json
@@ -50,32 +52,28 @@ def check(step: str, ok: bool, **detail) -> None:
 
 RAIL = """() => {
   const rail = document.querySelector('[data-testid="session-rail"]');
-  const ids = ['desk-rail-home', 'desk-rail-watch', 'rail-group', 'desk-rail-steering', 'desk-rail-skills', 'desk-rail-mcp',
-               'desk-rail-plugins', 'desk-rail-evals', 'desk-rail-repos', 'desk-rail-more', 'desk-rail-health', 'desk-rail-product', 'desk-rail-testing'];
+  const ids = ['desk-rail-home', 'desk-rail-new-project', 'rail-group', 'desk-rail-watch', 'desk-rail-skills', 'desk-rail-mcp',
+               'desk-rail-plugins', 'desk-rail-workflows', 'desk-rail-theme', 'desk-rail-general', 'desk-rail-health',
+               'desk-rail-steering', 'desk-rail-evals', 'desk-rail-repos', 'desk-rail-more', 'desk-rail-product', 'desk-rail-testing'];
   const seen = [];
   for (const el of rail.querySelectorAll('[data-testid]')) {
     const id = el.dataset.testid;
     if (ids.includes(id) && seen[seen.length - 1] !== id) seen.push(id);
   }
+  const home = rail.querySelector('[data-testid="desk-rail-home"]');
+  const badge = rail.querySelector('[data-testid="desk-rail-badge"]');
   return {
     order: seen,
     dests: [...rail.querySelectorAll('[data-nav-dest]')].map(e => e.dataset.navDest),
     text: rail.innerText,
     bell: !!rail.querySelector('[data-nav-dest="notifications"], [aria-label^="Notifications"], [aria-label$="notifications"]'),
-    steering: rail.querySelector('[data-testid="desk-rail-steering"]')?.getAttribute('href') ?? null,
-    more: rail.querySelector('[data-testid="desk-rail-more"]')?.innerText ?? null,
+    homeLinks: rail.querySelectorAll('a[href="/"]').length,
+    homeName: home?.getAttribute('aria-label') ?? null,
+    badge: badge && home?.contains(badge) ? badge.innerText.trim() : null,
+    watchInFoot: !!rail.querySelector('.wk-rail-foot [data-testid="desk-rail-watch"]'),
+    general: rail.querySelector('[data-testid="desk-rail-general"]')?.innerText ?? null,
     footLabel: rail.querySelector('[data-testid="rail-foot-label"]')?.textContent ?? null,
     healthState: rail.querySelector('[data-testid="rail-health-state"]')?.innerText ?? null,
-  };
-}"""
-
-MENU = """() => {
-  const m = document.querySelector('[data-testid="settings-overview"]');
-  const links = [...m.querySelectorAll('[data-testid="settings-overview-row"] a')];
-  return {
-    labels: links.map(a => a.innerText.trim()),
-    hrefs: links.map(a => a.getAttribute('href')),
-    controls: !!m.querySelector('[data-testid="desk-rail-controls"], [data-testid^="standing-orders"], [data-testid^="delivery-freeze"]'),
   };
 }"""
 
@@ -102,14 +100,21 @@ with sync_playwright() as p:
     page.screenshot(path=str(SHOTS / "desk-rail.png"))
 
     # ── 1. the order ─────────────────────────────────────────────────────────────
+    # The badge is said once the needs-you count has settled (useSettledNeeds).
+    page.get_by_test_id("desk-rail-badge").wait_for(state="visible", timeout=15000)
     r = page.evaluate(RAIL)
+    want = ['desk-rail-home', 'desk-rail-new-project', 'rail-group', 'desk-rail-watch', 'desk-rail-skills', 'desk-rail-mcp',
+            'desk-rail-plugins', 'desk-rail-workflows', 'desk-rail-theme', 'desk-rail-general', 'desk-rail-health']
+    badge = r["badge"]
     check("order",
-          r["order"] == ['desk-rail-home', 'desk-rail-watch', 'rail-group', 'desk-rail-steering', 'desk-rail-skills', 'desk-rail-mcp',
-                         'desk-rail-plugins', 'desk-rail-evals', 'desk-rail-repos', 'desk-rail-more', 'desk-rail-health']
-          and r["dests"] == ["watch", "section:steering", "section:skills", "section:mcp", "section:plugins", "section:evals", "section:repos", "settings", "health"]
-          and not r["bell"] and "Rules" not in r["text"] and "Everything else" not in r["text"] and "Product" not in r["text"]
-          and "Steering" in r["text"] and "Skills" in r["text"] and "MCP" in r["text"] and "MCP tools" not in r["text"]
-          and r["steering"] == "/rules" and (r["more"] or "").startswith("General settings")
+          r["order"] == want
+          and r["dests"] == ["watch", "section:skills", "section:mcp", "section:plugins", "section:workflows", "section:theme", "section:general", "health"]
+          and not r["bell"] and r["homeLinks"] == 1 and r["watchInFoot"]
+          # The wordmark link's name says the badge (the fixture has gates waiting).
+          and badge is not None and r["homeName"] in (f"wicked studio — Desk, {badge} need you", f"wicked studio — Desk, {badge} needs you")
+          and all(w not in r["text"] for w in ("Rules", "Everything else", "Product", "Steering", "Evals", "Repositories", "Agents", "General settings", "Configuration", "MCP tools"))
+          and "Skills" in r["text"] and "MCP" in r["text"] and "New project" in r["text"]
+          and r["general"] == "General"
           and (r["healthState"] or "").strip() in ("· all good", "· needs attention", "· failing")
           and r["footLabel"] == "Workspace",
           **{k: v for k, v in r.items() if k != "text"})
@@ -128,7 +133,7 @@ with sync_playwright() as p:
       const contrast = (el) => { const bg = bgOf(el); const f = rgb(getComputedStyle(el).color); const ink = [0, 1, 2].map((i) => f[3] * f[i] + (1 - f[3]) * bg[i]); const a = lum(ink), b = lum(bg); return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05); };
       const foot = [...document.querySelectorAll('[data-testid="session-rail"] .wk-rail-foot .wk-rail-link')].filter((e) => e.getAttribute('aria-current') !== 'page');
       const label = document.querySelector('[data-testid="rail-foot-label"]');
-      return { desk: px(document.querySelector('[data-testid="desk-rail-home"]')),
+      return { desk: px(document.querySelector('[data-testid="desk-rail-new-project"]')),
                watch: px(document.querySelector('[data-testid="watch-pill"]')),
                session: px(document.querySelector('[data-testid="rail-session"] .wk-rail-session-title')),
                workspace: foot.map(px), contrast: Math.min(...foot.map(contrast)), ink: foot[0] ? getComputedStyle(foot[0]).color : null, bg: foot[0] ? bgOf(foot[0]).join(',') : null, theme: document.documentElement.dataset.theme ?? null,
@@ -141,30 +146,31 @@ with sync_playwright() as p:
           and sizes["contrast"] >= 4.5 and sizes["labelTransform"] == "uppercase"
           and sizes["label"] is not None and sizes["label"] <= 11 and (sizes["labelSpacing"] or 0) > 0, **sizes)
 
-    # ── 2. the settings page (operator 2026-10-11: a page, not a dropdown) ─────────
-    page.get_by_test_id("desk-rail-more").click()
-    page.wait_for_function("() => window.location.pathname === '/settings'", timeout=5000)
-    page.get_by_test_id("settings-overview").wait_for(state="visible", timeout=5000)
-    page.wait_for_timeout(200)
-    page.screenshot(path=str(SHOTS / "desk-rail-additional.png"))
-    m = page.evaluate(MENU)
-    check("menu",
-          m["labels"] == ["Configuration", "Workflows", "Theme"]
-          and m["hrefs"] == ["/system", "/workflows", "/theme"]
-          # studio#421 r3 (change 17): the menu is navigation-only — the orders/freeze controls are
-          # the Desk's "⋯ › Hold" sheet.
-          and not m["controls"], **m)
-    page.locator('[data-testid="settings-overview"] a[href="/system"]').click()
+    # ── 2. New project opens the one New project modal; Escape closes it ──────────
+    page.get_by_test_id("desk-rail-new-project").click()
+    page.get_by_test_id("new-project-modal").wait_for(state="visible", timeout=5000)
+    page.wait_for_timeout(150)
+    page.screenshot(path=str(SHOTS / "desk-rail-new-project.png"))
+    page.keyboard.press("Escape")
+    page.get_by_test_id("new-project-modal").wait_for(state="detached", timeout=5000)
+    check("new-project", page.evaluate("() => window.location.pathname") == "/")
+
+    # ── 3. the retired "General settings" overview: /settings REPLACES itself with General ──
+    page.goto(f"{origin}/settings", wait_until="networkidle")
     page.wait_for_function("() => window.location.pathname === '/system'", timeout=5000)
-    page.get_by_role("heading", name="Configuration").first.wait_for(state="visible", timeout=8000)
+    page.get_by_role("heading", name="General", exact=True).first.wait_for(state="visible", timeout=8000)
+    page.wait_for_timeout(200)
+    page.screenshot(path=str(SHOTS / "desk-rail-general.png"))
     cfg = page.evaluate("""() => ({ testing: !!document.querySelector('[data-testid="settings-testing-link"]'),
-      developer: !!document.querySelector('[data-testid="developer-settings"]') })""")
-    check("configuration", not cfg["testing"] and not cfg["developer"], **cfg)
+      developer: !!document.querySelector('[data-testid="developer-settings"]'),
+      overview: !!document.querySelector('[data-testid="settings-overview"]'),
+      current: document.querySelector('[data-testid="desk-rail-general"]')?.getAttribute('aria-current') ?? null })""")
+    check("general", not cfg["testing"] and not cfg["developer"] and not cfg["overview"] and cfg["current"] == "page", **cfg)
 
     # ── 3. the rail entries navigate and mark the current one ────────────────────
     went = {}
-    for tid, path in (("desk-rail-steering", "/rules"), ("desk-rail-skills", "/skills"), ("desk-rail-mcp", "/mcp"), ("desk-rail-plugins", "/plugins"),
-                      ("desk-rail-evals", "/testing/evals"), ("desk-rail-repos", "/repos")):
+    for tid, path in (("desk-rail-skills", "/skills"), ("desk-rail-mcp", "/mcp"), ("desk-rail-plugins", "/plugins"),
+                      ("desk-rail-workflows", "/workflows"), ("desk-rail-theme", "/theme"), ("desk-rail-general", "/system")):
         page.get_by_test_id(tid).click()
         page.wait_for_function(f"() => window.location.pathname === '{path}'", timeout=5000)
         went[tid] = {"path": page.evaluate("() => window.location.pathname"),
@@ -216,11 +222,10 @@ with sync_playwright() as p:
     page.get_by_test_id("desk-rail-plugins").wait_for(state="visible", timeout=5000)
     shots("rail")
 
-    # r3: the same matrix on the General settings page.
-    page.get_by_test_id("desk-rail-more").click()
-    page.get_by_test_id("settings-overview").wait_for(state="visible", timeout=5000)
-    shots("settings")
-    page.keyboard.press("Escape")
+    # r3: the same matrix on the General page.
+    page.get_by_test_id("desk-rail-general").click()
+    page.wait_for_function("() => window.location.pathname === '/system'", timeout=5000)
+    shots("general")
 
     page.get_by_test_id("desk-rail-health").click()
     page.wait_for_function("() => window.location.pathname === '/health'", timeout=5000)

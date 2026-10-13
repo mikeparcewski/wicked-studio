@@ -2,12 +2,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 
 /**
- * THE DESK RAIL after Amendment 5 (DES-STUDIO-REBUILD-001, Amendment 5 as revised; S15c):
- * top to bottom — Desk · Watchtower · the sessions list · the "Workspace" foot (Product · Skills ·
- * MCP tools · Steering · Health) · "Additional settings" (a disclosure holding Configuration,
- * Repositories, Workflows, Evals, Theme, in that order). No Notifications entry: the Desk is the
- * notification surface. Nothing that redirects appears in the menu — and (studio#421 r3 change 17)
- * the menu is NAVIGATION ONLY: the orders/away and freeze controls are the Desk sheet's.
+ * THE DESK RAIL after the operator's IA change (2026-10-13; first Amendment 5, S15c): top to bottom —
+ * the wordmark (one link to the Desk, carrying its needs-you badge) · New project · the sessions list ·
+ * the "Workspace" foot: Watchtower · Skills · MCP · Plugins · Workflows · Theme · General · Health. No
+ * Desk item, no Notifications entry (the Desk is the notification surface), no "General settings"
+ * overview, and none of the Desk tabs (Repositories, Steering, Evals, Agents). Navigation only.
  */
 
 vi.mock('../src/hooks/useBoardModel.js', () => ({
@@ -19,7 +18,7 @@ vi.mock('../src/api/client.js', () => ({
 }));
 
 const { SessionRail } = await import('../src/components/desk/SessionRail.js');
-const { ADDITIONAL_SETTINGS, DESK_RAIL_LINKS } = await import('../src/board/deskModel.js');
+const { DESK_RAIL_LINKS } = await import('../src/board/deskModel.js');
 
 afterEach(cleanup);
 
@@ -28,48 +27,46 @@ function rail(pathname = '/'): ReturnType<typeof render> {
 }
 
 describe('the rail, top to bottom', () => {
-  it('Desk · Watchtower · sessions · Steering · Skills · MCP · Plugins · Evals · Repositories · General settings · Health — and no bell (operator 2026-10-12)', () => {
+  it('Desk (the wordmark) · New project · sessions · Watchtower · Skills · MCP · Plugins · Workflows · Theme · General · Health (operator IA 2026-10-13)', () => {
     rail();
     const nav = screen.getByTestId('session-rail');
-    const ids = ['desk-rail-home', 'desk-rail-watch', 'desk-rail-steering', 'desk-rail-skills', 'desk-rail-mcp', 'desk-rail-plugins', 'desk-rail-evals', 'desk-rail-repos', 'desk-rail-more', 'desk-rail-health'];
+    const ids = ['desk-rail-home', 'desk-rail-new-project', 'desk-rail-watch', 'desk-rail-skills', 'desk-rail-mcp', 'desk-rail-plugins', 'desk-rail-workflows', 'desk-rail-theme', 'desk-rail-general', 'desk-rail-health'];
     const order = [...nav.querySelectorAll('[data-testid]')].map((e) => e.getAttribute('data-testid') ?? '').filter((id) => ids.includes(id));
     expect(order).toEqual(ids);
     expect(nav.querySelector('[data-nav-dest="notifications"]')).toBeNull();
-    expect(nav.querySelector('[data-testid="desk-rail-product"], [data-testid="desk-rail-testing"]')).toBeNull();
-    expect(nav.textContent).not.toContain('Everything else');
-    expect(screen.getByTestId('desk-rail-steering')).toHaveAttribute('href', '/rules');
+    for (const gone of ['desk-rail-product', 'desk-rail-testing', 'desk-rail-steering', 'desk-rail-evals', 'desk-rail-repos', 'desk-rail-more', 'desk-rail-agents']) {
+      expect(nav.querySelector(`[data-testid="${gone}"]`)).toBeNull();
+    }
+    for (const word of ['Everything else', 'General settings', 'Repositories', 'Steering', 'Evals', 'Agents']) expect(nav.textContent).not.toContain(word);
+    // The wordmark is the Desk's link, and the Watchtower sits inside the Workspace group.
+    expect(screen.getByTestId('desk-rail-home')).toHaveAttribute('href', '/');
+    expect(screen.getByTestId('desk-rail-home')).toContainElement(screen.getByTestId('desk-rail-brand'));
+    expect(screen.getByTestId('rail-foot-label').parentElement).toContainElement(screen.getByTestId('desk-rail-watch'));
     expect(screen.getByTestId('desk-rail-mcp')).toHaveTextContent(/^MCP$/);
     expect(screen.getByTestId('desk-rail-plugins')).toHaveAttribute('href', '/plugins');
-    expect(screen.getByTestId('desk-rail-evals')).toHaveAttribute('href', '/testing/evals');
-    expect(screen.getByTestId('desk-rail-repos')).toHaveAttribute('href', '/repos');
-    expect(screen.getByTestId('desk-rail-more')).toHaveTextContent('General settings');
+    expect(screen.getByTestId('desk-rail-workflows')).toHaveAttribute('href', '/workflows');
+    expect(screen.getByTestId('desk-rail-theme')).toHaveAttribute('href', '/theme');
+    expect(screen.getByTestId('desk-rail-general')).toHaveAttribute('href', '/system');
+    expect(screen.getByTestId('desk-rail-general')).toHaveTextContent(/^General$/);
   });
 
   it('the rail entries carry the skin contract\'s nav-dest marks', () => {
     rail();
     const dests = [...screen.getByTestId('session-rail').querySelectorAll('[data-nav-dest]')].map((e) => e.getAttribute('data-nav-dest'));
-    expect(dests).toEqual(['watch', 'section:steering', 'section:skills', 'section:mcp', 'section:plugins', 'section:evals', 'section:repos', 'settings', 'health']);
+    expect(dests).toEqual(['watch', 'section:skills', 'section:mcp', 'section:plugins', 'section:workflows', 'section:theme', 'section:general', 'health']);
   });
 
   it('the current entry is marked', () => {
-    rail('/rules');
-    expect(screen.getByTestId('desk-rail-steering')).toHaveAttribute('aria-current', 'page');
+    rail('/system');
+    expect(screen.getByTestId('desk-rail-general')).toHaveAttribute('aria-current', 'page');
     expect(screen.getByTestId('desk-rail-home')).not.toHaveAttribute('aria-current');
-  });
-});
-
-describe('"General settings"', () => {
-  it('is a link to the /settings page, which lists exactly Configuration, Workflows, Theme — in that order', () => {
-    rail();
-    expect(screen.getByTestId('desk-rail-more')).toHaveAttribute('href', '/settings');
-    expect(screen.queryByTestId('desk-rail-additional')).toBeNull();
-    expect(ADDITIONAL_SETTINGS.map((d) => [d.label, d.path, d.dest])).toEqual([
-      ['Configuration', '/system', 'settings:/system'], ['Workflows', '/workflows', 'settings:/workflows'], ['Theme', '/theme', 'settings:/theme'],
-    ]);
+    cleanup();
+    rail('/');
+    expect(screen.getByTestId('desk-rail-home')).toHaveAttribute('aria-current', 'page');
   });
 
-  it('nothing that redirects is listed: not the retired Testing landing either', () => {
-    const hrefs = [...ADDITIONAL_SETTINGS, ...DESK_RAIL_LINKS].map((d) => d.path);
-    for (const old of ['/projects', '/chats', '/work', '/execute', '/vibe', '/demo', '/testing/campaigns', '/product']) expect(hrefs).not.toContain(old);
+  it('nothing that redirects is linked: not the retired Testing landing or the /settings overview either', () => {
+    const hrefs = DESK_RAIL_LINKS.map((d) => d.path);
+    for (const old of ['/projects', '/chats', '/work', '/execute', '/vibe', '/demo', '/testing/campaigns', '/product', '/settings']) expect(hrefs).not.toContain(old);
   });
 });

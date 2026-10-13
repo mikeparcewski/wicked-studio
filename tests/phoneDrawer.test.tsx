@@ -65,6 +65,19 @@ describe('phone rail drawer', () => {
     );
     expect(screen.getByTestId('rail-drawer').getAttribute('data-open')).toBe('false');
   });
+  it('a modal opened from the drawer (New project) closes it and leaves focus to that modal', () => {
+    shell();
+    const t = screen.getByTestId('rail-drawer-toggle');
+    fireEvent.click(t);
+    let modalId = 0;
+    act(() => { modalId = useLayerStore.getState().pushModal(); });
+    expect(screen.getByTestId('rail-drawer').getAttribute('data-open')).toBe('false');
+    expect(document.activeElement).not.toBe(t);
+    expect(document.getElementById('main')!.hasAttribute('inert')).toBe(false);
+    // Only the modal's own rung is left.
+    expect(useLayerStore.getState().modalIds).toEqual([modalId]);
+    act(() => useLayerStore.getState().popModal(modalId));
+  });
   it('desktop: the rail renders as before, no top bar, no toggle', () => {
     phone = false;
     shell();

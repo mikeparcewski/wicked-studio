@@ -149,7 +149,7 @@ export function NewProjectModal({ navigate, onClose, deskMode = false }: Props):
               onChange={(e) => setName(e.target.value)}
               autoFocus
               maxLength={PROJECT_NAME_MAX}
-              placeholder="Team offsite"
+              placeholder="e.g. Team offsite"
               className="wk-field"
             />
           </label>

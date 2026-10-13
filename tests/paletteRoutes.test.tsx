@@ -67,9 +67,11 @@ describe('the palette carries them', () => {
     await waitFor(() => expect(screen.getAllByTestId('palette-row').length).toBeGreaterThan(0));
     const rows = screen.getAllByTestId('palette-row');
     expect(new Set(rows.map((r) => r.dataset.group))).toStrictEqual(new Set(['go']));
-    expect(rows[0]!.getAttribute('href')).toBe('/settings');
+    // The retired /settings overview has no row; "settings" finds General (rail restructure 2026-10-13).
+    expect(rows[0]!.getAttribute('href')).toBe('/system');
+    expect(rows.some((r) => r.getAttribute('href') === '/settings')).toBe(false);
     fireEvent.keyDown(input, { key: 'Enter' });
-    expect(navigate).toHaveBeenCalledWith('/settings');
+    expect(navigate).toHaveBeenCalledWith('/system');
     vi.unstubAllGlobals();
   }, 30_000);
 

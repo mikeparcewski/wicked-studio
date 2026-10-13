@@ -1,7 +1,6 @@
 import type { RosterSeat, SessionView } from '../api/types.js';
 import { mcpPath } from '../api/mcp.js';
 import { skillsPath } from '../api/skills.js';
-import { testingPath } from '../api/testing.js';
 import type { NeedRow } from './needsYou.js';
 import { DELIVERED_LINE, KEPT_LINE, jobTitle, jobTitleFull, keptLocally } from './deskWords.js';
 import { PAGE_NAMES } from './pageNames.js';
@@ -403,33 +402,17 @@ export function lapsedSeatChores(roster: readonly RosterSeat[] | null): DeskChor
 // ── Where the rail reaches ───────────────────────────────────────────────────
 
 /**
- * THE RAIL'S WORKSPACE GROUP (operator ruling 2026-10-12), top to bottom. Product and Testing are gone:
- * a project's requirements live on its dashboard (Draft epics is a launch-wizard job), and QE campaigns
- * are a workflow (`qe-author-tests` in the wizard and the composer). Evals and Repositories moved up
- * from the settings page; Editor plugins left Configuration for their own Plugins page. "General
- * settings" (the `/settings` overview) follows, and Health sits apart at the foot.
+ * THE RAIL'S WORKSPACE GROUP (operator IA 2026-10-13), top to bottom, after the Watchtower pill that
+ * heads it: Skills · MCP · Plugins, then the pages the retired "General settings" overview listed —
+ * Workflows · Theme · General (the `/system` page, renamed from Configuration). Health sits apart at the
+ * foot. Repositories, Steering, Evals and Agents are not rail links: they are Desk tabs, and ⌘K still
+ * goes to each. Navigation only: the orders/away and delivery-freeze controls are the Desk's.
  */
 export const DESK_RAIL_LINKS: readonly { dest: string; label: string; path: string; testId: string }[] = [
-  // SLOT: Agents (the seats page, lane w14-seats-page) goes FIRST here when it is built.
-  { dest: 'section:steering', label: PAGE_NAMES.steering, path: '/rules', testId: 'desk-rail-steering' },
   { dest: 'section:skills', label: PAGE_NAMES.skills, path: skillsPath(), testId: 'desk-rail-skills' },
   { dest: 'section:mcp', label: PAGE_NAMES.mcp, path: mcpPath(), testId: 'desk-rail-mcp' },
   { dest: 'section:plugins', label: PAGE_NAMES.plugins, path: '/plugins', testId: 'desk-rail-plugins' },
-  { dest: 'section:evals', label: PAGE_NAMES.evals, path: testingPath('evals'), testId: 'desk-rail-evals' },
-  { dest: 'section:repos', label: PAGE_NAMES.repos, path: '/repos', testId: 'desk-rail-repos' },
-];
-
-/** The Settings overview page (`/settings`) — where the rail's "General settings" link lands. */
-export const SETTINGS_PATH = '/settings';
-
-/**
- * "GENERAL SETTINGS" — the pages the `/settings` overview lists, in this order, each with the one plain
- * sentence that says what it is for (operator 2026-10-11: a page, not a dropdown; 2026-10-12: only
- * Configuration, Workflows and Theme — Repositories and Evals moved up into the rail). Navigation
- * only: the orders/away and delivery-freeze controls are the Desk's.
- */
-export const ADDITIONAL_SETTINGS: readonly { dest: string; label: string; path: string; about: string }[] = [
-  { dest: 'settings:/system', label: PAGE_NAMES.system, path: '/system', about: 'How studio runs: helpers and their sign-ins, how many helpers review a decision, technical details and notifications.' },
-  { dest: 'settings:/workflows', label: PAGE_NAMES.workflows, path: '/workflows', about: 'The step-by-step recipes work follows, and the ones you can start from / in the composer.' },
-  { dest: 'settings:/theme', label: PAGE_NAMES.theme, path: '/theme', about: 'How studio looks: light or dark, your logo and the site name.' },
+  { dest: 'section:workflows', label: PAGE_NAMES.workflows, path: '/workflows', testId: 'desk-rail-workflows' },
+  { dest: 'section:theme', label: PAGE_NAMES.theme, path: '/theme', testId: 'desk-rail-theme' },
+  { dest: 'section:general', label: PAGE_NAMES.system, path: '/system', testId: 'desk-rail-general' },
 ];

@@ -46,14 +46,14 @@ import { announceNavigateAway, inAppEntryState, isInAppEntry, replacedEntryState
 // worktree files/diff as REAL routes — `/runs/:id/events`, `/runs/:id/files` — so the palette
 // verb that opens them is one history entry and browser Back returns to where you were. The run
 // id rides in `artifactId` (NOT `runId`: no run-selected machinery, no legacy shell redirect).
-export type Panel = 'home' | 'runs' | 'run-events' | 'run-files' | 'workflows' | 'skills' | 'mcp' | 'steering' | 'testing' | 'repos' | 'system' | 'theme' | 'repo-detail' | 'project-detail' | 'session' | 'editors' | 'watch' | 'rules' | 'everything' | 'product' | 'project-requirements' | 'plugins' | 'learn' | 'health' | 'settings' | 'not-found';
+export type Panel = 'home' | 'runs' | 'run-events' | 'run-files' | 'workflows' | 'skills' | 'mcp' | 'steering' | 'testing' | 'repos' | 'system' | 'theme' | 'repo-detail' | 'project-detail' | 'session' | 'editors' | 'watch' | 'rules' | 'everything' | 'product' | 'project-requirements' | 'plugins' | 'learn' | 'health' | 'not-found';
 
 /** Every panel, exhaustively (the compile-time check below fails when the union grows without it). */
-export const ALL_PANELS = ['home', 'runs', 'run-events', 'run-files', 'workflows', 'skills', 'mcp', 'steering', 'testing', 'repos', 'system', 'theme', 'repo-detail', 'project-detail', 'session', 'editors', 'watch', 'rules', 'everything', 'product', 'project-requirements', 'plugins', 'learn', 'health', 'settings', 'not-found'] as const satisfies readonly Panel[];
+export const ALL_PANELS = ['home', 'runs', 'run-events', 'run-files', 'workflows', 'skills', 'mcp', 'steering', 'testing', 'repos', 'system', 'theme', 'repo-detail', 'project-detail', 'session', 'editors', 'watch', 'rules', 'everything', 'product', 'project-requirements', 'plugins', 'learn', 'health', 'not-found'] as const satisfies readonly Panel[];
 type MissingPanel = Exclude<Panel, (typeof ALL_PANELS)[number]>;
 export const PANELS_EXHAUSTIVE: MissingPanel extends never ? true : MissingPanel = true;
 
-const PANELS: Panel[] = ['runs', 'workflows', 'skills', 'mcp', 'plugins', 'repos', 'system', 'theme', 'repo-detail', 'watch', 'learn', 'health', 'settings'];
+const PANELS: Panel[] = ['runs', 'workflows', 'skills', 'mcp', 'plugins', 'repos', 'system', 'theme', 'repo-detail', 'watch', 'learn', 'health'];
 /** studio#157's Product view retired (operator 2026-10-12): `/product[?project=<id>]` only redirects —
  *  to that project's dashboard (its Requirements section), or to the projects list. */
 export function productRedirectPath(search: string): string {
@@ -219,6 +219,13 @@ function parse(pathname: string): Route {
   // System settings page — parsed here so it renders instantly, redirected (replace) by
   // `useRetiredSettingsRedirect` so bookmarks land on `/system`.
   if (first === 'coverage' || first === 'domain') {
+    return route({ panel: 'system' });
+  }
+  // The RETIRED "General settings" overview (`/settings`, and any `/settings/...` under it; rail
+  // restructure 2026-10-13): its links moved to the rail's Workspace group and the Configuration page
+  // it listed is now "General" — parsed onto General so it renders instantly, redirected (replace) by
+  // `useRetiredSettingsRedirect` so bookmarks land on `/system`.
+  if (first === 'settings') {
     return route({ panel: 'system' });
   }
   // `/testing/:page` — the Testing surface: one page component, parameterized by sub-page

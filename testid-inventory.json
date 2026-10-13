@@ -11,9 +11,9 @@
   "version": 1,
   "studioVersion": "0.7.13",
   "counts": {
-    "files": 206,
-    "occurrences": 2406,
-    "static": 2099,
+    "files": 205,
+    "occurrences": 2403,
+    "static": 2096,
     "dynamic": 63,
     "computed": 24
   },
@@ -1806,7 +1806,7 @@
       ]
     },
     {
-      "testId": "desk-rail-evals",
+      "testId": "desk-rail-general",
       "files": [
         "src/board/deskModel.ts"
       ]
@@ -1836,19 +1836,13 @@
       ]
     },
     {
-      "testId": "desk-rail-more",
+      "testId": "desk-rail-new-project",
       "files": [
         "src/components/desk/SessionRail.tsx"
       ]
     },
     {
       "testId": "desk-rail-plugins",
-      "files": [
-        "src/board/deskModel.ts"
-      ]
-    },
-    {
-      "testId": "desk-rail-repos",
       "files": [
         "src/board/deskModel.ts"
       ]
@@ -1866,7 +1860,7 @@
       ]
     },
     {
-      "testId": "desk-rail-steering",
+      "testId": "desk-rail-theme",
       "files": [
         "src/board/deskModel.ts"
       ]
@@ -1875,6 +1869,12 @@
       "testId": "desk-rail-watch",
       "files": [
         "src/components/desk/SessionRail.tsx"
+      ]
+    },
+    {
+      "testId": "desk-rail-workflows",
+      "files": [
+        "src/board/deskModel.ts"
       ]
     },
     {
@@ -9071,24 +9071,6 @@
       "testId": "settings-council-size",
       "files": [
         "src/components/SystemSettings.tsx"
-      ]
-    },
-    {
-      "testId": "settings-overview",
-      "files": [
-        "src/components/SettingsOverviewPage.tsx"
-      ]
-    },
-    {
-      "testId": "settings-overview-row",
-      "files": [
-        "src/components/SettingsOverviewPage.tsx"
-      ]
-    },
-    {
-      "testId": "settings-overview-sentence",
-      "files": [
-        "src/components/SettingsOverviewPage.tsx"
       ]
     },
     {

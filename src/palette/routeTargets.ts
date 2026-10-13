@@ -54,7 +54,6 @@ export const ROUTE_SHAPES: readonly RouteShape[] = [
   // The retired Product page's address (operator 2026-10-12): it only redirects to a project dashboard.
   { id: 'product', example: '/product', is: (r) => r.panel === 'product' },
   { id: 'health', example: '/health', is: (r) => r.panel === 'health' },
-  { id: 'settings', example: '/settings', is: (r) => r.panel === 'settings' },
   { id: 'mcp', example: '/mcp', is: (r) => r.panel === 'mcp' && r.artifactId === null },
   { id: 'mcp-inspect', example: '/mcp/inspect', is: (r) => r.panel === 'mcp' && r.artifactId === 'inspect' },
   { id: 'plugins', example: '/plugins', is: (r) => r.panel === 'plugins' },
@@ -92,8 +91,7 @@ const DESTINATIONS: ReadonlyArray<{ shape: string; label: string; href: string }
   { shape: 'mcp-inspect', label: `${PAGE_NAMES.mcpInspect} — test and debug an MCP server`, href: '/mcp/inspect' },
   { shape: 'plugins', label: `${PAGE_NAMES.plugins} — editor plugins, and making one`, href: '/plugins' },
   { shape: 'learn', label: 'Learn', href: '/learn' },
-  { shape: 'settings', label: `${PAGE_NAMES.settings} — every settings page`, href: '/settings' },
-  { shape: 'system', label: `${PAGE_NAMES.system} — helpers, sign-ins, notifications`, href: '/system' },
+  { shape: 'system', label: `${PAGE_NAMES.system} — settings for helpers, sign-ins and notifications`, href: '/system' },
   { shape: 'theme', label: `${PAGE_NAMES.theme} — light or dark, logo, site name`, href: '/theme' },
   { shape: 'editors-dev', label: 'Editor test page — try an editor plugin', href: '/editors/dev' },
 ];

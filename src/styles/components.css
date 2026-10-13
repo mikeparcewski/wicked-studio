@@ -626,22 +626,33 @@ select:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-
   background: var(--surface-rail); border-right: 1px solid var(--border);
   font-size: var(--text-sm); color: var(--ink-body);
 }
-.wk-rail-brand { padding: 16px 18px 10px; font-size: var(--text-lg); color: var(--ink-muted); display: flex; align-items: center; gap: 6px; }
+/* Operator IA 2026-10-13: the wordmark and the Desk's badge are one link to the Desk. */
+.wk-rail-home {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 10px 10px 6px; padding: 6px 8px;
+  border-radius: var(--radius-md); text-decoration: none; min-width: 0;
+}
+.wk-rail-home:hover, .wk-rail-home[aria-current="page"] { background: var(--surface-card); }
+.wk-rail-brand { font-size: var(--text-lg); color: var(--ink-muted); display: flex; align-items: center; gap: 6px; min-width: 0; }
 .wk-rail-brand b { color: var(--ink-high); }
+.wk-rail-brand-name { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 /* The wordmark: a yellow dot with a harbor ring (DESIGN-simple §1a). */
 .wk-rail-brand .wk-desk-dot, .wk-desk-avatar .wk-desk-dot { background: var(--spark); box-shadow: 0 0 0 1.5px var(--accent); }
-.wk-rail-desk {
-  display: flex; align-items: center; justify-content: space-between; margin: 0 10px 6px; padding: 8px 10px;
-  border-radius: var(--radius-md); color: var(--ink-high); font-weight: var(--weight-semi); text-decoration: none;
+/* Operator IA 2026-10-13: "New project" takes the old Desk item's place — a quiet outlined action. */
+.wk-rail-newproject {
+  display: flex; align-items: center; gap: 8px; margin: 0 10px 8px; padding: 7px 10px; min-height: 34px;
+  border: 1px solid var(--border); border-radius: var(--radius-md); background: none; cursor: pointer;
+  color: var(--ink-high); font: inherit; font-weight: var(--weight-semi); text-align: left;
 }
-.wk-rail-desk[aria-current="page"], .wk-rail-desk:hover { background: var(--surface-card); box-shadow: var(--shadow-card); }
+.wk-rail-newproject:hover { background: var(--surface-card); box-shadow: var(--shadow-card); }
+.wk-rail-newproject svg { color: var(--ink-muted); flex-shrink: 0; }
 .wk-rail-badge {
   min-width: 20px; height: 20px; padding: 0 6px; border-radius: var(--radius-full); flex-shrink: 0;
   display: inline-flex; align-items: center; justify-content: center;
   background: var(--accent); color: var(--accent-fg); font-size: var(--text-2xs); font-weight: var(--weight-bold);
 }
-/* The Desk badge is the spark; a session's own badge stays harbor (one yellow mark per viewport). */
-.wk-rail-desk .wk-rail-badge { background: var(--spark); color: var(--spark-ink); }
+/* The Desk badge (beside the wordmark) is the spark; a session's own badge stays harbor (one yellow mark
+   per viewport). */
+.wk-rail-home .wk-rail-badge { background: var(--spark); color: var(--spark-ink); }
 .wk-rail-groups { flex: 1 1 auto; overflow-y: auto; min-height: 0; padding: 4px 10px 8px; }
 /* A project group's header row: the fold toggle (name) and its two quick icons (studio#421 change 5;
    studio-rail-clean: air above each group, the toggle and the icons on one baseline). */
@@ -684,9 +695,8 @@ select:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-
   .wk-desk-move-trigger { opacity: 1; min-width: var(--tap-min, 44px); min-height: var(--tap-min, 44px); }
   .wk-desk-move-picker .wk-btn { min-height: var(--tap-min, 44px); }
 }
-.wk-rail-watch { margin: 0 10px 4px; position: relative; z-index: 30; }
-/* At the top of the rail (Amendment 5) the card opens DOWN from the pill, never above the window. */
-.wk-rail-watch .wk-watch-card { top: 0; bottom: auto; }
+.wk-rail-watch { position: relative; z-index: 30; }
+.wk-rail-watch .wk-watch-pill { width: 100%; }
 /* studio#421 change 4: the foot's top border is the separator — the Product/support links sit above it,
    the run levers below. A dim-ink line on the rail surface, not the faint --border (nothing else). */
 .wk-rail-foot { position: relative; border-top: 1px solid color-mix(in oklab, var(--ink-dim) 50%, transparent); padding: 8px 10px; display: flex; flex-direction: column; gap: 2px; }

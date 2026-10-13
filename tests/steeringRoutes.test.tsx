@@ -80,6 +80,11 @@ describe('useRoute — /steering/{dashboard,policies,memories}', () => {
     expect(routeAt('/domain').current.panel).toBe('system');
   });
 
+  it('the retired "General settings" overview (/settings, and any /settings/...) folds into General (/system)', () => {
+    expect(routeAt('/settings').current.panel).toBe('system');
+    expect(routeAt('/settings/system').current.panel).toBe('system');
+  });
+
   it('every other route spells steeringSection null without claiming the steering panel', () => {
     const r = routeAt('/skills').current;
     expect(r.panel).toBe('skills');
@@ -136,8 +141,8 @@ describe('useSteeringRedirect', () => {
 });
 
 describe('useRetiredSettingsRedirect', () => {
-  it('REPLACES /coverage and /domain with /system', () => {
-    for (const path of ['/coverage', '/domain']) {
+  it('REPLACES /coverage, /domain and the retired /settings overview with /system', () => {
+    for (const path of ['/coverage', '/domain', '/settings', '/settings/theme']) {
       const navigate = vi.fn();
       renderHook(() => useRetiredSettingsRedirect(path, navigate));
       expect(navigate).toHaveBeenCalledWith('/system', { replace: true });

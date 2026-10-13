@@ -784,6 +784,13 @@
     "product-search": "requirements-search",
     "product-status": "requirements-totals",
     "product-totals": "requirements-totals",
-    "settings-testing-link": "desk-rail-evals"
+    "settings-testing-link": "desk-rail-evals",
+    "desk-rail-steering": "palette-row",
+    "desk-rail-evals": "palette-row",
+    "desk-rail-repos": "palette-row",
+    "desk-rail-more": "desk-rail-general",
+    "settings-overview": "desk-rail-general",
+    "settings-overview-row": "desk-rail-general",
+    "settings-overview-sentence": "desk-rail-general"
   }
 }
