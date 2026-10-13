@@ -1,5 +1,6 @@
 import type { SessionView } from '../api/types.js';
 import { agentsOf, durationMin, outcomeOf, projectOf, workflowOf, type AgentRow, type WorkflowRow } from './deskInsights.js';
+import { median } from './deskPulse.js';
 
 /**
  * UNDERSTAND'S SIDE-BY-SIDE (DES-desk-v2 §0.4, the approved concept): one card per selected item, the
@@ -123,7 +124,7 @@ export function compareProjects(ids: readonly string[], kept: readonly SessionVi
     const fin = o.filter((x) => x === 'Finished' || x === 'Answered').length;
     const ended = o.filter((x) => x !== null && x !== 'Working' && x !== 'Waiting on you').length;
     const m = vs.map(durationMin).filter((x): x is number => x !== null).sort((a, b) => a - b);
-    return { id, jobs: vs.length, fin, ended, failed: o.filter((x) => x === 'Failed').length, waiting: o.filter((x) => x === 'Waiting on you').length, med: m.length === 0 ? null : m[Math.floor((m.length - 1) / 2)]!, flows: new Set(vs.map((v) => workflowOf(v).key)).size };
+    return { id, jobs: vs.length, fin, ended, failed: o.filter((x) => x === 'Failed').length, waiting: o.filter((x) => x === 'Waiting on you').length, med: m.length === 0 ? null : median(m), flows: new Set(vs.map((v) => workflowOf(v).key)).size };
   });
   const metrics: Metric[] = [
     { label: 'Jobs', better: null, value: (i) => data[i]!.jobs, text: (i) => String(data[i]!.jobs) },

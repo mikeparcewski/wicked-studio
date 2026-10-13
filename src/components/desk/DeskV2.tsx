@@ -6,7 +6,7 @@ import { getDiagnostics } from '../../api/diagnostics.js';
 import { readErrorKind } from '../../api/errors.js';
 import { failureCounts } from '../../board/attention.js';
 import {
-  agentRows, agentsOf, governanceOf, PARTIAL_RECORD_NOTE, bucketsOf, callouts, DEFAULT_REFINE, GROUP_BYS, jobSeries, OUTCOMES, outcomeOf, projectOf, RANGES,
+  agentRows, agentsOf, governanceOf, AGENT_WORKFLOW_NOTE, PARTIAL_RECORD_NOTE, bucketsOf, callouts, DEFAULT_REFINE, GROUP_BYS, jobSeries, OUTCOMES, outcomeOf, projectOf, RANGES,
   refineRuns, spendSeries, spendTotals as projectSpend, stepFor, outcomeRows, sum, workflowLabel, workflowOf, workflowRows, type AcpFallbacks, type Callout, type GroupBy, type GroupNames, type RangeDays, type Refine,
 } from '../../board/deskInsights.js';
 import { deskReadState, lapsedSeatChores, needRunId, noSignedInHelper } from '../../board/deskModel.js';
@@ -217,7 +217,7 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
   const spendTotal = sum(spendBars.flatMap((s) => s.values));
   const rosterKeys = useMemo(() => displaySeats(roster).map((s) => s.key), [roster]);
   // Agent rows exist only from a read record: an unread or failed record is never a row of zeros.
-  const agents = useMemo(() => (record.window === null ? [] : agentRows(record.window, kept, names, rosterKeys)).filter((a) => refine.agent === null || a.cli === refine.agent), [record.window, kept, names, rosterKeys, refine.agent]);
+  const agents = useMemo(() => (record.window === null ? [] : agentRows(record.window, kept, names, rosterKeys, refine.workflow)).filter((a) => refine.agent === null || a.cli === refine.agent), [record.window, kept, names, rosterKeys, refine.agent, refine.workflow]);
   const flows = useMemo(() => workflowRows(kept), [kept]);
   // Open failures follow the refine bar's project, agent and workflow (the window is failureCounts' own).
   const openFailures = useMemo(() => {
@@ -227,7 +227,7 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
     const ids = new Set(inScope.map((v) => v.session.id));
     return failureCounts(inScope, needRows.filter((r) => { const id = needRunId(r); return id !== null && ids.has(id); }), refine.days, now);
   }, [runs, needRows, refine, now]);
-  const tips = useMemo(() => callouts({ agents, workflows: flows, acp: refine.agent === null ? acp : acp === null ? null : Object.fromEntries(Object.entries(acp).filter(([k]) => k === refine.agent)), openFailures: openFailures.inWindow.length + openFailures.older, days: refine.days, scoped: projectId !== undefined || refined(refine) }), [agents, flows, acp, openFailures, refine, projectId]);
+  const tips = useMemo(() => callouts({ agents, workflows: flows, acp: refine.agent === null ? acp : acp === null ? null : Object.fromEntries(Object.entries(acp).filter(([k]) => k === refine.agent)), openFailures: openFailures.inWindow.length + openFailures.older, days: refine.days, scoped: projectId !== undefined || refined(refine), workflow: refine.workflow }), [agents, flows, acp, openFailures, refine, projectId]);
 
   const runsState: ChartState = !runsShown ? { kind: 'loading' } : kept.length === 0 ? { kind: 'empty', text: `No jobs started in the last ${refine.days} days${refined(refine) ? ' in this view' : ''}.` } : { kind: 'ready' };
   const spendTruncated = byProjectOn ? byProject.truncated : record.truncated;
@@ -364,8 +364,8 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
           <DeskStat icon={Bot} tone="accent" label="Agents ready" testId="desk-block-agents" href={tabPath('agents')} navigate={navigate}
             value={roster === null ? null : `${ready} of ${seats.length}`} note={ready === seats.length ? 'all signed in' : `${seats.length - ready} signed out`} />
           <DeskStat icon={Wallet} tone="accent" label="Spend" testId="desk-block-spend" href={`${tabPath('report')}&focus=spend`} navigate={navigate}
-            value={projectId === 'default' ? '—' : workSpend.phase === 'loading' ? null : workSpend.current === null ? '—' : moneyWords(workSpend.current)}
-            note={projectId === 'default' ? 'Spend is counted per project' : workSpend.current !== null && workSpend.previous !== null ? deltaWords(workSpend.current, workSpend.previous, (d) => moneyWords(Math.abs(d)), 30) : workSpend.partial ? 'last 30 days · priced usage only' : 'last 30 days'} />
+            value={projectId === 'default' ? '—' : workSpend.phase === 'loading' ? null : workSpend.current === null ? '—' : `${workSpend.truncated ? 'at least ' : ''}${moneyWords(workSpend.current)}`}
+            note={projectId === 'default' ? 'Spend is counted per project' : workSpend.truncated ? 'Partial: last 30 days · newest jobs only; older ones were not read' : workSpend.current !== null && workSpend.previous !== null ? deltaWords(workSpend.current, workSpend.previous, (d) => moneyWords(Math.abs(d)), 30) : workSpend.partial ? 'last 30 days · priced usage only' : 'last 30 days'} />
         </ul>
       </div>
       <DeskHappening runs={runs} runsShown={runsShown} navigate={navigate} now={now} title={(v) => jobTitle(v.session)} pathOf={pathOfRun} agentName={agentName}
@@ -378,7 +378,7 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
 
   const reportScope = [`the last ${refine.days} days`, scope !== null ? `project ${projectName(scope)}` : null,
     refine.agent !== null ? `agent ${agentName(refine.agent)}` : null, refine.workflow !== null ? `workflow ${workflowLabel(refine.workflow)}` : null].filter((x): x is string => x !== null).join(', ');
-  const ask = (q: string): void => openAskDock({ fresh: true, projectId: scope !== null && scope !== 'default' ? scope : null, seedText: `${q} (Look at ${reportScope}; answer from the run record and cite the jobs.)` });
+  const ask = (q: string): void => openAskDock({ fresh: true, projectId: scope !== null && scope !== 'default' ? scope : null, seedText: `${q} (Look at ${reportScope}; answer from the run record and cite the jobs.)${refine.workflow !== null ? ` ${AGENT_WORKFLOW_NOTE} Do not treat agent-record totals as workflow-scoped numbers.` : ''}` });
 
   const refineBarOf = (withGroup: boolean): React.ReactElement => (
       <div className="wk-refine" role="group" aria-label="Refine every chart below" data-testid="desk-refine">
@@ -439,7 +439,8 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
             </ChartCard>
             <section className="wk-card wk-viz wk-viz-insights" aria-labelledby="desk-insights-title" data-testid="desk-insights">
               <header className="wk-viz-head"><h3 id="desk-insights-title" className="wk-viz-title">Improve this</h3><span className="wk-viz-meta">{refine.groupBy === 'agent' ? 'by agent' : refine.groupBy === 'workflow' ? 'by workflow' : 'from the evidence'}</span></header>
-              <InsightCards items={groupTips(tips, refine.groupBy)} loading={!runsShown || record.phase === 'loading'} recordFailed={record.phase === 'error'} navigate={navigate} workPath={tabPath('work')} />
+              {refine.workflow !== null && <p className="wk-viz-note">{AGENT_WORKFLOW_NOTE}</p>}
+              <InsightCards items={groupTips(tips, refine.groupBy)} loading={!runsShown || (refine.workflow === null && record.phase === 'loading')} recordFailed={refine.workflow === null && record.phase === 'error'} navigate={navigate} workPath={tabPath('work')} />
               {(refine.groupBy === 'project' || refine.groupBy === 'outcome') && <p className="wk-viz-note">Not grouped by {refine.groupBy}: each finding is about an agent, a workflow or failed jobs.</p>}
             </section>
           </div>
@@ -473,6 +474,7 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
   const understand = (
     <div role="tabpanel" id={panelId('understand')} aria-labelledby={tabId('understand')} data-testid="desk-understand" className="wk-understand">
       <DeskUnderstand agents={agents} agentsRead={record.phase} agentsTruncated={record.truncated}
+        filterAgent={refine.agent} filterWorkflow={refine.workflow}
         filters={[refine.agent !== null ? `agent ${agentName(refine.agent)}` : null, refine.workflow !== null ? `workflow ${workflowLabel(refine.workflow)}` : null].filter((x): x is string => x !== null).join(', ') || null}
         workflows={flows} kept={kept} allRuns={runs} days={refine.days} onDays={(d) => set('days', d)} project={scope}
         projectLabel={scope === null ? null : projectName(scope)} projectName={projectName} agentName={agentName} governance={governance}

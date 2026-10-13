@@ -7,7 +7,7 @@ import { compareAgents, compareJobs, compareProjects, compareWorkflows, insightP
 import { evidenceLinks } from '../../board/deskAnalyze.js';
 import { generateInsights, useDeskInsights } from '../../hooks/useDeskInsights.js';
 import { Markdown } from '../Markdown.js';
-import { outcomeOf, PARTIAL_RECORD_NOTE, projectOf, workflowLabel, workflowOf, RANGES, type AgentRow, type RangeDays, type WorkflowRow } from '../../board/deskInsights.js';
+import { AGENT_WORKFLOW_NOTE, outcomeOf, PARTIAL_RECORD_NOTE, projectOf, workflowLabel, workflowOf, RANGES, type AgentRow, type RangeDays, type WorkflowRow } from '../../board/deskInsights.js';
 import { jobTitle } from '../../board/deskWords.js';
 import { relTime } from '../../board/relTime.js';
 import { statusWord } from '../../board/statusWords.js';
@@ -31,7 +31,7 @@ const MAX_CARDS = 4;
 
 const costCache = new Map<string, number | null>();
 
-export function DeskUnderstand({ agents, agentsRead = 'done', agentsTruncated = false, filters = null, workflows, kept, allRuns, days, onDays, project, projectLabel, projectName, agentName, governance, navigate, pathOf, now }: {
+export function DeskUnderstand({ agents, agentsRead = 'done', agentsTruncated = false, filters = null, filterAgent = null, filterWorkflow = null, workflows, kept, allRuns, days, onDays, project, projectLabel, projectName, agentName, governance, navigate, pathOf, now }: {
   agents: readonly AgentRow[];
   /** The agent record's read: agents are compared only from a record that was read. */
   agentsRead?: 'loading' | 'done' | 'error';
@@ -39,6 +39,9 @@ export function DeskUnderstand({ agents, agentsRead = 'done', agentsTruncated = 
   agentsTruncated?: boolean;
   /** The refine bar's agent / workflow filters in words ("agent Claude Code, workflow Bug"), or null. */
   filters?: string | null;
+  /** Stable refine IDs for cache identity; display words above are only for prose. */
+  filterAgent?: string | null;
+  filterWorkflow?: string | null;
   workflows: readonly WorkflowRow[];
   kept: readonly SessionView[];
   /** Every run (Past analyses lists earlier analysis jobs from all of them). */
@@ -68,14 +71,14 @@ export function DeskUnderstand({ agents, agentsRead = 'done', agentsTruncated = 
   const addRef = useRef<HTMLDivElement | null>(null);
 
   const options = useMemo(() => {
-    if (kind === 'agents') return agents.map((a) => ({ id: a.cli, label: a.label, color: agentColor(a.cli) as string | null, meta: `${a.steps} steps` }));
+    if (kind === 'agents') return (filterWorkflow === null ? agents : []).map((a) => ({ id: a.cli, label: a.label, color: agentColor(a.cli) as string | null, meta: `${a.steps} steps` }));
     if (kind === 'workflows') return workflows.map((w) => ({ id: w.key, label: w.label, color: null, meta: `${w.jobs} ${w.jobs === 1 ? 'job' : 'jobs'}` }));
     if (kind === 'jobs') {
       return [...kept].filter((v) => typeof v.session.ended_at === 'number').sort((a, b) => (createdAtMs(b) ?? 0) - (createdAtMs(a) ?? 0)).slice(0, 30)
         .map((v) => ({ id: v.session.id, label: jobTitle(v.session), color: null, meta: `${outcomeOf(v) ?? 'Unknown'}${createdAtMs(v) !== null ? ` · ${relTime(createdAtMs(v)!, now)}` : ''}` }));
     }
     return [...new Set(kept.map(projectOf))].map((id) => ({ id, label: projectName(id), color: null, meta: `${kept.filter((v) => projectOf(v) === id).length} jobs` }));
-  }, [kind, agents, workflows, kept, projectName, now]);
+  }, [kind, agents, workflows, kept, projectName, now, filterWorkflow]);
 
   // Nothing is picked until the operator picks (operator r7): the empty state's suggestions pre-select.
   const sel = (picked[kind] ?? []).filter((id) => options.some((o) => o.id === id)).slice(0, MAX_CARDS);
@@ -115,14 +118,15 @@ export function DeskUnderstand({ agents, agentsRead = 'done', agentsTruncated = 
 
   // The cache key is the comparison itself: kind, window, scope, selection AND the numbers on the
   // cards, so any filter that changes what is shown asks again rather than reusing another answer.
-  const insightKey = `${kind}|${days}|${project ?? ''}|${filters ?? ''}|${sel.join(',')}|${view.cards.map((c) => c.cells.map((x) => x.text).join('/')).join('|')}${kind === 'agents' && agentsTruncated ? '|partial' : ''}`;
+  const insightKey = `${kind}|${days}|${project ?? ''}|${JSON.stringify([filterAgent, filterWorkflow])}|${sel.join(',')}|${view.cards.map((c) => c.cells.map((x) => x.text).join('/')).join('|')}${kind === 'agents' && agentsTruncated ? '|partial' : ''}`;
   const insight = useDeskInsights(insightKey);
   const scopeWords = [project === null ? null : `the project ${projectLabel ?? project} (${project})`, filters].filter((x): x is string => x !== null && x !== '').join(', ') || null;
   // A new window, scope or filter starts the analysis over: an edited intent or a pending launch
   // belongs to the comparison it was made for.
-  useEffect(() => { setEditing(null); launchGen.current += 1; setLaunch({ phase: 'idle' }); }, [days, project, filters]);
+  useEffect(() => { setEditing(null); launchGen.current += 1; setLaunch({ phase: 'idle' }); }, [days, project, filters, filterAgent, filterWorkflow]);
   const runInsights = (): void => { void generateInsights(insightKey, insightPrompt(kind, view, days, evidenceLinks(kind, items, days, apiBase(), project), scopeWords) + (kind === 'agents' && agentsTruncated ? `\n${PARTIAL_RECORD_NOTE}. The agent comparison is partial.` : '')); };
   const agentsUnread = kind === 'agents' && agentsRead !== 'done';
+  const agentsUnavailable = kind === 'agents' && filterWorkflow !== null;
   const suggestions = [
     { id: 'agents', label: 'Compare your agents', go: () => { setKind('agents'); setPicked((p) => ({ ...p, agents: agents.slice(0, 3).map((a) => a.cli) })); } },
     { id: 'workflows', label: 'Compare your two busiest workflows', go: () => { setKind('workflows'); setPicked((p) => ({ ...p, workflows: workflows.slice(0, 2).map((w) => w.key) })); } },
@@ -193,8 +197,15 @@ export function DeskUnderstand({ agents, agentsRead = 'done', agentsTruncated = 
 
       <div className="wk-und-cols">
         <div className="wk-und-main">
-          {kind === 'agents' && agentsTruncated && <p className="wk-viz-note">{PARTIAL_RECORD_NOTE}</p>}
-          {agentsUnread ? (
+          {kind === 'agents' && !agentsUnavailable && agentsTruncated && <p className="wk-viz-note">{PARTIAL_RECORD_NOTE}</p>}
+          {agentsUnavailable ? (
+            <section className="wk-card wk-und-empty" data-testid="desk-und-agents-unread">
+              <p className="wk-viz-state">{AGENT_WORKFLOW_NOTE}</p>
+              <ul className="wk-und-suggest">
+                {suggestions.filter((g) => g.id !== 'agents').map((g) => <li key={g.id}><button type="button" className="wk-btn wk-btn--secondary" data-testid="desk-und-suggest" data-id={g.id} onClick={g.go}>{g.label}</button></li>)}
+              </ul>
+            </section>
+          ) : agentsUnread ? (
             <section className="wk-card wk-und-empty" data-testid="desk-und-agents-unread" aria-busy={agentsRead === 'loading'}>
               {agentsRead === 'loading' ? <Skeleton rows={3} variant="line" />
                 : <p className="wk-viz-state" role="alert">Couldn’t read the agent record, so agents can’t be compared right now. Workflows, jobs and projects still can.</p>}
