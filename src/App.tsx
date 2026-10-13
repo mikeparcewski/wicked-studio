@@ -75,7 +75,7 @@ import { useWatchStore } from './store/watch.js';
 import { useWatchHydrate } from './hooks/useWatchFeed.js';
 import { WatchtowerPage } from './components/watch/WatchtowerPage.js';
 import { RulesPage } from './components/rules/RulesPage.js';
-import { badgeCount } from './board/needsQueue.js';
+import { attentionBadge } from './board/attention.js';
 import type { CoreEvent, RepoEntry } from './api/types.js';
 import { readSteeringTypeFilter } from './api/steering.js';
 import { isTestingSubPage, readLaunchIntent } from './api/testing.js';
@@ -543,7 +543,7 @@ export function App(): React.ReactElement {
     if (panel === 'watch') {
       return (
         <div className="flex flex-1 overflow-hidden">
-          <WatchtowerPage count={badgeCount(needRows)} runs={runs} runsLoaded={runsLoaded} runsError={runsError} onRetryRuns={refresh} navigate={navigate} now={needsNow} />
+          <WatchtowerPage count={attentionBadge(needRows)} runs={runs} runsLoaded={runsLoaded} runsError={runsError} onRetryRuns={refresh} navigate={navigate} now={needsNow} />
         </div>
       );
     }
@@ -739,8 +739,8 @@ export function App(): React.ReactElement {
       </AskLauncher>
 
       {/* S11: the open "look underneath" sheet (a step, a helper, a session, the Desk). */}
-      <ObjectSheet runs={runs} navigate={navigate} needCount={badgeCount(needRows)} />
-      <AltPeek runs={runs} needCount={badgeCount(needRows)} />
+      <ObjectSheet runs={runs} navigate={navigate} needCount={attentionBadge(needRows)} />
+      <AltPeek runs={runs} needCount={attentionBadge(needRows)} />
 
       {/* The universal command palette (DES-FEEDBACK-002 §1, slice G) — corpus
           from already-loaded stores + the runs prop; repos cached on first open. */}
