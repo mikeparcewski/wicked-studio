@@ -29,6 +29,14 @@ describe('codex r6', () => {
     expect(calm).toHaveTextContent('Nothing in Failures now · 1 still waiting in All.');
   });
 
+  it('an emptied folder under a partial read says the rest is a floor (agy r6)', () => {
+    const props = { runs: [], navigate: vi.fn(), now: Date.UTC(2026, 9, 13), settled: 'partial' as const, agentName: (s: string) => s, missing: ['proposals'] };
+    const { rerender } = render(<DeskInbox rows={[row('gate', 0), row('failed-run', 1)]} {...props} />);
+    fireEvent.click(screen.getByTestId('desk-inbox-folder-failure'));
+    rerender(<DeskInbox rows={[row('gate', 0)]} {...props} />);
+    expect(screen.getByTestId('home-calm')).toHaveTextContent('Nothing in Failures now · 1+ still waiting in All.');
+  });
+
   it('the whole queue empty still reads as the calm all-clear', () => {
     render(<DeskInbox rows={[]} runs={[]} navigate={vi.fn()} now={Date.UTC(2026, 9, 13)} settled="complete" agentName={(s) => s} />);
     expect(screen.getByTestId('home-calm')).toHaveTextContent('Nothing needs you');
@@ -41,6 +49,9 @@ describe('codex r6', () => {
     const withUnit = (status: string): SessionView => ({ ...running, units: [{ ord: 1, status }] }) as unknown as SessionView;
     expect(workFingerprint([withUnit('distributed')])).toBe(workFingerprint([withUnit('pending')]));
     expect(workFingerprint([withUnit('rejected')])).not.toBe(workFingerprint([withUnit('distributed')]));
+    // Resumed (awaiting_human -> executing) and cancelled runs move it too (agy r6).
+    expect(workFingerprint([deskRun('a', { status: 'awaiting_human' })])).not.toBe(workFingerprint([running]));
+    expect(workFingerprint([deskRun('a', { status: 'cancelled' })])).not.toBe(workFingerprint([running]));
     // Order-stable: the same runs in another order are the same work.
     const b = deskRun('b');
     expect(workFingerprint([running, b])).toBe(workFingerprint([b, running]));
@@ -53,5 +64,12 @@ describe('codex r6', () => {
     expect(acp?.title).toContain('3 times');
     expect(acp?.why).toContain('session died');
     expect(acp?.why).not.toContain('auth failed');
+  });
+
+  it('a fallback whose only kinds were benched or deliberate says no reason was recorded (agy r6)', () => {
+    const f = { fallbacks: 4, kinds: { auth_failed: 1, governance_requires_wrapped: 1 } };
+    const acp = callouts({ agents: [], workflows: [], acp: { pi: f }, openFailures: 0, days: 30 }).find((c) => c.id === 'acp:pi');
+    expect(acp?.title).toContain('2 times');
+    expect(acp?.why).toContain('(no reason recorded)');
   });
 });
