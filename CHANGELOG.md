@@ -13,6 +13,7 @@ npm publish dates. Every version listed here exists on
 ## [Unreleased]
 
 ### Changed
+- The light theme is easier to read: secondary text and timestamps are darker (at least 7:1 on cards, and the quietest labels at least 6:1 everywhere), cards stand off the page with a hairline and a soft shadow, and the page sits a clearer step under the cards. The dark theme is unchanged.
 - New job opens on a grid of cards, one per kind of job (the same jobs, in the same order), each with a small line drawing, its name and its purpose. Four cards across and three rows in view, with the rest scrolling inside the dialog. Two across below 900 px wide and one on a phone. Arrow keys move across the grid and Enter picks. The dialog is a little wider.
 
 ## [0.7.13] — 2026-10-12

@@ -15,25 +15,30 @@
  * Signal yellow (#FFDA19) is a small mark only, never text or a fill, so no token here
  * carries it yet; the desk slices place it.
  * Every text token clears WCAG AA (4.5:1) on base, rail, card and raised, measured in
- * tests/tokens.contrast.test.ts. The §1a faint ink #63707C measures 4.4:1 on the sunk
- * surface, so it is one step darker here (#5A6672). */
+ * tests/tokens.contrast.test.ts. Light-theme contrast pass (2026-10-13): secondary copy (ink-muted,
+ * ink-body) clears 7:1 on cards and the quietest ink (ink-dim) 6:1 on every surface; the canvas sits a
+ * clearer step under the white card, and cards carry a hairline plus a soft shadow. */
 
 [data-theme="wicked-light"] {
-  --_surface-0: #f4f7f9;   /* canvas: a faint harbor tint */
-  --_surface-1: #ebf0f3;   /* sunk: the rail */
+  --_surface-0: #e8edf1;   /* canvas: a faint harbor tint, one clear step under the white card */
+  --_surface-1: #dde4ea;   /* sunk: the rail */
   --_surface-2: #ffffff;   /* surface: cards */
-  --_surface-3: #e6ecf0;   /* raised */
+  --_surface-3: #edf1f4;   /* raised */
   --_surface-4: #dbe3e9;   /* overlay */
 
-  --_ink-faint:  #5a6672;
-  --_ink-soft:   #44515d;
-  --_ink-strong: #263039;
-  --_ink-max:    #0d1117;
+  --_ink-faint:  #45505b;   /* quietest labels, ages: >= 6:1 on every surface, 8:1 on cards */
+  --_ink-soft:   #38434e;   /* secondary copy: >= 7.7:1 on every surface, 10:1 on cards */
+  --_ink-strong: #1e262e;
+  --_ink-max:    #0b0f14;
 
-  --border-subtle: rgba(13, 17, 23, 0.07);
-  --border:        rgba(13, 17, 23, 0.12);
-  --border-strong: rgba(13, 17, 23, 0.22);
-  --border-input:  rgba(13, 17, 23, 0.50);
+  --border-subtle: rgba(13, 17, 23, 0.10);
+  --border:        rgba(13, 17, 23, 0.16);
+  --border-strong: rgba(13, 17, 23, 0.30);
+  --border-input:  rgba(13, 17, 23, 0.55);
+
+  /* Cards stand off the canvas by a hairline AND a soft two-layer shadow (light-theme contrast pass). */
+  --shadow-card:   0 1px 2px rgba(13, 17, 23, 0.06), 0 2px 8px -2px rgba(13, 17, 23, 0.07), 0 0 0 1px rgba(13, 17, 23, 0.12);
+  --shadow-raised: 0 8px 20px -6px rgba(13, 17, 23, 0.18), 0 0 0 1px var(--border);
 
   --accent:        hsl(var(--_accent-h) var(--_accent-s) var(--_accent-l));
   --accent-dim:    hsl(var(--_accent-h) var(--_accent-s) calc(var(--_accent-l) + 8%));
