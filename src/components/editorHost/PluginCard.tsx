@@ -72,6 +72,10 @@ export function PluginCard(props: PluginCardProps): React.ReactElement {
   return <CappedCard {...props} editor={editor} />;
 }
 
+/** The cards whose Options group an address opened: Back closes it (codex h2-r8/r9 P2). Kept outside the live card,
+ *  which may rest (unmount) while its group stays open; the mounted wrapper does the closing. */
+const openedByAddress = new Set<string>();
+
 /** Only the newest cards on the page run a frame (§7.1, §8.1): an older one shows its title and "Show it live". A
  *  full-screen card is always live. */
 function CappedCard(props: PluginCardProps & { editor: EditorView }): React.ReactElement {
@@ -83,6 +87,13 @@ function CappedCard(props: PluginCardProps & { editor: EditorView }): React.Reac
   // The artifact address sees every mounted card, live or resting; a deep link to a resting one wakes it (codex h2-r7 P2).
   useEffect(() => registerArtifact(key), [key]);
   const asked = useArtifactSizes((st) => artifactSizeOf(st, key) !== 'inline');
+  const routeKey = useArtifactAddress()?.routeKey ?? null;
+  useEffect(() => {
+    if (!openedByAddress.has(key) || routeKey === key) return;
+    openedByAddress.delete(key);
+    const panel = useHostPanel.getState();
+    if (panel.group?.key === groupKey(props.editor.id, key)) panel.closeGroup();
+  }, [routeKey, key, props.editor.id]);
   useEffect(() => { if (asked && !live) touchLive(key); }, [asked, live, key]);
   if (live || full) return <LiveCard {...props} />;
   return (
@@ -284,20 +295,11 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
       setArtifactSize(key, 'inline');
       if (owner === key) exitFull();
       openOptionsRef.current();
-      paneFromAddress.current = true;
+      openedByAddress.add(key);
     }
     // Only this card's own full screen: another card's deep link may already own it (codex h2-r7 P2).
     else if (size === 'inline' && owner === key) exitFull();
   }, [size, key, ready, enterFull, exitFull]);
-  // An Options group the address opened closes when the address leaves this artifact (Back; codex h2-r8 P2).
-  const paneFromAddress = useRef(false);
-  const routeKey = address?.routeKey ?? null;
-  useEffect(() => {
-    if (!paneFromAddress.current || routeKey === key) return;
-    paneFromAddress.current = false;
-    const panel = useHostPanel.getState();
-    if (panel.group?.key === group) panel.closeGroup();
-  }, [routeKey, key, group]);
   const wasFull = useRef(full);
   useEffect(() => {
     if (wasFull.current === full) return;
