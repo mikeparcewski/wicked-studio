@@ -59,6 +59,14 @@ describe('words, never ids', () => {
     expect(href.startsWith('/editors/dev?')).toBe(true);
     expect(Object.fromEntries(q)).toEqual({ editor: 'e2e-json-viewer', version: '0.1.0', sha: SHA_B, title: 'JSON viewer' });
   });
+
+  it('a deck editor opens over the sample deck, a video editor over the sample cut (orchestrator 2026-10-14)', () => {
+    const kindOf = (kinds: string[]): string | null => new URLSearchParams(devHostHref({ id: 'x', version: '1', sha256: SHA_B, title: 'X', kinds }).split('?')[1]).get('kind');
+    expect(kindOf(['deck'])).toBe('deck');
+    expect(kindOf(['demo-video', 'walkthrough'])).toBe('demo-video');
+    expect(kindOf(['walkthrough'])).toBe('demo-video');
+    expect(kindOf(['page'])).toBeNull();
+  });
 });
 
 describe('the Plugins page (editor plugins)', () => {

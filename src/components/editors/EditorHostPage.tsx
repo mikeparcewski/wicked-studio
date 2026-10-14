@@ -30,7 +30,7 @@ interface Page {
   title: string;
   grants: PermissionId[] | null;
   firstParty: boolean;
-  /** The kind the sample is (P-D1: `deck` opens a sample deck; anything else the sample page). */
+  /** The kind the sample is (P-D1: `deck` opens a sample deck, `demo-video` the sample cut; anything else the sample page). */
   kind: string;
   /** Protocol 2 (conformance only): the surface this instance is, its options tab, its full-screen mode. */
   surface: Surface | null;
@@ -51,7 +51,7 @@ function readPage(search: string, mode: 'dev' | 'conformance'): Page {
     title: q.get('title') ?? (editor === '' ? 'Editor' : editor),
     grants: grants === null ? null : grants.split(',').filter((g): g is PermissionId => PERMISSIONS.includes(g as PermissionId)),
     firstParty: editor.startsWith('wicked-'),
-    kind: q.get('kind') === 'deck' ? 'deck' : 'page',
+    kind: q.get('kind') === 'deck' ? 'deck' : q.get('kind') === 'demo-video' ? 'demo-video' : 'page',
     surface: mode === 'conformance' && ['card', 'options', 'full'].includes(q.get('surface') ?? '') ? q.get('surface') as Surface : null,
     // A tab only for an options instance; the host checks it against the declared plugin tabs (codex h3-seam r1 P3).
     tab: mode === 'conformance' && q.get('surface') === 'options' ? q.get('tab') : null,

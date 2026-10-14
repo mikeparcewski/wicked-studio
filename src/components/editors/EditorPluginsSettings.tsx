@@ -72,8 +72,10 @@ const DOCUMENT_KINDS: readonly string[] = ['page', 'document', 'deck'];
 /** The editor test page for one editor. */
 export function devHostHref(e: Pick<EditorView, 'id' | 'version' | 'sha256' | 'title'> & { kinds?: readonly string[] }): string {
   const q = new URLSearchParams({ editor: e.id, version: e.version, sha: e.sha256, title: e.title });
-  // A deck editor opens over a sample deck (P-D1); everything else over the sample page.
+  // A deck editor opens over a sample deck (P-D1), a video editor over the sample four-chapter cut; everything else
+  // over the sample page.
   if (e.kinds?.includes('deck') === true && !e.kinds.includes('page')) q.set('kind', 'deck');
+  else if ((e.kinds?.includes('demo-video') === true || e.kinds?.includes('walkthrough') === true) && !e.kinds.includes('page')) q.set('kind', 'demo-video');
   return `/editors/dev?${q.toString()}`;
 }
 
