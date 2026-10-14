@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { DemoView } from '../src/api/demo.js';
 import type { WalkthroughView } from '../src/api/walkthrough.js';
-import { recordingOfDemo } from '../src/board/walkthroughModel.js';
+import { recordingOf, recordingOfDemo } from '../src/board/walkthroughModel.js';
 import { cutOfRecording, RecordingSurfaceAdapter } from '../src/editors/adapters/recording.js';
 import type { ArtifactBinding } from '../src/editors/hostApi.js';
 import { changedBy } from '../src/editors/model.js';
@@ -32,6 +32,20 @@ function walkthrough(over: Partial<WalkthroughView> = {}): WalkthroughView {
     ...over,
   };
 }
+function proofWalkthrough(): WalkthroughView {
+  return walkthrough({
+    state: 'failed',
+    video: { mp4: 'take/video.mp4', poster: null, markers: [{ at: '0:00', sec: 0, title: 'Scope' }, { at: '0:12', sec: 12, title: 'Plan' }] },
+    chapters: ['Scope', 'Missing', 'Plan'].map((title, i) => ({
+      key: `ch${i + 1}`, title, blurb: `Say ${title}`, tags: [], resets: [], recorded: i !== 1,
+      index: i + 1, total: 3, verdict: i === 2 ? 'FAIL' : i === 0 ? 'PASS' : null, takes: 1,
+      failedAtSec: i === 2 ? 4 : null, failedFrame: i === 2 ? 'plan/fail.png' : null, proves: [], legs: [],
+      checks: [{ id: 'screen', kind: 'on_screen', sentence: `Check ${title}`, passed: i === 2 ? false : i === 0 ? true : null,
+        atSec: i === 2 ? 4 : i === 0 ? 3 : null, evidence: i === 2 ? ['plan/screen.png'] : [],
+        vaultEntry: i === 2 ? 'proof-1' : null, detail: i === 2 ? '<b>Wrong plan</b>' : null }],
+    })),
+  });
+}
 afterEach(() => vi.unstubAllGlobals());
 
 describe('recording cut timing', () => {
@@ -54,6 +68,61 @@ describe('recording cut timing', () => {
     const rec = recordingOfDemo(demo()); rec.chapters = rec.chapters.slice(0, 1); rec.markers = rec.markers.slice(0, 1);
     expect(cutOfRecording(rec, 'Run').chapters[0]?.durationSec).toBe(-1);
     expect(cutOfRecording({ ...rec, durationSec: 11 }, 'Run').chapters[0]?.durationSec).toBe(11);
+  });
+  it('keeps starts [0, null, 12] unknown and times known chapters to the next known start', () => {
+    const rec = recordingOf(proofWalkthrough());
+    expect(rec.chapters.map(c => c.startSec)).toEqual([0, null, 12]);
+    expect(cutOfRecording({ ...rec, durationSec: 20 }, 'Run').chapters).toMatchObject([
+      { startSec: 0, durationSec: 12, outSec: 12 },
+      { startSec: -1, durationSec: -1, outSec: -1 },
+      { startSec: 12, durationSec: 8, outSec: 8 },
+    ]);
+    expect(cutOfRecording(rec, 'Run').chapters.at(-1)?.durationSec).toBe(-1);
+  });
+});
+
+describe('recording proof', () => {
+  it('carries chapter verdicts, absolute failure/check times and literal evidence into cut content', () => {
+    const cut = cutOfRecording(recordingOf(proofWalkthrough()), 'Run');
+    expect(cut.chapters.map(c => c.verdict)).toEqual(['PASS', null, 'FAIL']);
+    expect(cut.proof).toEqual({ verdict: 'FAIL', failedAtSec: 16, checks: [
+      { id: 'screen', chapter: 'ch1', atSec: 3, text: 'Check Scope', state: 'PASS' },
+      { id: 'screen', chapter: 'ch2', atSec: null, text: 'Check Missing', state: 'PENDING' },
+      { id: 'screen', chapter: 'ch3', atSec: 16, text: 'Check Plan · <b>Wrong plan</b> · Evidence: plan/screen.png · vault proof-1', state: 'FAIL' },
+    ] });
+    expect(cutOfRecording(recordingOf({ ...proofWalkthrough(), state: 'passed' }), 'Run').proof?.verdict).toBe('PASS');
+    expect(cutOfRecording(recordingOfDemo(demo()), 'Run').proof).toBeUndefined();
+  });
+  it('does not assign an absent chapter’s check or failing moment to another chapter', () => {
+    const view = proofWalkthrough();
+    view.chapters[1] = { ...view.chapters[1]!, verdict: 'FAIL', failedAtSec: 2,
+      checks: [{ ...view.chapters[1]!.checks[0]!, passed: false, atSec: 2 }] };
+    const proof = cutOfRecording(recordingOf(view), 'Run').proof!;
+    expect(proof.failedAtSec).toBeNull(); expect(proof.checks[1]).toMatchObject({ state: 'FAIL', atSec: null });
+  });
+  it('loads host checks, with unique chapter/check ids and state, chapter title and evidence text', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => json(proofWalkthrough())));
+    const a = new RecordingSurfaceAdapter({ ...binding, source: 'walkthrough', kind: 'walkthrough' }, 'walkthrough');
+    expect(a.capabilities()).not.toContain('checks'); // the host Checks tab is an interactive document's
+    expect(await a.checks()).toEqual({ total: 3, checks: [
+      { id: 'ch1/screen', text: 'PASS · Scope · Check Scope' },
+      { id: 'ch2/screen', text: 'PENDING · Missing · Check Missing' },
+      { id: 'ch3/screen', text: 'FAIL · Plan · Check Plan · <b>Wrong plan</b> · Evidence: plan/screen.png · vault proof-1' },
+    ] });
+    expect(await a.read()).toMatchObject({ content: { proof: { verdict: 'FAIL', failedAtSec: 16 } } });
+  });
+  it('refreshes proof text even when the take path and verdicts stay the same', async () => {
+    const view = proofWalkthrough(); vi.stubGlobal('fetch', vi.fn(async () => json(view)));
+    const a = new RecordingSurfaceAdapter(binding, 'walkthrough'); await a.read();
+    view.chapters[2]!.checks[0]!.detail = 'Updated evidence';
+    expect(await a.refresh()).toEqual({ head: 2, kind: 'generated' });
+    expect(await a.checks()).toMatchObject({ checks: [expect.anything(), expect.anything(), { text: expect.stringContaining('Updated evidence') }] });
+  });
+  it('returns an empty Checks tab for demos and an unavailable result on a failed read', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => json(demo())));
+    expect(await new RecordingSurfaceAdapter(binding, 'demo').checks()).toEqual({ checks: [], total: 0 });
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('offline'); }));
+    expect(await new RecordingSurfaceAdapter(binding, 'walkthrough').checks()).toMatchObject({ error: 'unavailable' });
   });
 });
 

@@ -13,8 +13,15 @@ export interface VideoStyle {
   captions: { on: boolean; burnIn: boolean; position: 'bottom' | 'top'; size: number; maxLines: number; wrapChars: number; style: 'bar' | 'outline' | 'plain' };
 }
 export interface DemoTake { file: string; durationSec: number; at?: string }
-export interface DemoChapter { id: string; title: string; say: string; take: string; inSec: number; outSec: number; durationSec: number; startSec: number }
-export interface DemoCut { type: 'demo-cut'; title: string; rev: number; version: number; chapters: DemoChapter[]; takes: Record<string, DemoTake[]>; style: VideoStyle; ffmpeg?: { ok: boolean; burnIn: boolean } }
+export type RecordingVerdict = 'PASS' | 'FAIL' | 'INCONCLUSIVE' | null;
+export interface RecordingProof {
+  verdict: RecordingVerdict;
+  /** Seconds in the stitched take, never a chapter-relative offset. */
+  failedAtSec: number | null;
+  checks: { id: string; chapter: string; atSec: number | null; text: string; state: 'PASS' | 'FAIL' | 'PENDING' }[];
+}
+export interface DemoChapter { id: string; title: string; say: string; take: string; inSec: number; outSec: number; durationSec: number; startSec: number; verdict?: RecordingVerdict }
+export interface DemoCut { type: 'demo-cut'; title: string; rev: number; version: number; chapters: DemoChapter[]; takes: Record<string, DemoTake[]>; style: VideoStyle; ffmpeg?: { ok: boolean; burnIn: boolean }; proof?: RecordingProof }
 export type ChapterOp = Extract<Op, { chapter: string }>;
 
 export function defaultVideoStyle(title: string): VideoStyle {
