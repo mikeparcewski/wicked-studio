@@ -135,9 +135,10 @@ describe('kinds, chips, changed.by, grants', () => {
     expect(changedBy(5, 'demo', own)).toBeNull();
   });
 
-  it('built-in defaults: network.media only for wicked-page', () => {
+  it('built-in defaults: network.media for the page and document editors', () => {
     expect(builtinDefaults('wicked-page')).toContain('network.media');
-    expect(builtinDefaults('wicked-doc')).not.toContain('network.media');
+    expect(builtinDefaults('wicked-doc')).toContain('network.media');
+    expect(builtinDefaults('wicked-deck')).not.toContain('network.media');
   });
 });
 
