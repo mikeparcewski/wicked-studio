@@ -21,7 +21,7 @@ import { projectDetailPath, type Navigate } from '../../hooks/useRoute.js';
 import { useRoster } from '../../hooks/useRoster.js';
 import { useWindowSpend } from '../../hooks/useWindowSpend.js';
 import { useStartClocks } from '../../hooks/useStartClocks.js';
-import { SignInPanel } from '../SignInPanel.js';
+import { AgentModal } from '../agents/AgentModal.js';
 import { useMovableBoardModel } from './MoveToProject.js';
 import type { RosterSeat } from '../../api/types.js';
 import { CaptureDrop } from '../CaptureDrop.js';
@@ -426,7 +426,7 @@ export function Desk({ runs: wireRuns, runsLoaded, runsError = null, onRetryRuns
           )}
         </div>
       </div>
-      {signIn !== null && <SignInPanel seat={signIn} onClose={() => setSignIn(null)} />}
+      {signIn !== null && <AgentModal agentKey={signIn.key} onClose={() => setSignIn(null)} />}
     </div>
   );
 }

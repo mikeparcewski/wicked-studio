@@ -95,17 +95,17 @@ describe('System — seat cards: #1 opencode login + free-tier note', () => {
     expect(screen.getByTestId('seat-freetier-opencode')).toHaveTextContent('OpenCode Zen free models (no account needed)');
   });
 
-  it('Sign in for opencode opens the plain-words panel with its login_invocation (Amendment 5) — no terminal', async () => {
+  it('Sign in for opencode opens the agent modal with its login_invocation — no terminal', async () => {
     const user = userEvent.setup();
     render(<SystemSettings />);
     await screen.findByText('OpenCode');
 
     await user.click(screen.getByRole('button', { name: 'More actions for OpenCode' }));
     await user.click(screen.getByRole('menuitem', { name: 'Sign in OpenCode' }));
-    expect(screen.getByRole('dialog', { name: 'Sign in — OpenCode' })).toBeInTheDocument();
-    expect(screen.getByTestId('signin-line')).toHaveTextContent('XDG_CONFIG_HOME=/w/opencode opencode auth login');
-    expect(screen.getByTestId('copy-command')).toHaveAttribute('data-command', 'XDG_CONFIG_HOME=/w/opencode opencode auth login');
-    expect(screen.getByTestId('signin-check')).toBeInTheDocument();
+    expect(await screen.findByRole('dialog', { name: 'OpenCode' })).toBeInTheDocument();
+    const shown = (await screen.findAllByTestId('agents-command')).map((c) => (c.textContent ?? ''));
+    expect(shown).toContain('XDG_CONFIG_HOME=/w/opencode opencode auth login');
+    expect(screen.getByTestId('agents-check')).toBeInTheDocument();
     expect(screen.queryByTestId('mock-terminal')).toBeNull();
   });
 });

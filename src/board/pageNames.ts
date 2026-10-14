@@ -31,6 +31,7 @@ const BY_PATH: ReadonlyArray<[string, string]> = [
   ['/mcp/inspect', PAGE_NAMES.mcpInspect],
   ['/mcp', PAGE_NAMES.mcp],
   ['/plugins', PAGE_NAMES.plugins],
+  ['/agents', PAGE_NAMES.agents],
   ['/rules', PAGE_NAMES.steering],
   ['/learn', PAGE_NAMES.learn],
   ['/health', PAGE_NAMES.health],

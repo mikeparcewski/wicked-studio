@@ -49,7 +49,7 @@ describe('ChatInput seat warning — one fold with the Health rail (F-A45-006)',
     });
     render(<ChatInput runId={null} runStatus={null} onLaunched={vi.fn()} />);
     const warning = await screen.findByTestId('signin-warning');
-    expect(warning).toHaveTextContent("⚠ codex isn't signed in — runs routed there will fall back or fail. Sign in in Settings.");
+    expect(warning).toHaveTextContent("⚠ codex isn't signed in — runs routed there will fall back or fail.");
     expect(warning).not.toHaveTextContent('opencode');
     expect(screen.queryByTestId('ineligible-warning')).toBeNull();
   });

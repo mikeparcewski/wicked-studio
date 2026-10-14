@@ -91,31 +91,31 @@ describe('SystemSettings — CLI seats & sign-in', () => {
     expect(screen.queryByRole('button', { name: 'Sign in Cursor' })).toBeNull();
   });
 
-  it('Sign in opens the plain-words panel with the login line, Copy and check-again — no terminal (Amendment 5)', async () => {
+  it('Sign in opens the agent modal with the login line, Copy and check-again — no terminal', async () => {
     const user = userEvent.setup();
     render(<SystemSettings />);
     await screen.findByText('Claude Code');
 
     await user.click(screen.getByRole('button', { name: 'Sign in Codex' }));
 
-    // Modal with the seat's name; the daemon's line shown as given, never run here.
-    expect(screen.getByRole('dialog', { name: 'Sign in — Codex' })).toBeInTheDocument();
-    expect(screen.getByTestId('signin-line')).toHaveTextContent('codex auth login');
-    expect(screen.getByTestId('copy-command')).toHaveAttribute('data-command', 'codex auth login');
-    expect(screen.getByTestId('signin-check')).toBeInTheDocument();
+    // The agent's modal (DES-seats-page §4): its name; the daemon's line shown, never run here.
+    expect(await screen.findByRole('dialog', { name: 'Codex' })).toBeInTheDocument();
+    expect(await screen.findByTestId('agents-command')).toHaveTextContent('codex auth login');
+    expect(screen.getAllByTestId('agents-copy')[0]).toHaveAccessibleName('Copy the sign-in command');
+    expect(screen.getByTestId('agents-check')).toBeInTheDocument();
     expect(screen.queryByTestId('mock-terminal')).toBeNull();
   });
 
-  it('the modal close button dismisses the sign-in panel', async () => {
+  it('the modal close button dismisses the agent modal', async () => {
     const user = userEvent.setup();
     render(<SystemSettings />);
     await screen.findByText('Claude Code');
 
     await user.click(screen.getByRole('button', { name: 'Sign in Codex' }));
-    expect(screen.getByTestId('signin-panel')).toBeInTheDocument();
+    expect(await screen.findByTestId('agents-modal')).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Close' }));
-    await waitFor(() => expect(screen.queryByTestId('signin-panel')).toBeNull());
+    await waitFor(() => expect(screen.queryByTestId('agents-modal')).toBeNull());
   });
 
   it('clicking Sign in does not toggle the seat default-CLI checkbox', async () => {

@@ -40,7 +40,7 @@ import { openLaunchWizard } from '../../store/launchWizard.js';
 import { useProjectsStore } from '../../store/projects.js';
 import { openSheet } from '../../store/sheets.js';
 import { CaptureDrop } from '../CaptureDrop.js';
-import { SignInPanel } from '../SignInPanel.js';
+import { AgentModal } from '../agents/AgentModal.js';
 import { StandingOrdersPanel } from '../StandingOrdersPanel.js';
 import { agentColor, AreaChart, catColor, ChartCard, OutcomeBreakdown, outcomeColor, StackedBars, type BarSeries, type ChartState } from '../charts/Chart.js';
 import { liveRows } from '../../board/deskInsights.js';
@@ -505,7 +505,7 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
           {projectId !== undefined && HOSTED_NOTE[tab] !== null && <p className="wk-desk2-hosted-note" data-testid="desk-hosted-note">{HOSTED_NOTE[tab]}</p>}
           {hosted?.(tab, query.get('at') ?? HOSTED_HOME[tab], projectId ?? null)}
         </div>
-        {signIn !== null && <SignInPanel seat={signIn} onClose={() => setSignIn(null)} />}
+        {signIn !== null && <AgentModal agentKey={signIn.key} onClose={() => setSignIn(null)} />}
       </div>
     );
   }
@@ -520,7 +520,7 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
         {tabs}
         {tab === 'work' ? work : tab === 'runs' ? runsTab : tab === 'report' ? report : understand}
       </div>
-      {signIn !== null && <SignInPanel seat={signIn} onClose={() => setSignIn(null)} />}
+      {signIn !== null && <AgentModal agentKey={signIn.key} onClose={() => setSignIn(null)} />}
     </div>
   );
 }

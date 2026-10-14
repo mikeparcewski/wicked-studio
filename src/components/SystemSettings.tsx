@@ -16,7 +16,8 @@ import { setCachedRoster } from '../store/rosterCache.js';
 import { Modal } from './Modal.js';
 import { NotificationSettings } from './NotificationSettings.js';
 import { Terminal } from './Terminal.js';
-import { SignInPanel } from './SignInPanel.js';
+import { AgentModal } from './agents/AgentModal.js';
+import { getCachedRoster } from '../store/rosterCache.js';
 import { homeDirsIn } from '../board/homePath.js';
 import { PAGE_NAMES } from '../board/pageNames.js';
 import { Segmented } from './ui/Segmented.js';
@@ -361,7 +362,7 @@ export function SystemSettings({ navigate = (p) => { history.pushState(null, '',
 
       {/* Editor plugins moved to their own Plugins page (`/plugins`, operator ruling 2026-10-12). */}
       </div>
-      {signInSeat !== null && <SignInPanel seat={signInSeat} onClose={() => setSignInSeat(null)} onChecked={(r) => setRoster(r)} />}
+      {signInSeat !== null && <AgentModal agentKey={signInSeat.key} intent="sign-in" onClose={() => { const r = getCachedRoster(); if (r !== null) setRoster(r); setSignInSeat(null); }} />}
       {logoutSeat !== null && <Modal title={`Log out — ${seatLabel(logoutSeat)}`} onClose={() => setLogoutSeat(null)}>
         <p data-testid="seat-logout-line">Complete any prompt below, then close this panel.</p>
         <TechDetails text={logoutSeat.logout_invocation ?? ''} />

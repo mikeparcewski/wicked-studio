@@ -1,7 +1,8 @@
 import { useEffect } from 'react';
 import { HEALTH_RECHECKED } from '../hooks/useRailHealthDot.js';
 import { ConnectionRegistry, GovernanceRows, SeatsRegistry, WeekRegistry, useHealthRegistry } from './HealthRailSection.js';
-import { SignInPanel } from './SignInPanel.js';
+import { AgentModal } from './agents/AgentModal.js';
+import { getCachedRoster } from '../store/rosterCache.js';
 
 /**
  * `/health` (studio#421 rail polish, change 3): the rail's Health link lands the FULL registry — the
@@ -47,7 +48,7 @@ export function HealthPage(): React.ReactElement {
         <GovernanceRows read={governance} overdue={overdue ? registry.probeDeadlineMs : 0} onReprobe={registry.reprobeNow} />
       </section>
       {signIn !== null && (
-        <SignInPanel seat={signIn} onClose={() => registry.setSignIn(null)} onChecked={registry.acceptRoster} />
+        <AgentModal agentKey={signIn.key} intent="sign-in" onClose={() => { const r = getCachedRoster(); if (r !== null) registry.acceptRoster(r); registry.setSignIn(null); }} />
       )}
     </div>
   );

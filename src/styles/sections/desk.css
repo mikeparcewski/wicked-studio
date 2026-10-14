@@ -656,7 +656,6 @@
   .wk-desk2-tabs { overflow-x: auto; gap: var(--space-4); }
 }
 
-.wk-desk2-pending { flex: 1 1 auto; display: flex; align-items: flex-start; justify-content: center; padding: var(--space-12, 48px) var(--space-8); }
 
 /* ── Understand (approved concept) ─────────────────────────────────────────────────────────── */
 .wk-und { display: flex; flex-direction: column; gap: var(--d2-gap); }

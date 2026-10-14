@@ -20,6 +20,8 @@ import { ProjectRequirementsPage } from './components/product/ProjectRequirement
 import { CampaignsRedirect, RouteRedirect } from './components/RouteRedirect.js';
 import { PluginsPage } from './components/editors/EditorPluginsSettings.js';
 import { McpInspectPage } from './components/editors/McpInspectPage.js';
+import { AGENTS_PATH, AgentsPage } from './components/agents/AgentsPage.js';
+import { useFirstUseLanding } from './components/agents/useFirstUseLanding.js';
 import { McpToolsPage } from './components/McpToolsPage.js';
 import { SteeringPage } from './components/SteeringPage.js';
 import { MemoriesPanel } from './components/MemoriesPanel.js';
@@ -34,9 +36,8 @@ import { ConnectionStatus } from './components/ConnectionStatus.js';
 import { SystemSettings } from './components/SystemSettings.js';
 import { ThemePage } from './components/ThemePage.js';
 import { HealthPage } from './components/HealthPage.js';
-import { parseRoute } from './hooks/useRoute.js';
+import { parseRoute, projectDetailPath } from './hooks/useRoute.js';
 import { DeskV2, deskTabPath, type HostedTab } from './components/desk/DeskV2.js';
-import { AgentsTabPending } from './components/desk/AgentsTabPending.js';
 import { useDeskStream } from './store/deskStream.js';
 import { SessionRail } from './components/desk/SessionRail.js';
 import { RailDrawer } from './components/ui/RailDrawer.js';
@@ -170,13 +171,19 @@ export function App(): React.ReactElement {
 
   /** Desk hosted tabs: render the page at the tab's address, with the project page's scope. */
   const renderHosted = (tab: HostedTab, at: string, project: string | null): React.ReactNode => {
-    if (tab === 'agents') {
-      // The Agents page (lane studio-agents-page) mounts here when it lands; until then the tab says so.
-      return <AgentsTabPending navigate={navigate} />;
-    }
     const u = new URL(at.startsWith('/') ? at : `/${at}`, 'http://studio.local');
     const r = parseRoute(u.pathname);
     const hs = u.search;
+    // The Agents page (DES-seats-page) is the Agents tab; `/agents?fix=<key>` / `?setup=1` ride along as `at`.
+    // Its own moves (open/close an agent, the setup steps) stay on this tab's address, in this Desk
+    // (global or the project's), so the Desk is not remounted through the `/agents` redirect.
+    if (tab === 'agents') {
+      const base = project === null ? '/' : projectDetailPath(project);
+      const onTab = (path: string): string =>
+        path === AGENTS_PATH || path.startsWith(`${AGENTS_PATH}?`) || path.startsWith(`${AGENTS_PATH}/`) ? deskTabPath('agents', path, base) : path;
+      const agentsNavigate: typeof navigate = (path, opts) => { if (opts === undefined) navigate(onTab(path)); else navigate(onTab(path), opts); };
+      return <AgentsPage search={hs} navigate={agentsNavigate} />;
+    }
     if (tab === 'repositories' && project === null) {
       return <div className="wk-desk2-repos flex-1 overflow-hidden">
         <RepositoriesPanel onSelectRun={selectRun} autoShowRegister={u.pathname === '/repos/new'} navigate={navigate} ambientProject={ambientProjectId(u.pathname, hs)} />
@@ -250,6 +257,8 @@ export function App(): React.ReactElement {
   // (`/wiki`/`/rules`/`/policies`) and the retired standalone `/proposals` queue normalize onto
   // the unified surface's two sub-sections (`/steering/policies[?type=]` or `/steering/memories`).
   useSteeringRedirect(panel, steeringSection, pathname, search, navigate);
+  // First use (DES-seats-page §5.1): until the computer is good enough, `/` opens on the Agents tab's setup steps.
+  useFirstUseLanding(pathname, search, navigate);
 
   // The retired `/coverage` and `/domain` settings panels normalize onto `/system`.
   useRetiredSettingsRedirect(pathname, navigate);
@@ -486,6 +495,8 @@ export function App(): React.ReactElement {
     }
     // "See everything" (`/everything`, S15c): the tab, filter, project and kind ride the query.
     if (panel === 'everything') {
+      // The Helpers tab moved to the Agents page (DES-seats-page §2.2): its old address redirects.
+      if (new URLSearchParams(search).get('tab') === 'helpers') return <RouteRedirect to={AGENTS_PATH} navigate={navigate} />;
       // Like the Desk: the page owns its scroller (`.wk-desk-scroll`) — no clipping wrapper (main_scroll).
       return <EverythingPage runs={runs} runsLoaded={runsLoaded} runsError={runsError} onRetryRuns={refresh} needRows={needRows} navigate={navigate} search={search} />;
     }
@@ -572,6 +583,10 @@ export function App(): React.ReactElement {
     // matrix and Approve / Revoke. `?server=<name>` deep-links a server row open.
     if (panel === 'learn') {
       return <LearnPage navigate={navigate} />;
+    }
+    // `/agents` — the Agents page (DES-seats-page): one row per AI agent, `?fix=<key>` opens its modal.
+    if (panel === 'agents') {
+      return <AgentsPage search={search} navigate={navigate} />;
     }
     if (panel === 'plugins') {
       return (

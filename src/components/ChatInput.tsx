@@ -39,6 +39,7 @@ import { LinkedIssuesLine, useLinkedIssuesPreview } from './LinkedIssuesLine.js'
 import { PhasePicker } from './PhasePicker.js';
 import { isPlanGateNow, usePlanGate } from '../store/planGates.js';
 import { DELIVER_STEP } from '../board/planModel.js';
+import { AGENTS_PATH, agentFixPath } from '../hooks/useRoute.js';
 
 interface Props {
   /** If set, we're in "run selected" mode — steer if gated, inject if executing, placeholder otherwise. */
@@ -1600,15 +1601,17 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
           <span className="flex-1">
             ⚠ {unsignedSelected.map(seatLabel).join(', ')}{' '}
             {unsignedSelected.length === 1 ? "isn't" : "aren't"} signed in — runs routed there
-            will fall back or fail. Sign in in Settings.
+            will fall back or fail.
           </span>
+          {/* DES-seats-page §2.2: the warning links to the agent's fix on the Agents page. */}
           <button
             type="button"
-            onClick={() => navigate?.('/system')}
+            data-testid="signin-warning-fix"
+            onClick={() => navigate?.(unsignedSelected.length === 1 ? agentFixPath(unsignedSelected[0]!.key) : AGENTS_PATH)}
             className="wk-btn wk-btn--sm shrink-0"
             style={{ color: 'var(--status-warn)', borderColor: 'color-mix(in oklab, var(--status-warn) 40%, transparent)' }}
           >
-            Open Settings
+            How to sign in
           </button>
         </div>
       )}
