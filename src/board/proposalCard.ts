@@ -4,7 +4,7 @@ import { deliverUnit, deliveryOf, resolveDelivery } from '../components/delivery
 import { deliverTargetOf, isDeliverGate } from '../components/gateMoveModel.js';
 import type { OpenGate } from '../store/gates.js';
 import type { GateActionState } from './gateActions.js';
-import { gatePlanLabels, type ChainModel } from './chainModel.js';
+import { gatePlanLabels, stepAtOrd, type ChainModel } from './chainModel.js';
 import { plainDeliverSentence, repoNameOf } from './deskWords.js';
 import type { AskProposal } from './askThread.js';
 
@@ -123,15 +123,19 @@ export function statusSentence(view: SessionView, chain: ChainModel, gate: OpenG
   }
   if (s === 'awaiting_human' || gate !== undefined) {
     const kind = proposalKindOf(view.session.id, gate, view.units);
+    // Run clarity: a plain wait names the step it waits at ("Waiting on you at Test"), when known.
+    const at = kind === 'plan' || kind === 'deliver' || gate === undefined ? undefined : stepAtOrd(chain, view.units, gate.ord);
     const what = kind === 'plan' ? 'Waiting on your go for the plan'
       : kind === 'deliver' ? 'Ready to deliver — waiting on you'
-        : 'Waiting on you';
+        : `Waiting on you${at !== undefined ? ` at ${stepWords(at.label)}` : ''}`;
     return `${what}${count}`;
   }
   if (s === 'completed') return `${outcomeLine(view)}${count}`;
   if (s === 'failed') {
+    // UI-CONTRACT §5: a failed run reads "Failed", the word the page header says (statusWords).
     const at = chain.steps.find((x) => x.state === 'failed');
-    return `Stopped${at !== undefined ? ` at ${stepWords(at.label)}` : ''}${count}`;
+    if (at !== undefined) return `Failed at ${stepWords(at.label)}${count}`;
+    return `${chain.total > 0 && chain.done === 0 ? 'Failed before any step finished' : 'Failed'}${count}`;
   }
   if (s === 'cancelled') return `Cancelled${count}`;
   const running = chain.steps.find((x) => x.state === 'running');

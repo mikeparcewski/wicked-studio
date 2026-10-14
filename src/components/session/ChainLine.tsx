@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import type { SessionView } from '../../api/types.js';
 import { isRouteUnsupported } from '../../api/errors.js';
 import { runIdentityOf, teamPlanApi } from '../../api/teamPlan.js';
-import { chainOf, chainSentence, unitPhaseId, withGatePlan, type ChainModel, type ChainStep } from '../../board/chainModel.js';
+import { chainOf, chainSentence, stepAtOrd, unitPhaseId, withGatePlan, type ChainModel, type ChainStep } from '../../board/chainModel.js';
 import { useGateStore } from '../../store/gates.js';
 import { checkChip, checkedSentence, type MomentOf } from '../../board/checkState.js';
 import type { WalkthroughStepState } from '../../api/types.js';
@@ -100,7 +100,26 @@ function whyOf(s: ChainStep): string {
   return [ADDED_WORD[s.addedBy], s.reason].filter(Boolean).join(' — ');
 }
 
-export function ChainLine({ chain, runId, units = [], teamError = null, onRetry, checks = null, momentOf, onOpenAt, nothingChecked = false, jumpOrd = null }: {
+/** What the run is doing, for the "now" marker: working (executing, not orphaned), stopped (failed or
+ *  cancelled), or neither. A step's own `running`/`failed` state alone is not enough — an orphaned run's
+ *  cursor and a retained team claim still read `running` (codex r2). */
+export type RunPhase = 'working' | 'stopped' | 'other';
+
+/** Run clarity: which step is "now", and its word — the step waiting on you (the open gate's unit), else
+ *  the one working while the run works, else the one it stopped at once it stopped. `null` for a
+ *  proposed plan or when none is. Pure. */
+export function nowStep(chain: ChainModel, units: readonly SessionView['units'][number][], waitOrd: number | null, phase: RunPhase = 'other'): { index: number; kind: 'wait' | 'run' | 'stopped'; word: string } | null {
+  if (chain.proposed) return null;
+  const at = waitOrd === null ? undefined : stepAtOrd(chain, units, waitOrd);
+  const wait = at === undefined ? -1 : chain.steps.indexOf(at);
+  if (wait !== -1) return { index: wait, kind: 'wait', word: 'waiting on you' };
+  const run = phase === 'working' ? chain.steps.findIndex((s) => s.state === 'running') : -1;
+  if (run !== -1) return { index: run, kind: 'run', word: 'now' };
+  const stopped = phase === 'stopped' ? chain.steps.findIndex((s) => s.state === 'failed') : -1;
+  return stopped !== -1 ? { index: stopped, kind: 'stopped', word: 'stopped here' } : null;
+}
+
+export function ChainLine({ chain, runId, units = [], teamError = null, onRetry, checks = null, momentOf, onOpenAt, nothingChecked = false, jumpOrd = null, waitOrd = null, phase = 'other' }: {
   chain: ChainModel;
   runId: string;
   /** The run's units: a step that has one opens its sheet (S11). */
@@ -117,7 +136,12 @@ export function ChainLine({ chain, runId, units = [], teamError = null, onRetry,
   nothingChecked?: boolean;
   /** S16a-1c: the unit the Watchtower's "Jump in" named (`?jump=`): its step is marked. */
   jumpOrd?: number | null;
+  /** Run clarity: the unit an open gate waits at — its step is marked "waiting on you". */
+  waitOrd?: number | null;
+  /** Run clarity: what the run is doing — only a working run marks its running step, only a stopped one its failed step. */
+  phase?: RunPhase;
 }): React.ReactElement {
+  const now = nowStep(chain, units, waitOrd, phase);
   return (
     <div data-testid="chain" data-run-id={runId} data-source={chain.source} data-proposed={chain.proposed ? 'true' : 'false'} className={`wk-chain${nothingChecked ? ' wk-chain--unchecked' : ''}`}>
       {chain.steps.length > 0 && (
@@ -125,6 +149,7 @@ export function ChainLine({ chain, runId, units = [], teamError = null, onRetry,
           {chain.steps.map((s, i) => {
             const ord = stepUnitOrd(s, units);
             const chip = checkChip(s, checks, momentOf);
+            const isNow = now !== null && now.index === i;
             return (
             <li
               {...(ord !== null ? { 'data-object': `step:${runId}:${ord}` } : {})}
@@ -137,9 +162,10 @@ export function ChainLine({ chain, runId, units = [], teamError = null, onRetry,
               {...(s.late ? { 'data-late': 'true' } : {})}
               {...(ord !== null ? { 'data-unit-ord': String(ord) } : {})}
               {...(ord !== null && jumpOrd !== null && ord === jumpOrd ? { 'data-jumped': 'true' } : {})}
+              {...(isNow ? { 'data-now': now.kind, 'aria-current': 'step' as const } : {})}
               title={whyOf(s)}
-              aria-label={`${s.label}: ${STATE_WORD[s.state]} — ${whyOf(s)}`}
-              className={`wk-chain-step wk-chain-step--${s.state}`}
+              aria-label={`${s.label}: ${!isNow ? STATE_WORD[s.state] : now.kind === 'stopped' ? now.word : `${STATE_WORD[s.state]}, ${now.word}`} — ${whyOf(s)}`}
+              className={`wk-chain-step wk-chain-step--${s.state}${isNow ? ` wk-chain-step--now wk-chain-step--now-${now.kind}` : ''}`}
             >
               {i > 0 && <span aria-hidden className="wk-chain-join" />}
               <span aria-hidden className={`wk-chain-dot wk-chain-dot--${s.state}`} />
@@ -149,6 +175,7 @@ export function ChainLine({ chain, runId, units = [], teamError = null, onRetry,
                 <span className="wk-chain-label">{s.label}</span>
               )}
               {s.late && <span className="wk-chain-late">added</span>}
+              {isNow && <span data-testid="chain-step-now" className={`wk-chain-now wk-chain-now--${now.kind}`}>{now.word}</span>}
               {chip !== null && (chip.atSec === null || onOpenAt === undefined ? (
                 <span data-testid="chain-step-check" data-check={chip.kind} className={`wk-chain-check wk-chain-check--${chip.kind}`}>{chip.text}</span>
               ) : (
