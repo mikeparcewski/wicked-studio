@@ -18,18 +18,22 @@ export function RecordingGateActions({ runId, kind, step, units, onChanged, reta
   onChanged?: () => void;
   retake?: RetakeProps;
 }): React.ReactElement | null {
+  if (kind === 'demo-video') return retake === undefined ? null : <RetakeChapter key={retake.chapter} {...retake} {...(onChanged === undefined ? {} : { onChanged })} />;
+  return <WalkthroughGateActions runId={runId} step={step} units={units} {...(onChanged === undefined ? {} : { onChanged })} />;
+}
+
+function WalkthroughGateActions({ runId, step, units, onChanged }: {
+  runId: string; step: string | null; units: readonly UnitLike[]; onChanged?: () => void;
+}): React.ReactElement | null {
   // Unit changes replace the run-status signal the old editor received from the run page.
-  const { load, reload } = useRecording(runId, kind, step, JSON.stringify(units));
+  const { load, reload } = useRecording(runId, 'walkthrough', step, JSON.stringify(units));
   const changed = (): void => { reload(); onChanged?.(); };
-  return <>
-    {load.kind === 'ready' && <GateActions rec={load.rec} units={units} reload={changed} />}
-    {kind === 'demo-video' && retake !== undefined && <RetakeChapter key={retake.chapter} {...retake} />}
-  </>;
+  return load.kind === 'ready' ? <GateActions rec={load.rec} units={units} reload={changed} /> : null;
 }
 
 export function recordingGateActions(binding: ArtifactBinding, units: readonly UnitLike[]): ReactNode | null {
   if ((binding.source !== 'walkthrough' && binding.source !== 'demo') || binding.runId === undefined) return null;
-  return <RecordingGateActions runId={binding.runId} kind={binding.source === 'walkthrough' ? 'walkthrough' : 'demo-video'} step={null} units={units} />;
+  return <RecordingGateActions runId={binding.runId} kind={binding.source === 'walkthrough' ? 'walkthrough' : 'demo-video'} step={binding.source === 'walkthrough' ? binding.docId || null : null} units={units} />;
 }
 
 function GateActions({ rec, units, reload }: { rec: Recording; units: readonly UnitLike[]; reload: () => void }): React.ReactElement | null {
@@ -129,8 +133,10 @@ function GateActions({ rec, units, reload }: { rec: Recording; units: readonly U
     reload();
   });
 
-  // The note outlives the verbs: after Ask helpers to fix the gate closes, and the note must still say so.
-  if (!verbs.includes('fix') && !verbs.includes('edit') && note === null) return null;
+  // The gate closes once "Ask helpers to fix" is sent: its verbs go, but the note saying so stays (ev2-run 10:40Z).
+  if (!verbs.includes('fix') && !verbs.includes('edit')) {
+    return note === null ? null : <p data-testid="walkthrough-note" data-tone={note.tone} role={note.tone === 'bad' ? 'alert' : 'status'} className={`wk-walk-quiet${note.tone === 'bad' ? ' wk-walk-bad' : ''}`}>{note.text}</p>;
+  }
   return <>
     <div data-testid="walkthrough-actions" className="wk-walk-actions">
       {verbs.includes('fix') && <button type="button" data-testid="walkthrough-fix" disabled={busy} onClick={() => void fix()} className="wk-prop-btn wk-prop-btn--primary">Ask helpers to fix</button>}
@@ -151,7 +157,7 @@ function GateActions({ rec, units, reload }: { rec: Recording; units: readonly U
 }
 
 /** The demo cut adapter owns the take request; only host chrome offers the verb. */
-export function RetakeChapter({ adapter, chapter }: RetakeProps): React.ReactElement {
+export function RetakeChapter({ adapter, chapter, onChanged }: RetakeProps & { onChanged?: () => void }): React.ReactElement {
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<{ tone: 'ok' | 'bad'; text: string } | null>(null);
   const live = useRef(true);
@@ -164,6 +170,7 @@ export function RetakeChapter({ adapter, chapter }: RetakeProps): React.ReactEle
     setNote(null);
     try {
       const result = await adapter.retake(chapter);
+      if (live.current && !('error' in result)) onChanged?.();
       if (live.current) setNote('error' in result
         ? { tone: 'bad', text: result.message }
         : { tone: 'ok', text: 'The chapter was recorded again.' });

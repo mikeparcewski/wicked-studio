@@ -22,6 +22,7 @@ export function start(): void {
   let surface: Surface = 'card', mode: Mode = 'simple', tab = 'chapters', protocol = 1;
   let grants: string[] = [], cut: DemoCut | null = null, selected: string | null = null;
   let seq = 0, busy = false, disposed = false, dragged: string | null = null;
+  let renaming: string | null = null, renameText = '', renameBase = 0;
   let mediaUrl: string | null = null, mediaGeneration = 0, readingGeneration = 0, takePreview = false;
   const pending = new Map<string, { resolve: (r: Reply) => void; timer: ReturnType<typeof setTimeout> }>();
   const send = (type: string, payload: unknown): void => port?.postMessage({ p: PROTOCOL, v: ENVELOPE, type, payload });
@@ -37,7 +38,7 @@ export function start(): void {
   const editable = (): boolean => grants.includes('artifact.write') && !busy && !disposed;
   const advanced = (): boolean => surface === 'options' || mode === 'advanced';
   const status = (line: string): void => { el('status').textContent = line; send('ui.status', { line: line.replace(/[\r\n]/g, ' ').slice(0, 120) }); };
-  const publish = (): void => { if (protocol === 2 && cut !== null) for (const tab of ['captions', 'theme']) v2?.values(tab, videoValues(cut.style, tab, skin)); };
+  const publish = (): void => { if (protocol === 2 && cut !== null) for (const tab of ['captions', 'theme']) v2?.values(tab, videoValues(cut.style, tab, skin, cut.resolvedTheme)); };
   /** The active studio skin as video colours, resolved from the host's tokens to plain rgb() (the colour grammar). */
   let skin: VideoColours | null = null;
   const resolveColour = (v: unknown): string | null => {
@@ -138,18 +139,27 @@ export function start(): void {
     } finally { busy = false; draw(); }
   }
   function rename(c: DemoChapter): void {
-    if (!editable() || cut === null) return;
-    const base = cut.version;
-    const input = document.createElement('input'); input.value = c.title; input.maxLength = 80; input.setAttribute('aria-label', 'Chapter title'); input.dataset['testid'] = 'video-rename-input';
-    fields.prepend(input); input.focus(); input.select();
+    if (!editable() || cut === null || renaming !== null) return;
+    renaming = c.id; renameText = c.title; renameBase = cut.version;
+    draw();
+    const input = fields.querySelector<HTMLInputElement>('[data-testid="video-rename-input"]');
+    input?.focus(); input?.select();
+  }
+  function renameInput(): HTMLInputElement | null {
+    const c = cut?.chapters.find(c => c.id === renaming);
+    if (c === undefined) { renaming = null; return null; }
+    const input = document.createElement('input'); input.value = renameText; input.maxLength = 80; input.setAttribute('aria-label', 'Chapter title'); input.dataset['testid'] = 'video-rename-input';
+    input.oninput = () => { renameText = input.value; };
     input.onkeydown = e => {
-      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); draw(); }
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); renaming = null; draw(); }
       else if (e.key === 'Enter') {
         e.preventDefault(); e.stopPropagation();
-        if (input.value.trim() && !/[\r\n]/.test(input.value) && input.value !== c.title) void write({ op: 'chapter-rename', chapter: c.id, title: input.value }, base);
+        renaming = null;
+        if (input.value.trim() && !/[\r\n]/.test(input.value) && input.value !== c.title) void write({ op: 'chapter-rename', chapter: c.id, title: input.value }, renameBase);
         else draw();
       }
     };
+    return input;
   }
   function drawCaption(): void {
     if (cut === null) return;
@@ -165,8 +175,8 @@ export function start(): void {
     // E1's size is px at 1080p: at the player's width W that is size × W / 1920, i.e. size / 19.2 cqw.
     caption.style.fontSize = `max(9px, ${style.captions.size / 19.2}cqw)`;
     caption.style.maxHeight = `${style.captions.maxLines * 1.3 + 0.8}em`;
-    const colours = shownColours(style.theme, skin);
-    const vars = { background: colours.background, foreground: colours.foreground, accent: colours.accent, font: style.theme.font };
+    const colours = shownColours(style.theme, skin, cut.resolvedTheme);
+    const vars = { background: colours.background, foreground: colours.foreground, accent: colours.accent, font: paletteOf(style.theme) === 'studio' ? cut.resolvedTheme?.font ?? style.theme.font : style.theme.font };
     for (const [k, v] of Object.entries(vars)) root.style.setProperty(`--video-${k}`, v);
   }
   function trimHandle(c: DemoChapter, edge: 'in' | 'out'): HTMLButtonElement {
@@ -174,9 +184,11 @@ export function start(): void {
     handle.setAttribute('role', 'slider'); handle.setAttribute('aria-label', `${edge === 'in' ? 'In' : 'Out'} trim`);
     const duration = cut?.takes[c.id]?.find(t => t.file === c.take)?.durationSec ?? c.outSec;
     handle.setAttribute('aria-valuemin', '0'); handle.setAttribute('aria-valuemax', String(duration)); handle.setAttribute('aria-valuenow', String(edge === 'in' ? c.inSec : c.outSec));
-    handle.disabled = !editable();
+    // Nothing to trim while the chapter's length is unknown or empty (agy h6-r1).
+    const unknownLength = c.durationSec <= 0 || c.outSec - c.inSec <= 0;
+    handle.disabled = !editable() || unknownLength;
     handle.onpointerdown = e => {
-      if (!editable() || cut === null) return;
+      if (!editable() || cut === null || unknownLength) return;
       e.preventDefault(); e.stopPropagation();
       const base = cut.version, x = e.clientX, width = handle.parentElement!.getBoundingClientRect().width || 1;
       let inSec = c.inSec, outSec = c.outSec;
@@ -194,6 +206,7 @@ export function start(): void {
       window.addEventListener('pointermove', drag); window.addEventListener('pointerup', end); window.addEventListener('pointercancel', cancel, { once: true });
     };
     handle.onkeydown = e => {
+      if (!editable() || unknownLength) return;
       if (!['ArrowLeft', 'ArrowRight'].includes(e.key)) return;
       e.preventDefault(); e.stopPropagation(); const delta = e.key === 'ArrowLeft' ? -0.1 : 0.1;
       const inSec = edge === 'in' ? Math.max(0, Math.min(c.outSec - 0.5, c.inSec + delta)) : c.inSec;
@@ -235,6 +248,9 @@ export function start(): void {
   }
   function draw(): void {
     const active = document.activeElement as HTMLElement | null;
+    const previousRename = fields.querySelector<HTMLInputElement>('[data-testid="video-rename-input"]');
+    if (previousRename !== null) renameText = previousRename.value;
+    const renameFocused = active === previousRename, renameStart = previousRename?.selectionStart, renameEnd = previousRename?.selectionEnd;
     const focusedChapter = active?.dataset['chapter'];
     const focusedControl = active?.dataset['testid'];
     root.dataset['surface'] = surface; root.dataset['mode'] = mode; root.dataset['head'] = String(cut?.version ?? 0); root.dataset['current'] = selected ?? '';
@@ -243,6 +259,13 @@ export function start(): void {
     timeline.hidden = surface !== 'full'; chips.hidden = surface !== 'card';
     list.replaceChildren(); chips.replaceChildren(); timeline.replaceChildren(); fields.replaceChildren(); timeline.dataset['proof'] = 'false';
     if (cut === null) return;
+    if (renaming !== null) {
+      const input = renameInput();
+      if (input !== null) {
+        fields.prepend(input);
+        if (renameFocused) { input.focus(); input.setSelectionRange(renameStart ?? null, renameEnd ?? null); }
+      }
+    }
     cut.chapters.forEach((c, i) => {
       const row = document.createElement('li');
       const b = button('', () => go(c.id), 'video-chapter'); b.className = 'chapter'; b.dataset['chapter'] = c.id;
@@ -282,10 +305,10 @@ export function start(): void {
     el('count').textContent = c === undefined ? 'No chapters' : `${cut.chapters.findIndex(x => x.id === c.id) + 1} of ${cut.chapters.length}`;
     el<HTMLTextAreaElement>('say').value = c?.say ?? '';
     const t = cut.style.theme;
-    const shown = shownColours(t, skin), pal = paletteOf(t, skin);
-    el('theme-summary').textContent = `${pal === 'studio' ? 'Studio skin (default)' : pal === 'custom' ? 'Custom colours' : 'Preset: ' + pal}\n${t.font}\nBackground ${shown.background}\nText ${shown.foreground}\nAccent ${shown.accent}\nTitle card: ${t.titleCard.on ? t.titleCard.title : 'Off'}\nEnd card: ${t.endCard.on ? t.endCard.title : 'Off'}`;
+    const shown = shownColours(t, skin, cut.resolvedTheme), pal = paletteOf(t);
+    el('theme-summary').textContent = `${pal === 'studio' ? 'Studio skin (default)' : pal === 'custom' ? 'Custom colours' : 'Preset: ' + pal}\n${pal === 'studio' ? cut.resolvedTheme?.font ?? t.font : t.font}\nBackground ${shown.background}\nText ${shown.foreground}\nAccent ${shown.accent}\nTitle card: ${t.titleCard.on ? t.titleCard.title : 'Off'}\nEnd card: ${t.endCard.on ? t.endCard.title : 'Off'}`;
     drawCaption();
-    if (focusedChapter !== undefined) list.querySelector<HTMLElement>(`[data-chapter="${focusedChapter}"]`)?.focus();
+    if (focusedChapter !== undefined) Array.from(list.querySelectorAll<HTMLElement>('[data-chapter]')).find(n => n.dataset['chapter'] === focusedChapter)?.focus();
     if (!advanced() || surface === 'card' || c === undefined) return;
     const buttons = document.createElement('div'); buttons.className = 'buttons';
     const renameBtn = button('Rename', () => rename(c), 'video-rename'), up = button('Move up', () => move(c.id, -1), 'video-move-up'), down = button('Move down', () => move(c.id, 1), 'video-move-down');
@@ -320,18 +343,18 @@ export function start(): void {
   }
   async function optionsChanged(tab: string, id: string, value: unknown) {
     const control = declaration.options?.tabs.find(t => t.id === tab)?.controls?.find(c => c.id === id);
-    if (cut === null || control === undefined || !controlValueOk(control, value) || !grants.includes('artifact.theme') || (typeof value === 'string' && /[\r\n]/.test(value))) return { applied: false, values: cut === null ? {} : videoValues(cut.style, tab, skin), reason: 'That style change is not available.' };
-    if (busy) return { applied: false, values: videoValues(cut.style, tab, skin), reason: 'A cut is being saved.' };
+    if (cut === null || control === undefined || !controlValueOk(control, value) || !grants.includes('artifact.theme') || (typeof value === 'string' && /[\r\n]/.test(value))) return { applied: false, values: cut === null ? {} : videoValues(cut.style, tab, skin, cut.resolvedTheme), reason: 'That style change is not available.' };
+    if (busy) return { applied: false, values: videoValues(cut.style, tab, skin, cut.resolvedTheme), reason: 'A cut is being saved.' };
     busy = true; draw();
     try {
       for (let attempt = 0; attempt < 2; attempt++) {
-        const style = changedVideoStyle(cut.style, tab, id, value, skin);
+        const style = changedVideoStyle(cut.style, tab, id, value);
         const r = await req('theme.set', { base: cut.version, tokens: { kind: 'video-style', style } });
-        if (r.ok) { const confirmed = await read(); return { applied: confirmed, values: videoValues(cut.style, tab, skin), ...(confirmed ? {} : { reason: 'The saved style could not be read.' }) }; }
+        if (r.ok) { const confirmed = await read(); return { applied: confirmed, values: videoValues(cut.style, tab, skin, cut.resolvedTheme), ...(confirmed ? {} : { reason: 'The saved style could not be read.' }) }; }
         if (r.error?.code === 'head_moved' && attempt === 0 && await read()) continue;
-        publish(); return { applied: false, values: videoValues(cut.style, tab, skin), reason: r.error?.message ?? 'Style was not changed.' };
+        publish(); return { applied: false, values: videoValues(cut.style, tab, skin, cut.resolvedTheme), reason: r.error?.message ?? 'Style was not changed.' };
       }
-      return { applied: false, values: videoValues(cut.style, tab, skin) };
+      return { applied: false, values: videoValues(cut.style, tab, skin, cut.resolvedTheme) };
     } finally { busy = false; draw(); }
   }
   const playing = (): void => { el('play').textContent = player.paused ? 'Play' : 'Pause'; };
@@ -397,7 +420,11 @@ export function start(): void {
       const p = (msg.payload ?? {}) as Record<string, unknown>;
       switch (msg.type) {
         case 'host.ping': if (msg.id) port?.postMessage({ p: PROTOCOL, v: ENVELOPE, re: msg.id, ok: true, payload: {} }); break;
-        case 'host.size': if (p['size'] === 'inline' || p['size'] === 'pane' || p['size'] === 'full') { surface = surfaceOfSize(p['size']); draw(); } break;
+        case 'host.size': if (p['size'] === 'inline' || p['size'] === 'pane' || p['size'] === 'full') {
+          const was = surface;
+          surface = protocol === 1 && p['size'] === 'pane' ? 'full' : surfaceOfSize(p['size']);
+          draw(); if (was === 'options' && surface !== 'options') void media();
+        } break;
         case 'host.theme': applyTheme(p['theme']); publish(); drawCaption(); draw(); break;
         case 'artifact.changed': if (typeof p['head'] !== 'number' || cut === null || p['head'] > cut.version) void read(); break;
         case 'host.teardown': dispose(); break;

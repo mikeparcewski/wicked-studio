@@ -5,6 +5,7 @@ import { recordingOf, recordingOfDemo } from '../src/board/walkthroughModel.js';
 import { cutOfRecording, RecordingSurfaceAdapter } from '../src/editors/adapters/recording.js';
 import type { ArtifactBinding } from '../src/editors/hostApi.js';
 import { changedBy } from '../src/editors/model.js';
+import { momentOfRecording, resetRecordingsForTest, useRecordingsStore } from '../src/store/recordings.js';
 
 /** A Blob's text in any realm (jsdom's Blob has no text(); undici's does). */
 const textOf = (b: Blob): Promise<string> => (typeof (b as { text?: unknown }).text === 'function'
@@ -46,7 +47,46 @@ function proofWalkthrough(): WalkthroughView {
     })),
   });
 }
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => { vi.unstubAllGlobals(); resetRecordingsForTest(); });
+
+describe('walkthrough recording publication and step binding', () => {
+  it('publishes chapter moments after a read and replaces them on refresh', async () => {
+    const view = proofWalkthrough(); vi.stubGlobal('fetch', vi.fn(async () => json(view)));
+    const a = new RecordingSurfaceAdapter({ ...binding, source: 'walkthrough', kind: 'walkthrough' }, 'walkthrough');
+    await a.read();
+    const first = useRecordingsStore.getState().byRun[binding.runId!]!;
+    expect(momentOfRecording(first)('ch3', 'fail')).toBe(16);
+    view.video.markers[1]!.sec = 20;
+    await a.refresh();
+    const next = useRecordingsStore.getState().byRun[binding.runId!]!;
+    expect(next).not.toBe(first); expect(momentOfRecording(next)('ch3', 'fail')).toBe(24);
+  });
+  it.each(['read', 'refresh'] as const)('withdraws stale chip moments when %s fails, then publishes a successful reread', async method => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(json(proofWalkthrough()))
+      .mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce(json(proofWalkthrough()));
+    vi.stubGlobal('fetch', fetchMock);
+    const a = new RecordingSurfaceAdapter({ ...binding, source: 'walkthrough', kind: 'walkthrough' }, 'walkthrough');
+    await a.read(); expect(useRecordingsStore.getState().byRun[binding.runId!]).toBeDefined();
+    if (method === 'read') expect(await a.read()).toMatchObject({ error: 'unavailable' });
+    else await expect(a.refresh()).rejects.toThrow('offline');
+    expect(useRecordingsStore.getState().byRun[binding.runId!]).toBeUndefined();
+    await a.read(); expect(useRecordingsStore.getState().byRun[binding.runId!]).toBeDefined();
+  });
+  it.each([undefined, '', 'review one'])('reads the walkthrough step bound by docId=%s', async docId => {
+    const fetchMock = vi.fn(async (...args: unknown[]) => { void args; return json(proofWalkthrough()); }); vi.stubGlobal('fetch', fetchMock);
+    const b = { ...binding, source: 'walkthrough' as const, kind: 'walkthrough', ...(docId === undefined ? {} : { docId }) };
+    await new RecordingSurfaceAdapter(b, 'walkthrough').read();
+    expect(String(fetchMock.mock.calls[0]?.[0])).toContain(`/api/v1/runs/run%20one/walkthrough${docId ? '?step=review%20one' : ''}`);
+  });
+  it('demo reads and failures leave the run’s published walkthrough intact', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(json(proofWalkthrough()))
+      .mockResolvedValueOnce(json(demo())).mockRejectedValueOnce(new Error('offline')));
+    await new RecordingSurfaceAdapter(binding, 'walkthrough').read();
+    const published = useRecordingsStore.getState().byRun[binding.runId!];
+    const a = new RecordingSurfaceAdapter(binding, 'demo'); await a.read(); await a.read();
+    expect(useRecordingsStore.getState().byRun[binding.runId!]).toBe(published);
+  });
+});
 
 describe('recording cut timing', () => {
   it('keeps marker starts, narration and an unknown final duration without title/end cards', () => {
@@ -101,7 +141,7 @@ describe('recording proof', () => {
     expect(proof.failedAtSec).toBeNull(); expect(proof.checks[1]).toMatchObject({ state: 'FAIL', atSec: null });
   });
   it('loads host checks, with unique chapter/check ids and state, chapter title and evidence text', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => json(proofWalkthrough())));
+    vi.stubGlobal('fetch', vi.fn(async (...args: unknown[]) => { void args; return json(proofWalkthrough()); }));
     const a = new RecordingSurfaceAdapter({ ...binding, source: 'walkthrough', kind: 'walkthrough' }, 'walkthrough');
     expect(a.capabilities()).not.toContain('checks'); // the host Checks tab is an interactive document's
     expect(await a.checks()).toEqual({ total: 3, checks: [
