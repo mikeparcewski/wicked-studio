@@ -1,0 +1,120 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Protocol 2 sample editor</title>
+<style>
+  :root { --accent: #224a5e; --ink: #0d1117; --surface: #fff; --muted: #4b5563; --size: 15px; }
+  html, body { height: 100%; }
+  body { margin: 0; font: var(--size)/1.45 system-ui, sans-serif; color: var(--ink); background: var(--surface); }
+  main { box-sizing: border-box; height: 100%; padding: 16px 20px; display: flex; flex-direction: column; gap: 10px; }
+  body[data-density="dense"] main { gap: 4px; padding: 8px 12px; }
+  .where { font-size: 12px; color: var(--muted); letter-spacing: .02em; }
+  .parts { display: flex; flex-direction: column; gap: 6px; }
+  .part { padding: 8px 12px; border: 1px solid #d0d7de; border-radius: 6px; cursor: pointer; }
+  .part[aria-current="true"] { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
+  .part[data-pointed="true"] { background: color-mix(in oklab, var(--accent) 12%, transparent); }
+  .adv { display: none; font-size: 12px; color: var(--muted); }
+  body[data-mode="advanced"] .adv { display: block; }
+  body[data-captions="true"] .cap { display: block; }
+  .cap { display: none; font-size: 12px; background: #111; color: #fff; padding: 4px 8px; border-radius: 4px; align-self: flex-start; }
+</style></head>
+<body data-surface="card" data-mode="simple" data-density="calm" data-captions="false">
+<main>
+  <div class="where" id="where">Starting…</div>
+  <div class="parts" id="parts" role="list" aria-label="Parts"></div>
+  <div class="cap" id="cap">Captions are on</div>
+  <div class="adv" id="adv">Advanced: every anchor id is shown — <span id="ids"></span></div>
+</main>
+<script>
+(() => {
+  const EDITOR = 'acme-v2', VERSION = '0.1.0';
+  const SURFACES = {
+    card: { interactive: true, aspect: '16:9', actions: [
+      { id: 'next', label: 'Next part', verb: 'plugin', primary: true },
+      { id: 'ask', label: 'Ask about it', verb: 'host:ask' },
+    ] },
+    options: { tabs: [
+      { id: 'parts', label: 'Parts', render: 'plugin' },
+      { id: 'look', label: 'Look', render: 'controls', controls: [
+        { id: 'accent', label: 'Accent', type: 'color' },
+        { id: 'density', label: 'Density', type: 'segmented', options: [{ id: 'calm', label: 'Calm' }, { id: 'dense', label: 'Dense' }] },
+        { id: 'size', label: 'Text size', type: 'range', min: 12, max: 24, step: 1 },
+        { id: 'captions', label: 'Captions', type: 'toggle' },
+      ] },
+    ] },
+    full: { modes: ['simple', 'advanced'], default: 'simple' },
+  };
+  let port = null, surface = 'card', tab = null, mode = 'simple', current = 0, parts = [], seq = 0, rev = 0;
+  let look = { accent: '#224a5e', density: 'calm', size: 15, captions: false };
+  const pending = new Map();
+  const env = (type, payload) => ({ p: 'wicked.editor', v: 1, type, payload });
+  const send = (type, payload) => { if (port) port.postMessage(env(type, payload)); };
+  const reply = (id, payload) => port.postMessage({ p: 'wicked.editor', v: 1, re: id, ok: true, payload });
+  const req = (type, payload) => new Promise((resolve) => { const id = 'r' + (++seq); pending.set(id, resolve); port.postMessage({ p: 'wicked.editor', v: 1, type, id, payload }); });
+
+  function applyLook() {
+    document.documentElement.style.setProperty('--accent', look.accent);
+    document.documentElement.style.setProperty('--size', look.size + 'px');
+    document.body.dataset.density = look.density;
+    document.body.dataset.captions = String(look.captions);
+  }
+  function where() {
+    document.getElementById('where').textContent = 'surface: ' + surface + (tab ? ' · tab: ' + tab : '') + (surface === 'full' ? ' · mode: ' + mode : '') + ' · part ' + (current + 1) + ' of ' + parts.length;
+    document.body.dataset.surface = surface; document.body.dataset.mode = mode;
+  }
+  function draw() {
+    const box = document.getElementById('parts'); box.textContent = '';
+    parts.forEach((p, i) => {
+      const d = document.createElement('div');
+      d.className = 'part'; d.setAttribute('role', 'listitem'); d.dataset.wid = p.wid; d.textContent = p.text;
+      if (i === current) d.setAttribute('aria-current', 'true');
+      d.addEventListener('click', () => { current = i; draw(); send('selection.set', { anchors: [{ kind: 'element', id: p.wid }] }); });
+      box.appendChild(d);
+    });
+    document.getElementById('ids').textContent = parts.map((p) => p.wid).join(', ');
+    where();
+  }
+  async function read() {
+    const r = await req('artifact.read', {});
+    if (!r.ok) return;
+    const doc = new DOMParser().parseFromString(r.payload.content.html, 'text/html');
+    parts = [...doc.querySelectorAll('[data-wid]')].filter((el) => !el.querySelector('[data-wid]')).map((el) => ({ wid: el.getAttribute('data-wid'), text: el.textContent.trim() }));
+    draw();
+  }
+  function onPort(m) {
+    const d = m.data;
+    if (!d || d.p !== 'wicked.editor') return;
+    if (d.re && pending.has(d.re)) { const r = pending.get(d.re); pending.delete(d.re); r(d); return; }
+    const p = d.payload || {};
+    switch (d.type) {
+      case 'host.ping': reply(d.id, {}); break;
+      case 'host.surface': surface = p.surface; if (p.mode) mode = p.mode; where(); break;
+      case 'host.size': surface = p.size === 'inline' ? 'card' : p.size === 'pane' ? 'options' : 'full'; where(); break;
+      case 'host.tab': tab = p.tab; where(); break;
+      case 'host.mode': mode = p.mode; where(); reply(d.id, { mode }); break;
+      case 'host.action':
+        if (p.id === 'next') { current = (current + 1) % Math.max(parts.length, 1); draw(); reply(d.id, { handled: true, status: 'Showing part ' + (current + 1) }); }
+        else reply(d.id, { handled: false });
+        break;
+      case 'host.selection':
+        for (const el of document.querySelectorAll('.part')) el.dataset.pointed = String((p.anchors || []).some((a) => a.id === el.dataset.wid));
+        break;
+      case 'options.changed': {
+        if (p.tab === 'look' && p.id in look) { look = { ...look, [p.id]: p.value }; rev += 1; applyLook(); reply(d.id, { applied: true, rev, values: look }); }
+        else reply(d.id, { applied: false, rev, values: look, reason: 'not a control here' });
+        break;
+      }
+      case 'artifact.changed': read(); break;
+      default: break;
+    }
+  }
+  window.addEventListener('message', (e) => {
+    if (port || !e.data || e.data.type !== 'host.hello' || !e.ports[0]) return;
+    port = e.ports[0]; port.onmessage = onPort;
+    const h = e.data.payload || {};
+    surface = h.surface || 'card'; tab = h.tab || null; mode = h.mode || 'simple';
+    applyLook(); read();
+    if (surface === 'options') { rev += 1; send('options.values', { tab: 'look', rev, values: look }); }
+  });
+  parent.postMessage(env('plugin.ready', { editor: EDITOR, version: VERSION, protocol: [1, 2], surfaces: SURFACES }), '*');
+})();
+</script>
+</body></html>

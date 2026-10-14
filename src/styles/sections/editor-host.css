@@ -1,0 +1,93 @@
+/* H2 — the editor host surfaces (DES-EDITOR-PLUGIN-CONTRACT-001 §7): the card in the thread, the host panel (run page
+   option B) and full screen. Host chrome frames the plugin's frame on every side, in the host's own button style.
+   Tokens only. */
+
+/* ── shared host chrome ── */
+.wk-card-tag { flex: 0 0 auto; padding: 2px 8px; border-radius: var(--radius-sm); background: var(--accent-wash); color: var(--accent); font-size: var(--text-2xs); font-weight: var(--weight-semi); letter-spacing: 0.06em; text-transform: uppercase; }
+.wk-pill { flex: 0 0 auto; padding: 2px 8px; border-radius: var(--radius-full); font-size: var(--text-xs); background: var(--surface-raised); color: var(--ink-muted); }
+.wk-pill--good { background: var(--status-ok-dim); color: var(--status-ok); }
+.wk-pill--warn { background: var(--status-warn-dim); color: var(--status-warn); }
+.wk-pill--bad { background: var(--status-fail-dim); color: var(--status-fail); }
+.wk-host-btn { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 4px; padding: 5px 12px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--surface-card); color: var(--ink-body); font: inherit; font-size: var(--text-sm); cursor: pointer; }
+.wk-host-btn:hover:not(:disabled) { color: var(--ink-high); border-color: var(--ink-dim); }
+.wk-host-btn:disabled { opacity: 0.5; cursor: default; }
+.wk-host-btn--primary { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); font-weight: var(--weight-semi); }
+.wk-host-btn--primary:hover:not(:disabled) { background: var(--accent-hover); color: var(--accent-fg); }
+.wk-host-btn[aria-pressed='true'] { background: var(--accent-wash); border-color: var(--accent); color: var(--ink-high); }
+.wk-seg { display: inline-flex; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); overflow: hidden; }
+.wk-seg-btn { padding: 5px 12px; border: 0; background: var(--surface-card); color: var(--ink-muted); font: inherit; font-size: var(--text-sm); cursor: pointer; }
+.wk-seg-btn + .wk-seg-btn { border-left: 1px solid var(--border); }
+.wk-seg-btn--on { background: var(--accent); color: var(--accent-fg); font-weight: var(--weight-semi); }
+
+/* ── the card ── */
+.wk-pcard { position: relative; display: flex; flex-direction: column; gap: 0; margin: 0 0 var(--space-3); border: 1px solid var(--border-strong); border-radius: var(--radius-lg); background: var(--surface-card); box-shadow: var(--shadow-card); min-width: 0; max-width: 760px; }
+.wk-pcard--opening { min-height: 200px; }
+.wk-pcard--options { border-color: var(--accent); }
+.wk-pcard-who { margin: 0; padding: var(--space-2) var(--space-4) 0; font-size: var(--text-xs); font-weight: var(--weight-semi); color: var(--ink-muted); }
+.wk-pcard-head { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-3) var(--space-4); min-width: 0; }
+.wk-pcard-title { flex: 1 1 auto; min-width: 0; color: var(--ink-high); font-weight: var(--weight-semi); font-size: var(--text-md); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wk-pcard-frame { position: relative; display: flex; margin: 0 var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-md); overflow: hidden; background: var(--surface-base); min-height: 120px; }
+.wk-pcard-frame .wk-editor-frame { flex: 1 1 auto; width: 100%; height: 100%; min-height: 0; border: 0; background: var(--surface-base); }
+.wk-pcard:not(.wk-pcard--full) .wk-pcard-frame[data-interactive='false'] .wk-editor-frame { pointer-events: none; }
+.wk-pcard .wk-artifact-line, .wk-pcard-note { margin: var(--space-2) var(--space-4) 0; }
+.wk-pcard-foot { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); padding: var(--space-3) var(--space-4); }
+.wk-pcard-gap, .wk-full-gap, .wk-hpanel-gap { flex: 1 1 auto; }
+.wk-pcard-action-wrap { position: relative; display: inline-flex; }
+.wk-pcard-action-wrap .wk-artifact-menu { top: calc(100% + 4px); bottom: auto; left: 0; right: auto; }
+
+/* ── full screen: the same card, morphed (the iframe never re-parents) ── */
+.wk-pcard--full { position: fixed; inset: 0; z-index: 40; margin: 0; max-width: none; border: 0; border-radius: 0; box-shadow: none; background: var(--surface-base); }
+.wk-full { display: contents; }
+.wk-pcard--full .wk-full { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
+.wk-full-row--closed, .wk-full--closed .wk-full-body { display: contents; }
+.wk-full-head { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-3) var(--space-5); border-bottom: 1px solid var(--border); background: var(--surface-card); flex-shrink: 0; }
+.wk-full-title { color: var(--ink-high); font-weight: var(--weight-semi); font-size: var(--text-lg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.wk-full-phase { color: var(--ink-muted); font-size: var(--text-sm); white-space: nowrap; }
+.wk-pcard--full .wk-full-row { display: flex; flex: 1 1 auto; min-height: 0; }
+.wk-pcard--full .wk-full-body { display: flex; flex: 1 1 auto; min-width: 0; padding: var(--space-4); }
+.wk-pcard--full .wk-pcard-frame { flex: 1 1 auto; margin: 0; aspect-ratio: auto !important; height: auto !important; }
+.wk-full-drawer { flex: 0 0 360px; display: flex; flex-direction: column; min-height: 0; border-left: 1px solid var(--border); background: var(--surface-card); }
+.wk-full-drawer-head { padding: var(--space-3) var(--space-4); border-bottom: 1px solid var(--border); font-size: var(--text-sm); color: var(--ink-muted); }
+.wk-full-drawer-head b { color: var(--ink-high); margin-right: 6px; }
+.wk-full-drawer-body { flex: 1 1 auto; min-height: 0; overflow: auto; padding: var(--space-3) var(--space-4); }
+/* The app nav collapses while an artifact is full screen (useHostChrome.navCollapsed). */
+[data-nav-collapsed='true'] > .wk-rail-slot { display: none; }
+
+/* ── the host panel (run page option B) ── */
+.wk-hpanel { flex: 0 0 400px; width: 400px; display: flex; flex-direction: column; min-height: 0; border-left: 1px solid var(--border); background: var(--surface-card); }
+.wk-hpanel[hidden] { display: none; }
+.wk-hpanel--overlay { position: fixed; top: 0; right: 0; bottom: 0; z-index: 35; box-shadow: var(--shadow-overlay); }
+.wk-hpanel-head { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-4) var(--space-5) var(--space-2); }
+.wk-hpanel-heading { color: var(--ink-high); font-weight: var(--weight-semi); font-size: var(--text-md); }
+.wk-hpanel-tabs { display: flex; gap: var(--space-4); padding: 0 var(--space-5); border-bottom: 1px solid var(--border); overflow-x: auto; }
+.wk-hpanel-tab { display: inline-flex; align-items: center; gap: 6px; padding: var(--space-2) 0; border: 0; border-bottom: 2px solid transparent; background: none; color: var(--ink-muted); font: inherit; font-size: var(--text-sm); cursor: pointer; white-space: nowrap; }
+.wk-hpanel-tab--on { color: var(--ink-high); border-bottom-color: var(--ink-high); font-weight: var(--weight-semi); }
+.wk-hpanel-dot { width: 6px; height: 6px; border-radius: var(--radius-full); background: var(--accent); }
+.wk-hpanel-body { flex: 1 1 auto; min-height: 0; overflow: auto; padding: var(--space-4) var(--space-5); display: flex; flex-direction: column; gap: var(--space-3); }
+.wk-hpanel-frame { flex: 1 1 auto; display: flex; min-height: 320px; border: 1px solid var(--border); border-radius: var(--radius-md); overflow: hidden; }
+.wk-hpanel-frame[hidden] { display: none; }
+.wk-hpanel-frame .wk-editor-frame { flex: 1 1 auto; width: 100%; height: 100%; min-height: 0; border: 0; }
+.wk-hpanel-ribbon { display: flex; align-items: center; gap: var(--space-2); width: 100%; padding: var(--space-2) var(--space-4); border: 0; border-bottom: 1px solid var(--border); background: var(--surface-card); color: var(--ink-body); font: inherit; font-size: var(--text-sm); text-align: left; cursor: pointer; }
+.wk-hpanel-ribbon--side { width: auto; writing-mode: vertical-rl; border-bottom: 0; border-left: 1px solid var(--border); padding: var(--space-4) var(--space-2); }
+.wk-hpanel-v1 { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-2); color: var(--ink-muted); font-size: var(--text-sm); }
+.wk-hpanel-v1 p { margin: 0; }
+.wk-hcontrols { display: flex; flex-direction: column; gap: var(--space-4); }
+.wk-hcontrol { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: var(--space-2); }
+.wk-hcontrol-label { color: var(--ink-body); font-size: var(--text-sm); }
+.wk-hcontrol[data-state='pending'] { opacity: 0.7; }
+.wk-hcontrol-note { grid-column: 1 / -1; color: var(--status-warn); font-size: var(--text-xs); }
+.wk-hcontrol-input { min-width: 160px; padding: 5px 8px; border: 1px solid var(--border-input); border-radius: var(--radius-sm); background: var(--surface-base); color: var(--ink-high); font: inherit; font-size: var(--text-sm); }
+.wk-hcontrol-color { width: 44px; height: 30px; padding: 0; border: 1px solid var(--border-input); border-radius: var(--radius-sm); background: none; }
+.wk-hcontrol-range { display: inline-flex; align-items: center; gap: var(--space-2); }
+
+/* ── H7: the editor test page's three surfaces ── */
+.wk-surfaces { display: flex; gap: 0; min-height: 560px; margin: 0 0 var(--space-6); border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; background: var(--surface-base); }
+.wk-surfaces-thread { flex: 1 1 auto; min-width: 0; padding: var(--space-5) var(--space-6); overflow: auto; }
+.wk-surfaces-h { margin: 0 0 var(--space-3); font-size: var(--text-sm); font-weight: var(--weight-semi); color: var(--ink-muted); text-transform: uppercase; letter-spacing: 0.06em; }
+.wk-surfaces-turn { margin: 0 0 var(--space-3); color: var(--ink-body); }
+.wk-surfaces-run p { margin: 0 0 var(--space-2); color: var(--ink-body); font-size: var(--text-sm); }
+.wk-surfaces-run b { display: inline-block; min-width: 72px; color: var(--ink-muted); font-weight: var(--weight-medium); }
+.wk-surfaces-chat { display: flex; flex-direction: column; gap: var(--space-1); font-size: var(--text-sm); color: var(--ink-body); }
+.wk-surfaces-chat p { margin: 0; }
+.wk-surfaces-chat-who { margin-top: var(--space-2) !important; font-weight: var(--weight-semi); color: var(--ink-muted); }
+.wk-pcard-still { align-items: center; justify-content: center; aspect-ratio: 16 / 9; max-height: 200px; background: var(--surface-raised); }
