@@ -163,7 +163,7 @@ describe('recording gate controls in host chrome', () => {
     expect(recordingGateActions(binding, units)).not.toBeNull();
     expect(recordingGateActions({ ...binding, source: 'walkthrough', kind: 'walkthrough' }, units)).not.toBeNull();
     expect(recordingGateActions({ ...binding, source: 'interactive-doc' }, units)).toBeNull();
-    const { runId: _runId, ...withoutRun } = binding;
+    const withoutRun = { ...binding }; delete withoutRun.runId;
     expect(recordingGateActions(withoutRun, units)).toBeNull();
   });
 });
