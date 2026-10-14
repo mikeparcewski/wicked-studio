@@ -68,6 +68,7 @@ const MARKUP = `
         <button type="button" id="zoom-100" data-testid="deck-zoom-100" aria-pressed="false">100%</button>
       </div>
       <button type="button" id="fullscreen" data-testid="deck-fullscreen">Full screen</button>
+      <button type="button" id="notes-toggle" data-testid="deck-notes-toggle" aria-pressed="false" title="Show the speaker notes under the slide">Notes</button>
       <button type="button" id="present" data-testid="deck-present" title="Show the slide on its own; ← → move, Esc leaves">Present</button>
     </div>
     <div data-testid="deck-add-menu" id="menu" class="menu" role="menu" aria-label="Add a slide like" hidden></div>
@@ -108,7 +109,12 @@ export function oneSlideHtml(html: string, index: number, opts: { thumbnail: boo
   const doc = new DOMParser().parseFromString(html, 'text/html');
   topSlideElements(doc).forEach((s, i) => { if (i !== index) s.setAttribute('data-wi-deck-off', ''); else s.setAttribute('data-wi-deck-current', ''); });
   const style = doc.createElement('style');
-  style.textContent = '[data-wi-deck-off]{display:none!important}html,body{overflow:hidden!important}';
+  // The slide IS the 1280x720 canvas, full bleed, whatever the deck's own page layout (a deck styled as cards on a
+  // page still shows each slide filling the stage). What runs past its edge is clipped: shown as cut off.
+  style.textContent = '[data-wi-deck-off]{display:none!important}'
+    + 'html,body{margin:0!important;padding:0!important;width:1280px!important;height:720px!important;overflow:hidden!important}'
+    + '[data-wi-deck-current]{position:absolute!important;left:0!important;top:0!important;width:1280px!important;height:720px!important;'
+    + 'min-height:0!important;max-width:none!important;margin:0!important;box-sizing:border-box!important;overflow:hidden!important}';
   doc.head.append(style);
   if (opts.thumbnail) for (const s of Array.from(doc.querySelectorAll('script'))) s.remove();
   else {
@@ -150,6 +156,9 @@ export function start(): void {
   const downBtn = el<HTMLButtonElement>('down');
   const delBtn = el<HTMLButtonElement>('del');
   const presentBtn = el<HTMLButtonElement>('present');
+  const notesToggle = el<HTMLButtonElement>('notes-toggle');
+  /** Protocol 2 full screen: the stage takes the whole viewport; the notes fold under a Notes button. */
+  let notesOpen = false;
   const menu = el<HTMLDivElement>('menu');
   const stage = el<HTMLDivElement>('stage');
   const slideBox = el<HTMLDivElement>('slide-box');
@@ -300,7 +309,10 @@ export function start(): void {
     strip.hidden = size === 'inline' || present || options;
     stage.hidden = options;
     styleRoot.hidden = !options || tab !== 'style';
-    notesBox.hidden = size === 'inline' || present || (options && tab !== 'notes');
+    const notesFolded = protocol === 2 && surface === 'full' && !notesOpen && !present;
+    notesBox.hidden = size === 'inline' || present || (options && tab !== 'notes') || notesFolded;
+    notesToggle.hidden = !(protocol === 2 && surface === 'full');
+    notesToggle.setAttribute('aria-pressed', String(notesOpen));
     drawCutoff();
     deck.dataset['present'] = String(present);
     deck.dataset['selected'] = selected ?? '';
@@ -333,7 +345,7 @@ export function start(): void {
     if (editing !== null) place(input, box(editing.wid), 160, 30); else input.hidden = true;
     tools.hidden = size === 'inline' || present || options;
     fullscreenBtn.hidden = !grants.includes('ui.fullscreen');
-    if (size === 'inline' || present || options || editing !== null) { hint.hidden = true; return; }
+    if (size === 'inline' || present || options || editing !== null || (protocol === 2 && surface === 'full')) { hint.hidden = true; return; }
     hint.hidden = false;
     if (selected === null) { hint.removeAttribute('data-editable'); hint.textContent = n === 0 ? '' : '← → to move between slides · click a line to point at it · type on it to change it'; return; }
     const e = editable(selected);
@@ -776,6 +788,7 @@ export function start(): void {
   downBtn.addEventListener('click', () => moveBy(1));
   delBtn.addEventListener('click', () => deleteSlide());
   presentBtn.addEventListener('click', () => void enterPresent());
+  notesToggle.addEventListener('click', () => { notesOpen = !notesOpen; draw(); placeFrame(); if (notesOpen) notes.focus(); });
   fullscreenBtn.addEventListener('click', () => { void req('ui.fullscreen', {}).then((r) => { if (!r.ok) status(r.error.message); }); });
   fitBtn.addEventListener('click', () => { zoom = 'fit'; placeFrame(); draw(); });
   zoomBtn.addEventListener('click', () => { zoom = '100'; placeFrame(); draw(); });

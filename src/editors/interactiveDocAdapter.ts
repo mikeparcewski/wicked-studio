@@ -5,7 +5,7 @@ import { FEEDBACK_EVENT } from '../interactive/feedbackBatch.js';
 import type { AdapterResult, ArtifactRef, HostAdapter, MovedOn } from './host.js';
 import type { VersionKind } from './model.js';
 import type { WireItem } from './ops.js';
-import { isMatching } from './themeLock.js';
+import { beginThemeWrite, isMatching } from './themeLock.js';
 
 /** The engine's refusal reasons for a deck op (interactive `core/deck.js`), in plain words. */
 const SLIDE_REASONS: Readonly<Record<string, string>> = {
@@ -256,6 +256,12 @@ export class InteractiveDocAdapter implements HostAdapter {
   async theme(base: number, tokens: Record<string, unknown>, opts: { match?: boolean } = {}): Promise<AdapterResult<{ version: number }>> {
     // A Match in flight owns the document's theme until it lands (src/editors/themeLock.ts).
     if (opts.match !== true && isMatching(this.projectId, this.docId)) return { error: 'rate_limited', message: 'a Match from a website or a PDF is running: try again when it lands' };
+    // Counted while in flight, so a Match that starts now waits for it before reading its baseline.
+    const done = opts.match === true ? (): void => {} : beginThemeWrite(this.projectId, this.docId);
+    try { return await this.writeTheme(base, tokens); } finally { done(); }
+  }
+
+  private async writeTheme(base: number, tokens: Record<string, unknown>): Promise<AdapterResult<{ version: number }>> {
     // Fail closed: without a fresh read of the head there is no knowing what the theme would land on (codex h4-r1).
     try { await this.refresh(); } catch (e: unknown) { return { error: 'unavailable', message: e instanceof Error ? e.message : String(e) }; }
     if (this.head !== base) return { error: 'head_moved', message: 'the artifact changed since', head: this.head };
