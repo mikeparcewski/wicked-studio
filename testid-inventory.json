@@ -12,8 +12,8 @@
   "studioVersion": "0.8.0",
   "counts": {
     "files": 227,
-    "occurrences": 2795,
-    "static": 2408,
+    "occurrences": 2799,
+    "static": 2411,
     "dynamic": 70,
     "computed": 24
   },
@@ -1605,6 +1605,18 @@
     },
     {
       "testId": "composer-seats-refused",
+      "files": [
+        "src/components/session/Composer.tsx"
+      ]
+    },
+    {
+      "testId": "composer-suggestion",
+      "files": [
+        "src/components/session/Composer.tsx"
+      ]
+    },
+    {
+      "testId": "composer-suggestions",
       "files": [
         "src/components/session/Composer.tsx"
       ]
@@ -10009,6 +10021,12 @@
     },
     {
       "testId": "session-gate-assurance",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
+      "testId": "session-gate-assurance-tech",
       "files": [
         "src/components/session/GateRow.tsx"
       ]
