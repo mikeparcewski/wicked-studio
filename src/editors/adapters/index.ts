@@ -4,3 +4,4 @@
  */
 import './interactiveDoc.js';
 import './fake.js';
+import './review.js';
