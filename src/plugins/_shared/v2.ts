@@ -14,6 +14,8 @@
  * A plugin never names a host decision: it only answers what the host asks and acts through its granted requests.
  */
 
+import { isForwardable } from '../../editors/keys.js';
+
 export const PROTOCOL = 'wicked.editor';
 export const ENVELOPE = 1;
 
@@ -67,7 +69,9 @@ export function forwardOptionsKey(e: KeyboardEvent, root: HTMLElement, send: (ke
   let key: string | null = null;
   if (e.key === 'Escape') key = 'Escape';
   else if (mod && !e.altKey && e.key.toLowerCase() === 'k') key = 'Mod+K';
-  else if (e.altKey && !mod && /^Key[A-Z]$/.test(e.code)) key = `Alt+${e.code.slice(3)}`;
+  // Only the host's navigation chords: any other Alt chord is dropped by the host, and three drops tear the frame
+  // down (agy h4b-r1). Option+letter stays the platform's character.
+  else if (e.altKey && !mod && /^Key[A-Z]$/.test(e.code) && isForwardable(`Alt+${e.code.slice(3)}`)) key = `Alt+${e.code.slice(3)}`;
   else if (e.key === 'Tab') {
     const controls = Array.from(root.querySelectorAll<HTMLElement>('button, input, select, textarea, [tabindex]'))
       .filter((c) => c.tabIndex >= 0 && !c.matches(':disabled') && c.closest('[hidden]') === null);

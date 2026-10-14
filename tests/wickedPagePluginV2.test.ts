@@ -141,11 +141,11 @@ describe('wicked-page protocol 2', () => {
     for (const [target, init] of [
       [controls[0]!, { key: 'Tab', shiftKey: true }], [controls.at(-1)!, { key: 'Tab' }],
       [controls[3]!, { key: 'Escape' }], [controls[3]!, { key: 'k', metaKey: true }],
-      [controls[3]!, { key: 's', code: 'KeyS', altKey: true }],
+      [controls[3]!, { key: 'j', code: 'KeyJ', altKey: true }],
     ] as const) target.dispatchEvent(new KeyboardEvent('keydown', { ...init, bubbles: true, cancelable: true }));
     const typing = new KeyboardEvent('keydown', { key: 'a', bubbles: true, cancelable: true }); controls[3]!.dispatchEvent(typing);
     expect(typing.defaultPrevented).toBe(false);
-    await vi.waitFor(() => expect(messages('ui.key').map((m) => m.payload?.['key'])).toEqual(['Shift+Tab', 'Tab', 'Escape', 'Mod+K', 'Alt+S']));
+    await vi.waitFor(() => expect(messages('ui.key').map((m) => m.payload?.['key'])).toEqual(['Shift+Tab', 'Tab', 'Escape', 'Mod+K', 'Alt+J']));
     expect(messages('ui.typed')).toHaveLength(0);
   });
 });

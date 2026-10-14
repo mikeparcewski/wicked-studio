@@ -227,11 +227,11 @@ describe('wicked-deck protocol 2 options', () => {
     for (const [target, init] of [
       [controls[0]!, { key: 'Tab', shiftKey: true }], [controls.at(-1)!, { key: 'Tab' }],
       [controls[3]!, { key: 'Escape' }], [controls[3]!, { key: 'k', metaKey: true }],
-      [controls[3]!, { key: 's', code: 'KeyS', altKey: true }],
+      [controls[3]!, { key: 'j', code: 'KeyJ', altKey: true }],
     ] as const) target.dispatchEvent(new KeyboardEvent('keydown', { ...init, bubbles: true, cancelable: true }));
     const typing = new KeyboardEvent('keydown', { key: 'a', bubbles: true, cancelable: true }); controls[3]!.dispatchEvent(typing);
     expect(typing.defaultPrevented).toBe(false);
-    await vi.waitFor(() => expect(messages('ui.key').slice(before).map((m) => m.payload?.['key'])).toEqual(['Shift+Tab', 'Tab', 'Escape', 'Mod+K', 'Alt+S']));
+    await vi.waitFor(() => expect(messages('ui.key').slice(before).map((m) => m.payload?.['key'])).toEqual(['Shift+Tab', 'Tab', 'Escape', 'Mod+K', 'Alt+J']));
   });
   it('mounts Style for the hello tab, readable in the host theme', () => {
     expect(node('deck-style').hidden).toBe(false); expect(node('deck-style').textContent).toContain('Corporate Light');
@@ -283,11 +283,11 @@ describe('wicked-deck protocol 2 options', () => {
     await vi.waitFor(() => expect(deck().dataset['current']).toBe('s-first'));
     expect(notes.value).toBe(''); expect(messages('selection.set')).toHaveLength(before);
     const forwarded = messages('ui.key').length;
-    for (const init of [{ key: 'Escape' }, { key: 'Tab', shiftKey: true }, { key: 'Tab' }, { key: 'k', metaKey: true }, { key: 's', code: 'KeyS', altKey: true }]) {
+    for (const init of [{ key: 'Escape' }, { key: 'Tab', shiftKey: true }, { key: 'Tab' }, { key: 'k', metaKey: true }, { key: 'j', code: 'KeyJ', altKey: true }]) {
       notes.focus(); notes.dispatchEvent(new KeyboardEvent('keydown', { ...init, bubbles: true, cancelable: true }));
       expect(document.activeElement).not.toBe(node('deck-handle'));
     }
-    await vi.waitFor(() => expect(messages('ui.key').slice(forwarded).map((m) => m.payload?.['key'])).toEqual(['Escape', 'Shift+Tab', 'Tab', 'Mod+K', 'Alt+S']));
+    await vi.waitFor(() => expect(messages('ui.key').slice(forwarded).map((m) => m.payload?.['key'])).toEqual(['Escape', 'Shift+Tab', 'Tab', 'Mod+K', 'Alt+J']));
     const base = head; notes.focus(); notes.value = '<b>Speaker words</b>'; notes.blur();
     await vi.waitFor(() => expect(messages('version.write')).toHaveLength(1));
     expect(messages('version.write')[0]!.payload).toEqual({ base, ops: [{ op: 'notes-set', slide: 's-first', text: '<b>Speaker words</b>' }], summary: 'slide 2’s notes' });
