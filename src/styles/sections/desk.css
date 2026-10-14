@@ -581,6 +581,8 @@
 .wk-work-blocks { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: repeat(2, var(--blk-h)); gap: var(--d2-gap); }
 .wk-work-blocks .wk-stat { height: var(--blk-h); align-content: start; }
 .wk-work-blocks .wk-stat-value { font-size: var(--text-2xl); }
+/* A Work tile's note gets two lines before it is cut ("Agents ready": "1 more with limits · 2 can't tell"). */
+.wk-work-blocks .wk-stat-note { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 .wk-work > .wk-now { height: 276px; }
 .wk-stat--link { cursor: pointer; transition: box-shadow var(--dur-fast, 120ms) var(--ease-out, ease-out), transform var(--dur-fast, 120ms) var(--ease-out, ease-out); }
 .wk-stat--link:hover { box-shadow: var(--shadow-raised); transform: translateY(-1px); }

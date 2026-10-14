@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
 import { AlertCircle, AlertTriangle, Info } from 'lucide-react';
+import { api } from '../../api/client.js';
 import { readErrorKind } from '../../api/errors.js';
-import { agentTiles, fixLabel, type AgentRow, type Cell } from '../../board/agentsModel.js';
+import { getCachedRoster, setCachedRoster } from '../../store/rosterCache.js';
+import { agentTiles, authOf, fixLabel, readyNote, type AgentRow, type Cell } from '../../board/agentsModel.js';
 import { StatBand, StatTile } from '../ui/StatTile.js';
 import { relTime } from '../../board/relTime.js';
 import { AGENTS_PATH, type Navigate } from '../../hooks/useRoute.js';
@@ -24,6 +26,9 @@ import { useAgentRows } from './useAgentRows.js';
 export { AGENTS_PATH };
 export const INSTALL_DOCS = 'https://github.com/mikeparcewski/wicked-crew#install--quickstart';
 const PHONE_INTRO = 'Sign-in, safety checks and fixes for each AI agent.';
+/** An unread sign-in is read again every this many ms, at most {@link UNKNOWN_REREADS} times in a row. */
+export const UNKNOWN_REREAD_MS = 15_000;
+export const UNKNOWN_REREADS = 8;
 const INTRO = 'The AI coding tools studio gives work to: whether each is signed in, how its actions are checked, and what to do when one isn’t ready.';
 
 function CellView({ c, testId }: { c: Cell; testId?: string }): React.ReactElement {
@@ -86,7 +91,7 @@ function Tiles({ rows, onCheck, checking, onSetup }: { rows: AgentRow[]; onCheck
       {/* One band of tiles, one card with hairline dividers (UI-CONTRACT §4.6), beside the moves. */}
       <StatBand label="Agents at a glance" data-testid="agents-band">
         <StatTile data-testid="agents-tile-ready" label="Ready for work" value={`${t.ready} / ${t.total}`}
-          note={[t.limited > 0 ? `${t.limited} more with limits` : null, t.held > 0 ? `${t.held} held back for now` : null, t.notRecommended > 0 ? `${t.notRecommended} not recommended` : null, t.unknown > 0 ? `${t.unknown} can’t tell` : null, t.signedOut > 0 ? `${t.signedOut} signed out` : null].filter(Boolean).join(' · ') || (t.ready === t.total ? 'all signed in or free' : `${t.total - t.ready} not ready`)} />
+          note={readyNote(t)} />
         <StatTile data-testid="agents-tile-checked" label="Every action checked" value={t.everyAction}
           note={others.length > 0 ? others.join(', ') : t.everyAction === t.total ? 'all of them' : null} />
         <StatTile data-testid="agents-tile-fix" label="Things to fix" value={t.fixes}
@@ -176,6 +181,31 @@ export function AgentsPanel({ search, navigate, basePath = AGENTS_PATH }: {
   const [retrying, setRetrying] = useState(false);
   useEffect(() => { void v.reload(); /* a fresh reading each time the page opens */ }, []); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { const t = setInterval(() => tick((n) => n + 1), 30_000); return () => clearInterval(t); }, []);
+  // An agent whose sign-in studio's service has not read yet (its check is still running, or timed
+  // out on a busy computer) is read again shortly, a bounded number of times, so the row turns into
+  // the answer without a reload instead of staying "Unknown" while the service already knows.
+  // Read from the rows on screen: a failed full re-read keeps its cached rows, and an Unknown among
+  // them still recovers on its own (codex r2).
+  const unread = v.hasRoster && v.settled && v.rows.some((r) => authOf(r.seat) === 'unknown');
+  // Tries so far in this unread spell: every try counts (answered or failed), so a failed read never
+  // stops the next one; an answer that reads everyone ends the spell.
+  const [rereads, setRereads] = useState(0);
+  useEffect(() => {
+    if (!unread) { setRereads(0); return; }
+    if (rereads >= UNKNOWN_REREADS) return;
+    let live = true;
+    const t = setTimeout(() => {
+      // The roster alone (no diagnostics, no week record). Its answer is deposited only if no newer
+      // roster landed while it was out (a sign-in check, another surface) and the panel is still here.
+      const before = getCachedRoster();
+      Promise.resolve()
+        .then(() => api.getRoster())
+        .then(({ roster }) => { if (live && Array.isArray(roster) && getCachedRoster() === before) setCachedRoster(roster); })
+        .catch(() => { /* counted below; the next try follows */ })
+        .finally(() => { if (live) setRereads((n) => n + 1); });
+    }, UNKNOWN_REREAD_MS);
+    return () => { live = false; clearTimeout(t); };
+  }, [unread, rereads]);
 
   const params = new URLSearchParams(search);
   const fix = params.get('fix');

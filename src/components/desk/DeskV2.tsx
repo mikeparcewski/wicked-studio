@@ -44,7 +44,8 @@ import { AgentModal } from '../agents/AgentModal.js';
 import { StandingOrdersPanel } from '../StandingOrdersPanel.js';
 import { agentColor, AreaChart, catColor, ChartCard, OutcomeBreakdown, outcomeColor, StackedBars, type BarSeries, type ChartState } from '../charts/Chart.js';
 import { liveRows } from '../../board/deskInsights.js';
-import { userSeats } from '../../board/seatNames.js';
+import { agentTiles, readyNote } from '../../board/agentsModel.js';
+import { useAgentRows } from '../agents/useAgentRows.js';
 import { useWindowSpend } from '../../hooks/useWindowSpend.js';
 import { Segmented, Skeleton, StateBanner } from '../ui/index.js';
 import { DeskHappening } from './DeskHappening.js';
@@ -271,8 +272,9 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
   const rateNow = rate(kept);
   const ratePrev = rate(prev);
   const winSpend = useWindowSpend(refine.days, scope ?? undefined, workPrint, refine.agent === null && refine.workflow === null && projectId !== 'default');
-  const seats = userSeats(roster);
-  const ready = seats.filter((x) => (x as { signed_in?: boolean | null }).signed_in === true).length;
+  // "Agents ready" is the Agents tab's own Ready-for-work count, from the same rows (one model, one number).
+  const agentsView = useAgentRows();
+  const agentsTile = agentTiles(agentsView.rows);
   const jobTotals = buckets.map((_, i) => sum(jobsSeries.map((x) => x.values[i] ?? 0)));
   const spendTotals = buckets.map((_, i) => sum(spendBars.map((x) => x.values[i] ?? 0)));
   const allRunning = useMemo(() => liveRows(runs, (v) => jobTitle(v.session), heldByNeeds).length, [runs, heldByNeeds]);
@@ -373,7 +375,9 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
             value={runsShown ? String(workFailed.inWindow.length) : null}
             note={workFailed.inWindow.length === 0 ? (workFailed.older > 0 ? `none new · ${workFailed.older} older still open` : 'none in the last 30 days') : `last 30 days, not retried${workFailed.retried > 0 ? ` · ${workFailed.retried} retried` : ''}`} />
           <DeskStat icon={Bot} tone="accent" label="Agents ready" testId="desk-block-agents" href={tabPath('agents')} navigate={navigate}
-            value={roster === null ? null : `${ready} of ${seats.length}`} note={ready === seats.length ? 'all signed in' : `${seats.length - ready} signed out`} />
+            value={agentsView.hasRoster ? `${agentsTile.ready} of ${agentsTile.total}` : null}
+            loading={!agentsView.hasRoster && agentsView.rosterState !== 'failed'}
+            note={agentsView.hasRoster ? readyNote(agentsTile) : 'couldn’t read the agents'} />
           <DeskStat icon={Wallet} tone="accent" label="Spend" testId="desk-block-spend" href={`${tabPath('report')}&focus=spend`} navigate={navigate}
             value={projectId === 'default' ? '—' : workSpend.phase === 'loading' ? null : workSpend.current === null ? '—' : `${workSpend.truncated || workSpend.partial ? 'at least ' : ''}${moneyWords(workSpend.current)}`}
             note={projectId === 'default' ? 'Spend is counted per project' : workSpend.truncated ? 'Partial: last 30 days · newest jobs only; older ones were not read' : workSpend.current !== null && workSpend.previous !== null ? deltaWords(workSpend.current, workSpend.previous, (d) => moneyWords(Math.abs(d)), 30) : workSpend.partial ? 'last 30 days · priced usage only' : 'last 30 days'} />

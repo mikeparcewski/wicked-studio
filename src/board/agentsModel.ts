@@ -237,6 +237,17 @@ export function agentTiles(rows: readonly AgentRow[]): { ready: number; limited:
   };
 }
 
+/**
+ * The Ready-for-work tile's note: what the agents that are not "Ready" are instead. The Agents tab's
+ * tile and the Desk's "Agents ready" tile both say this, from the same rows, so the two never disagree.
+ */
+export function readyNote(t: ReturnType<typeof agentTiles>): string {
+  return [t.limited > 0 ? `${t.limited} more with limits` : null, t.held > 0 ? `${t.held} held back for now` : null,
+    t.notRecommended > 0 ? `${t.notRecommended} not recommended` : null, t.unknown > 0 ? `${t.unknown} can’t tell` : null,
+    t.signedOut > 0 ? `${t.signedOut} signed out` : null].filter(Boolean).join(' · ')
+    || (t.ready === t.total ? 'all signed in or free' : `${t.total - t.ready} not ready`);
+}
+
 /** The installed version in plain form ("opencode v2.0.25" → "2.0.25"). */
 function bareVersion(v: string): string {
   // The first version-shaped token ("opencode v2.0.25" → "2.0.25", "2.1.287 (Claude Code)" → "2.1.287").
