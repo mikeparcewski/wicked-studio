@@ -114,7 +114,7 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
     let cancelled = false;
     setTorn(null);
     const start = async (): Promise<void> => {
-      const decided = grantsProp !== undefined ? { grants: grantsProp, note: null } : await fetchGrants(editor.id, editor.version, editor.sha256, binding.projectId);
+      const decided = grantsProp !== undefined ? { grants: grantsProp, note: null } : await fetchGrants(editor.id, editor.version, editor.sha256, binding.projectId === '' ? null : binding.projectId);
       await adapter.refresh?.().catch(() => null);
       if (cancelled || frameBox.current === null) return;
       setNote(decided.note);
