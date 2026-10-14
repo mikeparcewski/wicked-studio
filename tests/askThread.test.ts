@@ -212,6 +212,12 @@ describe('isAskTurnGate — the turn gate draws nothing, and only the turn gate'
     expect(isAskTurnGate(know(), 'r-ask', 'def')).toBe(false);
     expect(isAskTurnGate({ ...know(), answerOrds: {} }, 'r-ask', 'terminal', undefined, 1)).toBe(false);
   });
+  it('run clarity: once the run’s chat is closed no composer answers the turn, so its turn gate is drawn', () => {
+    expect(isAskTurnGate({ ...know(), chatClosed: { 'r-ask': true } }, 'r-ask', 'terminal', undefined, 1)).toBe(false);
+    expect(isAskTurnGate({ ...know(), chatClosed: { 'r-ask': true } }, 'r-ask', undefined, 'Approve completion after the final phase (unit 1): answer-1 — hey', 1)).toBe(false);
+    // Another run's closed chat changes nothing here.
+    expect(isAskTurnGate({ ...know(), chatClosed: { 'r-other': true } }, 'r-ask', 'terminal', undefined, 1)).toBe(true);
+  });
   it('once a creator step is accepted every gate is real work’s and is drawn (codex #1)', () => {
     expect(isAskTurnGate(know(true), 'r-ask', 'def', undefined, 1)).toBe(false);
     expect(isAskTurnGate(know(true), 'r-ask', 'terminal', undefined, 1)).toBe(false);
@@ -299,3 +305,4 @@ describe('toolFailureOf — a reply that is only a failed tool call reads as one
     expect(toolFailureOf('')).toBeNull();
   });
 });
+

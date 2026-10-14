@@ -56,7 +56,7 @@ beforeEach(() => {
   chatBody = { chatId: 'chat-ask', seats: ['claude', 'codex'], scope: { kind: 'none' }, messages: TRANSCRIPT, path: { runId: RUN, pa: 'claude', selection: 'random', reviewer: 'codex', helpers: [], stepId: 'answer-1' } };
   teamBody = { runId: RUN, teamed: true, transport: 'bus', reason: null, planRev: 1, ended: false, units: [], rows: [ROWS.started, ROWS.scored, ROWS.accepted, ROWS.claimed, ROWS.reviewing, ROWS.completed, ROWS.finding] };
   useCapabilities.setState({ loaded: true, runChatId: true, walkthroughRoots: false, askPath: true });
-  useAskThreadStore.setState({ turns: {}, runByChat: {}, runs: new Set(), creatorAccepted: {}, turnGates: {}, replySeq: {}, paByChat: {}, retiredByChat: {}, answerOrds: { [RUN]: [1] } });
+  useAskThreadStore.setState({ turns: {}, runByChat: {}, runs: new Set(), creatorAccepted: {}, chatClosed: {}, turnGates: {}, replySeq: {}, paByChat: {}, retiredByChat: {}, answerOrds: { [RUN]: [1] } });
   // The corpus is "the reply landed, the run waits at its turn gate": the gate store recorded that
   // turn gate when its frame arrived (the positive fact the thread acts on — codex #2).
   useAskThreadStore.getState().recordTurnGate(RUN, 1);
@@ -123,7 +123,7 @@ describe('one thread, one voice', () => {
     // The reply streams in: the typing line yields to the pending bubble, then the bubble finishes.
     act(() => useAskThreadStore.getState().ingest({ type: 'chatDelta', chat: 'chat-ask', cliKey: 'claude', text: 'greet() does', turn_id: 't1' } as never));
     expect(screen.queryByTestId('ask-typing')).toBeNull();
-    expect(document.querySelector('[data-testid="session-turn"][data-pending="true"]')?.textContent).toContain('claude · answering');
+    expect(document.querySelector('[data-testid="session-turn"][data-pending="true"]')?.textContent).toContain('Claude · answering'); // H3: the seat by its roster name
     act(() => useAskThreadStore.getState().ingest({ type: 'chatReply', chat: 'chat-ask', cliKey: 'claude', text: 'greet() does not trim.', ok: true, run_id: RUN, ord: 1, turn_id: 't1' } as never));
     expect(document.querySelector('[data-testid="session-turn"][data-pending="true"]')).toBeNull();
     expect(screen.getByText('greet() does not trim.')).toBeTruthy();
@@ -192,6 +192,58 @@ describe('rule 3 — the thread is the chain until a creator step is accepted', 
     page();
     await waitFor(() => expect(screen.queryAllByTestId('ask-line').length).toBeGreaterThan(0));
     expect(screen.queryByTestId('session-run')).toBeNull();
+  });
+
+  it('run clarity: on a CLOSED conversation the composer cannot answer the turn gate — the run is marked, the runs list re-reads its gate, and the block draws it (rig 200fa059)', async () => {
+    // Crew answers a reclaimed chat with `scope: null, messages: []`: the conversation is closed and Send
+    // starts a separate ask. The page replays no cached question: it marks the run and asks the runs list
+    // for its gate read — the same read every waiting run's gate comes from.
+    chatBody = { chatId: 'chat-ask', scope: null, messages: [] };
+    useAskThreadStore.getState().linkRun('chat-ask', RUN);
+    const gate = { runId: RUN, ord: 1, prompt: 'Approve completion after the final phase (unit 1): answer-1 — why no trim?', lifecycle: 'open', receivedAt: 7 };
+    act(() => useGateStore.getState().setGate(gate)); // before the mark: left undrawn, as a turn gate
+    expect(useGateStore.getState().gates[RUN]).toBeUndefined();
+    const refresh = vi.fn(() => { useGateStore.getState().setGate(gate); }); // the runs list's backfill
+    render(<SessionPage sessionId="chat-ask" runs={[ASK_RUN]} runsLoaded needRows={[]} navigate={() => {}} onAsk={() => {}} onRetryRuns={refresh} />);
+    await screen.findByTestId('session-closed-line');
+    await waitFor(() => expect(refresh).toHaveBeenCalledTimes(1));
+    expect(useAskThreadStore.getState().chatClosed[RUN]).toBe(true);
+    // A gate like any other now — in the store (the decision path's watcher, arrival reset and 409 refresh
+    // all apply), no longer a recorded turn gate.
+    expect(useGateStore.getState().gates[RUN]).toMatchObject({ ord: 1 });
+    expect(useAskThreadStore.getState().turnGates[RUN]).toBeUndefined();
+    const block = await screen.findByTestId('session-run');
+    expect(block.getAttribute('data-run-id')).toBe(RUN);
+    await waitFor(() => expect(screen.getByTestId('session-status-sentence').textContent).toBe('Waiting on you at Research · 1 of 1 done'));
+    await screen.findByTestId('session-gate-row');
+  });
+
+  it('run clarity: a closed conversation whose run is not waiting asks for no gate read', async () => {
+    chatBody = { chatId: 'chat-ask', scope: null, messages: [] };
+    useAskThreadStore.getState().linkRun('chat-ask', RUN);
+    const refresh = vi.fn();
+    render(<SessionPage sessionId="chat-ask" runs={[{ ...ASK_RUN, session: { ...ASK_RUN.session, status: 'executing' } }]} runsLoaded needRows={[]} navigate={() => {}} onAsk={() => {}} onRetryRuns={refresh} />);
+    await screen.findByTestId('session-closed-line');
+    await waitFor(() => expect(useAskThreadStore.getState().chatClosed[RUN]).toBe(true));
+    expect(refresh).not.toHaveBeenCalled();
+  });
+
+  it('run clarity: on a LIVE conversation the turn gate stays the composer’s — no block, no gate read', async () => {
+    useAskThreadStore.getState().linkRun('chat-ask', RUN);
+    const gateReads: string[] = [];
+    const inner = globalThis.fetch as unknown as (url: string) => Promise<Response>;
+    vi.stubGlobal('fetch', vi.fn((url: string) => {
+      const path = new URL(url, 'http://x').pathname.replace(/^\/api\/v1/, '');
+      if (path.endsWith('/gate')) gateReads.push(path);
+      return inner(url);
+    }));
+    const refresh = vi.fn();
+    render(<SessionPage sessionId="chat-ask" runs={[ASK_RUN]} runsLoaded needRows={[]} navigate={() => {}} onAsk={() => {}} onRetryRuns={refresh} />);
+    await waitFor(() => expect(screen.queryAllByTestId('ask-line').length).toBeGreaterThan(0));
+    expect(screen.queryByTestId('session-run')).toBeNull();
+    expect(gateReads).toStrictEqual([]);
+    expect(refresh).not.toHaveBeenCalled();
+    expect(useAskThreadStore.getState().chatClosed[RUN]).toBeUndefined();
   });
 
   it('a late join’s kind-less gate is classified by its words: the turn gate stays undrawn, a hand-over is kept (codex #3)', () => {

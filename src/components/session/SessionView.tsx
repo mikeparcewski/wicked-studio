@@ -1,7 +1,7 @@
 import { CodebaseDownload, DeliverCredentialsNotice } from './CodebaseDownload.js';
-import { useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from 'react';
+import { Fragment, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { ApiError, api } from '../../api/client.js';
-import type { ChatPathView, SessionView as RunView } from '../../api/types.js';
+import type { ChatPathView, CoreEvent, SessionView as RunView } from '../../api/types.js';
 import { needsByRun } from '../../board/deskModel.js';
 import type { NeedRow } from '../../board/needsYou.js';
 import { endedAtMs, finishedAtMs } from '../../board/needsYou.js';
@@ -20,11 +20,11 @@ import { IDLE_GATE_ACTION, useGateActionStore } from '../../board/gateActions.js
 import { finishedDeliveryArm, proposalKindOf, statusSentence } from '../../board/proposalCard.js';
 import { useGateStore } from '../../store/gates.js';
 import { useRunEventStore } from '../../store/events.js';
-import { ChainLine, useRunChain } from './ChainLine.js';
+import { ChainLine, useRunChain, type RunPhase } from './ChainLine.js';
 import { ProposalCard } from './ProposalCard.js';
 import { useRunEvents } from '../../hooks/useRunEvents.js';
 import { StrandedCard } from './StrandedCard.js';
-import { RunRecordLines } from './RunRecord.js';
+import { RunRecordLines, RunStory } from './RunRecord.js';
 import { ArtifactAddressProvider, useArtifactMissing } from './ArtifactAddress.js';
 import { chatPromotePrefill } from '../../board/chatPromote.js';
 import { setRetryPrefill } from '../../store/retryPrefill.js';
@@ -66,6 +66,12 @@ import { splitToolFailures } from '../../board/askThread.js';
 import { useRoster } from '../../hooks/useRoster.js';
 import { isCliSeat, seatLabel } from '../../board/seatNames.js';
 import { chatStatusWord } from '../../board/statusWords.js';
+import { CREW, gateResponder, responderKey, turnResponder, type Responder } from '../../board/responder.js';
+import { TurnWho } from './TurnWho.js';
+import { RunRibbon, RunTab } from './RunTab.js';
+import { useRunHostValue } from './RunHost.js';
+import { HostPanel } from '../editorHost/HostPanel.js';
+import { RunHostProvider } from '../editorHost/RunHostContext.js';
 
 /** S16a-2c: the hash that lands a run's session on its sheet's Governance tab. */
 export const GOVERNANCE_HASH = '#governance';
@@ -114,6 +120,8 @@ type ThreadEntry =
   | { kind: 'line'; key: string; at: number; line: AskLine }
   | { kind: 'typing'; key: string; at: number; who: string }
   | { kind: 'proposal'; key: string; at: number; view: RunView; ask: AskProposal };
+
+const NO_TRAIL: readonly CoreEvent[] = [];
 
 /** How long a just-decided proposal keeps the run's block away while the daemon's status catches up. */
 const JUST_DECIDED_MS = 15_000;
@@ -226,7 +234,8 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
   const askRunsKnown = useAskThreadStore((s) => s.runs);
   const creatorAcceptedKnown = useAskThreadStore((s) => s.creatorAccepted);
   const answerOrdsKnown = useAskThreadStore((s) => s.answerOrds);
-  const askKnow = useMemo(() => ({ runs: askRunsKnown, creatorAccepted: creatorAcceptedKnown, answerOrds: answerOrdsKnown }), [askRunsKnown, creatorAcceptedKnown, answerOrdsKnown]);
+  const chatClosedKnown = useAskThreadStore((s) => s.chatClosed);
+  const askKnow = useMemo(() => ({ runs: askRunsKnown, creatorAccepted: creatorAcceptedKnown, answerOrds: answerOrdsKnown, chatClosed: chatClosedKnown }), [askRunsKnown, creatorAcceptedKnown, answerOrdsKnown, chatClosedKnown]);
   const turnGates = useAskThreadStore((s) => s.turnGates);
   // A finished reply re-reads the transcript: its `seat`, `citations` and `decisions` records and
   // the path's reviewer / helpers land there; the live turn then yields to the record.
@@ -266,6 +275,18 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
     useAskThreadStore.getState().learnAnswerOrds(askRunId, ords);
     useGateStore.getState().reclassifyAskGates();
   }, [askRunId, askRows]);
+  // Run clarity: a CLOSED conversation's composer starts a separate ask — it can no longer answer the
+  // path's turn gate. The run is marked (a fact, like creatorAccepted) so its turn gate is a gate like
+  // any other: kept in the gate store, drawn on the run's block and answered there — never a "Waiting on
+  // you" header with nothing on the page to answer. The gate itself comes from the runs list's own gate
+  // read (asked for here, once): no cached question is replayed, so nothing spent is ever drawn (codex r5).
+  useEffect(() => {
+    if (!askPathOn || askRunId === null || conversation !== 'closed') return;
+    const ask = useAskThreadStore.getState();
+    if (ask.chatClosed[askRunId] === true) return;
+    ask.markChatClosed(askRunId);
+    if (askView?.session.status === 'awaiting_human') onRetryRuns?.();
+  }, [askPathOn, askRunId, askView?.session.status, conversation, onRetryRuns]);
   // What the thread and the fold know between them: the stored fact survives an empty fold (r3 #3).
   const creatorAccepted = askPath.creatorAccepted || (askRunId !== null && creatorAcceptedKnown[askRunId] === true);
   const lines = useMemo(() => {
@@ -322,6 +343,12 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
       ? isAskTurnGate(askKnow, askRunId, askGate.gateKind, askGate.prompt, askGate.ord)
       : askView?.session.status !== 'awaiting_human' || askRunId in turnGates));
 
+  // H3: who responded, per thread entry (the roster names the seats).
+  const roster = useRoster();
+  const whoOfEntry = (e: ThreadEntry): Responder => (e.kind === 'turn' || e.kind === 'typing' ? turnResponder(e.who, roster)
+    : e.kind === 'proposal' ? turnResponder(e.ask.by, roster) : CREW);
+  // The closed line above the entries is crew's: the first crew entry under it needs no second label.
+  const leadWho: Responder | null = conversation === 'closed' && mine.length > 0 ? CREW : null;
   const badges = useMemo(() => needsByRun(needRows), [needRows]);
   const badge = mine.reduce((n, v) => n + (badges[v.session.id] ?? 0), 0);
   const state: SessionState = mine.some((v) => v.session.status === 'awaiting_human') ? 'waiting'
@@ -518,6 +545,28 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
     if (grew && nearBottom.current) scrollThread(el, el.scrollHeight);
   }, [entries, ready]);
 
+  // Run clarity: the action first. On a first visit (no saved place — a saved place means they were
+  // reading there) a run of this session with an open gate brings its block — the card leads it — into
+  // view once, and the thread stops following: a block that grows below (a plan pane, the step list)
+  // never pulls the question off screen. The thread's own scroll, so it is never saved as their place.
+  const gatedRunId = useGateStore((s) => mine.find((v) => s.gates[v.session.id] !== undefined)?.session.id ?? null);
+  const shownGate = useRef<string | null>(null);
+  useLayoutEffect(() => {
+    const el = scroller.current;
+    if (!ready || gatedRunId === null || el === null) return;
+    const key = `${sessionId}:${gatedRunId}`;
+    if (shownGate.current === key || useSessionDrafts.getState().scroll[sessionId] !== undefined) return;
+    const block = [...el.querySelectorAll<HTMLElement>('[data-testid="session-run"]')].find((b) => b.dataset['runId'] === gatedRunId);
+    if (block === undefined) return;
+    shownGate.current = key;
+    nearBottom.current = false;
+    restore.current.pending = false;
+    const view = el.getBoundingClientRect();
+    const at = block.getBoundingClientRect().top;
+    if (at >= view.top && at <= view.bottom - 160) return; // already in view
+    scrollThread(el, Math.max(0, el.scrollTop + at - view.top - 8));
+  }, [ready, gatedRunId, sessionId, entries]);
+
   // Where a source's passage can be read from: the session's runs with a worktree, newest first.
   const readers = useMemo(() => [...mine].reverse().map((v) => ({
     id: v.session.id, workdir: typeof v.session.workdir === 'string' ? v.session.workdir : null,
@@ -543,8 +592,47 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
   const artifactMissing = useArtifactMissing(artifactKey, ready && mine.length > 0);
   useEffect(() => () => collapseArtifacts(), [sessionId]);
 
+  // H3: the composer's props, shared by the thread's composer and the full-screen chat drawer's (one draft).
+  const composerProps = {
+    composerKey: sessionId,
+    // studio#606 (4): while a run here is live, Send starts a separate Ask — say so before Send.
+    footer: scopeNote !== null ? <p data-testid="session-composer-scope" role="note" className="wk-composer-hint">{scopeNote}</p> : null,
+    text: draft,
+    setText: (t: string) => setDraft(sessionId, t),
+    // S16a-4e: on a live chat's own session the composer replies into THAT chat.
+    onSend: (text: string, opts: ComposerSend) => onAsk(text, ref.kind === 'chat' && conversation === 'live' && opts.fresh !== true && opts.projectId === undefined ? { ...opts, chatId: ref.chatId } : opts),
+    runs: mine,
+    started: entries.length > 0,
+    navigate,
+    ariaLabel: 'Ask or tell studio what to do next',
+    placeholder: 'Ask about this, or tell studio what to do next — / adds a step, @ names a project or a helper',
+    variant: 'session' as const,
+  };
+  // H3 (HOST-API §6): full screen's chat drawer is this run's own thread, compact — its conversation turns,
+  // each with who responded, and the same composer (the run's cards stay in the thread behind it).
+  const drawerTurns = entries.filter((e): e is Extract<ThreadEntry, { kind: 'turn' }> => e.kind === 'turn').slice(-12);
+  const renderChat = (): React.ReactNode => (
+    <div data-testid="run-chat-drawer" className="wk-run-chat">
+      <div className="wk-run-chat-thread">
+        {drawerTurns.length === 0 && <p className="wk-session-grey">Nothing has been said in this run yet.</p>}
+        {drawerTurns.map((e) => (
+          <div key={e.key} data-testid="run-chat-turn" className="wk-run-chat-turn">
+            <TurnWho who={turnResponder(e.who, roster)} />
+            <p className="wk-session-text">{e.text}</p>
+          </div>
+        ))}
+      </div>
+      <Composer {...composerProps} composerKey={`${sessionId}#drawer`} text={draft} className="wk-run-chat-composer" />
+    </div>
+  );
+  const runHost = useRunHostValue(mine, renderChat);
+
   return (
     <ArtifactAddressProvider sessionId={sessionId} routeKey={artifactKey} routeSize={artifactSize} routeVersion={artifactVersion} navigate={navigate}>
+    <RunHostProvider value={runHost}>
+    {/* H3 (run page option B): the thread and, beside it, the ONE host panel — the run's details as its
+        Run tab, a plugin's Options tabs added on demand; below 1200 px a one-line ribbon. */}
+    <div data-testid="session-frame" className="wk-session-frame">
     <div data-testid="session" data-object={`session:${sessionId}`} data-session-id={sessionId} data-conversation={conversation} data-state={state} data-pane={pane} className={`wk-session${pane ? ' wk-session--pane' : ''}`}>
       <header className="wk-session-head">
         <span aria-hidden className={`wk-desk-dot wk-desk-dot--${state}`} />
@@ -617,7 +705,10 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
           }}
         >
           {conversation === 'closed' && mine.length > 0 && (
-            <p data-testid="session-closed-line" className="wk-session-grey">{CLOSED_LINE}</p>
+            <>
+              <TurnWho who={CREW} />
+              <p data-testid="session-closed-line" className="wk-session-grey">{CLOSED_LINE}</p>
+            </>
           )}
           {chatError !== null && (
             <StateBanner data-testid="session-chat-error" kind={readErrorKind(chatError)} what="this conversation" error={chatError}
@@ -655,7 +746,15 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
           {ready && ref.kind === 'chat' && !askPathOn && conversation === 'live' && messages.length > 0 && (
             <p data-testid="session-ask-older" className="wk-session-grey">Every helper answers at once in this conversation: this version of Studio’s service has no reviewer or help requests.</p>
           )}
-          {entries.map((e) => (e.kind === 'line'
+          {entries.map((e, i) => {
+            // H3: who responded. A turn says it in its own bubble; any other entry gets the line when the
+            // responder changes (consecutive crew lines share one), so the thread reads as a conversation.
+            const who = whoOfEntry(e);
+            const prev = i === 0 ? leadWho : whoOfEntry(entries[i - 1]!);
+            const label = e.kind !== 'turn' && (prev === null || responderKey(prev) !== responderKey(who))
+              ? <TurnWho who={who} runId={e.kind === 'run' || e.kind === 'proposal' ? e.view.session.id : askRunId} {...(e.kind === 'typing' ? { suffix: 'thinking' } : {})} />
+              : null;
+            const node = (e.kind === 'line'
             ? <AskLineView key={e.key} line={e.line} onSignIn={() => openSheet({ kind: 'session', sessionId }, 'signins')} onRetry={askTeamRetry} />
             : e.kind === 'typing'
               ? <AskTyping key={e.key} who={e.who} />
@@ -664,7 +763,7 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
                 : e.kind === 'turn'
             ? (
               <div key={e.key} data-testid="session-turn" data-who={e.who === 'you' ? 'you' : 'helper'} {...(e.pending ? { 'data-pending': 'true' } : {})} className={`wk-session-turn wk-session-turn--${e.who === 'you' ? 'you' : 'helper'}${e.pending ? ' wk-session-turn--pending' : ''}`}>
-                <p className="wk-session-who">{e.who === 'you' ? 'You' : e.pending ? `${e.who} · answering` : e.who}</p>
+                <TurnWho who={who} runId={askRunId} {...(e.pending ? { suffix: 'answering' } : {})} />
                 {e.who === 'you'
                   ? <p className={`wk-session-text${e.ok ? '' : ' wk-session-grey'}`}><OperatorMessage text={e.text} /></p>
                   : (
@@ -682,7 +781,9 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
                 {e.who === 'you' && ref.kind === 'chat' && e.turnId !== null && <TurnDecisions chatId={ref.chatId} turnId={e.turnId} navigate={navigate} />}
               </div>
             )
-            : <RunBlock key={e.key} view={e.view} badge={badges[e.view.session.id] ?? 0} sessionId={sessionId} navigate={navigate} solo={mine.length === 1 ? title : null} />))}
+            : <RunBlock key={e.key} view={e.view} badge={badges[e.view.session.id] ?? 0} sessionId={sessionId} navigate={navigate} solo={mine.length === 1 ? title : null} />);
+            return <Fragment key={e.key}>{label}{node}</Fragment>;
+          })}
           {/* S16a-4g: the chat's own question and gate (keyed by the chat id) at the thread's foot. */}
           {ref.kind === 'chat' && <ChatQuestions chatId={ref.chatId} />}
         </div>
@@ -692,23 +793,11 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
         <p data-testid="session-ask-shape" className="wk-session-grey wk-session-shape">{askShapeFooter(askPath)}</p>
       )}
 
-      <Composer
-        composerKey={sessionId}
-        // studio#606 (4): while a run here is live, Send starts a separate Ask — say so before Send.
-        footer={scopeNote !== null ? <p data-testid="session-composer-scope" role="note" className="wk-composer-hint">{scopeNote}</p> : null}
-        text={draft}
-        setText={(t) => setDraft(sessionId, t)}
-        // S16a-4e: on a live chat's own session the composer replies into THAT chat.
-        onSend={(text, opts) => onAsk(text, ref.kind === 'chat' && conversation === 'live' && opts.fresh !== true && opts.projectId === undefined ? { ...opts, chatId: ref.chatId } : opts)}
-        runs={mine}
-        started={entries.length > 0}
-        navigate={navigate}
-        className="wk-session-composer"
-        ariaLabel="Ask or tell studio what to do next"
-        placeholder="Ask about this, or tell studio what to do next — / adds a step, @ names a project or a helper"
-        variant="session"
-      />
+      <Composer {...composerProps} className="wk-session-composer" />
     </div>
+    <HostPanel runTab={<RunTab runs={mine} sessionId={sessionId} title={title} navigate={navigate} />} ribbon={<RunRibbon runs={mine} />} />
+    </div>
+    </RunHostProvider>
     </ArtifactAddressProvider>
   );
 }
@@ -799,6 +888,11 @@ export function RunBlock({ view, badge, sessionId, navigate, solo = null }: {
     endedMs,
     (e) => e.replace(/[-_]+/g, ' '),
   );
+  const trail = useRunEventStore((s) => s.byRun[id]) ?? NO_TRAIL;
+  // Run clarity: the "now" marker's run phase — an orphaned run is not working (OrphanedRow says so).
+  const phase: RunPhase = view.session.status === 'executing'
+    ? (orphanedOf(view.session.status, trail) === null ? 'working' : 'other')
+    : view.session.status === 'failed' || view.session.status === 'cancelled' ? 'stopped' : 'other';
   const gate = useGateStore((s) => s.gates[id]);
   const action = useGateActionStore((s) => s.byGate[id] ?? IDLE_GATE_ACTION);
   // WT-U2: "checked" comes only from the acceptance read (crew's per-step check state); the chips'
@@ -859,16 +953,12 @@ export function RunBlock({ view, badge, sessionId, navigate, solo = null }: {
           {view.session.archived_at != null && <span data-testid="session-run-archived" className="wk-session-grey"> · Archived</span>}
         </p>
       )}
-      {/* S16a-1d: the run's technical handles, when Settings › Show technical details is on. */}
-      <Tech data-testid="tech-session-run" parts={runTechParts({ id, base_commit: view.session.base_commit, clis: view.session.clis })} block />
-      <OrphanedRow view={view} />
-      {/* S16a-1c: the run's record lines — why it stopped, the amended acceptance list, a short
-          council, the Watchtower's lines (and "You jumped in" when the address carries ?jump=). */}
-      <RunRecordLines view={view} jumped={jump !== null} {...(navigate === undefined ? {} : { navigate })} />
-      {/* Audit row 27: a stopped run's two ways on, as two buttons: Resume (this run, in place) and
-          Start over (S16a-1d: the launch form prefilled; nothing starts until you send). */}
-      <RecoveryRow view={view} {...(navigate === undefined ? {} : { navigate })} />
-      {/* S15e: plan and deliver go through ProposalCard; every other gate kind is answered in the thread. */}
+      {/* S15e: plan and deliver go through ProposalCard; every other gate kind is answered in the thread.
+          Run clarity: the action comes first — the card sits right under the status sentence, above the
+          run's notes (who reviewed, what wasn't checked), so what you can do is never below the fold. */}
+      {/* H3: a gate a seat raised is labelled with the seat that is asking (crew's own gates sit under the
+          run's crew line). */}
+      <GateAsker view={view} gate={gate} />
       {effectiveKind === 'plan' || effectiveKind === 'deliver'
         ? <ProposalCard view={view} chain={chain} acceptance={acceptance?.summary ?? null} />
         : finished === 'handed'
@@ -876,6 +966,17 @@ export function RunBlock({ view, badge, sessionId, navigate, solo = null }: {
           : finished === 'stranded'
             ? <StrandedCard view={view} />
             : <GateRow view={view} gate={gate} {...(navigate !== undefined ? { navigate } : {})} />}
+      {/* S16a-1d: the run's technical handles, when Settings › Show technical details is on. */}
+      <Tech data-testid="tech-session-run" parts={runTechParts({ id, base_commit: view.session.base_commit, clis: view.session.clis })} block />
+      <OrphanedRow view={view} />
+      {/* S16a-1c: why it stopped. Run clarity: the reason, then the ways on, then the run's notes. */}
+      <RunStory view={view} events={trail} {...(navigate === undefined ? {} : { navigate })} />
+      {/* Audit row 27: a stopped run's two ways on, as two buttons: Resume (this run, in place) and
+          Start over (S16a-1d: the launch form prefilled; nothing starts until you send). */}
+      <RecoveryRow view={view} {...(navigate === undefined ? {} : { navigate })} />
+      {/* S16a-1c: the run's record lines — the amended acceptance list, a short council, the
+          Watchtower's lines (and "You jumped in" when the address carries ?jump=). */}
+      <RunRecordLines view={view} jumped={jump !== null} withStory={false} {...(navigate === undefined ? {} : { navigate })} />
       {/* crew#720: whatever the card above says, a deliver phase that refused for want of the provider
           credential says so, and the run's final code is downloadable — every outcome. */}
       <DeliverCredentialsNotice view={view} />
@@ -883,12 +984,20 @@ export function RunBlock({ view, badge, sessionId, navigate, solo = null }: {
       {/* S16a-4g: an MCP server's question and the stall watchdog's hand-off, under the run's card. */}
       <RunQuestions view={view} />
       <PlanStepLines runId={id} />
-      <ChainLine chain={chain} runId={id} units={view.units} teamError={teamError} onRetry={retry} checks={checks} momentOf={momentOf} onOpenAt={(sec) => requestWalkthroughSeek(id, sec)} nothingChecked={noEvidenceSummary !== null} jumpOrd={jump?.ord ?? null} />
+      <ChainLine chain={chain} runId={id} units={view.units} teamError={teamError} onRetry={retry} checks={checks} momentOf={momentOf} onOpenAt={(sec) => requestWalkthroughSeek(id, sec)} nothingChecked={noEvidenceSummary !== null} jumpOrd={jump?.ord ?? null} waitOrd={gate !== undefined && effectiveKind !== 'plan' ? gate.ord : null} phase={phase} />
       {/* S8: the page the run is producing — a live preview that morphs inline → pane → full. */}
       <RunArtifacts view={view} composerKey={sessionId} chain={chain} />
       <RunHelpers view={view} />
     </section>
   );
+}
+
+/** H3: the seat asking at a run's open gate, when a seat raised it; nothing for crew's own gates. */
+function GateAsker({ view, gate }: { view: RunView; gate: { ord: number; gateKind?: string } | undefined }): React.ReactElement | null {
+  const roster = useRoster();
+  const who = gateResponder(view, gate, roster);
+  if (gate === undefined || who.role !== 'seat') return null;
+  return <TurnWho who={who} runId={view.session.id} suffix="is asking" className="wk-who--asking" />;
 }
 
 /**

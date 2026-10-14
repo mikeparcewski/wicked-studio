@@ -9,9 +9,11 @@ import { parseDenial, stepDenialAdvice, stepDenialHeadline, type StructuredDenia
 import { degradedCouncil } from '../RunDegradedNote.js';
 import { unitStepName } from '../../board/chainModel.js';
 import { TechDetails } from '../ui/TechDetails.js';
+import { useDisplayText } from '../../hooks/useHomePath.js';
 import { RunIntentAmendments } from '../RunIntentAmendments.js';
 import { WatchRunLines } from '../WatchLines.js';
 import { everythingPath } from '../../board/everythingModel.js';
+import { engineFailureOf } from '../../board/engineFailure.js';
 
 const EMPTY: readonly CoreEvent[] = [];
 
@@ -35,12 +37,20 @@ function AllRunsLink({ navigate, filter }: { navigate: (path: string) => void; f
  *                                 own detail behind Technical details (studio#682 row 5).
  * Nothing for a run that did not stop (studio#537's misattribution fix lives in the store and holds).
  */
-export function RunStory({ view, navigate }: { view: SessionView; navigate?: (path: string) => void }): React.ReactElement | null {
+export function RunStory({ view, navigate, events = EMPTY }: {
+  view: SessionView;
+  navigate?: (path: string) => void;
+  /** The run's trail: a failure no step was refused for says the engine's own reason (run clarity). */
+  events?: readonly CoreEvent[];
+}): React.ReactElement | null {
   const runId = view.session.id;
   const status = view.session.status;
   const stopped = status === 'cancelled' || status === 'failed';
   useEffect(() => { if (stopped) useProvenanceStore.getState().load(runId); }, [runId, stopped]);
   const rejectNote = useProvenanceStore((s) => s.rejectNotes[runId] ?? null);
+  // The engine headline quotes the engine's first line: paths read `~` unless technical details are on
+  // (the same rule as Technical details below it — codex r3).
+  const show = useDisplayText();
   const story = useProvenanceStore((s) => s.cancelStories[runId] ?? null);
   if (!stopped) return null;
 
@@ -64,6 +74,9 @@ export function RunStory({ view, navigate }: { view: SessionView; navigate?: (pa
   }
 
   const denied = view.units.filter((u) => u.denial_reason || u.status === 'rejected');
+  // Run clarity: no step was refused, so the run stopped as a whole (no helper could take it, the
+  // engine errored): the trail's own reason, in one plain line — never "Failed" with no why.
+  const engine = denied.length === 0 ? engineFailureOf(events) : null;
   // studio#682 row 5: the status sentence already says it stopped; the story names the STEP and what
   // to do in plain words. The engine's own prose (env vars, fence internals, paths) is Technical
   // details only, sanitized (paths read `~`).
@@ -87,6 +100,12 @@ export function RunStory({ view, navigate }: { view: SessionView; navigate?: (pa
           </div>
         );
       })}
+      {engine !== null && (
+        <div data-testid="failure-engine" className="wk-session-run-story-note">
+          <p className="wk-session-run-story-line">{show(engine.headline)}</p>
+          <TechDetails data-testid="failure-engine-reason" text={engine.raw} />
+        </div>
+      )}
       {navigate !== undefined && <AllRunsLink navigate={navigate} filter="failed" />}
     </div>
   );
@@ -123,10 +142,12 @@ export function RunCheckersNote({ events }: { events: readonly CoreEvent[] }): R
  * jumped in from the Watchtower" with Back when the address carries `?jump=`). Each renders nothing
  * when there is nothing to say.
  */
-export function RunRecordLines({ view, jumped, navigate }: {
+export function RunRecordLines({ view, jumped, navigate, withStory = true }: {
   view: SessionView;
   jumped: boolean;
   navigate?: (path: string) => void;
+  /** Run clarity: false when the host draws the stop story itself (above its recovery buttons). */
+  withStory?: boolean;
 }): React.ReactElement {
   const runId = view.session.id;
   const events = useRunEventStore((s) => s.byRun[runId]) ?? EMPTY;
@@ -134,7 +155,7 @@ export function RunRecordLines({ view, jumped, navigate }: {
   const endedMs = useMemo(() => (isTerminal ? (endedAtMs(view) ?? finishedAtMs(view)) : null), [isTerminal, view]);
   return (
     <>
-      <RunStory view={view} {...(navigate === undefined ? {} : { navigate })} />
+      {withStory && <RunStory view={view} events={events} {...(navigate === undefined ? {} : { navigate })} />}
       <RunIntentAmendments session={view.session} />
       <RunCheckersNote events={events} />
       <RunPoolNote events={events} units={view.units} />

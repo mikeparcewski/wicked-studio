@@ -1,4 +1,7 @@
 import { useEffect, useState } from 'react';
+import { producerOf } from '../../board/responder.js';
+import { useRoster } from '../../hooks/useRoster.js';
+import { TurnWho } from './TurnWho.js';
 import { isDemoRun } from '../../api/demo.js';
 import { listDocs, type DocSummary } from '../../api/interactive.js';
 import type { SessionView } from '../../api/types.js';
@@ -67,9 +70,13 @@ export function RunArtifacts({ view, composerKey, chain }: { view: SessionView; 
   // S10: a planned run's plan is its artifact too — the ordered editor, while the run is going.
   const plan = hasPlanEditor(view, chain);
   const count = mine.length + (walkStep !== null ? 1 : 0) + (demo ? 1 : 0) + (plan ? 1 : 0);
+  const roster = useRoster();
+  const producer = producerOf(view, roster);
   if (count === 0) return null;
   return (
     <div data-testid="run-artifacts" data-run-id={runId} data-count={count}>
+      {/* H3: who made what is shown below — the seat of the run's newest step that ran (HOST-API §2 producedBy). */}
+      <TurnWho who={producer} runId={runId} suffix={count === 1 ? 'made this' : 'made these'} className="wk-who--made" />
       {plan && chain !== undefined && (
         <ArtifactMorph
           artifactKey={artifactKey('run', 'plan', runId)} title="Plan" projectId={projectId ?? ''} docId="" composerKey={composerKey}
