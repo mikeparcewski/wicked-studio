@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../src/api/client.js';
 import type { RequirementsPage } from '../src/api/types.js';
+import { ApiError } from '../src/api/errors.js';
 import { requirementsFor, type DocumentRequirements } from '../src/editors/adapters/requirements.js';
 import { InteractiveDocAdapter } from '../src/editors/interactiveDocAdapter.js';
 import { adapterFor } from '../src/editors/hostApi.js';
@@ -60,10 +61,15 @@ describe('the host requirements source', () => {
     expect(list).toHaveBeenCalledWith(expect.any(String), { limit: 50 });
   });
 
-  it.each([null, undefined, ''])('has no read without a repository (%s)', async (id) => {
+  it.each([null, undefined, ''])('has no requirements, and reads nothing, without a repository (%s)', async (id) => {
     const list = vi.spyOn(api, 'listRequirements');
-    await expect(requirementsFor(id)()).rejects.toThrow('no repository');
+    await expect(requirementsFor(id)()).resolves.toEqual({ rows: [], total: 0 });
     expect(list).not.toHaveBeenCalled();
+  });
+
+  it('a repository with no requirements read (crew 404) has none: an answer, not a failed read', async () => {
+    vi.spyOn(api, 'listRequirements').mockRejectedValue(new ApiError(404, 'no requirements read for this repository'));
+    await expect(requirementsFor(repoId())()).resolves.toEqual({ rows: [], total: 0 });
   });
 
   it('a failed HTTP read rejects and is retried immediately; an empty read is cached', async () => {
@@ -100,7 +106,7 @@ describe('InteractiveDocAdapter checks', () => {
     expect(list).toHaveBeenCalledTimes(2);
   });
 
-  it('answers unavailable when the artifact has no repository', async () => {
-    await expect(adapter(requirementsFor(null)).checks()).resolves.toMatchObject({ error: 'unavailable' });
+  it('answers no checks (not unavailable) when the artifact has no repository', async () => {
+    await expect(adapter(requirementsFor(null)).checks()).resolves.toEqual({ checks: [], total: 0 });
   });
 });
