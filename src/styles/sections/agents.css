@@ -13,6 +13,9 @@
    desk.css) must not apply: these band tiles have no icon, so they keep the band's own column (label, number, note). */
 .wk-desk2 .wk-agents-tiles .wk-stat { display: flex; border-radius: 0; }
 .wk-desk2 .wk-agents-tiles .wk-stat-label { align-self: auto; }
+/* The tile notes say which agents are not ready and why: they wrap, never cut off mid-word
+   (desk.css keeps a Desk tile's note to one line with an ellipsis). */
+.wk-agents-tiles .wk-stat-note { white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; }
 .wk-agents-tile { display: flex; flex-direction: column; justify-content: center; }
 .wk-agents-tile--moves { gap: var(--space-2); }
 .wk-agents-tile--moves .wk-btn { width: 100%; justify-content: center; }
