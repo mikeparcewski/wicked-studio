@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react';
+import { recordingGateActions } from '../editorPorts/RecordingGateActions.js';
+import type { ArtifactSize } from '../../board/artifactMorph.js';
 import { producerOf } from '../../board/responder.js';
 import { useRoster } from '../../hooks/useRoster.js';
 import { TurnWho } from './TurnWho.js';
@@ -109,13 +111,13 @@ export function RunArtifacts({ view, composerKey, chain }: { view: SessionView; 
       {walkStep !== null && (
         <ArtifactMorph
           artifactKey={artifactKey('run', 'walkthrough', runId)} title="Walkthrough" projectId={projectId ?? ''} docId="" composerKey={composerKey}
-          slot={{ kind: 'walkthrough', body: (size, morph) => <WalkthroughEditor runId={runId} kind="walkthrough" step={walkStep} size={size} morph={morph} units={view.units} runStatus={view.session.status} composerKey={composerKey} /> }}
+          slot={{ kind: 'walkthrough', body: (size, morph) => <RecordingSlot view={view} source="walkthrough" size={size} morph={morph}><WalkthroughEditor runId={runId} kind="walkthrough" step={walkStep} size={size} morph={morph} units={view.units} runStatus={view.session.status} composerKey={composerKey} /></RecordingSlot> }}
         />
       )}
       {demo && (
         <ArtifactMorph
           artifactKey={artifactKey('run', 'demo-video', runId)} title="Demo video" projectId={projectId ?? ''} docId="" composerKey={composerKey}
-          slot={{ kind: 'demo-video', body: (size, morph) => <WalkthroughEditor runId={runId} kind="demo-video" step={null} size={size} morph={morph} units={view.units} runStatus={view.session.status} composerKey={composerKey} /> }}
+          slot={{ kind: 'demo-video', body: (size, morph) => <RecordingSlot view={view} source="demo" size={size} morph={morph}><WalkthroughEditor runId={runId} kind="demo-video" step={null} size={size} morph={morph} units={view.units} runStatus={view.session.status} composerKey={composerKey} /></RecordingSlot> }}
         />
       )}
       {projectId !== null && mine.map((d) => (
@@ -131,5 +133,25 @@ export function RunArtifacts({ view, composerKey, chain }: { view: SessionView; 
         />
       ))}
     </div>
+  );
+}
+
+/**
+ * A recording's slot body when no protocol-2 editor claims it (the morphing artifact): the recording,
+ * then the host's own gate verbs for it — Ask helpers to fix, Edit the check (H6 moved them out of the
+ * editor into host chrome, RecordingGateActions). A plugin card draws the same verbs in its footer
+ * through the run host's `gateActions` and never renders this body, so they are never shown twice.
+ */
+function RecordingSlot({ view, source, size, morph, children }: { view: SessionView; source: 'walkthrough' | 'demo'; size: ArtifactSize; morph: (to: ArtifactSize) => void; children: React.ReactNode }): React.ReactElement {
+  const runId = view.session.id;
+  const kind = source === 'walkthrough' ? 'walkthrough' : 'demo-video';
+  const verbs = recordingGateActions({ artifactKey: artifactKey('run', kind, runId), title: kind, kind, source, projectId: '', composerKey: '', runId }, view.units,
+    // The storyline box needs room: an inline card opens beside the thread first.
+    () => { if (size === 'inline') morph('pane'); });
+  return (
+    <>
+      {children}
+      {verbs !== null && <div data-testid="recording-host-verbs" data-size={size} className={`wk-slot-verbs wk-slot-verbs--${size}`}>{verbs}</div>}
+    </>
   );
 }

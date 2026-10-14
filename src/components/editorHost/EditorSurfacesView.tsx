@@ -1,7 +1,7 @@
 import { useEffect, useMemo } from 'react';
 import { apiBase } from '../../api/client.js';
 import type { EditorView } from '../../api/editors.js';
-import { FakeSurfaceAdapter } from '../../editors/adapters/fake.js';
+import { fakeSurfaceFor } from '../../editors/adapters/fake.js';
 import { useHostChrome, useHostPanel, type ArtifactBinding, type RunHostContext } from '../../editors/hostApi.js';
 import { bundleUrl } from '../../editors/model.js';
 import { HostPanel } from './HostPanel.js';
@@ -20,10 +20,10 @@ export function EditorSurfacesView({ editor, version, sha, title, kind }: { edit
     permissions: [], first_party: editor.startsWith('wicked-'), enabled: true,
   } as unknown as EditorView), [editor, title, version, sha, kind]);
   const binding = useMemo<ArtifactBinding>(() => ({
-    artifactKey: `test:${editor}@${version}`, title: kind === 'deck' ? 'Library room booking · deck' : 'Library room booking', kind, source: 'fake',
+    artifactKey: `test:${editor}@${version}`, title: kind === 'deck' ? 'Library room booking · deck' : kind === 'demo-video' ? 'Build a team · demo video' : 'Library room booking', kind, source: 'fake',
     projectId: '', composerKey: 'editor-test', producedBy: 'Claude Code',
   }), [editor, version, kind]);
-  const adapter = useMemo(() => new FakeSurfaceAdapter(binding), [binding]);
+  const adapter = useMemo(() => fakeSurfaceFor(binding), [binding]);
   const src = bundleUrl(apiBase(), editor, version, sha);
   const run = useMemo<RunHostContext>(() => ({
     runId: null,

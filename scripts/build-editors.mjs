@@ -25,6 +25,19 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 /** The first-party editors studio ships. Ids are `wicked-*` (crew refuses anything else from a studio bundle). */
 export const EDITORS = [
   {
+    id: 'wicked-video', title: 'Video', protocol: [1, 2],
+    kinds: ['demo-video', 'walkthrough'], sizes: ['inline', 'pane', 'full'],
+    permissions: [
+      { id: 'artifact.read', why: 'to show the cut and read its chapters' },
+      { id: 'artifact.write', why: 'to reorder, rename or trim a chapter, each as one new cut with Undo' },
+      { id: 'media.read', why: 'to play the video and its chapters' },
+      { id: 'selection.chip', why: 'to make the chapter you select the subject of your next message' },
+      { id: 'artifact.theme', why: 'to change the captions and the title and end cards' },
+      { id: 'artifact.export', why: 'to export the video' },
+      { id: 'ui.fullscreen', why: 'to show the video full screen' },
+    ],
+  },
+  {
     id: 'wicked-page',
     title: 'Page',
     protocol: [1, 2],

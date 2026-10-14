@@ -11,9 +11,9 @@
   "version": 1,
   "studioVersion": "0.8.0",
   "counts": {
-    "files": 228,
-    "occurrences": 2816,
-    "static": 2424,
+    "files": 230,
+    "occurrences": 2826,
+    "static": 2431,
     "dynamic": 71,
     "computed": 24
   },
@@ -2365,6 +2365,18 @@
       "testId": "delivery-freeze-reason",
       "files": [
         "src/components/DeliveryFreezeSwitch.tsx"
+      ]
+    },
+    {
+      "testId": "demo-retake-chapter",
+      "files": [
+        "src/components/editorPorts/RecordingGateActions.tsx"
+      ]
+    },
+    {
+      "testId": "demo-retake-note",
+      "files": [
+        "src/components/editorPorts/RecordingGateActions.tsx"
       ]
     },
     {
@@ -8875,6 +8887,12 @@
       ]
     },
     {
+      "testId": "recording-host-verbs",
+      "files": [
+        "src/components/session/RunArtifacts.tsx"
+      ]
+    },
+    {
       "testId": "repo-capture-learnings",
       "files": [
         "src/components/RepositoriesPanel.tsx"
@@ -14082,6 +14100,30 @@
       ]
     },
     {
+      "testId": "video-editor",
+      "files": [
+        "src/plugins/wicked-video/plugin.ts"
+      ]
+    },
+    {
+      "testId": "video-play",
+      "files": [
+        "src/plugins/wicked-video/plugin.ts"
+      ]
+    },
+    {
+      "testId": "video-player",
+      "files": [
+        "src/plugins/wicked-video/plugin.ts"
+      ]
+    },
+    {
+      "testId": "video-poster",
+      "files": [
+        "src/plugins/wicked-video/plugin.ts"
+      ]
+    },
+    {
       "testId": "view-settings",
       "files": [
         "src/components/SystemSettings.tsx"
@@ -14150,6 +14192,7 @@
     {
       "testId": "walkthrough-actions",
       "files": [
+        "src/components/editorPorts/RecordingGateActions.tsx",
         "src/components/session/WalkthroughEditor.tsx"
       ]
     },
@@ -14204,13 +14247,13 @@
     {
       "testId": "walkthrough-edit",
       "files": [
-        "src/components/session/WalkthroughEditor.tsx"
+        "src/components/editorPorts/RecordingGateActions.tsx"
       ]
     },
     {
       "testId": "walkthrough-edit-check",
       "files": [
-        "src/components/session/WalkthroughEditor.tsx"
+        "src/components/editorPorts/RecordingGateActions.tsx"
       ]
     },
     {
@@ -14288,7 +14331,7 @@
     {
       "testId": "walkthrough-fix",
       "files": [
-        "src/components/session/WalkthroughEditor.tsx"
+        "src/components/editorPorts/RecordingGateActions.tsx"
       ]
     },
     {
@@ -14318,6 +14361,7 @@
     {
       "testId": "walkthrough-note",
       "files": [
+        "src/components/editorPorts/RecordingGateActions.tsx",
         "src/components/session/WalkthroughEditor.tsx"
       ]
     },
@@ -14342,19 +14386,19 @@
     {
       "testId": "walkthrough-storyline",
       "files": [
-        "src/components/session/WalkthroughEditor.tsx"
+        "src/components/editorPorts/RecordingGateActions.tsx"
       ]
     },
     {
       "testId": "walkthrough-storyline-cancel",
       "files": [
-        "src/components/session/WalkthroughEditor.tsx"
+        "src/components/editorPorts/RecordingGateActions.tsx"
       ]
     },
     {
       "testId": "walkthrough-storyline-save",
       "files": [
-        "src/components/session/WalkthroughEditor.tsx"
+        "src/components/editorPorts/RecordingGateActions.tsx"
       ]
     },
     {

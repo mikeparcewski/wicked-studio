@@ -6,13 +6,15 @@ import { openSheet } from '../../store/sheets.js';
  * a way into its sheet when the run is known (what it did, its terminal); "You" and "crew" are plain.
  * `data-role` is the contract the tests and journeys read: `seat` | `operator` | `crew`.
  */
-export function TurnWho({ who, runId = null, suffix = null, className = '' }: {
+export function TurnWho({ who, runId = null, suffix = null, className = '', inline = false }: {
   who: Responder;
   /** The run the seat worked on: its name opens the seat's sheet for that run. */
   runId?: string | null;
   /** A short state after the name ("answering", "is asking"). */
   suffix?: string | null;
   className?: string;
+  /** Inside a line of its own (a card's one-line head): a span, not a paragraph. */
+  inline?: boolean;
 }): React.ReactElement {
   const name = who.role === 'seat' && who.cli !== null && runId !== null
     ? (
@@ -21,11 +23,12 @@ export function TurnWho({ who, runId = null, suffix = null, className = '' }: {
       </button>
     )
     : <span className="wk-who-name">{who.name}</span>;
+  const Tag = inline ? 'span' : 'p';
   return (
-    <p data-testid="turn-who" data-role={who.role} {...(who.cli !== null ? { 'data-cli': who.cli } : {})} className={`wk-session-who wk-who wk-who--${who.role}${className !== '' ? ` ${className}` : ''}`}>
+    <Tag data-testid="turn-who" data-role={who.role} {...(who.cli !== null ? { 'data-cli': who.cli } : {})} className={`wk-session-who wk-who wk-who--${who.role}${className !== '' ? ` ${className}` : ''}`}>
       <span aria-hidden className="wk-who-dot" />
       {name}
       {suffix !== null && <span className="wk-who-suffix"> · {suffix}</span>}
-    </p>
+    </Tag>
   );
 }

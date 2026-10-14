@@ -1,0 +1,439 @@
+/** First-party video editor: all data and media arrive through the granted port. */
+import { announceReady, forwardOptionsKey, helloOf, V2Port, PROTOCOL, ENVELOPE, surfaceOfSize, type Envelope, type Mode, type Surface } from '../_shared/v2.js';
+import surfaces from './surfaces.json';
+import { changedVideoStyle, paletteOf, shownColours, videoValues, type ChapterOp, type DemoChapter, type DemoCut, type VideoColours } from '../../editors/demoCutModel.js';
+import { controlValueOk, parseSurfaces } from '../../editors/surfaces.js';
+
+interface Reply { ok: boolean; payload?: Record<string, unknown>; error?: { code: string; message: string } }
+const parsed = parseSurfaces(surfaces);
+if (!parsed.ok) throw new Error(parsed.reason);
+const declaration = parsed.value;
+export function start(): void {
+  // Static markup only; every artifact string is assigned as text or an input value below.
+  document.body.insertAdjacentHTML('afterbegin', `<main id="video-editor" class="video-editor" data-testid="video-editor" tabindex="0">
+    <aside id="chapters" class="chapters"><h2>Chapters</h2><ol id="chapter-list"></ol><div id="editor-fields" class="editor-fields"></div><p id="hint" class="hint"></p></aside>
+    <section id="work" class="work"><div class="player"><video id="player" data-testid="video-player" playsinline preload="metadata" aria-label="Video"></video><div id="unavailable" class="unavailable">The video isn't available here</div><img id="poster" data-testid="video-poster" class="poster" alt="" hidden><div id="caption" class="caption"></div></div>
+    <div class="transport"><button id="play" data-testid="video-play" type="button">Play</button><span id="count"></span></div><div id="chips" class="chips" aria-label="Chapter chips"></div><div id="timeline" class="timeline" aria-label="Chapter timeline"></div><p id="status" class="status" role="status"></p></section>
+    <aside id="inspectors" class="inspectors"><section id="proof"><h2>Checks</h2><p id="proof-summary" class="summary"></p><ol id="check-list" aria-label="Checks"></ol></section><h2>Text</h2><textarea id="say" aria-label="Chapter caption text" readonly></textarea><h2>Theme</h2><p id="theme-summary" class="summary"></p></aside></main>`);
+  const el = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
+  const root = el('video-editor'), list = el('chapter-list'), fields = el('editor-fields');
+  const player = el<HTMLVideoElement>('player'), chips = el('chips'), timeline = el('timeline'), caption = el('caption');
+  let port: MessagePort | null = null, v2: V2Port | null = null;
+  let surface: Surface = 'card', mode: Mode = 'simple', tab = 'chapters', protocol = 1;
+  let grants: string[] = [], cut: DemoCut | null = null, selected: string | null = null;
+  let seq = 0, busy = false, disposed = false, dragged: string | null = null;
+  let renaming: string | null = null, renameText = '', renameBase = 0;
+  let mediaUrl: string | null = null, mediaGeneration = 0, readingGeneration = 0, takePreview = false;
+  const pending = new Map<string, { resolve: (r: Reply) => void; timer: ReturnType<typeof setTimeout> }>();
+  const send = (type: string, payload: unknown): void => port?.postMessage({ p: PROTOCOL, v: ENVELOPE, type, payload });
+  const req = (type: string, payload: unknown): Promise<Reply> => new Promise(resolve => {
+    if (port === null || disposed) { resolve({ ok: false, error: { code: 'unavailable', message: 'No host here.' } }); return; }
+    const id = `wv-${++seq}`;
+    const timer = setTimeout(() => { pending.delete(id); resolve({ ok: false, error: { code: 'timeout', message: 'The host has not answered; check Versions.' } }); }, 10000);
+    pending.set(id, { resolve, timer }); port.postMessage({ p: PROTOCOL, v: ENVELOPE, type, id, payload });
+  });
+  const current = (): DemoChapter | undefined => cut?.chapters.find(c => c.id === selected);
+  const chapterAt = (sec: number): DemoChapter | undefined => cut?.chapters.find(c => c.startSec >= 0 && sec >= c.startSec && (c.durationSec < 0 || sec < c.startSec + c.durationSec));
+  const overlayOn = (c: DemoChapter | undefined): boolean => c !== undefined && c.startSec >= 0 && cut !== null && cut.style.captions.on && (takePreview || !(cut.style.captions.burnIn && cut.ffmpeg?.burnIn));
+  const editable = (): boolean => grants.includes('artifact.write') && !busy && !disposed;
+  const advanced = (): boolean => surface === 'options' || mode === 'advanced';
+  const status = (line: string): void => { el('status').textContent = line; send('ui.status', { line: line.replace(/[\r\n]/g, ' ').slice(0, 120) }); };
+  const publish = (): void => { if (protocol === 2 && cut !== null) for (const tab of ['captions', 'theme']) v2?.values(tab, videoValues(cut.style, tab, skin, cut.resolvedTheme)); };
+  /** The active studio skin as video colours, resolved from the host's tokens to plain rgb() (the colour grammar). */
+  let skin: VideoColours | null = null;
+  const resolveColour = (v: unknown): string | null => {
+    if (typeof v !== 'string' || v === '' || v.length > 200 || /url\(/i.test(v)) return null;
+    const probe = document.createElement('span'); probe.style.color = v; document.body.append(probe);
+    const c = getComputedStyle(probe).color; probe.remove();
+    return /^rgba?\(\s*\d/.test(c) ? c.replace(/\s+/g, ' ') : null;
+  };
+  const applyTheme = (raw: unknown): void => {
+    if (typeof raw !== 'object' || raw === null) return;
+    const t = raw as Record<string, unknown>;
+    const bg = resolveColour(t['--surface-raised'] ?? t['--surface-base']), fg = resolveColour(t['--ink-high']), ac = resolveColour(t['--accent']);
+    if (bg !== null && fg !== null && ac !== null) skin = { background: bg, foreground: fg, accent: ac };
+    // The host's tokens arrive named as CSS custom properties (`--surface-base`); a value is never a URL.
+    for (const [key, value] of Object.entries(raw)) if (typeof value === 'string' && /^--[a-z0-9-]+$/.test(key) && value.length <= 200 && !/url\(/i.test(value)) document.documentElement.style.setProperty(key, value);
+  };
+  const revoke = (): void => { if (mediaUrl !== null) URL.revokeObjectURL(mediaUrl); mediaUrl = null; player.removeAttribute('src'); };
+  /** No playable video (a failed walkthrough may have none): show its still — the failing frame, or the poster. */
+  let posterUrl: string | null = null;
+  async function poster(generation: number): Promise<void> {
+    const r = await req('artifact.media', { ref: 'poster' });
+    if (disposed || generation !== mediaGeneration) return;
+    const blob = r.payload?.['blob'], type = r.payload?.['type'];
+    const img = el('poster') as HTMLImageElement;
+    if (posterUrl !== null) { URL.revokeObjectURL(posterUrl); posterUrl = null; }
+    if (!r.ok || !(blob instanceof Blob) || typeof type !== 'string' || !type.startsWith('image/') || typeof URL.createObjectURL !== 'function') { img.hidden = true; return; }
+    posterUrl = URL.createObjectURL(blob);
+    img.src = posterUrl;
+    img.alt = cut?.proof?.verdict === 'FAIL' ? 'The moment the walkthrough failed' : 'The recording\'s still';
+    img.hidden = false;
+    el('unavailable').textContent = cut?.proof?.verdict === 'FAIL' ? 'No video: this is the moment it failed' : "The video isn't available here";
+  }
+  async function media(ref: 'video' | { chapter: string } = 'video', seekSec?: number): Promise<void> {
+    const generation = ++mediaGeneration;
+    if (!grants.includes('media.read')) { revoke(); el('unavailable').hidden = false; return; }
+    const r = await req('artifact.media', { ref });
+    if (disposed || generation !== mediaGeneration) return;
+    revoke();
+    const blob = r.payload?.['blob'], type = r.payload?.['type'];
+    if (!r.ok || !(blob instanceof Blob) || typeof type !== 'string' || !type.startsWith('video/') || typeof URL.createObjectURL !== 'function') { el('unavailable').hidden = false; void poster(generation); return; }
+    (el('poster') as HTMLImageElement).hidden = true;
+    if (posterUrl !== null) { URL.revokeObjectURL(posterUrl); posterUrl = null; (el('poster') as HTMLImageElement).removeAttribute('src'); }
+    mediaUrl = URL.createObjectURL(blob); player.src = mediaUrl;
+    el('unavailable').hidden = true;
+    drawCaption();
+    player.onloadedmetadata = () => {
+      if (!takePreview && cut !== null && Number.isFinite(player.duration)) {
+        for (const [i, c] of cut.chapters.entries()) if (c.startSec >= 0 && c.durationSec < 0) {
+          const end = cut.chapters.slice(i + 1).find(next => next.startSec >= 0)?.startSec ?? player.duration;
+          c.durationSec = Math.max(0, end - c.startSec); c.outSec = c.inSec + c.durationSec;
+        }
+        draw();
+      }
+      player.currentTime = seekSec ?? (takePreview ? current()?.inSec ?? 0 : Math.max(0, current()?.startSec ?? 0));
+    };
+  }
+  const button = (text: string, fn: () => void, testid?: string): HTMLButtonElement => {
+    const b = document.createElement('button'); b.type = 'button'; b.textContent = text; b.onclick = fn;
+    if (testid !== undefined) b.dataset['testid'] = testid;
+    return b;
+  };
+  function go(id: string, point = true): void {
+    if (!cut?.chapters.some(c => c.id === id && c.startSec >= 0)) return;
+    selected = id;
+    if (takePreview) { takePreview = false; void media(); }
+    player.currentTime = current()?.startSec ?? 0;
+    draw();
+    if (point && grants.includes('selection.chip')) send('selection.set', { anchors: [{ kind: 'chapter', id }] });
+  }
+  function move(id: string, delta: number): void {
+    const chapters = cut?.chapters ?? [], i = chapters.findIndex(c => c.id === id), to = i + delta;
+    if (to < 0 || to >= chapters.length) return;
+    const rest = chapters.filter(c => c.id !== id);
+    void write({ op: 'chapter-move', chapter: id, after: to === 0 ? null : rest[to - 1]!.id });
+  }
+  async function read(): Promise<boolean> {
+    const generation = ++readingGeneration;
+    const r = await req('artifact.read', {});
+    if (disposed || generation !== readingGeneration) return false;
+    const content = r.payload?.['content'] as DemoCut | undefined;
+    if (!r.ok || content?.type !== 'demo-cut' || !Array.isArray(content.chapters)) { status(r.error?.message ?? 'No cut is available here.'); return false; }
+    if (cut !== null && content.version < cut.version) return false;
+    const oldVersion = cut?.version;
+    cut = content;
+    if (oldVersion !== cut.version) takePreview = false;
+    if (!cut.chapters.some(c => c.id === selected && c.startSec >= 0)) selected = cut.chapters.find(c => c.startSec >= 0)?.id ?? null;
+    draw(); publish();
+    if (surface !== 'options' && oldVersion !== cut.version) void media();
+    return true;
+  }
+  async function write(op: ChapterOp, base = cut?.version): Promise<void> {
+    if (!editable() || cut === null || base === undefined) return;
+    busy = true; draw();
+    try {
+      const r = await req('version.write', { base, ops: [op], summary: `chapter ${cut.chapters.findIndex(c => c.id === op.chapter) + 1}` });
+      if (r.ok) { await read(); if (op.op === 'chapter-take' && surface !== 'options') { takePreview = true; void media({ chapter: op.chapter }); } }
+      else { status(r.error?.message ?? 'The chapter could not be saved.'); if (r.error?.code === 'head_moved') await read(); }
+    } finally { busy = false; draw(); }
+  }
+  function rename(c: DemoChapter): void {
+    if (!editable() || cut === null || renaming !== null) return;
+    renaming = c.id; renameText = c.title; renameBase = cut.version;
+    draw();
+    const input = fields.querySelector<HTMLInputElement>('[data-testid="video-rename-input"]');
+    input?.focus(); input?.select();
+  }
+  function renameInput(): HTMLInputElement | null {
+    const c = cut?.chapters.find(c => c.id === renaming);
+    if (c === undefined) { renaming = null; return null; }
+    const input = document.createElement('input'); input.value = renameText; input.maxLength = 80; input.setAttribute('aria-label', 'Chapter title'); input.dataset['testid'] = 'video-rename-input';
+    input.oninput = () => { renameText = input.value; };
+    input.onkeydown = e => {
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); renaming = null; draw(); }
+      else if (e.key === 'Enter') {
+        e.preventDefault(); e.stopPropagation();
+        renaming = null;
+        if (input.value.trim() && !/[\r\n]/.test(input.value) && input.value !== c.title) void write({ op: 'chapter-rename', chapter: c.id, title: input.value }, renameBase);
+        else draw();
+      }
+    };
+    return input;
+  }
+  function drawCaption(): void {
+    if (cut === null) return;
+    const style = cut.style, c = current();
+    caption.hidden = !overlayOn(c);
+    caption.dataset['position'] = style.captions.position; caption.dataset['look'] = style.captions.style;
+    const lines: string[] = []; let line = '';
+    for (const word of (c?.say ?? '').split(/\s+/)) {
+      if (line && (line + ' ' + word).length > style.captions.wrapChars) { lines.push(line); line = word; } else line += (line ? ' ' : '') + word;
+    }
+    if (line) lines.push(line);
+    caption.textContent = lines.slice(0, style.captions.maxLines).join('\n');
+    // E1's size is px at 1080p: at the player's width W that is size × W / 1920, i.e. size / 19.2 cqw.
+    caption.style.fontSize = `max(9px, ${style.captions.size / 19.2}cqw)`;
+    caption.style.maxHeight = `${style.captions.maxLines * 1.3 + 0.8}em`;
+    const colours = shownColours(style.theme, skin, cut.resolvedTheme);
+    const vars = { background: colours.background, foreground: colours.foreground, accent: colours.accent, font: paletteOf(style.theme) === 'studio' ? cut.resolvedTheme?.font ?? style.theme.font : style.theme.font };
+    for (const [k, v] of Object.entries(vars)) root.style.setProperty(`--video-${k}`, v);
+  }
+  function trimHandle(c: DemoChapter, edge: 'in' | 'out'): HTMLButtonElement {
+    const handle = button('', () => undefined, `video-trim-${edge}`); handle.className = 'trim-handle'; handle.dataset['edge'] = edge;
+    handle.setAttribute('role', 'slider'); handle.setAttribute('aria-label', `${edge === 'in' ? 'In' : 'Out'} trim`);
+    const duration = cut?.takes[c.id]?.find(t => t.file === c.take)?.durationSec ?? c.outSec;
+    handle.setAttribute('aria-valuemin', '0'); handle.setAttribute('aria-valuemax', String(duration)); handle.setAttribute('aria-valuenow', String(edge === 'in' ? c.inSec : c.outSec));
+    // Nothing to trim while the chapter's length is unknown or empty (agy h6-r1).
+    const unknownLength = c.durationSec <= 0 || c.outSec - c.inSec <= 0;
+    handle.disabled = !editable() || unknownLength;
+    handle.onpointerdown = e => {
+      if (!editable() || cut === null || unknownLength) return;
+      e.preventDefault(); e.stopPropagation();
+      const base = cut.version, x = e.clientX, width = handle.parentElement!.getBoundingClientRect().width || 1;
+      let inSec = c.inSec, outSec = c.outSec;
+      const update = (clientX: number): void => {
+        const delta = (clientX - x) / width * c.durationSec;
+        if (edge === 'in') inSec = Math.max(0, Math.min(c.outSec - 0.5, c.inSec + delta));
+        else outSec = Math.max(c.inSec + 0.5, Math.min(duration, c.outSec + delta));
+        handle.setAttribute('aria-valuenow', (edge === 'in' ? inSec : outSec).toFixed(2));
+        const input = fields.querySelector<HTMLInputElement>(`[data-testid="video-${edge}"]`); if (input) input.value = (edge === 'in' ? inSec : outSec).toFixed(2);
+      };
+      const drag = (m: PointerEvent): void => update(m.clientX);
+      const end = (m: PointerEvent): void => { update(m.clientX); clean(); if (inSec !== c.inSec || outSec !== c.outSec) void write({ op: 'chapter-trim', chapter: c.id, inSec, outSec }, base); };
+      const clean = (): void => { window.removeEventListener('pointermove', drag); window.removeEventListener('pointerup', end); window.removeEventListener('pointercancel', cancel); };
+      const cancel = (): void => { clean(); draw(); };
+      window.addEventListener('pointermove', drag); window.addEventListener('pointerup', end); window.addEventListener('pointercancel', cancel, { once: true });
+    };
+    handle.onkeydown = e => {
+      if (!editable() || unknownLength) return;
+      if (!['ArrowLeft', 'ArrowRight'].includes(e.key)) return;
+      e.preventDefault(); e.stopPropagation(); const delta = e.key === 'ArrowLeft' ? -0.1 : 0.1;
+      const inSec = edge === 'in' ? Math.max(0, Math.min(c.outSec - 0.5, c.inSec + delta)) : c.inSec;
+      const outSec = edge === 'out' ? Math.max(c.inSec + 0.5, Math.min(duration, c.outSec + delta)) : c.outSec;
+      if (inSec !== c.inSec || outSec !== c.outSec) void write({ op: 'chapter-trim', chapter: c.id, inSec, outSec });
+    };
+    return handle;
+  }
+  function drawProof(): void {
+    const proof = cut?.proof, checks = el('check-list');
+    checks.replaceChildren(); el('proof').hidden = proof === undefined;
+    if (proof === undefined || cut === null) return;
+    el('proof-summary').textContent = `${proof.verdict ?? 'Pending'}${proof.failedAtSec === null ? '' : ` · Failed at ${proof.failedAtSec.toFixed(1)}s`}`;
+    const end = !takePreview && Number.isFinite(player.duration) && player.duration > 0 ? player.duration : Math.max(1,
+      ...cut.chapters.filter(c => c.startSec >= 0).map(c => c.startSec + Math.max(0, c.durationSec)),
+      ...proof.checks.map(k => k.atSec ?? 0), proof.failedAtSec ?? 0);
+    const track = document.createElement('div'); track.className = 'check-track'; track.setAttribute('aria-label', 'Check timeline');
+    const mark = (sec: number, state: string, text: string, id: string): void => {
+      if (sec < 0 || !Number.isFinite(sec) || end <= 0) return;
+      const b = button(state === 'FAIL' ? '✗' : state === 'PASS' ? '✓' : '·', () => {
+        if (takePreview) { takePreview = false; void media('video', sec); }
+        player.currentTime = sec; player.dispatchEvent(new Event('timeupdate'));
+      }, id);
+      b.className = 'check-mark'; b.dataset['state'] = state; b.dataset['sec'] = String(sec);
+      b.style.left = `${Math.min(100, sec / end * 100)}%`; b.title = `${sec.toFixed(1)}s · ${text}`; b.setAttribute('aria-label', b.title);
+      track.append(b);
+    };
+    for (const k of proof.checks) {
+      const chapter = cut.chapters.find(c => c.id === k.chapter)?.title ?? k.chapter;
+      const text = `${k.state} · ${chapter} · ${k.text}`;
+      const row = document.createElement('li'); row.dataset['testid'] = 'video-check'; row.dataset['state'] = k.state;
+      row.textContent = `${text}${k.atSec === null ? '' : ` · ${k.atSec.toFixed(1)}s`}`; checks.append(row);
+      if (k.atSec !== null) mark(k.atSec, k.state, text, 'video-check-mark');
+    }
+    if (proof.failedAtSec !== null && !proof.checks.some(k => k.state === 'FAIL' && k.atSec === proof.failedAtSec)) {
+      mark(proof.failedAtSec, 'FAIL', 'Failed', 'video-failure-mark');
+    }
+    timeline.dataset['proof'] = String(track.childElementCount > 0); timeline.append(track);
+  }
+  function draw(): void {
+    const active = document.activeElement as HTMLElement | null;
+    const previousRename = fields.querySelector<HTMLInputElement>('[data-testid="video-rename-input"]');
+    if (previousRename !== null) renameText = previousRename.value;
+    const renameFocused = active === previousRename, renameStart = previousRename?.selectionStart, renameEnd = previousRename?.selectionEnd;
+    const focusedChapter = active?.dataset['chapter'];
+    const focusedControl = active?.dataset['testid'];
+    root.dataset['surface'] = surface; root.dataset['mode'] = mode; root.dataset['head'] = String(cut?.version ?? 0); root.dataset['current'] = selected ?? '';
+    el('chapters').hidden = surface === 'card' || (surface === 'options' && tab !== 'chapters');
+    el('work').hidden = surface === 'options'; el('inspectors').hidden = surface !== 'full' || mode !== 'advanced';
+    timeline.hidden = surface !== 'full'; chips.hidden = surface !== 'card';
+    list.replaceChildren(); chips.replaceChildren(); timeline.replaceChildren(); fields.replaceChildren(); timeline.dataset['proof'] = 'false';
+    if (cut === null) return;
+    if (renaming !== null) {
+      const input = renameInput();
+      if (input !== null) {
+        fields.prepend(input);
+        if (renameFocused) { input.focus(); input.setSelectionRange(renameStart ?? null, renameEnd ?? null); }
+      }
+    }
+    cut.chapters.forEach((c, i) => {
+      const row = document.createElement('li');
+      const b = button('', () => go(c.id), 'video-chapter'); b.className = 'chapter'; b.dataset['chapter'] = c.id;
+      b.disabled = c.startSec < 0; if (b.disabled) b.title = 'Not in this recording';
+      const n = document.createElement('span'); n.className = 'number'; n.textContent = String(i + 1);
+      const title = document.createElement('span'); title.textContent = c.title;
+      const duration = document.createElement('span'); duration.className = 'duration'; duration.textContent = c.durationSec < 0 ? '—' : `${c.durationSec.toFixed(1)}s`;
+      b.append(n, title, duration); b.setAttribute('aria-current', String(c.id === selected)); b.setAttribute('aria-label', `Chapter ${i + 1}: ${c.title}`);
+      if (c.verdict === 'PASS' || c.verdict === 'FAIL') {
+        const verdict = document.createElement('span'); verdict.className = 'chapter-verdict'; verdict.dataset['verdict'] = c.verdict;
+        verdict.textContent = c.verdict === 'PASS' ? '✓' : '✗'; verdict.setAttribute('aria-label', c.verdict); b.append(verdict);
+      }
+      b.ondblclick = () => { if (advanced()) rename(c); };
+      row.draggable = advanced() && editable();
+      row.ondragstart = e => { dragged = c.id; e.dataTransfer?.setData('text/plain', c.id); };
+      row.ondragover = e => { if (advanced() && editable()) e.preventDefault(); };
+      row.ondrop = e => {
+        e.preventDefault(); if (dragged === null || dragged === c.id || !advanced()) return;
+        const rest = cut!.chapters.filter(x => x.id !== dragged), at = rest.findIndex(x => x.id === c.id);
+        const rect = row.getBoundingClientRect();
+        const after = e.clientY >= rect.top + rect.height / 2 ? c.id : at === 0 ? null : rest[at - 1]!.id;
+        void write({ op: 'chapter-move', chapter: dragged, after }); dragged = null;
+      };
+      row.ondragend = () => { dragged = null; };
+      row.append(b); list.append(row);
+      const chip = button(`${i + 1} · ${c.title}`, () => go(c.id), 'video-chip'); chip.className = 'chip'; chip.setAttribute('aria-current', String(c.id === selected)); chips.append(chip);
+      chip.disabled = c.startSec < 0; if (chip.disabled) chip.title = 'Not in this recording';
+      const segment = document.createElement('div'); segment.className = 'segment-box'; segment.style.flex = String(c.durationSec < 0 ? 1 : c.durationSec);
+      const seg = button(`${i + 1} · ${c.title}`, () => go(c.id), 'video-segment'); seg.className = 'segment'; seg.setAttribute('aria-current', String(c.id === selected)); segment.append(seg);
+      seg.disabled = c.startSec < 0; if (seg.disabled) seg.title = 'Not in this recording';
+      if (mode === 'advanced' && c.id === selected) segment.append(trimHandle(c, 'in'), trimHandle(c, 'out'));
+      timeline.append(segment);
+    });
+    drawProof();
+    const c = current();
+    el('hint').textContent = c === undefined ? '' : "Re-record this chapter: the host's button";
+    el('count').textContent = c === undefined ? 'No chapters' : `${cut.chapters.findIndex(x => x.id === c.id) + 1} of ${cut.chapters.length}`;
+    el<HTMLTextAreaElement>('say').value = c?.say ?? '';
+    const t = cut.style.theme;
+    const shown = shownColours(t, skin, cut.resolvedTheme), pal = paletteOf(t);
+    el('theme-summary').textContent = `${pal === 'studio' ? 'Studio skin (default)' : pal === 'custom' ? 'Custom colours' : 'Preset: ' + pal}\n${pal === 'studio' ? cut.resolvedTheme?.font ?? t.font : t.font}\nBackground ${shown.background}\nText ${shown.foreground}\nAccent ${shown.accent}\nTitle card: ${t.titleCard.on ? t.titleCard.title : 'Off'}\nEnd card: ${t.endCard.on ? t.endCard.title : 'Off'}`;
+    drawCaption();
+    if (focusedChapter !== undefined) Array.from(list.querySelectorAll<HTMLElement>('[data-chapter]')).find(n => n.dataset['chapter'] === focusedChapter)?.focus();
+    if (!advanced() || surface === 'card' || c === undefined) return;
+    const buttons = document.createElement('div'); buttons.className = 'buttons';
+    const renameBtn = button('Rename', () => rename(c), 'video-rename'), up = button('Move up', () => move(c.id, -1), 'video-move-up'), down = button('Move down', () => move(c.id, 1), 'video-move-down');
+    renameBtn.disabled = !editable(); up.disabled = !editable() || cut.chapters[0]?.id === c.id; down.disabled = !editable() || cut.chapters.at(-1)?.id === c.id;
+    buttons.append(renameBtn, up, down); fields.append(buttons);
+    const base = cut.version, trim = document.createElement('div'); trim.className = 'trim-fields';
+    const input = (text: string, value: number, id: string): HTMLInputElement => {
+      const label = document.createElement('label'); label.textContent = text;
+      const node = document.createElement('input'); node.type = 'number'; node.step = '0.1'; node.min = '0'; node.value = String(value); node.dataset['testid'] = id; node.setAttribute('aria-label', text); node.disabled = !editable();
+      node.max = String(cut!.takes[c.id]?.find(t => t.file === c.take)?.durationSec ?? c.outSec); label.append(node); trim.append(label); return node;
+    };
+    const inInput = input('In (seconds)', c.inSec, 'video-in'), outInput = input('Out (seconds)', c.outSec, 'video-out');
+    const save = (): void => {
+      const inSec = inInput.valueAsNumber, outSec = outInput.valueAsNumber;
+      if (inSec === c.inSec && outSec === c.outSec) return;
+      if (!Number.isFinite(inSec) || !Number.isFinite(outSec) || inSec < 0 || outSec - inSec < 0.5 || outSec > Number(outInput.max)) { status('Keep at least 0.5 seconds within this take.'); return; }
+      void write({ op: 'chapter-trim', chapter: c.id, inSec, outSec }, base);
+    };
+    inInput.onchange = save; outInput.onchange = save; fields.append(trim);
+    const takes = cut.takes[c.id] ?? [];
+    if (takes.length > 1) {
+      const label = document.createElement('label'); label.textContent = 'Take';
+      const select = document.createElement('select'); select.setAttribute('aria-label', 'Take'); select.dataset['testid'] = 'video-take'; select.disabled = !editable();
+      takes.forEach((t, i) => { const o = document.createElement('option'); o.value = t.file; o.textContent = `Take ${i + 1} · ${t.durationSec.toFixed(1)}s`; select.append(o); });
+      select.value = c.take; select.onchange = () => { if (select.value !== c.take) void write({ op: 'chapter-take', chapter: c.id, take: select.value }, base); }; label.append(select); fields.append(label);
+      if (surface !== 'options') fields.append(button('Preview take', () => { takePreview = true; void media({ chapter: c.id }); }, 'video-preview-take'));
+    }
+    if (focusedControl !== undefined && !focusedControl.includes('rename-input')) {
+      const focus = root.querySelector<HTMLElement>(`[data-testid="${focusedControl}"]`);
+      if (focus && !(focus as HTMLButtonElement).disabled && !focus.closest('[hidden]')) focus.focus();
+    }
+  }
+  async function optionsChanged(tab: string, id: string, value: unknown) {
+    const control = declaration.options?.tabs.find(t => t.id === tab)?.controls?.find(c => c.id === id);
+    if (cut === null || control === undefined || !controlValueOk(control, value) || !grants.includes('artifact.theme') || (typeof value === 'string' && /[\r\n]/.test(value))) return { applied: false, values: cut === null ? {} : videoValues(cut.style, tab, skin, cut.resolvedTheme), reason: 'That style change is not available.' };
+    if (busy) return { applied: false, values: videoValues(cut.style, tab, skin, cut.resolvedTheme), reason: 'A cut is being saved.' };
+    busy = true; draw();
+    try {
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const style = changedVideoStyle(cut.style, tab, id, value);
+        const r = await req('theme.set', { base: cut.version, tokens: { kind: 'video-style', style } });
+        if (r.ok) { const confirmed = await read(); return { applied: confirmed, values: videoValues(cut.style, tab, skin, cut.resolvedTheme), ...(confirmed ? {} : { reason: 'The saved style could not be read.' }) }; }
+        if (r.error?.code === 'head_moved' && attempt === 0 && await read()) continue;
+        publish(); return { applied: false, values: videoValues(cut.style, tab, skin, cut.resolvedTheme), reason: r.error?.message ?? 'Style was not changed.' };
+      }
+      return { applied: false, values: videoValues(cut.style, tab, skin, cut.resolvedTheme) };
+    } finally { busy = false; draw(); }
+  }
+  const playing = (): void => { el('play').textContent = player.paused ? 'Play' : 'Pause'; };
+  player.onplay = playing; player.onpause = playing;
+  el('play').onclick = () => { if (mediaUrl === null) return; if (player.paused) void player.play().catch(() => status("The video isn't available here")); else player.pause(); };
+  player.onerror = () => { el('unavailable').hidden = false; };
+  player.ontimeupdate = () => {
+    if (cut === null || takePreview) return;
+    const c = chapterAt(player.currentTime);
+    if (c !== undefined && c.id !== selected) { selected = c.id; draw(); }
+    caption.hidden = !overlayOn(c);
+  };
+  root.onkeydown = e => {
+    const target = e.target as HTMLElement;
+    const mod = e.metaKey || e.ctrlKey;
+    if (forwardOptionsKey(e, root, key => send('ui.key', { key }))) return;
+    if (target.closest('input,textarea,select')) return;
+    if (e.key === 'Tab') return;
+    if (e.altKey && !mod && ['ArrowUp', 'ArrowDown'].includes(e.key) && advanced() && selected !== null) { e.preventDefault(); move(selected, e.key === 'ArrowUp' ? -1 : 1); return; }
+    if (mod || e.altKey) return;
+    if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key) && cut !== null) {
+      e.preventDefault(); const chapters = cut.chapters.filter(c => c.startSec >= 0), at = chapters.findIndex(c => c.id === selected);
+      const i = e.key === 'Home' ? 0 : e.key === 'End' ? chapters.length - 1 : Math.max(0, Math.min(chapters.length - 1, at + (e.key === 'ArrowRight' ? 1 : -1)));
+      const c = chapters[i]; if (c) go(c.id); return;
+    }
+    if (target.closest('button') && [' ', 'Enter'].includes(e.key)) return;
+    if (e.key.length === 1) { e.preventDefault(); send('ui.typed', { grapheme: e.key }); }
+  };
+  function dispose(): void {
+    disposed = true; ++mediaGeneration; ++readingGeneration; revoke(); if (posterUrl !== null) { URL.revokeObjectURL(posterUrl); posterUrl = null; }
+    for (const { timer, resolve } of pending.values()) { clearTimeout(timer); resolve({ ok: false, error: { code: 'unavailable', message: 'Editor closed.' } }); }
+    pending.clear(); port?.close(); window.removeEventListener('message', hello);
+  }
+  function hello(e: MessageEvent): void {
+    const d = e.data as Envelope | null;
+    if (port !== null || d?.p !== PROTOCOL || d.v !== ENVELOPE || d.type !== 'host.hello' || !e.ports[0]) return;
+    const h = helloOf(d.payload), p = d.payload as Record<string, unknown>;
+    surface = h.surface; mode = h.mode ?? 'simple'; tab = h.tab ?? 'chapters'; protocol = h.protocol;
+    grants = Array.isArray(p['grants']) ? p['grants'].filter((x): x is string => typeof x === 'string') : [];
+    applyTheme(p['theme']); port = e.ports[0];
+    v2 = new V2Port(port, {
+      surface(s, m) { const was = surface; surface = s; if (m !== null) mode = m; draw(); if (was === 'options' && s !== 'options') void media(); },
+      mode(m) { mode = m; draw(); return mode; },
+      action(id) {
+        const chapters = cut?.chapters.filter(c => c.startSec >= 0) ?? [];
+        if (!['next', 'prev'].includes(id) || cut === null || chapters.length === 0) return { handled: false };
+        const at = chapters.findIndex(c => c.id === selected), next = Math.max(0, Math.min(chapters.length - 1, at + (id === 'next' ? 1 : -1)));
+        const c = chapters[next]!; go(c.id);
+        return { handled: true, status: `Chapter ${cut.chapters.indexOf(c) + 1} of ${cut.chapters.length} · ${c.title}` };
+      },
+      tab(t) { tab = t; draw(); },
+      selection(anchors) { const a = anchors.find(x => typeof x === 'object' && x !== null && (x as { kind: unknown }).kind === 'chapter') as { id?: unknown } | undefined; if (typeof a?.id === 'string') go(a.id, false); },
+      optionsChanged,
+    });
+    port.onmessage = (event: MessageEvent) => {
+      const msg = event.data as Envelope | null;
+      if (msg?.p !== PROTOCOL || msg.v !== ENVELOPE) return;
+      if (typeof msg.re === 'string') {
+        const entry = pending.get(msg.re); if (entry === undefined) return;
+        clearTimeout(entry.timer); pending.delete(msg.re); entry.resolve({ ok: msg.ok === true, ...(msg.payload !== undefined ? { payload: msg.payload as Record<string, unknown> } : {}), ...(msg.error === undefined ? {} : { error: msg.error }) }); return;
+      }
+      if (protocol === 2 && v2?.dispatch(msg)) return;
+      const p = (msg.payload ?? {}) as Record<string, unknown>;
+      switch (msg.type) {
+        case 'host.ping': if (msg.id) port?.postMessage({ p: PROTOCOL, v: ENVELOPE, re: msg.id, ok: true, payload: {} }); break;
+        case 'host.size': if (p['size'] === 'inline' || p['size'] === 'pane' || p['size'] === 'full') {
+          const was = surface;
+          surface = protocol === 1 && p['size'] === 'pane' ? 'full' : surfaceOfSize(p['size']);
+          draw(); if (was === 'options' && surface !== 'options') void media();
+        } break;
+        case 'host.theme': applyTheme(p['theme']); publish(); drawCaption(); draw(); break;
+        case 'artifact.changed': if (typeof p['head'] !== 'number' || cut === null || p['head'] > cut.version) void read(); break;
+        case 'host.teardown': dispose(); break;
+        case 'selection.cleared': selected = null; draw(); break;
+      }
+    };
+    port.start(); draw(); void read();
+  }
+  window.addEventListener('message', hello); window.addEventListener('pagehide', dispose, { once: true });
+  draw(); announceReady('wicked-video', surfaces);
+}
+start();
