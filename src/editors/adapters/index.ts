@@ -7,3 +7,4 @@ import './fake.js';
 import './review.js';
 import './requirements.js';
 import './recording.js';
+import './mcp.js';
