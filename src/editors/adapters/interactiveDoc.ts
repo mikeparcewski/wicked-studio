@@ -14,8 +14,10 @@ const FORMATS: Readonly<Record<string, readonly ExportOption[]>> = {
 export class InteractiveDocSurfaceAdapter extends InteractiveDocAdapter implements SurfaceAdapter {
   readonly source = 'interactive-doc' as const;
   private readonly listeners = new Set<() => void>();
-  constructor(private readonly binding: ArtifactBinding) {
-    super(binding.projectId, binding.docId ?? '', binding.title, binding.kind, () => { for (const l of this.listeners) l(); void this.parts(); });
+  /** `opts` reach InteractiveDocAdapter as they are: a port re-registers `interactive-doc` with its own (H4b's
+   *  `requirements`), e.g. `registerAdapter('interactive-doc', (b) => new InteractiveDocSurfaceAdapter(b, {...}))`. */
+  constructor(private readonly binding: ArtifactBinding, opts: ConstructorParameters<typeof InteractiveDocAdapter>[5] = {}) {
+    super(binding.projectId, binding.docId ?? '', binding.title, binding.kind, () => { for (const l of this.listeners) l(); void this.parts(); }, opts);
   }
   /** The parts the head has (a deck's slides), counted at the last `parts()` read: no kind branch decides it. */
   private partsSeen = 0;

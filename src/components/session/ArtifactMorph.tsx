@@ -12,6 +12,7 @@ import { NoEditorPage, PluginArtifact } from './PluginArtifact.js';
 import { useEditorFor, useEditors } from '../../store/editors.js';
 import { DEMO_VIDEO_ID, openLaunchWizard } from '../../store/launchWizard.js';
 import { PluginCard } from '../editorHost/PluginCard.js';
+import type { AdapterSource } from '../../editors/hostApi.js';
 
 /** WT-U1: a body other than the page-editor family — a run's walkthrough, a demo's video (EP-D3) —
  *  behind the same chrome: its kind (the artifact's `data-kind`) and the body drawn at each size.
@@ -67,15 +68,22 @@ type ArtifactMorphProps = {
  * the plugin speaks protocol 2. A protocol-1 plugin renders exactly as today. Only a kind no plugin claims yet (a `document` until `wicked-doc`, H4b)
  * and the slot bodies (walkthrough, demo video, plan, until H6) keep the morphing section below.
  */
+/** The data plane a slot body lives in (HOST-API §2): a walkthrough's recording, a demo video's cut. */
+const SLOT_SOURCE: Readonly<Record<ArtifactSlot['kind'], AdapterSource | null>> = { walkthrough: 'walkthrough', 'demo-video': 'demo', plan: null };
+
 export function ArtifactMorph(props: ArtifactMorphProps): React.ReactElement {
-  const kind = props.kind ?? 'page';
+  // A slot (walkthrough, demo video) is claimed by its slot kind; anything else by the document's kind.
+  const kind: string = props.slot?.kind ?? props.kind ?? 'page';
+  const source: AdapterSource | null = props.slot === undefined ? 'interactive-doc' : SLOT_SOURCE[props.slot.kind];
   const editor = useEditorFor(kind);
   // A protocol-1 plugin keeps rendering exactly as today (DES §7.1, codex h2a-r1 P2); a plugin that speaks 2 is drawn
   // from its declaration (and falls back to the v1 mapping inside the card if its declaration is refused).
-  if (props.slot === undefined && editor !== null && editor !== undefined && editor.protocol.includes(2)) {
+  if (source !== null && editor !== null && editor !== undefined && editor.protocol.includes(2)) {
+    // The run is the key's own prefix (`artifactKey(projectId, docId, runId)` = `<runId>:<projectId>/<docId>`).
+    const runId = props.artifactKey.includes(':') ? props.artifactKey.slice(0, props.artifactKey.indexOf(':')) : undefined;
     return (
       <PluginCard
-        binding={{ artifactKey: props.artifactKey, title: props.title, kind, source: 'interactive-doc', projectId: props.projectId, docId: props.docId, composerKey: props.composerKey, repoId: props.repoId ?? null, producedBy: props.producedBy ?? null }}
+        binding={{ artifactKey: props.artifactKey, title: props.title, kind, source, projectId: props.projectId, docId: props.docId, ...(runId !== undefined ? { runId } : {}), composerKey: props.composerKey, repoId: props.repoId ?? null, producedBy: props.producedBy ?? null }}
         editor={editor}
       />
     );

@@ -157,6 +157,7 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
       const src = srcProp ?? bundleUrl(apiBase(), editor.id, editor.version, editor.sha256);
       loaded.current = { src, grants: decided.grants };
       const kind = binding.kind as EditorKind;
+      const bridge = adapter.mcpBridge?.();
       const host = new EditorHost({
         container: frameBox.current,
         src,
@@ -172,6 +173,7 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
         firstParty: editor.first_party,
         adapter,
         declared: declared ?? (editor as EditorView & { surfaces?: unknown }).surfaces,
+        ...(bridge !== undefined ? { mcp: bridge } : {}),
         sizes: editor.sizes,
         ui: {
           // The binding is read through its ref: a composer that changes while the card stays mounted gets the chips.

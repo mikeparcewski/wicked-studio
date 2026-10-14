@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { create } from 'zustand';
 import type { EditorView } from '../api/editors.js';
-import type { HostAdapter } from './host.js';
+import type { HostAdapter, McpHostBridge } from './host.js';
 import type { VersionKind } from './model.js';
 import type { AnchorRef, PermissionId } from './protocol.js';
 import type { FullMode, Surfaces } from './surfaces.js';
@@ -68,6 +68,9 @@ export interface SurfaceAdapter extends HostAdapter {
   refresh?(): Promise<{ head: number; kind: VersionKind } | null>;
   /** Make an export file of `version` (needs `export`): the host draws the working line and the Download link. */
   exportFile?(format: string, version: number): Promise<ExportOutcome>;
+  /** The MCP session the operator connected in host chrome, for an `mcp` artifact (H5): handed to the card's host
+   *  as `HostOptions.mcp`. Absent = `mcp.request` answers `unavailable`. */
+  mcpBridge?(): McpHostBridge | undefined;
   /** Host chrome re-renders on a change of pills/parts/head. */
   subscribe?(onChange: () => void): () => void;
 }
