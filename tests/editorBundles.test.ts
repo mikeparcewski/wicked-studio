@@ -2,6 +2,8 @@
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import docSurfaces from '../src/plugins/wicked-doc/surfaces.json';
+import { canonicalSurfaces, parseSurfaces } from '../src/editors/surfaces.js';
 import deckSurfaces from '../src/plugins/wicked-deck/surfaces.json';
 import { buildEditors, EDITORS, externalReferences } from '../scripts/build-editors.mjs';
 
@@ -17,6 +19,22 @@ beforeAll(async () => { written = await buildEditors(out, { version: '9.9.9' });
 afterAll(() => rmSync(out, { recursive: true, force: true }));
 
 describe('the first-party editor bundles', () => {
+  it('ships the document editor with protocol 2, matching surfaces and coverage permission', () => {
+    const doc = written.find((w) => w.id === 'wicked-doc')!;
+    const manifest = JSON.parse(readFileSync(join(doc.dir, 'editor.json'), 'utf8'));
+    expect(manifest.title).toBe('Document');
+    expect(manifest.kinds).toEqual(['document']);
+    expect(manifest.protocol).toEqual([1, 2]);
+    expect(manifest.sizes).toEqual(['inline', 'pane', 'full']);
+    const declared = parseSurfaces(manifest.surfaces);
+    const expected = parseSurfaces(docSurfaces);
+    expect(declared.ok).toBe(true); expect(expected.ok).toBe(true);
+    if (declared.ok && expected.ok) expect(canonicalSurfaces(declared.value)).toBe(canonicalSurfaces(expected.value));
+    expect(manifest.permissions.map((p: { id: string }) => p.id).sort()).toEqual(['artifact.read', 'artifact.theme', 'artifact.write', 'checks.read', 'network.media', 'selection.chip', 'ui.fullscreen']);
+    const html = readFileSync(join(doc.dir, 'index.html'), 'utf8');
+    expect(html).toContain('<meta name="wicked-editor" content="wicked-doc">');
+    expect(html).toContain('<title>Document</title>');
+  });
   it('builds every declared editor into <outDir>/editors/<id>/ with its manifest', () => {
     expect(written.map((w) => w.id)).toEqual(EDITORS.map((e) => e.id));
     for (const w of written) {
@@ -50,6 +68,7 @@ describe('the first-party editor bundles', () => {
   });
   it('the page editor speaks wicked.editor/2 for `page` and asks only for what it uses', () => {
     const page = EDITORS.find((e) => e.id === 'wicked-page');
+    expect(page?.title).toBe('Page');
     expect(page?.kinds).toEqual(['page']);
     expect(page?.protocol).toEqual([1, 2]);
     expect(page?.permissions.map((p) => p.id).sort()).toEqual(['artifact.read', 'artifact.theme', 'artifact.write', 'network.media', 'selection.chip', 'ui.fullscreen']);
