@@ -1,11 +1,14 @@
+import surfaces from './surfaces.json';
+import { announceReady, helloOf, V2Port, sizeOfSurface, type Surface } from '../_shared/v2.js';
+import { mountStyle, copyTokens, THEMES, type ThemeTokens } from '../_shared/style.js';
 import { deckOf, topSlideElements, type DeckSlide } from '../../board/deck.js';
 import { overlayBox, type OverlayBox, type ScrollState } from '../../interactive/anchoring.js';
 import { REQUEST_INVENTORY, parseInbound as parseBridge, type WidBlock, type WidRect } from '../../interactive/instrument-protocol.js';
 import { appendInstrumentBridge, hasInstrumentBridge } from '../../interactive/instrumented.js';
 
 /**
- * `wicked-deck` — the built-in slide editor as a `wicked.editor/1` plugin (DES-PRESENTATION-EDITOR-001
- * §3, slice P-D1; the editor-plugin contract DES-EDITOR-PLUGINS-001 §5). A separate plugin from
+ * `wicked-deck` — the built-in slide editor as a `wicked.editor/2` plugin, also compatible with v1
+ * (DES-PRESENTATION-EDITOR-001 §3, slice P-D1; DES-EDITOR-PLUGINS-001 §5). A separate plugin from
  * `wicked-page` (operator decision D1), so the page editor stays untouched.
  *
  *  - THE FILMSTRIP is the deck's slides in DOCUMENT ORDER, named by their `data-slide-id` and numbered
@@ -60,10 +63,19 @@ const MARKUP = `
       <button type="button" id="up" data-testid="deck-move-up" title="Move this slide up (⌥↑)" aria-label="Move up">↑ Up</button>
       <button type="button" id="down" data-testid="deck-move-down" title="Move this slide down (⌥↓)" aria-label="Move down">↓ Down</button>
       <button type="button" id="del" class="danger" data-testid="deck-delete" title="Delete this slide (⌘⌫) — Undo puts it back">Delete</button>
+      <div class="zoom" role="group" aria-label="Slide zoom">
+        <button type="button" id="fit" data-testid="deck-fit" aria-pressed="true">Fit</button>
+        <button type="button" id="zoom-100" data-testid="deck-zoom-100" aria-pressed="false">100%</button>
+      </div>
+      <button type="button" id="fullscreen" data-testid="deck-fullscreen">Full screen</button>
       <button type="button" id="present" data-testid="deck-present" title="Show the slide on its own; ← → move, Esc leaves">Present</button>
     </div>
     <div data-testid="deck-add-menu" id="menu" class="menu" role="menu" aria-label="Add a slide like" hidden></div>
+    <div id="style-panel" data-testid="deck-style" hidden></div>
     <div data-testid="deck-stage" id="stage" class="stage">
+      <div id="slide-box" class="slide-box"></div>
+      <div data-testid="deck-cutoff" id="cutoff-bottom" class="cutoff" data-edge="bottom" hidden><span>Cut off below</span></div>
+      <div data-testid="deck-cutoff" id="cutoff-right" class="cutoff" data-edge="right" hidden><span>Cut off right</span></div>
       <div data-testid="deck-hover-box" id="hover" class="box box--hover" hidden></div>
       <div data-testid="deck-selected-box" id="selected" class="box" data-wid="" hidden></div>
       <textarea data-testid="deck-edit-input" id="input" class="input" rows="1" aria-label="New text" hidden></textarea>
@@ -72,7 +84,7 @@ const MARKUP = `
     </div>
     <p data-testid="deck-hint" id="hint" class="hint" hidden></p>
     <p data-testid="deck-note" id="note" class="note" hidden></p>
-    <div id="notes-box" class="notes">
+    <div id="notes-box" data-testid="deck-notes-tab" class="notes">
       <label for="notes" id="notes-label" data-testid="deck-notes-label">Speaker notes</label>
       <textarea id="notes" data-testid="deck-notes" placeholder="What to say on this slide. Saved when you leave the field; Undo puts the old notes back."></textarea>
     </div>
@@ -94,11 +106,34 @@ const keyOf = (s: DeckSlide): string => s.id ?? `#${s.n}`;
  */
 export function oneSlideHtml(html: string, index: number, opts: { thumbnail: boolean }): string {
   const doc = new DOMParser().parseFromString(html, 'text/html');
-  topSlideElements(doc).forEach((s, i) => { if (i !== index) s.setAttribute('data-wi-deck-off', ''); });
+  topSlideElements(doc).forEach((s, i) => { if (i !== index) s.setAttribute('data-wi-deck-off', ''); else s.setAttribute('data-wi-deck-current', ''); });
   const style = doc.createElement('style');
-  style.textContent = `[data-wi-deck-off]{display:none!important}${opts.thumbnail ? 'html,body{overflow:hidden!important}' : ''}`;
+  style.textContent = '[data-wi-deck-off]{display:none!important}html,body{overflow:hidden!important}';
   doc.head.append(style);
   if (opts.thumbnail) for (const s of Array.from(doc.querySelectorAll('script'))) s.remove();
+  else {
+    // The shared bridge's rect inventory catches anchored overflow. Measure scroll extents
+    // alongside its inventory request too, so unanchored content is also reported. This
+    // executes INSIDE the slide's sandbox; no deck strings are interpolated into code.
+    const measure = doc.createElement('script');
+    measure.textContent = `(function(){
+      function report(){
+        var slide=document.querySelector('[data-wi-deck-current]');
+        if(!slide)return;
+        parent.postMessage({v:1,type:'deck-extents',width:slide.scrollWidth,height:slide.scrollHeight},'*');
+      }
+      window.addEventListener('message',function(e){if(e.source===parent&&e.data&&e.data.v===1&&e.data.type==='request-inventory')report();});
+      window.addEventListener('resize',report);
+      window.addEventListener('load',function(){
+        report();
+        var slide=document.querySelector('[data-wi-deck-current]');
+        if(slide&&typeof ResizeObserver==='function')new ResizeObserver(report).observe(slide);
+        if(slide&&typeof MutationObserver==='function')new MutationObserver(report).observe(slide,{childList:true,subtree:true,characterData:true,attributes:true});
+        if(document.fonts)document.fonts.ready.then(report);
+      });
+    })();`;
+    doc.body.append(measure);
+  }
   return `<!doctype html>${doc.documentElement.outerHTML}`;
 }
 
@@ -117,6 +152,14 @@ export function start(): void {
   const presentBtn = el<HTMLButtonElement>('present');
   const menu = el<HTMLDivElement>('menu');
   const stage = el<HTMLDivElement>('stage');
+  const slideBox = el<HTMLDivElement>('slide-box');
+  const cutoffBottom = el<HTMLDivElement>('cutoff-bottom');
+  const cutoffRight = el<HTMLDivElement>('cutoff-right');
+  const fitBtn = el<HTMLButtonElement>('fit');
+  const zoomBtn = el<HTMLButtonElement>('zoom-100');
+  const fullscreenBtn = el<HTMLButtonElement>('fullscreen');
+  const styleRoot = el<HTMLDivElement>('style-panel');
+  const notesBox = el<HTMLDivElement>('notes-box');
   const hoverBox = el<HTMLDivElement>('hover');
   const selBox = el<HTMLDivElement>('selected');
   const input = el<HTMLTextAreaElement>('input');
@@ -132,6 +175,13 @@ export function start(): void {
   let port: MessagePort | null = null;
   let grants: string[] = [];
   let size: Size = 'pane';
+  let protocol = 1;
+  let surface: Surface = 'options';
+  let tab = 'style';
+  let v2: V2Port | null = null;
+  let zoom: 'fit' | '100' = 'fit';
+  let themeTokens: ThemeTokens | null = null;
+  let followedSlide: string | null = null;
   let seq = 0;
   const pending = new Map<string, (r: Reply) => void>();
   const send = (type: string, payload: unknown): void => { port?.postMessage({ p: PROTOCOL, v: PROTOCOL_VERSION, type, payload }); };
@@ -167,6 +217,7 @@ export function start(): void {
   let readyGen = -1;
   let timers: ReturnType<typeof setTimeout>[] = [];
   let inventory: Inventory | null = null;
+  let extents: { width: number; height: number } | null = null;
   let scroll: ScrollState = { scrollX: 0, scrollY: 0 };
   let hover: string | null = null;
   let selected: string | null = null;
@@ -180,13 +231,32 @@ export function start(): void {
     const w = stage.clientWidth;
     const h = stage.clientHeight;
     if (w === 0 || h === 0) return { x: 0, y: 0, s: 1 };
-    const s = Math.min(w / SLIDE_W, h / SLIDE_H);
+    const s = zoom === '100' && size !== 'inline' && !present ? 1 : Math.min(w / SLIDE_W, h / SLIDE_H);
     return { x: Math.max(0, (w - SLIDE_W * s) / 2), y: Math.max(0, (h - SLIDE_H * s) / 2), s };
   };
   const placeFrame = (): void => {
     if (frame === null) return;
     const g = geom();
-    frame.style.cssText = `left:${g.x}px;top:${g.y}px;width:${SLIDE_W}px;height:${SLIDE_H}px;transform:scale(${g.s})`;
+    slideBox.style.cssText = `left:${g.x}px;top:${g.y}px;width:${SLIDE_W * g.s}px;height:${SLIDE_H * g.s}px`;
+    frame.style.cssText = `width:${SLIDE_W}px;height:${SLIDE_H}px;transform:scale(${g.s})`;
+    stage.dataset['zoom'] = zoom === '100' && size !== 'inline' && !present ? '100' : 'fit';
+    fitBtn.setAttribute('aria-pressed', String(zoom === 'fit'));
+    zoomBtn.setAttribute('aria-pressed', String(zoom === '100'));
+    drawCutoff();
+  };
+
+  // Inventory rects are measured inside the opaque slide frame. Add the measurement's
+  // scroll offset to get document extents; never inspect contentDocument from here.
+  const drawCutoff = (): void => {
+    const rects = Object.values(inventory?.widMap ?? {}).filter((r) => r.width > 0 && r.height > 0);
+    const height = rects.reduce((h, r) => Math.max(h, r.bottom + (inventory?.measured.scrollY ?? 0)), Math.max(SLIDE_H + scroll.scrollY, extents?.height ?? 0));
+    const width = rects.reduce((w, r) => Math.max(w, r.right + (inventory?.measured.scrollX ?? 0)), Math.max(SLIDE_W + scroll.scrollX, extents?.width ?? 0));
+    const g = geom();
+    const visible = protocol === 2 && surface === 'full' && !present;
+    cutoffBottom.hidden = !visible || height <= SLIDE_H;
+    cutoffRight.hidden = !visible || width <= SLIDE_W;
+    cutoffBottom.style.cssText = `left:${g.x}px;top:${g.y + SLIDE_H * g.s - 1}px;width:${SLIDE_W * g.s}px`;
+    cutoffRight.style.cssText = `left:${g.x + SLIDE_W * g.s - 1}px;top:${g.y}px;height:${SLIDE_H * g.s}px`;
   };
 
   const box = (wid: string | null): OverlayBox | null => {
@@ -222,6 +292,14 @@ export function start(): void {
     deck.dataset['currentN'] = c === null ? '' : String(c.n);
     deck.dataset['count'] = String(n);
     deck.dataset['size'] = size;
+    deck.dataset['surface'] = surface;
+    deck.dataset['tab'] = tab;
+    const options = protocol === 2 && surface === 'options';
+    strip.hidden = size === 'inline' || present || options;
+    stage.hidden = options;
+    styleRoot.hidden = !options || tab !== 'style';
+    notesBox.hidden = size === 'inline' || present || (options && tab !== 'notes');
+    drawCutoff();
     deck.dataset['present'] = String(present);
     deck.dataset['selected'] = selected ?? '';
     document.body.dataset['present'] = String(present);
@@ -234,7 +312,7 @@ export function start(): void {
     presentBtn.disabled = n === 0;
     addBtn.setAttribute('aria-expanded', String(menuOpen));
     menu.hidden = !menuOpen || size === 'inline';
-    badge.hidden = size !== 'inline' || n === 0;
+    badge.hidden = protocol === 2 || size !== 'inline' || n === 0;
     badge.textContent = `${n} slide${n === 1 ? '' : 's'}`;
     presentBar.hidden = !present;
     presentBar.textContent = `${c?.n ?? 0} / ${n} · ← → · Esc leaves`;
@@ -251,8 +329,8 @@ export function start(): void {
     selBox.dataset['wid'] = selected ?? '';
     place(selBox, pickable && editing === null ? box(selected) : null);
     if (editing !== null) place(input, box(editing.wid), 160, 30); else input.hidden = true;
-    tools.hidden = size === 'inline' || present;
-    if (size === 'inline' || present || editing !== null) { hint.hidden = true; return; }
+    tools.hidden = size === 'inline' || present || options;
+    if (size === 'inline' || present || options || editing !== null) { hint.hidden = true; return; }
     hint.hidden = false;
     if (selected === null) { hint.removeAttribute('data-editable'); hint.textContent = n === 0 ? '' : '← → to move between slides · click a line to point at it · type on it to change it'; return; }
     const e = editable(selected);
@@ -335,11 +413,13 @@ export function start(): void {
   const showSlide = (): void => {
     gen += 1;
     inventory = null;
+    extents = null;
+    scroll = { scrollX: 0, scrollY: 0 };
     hover = null;
     selected = null;
     cancelEdit();
-    const i = size === 'inline' ? 0 : at();
-    if (slides.length === 0) { frame?.remove(); frame = null; draw(); return; }
+    const i = protocol === 1 && size === 'inline' ? 0 : at();
+    if (slides.length === 0) { slideBox.replaceChildren(); frame = null; draw(); return; }
     const doc = oneSlideHtml(html, i, { thumbnail: false });
     const next = document.createElement('iframe');
     for (const [k, v] of Object.entries({ 'data-testid': 'deck-frame', sandbox: 'allow-scripts', title: `Slide ${i + 1}` })) next.setAttribute(k, v);
@@ -347,20 +427,22 @@ export function start(): void {
     // The previous slide stays on screen until this one has loaded (no flash between slides). Every
     // frame that is not the current one goes then — however many slides were stepped past before any
     // of them loaded — or after 2 s, should this one never load.
-    const prune = (): void => { for (const f of Array.from(stage.querySelectorAll('iframe'))) if (f !== frame) f.remove(); };
+    const prune = (): void => { for (const f of Array.from(slideBox.querySelectorAll('iframe'))) if (f !== frame) f.remove(); };
     next.addEventListener('load', () => { askInventory(next); if (frame === next) prune(); });
-    next.srcdoc = hasInstrumentBridge(doc) ? doc : appendInstrumentBridge(doc);
-    stage.insertBefore(next, stage.firstChild);
+    // Check the original HTML: our extent listener also mentions request-inventory.
+    next.srcdoc = hasInstrumentBridge(html) ? doc : appendInstrumentBridge(doc);
+    slideBox.prepend(next);
     placeFrame();
     setTimeout(() => { if (frame === next) prune(); }, 2000);
     draw();
   };
 
-  const go = (key: string | null): void => {
+  const go = (key: string | null, relay = true): void => {
     if (key === null || key === current || !slides.some((s) => keyOf(s) === key)) { draw(); return; }
     commitNotes();
     current = key;
     showSlide();
+    if (relay && protocol === 2 && surface !== 'options') pointAtSlide();
   };
   const step = (by: number): void => {
     const i = Math.max(0, Math.min(slides.length - 1, at() + by));
@@ -369,7 +451,7 @@ export function start(): void {
   };
   /** A click on a slide makes it the subject of the next message (the host writes the chip). */
   const pointAtSlide = (): void => {
-    const w = cur()?.wid;
+    const w = protocol === 2 ? (cur()?.id ?? cur()?.wid) : cur()?.wid;
     if (w != null && grants.includes('selection.chip')) send('selection.set', { anchors: [{ kind: 'element', id: w }] });
   };
 
@@ -379,6 +461,29 @@ export function start(): void {
   // a newer one, and never becomes the base of the next write (codex r1).
   const newer = (a: { version?: number }, b: { version?: number }): { version?: number } =>
     (a.version === undefined || b.version === undefined ? {} : a.version >= b.version ? a : b);
+  const acceptRead = (payload: Record<string, unknown>): void => {
+    const v = payload['version'];
+    if (typeof v === 'number' && head !== null && v < head) return;
+    note.hidden = true;
+    const content = payload['content'] as { type?: unknown; html?: unknown } | undefined;
+    html = typeof content?.html === 'string' ? content.html : '';
+    head = typeof v === 'number' ? v : head;
+    readThemeTokens(html);
+    stylePanel.refresh();
+    slides = deckOf(html);
+    if (goIndexAfterRender !== null) {
+      const s = slides[Math.max(0, Math.min(slides.length - 1, goIndexAfterRender))];
+      current = s === undefined ? null : keyOf(s);
+      goIndexAfterRender = null;
+    } else if (!slides.some((s) => keyOf(s) === current)) {
+      current = slides[0] === undefined ? null : keyOf(slides[0]);
+    }
+    const followed = slides.find((s) => s.id === followedSlide || s.wid === followedSlide);
+    if (surface === 'options' && followed !== undefined) current = keyOf(followed);
+    buildStrip();
+    showSlide();
+    if (protocol === 2 && surface !== 'options') pointAtSlide();
+  };
   const render = async (version?: number): Promise<void> => {
     if (version !== undefined && head !== null && version <= head) return;
     if (rendering) { const want = version === undefined ? {} : { version }; queued = queued === null ? want : newer(queued, want); return; }
@@ -386,22 +491,7 @@ export function start(): void {
     try {
       const r = await req('artifact.read', version === undefined ? {} : { version });
       if (!r.ok) { note.hidden = false; note.textContent = r.error.code === 'not_granted' ? 'This editor may not read the deck here.' : `The deck could not be read (${r.error.code}).`; return; }
-      const v = r.payload['version'];
-      if (typeof v === 'number' && head !== null && v < head) return;
-      note.hidden = true;
-      const content = r.payload['content'] as { type?: unknown; html?: unknown } | undefined;
-      html = typeof content?.html === 'string' ? content.html : '';
-      head = typeof v === 'number' ? v : head;
-      slides = deckOf(html);
-      if (goIndexAfterRender !== null) {
-        const s = slides[Math.max(0, Math.min(slides.length - 1, goIndexAfterRender))];
-        current = s === undefined ? null : keyOf(s);
-        goIndexAfterRender = null;
-      } else if (!slides.some((s) => keyOf(s) === current)) {
-        current = slides[0] === undefined ? null : keyOf(slides[0]);
-      }
-      buildStrip();
-      showSlide();
+      acceptRead(r.payload);
     } finally {
       rendering = false;
       if (queued !== null) {
@@ -412,9 +502,67 @@ export function start(): void {
     }
   };
 
+  /** Read the document's own --wi-* theme declarations, never studio's chrome theme. */
+  const readThemeTokens = (content: string): void => {
+    const doc = new DOMParser().parseFromString(content, 'text/html');
+    const css = Array.from(doc.querySelectorAll('style')).map((s) => s.textContent ?? '').join('\n');
+    const values = new Map<string, string>();
+    for (const m of css.matchAll(/(--wi-[a-z-]+)\s*:\s*([^;}{]+)/gi)) values.set(m[1]!.toLowerCase(), m[2]!.trim());
+    if (values.size === 0) return;
+    const t = copyTokens(THEMES[0]!);
+    t.name = 'custom';
+    const colors = { background: '--wi-bg', surface: '--wi-surface', primary: '--wi-primary', secondary: '--wi-secondary', accent: '--wi-accent', text_primary: '--wi-text', text_secondary: '--wi-text-secondary', text_muted: '--wi-muted', border: '--wi-border' } as const;
+    for (const key of Object.keys(colors) as (keyof typeof colors)[]) {
+      const value = values.get(colors[key]);
+      if (value !== undefined && /^(#(?:[0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})|(?:rgb|hsl)a?\([0-9.,%\s]+\))$/i.test(value)) t.colors[key] = value;
+    }
+    for (const key of ['heading', 'body', 'mono'] as const) {
+      const value = values.get(`--wi-font-${key}`);
+      if (value !== undefined) t.fonts[key] = value.split(',')[0]!.trim().replace(/^['"]|['"]$/g, '');
+    }
+    // Keep a named preset when its readback has the same tokens.
+    const match = THEMES.find((theme) => JSON.stringify(theme.colors) === JSON.stringify(t.colors) && JSON.stringify(theme.fonts) === JSON.stringify(t.fonts));
+    t.name = match?.name ?? 'custom';
+    themeTokens = t;
+  };
+
+  const stylePanel = mountStyle(styleRoot, {
+    tokens: () => themeTokens,
+    apply: async (tokens) => {
+      if (protocol !== 2 || !grants.includes('artifact.theme')) return { ok: false, reason: 'Theme changes are not granted here.' };
+      if (head === null) return { ok: false, reason: 'The deck has not loaded yet.' };
+      // Exactly one optimistic write, with one retry after re-reading a moved head.
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        const r = await req('theme.set', { base: head, tokens });
+        if (r.ok) {
+          themeTokens = copyTokens(tokens);
+          await render(typeof r.payload['version'] === 'number' ? r.payload['version'] : undefined);
+          return { ok: true };
+        }
+        if (r.error.code !== 'head_moved') return { ok: false, reason: r.error.message || r.error.code };
+        const read = await req('artifact.read', {});
+        if (!read.ok) return { ok: false, reason: read.error.message || read.error.code };
+        const nextHead = read.payload['version'];
+        if (typeof nextHead !== 'number' || (head !== null && nextHead < head)) return { ok: false, reason: 'The current deck version could not be read.' };
+        acceptRead(read.payload);
+        if (attempt === 1) return { ok: false, reason: r.error.message || r.error.code };
+      }
+      return { ok: false, reason: 'The deck changed meanwhile.' };
+    },
+  });
+
   // ── bridge → plugin (the stage frame's own window, this document's generation only) ──
   window.addEventListener('message', (e: MessageEvent) => {
     if (frame === null || frame.contentWindow === null || e.source !== frame.contentWindow || readyGen !== gen) return;
+    const data = e.data as { v?: unknown; type?: unknown; width?: unknown; height?: unknown } | null;
+    if (data !== null && typeof data === 'object' && data.v === 1 && data.type === 'deck-extents') {
+      if (typeof data.width === 'number' && Number.isFinite(data.width) && data.width >= 0 &&
+          typeof data.height === 'number' && Number.isFinite(data.height) && data.height >= 0) {
+        extents = { width: data.width, height: data.height };
+        draw();
+      }
+      return;
+    }
     const msg = parseBridge(e.data);
     if (msg === null) return;
     if (msg.type === 'wid-inventory') {
@@ -622,6 +770,9 @@ export function start(): void {
   downBtn.addEventListener('click', () => moveBy(1));
   delBtn.addEventListener('click', () => deleteSlide());
   presentBtn.addEventListener('click', () => void enterPresent());
+  fullscreenBtn.addEventListener('click', () => { void req('ui.fullscreen', {}).then((r) => { if (!r.ok) status(r.error.message); }); });
+  fitBtn.addEventListener('click', () => { zoom = 'fit'; placeFrame(); draw(); });
+  zoomBtn.addEventListener('click', () => { zoom = '100'; placeFrame(); draw(); });
 
   const enterPresent = async (): Promise<void> => {
     if (slides.length === 0) return;
@@ -653,7 +804,7 @@ export function start(): void {
   };
 
   deck.addEventListener('keydown', (e) => {
-    if (e.target === input || e.target === notes) return;
+    if (e.target === input || e.target === notes || styleRoot.contains(e.target as Node) || (protocol === 2 && surface === 'options')) return;
     const onButton = (e.target as HTMLElement | null)?.tagName === 'BUTTON';
     const onThumb = (e.target as HTMLElement | null)?.dataset?.['testid'] === 'deck-thumb';
     // Enter after digits typed in the filmstrip goes to that slide; otherwise a button's keys are its own.
@@ -726,8 +877,8 @@ export function start(): void {
     document.body.dataset['size'] = to;
     if (to === 'inline') { present = false; cancelEdit(); selected = null; menuOpen = false; (document.activeElement as HTMLElement | null)?.blur?.(); }
     if (to !== 'full' && present) present = false;
-    // The inline preview always shows slide 1; leaving it shows the current slide again.
-    if ((was === 'inline') !== (to === 'inline') && slides.length > 0) showSlide();
+    // Only v1's inline preview shows slide 1; a v2 morph keeps the current frame.
+    if (protocol === 1 && (was === 'inline') !== (to === 'inline') && slides.length > 0) showSlide();
     placeFrame();
     draw();
   };
@@ -751,6 +902,7 @@ export function start(): void {
         else r({ ok: false, error: d.error ?? { code: 'unavailable', message: 'no answer' }, payload });
         return;
       }
+      if (protocol === 2 && v2?.dispatch(d)) return;
       const p = typeof d.payload === 'object' && d.payload !== null ? d.payload as Record<string, unknown> : {};
       switch (d.type) {
         case 'host.ping':
@@ -787,14 +939,52 @@ export function start(): void {
     port.onmessage = onPort;
     const p = typeof d.payload === 'object' && d.payload !== null ? d.payload as Record<string, unknown> : {};
     grants = Array.isArray(p['grants']) ? (p['grants'] as unknown[]).filter((g): g is string => typeof g === 'string') : [];
+    const hello = helloOf(p);
+    protocol = hello.protocol;
+    surface = hello.surface;
+    tab = hello.tab ?? 'style';
+    document.body.dataset['protocol'] = String(protocol);
+    document.body.dataset['surface'] = surface;
+    v2 = new V2Port(port, {
+      surface: (to) => {
+        if (to === 'options') return; // Only the card/full instance morphs.
+        surface = to;
+        document.body.dataset['surface'] = to;
+        setSize(sizeOfSurface(to));
+      },
+      action: (id) => {
+        if (surface === 'options' || (id !== 'prev' && id !== 'next')) return { handled: false };
+        const next = at() + (id === 'next' ? 1 : -1);
+        if (next < 0 || next >= slides.length) return { handled: false };
+        step(id === 'next' ? 1 : -1);
+        return { handled: true, status: `Slide ${at() + 1} of ${slides.length}` };
+      },
+      tab: (to) => {
+        if (surface !== 'options' || (to !== 'style' && to !== 'notes')) return;
+        notes.blur();
+        tab = to;
+        stylePanel.refresh();
+        draw();
+      },
+      selection: (anchors) => {
+        if (surface !== 'options') return;
+        for (const anchor of anchors) {
+          if (typeof anchor !== 'object' || anchor === null) continue;
+          const a = anchor as { kind?: unknown; id?: unknown };
+          if (a.kind !== 'element' || typeof a.id !== 'string') continue;
+          const slide = slides.find((s) => s.id === a.id || s.wid === a.id);
+          // A selection may arrive before the first artifact.read answers.
+          if (slides.length === 0 || slide !== undefined) followedSlide = a.id;
+          if (slide !== undefined) { notes.blur(); go(keyOf(slide), false); break; }
+        }
+      },
+    });
     applyTheme(p['theme']);
-    setSize(p['size'] === 'inline' || p['size'] === 'full' ? p['size'] : 'pane');
+    setSize(protocol === 2 ? sizeOfSurface(surface) : hello.size);
     void render();
   });
 
-  void strip;
-  const version = document.querySelector('meta[name="wicked-editor-version"]')?.getAttribute('content') ?? '0.0.0';
-  parent.postMessage({ p: PROTOCOL, v: PROTOCOL_VERSION, type: 'plugin.ready', payload: { editor: EDITOR, version, protocol: [PROTOCOL_VERSION] } }, '*');
+  announceReady(EDITOR, surfaces);
 }
 
 start();
