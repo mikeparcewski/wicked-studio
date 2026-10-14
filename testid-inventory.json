@@ -11,10 +11,10 @@
   "version": 1,
   "studioVersion": "0.8.0",
   "counts": {
-    "files": 227,
-    "occurrences": 2799,
-    "static": 2411,
-    "dynamic": 70,
+    "files": 228,
+    "occurrences": 2812,
+    "static": 2422,
+    "dynamic": 71,
     "computed": 24
   },
   "static": [
@@ -1922,6 +1922,12 @@
       ]
     },
     {
+      "testId": "deck-cutoff",
+      "files": [
+        "src/plugins/wicked-deck/plugin.ts"
+      ]
+    },
+    {
       "testId": "deck-delete",
       "files": [
         "src/plugins/wicked-deck/plugin.ts"
@@ -1946,7 +1952,19 @@
       ]
     },
     {
+      "testId": "deck-fit",
+      "files": [
+        "src/plugins/wicked-deck/plugin.ts"
+      ]
+    },
+    {
       "testId": "deck-frame",
+      "files": [
+        "src/plugins/wicked-deck/plugin.ts"
+      ]
+    },
+    {
+      "testId": "deck-fullscreen",
       "files": [
         "src/plugins/wicked-deck/plugin.ts"
       ]
@@ -2001,6 +2019,12 @@
     },
     {
       "testId": "deck-notes-label",
+      "files": [
+        "src/plugins/wicked-deck/plugin.ts"
+      ]
+    },
+    {
+      "testId": "deck-notes-tab",
       "files": [
         "src/plugins/wicked-deck/plugin.ts"
       ]
@@ -2144,6 +2168,12 @@
       ]
     },
     {
+      "testId": "deck-style",
+      "files": [
+        "src/plugins/wicked-deck/plugin.ts"
+      ]
+    },
+    {
       "testId": "deck-thumb",
       "files": [
         "src/plugins/wicked-deck/plugin.ts"
@@ -2151,6 +2181,12 @@
     },
     {
       "testId": "deck-tools",
+      "files": [
+        "src/plugins/wicked-deck/plugin.ts"
+      ]
+    },
+    {
+      "testId": "deck-zoom-100",
       "files": [
         "src/plugins/wicked-deck/plugin.ts"
       ]
@@ -5724,6 +5760,30 @@
       ]
     },
     {
+      "testId": "match-theme",
+      "files": [
+        "src/components/editorPorts/MatchTheme.tsx"
+      ]
+    },
+    {
+      "testId": "match-theme-go",
+      "files": [
+        "src/components/editorPorts/MatchTheme.tsx"
+      ]
+    },
+    {
+      "testId": "match-theme-input",
+      "files": [
+        "src/components/editorPorts/MatchTheme.tsx"
+      ]
+    },
+    {
+      "testId": "match-theme-line",
+      "files": [
+        "src/components/editorPorts/MatchTheme.tsx"
+      ]
+    },
+    {
       "testId": "mcp-add-auth-into",
       "files": [
         "src/components/McpToolsPage.tsx"
@@ -7304,6 +7364,12 @@
       "testId": "page-selected-box",
       "files": [
         "src/components/session/PageEditor.tsx",
+        "src/plugins/wicked-page/plugin.ts"
+      ]
+    },
+    {
+      "testId": "page-style",
+      "files": [
         "src/plugins/wicked-page/plugin.ts"
       ]
     },
@@ -14915,6 +14981,12 @@
       "pattern": "live-narration-toggle-*",
       "files": [
         "src/components/LiveNarration.tsx"
+      ]
+    },
+    {
+      "pattern": "match-theme-*",
+      "files": [
+        "src/components/editorPorts/MatchTheme.tsx"
       ]
     },
     {
