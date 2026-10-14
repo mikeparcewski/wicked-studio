@@ -312,7 +312,11 @@ with sync_playwright() as p:
           and paged["total"] == "60" and paged["rows"] == "50" and paged["shown"] == 50 and "(the first 50 of 60)" in paged["line"], **absent, more_than_a_page=paged)
 
     # ════ THE SLIDE EDITOR (P-D1: the `wicked-deck` plugin; desk_deck_editor_test.py walks it) ═══
-    set_fixture(origin, doc_bound_run={"pid": PID, "doc": DECK}, editors=True)
+    # Crew's builtin posture allows a first-party editor what it declares; the fixture's default grants are a pack's,
+    # so the deck's artifact.export (Export ▾) is granted here as the daemon grants it.
+    set_fixture(origin, doc_bound_run={"pid": PID, "doc": DECK}, editors=True,
+                editor_grants=["artifact.read", "artifact.write", "selection.chip", "composer.draft", "checks.contribute",
+                               "ui.fullscreen", "artifact.export", "artifact.theme"])
     open_session(page, "deck", editor="wicked-deck")
     card = page.locator('[data-testid="plugin-card"][data-editor="wicked-deck"]')
     deck_frame = page.frame_locator('[data-testid="plugin-card"][data-editor="wicked-deck"] [data-testid="editor-frame"]')
