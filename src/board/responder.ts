@@ -69,10 +69,15 @@ export function askingResponder(view: RunView, roster: Roster): Responder {
  * `producedBy`). No finished making step on a seat: crew's.
  */
 export function producerOf(view: RunView, roster: Roster): Responder {
-  const makers = view.units.filter((u) => typeof u.assigned_cli === 'string' && u.assigned_cli !== '' && u.status === 'done'
-    && u.stage !== 'review' && !/review|judge|evaluat/i.test(String(u.role ?? '')));
+  const makers = view.units.filter((u) => typeof u.assigned_cli === 'string' && u.assigned_cli !== '' && u.status === 'done' && !isReviewUnit(u));
   const last = [...makers].sort((a, b) => b.ord - a.ord)[0];
   return last === undefined ? CREW : seatResponder(last.assigned_cli!, roster);
+}
+
+/** A step that judges work rather than making it: a review or critique stage, or a reviewing role
+ *  (the wire carries crew's stage words, `critique` included, beyond the typed `StageKind`). */
+export function isReviewUnit(u: { stage?: unknown; role?: unknown }): boolean {
+  return /^(review|critique)$/i.test(String(u.stage ?? '')) || /review|judge|evaluat|critic/i.test(String(u.role ?? ''));
 }
 
 /** Two entries with the same key share one "who" line. */

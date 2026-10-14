@@ -10,6 +10,7 @@ import { seatLabel } from '../../board/seatNames.js';
 import { ORPHANED_LINE, orphanedOf } from '../../board/sessionModel.js';
 import { finishedDeliveryArm } from '../../board/proposalCard.js';
 import { useRoster } from '../../hooks/useRoster.js';
+import { isReviewUnit } from '../../board/responder.js';
 import { useRunAcceptance } from '../../hooks/useRunAcceptance.js';
 import { useRunEvents } from '../../hooks/useRunEvents.js';
 import { useGateStore } from '../../store/gates.js';
@@ -26,9 +27,12 @@ function primaryRun(runs: SessionView[]): SessionView | undefined {
   return [...runs].reverse().find((view) => !isTerminal(view)) ?? runs[runs.length - 1];
 }
 
+/** The step the run is on: the running one, else (a live run waiting or between steps) the first step
+ *  not yet finished — a step waiting on you at its gate is not "done", and the next one is not "now". */
 function currentStep(view: SessionView, chain: ChainModel): ChainStep | undefined {
+  if (isTerminal(view)) return undefined;
   return chain.steps.find((step) => step.state === 'running')
-    ?? (!isTerminal(view) ? chain.steps.find((step) => step.state === 'todo') : undefined);
+    ?? chain.steps.find((step) => !['done', 'checked', 'replaced', 'struck'].includes(step.state));
 }
 
 function assignedClis(view: SessionView): string[] {
@@ -99,7 +103,7 @@ function RunTabDetails({ view, title }: { view: SessionView; title: string }): R
             {chain.steps.map((step) => (
               <li key={step.id} data-testid="run-tab-phase" data-state={step.state} data-current={step === current ? 'true' : 'false'} className="wk-run-tab-phase">
                 {(step.state === 'done' || step.state === 'checked') && <span aria-label="Done">✓ </span>}
-                {step.label}{step === current && <span className="wk-run-tab-pill">now</span>}
+                {step.label}{step === current && <span className="wk-run-tab-pill">{view.session.status === 'awaiting_human' ? 'waiting on you' : 'now'}</span>}
               </li>
             ))}
           </ol>
@@ -111,8 +115,7 @@ function RunTabDetails({ view, title }: { view: SessionView; title: string }): R
           <ul className="wk-run-tab-list">
             {clis.map((cli) => {
               const seat = roster?.find((entry) => entry.key === cli);
-              const reviews = view.units.some((unit) => unit.assigned_cli === cli
-                && (/review|judge|evaluat/i.test(unit.role ?? '') || unit.stage === 'review'));
+              const reviews = view.units.some((unit) => unit.assigned_cli === cli && isReviewUnit(unit));
               return (
                 <li key={cli} data-testid="run-tab-agent" data-cli={cli} className="wk-run-tab-agent">
                   <button type="button" className="wk-run-tab-name" onClick={() => openSheet({ kind: 'helper', runId: id, cli })}>

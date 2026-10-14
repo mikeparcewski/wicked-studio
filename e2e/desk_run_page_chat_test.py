@@ -79,8 +79,11 @@ PAGE = """() => {
 
 
 def open_run(page, run_id: str, theme: str) -> dict:
-    set_fixture(origin, sessions=True, run_chat_id=True, walkthrough=True, walk_recorded=3, extra_frames=[], reset_walkthrough=True,
-                appearance={**DEFAULT_APPEARANCE, "theme": theme})
+    # r-review is served (paused at its review gate) under gate_move; r-walk-demo under walkthrough.
+    flags = ({"gate_move": True, "walkthrough": False, "sessions": False, "run_chat_id": False} if run_id == "r-review"
+             else {"gate_move": False, "walkthrough": True, "walk_recorded": 3, "extra_frames": [], "reset_walkthrough": True,
+                   "sessions": True, "run_chat_id": True})
+    set_fixture(origin, appearance={**DEFAULT_APPEARANCE, "theme": theme}, **flags)
     page.goto(f"{origin}/s/run%3A{run_id}", wait_until="networkidle")
     try:
         page.get_by_test_id("session-run").first.wait_for(state="visible", timeout=15000)
@@ -130,7 +133,7 @@ with sync_playwright() as p:
 
     # ── 5. narrow: the ribbon, and it opens the panel over the page ──────────────────────────────
     page.set_viewport_size({"width": 1100, "height": H})
-    set_fixture(origin, appearance={**DEFAULT_APPEARANCE, "theme": "light"})
+    set_fixture(origin, gate_move=True, walkthrough=False, sessions=False, run_chat_id=False, appearance={**DEFAULT_APPEARANCE, "theme": "light"})
     page.goto(f"{origin}/s/run%3Ar-review", wait_until="networkidle")
     page.get_by_test_id("host-panel-ribbon").wait_for(state="visible", timeout=15000)
     page.wait_for_timeout(500)
