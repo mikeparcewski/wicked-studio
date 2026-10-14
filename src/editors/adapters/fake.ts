@@ -7,7 +7,7 @@ export class FakeSurfaceAdapter extends FakeDocAdapter implements SurfaceAdapter
   constructor(binding: Pick<ArtifactBinding, 'kind' | 'title'>, html?: string) {
     super(html ?? (binding.kind === 'deck' ? SAMPLE_DECK : SAMPLE_PAGE), binding.title, { kind: binding.kind });
   }
-  capabilities(): readonly AdapterCapability[] { return ['read', 'write', 'versions']; }
+  capabilities(): readonly AdapterCapability[] { return ['read', 'write']; }
   pills(): readonly StatusPill[] { return [{ id: 'version', text: `Version ${this.artifact().head}`, tone: 'neutral' }]; }
 }
 
