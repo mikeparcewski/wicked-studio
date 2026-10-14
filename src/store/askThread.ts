@@ -60,6 +60,9 @@ interface AskThreadState {
   runs: ReadonlySet<string>;
   /** Per run: a `plan.accepted` carried a creator step — from then on every gate is real work's (#1). */
   creatorAccepted: Record<string, boolean>;
+  /** Run clarity, per run: its chat was CLOSED (crew reclaimed it) — the composer starts a separate ask
+   *  there, so it can no longer answer the path's turn gate; from then on every gate is drawn. */
+  chatClosed: Record<string, boolean>;
   /** Per run: the TURN gate the gate store left undrawn (`{ord, at}`) — the one positive fact the
    *  needs-you fold and the thread act on; an UNKNOWN gate is never treated as a turn gate (#2). */
   turnGates: Record<string, { ord: number; at: number }>;
@@ -87,6 +90,8 @@ interface AskThreadState {
   /** The session's hydrate saw the accepted plan carry a creator step. POSITIVE knowledge only: an
    *  empty fold (a remount before the rows arrive) never resets it (codex r2 #1). */
   markCreatorAccepted: (runId: string) => void;
+  /** Run clarity: the run's chat is closed — its turn gates are drawn from now on. */
+  markChatClosed: (runId: string) => void;
   /** The runs list arrived: a recorded turn gate on a run that no longer waits, or that waits at a
    *  different unit than the record's, is stale (a transition missed across a reconnect) and goes, so
    *  the gate that follows is read back and drawn (codex r2 #2, r3). */
@@ -113,6 +118,7 @@ export const useAskThreadStore = create<AskThreadState>((set) => ({
   runByChat: {},
   runs: new Set<string>(),
   creatorAccepted: {},
+  chatClosed: {},
   turnGates: {},
   replySeq: {},
   paByChat: {},
@@ -152,6 +158,12 @@ export const useAskThreadStore = create<AskThreadState>((set) => ({
       let answerOrds = s.answerOrds;
       for (const o of ords) answerOrds = withOrd(answerOrds, runId, o);
       return answerOrds === s.answerOrds ? s : { answerOrds };
+    }),
+  markChatClosed: (runId) =>
+    set((s) => {
+      if (s.chatClosed[runId] === true) return s;
+      const turnGates = { ...s.turnGates }; delete turnGates[runId];
+      return { chatClosed: { ...s.chatClosed, [runId]: true }, turnGates };
     }),
   markCreatorAccepted: (runId) =>
     set((s) => {

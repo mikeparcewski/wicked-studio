@@ -12,8 +12,8 @@
   "studioVersion": "0.7.13",
   "counts": {
     "files": 210,
-    "occurrences": 2510,
-    "static": 2187,
+    "occurrences": 2515,
+    "static": 2192,
     "dynamic": 63,
     "computed": 24
   },
@@ -1058,6 +1058,12 @@
     },
     {
       "testId": "chain-step-check",
+      "files": [
+        "src/components/session/ChainLine.tsx"
+      ]
+    },
+    {
+      "testId": "chain-step-now",
       "files": [
         "src/components/session/ChainLine.tsx"
       ]
@@ -3124,7 +3130,19 @@
       ]
     },
     {
+      "testId": "failure-engine",
+      "files": [
+        "src/components/session/RunRecord.tsx"
+      ]
+    },
+    {
       "testId": "failure-engine-detail",
+      "files": [
+        "src/components/session/RunRecord.tsx"
+      ]
+    },
+    {
+      "testId": "failure-engine-reason",
       "files": [
         "src/components/session/RunRecord.tsx"
       ]
@@ -6638,6 +6656,18 @@
     },
     {
       "testId": "plugin-card-note",
+      "files": [
+        "src/components/editorHost/PluginCard.tsx"
+      ]
+    },
+    {
+      "testId": "plugin-card-offer",
+      "files": [
+        "src/components/editorHost/PluginCard.tsx"
+      ]
+    },
+    {
+      "testId": "plugin-card-offer-accept",
       "files": [
         "src/components/editorHost/PluginCard.tsx"
       ]

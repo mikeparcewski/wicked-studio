@@ -13,7 +13,7 @@ import { useGateStore } from '../src/store/gates.js';
 const frame = (f: Record<string, unknown>): CoreEvent => f as unknown as CoreEvent;
 
 beforeEach(() => {
-  useAskThreadStore.setState({ turns: {}, runByChat: {}, runs: new Set(), creatorAccepted: {}, turnGates: {}, replySeq: {}, paByChat: {}, retiredByChat: {}, answerOrds: {} });
+  useAskThreadStore.setState({ turns: {}, runByChat: {}, runs: new Set(), creatorAccepted: {}, chatClosed: {}, turnGates: {}, replySeq: {}, paByChat: {}, retiredByChat: {}, answerOrds: {} });
   useCapabilities.setState({ loaded: true, askPath: true });
   useGateStore.setState({ gates: {}, approaching: {} });
 });
@@ -131,6 +131,25 @@ describe('stale turn gates (codex r2 #2)', () => {
     expect(useAskThreadStore.getState().creatorAccepted['r1']).toBe(true);
     expect(useAskThreadStore.getState().turnGates['r1']).toBeUndefined();
     expect('setCreatorAccepted' in useAskThreadStore.getState()).toBe(false);
+  });
+});
+
+describe('run clarity: a closed chat’s turn gate is a gate like any other', () => {
+  it('markChatClosed drops the recorded turn gate, and the gate store keeps the same gate from then on', () => {
+    const st = useAskThreadStore.getState();
+    st.linkRun('c1', 'r1'); st.learnAnswerOrds('r1', [1]);
+    const gate = { runId: 'r1', ord: 1, prompt: 'Approve completion after the final phase (unit 1): answer-1 — hey', lifecycle: 'open', receivedAt: 1 };
+    useGateStore.getState().setGate(gate);
+    expect(useGateStore.getState().gates['r1']).toBeUndefined();
+    expect(useAskThreadStore.getState().turnGates['r1']).toMatchObject({ ord: 1 });
+    st.markChatClosed('r1'); st.markChatClosed('r1');
+    expect(useAskThreadStore.getState().chatClosed['r1']).toBe(true);
+    expect(useAskThreadStore.getState().turnGates['r1']).toBeUndefined();
+    useGateStore.getState().setGate(gate);
+    expect(useGateStore.getState().gates['r1']).toMatchObject({ ord: 1 });
+    // The runs poll's reclassify keeps it too.
+    useGateStore.getState().reclassifyAskGates();
+    expect(useGateStore.getState().gates['r1']).toMatchObject({ ord: 1 });
   });
 });
 
