@@ -68,6 +68,7 @@ export function start(): void {
     const blob = r.payload?.['blob'], type = r.payload?.['type'];
     if (!r.ok || !(blob instanceof Blob) || typeof type !== 'string' || !type.startsWith('video/') || typeof URL.createObjectURL !== 'function') { el('unavailable').hidden = false; void poster(generation); return; }
     (el('poster') as HTMLImageElement).hidden = true;
+    if (posterUrl !== null) { URL.revokeObjectURL(posterUrl); posterUrl = null; (el('poster') as HTMLImageElement).removeAttribute('src'); }
     mediaUrl = URL.createObjectURL(blob); player.src = mediaUrl;
     el('unavailable').hidden = true;
     drawCaption();
@@ -347,7 +348,7 @@ export function start(): void {
     if (e.key.length === 1) { e.preventDefault(); send('ui.typed', { grapheme: e.key }); }
   };
   function dispose(): void {
-    disposed = true; ++mediaGeneration; ++readingGeneration; revoke();
+    disposed = true; ++mediaGeneration; ++readingGeneration; revoke(); if (posterUrl !== null) { URL.revokeObjectURL(posterUrl); posterUrl = null; }
     for (const { timer, resolve } of pending.values()) { clearTimeout(timer); resolve({ ok: false, error: { code: 'unavailable', message: 'Editor closed.' } }); }
     pending.clear(); port?.close(); window.removeEventListener('message', hello);
   }
