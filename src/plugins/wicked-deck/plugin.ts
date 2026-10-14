@@ -361,7 +361,8 @@ export function start(): void {
         // A props-style object, so the testid scanner (scripts/testid-inventory.mjs) sees it.
         for (const [k, v] of Object.entries({ 'data-testid': 'deck-thumb' })) b.setAttribute(k, v);
         b.innerHTML = '<span class="n"></span><span class="mini"><iframe sandbox="" tabindex="-1" aria-hidden="true"></iframe></span><span class="t"></span>';
-        b.addEventListener('click', () => { go(b.dataset['key'] ?? null); pointAtSlide(); handle.focus(); });
+        // One pointing per click: the click itself points (go's relay would point a second time).
+        b.addEventListener('click', () => { go(b.dataset['key'] ?? null, false); pointAtSlide(); handle.focus(); });
         b.draggable = true;
         b.addEventListener('dragstart', (e) => { dragging = b.dataset['key'] ?? null; e.dataTransfer?.setData('text/plain', dragging ?? ''); });
         b.addEventListener('dragover', (e) => {
@@ -486,7 +487,6 @@ export function start(): void {
     if (surface === 'options' && followed !== undefined) { followedSlide = keyOf(followed); current = keyOf(followed); }
     buildStrip();
     showSlide();
-    if (protocol === 2 && surface !== 'options') pointAtSlide();
   };
   const render = async (version?: number): Promise<void> => {
     if (version !== undefined && head !== null && version <= head) return;
