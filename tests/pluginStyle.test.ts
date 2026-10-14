@@ -18,12 +18,17 @@ describe('shared artifact Style panel', () => {
     for (const control of [root.querySelector('button')!, field('Accent hex'), root.querySelector('select')!]) {
       for (const [init, forwarded] of [
         [{ key: 'Escape' }, 'Escape'], [{ key: 'k', ctrlKey: true }, 'Mod+K'],
-        [{ key: 'k', metaKey: true }, 'Mod+K'], [{ key: 's', code: 'KeyS', altKey: true }, 'Alt+S'],
+        [{ key: 'k', metaKey: true }, 'Mod+K'], [{ key: 'j', code: 'KeyJ', altKey: true }, 'Alt+J'],
       ] as const) {
         const e = new KeyboardEvent('keydown', { ...init, bubbles: true, cancelable: true });
         control.dispatchEvent(e);
         expect(e.defaultPrevented).toBe(true); expect(key).toHaveBeenLastCalledWith(forwarded);
       }
+      // An Alt chord the host would drop (three drops tear the frame down) stays the platform's (agy h4b-r1).
+      const before = key.mock.calls.length;
+      const alt = new KeyboardEvent('keydown', { key: 'a', code: 'KeyA', altKey: true, bubbles: true, cancelable: true });
+      control.dispatchEvent(alt);
+      expect(key.mock.calls.length).toBe(before); expect(alt.defaultPrevented).toBe(false);
       for (const native of ['a', 'ArrowDown', 'Enter', ' ']) {
         const before = key.mock.calls.length;
         const e = new KeyboardEvent('keydown', { key: native, bubbles: true, cancelable: true });
