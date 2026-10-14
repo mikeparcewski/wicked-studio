@@ -164,6 +164,7 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
       loaded.current = { src, grants: decided.grants };
       const kind = binding.kind as EditorKind;
       const bridge = adapter.mcpBridge?.();
+      const startedFull = fullRef.current;
       const host = new EditorHost({
         container: frameBox.current,
         src,
@@ -171,8 +172,8 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
         version: editor.version,
         name: editor.title,
         title: `${editor.title}: ${binding.title}`,
-        size: fullRef.current ? 'full' : 'inline',
-        surface: fullRef.current ? 'full' : 'card',
+        size: startedFull ? 'full' : 'inline',
+        surface: startedFull ? 'full' : 'card',
         grants: decided.grants,
         theme: readThemeTokens(),
         prefs: { reducedMotion: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false, techDetails: false, locale: navigator.language },
@@ -219,6 +220,9 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
           torn: (reason) => { if (live.current) setTorn(reason); },
           log: (e) => { logRef.current.push(e); if (logRef.current.length > 200) logRef.current.shift(); },
           surfaces: (s, p, n) => {
+            // A morph made before the handshake had no port: say the surface now shown (codex h2-r8 P2).
+            const now = fullRef.current ? 'full' : 'card';
+            if (now !== (startedFull ? 'full' : 'card')) queueMicrotask(() => hostRef.current?.setSurface(fullRef.current ? 'full' : 'card'));
             if (!live.current) return;
             setDecl(s); setProtocol(p); if (n !== null) setNote(n);
             if (s.full?.modes != null) setMode((m) => m ?? s.full?.default);
@@ -280,10 +284,20 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
       setArtifactSize(key, 'inline');
       if (owner === key) exitFull();
       openOptionsRef.current();
+      paneFromAddress.current = true;
     }
     // Only this card's own full screen: another card's deep link may already own it (codex h2-r7 P2).
     else if (size === 'inline' && owner === key) exitFull();
   }, [size, key, ready, enterFull, exitFull]);
+  // An Options group the address opened closes when the address leaves this artifact (Back; codex h2-r8 P2).
+  const paneFromAddress = useRef(false);
+  const routeKey = address?.routeKey ?? null;
+  useEffect(() => {
+    if (!paneFromAddress.current || routeKey === key) return;
+    paneFromAddress.current = false;
+    const panel = useHostPanel.getState();
+    if (panel.group?.key === group) panel.closeGroup();
+  }, [routeKey, key, group]);
   const wasFull = useRef(full);
   useEffect(() => {
     if (wasFull.current === full) return;
