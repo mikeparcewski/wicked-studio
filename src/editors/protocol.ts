@@ -69,11 +69,19 @@ export type Op =
   | { op: 'slide-insert'; slide: string; after: string | null }
   | { op: 'slide-duplicate'; slide: string }
   | { op: 'slide-move'; slide: string; after: string | null }
-  | { op: 'notes-set'; slide: string; text: string };
+  | { op: 'notes-set'; slide: string; text: string }
+  | { op: 'chapter-move'; chapter: string; after: string | null }
+  | { op: 'chapter-rename'; chapter: string; title: string }
+  | { op: 'chapter-trim'; chapter: string; inSec: number; outSec: number }
+  | { op: 'chapter-take'; chapter: string; take: string };
 
 /** The deck ops (each its own write). */
 export const DECK_OPS = ['slide-insert', 'slide-duplicate', 'slide-move', 'notes-set'] as const;
 export type DeckOpType = typeof DECK_OPS[number];
+
+export const CHAPTER_OPS = ['chapter-move', 'chapter-rename', 'chapter-trim', 'chapter-take'] as const;
+export type ChapterOpType = typeof CHAPTER_OPS[number];
+export type MediaRef = 'video' | 'poster' | { chapter: string } | { sheet: string };
 
 /** Plugin → host requests, with the permission each needs (null = none). */
 export const REQUESTS = {
