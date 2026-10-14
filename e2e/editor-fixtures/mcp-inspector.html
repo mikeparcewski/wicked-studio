@@ -94,13 +94,16 @@
   });
   // The log seq before a call: its request and answer are the entries after it.
   const calls = [];
+  const DETAIL_METHODS = ['tools/call', 'resources/read', 'prompts/get'];
   const claimed = new Set();
   // Each call keeps its own cursor (the log seq when it left), so a later call can never take its wire entries.
   const mcp = async (method, params) => {
     const after = lastSeq === null ? -1 : lastSeq;
     // Recorded at dispatch, in order, even if its detail view is gone by the reply: its request entry is its own.
     const call = { method, after, sentSeq: null, refused: null, name: params && typeof params.name === 'string' ? params.name : (params && params.uri) || null };
-    calls.push(call); if (calls.length > 50) calls.shift();
+    // Only the calls whose raw exchange is shown (a detail's own call) take part, and only when connected: a call
+    // made while not connected was never sent, so it can never take a later call's request (codex h5-r5).
+    if (DETAIL_METHODS.includes(method) && state === 'ready') { calls.push(call); if (calls.length > 50) calls.shift(); }
     const r = await req('mcp.request', params === undefined ? { method } : { method, params });
     if (!r.ok) { const c = (r.error && r.error.code) || 'refused'; if (NOT_SENT.includes(c)) call.refused = c; }
     return Object.assign(r, { after, call });
@@ -137,6 +140,9 @@
   function claim() {
     for (const c of calls) {
       if (c.sentSeq !== null || c.refused) continue;
+      // Its request was evicted from the ring (or fell in a gap): retire it rather than block every later call.
+      const oldest = log.find((x) => !x.gap);
+      if (oldest && oldest.seq > c.after + 1 && !log.some((x) => !x.gap && x.seq > c.after && x.dir === 'out' && x.kind === 'request' && x.method === c.method && !claimed.has(x.seq))) { c.sentSeq = -1; continue; }
       const e = log.find((x) => !x.gap && x.seq > c.after && x.dir === 'out' && x.kind === 'request' && x.method === c.method && !claimed.has(x.seq));
       if (!e) break;
       c.sentSeq = e.seq; claimed.add(e.seq);
@@ -158,7 +164,7 @@
     claim();
     const sent = lastCall.sentSeq === null ? undefined : log.find((e) => e.seq === lastCall.sentSeq);
     const got = sent ? log.find((e) => !e.gap && e.kind === 'response' && e.rpcId === sent.rpcId) : undefined;
-    reqEl.textContent = sent ? sent.text : 'Waiting for the log…';
+    reqEl.textContent = sent ? sent.text : lastCall.sentSeq === -1 ? 'The log no longer holds this call.' : 'Waiting for the log…';
     resEl.textContent = got ? got.text : (sent ? 'Waiting for the answer in the log…' : '');
   }
 
@@ -388,6 +394,7 @@
             if (lastSeq !== null && e.seq > lastSeq + 1) log.push({ gap: e.seq - lastSeq - 1 });
             lastSeq = e.seq; log.push(e);
           }
+          claim(); // claim as each batch arrives, before the ring trims anything
           if (log.length > 1000) log.splice(0, log.length - 1000);
           if (tab === 'log') drawList();
           syncRaw();
