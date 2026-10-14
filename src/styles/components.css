@@ -1306,8 +1306,7 @@ select:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-
 .wk-artifact--inline { height: 200px; }
 .wk-artifact--pane { margin: 0; position: fixed; top: 52px; right: 12px; bottom: 12px; width: min(46vw, 760px); z-index: 30; box-shadow: var(--shadow-card); }
 .wk-artifact--full { margin: 0; position: fixed; inset: 0; z-index: 40; border: 0; border-radius: 0; }
-.wk-session--pane .wk-session-body, .wk-session--pane .wk-session-composer { margin-right: calc(min(46vw, 760px) + 24px); }
-/* studio#772: the pane sits 12px in from the right edge; the thread and composer clear it with room to spare. */
+.wk-session--pane .wk-session-body, .wk-session--pane .wk-session-composer { margin-right: min(46vw, 760px); }
 .wk-artifact-head { position: relative; z-index: 3; display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-bottom: 1px solid var(--border); background: var(--surface-card); font-size: var(--text-xs); color: var(--ink-muted); flex-shrink: 0; }
 .wk-artifact-title { flex: 1 1 auto; min-width: 0; color: var(--ink-high); font-weight: var(--weight-semi); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .wk-artifact-btn { background: none; border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--ink-muted); cursor: pointer; font: inherit; padding: 1px 7px; }
@@ -1446,16 +1445,6 @@ button.wk-walk-chapter-btn:hover .wk-walk-chapter-title { text-decoration: under
 .wk-walk-stage { position: relative; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .wk-walk-side { display: flex; flex-direction: column; gap: 6px; min-width: 0; min-height: 0; }
 .wk-walk-video { display: block; width: 100%; max-height: 30vh; object-fit: contain; background: var(--surface-card); border-radius: var(--radius-sm); }
-/* studio#772: a demo video opened beside the thread fills the pane's width at 16:9 (never a letterboxed strip).
-   A check walkthrough keeps its short player: its failing checks stay above the fold. */
-.wk-artifact--pane[data-kind="demo-video"] .wk-walk-video { aspect-ratio: 16 / 9; height: auto; max-height: none; }
-/* studio#772: in the thread a demo video is large enough to read: the card grows to a 16:9 player across its
-   width (up to 720px), with the state line and chapters under it. (A check walkthrough keeps its compact
-   preview: its verbs stay above the fold.) The space beside the player stays the card's open-it catch. */
-.wk-artifact--inline[data-kind="demo-video"] { height: auto; }
-.wk-artifact--inline[data-kind="demo-video"] .wk-walk--preview .wk-walk-grid { flex-direction: column; }
-.wk-artifact--inline[data-kind="demo-video"] .wk-walk--preview .wk-walk-stage { width: 100%; max-width: 720px; height: auto; }
-.wk-artifact--inline[data-kind="demo-video"] .wk-walk--preview .wk-walk-video { height: auto; aspect-ratio: 16 / 9; max-height: none; }
 /* Full screen: the take on the left, what to do and every check beside it — nothing load-bearing below the fold. */
 .wk-walk--full { overflow: hidden; }
 .wk-walk--full .wk-walk-grid { display: grid; grid-template-columns: minmax(0, 3fr) minmax(340px, 2fr); gap: 14px; flex: 1 1 auto; }
@@ -1803,6 +1792,10 @@ p.wk-run-tab-muted { margin: var(--space-1) 0; }
 .wk-session-frame { flex: 1 1 auto; display: flex; min-width: 0; min-height: 0; }
 .wk-session-frame > .wk-session { flex: 1 1 auto; }
 .wk-session-frame > .wk-hpanel { overflow: hidden; }
+/* A slot artifact (walkthrough, demo video, plan) opened beside the thread takes the panel's place until it
+   moves into the panel's options tabs (H6): the two never stack on the same strip of the page. */
+.wk-session-frame:has(> .wk-session--pane) > .wk-hpanel,
+.wk-session-frame:has(> .wk-session--pane) > [data-testid="host-panel-ribbon"] { display: none; }
 .wk-session-frame > .wk-hpanel .wk-hpanel-body { overflow-y: auto; }
 @media (max-width: 1199px) {
   .wk-session-frame { flex-direction: column; }
