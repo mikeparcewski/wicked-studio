@@ -22,6 +22,9 @@ import type {
   OpenTerminalBody,
   SeatSessionBody,
   SeatSessionResponse,
+  SeatContainerLoginOutcome,
+  SeatContainerLoginResponse,
+  SeatContainerLogoutResponse,
   Project,
   ProjectDetail,
   ProjectMember,
@@ -418,6 +421,24 @@ export const api = {
    */
   seatLogout: (cli: string, body: SeatSessionBody) =>
     apiFetch<SeatSessionResponse>(`/seats/${encodeURIComponent(cli)}/logout`, { method: 'POST', body: JSON.stringify(body) }),
+
+  /**
+   * Open a seat's disposable login container in a daemon PTY (crew#1006, `WICKED_SEAT_FLOOR=container`)
+   * → its terminal id, driven over `terminalWsUrl`. When that terminal exits, crew moves the credential
+   * into its broker (studio never sees it) and records the outcome for `seatContainerLoginOutcome`.
+   * 404: the seat has no container sign-in; 409: one is already open; 502: the engine refused.
+   * The first one can take minutes (the engine prepares the seat's image).
+   */
+  seatContainerLogin: (cli: string, body: SeatSessionBody) =>
+    apiFetch<SeatContainerLoginResponse>(`/seats/${encodeURIComponent(cli)}/container-login`, { method: 'POST', body: JSON.stringify(body) }),
+
+  /** The last container sign-in's outcome for this seat (crew#1006); 404 until its terminal closed and crew ingested it. */
+  seatContainerLoginOutcome: (cli: string, signal?: AbortSignal) =>
+    apiFetch<SeatContainerLoginOutcome>(`/seats/${encodeURIComponent(cli)}/container-login`, signal === undefined ? undefined : { signal }),
+
+  /** Sign a container seat out of crew's broker (crew#1006): the broker's files are emptied. 404: no container sign-in. */
+  seatContainerLogout: (cli: string) =>
+    apiFetch<SeatContainerLogoutResponse>(`/seats/${encodeURIComponent(cli)}/container-logout`, { method: 'POST' }),
 
   /** Resize a live terminal's PTY to `cols`x`rows`. */
   resizeTerminal: (id: string, cols: number, rows: number) =>

@@ -10,11 +10,11 @@ import type { RosterSeat } from '../../api/types.js';
  * never handles credentials), and Check now re-runs the agent's sign-in check on the daemon
  * (`GET /roster?refresh=<key>`, read-only).
  *
- * The build-container-carrier lane wires the container flow by wrapping the app (or the tab) in
- * `<AgentLoginProvider hooks={…}>`: a `signIn` / `signOut` it supplies replaces the copy-the-command
- * step for signing in and out with a button that opens that agent's login container; a `checkNow`
- * it supplies replaces the re-check. Commands for other fixes (a version check, the codex account
- * switch) stay as they are.
+ * The container flow (crew#1006) is wired by `ContainerSignInProvider` (containerSignIn.tsx), which
+ * wraps the app in `<AgentLoginProvider hooks={…}>`: for the agents its `offers` names, the `signIn` /
+ * `signOut` it supplies replace the copy-the-command step for signing in and out with a button that
+ * opens that agent's login container; a `checkNow` it supplies would replace the re-check. Commands
+ * for other fixes (a version check, the codex account switch) stay as they are.
  * Nothing else in the tab changes.
  */
 
@@ -32,6 +32,17 @@ export interface AgentLoginHooks {
   signOut?: (key: string) => void | Promise<void>;
   /** Re-check this agent's sign-in now and answer with the fresh roster. */
   checkNow: (key: string) => Promise<AgentCheckResult>;
+  /**
+   * Which agents the supplied `signIn` / `signOut` handle (the container hooks: only a seat crew marks
+   * `sign_in: 'container'`). Absent: every agent. The others keep the copy-the-command steps.
+   */
+  offers?: (seat: RosterSeat) => boolean;
+}
+
+/** Whether these hooks sign this agent in (`'in'`) or out (`'out'`) with a button. */
+export function hookOffers(hooks: AgentLoginHooks, kind: 'in' | 'out', seat: RosterSeat | undefined): boolean {
+  if ((kind === 'in' ? hooks.signIn : hooks.signOut) === undefined) return false;
+  return hooks.offers === undefined || (seat !== undefined && hooks.offers(seat));
 }
 
 /** Studio's default: one bounded read-only re-check per click (crew A3b). */
@@ -48,10 +59,11 @@ const AgentLoginContext = createContext<AgentLoginHooks>(DEFAULT_LOGIN_HOOKS);
 /** Supply the sign-in hooks for every Agents surface beneath (the tab, the modal from the Desk chore). */
 export function AgentLoginProvider({ hooks = {}, children }: { hooks?: Partial<AgentLoginHooks>; children: React.ReactNode }): React.ReactElement {
   // An explicitly undefined checkNow (a JS caller) keeps the default re-check (codex S4 r2).
-  const { signIn, signOut, checkNow } = hooks;
+  const { signIn, signOut, checkNow, offers } = hooks;
   const value = useMemo<AgentLoginHooks>(() => ({
     ...(signIn !== undefined ? { signIn } : {}), ...(signOut !== undefined ? { signOut } : {}), checkNow: checkNow ?? DEFAULT_LOGIN_HOOKS.checkNow,
-  }), [signIn, signOut, checkNow]);
+    ...(offers !== undefined ? { offers } : {}),
+  }), [signIn, signOut, checkNow, offers]);
   return <AgentLoginContext.Provider value={value}>{children}</AgentLoginContext.Provider>;
 }
 

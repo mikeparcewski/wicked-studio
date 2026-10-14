@@ -24,6 +24,8 @@ export interface FixStep {
   note: string | null;
   /** This step carries the "I've signed in: check again" block. */
   check?: boolean;
+  /** This step carries the container Sign in button (the login hooks, crew#1006). */
+  signIn?: boolean;
   /** Steps that belong to this choice (rendered a, b under it). */
   sub?: FixStep[];
   /** Show `sub` behind a disclosure with this label (an optional procedure, codex r10 HIER). */
@@ -61,7 +63,11 @@ function jobs(n: number): string {
   return `${n} ${n === 1 ? 'job' : 'jobs'}`;
 }
 
-export function issueCopy(issue: AgentIssue, row: AgentRow, rows: readonly AgentRow[], now: number): IssueCopy {
+/**
+ * `containerSignIn`: studio signs this agent in with a button (the container hooks, crew#1006), so its
+ * sign-in steps say so and never name a terminal command.
+ */
+export function issueCopy(issue: AgentIssue, row: AgentRow, rows: readonly AgentRow[], now: number, containerSignIn = false): IssueCopy {
   const code = issue.code;
   const name = row.name;
   // The bench facts come from the issue itself (crew's params), so a folded reviewer's issue speaks for its own
@@ -81,10 +87,14 @@ export function issueCopy(issue: AgentIssue, row: AgentRow, rows: readonly Agent
   const notReset = retry === null ? '' : ' That time is studio’s own retry, not when your plan resets; your provider’s account page shows that.';
   const probed = typeof row.seat.probed_at === 'string' && Number.isFinite(Date.parse(row.seat.probed_at)) ? relTime(Date.parse(row.seat.probed_at), now) : null;
   const qe = qeAvailable(rows);
+  /** "Sign in again": the container Sign in button for a container agent (codex r7), else its own command. */
+  const again = (lead: string): FixStep => (containerSignIn ? { ...step(lead.replace(/:$/, ' here.')), signIn: true } : step(lead, '', cmd(row.login, 'sign-in')));
   switch (code) {
     case 'signed_out': {
       const others = otherReady(rows, row.key);
-      const signIn = row.login !== null
+      const signIn = containerSignIn
+        ? { ...step('Sign in here.', `Studio opens ${name}’s sign-in in a disposable login container; follow its steps there.`), signIn: true }
+        : row.login !== null
         ? step('Sign in from your terminal.', `Run this, then follow ${name}’s own sign-in steps (it may open your browser).`, cmd(row.login, 'sign-in'),
           'Studio never sees your password or token: the sign-in happens between your terminal and the provider.')
         : step('Sign in with its own command.', `Studio’s service sent no sign-in command for ${name}. Sign in the way its maker documents, then check again.`);
@@ -101,7 +111,9 @@ export function issueCopy(issue: AgentIssue, row: AgentRow, rows: readonly Agent
         title: 'Sign-in couldn’t be read',
         what: `Studio’s service hasn’t got an answer yet about whether ${name} is signed in.`,
         why: 'Until it does, studio can’t say whether jobs and reviews will reach it.',
-        fix: [step('Check sign-ins now', 'from the top of the page; the answer usually comes within a minute.'), ...(row.login !== null ? [step('If it stays unknown, sign in again:', '', cmd(row.login, 'sign-in'))] : [])],
+        fix: [step('Check sign-ins now', 'from the top of the page; the answer usually comes within a minute.'),
+          // The container sign-in is a button here too (codex r4): an unknown reading keeps its way out.
+          ...(containerSignIn || row.login !== null ? [again('If it stays unknown, sign in again:')] : [])],
         tech: row.tech.evidence,
       };
     case 'qe_blocked':
@@ -122,7 +134,7 @@ export function issueCopy(issue: AgentIssue, row: AgentRow, rows: readonly Agent
         why: 'Jobs and reviews go to the other agents until this clears. The reason is in Technical details.',
         fix: [
           step('Check again in a minute.', 'Studio’s service re-checks each agent on its own.'),
-          step('If it keeps happening, sign in again:', '', cmd(row.login, 'sign-in')),
+          again('If it keeps happening, sign in again:'),
         ],
         tech: row.tech.ineligible,
       };
@@ -136,7 +148,8 @@ export function issueCopy(issue: AgentIssue, row: AgentRow, rows: readonly Agent
           { ...step('Or, if you run studio’s service on this computer, allow it in repositories.', 'It takes both of these steps; the account change alone doesn’t lift it.'),
             subLabel: 'Show the two steps',
             sub: [
-              step(`Sign ${name} in with an account whose commands don’t need approval:`, '', [...cmd(row.logout, 'sign-out'), ...cmd(row.login, 'sign-in')]),
+              containerSignIn ? { ...step(`Sign ${name} in again here, with an account whose commands don’t need approval.`), signIn: true }
+                : step(`Sign ${name} in with an account whose commands don’t need approval:`, '', [...cmd(row.logout, 'sign-out'), ...cmd(row.login, 'sign-in')]),
               { ...step(`Restart the service with ${name} allowed in repositories.`),
                 tech: { summary: 'How to restart it that way', text: 'Start the service with WICKED_CODEX_WORKTREE_OK=1 set (the engine benches codex on runs bound to one repository, CODEX_WORKTREE_BENCH, unless the host opts out).' } },
             ] },
@@ -263,7 +276,7 @@ export function issueCopy(issue: AgentIssue, row: AgentRow, rows: readonly Agent
         why: 'Its first step may fail and move to another agent.',
         fix: [
           { ...step('Check again now.', 'An answer that comes back clears this.'), check: true },
-          ...(row.login !== null ? [step('If it keeps failing, sign in again:', '', cmd(row.login, 'sign-in'))] : []),
+          ...(containerSignIn || row.login !== null ? [again('If it keeps failing, sign in again:')] : []),
         ],
         tech: row.tech.evidence,
       };
@@ -293,7 +306,7 @@ export function issueCopy(issue: AgentIssue, row: AgentRow, rows: readonly Agent
         title: 'Sign-in not confirmed',
         what: `${name}’s sign-in hasn’t been confirmed: it has no command that reports it, so studio goes by its saved sign-in. If a request fails because the sign-in has expired, studio marks it signed out.`,
         why: 'A job may start on it and move to another agent.',
-        fix: [row.login !== null ? step('If studio marks it signed out, sign in again:', '', cmd(row.login, 'sign-in')) : step('If studio marks it signed out,', 'sign in again with its own command.')],
+        fix: [containerSignIn || row.login !== null ? again('If studio marks it signed out, sign in again:') : step('If studio marks it signed out,', 'sign in again with its own command.')],
         tech: row.tech.evidence,
       };
     case 'fallbacks': {

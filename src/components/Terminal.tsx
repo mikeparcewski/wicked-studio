@@ -40,6 +40,8 @@ interface Props {
   open?: (cols: number, rows: number) => Promise<{ id: string }>;
   /** Told when opening failed (the error the open rejected with). */
   onOpenError?: (err: unknown) => void;
+  /** Told once its PTY is gone while mounted: the daemon closes the terminal socket when the child exits. */
+  onExit?: () => void;
 }
 
 /**
@@ -55,11 +57,11 @@ interface Props {
  * A terminal is a stateful session: it opens ONCE for the component's lifetime.
  * Remount with a React `key` to start a fresh terminal (e.g. a different cwd).
  */
-export function Terminal({ cwd, cmd, governed = true, initialInput, concealHome, open, onOpenError }: Props): React.ReactElement {
+export function Terminal({ cwd, cmd, governed = true, initialInput, concealHome, open, onOpenError, onExit }: Props): React.ReactElement {
   const hostRef = useRef<HTMLDivElement>(null);
   // Snapshot the open-time props; the session opens once (see effect deps: []).
-  const propsRef = useRef({ cwd, cmd, governed, initialInput, concealHome, open, onOpenError });
-  propsRef.current = { cwd, cmd, governed, initialInput, concealHome, open, onOpenError };
+  const propsRef = useRef({ cwd, cmd, governed, initialInput, concealHome, open, onOpenError, onExit });
+  propsRef.current = { cwd, cmd, governed, initialInput, concealHome, open, onOpenError, onExit };
 
   useEffect(() => {
     const host = hostRef.current;
@@ -155,6 +157,9 @@ export function Terminal({ cwd, cmd, governed = true, initialInput, concealHome,
 
         const ws = new WebSocket(terminalWsUrl(id));
         ws.binaryType = 'arraybuffer';
+        // The daemon closes this socket when the PTY's child exits (crew TerminalHub); our own unmount
+        // closes it too, and that is not an exit.
+        ws.onclose = () => { if (!disposed) propsRef.current.onExit?.(); };
         // Type `initialInput` into the PTY the moment the stdin channel is up —
         // once, over the same WS text-frame path as keystrokes. The PTY's input is
         // kernel-buffered, so sending at open is safe even before the shell prompts.

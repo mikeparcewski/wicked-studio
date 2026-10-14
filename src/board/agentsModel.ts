@@ -387,6 +387,8 @@ function rowOf(seat: RosterSeat, alsoReviews: boolean, keys: string[], inp: Agen
   const signedOut = auth === 'signed_out';
   const optIn = seat.optIn === true;
   const check = bag(seat)['login_check'];
+  // crew#1006: a container seat's sign-in is crew's credential broker's reading, not the CLI's own check.
+  const container = seat.sign_in === 'container';
   // The row's readiness is its own seat's bench; a folded reviewer's bench only takes away reviews (below), and
   // its issue carries its own facts in `params` (codex S4 r4 adjudicated over r3).
   const bench = benchOf(seat);
@@ -396,7 +398,7 @@ function rowOf(seat: RosterSeat, alsoReviews: boolean, keys: string[], inp: Agen
   if (auth === 'not_required') sign = { word: 'No sign-in needed', tone: 'ok', sub: 'free models' };
   else if (signedOut) sign = { word: 'Signed out', tone: 'fail', sub: ago(seat.probed_at as string | undefined, now) !== null ? `checked ${ago(seat.probed_at as string, now)}` : null };
   else if (auth === 'signed_in') {
-    sign = check === 'live'
+    sign = container ? { word: 'Signed in', tone: 'ok', sub: 'kept by studio’s service' } : check === 'live'
       ? { word: 'Signed in', tone: 'ok', sub: ago(seat.probed_at as string | undefined, now) !== null ? `confirmed ${ago(seat.probed_at as string, now)}` : null }
       : { word: 'Looks signed in', tone: 'quiet', sub: check === 'status' ? 'its own check says so' : 'it has no way to confirm' };
   } else sign = { word: 'Unknown', tone: 'quiet', sub: 'studio couldn’t read its sign-in' };
@@ -457,7 +459,11 @@ function rowOf(seat: RosterSeat, alsoReviews: boolean, keys: string[], inp: Agen
 
   // Issues: crew's codes (its own and a folded reviewer's, once per code), then studio's GAPS.
   const issues: AgentIssue[] = [];
-  for (const i of [seat, ...folded].flatMap((x) => wireIssuesOf(x).map((w) => ({ ...fromWire(w), bench: benchOf(x) })))) {
+  // NOT A GAP, A MISREAD (crew#1006): crew codes live_check_failed for every signed-in seat whose check is
+  // `status`, and a container seat's check is always the broker's `status`, so no request ever failed. Read
+  // per seat (codex r3: a folded host reviewer keeps its own real one). Delete once crew stops coding it.
+  const misread = (x: RosterSeat, code: string): boolean => code === 'live_check_failed' && x.sign_in === 'container';
+  for (const i of [seat, ...folded].flatMap((x) => wireIssuesOf(x).filter((w) => !misread(x, w.code)).map((w) => ({ ...fromWire(w), bench: benchOf(x) })))) {
     const at = issues.findIndex((x) => x.code === i.code && x.wire === i.wire);
     if (at < 0) issues.push(i);
     // The same code from a folded seat keeps the more severe reading (codex S4 r1).
