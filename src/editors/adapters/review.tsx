@@ -33,6 +33,13 @@ registerTabFooter({
     <MatchTheme
       projectId={ctx.binding.projectId}
       docId={ctx.binding.docId ?? ''}
+      // Through the adapter's theme write, so the engine's parent is recorded for Undo and the head moves.
+      apply={async (tokens) => {
+        const theme = (ctx.adapter as { theme?: (base: number, t: Record<string, unknown>, o?: { match?: boolean }) => Promise<{ version: number } | { error: string; message: string }> }).theme;
+        if (theme === undefined) return { error: 'unsupported', message: 'this artifact has no theme' };
+        const r = await theme.call(ctx.adapter, ctx.adapter.artifact().head, tokens, { match: true });
+        return 'error' in r ? { error: r.error, message: r.message } : { version: r.version };
+      }}
       onVersion={(version) => ctx.changed(version, 'theme')}
     />
   ),
