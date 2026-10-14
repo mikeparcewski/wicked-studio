@@ -6,6 +6,11 @@ import { cutOfRecording, RecordingSurfaceAdapter } from '../src/editors/adapters
 import type { ArtifactBinding } from '../src/editors/hostApi.js';
 import { changedBy } from '../src/editors/model.js';
 
+/** A Blob's text in any realm (jsdom's Blob has no text(); undici's does). */
+const textOf = (b: Blob): Promise<string> => (typeof (b as { text?: unknown }).text === 'function'
+  ? b.text()
+  : new Promise((resolve, reject) => { const r = new FileReader(); r.onload = () => resolve(String(r.result)); r.onerror = () => reject(r.error); r.readAsText(b); }));
+
 const binding: ArtifactBinding = { artifactKey: 'recording', title: 'Run recording', kind: 'demo-video', source: 'demo', projectId: 'p', composerKey: 'run', runId: 'run one' };
 const json = (value: unknown, status = 200) => new Response(JSON.stringify(value), { status, headers: { 'Content-Type': 'application/json' } });
 function demo(over: Partial<DemoView> = {}): DemoView {
@@ -158,8 +163,8 @@ describe('recording refresh and media', () => {
     const next = await a.media('video');
     if ('error' in next) throw new Error(next.message);
     expect(next.blob).not.toBe(first.blob);
-    expect(await first.blob.text()).toBe('old video');
-    expect(await next.blob.text()).toBe('new video');
+    expect(await textOf(first.blob)).toBe('old video');
+    expect(await textOf(next.blob)).toBe('new video');
     const files = fetchMock.mock.calls.filter(([url]) => url.includes('/file?'));
     expect(files).toHaveLength(2); expect(files[1]?.[0]).toBe(files[0]?.[0]);
     expect(await a.refresh()).toBeNull(); unsubscribe();
@@ -189,7 +194,7 @@ describe('recording refresh and media', () => {
     finish(new Response('old video')); await old;
     const next = await a.media('video');
     if ('error' in next) throw new Error(next.message);
-    expect(await next.blob.text()).toBe('new video'); expect(files).toBe(2);
+    expect(await textOf(next.blob)).toBe('new video'); expect(files).toBe(2);
   });
   it('fetches recording media from the contained file route and refuses edits', async () => {
     const fetchMock = vi.fn(async (url: string) => url.includes('/file?') ? new Response('video', { headers: { 'Content-Type': 'video/mp4' } }) : json(demo())); vi.stubGlobal('fetch', fetchMock);

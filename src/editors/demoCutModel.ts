@@ -1,5 +1,7 @@
 /** E1's demo cut, shared as data only: no transport or UI framework. */
 import type { Op } from './protocol.js';
+/** E1's default video colours (interactive's style defaults, E1-API.md): data, so it lives in JSON. */
+import VIDEO_COLOURS from './videoStyleDefaults.json';
 
 export interface VideoStyle {
   theme: {
@@ -16,7 +18,7 @@ export interface DemoCut { type: 'demo-cut'; title: string; rev: number; version
 export type ChapterOp = Extract<Op, { chapter: string }>;
 
 export function defaultVideoStyle(title: string): VideoStyle {
-  return { theme: { titleCard: { on: true, title, subtitle: '', seconds: 2.5 }, endCard: { on: true, title: 'Thanks for watching', subtitle: '', seconds: 2.5 }, background: '#0b1020', foreground: '#ffffff', accent: '#0891b2', font: 'Inter' }, captions: { on: true, burnIn: true, position: 'bottom', size: 36, maxLines: 2, wrapChars: 42, style: 'bar' } };
+  return { theme: { titleCard: { on: true, title, subtitle: '', seconds: 2.5 }, endCard: { on: true, title: 'Thanks for watching', subtitle: '', seconds: 2.5 }, ...VIDEO_COLOURS, font: 'Inter' }, captions: { on: true, burnIn: true, position: 'bottom', size: 36, maxLines: 2, wrapChars: 42, style: 'bar' } };
 }
 /** E1 accepts partial styles; the editor publishes their effective defaults. */
 export function effectiveVideoStyle(title: string, style: Partial<VideoStyle> = {}): VideoStyle {
