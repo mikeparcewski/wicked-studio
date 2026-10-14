@@ -1,6 +1,6 @@
 import surfaces from './surfaces.json';
 import { announceReady, helloOf, V2Port, sizeOfSurface, type Surface } from '../_shared/v2.js';
-import { mountStyle, copyTokens, THEMES, type ThemeTokens } from '../_shared/style.js';
+import { mountStyle, copyTokens, tokensFromHtml, type ThemeTokens } from '../_shared/style.js';
 import { deckOf, topSlideElements, type DeckSlide } from '../../board/deck.js';
 import { overlayBox, type OverlayBox, type ScrollState } from '../../interactive/anchoring.js';
 import { REQUEST_INVENTORY, parseInbound as parseBridge, type WidBlock, type WidRect } from '../../interactive/instrument-protocol.js';
@@ -503,29 +503,17 @@ export function start(): void {
     }
   };
 
-  /** Read the document's own --wi-* theme declarations, never studio's chrome theme. */
-  const readThemeTokens = (content: string): void => {
-    const doc = new DOMParser().parseFromString(content, 'text/html');
-    const css = Array.from(doc.querySelectorAll('style')).map((s) => s.textContent ?? '').join('\n');
-    const values = new Map<string, string>();
-    for (const m of css.matchAll(/(--wi-[a-z-]+)\s*:\s*([^;}{]+)/gi)) values.set(m[1]!.toLowerCase(), m[2]!.trim());
-    if (values.size === 0) return;
-    const t = copyTokens(THEMES[0]!);
-    t.name = 'custom';
-    const colors = { background: '--wi-bg', surface: '--wi-surface', primary: '--wi-primary', secondary: '--wi-secondary', accent: '--wi-accent', text_primary: '--wi-text', text_secondary: '--wi-text-secondary', text_muted: '--wi-muted', border: '--wi-border' } as const;
-    for (const key of Object.keys(colors) as (keyof typeof colors)[]) {
-      const value = values.get(colors[key]);
-      if (value !== undefined && /^(#(?:[0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})|(?:rgb|hsl)a?\([0-9.,%\s]+\))$/i.test(value)) t.colors[key] = value;
-    }
-    for (const key of ['heading', 'body', 'mono'] as const) {
-      const value = values.get(`--wi-font-${key}`);
-      if (value !== undefined) t.fonts[key] = value.split(',')[0]!.trim().replace(/^['"]|['"]$/g, '');
-    }
-    // Keep a named preset when its readback has the same tokens.
-    const match = THEMES.find((theme) => JSON.stringify(theme.colors) === JSON.stringify(t.colors) && JSON.stringify(theme.fonts) === JSON.stringify(t.fonts));
-    t.name = match?.name ?? 'custom';
-    themeTokens = t;
+  /** The slide whose element carries this `data-wid` (read from the version's HTML, which runs no script here). */
+  const slideHolding = (wid: string): DeckSlide | undefined => {
+    if (html === '' || !/^[A-Za-z0-9_.:-]{1,100}$/.test(wid)) return undefined;
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    const node = doc.querySelector(`[data-wid="${wid}"]`);
+    const host = node?.closest('[data-slide-id]')?.getAttribute('data-slide-id') ?? null;
+    return host === null ? undefined : slides.find((s) => s.id === host);
   };
+
+  /** The document's own theme (its `--wi-*` declarations), never studio's chrome theme. */
+  const readThemeTokens = (content: string): void => { themeTokens = tokensFromHtml(content) ?? themeTokens; };
 
   const stylePanel = mountStyle(styleRoot, {
     tokens: () => themeTokens,
@@ -973,7 +961,8 @@ export function start(): void {
           if (typeof anchor !== 'object' || anchor === null) continue;
           const a = anchor as { kind?: unknown; id?: unknown };
           if (a.kind !== 'element' || typeof a.id !== 'string') continue;
-          const slide = slides.find((s) => s.id === a.id || s.wid === a.id);
+          // A line on a slide names its own wid: the slide that holds it is the one to follow (codex h4-r1).
+          const slide = slides.find((s) => s.id === a.id || s.wid === a.id) ?? slideHolding(a.id);
           // A selection may arrive before the first artifact.read answers.
           if (slides.length === 0 || slide !== undefined) followedSlide = a.id;
           if (slide !== undefined) { notes.blur(); go(keyOf(slide), false); break; }

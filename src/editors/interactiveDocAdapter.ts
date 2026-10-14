@@ -253,12 +253,17 @@ export class InteractiveDocAdapter implements HostAdapter {
    * fork of the version before it, like any write.
    */
   async theme(base: number, tokens: Record<string, unknown>): Promise<AdapterResult<{ version: number }>> {
-    await this.refresh().catch(() => null);
+    // Fail closed: without a fresh read of the head there is no knowing what the theme would land on (codex h4-r1).
+    try { await this.refresh(); } catch (e: unknown) { return { error: 'unavailable', message: e instanceof Error ? e.message : String(e) }; }
     if (this.head !== base) return { error: 'head_moved', message: 'the artifact changed since', head: this.head };
     try {
       const r = await putLearnedTheme(this.projectId, this.docId, tokens, true);
       if (r.version === null) return { error: 'refused', message: r.unchanged === true ? 'that theme changes nothing on this version' : 'no version was made' };
-      this.writes.set(r.version, base);
+      // Interactive's PUT has no expected head, so a helper's version can land between the read above and the
+      // re-theme. Undo forks the version the engine says it themed (`parent`), never the `base` we asked for, so a
+      // helper's change in between is never discarded (codex h4-r1 P1).
+      const parent = typeof r.parent === 'number' ? r.parent : base;
+      this.writes.set(r.version, parent);
       this.moveHead(r.version);
       return { version: r.version };
     } catch (e: unknown) {

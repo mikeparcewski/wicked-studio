@@ -6,7 +6,7 @@ import {
 import { appendInstrumentBridge, hasInstrumentBridge } from '../../interactive/instrumented.js';
 import { DEFAULT_COLOUR, themeSwatches, type Swatch } from '../../editors/swatches.js';
 import { V2Port, announceReady, helloOf, sizeOfSurface, type Mode, type Surface } from '../_shared/v2.js';
-import { mountStyle } from '../_shared/style.js';
+import { mountStyle, tokensFromHtml, type ThemeTokens } from '../_shared/style.js';
 import surfaces from './surfaces.json';
 
 /**
@@ -126,6 +126,8 @@ export function start(): void {
   let mode: Mode = 'simple';
   let v2: V2Port | null = null;
   const advanced = (): boolean => protocol < 2 || mode === 'advanced';
+  /** The theme the page wears (its `--wi-*`), the Style panel's starting point. */
+  let themeTokens: ThemeTokens | null = null;
   let seq = 0;
   const pending = new Map<string, (r: Reply) => void>();
   const send = (type: string, payload: unknown): void => { port?.postMessage({ p: PROTOCOL, v: PROTOCOL_VERSION, type, payload }); };
@@ -328,6 +330,8 @@ export function start(): void {
       const html = typeof content?.html === 'string' ? content.html : '';
       head = typeof r.payload['version'] === 'number' ? r.payload['version'] : head;
       swatches = themeSwatches(html);
+      themeTokens = tokensFromHtml(html) ?? themeTokens;
+      style?.refresh();
       fillSwatches(fills, 'background');
       fillSwatches(inks, 'color');
       gen += 1;
@@ -439,6 +443,8 @@ export function start(): void {
 
   /** R-a: remove the picked element — one version; the host's Undo puts it back. */
   const remove = async (wid: string): Promise<void> => {
+    // Removing is Advanced in full screen (and v1's editor); never from the card's preview (codex h4-r1).
+    if (!advanced() || size === 'inline') return;
     if (busy || inventory?.widMap[wid] === undefined) return;
     const words = anchorWords(wid, 'page');
     const section = inventory.blocks[wid]?.section ?? null;
@@ -634,15 +640,21 @@ export function start(): void {
     editor.hidden = options;
     if (options && style === null) {
       style = mountStyle(styleRoot, {
-        tokens: () => null,
+        tokens: () => themeTokens,
         apply: async (tokens) => {
           for (let attempt = 0; attempt < 2; attempt += 1) {
             if (head === null) return { ok: false, reason: 'The page is not loaded yet' };
             const r = await req('theme.set', { base: head, tokens });
-            if (r.ok) { const v = r.payload['version']; if (typeof v === 'number') void render(v); return { ok: true }; }
+            if (r.ok) {
+              const v = r.payload['version'];
+              themeTokens = { name: tokens.name, colors: { ...tokens.colors }, fonts: { ...tokens.fonts } };
+              if (typeof v === 'number') await render(v);
+              return { ok: true };
+            }
             if (r.error.code !== 'head_moved') return { ok: false, reason: r.error.message };
+            // Re-read the head the host named before the one retry, so the retry's base is a version we have seen.
             const h = r.payload?.['head'];
-            if (typeof h === 'number') head = h; else await render();
+            await render(typeof h === 'number' ? h : undefined);
           }
           return { ok: false, reason: 'The page changed again: try once more' };
         },

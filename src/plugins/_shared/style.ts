@@ -88,3 +88,29 @@ export function mountStyle(root: HTMLElement, ctx: StyleContext): { refresh(): v
   root.append(match, status); refresh();
   return { refresh };
 }
+
+/**
+ * The theme a document wears, read from its own `--wi-*` declarations (interactive's theme variables), so the Style
+ * panel starts from the artifact's real theme, not a preset (codex h4-r1). Null when the document declares none.
+ */
+export function tokensFromHtml(content: string): ThemeTokens | null {
+  const doc = new DOMParser().parseFromString(content, 'text/html');
+  const css = Array.from(doc.querySelectorAll('style')).map((s) => s.textContent ?? '').join('\n');
+  const values = new Map<string, string>();
+  for (const m of css.matchAll(/(--wi-[a-z-]+)\s*:\s*([^;}{]+)/gi)) values.set(m[1]!.toLowerCase(), m[2]!.trim());
+  if (values.size === 0) return null;
+  const t = copyTokens(THEMES[0]!);
+  const colors = { background: '--wi-bg', surface: '--wi-surface', primary: '--wi-primary', secondary: '--wi-secondary', accent: '--wi-accent', text_primary: '--wi-text', text_secondary: '--wi-text-secondary', text_muted: '--wi-muted', border: '--wi-border' } as const;
+  for (const key of Object.keys(colors) as (keyof typeof colors)[]) {
+    const value = values.get(colors[key]);
+    if (value !== undefined && /^(#(?:[0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})|(?:rgb|hsl)a?\([0-9.,%\s]+\))$/i.test(value)) t.colors[key] = value;
+  }
+  for (const key of ['heading', 'body', 'mono'] as const) {
+    const value = values.get(`--wi-font-${key}`);
+    if (value !== undefined) t.fonts[key] = value.split(',')[0]!.trim().replace(/^['"]|['"]$/g, '');
+  }
+  // A named preset when the readback has its tokens exactly.
+  const match = THEMES.find((theme) => JSON.stringify(theme.colors) === JSON.stringify(t.colors) && JSON.stringify(theme.fonts) === JSON.stringify(t.fonts));
+  t.name = match?.name ?? 'custom';
+  return t;
+}

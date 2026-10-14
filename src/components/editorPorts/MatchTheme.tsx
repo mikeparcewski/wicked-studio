@@ -30,7 +30,14 @@ export function MatchTheme({ projectId, docId, onVersion }: {
     if (!learnReady(kind, value) || busy) return;
     setBusy(true);
     setLine({ text: `Reading the ${LEARN_LABEL[kind].noun}…`, bad: false });
-    const before = await getLearnedTheme(projectId, docId).catch(() => null);
+    // The theme already learned, if any: a later readback is this learn's answer only when it differs. A failed
+    // read is not "none" (an older theme would then pass for this one's, codex h4-r1): stop and say so.
+    let before: Awaited<ReturnType<typeof getLearnedTheme>>;
+    try { before = await getLearnedTheme(projectId, docId); } catch (e: unknown) {
+      setLine({ text: `Could not read the current theme: ${e instanceof Error ? e.message : String(e)}`, bad: true });
+      setBusy(false);
+      return;
+    }
     const asked = await learnThemeFromThread({ projectId, docId, kind, value });
     if (!asked.ok) { setLine({ text: asked.reason, bad: true }); setBusy(false); return; }
     const ctl = new AbortController();
