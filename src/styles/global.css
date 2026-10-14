@@ -27,6 +27,7 @@
 @import './sections/rail.css';
 @import './sections/mcp-inspect.css';
 @import './sections/agents.css';
+@import './sections/editor-host.css';
 
 @tailwind base;
 @tailwind components;
