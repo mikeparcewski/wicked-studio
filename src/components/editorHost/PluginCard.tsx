@@ -80,6 +80,10 @@ function CappedCard(props: PluginCardProps & { editor: EditorView }): React.Reac
   const live = useLiveCards((s) => isLive(s.order, key, cap));
   const full = useHostChrome((s) => s.full === key);
   useEffect(() => { touchLive(key); return () => dropLive(key); }, [key]);
+  // The artifact address sees every mounted card, live or resting; a deep link to a resting one wakes it (codex h2-r7 P2).
+  useEffect(() => registerArtifact(key), [key]);
+  const asked = useArtifactSizes((st) => artifactSizeOf(st, key) !== 'inline');
+  useEffect(() => { if (asked && !live) touchLive(key); }, [asked, live, key]);
   if (live || full) return <LiveCard {...props} />;
   return (
     <section data-testid="plugin-card" data-state="still" data-editor={props.editor.id} className="wk-pcard">
@@ -261,15 +265,25 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
   // The artifact address (S16a-4a) keeps working (codex h2-r6 P2): the card registers while mounted, a deep link or
   // Back that sizes it opens or closes full screen (a pane is the Options group), and its own full screen is written
   // to the size store and the address.
+  // (Registration is the mounted wrapper's, CappedCard: a resting card is still on the page.)
   const address = useArtifactAddress();
   const key = binding.artifactKey;
-  useEffect(() => registerArtifact(key), [key]);
   const size = useArtifactSizes((st) => artifactSizeOf(st, key));
+  const ready = decl !== null;
   useEffect(() => {
-    if (size === 'full' && !fullRef.current) enterFull(key);
-    else if (size === 'pane') { openOptionsRef.current(); setArtifactSize(key, fullRef.current ? 'full' : 'inline'); }
-    else if (size === 'inline' && fullRef.current) exitFull();
-  }, [size, key, enterFull, exitFull]);
+    const owner = useHostChrome.getState().full;
+    if (size === 'full' && owner !== key) enterFull(key);
+    else if (size === 'pane') {
+      // A pane is this card's Options group: wait for the handshake's declaration, then leave full screen (Back from
+      // full lands here) and open the group (codex h2-r7 P2).
+      if (!ready) return;
+      setArtifactSize(key, 'inline');
+      if (owner === key) exitFull();
+      openOptionsRef.current();
+    }
+    // Only this card's own full screen: another card's deep link may already own it (codex h2-r7 P2).
+    else if (size === 'inline' && owner === key) exitFull();
+  }, [size, key, ready, enterFull, exitFull]);
   const wasFull = useRef(full);
   useEffect(() => {
     if (wasFull.current === full) return;
