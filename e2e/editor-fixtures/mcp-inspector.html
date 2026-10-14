@@ -93,17 +93,13 @@
     port.postMessage({ p: 'wicked.editor', v: 1, type, id, payload });
   });
   // The log seq before a call: its request and answer are the entries after it.
-  const calls = [];
-  const DETAIL_METHODS = ['tools/call', 'resources/read', 'prompts/get'];
-  const claimed = new Set();
   // Each call keeps its own cursor (the log seq when it left), so a later call can never take its wire entries.
   const mcp = async (method, params) => {
     const after = lastSeq === null ? -1 : lastSeq;
     // Recorded at dispatch, in order, even if its detail view is gone by the reply: its request entry is its own.
-    const call = { method, after, sentSeq: null, refused: null, name: params && typeof params.name === 'string' ? params.name : (params && params.uri) || null };
+    const call = { method, after, refused: null, name: params && typeof params.name === 'string' ? params.name : (params && params.uri) || null };
     // Only the calls whose raw exchange is shown (a detail's own call) take part, and only when connected: a call
     // made while not connected was never sent, so it can never take a later call's request (codex h5-r5).
-    if (DETAIL_METHODS.includes(method) && state === 'ready') { calls.push(call); if (calls.length > 50) calls.shift(); }
     const r = await req('mcp.request', params === undefined ? { method } : { method, params });
     if (!r.ok) { const c = (r.error && r.error.code) || 'refused'; if (NOT_SENT.includes(c)) call.refused = c; }
     return Object.assign(r, { after, call });
@@ -111,8 +107,8 @@
   // Refused before anything was sent; a timeout or a transport failure may still have reached the server.
   // `unavailable` can follow a dispatch (a transport failure after send): it is an uncertain outcome, not 'not sent'.
   const NOT_SENT = ['not_granted', 'refused', 'bad_request', 'write_not_granted', 'server_changed', 'rate_limited'];
-  // One call at a time (codex h5-r3): each call claims the next request entry in the log, and a reply that
-  // belongs to a detail view no longer shown never touches the one on screen.
+  // One call at a time (codex h5-r3), and a reply that belongs to a detail view no longer shown never
+  // touches the one on screen.
   let calling = false;
   let viewGen = 0;
   const once = async (fn) => { if (calling) return; calling = true; const gen = viewGen; try { await fn(gen); } finally { calling = false; } };
@@ -135,19 +131,6 @@
     }
   }
 
-  // Calls are one at a time and each sends exactly one request, so the log's outgoing requests are claimed in
-  // order: the first unclaimed request after a call's cursor, with its method, is that call's (codex h5-r4).
-  function claim() {
-    for (const c of calls) {
-      if (c.sentSeq !== null || c.refused) continue;
-      // Its request was evicted from the ring (or fell in a gap): retire it rather than block every later call.
-      const oldest = log.find((x) => !x.gap);
-      if (oldest && oldest.seq > c.after + 1 && !log.some((x) => !x.gap && x.seq > c.after && x.dir === 'out' && x.kind === 'request' && x.method === c.method && !claimed.has(x.seq))) { c.sentSeq = -1; continue; }
-      const e = log.find((x) => !x.gap && x.seq > c.after && x.dir === 'out' && x.kind === 'request' && x.method === c.method && !claimed.has(x.seq));
-      if (!e) break;
-      c.sentSeq = e.seq; claimed.add(e.seq);
-    }
-  }
   function syncRaw() {
     const reqEl = $('raw-request'), resEl = $('raw-response');
     if (!reqEl || !resEl) return;
@@ -161,10 +144,14 @@
       resEl.textContent = '';
       return;
     }
-    claim();
-    const sent = lastCall.sentSeq === null ? undefined : log.find((e) => e.seq === lastCall.sentSeq);
+    // The plugin is never told a call's rpc id, so it does not claim to know which log entry is this call's
+    // (codex h5-r2..r6): it shows the NEWEST matching request in the log since this call left (same method, same
+    // tool or resource), and its own answer by rpc id, and says so.
+    const named = (e) => lastCall.name === null || (typeof e.text === 'string' && e.text.includes(JSON.stringify(lastCall.name)));
+    const matches = log.filter((e) => !e.gap && e.seq > lastCall.after && e.dir === 'out' && e.kind === 'request' && e.method === lastCall.method && named(e));
+    const sent = matches[matches.length - 1];
     const got = sent ? log.find((e) => !e.gap && e.kind === 'response' && e.rpcId === sent.rpcId) : undefined;
-    reqEl.textContent = sent ? sent.text : lastCall.sentSeq === -1 ? 'The log no longer holds this call.' : 'Waiting for the log…';
+    reqEl.textContent = sent ? 'Newest matching request in the log' + (matches.length > 1 ? ' (' + matches.length + ' since this call)' : '') + ':\n' + sent.text : 'Waiting for the log…';
     resEl.textContent = got ? got.text : (sent ? 'Waiting for the answer in the log…' : '');
   }
 
@@ -300,7 +287,7 @@
   function show(out, r, method, params) {
     out.hidden = false;
     const code = r.ok ? null : (r.error && r.error.code) || 'refused';
-    lastCall = r.call || { method, after: r.after, sentSeq: null, name: null, refused: code !== null && NOT_SENT.includes(code) ? code : null };
+    lastCall = r.call || { method, after: r.after, name: null, refused: code !== null && NOT_SENT.includes(code) ? code : null };
     if (!r.ok) { out.dataset.error = '1'; out.textContent = words(r); syncRaw(); sendHeight(); return; }
     const res = r.payload.response;
     out.dataset.error = res.error || (res.result && res.result.isError) ? '1' : '0';
@@ -394,7 +381,6 @@
             if (lastSeq !== null && e.seq > lastSeq + 1) log.push({ gap: e.seq - lastSeq - 1 });
             lastSeq = e.seq; log.push(e);
           }
-          claim(); // claim as each batch arrives, before the ring trims anything
           if (log.length > 1000) log.splice(0, log.length - 1000);
           if (tab === 'log') drawList();
           syncRaw();
