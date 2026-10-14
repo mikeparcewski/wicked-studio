@@ -191,7 +191,8 @@ function OptionsInstance({ group, hostRef, visible, initialTab, onValues, onTorn
         chips: (chips) => { const b = group.binding; for (const c of chips) if (c.anchor.kind === 'element') addAboutChip(b.composerKey, { kind: 'about', key: `el:${b.docId ?? b.artifactKey}/${c.anchor.id}`, label: c.label }); },
         draft: () => undefined,
         typed: () => undefined,
-        key: (k) => { if (k === 'Escape') useHostPanel.getState().setTab(RUN_TAB); },
+        // Only with the focus in this options frame (codex h2b-r4): a hidden instance cannot switch tabs.
+        key: (k) => { if (k === 'Escape' && document.activeElement === hostRef.current?.frame) useHostPanel.getState().setTab(RUN_TAB); },
         // An options instance never changes a host surface (codex h2b-r1/r2 P1): Full screen is the card's host button.
         morph: () => undefined,
         status: () => undefined,

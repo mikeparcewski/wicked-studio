@@ -12,11 +12,14 @@ export function FullShell({ open, tag, title, phase, modes, mode, onMode, gateAc
   const setChatOpen = useHostChrome((s) => s.setChatOpen);
   const exitBtn = useRef<HTMLButtonElement | null>(null);
   const shell = useRef<HTMLDivElement | null>(null);
+  const openRef = useRef(open);
+  openRef.current = open;
   // The browser's own fullscreen, on the host's shell, only from this explicit host button (§7.3).
   const fillScreen = (): void => {
     const el = shell.current?.closest('[data-testid="plugin-card"]') ?? shell.current;
     if (document.fullscreenElement) void document.exitFullscreen?.().catch(() => undefined);
-    else void (el as HTMLElement | null)?.requestFullscreen?.().catch(() => undefined);
+    // The request is asynchronous: if full screen was left meanwhile, leave the browser's fullscreen too (codex h2a-r4).
+    else void (el as HTMLElement | null)?.requestFullscreen?.().then(() => { if (!openRef.current && document.fullscreenElement) void document.exitFullscreen?.().catch(() => undefined); }).catch(() => undefined);
   };
   // Leaving full screen also leaves the browser's own fullscreen, so the app around it comes back (codex h2a-r2 P2).
   const leave = (): void => { if (document.fullscreenElement) void document.exitFullscreen?.().catch(() => undefined); onExit(); };
