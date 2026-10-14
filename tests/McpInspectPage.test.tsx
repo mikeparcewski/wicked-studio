@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
@@ -19,7 +19,7 @@ vi.mock('../src/api/mcpInspect.js', async (orig) => ({ ...(await orig<typeof imp
 vi.mock('../src/api/editors.js', async (orig) => ({
   ...(await orig<typeof import('../src/api/editors.js')>()),
   listEditors: vi.fn(async () => [{
-    id: 'acme-mcp', title: 'Acme MCP', version: '0.1.0', protocol: [1], kinds: ['mcp-server'], sizes: ['pane'],
+    id: 'acme-mcp', title: 'Acme MCP', version: '0.1.0', protocol: [1, 2], kinds: ['mcp-server'], sizes: ['inline'],
     permissions: [{ id: 'mcp.session', why: 'x' }], sha256: 'a'.repeat(64), bytes: 1, first_party: false, enabled: true, source: 'pack', entry_url: '',
   }]),
 }));
@@ -33,6 +33,49 @@ vi.mock('../src/editors/model.js', async (orig) => ({
 }));
 
 import { McpInspectPage, pluginEntries } from '../src/components/editors/McpInspectPage.js';
+import { RUN_TAB, useHostChrome, useHostPanel } from '../src/editors/hostApi.js';
+import { resetArtifactSizes } from '../src/store/artifactSizes.js';
+
+const ports: MessagePort[] = [];
+const surfaces = {
+  card: { interactive: true, aspect: 'auto' },
+  options: { tabs: ['Tools', 'Resources', 'Log'].map((label) => ({ id: label.toLowerCase(), label, render: 'plugin' })) },
+  full: { modes: ['simple', 'advanced'], default: 'simple' },
+};
+type Message = { type?: string; id?: string; re?: string; ok?: boolean; payload?: Record<string, unknown> };
+
+/** The real port exercises the shared card and Options hosts against the page's one session. */
+function connectFrame(frame: HTMLIFrameElement) {
+  let port: MessagePort | undefined;
+  let hello: Message | undefined;
+  vi.spyOn(frame.contentWindow!, 'postMessage').mockImplementation(((m: Message, _origin: unknown, tr?: Transferable[]) => {
+    hello = m;
+    port = tr?.[0] as MessagePort | undefined;
+  }) as never);
+  act(() => window.dispatchEvent(new MessageEvent('message', {
+    source: frame.contentWindow,
+    data: { p: 'wicked.editor', v: 1, type: 'plugin.ready', payload: { editor: 'acme-mcp', version: '0.1.0', protocol: [2], surfaces } },
+  })));
+  expect(port).toBeDefined();
+  const connected = port!;
+  ports.push(connected);
+  const seen: Message[] = [];
+  connected.onmessage = (e) => {
+    const m = e.data as Message;
+    seen.push(m);
+    if (m.type === 'host.mode') connected.postMessage({ p: 'wicked.editor', v: 1, re: m.id, ok: true, payload: { mode: m.payload?.['mode'] } });
+  };
+  let sequence = 0;
+  const request = async (method: string) => {
+    const id = `mcp-${++sequence}`;
+    await act(async () => {
+      connected.postMessage({ p: 'wicked.editor', v: 1, type: 'mcp.request', id, payload: { method } });
+      await vi.waitFor(() => expect(seen.some((m) => m.re === id)).toBe(true));
+    });
+    return seen.find((m) => m.re === id)!;
+  };
+  return { seen, hello, request };
+}
 
 const view = (id: string, state: 'ready' | 'failed') => ({
   id, state, error: state === 'failed' ? 'exited with code 1' : null, startedAt: '', lastSeq: 1,
@@ -41,6 +84,9 @@ const view = (id: string, state: 'ready' | 'failed') => ({
 });
 
 beforeEach(() => {
+  useHostPanel.setState({ group: null, tab: RUN_TAB, folded: false });
+  useHostChrome.setState({ full: null, navCollapsed: false, chatOpen: false, navBefore: false });
+  resetArtifactSizes();
   for (const f of Object.values(api)) f.mockReset();
   api.hasInspector.mockResolvedValue(true);
   api.closeSession.mockResolvedValue(undefined);
@@ -49,7 +95,11 @@ beforeEach(() => {
     signal?.addEventListener('abort', () => rej(new DOMException('aborted', 'AbortError')));
   }));
 });
-afterEach(() => { document.body.innerHTML = ''; });
+afterEach(() => {
+  cleanup();
+  for (const port of ports.splice(0)) port.close();
+  vi.restoreAllMocks();
+});
 
 async function ready(): Promise<ReturnType<typeof render>> {
   const r = render(<McpInspectPage navigate={() => undefined} search="?server=tools" />);
@@ -59,6 +109,60 @@ async function ready(): Promise<ReturnType<typeof render>> {
 }
 
 describe('the inspector page’s sessions', () => {
+  it('shares its session and sanitized log with the declared Options tabs, and keeps the card frame in full screen', async () => {
+    api.startSession.mockResolvedValue(view('shared-1', 'ready'));
+    api.sendRpc.mockResolvedValue({ response: { result: { tools: [] } }, ms: 7, truncated: false });
+    const entries: Parameters<typeof pluginEntries>[0] = [
+      { seq: 1, at: '', dir: 'host', kind: 'state', text: 'spawn /private/server.js' },
+      { seq: 2, at: '', dir: 'in', kind: 'response', text: '{"result":{}}' },
+    ];
+    api.pollLog.mockResolvedValueOnce({ entries, next: 2, first: 1, state: 'ready', error: null });
+    const page = await ready();
+    const frame = await screen.findByTestId('editor-frame') as HTMLIFrameElement;
+    const card = connectFrame(frame);
+    expect(card.hello?.payload).toMatchObject({ surface: 'card' });
+    fireEvent.click(screen.getByTestId('mcp-inspect-connect'));
+    await screen.findByTestId('mcp-inspect-disconnect');
+    await waitFor(() => expect(card.seen).toContainEqual(expect.objectContaining({ type: 'mcp.log' })));
+    expect((await card.request('tools/list')).ok).toBe(true);
+    expect(screen.getByTestId('mcp-inspect-calls')).toHaveAttribute('data-count', '1');
+
+    fireEvent.click(screen.getByTestId('plugin-card-options'));
+    expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['Tools', 'Resources', 'Log']);
+    const optionsFrame = screen.getByTestId('host-panel-frame').querySelector('iframe')!;
+    const options = connectFrame(optionsFrame);
+    expect(options.hello?.payload).toMatchObject({ surface: 'options', tab: 'tools' });
+    await waitFor(() => expect(options.seen).toContainEqual(expect.objectContaining({ type: 'mcp.log' })));
+    expect(options.seen).toContainEqual(expect.objectContaining({ type: 'mcp.state', payload: expect.objectContaining({ state: 'ready' }) }));
+    expect(JSON.stringify(options.seen)).not.toContain('/private/server.js');
+    expect(options.seen).toContainEqual(expect.objectContaining({ type: 'mcp.log', payload: { entries: pluginEntries(entries) } }));
+    expect((await options.request('resources/list')).ok).toBe(true);
+    expect(api.sendRpc).toHaveBeenLastCalledWith('shared-1', 'resources/list', undefined);
+    expect(screen.getByTestId('mcp-inspect-calls')).toHaveAttribute('data-count', '2');
+    expect((await options.request('tools/call')).ok).toBe(false);
+    expect(api.sendRpc).toHaveBeenCalledTimes(2);
+    expect(screen.getByTestId('mcp-inspect-calls')).toHaveAttribute('data-count', '3');
+    expect(screen.getByTestId('mcp-inspect-calls')).toHaveTextContent('refused: you did not click for it');
+    fireEvent.click(screen.getByRole('tab', { name: 'Log' }));
+    await waitFor(() => expect(options.seen).toContainEqual(expect.objectContaining({ type: 'host.tab', payload: { tab: 'log' } })));
+    fireEvent.click(screen.getByTestId('host-panel-close'));
+    expect(optionsFrame.isConnected).toBe(false);
+
+    fireEvent.click(screen.getByTestId('plugin-card-full'));
+    expect(screen.getByTestId('editor-frame')).toBe(frame);
+    fireEvent.click(screen.getByRole('radio', { name: 'Advanced' }));
+    await waitFor(() => expect(screen.getByRole('radio', { name: 'Advanced' })).toHaveAttribute('aria-checked', 'true'));
+    fireEvent.click(screen.getByTestId('full-shell-exit'));
+    expect(screen.getByTestId('editor-frame')).toBe(frame);
+    expect(screen.getByTestId('plugin-card')).toHaveAttribute('data-surface', 'card');
+
+    fireEvent.click(screen.getByTestId('plugin-card-options'));
+    page.unmount();
+    expect(useHostPanel.getState().group).toBeNull();
+    expect(api.startSession).toHaveBeenCalledTimes(1);
+    expect(api.closeSession).toHaveBeenCalledWith('shared-1', { keepalive: true });
+  });
+
   it('a session that finishes starting after the page is gone is deleted, never polled', async () => {
     let finish: (v: unknown) => void = () => undefined;
     api.startSession.mockImplementation(() => new Promise((res) => { finish = res; }));

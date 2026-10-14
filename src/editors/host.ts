@@ -66,6 +66,15 @@ export type McpBridgeResult = { response: unknown; ms: number; truncated: boolea
  *  by the page, never by the plugin. Absent (the dev and conformance hosts) = no session: `unavailable`. */
 export interface McpHostBridge {
   request(method: string, params: Record<string, unknown> | undefined): Promise<McpBridgeResult>;
+  /** Each surface hears the current session and log backlog on subscribe, then live updates. */
+  subscribe?(events: McpSessionEvents): () => void;
+  /** The session owner's call line includes calls and refusals from every surface. */
+  onCall?(call: McpCall): void;
+}
+
+export interface McpSessionEvents {
+  state(payload: Record<string, unknown>): void;
+  log(entries: readonly unknown[]): void;
 }
 
 /** One `mcp.request`, as the host's call line counts it: `sent` when it leaves, `done` with its outcome. */
@@ -241,6 +250,7 @@ export class EditorHost {
   /** `mcp.state` / `mcp.log` the page posted before the handshake: delivered right after `host.hello`. */
   private pendingMcpState: Record<string, unknown> | null = null;
   private pendingMcpLog: unknown[] = [];
+  private unsubscribeMcp: (() => void) | undefined;
   /** Window messages after the handshake: counted against the flood limit, logged only the first few. */
   private ignoredWindow = 0;
   /** One typed character per gesture (§5.10): spent by an accepted `ui.typed`, re-armed only when
@@ -288,6 +298,10 @@ export class EditorHost {
     this.readyTimer = setTimeout(() => { if (!this.handshaken) this.teardown('This editor didn’t load'); }, LIMITS.loadMs);
     this.frame.src = this.o.src;
     this.o.container.appendChild(this.frame);
+    this.unsubscribeMcp = this.o.mcp?.subscribe?.({
+      state: (payload) => this.mcpState(payload),
+      log: (entries) => this.mcpLog(entries),
+    });
   }
 
   get alive(): boolean { return !this.torn; }
@@ -588,6 +602,11 @@ export class EditorHost {
     }
   }
 
+  private reportMcpCall(call: McpCall): void {
+    this.o.ui.mcpCall?.(call);
+    this.o.mcp?.onCall?.(call);
+  }
+
   /**
    * `mcp.request` (DES-MCP-INSPECTOR-001 §4). Judged at receipt, before any await: the method must be
    * on the bridge's list, and a `tools/call` needs the operator's real activation (a click or Enter in
@@ -599,7 +618,7 @@ export class EditorHost {
     const params = p['params'] as Record<string, unknown> | undefined;
     const tool = method === 'tools/call' && typeof params?.['name'] === 'string' ? params['name'].slice(0, 80) : null;
     if (!MCP_METHODS.has(method)) {
-      this.o.ui.mcpCall?.({ phase: 'done', method: method.slice(0, 80), tool: null, sent: false, ms: null, outcome: 'bad_request' });
+      this.reportMcpCall({ phase: 'done', method: method.slice(0, 80), tool: null, sent: false, ms: null, outcome: 'bad_request' });
       return { error: 'bad_request', message: `${method} is not a method the inspector sends` };
     }
     // A click in the host's own chrome (Connect, Copy log) also activates the page, so the click must
@@ -607,19 +626,19 @@ export class EditorHost {
     const clicked = (this.o.activation ?? NO_ACTIVATION)() && (this.o.focusInFrame ?? ((f) => document.activeElement === f))(this.frame);
     if (method === 'tools/call' && !clicked) {
       this.mcpRefusals += 1;
-      this.o.ui.mcpCall?.({ phase: 'done', method, tool, ms: null, sent: false, outcome: 'refused' });
+      this.reportMcpCall({ phase: 'done', method, tool, ms: null, sent: false, outcome: 'refused' });
       if (this.mcpRefusals >= LIMITS.mcpRefusalsBeforeTeardown) this.teardown('This editor called tools nobody clicked for');
       return { error: 'refused', message: 'a tool call needs your click in the editor' };
     }
     if (this.o.mcp === undefined) {
-      this.o.ui.mcpCall?.({ phase: 'done', method, tool, ms: null, sent: false, outcome: 'unavailable' });
+      this.reportMcpCall({ phase: 'done', method, tool, ms: null, sent: false, outcome: 'unavailable' });
       return { error: 'unavailable', message: 'not connected' };
     }
-    this.o.ui.mcpCall?.({ phase: 'sent', method, tool });
+    this.reportMcpCall({ phase: 'sent', method, tool });
     const r = await this.o.mcp.request(method, params);
     if (!this.torn) {
       const outcome = 'error' in r ? r.error : (r.response as { error?: unknown } | null)?.error !== undefined ? 'server-error' : 'ok';
-      this.o.ui.mcpCall?.({ phase: 'done', method, tool, sent: true, ms: 'error' in r ? null : r.ms, outcome });
+      this.reportMcpCall({ phase: 'done', method, tool, sent: true, ms: 'error' in r ? null : r.ms, outcome });
     }
     return r;
   }
@@ -912,6 +931,8 @@ export class EditorHost {
     if (this.torn) return;
     this.post(event('host.teardown', { reason }));
     this.torn = true;
+    this.unsubscribeMcp?.();
+    this.unsubscribeMcp = undefined;
     window.removeEventListener('message', this.onWindow);
     window.removeEventListener('blur', this.onHostBlur);
     this.frame.removeEventListener('load', this.onLoad);

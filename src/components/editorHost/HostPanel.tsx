@@ -179,6 +179,7 @@ function OptionsInstance({ group, hostRef, visible, withRun, initialTab, onValue
   useEffect(() => {
     if (box.current === null) return undefined;
     const e = group.editor;
+    const bridge = group.adapter.mcpBridge?.();
     const host = new EditorHost({
       container: box.current,
       src: group.src,
@@ -194,6 +195,7 @@ function OptionsInstance({ group, hostRef, visible, withRun, initialTab, onValue
       prefs: { reducedMotion: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false, techDetails: false, locale: navigator.language },
       firstParty: e.first_party,
       adapter: group.adapter,
+      ...(bridge !== undefined ? { mcp: bridge } : {}),
       declared: (e as typeof e & { surfaces?: unknown }).surfaces,
       sizes: e.sizes,
       ui: {

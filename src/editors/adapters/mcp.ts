@@ -1,5 +1,5 @@
 import { MCP_SERVER_KIND } from '../../api/editors.js';
-import type { AdapterResult, ArtifactRef } from '../host.js';
+import type { AdapterResult, ArtifactRef, McpHostBridge } from '../host.js';
 import { registerAdapter, type SurfaceAdapter, type AdapterCapability, type ArtifactBinding } from '../hostApi.js';
 
 /**
@@ -11,8 +11,12 @@ export class McpSurfaceAdapter implements SurfaceAdapter {
   private readonly at = new Date().toISOString();
   private readonly titleOf: () => string;
 
-  constructor(title: string | (() => string)) {
+  constructor(title: string | (() => string), private readonly bridge?: McpHostBridge) {
     this.titleOf = typeof title === 'function' ? title : () => title;
+  }
+
+  mcpBridge(): McpHostBridge | undefined {
+    return this.bridge;
   }
 
   capabilities(): readonly AdapterCapability[] {

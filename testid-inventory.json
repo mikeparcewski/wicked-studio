@@ -12,8 +12,8 @@
   "studioVersion": "0.8.0",
   "counts": {
     "files": 228,
-    "occurrences": 2810,
-    "static": 2428,
+    "occurrences": 2808,
+    "static": 2426,
     "dynamic": 71,
     "computed": 24
   },
@@ -6138,12 +6138,6 @@
       ]
     },
     {
-      "testId": "mcp-inspect-reload",
-      "files": [
-        "src/components/editors/McpInspectPage.tsx"
-      ]
-    },
-    {
       "testId": "mcp-inspect-restart",
       "files": [
         "src/components/editors/McpInspectPage.tsx"
@@ -6205,12 +6199,6 @@
     },
     {
       "testId": "mcp-inspect-target",
-      "files": [
-        "src/components/editors/McpInspectPage.tsx"
-      ]
-    },
-    {
-      "testId": "mcp-inspect-torn",
       "files": [
         "src/components/editors/McpInspectPage.tsx"
       ]
