@@ -72,7 +72,11 @@ PAGE = """() => {
 
 
 def address(page) -> str:
+    """The page's own address: a Desk-hosted tab (Desk v2: `/agents...` -> `/?tab=agents&at=...`) reads its `at`."""
     u = urllib.parse.urlparse(page.url)
+    q = urllib.parse.parse_qs(u.query)
+    if (u.path == "/" or u.path.startswith("/projects/")) and "at" in q:
+        return q["at"][0]
     return u.path + (f"?{u.query}" if u.query else "")
 
 
@@ -137,7 +141,7 @@ with sync_playwright() as p:
 
     # ── 4. helpers moved: the old tab address lands on the Agents page (DES-seats-page §2.2) ──
     page.goto(f"{origin}/everything?tab=helpers", wait_until="networkidle")
-    page.wait_for_function("() => location.pathname === '/agents' && document.querySelectorAll('[data-testid=\"agents-row\"]').length >= 3", timeout=10000)
+    page.wait_for_function("() => new URLSearchParams(location.search).get('tab') === 'agents' && document.querySelectorAll('[data-testid=\"agents-row\"]').length >= 3", timeout=10000)
     helpers = page.evaluate("""() => [...document.querySelectorAll('[data-testid="agents-row"]')]
         .map(h => ({seat: h.dataset.agent, ready: h.dataset.ready, fix: h.querySelector('[data-testid="agents-fix"]')?.dataset.tone ?? null}))""")
     page.screenshot(path=str(SHOTS / "desk-everything-helpers.png"))

@@ -36,7 +36,7 @@ import { ConnectionStatus } from './components/ConnectionStatus.js';
 import { SystemSettings } from './components/SystemSettings.js';
 import { ThemePage } from './components/ThemePage.js';
 import { HealthPage } from './components/HealthPage.js';
-import { parseRoute } from './hooks/useRoute.js';
+import { parseRoute, projectDetailPath } from './hooks/useRoute.js';
 import { DeskV2, deskTabPath, type HostedTab } from './components/desk/DeskV2.js';
 import { useDeskStream } from './store/deskStream.js';
 import { SessionRail } from './components/desk/SessionRail.js';
@@ -175,7 +175,15 @@ export function App(): React.ReactElement {
     const r = parseRoute(u.pathname);
     const hs = u.search;
     // The Agents page (DES-seats-page) is the Agents tab; `/agents?fix=<key>` / `?setup=1` ride along as `at`.
-    if (tab === 'agents') return <AgentsPage search={hs} navigate={navigate} />;
+    // Its own moves (open/close an agent, the setup steps) stay on this tab's address, in this Desk
+    // (global or the project's), so the Desk is not remounted through the `/agents` redirect.
+    if (tab === 'agents') {
+      const base = project === null ? '/' : projectDetailPath(project);
+      const onTab = (path: string): string =>
+        path === AGENTS_PATH || path.startsWith(`${AGENTS_PATH}?`) || path.startsWith(`${AGENTS_PATH}/`) ? deskTabPath('agents', path, base) : path;
+      const agentsNavigate: typeof navigate = (path, opts) => { if (opts === undefined) navigate(onTab(path)); else navigate(onTab(path), opts); };
+      return <AgentsPage search={hs} navigate={agentsNavigate} />;
+    }
     if (tab === 'repositories' && project === null) {
       return <div className="wk-desk2-repos flex-1 overflow-hidden">
         <RepositoriesPanel onSelectRun={selectRun} autoShowRegister={u.pathname === '/repos/new'} navigate={navigate} ambientProject={ambientProjectId(u.pathname, hs)} />

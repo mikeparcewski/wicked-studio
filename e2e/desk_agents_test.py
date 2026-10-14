@@ -143,7 +143,11 @@ def wire(page) -> None:
 
 
 def address(page) -> str:
+    """The page's own address: a Desk-hosted tab (Desk v2: `/agents...` -> `/?tab=agents&at=...`) reads its `at`."""
     u = urllib.parse.urlparse(page.url)
+    q = urllib.parse.parse_qs(u.query)
+    if (u.path == "/" or u.path.startswith("/projects/")) and "at" in q:
+        return q["at"][0]
     return u.path + (f"?{u.query}" if u.query else "")
 
 
@@ -253,7 +257,7 @@ with sync_playwright() as p:
         dest["chore_modal"] = page.get_by_test_id("agents-modal").get_attribute("data-agent")
         dest["chore_stays"] = address(page)
         page.keyboard.press("Escape")
-    check("dest", dest["cmdk"] == "/agents" and dest["cmdk_label"].startswith("Agents") and dest["helpers_tab"] == "/agents"
+    check("dest", dest["cmdk"] == "/agents" and dest["cmdk_label"].startswith("Desk › Agents") and dest["helpers_tab"] == "/agents"
           and dest["unknown_fix"] == "/agents" and dest["unknown_modal"] == 0
           and dest["chore"] == 1 and dest.get("chore_modal") == "claude" and dest.get("chore_stays") == "/", **dest)
 
