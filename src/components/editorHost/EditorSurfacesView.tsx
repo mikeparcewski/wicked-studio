@@ -56,7 +56,7 @@ export function EditorSurfacesView({ editor, version, sha, title, kind }: { edit
               <p><b>Workflow</b> Page · Critique now</p>
               <p><b>Phase</b> Build, 2 of 4</p>
               <p><b>Agents</b> Claude Code (maker), Codex (reviewer)</p>
-              <p className="wk-artifact-hint">A mock of the run page’s Run tab. Press Options on the card to add the plugin’s tabs.</p>
+              <p className="wk-host-note">A mock of the run page’s Run tab. Press Options on the card to add the plugin’s tabs.</p>
             </div>
           )}
           ribbon={<span>Run · Build, phase 2 of 4 · open the panel</span>}

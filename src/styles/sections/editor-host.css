@@ -91,3 +91,8 @@
 .wk-surfaces-chat p { margin: 0; }
 .wk-surfaces-chat-who { margin-top: var(--space-2) !important; font-weight: var(--weight-semi); color: var(--ink-muted); }
 .wk-pcard-still { align-items: center; justify-content: center; aspect-ratio: 16 / 9; max-height: 200px; background: var(--surface-raised); }
+.wk-host-note { margin: var(--space-2) var(--space-4) 0; font-size: var(--text-xs); color: var(--ink-muted); }
+.wk-pcard-frame .wk-host-note { position: absolute; left: var(--space-2); bottom: var(--space-2); margin: 0; padding: 2px 8px; background: var(--surface-card); border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.wk-hpanel-body .wk-host-note { margin: 0; }
+/* The test page: the surfaces span the page's grid; the protocol view stays below. */
+.wk-editor-page > .wk-surfaces { grid-column: 1 / -1; }

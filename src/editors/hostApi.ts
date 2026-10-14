@@ -80,6 +80,8 @@ const adapters = new Map<AdapterSource, AdapterFactory>();
 /** A data plane's adapter. `interactive-doc` and `fake` are the host's; `demo`, `walkthrough`, `mcp` are the ports'. */
 export function registerAdapter(source: AdapterSource, factory: AdapterFactory): void { adapters.set(source, factory); }
 export function adapterFor(binding: ArtifactBinding): SurfaceAdapter | null { return adapters.get(binding.source)?.(binding) ?? null; }
+/** Whether a data plane has an adapter yet: a caller keeps its old body until one is registered (codex h2-r6). */
+export function hasAdapter(source: AdapterSource): boolean { return adapters.has(source); }
 
 // ── host tabs (host-drawn, from capabilities) ───────────────────────────────────────────────────────
 

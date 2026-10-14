@@ -111,7 +111,7 @@ function GroupBody({ group, tab }: { group: OptionsGroup; tab: PanelTab }): Reac
           onValues={(t, v) => setValues((s) => ({ ...s, [t]: v }))} onTorn={setTorn} onShown={() => setShownTick((n) => n + 1)} />
       )}
       {showFrame && pluginTab !== null && <PluginTabSwitch hostRef={hostRef} tab={pluginTab.id} />}
-      {torn !== null && showFrame && <p data-testid="host-panel-torn" className="wk-artifact-hint">This part didn’t start · {torn}</p>}
+      {torn !== null && showFrame && <p data-testid="host-panel-torn" className="wk-host-note">This part didn’t start · {torn}</p>}
       {pluginTab !== null && pluginTab.render === 'controls' && v2 && (
         <ControlsTab key={pluginTab.id} tab={pluginTab} confirmed={values[pluginTab.id] ?? {}} change={(id, value) => hostRef.current?.changeOption(pluginTab.id, id, value) ?? Promise.resolve(false)} />
       )}

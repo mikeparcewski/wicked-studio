@@ -12,7 +12,9 @@ import { bundleUrl, fetchGrants } from '../../editors/model.js';
 import type { PermissionId } from '../../editors/protocol.js';
 import type { CardAction, FullMode, Surfaces } from '../../editors/surfaces.js';
 import { readThemeTokens } from '../../editors/theme.js';
+import { artifactSizeOf, registerArtifact, setArtifactSize, useArtifactSizes } from '../../store/artifactSizes.js';
 import { addAboutChip } from '../../store/composerChips.js';
+import { useArtifactAddress } from '../session/ArtifactAddress.js';
 import { useEditorFor } from '../../store/editors.js';
 import { useSessionDrafts } from '../../store/sessionDrafts.js';
 import '../../editors/adapters/index.js';
@@ -63,7 +65,7 @@ export function PluginCard(props: PluginCardProps): React.ReactElement {
   if (editor === null) {
     return (
       <section data-testid="plugin-card" data-state="no-editor" className="wk-pcard">
-        <p className="wk-artifact-hint" data-testid="plugin-card-no-editor">No editor is installed for {props.binding.kind}.</p>
+        <p className="wk-host-note" data-testid="plugin-card-no-editor">No editor is installed for {props.binding.kind}.</p>
       </section>
     );
   }
@@ -88,7 +90,7 @@ function CappedCard(props: PluginCardProps & { editor: EditorView }): React.Reac
       <div className="wk-pcard-frame wk-pcard-still" data-testid="plugin-card-thumb">
         <button type="button" className="wk-host-btn" onClick={() => touchLive(key)}>Show it live</button>
       </div>
-      <p className="wk-artifact-hint wk-pcard-note">Older cards rest so the newest stay quick.</p>
+      <p className="wk-host-note">Older cards rest so the newest stay quick.</p>
     </section>
   );
 }
@@ -219,6 +221,13 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
           },
           cardHeight: (px) => { if (live.current) setHeight(px); },
           selected: (anchors) => relay(group, 'card', { type: 'selection', anchors }),
+          // Every MCP call is the host's line (DES-MCP-INSPECTOR-001 §4: no call is quiet; codex h2-r6 P2).
+          mcpCall: (c) => {
+            if (!live.current) return;
+            const what = c.tool ?? c.method;
+            if (c.phase === 'sent') setLine({ kind: 'working', text: `Calling ${what}…` });
+            else setLine({ kind: c.outcome === 'ok' ? 'status' : 'failed', text: `${what}: ${c.outcome === 'ok' ? 'answered' : c.outcome}${c.ms !== null ? ` · ${c.ms} ms` : ''}${c.sent ? '' : ' (not sent)'}` });
+          },
         },
       });
       hostRef.current = host;
@@ -248,6 +257,29 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
     const fs = document.fullscreenElement;
     if (fs !== null && sectionRef.current !== null && (fs === sectionRef.current || sectionRef.current.contains(fs))) void document.exitFullscreen?.().catch(() => undefined);
   }, [full]);
+
+  // The artifact address (S16a-4a) keeps working (codex h2-r6 P2): the card registers while mounted, a deep link or
+  // Back that sizes it opens or closes full screen (a pane is the Options group), and its own full screen is written
+  // to the size store and the address.
+  const address = useArtifactAddress();
+  const key = binding.artifactKey;
+  useEffect(() => registerArtifact(key), [key]);
+  const size = useArtifactSizes((st) => artifactSizeOf(st, key));
+  useEffect(() => {
+    if (size === 'full' && !fullRef.current) enterFull(key);
+    else if (size === 'pane') { openOptionsRef.current(); setArtifactSize(key, fullRef.current ? 'full' : 'inline'); }
+    else if (size === 'inline' && fullRef.current) exitFull();
+  }, [size, key, enterFull, exitFull]);
+  const wasFull = useRef(full);
+  useEffect(() => {
+    if (wasFull.current === full) return;
+    wasFull.current = full;
+    const from = artifactSizeOf(useArtifactSizes.getState(), key);
+    const to = full ? 'full' : 'inline';
+    if (from === to) return;
+    setArtifactSize(key, to);
+    address?.write(key, from, to);
+  }, [full, key, address]);
 
   // Leaving the page while full restores the shell.
   useEffect(() => () => { if (useHostChrome.getState().full === binding.artifactKey) useHostChrome.getState().exitFull(); }, [binding.artifactKey]);
@@ -368,7 +400,7 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
               onClick={() => { if (hasFull) enterFull(binding.artifactKey); else if (hasOptions) openOptions(); }} />
           )}
           {torn !== null && (
-            <p data-testid="plugin-torn" className="wk-artifact-hint wk-plugin-note">
+            <p data-testid="plugin-torn" className="wk-host-note">
               This part didn’t start · {torn} · <button type="button" data-testid="plugin-reload" onClick={() => setMountKey((k) => k + 1)} className="wk-since-toggle">Reload it</button>
             </p>
           )}
@@ -397,7 +429,7 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
           <button type="button" className="wk-since-toggle" onClick={() => setOffer(null)}>Not now</button>
         </p>
       )}
-      {torn === null && note !== null && <p data-testid="plugin-card-note" className="wk-artifact-hint wk-pcard-note">{note}</p>}
+      {torn === null && note !== null && <p data-testid="plugin-card-note" className="wk-host-note">{note}</p>}
       {!full && (
         <footer className="wk-pcard-foot">
           {actions.map((a) => (

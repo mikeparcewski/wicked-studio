@@ -24,5 +24,5 @@ function VersionsTab({ ctx }: { ctx: HostTabContext }): React.ReactElement {
 registerHostTab({ id: 'versions', label: 'Versions', needs: 'versions', render: (ctx) => <VersionsTab ctx={ctx} /> });
 registerHostTab({
   id: 'checks', label: 'Checks', needs: 'checks',
-  render: (ctx) => (ctx.shown !== null && ctx.shown >= 1 ? <ChecksPanel projectId={ctx.binding.projectId} docId={ctx.binding.docId ?? ''} head={ctx.shown} pointAt={ctx.pointAt} /> : <p className="wk-artifact-hint">No version to check yet.</p>),
+  render: (ctx) => (ctx.shown !== null && ctx.shown >= 1 ? <ChecksPanel projectId={ctx.binding.projectId} docId={ctx.binding.docId ?? ''} head={ctx.shown} pointAt={ctx.pointAt} /> : <p className="wk-host-note">No version to check yet.</p>),
 });
