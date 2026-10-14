@@ -12,8 +12,8 @@
   "studioVersion": "0.8.0",
   "counts": {
     "files": 228,
-    "occurrences": 2813,
-    "static": 2423,
+    "occurrences": 2816,
+    "static": 2424,
     "dynamic": 71,
     "computed": 24
   },
@@ -528,6 +528,7 @@
     {
       "testId": "artifact-export-file",
       "files": [
+        "src/components/editorHost/PluginCard.tsx",
         "src/components/session/ArtifactMorph.tsx"
       ]
     },
@@ -554,6 +555,7 @@
     {
       "testId": "artifact-exports",
       "files": [
+        "src/components/editorHost/PluginCard.tsx",
         "src/components/session/ArtifactMorph.tsx"
       ]
     },
@@ -4179,6 +4181,12 @@
       "testId": "everything-made-census",
       "files": [
         "src/components/everything/EverythingPage.tsx"
+      ]
+    },
+    {
+      "testId": "everything-made-close",
+      "files": [
+        "src/components/everything/MadeOpen.tsx"
       ]
     },
     {
