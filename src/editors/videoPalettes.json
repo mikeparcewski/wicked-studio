@@ -1,0 +1,5 @@
+{
+  "corporate": { "background": "#FFFFFF", "foreground": "#1E293B", "accent": "#0891B2" },
+  "midnight": { "background": "#0A0A0F", "foreground": "#FFFFFF", "accent": "#A100FF" },
+  "warm": { "background": "#1A1A2E", "foreground": "#F8F8F2", "accent": "#FFD93D" }
+}

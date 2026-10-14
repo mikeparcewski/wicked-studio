@@ -2,6 +2,8 @@
 import type { Op } from './protocol.js';
 /** E1's default video colours (interactive's style defaults, E1-API.md): data, so it lives in JSON. */
 import VIDEO_COLOURS from './videoStyleDefaults.json';
+/** Interactive's built-in themes as video colours (src/themes/*.json): overrides of the studio skin. */
+import VIDEO_PALETTES from './videoPalettes.json';
 
 export interface VideoStyle {
   theme: {
@@ -64,15 +66,30 @@ export function applyChapterOp(cut: DemoCut, op: ChapterOp): DemoCut {
   }
   return timedCut({ ...cut, chapters });
 }
+/** The video's colours. The default is the active studio skin (operator, 2026-10-14): presets and custom colours override it. */
+export interface VideoColours { background: string; foreground: string; accent: string }
+export type PaletteId = 'studio' | 'corporate' | 'midnight' | 'warm' | 'custom';
+const PALETTES = VIDEO_PALETTES as Readonly<Record<'corporate' | 'midnight' | 'warm', VideoColours>>;
+const same = (a: VideoColours, b: VideoColours): boolean => (['background', 'foreground', 'accent'] as const).every((k) => a[k].toLowerCase() === b[k].toLowerCase());
+/** Which palette a style wears: an untouched cut (E1's own defaults) or the skin's colours = the studio skin. */
+export function paletteOf(t: VideoColours, skin: VideoColours | null): PaletteId {
+  if (same(t, VIDEO_COLOURS) || (skin !== null && same(t, skin))) return 'studio';
+  for (const [id, p] of Object.entries(PALETTES)) if (same(t, p)) return id as PaletteId;
+  return 'custom';
+}
+/** The colours a style shows: the skin's while it wears the studio palette. */
+export function shownColours(t: VideoColours, skin: VideoColours | null): VideoColours {
+  return paletteOf(t, skin) === 'studio' && skin !== null ? skin : { background: t.background, foreground: t.foreground, accent: t.accent };
+}
 const fonts = { inter: 'Inter', roboto: 'Roboto', 'source-sans': 'Source Sans 3', plex: 'IBM Plex Sans', system: 'system-ui' } as const;
-export function videoValues(style: VideoStyle, tab: string): Record<string, unknown> {
+export function videoValues(style: VideoStyle, tab: string, skin: VideoColours | null = null): Record<string, unknown> {
   const c = style.captions, t = style.theme;
   if (tab === 'captions') return { on: c.on, burn: c.burnIn, position: c.position, size: c.size, lines: c.maxLines, wrap: c.wrapChars, look: c.style };
-  if (tab === 'theme') return { title: t.titleCard.on, titletext: t.titleCard.title, end: t.endCard.on, endtext: t.endCard.title, background: t.background, foreground: t.foreground, accent: t.accent, font: Object.keys(fonts).find(k => fonts[k as keyof typeof fonts] === t.font) ?? 'system' };
+  if (tab === 'theme') { const shown = shownColours(t, skin); return { palette: paletteOf(t, skin), title: t.titleCard.on, titletext: t.titleCard.title, end: t.endCard.on, endtext: t.endCard.title, background: shown.background, foreground: shown.foreground, accent: shown.accent, font: Object.keys(fonts).find(k => fonts[k as keyof typeof fonts] === t.font) ?? 'system' }; }
   return {};
 }
 /** The caller checks the value against the declared control before applying it. */
-export function changedVideoStyle(style: VideoStyle, tab: string, id: string, value: unknown): VideoStyle {
+export function changedVideoStyle(style: VideoStyle, tab: string, id: string, value: unknown, skin: VideoColours | null = null): VideoStyle {
   const next = JSON.parse(JSON.stringify(style)) as VideoStyle;
   if (tab === 'captions') {
     const keys = { on: 'on', burn: 'burnIn', position: 'position', size: 'size', lines: 'maxLines', wrap: 'wrapChars', look: 'style' } as const;
@@ -84,6 +101,12 @@ export function changedVideoStyle(style: VideoStyle, tab: string, id: string, va
       case 'end': next.theme.endCard.on = value as boolean; break;
       case 'endtext': next.theme.endCard.title = value as string; break;
       case 'font': next.theme.font = fonts[value as keyof typeof fonts]; break;
+      case 'palette':
+        // The studio skin writes the skin's own colours (resolved from the host's tokens) so the render wears it;
+        // a preset writes its colours; Custom keeps what is there for the colour controls to change.
+        if (value === 'studio') Object.assign(next.theme, skin ?? VIDEO_COLOURS);
+        else if (value === 'corporate' || value === 'midnight' || value === 'warm') Object.assign(next.theme, PALETTES[value]);
+        break;
       default: Object.assign(next.theme, { [id]: value });
     }
   }
