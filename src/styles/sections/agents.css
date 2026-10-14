@@ -9,6 +9,10 @@
 .wk-agents-tiles .wk-stat-band { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .wk-agents-tiles .wk-stat { padding: var(--space-5, 20px) var(--space-6); justify-content: center; }
 .wk-agents-tiles .wk-stat:first-child { box-shadow: none; }
+/* Hosted in the Desk's Agents tab, the Desk's own tile grid (an icon column beside the number,
+   desk.css) must not apply: these band tiles have no icon, so they keep the band's own column (label, number, note). */
+.wk-desk2 .wk-agents-tiles .wk-stat { display: flex; border-radius: 0; }
+.wk-desk2 .wk-agents-tiles .wk-stat-label { align-self: auto; }
 .wk-agents-tile { display: flex; flex-direction: column; justify-content: center; }
 .wk-agents-tile--moves { gap: var(--space-2); }
 .wk-agents-tile--moves .wk-btn { width: 100%; justify-content: center; }
