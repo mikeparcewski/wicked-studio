@@ -11,10 +11,10 @@
   "version": 1,
   "studioVersion": "0.8.0",
   "counts": {
-    "files": 223,
-    "occurrences": 2756,
-    "static": 2373,
-    "dynamic": 69,
+    "files": 224,
+    "occurrences": 2763,
+    "static": 2377,
+    "dynamic": 70,
     "computed": 24
   },
   "static": [
@@ -5118,6 +5118,12 @@
       ]
     },
     {
+      "testId": "launch-qe-off",
+      "files": [
+        "src/components/QeOffNote.tsx"
+      ]
+    },
+    {
       "testId": "launch-reduced-assurance",
       "files": [
         "src/components/session/AssuranceReceipt.tsx"
@@ -5358,6 +5364,12 @@
       ]
     },
     {
+      "testId": "launch-wizard-qe-off",
+      "files": [
+        "src/components/launch/LaunchWizard.tsx"
+      ]
+    },
+    {
       "testId": "launch-wizard-reduced",
       "files": [
         "src/components/launch/LaunchWizard.tsx"
@@ -5383,6 +5395,12 @@
     },
     {
       "testId": "launch-wizard-review",
+      "files": [
+        "src/components/launch/LaunchWizard.tsx"
+      ]
+    },
+    {
+      "testId": "launch-wizard-review-qe-off",
       "files": [
         "src/components/launch/LaunchWizard.tsx"
       ]
@@ -8468,6 +8486,12 @@
       "testId": "qe-acceptance",
       "files": [
         "src/components/session/AssuranceReceipt.tsx"
+      ]
+    },
+    {
+      "testId": "qe-acceptance-toggle",
+      "files": [
+        "src/components/SystemSettings.tsx"
       ]
     },
     {
@@ -14381,6 +14405,7 @@
     {
       "pattern": "*-force",
       "files": [
+        "src/components/QeOffNote.tsx",
         "src/components/session/AssuranceReceipt.tsx"
       ]
     },
@@ -14421,6 +14446,12 @@
       "pattern": "*-more",
       "files": [
         "src/components/ui/Tabs.tsx"
+      ]
+    },
+    {
+      "pattern": "*-note",
+      "files": [
+        "src/components/QeOffNote.tsx"
       ]
     },
     {
@@ -14792,6 +14823,7 @@
         "src/components/HealthRailSection.tsx",
         "src/components/NeedsYouQueue.tsx",
         "src/components/ProvenanceLine.tsx",
+        "src/components/QeOffNote.tsx",
         "src/components/RepoFindings.tsx",
         "src/components/RunSparkline.tsx",
         "src/components/SkillChips.tsx",

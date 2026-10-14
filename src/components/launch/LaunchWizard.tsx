@@ -2,7 +2,8 @@ import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { api } from '../../api/client.js';
 import type { RepoEntry } from '../../api/types.js';
 import { gatePostureWord, workflowLaunchBody } from '../../board/launchModel.js';
-import { workflowRequiresQe } from '../../board/assuranceModel.js';
+import { qeAcceptanceSetting, workflowRequiresQe } from '../../board/assuranceModel.js';
+import { QeOffNote } from '../QeOffNote.js';
 import { workflowItems, WORKFLOWS_LOADING_LINE } from '../../board/workflowCommand.js';
 import { sessionPath } from '../../board/sessionModel.js';
 import { seatLabel, userSeats } from '../../board/seatNames.js';
@@ -92,6 +93,8 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
   const chatIdOnLaunch = useCapabilities((s) => s.chatIdOnLaunch);
   const [repos, setRepos] = useState<RepoEntry[] | null>(getCachedRepos());
   const [qeCap, setQeCap] = useState(false);
+  // Settings › System: QE acceptance off on this computer — the service skips it (labelled); nothing to tick here.
+  const [qeOff, setQeOff] = useState(false);
   const [force, setForce] = useState(false);
   const [launching, setLaunching] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -105,7 +108,7 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
     let live = true;
     Promise.resolve().then(() => api.getHealth()).then((h) => {
       const caps = (h as unknown as { capabilities?: Record<string, unknown> }).capabilities ?? {};
-      if (live) setQeCap(caps['qeAcceptanceOverride'] === true);
+      if (live) { setQeCap(caps['qeAcceptanceOverride'] === true); setQeOff(qeAcceptanceSetting(caps) === 'off'); }
     }).catch(() => { /* no override offered */ });
     return () => { live = false; };
   }, []);
@@ -162,7 +165,7 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
       : step === 'what' ? (draft.intent.trim() === '' ? 'Say what you want done.' : null)
         : step === 'where' ? (repoRef === null ? 'Choose the repository this works in.' : null)
           : step === 'options' ? (eligible.length > 0 && seats.length === 0 ? 'Turn on at least one helper.'
-            : offerQe && draft.skipQe && draft.skipQeReason.trim() === '' ? 'Say why QE acceptance is skipped.' : null)
+            : offerQe && !qeOff && draft.skipQe && draft.skipQeReason.trim() === '' ? 'Say why QE acceptance is skipped.' : null)
             : null;
   // Review re-checks every rule (codex r1: another tab may have dropped the last helper meanwhile).
   const launchBlocker: string | null =
@@ -172,7 +175,7 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
       : draft.intent.trim() === '' ? 'Say what you want done.'
         : repoRef === null ? 'Choose the repository this works in.'
           : eligible.length > 0 && seats.length === 0 ? 'Turn on at least one helper.'
-            : offerQe && draft.skipQe && draft.skipQeReason.trim() === '' ? 'Say why QE acceptance is skipped.' : null;
+            : offerQe && !qeOff && draft.skipQe && draft.skipQeReason.trim() === '' ? 'Say why QE acceptance is skipped.' : null;
   const order: Step[] = drafting ? ['workflow', 'requirements', 'review']
     : demoing ? ['workflow', 'demo', 'options', 'review']
       : ['workflow', 'what', 'where', 'options', 'review'];
@@ -313,10 +316,10 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
         deliver,
         autoDeliverGate: autoDeliver && deliverGateCap === true,
         reducedAssurance: offerReduced && draft.reduced,
-        skipQeReason: offerQe && draft.skipQe ? draft.skipQeReason : null,
+        skipQeReason: offerQe && !qeOff && draft.skipQe ? draft.skipQeReason : null,
         chatId,
       });
-      if (offerQe && force && !draft.skipQe) body.forceQeAcceptance = true;
+      if (offerQe && force && (qeOff || !draft.skipQe)) body.forceQeAcceptance = true;
       const { runId } = await api.launchRun(body);
       useProvenanceStore.getState().markLaunchedHere(runId);
       if (key !== null) clearAboutChips(key);
@@ -499,7 +502,8 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
                 </div>
               )}
               {offerReduced && <ReducedAssuranceOptIn checked={draft.reduced} onChange={(v) => update({ reduced: v })} testId="launch-wizard-reduced" />}
-              {offerQe && (
+              {offerQe && qeOff && <QeOffNote force={force} onForce={setForce} testId="launch-wizard-qe-off" />}
+              {offerQe && !qeOff && (
                 <QeAcceptanceOptions
                   skip={draft.skipQe} reason={draft.skipQeReason} force={force}
                   onSkip={(v) => update({ skipQe: v })} onReason={(v) => update({ skipQeReason: v })} onForce={setForce}
@@ -642,7 +646,8 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
               <div><dt>Ask me</dt><dd>{gatePostureWord(draft.confirmMode, beforeOrd, deliver === 'pr' && deliverGateCap === true)}</dd></div>
               {deliverVisible && <div><dt>Delivery</dt><dd>{draft.deliverOn ? 'A pull request when done' : 'Stays on its branch'}</dd></div>}
               {offerReduced && draft.reduced && <div><dt>Checks</dt><dd>Reduced assurance (one helper builds and reviews)</dd></div>}
-              {offerQe && draft.skipQe && <div><dt>QE acceptance</dt><dd>Skipped: {draft.skipQeReason.trim()}</dd></div>}
+              {offerQe && !qeOff && draft.skipQe && <div><dt>QE acceptance</dt><dd>Skipped: {draft.skipQeReason.trim()}</dd></div>}
+              {offerQe && qeOff && <div data-testid="launch-wizard-review-qe-off"><dt>QE acceptance</dt><dd>{force ? 'Required for this job' : 'Off on this computer (the job says it was skipped)'}</dd></div>}
             </dl>
           )}
 
