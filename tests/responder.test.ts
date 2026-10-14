@@ -48,8 +48,10 @@ describe('unit, gate and question responders', () => {
   it('a live run’s question is asked through the seat running the current step', () => {
     expect(askingResponder(view, ROSTER).cli).toBe('codex');
   });
-  it('an artifact is produced by the newest unit that ran on a seat', () => {
-    expect(producerOf(view, ROSTER).cli).toBe('codex');
+  it('an artifact is produced by the newest finished making step on a seat — never the reviewer', () => {
+    expect(producerOf(view, ROSTER).cli).toBe('claude');
+    const reviewed = makeView({}, [makeUnit({ ord: 0, assigned_cli: 'claude', status: 'done' }), makeUnit({ ord: 1, assigned_cli: 'codex', status: 'done', stage: 'review' })]);
+    expect(producerOf(reviewed, ROSTER).cli).toBe('claude');
     expect(producerOf(makeView({}, [makeUnit({ ord: 0, assigned_cli: 'claude', status: 'pending' })]), ROSTER)).toEqual(CREW);
   });
 });

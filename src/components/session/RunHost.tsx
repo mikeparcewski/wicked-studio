@@ -18,9 +18,12 @@ export function primaryRunOf(runs: readonly RunView[]): RunView | null {
   return [...runs].reverse().find((v) => !TERMINAL.has(v.session.status)) ?? runs[runs.length - 1] ?? null;
 }
 
-/** The run an artifact belongs to: its binding's run (artifact keys lead with it), else the page's. */
-function runOfBinding(binding: ArtifactBinding, runs: readonly RunView[]): RunView | null {
-  const id = binding.runId ?? binding.artifactKey.split(':')[0] ?? '';
+/** The run an artifact belongs to: its binding's run, else the run its key leads with (`artifactKey`
+ *  writes `<runId>:…`). `undefined` = the artifact names no run; `null` = it names one this page does not
+ *  hold — then it gets NO gate controls, never another run's (codex h3-r1 #1). */
+function runOfBinding(binding: ArtifactBinding, runs: readonly RunView[]): RunView | null | undefined {
+  const id = binding.runId ?? (binding.artifactKey.includes(':') ? binding.artifactKey.split(':')[0] : undefined);
+  if (id === undefined || id === '') return undefined;
   return runs.find((v) => v.session.id === id) ?? null;
 }
 
@@ -75,7 +78,8 @@ export function useRunHostValue(runs: readonly RunView[], renderChat: () => Reac
     phase,
     renderChat,
     gateActions: (binding) => {
-      const run = runOfBinding(binding, runs) ?? primary;
+      const own = runOfBinding(binding, runs);
+      const run = own === undefined ? primary : own;
       return run === null ? null : <GateButtons runId={run.session.id} />;
     },
     liveFrameCap: 6,

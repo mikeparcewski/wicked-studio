@@ -64,12 +64,14 @@ export function askingResponder(view: RunView, roster: Roster): Responder {
 }
 
 /**
- * Who produced a run's artifact: the seat of the newest unit with a seat (the one that wrote the latest
- * version) — the line above the artifact's card (HOST-API §2 `producedBy`).
+ * Who produced a run's artifacts: the seat of the newest FINISHED making step (not a review — a reviewer
+ * judges the work, it does not make it; codex h3-r1 #3), the line above the artifacts (HOST-API §2
+ * `producedBy`). No finished making step on a seat: crew's.
  */
 export function producerOf(view: RunView, roster: Roster): Responder {
-  const withSeat = [...view.units].filter((u) => typeof u.assigned_cli === 'string' && u.assigned_cli !== '' && u.status !== 'pending');
-  const last = withSeat.sort((a, b) => b.ord - a.ord)[0];
+  const makers = view.units.filter((u) => typeof u.assigned_cli === 'string' && u.assigned_cli !== '' && u.status === 'done'
+    && u.stage !== 'review' && !/review|judge|evaluat/i.test(String(u.role ?? '')));
+  const last = [...makers].sort((a, b) => b.ord - a.ord)[0];
   return last === undefined ? CREW : seatResponder(last.assigned_cli!, roster);
 }
 
