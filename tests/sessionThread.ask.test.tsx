@@ -123,7 +123,7 @@ describe('one thread, one voice', () => {
     // The reply streams in: the typing line yields to the pending bubble, then the bubble finishes.
     act(() => useAskThreadStore.getState().ingest({ type: 'chatDelta', chat: 'chat-ask', cliKey: 'claude', text: 'greet() does', turn_id: 't1' } as never));
     expect(screen.queryByTestId('ask-typing')).toBeNull();
-    expect(document.querySelector('[data-testid="session-turn"][data-pending="true"]')?.textContent).toContain('claude · answering');
+    expect(document.querySelector('[data-testid="session-turn"][data-pending="true"]')?.textContent).toContain('Claude · answering'); // H3: the seat by its roster name
     act(() => useAskThreadStore.getState().ingest({ type: 'chatReply', chat: 'chat-ask', cliKey: 'claude', text: 'greet() does not trim.', ok: true, run_id: RUN, ord: 1, turn_id: 't1' } as never));
     expect(document.querySelector('[data-testid="session-turn"][data-pending="true"]')).toBeNull();
     expect(screen.getByText('greet() does not trim.')).toBeTruthy();
