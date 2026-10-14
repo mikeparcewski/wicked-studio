@@ -165,7 +165,9 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
     setTorn(null);
     const start = async (): Promise<void> => {
       const decided = grantsProp !== undefined ? { grants: grantsProp, note: null } : await fetchGrants(editor.id, editor.version, editor.sha256, binding.projectId === '' ? null : binding.projectId);
-      await adapter.refresh?.().catch(() => null);
+      const startMoved = await adapter.refresh?.().catch(() => null);
+      // A head this start discovered reaches the group's other instances (an open Options frame) too (codex h2-r16 P2).
+      if (startMoved != null) relay(group, 'card', { type: 'changed', head: startMoved.head, kind: startMoved.kind });
       announced.current = adapter.artifact().head;
       if (cancelled || frameBox.current === null) return;
       setNote(decided.note);
