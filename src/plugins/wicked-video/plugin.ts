@@ -1,7 +1,7 @@
 /** First-party video editor: all data and media arrive through the granted port. */
 import { announceReady, forwardOptionsKey, helloOf, V2Port, PROTOCOL, ENVELOPE, surfaceOfSize, type Envelope, type Mode, type Surface } from '../_shared/v2.js';
 import surfaces from './surfaces.json';
-import { changedVideoStyle, videoValues, type ChapterOp, type DemoChapter, type DemoCut } from '../../editors/demoCutModel.js';
+import { changedVideoStyle, paletteOf, shownColours, videoValues, type ChapterOp, type DemoChapter, type DemoCut, type VideoColours } from '../../editors/demoCutModel.js';
 import { controlValueOk, parseSurfaces } from '../../editors/surfaces.js';
 
 interface Reply { ok: boolean; payload?: Record<string, unknown>; error?: { code: string; message: string } }
@@ -37,9 +37,20 @@ export function start(): void {
   const editable = (): boolean => grants.includes('artifact.write') && !busy && !disposed;
   const advanced = (): boolean => surface === 'options' || mode === 'advanced';
   const status = (line: string): void => { el('status').textContent = line; send('ui.status', { line: line.replace(/[\r\n]/g, ' ').slice(0, 120) }); };
-  const publish = (): void => { if (protocol === 2 && cut !== null) for (const tab of ['captions', 'theme']) v2?.values(tab, videoValues(cut.style, tab)); };
+  const publish = (): void => { if (protocol === 2 && cut !== null) for (const tab of ['captions', 'theme']) v2?.values(tab, videoValues(cut.style, tab, skin)); };
+  /** The active studio skin as video colours, resolved from the host's tokens to plain rgb() (the colour grammar). */
+  let skin: VideoColours | null = null;
+  const resolveColour = (v: unknown): string | null => {
+    if (typeof v !== 'string' || v === '' || v.length > 200 || /url\(/i.test(v)) return null;
+    const probe = document.createElement('span'); probe.style.color = v; document.body.append(probe);
+    const c = getComputedStyle(probe).color; probe.remove();
+    return /^rgba?\(\s*\d/.test(c) ? c.replace(/\s+/g, ' ') : null;
+  };
   const applyTheme = (raw: unknown): void => {
     if (typeof raw !== 'object' || raw === null) return;
+    const t = raw as Record<string, unknown>;
+    const bg = resolveColour(t['--surface-raised'] ?? t['--surface-base']), fg = resolveColour(t['--ink-high']), ac = resolveColour(t['--accent']);
+    if (bg !== null && fg !== null && ac !== null) skin = { background: bg, foreground: fg, accent: ac };
     // The host's tokens arrive named as CSS custom properties (`--surface-base`); a value is never a URL.
     for (const [key, value] of Object.entries(raw)) if (typeof value === 'string' && /^--[a-z0-9-]+$/.test(key) && value.length <= 200 && !/url\(/i.test(value)) document.documentElement.style.setProperty(key, value);
   };
@@ -154,7 +165,8 @@ export function start(): void {
     // E1's size is px at 1080p: at the player's width W that is size × W / 1920, i.e. size / 19.2 cqw.
     caption.style.fontSize = `max(9px, ${style.captions.size / 19.2}cqw)`;
     caption.style.maxHeight = `${style.captions.maxLines * 1.3 + 0.8}em`;
-    const vars = { background: style.theme.background, foreground: style.theme.foreground, accent: style.theme.accent, font: style.theme.font };
+    const colours = shownColours(style.theme, skin);
+    const vars = { background: colours.background, foreground: colours.foreground, accent: colours.accent, font: style.theme.font };
     for (const [k, v] of Object.entries(vars)) root.style.setProperty(`--video-${k}`, v);
   }
   function trimHandle(c: DemoChapter, edge: 'in' | 'out'): HTMLButtonElement {
@@ -270,7 +282,8 @@ export function start(): void {
     el('count').textContent = c === undefined ? 'No chapters' : `${cut.chapters.findIndex(x => x.id === c.id) + 1} of ${cut.chapters.length}`;
     el<HTMLTextAreaElement>('say').value = c?.say ?? '';
     const t = cut.style.theme;
-    el('theme-summary').textContent = `${t.font}\nBackground ${t.background}\nText ${t.foreground}\nAccent ${t.accent}\nTitle card: ${t.titleCard.on ? t.titleCard.title : 'Off'}\nEnd card: ${t.endCard.on ? t.endCard.title : 'Off'}`;
+    const shown = shownColours(t, skin), pal = paletteOf(t, skin);
+    el('theme-summary').textContent = `${pal === 'studio' ? 'Studio skin (default)' : pal === 'custom' ? 'Custom colours' : 'Preset: ' + pal}\n${t.font}\nBackground ${shown.background}\nText ${shown.foreground}\nAccent ${shown.accent}\nTitle card: ${t.titleCard.on ? t.titleCard.title : 'Off'}\nEnd card: ${t.endCard.on ? t.endCard.title : 'Off'}`;
     drawCaption();
     if (focusedChapter !== undefined) list.querySelector<HTMLElement>(`[data-chapter="${focusedChapter}"]`)?.focus();
     if (!advanced() || surface === 'card' || c === undefined) return;
@@ -307,18 +320,18 @@ export function start(): void {
   }
   async function optionsChanged(tab: string, id: string, value: unknown) {
     const control = declaration.options?.tabs.find(t => t.id === tab)?.controls?.find(c => c.id === id);
-    if (cut === null || control === undefined || !controlValueOk(control, value) || !grants.includes('artifact.theme') || (typeof value === 'string' && /[\r\n]/.test(value))) return { applied: false, values: cut === null ? {} : videoValues(cut.style, tab), reason: 'That style change is not available.' };
-    if (busy) return { applied: false, values: videoValues(cut.style, tab), reason: 'A cut is being saved.' };
+    if (cut === null || control === undefined || !controlValueOk(control, value) || !grants.includes('artifact.theme') || (typeof value === 'string' && /[\r\n]/.test(value))) return { applied: false, values: cut === null ? {} : videoValues(cut.style, tab, skin), reason: 'That style change is not available.' };
+    if (busy) return { applied: false, values: videoValues(cut.style, tab, skin), reason: 'A cut is being saved.' };
     busy = true; draw();
     try {
       for (let attempt = 0; attempt < 2; attempt++) {
-        const style = changedVideoStyle(cut.style, tab, id, value);
+        const style = changedVideoStyle(cut.style, tab, id, value, skin);
         const r = await req('theme.set', { base: cut.version, tokens: { kind: 'video-style', style } });
-        if (r.ok) { const confirmed = await read(); return { applied: confirmed, values: videoValues(cut.style, tab), ...(confirmed ? {} : { reason: 'The saved style could not be read.' }) }; }
+        if (r.ok) { const confirmed = await read(); return { applied: confirmed, values: videoValues(cut.style, tab, skin), ...(confirmed ? {} : { reason: 'The saved style could not be read.' }) }; }
         if (r.error?.code === 'head_moved' && attempt === 0 && await read()) continue;
-        publish(); return { applied: false, values: videoValues(cut.style, tab), reason: r.error?.message ?? 'Style was not changed.' };
+        publish(); return { applied: false, values: videoValues(cut.style, tab, skin), reason: r.error?.message ?? 'Style was not changed.' };
       }
-      return { applied: false, values: videoValues(cut.style, tab) };
+      return { applied: false, values: videoValues(cut.style, tab, skin) };
     } finally { busy = false; draw(); }
   }
   const playing = (): void => { el('play').textContent = player.paused ? 'Play' : 'Pause'; };
@@ -385,7 +398,7 @@ export function start(): void {
       switch (msg.type) {
         case 'host.ping': if (msg.id) port?.postMessage({ p: PROTOCOL, v: ENVELOPE, re: msg.id, ok: true, payload: {} }); break;
         case 'host.size': if (p['size'] === 'inline' || p['size'] === 'pane' || p['size'] === 'full') { surface = surfaceOfSize(p['size']); draw(); } break;
-        case 'host.theme': applyTheme(p['theme']); break;
+        case 'host.theme': applyTheme(p['theme']); publish(); drawCaption(); draw(); break;
         case 'artifact.changed': if (typeof p['head'] !== 'number' || cut === null || p['head'] > cut.version) void read(); break;
         case 'host.teardown': dispose(); break;
         case 'selection.cleared': selected = null; draw(); break;
