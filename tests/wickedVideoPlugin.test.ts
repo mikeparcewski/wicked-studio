@@ -130,6 +130,9 @@ describe('wicked-video protocol 2 surfaces and player', () => {
     await adapter.theme(1, { kind: 'video-style', style: demoCut4.style });
     send('artifact.changed', { head: 2 });
     await vi.waitFor(() => expect(document.getElementById('unavailable')).not.toHaveAttribute('hidden'));
+    // No playable video: the plugin asks for the still (a failed walkthrough's failing frame) instead.
+    await vi.waitFor(() => expect(messages('artifact.media').some(m => m.payload?.['ref'] === 'poster')).toBe(true));
+    expect(document.getElementById('poster')).toHaveAttribute('hidden');
     node('video-chip').click(); expect(root().dataset['current']).toBe('open-the-scope');
     await vi.waitFor(() => expect(root().dataset['head']).toBe('2'));
     const before = messages('artifact.read').length; send('artifact.changed', { head: 1 });

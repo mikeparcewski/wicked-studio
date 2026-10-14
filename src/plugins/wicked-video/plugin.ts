@@ -12,7 +12,7 @@ export function start(): void {
   // Static markup only; every artifact string is assigned as text or an input value below.
   document.body.insertAdjacentHTML('afterbegin', `<main id="video-editor" class="video-editor" data-testid="video-editor" tabindex="0">
     <aside id="chapters" class="chapters"><h2>Chapters</h2><ol id="chapter-list"></ol><div id="editor-fields" class="editor-fields"></div><p id="hint" class="hint"></p></aside>
-    <section id="work" class="work"><div class="player"><video id="player" data-testid="video-player" playsinline preload="metadata" aria-label="Video"></video><div id="unavailable" class="unavailable">The video isn't available here</div><div id="caption" class="caption"></div></div>
+    <section id="work" class="work"><div class="player"><video id="player" data-testid="video-player" playsinline preload="metadata" aria-label="Video"></video><div id="unavailable" class="unavailable">The video isn't available here</div><img id="poster" data-testid="video-poster" class="poster" alt="" hidden><div id="caption" class="caption"></div></div>
     <div class="transport"><button id="play" data-testid="video-play" type="button">Play</button><span id="count"></span></div><div id="chips" class="chips" aria-label="Chapter chips"></div><div id="timeline" class="timeline" aria-label="Chapter timeline"></div><p id="status" class="status" role="status"></p></section>
     <aside id="inspectors" class="inspectors"><section id="proof"><h2>Checks</h2><p id="proof-summary" class="summary"></p><ol id="check-list" aria-label="Checks"></ol></section><h2>Text</h2><textarea id="say" aria-label="Chapter caption text" readonly></textarea><h2>Theme</h2><p id="theme-summary" class="summary"></p></aside></main>`);
   const el = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
@@ -44,6 +44,21 @@ export function start(): void {
     for (const [key, value] of Object.entries(raw)) if (typeof value === 'string' && /^--[a-z0-9-]+$/.test(key) && value.length <= 200 && !/url\(/i.test(value)) document.documentElement.style.setProperty(key, value);
   };
   const revoke = (): void => { if (mediaUrl !== null) URL.revokeObjectURL(mediaUrl); mediaUrl = null; player.removeAttribute('src'); };
+  /** No playable video (a failed walkthrough may have none): show its still — the failing frame, or the poster. */
+  let posterUrl: string | null = null;
+  async function poster(generation: number): Promise<void> {
+    const r = await req('artifact.media', { ref: 'poster' });
+    if (disposed || generation !== mediaGeneration) return;
+    const blob = r.payload?.['blob'], type = r.payload?.['type'];
+    const img = el('poster') as HTMLImageElement;
+    if (posterUrl !== null) { URL.revokeObjectURL(posterUrl); posterUrl = null; }
+    if (!r.ok || !(blob instanceof Blob) || typeof type !== 'string' || !type.startsWith('image/') || typeof URL.createObjectURL !== 'function') { img.hidden = true; return; }
+    posterUrl = URL.createObjectURL(blob);
+    img.src = posterUrl;
+    img.alt = cut?.proof?.verdict === 'FAIL' ? 'The moment the walkthrough failed' : 'The recording\'s still';
+    img.hidden = false;
+    el('unavailable').textContent = cut?.proof?.verdict === 'FAIL' ? 'No video: this is the moment it failed' : "The video isn't available here";
+  }
   async function media(ref: 'video' | { chapter: string } = 'video', seekSec?: number): Promise<void> {
     const generation = ++mediaGeneration;
     if (!grants.includes('media.read')) { revoke(); el('unavailable').hidden = false; return; }
@@ -51,7 +66,8 @@ export function start(): void {
     if (disposed || generation !== mediaGeneration) return;
     revoke();
     const blob = r.payload?.['blob'], type = r.payload?.['type'];
-    if (!r.ok || !(blob instanceof Blob) || typeof type !== 'string' || !type.startsWith('video/') || typeof URL.createObjectURL !== 'function') { el('unavailable').hidden = false; return; }
+    if (!r.ok || !(blob instanceof Blob) || typeof type !== 'string' || !type.startsWith('video/') || typeof URL.createObjectURL !== 'function') { el('unavailable').hidden = false; void poster(generation); return; }
+    (el('poster') as HTMLImageElement).hidden = true;
     mediaUrl = URL.createObjectURL(blob); player.src = mediaUrl;
     el('unavailable').hidden = true;
     drawCaption();
