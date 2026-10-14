@@ -50,6 +50,9 @@ export type AdapterCapability = 'read' | 'write' | 'versions' | 'parts' | 'media
 
 export interface ExportOption { format: string; label: string }
 export type ExportOutcome = { ok: true; text: string; href: string; file: string } | { ok: false; text: string };
+/** A file already exported for a version, on disk (studio#234): the host lists it on the card so a download made in an
+ *  earlier session survives a reload. */
+export interface ExportedFile { format: string; label: string; name: string; href: string }
 /** A host status pill on the card ("Version 3", "2 changed", "Ready to watch"). Host words, from adapter state. */
 export interface StatusPill { id: string; text: string; tone: 'neutral' | 'good' | 'warn' | 'bad' }
 /** A reviewable part (slide, chapter, section): what the host review capability approves (§7.4). */
@@ -68,6 +71,9 @@ export interface SurfaceAdapter extends HostAdapter {
   refresh?(): Promise<{ head: number; kind: VersionKind } | null>;
   /** Make an export file of `version` (needs `export`): the host draws the working line and the Download link. */
   exportFile?(format: string, version: number): Promise<ExportOutcome>;
+  /** The files already exported for `version` (needs `export`), read from the data plane's own listing; a failed
+   *  listing rejects and the host shows nothing — never a guessed link. */
+  exported?(version: number): Promise<readonly ExportedFile[]>;
   /** The MCP session the operator connected in host chrome, for an `mcp` artifact (H5): handed to the card's host
    *  as `HostOptions.mcp`. Absent = `mcp.request` answers `unavailable`. */
   mcpBridge?(): McpHostBridge | undefined;
@@ -302,10 +308,11 @@ export interface PluginCardProps {
 }
 
 export interface HostPanelProps {
-  /** The Run tab's body (H3 owns it: workflow, repos, phases, agents, checks, spend, assurance, actions). */
-  runTab: ReactNode;
-  /** The ribbon's one line below 1200 px ("Building · phase 3 of 5 · $1.20"). */
-  ribbon: ReactNode;
+  /** The Run tab's body (H3 owns it: workflow, repos, phases, agents, checks, spend, assurance, actions). Absent
+   *  where no run is in view (a document opened on the Made list): the panel is then only the open group's tabs. */
+  runTab?: ReactNode;
+  /** The ribbon's one line below 1200 px ("Building · phase 3 of 5 · $1.20"); without a run, the open group's name. */
+  ribbon?: ReactNode;
 }
 
 export interface FullShellProps {

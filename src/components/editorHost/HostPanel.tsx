@@ -48,7 +48,7 @@ export function HostPanel({ runTab, ribbon }: HostPanelProps): React.ReactElemen
         <button type="button" data-testid="host-panel-ribbon" data-folded={narrow ? 'false' : 'true'}
           className={narrow ? 'wk-hpanel-ribbon' : 'wk-hpanel-ribbon wk-hpanel-ribbon--side'}
           onClick={() => { if (narrow) setOverlay(true); else setFolded(false); }} aria-label="Show the panel">
-          {ribbon}
+          {ribbon ?? (group !== null ? `${group.editor.title} options` : 'Options')}
         </button>
       )}
     <aside data-testid={collapsed ? undefined : 'host-panel'} hidden={collapsed} data-narrow={narrow ? 'true' : 'false'} aria-label="Run and options" className={`wk-hpanel${narrow ? ' wk-hpanel--overlay' : ''}`}>
@@ -62,18 +62,18 @@ export function HostPanel({ runTab, ribbon }: HostPanelProps): React.ReactElemen
         <button type="button" data-testid="host-panel-fold" aria-label="Hide the panel" className="wk-host-btn"
           onClick={() => { if (narrow) setOverlay(false); else setFolded(true); }}>⟩</button>
       </div>
-      <PanelTabs group={group} tab={tab} setTab={setTab} />
+      <PanelTabs group={group} tab={tab} setTab={setTab} withRun={runTab !== undefined} />
       <div className="wk-hpanel-body">
-        <div hidden={tab.owner !== 'run'} data-testid="host-panel-run">{runTab}</div>
-        {group !== null && <GroupBody key={group.key} group={group} tab={tab} />}
+        {runTab !== undefined && <div hidden={tab.owner !== 'run'} data-testid="host-panel-run">{runTab}</div>}
+        {group !== null && <GroupBody key={group.key} group={group} tab={tab} withRun={runTab !== undefined} />}
       </div>
     </aside>
     </>
   );
 }
 
-function PanelTabs({ group, tab, setTab }: { group: OptionsGroup | null; tab: PanelTab; setTab: (t: PanelTab) => void }): React.ReactElement {
-  const items: { tab: PanelTab; label: string; owner: string; id: string }[] = [{ tab: RUN_TAB, label: 'Run', owner: 'run', id: 'run' }];
+function PanelTabs({ group, tab, setTab, withRun }: { group: OptionsGroup | null; tab: PanelTab; setTab: (t: PanelTab) => void; withRun: boolean }): React.ReactElement {
+  const items: { tab: PanelTab; label: string; owner: string; id: string }[] = withRun ? [{ tab: RUN_TAB, label: 'Run', owner: 'run', id: 'run' }] : [];
   if (group !== null) {
     for (const t of group.surfaces.options?.tabs ?? []) items.push({ tab: { owner: 'plugin', id: t.id }, label: t.label, owner: 'plugin', id: t.id });
     for (const h of hostTabsFor(group.adapter)) items.push({ tab: { owner: 'host', id: h.id }, label: h.label, owner: 'host', id: h.id });
@@ -95,7 +95,7 @@ function PanelTabs({ group, tab, setTab }: { group: OptionsGroup | null; tab: Pa
 
 /** One group's body: its ONE options instance (mounted for the group's life, shown on a plugin tab), its controls
  *  tabs, and its host tabs. */
-function GroupBody({ group, tab }: { group: OptionsGroup; tab: PanelTab }): React.ReactElement {
+function GroupBody({ group, tab, withRun }: { group: OptionsGroup; tab: PanelTab; withRun: boolean }): React.ReactElement {
   const hostRef = useRef<EditorHost | null>(null);
   const [values, setValues] = useState<Record<string, Record<string, unknown>>>({});
   const [torn, setTorn] = useState<string | null>(null);
@@ -111,7 +111,7 @@ function GroupBody({ group, tab }: { group: OptionsGroup; tab: PanelTab }): Reac
   return (
     <>
       {v2 && (
-        <OptionsInstance group={group} hostRef={hostRef} visible={showFrame} initialTab={pluginTab?.render === 'plugin' ? pluginTab.id : firstPluginTab}
+        <OptionsInstance group={group} hostRef={hostRef} visible={showFrame} withRun={withRun} initialTab={pluginTab?.render === 'plugin' ? pluginTab.id : firstPluginTab}
           onValues={(t, v) => setValues((s) => ({ ...s, [t]: v }))} onTorn={setTorn} onShown={() => setShownTick((n) => n + 1)} />
       )}
       {showFrame && pluginTab !== null && <PluginTabSwitch hostRef={hostRef} tab={pluginTab.id} />}
@@ -159,7 +159,9 @@ function PluginTabSwitch({ hostRef, tab }: { hostRef: React.MutableRefObject<Edi
   return null;
 }
 
-function OptionsInstance({ group, hostRef, visible, initialTab, onValues, onTorn, onShown }: {
+function OptionsInstance({ group, hostRef, visible, withRun, initialTab, onValues, onTorn, onShown }: {
+  /** The panel has a Run tab to go back to; without one (the Made list), Esc in the frame closes the group. */
+  withRun: boolean;
   group: OptionsGroup;
   hostRef: React.MutableRefObject<EditorHost | null>;
   visible: boolean;
@@ -171,6 +173,8 @@ function OptionsInstance({ group, hostRef, visible, initialTab, onValues, onTorn
   const box = useRef<HTMLDivElement | null>(null);
   const cb = useRef({ onValues, onTorn, onShown });
   cb.current = { onValues, onTorn, onShown };
+  const withRunRef = useRef(withRun);
+  withRunRef.current = withRun;
   const tab0 = useMemo(() => initialTab, []); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (box.current === null) return undefined;
@@ -201,7 +205,11 @@ function OptionsInstance({ group, hostRef, visible, initialTab, onValues, onTorn
         typed: (g) => typedToComposer(group.binding.composerKey, g),
         // Only with the focus in this options frame (codex h2b-r4): a hidden instance cannot switch tabs.
         key: (k) => {
-          if (k === 'Escape') { if (document.activeElement === hostRef.current?.frame) useHostPanel.getState().setTab(RUN_TAB); }
+          if (k === 'Escape') {
+            if (document.activeElement !== hostRef.current?.frame) return;
+            if (withRunRef.current) useHostPanel.getState().setTab(RUN_TAB);
+            else useHostPanel.getState().closeGroup(); // no Run tab here (codex h4-fix r1 P2): Esc closes the options
+          }
           else forwardedKey(k, hostRef.current?.frame ?? null);
         },
         // An options instance never changes a host surface (codex h2b-r1/r2 P1): Full screen is the card's host button.

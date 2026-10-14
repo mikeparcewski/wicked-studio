@@ -831,6 +831,12 @@ select:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-
 .wk-everything-panel { display: flex; flex-direction: column; gap: 10px; padding-top: 10px; max-width: 920px; }
 .wk-everything-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
 /* S16a-4d: the Made list's doors — New document's form, a Delete on each document row. */
+.wk-made-open { display: flex; flex-direction: column; gap: 8px; margin: 8px 0 16px; }
+.wk-made-open-bar { display: flex; justify-content: flex-end; }
+.wk-made-open-row { display: flex; align-items: flex-start; gap: 16px; min-width: 0; }
+.wk-made-open-card { flex: 1 1 auto; min-width: 0; }
+.wk-made-open-row > .wk-hpanel { border: 1px solid var(--border); border-radius: var(--radius-md); max-height: 80vh; }
+.wk-made-open-row > .wk-hpanel .wk-hpanel-body { overflow-y: auto; }
 .wk-made-new { display: flex; flex-direction: column; gap: 8px; margin: 8px 0; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface-card); }
 .wk-made-new-field { display: flex; flex-direction: column; gap: 4px; font-size: var(--text-xs); color: var(--ink-muted); }
 .wk-made-li { display: flex; align-items: center; gap: 8px; }
@@ -1832,3 +1838,6 @@ button.wk-who-name:hover { text-decoration: underline; }
 .wk-run-chat-thread { flex: 1 1 auto; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding: 12px; }
 .wk-run-chat-turn .wk-session-text { margin: 2px 0 0; }
 .wk-run-chat-composer { flex-shrink: 0; margin: 8px 12px 12px; }
+/* H4: the deck review was a rail beside the morphing pane (absolutely placed in the artifact). As the
+   host panel's Review tab it is ordinary flow inside the panel — never laid over the thread or the card's Full screen. */
+.wk-hpanel .wk-deck-review { position: static; inset: auto; width: auto; border-left: 0; padding: 12px 16px 24px; overflow: visible; z-index: auto; }

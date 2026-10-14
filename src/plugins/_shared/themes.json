@@ -1,0 +1,62 @@
+[
+  {
+    "name": "corporate-light",
+    "display_name": "Corporate Light",
+    "colors": {
+      "background": "#FFFFFF",
+      "surface": "#F8FAFC",
+      "primary": "#1E3A5F",
+      "secondary": "#2563EB",
+      "accent": "#0891B2",
+      "text_primary": "#1E293B",
+      "text_secondary": "#64748B",
+      "text_muted": "#94A3B8",
+      "border": "#E2E8F0"
+    },
+    "fonts": {
+      "heading": "Calibri",
+      "body": "Calibri",
+      "mono": "Consolas"
+    }
+  },
+  {
+    "name": "midnight-purple",
+    "display_name": "Midnight Purple",
+    "colors": {
+      "background": "#0A0A0F",
+      "surface": "#13091D",
+      "primary": "#A100FF",
+      "secondary": "#6B2FA0",
+      "accent": "#F59E0B",
+      "text_primary": "#FFFFFF",
+      "text_secondary": "#A0A0B0",
+      "text_muted": "#6B6B80",
+      "border": "#2A2A3D"
+    },
+    "fonts": {
+      "heading": "Calibri",
+      "body": "Calibri",
+      "mono": "Consolas"
+    }
+  },
+  {
+    "name": "warm-dark",
+    "display_name": "Warm Dark",
+    "colors": {
+      "background": "#1A1A2E",
+      "surface": "#16213E",
+      "primary": "#FF6B6B",
+      "secondary": "#C44569",
+      "accent": "#FFD93D",
+      "text_primary": "#F8F8F2",
+      "text_secondary": "#B0B0C0",
+      "text_muted": "#6B6B80",
+      "border": "#2D2D44"
+    },
+    "fonts": {
+      "heading": "Calibri",
+      "body": "Calibri",
+      "mono": "Consolas"
+    }
+  }
+]

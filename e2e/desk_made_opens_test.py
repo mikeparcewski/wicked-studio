@@ -7,8 +7,8 @@ Desk. Against the in-process fixture: project `notes`, doc `offsite-plan` bound 
   1. MADE ROW: the Made list's `offsite-plan` row opens its session with the document at full size
      (`/s/<session>/a/<key>?size=full`).
   2. VERSION: that address with `v=1` opens the lens.
-  3. UNBOUND: the Made list with `open=loose-notes` shows the document open at full size; Esc closes
-     it back to the list.
+  3. UNBOUND: the Made list with `open=loose-notes` shows the document open at full size; Esc comes
+     back to its card (DES §7.3), and Esc on the card closes it back to the list.
   4. RETIRED (X1): `/p/notes/document/offsite-plan` and `/p/notes/video` are dead addresses — the
      not-found page, the typed address kept.
   5. 0 page errors.
@@ -61,7 +61,7 @@ from playwright.sync_api import sync_playwright  # noqa: E402
 
 SHOTS.mkdir(parents=True, exist_ok=True)
 errors: list[str] = []
-SIZE = "() => document.querySelector('[data-testid=\"artifact\"]')?.dataset.size ?? null"
+SURFACE = "() => document.querySelector('[data-testid=\"plugin-card\"]')?.dataset.surface ?? null"
 
 
 def addr(page) -> dict:
@@ -81,6 +81,7 @@ with sync_playwright() as p:
     post_json(f"{origin}/api/v1/projects/{PID}/interactive/api/docs", {"name": "loose-notes", "brief": "notes no run made"})
     set_fixture(origin, run_chat_id=True, doc_bound_run={"pid": PID, "doc": DOC}, extra_frames=[], editors=True, shell_csp=True)
 
+    # The address must open the protocol-2 shell too; do not click Full screen to mask a broken deep link.
     # ── 1. a Made row opens its session at full size ───────────────────────────────────────────
     page.goto(f"{origin}/everything?tab=made&project={PID}&kind=documents", wait_until="networkidle")
     row = page.locator(f'[data-testid="everything-made-row"][data-name="{DOC}"]')
@@ -88,10 +89,10 @@ with sync_playwright() as p:
     href = row.get_attribute("href")
     row.click()
     page.wait_for_function("() => location.pathname.startsWith('/s/') && location.pathname.includes('/a/')", timeout=15000)
-    page.wait_for_function("() => document.querySelector('[data-testid=\"artifact\"]')?.dataset.size === 'full'", timeout=15000)
+    page.wait_for_function("() => document.querySelector('[data-testid=\"plugin-card\"]')?.dataset.surface === 'full'", timeout=15000)
     page.screenshot(path=str(SHOTS / "desk-made-opens-row.png"))
     check("made-row-opens-the-session-at-full", "/a/" in (href or "") and "size=full" in (href or "")
-          and page.evaluate(SIZE) == "full", href=href, url=page.url)
+          and page.evaluate(SURFACE) == "full", href=href, url=page.url)
 
     # ── 2. the document's own address with ?v=1 is the lens ────────────────────────────────────
     page.goto(f"{origin}{href}{'&' if '?' in (href or '') else '?'}v=1", wait_until="networkidle")
@@ -101,11 +102,14 @@ with sync_playwright() as p:
 
     # ── 3. an unbound document opens on the Made list ──────────────────────────────────────────
     page.goto(f"{origin}/everything?tab=made&kind=documents&project={PID}&open=loose-notes", wait_until="networkidle")
-    page.locator('[data-testid="everything-made-open"] [data-testid="artifact"]').wait_for(state="visible", timeout=15000)
-    page.wait_for_function("() => document.querySelector('[data-testid=\"everything-made-open\"] [data-testid=\"artifact\"]')?.dataset.size === 'full'", timeout=10000)
+    page.locator('[data-testid="everything-made-open"] [data-testid="plugin-card"]').wait_for(state="visible", timeout=15000)
+    page.wait_for_function("() => document.querySelector('[data-testid=\"everything-made-open\"] [data-testid=\"plugin-card\"]')?.dataset.surface === 'full'", timeout=10000)
     page.screenshot(path=str(SHOTS / "desk-made-opens-unbound.png"))
     q = urllib.parse.parse_qs(urllib.parse.urlparse(page.url).query)
     check("unbound-opens-on-the-made-list", q.get("tab") == ["made"] and q.get("project") == [PID] and q.get("kind") == ["documents"], url=page.url)
+    # Esc from full screen is back to the card (DES §7.3); Esc on the card closes it to the list.
+    page.keyboard.press("Escape")
+    page.wait_for_function("() => document.querySelector('[data-testid=\"everything-made-open\"] [data-testid=\"plugin-card\"]')?.dataset.surface === 'card'", timeout=8000)
     page.keyboard.press("Escape")
     page.wait_for_function("() => !document.querySelector('[data-testid=\"everything-made-open\"]')", timeout=8000)
     check("esc-closes-to-the-list", "open=" not in page.url, url=page.url)

@@ -5,7 +5,7 @@ import { editedLine, notUndoneLine, undoneLine, writtenWords, type EditorKind, t
 import { EditorHost, type HostLogEntry } from '../../editors/host.js';
 import {
   LIVE_FRAME_CAP, adapterFor, dropLive, firstTabOf, setGroupShown, groupKey, hostTabsFor, isLive, joinGroup, relay, touchLive, useHostChrome, useHostPanel, useLiveCards,
-  type ExportOutcome, type PluginCardProps, type SurfaceAdapter,
+  type ExportOutcome, type ExportedFile, type PluginCardProps, type SurfaceAdapter,
 } from '../../editors/hostApi.js';
 import { bundleUrl, fetchGrants } from '../../editors/model.js';
 import type { PermissionId } from '../../editors/protocol.js';
@@ -404,8 +404,24 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
     const label = exports.find((x) => x.format === format)?.label ?? format;
     setLine({ kind: 'working', text: `Making the ${label} of version ${head}…` });
     const out = await adapter.exportFile(format, head);
-    if (live.current) setLine({ kind: 'export', out });
+    if (live.current) { setLine({ kind: 'export', out }); if (out.ok) setDiskReads((n) => n + 1); }
   };
+  // studio#234: the files already exported for the version shown, from the adapter's listing — re-read on a new head
+  // and after an export, so a download made in an earlier session is still offered after a reload.
+  // The rows belong to the (artifact, version) they were read for: after a head or document change they are not shown
+  // until the new listing lands (codex h4-fix r1 P2).
+  const [onDisk, setOnDisk] = useState<{ of: string; rows: readonly ExportedFile[] } | null>(null);
+  const [diskReads, setDiskReads] = useState(0);
+  const listsExports = exports.length > 0 && head >= 1 && adapter?.exported !== undefined;
+  const diskOf = `${binding.artifactKey}@${head}`;
+  useEffect(() => {
+    if (!listsExports || adapter?.exported === undefined) { setOnDisk(null); return undefined; }
+    let cancelled = false;
+    adapter.exported(head).then((rows) => { if (!cancelled) setOnDisk({ of: diskOf, rows }); }, () => { if (!cancelled) setOnDisk(null); });
+    return () => { cancelled = true; };
+  }, [listsExports, adapter, head, diskReads, diskOf]);
+  const linkedFile = line?.kind === 'export' && line.out.ok ? line.out.file : null;
+  const filesOnDisk = listsExports && onDisk !== null && onDisk.of === diskOf ? onDisk.rows.filter((x) => x.name !== linkedFile) : [];
 
   const runAction = async (a: CardAction): Promise<void> => {
     if (a.verb === 'host:export') { setExportOpen((o) => !o); return; }
@@ -497,6 +513,17 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
           {line.kind === 'export' && <>{line.out.text}{line.out.ok && <> <a data-testid="artifact-export-download" href={line.out.href} download={line.out.file} className="wk-since-toggle">Download</a></>}</>}
         </p>
       )}
+      {!full && filesOnDisk.length > 0 && (
+        <p data-testid="artifact-exports" className="wk-artifact-line">
+          Exported version {head}:{' '}
+          {filesOnDisk.map((x, i) => (
+            <span key={x.name}>
+              {i > 0 && ' · '}
+              <a data-testid="artifact-export-file" data-format={x.format} href={x.href} download={x.name} className="wk-since-toggle">{x.label}</a>
+            </span>
+          ))}
+        </p>
+      )}
       {offer !== null && !full && (
         <p data-testid="plugin-card-offer" className="wk-artifact-line">
           {editor.title} asks to open {offer === 'full' ? 'full screen' : 'its options'}.{' '}
@@ -509,7 +536,15 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
       {!full && (
         <footer className="wk-pcard-foot">
           {actions.map((a) => (
-            <span key={a.id} className="wk-pcard-action-wrap">
+            <span key={a.id} className="wk-pcard-action-wrap"
+              // Esc with the Export menu open closes the menu, not what the card sits in (the Made list's close), and
+              // gives Export its focus back (codex h4-fix r1 P2).
+              onKeyDown={(e) => {
+                if (e.key !== 'Escape' || a.verb !== 'host:export' || !exportOpen) return;
+                e.preventDefault();
+                setExportOpen(false);
+                (e.currentTarget.querySelector('[data-verb="host:export"]') as HTMLButtonElement | null)?.focus();
+              }}>
               <button type="button" data-testid="plugin-card-action" data-action={a.id} data-verb={a.verb}
                 disabled={a.verb === 'host:export' && (exports.length === 0 || head < 1)}
                 className={a.primary ? 'wk-host-btn wk-host-btn--primary' : 'wk-host-btn'} onClick={() => void runAction(a)}>

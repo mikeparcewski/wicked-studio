@@ -6825,6 +6825,21 @@ class W2Handler(SimpleHTTPRequestHandler):
             else:
                 self._json(404, {"error": "no such recording"})
             return True
+        # studio#234 (wicked-interactive#236): GET /d/<doc>/api/export — the doc's finished exports, oldest first,
+        # so a card lists the downloads made in an earlier session.
+        m = re.match(r"^/api/v1/projects/([^/]+)/interactive/d/([^/]+)/api/export$", path)
+        if m:
+            pid, doc = (urllib.parse.unquote(g) for g in m.groups())
+            with exports_lock:
+                made = [(name, fmt) for (p_, d_, name), fmt in exports_created.items() if p_ == pid and d_ == doc]
+            rows = []
+            for name, fmt in made:
+                version_m = re.search(r"_v(\d+)\.", name)
+                rows.append({"version": int(version_m.group(1)) if version_m else 1, "format": fmt, "name": name,
+                             "bytes": len(export_bytes(doc, int(version_m.group(1)) if version_m else 1, fmt)),
+                             "generated_at": "2026-10-14T00:00:00Z"})
+            self._json(200, rows)
+            return True
         # Slice X (§7.2): GET /d/<doc>/api/export/file/<name> — the artifact bytes,
         # exactly as server.js serves them (Content-Disposition attachment), so the
         # click site's ready affordance is a REAL download on the one origin (§5.3).
@@ -8121,6 +8136,7 @@ class W2Handler(SimpleHTTPRequestHandler):
                 editors.append({"id": m["id"], "title": m["title"], "version": m["version"], "protocol": m["protocol"],
                                 "kinds": m["kinds"], "sizes": m["sizes"], "permissions": m["permissions"],
                                 "sha256": e["sha256"], "bytes": len(e["body"]), "first_party": True, "enabled": True,
+                                **({"surfaces": m["surfaces"]} if "surfaces" in m else {}),
                                 "source": "studio-bundle", "entry_url": f"/api/v1/editors/{m['id']}/{m['version']}/entry"})
             with state_lock:
                 mcp_on = state["mcp_inspect"]

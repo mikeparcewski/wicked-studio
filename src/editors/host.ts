@@ -447,8 +447,8 @@ export class EditorHost {
         }
         const failed = r !== null && typeof r === 'object' && 'error' in r && typeof (r as { error: unknown }).error === 'string';
         if (late) {
-          const made = (msg.type === 'version.write' || msg.type === 'version.fork') && !failed && typeof (r as { version?: unknown }).version === 'number';
-          if (made) this.artifactChanged((r as { version: number }).version, msg.type === 'version.fork' ? 'fork' : 'deterministic');
+          const made = (msg.type === 'version.write' || msg.type === 'version.fork' || msg.type === 'theme.set') && !failed && typeof (r as { version?: unknown }).version === 'number';
+          if (made) this.artifactChanged((r as { version: number }).version, msg.type === 'version.fork' ? 'fork' : msg.type === 'theme.set' ? 'theme' : 'deterministic');
           // A definite "no" after the timer replaces "it may still land" — while that line is still shown.
           else if (failed) this.lateEnd(id, (r as { error: ErrorCode }).error, (r as { message: string }).message);
         } else if (failed) {
@@ -556,7 +556,13 @@ export class EditorHost {
         this.writing = true;
         try {
           const r = await a.theme(p['base'] as number, p['tokens'] as Record<string, unknown>);
-          if (!('error' in r)) { this.ownVersions.add(r.version); this.inventory = null; this.o.ui.thread(`${this.o.firstParty ? 'You' : this.o.name} changed the theme · Version ${r.version}`); }
+          if (!('error' in r)) {
+            this.ownVersions.add(r.version);
+            this.inventory = null;
+            this.timeoutLine = null;
+            this.o.ui.thread(`${this.o.firstParty ? 'You' : this.o.name} changed the theme · Version ${r.version}`);
+            this.o.ui.written?.({ version: r.version, base: p['base'] as number, summary: 'the theme', anchors: [], verb: 'restyled', words: 'the theme' });
+          }
           return r;
         } finally {
           this.writing = false;

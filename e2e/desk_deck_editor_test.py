@@ -9,8 +9,8 @@ lists the `wicked-deck` bundle the served dist carries; the bridge stand-in mirr
 (`POST /d/<doc>/api/deck`, one version per op) and review store (`/d/<doc>/api/deck/review`, decisions,
 audience, proposals); an audience rewrite is answered by a stand-in for crew's governed edit run.
 
-  1. INLINE: the run's deck is a live preview in the `wicked-deck` plugin: slide 1 and "4 slides".
-  2. FILMSTRIP: in the pane, the slides in document order, numbered by place; slide 1's notes under it.
+  1. INLINE: the run's deck is a live preview in the `wicked-deck` plugin: slide 1 and a four-slide inventory.
+  2. FILMSTRIP: in full screen, the slides in document order, numbered by place; slide 1's notes under it.
   3. MOVING BETWEEN SLIDES: → / End / Home in the editor, "3 Enter" in the filmstrip; a click on a thumbnail makes the
      slide the subject of the next message (a chip the host words).
   4. MOVE + UNDO: Move up on slide 3 lands ONE version ("Moved slide 3 to after slide 1 — version 2."),
@@ -19,7 +19,7 @@ audience, proposals); an audience rewrite is answered by a stand-in for crew's g
   5. DUPLICATE, ADD, DELETE: ⌘D, Add slide ▾ "like slide 4", Delete — one version each, the host's words.
   6. NOTES: typed under slide 1 and left — one version; the version's HTML holds them in the notes aside.
   7. TEXT: a click on slide 1's title in the slide, Enter, new words, Enter — "Changed slide 1’s text".
-  8. REVIEW (full): the host's rail lists the slides; Approve slide 1, ask for changes on slide 2 with a
+  8. REVIEW (Options → Review): the host's tab lists the slides; Approve slide 1, ask for changes on slide 2 with a
      note. A move keeps slide 1's approval current; an edit to its words shows "approved on version N —
      changed since" (D5). The rail says approvals don't hold up delivery (D4).
   9. AUDIENCE → PROPOSAL → COMPARE → KEEP: "Rewrite it for them" (Executives) sends ONE structural batch on
@@ -84,11 +84,13 @@ from playwright.sync_api import sync_playwright  # noqa: E402
 SHOTS.mkdir(parents=True, exist_ok=True)
 errors: list[str] = []
 
-ARTIFACT = """() => { const a = document.querySelector('[data-testid="artifact"]');
-  return a ? { size: a.dataset.size, kind: a.dataset.kind,
-               plugin: (document.querySelector('[data-testid="plugin-artifact"]') || {dataset: {}}).dataset.editor || null,
+CARD = '[data-testid="plugin-card"][data-editor="wicked-deck"]'
+ARTIFACT = """() => { const a = document.querySelector('[data-testid="plugin-card"][data-editor="wicked-deck"]');
+  return a ? { surface: a.dataset.surface, key: a.dataset.artifact, protocol: a.dataset.protocol,
+               plugin: a.dataset.editor,
                rail: document.querySelectorAll('[data-testid="deck-review"]').length,
                hscroll: document.documentElement.scrollWidth > document.documentElement.clientWidth } : null; }"""
+
 CHIPS = """() => [...document.querySelectorAll('[data-testid="composer-chip"]')].map(c => c.dataset.key)"""
 STATE = "e => ({ head: e.dataset.head, current: e.dataset.current, n: e.dataset.currentN, count: e.dataset.count, present: e.dataset.present, size: e.dataset.size })"
 THUMBS = "bs => bs.map(b => [b.dataset.n, b.dataset.slideId, b.querySelector('.t').innerText])"
@@ -105,7 +107,7 @@ with sync_playwright() as p:
     post_json(f"{origin}/api/v1/projects/{PID}/interactive/api/docs", {"name": DECK, "brief": "the pitch, four slides", "style": "ppt"})
     set_fixture(origin, run_chat_id=True, doc_bound_run={"pid": PID, "doc": DECK}, editors=True, extra_frames=[], deck_adapt_ms=600)
 
-    plugin = page.frame_locator('[data-testid="editor-frame"][data-editor="wicked-deck"]')
+    plugin = page.frame_locator(f'{CARD} [data-testid="editor-frame"]')
     stage = plugin.frame_locator('[data-testid="deck-frame"]').first  # the newest (a previous one stays until it loads)
     deck = plugin.locator('[data-testid="deck-editor"]')
 
@@ -138,24 +140,24 @@ with sync_playwright() as p:
         deck.focus()
 
     page.goto(f"{origin}/s/run%3A{RUN}", wait_until="networkidle")
-    page.get_by_test_id("artifact").wait_for(state="visible", timeout=15000)
+    page.locator(f'{CARD}[data-protocol="2"]').wait_for(state="visible", timeout=15000)
     try:
-        plugin.locator('[data-testid="deck-inline-count"]').wait_for(state="visible", timeout=15000)
+        plugin.locator('[data-testid="deck-frame"]').wait_for(state="visible", timeout=15000)
     except Exception:
         page.screenshot(path=str(SHOTS / "desk-deck-editor-inline-missing.png"))
         fail("inline", "no wicked-deck preview in the run's block")
     a0 = page.evaluate(ARTIFACT)
     page.screenshot(path=str(SHOTS / "desk-deck-editor-inline.png"))
     # ── 1. inline ──────────────────────────────────────────────────────────────────
-    check("inline", a0 == {"size": "inline", "kind": "deck", "plugin": "wicked-deck", "rail": 0, "hscroll": False}
-          and plugin.locator('[data-testid="deck-inline-count"]').inner_text() == "4 slides"
+    check("inline", a0 == {"surface": "card", "key": f"{RUN}:{PID}/{DECK}", "protocol": "2", "plugin": "wicked-deck", "rail": 0, "hscroll": False}
+          and state()["count"] == "4"
           and plugin.locator('[data-testid="deck-frame"]').get_attribute("title") == "Slide 1",
           artifact=a0)
 
     # ── 2. filmstrip ───────────────────────────────────────────────────────────────
-    page.get_by_test_id("artifact-open").click()
-    page.wait_for_function("() => document.querySelector('[data-testid=\"artifact\"]').dataset.size === 'pane'", timeout=5000)
-    deck.wait_for(state="visible")
+    page.locator(CARD).get_by_test_id("plugin-card-full").click()
+    page.get_by_test_id("full-shell").wait_for(state="visible", timeout=5000)
+    plugin.locator('[data-testid="deck-thumb"]').first.wait_for(state="visible", timeout=5000)
     t2 = thumbs()
     notes2 = plugin.locator('[data-testid="deck-notes"]').input_value()
     page.wait_for_timeout(SETTLE_MS)
@@ -215,7 +217,11 @@ with sync_playwright() as p:
     # ── 6. notes ───────────────────────────────────────────────────────────────────
     focus_deck()
     page.keyboard.press("Home")
+    # Full screen gives the stage the whole viewport: the speaker notes fold under the Notes button.
+    if plugin.locator('[data-testid="deck-notes-toggle"]').get_attribute("aria-pressed") != "true":
+        plugin.locator('[data-testid="deck-notes-toggle"]').click()
     notes = plugin.locator('[data-testid="deck-notes"]')
+    notes.wait_for(state="visible", timeout=5000)
     notes.fill("Open with the waiting list: 140 residents.")
     focus_deck()
     wait_head(7, "notes")
@@ -237,30 +243,46 @@ with sync_playwright() as p:
     l7 = line()
     check("text", l7.startswith("Changed slide 1’s text — version 8.") and thumbs()[0][2] == "Library rooms, booked in seconds", line=l7, thumbs=thumbs())
 
-    # ── 8. review at full size ─────────────────────────────────────────────────────
-    page.get_by_test_id("artifact-grow").click()
+    def open_review() -> None:
+        if page.get_by_test_id("full-shell").count():
+            page.get_by_test_id("full-shell-exit").click()
+            page.get_by_test_id("full-shell").wait_for(state="detached", timeout=5000)
+        page.locator(CARD).get_by_test_id("plugin-card-options").click()
+        page.get_by_test_id("host-panel").wait_for(state="visible", timeout=5000)
+        page.locator('[data-testid="host-panel-tab"][data-group="host"][data-tab="review"]').click()
+
+    def open_full() -> None:
+        page.locator(CARD).get_by_test_id("plugin-card-full").click()
+        page.get_by_test_id("full-shell").wait_for(state="visible", timeout=5000)
+        plugin.locator('[data-testid="deck-thumb"]').first.wait_for(state="visible", timeout=5000)
+
+    # ── 8. review in the host Options tab ─────────────────────────────────────────────────────
+    open_review()
     page.get_by_test_id("deck-review").wait_for(state="visible", timeout=8000)
     page.wait_for_function("() => document.querySelectorAll('[data-testid=\"deck-review-row\"]').length === 5", timeout=8000)
     row = lambda sid: page.locator(f'[data-testid="deck-review-row"][data-slide-id="{sid}"]')  # noqa: E731
     sum0 = page.get_by_test_id("deck-review-summary").inner_text()
     row("s1").get_by_test_id("deck-review-approve").click()
-    page.wait_for_function("() => document.querySelector('[data-testid=\"deck-review-row\"][data-slide-id=\"s1\"]').dataset.state === 'approved'", timeout=8000)
+    page.wait_for_function("() => document.querySelector('[data-testid=\"deck-review-row\"][data-slide-id=\"s1\"]')?.dataset.state === 'approved'", timeout=8000)
     row("s2").get_by_test_id("deck-review-ask").click()
     row("s2").get_by_test_id("deck-review-note").fill("Name the branches")
     row("s2").get_by_test_id("deck-review-save-changes").click()
-    page.wait_for_function("() => document.querySelector('[data-testid=\"deck-review-row\"][data-slide-id=\"s2\"]').dataset.state === 'changes'", timeout=8000)
+    page.wait_for_function("() => document.querySelector('[data-testid=\"deck-review-row\"][data-slide-id=\"s2\"]')?.dataset.state === 'changes'", timeout=8000)
     b8 = {sid: row(sid).get_by_test_id("deck-review-badge").inner_text() for sid in ("s1", "s2")}
     sum8 = page.get_by_test_id("deck-review-summary").inner_text()
     note8 = page.get_by_test_id("deck-review").inner_text()
     page.wait_for_timeout(SETTLE_MS)
     page.screenshot(path=str(SHOTS / "desk-deck-editor-review.png"))
+    open_full()
     # a MOVE keeps slide 1's approval: slide 2 (Residents first, now third) goes down
     plugin.locator(f'[data-testid="deck-thumb"][data-slide-id="s2"]').click()
     plugin.locator('[data-testid="deck-move-down"]').click()
     wait_head(9, "carry-move")
-    page.wait_for_function("() => document.querySelector('[data-testid=\"deck-review\"]').dataset.version === '9'", timeout=10000)
+    open_review()
+    page.wait_for_function("() => document.querySelector('[data-testid=\"deck-review\"]')?.dataset.version === '9'", timeout=10000)
     page.wait_for_timeout(400)
     after_move = row("s1").get_by_test_id("deck-review-badge").inner_text()
+    open_full()
     # an EDIT to slide 1's words shows its approval as changed since
     focus_deck()
     page.keyboard.press("Home")
@@ -270,7 +292,8 @@ with sync_playwright() as p:
     page.keyboard.type("A study room in one tap.")
     page.keyboard.press("Enter")
     wait_head(10, "carry-edit")
-    page.wait_for_function("() => document.querySelector('[data-testid=\"deck-review-row\"][data-slide-id=\"s1\"]').dataset.state === 'stale'", timeout=10000)
+    open_review()
+    page.wait_for_function("() => document.querySelector('[data-testid=\"deck-review-row\"][data-slide-id=\"s1\"]')?.dataset.state === 'stale'", timeout=10000)
     after_edit = row("s1").get_by_test_id("deck-review-badge").inner_text()
     check("review", sum0 == "0 of 5 approved" and b8 == {"s1": "Approved on version 8", "s2": "Changes asked: Name the branches"}
           and sum8 == "1 of 5 approved · 1 asks for changes" and "don’t hold up delivery" in note8
@@ -316,6 +339,7 @@ with sync_playwright() as p:
           line=dropped_line, head=m9["head"], last=last9)
 
     # ── 10. present ────────────────────────────────────────────────────────────────
+    open_full()
     plugin.locator('[data-testid="deck-present"]').click()
     page.wait_for_function("() => true")
     t0 = time.time()
@@ -331,7 +355,7 @@ with sync_playwright() as p:
     page.wait_for_timeout(200)
     after_esc = state()
     a10 = page.evaluate(ARTIFACT)
-    check("present", pres["present"] == "true" and tools_hidden and moved and after_esc["present"] == "false" and a10["size"] == "full",
+    check("present", pres["present"] == "true" and tools_hidden and moved and after_esc["present"] == "false" and a10["surface"] == "full",
           present=pres, after_esc=after_esc, artifact=a10)
 
     check("no-errors", not errors and not a10["hscroll"], errors=errors[:5])

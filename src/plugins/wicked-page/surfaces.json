@@ -1,0 +1,29 @@
+{
+  "card": {
+    "interactive": true,
+    "aspect": "16:9",
+    "actions": [
+      {
+        "id": "ask",
+        "label": "Ask about this",
+        "verb": "host:ask"
+      }
+    ]
+  },
+  "options": {
+    "tabs": [
+      {
+        "id": "style",
+        "label": "Style",
+        "render": "plugin"
+      }
+    ]
+  },
+  "full": {
+    "modes": [
+      "simple",
+      "advanced"
+    ],
+    "default": "simple"
+  }
+}

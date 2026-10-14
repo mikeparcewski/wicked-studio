@@ -5,6 +5,9 @@ import {
 } from '../../interactive/instrument-protocol.js';
 import { appendInstrumentBridge, hasInstrumentBridge } from '../../interactive/instrumented.js';
 import { DEFAULT_COLOUR, themeSwatches, type Swatch } from '../../editors/swatches.js';
+import { V2Port, announceReady, helloOf, sizeOfSurface, type Mode, type Surface } from '../_shared/v2.js';
+import { mountStyle, tokensFromHtml, type ThemeTokens } from '../_shared/style.js';
+import surfaces from './surfaces.json';
 
 /**
  * `wicked-page` — the built-in page element editor as a `wicked.editor/1` plugin (DES-EDITOR-PLUGINS-001
@@ -19,6 +22,11 @@ import { DEFAULT_COLOUR, themeSwatches, type Swatch } from '../../editors/swatch
  * (also ⌘⌫ / Ctrl+Backspace — bare Backspace never removes), a fill and a text colour from the page's
  * own theme plus Default, and the whole section (also ⌥↑, or a second click); the header sets the
  * page's width (Phone 390 / Tablet 820 / Desktop 1280) — only the nested frame's width changes.
+ *
+ * Protocol 2 (DES-EDITOR-PLUGIN-CONTRACT-001 §9): the CARD is the page preview (scrollable; a click points at an
+ * element, so the host's "Ask about this" has a subject); the OPTIONS instance draws the Style tab (themes,
+ * colours, fonts: one `theme.set` each, Undo from the host); FULL is this editor, where Simple edits words and
+ * Advanced adds the element style (fill, text colour) and Remove. A protocol-1 host sees the v1 editor unchanged.
  *
  * The plugin never learns a URL, an id's mount or a run root: it reads the artifact through the host,
  * and every write, chip and key goes through the host's checks (§5.6, §5.7, §5.10). Framework-free,
@@ -48,6 +56,7 @@ interface Inventory {
 }
 
 const MARKUP = `
+<div data-testid="page-style" id="style" class="style-pane" hidden></div>
 <div data-testid="page-editor" id="editor" class="editor" data-kind="page" data-head="" data-pickable="false" data-selected="" data-size="pane" data-width="" tabindex="0" role="application" aria-label="The page">
   <div data-testid="page-tools" id="tools" class="tools" role="toolbar" aria-label="Page width">
     ${WIDTHS.map(([w, word]) => `<button type="button" data-testid="page-width" data-width="${w}" aria-pressed="false" title="${word} · ${w} px wide">${word} ${w}</button>`).join('')}
@@ -111,6 +120,15 @@ export function start(): void {
   let port: MessagePort | null = null;
   let grants: string[] = [];
   let size: Size = 'pane';
+  /** Protocol 2: the surface this instance is and the full-screen mode (Simple edits words; Advanced adds style). */
+  let protocol = 1;
+  let surface: Surface = 'options';
+  let mode: Mode = 'simple';
+  let v2: V2Port | null = null;
+  const canEditText = (): boolean => protocol === 1 ? size !== 'inline' : surface === 'full';
+  const canRestyle = (): boolean => canEditText() && (protocol === 1 || mode === 'advanced');
+  /** The theme the page wears (its `--wi-*`), the Style panel's starting point. */
+  let themeTokens: ThemeTokens | null = null;
   let seq = 0;
   const pending = new Map<string, (r: Reply) => void>();
   const send = (type: string, payload: unknown): void => { port?.postMessage({ p: PROTOCOL, v: PROTOCOL_VERSION, type, payload }); };
@@ -128,6 +146,7 @@ export function start(): void {
   let current: ScrollState = { scrollX: 0, scrollY: 0 };
   let hover: string | null = null;
   let selected: string | null = null;
+  let bufferedSelection: string | null = null;
   let editing: { wid: string; before: string } | null = null;
   let busy = false;
   /** EP-P3: the page's own theme colours (this version's `--wi-*`), and the width the page is shown at. */
@@ -209,7 +228,7 @@ export function start(): void {
     node.style.height = `${Math.max(b.height, minH)}px`;
   };
 
-  const pickable = (): boolean => size !== 'inline' && inventory !== null;
+  const pickable = (): boolean => (size !== 'inline' || (protocol >= 2 && surface === 'card')) && inventory !== null;
 
   const draw = (): void => {
     editor.dataset['head'] = head === null ? '' : String(head);
@@ -221,9 +240,14 @@ export function start(): void {
     place(selBox, editing === null ? box(selected) : null);
     if (editing !== null) place(input, box(editing.wid), 160, 30); else input.hidden = true;
     tools.hidden = size === 'inline';
+    editor.dataset['mode'] = protocol >= 2 ? mode : '';
+    // The element's peek, style and Remove are Advanced in full screen (§9).
+    removeBtn.hidden = !canRestyle();
+    fills.hidden = !canRestyle();
+    inks.hidden = !canRestyle();
     drawPeek();
     // The hint: what the pick lets you do (S8 words), or why typing cannot change this element.
-    if (!pickable() || editing !== null) { hint.hidden = true; return; }
+    if (!canEditText() || !pickable() || editing !== null) { hint.hidden = true; return; }
     hint.hidden = false;
     if (selected === null) { hint.removeAttribute('data-editable'); hint.textContent = 'Click an element to make it the subject · type on it to change it'; return; }
     const words = anchorWords(selected, 'page');
@@ -237,7 +261,7 @@ export function start(): void {
 
   /** The picked element's peek: below its box (above when there is no room), at pane and full size. */
   const drawPeek = (): void => {
-    const b = pickable() && editing === null && !busy ? box(selected) : null;
+    const b = canRestyle() && pickable() && editing === null && !busy ? box(selected) : null;
     if (b === null || selected === null) { peek.hidden = true; return; }
     peek.hidden = false;
     toSection.hidden = inventory?.blocks[selected]?.section === undefined;
@@ -277,6 +301,7 @@ export function start(): void {
   /** An element becomes the subject: picked, a chip on the composer (the host writes its words), and
    *  typing reaches this document — never the frame the click focused. */
   const select = (wid: string | null): void => {
+    bufferedSelection = null;
     selected = wid;
     cancelEdit();
     draw();
@@ -287,6 +312,29 @@ export function start(): void {
   };
 
   const scrollTo = (wid: string): void => { asks += 1; postToFrame(makeScrollToWid(wid, asks)); };
+
+  const acceptRead = (payload: Record<string, unknown>): void => {
+    const version = payload['version'];
+    if (typeof version === 'number' && head !== null && version < head) return;
+    note.hidden = true;
+    const content = payload['content'] as { type?: unknown; html?: unknown } | undefined;
+    const html = typeof content?.html === 'string' ? content.html : '';
+    head = typeof payload['version'] === 'number' ? payload['version'] : head;
+    swatches = themeSwatches(html);
+    themeTokens = tokensFromHtml(html) ?? themeTokens;
+    style?.refresh();
+    fillSwatches(fills, 'background');
+    fillSwatches(inks, 'color');
+    gen += 1;
+    armed = returnTo;
+    returnTo = null;
+    inventory = null;
+    hover = null;
+    selected = null;
+    cancelEdit();
+    draw();
+    mountFrame(hasInstrumentBridge(html) ? html : appendInstrumentBridge(html));
+  };
 
   /** Render one version: the host's HTML, the bridge appended, in the nested sandboxed frame. */
   const render = async (version?: number): Promise<void> => {
@@ -303,22 +351,7 @@ export function start(): void {
     try {
       const r = await req('artifact.read', version === undefined ? {} : { version });
       if (!r.ok) { note.hidden = false; note.textContent = r.error.code === 'not_granted' ? 'This editor may not read the page here.' : `The page could not be read (${r.error.code}).`; return; }
-      note.hidden = true;
-      const content = r.payload['content'] as { type?: unknown; html?: unknown } | undefined;
-      const html = typeof content?.html === 'string' ? content.html : '';
-      head = typeof r.payload['version'] === 'number' ? r.payload['version'] : head;
-      swatches = themeSwatches(html);
-      fillSwatches(fills, 'background');
-      fillSwatches(inks, 'color');
-      gen += 1;
-      armed = returnTo;
-      returnTo = null;
-      inventory = null;
-      hover = null;
-      selected = null;
-      cancelEdit();
-      draw();
-      mountFrame(hasInstrumentBridge(html) ? html : appendInstrumentBridge(html));
+      acceptRead(r.payload);
     } finally {
       rendering = false;
       reading = null;
@@ -342,6 +375,9 @@ export function start(): void {
       const back = armed;
       armed = null;
       if (back !== null && msg.widMap[back] !== undefined) scrollTo(back);
+      // The anchor another instance pointed at survives a new version's frame (codex h4-r3): it is resolved
+      // against each new inventory until the operator picks something else here or the chip is removed.
+      if (bufferedSelection !== null && msg.widMap[bufferedSelection] !== undefined) selected = bufferedSelection;
       draw();
     } else if (msg.type === 'scroll-state') {
       current = { scrollX: msg.scrollX, scrollY: msg.scrollY };
@@ -352,7 +388,8 @@ export function start(): void {
       hover = msg.wid;
       draw();
     } else if (msg.type === 'wid-click') {
-      if (size === 'inline') return; // the preview is one control: the host's catch opens it
+      if (protocol === 1 && size === 'inline') return; // v1's host hit layer owns the preview
+      if (protocol === 2 && surface === 'card') { select(msg.wid); return; }
       // R-c: a second click on the picked element picks its section.
       const up = msg.wid === selected ? inventory?.blocks[msg.wid]?.section : undefined;
       select(up !== undefined && inventory?.widMap[up] !== undefined ? up : msg.wid);
@@ -361,7 +398,7 @@ export function start(): void {
 
   // ── edit by touching ──────────────────────────────────────────────────────────────────
   const beginEdit = (wid: string, typed: string | null): void => {
-    if (busy || inventory === null || typingOn(inventory, wid) !== 'yes') return;
+    if (!canEditText() || busy || inventory === null || typingOn(inventory, wid) !== 'yes') return;
     const before = inventory.blocks[wid]?.text ?? '';
     // The field exists and holds the focus before this key event returns: the characters typed right
     // behind it land in the field (no frame is awaited — S8 lost them to the frame once).
@@ -419,6 +456,8 @@ export function start(): void {
 
   /** R-a: remove the picked element — one version; the host's Undo puts it back. */
   const remove = async (wid: string): Promise<void> => {
+    // Removing is Advanced in full screen (and v1's editor); never from the card's preview (codex h4-r1).
+    if (!canRestyle()) return;
     if (busy || inventory?.widMap[wid] === undefined) return;
     const words = anchorWords(wid, 'page');
     const section = inventory.blocks[wid]?.section ?? null;
@@ -428,7 +467,7 @@ export function start(): void {
 
   /** R-b: one colour on the picked element — one version, with Undo. */
   const restyle = async (wid: string, prop: 'background' | 'color', value: string, label: string): Promise<void> => {
-    if (busy || inventory?.widMap[wid] === undefined) return;
+    if (!canRestyle() || busy || inventory?.widMap[wid] === undefined) return;
     const words = anchorWords(wid, 'page');
     handle.focus();
     await write([{ op: 'style', anchor: wid, style: { [prop]: value } }], words, `${prop === 'background' ? 'Filling' : 'Colouring the text of'} ${words}: ${label.toLowerCase()}…`, wid);
@@ -508,11 +547,11 @@ export function start(): void {
     }
     if (e.metaKey || e.ctrlKey || e.altKey) return;
     if (onButton && e.key.length !== 1) return;
-    if (e.key === 'Enter') { if (selected !== null && !busy) { e.preventDefault(); beginEdit(selected, null); } return; }
+    if (e.key === 'Enter') { if (selected !== null && !busy && canEditText()) { e.preventDefault(); beginEdit(selected, null); } return; }
     // Bare Backspace / Delete never remove anything (§7.1 R-a).
     if (e.key.length !== 1) return;
     e.preventDefault();
-    if (selected !== null && !busy) { beginEdit(selected, e.key); return; }
+    if (selected !== null && !busy && canEditText()) { beginEdit(selected, e.key); return; }
     // Rule 2: the first printable key outside an editable goes to the composer — never an action.
     send('ui.typed', { grapheme: e.key });
   });
@@ -521,7 +560,7 @@ export function start(): void {
   const setSize = (to: Size): void => {
     size = to;
     document.body.dataset['size'] = to;
-    if (to === 'inline') { cancelEdit(); select(null); (document.activeElement as HTMLElement | null)?.blur?.(); }
+    if (to === 'inline') { cancelEdit(); if (protocol < 2) select(null); (document.activeElement as HTMLElement | null)?.blur?.(); }
     applyWidth();
     draw();
   };
@@ -545,6 +584,7 @@ export function start(): void {
         else r({ ok: false, error: d.error ?? { code: 'unavailable', message: 'no answer' }, payload });
         return;
       }
+      if (v2 !== null && v2.dispatch(d)) return;
       const p = typeof d.payload === 'object' && d.payload !== null ? d.payload as Record<string, unknown> : {};
       switch (d.type) {
         case 'host.ping':
@@ -567,6 +607,7 @@ export function start(): void {
         }
         case 'selection.cleared':
           // The chip was removed on the composer: the element is no longer the subject here either.
+          bufferedSelection = null;
           if (selected !== null) { selected = null; cancelEdit(); draw(); }
           return;
         default:
@@ -585,12 +626,66 @@ export function start(): void {
     const p = typeof d.payload === 'object' && d.payload !== null ? d.payload as Record<string, unknown> : {};
     grants = Array.isArray(p['grants']) ? (p['grants'] as unknown[]).filter((g): g is string => typeof g === 'string') : [];
     applyTheme(p['theme']);
-    setSize(p['size'] === 'inline' || p['size'] === 'full' ? p['size'] : 'pane');
+    const hello = helloOf(p);
+    protocol = hello.protocol;
+    if (protocol >= 2) {
+      surface = hello.surface;
+      mode = hello.mode ?? 'simple';
+      v2 = new V2Port(port, {
+        surface: (s, m) => { surface = s; if (m !== null) mode = m; showSurface(); },
+        mode: (m) => { mode = m; draw(); return mode; },
+        selection: (anchors) => {
+          // Another instance pointed at an element: show it picked here too (ids only; the host checked them).
+          const a = anchors.find((x): x is { kind: 'element'; id: string } => typeof x === 'object' && x !== null && (x as { kind?: unknown }).kind === 'element' && typeof (x as { id?: unknown }).id === 'string');
+          if (surface === 'options') return;
+          bufferedSelection = a?.id ?? null;
+          selected = a !== undefined && inventory?.widMap[a.id] !== undefined ? a.id : null;
+          cancelEdit();
+          draw();
+        },
+      });
+      showSurface();
+    } else setSize(hello.size);
     void render();
   });
 
-  const version = document.querySelector('meta[name="wicked-editor-version"]')?.getAttribute('content') ?? '0.0.0';
-  parent.postMessage({ p: PROTOCOL, v: PROTOCOL_VERSION, type: 'plugin.ready', payload: { editor: EDITOR, version, protocol: [PROTOCOL_VERSION] } }, '*');
+  /** Protocol 2: the options instance is the Style tab; the card and full screen are the page editor. */
+  const styleRoot = el<HTMLDivElement>('style');
+  let style: { refresh(): void } | null = null;
+  const showSurface = (): void => {
+    const options = surface === 'options';
+    styleRoot.hidden = !options;
+    editor.hidden = options;
+    if (options && style === null) {
+      style = mountStyle(styleRoot, {
+        tokens: () => themeTokens,
+        key: (key) => send('ui.key', { key }),
+        apply: async (tokens) => {
+          for (let attempt = 0; attempt < 2; attempt += 1) {
+            if (head === null) return { ok: false, reason: 'The page is not loaded yet' };
+            const r = await req('theme.set', { base: head, tokens });
+            if (r.ok) {
+              const v = r.payload['version'];
+              themeTokens = { name: tokens.name, colors: { ...tokens.colors }, fonts: { ...tokens.fonts } };
+              if (typeof v === 'number') await render(v);
+              return { ok: true };
+            }
+            if (r.error.code !== 'head_moved') return { ok: false, reason: r.error.message };
+            const read = await req('artifact.read', {});
+            if (!read.ok) return { ok: false, reason: read.error.message || read.error.code };
+            const nextHead = read.payload['version'];
+            if (typeof nextHead !== 'number' || (head !== null && nextHead < head)) return { ok: false, reason: 'The current page version could not be read.' };
+            acceptRead(read.payload);
+            if (attempt === 1) return { ok: false, reason: r.error.message || r.error.code };
+          }
+          return { ok: false, reason: 'The page changed again: try once more' };
+        },
+      });
+    }
+    setSize(sizeOfSurface(surface));
+  };
+
+  announceReady(EDITOR, surfaces);
 }
 
 start();

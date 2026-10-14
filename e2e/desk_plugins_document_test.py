@@ -8,10 +8,10 @@ page-style doc `launch-page`, an unstyled doc `loose-notes` and a written doc `q
   1. LIST: /plugins shows the built-in row named "Document", listing the documents it opens
      (launch-page, loose-notes) and not the written one (q4-brief), with the honest "written documents
      open in studio's own editor; decks open in Slides" line.
-  2. OPEN: a click on launch-page opens THAT document full size in the plugin frame (the hash-pinned
-     bundle, kind `page`), on the Made list's `open=` address — not the editor test page's sample;
+  2. OPEN: a click on launch-page opens THAT document full size (the `open=` address opens full screen)
+     in the plugin frame (the hash-pinned bundle, kind `page`), on the Made list's `open=` address — not the editor test page's sample;
      picking version 1 in its version list shows version 1 (no address to write there).
-  3. ESC closes it back to the list.
+  3. ESC from full screen comes back to the card (DES §7.3); Esc on the card closes it back to the list.
   4. SOON (Plugins): "Vibe — app builder · Coming soon" is one row with no link or button.
   5. SOON (New job): the grid ends with the same entry as a tile that is not a button.
   6. 0 page errors.
@@ -93,9 +93,10 @@ with sync_playwright() as p:
     # ── 2. a click opens the real document in the plugin ───────────────────────────────────────
     row.locator('[data-testid="plugin-document"][data-doc="launch-page"]').click()
     page.wait_for_function("() => new URLSearchParams(location.search).get('open') === 'launch-page'", timeout=10000)
-    art = page.locator('[data-testid="everything-made-open"] [data-testid="artifact"]')
+    art = page.locator('[data-testid="everything-made-open"] [data-testid="plugin-card"][data-editor="wicked-page"]')
     art.wait_for(state="visible", timeout=15000)
-    page.wait_for_function("() => document.querySelector('[data-testid=\"everything-made-open\"] [data-testid=\"artifact\"]')?.dataset.size === 'full'", timeout=10000)
+    # The `open=` address opens it full screen by itself (a deep link opens full; no click masks a broken one).
+    page.get_by_test_id("full-shell").wait_for(state="visible", timeout=10000)
     frame = page.locator('[data-testid="everything-made-open"] iframe[title^="Document: "]')
     frame.wait_for(state="attached", timeout=15000)
     src = frame.get_attribute("src") or ""
@@ -103,10 +104,17 @@ with sync_playwright() as p:
     page.screenshot(path=str(SHOTS / "desk-plugins-document-open.png"))
     q = urllib.parse.parse_qs(urllib.parse.urlparse(page.url).query)
     check("opens-the-real-document-in-the-plugin",
-          art.get_attribute("data-kind") == "page" and art.get_attribute("data-doc") == "launch-page"
+          art.get_attribute("data-editor") == "wicked-page" and art.get_attribute("data-artifact") == f"made:{PID}/launch-page"
+          and page.get_by_test_id("everything-made-open").get_attribute("data-doc") == "launch-page"
           and "/api/v1/editors/wicked-page/" in src and "/editors/dev" not in page.url
           and q.get("tab") == ["made"] and q.get("project") == [PID],
-          url=page.url, src=src[:120], kind=art.get_attribute("data-kind"))
+          url=page.url, src=src[:120], editor=art.get_attribute("data-editor"))
+
+    page.get_by_test_id("full-shell-exit").click()
+    page.get_by_test_id("full-shell").wait_for(state="detached", timeout=5000)
+    art.get_by_test_id("plugin-card-options").click()
+    page.get_by_test_id("host-panel").wait_for(state="visible", timeout=5000)
+    page.locator('[data-testid="host-panel-tab"][data-group="host"][data-tab="versions"]').click()
 
     # ── 2b. its versions work here too: picking version 1 shows version 1 (codex r1) ───────────
     page.locator('[data-testid="artifact-version-row"][data-version="1"] [data-testid="artifact-version-lens"]').click()
@@ -117,7 +125,11 @@ with sync_playwright() as p:
     check("version-lens-works-on-the-made-list", shown == "1", shown=shown)
 
     # ── 3. Esc closes it back to the list ──────────────────────────────────────────────────────
-    page.locator('[data-testid="artifact-head"]').click(position={"x": 4, "y": 4})
+    page.get_by_test_id("host-panel-close").click()
+    art.get_by_test_id("plugin-card-full").click()
+    page.get_by_test_id("full-shell").wait_for(state="visible", timeout=5000)
+    page.keyboard.press("Escape")
+    page.get_by_test_id("full-shell").wait_for(state="detached", timeout=5000)
     page.keyboard.press("Escape")
     page.wait_for_function("() => !document.querySelector('[data-testid=\"everything-made-open\"]')", timeout=8000)
     check("esc-closes-to-the-list", "open=" not in page.url, url=page.url)
