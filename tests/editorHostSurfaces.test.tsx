@@ -196,6 +196,11 @@ describe('a colour control shows the colour it holds', () => {
     expect(swatchHex('rgb(17, 24, 39)')).toBe('#111827');
     expect(swatchHex('rgba(255,255,255,0.5)')).toBe('#ffffff');
     expect(swatchHex('rgb(17 24 39 / 50%)')).toBe('#111827');
+    expect(swatchHex('rgb(100%, 0%, 0%)')).toBe('#ff0000');
+    expect(swatchHex('rgb(17.5, 24, 39)')).toBe('#121827');
+    expect(swatchHex('rgb(.5, 24, 39)')).toBe('#011827');
+    expect(swatchHex('rgb(50%, 50%, 50%)')).toBe('#808080');
+    expect(swatchHex('rgb(300, -1, 39)')).toBe('#000000'); // a minus sign is not a colour
     expect(swatchHex('var(--x)')).toBe('#000000');
     expect(swatchHex(undefined)).toBe('#000000');
   });

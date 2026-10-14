@@ -316,10 +316,12 @@ export function swatchHex(value: unknown): string {
   if (/^#[0-9a-f]{6}$/iu.test(v)) return v.toLowerCase();
   const short = /^#([0-9a-f])([0-9a-f])([0-9a-f])$/iu.exec(v);
   if (short !== null) return `#${short[1]}${short[1]}${short[2]}${short[2]}${short[3]}${short[3]}`.toLowerCase();
-  const rgb = /^rgba?\(\s*(\d{1,3})[\s,]+(\d{1,3})[\s,]+(\d{1,3})(?:\s*[,/]\s*[\d.]+%?)?\s*\)$/iu.exec(v);
+  const ch = '(\\d*\\.?\\d+%?)';
+  const rgb = new RegExp(`^rgba?\\(\\s*${ch}[\\s,]+${ch}[\\s,]+${ch}(?:\\s*[,/]\\s*[\\d.]+%?)?\\s*\\)$`, 'iu').exec(v);
   if (rgb === null) return PICKER_EMPTY;
-  const hex = rgb.slice(1, 4).map((n) => Math.min(255, Number(n)).toString(16).padStart(2, '0')).join('');
-  return `#${hex}`;
+  // A channel is 0-255 or a percentage, fractional or not (codex h3-seam r1 P2); clamped and rounded to a byte.
+  const byte = (c: string): number => Math.max(0, Math.min(255, Math.round(c.endsWith('%') ? (Number(c.slice(0, -1)) * 255) / 100 : Number(c))));
+  return `#${rgb.slice(1, 4).map((c) => byte(c!).toString(16).padStart(2, '0')).join('')}`;
 }
 
 /** Text commits on Enter or blur, not per keystroke (one `options.changed` per edit). */

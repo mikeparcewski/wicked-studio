@@ -334,8 +334,9 @@ export class EditorHost {
     const surface = this.o.surface ?? (this.o.size === 'inline' ? 'card' : this.o.size === 'pane' ? 'options' : 'full');
     // A tab picked before the handshake (the operator clicked Coverage while the frame was loading) is the tab the
     // instance starts on: host.tab before the port existed went nowhere.
-    const wanted = this.tabWanted;
-    const tab = wanted !== undefined && this.decl.options?.tabs.some((t) => t.id === wanted && t.render === 'plugin') ? wanted : this.o.tab;
+    // Only an options instance has a tab, and only one of the plugin-rendered tabs it declared (codex h3-seam r1 P3).
+    const pluginTab = (id: string | undefined): boolean => id !== undefined && this.decl?.options?.tabs.some((t) => t.id === id && t.render === 'plugin') === true;
+    const tab = surface !== 'options' ? undefined : pluginTab(this.tabWanted) ? this.tabWanted : pluginTab(this.o.tab) ? this.o.tab : undefined;
     const v2 = this.protocol >= 2
       ? { surface, ...(tab !== undefined ? { tab } : {}), ...(surface === 'full' && this.decl.full?.modes != null ? { mode: this.o.mode ?? this.decl.full.default } : {}) }
       : {};

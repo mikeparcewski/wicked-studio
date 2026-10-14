@@ -53,7 +53,8 @@ function readPage(search: string, mode: 'dev' | 'conformance'): Page {
     firstParty: editor.startsWith('wicked-'),
     kind: q.get('kind') === 'deck' ? 'deck' : 'page',
     surface: mode === 'conformance' && ['card', 'options', 'full'].includes(q.get('surface') ?? '') ? q.get('surface') as Surface : null,
-    tab: mode === 'conformance' ? q.get('tab') : null,
+    // A tab only for an options instance; the host checks it against the declared plugin tabs (codex h3-seam r1 P3).
+    tab: mode === 'conformance' && q.get('surface') === 'options' ? q.get('tab') : null,
     mode: mode === 'conformance' && (q.get('mode') === 'simple' || q.get('mode') === 'advanced') ? q.get('mode') as FullMode : null,
   };
 }
@@ -85,6 +86,11 @@ export function EditorHostPage({ mode, navigate }: { mode: 'dev' | 'conformance'
   const [mountKey, setMountKey] = useState(0);
   const [showProtocol, setShowProtocol] = useState(false);
   const [size, setSize] = useState<Size>(page.surface !== null ? sizeOfSurface(page.surface) : 'pane');
+  // A new address (another surface, or the dev page) starts at its own size, not the last one's (codex h3-seam r1 P2).
+  // Keyed by the address itself (`page` is memoized on the search and the route mode): any new address, even one with
+  // the same default, starts at its own size (codex h3-seam r2 P2).
+  const [sizeFor, setSizeFor] = useState(page);
+  if (sizeFor !== page) { setSizeFor(page); setSize(page.surface !== null ? sizeOfSurface(page.surface) : 'pane'); }
   const [torn, setTorn] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const [chips, setChips] = useState<Chip[]>([]);
