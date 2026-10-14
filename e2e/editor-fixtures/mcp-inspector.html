@@ -100,7 +100,13 @@
     return Object.assign(r, { after });
   };
   // Refused before anything was sent; a timeout or a transport failure may still have reached the server.
-  const NOT_SENT = ['not_granted', 'refused', 'bad_request', 'unavailable', 'write_not_granted', 'server_changed', 'rate_limited'];
+  // `unavailable` can follow a dispatch (a transport failure after send): it is an uncertain outcome, not 'not sent'.
+  const NOT_SENT = ['not_granted', 'refused', 'bad_request', 'write_not_granted', 'server_changed', 'rate_limited'];
+  // One call at a time (codex h5-r3): each call claims the next request entry in the log, and a reply that
+  // belongs to a detail view no longer shown never touches the one on screen.
+  let calling = false;
+  let viewGen = 0;
+  const once = async (fn) => { if (calling) return; calling = true; const gen = viewGen; try { await fn(gen); } finally { calling = false; } };
   const words = (r) => {
     const c = r.error.code;
     if (c === 'write_not_granted') return r.error.message + ' Enable it on the MCP tools page.';
@@ -219,6 +225,7 @@
   }
 
   function drawDetail() {
+    viewGen += 1;
     const d = $('detail');
     d.textContent = '';
     if (!current) { sendHeight(); return; }
@@ -243,22 +250,21 @@
         const args = {};
         for (const [k, [inp, t]] of Object.entries(inputs)) if (inp.value !== '') args[k] = t === 'number' || t === 'integer' ? Number(inp.value) : inp.value;
         const params = { name: current.name, arguments: args };
-        const r = await mcp('tools/call', params);
-        show(out, r, 'tools/call', params);
+        await once(async (gen) => { const r = await mcp('tools/call', params); if (gen === viewGen) show(out, r, 'tools/call', params); });
       });
       d.appendChild(call);
     } else if (tab === 'resources') {
       const read = el('button', { type: 'button', class: 'primary' }, 'Read it');
       read.addEventListener('click', async () => {
         const params = { uri: current.uri };
-        show(out, await mcp('resources/read', params), 'resources/read', params);
+        await once(async (gen) => { const r = await mcp('resources/read', params); if (gen === viewGen) show(out, r, 'resources/read', params); });
       });
       d.appendChild(read);
     } else if (tab === 'prompts') {
       const get = el('button', { type: 'button', class: 'primary' }, 'Get it');
       get.addEventListener('click', async () => {
         const params = { name: current.name, arguments: {} };
-        show(out, await mcp('prompts/get', params), 'prompts/get', params);
+        await once(async (gen) => { const r = await mcp('prompts/get', params); if (gen === viewGen) show(out, r, 'prompts/get', params); });
       });
       d.appendChild(get);
     }
