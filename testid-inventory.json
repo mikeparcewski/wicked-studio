@@ -12,8 +12,8 @@
   "studioVersion": "0.8.0",
   "counts": {
     "files": 230,
-    "occurrences": 2823,
-    "static": 2429,
+    "occurrences": 2824,
+    "static": 2430,
     "dynamic": 71,
     "computed": 24
   },
@@ -14107,6 +14107,12 @@
     },
     {
       "testId": "video-player",
+      "files": [
+        "src/plugins/wicked-video/plugin.ts"
+      ]
+    },
+    {
+      "testId": "video-poster",
       "files": [
         "src/plugins/wicked-video/plugin.ts"
       ]

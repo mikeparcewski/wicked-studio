@@ -148,7 +148,8 @@ export class RecordingSurfaceAdapter implements SurfaceAdapter {
   async media(ref: MediaRef): Promise<AdapterResult<{ type: string; blob: Blob }>> {
     const rec = this.rec ?? await this.load().catch(() => null);
     if (rec === null) return { error: 'unavailable', message: 'the recording could not be read' };
-    const path = ref === 'video' ? rec.video : ref === 'poster' ? rec.poster : null;
+    // The poster is the recording's still, or for a failed walkthrough with no poster, its failing frame.
+    const path = ref === 'video' ? rec.video : ref === 'poster' ? rec.poster ?? failedChapter(rec)?.failedFrame ?? null : null;
     if (path === null) return { error: 'unsupported', message: ref === 'video' || ref === 'poster' ? 'no file for that yet' : 'a recording is one take' };
     const url = rec.kind === 'demo-video' ? demoFileUrl(rec.runId, path) : walkthroughFileUrl(rec.runId, rec.step, path);
     const cached = this.mediaCache.get(url);
