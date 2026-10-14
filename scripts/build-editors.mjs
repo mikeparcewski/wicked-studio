@@ -38,7 +38,6 @@ export const EDITORS = [
       { id: 'network.media', why: 'to show the page’s web images and fonts' },
       { id: 'artifact.theme', why: 'to change the page’s theme, colours and fonts from its Style tab, as one version with Undo' },
       { id: 'ui.fullscreen', why: 'to show the page full screen' },
-      { id: 'artifact.export', why: 'to offer the page as a file from its card (the host makes the file)' },
     ],
   },
   {

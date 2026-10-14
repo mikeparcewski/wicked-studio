@@ -434,8 +434,8 @@ export class EditorHost {
         }
         const failed = r !== null && typeof r === 'object' && 'error' in r && typeof (r as { error: unknown }).error === 'string';
         if (late) {
-          const made = (msg.type === 'version.write' || msg.type === 'version.fork') && !failed && typeof (r as { version?: unknown }).version === 'number';
-          if (made) this.artifactChanged((r as { version: number }).version, msg.type === 'version.fork' ? 'fork' : 'deterministic');
+          const made = (msg.type === 'version.write' || msg.type === 'version.fork' || msg.type === 'theme.set') && !failed && typeof (r as { version?: unknown }).version === 'number';
+          if (made) this.artifactChanged((r as { version: number }).version, msg.type === 'version.fork' ? 'fork' : msg.type === 'theme.set' ? 'theme' : 'deterministic');
           // A definite "no" after the timer replaces "it may still land" — while that line is still shown.
           else if (failed) this.lateEnd(id, (r as { error: ErrorCode }).error, (r as { message: string }).message);
         } else if (failed) {

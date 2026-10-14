@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { getLearnedTheme, putLearnedTheme, type LearnKind } from '../../api/interactive.js';
 import { learnReady, learnThemeFromThread, LEARN_KINDS, LEARN_LABEL } from '../../interactive/themeWire.js';
 import { pollLearnedTheme } from '../../theming/learnPoll.js';
+import { beginMatch, endMatch } from '../../editors/themeLock.js';
 import { Segmented } from '../ui/index.js';
 
 /**
@@ -13,9 +14,12 @@ import { Segmented } from '../ui/index.js';
  * bridge's SSRF guard owns; nothing is fetched or uploaded from the browser), then the learned-theme readback, then
  * ONE re-themed version of the head (`PUT /api/theme/learned {apply:true}`), Undo from the host like any write.
  */
-export function MatchTheme({ projectId, docId, onVersion }: {
+export function MatchTheme({ projectId, docId, onVersion, apply }: {
   projectId: string;
   docId: string;
+  /** The host's own theme write (the artifact's adapter: it records the parent for Undo and moves the head).
+   *  Absent = the learned-theme PUT directly. */
+  apply?: (tokens: Record<string, unknown>) => Promise<{ version: number } | { error: string; message: string }>;
   /** A re-themed version landed (the host announces it to every instance as `artifact.changed`). */
   onVersion?: (version: number) => void;
 }): React.ReactElement {
@@ -24,13 +28,18 @@ export function MatchTheme({ projectId, docId, onVersion }: {
   const [line, setLine] = useState<{ text: string; bad: boolean } | null>(null);
   const [busy, setBusy] = useState(false);
   const abort = useRef<AbortController | null>(null);
-  useEffect(() => () => abort.current?.abort(), []);
+  useEffect(() => () => { abort.current?.abort(); endMatch(projectId, docId); }, [projectId, docId]);
 
   const match = async (): Promise<void> => {
     if (!learnReady(kind, value) || busy) return;
     const ctl = new AbortController();
     abort.current = ctl;
     setBusy(true);
+    beginMatch(projectId, docId);
+    try { await run(ctl); } finally { endMatch(projectId, docId); }
+  };
+
+  const run = async (ctl: AbortController): Promise<void> => {
     setLine({ text: `Reading the ${LEARN_LABEL[kind].noun}…`, bad: false });
     // The theme already learned, if any: a later readback is this learn's answer only when it differs. A failed
     // read is not "none" (an older theme would then pass for this one's, codex h4-r1): stop and say so.
@@ -61,10 +70,18 @@ export function MatchTheme({ projectId, docId, onVersion }: {
     }
     try {
       if (ctl.signal.aborted) return;
-      const r = await putLearnedTheme(projectId, docId, out.result.tokens, true);
-      if (ctl.signal.aborted) return;
-      if (r.version !== null) onVersion?.(r.version);
-      setLine({ text: r.version !== null ? `Matched: version ${r.version} wears it` : 'Matched: this version already looks like that', bad: false });
+      if (apply !== undefined) {
+        const r = await apply(out.result.tokens);
+        if (ctl.signal.aborted) return;
+        if ('error' in r) { setLine({ text: r.message, bad: true }); setBusy(false); return; }
+        onVersion?.(r.version);
+        setLine({ text: `Matched: version ${r.version} wears it`, bad: false });
+      } else {
+        const r = await putLearnedTheme(projectId, docId, out.result.tokens, true);
+        if (ctl.signal.aborted) return;
+        if (r.version !== null) onVersion?.(r.version);
+        setLine({ text: r.version !== null ? `Matched: version ${r.version} wears it` : 'Matched: this version already looks like that', bad: false });
+      }
     } catch (e: unknown) {
       if (ctl.signal.aborted) return;
       setLine({ text: e instanceof Error ? e.message : String(e), bad: true });

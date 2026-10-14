@@ -375,10 +375,9 @@ export function start(): void {
       const back = armed;
       armed = null;
       if (back !== null && msg.widMap[back] !== undefined) scrollTo(back);
-      if (bufferedSelection !== null && msg.widMap[bufferedSelection] !== undefined) {
-        selected = bufferedSelection;
-        bufferedSelection = null;
-      }
+      // The anchor another instance pointed at survives a new version's frame (codex h4-r3): it is resolved
+      // against each new inventory until the operator picks something else here or the chip is removed.
+      if (bufferedSelection !== null && msg.widMap[bufferedSelection] !== undefined) selected = bufferedSelection;
       draw();
     } else if (msg.type === 'scroll-state') {
       current = { scrollX: msg.scrollX, scrollY: msg.scrollY };
@@ -641,7 +640,6 @@ export function start(): void {
           if (surface === 'options') return;
           bufferedSelection = a?.id ?? null;
           selected = a !== undefined && inventory?.widMap[a.id] !== undefined ? a.id : null;
-          if (selected !== null) bufferedSelection = null;
           cancelEdit();
           draw();
         },
