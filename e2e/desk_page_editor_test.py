@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-desk_page_editor_test.py — S8, the morphing artifact and the page element editor, now the `wicked-page`
+desk_page_editor_test.py — S8, the protocol-2 host and the page element editor, now the `wicked-page`
 PLUGIN in the kind slot (EP-P2; DES-STUDIO-REBUILD-001 §11 S8; DES-EDITOR-PLUGINS-001 §7.1, §9.3;
 DESIGN-interaction rules 1, 2 and 3) at 1440x700 on the Desk.
 
@@ -11,12 +11,11 @@ bundle CSP), and the grants route answering the engine's decided set. It proves 
 against the plugin, and EP-P2's own:
 
   1. INLINE: the session `/s/run:r-doc-bound` shows the run's page as a live preview in its block
-     (`artifact[data-size=inline]` → the plugin frame → the nested page frame renders the headline).
+     (`plugin-card[data-surface=card]` → the plugin frame → the nested page frame renders the headline).
      ONE handshake, 0 ignored window messages.
-  2. MORPH: a click on the preview grows it to a pane beside the thread; ⤢ grows it to full screen;
-     Esc shrinks one step each time back to inline. The same element throughout (never re-parented):
-     the artifact's `data-object` AND the plugin frame element itself are unchanged across pane ↔ full.
-  3. POINT: in the pane, a click on the headline (inside the nested frame) picks it
+  2. MORPH: Full screen grows the card to the full editor; Esc returns to the card. The
+     artifact key AND the plugin frame element are unchanged throughout (never re-parented).
+  3. POINT: in full screen, a click on the headline (inside the nested frame) picks it
      (`page-selected-box[data-wid=headline]` in the plugin) and makes it the subject of the next message
      — an "about: “…”" chip on the session composer, its words written by the HOST from its own
      inventory of the version.
@@ -90,17 +89,17 @@ from playwright.sync_api import sync_playwright  # noqa: E402
 SHOTS.mkdir(parents=True, exist_ok=True)
 errors: list[str] = []
 
+CARD = '[data-testid="plugin-card"][data-editor="wicked-page"]'
 ARTIFACT = """() => {
-  const a = document.querySelector('[data-testid="artifact"]');
+  const a = document.querySelector('[data-testid="plugin-card"][data-editor="wicked-page"]');
   if (!a) return null;
   const r = a.getBoundingClientRect();
-  const f = document.querySelector('[data-testid="editor-frame"]');
+  const f = a.querySelector('[data-testid="editor-frame"]');
   if (f && !f.__wk) f.__wk = String(Math.random()).slice(2);
-  return { size: a.dataset.size, object: a.dataset.object, doc: a.dataset.doc, kind: a.dataset.kind, w: Math.round(r.width), h: Math.round(r.height),
-           left: Math.round(r.left), version: (document.querySelector('[data-testid="artifact-version"]') || {}).innerText || '',
-           pane: document.querySelector('[data-testid="session"]')?.dataset.pane,
-           frames: document.querySelectorAll('[data-testid="editor-frame"]').length, frame: f ? f.__wk : null,
-           editor: document.querySelector('[data-testid="plugin-artifact"]')?.dataset.editor ?? null,
+  return { surface: a.dataset.surface, object: a.dataset.artifact, w: Math.round(r.width), h: Math.round(r.height),
+           version: a.querySelector('[data-testid="page-line"]')?.innerText || a.querySelector('[data-testid="plugin-card-pill"]')?.innerText || '',
+           frames: a.querySelectorAll('[data-testid="editor-frame"]').length, frame: f ? f.__wk : null,
+           editor: a.dataset.editor, protocol: a.dataset.protocol,
            hscroll: document.documentElement.scrollWidth > document.documentElement.clientWidth };
 }"""
 
@@ -212,52 +211,43 @@ with sync_playwright() as p:
     page.goto(f"{origin}/s/run%3A{RUN}", wait_until="networkidle")
     page.get_by_test_id("session").wait_for(state="visible", timeout=15000)
     try:
-        page.get_by_test_id("artifact").wait_for(state="visible", timeout=15000)
-        page.locator('[data-testid="plugin-artifact"][data-editor="wicked-page"]').wait_for(state="attached", timeout=15000)
+        page.locator(f'{CARD}[data-protocol="2"]').wait_for(state="visible", timeout=15000)
     except Exception:
         page.screenshot(path=str(SHOTS / "desk-page-editor-missing.png"))
-        fail("inline", {"why": "no [data-testid=artifact] hosting the wicked-page plugin in the session's run block",
+        fail("inline", {"why": "no protocol-2 plugin-card hosting the wicked-page plugin in the session's run block",
                         "artifact": page.evaluate(ARTIFACT)})
     shown = wait_headline(page, HEADLINE_V1)
     a0 = page.evaluate(ARTIFACT)
     pf = plugin_frame(page)
     inline_plugin = pf.evaluate(PAGE_EDITOR) if pf is not None else None
     page.screenshot(path=str(SHOTS / "desk-page-editor-inline.png"))
-    check("inline", a0 is not None and a0["size"] == "inline" and a0["doc"] == DOC and a0["kind"] == "page" and a0["editor"] == "wicked-page"
-          and a0["frames"] == 1 and shown.get("text") == HEADLINE_V1 and "version 1" in a0["version"] and not a0["hscroll"]
-          and inline_plugin is not None and inline_plugin["size"] == "inline" and inline_plugin["pickable"] == "false",
+    check("inline", a0 is not None and a0["surface"] == "card" and a0["object"] == f"{RUN}:{PID}/{DOC}" and a0["protocol"] == "2" and a0["editor"] == "wicked-page"
+          and a0["frames"] == 1 and shown.get("text") == HEADLINE_V1 and "Version 1" in a0["version"] and not a0["hscroll"]
+          and inline_plugin is not None and inline_plugin["size"] == "inline" and inline_plugin["pickable"] == "true",
           artifact=a0, headline=shown, plugin=inline_plugin)
 
-    # ── 2. morph: inline → pane → full → pane → inline, one element, one plugin frame ──────
-    page.get_by_test_id("artifact-open").click()
+    # ── 2. card → full → card: one section and one plugin frame throughout ──────────────
+    page.locator(CARD).get_by_test_id("plugin-card-full").click()
+    page.get_by_test_id("full-shell").wait_for(state="visible", timeout=5000)
     page.wait_for_timeout(400)
     a1 = page.evaluate(ARTIFACT)
-    page.screenshot(path=str(SHOTS / "desk-page-editor-pane.png"))
-    page.get_by_test_id("artifact-grow").click()
-    page.wait_for_timeout(400)
-    a2 = page.evaluate(ARTIFACT)
     page.screenshot(path=str(SHOTS / "desk-page-editor-full.png"))
     page.keyboard.press("Escape")
-    page.wait_for_timeout(400)
-    a3 = page.evaluate(ARTIFACT)
-    page.keyboard.press("Escape")
-    page.wait_for_timeout(400)
-    a4 = page.evaluate(ARTIFACT)
-    check("morph",
-          a1["size"] == "pane" and a1["pane"] == "true" and a1["h"] > a0["h"] * 2 and a1["left"] > W / 2
-          and a2["size"] == "full" and a2["w"] == W and a2["h"] == H
-          and a3["size"] == "pane" and a4["size"] == "inline" and a4["pane"] == "false"
-          and a0["object"] == a1["object"] == a2["object"] == a3["object"] == a4["object"]
-          # EP-D2: the plugin frame is the same element in the pane, at full screen, and back.
-          and a1["frame"] is not None and a1["frame"] == a2["frame"] == a3["frame"] and a1["frames"] == a2["frames"] == a3["frames"] == 1
-          and not a2["hscroll"],
-          inline=a0, pane=a1, full=a2, back_pane=a3, back_inline=a4)
+    page.get_by_test_id("full-shell").wait_for(state="detached", timeout=5000)
+    a2 = page.evaluate(ARTIFACT)
+    check("morph", a1["surface"] == "full" and a1["w"] == W and a1["h"] == H
+          and a2["surface"] == "card"
+          and a0["object"] == a1["object"] == a2["object"]
+          and a0["frame"] is not None and a0["frame"] == a1["frame"] == a2["frame"]
+          and a0["frames"] == a1["frames"] == a2["frames"] == 1 and not a1["hscroll"],
+          card=a0, full=a1, back_card=a2)
 
-    # ── 3. point: pick the headline inside the nested frame → the host's about-chip ────────
-    page.get_by_test_id("artifact-open").click()
-    page.wait_for_timeout(500)
+    # ── 3. point and edit in the full editor (Simple mode edits words) ─────────────────
+    page.locator(CARD).get_by_test_id("plugin-card-full").click()
+    page.get_by_test_id("full-shell").wait_for(state="visible", timeout=5000)
+    plugin = page.frame_locator(f'{CARD} [data-testid="editor-frame"]')
+    plugin.locator('[data-testid="page-editor"][data-size="full"]').wait_for(state="visible", timeout=5000)
     wait_pickable(page, 1)
-    plugin = page.frame_locator('[data-testid="editor-frame"]')
     doc = plugin.frame_locator('[data-testid="page-frame"]')
     doc.locator('[data-wid="headline"]').click()
     plugin.locator('[data-testid="page-selected-box"]').wait_for(state="visible", timeout=5000)
@@ -279,10 +269,10 @@ with sync_playwright() as p:
     page.keyboard.press("Enter")
     line1 = wait_line(page, "edited", "edit-by-touching")
     after1 = wait_headline(page, "Q3: revenue up 18%")
-    v1 = page.evaluate(ARTIFACT)["version"]
+    v1 = plugin_frame(page).evaluate(PAGE_EDITOR)["head"]
     page.screenshot(path=str(SHOTS / "desk-page-editor-edited.png"))
     check("edit-by-touching", "version 2" in line1 and "headline" in line1 and after1.get("text") == "Q3: revenue up 18%"
-          and "version 2" in v1, line=line1, headline=after1, version=v1)
+          and v1 == "2", line=line1, headline=after1, version=v1)
 
     # ── 5. undo → version 3 is the page before ─────────────────────────────────────────────
     page.get_by_test_id("page-undo").click()

@@ -38,6 +38,7 @@ export const EDITORS = [
       { id: 'network.media', why: 'to show the page’s web images and fonts' },
       { id: 'artifact.theme', why: 'to change the page’s theme, colours and fonts from its Style tab, as one version with Undo' },
       { id: 'ui.fullscreen', why: 'to show the page full screen' },
+      { id: 'artifact.export', why: 'to offer the page as a file from its card (the host makes the file)' },
     ],
   },
   {
@@ -52,6 +53,7 @@ export const EDITORS = [
       { id: 'artifact.write', why: 'to add, duplicate, move or delete a slide, change its words or its notes, each as one version with Undo' },
       { id: 'selection.chip', why: 'to make the slide or the line you click the subject of your next message' },
       { id: 'ui.fullscreen', why: 'to present the deck full screen' },
+      { id: 'artifact.export', why: 'to offer the deck as PowerPoint or PDF from its card (the host makes the file)' },
       { id: 'artifact.theme', why: 'to change the deck’s theme, colours and fonts from its Style tab, as one version with Undo' },
     ],
   },
