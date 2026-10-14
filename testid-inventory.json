@@ -7303,14 +7303,14 @@
       "testId": "page-edit-input",
       "files": [
         "src/components/session/PageEditor.tsx",
-        "src/plugins/wicked-page/plugin.ts"
+        "src/plugins/_shared/pageEditor.ts"
       ]
     },
     {
       "testId": "page-editor",
       "files": [
         "src/components/session/PageEditor.tsx",
-        "src/plugins/wicked-page/plugin.ts"
+        "src/plugins/_shared/pageEditor.ts"
       ]
     },
     {
@@ -7318,28 +7318,28 @@
       "files": [
         "src/components/session/PageEditor.tsx",
         "src/components/ui/PageFrame.tsx",
-        "src/plugins/wicked-page/plugin.ts"
+        "src/plugins/_shared/pageEditor.ts"
       ]
     },
     {
       "testId": "page-handle",
       "files": [
         "src/components/session/PageEditor.tsx",
-        "src/plugins/wicked-page/plugin.ts"
+        "src/plugins/_shared/pageEditor.ts"
       ]
     },
     {
       "testId": "page-hint",
       "files": [
         "src/components/session/PageEditor.tsx",
-        "src/plugins/wicked-page/plugin.ts"
+        "src/plugins/_shared/pageEditor.ts"
       ]
     },
     {
       "testId": "page-hover-box",
       "files": [
         "src/components/session/PageEditor.tsx",
-        "src/plugins/wicked-page/plugin.ts"
+        "src/plugins/_shared/pageEditor.ts"
       ]
     },
     {
@@ -7353,56 +7353,56 @@
     {
       "testId": "page-note",
       "files": [
-        "src/plugins/wicked-page/plugin.ts"
+        "src/plugins/_shared/pageEditor.ts"
       ]
     },
     {
       "testId": "page-peek",
       "files": [
-        "src/plugins/wicked-page/plugin.ts"
+        "src/plugins/_shared/pageEditor.ts"
       ]
     },
     {
       "testId": "page-remove",
       "files": [
-        "src/plugins/wicked-page/plugin.ts"
+        "src/plugins/_shared/pageEditor.ts"
       ]
     },
     {
       "testId": "page-section",
       "files": [
-        "src/plugins/wicked-page/plugin.ts"
+        "src/plugins/_shared/pageEditor.ts"
       ]
     },
     {
       "testId": "page-selected-box",
       "files": [
         "src/components/session/PageEditor.tsx",
-        "src/plugins/wicked-page/plugin.ts"
+        "src/plugins/_shared/pageEditor.ts"
       ]
     },
     {
       "testId": "page-style",
       "files": [
-        "src/plugins/wicked-page/plugin.ts"
+        "src/plugins/_shared/pageEditor.ts"
       ]
     },
     {
       "testId": "page-swatch",
       "files": [
-        "src/plugins/wicked-page/plugin.ts"
+        "src/plugins/_shared/pageEditor.ts"
       ]
     },
     {
       "testId": "page-swatches",
       "files": [
-        "src/plugins/wicked-page/plugin.ts"
+        "src/plugins/_shared/pageEditor.ts"
       ]
     },
     {
       "testId": "page-tools",
       "files": [
-        "src/plugins/wicked-page/plugin.ts"
+        "src/plugins/_shared/pageEditor.ts"
       ]
     },
     {
@@ -7416,7 +7416,7 @@
     {
       "testId": "page-width",
       "files": [
-        "src/plugins/wicked-page/plugin.ts"
+        "src/plugins/_shared/pageEditor.ts"
       ]
     },
     {

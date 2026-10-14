@@ -1,4 +1,5 @@
 import surfaces from './surfaces.json';
+import { isForwardable } from '../../editors/keys.js';
 import { announceReady, forwardOptionsKey, helloOf, V2Port, sizeOfSurface, type Surface } from '../_shared/v2.js';
 import { mountStyle, copyTokens, tokensFromHtml, type ThemeTokens } from '../_shared/style.js';
 import { deckOf, topSlideElements, type DeckSlide } from '../../board/deck.js';
@@ -713,7 +714,7 @@ export function start(): void {
       if (key === 'Tab' || key === 'Shift+Tab') notes.blur();
       send('ui.key', { key });
     })) return;
-    if (e.altKey && !e.metaKey && !e.ctrlKey && /^Key[A-Z]$/.test(e.code)) { e.preventDefault(); send('ui.key', { key: `Alt+${e.code.slice(3)}` }); return; }
+    if (e.altKey && !e.metaKey && !e.ctrlKey && /^Key[A-Z]$/.test(e.code) && isForwardable(`Alt+${e.code.slice(3)}`)) { e.preventDefault(); send('ui.key', { key: `Alt+${e.code.slice(3)}` }); return; }
     if (e.key === 'Escape') { e.preventDefault(); if (notesDraft?.key === current) notesDraft = null; notes.value = cur()?.notes ?? ''; notesFor = null; handle.focus(); return; }
     if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); if (protocol === 2 && surface === 'options') notes.blur(); else handle.focus(); return; }
     // ⌘K is the host's, from inside the field too (codex r1); Tab past the last control leaves to the host.
