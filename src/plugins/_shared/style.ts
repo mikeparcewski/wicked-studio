@@ -29,7 +29,7 @@ export function mountStyle(root: HTMLElement, ctx: StyleContext): { refresh(): v
 .plugin-style h2{font-size:16px;margin:0 0 12px}.plugin-style .theme-cards{display:grid;gap:8px;margin-bottom:18px}
 .plugin-style button,.plugin-style input,.plugin-style select{font:inherit;color:var(--ink-high);background:var(--surface-card);border:1px solid var(--border);border-radius:4px}
 .plugin-style button{padding:8px;text-align:left;cursor:pointer}.plugin-style button:focus-visible,.plugin-style input:focus-visible,.plugin-style select:focus-visible{outline:2px solid var(--accent)}
-.plugin-style .swatches{display:flex;height:16px;margin-bottom:6px;border:1px solid var(--border)}.plugin-style .swatches span{flex:1}
+.plugin-style .ps-swatches{display:flex;width:100%;height:16px;margin-bottom:6px;border:1px solid var(--border)}.plugin-style .ps-swatches span{flex:1}
 .plugin-style label{display:flex;align-items:center;gap:8px;margin:10px 0}.plugin-style label>span:first-child{flex:1}.plugin-style input[type=color]{width:36px;height:30px;padding:2px}.plugin-style input[type=text]{width:80px;padding:5px}.plugin-style select{max-width:170px;padding:5px}
 .plugin-style p{line-height:1.5;color:var(--ink-body)}.plugin-style [role=status]{min-height:1.5em}.plugin-style :disabled{opacity:.6;cursor:default}`;
   root.append(css);
@@ -61,7 +61,7 @@ export function mountStyle(root: HTMLElement, ctx: StyleContext): { refresh(): v
   };
   for (const theme of THEMES) {
     const b = document.createElement('button'); b.type = 'button'; b.dataset['theme'] = theme.name;
-    const swatches = document.createElement('span'); swatches.className = 'swatches'; swatches.setAttribute('aria-hidden', 'true');
+    const swatches = document.createElement('span'); swatches.className = 'ps-swatches'; swatches.setAttribute('aria-hidden', 'true');
     for (const key of ['background', 'surface', 'primary', 'secondary', 'accent'] as const) {
       const swatch = document.createElement('span'); swatch.style.backgroundColor = theme.colors[key]; swatches.append(swatch);
     }
