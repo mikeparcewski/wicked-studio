@@ -8121,6 +8121,7 @@ class W2Handler(SimpleHTTPRequestHandler):
                 editors.append({"id": m["id"], "title": m["title"], "version": m["version"], "protocol": m["protocol"],
                                 "kinds": m["kinds"], "sizes": m["sizes"], "permissions": m["permissions"],
                                 "sha256": e["sha256"], "bytes": len(e["body"]), "first_party": True, "enabled": True,
+                                **({"surfaces": m["surfaces"]} if "surfaces" in m else {}),
                                 "source": "studio-bundle", "entry_url": f"/api/v1/editors/{m['id']}/{m['version']}/entry"})
             with state_lock:
                 mcp_on = state["mcp_inspect"]

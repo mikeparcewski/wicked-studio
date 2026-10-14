@@ -4,6 +4,16 @@
     "Empty until the S16 deletion slices: before then a removal fails. Add entries as \"<removed>\": \"<successor>\" in the PR that removes the testid."
   ],
   "successors": {
+    "artifact": "plugin-card",
+    "artifact-open": "plugin-card-full",
+    "artifact-grow": "plugin-card-full",
+    "artifact-shrink": "full-shell-exit",
+    "artifact-head": "full-shell-head",
+    "artifact-version": "plugin-card-pill",
+    "artifact-export": "plugin-card-action",
+    "artifact-export-line": "page-line",
+    "plugin-artifact": "plugin-card",
+    "deck-inline-count": "deck-count",
     "palette-project-stage": "launch-wizard-demo-project",
     "watch-coverage-toggle": "watch-coverage-reasons",
     "session-chat-stop": "session-stop",
