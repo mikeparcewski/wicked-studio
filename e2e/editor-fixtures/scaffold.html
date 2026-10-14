@@ -1,0 +1,332 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: MIT -->
+<!--
+  Acme notes (acme-notes 0.1.0): an artifact editor plugin speaking wicked.editor/2, and
+  /1 to an older host (DES-EDITOR-PLUGIN-CONTRACT-001; DES-EDITOR-PLUGINS-001 §5). ONE self-contained file:
+  every script and style is inline, nothing is loaded from outside it (the bundle's policy has connect-src
+  'none' and the pack check refuses outside references). It talks only to the host, over the MessagePort the
+  host transfers with host.hello.
+
+  Protocol 2: the host draws this editor in up to three places from the SURFACES declaration below, which is
+  the same JSON as `surfaces` in wicked-pack.json (the host and the conformance run compare the two):
+    card     a live frame in the thread; the host draws the action buttons, Options and Full screen around it
+    options  a frame in the host panel showing one of the plugin tabs (host.tab); controls tabs are drawn by
+             the host, and this editor owns their values (options.values / options.changed)
+    full     the full-screen body; the host draws the header, Simple/Advanced (host.mode) and the chat drawer
+  The card and full screen are ONE instance that morphs (host.surface): never reload on a morph.
+
+  The protocol plumbing below is what the conformance run checks; keep it. Put your editor in render(),
+  in the YOUR EDITOR handlers, and in SURFACES (then copy SURFACES into wicked-pack.json, or re-scaffold).
+  After every change to this file, re-pin its hash: wicked-garden run scripts/editor/pin.py <pack dir>
+-->
+<html lang="en"><head><meta charset="utf-8"><title>Acme notes</title>
+<style>
+  :root { --accent: #224a5e; --ink: #0d1117; --ink-muted: #44515d; --surface: #ffffff; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.45 system-ui, sans-serif; color: var(--ink); background: var(--surface); }
+  main { padding: 10px 14px; }
+  .note { color: var(--ink-muted); font-size: 12px; margin: 0 0 8px; }
+  [data-part] { display: block; padding: 3px 6px; margin: 2px 0; border-radius: 4px; outline: none; }
+  [data-part][aria-selected="true"] { box-shadow: 0 0 0 2px var(--accent); }
+  [data-part]:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  button { font: inherit; color: var(--ink); background: transparent; border: 1px solid var(--ink-muted); border-radius: 4px; padding: 2px 8px; }
+  pre { margin: 0; white-space: pre-wrap; word-break: break-word; font: 12px/1.4 ui-monospace, monospace; }
+  body[data-density="compact"] [data-part] { padding: 1px 6px; margin: 0; }
+  body:not([data-numbers="true"]) .num { display: none; }
+  .num { color: var(--ink-muted); margin-right: 6px; font-variant-numeric: tabular-nums; }
+  .advanced { display: none; }
+  body[data-surface="full"][data-mode="advanced"] .advanced { display: block; }
+  /* Protocol 1: the inline card has no input (a host hit layer turns a click into "grow"). */
+  body[data-protocol="1"][data-size="inline"] main { pointer-events: none; }
+  /* Protocol 2: the card is interactive (SURFACES.card.interactive), so it keeps pointer and keys. */
+  body[data-surface="card"] #view { max-height: 360px; overflow: auto; }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style></head>
+<body data-size="pane" data-protocol="1" data-density="roomy">
+<main>
+  <p class="note" id="status">Loading…</p>
+  <div id="view" role="list" aria-label="What this editor shows"></div>
+  <pre class="advanced" id="detail" aria-label="Advanced detail"></pre>
+  <button type="button" id="full">Full screen</button>
+</main>
+<script>
+(() => {
+  'use strict';
+  const EDITOR = 'acme-notes', VERSION = '0.1.0';
+  // The protocol-2 declaration: byte-for-byte the manifest's `surfaces` (the scaffold writes both).
+  const SURFACES = {
+  "card": {
+    "interactive": true,
+    "aspect": "auto",
+    "actions": [
+      {
+        "id": "next",
+        "label": "Next part",
+        "verb": "plugin"
+      },
+      {
+        "id": "ask",
+        "label": "Ask about it",
+        "verb": "host:ask"
+      }
+    ]
+  },
+  "options": {
+    "tabs": [
+      {
+        "id": "parts",
+        "label": "Parts",
+        "render": "plugin"
+      },
+      {
+        "id": "view",
+        "label": "View",
+        "render": "controls",
+        "controls": [
+          {
+            "id": "density",
+            "label": "Density",
+            "type": "segmented",
+            "options": [
+              {
+                "id": "roomy",
+                "label": "Roomy"
+              },
+              {
+                "id": "compact",
+                "label": "Compact"
+              }
+            ]
+          },
+          {
+            "id": "numbers",
+            "label": "Show numbers",
+            "type": "toggle"
+          }
+        ]
+      }
+    ]
+  },
+  "full": {
+    "modes": [
+      "simple",
+      "advanced"
+    ],
+    "default": "simple"
+  }
+};
+  let port = null, grants = [], head = 0, seq = 0, selected = null, protocol = 1;
+  let surface = 'card', mode = 'simple', tab = null, parts = [];
+  // The values of the host-drawn controls tabs: this editor's truth, with a per-tab rev (§6, options.changed).
+  const values = {}, revs = {};
+  for (const t of (SURFACES.options && SURFACES.options.tabs) || []) {
+    if (t.render !== 'controls') continue;
+    values[t.id] = {}; revs[t.id] = 0;
+    for (const c of t.controls) values[t.id][c.id] = c.type === 'toggle' ? false : c.options ? c.options[0].id : c.type === 'range' ? c.min : c.type === 'color' ? '#224a5e' : '';
+  }
+  const pending = new Map();
+  const env = (type, payload) => ({ p: 'wicked.editor', v: 1, type, payload });
+  // A request expects one reply on the port (the host answers every request within 10 s).
+  const req = (type, payload) => new Promise((resolve) => {
+    if (!port) { resolve({ ok: false, error: { code: 'unavailable', message: 'no port' } }); return; }
+    const id = 'r' + (++seq);
+    pending.set(id, resolve);
+    port.postMessage({ p: 'wicked.editor', v: 1, type, id, payload });
+  });
+  const send = (type, payload) => { if (port) port.postMessage(env(type, payload)); };
+  const answer = (id, payload) => { if (port) port.postMessage({ p: 'wicked.editor', v: 1, re: id, ok: true, payload }); };
+  const status = (line) => {
+    document.getElementById('status').textContent = line;
+    send('ui.status', { line: String(line).slice(0, 120) });
+  };
+  const granted = (p) => grants.includes(p);
+
+  // The card's height, when it declares aspect "auto" (the host clamps it to 120-560 px).
+  function reportHeight() {
+    if (protocol >= 2 && surface === 'card' && SURFACES.card.aspect === 'auto') send('ui.height', { px: Math.ceil(document.body.scrollHeight) });
+  }
+
+  function select(d) {
+    if (selected) selected.removeAttribute('aria-selected');
+    selected = d;
+    if (d) d.setAttribute('aria-selected', 'true');
+  }
+
+  // YOUR EDITOR: turn the artifact into what this editor shows. `content` is the host's Content:
+  // {type:'html', html} for documents and pages, {type:'demo', ...}, {type:'walkthrough', view}, or
+  // {type:'rfp', requirements, answers}. Build DOM nodes with textContent — never innerHTML of content.
+  function render(content) {
+    const view = document.getElementById('view');
+    view.textContent = '';
+    parts = [];
+    if (content && content.type === 'html') {
+      // Parse without running anything (DOMParser runs no scripts) and list the anchored parts.
+      const tmp = new DOMParser().parseFromString(content.html, 'text/html');
+      for (const el of tmp.querySelectorAll('[data-wid]')) {
+        if (el.querySelector('[data-wid]')) continue;
+        const d = document.createElement('div');
+        d.dataset.part = el.getAttribute('data-wid');
+        d.setAttribute('role', 'listitem');
+        d.tabIndex = 0;
+        const n = document.createElement('span');
+        n.className = 'num';
+        n.textContent = String(parts.length + 1);
+        d.appendChild(n);
+        d.appendChild(document.createTextNode(el.textContent.trim()));
+        view.appendChild(d);
+        parts.push(d);
+      }
+    } else {
+      const pre = document.createElement('pre');
+      pre.setAttribute('role', 'listitem');
+      pre.textContent = JSON.stringify(content, null, 2);
+      view.appendChild(pre);
+    }
+    document.getElementById('detail').textContent = 'Version ' + head + ' · ' + parts.length + ' parts';
+    reportHeight();
+  }
+
+  async function load() {
+    if (!granted('artifact.read')) { status('This editor may not read the artifact here.'); reportHeight(); return; }
+    const r = await req('artifact.read', {});
+    if (!r.ok) { status('Not read: ' + r.error.code); reportHeight(); return; }
+    head = r.payload.version;
+    render(r.payload.content);
+    status('Version ' + head);
+  }
+
+  // YOUR EDITOR: a host-drawn card action with verb "plugin" (SURFACES.card.actions). It carries no user
+  // activation: act only through your granted requests. Answer {handled, status?}.
+  function onAction(id) {
+    if (id === 'next' && parts.length > 0) {
+      const i = (parts.indexOf(selected) + 1) % parts.length;
+      select(parts[i]);
+      parts[i].scrollIntoView({ block: 'nearest' });
+      if (granted('selection.chip')) send('selection.set', { anchors: [{ kind: 'element', id: parts[i].dataset.part }] });
+      return { handled: true, status: 'Part ' + (i + 1) + ' of ' + parts.length };
+    }
+    return { handled: false };
+  }
+
+  // YOUR EDITOR: a host-drawn control changed. Apply it, bump the tab's rev, answer with the tab's values.
+  function onOptionChanged(p) {
+    const t = ((SURFACES.options && SURFACES.options.tabs) || []).find((x) => x.id === p.tab && x.render === 'controls');
+    const c = t && t.controls.find((x) => x.id === p.id);
+    const ok = c && (c.type === 'toggle' ? typeof p.value === 'boolean' : c.options ? c.options.some((o) => o.id === p.value) : true);
+    if (!ok) return { applied: false, rev: revs[p.tab] || 0, values: values[p.tab] || {}, reason: 'not a value this control holds' };
+    values[t.id][c.id] = p.value;
+    revs[t.id] += 1;
+    applyValues();
+    return { applied: true, rev: revs[t.id], values: values[t.id] };
+  }
+
+  function applyValues() {
+    const v = values.view || {};
+    if (v.density) document.body.dataset.density = v.density;
+    document.body.dataset.numbers = String(v.numbers === true);
+    reportHeight();
+  }
+
+  function setSurface(s, m) {
+    surface = s;
+    document.body.dataset.surface = s;
+    if (typeof m === 'string') setMode(m);
+    if (s === 'card' && document.activeElement && document.activeElement !== document.body) document.activeElement.blur();
+    reportHeight();
+  }
+  function setMode(m) { mode = m === 'advanced' ? 'advanced' : 'simple'; document.body.dataset.mode = mode; }
+
+  // Pointing: a click on a part puts a chip in the composer (the host writes the label).
+  document.addEventListener('click', (e) => {
+    const d = e.target.closest && e.target.closest('[data-part]');
+    if (!d || !granted('selection.chip')) return;
+    select(d);
+    send('selection.set', { anchors: [{ kind: 'element', id: d.dataset.part }] });
+  });
+  document.getElementById('full').addEventListener('click', () => {
+    if (protocol >= 2 && SURFACES.full) { send('ui.morph', { to: surface === 'full' ? 'card' : 'full' }); return; }
+    if (granted('ui.fullscreen')) req('ui.fullscreen', {});
+  });
+
+  // Keys (DES §5.10): forward only Escape, Mod+K, Alt+<letter> and Tab at the edges; the FIRST printable
+  // key goes to the composer as ONE grapheme (rule 2). A key never approves, deletes or sends anything.
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') { send('ui.key', { key: 'Escape' }); return; }
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); send('ui.key', { key: 'Mod+K' }); return; }
+    // Only the host's navigation chords; Alt+A (approve), Alt+R / Alt+X (decide), Alt+N (compose) are never sent.
+    if (e.altKey && e.code && /^Key[JKPGBTU]$/.test(e.code)) { e.preventDefault(); send('ui.key', { key: 'Alt+' + e.code.slice(3) }); return; }
+    if (e.altKey && e.code === 'Slash') { e.preventDefault(); send('ui.key', { key: 'Alt+/' }); return; }
+    if (e.key === 'Tab') {
+      const items = [...document.querySelectorAll('[data-part], button')];
+      const i = items.indexOf(document.activeElement);
+      if ((!e.shiftKey && i === items.length - 1) || (e.shiftKey && i <= 0)) { e.preventDefault(); send('ui.key', { key: e.shiftKey ? 'Shift+Tab' : 'Tab' }); }
+      return;
+    }
+    if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) { e.preventDefault(); send('ui.typed', { grapheme: e.key }); }
+    // Backspace / Delete: nothing (a stray key never removes anything).
+  });
+
+  function onPort(m) {
+    const d = m.data;
+    try {
+      if (!d || d.p !== 'wicked.editor' || d.v !== 1) return;
+      if (typeof d.re === 'string' && pending.has(d.re)) { const r = pending.get(d.re); pending.delete(d.re); r(d); return; }
+      const p = d.payload || {};
+      switch (d.type) {
+        case 'host.ping': answer(d.id, {}); break;
+        case 'host.size':
+          if (typeof p.size === 'string') {
+            document.body.dataset.size = p.size;
+            if (p.size === 'inline' && document.activeElement) document.activeElement.blur();
+          }
+          break;
+        case 'host.theme': {
+          const t = p.theme || {};
+          const map = { '--accent': '--accent', '--ink-high': '--ink', '--ink-muted': '--ink-muted', '--surface-card': '--surface' };
+          for (const [k, v] of Object.entries(t)) {
+            if (map[k] && typeof v === 'string' && !/url\(|[;{}]/i.test(v)) document.documentElement.style.setProperty(map[k], v);
+          }
+          break;
+        }
+        case 'artifact.changed': if (p.by !== 'this-editor') load(); break;
+        // ── protocol 2 (only a host that negotiated 2 sends these) ──
+        case 'host.surface': if (protocol >= 2 && ['card', 'options', 'full'].includes(p.surface)) setSurface(p.surface, p.mode); break;
+        case 'host.mode': if (protocol >= 2 && typeof d.id === 'string') { setMode(p.mode); answer(d.id, { mode }); } break;
+        case 'host.action': if (protocol >= 2 && typeof d.id === 'string') answer(d.id, onAction(String(p.id))); break;
+        case 'host.tab': if (protocol >= 2 && typeof p.tab === 'string') tab = p.tab; break;
+        case 'host.selection': {
+          const a = Array.isArray(p.anchors) ? p.anchors.find((x) => x && x.kind === 'element') : null;
+          if (protocol >= 2) select(a ? parts.find((x) => x.dataset.part === a.id) || null : null);
+          break;
+        }
+        case 'options.changed': if (protocol >= 2 && typeof d.id === 'string') answer(d.id, onOptionChanged(p)); break;
+        case 'host.teardown': break;
+        default: break; // an unknown type is ignored, never an error (§5.4)
+      }
+    } catch (err) { /* a malformed host message is ignored */ }
+  }
+
+  window.addEventListener('message', (e) => {
+    // One handshake: the first host.hello carrying a port; everything after rides that port.
+    if (port || !e.data || e.data.p !== 'wicked.editor' || e.data.type !== 'host.hello' || !e.ports || !e.ports[0]) return;
+    port = e.ports[0];
+    port.onmessage = onPort;
+    const p = e.data.payload || {};
+    grants = Array.isArray(p.grants) ? p.grants : [];
+    protocol = p.protocol === 2 ? 2 : 1;
+    document.body.dataset.protocol = String(protocol);
+    if (typeof p.size === 'string') document.body.dataset.size = p.size;
+    if (protocol >= 2) {
+      if (typeof p.tab === 'string') tab = p.tab;
+      setMode(typeof p.mode === 'string' ? p.mode : (SURFACES.full && SURFACES.full.default) || 'simple');
+      setSurface(['card', 'options', 'full'].includes(p.surface) ? p.surface : 'card');
+      // The options instance owns the controls tabs' values: it tells the host what they are now.
+      if (surface === 'options') for (const id of Object.keys(values)) send('options.values', { tab: id, rev: revs[id], values: values[id] });
+    }
+    applyValues();
+    load();
+  });
+  parent.postMessage(env('plugin.ready', { editor: EDITOR, version: VERSION, protocol: [1, 2], surfaces: SURFACES }), '*');
+})();
+</script>
+</body></html>

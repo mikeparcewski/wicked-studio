@@ -6,6 +6,7 @@ import { bundleUrl, fetchGrants, type Chip } from '../../editors/model.js';
 import { PERMISSIONS, SIZES, type PermissionId, type Size } from '../../editors/protocol.js';
 import { readThemeTokens } from '../../editors/theme.js';
 import { EditorTestPagePicker } from './EditorPluginsSettings.js';
+import { EditorSurfacesView } from '../editorHost/EditorSurfacesView.js';
 
 /**
  * THE EDITOR HOST PAGE (DES-EDITOR-PLUGINS-001 §10 step 2, §12.1; slice EP-P1): one editor plugin in
@@ -177,6 +178,10 @@ export function EditorHostPage({ mode, navigate }: { mode: 'dev' | 'conformance'
 
   return (
     <div data-testid="editor-host-page" data-mode={mode} className="wk-editor-page">
+      {/* H7: the three surfaces, drawn by the run page's own host components from the plugin's declaration. */}
+      {mode === 'dev' && page.editor !== '' && page.version !== '' && page.sha !== '' && (
+        <EditorSurfacesView editor={page.editor} version={page.version} sha={page.sha} title={page.title} kind={page.kind} />
+      )}
       <div ref={container} data-testid="editor-artifact-frame" data-size={size} className={`wk-editor-artifact wk-editor-artifact--${size}`}>
         <header className="wk-editor-head">
           <span className="wk-editor-title">{page.title}</span>
