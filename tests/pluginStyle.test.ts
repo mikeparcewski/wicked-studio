@@ -48,7 +48,7 @@ describe('shared artifact Style panel', () => {
   it('shows the three built-in themes with swatches and applies exact tokens in one call', async () => {
     const cards = Array.from(root.querySelectorAll<HTMLButtonElement>('button[data-theme]'));
     expect(cards.map((b) => b.textContent)).toEqual(['Corporate Light', 'Midnight Purple', 'Warm Dark']);
-    expect(cards.map((b) => b.querySelectorAll('.swatches span').length)).toEqual([5, 5, 5]);
+    expect(cards.map((b) => b.querySelectorAll('.ps-swatches span').length)).toEqual([5, 5, 5]);
     for (const [i, card] of cards.entries()) {
       card.click();
       await vi.waitFor(() => expect(root.querySelector('[role=status]')?.textContent).toBe('Theme applied.'));
