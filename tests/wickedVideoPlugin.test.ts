@@ -5,6 +5,8 @@ import { chapterInventoryOf, checkOps } from '../src/editors/ops.js';
 import { canonicalSurfaces, parseSurfaces } from '../src/editors/surfaces.js';
 import surfaces from '../src/plugins/wicked-video/surfaces.json';
 import { videoValues, type DemoCut } from '../src/editors/demoCutModel.js';
+import { cutOfRecording } from '../src/editors/adapters/recording.js';
+import type { Recording } from '../src/board/walkthroughModel.js';
 
 const env = (type: string, payload: unknown, id?: string) => ({ p: 'wicked.editor', v: 1, type, payload, ...(id === undefined ? {} : { id }) });
 interface Message { type?: string; id?: string; re?: string; ok?: boolean; payload?: Record<string, unknown> }
@@ -20,6 +22,24 @@ const messages = (type: string) => seen.filter(m => m.type === type);
 const values = (tab: string) => messages('options.values').filter(m => m.payload?.['tab'] === tab).at(-1)?.payload?.['values'];
 const send = (type: string, payload: unknown, id?: string) => ch.port1.postMessage(env(type, payload, id));
 const settled = async (version: number) => vi.waitFor(() => { expect(root().dataset['head']).toBe(String(version)); expect(node('video-rename')?.hasAttribute('disabled') ?? false).toBe(false); });
+function recordingCut(): DemoCut {
+  const rec: Recording = {
+    kind: 'walkthrough', runId: 'run', step: 'review', planStep: 'plan', state: 'failed', cause: null,
+    seat: { evaluator: 'reviewer', builders: [] }, sealed: true, video: 'take/video.mp4', poster: null,
+    markers: [{ at: '0:00', sec: 0, title: 'Scope' }, { at: '0:12', sec: 12, title: 'Plan' }],
+    script: null, exportable: false, scriptEditable: false,
+    chapters: ['Scope', 'Missing', 'Plan'].map((title, i) => ({
+      key: `ch${i + 1}`, title, blurb: `Say ${title}`, index: i + 1, total: 3,
+      startSec: [0, null, 12][i]!, verdict: i === 2 ? 'FAIL' : i === 0 ? 'PASS' : null,
+      recorded: i !== 1, takes: 1, failedAtSec: i === 2 ? 4 : null, failedAbsSec: i === 2 ? 16 : null,
+      failedFrame: null, proves: [],
+      checks: [{ id: 'screen', kind: 'on_screen', sentence: i === 2 ? '<b>Check Plan</b>' : `Check ${title}`,
+        passed: i === 2 ? false : i === 0 ? true : null, atSec: i === 2 ? 4 : i === 0 ? 3 : null,
+        atAbsSec: i === 2 ? 16 : i === 0 ? 3 : null, evidence: i === 2 ? ['plan/screen.png'] : [], detail: null, vaultEntry: null }],
+    })),
+  };
+  return cutOfRecording(rec, 'Run');
+}
 async function show(cut: DemoCut): Promise<HTMLVideoElement> {
   await vi.waitFor(() => expect(node('video-player').getAttribute('src')).toMatch(/^blob:/));
   const oldSrc = node('video-player').getAttribute('src');
@@ -125,6 +145,7 @@ describe('chapter edits are one operation in one write', () => {
     expect(messages('version.write')[0]?.payload).toEqual({ base: 1, ops: [{ op: 'chapter-rename', chapter: 'open-the-scope', title: '<b>Scope</b>' }], summary: 'chapter 1' });
     expect(node('video-chapter').textContent).toContain('<b>Scope</b>'); expect(node('video-chapter').querySelector('b')).toBeNull();
     node('video-rename').click(); node('video-rename-input').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); expect(node('video-rename-input')).toBeNull(); expect(messages('version.write')).toHaveLength(1);
+    await new Promise(r => setTimeout(r, 30)); expect(messages('ui.key')).toHaveLength(0);
   });
   it('trims on number input release and refuses invalid trim values locally', async () => {
     const input = node<HTMLInputElement>('video-in'); input.value = '0.5'; input.dispatchEvent(new Event('change')); await settled(2);
@@ -149,7 +170,106 @@ describe('chapter edits are one operation in one write', () => {
   });
 });
 
+describe('native control host keys', () => {
+  beforeEach(async () => {
+    send('host.surface', { surface: 'full', mode: 'advanced' });
+    await vi.waitFor(() => expect(node('video-take')).toBeTruthy());
+  });
+  it.each(['say', 'video-in', 'video-out', 'video-take'])('forwards Escape from %s', async id => {
+    const control = id === 'say' ? document.getElementById(id)! : node(id);
+    control.focus();
+    const key = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }); control.dispatchEvent(key);
+    expect(key.defaultPrevented).toBe(true);
+    await vi.waitFor(() => expect(messages('ui.key').at(-1)?.payload).toEqual({ key: 'Escape' }));
+  });
+  it('forwards boundary Tab from the caption textarea and keeps interior Tab and arrows native', async () => {
+    const caption = document.getElementById('say')!; caption.focus();
+    caption.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }));
+    await vi.waitFor(() => expect(messages('ui.key')).toHaveLength(1));
+    expect(messages('ui.key')[0]?.payload).toEqual({ key: 'Tab' });
+    const input = node('video-in'); input.focus();
+    for (const key of ['Tab', 'ArrowRight']) {
+      const event = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }); input.dispatchEvent(event);
+      expect(event.defaultPrevented).toBe(false);
+    }
+    await new Promise(r => setTimeout(r, 30)); expect(messages('ui.key')).toHaveLength(1); expect(messages('version.write')).toHaveLength(0);
+  });
+  it.each(['video-in', 'video-out', 'video-take'])('forwards Tab and Shift+Tab when %s is at the boundary', async id => {
+    send('host.surface', { surface: 'options' }); send('host.tab', { tab: 'chapters' });
+    await vi.waitFor(() => expect(root().dataset['surface']).toBe('options'));
+    const control = node(id);
+    // Only this native control is in the focus ring: exercise both boundaries for each kind.
+    root().querySelectorAll<HTMLElement>('button, input, select, textarea, [tabindex]').forEach(c => { if (c !== control) c.tabIndex = -1; });
+    control.focus();
+    for (const shiftKey of [false, true]) {
+      const event = new KeyboardEvent('keydown', { key: 'Tab', shiftKey, bubbles: true, cancelable: true }); control.dispatchEvent(event);
+      expect(event.defaultPrevented).toBe(true);
+    }
+    await vi.waitFor(() => expect(messages('ui.key').map(m => m.payload)).toEqual([{ key: 'Tab' }, { key: 'Shift+Tab' }]));
+  });
+  it('forwards host chords from native controls', async () => {
+    const control = node('video-take'); control.focus();
+    control.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true, bubbles: true, cancelable: true }));
+    control.dispatchEvent(new KeyboardEvent('keydown', { key: 'v', code: 'KeyV', altKey: true, bubbles: true, cancelable: true }));
+    await vi.waitFor(() => expect(messages('ui.key').map(m => m.payload)).toEqual([{ key: 'Mod+K' }, { key: 'Alt+V' }]));
+  });
+});
+
+describe('walkthrough proof in the video editor', () => {
+  it('shows verdicts and check marks at absolute moments, with evidence as literal text in Advanced', async () => {
+    const player = await show(recordingCut());
+    send('host.surface', { surface: 'full', mode: 'advanced' });
+    await vi.waitFor(() => expect(root().dataset['mode']).toBe('advanced'));
+    Object.defineProperty(player, 'duration', { configurable: true, value: 20 }); player.dispatchEvent(new Event('loadedmetadata'));
+    expect(Array.from(document.querySelectorAll('.chapter-verdict')).map(n => n.textContent)).toEqual(['✓', '✗']);
+    expect(document.getElementById('proof-summary')?.textContent).toBe('FAIL · Failed at 16.0s');
+    const marks = Array.from(document.querySelectorAll<HTMLButtonElement>('[data-testid="video-check-mark"]'));
+    expect(marks.map(m => [m.dataset['sec'], m.dataset['state'], m.style.left])).toEqual([['3', 'PASS', '15%'], ['16', 'FAIL', '80%']]);
+    marks[1]!.click(); expect(player.currentTime).toBe(16); expect(root().dataset['current']).toBe('ch3');
+    expect(document.getElementById('inspectors')).not.toHaveAttribute('hidden');
+    const checks = Array.from(document.querySelectorAll<HTMLElement>('[data-testid="video-check"]'));
+    expect(checks).toHaveLength(3);
+    expect(checks[1]?.textContent).toBe('PENDING · Missing · Check Missing');
+    expect(checks[2]?.textContent).toBe('FAIL · Plan · <b>Check Plan</b> · Evidence: plan/screen.png · 16.0s');
+    expect(document.getElementById('check-list')?.querySelector('b, a, img, script')).toBeNull();
+    send('host.mode', { mode: 'simple' }, 'proof-simple');
+    await vi.waitFor(() => expect(document.getElementById('inspectors')).toHaveAttribute('hidden'));
+    expect(document.querySelectorAll('[data-testid="video-check-mark"]')).toHaveLength(2);
+  });
+  it('marks the failure moment even when no check has a time', async () => {
+    const cut = recordingCut(); cut.proof!.checks = cut.proof!.checks.map(k => ({ ...k, atSec: null }));
+    const player = await show(cut);
+    send('host.surface', { surface: 'full', mode: 'advanced' });
+    await vi.waitFor(() => expect(root().dataset['mode']).toBe('advanced'));
+    Object.defineProperty(player, 'duration', { configurable: true, value: 20 }); player.dispatchEvent(new Event('loadedmetadata'));
+    expect(document.querySelectorAll('[data-testid="video-check-mark"]')).toHaveLength(0);
+    expect(node('video-failure-mark').dataset).toMatchObject({ sec: '16', state: 'FAIL' });
+    expect(node('video-failure-mark').style.left).toBe('80%');
+  });
+});
+
 describe('video timing and caption overlays', () => {
+  it('keeps [0, null, 12] chapters visible but never seeks or captions the absent chapter, even after metadata', async () => {
+    const player = await show(recordingCut());
+    const chips = Array.from(document.querySelectorAll<HTMLButtonElement>('[data-testid="video-chip"]'));
+    const rows = Array.from(document.querySelectorAll<HTMLButtonElement>('[data-testid="video-chapter"]'));
+    expect(chips).toHaveLength(3); expect(rows).toHaveLength(3);
+    for (const control of [chips[1]!, rows[1]!]) { expect(control).toBeDisabled(); expect(control.title).toBe('Not in this recording'); }
+    player.currentTime = 5;
+    chips[1]!.click(); rows[1]!.click();
+    send('host.selection', { anchors: [{ kind: 'chapter', id: 'ch2' }] });
+    await new Promise(r => setTimeout(r, 30)); expect(player.currentTime).toBe(5); expect(root().dataset['current']).toBe('ch1');
+    player.currentTime = 13; player.dispatchEvent(new Event('timeupdate'));
+    expect(root().dataset['current']).toBe('ch3'); expect(document.getElementById('caption')?.textContent).toBe('Say Plan');
+    Object.defineProperty(player, 'duration', { configurable: true, value: 20 }); player.dispatchEvent(new Event('loadedmetadata'));
+    expect(document.querySelectorAll('.duration')[1]?.textContent).toBe('—');
+    expect(document.querySelectorAll('.duration')[2]?.textContent).toBe('8.0s');
+    player.currentTime = 20; player.dispatchEvent(new Event('timeupdate')); expect(document.getElementById('caption')).toHaveAttribute('hidden');
+    send('host.action', { id: 'prev' }, 'skip-missing');
+    await vi.waitFor(() => expect(seen.find(m => m.re === 'skip-missing')?.payload).toEqual({ handled: true, status: 'Chapter 1 of 3 · Scope' }));
+    expect(player.currentTime).toBe(0);
+    root().dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true })); expect(player.currentTime).toBe(12);
+  });
   it('keeps the overlay hidden on a burned MP4 across chapter playback updates', async () => {
     expect(document.getElementById('caption')).toHaveAttribute('hidden');
     const player = node<HTMLVideoElement>('video-player');

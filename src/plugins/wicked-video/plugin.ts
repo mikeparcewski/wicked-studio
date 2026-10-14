@@ -1,5 +1,5 @@
 /** First-party video editor: all data and media arrive through the granted port. */
-import { announceReady, helloOf, V2Port, PROTOCOL, ENVELOPE, surfaceOfSize, type Envelope, type Mode, type Surface } from '../_shared/v2.js';
+import { announceReady, forwardOptionsKey, helloOf, V2Port, PROTOCOL, ENVELOPE, surfaceOfSize, type Envelope, type Mode, type Surface } from '../_shared/v2.js';
 import surfaces from './surfaces.json';
 import { changedVideoStyle, videoValues, type ChapterOp, type DemoChapter, type DemoCut } from '../../editors/demoCutModel.js';
 import { controlValueOk, parseSurfaces } from '../../editors/surfaces.js';
@@ -14,7 +14,7 @@ export function start(): void {
     <aside id="chapters" class="chapters"><h2>Chapters</h2><ol id="chapter-list"></ol><div id="editor-fields" class="editor-fields"></div><p id="hint" class="hint"></p></aside>
     <section id="work" class="work"><div class="player"><video id="player" data-testid="video-player" playsinline preload="metadata" aria-label="Video"></video><div id="unavailable" class="unavailable">The video isn't available here</div><div id="caption" class="caption"></div></div>
     <div class="transport"><button id="play" data-testid="video-play" type="button">Play</button><span id="count"></span></div><div id="chips" class="chips" aria-label="Chapter chips"></div><div id="timeline" class="timeline" aria-label="Chapter timeline"></div><p id="status" class="status" role="status"></p></section>
-    <aside id="inspectors" class="inspectors"><h2>Text</h2><textarea id="say" aria-label="Chapter caption text" readonly></textarea><h2>Theme</h2><p id="theme-summary" class="summary"></p></aside></main>`);
+    <aside id="inspectors" class="inspectors"><section id="proof"><h2>Checks</h2><p id="proof-summary" class="summary"></p><ol id="check-list" aria-label="Checks"></ol></section><h2>Text</h2><textarea id="say" aria-label="Chapter caption text" readonly></textarea><h2>Theme</h2><p id="theme-summary" class="summary"></p></aside></main>`);
   const el = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
   const root = el('video-editor'), list = el('chapter-list'), fields = el('editor-fields');
   const player = el<HTMLVideoElement>('player'), chips = el('chips'), timeline = el('timeline'), caption = el('caption');
@@ -32,8 +32,8 @@ export function start(): void {
     pending.set(id, { resolve, timer }); port.postMessage({ p: PROTOCOL, v: ENVELOPE, type, id, payload });
   });
   const current = (): DemoChapter | undefined => cut?.chapters.find(c => c.id === selected);
-  const chapterAt = (sec: number): DemoChapter | undefined => cut?.chapters.find(c => sec >= c.startSec && (c.durationSec < 0 || sec < c.startSec + c.durationSec));
-  const overlayOn = (c: DemoChapter | undefined): boolean => c !== undefined && cut !== null && cut.style.captions.on && (takePreview || !(cut.style.captions.burnIn && cut.ffmpeg?.burnIn));
+  const chapterAt = (sec: number): DemoChapter | undefined => cut?.chapters.find(c => c.startSec >= 0 && sec >= c.startSec && (c.durationSec < 0 || sec < c.startSec + c.durationSec));
+  const overlayOn = (c: DemoChapter | undefined): boolean => c !== undefined && c.startSec >= 0 && cut !== null && cut.style.captions.on && (takePreview || !(cut.style.captions.burnIn && cut.ffmpeg?.burnIn));
   const editable = (): boolean => grants.includes('artifact.write') && !busy && !disposed;
   const advanced = (): boolean => surface === 'options' || mode === 'advanced';
   const status = (line: string): void => { el('status').textContent = line; send('ui.status', { line: line.replace(/[\r\n]/g, ' ').slice(0, 120) }); };
@@ -44,7 +44,7 @@ export function start(): void {
     for (const [key, value] of Object.entries(raw)) if (typeof value === 'string' && /^--[a-z0-9-]+$/.test(key) && value.length <= 200 && !/url\(/i.test(value)) document.documentElement.style.setProperty(key, value);
   };
   const revoke = (): void => { if (mediaUrl !== null) URL.revokeObjectURL(mediaUrl); mediaUrl = null; player.removeAttribute('src'); };
-  async function media(ref: 'video' | { chapter: string } = 'video'): Promise<void> {
+  async function media(ref: 'video' | { chapter: string } = 'video', seekSec?: number): Promise<void> {
     const generation = ++mediaGeneration;
     if (!grants.includes('media.read')) { revoke(); el('unavailable').hidden = false; return; }
     const r = await req('artifact.media', { ref });
@@ -57,12 +57,13 @@ export function start(): void {
     drawCaption();
     player.onloadedmetadata = () => {
       if (!takePreview && cut !== null && Number.isFinite(player.duration)) {
-        for (const c of cut.chapters) if (c.durationSec < 0) {
-          c.durationSec = Math.max(0, player.duration - c.startSec); c.outSec = c.inSec + c.durationSec;
+        for (const [i, c] of cut.chapters.entries()) if (c.startSec >= 0 && c.durationSec < 0) {
+          const end = cut.chapters.slice(i + 1).find(next => next.startSec >= 0)?.startSec ?? player.duration;
+          c.durationSec = Math.max(0, end - c.startSec); c.outSec = c.inSec + c.durationSec;
         }
         draw();
       }
-      player.currentTime = takePreview ? current()?.inSec ?? 0 : current()?.startSec ?? 0;
+      player.currentTime = seekSec ?? (takePreview ? current()?.inSec ?? 0 : Math.max(0, current()?.startSec ?? 0));
     };
   }
   const button = (text: string, fn: () => void, testid?: string): HTMLButtonElement => {
@@ -71,7 +72,7 @@ export function start(): void {
     return b;
   };
   function go(id: string, point = true): void {
-    if (!cut?.chapters.some(c => c.id === id)) return;
+    if (!cut?.chapters.some(c => c.id === id && c.startSec >= 0)) return;
     selected = id;
     if (takePreview) { takePreview = false; void media(); }
     player.currentTime = current()?.startSec ?? 0;
@@ -94,7 +95,7 @@ export function start(): void {
     const oldVersion = cut?.version;
     cut = content;
     if (oldVersion !== cut.version) takePreview = false;
-    if (!cut.chapters.some(c => c.id === selected)) selected = cut.chapters[0]?.id ?? null;
+    if (!cut.chapters.some(c => c.id === selected && c.startSec >= 0)) selected = cut.chapters.find(c => c.startSec >= 0)?.id ?? null;
     draw(); publish();
     if (surface !== 'options' && oldVersion !== cut.version) void media();
     return true;
@@ -172,6 +173,37 @@ export function start(): void {
     };
     return handle;
   }
+  function drawProof(): void {
+    const proof = cut?.proof, checks = el('check-list');
+    checks.replaceChildren(); el('proof').hidden = proof === undefined;
+    if (proof === undefined || cut === null) return;
+    el('proof-summary').textContent = `${proof.verdict ?? 'Pending'}${proof.failedAtSec === null ? '' : ` · Failed at ${proof.failedAtSec.toFixed(1)}s`}`;
+    const end = !takePreview && Number.isFinite(player.duration) && player.duration > 0 ? player.duration : Math.max(1,
+      ...cut.chapters.filter(c => c.startSec >= 0).map(c => c.startSec + Math.max(0, c.durationSec)),
+      ...proof.checks.map(k => k.atSec ?? 0), proof.failedAtSec ?? 0);
+    const track = document.createElement('div'); track.className = 'check-track'; track.setAttribute('aria-label', 'Check timeline');
+    const mark = (sec: number, state: string, text: string, id: string): void => {
+      if (sec < 0 || !Number.isFinite(sec) || end <= 0) return;
+      const b = button(state === 'FAIL' ? '✗' : state === 'PASS' ? '✓' : '·', () => {
+        if (takePreview) { takePreview = false; void media('video', sec); }
+        player.currentTime = sec; player.dispatchEvent(new Event('timeupdate'));
+      }, id);
+      b.className = 'check-mark'; b.dataset['state'] = state; b.dataset['sec'] = String(sec);
+      b.style.left = `${Math.min(100, sec / end * 100)}%`; b.title = `${sec.toFixed(1)}s · ${text}`; b.setAttribute('aria-label', b.title);
+      track.append(b);
+    };
+    for (const k of proof.checks) {
+      const chapter = cut.chapters.find(c => c.id === k.chapter)?.title ?? k.chapter;
+      const text = `${k.state} · ${chapter} · ${k.text}`;
+      const row = document.createElement('li'); row.dataset['testid'] = 'video-check'; row.dataset['state'] = k.state;
+      row.textContent = `${text}${k.atSec === null ? '' : ` · ${k.atSec.toFixed(1)}s`}`; checks.append(row);
+      if (k.atSec !== null) mark(k.atSec, k.state, text, 'video-check-mark');
+    }
+    if (proof.failedAtSec !== null && !proof.checks.some(k => k.state === 'FAIL' && k.atSec === proof.failedAtSec)) {
+      mark(proof.failedAtSec, 'FAIL', 'Failed', 'video-failure-mark');
+    }
+    timeline.dataset['proof'] = String(track.childElementCount > 0); timeline.append(track);
+  }
   function draw(): void {
     const active = document.activeElement as HTMLElement | null;
     const focusedChapter = active?.dataset['chapter'];
@@ -180,15 +212,20 @@ export function start(): void {
     el('chapters').hidden = surface === 'card' || (surface === 'options' && tab !== 'chapters');
     el('work').hidden = surface === 'options'; el('inspectors').hidden = surface !== 'full' || mode !== 'advanced';
     timeline.hidden = surface !== 'full'; chips.hidden = surface !== 'card';
-    list.replaceChildren(); chips.replaceChildren(); timeline.replaceChildren(); fields.replaceChildren();
+    list.replaceChildren(); chips.replaceChildren(); timeline.replaceChildren(); fields.replaceChildren(); timeline.dataset['proof'] = 'false';
     if (cut === null) return;
     cut.chapters.forEach((c, i) => {
       const row = document.createElement('li');
       const b = button('', () => go(c.id), 'video-chapter'); b.className = 'chapter'; b.dataset['chapter'] = c.id;
+      b.disabled = c.startSec < 0; if (b.disabled) b.title = 'Not in this recording';
       const n = document.createElement('span'); n.className = 'number'; n.textContent = String(i + 1);
       const title = document.createElement('span'); title.textContent = c.title;
       const duration = document.createElement('span'); duration.className = 'duration'; duration.textContent = c.durationSec < 0 ? '—' : `${c.durationSec.toFixed(1)}s`;
       b.append(n, title, duration); b.setAttribute('aria-current', String(c.id === selected)); b.setAttribute('aria-label', `Chapter ${i + 1}: ${c.title}`);
+      if (c.verdict === 'PASS' || c.verdict === 'FAIL') {
+        const verdict = document.createElement('span'); verdict.className = 'chapter-verdict'; verdict.dataset['verdict'] = c.verdict;
+        verdict.textContent = c.verdict === 'PASS' ? '✓' : '✗'; verdict.setAttribute('aria-label', c.verdict); b.append(verdict);
+      }
       b.ondblclick = () => { if (advanced()) rename(c); };
       row.draggable = advanced() && editable();
       row.ondragstart = e => { dragged = c.id; e.dataTransfer?.setData('text/plain', c.id); };
@@ -203,11 +240,14 @@ export function start(): void {
       row.ondragend = () => { dragged = null; };
       row.append(b); list.append(row);
       const chip = button(`${i + 1} · ${c.title}`, () => go(c.id), 'video-chip'); chip.className = 'chip'; chip.setAttribute('aria-current', String(c.id === selected)); chips.append(chip);
+      chip.disabled = c.startSec < 0; if (chip.disabled) chip.title = 'Not in this recording';
       const segment = document.createElement('div'); segment.className = 'segment-box'; segment.style.flex = String(c.durationSec < 0 ? 1 : c.durationSec);
       const seg = button(`${i + 1} · ${c.title}`, () => go(c.id), 'video-segment'); seg.className = 'segment'; seg.setAttribute('aria-current', String(c.id === selected)); segment.append(seg);
+      seg.disabled = c.startSec < 0; if (seg.disabled) seg.title = 'Not in this recording';
       if (mode === 'advanced' && c.id === selected) segment.append(trimHandle(c, 'in'), trimHandle(c, 'out'));
       timeline.append(segment);
     });
+    drawProof();
     const c = current();
     el('hint').textContent = c === undefined ? '' : "Re-record this chapter: the host's button";
     el('count').textContent = c === undefined ? 'No chapters' : `${cut.chapters.findIndex(x => x.id === c.id) + 1} of ${cut.chapters.length}`;
@@ -277,21 +317,15 @@ export function start(): void {
   root.onkeydown = e => {
     const target = e.target as HTMLElement;
     const mod = e.metaKey || e.ctrlKey;
-    if (mod && !e.altKey && e.key.toLowerCase() === 'k') { e.preventDefault(); send('ui.key', { key: 'Mod+K' }); return; }
+    if (forwardOptionsKey(e, root, key => send('ui.key', { key }))) return;
     if (target.closest('input,textarea,select')) return;
-    if (e.key === 'Escape') { e.preventDefault(); send('ui.key', { key: 'Escape' }); return; }
-    if (e.key === 'Tab') {
-      const ring = Array.from(root.querySelectorAll<HTMLElement>('button:not(:disabled),input:not(:disabled),select:not(:disabled),textarea')).filter(n => !n.closest('[hidden]'));
-      const at = ring.indexOf(document.activeElement as HTMLElement), next = at + (e.shiftKey ? -1 : 1);
-      if (next < 0 || next >= ring.length) { e.preventDefault(); send('ui.key', { key: e.shiftKey ? 'Shift+Tab' : 'Tab' }); }
-      return;
-    }
+    if (e.key === 'Tab') return;
     if (e.altKey && !mod && ['ArrowUp', 'ArrowDown'].includes(e.key) && advanced() && selected !== null) { e.preventDefault(); move(selected, e.key === 'ArrowUp' ? -1 : 1); return; }
     if (mod || e.altKey) return;
     if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key) && cut !== null) {
-      e.preventDefault(); const at = cut.chapters.findIndex(c => c.id === selected);
-      const i = e.key === 'Home' ? 0 : e.key === 'End' ? cut.chapters.length - 1 : Math.max(0, Math.min(cut.chapters.length - 1, at + (e.key === 'ArrowRight' ? 1 : -1)));
-      const c = cut.chapters[i]; if (c) go(c.id); return;
+      e.preventDefault(); const chapters = cut.chapters.filter(c => c.startSec >= 0), at = chapters.findIndex(c => c.id === selected);
+      const i = e.key === 'Home' ? 0 : e.key === 'End' ? chapters.length - 1 : Math.max(0, Math.min(chapters.length - 1, at + (e.key === 'ArrowRight' ? 1 : -1)));
+      const c = chapters[i]; if (c) go(c.id); return;
     }
     if (target.closest('button') && [' ', 'Enter'].includes(e.key)) return;
     if (e.key.length === 1) { e.preventDefault(); send('ui.typed', { grapheme: e.key }); }
@@ -312,10 +346,11 @@ export function start(): void {
       surface(s, m) { const was = surface; surface = s; if (m !== null) mode = m; draw(); if (was === 'options' && s !== 'options') void media(); },
       mode(m) { mode = m; draw(); return mode; },
       action(id) {
-        if (!['next', 'prev'].includes(id) || cut === null || cut.chapters.length === 0) return { handled: false };
-        const at = cut.chapters.findIndex(c => c.id === selected), next = Math.max(0, Math.min(cut.chapters.length - 1, at + (id === 'next' ? 1 : -1)));
-        const c = cut.chapters[next]!; go(c.id);
-        return { handled: true, status: `Chapter ${next + 1} of ${cut.chapters.length} · ${c.title}` };
+        const chapters = cut?.chapters.filter(c => c.startSec >= 0) ?? [];
+        if (!['next', 'prev'].includes(id) || cut === null || chapters.length === 0) return { handled: false };
+        const at = chapters.findIndex(c => c.id === selected), next = Math.max(0, Math.min(chapters.length - 1, at + (id === 'next' ? 1 : -1)));
+        const c = chapters[next]!; go(c.id);
+        return { handled: true, status: `Chapter ${cut.chapters.indexOf(c) + 1} of ${cut.chapters.length} · ${c.title}` };
       },
       tab(t) { tab = t; draw(); },
       selection(anchors) { const a = anchors.find(x => typeof x === 'object' && x !== null && (x as { kind: unknown }).kind === 'chapter') as { id?: unknown } | undefined; if (typeof a?.id === 'string') go(a.id, false); },

@@ -1,9 +1,9 @@
 import { demoFileUrl, getDemo } from '../../api/demo.js';
 import { interactiveUrl } from '../../api/interactive.js';
 import { walkthroughApi, walkthroughFileUrl } from '../../api/walkthrough.js';
-import { exportOptions, recordingOf, recordingOfDemo, takeFingerprint, type Recording } from '../../board/walkthroughModel.js';
+import { checksTrack, exportOptions, failedChapter, recordingOf, recordingOfDemo, takeFingerprint, type Recording } from '../../board/walkthroughModel.js';
 import { DemoCutAdapter } from '../demoCutAdapter.js';
-import { defaultVideoStyle, type DemoChapter, type DemoCut } from '../demoCutModel.js';
+import { defaultVideoStyle, type DemoChapter, type DemoCut, type RecordingProof } from '../demoCutModel.js';
 import type { AdapterResult, ArtifactRef } from '../host.js';
 import { registerAdapter, type AdapterCapability, type ArtifactBinding, type ExportOption, type ExportOutcome, type StatusPill, type SurfaceAdapter } from '../hostApi.js';
 import type { MediaRef } from '../protocol.js';
@@ -20,19 +20,33 @@ import type { MediaRef } from '../protocol.js';
 
 const CUT_EXPORTS: readonly ExportOption[] = [{ format: 'mp4', label: 'Video' }];
 
+function proofOfRecording(rec: Recording): RecordingProof {
+  return {
+    verdict: rec.state === 'passed' ? 'PASS' : rec.state === 'failed' ? 'FAIL' : rec.state === 'inconclusive' ? 'INCONCLUSIVE' : null,
+    failedAtSec: failedChapter(rec)?.failedAbsSec ?? null,
+    checks: checksTrack(rec).map(k => ({
+      id: k.id, chapter: k.chapter.key, atSec: k.atAbsSec,
+      text: [k.sentence, k.detail, k.evidence.length > 0 ? `Evidence: ${k.evidence.join(', ')}` : null, k.vaultEntry ? `vault ${k.vaultEntry}` : null].filter(Boolean).join(' · '),
+      state: k.passed === true ? 'PASS' : k.passed === false ? 'FAIL' : 'PENDING',
+    })),
+  };
+}
+
 /** A run's recording as the cut shape the plugin reads (no takes: a recording is one take). */
 export function cutOfRecording(rec: Recording, title: string): DemoCut {
-  const starts = rec.chapters.map((c) => c.startSec ?? 0);
+  const starts = rec.chapters.map((c) => c.startSec ?? -1);
   const chapters: DemoChapter[] = rec.chapters.map((c, i) => {
-    const startSec = starts[i] ?? 0;
-    const next = starts[i + 1] ?? rec.markers.find(m => m.sec > startSec)?.sec ?? rec.durationSec;
-    const durationSec = next !== undefined && Number.isFinite(next) && next >= startSec ? next - startSec : -1;
-    return { id: c.key, title: c.title, say: c.blurb ?? '', take: '', inSec: 0, outSec: durationSec, durationSec, startSec };
+    const startSec = starts[i]!;
+    const next = starts.slice(i + 1).find(start => start >= 0) ?? rec.markers.find(m => m.sec > startSec)?.sec ?? rec.durationSec;
+    const durationSec = startSec >= 0 && next !== undefined && Number.isFinite(next) && next >= startSec ? next - startSec : -1;
+    return { id: c.key, title: c.title, say: c.blurb ?? '', take: '', inSec: 0, outSec: durationSec, durationSec, startSec,
+      ...(rec.kind === 'walkthrough' ? { verdict: c.verdict } : {}) };
   });
   const style = defaultVideoStyle(title);
   style.theme.titleCard.on = false;
   style.theme.endCard.on = false;
-  return { type: 'demo-cut', title, rev: 1, version: 1, chapters, takes: {}, style, ffmpeg: { ok: false, burnIn: false } };
+  return { type: 'demo-cut', title, rev: 1, version: 1, chapters, takes: {}, style, ffmpeg: { ok: false, burnIn: false },
+    ...(rec.kind === 'walkthrough' ? { proof: proofOfRecording(rec) } : {}) };
 }
 
 export class RecordingSurfaceAdapter implements SurfaceAdapter {
@@ -46,6 +60,8 @@ export class RecordingSurfaceAdapter implements SurfaceAdapter {
   constructor(private readonly binding: ArtifactBinding, source: 'demo' | 'walkthrough') { this.source = source; }
 
   capabilities(): readonly AdapterCapability[] {
+    // No 'checks' capability: the host's Checks tab reads an interactive document's checks, which a run's recording
+    // is not. The proof is drawn by the plugin (timeline marks, verdicts, Advanced's Checks list) and served by checks().
     const caps: AdapterCapability[] = ['read', 'media', 'versions'];
     if (this.exports().length > 0) caps.push('export');
     return caps;
@@ -116,6 +132,17 @@ export class RecordingSurfaceAdapter implements SurfaceAdapter {
 
   async versions(): Promise<AdapterResult<{ versions: { version: number; parent: number | null; createdAt: string }[]; head: number }>> {
     return { versions: [{ version: this.head, parent: null, createdAt: new Date(0).toISOString() }], head: this.head };
+  }
+
+  async checks(): Promise<AdapterResult<{ checks: { id: string; text: string }[]; total: number }>> {
+    try {
+      const rec = this.rec ?? await this.load();
+      const checks = proofOfRecording(rec).checks.map(k => ({
+        id: `${k.chapter}/${k.id}`,
+        text: `${k.state} · ${rec.chapters.find(c => c.key === k.chapter)?.title ?? k.chapter} · ${k.text}`,
+      }));
+      return { checks, total: checks.length };
+    } catch (e: unknown) { return { error: 'unavailable', message: e instanceof Error ? e.message : String(e) }; }
   }
 
   async media(ref: MediaRef): Promise<AdapterResult<{ type: string; blob: Blob }>> {
