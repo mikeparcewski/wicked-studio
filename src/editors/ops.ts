@@ -1,5 +1,6 @@
+import type { ChapterOp, DemoCut, DemoTake } from './demoCutModel.js';
 import { deckOf, topSlideElements } from '../board/deck.js';
-import { DECK_OPS, LIMITS, type DeckOpType, type Op } from './protocol.js';
+import { CHAPTER_OPS, DECK_OPS, LIMITS, type DeckOpType, type Op } from './protocol.js';
 
 /**
  * Edits, as the host checks them before anything crosses the wire (DES-EDITOR-PLUGINS-001 §5.6,
@@ -37,6 +38,7 @@ export function isColour(value: string, themeTokens: ReadonlySet<string> = new S
 }
 
 export interface Inventory {
+  chapters?: ReadonlyMap<string, { title: string; take: string; takes: readonly DemoTake[] }>;
   /** Every `data-wid` in the version, with its slide/section ancestry. */
   wids: ReadonlyMap<string, { slide: string | null; section: string | null; text: string; deckN?: number }>;
   /** A deck's slides by `data-slide-id` (P-D1): their place, their own anchor and their title. */
@@ -103,6 +105,7 @@ export type WireItem =
   | { selector: string; type: 'remove' }
   // A deck op (P-D1) is posted to the deck route on its own (`POST /d/:doc/api/deck {expect_head, op}`),
   // never in a feedback batch; `selector` is the slide's id, for the host's own words about it.
+  | { selector: string; type: 'chapter'; op: ChapterOp }
   | { selector: string; type: 'deck'; op: { type: DeckOpType; slide: string; after?: string | null; text?: string } };
 
 export type OpsCheck = { ok: true; items: WireItem[] } | { ok: false; code: 'bad_request' | 'too_large'; message: string };
@@ -117,6 +120,12 @@ export function checkOps(ops: unknown[], inv: Inventory, themeTokens: ReadonlySe
   let bytes = 0;
   try { bytes = new TextEncoder().encode(JSON.stringify(ops)).length; } catch { return { ok: false, code: 'bad_request', message: 'ops are not data' }; }
   if (bytes > LIMITS.writeBytes) return { ok: false, code: 'too_large', message: 'ops are too large' };
+  // A chapter edit always lands alone as a new cut.
+  const chapterOps = ops.filter(o => typeof o === 'object' && o !== null && (CHAPTER_OPS as readonly unknown[]).includes((o as { op?: unknown }).op));
+  if (chapterOps.length > 0) {
+    if (ops.length !== 1) return { ok: false, code: 'bad_request', message: 'a chapter op is a write of its own' };
+    return checkChapterOp(chapterOps[0] as Record<string, unknown>, inv);
+  }
   // A deck op is its own write (the engine lands one version per deck op): never mixed, never two.
   const deckOps = ops.filter((o) => typeof o === 'object' && o !== null && DECK_OPS.includes((o as { op?: unknown }).op as DeckOpType));
   if (deckOps.length > 0) {
@@ -187,3 +196,45 @@ function checkDeckOp(o: Record<string, unknown>, inv: Inventory): OpsCheck {
 }
 
 export type { Op };
+
+/** The cut read by the host is the authority for chapter ids and take durations. */
+export function chapterInventoryOf(cut: Pick<DemoCut, 'chapters' | 'takes'>): Inventory {
+  const chapters = new Map<string, { title: string; take: string; takes: readonly DemoTake[] }>();
+  for (const c of cut.chapters) {
+    if (!/^[a-z0-9-]{1,64}$/.test(c.id) || cut.chapters.filter(x => x.id === c.id).length !== 1) continue;
+    chapters.set(c.id, { title: c.title, take: c.take, takes: cut.takes[c.id] ?? [] });
+  }
+  return { wids: new Map(), slides: new Map(), chapters };
+}
+function checkChapterOp(o: Record<string, unknown>, inv: Inventory): OpsCheck {
+  const fail = (message: string): OpsCheck => ({ ok: false, code: 'bad_request', message });
+  const id = o['chapter'];
+  if (typeof id !== 'string' || !/^[a-z0-9-]{1,64}$/.test(id) || !inv.chapters?.has(id)) return fail('chapter not in this cut');
+  const chapter = inv.chapters.get(id)!;
+  let op: ChapterOp;
+  switch (o['op']) {
+    case 'chapter-move': {
+      const after = o['after'];
+      if (!(after === null || (typeof after === 'string' && /^[a-z0-9-]{1,64}$/.test(after) && inv.chapters.has(after) && after !== id))) return fail('after must be another chapter, or null');
+      op = { op: 'chapter-move', chapter: id, after }; break;
+    }
+    case 'chapter-rename': {
+      const title = o['title'];
+      if (typeof title !== 'string' || title.trim().length === 0 || title.length > 80 || /[\r\n]/.test(title)) return fail('title is one line, 1–80 characters');
+      op = { op: 'chapter-rename', chapter: id, title }; break;
+    }
+    case 'chapter-trim': {
+      const a = o['inSec'], b = o['outSec'];
+      const duration = chapter.takes.find(t => t.file === chapter.take)?.durationSec;
+      if (typeof a !== 'number' || typeof b !== 'number' || !Number.isFinite(a) || !Number.isFinite(b) || duration === undefined || !Number.isFinite(duration) || a < 0 || b - a < 0.5 || b > duration) return fail('trim must keep at least 0.5 seconds within the take');
+      op = { op: 'chapter-trim', chapter: id, inSec: a, outSec: b }; break;
+    }
+    case 'chapter-take': {
+      const take = o['take'];
+      if (typeof take !== 'string' || !/^_take-[a-z0-9-]+-\d+\.webm$/.test(take) || !chapter.takes.some(t => t.file === take)) return fail('take not in this chapter');
+      op = { op: 'chapter-take', chapter: id, take }; break;
+    }
+    default: return fail('unknown chapter op');
+  }
+  return { ok: true, items: [{ type: 'chapter', selector: id, op }] };
+}
