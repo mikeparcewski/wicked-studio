@@ -263,11 +263,11 @@ with sync_playwright() as p:
     row = lambda sid: page.locator(f'[data-testid="deck-review-row"][data-slide-id="{sid}"]')  # noqa: E731
     sum0 = page.get_by_test_id("deck-review-summary").inner_text()
     row("s1").get_by_test_id("deck-review-approve").click()
-    page.wait_for_function("() => document.querySelector('[data-testid=\"deck-review-row\"][data-slide-id=\"s1\"]').dataset.state === 'approved'", timeout=8000)
+    page.wait_for_function("() => document.querySelector('[data-testid=\"deck-review-row\"][data-slide-id=\"s1\"]')?.dataset.state === 'approved'", timeout=8000)
     row("s2").get_by_test_id("deck-review-ask").click()
     row("s2").get_by_test_id("deck-review-note").fill("Name the branches")
     row("s2").get_by_test_id("deck-review-save-changes").click()
-    page.wait_for_function("() => document.querySelector('[data-testid=\"deck-review-row\"][data-slide-id=\"s2\"]').dataset.state === 'changes'", timeout=8000)
+    page.wait_for_function("() => document.querySelector('[data-testid=\"deck-review-row\"][data-slide-id=\"s2\"]')?.dataset.state === 'changes'", timeout=8000)
     b8 = {sid: row(sid).get_by_test_id("deck-review-badge").inner_text() for sid in ("s1", "s2")}
     sum8 = page.get_by_test_id("deck-review-summary").inner_text()
     note8 = page.get_by_test_id("deck-review").inner_text()
@@ -279,7 +279,7 @@ with sync_playwright() as p:
     plugin.locator('[data-testid="deck-move-down"]').click()
     wait_head(9, "carry-move")
     open_review()
-    page.wait_for_function("() => document.querySelector('[data-testid=\"deck-review\"]').dataset.version === '9'", timeout=10000)
+    page.wait_for_function("() => document.querySelector('[data-testid=\"deck-review\"]')?.dataset.version === '9'", timeout=10000)
     page.wait_for_timeout(400)
     after_move = row("s1").get_by_test_id("deck-review-badge").inner_text()
     open_full()
@@ -293,7 +293,7 @@ with sync_playwright() as p:
     page.keyboard.press("Enter")
     wait_head(10, "carry-edit")
     open_review()
-    page.wait_for_function("() => document.querySelector('[data-testid=\"deck-review-row\"][data-slide-id=\"s1\"]').dataset.state === 'stale'", timeout=10000)
+    page.wait_for_function("() => document.querySelector('[data-testid=\"deck-review-row\"][data-slide-id=\"s1\"]')?.dataset.state === 'stale'", timeout=10000)
     after_edit = row("s1").get_by_test_id("deck-review-badge").inner_text()
     check("review", sum0 == "0 of 5 approved" and b8 == {"s1": "Approved on version 8", "s2": "Changes asked: Name the branches"}
           and sum8 == "1 of 5 approved · 1 asks for changes" and "don’t hold up delivery" in note8

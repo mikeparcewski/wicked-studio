@@ -1838,3 +1838,6 @@ button.wk-who-name:hover { text-decoration: underline; }
 .wk-run-chat-thread { flex: 1 1 auto; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding: 12px; }
 .wk-run-chat-turn .wk-session-text { margin: 2px 0 0; }
 .wk-run-chat-composer { flex-shrink: 0; margin: 8px 12px 12px; }
+/* H4: the deck review was a rail beside the morphing pane (absolutely placed in the artifact). As the
+   host panel's Review tab it is ordinary flow inside the panel — never laid over the thread or the card's Full screen. */
+.wk-hpanel .wk-deck-review { position: static; inset: auto; width: auto; border-left: 0; padding: 12px 16px 24px; overflow: visible; z-index: auto; }
