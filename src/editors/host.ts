@@ -1,10 +1,10 @@
 import { judgeKey, judgeTyped } from './keys.js';
 import type { WriteVerb } from '../board/artifactMorph.js';
 import { changedBy, chipsFor, elementLabel, type Chip, type VersionKind } from './model.js';
-import { checkOps, inventoryOf, themeTokensOf, type Inventory, type WireItem } from './ops.js';
+import { chapterInventoryOf, checkOps, inventoryOf, themeTokensOf, type Inventory, type WireItem } from './ops.js';
 import {
   EVENTS, LIMITS, MCP_METHODS, REQUESTS, event, negotiate, parseInbound, parseReady, refuse, reply, request, sizeOf,
-  type AnchorRef, type ErrorCode, type PermissionId, type Size,
+  type MediaRef, type AnchorRef, type ErrorCode, type PermissionId, type Size,
 } from './protocol.js';
 import { clampCardHeight, parseSurfaces, sameSurfaces, v1Surfaces, valuesOk, controlValueOk, type FullMode, type Surfaces } from './surfaces.js';
 
@@ -79,6 +79,7 @@ export type AdapterResult<T> = (T & { moved?: MovedOn }) | { error: ErrorCode; m
 /** What the host can do with the artifact. A method an artifact does not support answers `unsupported`. */
 export interface HostAdapter {
   artifact(): ArtifactRef;
+  media?(ref: MediaRef): Promise<AdapterResult<{ type: string; blob: Blob }>>;
   read(version?: number): Promise<AdapterResult<{ version: number; content: { type: 'html'; html: string } | Record<string, unknown> }>>;
   versions(): Promise<AdapterResult<{ versions: { version: number; parent: number | null; createdAt: string }[]; head: number }>>;
   write(base: number, items: WireItem[], summary: string): Promise<AdapterResult<{ version: number }>>;
@@ -488,6 +489,11 @@ export class EditorHost {
     if (this.inventory?.version === head) return this.inventory;
     const r = await this.o.adapter.read(head);
     if ('error' in r) return { error: r.error as ErrorCode, message: String(r.message) };
+    if (r.content.type === 'demo-cut') {
+      const cut = r.content as unknown as import('./demoCutModel.js').DemoCut;
+      this.inventory = { version: r.version, inv: chapterInventoryOf(cut), tokens: new Set() };
+      return this.inventory;
+    }
     const content = r.content as { type?: unknown; html?: unknown };
     if (content.type !== 'html' || typeof content.html !== 'string') return { error: 'unsupported', message: 'this artifact has no element edits' };
     this.inventory = { version: head, inv: inventoryOf(content.html), tokens: themeTokensOf(content.html) };
@@ -500,6 +506,7 @@ export class EditorHost {
       case 'artifact.read': return a.read(typeof p['version'] === 'number' ? p['version'] : undefined);
       case 'artifact.versions': return a.versions();
       case 'checks.read': return a.checks !== undefined ? a.checks() : { error: 'unsupported', message: 'no checks for this artifact' };
+      case 'artifact.media': return a.media?.(p['ref'] as MediaRef) ?? { error: 'unsupported', message: 'no media for this artifact' };
       case 'version.write': {
         if (this.writing) return { error: 'rate_limited', message: 'one write at a time' };
         if (a.artifact().readonly) return { error: 'refused', message: 'this artifact is read-only here' };
@@ -627,7 +634,7 @@ export class EditorHost {
     // Only anchors the HOST can resolve get a chip: elements in its own inventory. A page has no
     // chapters or times; a plugin-chosen chapter id is never echoed as a label (Copilot). The
     // demo-video adapter resolves those against its own chapter list (EP-P5).
-    return chipsFor(anchors, (x) => (x.kind === 'element' && wids.has(x.id) ? elementLabel(wids.get(x.id)?.text, x.id) : null));
+    return chipsFor(anchors, (x) => (x.kind === 'element' && wids.has(x.id) ? elementLabel(wids.get(x.id)?.text, x.id) : x.kind === 'chapter' && !('error' in inv) ? inv.inv.chapters?.get(x.id)?.title ?? null : null));
   }
 
   private drop(type: string, why: string): void {

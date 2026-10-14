@@ -52,6 +52,8 @@ export interface Recording {
   sealed: boolean;
   /** Proof-root-relative (walkthrough) or demo-root-relative (demo) path of the stitched take. */
   video: string | null;
+  /** Total seconds when known; otherwise the player's metadata supplies the final chapter's end. */
+  durationSec?: number;
   poster: string | null;
   markers: DemoMarker[];
   chapters: RecordingChapter[];

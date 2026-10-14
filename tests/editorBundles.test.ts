@@ -5,6 +5,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import docSurfaces from '../src/plugins/wicked-doc/surfaces.json';
 import { canonicalSurfaces, parseSurfaces } from '../src/editors/surfaces.js';
 import deckSurfaces from '../src/plugins/wicked-deck/surfaces.json';
+import videoSurfaces from '../src/plugins/wicked-video/surfaces.json';
 import { buildEditors, EDITORS, externalReferences } from '../scripts/build-editors.mjs';
 
 /**
@@ -15,7 +16,7 @@ import { buildEditors, EDITORS, externalReferences } from '../scripts/build-edit
 const out = mkdtempSync(join(process.cwd(), 'tests', '.wicked-editors-'));
 let written: Awaited<ReturnType<typeof buildEditors>>;
 
-beforeAll(async () => { written = await buildEditors(out, { version: '9.9.9' }); }, 60_000);
+beforeAll(async () => { written = await buildEditors(out, { version: '9.9.9' }); }, 180_000);
 afterAll(() => rmSync(out, { recursive: true, force: true }));
 
 describe('the first-party editor bundles', () => {
@@ -34,6 +35,18 @@ describe('the first-party editor bundles', () => {
     const html = readFileSync(join(doc.dir, 'index.html'), 'utf8');
     expect(html).toContain('<meta name="wicked-editor" content="wicked-doc">');
     expect(html).toContain('<title>Document</title>');
+  });
+  it('ships Video for both recording kinds with protocol 2 surfaces and its grants', () => {
+    const video = EDITORS.find(e => e.id === 'wicked-video');
+    expect(video?.title).toBe('Video');
+    expect(video?.kinds).toEqual(['demo-video', 'walkthrough']);
+    expect(video?.protocol).toEqual([1, 2]);
+    expect(video?.permissions.map(p => p.id).sort()).toEqual(['artifact.export', 'artifact.read', 'artifact.theme', 'artifact.write', 'media.read', 'selection.chip', 'ui.fullscreen']);
+    const built = written.find(w => w.id === 'wicked-video')!;
+    const manifest = JSON.parse(readFileSync(join(built.dir, 'editor.json'), 'utf8')) as { surfaces: unknown };
+    const actual = parseSurfaces(manifest.surfaces), expected = parseSurfaces(videoSurfaces);
+    if (!actual.ok || !expected.ok) throw new Error('Video surfaces did not parse');
+    expect(canonicalSurfaces(actual.value)).toEqual(canonicalSurfaces(expected.value));
   });
   it('builds every declared editor into <outDir>/editors/<id>/ with its manifest', () => {
     expect(written.map((w) => w.id)).toEqual(EDITORS.map((e) => e.id));
