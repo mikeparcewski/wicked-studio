@@ -1,5 +1,5 @@
 import { ApiError } from '../api/errors.js';
-import { getVersions, HeadMovedError, interactiveDocUrl, postDeckOp, postEvent, postFork, type VersionEntry } from '../api/interactive.js';
+import { getVersions, HeadMovedError, interactiveDocUrl, postDeckOp, postEvent, postFork, putLearnedTheme, type VersionEntry } from '../api/interactive.js';
 import { notUndoneLine } from '../board/artifactMorph.js';
 import { FEEDBACK_EVENT } from '../interactive/feedbackBatch.js';
 import type { AdapterResult, ArtifactRef, HostAdapter, MovedOn } from './host.js';
@@ -243,6 +243,32 @@ export class InteractiveDocAdapter implements HostAdapter {
         return { error: 'head_moved', message: notUndoneLine(head), head, moved };
       }
       return { error: 'unavailable', message: `Could not undo: ${e instanceof Error ? e.message : String(e)}` };
+    }
+  }
+
+  /**
+   * Protocol 2 `theme.set` (DES-EDITOR-PLUGIN-CONTRACT-001 §6): the tokens are written as the doc's learned theme
+   * and ONE re-themed version of the head lands (interactive re-checks the grammar). `head_moved` when the head is
+   * not `base` (re-read first, so a helper's version in between is never re-themed unseen). Undo is the host's
+   * fork of the version before it, like any write.
+   */
+  async theme(base: number, tokens: Record<string, unknown>): Promise<AdapterResult<{ version: number }>> {
+    // Fail closed: without a fresh read of the head there is no knowing what the theme would land on (codex h4-r1).
+    try { await this.refresh(); } catch (e: unknown) { return { error: 'unavailable', message: e instanceof Error ? e.message : String(e) }; }
+    if (this.head !== base) return { error: 'head_moved', message: 'the artifact changed since', head: this.head };
+    try {
+      const r = await putLearnedTheme(this.projectId, this.docId, tokens, true);
+      if (r.version === null) return { error: 'refused', message: r.unchanged === true ? 'that theme changes nothing on this version' : 'no version was made' };
+      // Interactive's PUT has no expected head, so a helper's version can land between the read above and the
+      // re-theme. Undo forks the version the engine says it themed (`parent`), never the `base` we asked for, so a
+      // helper's change in between is never discarded (codex h4-r1 P1).
+      const parent = typeof r.parent === 'number' ? r.parent : base;
+      this.writes.set(r.version, parent);
+      this.moveHead(r.version);
+      return { version: r.version };
+    } catch (e: unknown) {
+      if (e instanceof ApiError && e.status === 400) return { error: 'bad_request', message: e.message };
+      return { error: 'unavailable', message: e instanceof Error ? e.message : String(e) };
     }
   }
 
