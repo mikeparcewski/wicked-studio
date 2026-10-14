@@ -2,8 +2,9 @@ import { useEffect, useRef, useState } from 'react';
 import { getLearnedTheme, putLearnedTheme, type LearnKind } from '../../api/interactive.js';
 import { learnReady, learnThemeFromThread, LEARN_KINDS, LEARN_LABEL } from '../../interactive/themeWire.js';
 import { pollLearnedTheme } from '../../theming/learnPoll.js';
-import { beginMatch, endMatch } from '../../editors/themeLock.js';
+import { beginMatch, endMatch, themeWritesSettled } from '../../editors/themeLock.js';
 import { Segmented } from '../ui/index.js';
+import './editorPorts.css';
 
 /**
  * "Match a website or a PDF" for an artifact's Style tab (DES-EDITOR-PLUGIN-CONTRACT-001 §9, slice H4). HOST chrome:
@@ -28,15 +29,21 @@ export function MatchTheme({ projectId, docId, onVersion, apply }: {
   const [line, setLine] = useState<{ text: string; bad: boolean } | null>(null);
   const [busy, setBusy] = useState(false);
   const abort = useRef<AbortController | null>(null);
-  useEffect(() => () => { abort.current?.abort(); endMatch(projectId, docId); }, [projectId, docId]);
+  const lock = useRef<symbol | null>(null);
+  useEffect(() => () => { abort.current?.abort(); endMatch(projectId, docId, lock.current); }, [projectId, docId]);
 
   const match = async (): Promise<void> => {
     if (!learnReady(kind, value) || busy) return;
     const ctl = new AbortController();
     abort.current = ctl;
     setBusy(true);
-    beginMatch(projectId, docId);
-    try { await run(ctl); } finally { endMatch(projectId, docId); }
+    const token = beginMatch(projectId, docId);
+    lock.current = token;
+    try {
+      // A Style write already in flight lands before the baseline is read, so it can never pass for this learn.
+      await themeWritesSettled(projectId, docId, ctl.signal);
+      if (!ctl.signal.aborted) await run(ctl);
+    } finally { endMatch(projectId, docId, token); }
   };
 
   const run = async (ctl: AbortController): Promise<void> => {

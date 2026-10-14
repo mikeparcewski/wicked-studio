@@ -217,7 +217,11 @@ with sync_playwright() as p:
     # ── 6. notes ───────────────────────────────────────────────────────────────────
     focus_deck()
     page.keyboard.press("Home")
+    # Full screen gives the stage the whole viewport: the speaker notes fold under the Notes button.
+    if plugin.locator('[data-testid="deck-notes-toggle"]').get_attribute("aria-pressed") != "true":
+        plugin.locator('[data-testid="deck-notes-toggle"]').click()
     notes = plugin.locator('[data-testid="deck-notes"]')
+    notes.wait_for(state="visible", timeout=5000)
     notes.fill("Open with the waiting list: 140 residents.")
     focus_deck()
     wait_head(7, "notes")
