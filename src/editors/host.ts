@@ -3,9 +3,19 @@ import type { WriteVerb } from '../board/artifactMorph.js';
 import { changedBy, chipsFor, elementLabel, type Chip, type VersionKind } from './model.js';
 import { checkOps, inventoryOf, themeTokensOf, type Inventory, type WireItem } from './ops.js';
 import {
-  EVENTS, LIMITS, MCP_METHODS, PROTOCOL_VERSION, REQUESTS, event, parseInbound, parseReady, refuse, reply, request, sizeOf,
+  EVENTS, LIMITS, MCP_METHODS, REQUESTS, event, negotiate, parseInbound, parseReady, refuse, reply, request, sizeOf,
   type AnchorRef, type ErrorCode, type PermissionId, type Size,
 } from './protocol.js';
+import { clampCardHeight, parseSurfaces, sameSurfaces, v1Surfaces, valuesOk, controlValueOk, type FullMode, type Surfaces } from './surfaces.js';
+
+/** Protocol 2's three surfaces (DES-EDITOR-PLUGIN-CONTRACT-001 §4). */
+export type Surface = 'card' | 'options' | 'full';
+/** The v1 size a surface is told as, to a protocol-1 plugin. */
+export function sizeOfSurface(s: Surface): Size { return s === 'card' ? 'inline' : s === 'options' ? 'pane' : 'full'; }
+/** Per options tab (§6): the newest confirmed `rev`, whether a change is in flight, and the queue behind it. */
+interface TabState { rev: number; busy: boolean; queue: Map<string, { value: unknown; waiters: Array<(applied: boolean) => void> }> }
+/** How long a plugin has to answer a host request (`host.action`, `host.mode`, `options.changed`). */
+export const HOST_REPLY_MS = 2_000;
 
 /**
  * THE PLUGIN HOST (DES-EDITOR-PLUGINS-001 §5.3-§5.10, §6, §8; slice EP-P1). One controller per
@@ -74,6 +84,8 @@ export interface HostAdapter {
   undo(version: number): Promise<AdapterResult<{ undone: true }>>;
   fork(from: number): Promise<AdapterResult<{ version: number }>>;
   exportAs?(format: string): Promise<AdapterResult<{ started: true }>>;
+  /** Protocol 2 `theme.set` (§6): write the artifact's theme tokens on `base`, as a new version. */
+  theme?(base: number, tokens: Record<string, unknown>): Promise<AdapterResult<{ version: number }>>;
 }
 
 /** What the host shows or does in its own chrome — never the plugin's words as the operator's. */
@@ -97,6 +109,15 @@ export interface HostUi {
   log(entry: HostLogEntry): void;
   /** Every `mcp.request` the plugin made, for the host-drawn call line (no call is quiet). */
   mcpCall?(call: McpCall): void;
+  /** Protocol 2 (DES-EDITOR-PLUGIN-CONTRACT-001): the surfaces the host renders this plugin's three surfaces from,
+   *  the protocol negotiated, and why it fell back to the v1 mapping, if it did. Called once, at the handshake. */
+  surfaces?(s: Surfaces, protocol: number, note: string | null): void;
+  /** A confirmed values snapshot for a host-rendered controls tab (newest `rev` only). */
+  optionsValues?(tab: string, values: Record<string, unknown>): void;
+  /** A card with `aspect:"auto"` asked for this height (already clamped). */
+  cardHeight?(px: number): void;
+  /** Another instance of this artifact's group pointed at these anchors: relay them (`host.selection`). */
+  selected?(anchors: AnchorRef[]): void;
 }
 
 export type HostLogEntry =
@@ -128,6 +149,14 @@ export interface HostOptions {
   ui: HostUi;
   /** The inspector page's session (DES-MCP-INSPECTOR-001); absent = `mcp.request` answers `unavailable`. */
   mcp?: McpHostBridge;
+  /** Protocol 2: the surface this instance is (default: from `size`), its options tab, its full-screen mode. */
+  surface?: Surface;
+  tab?: string;
+  mode?: FullMode;
+  /** The registry's copy of the surfaces (§5.1). When given, `plugin.ready`'s copy must be the same. */
+  declared?: unknown;
+  /** The registry's sizes, for the v1 mapping. */
+  sizes?: readonly string[];
   /** The host's real user activation at receipt (`navigator.userActivation.isActive`). */
   activation?: () => boolean;
   /** Whether focus is in this editor's frame (`document.activeElement === frame`). */
@@ -221,6 +250,14 @@ export class EditorHost {
   private readonly now: () => number;
   private readonly onWindow = (e: MessageEvent): void => this.windowMessage(e);
   private readonly onLoad = (): void => this.frameLoaded();
+  /** The protocol the handshake negotiated (1 until then), and the surfaces rendered from it. */
+  private protocol = 1;
+  private decl: Surfaces | null = null;
+  /** Host → plugin requests in flight (`host.action`, `host.mode`, `options.changed`). */
+  private pending = new Map<string, { resolve: (r: { ok: boolean; payload: unknown }) => void; timer: ReturnType<typeof setTimeout> }>();
+  private hostSeq = 0;
+  /** Per options tab: the newest confirmed `rev`, the change in flight, and the queue behind it (§6). */
+  private tabs = new Map<string, TabState>();
 
   constructor(private readonly o: HostOptions) {
     this.now = o.now ?? Date.now;
@@ -265,19 +302,41 @@ export class EditorHost {
       this.log({ kind: 'ignored-window-message', why: `plugin.ready for ${ready.editor}@${ready.version}, loaded ${this.o.editor}@${this.o.version}` });
       return;
     }
-    if (!ready.protocol.includes(PROTOCOL_VERSION)) { this.teardown('This editor speaks a protocol studio does not'); return; }
+    const negotiated = negotiate(ready.protocol);
+    if (negotiated === null) { this.teardown('This editor speaks a protocol studio does not'); return; }
+    // Protocol 2 needs a surfaces declaration that parses, and that is the registry's own when crew lists one
+    // (§5.1); otherwise the host falls back to the v1 mapping and says why.
+    let note: string | null = null;
+    let decl: Surfaces | null = null;
+    if (negotiated >= 2) {
+      const mine = parseSurfaces(ready.surfaces);
+      if (!mine.ok) note = `This editor's surfaces were refused (${mine.reason}); shown the protocol-1 way.`;
+      else if (this.o.declared !== undefined) {
+        const reg = parseSurfaces(this.o.declared);
+        if (!reg.ok || !sameSurfaces(reg.value, mine.value)) note = 'This editor declares other surfaces than its manifest; shown the protocol-1 way.';
+        else decl = mine.value;
+      } else decl = mine.value;
+    }
+    this.protocol = decl === null ? 1 : negotiated;
+    if (this.protocol === 1 && !ready.protocol.includes(1)) { this.teardown(note ?? 'This editor speaks a protocol studio does not'); return; }
+    this.decl = decl ?? v1Surfaces(this.o.sizes ?? ['inline', 'pane', 'full']);
     this.handshaken = true;
     if (this.readyTimer !== null) clearTimeout(this.readyTimer);
     const channel = new MessageChannel();
     this.port = channel.port1;
     this.port.onmessage = (m) => this.portMessage(m.data);
     const a = this.o.adapter.artifact();
+    const surface = this.o.surface ?? (this.o.size === 'inline' ? 'card' : this.o.size === 'pane' ? 'options' : 'full');
+    const v2 = this.protocol >= 2
+      ? { surface, ...(this.o.tab !== undefined ? { tab: this.o.tab } : {}), ...(surface === 'full' && this.decl.full?.modes != null ? { mode: this.o.mode ?? this.decl.full.default } : {}) }
+      : {};
     this.frame.contentWindow?.postMessage(event('host.hello', {
-      protocol: PROTOCOL_VERSION, artifact: a, size: this.o.size, grants: [...this.grants],
+      protocol: this.protocol, ...v2, artifact: a, size: this.o.size, grants: [...this.grants],
       theme: this.o.theme, artifactTheme: null, prefs: this.o.prefs,
       limits: { messageBytes: LIMITS.messageBytes, writeOps: LIMITS.writeOps, writeBytes: LIMITS.writeBytes },
     }), '*', [channel.port2]);
     this.log({ kind: 'handshake', editor: ready.editor, version: ready.version });
+    this.o.ui.surfaces?.(this.decl, this.protocol, note);
     this.pingTimer = setInterval(() => this.ping(), LIMITS.pingEveryMs);
     if (this.pendingMcpState !== null) this.post(event('mcp.state', this.pendingMcpState));
     this.pendingMcpState = null;
@@ -321,14 +380,19 @@ export class EditorHost {
       if (id !== null) this.post(refuse(id, 'rate_limited', 'too many messages'));
       return;
     }
-    const parsed = parseInbound(data);
+    const parsed = parseInbound(data, this.protocol);
     if (!parsed.ok) {
       this.log({ kind: 'in', type: String((data as { type?: unknown })?.type ?? '?'), ok: false, why: parsed.reason });
       if (parsed.id !== undefined) this.post(refuse(parsed.id, parsed.reason === 'too large' ? 'too_large' : 'bad_request', parsed.reason));
       return;
     }
     const msg = parsed.msg;
-    if (msg.kind === 'reply') { this.pingReply(msg.re); return; }
+    if (msg.kind === 'reply') {
+      const p = this.pending.get(msg.re);
+      if (p !== undefined) { this.pending.delete(msg.re); clearTimeout(p.timer); p.resolve({ ok: msg.ok, payload: msg.payload }); return; }
+      this.pingReply(msg.re);
+      return;
+    }
     this.log({ kind: 'in', type: msg.type, ok: true });
     if (msg.kind === 'event') { this.handleEvent(msg.type, msg.payload); return; }
     const need = REQUESTS[msg.type];
@@ -470,6 +534,21 @@ export class EditorHost {
       case 'mcp.request': return this.mcpRequest(p);
       case 'export.request':
         return a.exportAs !== undefined ? a.exportAs(String(p['format'])) : { error: 'unsupported', message: 'no export for this artifact' };
+      case 'theme.set': {
+        if (a.theme === undefined) return { error: 'unsupported', message: 'this artifact has no theme' };
+        if (a.artifact().readonly) return { error: 'refused', message: 'this artifact is read-only here' };
+        // The same optimistic rule as a write (§6): a theme set on a head that moved is refused with the head.
+        if (p['base'] !== a.artifact().head) return { error: 'head_moved', message: 'the artifact changed since', head: a.artifact().head };
+        if (this.writing) return { error: 'rate_limited', message: 'one write at a time' };
+        this.writing = true;
+        try {
+          const r = await a.theme(p['base'] as number, p['tokens'] as Record<string, unknown>);
+          if (!('error' in r)) { this.ownVersions.add(r.version); this.inventory = null; this.o.ui.thread(`${this.o.firstParty ? 'You' : this.o.name} changed the theme · Version ${r.version}`); }
+          return r;
+        } finally {
+          this.writing = false;
+        }
+      }
       default:
         return { error: 'unsupported', message: `${type} is not available for this artifact` };
     }
@@ -543,13 +622,27 @@ export class EditorHost {
     switch (type) {
       case 'selection.set':
         void this.chipsOf(p['anchors'] as AnchorRef[]).then((c) => this.o.ui.chips(c));
+        // Protocol 2: the other instances of this artifact's group hear it as `host.selection` (§4).
+        if (this.protocol >= 2) this.o.ui.selected?.(p['anchors'] as AnchorRef[]);
+        return;
+      case 'options.values': {
+        const tab = this.decl?.options?.tabs.find((t) => t.id === p['tab'] && t.render === 'controls');
+        if (tab === undefined || !valuesOk(tab, p['values'])) { this.log({ kind: 'dropped', type, why: 'values outside the tab\'s controls' }); return; }
+        this.snapshot(tab.id, p['rev'] as number, p['values'] as Record<string, unknown>);
+        return;
+      }
+      case 'ui.height':
+        if (this.decl?.card.aspect !== 'auto') { this.log({ kind: 'dropped', type, why: 'the card is not aspect:auto' }); return; }
+        this.o.ui.cardHeight?.(clampCardHeight(p['px'] as number));
         return;
       case 'checks.contribute':
         this.o.ui.notes((p['checks'] as unknown[]).length);
         return;
-      case 'ui.morph':
-        this.o.ui.morph(p['to'] as Size);
+      case 'ui.morph': {
+        const to = String(p['to']);
+        this.o.ui.morph(to === 'card' ? 'inline' : (to as Size));
         return;
+      }
       case 'ui.key': {
         const key = String(p['key']);
         const v = judgeKey(key, activation);
@@ -594,6 +687,121 @@ export class EditorHost {
   typingRearm(): void { this.typingSpent = false; }
 
   setSize(size: Size): void { this.post(event('host.size', { size })); }
+
+  // ── protocol 2: surfaces (DES-EDITOR-PLUGIN-CONTRACT-001 §6) ─────────────────────────────────────
+
+  /** The protocol this frame speaks, and the surfaces the host renders it from (v1 mapping for protocol 1). */
+  get negotiated(): number { return this.protocol; }
+  get surfaces(): Surfaces | null { return this.decl; }
+
+  private hostRequest(type: string, payload: Record<string, unknown>): Promise<{ ok: boolean; payload: unknown } | null> {
+    if (!this.connected || this.protocol < 2) return Promise.resolve(null);
+    this.hostSeq += 1;
+    const id = `h-${this.hostSeq}`;
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => { this.pending.delete(id); resolve(null); }, HOST_REPLY_MS);
+      this.pending.set(id, { resolve, timer });
+      this.post(request(type, id, payload));
+    });
+  }
+
+  /** The card ↔ full morph of this one instance (`host.surface`); v1 hears `host.size`. */
+  setSurface(surface: Surface, mode?: FullMode): void {
+    if (this.protocol < 2) { this.setSize(sizeOfSurface(surface)); return; }
+    const m = surface === 'full' && this.decl?.full?.modes != null ? (mode ?? this.decl.full.default) : undefined;
+    this.post(event('host.surface', { surface, ...(m !== undefined ? { mode: m } : {}) }));
+  }
+
+  /** Simple/Advanced (`host.mode`): the plugin's echo is the mode it now shows; null = no answer, or no modes. */
+  async setMode(mode: FullMode): Promise<FullMode | null> {
+    if (this.decl?.full?.modes == null) return null;
+    const r = await this.hostRequest('host.mode', { mode });
+    const raw = r?.ok === true ? r.payload : null;
+    const shown = typeof raw === 'object' && raw !== null ? (raw as { mode?: unknown }).mode : null;
+    return shown === 'simple' || shown === 'advanced' ? shown : null;
+  }
+
+  /** A declared `verb:"plugin"` card action, after the operator's click on the HOST's button. It grants no
+   *  activation (§6): a `tools/call` still needs a click inside the frame. */
+  async action(id: string): Promise<{ handled: boolean; status: string | null } | null> {
+    const a = this.decl?.card.actions.find((x) => x.id === id && x.verb === 'plugin');
+    if (a === undefined) return null;
+    const r = await this.hostRequest('host.action', { id });
+    if (r === null || !r.ok) return null;
+    const pl = typeof r.payload === 'object' && r.payload !== null ? (r.payload as { handled?: unknown; status?: unknown }) : null;
+    const status = typeof pl?.status === 'string' ? pl.status.replace(/[\r\n]+/gu, ' ').slice(0, LIMITS.statusChars) : null;
+    return { handled: pl?.handled === true, status };
+  }
+
+  /** The options instance's plugin tab now shown (`host.tab`). */
+  setTab(tab: string): void {
+    if (this.protocol >= 2 && this.decl?.options?.tabs.some((t) => t.id === tab && t.render === 'plugin')) this.post(event('host.tab', { tab }));
+  }
+
+  /** Another instance of this artifact's group pointed (`host.selection`; ids only). */
+  relaySelection(anchors: readonly AnchorRef[]): void {
+    if (this.protocol >= 2) this.post(event('host.selection', { anchors }));
+  }
+
+  private snapshot(tab: string, rev: number, values: Record<string, unknown>): boolean {
+    const t = this.tabState(tab);
+    // Newest wins, whenever it arrives (§6): a snapshot with a lower or equal rev is discarded.
+    if (rev <= t.rev) return false;
+    t.rev = rev;
+    this.o.ui.optionsValues?.(tab, values);
+    return true;
+  }
+
+  /**
+   * A host-rendered control changed (`options.changed`). Serialized per tab: one change in flight, later ones
+   * queued, the newest value per control kept (an earlier queued value for the same control shares the newer
+   * one's outcome). Resolves `true` only when the plugin applied it AND confirmed it with a valid snapshot (an
+   * integer `rev`, values the tab's controls can hold); on `false`, a timeout or a refusal the caller shows the
+   * last confirmed values again (from `optionsValues`).
+   */
+  changeOption(tab: string, id: string, value: unknown): Promise<boolean> {
+    const decl = this.decl?.options?.tabs.find((t) => t.id === tab && t.render === 'controls');
+    const control = decl?.controls?.find((c) => c.id === id);
+    if (decl === undefined || control === undefined || !controlValueOk(control, value)) return Promise.resolve(false);
+    const t = this.tabState(tab);
+    return new Promise<boolean>((resolve) => {
+      const queued = t.queue.get(id);
+      if (queued !== undefined) { queued.value = value; queued.waiters.push(resolve); }
+      else t.queue.set(id, { value, waiters: [resolve] });
+      if (!t.busy) void this.pump(tab);
+    });
+  }
+
+  private tabState(tab: string): TabState {
+    let t = this.tabs.get(tab);
+    if (t === undefined) { t = { rev: -1, busy: false, queue: new Map() }; this.tabs.set(tab, t); }
+    return t;
+  }
+
+  private async pump(tab: string): Promise<void> {
+    const t = this.tabState(tab);
+    const decl = this.decl?.options?.tabs.find((x) => x.id === tab && x.render === 'controls');
+    t.busy = true;
+    try {
+      for (let next = t.queue.entries().next(); !next.done; next = t.queue.entries().next()) {
+        const [id, entry] = next.value;
+        t.queue.delete(id);
+        let applied = false;
+        if (decl !== undefined && !this.torn) {
+          const r = await this.hostRequest('options.changed', { tab, id, value: entry.value });
+          // Any reply shape is read defensively: a missing or non-object payload is "not confirmed" (codex h1-r2).
+          const raw = r?.ok === true ? r.payload : null;
+          const pl = typeof raw === 'object' && raw !== null ? (raw as { applied?: unknown; rev?: unknown; values?: unknown }) : null;
+          const confirmed = pl !== null && Number.isInteger(pl.rev) && valuesOk(decl, pl.values);
+          if (confirmed) this.snapshot(tab, pl.rev as number, pl.values as Record<string, unknown>);
+          applied = confirmed && pl.applied === true;
+        }
+        for (const w of entry.waiters) w(applied);
+      }
+    } finally {
+      t.busy = false;
+    }
+  }
   setTheme(theme: Record<string, string>): void { this.post(event('host.theme', { theme, artifactTheme: null })); }
   setGrants(grants: readonly PermissionId[]): void { this.grants = new Set(grants); }
   selectionCleared(): void { this.post(event('selection.cleared', {})); }
@@ -668,6 +876,8 @@ export class EditorHost {
     if (this.readyTimer !== null) clearTimeout(this.readyTimer);
     if (this.pingTimer !== null) clearInterval(this.pingTimer);
     if (this.pingWait !== null) clearTimeout(this.pingWait);
+    for (const p of this.pending.values()) { clearTimeout(p.timer); p.resolve({ ok: false, payload: null }); }
+    this.pending.clear();
     this.port?.close();
     this.port = null;
     this.frame.remove();

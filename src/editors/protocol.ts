@@ -8,7 +8,19 @@
  */
 
 export const PROTOCOL = 'wicked.editor';
+/** The envelope version every message carries (`v`). Protocol 2 (DES-EDITOR-PLUGIN-CONTRACT-001) is negotiated in
+ *  the `plugin.ready` / `host.hello` payloads and keeps this envelope; it only adds message types, accepted
+ *  on a port that negotiated 2. */
 export const PROTOCOL_VERSION = 1;
+/** The protocols this host speaks, lowest first. */
+export const HOST_PROTOCOLS: readonly number[] = [1, 2];
+
+/** The highest protocol both sides speak, or null. */
+export function negotiate(plugin: readonly number[]): number | null {
+  let best: number | null = null;
+  for (const v of HOST_PROTOCOLS) if (plugin.includes(v)) best = v;
+  return best;
+}
 
 export type Size = 'inline' | 'pane' | 'full';
 export const SIZES: readonly Size[] = ['inline', 'pane', 'full'];
@@ -22,11 +34,13 @@ export type ErrorCode = 'not_granted' | 'bad_request' | 'stale' | 'head_moved' |
 
 export type PermissionId = 'artifact.read' | 'artifact.write' | 'selection.chip' | 'composer.draft' | 'checks.read'
   | 'checks.contribute' | 'sources.read' | 'media.read' | 'artifact.export' | 'ui.fullscreen' | 'network.media'
-  | 'mcp.session';
+  | 'mcp.session'
+  /** Protocol 2 `theme.set` (DES-EDITOR-PLUGIN-CONTRACT-001 §6, §7.2): change the artifact's theme tokens. */
+  | 'artifact.theme';
 
 export const PERMISSIONS: readonly PermissionId[] = [
   'artifact.read', 'artifact.write', 'selection.chip', 'composer.draft', 'checks.read', 'checks.contribute',
-  'sources.read', 'media.read', 'artifact.export', 'ui.fullscreen', 'network.media', 'mcp.session',
+  'sources.read', 'media.read', 'artifact.export', 'ui.fullscreen', 'network.media', 'mcp.session', 'artifact.theme',
 ];
 
 /** Permissions no default ever grants (core `LEDGER_ONLY_PERMISSIONS`): only the build's own token in
@@ -75,6 +89,7 @@ export const REQUESTS = {
   'export.request': 'artifact.export',
   'ui.fullscreen': 'ui.fullscreen',
   'mcp.request': 'mcp.session',
+  'theme.set': 'artifact.theme',
 } as const satisfies Record<string, PermissionId>;
 export type RequestType = keyof typeof REQUESTS;
 
@@ -89,8 +104,15 @@ export const EVENTS = {
   'ui.typed': null,
   'ui.status': null,
   'plugin.error': null,
+  'options.values': null,
+  'ui.height': null,
 } as const satisfies Record<string, PermissionId | null>;
 export type EventType = keyof typeof EVENTS;
+
+/** Message types a plugin may send only on a port that negotiated protocol 2. */
+export const V2_ONLY: ReadonlySet<string> = new Set(['theme.set', 'options.values', 'ui.height']);
+/** Protocol 2 surfaces a v2 `ui.morph` may name (§6), beside the v1 sizes. */
+export const V2_MORPH = ['card', 'full'] as const;
 
 export const LIMITS = {
   /** One message, serialized. */
@@ -142,7 +164,7 @@ export function sizeOf(v: unknown): number {
 const isLine = (v: unknown, max: number): v is string => isStr(v, max) && !/[\r\n]/.test(v);
 
 /** The per-type payload checks: a missing field or a wrong type rejects the message. */
-function payloadOk(type: string, p: Record<string, unknown>): boolean {
+function payloadOk(type: string, p: Record<string, unknown>, protocol: number): boolean {
   switch (type) {
     case 'artifact.read': return p['version'] === undefined || isNum(p['version']);
     case 'artifact.versions': case 'artifact.sources': case 'checks.read': case 'ui.fullscreen': return true;
@@ -167,7 +189,13 @@ function payloadOk(type: string, p: Record<string, unknown>): boolean {
     // The method is checked against MCP_METHODS by the host (an unlisted one is `bad_request` with its
     // reason); here only the shape: a method name and, optionally, a params object.
     case 'mcp.request': return isStr(p['method'], 128) && p['method'] !== '' && (p['params'] === undefined || isObj(p['params']));
-    case 'ui.morph': return SIZES.includes(p['to'] as Size);
+    case 'ui.morph': return SIZES.includes(p['to'] as Size) || (protocol >= 2 && (V2_MORPH as readonly string[]).includes(p['to'] as string));
+    case 'theme.set': return isNum(p['base']) && isObj(p['tokens']);
+    case 'options.values': {
+      const v = p['values'];
+      return isStr(p['tab'], 32) && Number.isInteger(p['rev']) && (p['rev'] as number) >= 0 && isObj(v) && Object.keys(v).length <= 16;
+    }
+    case 'ui.height': return isNum(p['px']);
     case 'ui.key': return isStr(p['key'], 40);
     case 'ui.typed': return isStr(p['grapheme'], 64);
     case 'ui.status': return isLine(p['line'], LIMITS.statusChars);
@@ -184,7 +212,7 @@ export function isAnchorRef(v: unknown): v is AnchorRef {
 }
 
 /** Parse one message off the port. Never throws. */
-export function parseInbound(data: unknown): ParseResult {
+export function parseInbound(data: unknown, protocol = 1): ParseResult {
   if (!isObj(data)) return { ok: false, reason: 'not an object' };
   if (data['p'] !== PROTOCOL || data['v'] !== PROTOCOL_VERSION) return { ok: false, reason: 'wrong protocol' };
   if (sizeOf(data) > LIMITS.messageBytes) {
@@ -203,28 +231,30 @@ export function parseInbound(data: unknown): ParseResult {
   const id = hasId && isStr(data['id'], LIMITS.idChars) && (data['id'] as string) !== '' ? (data['id'] as string) : undefined;
   if (hasId && id === undefined) return { ok: false, reason: 'bad id' };
   const payload = data['payload'] ?? {};
+  if (V2_ONLY.has(type) && protocol < 2) return { ok: false, reason: `${type} needs protocol 2`, ...(id !== undefined ? { id } : {}) };
   if (type in REQUESTS) {
     if (id === undefined) return { ok: false, reason: `request ${type} has no id` };
-    if (!isObj(payload) || !payloadOk(type, payload)) return { ok: false, reason: `bad ${type} payload`, id };
+    if (!isObj(payload) || !payloadOk(type, payload, protocol)) return { ok: false, reason: `bad ${type} payload`, id };
     return { ok: true, msg: { kind: 'request', type: type as RequestType, id, payload } };
   }
   if (type in EVENTS) {
     if (hasId) return { ok: false, reason: `event ${type} carries an id` };
-    if (!isObj(payload) || !payloadOk(type, payload)) return { ok: false, reason: `bad ${type} payload` };
+    if (!isObj(payload) || !payloadOk(type, payload, protocol)) return { ok: false, reason: `bad ${type} payload` };
     return { ok: true, msg: { kind: 'event', type: type as EventType, payload } };
   }
   return { ok: false, reason: `unknown type ${type}`, ...(id !== undefined ? { id } : {}) };
 }
 
 /** The one window message: `plugin.ready {editor, version, protocol}`. */
-export function parseReady(data: unknown): { editor: string; version: string; protocol: number[] } | null {
+export function parseReady(data: unknown): { editor: string; version: string; protocol: number[]; surfaces?: unknown } | null {
   if (!isObj(data) || data['p'] !== PROTOCOL || data['v'] !== PROTOCOL_VERSION || data['type'] !== 'plugin.ready') return null;
   const p = data['payload'];
   if (!isObj(p) || !isStr(p['editor'], 100) || !isStr(p['version'], 40) || !Array.isArray(p['protocol'])) return null;
   // Strict: every entry an integer, or the whole ready is refused (codex).
   const protocol = p['protocol'] as unknown[];
   if (protocol.length === 0 || protocol.length > 8 || !protocol.every((n) => Number.isInteger(n))) return null;
-  return { editor: p['editor'], version: p['version'], protocol: protocol as number[] };
+  // Protocol 2: the surfaces declaration rides here (§5.1); the host parses it with `parseSurfaces`.
+  return { editor: p['editor'], version: p['version'], protocol: protocol as number[], ...(p['surfaces'] !== undefined ? { surfaces: p['surfaces'] } : {}) };
 }
 
 export function reply(re: string, payload: unknown): Record<string, unknown> {
