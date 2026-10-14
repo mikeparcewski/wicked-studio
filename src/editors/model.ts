@@ -72,9 +72,9 @@ export function elementLabel(text: string | undefined, id: string): string {
 // ── §6 grants ───────────────────────────────────────────────────────────────────────────────
 
 /** The first-party default set (§6.1 column 4): every permission except `network.media`, which only
- *  `wicked-page` holds by default, and the ledger-only ones (`mcp.session`), which no default grants. */
+ *  `wicked-page` and `wicked-doc` hold by default, and the ledger-only ones (`mcp.session`), which no default grants. */
 export function builtinDefaults(editorId: string): PermissionId[] {
-  return PERMISSIONS.filter((p) => !LEDGER_ONLY.has(p) && (p !== 'network.media' || editorId === 'wicked-page'));
+  return PERMISSIONS.filter((p) => !LEDGER_ONLY.has(p) && (p !== 'network.media' || editorId === 'wicked-page' || editorId === 'wicked-doc'));
 }
 
 /** One decided grant as crew answers it (api-types `EditorGrant`, EP-C1): the permission, the engine's
