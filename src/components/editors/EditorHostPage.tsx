@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { apiBase } from '../../api/client.js';
-import { EditorHost, type HostLogEntry } from '../../editors/host.js';
+import { EditorHost, sizeOfSurface, type HostLogEntry, type Surface } from '../../editors/host.js';
+import type { FullMode } from '../../editors/surfaces.js';
 import { FakeDocAdapter, SAMPLE_DECK, SAMPLE_PAGE } from '../../editors/fakeAdapter.js';
 import { bundleUrl, fetchGrants, type Chip } from '../../editors/model.js';
 import { PERMISSIONS, SIZES, type PermissionId, type Size } from '../../editors/protocol.js';
@@ -31,6 +32,10 @@ interface Page {
   firstParty: boolean;
   /** The kind the sample is (P-D1: `deck` opens a sample deck; anything else the sample page). */
   kind: string;
+  /** Protocol 2 (conformance only): the surface this instance is, its options tab, its full-screen mode. */
+  surface: Surface | null;
+  tab: string | null;
+  mode: FullMode | null;
 }
 
 function readPage(search: string, mode: 'dev' | 'conformance'): Page {
@@ -47,6 +52,9 @@ function readPage(search: string, mode: 'dev' | 'conformance'): Page {
     grants: grants === null ? null : grants.split(',').filter((g): g is PermissionId => PERMISSIONS.includes(g as PermissionId)),
     firstParty: editor.startsWith('wicked-'),
     kind: q.get('kind') === 'deck' ? 'deck' : 'page',
+    surface: mode === 'conformance' && ['card', 'options', 'full'].includes(q.get('surface') ?? '') ? q.get('surface') as Surface : null,
+    tab: mode === 'conformance' ? q.get('tab') : null,
+    mode: mode === 'conformance' && (q.get('mode') === 'simple' || q.get('mode') === 'advanced') ? q.get('mode') as FullMode : null,
   };
 }
 
@@ -61,6 +69,8 @@ declare global {
       agentVersion: () => void;
       inject: (msg: unknown) => void;
       composer: () => { text: string; chips: Chip[]; drafted: { text: string; chips: Chip[] }[]; keys: string[]; thread: string[]; status: string | null; notes: number };
+      /** Protocol 2: the newest accepted options values per controls tab (conformance case 15). */
+      optionsValues: () => Record<string, Record<string, unknown>>;
     };
   }
 }
@@ -74,7 +84,7 @@ export function EditorHostPage({ mode, navigate }: { mode: 'dev' | 'conformance'
   const composerBox = useRef<HTMLTextAreaElement | null>(null);
   const [mountKey, setMountKey] = useState(0);
   const [showProtocol, setShowProtocol] = useState(false);
-  const [size, setSize] = useState<Size>('pane');
+  const [size, setSize] = useState<Size>(page.surface !== null ? sizeOfSurface(page.surface) : 'pane');
   const [torn, setTorn] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const [chips, setChips] = useState<Chip[]>([]);
@@ -85,6 +95,7 @@ export function EditorHostPage({ mode, navigate }: { mode: 'dev' | 'conformance'
   const [text, setText] = useState('');
   const keys = useRef<string[]>([]);
   const log = useRef<HostLogEntry[]>([]);
+  const optionsSeen = useRef<Record<string, Record<string, unknown>>>({});
   const hostRef = useRef<EditorHost | null>(null);
   const adapter = useMemo(() => (page.kind === 'deck'
     ? new FakeDocAdapter(SAMPLE_DECK, 'Library room booking (deck)', { kind: 'deck' })
@@ -113,6 +124,9 @@ export function EditorHostPage({ mode, navigate }: { mode: 'dev' | 'conformance'
         prefs: { reducedMotion: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false, techDetails: false, locale: navigator.language },
         firstParty: page.firstParty,
         adapter,
+        ...(page.surface !== null ? { surface: page.surface } : {}),
+        ...(page.tab !== null ? { tab: page.tab } : {}),
+        ...(page.mode !== null ? { mode: page.mode } : {}),
         ui: {
           chips: (c) => setChips(c),
           draft: (t, c) => setDrafted((d) => [...d, { text: t, chips: c }]),
@@ -136,6 +150,7 @@ export function EditorHostPage({ mode, navigate }: { mode: 'dev' | 'conformance'
           },
           torn: (reason) => setTorn(reason),
           log: (e) => { log.current.push(e); },
+          optionsValues: (tab, values) => { optionsSeen.current[tab] = values; },
         },
       });
       hostRef.current = host;
@@ -163,6 +178,7 @@ export function EditorHostPage({ mode, navigate }: { mode: 'dev' | 'conformance'
       agentVersion: () => { const v = adapter.agentEdit(); hostRef.current?.artifactChanged(v, 'generated'); },
       inject: (msg) => hostRef.current?.inject(msg),
       composer: () => ({ ...live.current, keys: [...keys.current] }),
+      optionsValues: () => ({ ...optionsSeen.current }),
     };
     return () => { delete window.__wickedEditor; };
   }, [adapter]);
