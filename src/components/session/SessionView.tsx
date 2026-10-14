@@ -68,6 +68,10 @@ import { isCliSeat, seatLabel } from '../../board/seatNames.js';
 import { chatStatusWord } from '../../board/statusWords.js';
 import { CREW, gateResponder, responderKey, turnResponder, type Responder } from '../../board/responder.js';
 import { TurnWho } from './TurnWho.js';
+import { RunRibbon, RunTab } from './RunTab.js';
+import { useRunHostValue } from './RunHost.js';
+import { HostPanel } from '../editorHost/HostPanel.js';
+import { RunHostProvider } from '../editorHost/RunHostContext.js';
 
 /** S16a-2c: the hash that lands a run's session on its sheet's Governance tab. */
 export const GOVERNANCE_HASH = '#governance';
@@ -588,8 +592,47 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
   const artifactMissing = useArtifactMissing(artifactKey, ready && mine.length > 0);
   useEffect(() => () => collapseArtifacts(), [sessionId]);
 
+  // H3: the composer's props, shared by the thread's composer and the full-screen chat drawer's (one draft).
+  const composerProps = {
+    composerKey: sessionId,
+    // studio#606 (4): while a run here is live, Send starts a separate Ask — say so before Send.
+    footer: scopeNote !== null ? <p data-testid="session-composer-scope" role="note" className="wk-composer-hint">{scopeNote}</p> : null,
+    text: draft,
+    setText: (t: string) => setDraft(sessionId, t),
+    // S16a-4e: on a live chat's own session the composer replies into THAT chat.
+    onSend: (text: string, opts: ComposerSend) => onAsk(text, ref.kind === 'chat' && conversation === 'live' && opts.fresh !== true && opts.projectId === undefined ? { ...opts, chatId: ref.chatId } : opts),
+    runs: mine,
+    started: entries.length > 0,
+    navigate,
+    ariaLabel: 'Ask or tell studio what to do next',
+    placeholder: 'Ask about this, or tell studio what to do next — / adds a step, @ names a project or a helper',
+    variant: 'session' as const,
+  };
+  // H3 (HOST-API §6): full screen's chat drawer is this run's own thread, compact — its conversation turns,
+  // each with who responded, and the same composer (the run's cards stay in the thread behind it).
+  const drawerTurns = entries.filter((e): e is Extract<ThreadEntry, { kind: 'turn' }> => e.kind === 'turn').slice(-12);
+  const renderChat = (): React.ReactNode => (
+    <div data-testid="run-chat-drawer" className="wk-run-chat">
+      <div className="wk-run-chat-thread">
+        {drawerTurns.length === 0 && <p className="wk-session-grey">Nothing has been said in this run yet.</p>}
+        {drawerTurns.map((e) => (
+          <div key={e.key} data-testid="run-chat-turn" className="wk-run-chat-turn">
+            <TurnWho who={turnResponder(e.who, roster)} />
+            <p className="wk-session-text">{e.text}</p>
+          </div>
+        ))}
+      </div>
+      <Composer {...composerProps} composerKey={`${sessionId}#drawer`} text={draft} className="wk-run-chat-composer" />
+    </div>
+  );
+  const runHost = useRunHostValue(mine, renderChat);
+
   return (
     <ArtifactAddressProvider sessionId={sessionId} routeKey={artifactKey} routeSize={artifactSize} routeVersion={artifactVersion} navigate={navigate}>
+    <RunHostProvider value={runHost}>
+    {/* H3 (run page option B): the thread and, beside it, the ONE host panel — the run's details as its
+        Run tab, a plugin's Options tabs added on demand; below 1200 px a one-line ribbon. */}
+    <div data-testid="session-frame" className="wk-session-frame">
     <div data-testid="session" data-object={`session:${sessionId}`} data-session-id={sessionId} data-conversation={conversation} data-state={state} data-pane={pane} className={`wk-session${pane ? ' wk-session--pane' : ''}`}>
       <header className="wk-session-head">
         <span aria-hidden className={`wk-desk-dot wk-desk-dot--${state}`} />
@@ -750,23 +793,11 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
         <p data-testid="session-ask-shape" className="wk-session-grey wk-session-shape">{askShapeFooter(askPath)}</p>
       )}
 
-      <Composer
-        composerKey={sessionId}
-        // studio#606 (4): while a run here is live, Send starts a separate Ask — say so before Send.
-        footer={scopeNote !== null ? <p data-testid="session-composer-scope" role="note" className="wk-composer-hint">{scopeNote}</p> : null}
-        text={draft}
-        setText={(t) => setDraft(sessionId, t)}
-        // S16a-4e: on a live chat's own session the composer replies into THAT chat.
-        onSend={(text, opts) => onAsk(text, ref.kind === 'chat' && conversation === 'live' && opts.fresh !== true && opts.projectId === undefined ? { ...opts, chatId: ref.chatId } : opts)}
-        runs={mine}
-        started={entries.length > 0}
-        navigate={navigate}
-        className="wk-session-composer"
-        ariaLabel="Ask or tell studio what to do next"
-        placeholder="Ask about this, or tell studio what to do next — / adds a step, @ names a project or a helper"
-        variant="session"
-      />
+      <Composer {...composerProps} className="wk-session-composer" />
     </div>
+    <HostPanel runTab={<RunTab runs={mine} sessionId={sessionId} title={title} navigate={navigate} />} ribbon={<RunRibbon runs={mine} />} />
+    </div>
+    </RunHostProvider>
     </ArtifactAddressProvider>
   );
 }

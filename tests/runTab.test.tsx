@@ -245,17 +245,14 @@ describe('RunTab', () => {
 });
 
 describe('RunRibbon', () => {
-  it('summarizes the primary workflow, current phase, distinct agents and spend, and opens on click', async () => {
+  it('summarizes the primary workflow, current phase, distinct agents and spend as plain text (the panel draws the button)', async () => {
     const view = phases();
     Object.assign(view.session, { cost_usd: 1.25 });
     view.units.push(makeUnit({ ord: 3, assigned_cli: 'claude' }));
-    const open = vi.fn();
-    await act(async () => render(<RunRibbon runs={[view, makeView({ id: 'finished', status: 'completed' })]} onOpen={open} />));
+    await act(async () => render(<RunRibbon runs={[view, makeView({ id: 'finished', status: 'completed' })]} />));
     const line = screen.getByTestId('run-ribbon-line');
     expect(line).toHaveTextContent('MCP server · Build · 2 agents · $1.25');
-    expect(line).toHaveAttribute('type', 'button');
-    fireEvent.click(line);
-    expect(open).toHaveBeenCalledOnce();
+    expect(line.tagName).toBe('SPAN');
   });
 
   it('uses the status without a current phase and omits unreported spend', async () => {

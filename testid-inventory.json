@@ -11,9 +11,9 @@
   "version": 1,
   "studioVersion": "0.7.13",
   "counts": {
-    "files": 206,
-    "occurrences": 2466,
-    "static": 2154,
+    "files": 212,
+    "occurrences": 2537,
+    "static": 2214,
     "dynamic": 63,
     "computed": 24
   },
@@ -167,6 +167,7 @@
     {
       "testId": "artifact-export-download",
       "files": [
+        "src/components/editorHost/PluginCard.tsx",
         "src/components/session/ArtifactMorph.tsx"
       ]
     },
@@ -179,6 +180,7 @@
     {
       "testId": "artifact-export-format",
       "files": [
+        "src/components/editorHost/PluginCard.tsx",
         "src/components/session/ArtifactMorph.tsx"
       ]
     },
@@ -191,6 +193,7 @@
     {
       "testId": "artifact-export-menu",
       "files": [
+        "src/components/editorHost/PluginCard.tsx",
         "src/components/session/ArtifactMorph.tsx"
       ]
     },
@@ -3199,6 +3202,42 @@
       ]
     },
     {
+      "testId": "full-shell",
+      "files": [
+        "src/components/editorHost/FullShell.tsx"
+      ]
+    },
+    {
+      "testId": "full-shell-chat",
+      "files": [
+        "src/components/editorHost/FullShell.tsx"
+      ]
+    },
+    {
+      "testId": "full-shell-drawer",
+      "files": [
+        "src/components/editorHost/FullShell.tsx"
+      ]
+    },
+    {
+      "testId": "full-shell-exit",
+      "files": [
+        "src/components/editorHost/FullShell.tsx"
+      ]
+    },
+    {
+      "testId": "full-shell-head",
+      "files": [
+        "src/components/editorHost/FullShell.tsx"
+      ]
+    },
+    {
+      "testId": "full-shell-mode",
+      "files": [
+        "src/components/editorHost/FullShell.tsx"
+      ]
+    },
+    {
       "testId": "gate-badge",
       "files": [
         "src/components/DecisionsLedger.tsx"
@@ -3742,6 +3781,78 @@
       "testId": "home-focus-toggle",
       "files": [
         "src/components/NeedsYouQueue.tsx"
+      ]
+    },
+    {
+      "testId": "host-control",
+      "files": [
+        "src/components/editorHost/HostPanel.tsx"
+      ]
+    },
+    {
+      "testId": "host-controls",
+      "files": [
+        "src/components/editorHost/HostPanel.tsx"
+      ]
+    },
+    {
+      "testId": "host-panel",
+      "files": [
+        "src/components/editorHost/HostPanel.tsx"
+      ]
+    },
+    {
+      "testId": "host-panel-close",
+      "files": [
+        "src/components/editorHost/HostPanel.tsx"
+      ]
+    },
+    {
+      "testId": "host-panel-fold",
+      "files": [
+        "src/components/editorHost/HostPanel.tsx"
+      ]
+    },
+    {
+      "testId": "host-panel-frame",
+      "files": [
+        "src/components/editorHost/HostPanel.tsx"
+      ]
+    },
+    {
+      "testId": "host-panel-hosttab",
+      "files": [
+        "src/components/editorHost/HostPanel.tsx"
+      ]
+    },
+    {
+      "testId": "host-panel-ribbon",
+      "files": [
+        "src/components/editorHost/HostPanel.tsx"
+      ]
+    },
+    {
+      "testId": "host-panel-run",
+      "files": [
+        "src/components/editorHost/HostPanel.tsx"
+      ]
+    },
+    {
+      "testId": "host-panel-tab",
+      "files": [
+        "src/components/editorHost/HostPanel.tsx"
+      ]
+    },
+    {
+      "testId": "host-panel-torn",
+      "files": [
+        "src/components/editorHost/HostPanel.tsx"
+      ]
+    },
+    {
+      "testId": "host-panel-v1",
+      "files": [
+        "src/components/editorHost/HostPanel.tsx"
       ]
     },
     {
@@ -6108,6 +6219,7 @@
     {
       "testId": "page-line",
       "files": [
+        "src/components/editorHost/PluginCard.tsx",
         "src/components/session/PageEditor.tsx",
         "src/components/session/PluginArtifact.tsx"
       ]
@@ -6164,6 +6276,7 @@
     {
       "testId": "page-undo",
       "files": [
+        "src/components/editorHost/PluginCard.tsx",
         "src/components/session/PageEditor.tsx",
         "src/components/session/PluginArtifact.tsx"
       ]
@@ -6488,6 +6601,72 @@
       ]
     },
     {
+      "testId": "plugin-card",
+      "files": [
+        "src/components/editorHost/PluginCard.tsx"
+      ]
+    },
+    {
+      "testId": "plugin-card-action",
+      "files": [
+        "src/components/editorHost/PluginCard.tsx"
+      ]
+    },
+    {
+      "testId": "plugin-card-catch",
+      "files": [
+        "src/components/editorHost/PluginCard.tsx"
+      ]
+    },
+    {
+      "testId": "plugin-card-frame",
+      "files": [
+        "src/components/editorHost/PluginCard.tsx"
+      ]
+    },
+    {
+      "testId": "plugin-card-full",
+      "files": [
+        "src/components/editorHost/PluginCard.tsx"
+      ]
+    },
+    {
+      "testId": "plugin-card-no-editor",
+      "files": [
+        "src/components/editorHost/PluginCard.tsx"
+      ]
+    },
+    {
+      "testId": "plugin-card-note",
+      "files": [
+        "src/components/editorHost/PluginCard.tsx"
+      ]
+    },
+    {
+      "testId": "plugin-card-options",
+      "files": [
+        "src/components/editorHost/PluginCard.tsx"
+      ]
+    },
+    {
+      "testId": "plugin-card-pill",
+      "files": [
+        "src/components/editorHost/PluginCard.tsx"
+      ]
+    },
+    {
+      "testId": "plugin-card-tag",
+      "files": [
+        "src/components/editorHost/PluginCard.tsx"
+      ]
+    },
+    {
+      "testId": "plugin-card-who",
+      "files": [
+        "src/components/editorHost/PluginCard.tsx"
+      ]
+    },
+    {
       "testId": "plugin-coming-soon",
       "files": [
         "src/components/editors/EditorPluginsSettings.tsx"
@@ -6544,12 +6723,14 @@
     {
       "testId": "plugin-reload",
       "files": [
+        "src/components/editorHost/PluginCard.tsx",
         "src/components/session/PluginArtifact.tsx"
       ]
     },
     {
       "testId": "plugin-torn",
       "files": [
+        "src/components/editorHost/PluginCard.tsx",
         "src/components/session/PluginArtifact.tsx"
       ]
     },
@@ -8234,6 +8415,18 @@
       ]
     },
     {
+      "testId": "run-chat-drawer",
+      "files": [
+        "src/components/session/SessionView.tsx"
+      ]
+    },
+    {
+      "testId": "run-chat-turn",
+      "files": [
+        "src/components/session/SessionView.tsx"
+      ]
+    },
+    {
       "testId": "run-codebase-zip",
       "files": [
         "src/components/session/CodebaseDownload.tsx"
@@ -8341,6 +8534,24 @@
       "files": [
         "src/components/FinishedRunRow.tsx",
         "src/components/everything/FinishedRunMenu.tsx"
+      ]
+    },
+    {
+      "testId": "run-gate-actions",
+      "files": [
+        "src/components/session/RunHost.tsx"
+      ]
+    },
+    {
+      "testId": "run-gate-approve",
+      "files": [
+        "src/components/session/RunHost.tsx"
+      ]
+    },
+    {
+      "testId": "run-gate-open",
+      "files": [
+        "src/components/session/RunHost.tsx"
       ]
     },
     {
@@ -8452,6 +8663,144 @@
       "testId": "run-revise-pr",
       "files": [
         "src/components/RunDelivery.tsx"
+      ]
+    },
+    {
+      "testId": "run-ribbon-line",
+      "files": [
+        "src/components/session/RunTab.tsx"
+      ]
+    },
+    {
+      "testId": "run-tab",
+      "files": [
+        "src/components/session/RunTab.tsx"
+      ]
+    },
+    {
+      "testId": "run-tab-acceptance",
+      "files": [
+        "src/components/session/RunTab.tsx"
+      ]
+    },
+    {
+      "testId": "run-tab-actions",
+      "files": [
+        "src/components/session/RunTab.tsx"
+      ]
+    },
+    {
+      "testId": "run-tab-agent",
+      "files": [
+        "src/components/session/RunTab.tsx"
+      ]
+    },
+    {
+      "testId": "run-tab-agents",
+      "files": [
+        "src/components/session/RunTab.tsx"
+      ]
+    },
+    {
+      "testId": "run-tab-checks",
+      "files": [
+        "src/components/session/RunTab.tsx"
+      ]
+    },
+    {
+      "testId": "run-tab-download",
+      "files": [
+        "src/components/session/RunTab.tsx"
+      ]
+    },
+    {
+      "testId": "run-tab-empty",
+      "files": [
+        "src/components/session/RunTab.tsx"
+      ]
+    },
+    {
+      "testId": "run-tab-look",
+      "files": [
+        "src/components/session/RunTab.tsx"
+      ]
+    },
+    {
+      "testId": "run-tab-orphaned",
+      "files": [
+        "src/components/session/RunTab.tsx"
+      ]
+    },
+    {
+      "testId": "run-tab-phase",
+      "files": [
+        "src/components/session/RunTab.tsx"
+      ]
+    },
+    {
+      "testId": "run-tab-phases",
+      "files": [
+        "src/components/session/RunTab.tsx"
+      ]
+    },
+    {
+      "testId": "run-tab-repo",
+      "files": [
+        "src/components/session/RunTab.tsx"
+      ]
+    },
+    {
+      "testId": "run-tab-run-pick",
+      "files": [
+        "src/components/session/RunTab.tsx"
+      ]
+    },
+    {
+      "testId": "run-tab-spend",
+      "files": [
+        "src/components/session/RunTab.tsx"
+      ]
+    },
+    {
+      "testId": "run-tab-stop",
+      "files": [
+        "src/components/session/RunTab.tsx"
+      ]
+    },
+    {
+      "testId": "run-tab-stop-confirm",
+      "files": [
+        "src/components/session/RunTab.tsx"
+      ]
+    },
+    {
+      "testId": "run-tab-stop-confirm-row",
+      "files": [
+        "src/components/session/RunTab.tsx"
+      ]
+    },
+    {
+      "testId": "run-tab-stop-keep",
+      "files": [
+        "src/components/session/RunTab.tsx"
+      ]
+    },
+    {
+      "testId": "run-tab-stranded",
+      "files": [
+        "src/components/session/RunTab.tsx"
+      ]
+    },
+    {
+      "testId": "run-tab-tech",
+      "files": [
+        "src/components/session/RunTab.tsx"
+      ]
+    },
+    {
+      "testId": "run-tab-workflow",
+      "files": [
+        "src/components/session/RunTab.tsx"
       ]
     },
     {
@@ -8686,6 +9035,12 @@
     },
     {
       "testId": "session-failed-resume-error-detail",
+      "files": [
+        "src/components/session/SessionView.tsx"
+      ]
+    },
+    {
+      "testId": "session-frame",
       "files": [
         "src/components/session/SessionView.tsx"
       ]
@@ -12319,6 +12674,18 @@
       "testId": "trust-receipt-question",
       "files": [
         "src/components/TrustReceipt.tsx"
+      ]
+    },
+    {
+      "testId": "turn-who",
+      "files": [
+        "src/components/session/TurnWho.tsx"
+      ]
+    },
+    {
+      "testId": "turn-who-seat",
+      "files": [
+        "src/components/session/TurnWho.tsx"
       ]
     },
     {

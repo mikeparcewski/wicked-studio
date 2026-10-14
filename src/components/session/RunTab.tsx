@@ -161,18 +161,19 @@ function RunTabDetails({ view, title }: { view: SessionView; title: string }): R
   );
 }
 
-export function RunRibbon({ runs, onOpen }: { runs: SessionView[]; onOpen?: () => void }): React.ReactElement {
+/** The panel's one-line ribbon (below 1200 px, or folded). HostPanel draws the button around it, so this is text. */
+export function RunRibbon({ runs }: { runs: SessionView[] }): React.ReactElement {
   const view = primaryRun(runs);
-  if (view === undefined) return <button data-testid="run-ribbon-line" type="button" className="wk-run-tab-ribbon" onClick={onOpen}>No run in this session yet.</button>;
-  return <RunRibbonLine view={view} {...(onOpen !== undefined ? { onOpen } : {})} />;
+  if (view === undefined) return <span data-testid="run-ribbon-line" className="wk-run-tab-ribbon">No run in this session yet.</span>;
+  return <RunRibbonLine view={view} />;
 }
 
-function RunRibbonLine({ view, onOpen }: { view: SessionView; onOpen?: () => void }): React.ReactElement {
+function RunRibbonLine({ view }: { view: SessionView }): React.ReactElement {
   const { chain } = useRunChain(view);
   const spend = spendWords(view);
   return (
-    <button data-testid="run-ribbon-line" type="button" className="wk-run-tab-ribbon" onClick={onOpen}>
+    <span data-testid="run-ribbon-line" className="wk-run-tab-ribbon">
       {workflowLabel(view.session.workflow_id)} · {currentStep(view, chain)?.label ?? chatStatusWord([view]).word} · {agentsWord(assignedClis(view).length)}{spend !== null && ` · ${spend}`}
-    </button>
+    </span>
   );
 }
