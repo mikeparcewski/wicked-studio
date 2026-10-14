@@ -115,6 +115,7 @@ with sync_playwright() as p:
     # The rail is navigation only: no standing-orders control in it.
     check("rail-menu-has-no-orders-control",
           page.get_by_test_id("session-rail").locator('[data-testid="standing-orders-toggle"], [data-testid="delivery-freeze-open"]').count() == 0)
+    page.get_by_test_id("desk-more").click()  # Desk v2: "Look underneath" is in the ⋯ panel
     page.get_by_test_id("desk-sheet-open").click()
     page.locator('[data-testid="sheet-tab"][data-tab="hold"]').click()
     hold = page.get_by_test_id("sheet-hold")

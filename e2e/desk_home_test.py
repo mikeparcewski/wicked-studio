@@ -10,7 +10,7 @@ proves the S4 acceptance:
      bottom bar and every KPI tile are gone.
   2. ONE COUNT (concept A, operator ruling 2026-10-12): the Desk rail badge = the needs-you list's
      decisions + failures (reviews are never in it), the list is drawn in labelled sections, the
-     Desk opens with its one sentence, and every session badge in the rail names a run the list holds.
+     Desk v2 inbox says how many wait, and every session badge in the rail names a run the list holds.
   3. CHORES: the lapsed-seat chore ("For whoever runs studio") comes from GET /roster, is not in
      the count, and no disk chore is rendered.
   4. NO COMPOSER (concept A): the Desk has no bottom composer; its header carries the ⌘K command
@@ -74,7 +74,7 @@ SHELL = """() => {
 
 COUNTS = """() => {
   const q = document.querySelector('[data-testid="needs-you-queue"]');
-  const h = document.querySelector('[data-testid="desk-story"]');
+  const h = document.querySelector('[data-testid="desk-inbox-count"]');
   const inSection = (ids) => [...document.querySelectorAll('[data-testid="need-row"]')]
     .filter(r => ids.includes(r.closest('[data-section]')?.dataset.section)).reduce((n, r) => n + Number(r.dataset.count || '1'), 0);
   const b = document.querySelector('[data-testid="desk-rail-badge"]');
@@ -143,7 +143,7 @@ with sync_playwright() as p:
 
     # ── 2. one count ──────────────────────────────────────────────────────────────
     # studio#723: the count is said only once it holds still (NEEDS_QUIET_MS) — wait for it.
-    page.get_by_test_id("desk-story").wait_for(state="visible", timeout=10000)
+    page.get_by_test_id("desk-inbox-count").wait_for(state="visible", timeout=10000)
     page.get_by_test_id("desk-rail-badge").wait_for(state="visible", timeout=10000)
     c = page.evaluate(COUNTS)
     # Open every group so the members' keys are on the page.
@@ -157,7 +157,7 @@ with sync_playwright() as p:
           c["queue"] is not None and c["queue"] >= 3 and c["variant"] == "desk"
           and c["badge"] == c["badgeRows"] and c["badge"] == c["queue"] - c["reviewRows"] - 0
           and c["sections"][:1] == ["decision"]
-          and "waiting for you" in (c["headlineText"] or "")
+          and "waiting" in (c["headlineText"] or "")
           and len(badged) > 0 and all(s["run"] in runs_needing for s in badged)
           and sum(s["badge"] for s in badged) <= c["queue"],
           counts=c, keys=keys)

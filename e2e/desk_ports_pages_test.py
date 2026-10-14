@@ -233,6 +233,7 @@ with sync_playwright() as p:
         page.goto(f"{origin}/", wait_until="networkidle")
         page.get_by_test_id("desk").wait_for(state="visible", timeout=15000)
         page.wait_for_timeout(600)
+        page.get_by_test_id("desk-more").click()  # Desk v2: "Look underneath" is in the ⋯ panel
         page.get_by_test_id("desk-sheet-open").click()
         page.get_by_test_id("sheet").wait_for(state="visible", timeout=5000)
         sheet_tab(page, "studio")

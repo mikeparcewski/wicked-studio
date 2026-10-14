@@ -8,7 +8,7 @@ import { CommandPalette, paletteShortcutEntries } from './components/CommandPale
 import { GateNotifications } from './components/GateNotifications.js';
 import { NotFoundPage } from './components/NotFoundPage.js';
 import { SkipLink } from './components/SkipLink.js';
-import { ProjectDetailPage } from './components/ProjectDetailPage.js';
+import { ProjectDesk } from './components/desk/ProjectDesk.js';
 import { RepositoriesPanel } from './components/RepositoriesPanel.js';
 import { LearnPage } from './components/learn/LearnPage.js';
 import { RepoDetailPage } from './components/RepoDetailPage.js';
@@ -35,7 +35,10 @@ import { ConnectionStatus } from './components/ConnectionStatus.js';
 import { SystemSettings } from './components/SystemSettings.js';
 import { ThemePage } from './components/ThemePage.js';
 import { HealthPage } from './components/HealthPage.js';
-import { Desk } from './components/desk/Desk.js';
+import { parseRoute } from './hooks/useRoute.js';
+import { DeskV2, deskTabPath, type HostedTab } from './components/desk/DeskV2.js';
+import { AgentsTabPending } from './components/desk/AgentsTabPending.js';
+import { useDeskStream } from './store/deskStream.js';
 import { SessionRail } from './components/desk/SessionRail.js';
 import { RailDrawer } from './components/ui/RailDrawer.js';
 import { PhoneNeedsBadge } from './components/ui/PhoneNeedsBadge.js';
@@ -113,7 +116,7 @@ const RIGHT_PANEL_PX = 288;
 const DESK_COMPOSER_PX = 96;
 
 export function App(): React.ReactElement {
-  const { panel, runId, repoId, projectId, artifactId, showLaunch, showRegisterRepo, campaignId, steeringSection, testingPage, ruleId, artifactKey, navigate, search, pathname } = useRoute();
+  const { panel, runId, repoId, projectId, artifactId, showLaunch, campaignId, steeringSection, testingPage, artifactKey, navigate, search, pathname } = useRoute();
   const { runs, refresh, loaded: runsLoaded, error: runsError } = useRuns();
   const ingestGate = useGateStore((s) => s.ingest);
   const ingestCampaign = useCampaignsStore((s) => s.ingest);
@@ -149,6 +152,8 @@ export function App(): React.ReactElement {
       useAskThreadStore.getState().ingest(event);
       // Wave 2b: the watchdog's needs-a-human escalations feed the needs-you queue.
       ingestStallEscalation(event);
+      // Desk v2: the live stream of events from every run (a cheap type-set miss for the rest).
+      useDeskStream.getState().ingest(event);
       // DC-S6: `chatDecisions` (the line under the operator's message) and `decisionChanged` (ids only).
       useDecisionsStore.getState().ingest(event as unknown as { type: string } & Record<string, unknown>);
       // TH-14: fold core's Campaign* frames (a cheap prefix miss for everything else) so the
@@ -161,6 +166,56 @@ export function App(): React.ReactElement {
     },
     [ingestGate, ingestCampaign, ingestAnnotation, ingestElicitation, ingestNotif, ingestRuntime, ingestRunEvent, ingestDocThread, ingestLiveChat, ingestStallEscalation, refresh],
   );
+
+
+  /** Desk hosted tabs: render the page at the tab's address, with the project page's scope. */
+  const renderHosted = (tab: HostedTab, at: string, project: string | null): React.ReactNode => {
+    if (tab === 'agents') {
+      // The Agents page (lane studio-agents-page) mounts here when it lands; until then the tab says so.
+      return <AgentsTabPending navigate={navigate} />;
+    }
+    const u = new URL(at.startsWith('/') ? at : `/${at}`, 'http://studio.local');
+    const r = parseRoute(u.pathname);
+    const hs = u.search;
+    if (tab === 'repositories' && project === null) {
+      return <div className="wk-desk2-repos flex-1 overflow-hidden">
+        <RepositoriesPanel onSelectRun={selectRun} autoShowRegister={u.pathname === '/repos/new'} navigate={navigate} ambientProject={ambientProjectId(u.pathname, hs)} />
+      </div>;
+    }
+    if (tab === 'evaluate') {
+      return (
+        <div className="flex-1 overflow-y-auto">
+          <TestingPage page="evals" campaignId={null} runs={runs} navigate={navigate} launchIntent={readLaunchIntent(hs)} projectId={project ?? new URLSearchParams(hs).get('project')} />
+        </div>
+      );
+    }
+    if (r.panel === 'rules') {
+      return (
+        <div className="flex flex-1 overflow-hidden">
+          <RulesPage ruleId={r.ruleId} runs={runs} navigate={navigate} />
+        </div>
+      );
+    }
+    if (r.steeringSection === 'dashboard') {
+      return (
+        <div className="flex flex-1 overflow-hidden">
+          <GovernanceDashboard navigate={navigate} />
+        </div>
+      );
+    }
+    if (r.steeringSection === 'memories') {
+      return (
+        <div className="flex flex-1 overflow-hidden">
+          <MemoriesPanel />
+        </div>
+      );
+    }
+    return (
+      <div className="flex flex-1 overflow-hidden">
+        <SteeringPage type={readSteeringTypeFilter(hs)} navigate={navigate} search={hs} runs={runs} />
+      </div>
+    );
+  };
 
   useEventStream(handleEvent);
   // TR-W8: finished and delivered runs are Watchtower rows, from the run list studio already reads.
@@ -424,6 +479,10 @@ export function App(): React.ReactElement {
   function renderCenter(): React.ReactElement {
     // A dead address (usability review #4): the honest not-found view. Checked
     // FIRST — no redirect hook fires for this panel, so the typed URL stays.
+    // Desk v2: the Agents page is the Desk's Agents tab; `/agents/...` deep links ride along as `at`.
+    if (pathname === '/agents' || pathname.startsWith('/agents/')) {
+      return <RouteRedirect to={deskTabPath('agents', pathname + search)} navigate={navigate} />;
+    }
     if (panel === 'not-found') {
       return (
         <div className="flex-1 overflow-y-auto">
@@ -474,7 +533,7 @@ export function App(): React.ReactElement {
     // still at `/runs`, which the `panel === 'runs'` fallback below keeps rendering.
     if (panel === 'home') {
       // The Desk (S4) — the one shell since the classic skins retired (S18d).
-      return <Desk runs={runs} runsLoaded={runsLoaded} runsError={runsError} onRetryRuns={refresh} needRows={needRows} now={needsNow} navigate={navigate} onCommand={openPalette} />;
+      return <DeskV2 hosted={renderHosted} runs={runs} runsLoaded={runsLoaded} runsError={runsError} onRetryRuns={refresh} needRows={needRows} now={needsNow} navigate={navigate} onCommand={openPalette} search={search} />;
     }
     if (panel === 'workflows') {
       return (
@@ -490,33 +549,10 @@ export function App(): React.ReactElement {
     // `/wiki`/`/rules`/`/policies` addresses) renders the seven-type rule grid (the `?type=` filter
     // collapsing the old seven pages). Bare `/steering` and the retired `/proposals` queue redirect
     // to the dashboard.
-    if (panel === 'steering') {
-      // No page-level scroll wrapper here: each sub-section owns its layout — a two-column flex
-      // (the management column scrolls, the assist dock is a full-height sibling — DES-ASSIST-DOCK §2).
-      if (steeringSection === 'dashboard') {
-        return (
-          <div className="flex flex-1 overflow-hidden">
-            <GovernanceDashboard navigate={navigate} />
-          </div>
-        );
-      }
-      if (steeringSection === 'memories') {
-        return (
-          <div className="flex flex-1 overflow-hidden">
-            <MemoriesPanel />
-          </div>
-        );
-      }
-      return (
-        <div className="flex flex-1 overflow-hidden">
-          <SteeringPage
-            type={readSteeringTypeFilter(search)}
-            navigate={navigate}
-            search={search}
-            runs={runs}
-          />
-        </div>
-      );
+    // Desk v2: Steering lives on the Desk's Steer tab. Every old address (`/steering/...`, `/rules/...`)
+    // lands there with its own path carried as `at`, so sub-pages and deep links keep working.
+    if (panel === 'steering' || panel === 'rules') {
+      return <RouteRedirect to={deskTabPath('steer', pathname + search)} navigate={navigate} />;
     }
     // `/skills` — the skills file manager over the daemon's effective plugin root (the skills
     // keystone): the catalog + KPI band, a drawer per skill (skill + support file trees, textarea
@@ -530,20 +566,11 @@ export function App(): React.ReactElement {
         </div>
       );
     }
-    // `/rules` and `/rules/:ruleId` — the Rules page (S12): DC's rule components on one frame, for
-    // every skin; the steering grid stays reachable from it as "All rules".
-    if (panel === 'rules') {
-      return (
-        <div className="flex flex-1 overflow-hidden">
-          <RulesPage ruleId={ruleId} runs={runs} navigate={navigate} />
-        </div>
-      );
-    }
     // `/watch` — the Watchtower (S14): TR's feed under every skin; its sentence is the needs-you count.
     if (panel === 'watch') {
       return (
         <div className="flex flex-1 overflow-hidden">
-          <WatchtowerPage count={attentionBadge(needRows)} runs={runs} runsLoaded={runsLoaded} runsError={runsError} onRetryRuns={refresh} navigate={navigate} now={needsNow} />
+          <WatchtowerPage count={attentionBadge(needRows)} runs={runs} runsLoaded={runsLoaded} runsError={runsError} onRetryRuns={refresh} navigate={navigate} now={needsNow} search={search} />
         </div>
       );
     }
@@ -570,19 +597,7 @@ export function App(): React.ReactElement {
       );
     }
     if (panel === 'repos') {
-      return (
-        <div className="flex-1 overflow-hidden">
-          <RepositoriesPanel
-            onSelectRun={selectRun}
-            autoShowRegister={showRegisterRepo}
-            navigate={navigate}
-            // Slice S (DES-UX-001 §2.3 rule 1): `/repos/new?project=<id>` — the
-            // ambient-project carry from an entry point inside a project context.
-            // The ONE shared derivation; the panel itself never re-parses the URL.
-            ambientProject={ambientProjectId(pathname, search)}
-          />
-        </div>
-      );
+      return <RouteRedirect to={deskTabPath('repositories', pathname + search)} navigate={navigate} />;
     }
     if (panel === 'repo-detail' && repoId) {
       return (
@@ -605,6 +620,10 @@ export function App(): React.ReactElement {
     // own scoreboard (`/testing/campaigns/:id`) and Evals stay.
     if (panel === 'testing' && testingPage === 'campaigns' && campaignId === null) {
       return <CampaignsRedirect search={search} navigate={navigate} />;
+    }
+    // Desk v2: Evals lives on the Desk's Evaluate tab (the address carried as `at`).
+    if (panel === 'testing' && testingPage === 'evals') {
+      return <RouteRedirect to={deskTabPath('evaluate', pathname + search)} navigate={navigate} />;
     }
     if (panel === 'testing') {
       return (
@@ -641,13 +660,9 @@ export function App(): React.ReactElement {
         </div>
       );
     }
-    // `/projects/:id` — the project management page (Edit + Archive/Restore).
+    // `/projects/:id` — the same Desk, filtered to this project.
     if (panel === 'project-detail' && projectId) {
-      return (
-        <div className="flex-1 overflow-y-auto">
-          <ProjectDetailPage projectId={projectId} navigate={navigate} runs={runs} needRows={needRows} now={needsNow} />
-        </div>
-      );
+      return <ProjectDesk projectId={projectId} navigate={navigate} runs={runs} needRows={needRows} now={needsNow} search={search} runsLoaded={runsLoaded} runsError={runsError} onRetryRuns={refresh} hosted={renderHosted} onCommand={openPalette} />;
     }
     if (panel === 'system') {
       return (

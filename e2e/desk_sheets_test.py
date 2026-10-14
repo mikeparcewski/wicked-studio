@@ -99,6 +99,8 @@ with sync_playwright() as p:
     # ── 1. the Desk's sheet ────────────────────────────────────────────────────────
     page.goto(f"{origin}/", wait_until="networkidle")
     page.get_by_test_id("desk").wait_for(state="visible", timeout=15000)
+    # Desk v2: "Look underneath" sits in the header's ⋯ panel.
+    page.get_by_test_id("desk-more").click()
     page.get_by_test_id("desk-sheet-open").click()
     page.get_by_test_id("sheet").wait_for(state="visible", timeout=5000)
     desk_tabs = tabs()

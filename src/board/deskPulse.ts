@@ -67,7 +67,8 @@ export function pulse(runs: readonly SessionView[], days: WindowDays, now: numbe
   };
 }
 
-function median(sorted: readonly number[]): number {
+/** Median of a nonempty sample sorted in ascending order. */
+export function median(sorted: readonly number[]): number {
   const mid = sorted.length >> 1;
   return sorted.length % 2 === 1 ? sorted[mid]! : (sorted[mid - 1]! + sorted[mid]!) / 2;
 }

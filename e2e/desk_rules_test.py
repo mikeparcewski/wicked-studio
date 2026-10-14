@@ -150,7 +150,7 @@ with sync_playwright() as p:
     if d2.get_attribute("data-open") != "true":
         d2.get_by_test_id("considered-toggle").click()
     d2.locator('[data-testid="considered-row"][data-verdict="cited"] [data-testid="considered-row-open"]').click()
-    page.wait_for_function("() => decodeURIComponent(location.pathname) === '/rules/proposal:pr-auto'", timeout=8000)
+    page.wait_for_function("() => decodeURIComponent((() => { const q = new URLSearchParams(location.search); const at = q.get('at'); return location.pathname === '/' && at ? at.split('?')[0] : location.pathname; })()) === '/rules/proposal:pr-auto'", timeout=8000)
     drawer = page.get_by_test_id("steering-rule-drawer")
     try:
         drawer.wait_for(state="visible", timeout=15000)
@@ -215,14 +215,20 @@ with sync_playwright() as p:
     page.screenshot(path=str(SHOTS / "desk-rules-page.png"))
     # ── 8. N7: no Hold control on a decision rule — judged while ITS drawer is open ─────────
     drawers, holds = page.get_by_test_id("steering-rule-drawer").count(), page.get_by_text("Hold work to it").count()
-    check("no-hold", drawers == 1 and holds == 0, drawers=drawers, holds=holds, path=page.evaluate("() => location.pathname"))
+    check("no-hold", drawers == 1 and holds == 0, drawers=drawers, holds=holds, path=page.evaluate("() => location.pathname + location.search"))
     # Esc closes the rule and the address returns to /rules.
     page.keyboard.press("Escape")
-    page.wait_for_function("() => location.pathname === '/rules'", timeout=8000)
-    check("rules-close", page.get_by_test_id("steering-rule-drawer").count() == 0 and page.get_by_test_id("rules-row").count() == 3)
+    page.wait_for_function("() => (() => { const q = new URLSearchParams(location.search); const at = q.get('at'); return location.pathname === '/' && at ? at.split('?')[0] : location.pathname; })() === '/rules'", timeout=8000)
+    # The Steer tab re-hosts the Rules page on the new address: let its rows land before counting.
+    try:
+        page.wait_for_function("() => !document.querySelector('[data-testid=\"steering-rule-drawer\"]') && document.querySelectorAll('[data-testid=\"rules-row\"]').length === 3", timeout=8000)
+    except Exception:  # noqa: BLE001 — reported by the check
+        pass
+    check("rules-close", page.get_by_test_id("steering-rule-drawer").count() == 0 and page.get_by_test_id("rules-row").count() == 3,
+          drawers=page.get_by_test_id("steering-rule-drawer").count(), rows=page.get_by_test_id("rules-row").count())
     # "All rules" reaches the steering grid; Back returns to the Rules page.
     page.get_by_test_id("rules-all").click()
-    page.wait_for_function("() => location.pathname === '/steering/policies'", timeout=8000)
+    page.wait_for_function("() => (() => { const q = new URLSearchParams(location.search); const at = q.get('at'); return location.pathname === '/' && at ? at.split('?')[0] : location.pathname; })() === '/steering/policies'", timeout=8000)
     try:
         page.get_by_test_id("steering-page").wait_for(state="visible", timeout=15000)
     except Exception as e:  # noqa: BLE001
@@ -230,7 +236,7 @@ with sync_playwright() as p:
         fail("rules-all", f"'All rules' did not reach the steering grid: {e}")
     page.go_back()
     # Back remounts the page in its loading state: wait for the rows the read restores, not just the address.
-    page.wait_for_function("() => location.pathname === '/rules' && document.querySelectorAll('[data-testid=\"rules-row\"]').length === 3", timeout=15000)
+    page.wait_for_function("() => (() => { const q = new URLSearchParams(location.search); const at = q.get('at'); return location.pathname === '/' && at ? at.split('?')[0] : location.pathname; })() === '/rules' && document.querySelectorAll('[data-testid=\"rules-row\"]').length === 3", timeout=15000)
     check("rules-all", page.get_by_test_id("rules-page").count() == 1 and page.get_by_test_id("rules-sentence").inner_text() == "3 rules in force · 1 from your words · 1 testing rule")
 
     check("no-followed", "Followed" not in page.evaluate("() => document.body.innerText"))

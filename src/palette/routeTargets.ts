@@ -69,9 +69,13 @@ export const NOT_A_DESTINATION = 'not-found';
 
 /** The parameterless destinations, in the words the palette shows. */
 const DESTINATIONS: ReadonlyArray<{ shape: string; label: string; href: string }> = [
-  { shape: 'home', label: 'Desk — home', href: '/' },
+  { shape: 'home', label: 'Desk — Work: what needs you, what is running', href: '/' },
+  // Desk v2: the Desk's tabs (Steer, Agents and Evaluate host the pages that used to be Workspace links).
+  { shape: 'home', label: 'Desk › Report — charts, spend and outcomes', href: '/?tab=report' },
+  { shape: 'home', label: 'Desk › Understand — compare and analyze', href: '/?tab=understand' },
+  { shape: 'home', label: 'Desk › Agents — sign-in, checks, readiness', href: '/?tab=agents' },
   { shape: 'watch', label: 'Watchtower — the full feed', href: '/watch' },
-  { shape: 'rules', label: `${PAGE_NAMES.steering} — what helpers are told`, href: '/rules' },
+  { shape: 'rules', label: `Desk › Steer — ${PAGE_NAMES.steering.toLowerCase()}: what agents are told`, href: '/rules' },
   { shape: 'everything', label: 'Everything — every session', href: everythingPath({ tab: 'sessions' }) },
   { shape: 'everything', label: 'Everything made — documents, pages, decks, videos', href: everythingPath({ tab: 'made' }) },
   { shape: 'everything', label: 'Helpers — the CLIs and their sign-in', href: everythingPath({ tab: 'helpers' }) },
@@ -80,7 +84,7 @@ const DESTINATIONS: ReadonlyArray<{ shape: string; label: string; href: string }
   { shape: 'steering-dashboard', label: 'Steering dashboard — proposals to review', href: '/steering/dashboard' },
   { shape: 'steering-policies', label: 'Steering — all rules and policies', href: '/steering/policies' },
   { shape: 'steering-memories', label: 'Steering — memories', href: '/steering/memories' },
-  { shape: 'testing-evals', label: `${PAGE_NAMES.evals} — check steering rules against samples`, href: '/testing/evals' },
+  { shape: 'testing-evals', label: `Desk › Evaluate — ${PAGE_NAMES.evals.toLowerCase()}: check steering rules against samples`, href: '/testing/evals' },
   { shape: 'repos', label: 'Repositories', href: '/repos' },
   { shape: 'repos-new', label: 'Register a repository', href: '/repos/new' },
   { shape: 'runs-new', label: 'Start a run', href: '/runs/new' },

@@ -11,6 +11,14 @@
  */
 
 :root {
+  /* Helper colours (DES-desk-v2 §4): one hue per helper on every chart; projects and workflows use the
+     neutral --cat- ramp so a hue never names two things. UI-CONTRACT ASK (desk-v2). */
+  --agent-claude: #c2410c; --agent-codex: #2563eb; --agent-pi: #4d7c0f; --agent-copilot: #0f766e;
+  --agent-opencode: #a16207; --agent-agy: #be185d; --agent-gemini: #be185d; --agent-other: #64748b;
+  --cat-1: color-mix(in oklab, var(--accent) 100%, var(--surface-card)); --cat-2: color-mix(in oklab, var(--accent) 72%, var(--surface-card));
+  --cat-3: color-mix(in oklab, var(--accent) 50%, var(--surface-card)); --cat-4: color-mix(in oklab, var(--ink-muted) 80%, var(--surface-card));
+  --cat-5: color-mix(in oklab, var(--ink-muted) 55%, var(--surface-card)); --cat-6: color-mix(in oklab, var(--ink-muted) 35%, var(--surface-card));
+
   /* ── Surface ramp (§2.3) — a slate-ink ramp with a cool blue bias (hue ≈ 222°), not flat
      grey: each step lifts ~5% lightness so page → rail → card → raised → overlay read as
      layers even before borders and shadows. Pure #000 was rejected — it collapses depth cues

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { decisionsApi, type DecisionView } from '../../api/decisions.js';
 import { isRouteUnsupported } from '../../api/errors.js';
 import { gateDecisionRows, type GateAnswer } from '../../board/gateDecisionRows.js';
@@ -30,6 +30,12 @@ const KINDS: ReadonlyArray<{ kind: FilterKind | null; label: string }> = [
   { kind: 'done', label: 'Finished' },
   { kind: 'delivery', label: 'Delivered' },
 ];
+
+/** `?filter=` on the address, when it names one of the page's kinds; anything else is Everything. */
+export function readFilterParam(search: string = typeof window === 'undefined' ? '' : window.location.search): FilterKind | null {
+  const v = new URLSearchParams(search).get('filter');
+  return KINDS.find((k) => k.kind !== null && k.kind === v)?.kind ?? null;
+}
 
 const STATE_WORD: Record<WatchRow['state'], string> = { open: 'Open', fixed: 'Fixed', dismissed: 'Dismissed', done: 'Done' };
 
@@ -143,7 +149,7 @@ export function ago(at: number, now: number): string {
  * still shows what studio folds itself; a failed read says it failed, with Try again, and is never
  * read as an empty feed.
  */
-export function WatchtowerPage({ runs, runsLoaded = true, runsError = null, onRetryRuns, navigate, now }: {
+export function WatchtowerPage({ runs, runsLoaded = true, runsError = null, onRetryRuns, navigate, now, search = window.location.search }: {
   count: number;
   runs: SessionView[];
   /** Whether a `GET /runs` has answered (App's `useRuns`). */
@@ -153,14 +159,31 @@ export function WatchtowerPage({ runs, runsLoaded = true, runsError = null, onRe
   onRetryRuns?: () => void;
   navigate: Navigate;
   now: number;
+  /** The router's query, updated by navigation and Back/Forward. */
+  search?: string;
 }): React.ReactElement {
-  const [kind, setKind] = useState<FilterKind | null>(null);
+  // The filter rides `?filter=<kind>` so a link can open the page filtered (the Desk's Needs you
+  // block opens `?filter=decision`); picking a chip keeps the address in step (replace, no history).
+  const [kind, setKindState] = useState<FilterKind | null>(() => readFilterParam(search));
+  useEffect(() => { setKindState(readFilterParam(search)); }, [search]);
+  const setKind = useCallback((k: FilterKind | null): void => {
+    setKindState(k);
+    const params = new URLSearchParams(search);
+    if (k === null) params.delete('filter'); else params.set('filter', k);
+    const query = params.toString();
+    navigate(`/watch${query ? `?${query}` : ''}${window.location.hash}`, { replace: true });
+  }, [navigate, search]);
   const gateKind = kind === 'approved' || kind === 'rejected' ? kind : null;
   // The decision record (`GET /decisions`), read when the page opens: the Approved / Rejected source.
   const [ledger, setLedger] = useState<{ decisions: DecisionView[]; error: string | null; loaded: boolean; unread: 'absent' | 'off' | null }>({ decisions: [], error: null, loaded: false, unread: null });
+  // A read that lands after the page is gone sets nothing (a setState on an unmounted page still
+  // touches `window`, which a torn-down test environment no longer has).
+  const mounted = useRef(true);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   const readLedger = useCallback((): Promise<void> => decisionsApi.list()
-    .then((r) => { setLedger({ decisions: r.decisions ?? [], error: null, loaded: true, unread: r.mode === 'off' ? 'off' : null }); })
+    .then((r) => { if (mounted.current) setLedger({ decisions: r.decisions ?? [], error: null, loaded: true, unread: r.mode === 'off' ? 'off' : null }); })
     .catch((e: unknown) => {
+      if (!mounted.current) return;
       // A daemon without the record: nothing to list, said by the empty line, not as a failure.
       const absent = isRouteUnsupported(e);
       setLedger({ decisions: [], error: absent ? null : e instanceof Error ? e.message : String(e), loaded: true, unread: absent ? 'absent' : null });
