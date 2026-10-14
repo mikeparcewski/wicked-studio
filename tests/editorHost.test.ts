@@ -646,12 +646,29 @@ describe('the host controller', () => {
     expect(host.frame.isConnected).toBe(false);
   });
 
-  it('no plugin.ready in 3 s: "didn’t start"', () => {
+  it('no plugin.ready in 3 s after its document loaded: "didn’t start"', () => {
     vi.useFakeTimers();
     const { host, ui } = makeHost();
+    host.frame.dispatchEvent(new Event('load'));
     vi.advanceTimersByTime(3_001);
     expect(host.alive).toBe(false);
     expect(ui.torn).toHaveBeenCalledWith('This editor didn’t start');
+  });
+
+  it('a daemon slow to serve the bundle is not a plugin that failed to start; a document that never loads is', () => {
+    vi.useFakeTimers();
+    const { host, ui } = makeHost();
+    vi.advanceTimersByTime(30_000); // :7701 took 20-59 s to serve the deck's entry (orchestrator 2026-10-14)
+    expect(host.alive).toBe(true);
+    host.frame.dispatchEvent(new Event('load'));
+    vi.advanceTimersByTime(2_000);
+    expect(host.alive).toBe(true);
+    vi.advanceTimersByTime(1_001);
+    expect(ui.torn).toHaveBeenCalledWith('This editor didn’t start');
+    const late = makeHost();
+    vi.advanceTimersByTime(90_001);
+    expect(late.host.alive).toBe(false);
+    expect(late.ui.torn).toHaveBeenCalledWith('This editor didn’t load');
   });
 
   it('grants are enforced per request; drops are counted and three tear down', async () => {

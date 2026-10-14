@@ -27,7 +27,8 @@ export const HOST_REPLY_MS = 2_000;
  *    accepted only from that frame's own window, for the editor/version the host loaded, with a
  *    protocol overlap. The host then transfers a MessagePort and ignores every window message from
  *    the frame. A second `load` of the frame (it navigated) is a teardown; an element is never re-used.
- *  - No `plugin.ready` within 3 s: teardown, "didn't start". `host.ping` every 10 s, 2 s to answer.
+ *  - No `plugin.ready` within 3 s of the frame's document loading: teardown, "didn't start" (a document that never
+ *    loads: "didn't load" at 90 s). `host.ping` every 10 s, 2 s to answer.
  *  - Every message is strictly parsed; every request is checked against the host's grant set (crew's
  *    decided set) and answered within 10 s; 200 messages/s, then `rate_limited`, teardown after 5 s.
  *  - Edits: one write in flight; ops checked against the HOST's inventory of the current version,
@@ -276,9 +277,13 @@ export class EditorHost {
     window.addEventListener('message', this.onWindow);
     window.addEventListener('blur', this.onHostBlur);
     this.frame.addEventListener('load', this.onLoad);
+    // The 3 s for plugin.ready start when the frame's document has loaded (frameLoaded): a slow daemon serving the
+    // bundle is not a plugin that failed to start (orchestrator 2026-10-14: :7701 took 20-59 s to serve the deck's
+    // entry, and the card tore down at 3 s). A document that never loads is torn down at loadMs. Armed before the
+    // frame is inserted: an insertion may fire its first load synchronously (codex h2 r22 P3).
+    this.readyTimer = setTimeout(() => { if (!this.handshaken) this.teardown('This editor didn’t load'); }, LIMITS.loadMs);
     this.frame.src = this.o.src;
     this.o.container.appendChild(this.frame);
-    this.readyTimer = setTimeout(() => { if (!this.handshaken) this.teardown('This editor didn’t start'); }, LIMITS.readyMs);
   }
 
   get alive(): boolean { return !this.torn; }
@@ -327,8 +332,12 @@ export class EditorHost {
     this.port.onmessage = (m) => this.portMessage(m.data);
     const a = this.o.adapter.artifact();
     const surface = this.o.surface ?? (this.o.size === 'inline' ? 'card' : this.o.size === 'pane' ? 'options' : 'full');
+    // A tab picked before the handshake (the operator clicked Coverage while the frame was loading) is the tab the
+    // instance starts on: host.tab before the port existed went nowhere.
+    const wanted = this.tabWanted;
+    const tab = wanted !== undefined && this.decl.options?.tabs.some((t) => t.id === wanted && t.render === 'plugin') ? wanted : this.o.tab;
     const v2 = this.protocol >= 2
-      ? { surface, ...(this.o.tab !== undefined ? { tab: this.o.tab } : {}), ...(surface === 'full' && this.decl.full?.modes != null ? { mode: this.o.mode ?? this.decl.full.default } : {}) }
+      ? { surface, ...(tab !== undefined ? { tab } : {}), ...(surface === 'full' && this.decl.full?.modes != null ? { mode: this.o.mode ?? this.decl.full.default } : {}) }
       : {};
     this.frame.contentWindow?.postMessage(event('host.hello', {
       protocol: this.protocol, ...v2, artifact: a, size: this.o.size, grants: [...this.grants],
@@ -349,7 +358,10 @@ export class EditorHost {
     this.loads += 1;
     this.log({ kind: 'load', count: this.loads });
     // The window survives navigation; a second document is never trusted with a port or a grant.
-    if (this.loads >= 2) this.teardown('This editor reloaded itself');
+    if (this.loads >= 2) { this.teardown('This editor reloaded itself'); return; }
+    if (this.handshaken || this.torn) return;
+    if (this.readyTimer !== null) clearTimeout(this.readyTimer);
+    this.readyTimer = setTimeout(() => { if (!this.handshaken) this.teardown('This editor didn’t start'); }, LIMITS.readyMs);
   }
 
   // ── the port ──────────────────────────────────────────────────────────────────────────────
@@ -733,8 +745,12 @@ export class EditorHost {
     return { handled: pl?.handled === true, status };
   }
 
+  /** The tab asked for before the handshake: `host.hello` carries it (there is no port to send `host.tab` on yet). */
+  private tabWanted: string | undefined = undefined;
+
   /** The options instance's plugin tab now shown (`host.tab`). */
   setTab(tab: string): void {
+    if (!this.handshaken) { this.tabWanted = tab; return; }
     if (this.protocol >= 2 && this.decl?.options?.tabs.some((t) => t.id === tab && t.render === 'plugin')) this.post(event('host.tab', { tab }));
   }
 
