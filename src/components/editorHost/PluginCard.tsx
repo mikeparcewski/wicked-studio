@@ -88,7 +88,18 @@ function CappedCard(props: PluginCardProps & { editor: EditorView }): React.Reac
     if (panel.group?.key === groupKey(props.editor.id, key)) panel.closeGroup();
   }, [routeKey, key, props.editor.id]);
   useEffect(() => { if (asked && !live) touchLive(key); }, [asked, live, key]);
-  if (live || full) return <LiveCard {...props} />;
+  // One adapter per artifact for as long as its card is on the page, across resting and waking: the Options group
+  // and a woken frame must share it, or a write's Undo loses the adapter's history (codex fu r2 P2).
+  const bindingRef = useRef(props.binding);
+  bindingRef.current = props.binding;
+  const { adapter: adapterProp } = props;
+  const b = props.binding;
+  const adapter = useMemo<SurfaceAdapter | null>(
+    () => adapterProp ?? adapterFor(bindingRef.current),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed by the artifact's identity; the binding is read through its ref
+    [adapterProp, b.artifactKey, b.source, b.projectId, b.docId, b.kind],
+  );
+  if (live || full) return <LiveCard {...props} {...(adapter !== null ? { adapter } : {})} />;
   return (
     <section data-testid="plugin-card" data-state="still" data-editor={props.editor.id} className="wk-pcard">
       <header className="wk-pcard-head">
@@ -107,6 +118,8 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
   const run = useRunHost();
   const frameBox = useRef<HTMLDivElement | null>(null);
   const hostRef = useRef<EditorHost | null>(null);
+  /** Versions an Options write made while this card had no connected host: adopted at its handshake. */
+  const pendingAdopt = useRef<{ group: string; version: number }[]>([]);
   const logRef = useRef<HostLogEntry[]>([]);
   const [decl, setDecl] = useState<Surfaces | null>(null);
   const [protocol, setProtocol] = useState(1);
@@ -233,6 +246,8 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
           torn: (reason) => { if (live.current) setTorn(reason); },
           log: (e) => { logRef.current.push(e); if (logRef.current.length > 200) logRef.current.shift(); },
           surfaces: (s, p, n) => {
+            // Only this group's: a queue left by another artifact's group is dropped, never adopted here.
+            for (const p of pendingAdopt.current.splice(0)) if (p.group === group) host.adopt(p.version);
             replayGroupSelection(group, 'card');
             // A morph made before the handshake had no port: say the surface now shown (codex h2-r8 P2).
             const now = fullRef.current ? 'full' : 'card';
@@ -261,7 +276,10 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
       else if (e.type === 'changed') hostRef.current?.artifactChanged(e.head, e.kind);
       else if (e.type === 'write') {
         if (e.ok) {
-          hostRef.current?.adopt(e.write.version);
+          // A write that lands while the frame is being remade (Reload it, waking) is adopted once the new host
+          // has shaken hands, so its Undo is this card's (codex fu r2 P2).
+          if (hostRef.current?.connected === true) hostRef.current.adopt(e.write.version);
+          else pendingAdopt.current.push({ group, version: e.write.version });
           hostRef.current?.artifactChanged(e.write.version, e.write.verb === 'restyled' ? 'theme' : 'deterministic');
           written(e.write);
         } else if (live.current) setLine({ kind: 'failed', text: e.message });

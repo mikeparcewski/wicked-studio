@@ -208,7 +208,8 @@ function DemoScriptActions({ runId, units, onChanged }: { runId: string; units: 
       {open && (
         <div data-testid="demo-script-box" className="wk-walk-edit">
           <p className="wk-walk-quiet">The presenter’s script. Change it here before anything records; the recorder reads it when you approve the plan.</p>
-          <textarea data-testid="demo-script" value={text} onChange={(e) => setDraft({ take, text: e.target.value })} rows={6} className="wk-walk-storyline" aria-label="The presenter’s script" />
+          {/* Read-only while it saves: the save then clears exactly the text it sent (codex fu r2 P2). */}
+          <textarea data-testid="demo-script" value={text} readOnly={busy} onChange={(e) => setDraft({ take, text: e.target.value })} rows={6} className="wk-walk-storyline" aria-label="The presenter’s script" />
           <div className="wk-prop-btns">
             <button type="button" data-testid="demo-script-save" disabled={busy || text.trim() === '' || text === (rec.script ?? '')} onClick={() => void save()} className="wk-prop-btn wk-prop-btn--primary">Save the script</button>
           </div>
