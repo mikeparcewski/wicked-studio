@@ -462,7 +462,8 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
         onExit={onExit}
       >
         <div className="wk-pcard-frame" data-testid="plugin-card-frame" data-interactive={interactive ? 'true' : 'false'} style={frameStyle}>
-          <div ref={frameBox} key={mountKey} className="wk-plugin-frame-box" />
+          {/* Under the read-only lens the live editor is inert: no Tab or typing reaches it (codex h2-r19 P2). */}
+          <div ref={frameBox} key={mountKey} className="wk-plugin-frame-box" {...(full && lensVersion !== null ? { inert: '' as unknown as boolean, 'aria-hidden': true } : {})} />
           {/* A version lens from the address (`?v=N`): read-only, over the live frame, which stays mounted. */}
           {full && lensVersion !== null && binding.docId !== undefined && binding.docId !== '' && (
             <div className="wk-pcard-lens">
