@@ -28,6 +28,12 @@ it('workflowLabel says a key in plain words, acronyms kept', () => {
   expect(workflowLabel('feature')).toBe('Feature');
 });
 
+it('a plan the engine generated for one run is never named by its id (the run panel showed "Wf 200fa059 …")', () => {
+  expect(workflowLabel('wf-200fa059-c1b7-4d65-8a6d-8959797ecfb9')).toBe('Planned for this run');
+  expect(workflowLabel('wf-recon-mttdwnhf-e3e3c5f4:wicked-crew:a0')).toBe('Recon, planned for this run');
+  expect(workflowLabel('wf-w2')).toBe('Wf w2'); // a catalog key that merely starts with wf- is still a key
+});
+
 it('the list and the steps heading use the plain names', async () => {
   listWorkflows.mockResolvedValue({ workflows: [
     { id: 'domain-extraction', phases: [{ id: 'survey' }] },

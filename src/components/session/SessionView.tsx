@@ -38,7 +38,7 @@ import { reviewerName } from '../WatchLines.js';
 import { ChatQuestions, RunQuestions } from './ThreadQuestions.js';
 import { SourceChips } from './SourceChips.js';
 import { SinceYouLeft } from './SinceYouLeft.js';
-import { Composer, type ComposerSend } from './Composer.js';
+import { Composer, type ComposerSend, type ComposerSuggestion } from './Composer.js';
 import { quoteLabel } from '../../board/aboutChips.js';
 import { addAboutChip } from '../../store/composerChips.js';
 import { usePlanDrafts } from '../../store/planDrafts.js';
@@ -50,7 +50,9 @@ import { turnKey, useDecisionsStore } from '../../store/decisions.js';
 import { DecisionLine } from '../decisions/DecisionLine.js';
 import { TurnConsidered } from '../decisions/ConsideredLine.js';
 import { collapseArtifacts, paneOpen, useArtifactSizes } from '../../store/artifactSizes.js';
-import { RunArtifacts } from './RunArtifacts.js';
+import { RunArtifacts, useRunDocs } from './RunArtifacts.js';
+import { editorKindOf } from '../../board/artifactMorph.js';
+import { DEMO_VIDEO_ID, openLaunchWizard } from '../../store/launchWizard.js';
 import { OperatorMessage } from '../OperatorMessage.js';
 import { Markdown } from '../Markdown.js';
 import { CitationStrip, citationLabel, citationMarks } from '../citations.js';
@@ -594,8 +596,21 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
   const artifactMissing = useArtifactMissing(artifactKey, ready && mine.length > 0);
   useEffect(() => () => collapseArtifacts(), [sessionId]);
 
+  // DES §7.4: the retired "Demo video" header button is an ordinary turn suggestion — a run here that made a deck or a
+  // document in a project offers "Make a demo video of this", which opens the New job form's demo video in that project.
+  const newest = mine.length > 0 ? mine[mine.length - 1] : null;
+  const madeDocs = useRunDocs(newest);
+  const suggestions = useMemo<ComposerSuggestion[]>(() => {
+    const projectId = newest?.session.project_id;
+    const made = madeDocs.some((d) => { const k = editorKindOf(d.style); return k === 'deck' || k === 'document'; });
+    if (!made || typeof projectId !== 'string' || projectId === '') return [];
+    return [{ id: 'demo-video', label: 'Make a demo video of this', title: 'A demo video of the running app, in this project',
+      onPick: () => openLaunchWizard({ workflowId: DEMO_VIDEO_ID, projectId, composerKey: sessionId }) }];
+  }, [madeDocs, newest, sessionId]);
+
   // H3: the composer's props, shared by the thread's composer and the full-screen chat drawer's (one draft).
   const composerProps = {
+    suggestions,
     composerKey: sessionId,
     // studio#606 (4): while a run here is live, Send starts a separate Ask — say so before Send.
     footer: scopeNote !== null ? <p data-testid="session-composer-scope" role="note" className="wk-composer-hint">{scopeNote}</p> : null,
