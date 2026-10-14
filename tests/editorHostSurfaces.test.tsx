@@ -7,6 +7,8 @@ import {
 import type { Surfaces } from '../src/editors/surfaces.js';
 import { FullShell } from '../src/components/editorHost/FullShell.js';
 import { ControlsTab, HostPanel } from '../src/components/editorHost/HostPanel.js';
+// The host's own Versions and Checks tabs register on import (as PluginCard imports them in the app).
+import '../src/components/editorHost/hostTabs.js';
 
 /** H2 — the host surfaces' own behaviour (HOST-API rev 2): the stores, the relay, the controls tab, the panel and the
  *  full-screen shell. The plugin side is the conformance journey's. */
