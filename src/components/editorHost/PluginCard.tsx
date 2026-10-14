@@ -146,7 +146,7 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
     const panel = useHostPanel.getState();
     // Already open: reveal it (unfold, back to its tabs) without remounting its options instance (codex h2-r11 P3).
     if (panel.group?.key === group) {
-      panel.setFolded(false);
+      panel.reveal();
       if (panel.tab.owner === 'run') panel.setTab(firstTabOf(panel.group));
       return;
     }
@@ -250,11 +250,15 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
         // A version the host's own chrome wrote for this artifact (Match a website): this card owns its Undo — offered
         // only once the adapter has re-read the manifest, so Undo knows the version's parent (codex h2-r11 P2).
         const v = e.version;
-        void Promise.resolve(adapter?.refresh?.()).catch(() => null).then(() => {
-          hostRef.current?.adopt(v);
-          hostRef.current?.artifactChanged(v, 'theme');
-          if (live.current) setLine({ kind: 'edited', version: v, base: e.base ?? v, what: e.words, verb: 'restyled' });
-        });
+        hostRef.current?.artifactChanged(v, 'theme');
+        void Promise.resolve(adapter?.refresh?.()).then(
+          () => {
+            hostRef.current?.adopt(v);
+            if (live.current) setLine({ kind: 'edited', version: v, base: e.base ?? v, what: e.words, verb: 'restyled' });
+          },
+          // The manifest could not be re-read: say what changed, with no Undo that could not find its parent (codex h2-r12 P2).
+          () => { if (live.current) setLine({ kind: 'status', text: `The theme changed · version ${v}` }); },
+        );
       }
     });
     return () => {

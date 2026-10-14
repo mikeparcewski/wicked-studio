@@ -35,6 +35,9 @@ export function HostPanel({ runTab, ribbon }: HostPanelProps): React.ReactElemen
   const [overlay, setOverlay] = useState(false);
   // A newly opened group shows the panel, also on a narrow screen.
   useEffect(() => { if (group !== null) setOverlay(true); }, [group]);
+  // A card's Options on an open group reveals the panel again, also as the overlay (codex h2-r12 P3).
+  const revealed = useHostPanel((s) => s.revealed);
+  useEffect(() => { if (revealed > 0) setOverlay(true); }, [revealed]);
 
   // Folded or narrow, the panel is the ribbon — but its subtree stays mounted (hidden), so the group's options
   // instance and its confirmed values live as long as the group (codex h2b-r1 P2).

@@ -190,6 +190,9 @@ export interface HostPanelState {
   closeGroup(): void;
   setTab(tab: PanelTab): void;
   setFolded(folded: boolean): void;
+  /** Bumped to show the panel again (unfold, and open the overlay below 1200 px) without touching the group. */
+  revealed: number;
+  reveal(): void;
 }
 
 export const useHostPanel = create<HostPanelState>((set, get) => ({
@@ -200,6 +203,8 @@ export const useHostPanel = create<HostPanelState>((set, get) => ({
   closeGroup: () => set({ group: null, tab: RUN_TAB }),
   setTab: (tab) => { if (tab.owner === 'run' || get().group !== null) set({ tab }); },
   setFolded: (folded) => set({ folded }),
+  revealed: 0,
+  reveal: () => set((s) => ({ folded: false, revealed: s.revealed + 1 })),
 }));
 
 /** The panel is a ribbon below this width (css px). */
