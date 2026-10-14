@@ -1,0 +1,61 @@
+{
+  "card": {
+    "interactive": true,
+    "aspect": "auto",
+    "actions": [
+      {
+        "id": "next",
+        "label": "Next part",
+        "verb": "plugin"
+      },
+      {
+        "id": "ask",
+        "label": "Ask about it",
+        "verb": "host:ask"
+      }
+    ]
+  },
+  "options": {
+    "tabs": [
+      {
+        "id": "parts",
+        "label": "Parts",
+        "render": "plugin"
+      },
+      {
+        "id": "view",
+        "label": "View",
+        "render": "controls",
+        "controls": [
+          {
+            "id": "density",
+            "label": "Density",
+            "type": "segmented",
+            "options": [
+              {
+                "id": "roomy",
+                "label": "Roomy"
+              },
+              {
+                "id": "compact",
+                "label": "Compact"
+              }
+            ]
+          },
+          {
+            "id": "numbers",
+            "label": "Show numbers",
+            "type": "toggle"
+          }
+        ]
+      }
+    ]
+  },
+  "full": {
+    "modes": [
+      "simple",
+      "advanced"
+    ],
+    "default": "simple"
+  }
+}

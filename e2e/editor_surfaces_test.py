@@ -6,9 +6,10 @@ the scripted sample artifact, renders its CARD (host chrome, the declared action
 panel (a plugin tab and a host-rendered controls tab) and FULL SCREEN (the nav collapses and returns,
 Simple/Advanced, the chat drawer) — all drawn from its declaration, with no host code that knows the plugin.
 
-  python3 e2e/editor_surfaces_test.py                       # the protocol-2 sample (e2e/editor-fixtures/v2-sample.html)
-  python3 e2e/editor_surfaces_test.py --bundle scaffold     # a builder-scaffolded plugin (e2e/editor-fixtures/scaffold.html,
-                                                            # written by garden's scaffold.py in the acceptance CI job)
+  python3 e2e/editor_surfaces_test.py                       # both bundles (CI)
+  python3 e2e/editor_surfaces_test.py --bundle v2-sample    # the hand-written protocol-2 sample (e2e/editor-fixtures/v2-sample.html)
+  python3 e2e/editor_surfaces_test.py --bundle scaffold     # the builder-scaffolded plugin (e2e/editor-fixtures/scaffold.html),
+                                                            # garden scaffold.py with the defaults, untouched
 
 Light and dark at 1440x700. Captures: e2e/shots/editor-surfaces-<bundle>-<surface>-<theme>.png.
 Env: FEEDBACK_PORT (default 4356).
@@ -27,11 +28,19 @@ PORT = int(os.environ.get("FEEDBACK_PORT", "4356"))
 W, H = 1440, 700
 SHOTS = REPO / "e2e" / "shots"
 FIX = REPO / "e2e" / "editor-fixtures"
-BUNDLES = {"v2-sample": ("acme-v2", "v2-sample.html"), "scaffold": ("acme-scaffold", "scaffold.html")}
+# scaffold.html is garden's `scaffold.py` output with the defaults (the B1 builder's acme-notes sample, pinned as
+# its pack manifest pins it); scaffold.surfaces.json is that manifest's `surfaces`.
+BUNDLES = {"v2-sample": ("acme-v2", "v2-sample.html"), "scaffold": ("acme-notes", "scaffold.html")}
 
 ap = argparse.ArgumentParser()
-ap.add_argument("--bundle", choices=sorted(BUNDLES), default="v2-sample")
+ap.add_argument("--bundle", choices=sorted(BUNDLES) + ["all"], default="all")
 args = ap.parse_args()
+if args.bundle == "all":
+    # Each bundle in its own run (its own server port): one red one says which.
+    import subprocess
+    rcs = [subprocess.run([sys.executable, __file__, "--bundle", b], env=dict(os.environ, FEEDBACK_PORT=str(PORT + i))).returncode
+           for i, b in enumerate(sorted(BUNDLES))]
+    sys.exit(max(rcs))
 EDITOR, FILE = BUNDLES[args.bundle]
 
 report: dict = {"ok": False, "bundle": args.bundle, "cases": {}}
@@ -52,7 +61,7 @@ def check(case: str, ok: bool, **detail) -> None:
 
 entry = FIX / FILE
 if not entry.is_file():
-    fail("bundle", f"{entry} is missing (the scaffold bundle is written by the acceptance CI job)")
+    fail("bundle", f"{entry} is missing")
 # The declaration the plugin sends, from its manifest sidecar (<bundle>.surfaces.json — the scaffold's manifest
 # `surfaces`): the journey asserts the host drew exactly that.
 side = entry.with_suffix(".surfaces.json")

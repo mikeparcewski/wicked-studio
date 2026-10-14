@@ -7932,7 +7932,7 @@ class W2Handler(SimpleHTTPRequestHandler):
             return True
         # /api/v1/editors/<id>/<version>/entry
         if len(parts) == 7 and parts[6] == "entry":
-            files = {"acme-good": "good.html", "acme-hostile": "hostile.html", "acme-mcp": "mcp-inspector.html", "acme-v2": "v2-sample.html", "acme-scaffold": "scaffold.html"}
+            files = {"acme-good": "good.html", "acme-hostile": "hostile.html", "acme-mcp": "mcp-inspector.html", "acme-v2": "v2-sample.html", "acme-notes": "scaffold.html"}
             name = files.get(parts[4])
             first_party = next((e for e in self._studio_editors() if e["manifest"]["id"] == parts[4]), None)
             if first_party is not None:
