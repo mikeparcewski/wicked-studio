@@ -147,7 +147,13 @@
     // The plugin is never told a call's rpc id, so it does not claim to know which log entry is this call's
     // (codex h5-r2..r6): it shows the NEWEST matching request in the log since this call left (same method, same
     // tool or resource), and its own answer by rpc id, and says so.
-    const named = (e) => lastCall.name === null || (typeof e.text === 'string' && e.text.includes(JSON.stringify(lastCall.name)));
+    // The logged request's own params, parsed: its tool or prompt name, or its resource uri (codex h5-r7). A cut or
+    // unparseable entry can't be checked, so it never passes for this call.
+    const named = (e) => {
+      if (lastCall.name === null) return true;
+      if (e.truncated || typeof e.text !== 'string') return false;
+      try { const m = JSON.parse(e.text); const p = (m && m.params) || {}; return p.name === lastCall.name || p.uri === lastCall.name; } catch { return false; }
+    };
     const matches = log.filter((e) => !e.gap && e.seq > lastCall.after && e.dir === 'out' && e.kind === 'request' && e.method === lastCall.method && named(e));
     const sent = matches[matches.length - 1];
     const got = sent ? log.find((e) => !e.gap && e.kind === 'response' && e.rpcId === sent.rpcId) : undefined;
