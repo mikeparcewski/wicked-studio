@@ -17,7 +17,7 @@ import type { FullMode, Surfaces } from './surfaces.js';
  *  - The run page supplies what only it knows through {@link RunHostContext}: the Run tab, the chat drawer,
  *    the phase and the open gate's host controls.
  *  - Instances of one artifact (card/full and options) form a GROUP keyed by {@link groupKey}; selection is
- *    relayed inside a group only ({@link relaySelection}).
+ *    relayed inside a group only ({@link relay}).
  */
 
 // ── what a caller passes ────────────────────────────────────────────────────────────────────────────
@@ -49,6 +49,7 @@ export interface ArtifactBinding {
 export type AdapterCapability = 'read' | 'write' | 'versions' | 'parts' | 'media' | 'export' | 'theme' | 'mcp' | 'review' | 'checks';
 
 export interface ExportOption { format: string; label: string }
+export type ExportOutcome = { ok: true; text: string; href: string; file: string } | { ok: false; text: string };
 /** A host status pill on the card ("Version 3", "2 changed", "Ready to watch"). Host words, from adapter state. */
 export interface StatusPill { id: string; text: string; tone: 'neutral' | 'good' | 'warn' | 'bad' }
 /** A reviewable part (slide, chapter, section): what the host review capability approves (§7.4). */
@@ -65,6 +66,8 @@ export interface SurfaceAdapter extends HostAdapter {
   parts?(): Promise<readonly ArtifactPart[]>;
   /** Re-read the head; a moved head is posted to every instance as `artifact.changed`. Polled at idle (5 s). */
   refresh?(): Promise<{ head: number; kind: VersionKind } | null>;
+  /** Make an export file of `version` (needs `export`): the host draws the working line and the Download link. */
+  exportFile?(format: string, version: number): Promise<ExportOutcome>;
   /** Host chrome re-renders on a change of pills/parts/head. */
   subscribe?(onChange: () => void): () => void;
 }
@@ -105,18 +108,23 @@ export function hostTabsFor(adapter: SurfaceAdapter): HostTabSpec[] {
 /** One group per (editor id, artifact key): relays never cross groups. */
 export function groupKey(editorId: string, artifactKey: string): string { return `${editorId}::${artifactKey}`; }
 
-type SelectionListener = (anchors: readonly AnchorRef[]) => void;
-const relays = new Map<string, Map<string, SelectionListener>>();
+/** What one instance of a group tells the others: a pointing (`host.selection`), or a head that moved
+ *  (`artifact.changed`), so every instance shows the same version. */
+export type GroupEvent =
+  | { type: 'selection'; anchors: readonly AnchorRef[] }
+  | { type: 'changed'; head: number; kind: VersionKind };
+type GroupListener = (e: GroupEvent) => void;
+const relays = new Map<string, Map<string, GroupListener>>();
 /** An instance joins its group's relay; the returned function leaves it. */
-export function joinGroup(group: string, instance: string, onSelection: SelectionListener): () => void {
+export function joinGroup(group: string, instance: string, on: GroupListener): () => void {
   let m = relays.get(group);
   if (m === undefined) { m = new Map(); relays.set(group, m); }
-  m.set(instance, onSelection);
+  m.set(instance, on);
   return () => { const g = relays.get(group); g?.delete(instance); if (g?.size === 0) relays.delete(group); };
 }
-/** `selection.set` from `from` reaches every OTHER instance of the group as `host.selection`. */
-export function relaySelection(group: string, from: string, anchors: readonly AnchorRef[]): void {
-  for (const [id, fn] of relays.get(group) ?? []) if (id !== from) fn(anchors);
+/** An event from `from` reaches every OTHER instance of the group, never another group. */
+export function relay(group: string, from: string, e: GroupEvent): void {
+  for (const [id, fn] of relays.get(group) ?? []) if (id !== from) fn(e);
 }
 
 // ── the host panel (run page option B, §7.2) ────────────────────────────────────────────────────────
@@ -135,16 +143,29 @@ export interface OptionsGroup {
   adapter: SurfaceAdapter;
 }
 
-/** `run` is the host's base tab; otherwise a plugin tab id or a host tab id of the open group. */
-export type PanelTab = 'run' | string;
+/** A panel tab, by owner, so a plugin tab id can never be mistaken for the Run tab or a host tab (codex api-r1 P1). */
+export type PanelTab = { owner: 'run' } | { owner: 'plugin'; id: string } | { owner: 'host'; id: HostTabId };
+export const RUN_TAB: PanelTab = { owner: 'run' };
+export function sameTab(a: PanelTab, b: PanelTab): boolean {
+  return a.owner === b.owner && (a.owner === 'run' || (a as { id: string }).id === (b as { id: string }).id);
+}
+
+/** The tab Options focuses: the group's first plugin tab, else its first host tab (codex api-r1 P2). */
+export function firstTabOf(group: OptionsGroup): PanelTab {
+  const p = group.surfaces.options?.tabs[0];
+  if (p !== undefined) return { owner: 'plugin', id: p.id };
+  const h = hostTabsFor(group.adapter)[0];
+  return h !== undefined ? { owner: 'host', id: h.id } : RUN_TAB;
+}
 
 export interface HostPanelState {
   group: OptionsGroup | null;
   tab: PanelTab;
   /** The operator folded the panel (wide screens); below 1200 px it is the ribbon regardless. */
   folded: boolean;
-  /** Another plugin's Options REPLACES the group (one plugin group at a time) and focuses its first tab. */
-  openGroup(group: OptionsGroup, tab?: string): void;
+  /** Another plugin's Options REPLACES the group (one plugin group at a time) and focuses its first tab. The
+   *  group's ONE options instance mounts on open — controls-only groups too — and is disposed on close. */
+  openGroup(group: OptionsGroup, tab?: PanelTab): void;
   closeGroup(): void;
   setTab(tab: PanelTab): void;
   setFolded(folded: boolean): void;
@@ -152,11 +173,11 @@ export interface HostPanelState {
 
 export const useHostPanel = create<HostPanelState>((set, get) => ({
   group: null,
-  tab: 'run',
+  tab: RUN_TAB,
   folded: false,
-  openGroup: (group, tab) => set({ group, tab: tab ?? group.surfaces.options?.tabs[0]?.id ?? 'run', folded: false }),
-  closeGroup: () => set({ group: null, tab: 'run' }),
-  setTab: (tab) => { if (tab === 'run' || get().group !== null) set({ tab }); },
+  openGroup: (group, tab) => set({ group, tab: tab ?? firstTabOf(group), folded: false }),
+  closeGroup: () => set({ group: null, tab: RUN_TAB }),
+  setTab: (tab) => { if (tab.owner === 'run' || get().group !== null) set({ tab }); },
   setFolded: (folded) => set({ folded }),
 }));
 
@@ -243,12 +264,12 @@ export interface FullShellProps {
   phase?: string | null;
   /** Present only when the plugin declared modes. */
   modes?: readonly FullMode[] | null;
-  mode?: FullMode;
+  mode?: FullMode | undefined;
   onMode?(mode: FullMode): void;
   /** The open gate's host controls (from RunHostContext.gateActions). */
-  gateActions?: ReactNode;
+  gateActions?: ReactNode | undefined;
   /** The drawer's body (RunHostContext.renderChat); no Chat button without it. */
-  chat?: ReactNode;
+  chat?: ReactNode | undefined;
   onExit(): void;
   /** The morphing frame: kept in the SAME tree position open or closed, so the iframe never re-parents. */
   children: ReactNode;

@@ -1,4 +1,6 @@
-import { registerAdapter, type AdapterCapability, type ArtifactBinding, type ExportOption, type StatusPill, type SurfaceAdapter } from '../hostApi.js';
+import { interactiveUrl, type ExportFormat } from '../../api/interactive.js';
+import { exportReadyText, runExport } from '../../interactive/exportWire.js';
+import { registerAdapter, type AdapterCapability, type ArtifactBinding, type ExportOption, type ExportOutcome, type StatusPill, type SurfaceAdapter } from '../hostApi.js';
 import { InteractiveDocAdapter } from '../interactiveDocAdapter.js';
 
 /** The formats interactive renders, per artifact kind (what ArtifactMorph's EXPORTS table said). */
@@ -22,6 +24,12 @@ export class InteractiveDocSurfaceAdapter extends InteractiveDocAdapter implemen
   }
   exports(): readonly ExportOption[] { return FORMATS[this.binding.kind] ?? []; }
   pills(): readonly StatusPill[] { return this.head >= 1 ? [{ id: 'version', text: `Version ${this.head}`, tone: 'neutral' }] : [{ id: 'version', text: 'Building…', tone: 'warn' }]; }
+  async exportFile(format: string, version: number): Promise<ExportOutcome> {
+    const label = this.exports().find((x) => x.format === format)?.label ?? format;
+    const out = await runExport({ projectId: this.binding.projectId, docId: this.binding.docId ?? '', version, format: format as ExportFormat });
+    if (out.ok) return { ok: true, text: exportReadyText(format as ExportFormat, out.file, out.report), href: interactiveUrl(this.binding.projectId, out.result.download), file: out.file };
+    return { ok: false, text: `The ${label} was not made — ${out.hint}` };
+  }
   subscribe(onChange: () => void): () => void { this.listeners.add(onChange); return () => { this.listeners.delete(onChange); }; }
 }
 

@@ -11,6 +11,7 @@ import { PageEditor, type FrameParts } from './PageEditor.js';
 import { NoEditorPage, PluginArtifact } from './PluginArtifact.js';
 import { useEditorFor, useEditors } from '../../store/editors.js';
 import { DEMO_VIDEO_ID, openLaunchWizard } from '../../store/launchWizard.js';
+import { PluginCard } from '../editorHost/PluginCard.js';
 
 /** WT-U1: a body other than the page-editor family — a run's walkthrough, a demo's video (EP-D3) —
  *  behind the same chrome: its kind (the artifact's `data-kind`) and the body drawn at each size.
@@ -47,7 +48,40 @@ type ExportLine =
   | { state: 'ready'; text: string; href: string; file: string }
   | { state: 'failed'; text: string };
 
-export function ArtifactMorph({ artifactKey, title, projectId, docId, composerKey, kind = 'page', repoId = null, slot }: {
+type ArtifactMorphProps = {
+  artifactKey: string;
+  title: string;
+  projectId: string;
+  docId: string;
+  composerKey: string;
+  kind?: EditorKind;
+  repoId?: string | null;
+  slot?: ArtifactSlot;
+  /** Who produced the version shown (H3 passes the seat), for the card's turn line. */
+  producedBy?: string | null;
+};
+
+/**
+ * H2 (DES-EDITOR-PLUGIN-CONTRACT-001 §7; HOST-API §2): an artifact whose kind an installed editor plugin claims is
+ * rendered by the host from the plugin's declaration — {@link PluginCard} (card, Options group, full screen), with
+ * the protocol-1 mapping for a v1 plugin. Only a kind no plugin claims yet (a `document` until `wicked-doc`, H4b)
+ * and the slot bodies (walkthrough, demo video, plan, until H6) keep the morphing section below.
+ */
+export function ArtifactMorph(props: ArtifactMorphProps): React.ReactElement {
+  const kind = props.kind ?? 'page';
+  const editor = useEditorFor(kind);
+  if (props.slot === undefined && editor !== null && editor !== undefined) {
+    return (
+      <PluginCard
+        binding={{ artifactKey: props.artifactKey, title: props.title, kind, source: 'interactive-doc', projectId: props.projectId, docId: props.docId, composerKey: props.composerKey, repoId: props.repoId ?? null, producedBy: props.producedBy ?? null }}
+        editor={editor}
+      />
+    );
+  }
+  return <MorphingArtifact {...props} />;
+}
+
+function MorphingArtifact({ artifactKey, title, projectId, docId, composerKey, kind = 'page', repoId = null, slot }: {
   artifactKey: string;
   title: string;
   projectId: string;

@@ -25,6 +25,7 @@
 @import './sections/learn.css';
 @import './sections/rail.css';
 @import './sections/mcp-inspect.css';
+@import './sections/editor-host.css';
 
 @tailwind base;
 @tailwind components;
