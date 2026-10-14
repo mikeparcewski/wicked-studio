@@ -1,0 +1,16 @@
+{
+  "card": { "interactive": true, "aspect": "16:9", "actions": [
+    { "id": "next", "label": "Next part", "verb": "plugin", "primary": true },
+    { "id": "ask", "label": "Ask about it", "verb": "host:ask" }
+  ] },
+  "options": { "tabs": [
+    { "id": "parts", "label": "Parts", "render": "plugin" },
+    { "id": "look", "label": "Look", "render": "controls", "controls": [
+      { "id": "accent", "label": "Accent", "type": "color" },
+      { "id": "density", "label": "Density", "type": "segmented", "options": [{ "id": "calm", "label": "Calm" }, { "id": "dense", "label": "Dense" }] },
+      { "id": "size", "label": "Text size", "type": "range", "min": 12, "max": 24, "step": 1 },
+      { "id": "captions", "label": "Captions", "type": "toggle" }
+    ] }
+  ] },
+  "full": { "modes": ["simple", "advanced"], "default": "simple" }
+}
