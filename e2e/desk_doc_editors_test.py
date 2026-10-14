@@ -34,7 +34,7 @@ written document (`style: doc`) and a deck (`style: ppt`), anchored the way the 
      DEMO VIDEO SUGGESTION: the empty session composer offers "Make a demo video of this";
      it opens the New job wizard on the demo video form, and Escape closes it.
  12. EXPORT: Export ▾ offers PowerPoint and PDF, by keyboard too (Tab walks the formats;
-     Enter on Export closes the menu and keeps its focus); PowerPoint
+     Esc on a format closes the menu, not the card, and returns the focus to Export); PowerPoint
      answers "PPTX export ready — …" with a Download link.
  13. 0 page errors, no horizontal scroll.
 
@@ -139,22 +139,17 @@ def coverage_state(frame) -> dict:
 
 
 def frame_wid(page, wid: str) -> dict:
-    """What the sandboxed frame shows for one anchor: its text and where it sits in the frame's
-    viewport. The frame reloads on every new version, so the newest frame that holds it wins."""
-    found: dict = {"text": None}
-    for f in page.frames:
-        if f == page.main_frame:
-            continue
-        try:
-            got = f.evaluate("""(wid) => { const h = document.querySelector('[data-wid="' + wid + '"]');
-              if (!h || document.readyState === 'loading') return null;
-              const r = h.getBoundingClientRect();
-              return { text: h.textContent, top: Math.round(r.top), bottom: Math.round(r.bottom), vh: window.innerHeight }; }""", wid)
-        except Exception:
-            continue
-        if got is not None and got.get("text"):
-            found = got
-    return found
+    """What the CARD instance's document frame shows for one anchor: its text and where it sits in the frame's
+    viewport. Scoped to the wicked-doc card (an Options instance renders the same document in its own hidden frame;
+    agy review). The frame reloads on every new version; the locator follows it."""
+    loc = page.frame_locator(f'{DOC_CARD} [data-testid="editor-frame"]').frame_locator('[data-testid="page-frame"]').locator(f'[data-wid="{wid}"]')
+    try:
+        if loc.count() == 0:
+            return {"text": None}
+        return loc.first.evaluate("""(h) => { const r = h.getBoundingClientRect();
+          return { text: h.textContent, top: Math.round(r.top), bottom: Math.round(r.bottom), vh: window.innerHeight }; }""")
+    except Exception:
+        return {"text": None}
 
 
 def wait_text(page, wid: str, text: str, timeout_ms: int = 10000) -> dict:
@@ -231,10 +226,12 @@ with sync_playwright() as p:
     page.wait_for_timeout(SETTLE_MS)
     page.screenshot(path=str(SHOTS / "desk-doc-editors-document-card.png"))
     # ── 1. kind ────────────────────────────────────────────────────────────────────
-    # The recorded document now chooses wicked-doc; the old artifact inline/pane sizes and pane hint are gone.
+    # The recorded document chooses wicked-doc; the card replaces the old inline/pane sizes, and on the card (no room
+    # for it) the coverage list is not shown — it is the Options tab and full screen Advanced's side list.
+    card_cov_hidden = not plugin.get_by_test_id("doc-coverage").is_visible()
     check("document-kind", a0 == {"editor": "wicked-doc", "protocol": "2", "surface": "card", "key": f"{RUN}:{PID}/{DOC}"}
-          and plugin.get_by_test_id("page-editor").get_attribute("data-kind") == "document"
-          and heading.get("text") == "Library room booking — our response", card=a0, heading=heading.get("text"))
+          and plugin.get_by_test_id("page-editor").get_attribute("data-kind") == "document" and card_cov_hidden
+          and heading.get("text") == "Library room booking — our response", card=a0, heading=heading.get("text"), card_coverage_hidden=card_cov_hidden)
 
     # ── 2. coverage = the read ─────────────────────────────────────────────────────
     # Coverage is a plugin Options tab, plus a side list in full-screen Advanced; Simple hides it.
@@ -284,8 +281,13 @@ with sync_playwright() as p:
     sel = plugin.get_by_test_id("page-selected-box").get_attribute("data-wid")
     page.locator(f'[data-testid="composer-chip"][data-key="el:{DOC}/{P2}"]').first.wait_for(state="attached", timeout=15000)
     chips = page.evaluate(CHIPS)
-    # A coverage row selects its named element; it no longer adds an "about: requirement REQ-002" chip.
-    check("requirement-subject", sel == P2 and any(c["key"] == f"el:{DOC}/{P2}" for c in chips), selected=sel, chips=chips)
+    hint3 = plugin.get_by_test_id("page-hint").inner_text()
+    el_chip = next((c for c in chips if c["key"] == f"el:{DOC}/{P2}"), None)
+    # A coverage row selects its named element (an "about:" element chip on the run's composer, the one the full
+    # screen's chat drawer shows); it no longer adds a separate "about: requirement REQ-002" chip. The hint speaks of
+    # the paragraph, as the old pane's did.
+    check("requirement-subject", sel == P2 and el_chip is not None and el_chip["text"].startswith("about:")
+          and "paragraph 2" in hint3, selected=sel, chips=chips, hint=hint3)
 
     # ── 4. a paragraph edit is one version ─────────────────────────────────────────
     # Coverage keeps focus on its button. Focus the page without clicking the already selected paragraph
@@ -356,12 +358,11 @@ with sync_playwright() as p:
         open_session(page, name)
         wait_pickable(page, 3)
         options = open_coverage(page)
-        # No source/404 now leave an empty Coverage tab (possibly a read-failed message), not an absent host column.
-        # Wait for the read to finish so "Reading requirements…" cannot pass as an empty result.
+        # No repository, or a repository with no requirements read (crew's 404), is an answer: the Coverage tab says
+        # there are none (never "Couldn't read" with a retry that cannot help). Waiting for that sentence also keeps
+        # "Reading requirements…" from passing as an empty result.
         options.get_by_test_id("doc-coverage").get_by_text(
-            "No requirements for this document's repository", exact=True).or_(
-                options.get_by_test_id("doc-coverage").get_by_text("Couldn't read the requirements", exact=False)
-            ).wait_for(state="visible", timeout=15000)
+            "No requirements for this document's repository", exact=True).wait_for(state="visible", timeout=15000)
         absent[name] = {"key": page.locator(DOC_CARD).get_attribute("data-artifact"),
                         "rows": options.get_by_test_id("doc-coverage-row").count(),
                         "text": options.get_by_test_id("doc-coverage").inner_text(),
@@ -383,6 +384,7 @@ with sync_playwright() as p:
     page.screenshot(path=str(SHOTS / "desk-doc-editors-coverage-first-page.png"))
     # requirementsFor still reads limit=50, and coverageLine still includes the first-page wording.
     check("coverage-absent-elsewhere", all(a["key"] == f"{RUN}:{PID}/{DOC}" and a["rows"] == 0
+          and a["text"].strip() == "No requirements for this document's repository"
           and not a["hscroll"] and not a["frame_hscroll"] for a in absent.values())
           and paged["total"] == 60 and paged["rows"] == 50 and len(paged["items"]) == 50
           and "(the first 50 of 60)" in paged["line"], **absent, more_than_a_page=paged)
@@ -448,9 +450,9 @@ with sync_playwright() as p:
     first_focus = page.evaluate(FOCUS)
     page.keyboard.press("Tab")
     next_focus = page.evaluate(FOCUS)
-    page.keyboard.press("Shift+Tab")
-    page.keyboard.press("Shift+Tab")
-    page.keyboard.press("Enter")
+    # Esc on a format closes the menu, not the card (or the page around it), and gives Export its focus back.
+    page.keyboard.press("Escape")
+    page.wait_for_timeout(200)
     closed = {"menu": card.get_by_test_id("artifact-export-menu").count(), "focus": page.evaluate(FOCUS), "surface": card.get_attribute("data-surface")}
     keys_ok = first_focus == "pptx" and next_focus == "pdf" and closed == {"menu": 0, "focus": "export", "surface": "card"}
     page.keyboard.press("Enter")
