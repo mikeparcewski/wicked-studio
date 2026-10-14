@@ -1,5 +1,4 @@
 import { applyChapterOp, defaultVideoStyle, timedCut, type DemoCut, type VideoStyle } from '../demoCutModel.js';
-import type { MediaRef } from '../protocol.js';
 import type { AdapterResult, HostAdapter } from '../host.js';
 import { chapterInventoryOf, checkOps, type WireItem } from '../ops.js';
 
@@ -49,7 +48,7 @@ export function fakeDemoCutAdapter(initial: DemoCut = demoCut4) {
       if (tokens['kind'] !== 'video-style' || typeof tokens['style'] !== 'object' || tokens['style'] === null) return { error: 'bad_request', message: 'Expected a video style.' };
       return land({ ...cut, style: copy(tokens['style'] as VideoStyle) });
     },
-    async media(_ref?: MediaRef) { return { type: 'video/webm', blob: new Blob([], { type: 'video/webm' }) }; },
+    async media() { return { type: 'video/webm', blob: new Blob([], { type: 'video/webm' }) }; },
     async undo(version: number): Promise<AdapterResult<{ undone: true }>> {
       const s = stale(version); if (s !== null) return s;
       const parent = entries.find(e => e.version === version)?.parent;

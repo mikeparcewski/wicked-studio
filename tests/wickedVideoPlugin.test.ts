@@ -10,7 +10,8 @@ const env = (type: string, payload: unknown, id?: string) => ({ p: 'wicked.edito
 interface Message { type?: string; id?: string; re?: string; ok?: boolean; payload?: Record<string, unknown> }
 let start: () => void, initial = true, ch: MessageChannel;
 let adapter: ReturnType<typeof fakeDemoCutAdapter>;
-let seen: Message[] = [], ready: Message[] = [];
+let seen: Message[] = [];
+const ready: Message[] = [];
 let refuseTheme = false, refuseMedia = false;
 const createUrl = vi.fn(() => `blob:video-${Math.random()}`), revokeUrl = vi.fn();
 const root = () => document.querySelector<HTMLElement>('[data-testid="video-editor"]')!;
