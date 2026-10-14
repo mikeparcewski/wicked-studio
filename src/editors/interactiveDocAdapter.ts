@@ -257,7 +257,8 @@ export class InteractiveDocAdapter implements HostAdapter {
     // A Match in flight owns the document's theme until it lands (src/editors/themeLock.ts).
     if (opts.match !== true && isMatching(this.projectId, this.docId)) return { error: 'rate_limited', message: 'a Match from a website or a PDF is running: try again when it lands' };
     // Counted while in flight, so a Match that starts now waits for it before reading its baseline.
-    const done = opts.match === true ? (): void => {} : beginThemeWrite(this.projectId, this.docId);
+    // Every theme write is counted, the Match's own apply too: a later Match waits for an earlier one's PUT (codex h4-r5).
+    const done = beginThemeWrite(this.projectId, this.docId);
     try { return await this.writeTheme(base, tokens); } finally { done(); }
   }
 
