@@ -86,7 +86,7 @@ with sync_playwright() as p:
     title = row.locator("p").first.inner_text()
     page.screenshot(path=str(SHOTS / "desk-plugins-document-list.png"))
     check("built-in-row-lists-its-documents",
-          title.startswith("Document") and "launch-page" in names and "loose-notes" in names and "q4-brief" not in names
+          title.startswith("Page") and "launch-page" in names and "loose-notes" in names and "q4-brief" not in names
           and row.get_by_test_id("editor-plugin-elsewhere").is_visible(),
           title=title, names=names)
 
@@ -97,7 +97,7 @@ with sync_playwright() as p:
     art.wait_for(state="visible", timeout=15000)
     art.get_by_test_id("plugin-card-full").click()
     page.get_by_test_id("full-shell").wait_for(state="visible", timeout=5000)
-    frame = page.locator('[data-testid="everything-made-open"] iframe[title^="Document: "]')
+    frame = page.locator('[data-testid="everything-made-open"] iframe[title^="Page: "]')
     frame.wait_for(state="attached", timeout=15000)
     src = frame.get_attribute("src") or ""
     page.wait_for_timeout(1500)

@@ -1,4 +1,5 @@
 import { anchorWords, coverageOf, coverageLine, type BlockText, type CoverageRow } from '../../board/artifactMorph.js';
+import { isForwardable } from '../../editors/keys.js';
 import { overlayBox, type OverlayBox, type ScrollState } from '../../interactive/anchoring.js';
 import {
   REQUEST_INVENTORY, makeScrollToWid, parseInbound as parseBridge, type WidBlock, type WidRect,
@@ -205,8 +206,11 @@ body[data-coverage="side"] #coverage{position:absolute;right:0;top:0;width:min(3
         button.textContent = `${r.reqId} · ${r.title}${r.wid === null ? '' : ` · ${anchorWords(r.wid, cfg.kind)}`}`;
         button.addEventListener('click', () => {
           if (r.wid === null) return;
-          select(r.wid);
-          if (surface !== 'options') scrollTo(r.wid);
+          // From the Coverage list the focus stays on the row (agy h4b-r1): Tab walks the rows, keys go where they did.
+          // In the options tab the editor is hidden: only the host hears the selection.
+          if (surface === 'options') { if (grants.includes('selection.chip')) send('selection.set', { anchors: [{ kind: 'element', id: r.wid }] }); return; }
+          select(r.wid, true);
+          scrollTo(r.wid);
         });
         coverageRoot.append(button);
       }
@@ -400,14 +404,14 @@ body[data-coverage="side"] #coverage{position:absolute;right:0;top:0;width:min(3
 
   /** An element becomes the subject: picked, a chip on the composer (the host writes its words), and
    *  typing reaches this document — never the frame the click focused. */
-  const select = (wid: string | null): void => {
+  const select = (wid: string | null, keepFocus = false): void => {
     bufferedSelection = null;
     selected = wid;
     cancelEdit();
     draw();
     if (wid !== null) {
       if (grants.includes('selection.chip')) send('selection.set', { anchors: [{ kind: 'element', id: wid }] });
-      handle.focus();
+      if (!keepFocus) handle.focus();
     }
   };
 
@@ -639,7 +643,8 @@ body[data-coverage="side"] #coverage{position:absolute;right:0;top:0;width:min(3
       if (selected !== null) toSectionOf(selected);
       return;
     }
-    if (e.altKey && !e.metaKey && !e.ctrlKey && /^Key[A-Z]$/.test(e.code)) { e.preventDefault(); send('ui.key', { key: `Alt+${e.code.slice(3)}` }); return; }
+    // Only the host's navigation chords: the host drops any other Alt chord and tears the frame down after three (agy h4b-r1).
+    if (e.altKey && !e.metaKey && !e.ctrlKey && /^Key[A-Z]$/.test(e.code) && isForwardable(`Alt+${e.code.slice(3)}`)) { e.preventDefault(); send('ui.key', { key: `Alt+${e.code.slice(3)}` }); return; }
     if (e.key === 'Tab') {
       // Tab moves through the plugin's own controls; past either end it returns to the host (§5.10 rule 5).
       e.preventDefault();
