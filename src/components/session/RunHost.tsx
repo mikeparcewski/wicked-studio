@@ -3,7 +3,7 @@ import type { SessionView as RunView } from '../../api/types.js';
 import { decideGate, IDLE_GATE_ACTION, useGateActionStore } from '../../board/gateActions.js';
 import type { ArtifactBinding, RunHostContext } from '../../editors/hostApi.js';
 import { useHostChrome } from '../../editors/hostApi.js';
-import { isSimpleGate, useGateStore } from '../../store/gates.js';
+import { useGateStore } from '../../store/gates.js';
 import { recordingGateActions } from '../editorPorts/RecordingGateActions.js';
 
 /**
@@ -43,7 +43,8 @@ export function GateButtons({ runId }: { runId: string }): React.ReactElement | 
   // pre-run review (`def`) with the two plain answers. A gate whose kind is not known (a late join: GET
   // /runs/:id/gate carries none), a deliver or plan gate, an escalation, a consent, a free-text or
   // multi-choice gate is answered on its card in the thread, where its disclosures are.
-  const plainApprove = gate.gateKind === 'def' && isSimpleGate(gate);
+  // `choices` absent is the plain gate's two answers; any named choices (even two) are the card's (codex fu r1 P1).
+  const plainApprove = gate.gateKind === 'def' && gate.choices === undefined;
   const toThread = (): void => {
     useHostChrome.getState().exitFull();
     // The gate card leads its run's block in the thread (run clarity): bring it into view and focus it.

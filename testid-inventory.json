@@ -12,8 +12,8 @@
   "studioVersion": "0.8.0",
   "counts": {
     "files": 228,
-    "occurrences": 2804,
-    "static": 2425,
+    "occurrences": 2810,
+    "static": 2428,
     "dynamic": 71,
     "computed": 24
   },
@@ -2359,13 +2359,27 @@
     {
       "testId": "demo-script",
       "files": [
+        "src/components/editorPorts/RecordingGateActions.tsx",
         "src/components/session/WalkthroughEditor.tsx"
+      ]
+    },
+    {
+      "testId": "demo-script-actions",
+      "files": [
+        "src/components/editorPorts/RecordingGateActions.tsx"
       ]
     },
     {
       "testId": "demo-script-box",
       "files": [
+        "src/components/editorPorts/RecordingGateActions.tsx",
         "src/components/session/WalkthroughEditor.tsx"
+      ]
+    },
+    {
+      "testId": "demo-script-edit",
+      "files": [
+        "src/components/editorPorts/RecordingGateActions.tsx"
       ]
     },
     {
@@ -2375,8 +2389,15 @@
       ]
     },
     {
+      "testId": "demo-script-note",
+      "files": [
+        "src/components/editorPorts/RecordingGateActions.tsx"
+      ]
+    },
+    {
       "testId": "demo-script-save",
       "files": [
+        "src/components/editorPorts/RecordingGateActions.tsx",
         "src/components/session/WalkthroughEditor.tsx"
       ]
     },

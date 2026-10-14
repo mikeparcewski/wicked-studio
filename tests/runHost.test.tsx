@@ -64,7 +64,8 @@ describe('the run host context', () => {
   });
 
   it('fail closed (codex final P1): a gate of unknown kind (a late join), an escalation, a consent or a free-text gate gets no bare Approve', () => {
-    const cases: Array<Record<string, unknown>> = [{}, { gateKind: 'escalation' }, { gateKind: 'consent' }, { gateKind: 'def', choices: null }, { gateKind: 'def', choices: ['a', 'b', 'c'] }];
+    const cases: Array<Record<string, unknown>> = [{}, { gateKind: 'escalation' }, { gateKind: 'consent' }, { gateKind: 'def', choices: null }, { gateKind: 'def', choices: ['a', 'b', 'c'] },
+      { gateKind: 'def', choices: ['retry', 'stop'] }, { gateKind: 'def', choices: ['ok'] }, { gateKind: 'def', choices: [] }];
     for (const extra of cases) {
       cleanup();
       useGateStore.setState({ gates: { r1: { runId: 'r1', ord: 1, prompt: 'Gate?', lifecycle: 'open', receivedAt: 1, ...extra } as never } });
