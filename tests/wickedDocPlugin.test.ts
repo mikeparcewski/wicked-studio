@@ -168,7 +168,7 @@ describe('wicked-doc protocol 2', () => {
     { key: 'Escape', options: {}, forwarded: 'Escape' },
     { key: 'k', options: { metaKey: true }, forwarded: 'Mod+K' },
     { key: 'K', options: { ctrlKey: true }, forwarded: 'Mod+K' },
-    { key: 'c', options: { altKey: true, code: 'KeyC' }, forwarded: 'Alt+C' },
+    { key: 'j', options: { altKey: true, code: 'KeyJ' }, forwarded: 'Alt+J' },
   ])('forwards $forwarded from a focused Coverage row', async ({ key, options, forwarded }) => {
     const { seen } = await boot();
     row('REQ-1').focus();
@@ -210,6 +210,8 @@ describe('wicked-doc protocol 2', () => {
     expect(seen).toHaveLength(before);
     row('REQ-1').click();
     expect(seen.at(-1)).toMatchObject({ type: 'selection.set', payload: { anchors: [{ kind: 'element', id: 'paragraph-1' }] } });
+    // The focus stays on the row (agy h4b-r1), never the hidden editor's handle.
+    expect(document.activeElement).toBe(row('REQ-1'));
   });
 
   it('hides swatches after Advanced shrinks to a card and refuses style writes after picking again', async () => {
@@ -259,10 +261,10 @@ describe('wicked-doc protocol 2', () => {
     expect(keyOn(controls.at(-1)!, 'Tab').defaultPrevented).toBe(true);
     keyOn(controls[3]!, 'Escape');
     keyOn(controls[3]!, 'k', { metaKey: true });
-    keyOn(controls[3]!, 's', { altKey: true, code: 'KeyS' });
+    keyOn(controls[3]!, 'j', { altKey: true, code: 'KeyJ' });
     expect(keyOn(controls[3]!, 'x').defaultPrevented).toBe(false);
     expect(seen.filter((m) => m.type === 'ui.key').map((m) => m.payload?.['key']))
-      .toEqual(['Shift+Tab', 'Tab', 'Escape', 'Mod+K', 'Alt+S']);
+      .toEqual(['Shift+Tab', 'Tab', 'Escape', 'Mod+K', 'Alt+J']);
     expect(seen.filter((m) => m.type === 'ui.typed')).toHaveLength(0);
   });
 
