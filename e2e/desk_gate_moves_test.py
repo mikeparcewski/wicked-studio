@@ -152,12 +152,16 @@ with sync_playwright() as p:
         note = None
     page.screenshot(path=str(SHOTS / "desk-gate-moves-full-verdict.png"))
     # core#850: the row carries the receipt of the evaluation it is about — a FAIL is "checked", never "accepted".
+    # Its technical lines are in the row's one Technical details (one toggle per card, operator 2026-10-14).
     receipt = page.evaluate("""() => { const r = document.querySelector('[data-testid="session-gate-assurance"]');
-      return r ? {kind: r.getAttribute('data-kind'), text: r.textContent} : null; }""")
+      const t = document.querySelector('[data-testid="session-gate-assurance-tech"]');
+      const row = r ? r.closest('[data-testid="session-gate-row"]') : null;
+      const toggles = row ? [...row.querySelectorAll('summary')].filter((x) => x.textContent.trim() === 'Technical details').length : null;
+      return r ? {kind: r.getAttribute('data-kind'), text: r.textContent + ' ' + (t ? t.textContent : ''), toggles} : null; }""")
     check("gate-row-assurance-receipt", receipt is not None and receipt["kind"] == "independent"
           and receipt["text"].startswith("Checked independently")
           and "built by claude · evaluated by codex (separate seats)" in receipt["text"]
-          and "skipped: repo checks (not applicable)" in receipt["text"], receipt=receipt)
+          and "skipped: repo checks (not applicable)" in receipt["text"] and receipt["toggles"] == 1, receipt=receipt)
     check("send-back-carries-the-first-finding", note is not None and "the regression test is missing" in note
           and "still reads" in note, note=note)
     set_fixture(origin, gate_move=False, gate_move_tail=False)

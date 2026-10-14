@@ -15,6 +15,7 @@ import { reviewedUnitFor } from '../gateVerdictModel.js';
 import { GateUnderReview } from '../GateUnderReview.js';
 import { VerdictDiff } from '../VerdictDiff.js';
 import { TechDetails } from '../ui/index.js';
+import { useDisplayText } from '../../hooks/useHomePath.js';
 
 /**
  * S16a-1b: the gate card's depth in the session thread (ported from the run page's the retired gate card,
@@ -112,6 +113,7 @@ export function GateDepthDetails({ view, gate, failing, reviewedOrd, source, und
   const units = view.units ?? EMPTY_UNITS;
   const reviewed = useMemo(() => (underReview ? reviewedUnitFor(units, gate.ord, null) : null), [underReview, units, gate.ord]);
   const next = useMemo(() => (typeof gate.ord === 'number' ? units.find((u) => u.ord === gate.ord) ?? null : null), [units, gate.ord]);
+  const showText = useDisplayText();
   return (
     <>
       {reviewed !== null && (
@@ -120,7 +122,8 @@ export function GateDepthDetails({ view, gate, failing, reviewedOrd, source, und
         </div>
       )}
       {failing.length > 0 && <VerdictDiff runId={runId} units={units} reviewedOrd={reviewedOrd} items={failing} />}
-      {source !== null && <TechDetails data-testid="session-gate-source" text={source} />}
+      {/* Already inside the row's one Technical details: the source is a line there, not a second disclosure. */}
+      {source !== null && source.trim() !== '' && <p data-testid="session-gate-source" data-tech="on" className="wk-session-gate-detail-item wk-session-verdict-details">{showText(source)}</p>}
     </>
   );
 }

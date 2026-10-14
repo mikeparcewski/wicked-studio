@@ -11,9 +11,15 @@ const PLAIN: Readonly<Record<string, string>> = {
   'qe-author-tests': 'Write tests',
 };
 
+/** A plan the engine generated for one run ("wf-<uuid>", "wf-recon-<stamp>-<hash>:<repo>:a0") has no catalog key: its
+ *  id is an internal handle, never a name. */
+const GENERATED = /^wf-(?:([a-z]+)-[a-z0-9]+-)?[0-9a-f]{8}/i;
+
 export function workflowLabel(key: string): string {
   const plain = PLAIN[key];
   if (plain !== undefined) return plain;
+  const generated = GENERATED.exec(key);
+  if (generated !== null) return generated[1] === undefined ? 'Planned for this run' : `${workflowLabel(generated[1])}, planned for this run`;
   const words = key.split(/[-_\s]+/).filter(Boolean).map((w) => (ACRONYMS.has(w.toLowerCase()) ? w.toUpperCase() : w.toLowerCase()));
   const [first, ...rest] = words;
   if (first === undefined) return key;

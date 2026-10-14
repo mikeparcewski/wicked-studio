@@ -1,6 +1,6 @@
-import { interactiveUrl, type ExportFormat } from '../../api/interactive.js';
+import { exportFileUrl, interactiveUrl, listExports, type ExportFormat } from '../../api/interactive.js';
 import { exportReadyText, runExport } from '../../interactive/exportWire.js';
-import { registerAdapter, type AdapterCapability, type ArtifactBinding, type ArtifactPart, type ExportOption, type ExportOutcome, type StatusPill, type SurfaceAdapter } from '../hostApi.js';
+import { registerAdapter, type AdapterCapability, type ArtifactBinding, type ArtifactPart, type ExportOption, type ExportOutcome, type ExportedFile, type StatusPill, type SurfaceAdapter } from '../hostApi.js';
 import { InteractiveDocAdapter } from '../interactiveDocAdapter.js';
 import { inventoryOf } from '../ops.js';
 
@@ -45,6 +45,18 @@ export class InteractiveDocSurfaceAdapter extends InteractiveDocAdapter implemen
     const out = await runExport({ projectId: this.binding.projectId, docId: this.binding.docId ?? '', version, format: format as ExportFormat });
     if (out.ok) return { ok: true, text: exportReadyText(format as ExportFormat, out.file, out.report), href: interactiveUrl(this.binding.projectId, out.result.download), file: out.file };
     return { ok: false, text: `The ${label} was not made — ${out.hint}` };
+  }
+  /** studio#234: what is on disk for `version`, from the bridge's listing (`GET /d/:doc/api/export`), in the formats
+   *  this kind offers. */
+  async exported(version: number): Promise<readonly ExportedFile[]> {
+    const { projectId } = this.binding;
+    const docId = this.binding.docId ?? '';
+    if (docId === '' || this.exports().length === 0) return [];
+    const rows = await listExports(projectId, docId);
+    return (Array.isArray(rows) ? rows : []).flatMap((r) => {
+      const offered = r.version === version ? this.exports().find((x) => x.format === r.format) : undefined;
+      return offered === undefined ? [] : [{ format: r.format, label: offered.label, name: r.name, href: exportFileUrl(projectId, docId, r.name) }];
+    });
   }
   subscribe(onChange: () => void): () => void { this.listeners.add(onChange); return () => { this.listeners.delete(onChange); }; }
 }

@@ -50,25 +50,37 @@ function walkthroughStepOf(chain: ChainModel | undefined, roots: boolean): strin
   return s === undefined ? null : s.id;
 }
 
-export function RunArtifacts({ view, composerKey, chain }: { view: SessionView; composerKey: string; chain?: ChainModel }): React.ReactElement | null {
-  const projectId = typeof view.session.project_id === 'string' && view.session.project_id !== '' ? view.session.project_id : null;
-  const runId = view.session.id;
-  const roots = useCapabilities((s) => s.walkthroughRoots);
-  // WT-U1 / EP-D3: the run's walkthrough (its `walkthrough_review` step) and a demo run's video open
-  // in the same slot — a recording is a run's artifact whether or not the run is filed.
-  const walkStep = walkthroughStepOf(chain, roots);
-  const demo = isDemoRun(view);
+function projectOf(view: SessionView | null | undefined): string | null {
+  const p = view?.session.project_id;
+  return typeof p === 'string' && p !== '' ? p : null;
+}
+
+/** The project documents this run made (its bound docs), re-read every {@link FRESH_MS} — the run block's artifacts
+ *  and the composer's turn suggestions read the same list. A run filed in no project has none. */
+export function useRunDocs(view: SessionView | null | undefined): DocSummary[] {
+  const projectId = projectOf(view);
   const [docs, setDocs] = useState<DocSummary[]>([]);
   useEffect(() => {
-    if (projectId === null) return undefined;
+    if (projectId === null) { setDocs([]); return undefined; }
     let cancelled = false;
     const read = (): void => { void projectDocs(projectId).then((d) => { if (!cancelled) setDocs(d); }); };
     read();
     // A page the run creates later appears on the next re-read, not never.
     const timer = setInterval(read, FRESH_MS);
     return () => { cancelled = true; clearInterval(timer); };
-  }, [projectId, view.session.id, view.session.status]);
-  const mine = projectId === null ? [] : docs.filter((d) => d.kind === 'doc' && isDocRun(view, d.name));
+  }, [projectId, view?.session.id, view?.session.status]);
+  return projectId === null || view === null || view === undefined ? [] : docs.filter((d) => d.kind === 'doc' && isDocRun(view, d.name));
+}
+
+export function RunArtifacts({ view, composerKey, chain }: { view: SessionView; composerKey: string; chain?: ChainModel }): React.ReactElement | null {
+  const projectId = projectOf(view);
+  const runId = view.session.id;
+  const roots = useCapabilities((s) => s.walkthroughRoots);
+  // WT-U1 / EP-D3: the run's walkthrough (its `walkthrough_review` step) and a demo run's video open
+  // in the same slot — a recording is a run's artifact whether or not the run is filed.
+  const walkStep = walkthroughStepOf(chain, roots);
+  const demo = isDemoRun(view);
+  const mine = useRunDocs(view);
   // S10: a planned run's plan is its artifact too — the ordered editor, while the run is going.
   const plan = hasPlanEditor(view, chain);
   const count = mine.length + (walkStep !== null ? 1 : 0) + (demo ? 1 : 0) + (plan ? 1 : 0);
@@ -88,13 +100,13 @@ export function RunArtifacts({ view, composerKey, chain }: { view: SessionView; 
       {walkStep !== null && (
         <ArtifactMorph
           artifactKey={artifactKey('run', 'walkthrough', runId)} title="Walkthrough" projectId={projectId ?? ''} docId="" composerKey={composerKey}
-          slot={{ kind: 'walkthrough', body: (size, morph) => <RecordingSlot view={view} source="walkthrough" size={size}><WalkthroughEditor runId={runId} kind="walkthrough" step={walkStep} size={size} morph={morph} units={view.units} runStatus={view.session.status} composerKey={composerKey} /></RecordingSlot> }}
+          slot={{ kind: 'walkthrough', body: (size, morph) => <RecordingSlot view={view} source="walkthrough" size={size} morph={morph}><WalkthroughEditor runId={runId} kind="walkthrough" step={walkStep} size={size} morph={morph} units={view.units} runStatus={view.session.status} composerKey={composerKey} /></RecordingSlot> }}
         />
       )}
       {demo && (
         <ArtifactMorph
           artifactKey={artifactKey('run', 'demo-video', runId)} title="Demo video" projectId={projectId ?? ''} docId="" composerKey={composerKey}
-          slot={{ kind: 'demo-video', body: (size, morph) => <RecordingSlot view={view} source="demo" size={size}><WalkthroughEditor runId={runId} kind="demo-video" step={null} size={size} morph={morph} units={view.units} runStatus={view.session.status} composerKey={composerKey} /></RecordingSlot> }}
+          slot={{ kind: 'demo-video', body: (size, morph) => <RecordingSlot view={view} source="demo" size={size} morph={morph}><WalkthroughEditor runId={runId} kind="demo-video" step={null} size={size} morph={morph} units={view.units} runStatus={view.session.status} composerKey={composerKey} /></RecordingSlot> }}
         />
       )}
       {projectId !== null && mine.map((d) => (
@@ -119,10 +131,12 @@ export function RunArtifacts({ view, composerKey, chain }: { view: SessionView; 
  * editor into host chrome, RecordingGateActions). A plugin card draws the same verbs in its footer
  * through the run host's `gateActions` and never renders this body, so they are never shown twice.
  */
-function RecordingSlot({ view, source, size, children }: { view: SessionView; source: 'walkthrough' | 'demo'; size: ArtifactSize; children: React.ReactNode }): React.ReactElement {
+function RecordingSlot({ view, source, size, morph, children }: { view: SessionView; source: 'walkthrough' | 'demo'; size: ArtifactSize; morph: (to: ArtifactSize) => void; children: React.ReactNode }): React.ReactElement {
   const runId = view.session.id;
   const kind = source === 'walkthrough' ? 'walkthrough' : 'demo-video';
-  const verbs = recordingGateActions({ artifactKey: artifactKey('run', kind, runId), title: kind, kind, source, projectId: '', composerKey: '', runId }, view.units);
+  const verbs = recordingGateActions({ artifactKey: artifactKey('run', kind, runId), title: kind, kind, source, projectId: '', composerKey: '', runId }, view.units,
+    // The storyline box needs room: an inline card opens beside the thread first.
+    () => { if (size === 'inline') morph('pane'); });
   return (
     <>
       {children}

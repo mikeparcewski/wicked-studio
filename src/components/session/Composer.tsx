@@ -110,9 +110,12 @@ export function shortPlaceholder(text: string, max = 18): string {
   return first.length < whole.length ? `${first}…` : whole;
 }
 
+/** One turn suggestion under the conversation: a label and what a click does. */
+export interface ComposerSuggestion { id: string; label: string; title?: string; onPick: () => void }
+
 export function Composer({
   composerKey, text, setText, onSend, runs = [], started = false, placeholder, ariaLabel, variant, className = '',
-  inputRef, hint = false, footer = null,
+  inputRef, hint = false, footer = null, suggestions = [],
 }: {
   /** `desk`, or the session id. */
   composerKey: string;
@@ -136,6 +139,9 @@ export function Composer({
   hint?: boolean;
   /** S19b: what sits beside the hint under the box (the Desk's Capture). */
   footer?: React.ReactNode;
+  /** Turn suggestions: what this conversation could ask next ("Make a demo video of this"), one click each. Shown
+   *  while the box is empty and no menu is open. */
+  suggestions?: readonly ComposerSuggestion[];
 }): React.ReactElement {
   const chips = useComposerChips((s) => chipsOf(s, composerKey));
   const roster = useRoster();
@@ -413,6 +419,14 @@ export function Composer({
             );
           })}
           {seatRefusal !== null && <span data-testid="composer-seats-refused" role="status" className="wk-composer-note wk-composer-note--bad">{seatRefusal}</span>}
+        </div>
+      )}
+      {suggestions.length > 0 && text === '' && !menuOpen && (
+        <div data-testid="composer-suggestions" role="group" aria-label="Suggestions" className="wk-composer-chips">
+          {suggestions.map((sg) => (
+            <button key={sg.id} type="button" data-testid="composer-suggestion" data-id={sg.id} title={sg.title}
+              onClick={sg.onPick} className="wk-composer-chip wk-composer-suggestion">{sg.label}</button>
+          ))}
         </div>
       )}
       <form className="wk-desk-composer" onSubmit={(e) => { e.preventDefault(); send(); }}>

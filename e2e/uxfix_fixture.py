@@ -1302,7 +1302,7 @@ ATTACHED_AT = {
 
 def session(rid: str, status: str, problem: str, unit_desc: str) -> dict:
     return {"session": {
-        "id": rid, "workflow_id": "wf-w2", "problem": problem, "entity_mode": "shared",
+        "id": rid, "workflow_id": "wf-5e1d2c3b-0a9f-4e7d-9c11-2b3a4c5d6e7f", "problem": problem, "entity_mode": "shared",
         "collection_scope": None, "clis": ["claude"], "status": status,
         "human_confirm": "all" if status == "awaiting_human" else "none",
         "unit_ix": 0, "attempt": 0, "workdir": None, "repo_ref": None,
@@ -6824,6 +6824,21 @@ class W2Handler(SimpleHTTPRequestHandler):
                 self._media(demo_frame(step, DEMO_STEPS[step]["title"]), "image/png")
             else:
                 self._json(404, {"error": "no such recording"})
+            return True
+        # studio#234 (wicked-interactive#236): GET /d/<doc>/api/export — the doc's finished exports, oldest first,
+        # so a card lists the downloads made in an earlier session.
+        m = re.match(r"^/api/v1/projects/([^/]+)/interactive/d/([^/]+)/api/export$", path)
+        if m:
+            pid, doc = (urllib.parse.unquote(g) for g in m.groups())
+            with exports_lock:
+                made = [(name, fmt) for (p_, d_, name), fmt in exports_created.items() if p_ == pid and d_ == doc]
+            rows = []
+            for name, fmt in made:
+                version_m = re.search(r"_v(\d+)\.", name)
+                rows.append({"version": int(version_m.group(1)) if version_m else 1, "format": fmt, "name": name,
+                             "bytes": len(export_bytes(doc, int(version_m.group(1)) if version_m else 1, fmt)),
+                             "generated_at": "2026-10-14T00:00:00Z"})
+            self._json(200, rows)
             return True
         # Slice X (§7.2): GET /d/<doc>/api/export/file/<name> — the artifact bytes,
         # exactly as server.js serves them (Content-Disposition attachment), so the

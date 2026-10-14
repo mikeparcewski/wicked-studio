@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { create } from 'zustand';
 import { getDemo } from '../../api/demo.js';
 import { isWalkthroughUnsupported, walkthroughApi } from '../../api/walkthrough.js';
 import { isLive, recordingOf, recordingOfDemo, type Recording, type RecordingKind } from '../../board/walkthroughModel.js';
@@ -8,6 +9,14 @@ const POLL_MS = 2500;
 /** A read that keeps failing is retried this many times (5 s apart), then left: the line says it failed. */
 const MAX_FAILED_READS = 5;
 
+/** One re-read signal per run: a reload from any reader of a run's recording (the gate verbs after
+ *  "Ask helpers to fix", the editor's own retry) re-reads every reader of that run, so the state line
+ *  and the verbs never show two different takes. */
+const useRereads = create<{ byRun: Record<string, number> }>(() => ({ byRun: {} }));
+export function rereadRecording(runId: string): void {
+  useRereads.setState((s) => ({ byRun: { ...s.byRun, [runId]: (s.byRun[runId] ?? 0) + 1 } }));
+}
+
 type Load = { kind: 'loading' } | { kind: 'absent' } | { kind: 'failed'; message: string } | { kind: 'ready'; rec: Recording };
 
 export function useRecording(runId: string, kind: RecordingKind, step: string | null, runStatus: string): { load: Load; reload: () => void } {
@@ -16,7 +25,7 @@ export function useRecording(runId: string, kind: RecordingKind, step: string | 
   const ident = `${kind}\u0000${runId}\u0000${step ?? ''}`;
   const [held, setHeld] = useState<{ ident: string; load: Load }>({ ident, load: { kind: 'loading' } });
   const load: Load = held.ident === ident ? held.load : { kind: 'loading' };
-  const [tick, setTick] = useState(0);
+  const tick = useRereads((s) => s.byRun[runId] ?? 0);
   useEffect(() => {
     const setLoad = (next: Load | ((was: Load) => Load)): void => setHeld((h) => {
       const was: Load = h.ident === ident ? h.load : { kind: 'loading' };
@@ -46,7 +55,7 @@ export function useRecording(runId: string, kind: RecordingKind, step: string | 
     void read();
     return () => { cancelled = true; if (timer !== null) clearTimeout(timer); };
   }, [runId, kind, step, runStatus, tick, ident]);
-  const reload = useCallback(() => setTick((t) => t + 1), []);
+  const reload = useCallback(() => rereadRecording(runId), [runId]);
   return { load, reload };
 }
 

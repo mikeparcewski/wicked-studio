@@ -7,8 +7,8 @@ Desk. Against the in-process fixture: project `notes`, doc `offsite-plan` bound 
   1. MADE ROW: the Made list's `offsite-plan` row opens its session with the document at full size
      (`/s/<session>/a/<key>?size=full`).
   2. VERSION: that address with `v=1` opens the lens.
-  3. UNBOUND: the Made list with `open=loose-notes` shows the document open at full size; Esc closes
-     it back to the list.
+  3. UNBOUND: the Made list with `open=loose-notes` shows the document open at full size; Esc comes
+     back to its card (DES §7.3), and Esc on the card closes it back to the list.
   4. RETIRED (X1): `/p/notes/document/offsite-plan` and `/p/notes/video` are dead addresses — the
      not-found page, the typed address kept.
   5. 0 page errors.
@@ -107,6 +107,9 @@ with sync_playwright() as p:
     page.screenshot(path=str(SHOTS / "desk-made-opens-unbound.png"))
     q = urllib.parse.parse_qs(urllib.parse.urlparse(page.url).query)
     check("unbound-opens-on-the-made-list", q.get("tab") == ["made"] and q.get("project") == [PID] and q.get("kind") == ["documents"], url=page.url)
+    # Esc from full screen is back to the card (DES §7.3); Esc on the card closes it to the list.
+    page.keyboard.press("Escape")
+    page.wait_for_function("() => document.querySelector('[data-testid=\"everything-made-open\"] [data-testid=\"plugin-card\"]')?.dataset.surface === 'card'", timeout=8000)
     page.keyboard.press("Escape")
     page.wait_for_function("() => !document.querySelector('[data-testid=\"everything-made-open\"]')", timeout=8000)
     check("esc-closes-to-the-list", "open=" not in page.url, url=page.url)

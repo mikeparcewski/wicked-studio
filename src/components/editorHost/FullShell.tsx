@@ -34,6 +34,7 @@ export function FullShell({ open, tag, title, phase, modes, mode, onMode, gateAc
       if (e.key !== 'Escape' || e.defaultPrevented || document.fullscreenElement) return;
       const t = e.target as HTMLElement | null;
       if (t !== null && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+      e.preventDefault(); // this Esc is spent: nothing around the shell (a Made list's card) acts on it too
       onExit();
     };
     document.addEventListener('keydown', onKey);

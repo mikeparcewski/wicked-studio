@@ -10,33 +10,35 @@ import { useRecording } from './useRecording.js';
 type RetakeProps = { adapter: DemoCutSurfaceAdapter; chapter: string };
 
 /** The run's gate controls live in host chrome, alongside the recording plugin. */
-export function RecordingGateActions({ runId, kind, step, units, onChanged, retake }: {
+export function RecordingGateActions({ runId, kind, step, units, onChanged, onEditOpen, retake }: {
   runId: string;
   kind: RecordingKind;
   step: string | null;
   units: readonly UnitLike[];
   onChanged?: () => void;
+  /** "Edit the check" opened its storyline box: a host that can give it room (an inline slot grows to the pane) does. */
+  onEditOpen?: () => void;
   retake?: RetakeProps;
 }): React.ReactElement | null {
   if (kind === 'demo-video') return retake === undefined ? null : <RetakeChapter key={retake.chapter} {...retake} {...(onChanged === undefined ? {} : { onChanged })} />;
-  return <WalkthroughGateActions runId={runId} step={step} units={units} {...(onChanged === undefined ? {} : { onChanged })} />;
+  return <WalkthroughGateActions runId={runId} step={step} units={units} {...(onChanged === undefined ? {} : { onChanged })} {...(onEditOpen === undefined ? {} : { onEditOpen })} />;
 }
 
-function WalkthroughGateActions({ runId, step, units, onChanged }: {
-  runId: string; step: string | null; units: readonly UnitLike[]; onChanged?: () => void;
+function WalkthroughGateActions({ runId, step, units, onChanged, onEditOpen }: {
+  runId: string; step: string | null; units: readonly UnitLike[]; onChanged?: () => void; onEditOpen?: () => void;
 }): React.ReactElement | null {
   // Unit changes replace the run-status signal the old editor received from the run page.
   const { load, reload } = useRecording(runId, 'walkthrough', step, JSON.stringify(units));
   const changed = (): void => { reload(); onChanged?.(); };
-  return load.kind === 'ready' ? <GateActions rec={load.rec} units={units} reload={changed} /> : null;
+  return load.kind === 'ready' ? <GateActions rec={load.rec} units={units} reload={changed} {...(onEditOpen === undefined ? {} : { onEditOpen })} /> : null;
 }
 
-export function recordingGateActions(binding: ArtifactBinding, units: readonly UnitLike[]): ReactNode | null {
+export function recordingGateActions(binding: ArtifactBinding, units: readonly UnitLike[], onEditOpen?: () => void): ReactNode | null {
   if ((binding.source !== 'walkthrough' && binding.source !== 'demo') || binding.runId === undefined) return null;
-  return <RecordingGateActions runId={binding.runId} kind={binding.source === 'walkthrough' ? 'walkthrough' : 'demo-video'} step={binding.source === 'walkthrough' ? binding.docId || null : null} units={units} />;
+  return <RecordingGateActions runId={binding.runId} kind={binding.source === 'walkthrough' ? 'walkthrough' : 'demo-video'} step={binding.source === 'walkthrough' ? binding.docId || null : null} units={units} {...(onEditOpen === undefined ? {} : { onEditOpen })} />;
 }
 
-function GateActions({ rec, units, reload }: { rec: Recording; units: readonly UnitLike[]; reload: () => void }): React.ReactElement | null {
+function GateActions({ rec, units, reload, onEditOpen }: { rec: Recording; units: readonly UnitLike[]; reload: () => void; onEditOpen?: () => void }): React.ReactElement | null {
   const gate = useGateStore((s) => s.gates[rec.runId]);
   const verbs = gateVerbs(rec, escalationOpen(rec, gate?.ord ?? null, units));
   // An Edit-the-check draft belongs to the take it was opened on, BY CONSTRUCTION: it carries that
@@ -140,7 +142,7 @@ function GateActions({ rec, units, reload }: { rec: Recording; units: readonly U
   return <>
     <div data-testid="walkthrough-actions" className="wk-walk-actions">
       {verbs.includes('fix') && <button type="button" data-testid="walkthrough-fix" disabled={busy} onClick={() => void fix()} className="wk-prop-btn wk-prop-btn--primary">Ask helpers to fix</button>}
-      {verbs.includes('edit') && <button type="button" data-testid="walkthrough-edit-check" disabled={busy} aria-expanded={editing} onClick={() => setDraft(editing ? null : { take, text: storyline })} className="wk-prop-btn wk-prop-btn--ghost">Edit the check</button>}
+      {verbs.includes('edit') && <button type="button" data-testid="walkthrough-edit-check" disabled={busy} aria-expanded={editing} onClick={() => { if (!editing) onEditOpen?.(); setDraft(editing ? null : { take, text: storyline }); }} className="wk-prop-btn wk-prop-btn--ghost">Edit the check</button>}
     </div>
     {editing && verbs.includes('edit') && (
       <div data-testid="walkthrough-edit" className="wk-walk-edit">
