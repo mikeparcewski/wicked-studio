@@ -165,10 +165,10 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
     setTorn(null);
     const start = async (): Promise<void> => {
       const decided = grantsProp !== undefined ? { grants: grantsProp, note: null } : await fetchGrants(editor.id, editor.version, editor.sha256, binding.projectId === '' ? null : binding.projectId);
-      const startMoved = await adapter.refresh?.().catch(() => null);
-      // A head this start discovered reaches the group's other instances (an open Options frame) too (codex h2-r16 P2).
-      if (startMoved != null) relay(group, 'card', { type: 'changed', head: startMoved.head, kind: startMoved.kind });
-      announced.current = adapter.artifact().head;
+      await adapter.refresh?.().catch(() => null);
+      // Nothing counts as announced yet: the first idle re-read tells every instance of the group (an open Options
+      // frame included) the head as it stands, however it moved meanwhile (codex h2-r16/r17 P2).
+      announced.current = null;
       if (cancelled || frameBox.current === null) return;
       setNote(decided.note);
       const src = srcProp ?? bundleUrl(apiBase(), editor.id, editor.version, editor.sha256);
