@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { EditorHost } from '../../editors/host.js';
 import {
-  PANEL_RIBBON_BELOW_PX, RUN_TAB, hostTabsFor, joinGroup, relay, sameTab, useHostChrome, useHostPanel,
+  PANEL_RIBBON_BELOW_PX, RUN_TAB, hostTabsFor, joinGroup, relay, sameTab, tabFootersFor, useHostChrome, useHostPanel,
   type HostPanelProps, type HostTabContext, type OptionsGroup, type PanelTab,
 } from '../../editors/hostApi.js';
 import { readThemeTokens } from '../../editors/theme.js';
@@ -122,6 +122,9 @@ function GroupBody({ group, tab }: { group: OptionsGroup; tab: PanelTab }): Reac
           )}
         </div>
       )}
+      {pluginTab !== null && tabFootersFor(pluginTab.id, group.adapter).map((f, i) => (
+        <div key={i} data-testid="host-panel-tab-footer" data-tab={pluginTab.id}>{f.render(hostCtx(group, hostRef))}</div>
+      ))}
       {hostTab !== null && (
         <div data-testid="host-panel-hosttab" data-tab={hostTab.id}>
           {hostTab.render(hostCtx(group, hostRef))}

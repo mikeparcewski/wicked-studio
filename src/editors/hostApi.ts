@@ -103,6 +103,20 @@ export function hostTabsFor(adapter: SurfaceAdapter): HostTabSpec[] {
   return HOST_TAB_ORDER.map((id) => hostTabs.get(id)).filter((t): t is HostTabSpec => t !== undefined && caps.includes(t.needs));
 }
 
+/** Host chrome under one plugin tab (ev2-ports: "Match a website / PDF" under a Style tab — a frame has no
+ *  network, so the fetch is the host's). Shown when the open group has a plugin or controls tab with this id and the
+ *  adapter has `needs`. */
+export interface TabFooterSpec { tab: string; needs: AdapterCapability; render(ctx: HostTabContext): ReactNode }
+const tabFooters: TabFooterSpec[] = [];
+export function registerTabFooter(spec: TabFooterSpec): void {
+  const i = tabFooters.findIndex((f) => f.tab === spec.tab && f.needs === spec.needs);
+  if (i >= 0) tabFooters[i] = spec; else tabFooters.push(spec);
+}
+export function tabFootersFor(tab: string, adapter: SurfaceAdapter): TabFooterSpec[] {
+  const caps = adapter.capabilities();
+  return tabFooters.filter((f) => f.tab === tab && caps.includes(f.needs));
+}
+
 // ── groups and the selection relay (§4) ─────────────────────────────────────────────────────────────
 
 /** One group per (editor id, artifact key): relays never cross groups. */
