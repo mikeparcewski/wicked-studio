@@ -86,7 +86,7 @@ describe('wicked-deck protocol 2 card and full', () => {
     expect(await action('prev')).toEqual({ handled: false });
     expect(await action('next')).toEqual({ handled: true, status: 'Slide 2 of 4' });
     expect(deck().dataset['current']).toBe('s-first'); expect(stageFrame().title).toBe('Slide 2');
-    expect(messages('selection.set').at(-1)!.payload).toEqual({ anchors: [{ kind: 'element', id: 's-first' }] });
+    expect(messages('selection.set').at(-1)!.payload).toEqual({ anchors: [{ kind: 'element', id: 'section-1' }] });
     expect(await action('next')).toEqual({ handled: true, status: 'Slide 3 of 4' });
     expect(await action('next')).toEqual({ handled: true, status: 'Slide 4 of 4' });
     expect(await action('next')).toEqual({ handled: false });

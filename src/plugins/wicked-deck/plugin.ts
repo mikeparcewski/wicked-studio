@@ -451,7 +451,8 @@ export function start(): void {
   };
   /** A click on a slide makes it the subject of the next message (the host writes the chip). */
   const pointAtSlide = (): void => {
-    const w = protocol === 2 ? (cur()?.id ?? cur()?.wid) : cur()?.wid;
+    // The slide's own `data-wid`: the host checks element anchors against its inventory of wids (a slide id is not one).
+    const w = cur()?.wid;
     if (w != null && grants.includes('selection.chip')) send('selection.set', { anchors: [{ kind: 'element', id: w }] });
   };
 
