@@ -2,6 +2,8 @@ import { useState } from 'react';
 import type { SessionView } from '../../api/types.js';
 import type { SinceCard } from '../../board/sessionModel.js';
 import { humanTitle } from '../runIdentity.js';
+import { CREW } from '../../board/responder.js';
+import { TurnWho } from './TurnWho.js';
 
 /**
  * "Since you left" (R2, slice S6a): a session opened after 4 h away. The card OVERLAYS the top of
@@ -17,6 +19,8 @@ export function SinceYouLeft({ card, runs }: { card: SinceCard; runs: readonly S
   return (
     <aside data-testid="since-you-left" data-collapsed={collapsed ? 'true' : 'false'} aria-label="Since you left" className="wk-since">
       <p className="wk-since-head">
+        {/* H3: who responded — the summary is crew's (one line, so the card stays one line collapsed). */}
+        <TurnWho who={CREW} inline className="wk-who--since" />
         <b>Since you left · {card.away}</b>
         <span data-testid="since-summary" className="wk-since-summary">{card.summary}</span>
         <button

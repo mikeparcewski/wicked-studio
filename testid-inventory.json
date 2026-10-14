@@ -12,8 +12,8 @@
   "studioVersion": "0.8.0",
   "counts": {
     "files": 230,
-    "occurrences": 2825,
-    "static": 2430,
+    "occurrences": 2826,
+    "static": 2431,
     "dynamic": 71,
     "computed": 24
   },
@@ -8884,6 +8884,12 @@
       "testId": "raw-events-error",
       "files": [
         "src/components/RunRawView.tsx"
+      ]
+    },
+    {
+      "testId": "recording-host-verbs",
+      "files": [
+        "src/components/session/RunArtifacts.tsx"
       ]
     },
     {
