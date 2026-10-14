@@ -4,7 +4,7 @@ import type { EditorView } from '../../api/editors.js';
 import { editedLine, notUndoneLine, undoneLine, writtenWords, type EditorKind, type WriteVerb } from '../../board/artifactMorph.js';
 import { EditorHost, type HostLogEntry } from '../../editors/host.js';
 import {
-  LIVE_FRAME_CAP, adapterFor, dropLive, setGroupShown, groupKey, hostTabsFor, isLive, joinGroup, relay, touchLive, useHostChrome, useHostPanel, useLiveCards,
+  LIVE_FRAME_CAP, adapterFor, dropLive, firstTabOf, setGroupShown, groupKey, hostTabsFor, isLive, joinGroup, relay, touchLive, useHostChrome, useHostPanel, useLiveCards,
   type ExportOutcome, type PluginCardProps, type SurfaceAdapter,
 } from '../../editors/hostApi.js';
 import { bundleUrl, fetchGrants } from '../../editors/model.js';
@@ -143,10 +143,19 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
 
   const openOptions = useCallback((): void => {
     if (adapter === null || decl === null || loaded.current === null) return;
-    if (useHostPanel.getState().group?.key === group) return;
+    const panel = useHostPanel.getState();
+    // Already open: reveal it (unfold, back to its tabs) without remounting its options instance (codex h2-r11 P3).
+    if (panel.group?.key === group) {
+      panel.setFolded(false);
+      if (panel.tab.owner === 'run') panel.setTab(firstTabOf(panel.group));
+      return;
+    }
     openGroup({ key: group, binding, editor, surfaces: decl, protocol, src: loaded.current.src, grants: loaded.current.grants, adapter });
   }, [adapter, decl, group, binding, editor, protocol, openGroup]);
   const openOptionsRef = useRef(openOptions);
+  /** Every host-approved Options opener (button, the plugin's accepted offer, the options-only catch) goes through the
+   *  address (codex h2-r11 P2). */
+  const pressOptionsRef = useRef<() => void>(() => undefined);
   openOptionsRef.current = openOptions;
 
   // One host per mount (EP-D2): the frame is made once; card ↔ full is the same element. "Reload it" remounts.
@@ -238,10 +247,14 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
       if (e.type === 'selection') hostRef.current?.relaySelection(e.anchors);
       else if (e.type === 'changed') hostRef.current?.artifactChanged(e.head, e.kind);
       else {
-        // A version the host's own chrome wrote for this artifact (Match a website): this card owns its Undo.
-        hostRef.current?.adopt(e.version);
-        hostRef.current?.artifactChanged(e.version, 'theme');
-        if (live.current) setLine({ kind: 'edited', version: e.version, base: e.base ?? e.version, what: e.words, verb: 'restyled' });
+        // A version the host's own chrome wrote for this artifact (Match a website): this card owns its Undo — offered
+        // only once the adapter has re-read the manifest, so Undo knows the version's parent (codex h2-r11 P2).
+        const v = e.version;
+        void Promise.resolve(adapter?.refresh?.()).catch(() => null).then(() => {
+          hostRef.current?.adopt(v);
+          hostRef.current?.artifactChanged(v, 'theme');
+          if (live.current) setLine({ kind: 'edited', version: v, base: e.base ?? v, what: e.words, verb: 'restyled' });
+        });
       }
     });
     return () => {
@@ -293,6 +306,7 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
     openOptions();
     if (address !== null && address.routeKey !== key && !fullRef.current) address.write(key, 'inline', 'pane');
   };
+  pressOptionsRef.current = pressOptions;
   const wasOpen = useRef(optionsOpen);
   useEffect(() => {
     const closed = wasOpen.current && !optionsOpen;
@@ -428,7 +442,7 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
           {!interactive && !full && torn === null && (
             // The v1 hit layer (and `interactive:false`): a click is the host's — it opens, never reaches the frame.
             <button type="button" data-testid="plugin-card-catch" aria-label={`Open ${binding.title}`} className="wk-artifact-catch"
-              onClick={() => { if (hasFull) enterFull(binding.artifactKey); else if (hasOptions) openOptions(); }} />
+              onClick={() => { if (hasFull) enterFull(binding.artifactKey); else if (hasOptions) pressOptionsRef.current(); }} />
           )}
           {torn !== null && (
             <p data-testid="plugin-torn" className="wk-host-note">
@@ -456,7 +470,7 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
         <p data-testid="plugin-card-offer" className="wk-artifact-line">
           {editor.title} asks to open {offer === 'full' ? 'full screen' : 'its options'}.{' '}
           <button type="button" data-testid="plugin-card-offer-accept" className="wk-host-btn wk-host-btn--primary"
-            onClick={() => { setOffer(null); if (offer === 'full') enterFull(binding.artifactKey); else openOptions(); }}>{offer === 'full' ? 'Open full screen' : 'Open options'}</button>{' '}
+            onClick={() => { setOffer(null); if (offer === 'full') enterFull(binding.artifactKey); else pressOptionsRef.current(); }}>{offer === 'full' ? 'Open full screen' : 'Open options'}</button>{' '}
           <button type="button" className="wk-since-toggle" onClick={() => setOffer(null)}>Not now</button>
         </p>
       )}
