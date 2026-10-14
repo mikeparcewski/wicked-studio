@@ -84,6 +84,8 @@ export class RecordingSurfaceAdapter implements SurfaceAdapter {
     const content = JSON.stringify({
       cut: cutOfRecording(rec, this.binding.title), video: rec.video, step: rec.step,
       state: rec.state, chapters: rec.chapters.length,
+      // The stills too: a failing frame that appears or changes is a new head (codex h6-r5).
+      poster: rec.poster, failedFrame: failedChapter(rec)?.failedFrame ?? null,
       take: demo !== null ? demo.video?.bytes ?? null : takeFingerprint(rec),
     });
     const contentChanged = this.contentSeen !== null && this.contentSeen !== content;
@@ -148,8 +150,8 @@ export class RecordingSurfaceAdapter implements SurfaceAdapter {
   async media(ref: MediaRef): Promise<AdapterResult<{ type: string; blob: Blob }>> {
     const rec = this.rec ?? await this.load().catch(() => null);
     if (rec === null) return { error: 'unavailable', message: 'the recording could not be read' };
-    // The poster is the recording's still, or for a failed walkthrough with no poster, its failing frame.
-    const path = ref === 'video' ? rec.video : ref === 'poster' ? rec.poster ?? failedChapter(rec)?.failedFrame ?? null : null;
+    // A failed walkthrough's still is its failing frame (the poster only when it has none); otherwise the poster.
+    const path = ref === 'video' ? rec.video : ref === 'poster' ? (rec.state === 'failed' ? failedChapter(rec)?.failedFrame ?? rec.poster : rec.poster ?? failedChapter(rec)?.failedFrame) ?? null : null;
     if (path === null) return { error: 'unsupported', message: ref === 'video' || ref === 'poster' ? 'no file for that yet' : 'a recording is one take' };
     const url = rec.kind === 'demo-video' ? demoFileUrl(rec.runId, path) : walkthroughFileUrl(rec.runId, rec.step, path);
     const cached = this.mediaCache.get(url);
