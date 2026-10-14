@@ -250,7 +250,7 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
         // A version the host's own chrome wrote for this artifact (Match a website): this card owns its Undo — offered
         // only once the adapter has re-read the manifest, so Undo knows the version's parent (codex h2-r11 P2).
         const v = e.version;
-        // The plugin hears it once the adapter's head is the new version (codex h2-r13 P2), either way.
+        // The plugin hears it once the adapter's head is the new version (codex h2-r13 P2).
         void Promise.resolve(adapter?.refresh?.()).then(
           () => {
             hostRef.current?.adopt(v);
@@ -258,10 +258,9 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
             if (live.current) setLine({ kind: 'edited', version: v, base: e.base ?? v, what: e.words, verb: 'restyled' });
           },
           // The manifest could not be re-read: say what changed, with no Undo that could not find its parent (codex h2-r12 P2).
-          () => {
-            hostRef.current?.artifactChanged(v, 'theme');
-            if (live.current) setLine({ kind: 'status', text: `The theme changed · version ${v}` });
-          },
+          // No announcement either: the head has not moved here yet; the idle re-read announces it when it does
+          // (codex h2-r14 P2).
+          () => { if (live.current) setLine({ kind: 'status', text: `The theme changed · version ${v}` }); },
         );
       }
     });
