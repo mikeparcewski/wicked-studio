@@ -5,3 +5,5 @@
 import './interactiveDoc.js';
 import './fake.js';
 import './review.js';
+import './recording.js';
+import './mcp.js';
