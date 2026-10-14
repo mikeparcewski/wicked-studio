@@ -1792,6 +1792,10 @@ p.wk-run-tab-muted { margin: var(--space-1) 0; }
 .wk-session-frame { flex: 1 1 auto; display: flex; min-width: 0; min-height: 0; }
 .wk-session-frame > .wk-session { flex: 1 1 auto; }
 .wk-session-frame > .wk-hpanel { overflow: hidden; }
+/* A slot artifact (walkthrough, demo video, plan) opened beside the thread takes the panel's place until it
+   moves into the panel's options tabs (H6): the two never stack on the same strip of the page. */
+.wk-session-frame:has(> .wk-session--pane) > .wk-hpanel,
+.wk-session-frame:has(> .wk-session--pane) > [data-testid="host-panel-ribbon"] { display: none; }
 .wk-session-frame > .wk-hpanel .wk-hpanel-body { overflow-y: auto; }
 @media (max-width: 1199px) {
   .wk-session-frame { flex-direction: column; }

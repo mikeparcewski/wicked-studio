@@ -622,7 +622,9 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
           </div>
         ))}
       </div>
-      <Composer {...composerProps} composerKey={`${sessionId}#drawer`} text={draft} className="wk-run-chat-composer" />
+      {/* The SAME composer key: the "about:" chip a plugin's selection puts on the run's composer, and a
+          typed character it forwards, land here while the drawer is the composer in view (DES §7.3). */}
+      <Composer {...composerProps} className="wk-run-chat-composer" />
     </div>
   );
   const runHost = useRunHostValue(mine, renderChat);
