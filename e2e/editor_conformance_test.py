@@ -317,7 +317,11 @@ def protocol2_cases(page, bundle: str) -> None:
                     reply: c.incoming.find(e => e.msg.re === 'conformance-no-click').msg};
         }""")
         refused = [r for r in log(page) if r["kind"] == "refused" and r["type"] == "mcp.request"]
-        check(case, refusal["activation"] is False and "mcp.session" not in refusal["grants"]
+        # The refusal here is the PERMISSION check (no mcp.session), not the activation guard (codex h4b-r3):
+        # report it under its own name and say plainly that activation itself is not exercised for these bundles.
+        report["gaps"].append(f"{case}: activation not exercised (these bundles hold no mcp.session, so the host refuses at the "
+                              "permission check first); the click rule is driven by desk_mcp_inspect and the hostile-bundle cases")
+        check(f"{case}-no-grant", refusal["activation"] is False and "mcp.session" not in refusal["grants"]
               and refusal["reply"].get("ok") is False
               and refusal["reply"].get("error", {}).get("code") in ("not_granted", "refused")
               and len(refused) == 1 and refused[0]["code"] == refusal["reply"]["error"]["code"],
