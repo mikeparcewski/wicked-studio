@@ -4,6 +4,12 @@ import { isRouteUnsupported } from '../api/errors.js';
 import type { WatchCoverage } from '../api/watch-wire.js';
 import { coverageSummary, gateLine, useWatchStore, type CoverageSummary } from '../store/watch.js';
 import { TechDetails } from './ui/TechDetails.js';
+import { useRunEvents } from '../hooks/useRunEvents.js';
+import { independentReviewers } from '../board/assuranceModel.js';
+import { seatLabel } from '../board/seatNames.js';
+
+/** A seat key as the coverage line names it ("pi" → "Pi"). */
+export const reviewerName = (key: string): string => seatLabel({ key });
 
 /**
  * The watch registry's lines on surfaces that already exist (DES-TRIGGER-REGISTRY-001 §4.10, TR-W8).
@@ -44,10 +50,13 @@ export function WatchRunLines({ runId, jumped, onBack, isTerminal, endedMs }: {
       });
     return () => { cancelled = true; };
   }, [runId]);
+  // studio#770: a review on a distinct seat that accepted is a check the coverage registry doesn't list.
+  const { events } = useRunEvents(runId, isTerminal);
+  const reviewers = independentReviewers(events, reviewerName);
   const errorLine: string | null =
     error !== null ? 'Couldn’t read what was checked on this run.' : null;
   const summary: CoverageSummary | null =
-    error === null ? coverageSummary(coverage, isTerminal, endedMs, entryLabel) : null;
+    error === null ? coverageSummary(coverage, isTerminal, endedMs, entryLabel, Date.now(), reviewers) : null;
   if (errorLine === null && summary === null && !jumped) return null;
   return (
     <div className="wk-watch-run-lines">

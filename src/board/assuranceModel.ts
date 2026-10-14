@@ -188,6 +188,23 @@ export function gatePassedFor(events: readonly CoreEvent[] | null, ord: number |
   return null;
 }
 
+/**
+ * studio#770: the seats that independently reviewed this run and accepted: every `gateEvaluated` that passed with
+ * `distinct_evaluator` among the instruments that ran, its evaluator named by `name`. In the order first seen, once each.
+ */
+export function independentReviewers(events: readonly CoreEvent[] | null | undefined, name: (seat: string) => string = (s) => s): string[] {
+  const out: string[] = [];
+  for (const e of events ?? []) {
+    const r = e as Record<string, unknown>;
+    if (r['type'] !== 'gateEvaluated' || r['combined'] !== true || (r['denial'] !== null && r['denial'] !== undefined)) continue;
+    const receipt = receiptOf(r['assurance']);
+    if (receipt === null || !receipt.ran.includes('distinct_evaluator') || receipt.evaluator === null) continue;
+    const n = name(receipt.evaluator);
+    if (!out.includes(n)) out.push(n);
+  }
+  return out;
+}
+
 export function gateReceiptFor(events: readonly CoreEvent[] | null, units: readonly WorkUnit[] | undefined, ord: number | null | undefined): AssuranceReceipt | null {
   if (typeof ord !== 'number') return null;
   const log = events ?? [];

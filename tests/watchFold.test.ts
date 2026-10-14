@@ -1,3 +1,4 @@
+import { independentReviewers } from '../src/board/assuranceModel.js';
 // @vitest-environment node
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../src/api/client.js';
@@ -242,8 +243,26 @@ describe('coverageSummary (S17c)', () => {
       [NOT_CHECKED('scope-drift', 'no declared scope'), CHECKED('claim-vs-evidence')],
       true, NOW - 120_000, undefined, NOW,
     );
-    expect(result).toStrictEqual({ line: '1 check didn’t run on this run.', reasons: ['scope-drift (no declared scope)'] });
+    expect(result).toStrictEqual({ line: '1 check didn’t run on this run.', reasons: ['scope-drift (no declared scope)'], nothing: false });
     expect(coverageSummary([CHECKED('claim-vs-evidence')], true, NOW - 120_000, undefined, NOW)).toBeNull();
+  });
+});
+
+describe('studio#770 — an independent review counts as checked', () => {
+  const NOW = 1_700_000_000_000;
+  const NOT_CHECKED = (id: string, reason: string) => ({ entry_id: id, state: 'not_checked' as const, reason });
+  it('a finished run whose review ran on a distinct seat says who reviewed, never "nothing was checked"', () => {
+    const r = coverageSummary([NOT_CHECKED('scope', 'no floor')], true, NOW - 1000, undefined, NOW, ['Pi']);
+    expect(r).toStrictEqual({ line: 'Reviewed independently by Pi; no floor or judge checked this run.', reasons: ['scope (no floor)'], nothing: false });
+  });
+  it('with no review and no checked entry it is still "nothing was checked"', () => {
+    expect(coverageSummary([NOT_CHECKED('scope', 'no floor')], true, NOW - 1000, undefined, NOW, [])?.nothing).toBe(true);
+  });
+  it('independentReviewers: only passed evaluations with distinct_evaluator, once each, named', () => {
+    const ev = (combined: boolean, ran: string[], evaluator: string, denial: unknown = null) =>
+      ({ type: 'gateEvaluated', ord: 3, combined, denial, assurance: { mode: 'standard', required: [], ran, skipped: [], evaluator, creator: 'claude' } }) as unknown as CoreEvent;
+    const events = [ev(true, ['distinct_evaluator'], 'pi'), ev(true, ['distinct_evaluator'], 'pi'), ev(false, ['distinct_evaluator'], 'codex'), ev(true, ['judge'], 'opencode'), ev(true, ['distinct_evaluator'], 'codex', { reason: 'x' })];
+    expect(independentReviewers(events, (s) => s.toUpperCase())).toEqual(['PI']);
   });
 });
 
