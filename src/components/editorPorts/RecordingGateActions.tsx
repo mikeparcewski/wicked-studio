@@ -129,7 +129,8 @@ function GateActions({ rec, units, reload }: { rec: Recording; units: readonly U
     reload();
   });
 
-  if (!verbs.includes('fix') && !verbs.includes('edit')) return null;
+  // The note outlives the verbs: after Ask helpers to fix the gate closes, and the note must still say so.
+  if (!verbs.includes('fix') && !verbs.includes('edit') && note === null) return null;
   return <>
     <div data-testid="walkthrough-actions" className="wk-walk-actions">
       {verbs.includes('fix') && <button type="button" data-testid="walkthrough-fix" disabled={busy} onClick={() => void fix()} className="wk-prop-btn wk-prop-btn--primary">Ask helpers to fix</button>}
