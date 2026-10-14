@@ -13,6 +13,7 @@ import type { CardAction, FullMode, Surfaces } from '../../editors/surfaces.js';
 import { readThemeTokens } from '../../editors/theme.js';
 import { artifactSizeOf, registerArtifact, setArtifactSize, useArtifactSizes } from '../../store/artifactSizes.js';
 import { useArtifactAddress } from '../session/ArtifactAddress.js';
+import { VersionLens } from '../session/ArtifactVersions.js';
 import { useEditorFor } from '../../store/editors.js';
 import '../../editors/adapters/index.js';
 import './hostTabs.js';
@@ -297,6 +298,7 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
   const key = binding.artifactKey;
   const size = useArtifactSizes((st) => artifactSizeOf(st, key));
   const ready = decl !== null;
+  const lensVersion = address !== null && address.routeKey === key ? address.routeVersion : null;
   useEffect(() => {
     const owner = useHostChrome.getState().full;
     if (size === 'full' && owner !== key) enterFull(key);
@@ -459,6 +461,12 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
       >
         <div className="wk-pcard-frame" data-testid="plugin-card-frame" data-interactive={interactive ? 'true' : 'false'} style={frameStyle}>
           <div ref={frameBox} key={mountKey} className="wk-plugin-frame-box" />
+          {/* A version lens from the address (`?v=N`): read-only, over the live frame, which stays mounted. */}
+          {full && lensVersion !== null && binding.docId !== undefined && binding.docId !== '' && (
+            <div className="wk-pcard-lens">
+              <VersionLens projectId={binding.projectId} docId={binding.docId} version={lensVersion} onBack={() => { leaveFull(); }} />
+            </div>
+          )}
           {!interactive && !full && torn === null && (
             // The v1 hit layer (and `interactive:false`): a click is the host's — it opens, never reaches the frame.
             <button type="button" data-testid="plugin-card-catch" aria-label={`Open ${binding.title}`} className="wk-artifact-catch"
