@@ -643,6 +643,21 @@ export function getLearnedTheme(
     });
 }
 
+/**
+ * `PUT /d/:docId/api/theme/learned {tokens, apply}` — write the doc's theme tokens (EP-I2; protocol 2 `theme.set`,
+ * DES-EDITOR-PLUGIN-CONTRACT-001 §6). Interactive re-checks every token with its own grammar (400, nothing
+ * written). `apply: true` lands one re-themed version of the head: `{version, parent, kind:'theme'}`, or
+ * `{version:null, unchanged:true}` when the tokens change nothing.
+ */
+export function putLearnedTheme(
+  projectId: string,
+  docId: string,
+  tokens: Record<string, unknown>,
+  apply: boolean,
+): Promise<{ document_id: string; written: boolean; version: number | null; parent: number | null; kind: string | null; unchanged?: boolean }> {
+  return iFetch(`${docBase(projectId, docId)}/api/theme/learned`, { method: 'PUT', body: JSON.stringify({ tokens, apply }) });
+}
+
 /** `GET /d/:docId/api/theme/learned`'s 200 body (interactive#181). */
 export interface LearnedTheme {
   document_id: string;

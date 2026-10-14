@@ -5,6 +5,9 @@ import {
 } from '../../interactive/instrument-protocol.js';
 import { appendInstrumentBridge, hasInstrumentBridge } from '../../interactive/instrumented.js';
 import { DEFAULT_COLOUR, themeSwatches, type Swatch } from '../../editors/swatches.js';
+import { V2Port, announceReady, helloOf, sizeOfSurface, type Mode, type Surface } from '../_shared/v2.js';
+import { mountStyle } from '../_shared/style.js';
+import surfaces from './surfaces.json';
 
 /**
  * `wicked-page` — the built-in page element editor as a `wicked.editor/1` plugin (DES-EDITOR-PLUGINS-001
@@ -19,6 +22,11 @@ import { DEFAULT_COLOUR, themeSwatches, type Swatch } from '../../editors/swatch
  * (also ⌘⌫ / Ctrl+Backspace — bare Backspace never removes), a fill and a text colour from the page's
  * own theme plus Default, and the whole section (also ⌥↑, or a second click); the header sets the
  * page's width (Phone 390 / Tablet 820 / Desktop 1280) — only the nested frame's width changes.
+ *
+ * Protocol 2 (DES-EDITOR-PLUGIN-CONTRACT-001 §9): the CARD is the page preview (scrollable; a click points at an
+ * element, so the host's "Ask about this" has a subject); the OPTIONS instance draws the Style tab (themes,
+ * colours, fonts: one `theme.set` each, Undo from the host); FULL is this editor, where Simple edits words and
+ * Advanced adds the element style (fill, text colour) and Remove. A protocol-1 host sees the v1 editor unchanged.
  *
  * The plugin never learns a URL, an id's mount or a run root: it reads the artifact through the host,
  * and every write, chip and key goes through the host's checks (§5.6, §5.7, §5.10). Framework-free,
@@ -48,6 +56,7 @@ interface Inventory {
 }
 
 const MARKUP = `
+<div data-testid="page-style" id="style" class="style-pane" hidden></div>
 <div data-testid="page-editor" id="editor" class="editor" data-kind="page" data-head="" data-pickable="false" data-selected="" data-size="pane" data-width="" tabindex="0" role="application" aria-label="The page">
   <div data-testid="page-tools" id="tools" class="tools" role="toolbar" aria-label="Page width">
     ${WIDTHS.map(([w, word]) => `<button type="button" data-testid="page-width" data-width="${w}" aria-pressed="false" title="${word} · ${w} px wide">${word} ${w}</button>`).join('')}
@@ -111,6 +120,12 @@ export function start(): void {
   let port: MessagePort | null = null;
   let grants: string[] = [];
   let size: Size = 'pane';
+  /** Protocol 2: the surface this instance is and the full-screen mode (Simple edits words; Advanced adds style). */
+  let protocol = 1;
+  let surface: Surface = 'options';
+  let mode: Mode = 'simple';
+  let v2: V2Port | null = null;
+  const advanced = (): boolean => protocol < 2 || mode === 'advanced';
   let seq = 0;
   const pending = new Map<string, (r: Reply) => void>();
   const send = (type: string, payload: unknown): void => { port?.postMessage({ p: PROTOCOL, v: PROTOCOL_VERSION, type, payload }); };
@@ -209,7 +224,7 @@ export function start(): void {
     node.style.height = `${Math.max(b.height, minH)}px`;
   };
 
-  const pickable = (): boolean => size !== 'inline' && inventory !== null;
+  const pickable = (): boolean => (size !== 'inline' || (protocol >= 2 && surface === 'card')) && inventory !== null;
 
   const draw = (): void => {
     editor.dataset['head'] = head === null ? '' : String(head);
@@ -221,6 +236,11 @@ export function start(): void {
     place(selBox, editing === null ? box(selected) : null);
     if (editing !== null) place(input, box(editing.wid), 160, 30); else input.hidden = true;
     tools.hidden = size === 'inline';
+    editor.dataset['mode'] = protocol >= 2 ? mode : '';
+    // Simple mode keeps the peek to the section step; the element's style and Remove are Advanced (§9).
+    removeBtn.hidden = !advanced();
+    fills.hidden = !advanced();
+    inks.hidden = !advanced();
     drawPeek();
     // The hint: what the pick lets you do (S8 words), or why typing cannot change this element.
     if (!pickable() || editing !== null) { hint.hidden = true; return; }
@@ -508,11 +528,11 @@ export function start(): void {
     }
     if (e.metaKey || e.ctrlKey || e.altKey) return;
     if (onButton && e.key.length !== 1) return;
-    if (e.key === 'Enter') { if (selected !== null && !busy) { e.preventDefault(); beginEdit(selected, null); } return; }
+    if (e.key === 'Enter') { if (selected !== null && !busy && size !== 'inline') { e.preventDefault(); beginEdit(selected, null); } return; }
     // Bare Backspace / Delete never remove anything (§7.1 R-a).
     if (e.key.length !== 1) return;
     e.preventDefault();
-    if (selected !== null && !busy) { beginEdit(selected, e.key); return; }
+    if (selected !== null && !busy && size !== 'inline') { beginEdit(selected, e.key); return; }
     // Rule 2: the first printable key outside an editable goes to the composer — never an action.
     send('ui.typed', { grapheme: e.key });
   });
@@ -521,7 +541,7 @@ export function start(): void {
   const setSize = (to: Size): void => {
     size = to;
     document.body.dataset['size'] = to;
-    if (to === 'inline') { cancelEdit(); select(null); (document.activeElement as HTMLElement | null)?.blur?.(); }
+    if (to === 'inline') { cancelEdit(); if (protocol < 2) select(null); (document.activeElement as HTMLElement | null)?.blur?.(); }
     applyWidth();
     draw();
   };
@@ -545,6 +565,7 @@ export function start(): void {
         else r({ ok: false, error: d.error ?? { code: 'unavailable', message: 'no answer' }, payload });
         return;
       }
+      if (v2 !== null && v2.dispatch(d)) return;
       const p = typeof d.payload === 'object' && d.payload !== null ? d.payload as Record<string, unknown> : {};
       switch (d.type) {
         case 'host.ping':
@@ -585,12 +606,52 @@ export function start(): void {
     const p = typeof d.payload === 'object' && d.payload !== null ? d.payload as Record<string, unknown> : {};
     grants = Array.isArray(p['grants']) ? (p['grants'] as unknown[]).filter((g): g is string => typeof g === 'string') : [];
     applyTheme(p['theme']);
-    setSize(p['size'] === 'inline' || p['size'] === 'full' ? p['size'] : 'pane');
+    const hello = helloOf(p);
+    protocol = hello.protocol;
+    if (protocol >= 2) {
+      surface = hello.surface;
+      mode = hello.mode ?? 'simple';
+      v2 = new V2Port(port, {
+        surface: (s, m) => { surface = s; if (m !== null) mode = m; showSurface(); },
+        mode: (m) => { mode = m; draw(); return mode; },
+        selection: (anchors) => {
+          // Another instance pointed at an element: show it picked here too (ids only; the host checked them).
+          const a = anchors.find((x): x is { kind: 'element'; id: string } => typeof x === 'object' && x !== null && (x as { kind?: unknown }).kind === 'element' && typeof (x as { id?: unknown }).id === 'string');
+          if (a !== undefined && inventory?.widMap[a.id] !== undefined && surface !== 'options') { selected = a.id; draw(); }
+        },
+      });
+      showSurface();
+    } else setSize(hello.size);
     void render();
   });
 
-  const version = document.querySelector('meta[name="wicked-editor-version"]')?.getAttribute('content') ?? '0.0.0';
-  parent.postMessage({ p: PROTOCOL, v: PROTOCOL_VERSION, type: 'plugin.ready', payload: { editor: EDITOR, version, protocol: [PROTOCOL_VERSION] } }, '*');
+  /** Protocol 2: the options instance is the Style tab; the card and full screen are the page editor. */
+  const styleRoot = el<HTMLDivElement>('style');
+  let style: { refresh(): void } | null = null;
+  const showSurface = (): void => {
+    const options = surface === 'options';
+    styleRoot.hidden = !options;
+    editor.hidden = options;
+    if (options && style === null) {
+      style = mountStyle(styleRoot, {
+        tokens: () => null,
+        apply: async (tokens) => {
+          for (let attempt = 0; attempt < 2; attempt += 1) {
+            if (head === null) return { ok: false, reason: 'The page is not loaded yet' };
+            const r = await req('theme.set', { base: head, tokens });
+            if (r.ok) { const v = r.payload['version']; if (typeof v === 'number') void render(v); return { ok: true }; }
+            if (r.error.code !== 'head_moved') return { ok: false, reason: r.error.message };
+            const h = r.payload?.['head'];
+            if (typeof h === 'number') head = h; else await render();
+          }
+          return { ok: false, reason: 'The page changed again: try once more' };
+        },
+      });
+    }
+    setSize(sizeOfSurface(surface));
+  };
+
+  announceReady(EDITOR, surfaces);
 }
 
 start();
