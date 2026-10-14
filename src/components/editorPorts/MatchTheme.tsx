@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { getLearnedTheme, putLearnedTheme, type LearnKind } from '../../api/interactive.js';
 import { learnReady, learnThemeFromThread, LEARN_KINDS, LEARN_LABEL } from '../../interactive/themeWire.js';
 import { pollLearnedTheme } from '../../theming/learnPoll.js';
-import { beginMatch, endMatch, themeWritesSettled } from '../../editors/themeLock.js';
+import { beginMatch, beginThemeWrite, endMatch, themeWritesSettled } from '../../editors/themeLock.js';
 import { Segmented } from '../ui/index.js';
 import './editorPorts.css';
 
@@ -84,7 +84,8 @@ export function MatchTheme({ projectId, docId, onVersion, apply }: {
         onVersion?.(r.version);
         setLine({ text: `Matched: version ${r.version} wears it`, bad: false });
       } else {
-        const r = await putLearnedTheme(projectId, docId, out.result.tokens, true);
+        const done = beginThemeWrite(projectId, docId);
+        const r = await putLearnedTheme(projectId, docId, out.result.tokens, true).finally(done);
         if (ctl.signal.aborted) return;
         if (r.version !== null) onVersion?.(r.version);
         setLine({ text: r.version !== null ? `Matched: version ${r.version} wears it` : 'Matched: this version already looks like that', bad: false });

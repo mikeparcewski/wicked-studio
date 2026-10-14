@@ -813,7 +813,7 @@ export function start(): void {
     ...Array.from(thumbs.querySelectorAll<HTMLButtonElement>('button')).filter(() => size !== 'inline' && !present),
     ...Array.from(tools.querySelectorAll<HTMLButtonElement>('button')).filter((b) => !tools.hidden && !b.hidden && !b.disabled),
     handle,
-    ...(size === 'inline' || present ? [] : [notes]),
+    ...(size === 'inline' || present || notesBox.hidden ? [] : [notes]),
   ];
   const goto = (digit: string): void => {
     gotoDigits = `${gotoDigits}${digit}`.slice(-3);

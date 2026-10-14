@@ -143,6 +143,17 @@ describe('wicked-deck protocol 2 card and full', () => {
     expect(getComputedStyle(document.querySelector('#slide-box')!).overflow).toBe('hidden');
     expect(frame.srcdoc).toContain('[data-wi-deck-current]{position:absolute!important;left:0!important;top:0!important;width:1280px!important;height:720px!important');
   });
+  it('in full screen the notes fold under the Notes button and leave the focus ring until opened', () => {
+    const toggle = node<HTMLButtonElement>('deck-notes-toggle');
+    expect(toggle.hidden).toBe(false);
+    expect(node('deck-notes-tab').hidden).toBe(true);
+    expect(toggle.getAttribute('aria-pressed')).toBe('false');
+    toggle.click();
+    expect(node('deck-notes-tab').hidden).toBe(false);
+    expect(toggle.getAttribute('aria-pressed')).toBe('true');
+    toggle.click();
+    expect(node('deck-notes-tab').hidden).toBe(true);
+  });
   it('marks overflowing measured content at the bottom/right and rejects foreign or malformed measurements', () => {
     const frame = stageFrame(); frame.dispatchEvent(new Event('load'));
     const bottom = document.querySelector<HTMLElement>('[data-testid=deck-cutoff][data-edge=bottom]')!;
