@@ -12,8 +12,8 @@
   "studioVersion": "0.7.13",
   "counts": {
     "files": 206,
-    "occurrences": 2463,
-    "static": 2151,
+    "occurrences": 2465,
+    "static": 2153,
     "dynamic": 63,
     "computed": 24
   },
@@ -1656,6 +1656,18 @@
     },
     {
       "testId": "deck-proposal-keep",
+      "files": [
+        "src/components/session/DeckReview.tsx"
+      ]
+    },
+    {
+      "testId": "deck-proposal-retry",
+      "files": [
+        "src/components/session/DeckReview.tsx"
+      ]
+    },
+    {
+      "testId": "deck-proposal-stopped",
       "files": [
         "src/components/session/DeckReview.tsx"
       ]

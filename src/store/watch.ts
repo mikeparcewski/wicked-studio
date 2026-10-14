@@ -419,6 +419,9 @@ export function coverageLine(coverage: WatchFeedResponse['coverage'], label: (en
 
 export interface CoverageSummary {
   line: string;
+  /** studio#770: true only when nothing at all checked the finished run (no coverage entry, no independent
+   *  review) — what "· nothing checked" on the chain line means. */
+  nothing: boolean;
   /** Non-empty → ⋯ disclosure; empty → no toggle. */
   reasons: string[];
 }
@@ -441,6 +444,8 @@ export function coverageSummary(
   endedMs: number | null,
   label: (entryId: string) => string = (e) => e,
   now = Date.now(),
+  /** studio#770: the seats that independently reviewed and accepted a step of this run (a distinct evaluator). */
+  reviewers: readonly string[] = [],
 ): CoverageSummary | null {
   if (coverage === undefined) return null;
   const notChecked = (coverage ?? []).filter(
@@ -452,10 +457,14 @@ export function coverageSummary(
   const counted = (n: number): string => `${n} ${n === 1 ? 'check' : 'checks'} didn’t run on this run.`;
   // A live run, or a finished run that DID record evidence: how many checks did not run.
   if (!isTerminal || (coverage ?? []).some((c) => c.state === 'checked')) {
-    return notChecked.length === 0 ? null : { line: counted(notChecked.length), reasons };
+    return notChecked.length === 0 ? null : { line: counted(notChecked.length), reasons, nothing: false };
+  }
+  // studio#770: an independent review on a distinct seat IS a check — say what ran and what didn't.
+  if (reviewers.length > 0) {
+    return { line: `Reviewed independently by ${reviewers.join(' and ')}; no floor or judge checked this run.`, reasons, nothing: false };
   }
   const ended = endedMs !== null ? `it ended ${_ago(endedMs, now)}` : 'it has ended';
-  return { line: `Nothing was checked on this run — ${ended}`, reasons };
+  return { line: `Nothing was checked on this run — ${ended}`, reasons, nothing: true };
 }
 
 // ── The store ─────────────────────────────────────────────────────────────────────────────

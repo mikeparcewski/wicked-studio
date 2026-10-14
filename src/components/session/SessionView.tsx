@@ -33,6 +33,8 @@ import { Tech, runTechParts } from '../Tech.js';
 import { parseJump } from '../../store/watch.js';
 import { GateRow } from './GateRow.js';
 import { RunAssuranceLabel } from './AssuranceReceipt.js';
+import { independentReviewers } from '../../board/assuranceModel.js';
+import { reviewerName } from '../WatchLines.js';
 import { ChatQuestions, RunQuestions } from './ThreadQuestions.js';
 import { SourceChips } from './SourceChips.js';
 import { SinceYouLeft } from './SinceYouLeft.js';
@@ -793,11 +795,15 @@ export function RunBlock({ view, badge, sessionId, navigate, solo = null }: {
         // Only a successful read with no checked entry adds "· nothing checked".
       });
   }, [id, isTerminal]);
+  // studio#770: an accepted review on a distinct seat counts as checked.
+  const runEvents = useRunEvents(id, isTerminal).events;
   const noEvidenceSummary = coverageSummary(
     watchCoverage,
     isTerminal,
     endedMs,
     (e) => e.replace(/[-_]+/g, ' '),
+    Date.now(),
+    independentReviewers(runEvents, reviewerName),
   );
   const gate = useGateStore((s) => s.gates[id]);
   const action = useGateActionStore((s) => s.byGate[id] ?? IDLE_GATE_ACTION);
@@ -883,7 +889,7 @@ export function RunBlock({ view, badge, sessionId, navigate, solo = null }: {
       {/* S16a-4g: an MCP server's question and the stall watchdog's hand-off, under the run's card. */}
       <RunQuestions view={view} />
       <PlanStepLines runId={id} />
-      <ChainLine chain={chain} runId={id} units={view.units} teamError={teamError} onRetry={retry} checks={checks} momentOf={momentOf} onOpenAt={(sec) => requestWalkthroughSeek(id, sec)} nothingChecked={noEvidenceSummary !== null} jumpOrd={jump?.ord ?? null} />
+      <ChainLine chain={chain} runId={id} units={view.units} teamError={teamError} onRetry={retry} checks={checks} momentOf={momentOf} onOpenAt={(sec) => requestWalkthroughSeek(id, sec)} nothingChecked={noEvidenceSummary?.nothing === true} jumpOrd={jump?.ord ?? null} />
       {/* S8: the page the run is producing — a live preview that morphs inline → pane → full. */}
       <RunArtifacts view={view} composerKey={sessionId} chain={chain} />
       <RunHelpers view={view} />

@@ -23,6 +23,27 @@ import { rememberWorkTitles } from '../board/gateActions.js';
  * pool from being saturated by stacked actor-bound requests, which would starve
  * concurrent read-only operations (getCoverageReport, listConformanceRules, etc.).
  */
+const TERMINAL = new Set(['completed', 'cancelled', 'failed']);
+
+/** studio#769: read the open question of every live run the store holds none for (CAS-guarded). */
+export async function hydrateElicitations(runs: readonly SessionView[], cancelled: () => boolean = () => false): Promise<void> {
+  const store = useElicitationStore.getState;
+  const live = runs.filter((v) => !TERMINAL.has(v.session.status) && store().elicitations[v.session.id] === undefined).map((v) => v.session.id);
+  await Promise.all(live.map(async (id) => {
+    const gen = store().getRunGen(id);
+    let e: Awaited<ReturnType<typeof api.getElicitation>>;
+    try {
+      e = await api.getElicitation(id);
+    } catch {
+      return;
+    }
+    if (cancelled() || e === null) return;
+    store().setFromGetIfUnchanged(id, gen, {
+      runId: e.runId, elicitationId: e.elicitationId, message: e.message, options: e.options, receivedAt: e.receivedAt,
+    });
+  }));
+}
+
 export function useRuns(): { runs: SessionView[]; refresh: () => void; loaded: boolean; error: string | null } {
   const status = useConnectionStore((s) => s.status);
   const setGate = useGateStore((s) => s.setGate);
@@ -94,6 +115,13 @@ export function useRuns(): { runs: SessionView[]; refresh: () => void; loaded: b
       // executing and still hold an open MCP question (DES-002 v0.25 — an absent run must bump so
       // an in-flight GET cannot resurrect a zombie prompt).
       reconcileElicitations(fetched.map((v) => v.session.id));
+      // studio#769: the late-join rehydration the store was built for (its CAS, `setFromGetIfUnchanged`). A
+      // page loaded after a worker's question opened, or one that missed the frame while the socket
+      // reconnected, reads `GET /runs/:id/elicitation` for every live run it holds no question for. A
+      // frame that lands while the read is in flight bumps the generation, so the read cannot resurrect a
+      // prompt the operator already answered. A failed read leaves the store as it was (no question is
+      // cleared for a broken daemon).
+      void hydrateElicitations(fetched, () => cancelled);
 
       for (const id of awaiting) {
         if (useGateStore.getState().gates[id]) continue;
