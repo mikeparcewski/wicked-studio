@@ -1,4 +1,5 @@
 import type { CoreEvent, SessionView, WorkUnit } from '../api/types.js';
+import { PAGE_NAMES } from './pageNames.js';
 
 /**
  * The assurance receipt (wicked-core#850 / #852, core-ts 0.7.46): what a run REQUIRES, and for each
@@ -96,6 +97,22 @@ export const QE_SKIP_LABEL = 'Skip QE acceptance';
 export const QE_SKIP_DISCLOSURE =
   'This workflow changes the application, so delivery waits for a QE acceptance PASS. Skipping needs '
   + 'a reason, and the run, every gate and the delivery say "QE acceptance: skipped by operator".';
+/**
+ * QE acceptance as this computer's service is set (`GET /health.capabilities.qeAcceptance`, api-types
+ * 0.120.0): `'off'` — every job that would wait for it skips it, labelled; `'required'` — the default;
+ * `null` — a service that does not say (read it as required).
+ */
+export function qeAcceptanceSetting(caps: Record<string, unknown> | null | undefined): 'required' | 'off' | null {
+  const v = caps?.['qeAcceptance'];
+  return v === 'off' || v === 'required' ? v : null;
+}
+export const QE_OFF_NOTE =
+  `QE acceptance is off on this computer (Settings › ${PAGE_NAMES.system}), so this job doesn’t wait for it. `
+  + 'The job, its gates and its delivery say it was skipped.';
+/** The same note once the operator forces QE acceptance for this one job. */
+export const QE_OFF_FORCED_NOTE =
+  `QE acceptance is off on this computer (Settings › ${PAGE_NAMES.system}), but this job requires it: `
+  + 'it waits for a QE acceptance pass before it delivers.';
 export const QE_FORCE_LABEL = 'Force QE acceptance';
 export const QE_FORCE_DISCLOSURE =
   'Require QE acceptance even if the run\'s change scores low enough to waive it.';

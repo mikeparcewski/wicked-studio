@@ -33,7 +33,8 @@ import { deliverKindOf, type RunKind, type RunMode } from './runMode.js';
 import { HOME_FRESH_MS, useNeedsSources } from '../store/needsSources.js';
 import { useLaunchPreview, usePhaseSelection } from '../hooks/useLaunchPlan.js';
 import { QeAcceptanceOptions, ReducedAssuranceOptIn } from './session/AssuranceReceipt.js';
-import { workflowRequiresQe } from '../board/assuranceModel.js';
+import { qeAcceptanceSetting, workflowRequiresQe } from '../board/assuranceModel.js';
+import { QeOffNote } from './QeOffNote.js';
 import { LaunchPreview } from './LaunchPreview.js';
 import { LinkedIssuesLine, useLinkedIssuesPreview } from './LinkedIssuesLine.js';
 import { PhasePicker } from './PhasePicker.js';
@@ -294,6 +295,8 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   // QE-IN-APP-WORKFLOWS: whether the daemon takes the operator's explicit QE word
   // (`capabilities.qeAcceptanceOverride`), and the word itself — never set by studio.
   const [daemonQe, setDaemonQe] = useState(false);
+  // Settings › System: QE acceptance off on this computer (`capabilities.qeAcceptance`) — the service skips it, labelled.
+  const [qeOff, setQeOff] = useState(false);
   const [skipQe, setSkipQe] = useState(false);
   const [skipQeReason, setSkipQeReason] = useState('');
   const [forceQe, setForceQe] = useState(false);
@@ -314,6 +317,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
         setDaemonLinkedIssues(h.capabilities?.linkedIssuesExclude === true);
         setDaemonReduced(h.capabilities?.reducedAssurance === true);
         setDaemonQe(h.capabilities?.qeAcceptanceOverride === true);
+        setQeOff(qeAcceptanceSetting(h.capabilities as Record<string, unknown> | undefined) === 'off');
         setBaseSkill(h.baseSkill);
       })
       .catch(() => { if (!cancelled) { setDaemonDeliverGate(null); setDaemonRevisesPr(null); setDaemonChatId(null); } });
@@ -769,7 +773,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
       }
     }
     // QE-IN-APP-WORKFLOWS: a ticked skip is never sent without its reason.
-    if (offerQe && skipQe && skipQeReason.trim() === '') {
+    if (offerQe && !qeOff && skipQe && skipQeReason.trim() === '') {
       setSubmitting(false);
       setError('Say why QE acceptance is skipped, or untick "Skip QE acceptance".');
       return;
@@ -849,7 +853,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
     if (reducedAssurance) body.reducedAssurance = true;
     // QE-IN-APP-WORKFLOWS: the operator's explicit skip (with its reason) or force — only when ticked,
     // only to a daemon that takes it, only for a workflow that requires QE acceptance.
-    if (offerQe && skipQe) body.skipQeAcceptance = { reason: skipQeReason.trim() };
+    if (offerQe && !qeOff && skipQe) body.skipQeAcceptance = { reason: skipQeReason.trim() };
     if (offerQe && forceQe) body.forceQeAcceptance = true;
 
     try {
@@ -1624,7 +1628,8 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
 
       {/* QE-IN-APP-WORKFLOWS: a workflow that changes the application waits for a QE acceptance PASS
           before it delivers; the operator may skip it (with a reason) or force it, said first. */}
-      {offerQe && (
+      {offerQe && qeOff && <QeOffNote force={forceQe} onForce={setForceQe} />}
+      {offerQe && !qeOff && (
         <QeAcceptanceOptions
           skip={skipQe} reason={skipQeReason} force={forceQe}
           onSkip={setSkipQe} onReason={setSkipQeReason} onForce={setForceQe}

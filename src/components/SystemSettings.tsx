@@ -38,7 +38,8 @@ function isAbsolutePathLike(p: string): boolean {
  * bumps its pin — the same TODO shape `api/types.ts` uses for the delivery wire.
  */
 // api-types 0.109.0 carries councilSize; extend the pinned settings type locally until then.
-type LocalSettings = Settings & { deliverIdentityLogin?: string; councilSize?: number };
+/** `qeAcceptance` is api-types 0.120.0 (crew): typed here until studio's pin carries it. */
+type LocalSettings = Settings & { deliverIdentityLogin?: string; councilSize?: number; qeAcceptance?: 'required' | 'off' };
 
 /**
  * Client-side mirror of the daemon's deliver-identity rule (crew#549): a GitHub login — letters,
@@ -264,6 +265,15 @@ export function SystemSettings({ navigate = (p) => { history.pushState(null, '',
             {baseSkill != null && <TechDetails text={JSON.stringify(baseSkill, null, 2)} />}
           </div>
         </SettingRow>
+        {/* api-types 0.120.0: off = studio's service skips QE acceptance for every job that would wait
+            for it, and labels each one; a daemon before the setting sends no key and keeps it required. */}
+        <Switch label="Require QE acceptance before delivery" data-testid="qe-acceptance-toggle" checked={merged.qeAcceptance !== 'off'}
+          onChange={(checked) => patch('qeAcceptance', checked ? 'required' : 'off')}
+          disabled={settings === null ? 'Reading this setting…'
+            : settings.qeAcceptance === undefined ? 'Studio’s service doesn’t have this setting yet, so QE acceptance stays required.' : null}
+          hint={merged.qeAcceptance === 'off'
+            ? 'Off: jobs that change the application deliver without waiting for a QE check. Each job, its gates and its delivery say it was skipped.'
+            : 'Jobs that change the application wait for a QE acceptance pass before they deliver.'} />
         <Switch label="Open a PR when a build run finishes" data-testid="deliver-pr-toggle" checked={deliverPr}
           onChange={(checked) => updateComposerPrefs({ deliverPr: checked })}
           hint="Push the finished branch and open a pull request when a workflow and repository are selected; you decide when to merge." />
