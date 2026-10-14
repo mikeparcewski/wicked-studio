@@ -335,8 +335,10 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
     const to = full ? 'full' : 'inline';
     if (from === to) return;
     setArtifactSize(key, to);
-    address?.write(key, from, to);
-  }, [full, key, address]);
+    // Leaving full screen with this card's Options group open lands on its pane address, so the group (and a
+    // Versions tab in it) stays (desk_artifact_versions: the lens's own Back, then Restore in the panel).
+    address?.write(key, from, !full && useHostPanel.getState().group?.key === group ? 'pane' : to);
+  }, [full, key, address, group]);
 
   // Leaving the page while full restores the shell.
   useEffect(() => () => { if (useHostChrome.getState().full === binding.artifactKey) useHostChrome.getState().exitFull(); }, [binding.artifactKey]);
