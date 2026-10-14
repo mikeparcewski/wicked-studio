@@ -11,9 +11,9 @@
   "version": 1,
   "studioVersion": "0.7.13",
   "counts": {
-    "files": 214,
-    "occurrences": 2562,
-    "static": 2236,
+    "files": 215,
+    "occurrences": 2565,
+    "static": 2239,
     "dynamic": 64,
     "computed": 24
   },
@@ -12926,6 +12926,24 @@
       "testId": "verdict-ungated",
       "files": [
         "src/components/VerdictDetail.tsx"
+      ]
+    },
+    {
+      "testId": "video-editor",
+      "files": [
+        "src/plugins/wicked-video/plugin.ts"
+      ]
+    },
+    {
+      "testId": "video-play",
+      "files": [
+        "src/plugins/wicked-video/plugin.ts"
+      ]
+    },
+    {
+      "testId": "video-player",
+      "files": [
+        "src/plugins/wicked-video/plugin.ts"
       ]
     },
     {
