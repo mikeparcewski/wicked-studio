@@ -4,6 +4,7 @@ import { decideGate, IDLE_GATE_ACTION, useGateActionStore } from '../../board/ga
 import type { ArtifactBinding, RunHostContext } from '../../editors/hostApi.js';
 import { useHostChrome } from '../../editors/hostApi.js';
 import { useGateStore } from '../../store/gates.js';
+import { recordingGateActions } from '../editorPorts/RecordingGateActions.js';
 
 /**
  * H3 (HOST-API §6): what the run page supplies to the editor host — the run, its current phase (the
@@ -80,7 +81,12 @@ export function useRunHostValue(runs: readonly RunView[], renderChat: () => Reac
     gateActions: (binding) => {
       const own = runOfBinding(binding, runs);
       const run = own === undefined ? primary : own;
-      return run === null ? null : <GateButtons runId={run.session.id} />;
+      if (run === null) return null;
+      // A recording (walkthrough, demo video) brings its own gate verbs — Ask helpers to fix, Edit the
+      // check, Re-record this chapter — drawn from the run's state by the host (H6, RecordingGateActions);
+      // they read the binding's run, which is the run resolved here (never another run's).
+      const recording = recordingGateActions({ ...binding, runId: run.session.id }, run.units);
+      return <>{recording}<GateButtons runId={run.session.id} /></>;
     },
     liveFrameCap: 6,
   }), [primary, phase, renderChat, runs]);

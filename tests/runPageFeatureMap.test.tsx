@@ -14,6 +14,7 @@ import { useElicitationStore } from '../src/store/elicitations.js';
 import { setCachedRoster } from '../src/store/rosterCache.js';
 import { useHostPanel } from '../src/editors/hostApi.js';
 import { makeUnit, makeView } from './factories.js';
+import { SinceYouLeft } from '../src/components/session/SinceYouLeft.js';
 
 const ROSTER = [
   { key: 'claude', display_name: 'Claude Code', binary: 'claude', enabled_for_council: true },
@@ -157,5 +158,14 @@ describe('where today’s features go (one row each)', () => {
   it('the composer, slash menu and about: chips → unchanged, at the bottom of the thread', () => {
     page([live()]);
     expect(screen.getByTestId('session').querySelector('.wk-session-composer')).not.toBeNull();
+  });
+
+  it('SinceYouLeft → the first card in the thread on return, from crew, still one line collapsed', () => {
+    render(<SinceYouLeft card={{ away: '5 h', summary: '1 finished', finished: ['r1'], failed: [], needsYou: 0 } as never} runs={[live('completed')]} />);
+    const card = screen.getByTestId('since-you-left');
+    const who = within(card).getByTestId('turn-who');
+    expect(who).toHaveAttribute('data-role', 'crew');
+    expect(who.tagName).toBe('SPAN');
+    expect(who.closest('.wk-since-head')).not.toBeNull();
   });
 });
