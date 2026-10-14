@@ -28,7 +28,7 @@ export const EDITORS = [
     id: 'wicked-page',
     // The operator's name for it (2026-10-12): the editor of an interactive document, plainly.
     title: 'Document',
-    protocol: [1],
+    protocol: [1, 2],
     kinds: ['page'],
     sizes: ['inline', 'pane', 'full'],
     permissions: [
@@ -36,13 +36,15 @@ export const EDITORS = [
       { id: 'artifact.write', why: 'to land what you type on an element as one version, with Undo' },
       { id: 'selection.chip', why: 'to make the element you click the subject of your next message' },
       { id: 'network.media', why: 'to show the page’s web images and fonts' },
+      { id: 'artifact.theme', why: 'to change the page’s theme, colours and fonts from its Style tab, as one version with Undo' },
+      { id: 'ui.fullscreen', why: 'to show the page full screen' },
     ],
   },
   {
     // DES-PRESENTATION-EDITOR-001 P-D1 (operator decision D1: its own plugin, not a layout of the page editor).
     id: 'wicked-deck',
     title: 'Slides',
-    protocol: [1],
+    protocol: [1, 2],
     kinds: ['deck'],
     sizes: ['inline', 'pane', 'full'],
     permissions: [
@@ -50,9 +52,15 @@ export const EDITORS = [
       { id: 'artifact.write', why: 'to add, duplicate, move or delete a slide, change its words or its notes, each as one version with Undo' },
       { id: 'selection.chip', why: 'to make the slide or the line you click the subject of your next message' },
       { id: 'ui.fullscreen', why: 'to present the deck full screen' },
+      { id: 'artifact.theme', why: 'to change the deck’s theme, colours and fonts from its Style tab, as one version with Undo' },
     ],
   },
 ];
+
+/** A protocol-2 plugin's surfaces declaration, `src/plugins/<id>/surfaces.json`. */
+export function surfacesOf(id) {
+  return JSON.parse(readFileSync(join(root, 'src', 'plugins', id, 'surfaces.json'), 'utf8'));
+}
 
 /** Nothing in the entry may load from outside it (crew's `externalReferences` check; the CSP would block it anyway). */
 export function externalReferences(html) {
@@ -101,7 +109,10 @@ export async function buildEditors(outDir, { version } = {}) {
     if (outside.length > 0) throw new Error(`build-editors: ${e.id} loads from outside itself: ${outside.join(', ')}`);
     const target = join(outDir, 'editors', e.id);
     mkdirSync(target, { recursive: true });
-    const manifest = { id: e.id, title: e.title, version: v, protocol: e.protocol, kinds: e.kinds, entry: 'index.html', sizes: e.sizes, permissions: e.permissions };
+    // Protocol 2 (DES-EDITOR-PLUGIN-CONTRACT-001 §5.1): the surfaces live in the plugin's own `surfaces.json`, which
+    // its `plugin.ts` imports for `plugin.ready` too, so the manifest and the bundle can't disagree.
+    const surfaces = e.protocol.includes(2) ? surfacesOf(e.id) : undefined;
+    const manifest = { id: e.id, title: e.title, version: v, protocol: e.protocol, kinds: e.kinds, entry: 'index.html', sizes: e.sizes, permissions: e.permissions, ...(surfaces !== undefined ? { surfaces } : {}) };
     writeFileSync(join(target, 'index.html'), html, 'utf8');
     writeFileSync(join(target, 'editor.json'), `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
     written.push({ id: e.id, version: v, bytes: Buffer.byteLength(html, 'utf8'), sha256: createHash('sha256').update(html, 'utf8').digest('hex'), dir: target });
