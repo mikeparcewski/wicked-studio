@@ -101,6 +101,8 @@ function GroupBody({ group, tab }: { group: OptionsGroup; tab: PanelTab }): Reac
   const showFrame = v2 && pluginTab?.render === 'plugin';
   const firstPluginTab = group.surfaces.options?.tabs.find((t) => t.render === 'plugin')?.id;
   const [, setShownTick] = useState(0);
+  // The card's shown version re-renders the host tabs (codex h2b-r3 P2).
+  const shown = useGroupShown((st) => st.shown[group.key]);
 
   return (
     <>
@@ -122,22 +124,22 @@ function GroupBody({ group, tab }: { group: OptionsGroup; tab: PanelTab }): Reac
         </div>
       )}
       {pluginTab !== null && tabFootersFor(pluginTab.id, group.adapter).map((f, i) => (
-        <div key={i} data-testid="host-panel-tab-footer" data-tab={pluginTab.id}>{f.render(hostCtx(group, hostRef))}</div>
+        <div key={i} data-testid="host-panel-tab-footer" data-tab={pluginTab.id}>{f.render(hostCtx(group, hostRef, shown))}</div>
       ))}
       {hostTab !== null && (
         <div data-testid="host-panel-hosttab" data-tab={hostTab.id}>
-          {hostTab.render(hostCtx(group, hostRef))}
+          {hostTab.render(hostCtx(group, hostRef, shown))}
         </div>
       )}
     </>
   );
 }
 
-function hostCtx(group: OptionsGroup, hostRef: React.MutableRefObject<EditorHost | null>): HostTabContext {
+function hostCtx(group: OptionsGroup, hostRef: React.MutableRefObject<EditorHost | null>, shownVersion: number | undefined): HostTabContext {
   return {
     binding: group.binding,
     adapter: group.adapter,
-    shown: useGroupShown.getState().shown[group.key] ?? group.adapter.artifact().head,
+    shown: shownVersion ?? group.adapter.artifact().head,
     pointAt: async (wid) => (await hostRef.current?.pointAt(wid)) ?? false,
     changed: (head, kind) => {
       hostRef.current?.artifactChanged(head, kind);
@@ -277,6 +279,8 @@ function ControlInput({ c, id, value, onChange }: { c: Control; id: string; valu
         </select>
       );
     case 'color':
+      // The native picker needs SOME hex until the plugin's value arrives: a control value, not host styling.
+      // eslint-disable-next-line no-restricted-syntax
       return <input id={id} type="color" value={typeof value === 'string' && /^#[0-9a-f]{6}$/iu.test(value) ? value : '#000000'} onChange={(e) => onChange(e.target.value)} className="wk-hcontrol-color" />;
     case 'text':
       return <TextControl id={id} max={c.maxChars ?? 200} value={typeof value === 'string' ? value : ''} onChange={onChange} />;

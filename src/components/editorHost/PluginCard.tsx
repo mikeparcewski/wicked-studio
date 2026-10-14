@@ -121,6 +121,7 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
   const adapter = useMemo<SurfaceAdapter | null>(
     () => adapterProp ?? adapterFor(bindingRef.current),
     // Not the title: renaming an artifact must not tear its frame down (codex h2a-r1 P2).
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed by the artifact's identity; the binding is read through its ref
     [adapterProp, binding.artifactKey, binding.source, binding.projectId, binding.docId, binding.kind],
   );
   const group = groupKey(editor.id, binding.artifactKey);
@@ -183,7 +184,8 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
             focusComposer(key);
           },
           key: (k) => {
-            if (k === 'Escape') leaveFull();
+            // Escape is honoured only with the focus in this frame (codex h2a-r3 P1), like every plugin-made shrink.
+            if (k === 'Escape') { if (clickedIn(hostRef.current?.frame) || document.activeElement === hostRef.current?.frame) leaveFull(); }
             else if (k === 'Mod+K') pressInHost({ key: 'k', code: 'KeyK', metaKey: true, ctrlKey: true });
             else if (k.startsWith('Alt+')) pressInHost({ key: k.slice(4).toLowerCase(), code: `Key${k.slice(4)}`, altKey: true });
             else if (k === 'Tab' || k === 'Shift+Tab') focusBeside(hostRef.current?.frame ?? null, k === 'Shift+Tab');
@@ -237,6 +239,13 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
 
   // Card ↔ full: the same instance hears `host.surface` (v1: `host.size`).
   useEffect(() => { hostRef.current?.setSurface(full ? 'full' : 'card', mode); }, [full]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Every way out of full screen also leaves the browser's own fullscreen of this card (codex h2a-r3 P2).
+  const sectionRef = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    if (full) return;
+    const fs = document.fullscreenElement;
+    if (fs !== null && sectionRef.current !== null && (fs === sectionRef.current || sectionRef.current.contains(fs))) void document.exitFullscreen?.().catch(() => undefined);
+  }, [full]);
 
   // Leaving the page while full restores the shell.
   useEffect(() => () => { if (useHostChrome.getState().full === binding.artifactKey) useHostChrome.getState().exitFull(); }, [binding.artifactKey]);
@@ -318,6 +327,7 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
 
   return (
     <section
+      ref={sectionRef}
       data-testid="plugin-card"
       data-editor={editor.id}
       data-protocol={protocol}
