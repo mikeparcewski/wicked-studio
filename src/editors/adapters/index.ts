@@ -6,3 +6,4 @@ import './interactiveDoc.js';
 import './fake.js';
 import './review.js';
 import './requirements.js';
+import './recording.js';

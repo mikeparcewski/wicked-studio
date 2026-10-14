@@ -1,15 +1,13 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { demoFileUrl, getDemo, putDemoScript } from '../../api/demo.js';
-import { isWalkthroughUnsupported, walkthroughApi, walkthroughFileUrl, type DemoExportFormat, type WalkthroughView } from '../../api/walkthrough.js';
+import { demoFileUrl, putDemoScript } from '../../api/demo.js';
+import { walkthroughApi, walkthroughFileUrl, type DemoExportFormat } from '../../api/walkthrough.js';
 import type { ArtifactSize } from '../../board/artifactMorph.js';
 import {
-  authorWaiting, chapterMarks, checksTrack, escalationOpen, exportOptions, failedChapter, fixNote, fmtTime, gateVerbs, isLive, playheadStart,
-  recordingOf, recordingOfDemo, seatLine, stateLine, takeFingerprint, underneathLines, type GateVerb, type Recording, type RecordingKind, type UnitLike,
+  authorWaiting, chapterMarks, checksTrack, exportOptions, failedChapter, fmtTime, gateVerbs, playheadStart,
+  seatLine, stateLine, takeFingerprint, underneathLines, type Recording, type RecordingKind, type UnitLike,
 } from '../../board/walkthroughModel.js';
-import { commitGateDecision, refreshGate } from '../../board/gateActions.js';
-import { useGateStore } from '../../store/gates.js';
 import { useDisplayText } from '../../hooks/useHomePath.js';
-import { publishRecording, withdrawRecording } from '../../store/recordings.js';
+import { useRecording } from '../editorPorts/useRecording.js';
 import { consumeWalkthroughSeek, useWalkthroughSeek } from '../../store/walkthroughSeek.js';
 import { addAboutChip } from '../../store/composerChips.js';
 
@@ -25,13 +23,13 @@ import { addAboutChip } from '../../store/composerChips.js';
  *  - pane / full: the video editor — the stitched take with the playhead on the failing moment, the
  *    chapters as seek points, the narration (a demo's script, editable while its plan gate is open —
  *    crew accepts the PUT only then), the checks track (each check at its moment, with its evidence
- *    under ⋯), the red mark where it failed, the same actions, and Export.
+ *    under ⋯), the red mark where it failed, and Export. The gate actions live in host chrome.
  *
  * ONE tree at every size: the `<video>` keeps its place in it, so the morph never remounts the player
  * (what is playing inline keeps playing in the pane). Picking a chapter seeks AND makes it the subject
  * of the next message (DESIGN-interaction rule 2: an "about: chapter 2 · …" chip on the composer).
  *
- * The actions are the run's own gate: "Ask helpers to fix" is a `request_changes` with what the
+ * The host's actions are the run's own gate: "Ask helpers to fix" is a `request_changes` with what the
  * walkthrough caught; "Edit the check" is the storyline PUT then an approve. Both are offered only
  * while the open gate is THIS walkthrough's escalation (crew refuses the PUT otherwise).
  *
@@ -54,51 +52,7 @@ export function focusPlayerOnEntry(e: React.FocusEvent<HTMLMediaElement>): void 
   if (e.relatedTarget !== e.currentTarget) e.currentTarget.focus({ preventScroll: true });
 }
 
-const POLL_MS = 2500;
-/** A read that keeps failing is retried this many times (5 s apart), then left: the line says it failed. */
-const MAX_FAILED_READS = 5;
-
-type Load = { kind: 'loading' } | { kind: 'absent' } | { kind: 'failed'; message: string } | { kind: 'ready'; rec: Recording };
-
-export function useRecording(runId: string, kind: RecordingKind, step: string | null, runStatus: string): { load: Load; reload: () => void } {
-  // What is read belongs to ONE (kind, run, step): after any of them changes, the previous
-  // recording is never shown — or acted on — under the new identity, not even while the new read fails.
-  const ident = `${kind}\u0000${runId}\u0000${step ?? ''}`;
-  const [held, setHeld] = useState<{ ident: string; load: Load }>({ ident, load: { kind: 'loading' } });
-  const load: Load = held.ident === ident ? held.load : { kind: 'loading' };
-  const [tick, setTick] = useState(0);
-  useEffect(() => {
-    const setLoad = (next: Load | ((was: Load) => Load)): void => setHeld((h) => {
-      const was: Load = h.ident === ident ? h.load : { kind: 'loading' };
-      return { ident, load: typeof next === 'function' ? next(was) : next };
-    });
-    let cancelled = false;
-    let timer: ReturnType<typeof setTimeout> | null = null;
-    let fails = 0;
-    const read = async (): Promise<void> => {
-      try {
-        const rec = kind === 'demo-video' ? recordingOfDemo(await getDemo(runId)) : recordingOf(await walkthroughApi.view(runId, step));
-        if (cancelled) return;
-        fails = 0;
-        publishRecording(rec); // WT-U2: the chain's chips place their moments by this take's chapter marks
-        setLoad(kind === 'walkthrough' && rec.step === null && rec.planStep === null ? { kind: 'absent' } : { kind: 'ready', rec });
-        if (isLive(rec.state)) timer = setTimeout(() => void read(), POLL_MS);
-      } catch (e) {
-        if (cancelled) return;
-        if (kind === 'walkthrough') withdrawRecording(runId); // WT-U2: no chip moment from a take not re-read
-        // A read that fails while a recording is on screen keeps it (a blip must not blank the take).
-        setLoad((was) => (isWalkthroughUnsupported(e) ? { kind: 'absent' }
-          : was.kind === 'ready' ? was : { kind: 'failed', message: e instanceof Error ? e.message : String(e) }));
-        fails += 1;
-        if (!isWalkthroughUnsupported(e) && fails < MAX_FAILED_READS) timer = setTimeout(() => void read(), POLL_MS * 2);
-      }
-    };
-    void read();
-    return () => { cancelled = true; if (timer !== null) clearTimeout(timer); };
-  }, [runId, kind, step, runStatus, tick, ident]);
-  const reload = useCallback(() => setTick((t) => t + 1), []);
-  return { load, reload };
-}
+export { useRecording } from '../editorPorts/useRecording.js';
 
 function fileUrl(rec: Recording, path: string): string {
   return rec.kind === 'demo-video' ? demoFileUrl(rec.runId, path) : walkthroughFileUrl(rec.runId, rec.step, path);
@@ -178,15 +132,10 @@ function Body({ rec, size, morph, units, reload, composerKey }: {
   const failed = failedChapter(rec);
   const under = underneathLines(rec);
   const track = useMemo(() => checksTrack(rec), [rec]);
-  const gate = useGateStore((s) => s.gates[rec.runId]);
-  const verbs = gateVerbs(rec, escalationOpen(rec, gate?.ord ?? null, units));
+  const verbs = gateVerbs(rec, false);
   const options = exportOptions(rec);
   const [duration, setDuration] = useState<number | null>(null);
   const [raw, setRaw] = useState<string | null>(null);
-  // An Edit-the-check draft belongs to the take it was opened on, BY CONSTRUCTION: it carries that
-  // take's fingerprint, and on any other take there is no open box and no text — in the same render
-  // that shows the other take, with no effect in between. It can never be saved over a newer take.
-  const [draft, setDraft] = useState<{ take: string; text: string } | null>(null);
   const [note, setNote] = useState<{ tone: 'ok' | 'bad'; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
@@ -194,28 +143,10 @@ function Body({ rec, size, morph, units, reload, composerKey }: {
   const src = rec.video === null ? null : fileUrl(rec, rec.video);
   const startAt = playheadStart(rec);
   const take = takeFingerprint(rec);
-  const editing = draft !== null && draft.take === take;
-  const storyline = editing ? draft.text : '';
   // Mounted, as of the commit: the cleanup runs inside the unmount's commit (a layout effect), so a
   // read that resolves right after it never finds the flag still up.
   const live = useRef(true);
   useLayoutEffect(() => { live.current = true; return () => { live.current = false; }; }, []);
-  // The run's units as of the LATEST render: a check made after an await must not read the units
-  // the click handler closed over (the denial may have been cleared meanwhile).
-  // (A layout effect: it runs in the commit itself, so no awaited continuation can resume between a
-  // commit of newer units and this mirror of them.)
-  const unitsRef = useRef(units);
-  useLayoutEffect(() => { unitsRef.current = units; }, [units]);
-  // The take on screen as of the latest commit, for the same reason.
-  const recRef = useRef(rec);
-  useLayoutEffect(() => { recRef.current = rec; }, [rec]);
-
-  // A failed walkthrough's gate may predate this page (a late join): read it once, so the actions
-  // the escalation allows are offered without a visit to the run page.
-  const failedWalk = rec.kind === 'walkthrough' && rec.state === 'failed';
-  useEffect(() => {
-    if (failedWalk && useGateStore.getState().gates[rec.runId] === undefined) void refreshGate(rec.runId);
-  }, [failedWalk, rec.runId]);
 
   // Esc closes the export menu before it shrinks the artifact (the artifact's own listener skips a
   // prevented event); a click elsewhere closes it too.
@@ -297,77 +228,17 @@ function Body({ rec, size, morph, units, reload, composerKey }: {
       if (live.current) setBusy(false);
     }
   };
-  // The verbs were drawn from an older read: before anything is sent, the gate and the take are read
-  // again and the write goes out only if it is still this walkthrough's own escalation, for this take.
-  /** The gate and the take, read now. */
-  const readNow = async (): Promise<WalkthroughView> => {
-    const [, view] = await Promise.all([refreshGate(rec.runId), walkthroughApi.view(rec.runId, rec.step)]);
-    return view;
-  };
-  /** SYNCHRONOUS, and called in the same run as the send it guards (never awaited): nothing can
-   *  change between a check and the write that follows it. Throws when the write must not go out. */
-  const assertMine = (view: WalkthroughView): void => {
-    // Left the page while they were read: the operator is not looking at this any more.
-    if (!live.current) throw new Error('Nothing was sent.');
-    const now = useGateStore.getState().gates[rec.runId];
-    if (!escalationOpen(rec, now?.ord ?? null, unitsRef.current)) throw new Error('This walkthrough is no longer waiting on you — nothing was sent.');
-    // The same step can escalate again for a NEWER take (recorded again, failed again): the take the
-    // click was made on (`rec`: the fix note is built from it), the take on screen now and the take
-    // the daemon holds now must be one and the same.
-    const clicked = takeFingerprint(rec);
-    if (takeFingerprint(recordingOf(view)) !== clicked || takeFingerprint(recRef.current) !== clicked) {
-      reload();
-      throw new Error('The walkthrough changed since this was shown — nothing was sent. Look at it again.');
-    }
-  };
-  const decide = async (decision: Parameters<typeof commitGateDecision>[1]): Promise<void> => {
-    const view = await readNow();
-    assertMine(view);
-    const outcome = await commitGateDecision(rec.runId, decision);
-    if (outcome === 'undone') throw new Error('Undone — nothing was sent.');
-    if (outcome !== 'sent') throw new Error('Not sent — the gate changed or was already answered.');
-  };
-  const fix = (): Promise<void> => act('Sent back to the helpers with what the walkthrough caught.', async () => {
-    await decide({ approve: false, action: 'request_changes', amend: fixNote(rec) });
-    reload();
-  });
-  const saveStoryline = (): Promise<void> => act('The check was changed; the walkthrough records again.', async () => {
-    const stepId = rec.step ?? rec.planStep;
-    if (stepId === null) throw new Error('This recording has no walkthrough step.');
-    const view = await readNow();
-    assertMine(view);
-    await walkthroughApi.putStoryline(rec.runId, stepId, storyline);
-    if (!live.current) return; // the file is written; the approve is the operator's to send, on the gate
-    try {
-      await decide({ approve: true });
-    } catch (e) {
-      // The file is written; only the approve did not go out. Say both, so the gate is not left a mystery.
-      throw new Error(`The check was saved, but it was not sent to record again: ${e instanceof Error ? e.message : String(e)} Approve the gate to record it.`);
-    }
-    if (live.current) setDraft(null);
-    reload();
-  });
   const exportAs = (format: DemoExportFormat): Promise<void> => act(`${format === 'gif' ? 'GIF' : 'Poster'} made.`, async () => {
     const r = await walkthroughApi.demoExport(rec.runId, format);
     if (live.current) setMade((m) => ({ ...m, [format]: r.path }));
   });
-  const onVerb = (v: GateVerb): void => {
-    if (v === 'watch') {
-      if (open) seek(startAt);
-      else { wantPlay.current = src !== null; morph('pane'); }
-    } else if (v === 'fix') void fix();
-    else {
-      // Opens the box for THIS take (at the inline size it also opens the pane); pressed again, closes it.
-      setDraft(editing && open ? null : { take, text: storyline });
-      if (!open) morph('pane');
-    }
+  const watch = (): void => {
+    if (open) seek(startAt);
+    else { wantPlay.current = src !== null; morph('pane'); }
   };
-
-  const actions = verbs.length > 0 && (
+  const actions = verbs.includes('watch') && (
     <div data-testid="walkthrough-actions" className="wk-walk-actions">
-      {verbs.includes('watch') && <button type="button" data-testid="walkthrough-watch" onClick={() => onVerb('watch')} className="wk-prop-btn wk-prop-btn--ghost">Watch</button>}
-      {verbs.includes('fix') && <button type="button" data-testid="walkthrough-fix" disabled={busy} onClick={() => onVerb('fix')} className="wk-prop-btn wk-prop-btn--primary">Ask helpers to fix</button>}
-      {verbs.includes('edit') && <button type="button" data-testid="walkthrough-edit-check" disabled={busy} aria-expanded={editing && open} onClick={() => onVerb('edit')} className="wk-prop-btn wk-prop-btn--ghost">Edit the check</button>}
+      <button type="button" data-testid="walkthrough-watch" onClick={watch} className="wk-prop-btn wk-prop-btn--ghost">Watch</button>
     </div>
   );
   const noteLine = note !== null && (
@@ -475,16 +346,6 @@ function Body({ rec, size, morph, units, reload, composerKey }: {
             </ul>
           )}
           {actions}
-          {open && editing && verbs.includes('edit') && (
-            <div data-testid="walkthrough-edit" className="wk-walk-edit">
-              <p className="wk-walk-quiet">Paste the storyline with your change to the check (the author’s <code>storyline.mjs</code>, whole). Saving re-checks it and the walkthrough records again.</p>
-              <textarea data-testid="walkthrough-storyline" value={storyline} onChange={(e) => setDraft({ take, text: e.target.value })} rows={4} className="wk-walk-storyline" aria-label="The storyline" />
-              <div className="wk-prop-btns">
-                <button type="button" data-testid="walkthrough-storyline-save" disabled={busy || storyline.trim() === ''} onClick={() => void saveStoryline()} className="wk-prop-btn wk-prop-btn--primary">Save and record again</button>
-                <button type="button" data-testid="walkthrough-storyline-cancel" onClick={() => setDraft(null)} className="wk-prop-btn wk-prop-btn--ghost">Cancel</button>
-              </div>
-            </div>
-          )}
           {noteLine}
           {open && track.length > 0 && (
             <ol data-testid="walkthrough-checks" className="wk-walk-checks" aria-label="Checks">
