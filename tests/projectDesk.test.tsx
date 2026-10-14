@@ -179,8 +179,8 @@ describe('the project Desk', () => {
     render(<ProjectDesk {...props} search={`?tab=${tab}&at=${encodeURIComponent('/testing/evals?project=wrong')}`} hosted={hosted} />);
     await loaded();
     expect(hosted).toHaveBeenCalledWith(tab, '/testing/evals?project=wrong', 'p1');
-    // Steering, agents and evaluations are studio-wide: each says so on a project's page (codex r1).
-    expect(screen.getByTestId('desk-hosted-note')).toBeInTheDocument();
+    // Studio-wide tabs carry no "this is all of it" note on a project's page (operator, 2026-10-14).
+    expect(screen.queryByTestId('desk-hosted-note')).toBeNull();
   });
 
   it('first-run guidance opens the project Repositories tab', async () => {

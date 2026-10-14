@@ -12,8 +12,8 @@
   "studioVersion": "0.8.0",
   "counts": {
     "files": 219,
-    "occurrences": 2706,
-    "static": 2334,
+    "occurrences": 2705,
+    "static": 2333,
     "dynamic": 69,
     "computed": 24
   },
@@ -2580,12 +2580,6 @@
       "testId": "desk-headline",
       "files": [
         "src/board/objectActions.ts"
-      ]
-    },
-    {
-      "testId": "desk-hosted-note",
-      "files": [
-        "src/components/desk/DeskV2.tsx"
       ]
     },
     {

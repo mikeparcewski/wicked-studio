@@ -502,7 +502,6 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
       <div data-testid="desk" data-object="desk" data-desk="v2" data-tab={tab} className="wk-desk wk-desk2 wk-desk2--hosted">
         <div className="wk-desk2-hosted-head">{header}{tabs}</div>
         <div className="wk-desk2-hosted" role="tabpanel" id={panelId(tab)} aria-labelledby={tabId(tab)} data-testid={`desk-${tab}`}>
-          {projectId !== undefined && HOSTED_NOTE[tab] !== null && <p className="wk-desk2-hosted-note" data-testid="desk-hosted-note">{HOSTED_NOTE[tab]}</p>}
           {hosted?.(tab, query.get('at') ?? HOSTED_HOME[tab], projectId ?? null)}
         </div>
         {signIn !== null && <AgentModal agentKey={signIn.key} onClose={() => setSignIn(null)} />}
@@ -544,14 +543,6 @@ export const DESK_TABS: readonly { id: DeskTab; label: string }[] = [
 
 /** Each hosted tab's own page when the address names none. */
 export const HOSTED_HOME: Record<HostedTab, string> = { repositories: '/repos', steer: '/rules', agents: '/agents', evaluate: '/testing/evals' };
-
-/** On a project's page: what a hosted tab shows when it cannot be narrowed to the project (null = it is narrowed). */
-const HOSTED_NOTE: Record<HostedTab, string | null> = {
-  repositories: null,
-  steer: 'Steering applies to every project, so this is all of it.',
-  agents: 'Agents serve every project, so these are all of them.',
-  evaluate: 'Evaluations check the steering rules, which apply to every project, so this is all of them.',
-};
 
 /** A Desk tab's address; `at` = the hosted page's own address; `base` = `/` or a project's page. */
 export function deskTabPath(t: DeskTab, at?: string, base = '/'): string {

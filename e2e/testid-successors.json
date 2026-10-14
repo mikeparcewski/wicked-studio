@@ -852,6 +852,7 @@
     "signin-line": "agents-command",
     "signin-no-line": "agents-issue",
     "signin-check": "agents-check",
-    "signin-result": "agents-check-result"
+    "signin-result": "agents-check-result",
+    "desk-hosted-note": "desk"
   }
 }
