@@ -367,6 +367,19 @@ describe('the host, protocol 2', () => {
     host.teardown('done');
   });
 
+  it('a plugin tab picked before the handshake is the tab host.hello carries; a controls tab is not (desk_doc_editors)', () => {
+    const early = makeHost({ surface: 'options' });
+    early.host.setTab('chapters'); // the operator clicked the tab while the options frame was still loading
+    early.ready([2], DECL);
+    expect(early.hello[0]).toMatchObject({ surface: 'options', tab: 'chapters' });
+    early.host.teardown('done');
+    const controls = makeHost({ surface: 'options' });
+    controls.host.setTab('captions');
+    controls.ready([2], DECL);
+    expect(controls.hello[0]?.['tab']).toBeUndefined();
+    controls.host.teardown('done');
+  });
+
   it('a change the plugin did not apply resolves false', async () => {
     const { host, ready } = makeHost({ surface: 'options' });
     plugin(ready([2], DECL), (m) => (m.type === 'options.changed' ? { applied: false, rev: 1, values: { show: true }, reason: 'read-only' } : undefined));

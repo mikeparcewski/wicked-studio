@@ -118,7 +118,10 @@ export const LIMITS = {
   /** One message, serialized. */
   messageBytes: 1_000_000,
   idChars: 64,
+  /** `plugin.ready` after the frame's document has loaded (the plugin's own start, not the daemon's latency). */
   readyMs: 3_000,
+  /** The frame's document itself: a bundle the daemon has not served by then never will be. */
+  loadMs: 90_000,
   pingEveryMs: 10_000,
   pingReplyMs: 2_000,
   replyMs: 10_000,

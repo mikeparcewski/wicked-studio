@@ -1,4 +1,7 @@
 import { useEffect, useState } from 'react';
+import { producerOf } from '../../board/responder.js';
+import { useRoster } from '../../hooks/useRoster.js';
+import { TurnWho } from './TurnWho.js';
 import { isDemoRun } from '../../api/demo.js';
 import { listDocs, type DocSummary } from '../../api/interactive.js';
 import type { SessionView } from '../../api/types.js';
@@ -45,31 +48,58 @@ function walkthroughStepOf(chain: ChainModel | undefined, roots: boolean): strin
   return s === undefined ? null : s.id;
 }
 
+function projectOf(view: SessionView | null | undefined): string | null {
+  const p = view?.session.project_id;
+  return typeof p === 'string' && p !== '' ? p : null;
+}
+
+/** The project documents this run made (its bound docs), re-read every {@link FRESH_MS} — the run block's artifacts
+ *  and the composer's turn suggestions read the same list. A run filed in no project has none. */
+export function useRunDocs(view: SessionView | null | undefined): DocSummary[] {
+  const projectId = projectOf(view);
+  // The list is the project's it was read for: while another project's read is in flight, nothing (codex h3-fix r1 P2).
+  const [read, setRead] = useState<{ projectId: string; docs: DocSummary[] } | null>(null);
+  useEffect(() => {
+    if (projectId === null) { setRead(null); return undefined; }
+    let cancelled = false;
+    const load = (): void => { void projectDocs(projectId).then((docs) => { if (!cancelled) setRead({ projectId, docs }); }); };
+    load();
+    // A page the run creates later appears on the next re-read, not never.
+    const timer = setInterval(load, FRESH_MS);
+    return () => { cancelled = true; clearInterval(timer); };
+  }, [projectId, view?.session.id, view?.session.status]);
+  if (projectId === null || view === null || view === undefined || read === null || read.projectId !== projectId) return [];
+  return read.docs.filter((d) => d.kind === 'doc' && isDocRun(view, d.name));
+}
+
+/** DES §7.4: the retired "Demo video" header button as a turn suggestion — offered for a run that made a deck or a
+ *  document (a page is its own plugin's; studio#664 offered it on decks and documents only), filed or unfiled (the
+ *  form then launches unfiled, as the button did). The project the form opens in, or null for no suggestion. */
+export function demoVideoProjectOf(view: SessionView | null | undefined, made: readonly DocSummary[]): string | null {
+  const projectId = projectOf(view);
+  if (projectId === null) return null;
+  return made.some((d) => { const k = editorKindOf(d.style); return k === 'deck' || k === 'document'; }) ? projectId : null;
+}
+
 export function RunArtifacts({ view, composerKey, chain }: { view: SessionView; composerKey: string; chain?: ChainModel }): React.ReactElement | null {
-  const projectId = typeof view.session.project_id === 'string' && view.session.project_id !== '' ? view.session.project_id : null;
+  const projectId = projectOf(view);
   const runId = view.session.id;
   const roots = useCapabilities((s) => s.walkthroughRoots);
   // WT-U1 / EP-D3: the run's walkthrough (its `walkthrough_review` step) and a demo run's video open
   // in the same slot — a recording is a run's artifact whether or not the run is filed.
   const walkStep = walkthroughStepOf(chain, roots);
   const demo = isDemoRun(view);
-  const [docs, setDocs] = useState<DocSummary[]>([]);
-  useEffect(() => {
-    if (projectId === null) return undefined;
-    let cancelled = false;
-    const read = (): void => { void projectDocs(projectId).then((d) => { if (!cancelled) setDocs(d); }); };
-    read();
-    // A page the run creates later appears on the next re-read, not never.
-    const timer = setInterval(read, FRESH_MS);
-    return () => { cancelled = true; clearInterval(timer); };
-  }, [projectId, view.session.id, view.session.status]);
-  const mine = projectId === null ? [] : docs.filter((d) => d.kind === 'doc' && isDocRun(view, d.name));
+  const mine = useRunDocs(view);
   // S10: a planned run's plan is its artifact too — the ordered editor, while the run is going.
   const plan = hasPlanEditor(view, chain);
   const count = mine.length + (walkStep !== null ? 1 : 0) + (demo ? 1 : 0) + (plan ? 1 : 0);
+  const roster = useRoster();
+  const producer = producerOf(view, roster);
   if (count === 0) return null;
   return (
     <div data-testid="run-artifacts" data-run-id={runId} data-count={count}>
+      {/* H3: who made what is shown below — the seat of the run's newest step that ran (HOST-API §2 producedBy). */}
+      <TurnWho who={producer} runId={runId} suffix={count === 1 ? 'made this' : 'made these'} className="wk-who--made" />
       {plan && chain !== undefined && (
         <ArtifactMorph
           artifactKey={artifactKey('run', 'plan', runId)} title="Plan" projectId={projectId ?? ''} docId="" composerKey={composerKey}

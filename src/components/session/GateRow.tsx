@@ -23,7 +23,7 @@ import { retryPrefillOf } from '../../board/needsYou.js';
 import { setRetryPrefill } from '../../store/retryPrefill.js';
 import { useCapabilities } from '../../store/capabilities.js';
 import type { Navigate } from '../../hooks/useRoute.js';
-import { AssuranceReceipt, QeAcceptanceLabel, ReducedAssuranceLabel } from './AssuranceReceipt.js';
+import { AssuranceReceipt, AssuranceReceiptTech, QeAcceptanceLabel, ReducedAssuranceLabel } from './AssuranceReceipt.js';
 
 /**
  * EVERY GATE KIND ANSWERABLE IN THE SESSION THREAD (S15e): an answerable row rendered inside
@@ -212,7 +212,7 @@ function RunGateRow({ view, gate, navigate }: { view: RunView; gate: OpenGate | 
       {judgeWait && <JudgeWaitLine {...(navigate !== undefined ? { navigate } : {})} />}
       {seatRefusal && <CreatorSeatRefusal view={view} {...(navigate !== undefined ? { navigate } : {})} />}
       {receipt !== null
-        ? <AssuranceReceipt receipt={receipt} passed={gatePassedFor(events, receiptOrd)} testId="session-gate-assurance" />
+        ? <AssuranceReceipt receipt={receipt} passed={gatePassedFor(events, receiptOrd)} testId="session-gate-assurance" tech="host" />
         : reduced && <p className="wk-assurance"><ReducedAssuranceLabel testId="session-gate-reduced" /></p>}
       {qe !== null && receipt?.qe === undefined && <p className="wk-assurance"><QeAcceptanceLabel qe={qe} testId="session-gate-qe" /></p>}
     </>
@@ -223,6 +223,7 @@ function RunGateRow({ view, gate, navigate }: { view: RunView; gate: OpenGate | 
       eventsUnavailable={gate !== undefined && events === null && eventsFetchFailed}
       retryEvents={retryEvents} depth={depth} refusalLines={refusalLines} drift={drift}
       assurance={assurance}
+      assuranceTech={model !== null && receipt !== null ? <AssuranceReceiptTech receipt={receipt} passed={gatePassedFor(events, receiptOrd)} testId="session-gate-assurance-tech" /> : null}
     />
   );
 }
@@ -310,7 +311,7 @@ export function refusalWords(r: DeliverRefusal, at: { branch: string | null; rep
   return { lead, consent };
 }
 
-function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, retryEvents, depth, refusalLines = null, drift = null, assurance = null }: {
+function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, retryEvents, depth, refusalLines = null, drift = null, assurance = null, assuranceTech = null }: {
   runId: string;
   gate: OpenGate | undefined;
   model: GateRowModel | null;
@@ -328,6 +329,8 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
   drift?: DiffDrift | null;
   /** core#850: the assurance receipt (and the judge wait); null on a chat's gate. */
   assurance?: React.ReactNode;
+  /** The receipt's technical lines: they go in the row's ONE Technical details (operator: the card showed two). */
+  assuranceTech?: React.ReactNode;
 }): React.ReactElement | null {
   const action = useGateActionStore((s) => s.byGate[runId] ?? IDLE_GATE_ACTION);
   const showPath = useDisplayPath();
@@ -710,9 +713,10 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
       {seat !== null && <RuleOfferBlock seat={seat} locked={action.busy} />}
       {/* ⋯ details: raw prompt, verdict layers, failing items, reviewer's note; S16a-1b: the work under
           review, "Why it failed" (the failing criteria beside the creator's claims), the source line. */}
-      {model.detailItems.length > 0 && (
+      {(model.detailItems.length > 0 || assuranceTech !== null) && (
         <details className="wk-session-gate-prompt-detail">
           <summary className="wk-session-gate-prompt-summary">Technical details</summary>
+          {assuranceTech}
           {model.detailItems.map((item, idx) => (
             <p key={idx} data-testid={idx === 0 ? 'session-gate-raw-prompt' : undefined} className="wk-session-gate-detail-item wk-session-verdict-details">{showText(item)}</p>
           ))}

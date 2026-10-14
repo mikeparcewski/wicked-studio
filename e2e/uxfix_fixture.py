@@ -1302,7 +1302,7 @@ ATTACHED_AT = {
 
 def session(rid: str, status: str, problem: str, unit_desc: str) -> dict:
     return {"session": {
-        "id": rid, "workflow_id": "wf-w2", "problem": problem, "entity_mode": "shared",
+        "id": rid, "workflow_id": "wf-5e1d2c3b-0a9f-4e7d-9c11-2b3a4c5d6e7f", "problem": problem, "entity_mode": "shared",
         "collection_scope": None, "clis": ["claude"], "status": status,
         "human_confirm": "all" if status == "awaiting_human" else "none",
         "unit_ix": 0, "attempt": 0, "workdir": None, "repo_ref": None,

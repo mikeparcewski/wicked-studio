@@ -11,14 +11,16 @@ import { TechDetails } from '../ui/index.js';
  * required and what ran, who built and checked it (and whether they were separate seats), what was
  * skipped and why, and the tree and attempt. The engine's detail for each skip rides the hover.
  */
-export function AssuranceReceipt({ receipt, passed = null, testId = 'assurance-receipt' }: {
+export function AssuranceReceipt({ receipt, passed = null, testId = 'assurance-receipt', tech = 'own' }: {
   receipt: Receipt;
   /** The decision passed (an approval, a delivery), did not, or is not known. */
   passed?: boolean | null;
   testId?: string;
+  /** `host`: the card it sits in has ONE Technical details and shows {@link AssuranceReceiptTech} there (a gate
+   *  row), so the receipt draws no disclosure of its own. */
+  tech?: 'own' | 'host';
 }): React.ReactElement {
   const w = receiptWords(receipt, passed);
-  const showText = useDisplayText();
   const lead = w.kind === 'floor-only' ? 'Only automatic checks ran'
     : w.kind === 'same-seat' ? 'The helper checked its own work'
       : w.kind === 'unchecked' ? 'Nothing was verified'
@@ -31,10 +33,24 @@ export function AssuranceReceipt({ receipt, passed = null, testId = 'assurance-r
       </p>
       {receipt.skipped.length > 0 && <p className="wk-assurance-line">{receipt.skipped.length} {receipt.skipped.length === 1 ? "check didn't" : "checks didn't"} run on this step.</p>}
       {receipt.qe !== undefined && <p className="wk-assurance-line"><QeAcceptanceLabel qe={receipt.qe} testId="assurance-qe" /></p>}
-      <details className="wk-tech-details">
-        <summary className="wk-tech-details-summary">Technical details</summary>
-        <div className="wk-session-verdict-details" data-tech="on">
-          <p><span data-testid="assurance-kind">{w.label}</span> · {showText(w.required)} · {showText(w.ran)}</p>
+      {tech === 'own' && (
+        <details className="wk-tech-details">
+          <summary className="wk-tech-details-summary">Technical details</summary>
+          <AssuranceReceiptTech receipt={receipt} passed={passed} />
+        </details>
+      )}
+    </div>
+  );
+}
+
+/** The receipt's technical lines — what was required and ran, who built and checked it, what was skipped, the tree
+ *  and attempt — for the one Technical details of the card the receipt sits in. */
+export function AssuranceReceiptTech({ receipt, passed = null, testId }: { receipt: Receipt; passed?: boolean | null; testId?: string }): React.ReactElement {
+  const w = receiptWords(receipt, passed);
+  const showText = useDisplayText();
+  return (
+    <div className="wk-session-verdict-details" data-tech="on" {...(testId !== undefined ? { 'data-testid': testId } : {})}>
+      <p><span data-testid="assurance-kind">{w.label}</span> · {showText(w.required)} · {showText(w.ran)}</p>
       {w.who !== null && <p data-testid="assurance-who" className="wk-assurance-line">{showText(w.who)}</p>}
       {(w.skipped !== null || w.where !== null) && (
         <p className="wk-assurance-line">
@@ -45,9 +61,7 @@ export function AssuranceReceipt({ receipt, passed = null, testId = 'assurance-r
           {w.where !== null && <span data-testid="assurance-where">{showText(w.where)}</span>}
         </p>
       )}
-          {w.skippedDetail.length > 0 && <TechDetails summary="Why these checks did not run" text={w.skippedDetail} />}
-        </div>
-      </details>
+      {w.skippedDetail.length > 0 && <TechDetails summary="Why these checks did not run" text={w.skippedDetail} />}
     </div>
   );
 }

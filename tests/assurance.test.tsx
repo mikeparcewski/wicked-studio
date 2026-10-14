@@ -185,7 +185,10 @@ describe('the receipt renders', () => {
     const box = screen.getByTestId('session-gate-assurance');
     expect(box.getAttribute('data-kind')).toBe('independent');
     expect(screen.getByTestId('assurance-kind').textContent).toBe('Independently accepted');
-    expect(box.textContent).toContain('required: distinct evaluator, judge · ran: repo checks, judge');
+    // The receipt's technical lines sit in the row's ONE Technical details, not a second disclosure of the receipt's.
+    expect(screen.getByTestId('session-gate-assurance-tech').textContent).toContain('required: distinct evaluator, judge · ran: repo checks, judge');
+    expect(box.querySelector('details')).toBeNull();
+    expect(screen.getAllByText('Technical details')).toHaveLength(1);
     expect(screen.getByTestId('assurance-who').textContent).toBe('built by claude · judged by codex (judged on a separate seat)');
     expect(screen.getByTestId('assurance-where').textContent).toBe('tree feedfac · attempt 1');
     expect(screen.queryByTestId('assurance-reduced')).toBeNull();
