@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { apiBase } from '../../api/client.js';
 import type { EditorView } from '../../api/editors.js';
 import { getVersions, interactiveDocUrl } from '../../api/interactive.js';
-import { editedLine, notUndoneLine, shrink, undoneLine, writtenWords, type ArtifactSize, type WriteVerb } from '../../board/artifactMorph.js';
+import { editedLine, notUndoneLine, shrink, undoneLine, writtenWords, type ArtifactSize, type EditorKind, type WriteVerb } from '../../board/artifactMorph.js';
 import { focusBeside } from '../../editors/focus.js';
 import { EditorHost, type HostLogEntry } from '../../editors/host.js';
 import { InteractiveDocAdapter } from '../../editors/interactiveDocAdapter.js';
@@ -11,7 +11,6 @@ import { readThemeTokens } from '../../editors/theme.js';
 import { addAboutChip } from '../../store/composerChips.js';
 import { useSessionDrafts } from '../../store/sessionDrafts.js';
 import { ChecksPanel } from './ChecksPanel.js';
-import { DeckReview } from './DeckReview.js';
 
 /**
  * EP-P2 — the kind slot hosting an editor PLUGIN (DES-EDITOR-PLUGINS-001 §4, §5, §9.3): `wicked-page`
@@ -50,7 +49,7 @@ export function PluginArtifact({ projectId, docId, title, composerKey, size, mor
   docId: string;
   title: string;
   /** The artifact kind the editor opens (`page`, or `deck` for `wicked-deck` — P-D1). */
-  kind?: 'page' | 'deck';
+  kind?: string;
   composerKey: string;
   size: ArtifactSize;
   morph: (to: ArtifactSize) => void;
@@ -131,7 +130,7 @@ export function PluginArtifact({ projectId, docId, title, composerKey, size, mor
           // The line's words are the host's: the anchors it checked, named by it — a third-party editor's
           // line also says who changed it. The plugin's summary never reaches the thread.
           // A deck's slide words are the host's own, by place (P-D1); anything else names its anchors.
-          written: (w) => { if (live.current) setLine({ kind: 'edited', version: w.version, base: w.base, what: w.words ?? writtenWords(w.anchors, kind), verb: w.verb }); },
+          written: (w) => { if (live.current) setLine({ kind: 'edited', version: w.version, base: w.base, what: w.words ?? writtenWords(w.anchors, kind as EditorKind), verb: w.verb }); },
           shown: (v) => { if (live.current) setShown(v); },
           fullscreen: async () => { morphRef.current('full'); return true; },
           torn: (reason) => { if (live.current) setTorn(reason); },
@@ -213,10 +212,6 @@ export function PluginArtifact({ projectId, docId, title, composerKey, size, mor
       )}
       {size !== 'inline' && shown !== null && (
         <ChecksPanel projectId={projectId} docId={docId} head={shown} pointAt={pointAt} />
-      )}
-      {kind === 'deck' && size === 'full' && shown !== null && (
-        <DeckReview projectId={projectId} docId={docId} head={shown}
-          onForked={(h) => { void adapter.refresh().then(() => hostRef.current?.artifactChanged(h, 'fork')).catch(() => undefined); }} />
       )}
     </>
   );

@@ -1,6 +1,6 @@
 {
   "$doc": [
-    "Removed data-testid -> its successor (DES-STUDIO-REBUILD-001 \u00a76.3). tests/testidRemovals.test.ts diffs testid-inventory.json against the merge base and fails on any removed static id or dynamic pattern not listed here with a successor the current tree declares.",
+    "Removed data-testid -> its successor (DES-STUDIO-REBUILD-001 §6.3). tests/testidRemovals.test.ts diffs testid-inventory.json against the merge base and fails on any removed static id or dynamic pattern not listed here with a successor the current tree declares.",
     "Empty until the S16 deletion slices: before then a removal fails. Add entries as \"<removed>\": \"<successor>\" in the PR that removes the testid."
   ],
   "successors": {
@@ -862,6 +862,12 @@
     "signin-line": "agents-command",
     "signin-no-line": "agents-issue",
     "signin-check": "agents-check",
-    "signin-result": "agents-check-result"
+    "signin-result": "agents-check-result",
+    "artifact-demo-video": "composer",
+    "artifact-exports": "artifact-export-download",
+    "artifact-export-file": "artifact-export-download",
+    "doc-coverage": "host-panel-frame",
+    "doc-coverage-line": "host-panel-frame",
+    "doc-coverage-row": "host-panel-frame"
   }
 }

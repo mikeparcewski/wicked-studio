@@ -11,9 +11,9 @@
   "version": 1,
   "studioVersion": "0.7.13",
   "counts": {
-    "files": 223,
-    "occurrences": 2720,
-    "static": 2338,
+    "files": 224,
+    "occurrences": 2757,
+    "static": 2384,
     "dynamic": 70,
     "computed": 24
   },
@@ -48,6 +48,360 @@
         "src/components/RepoDetailPage.tsx",
         "src/components/RepoGraphModal.tsx",
         "src/components/RepositoriesPanel.tsx"
+      ]
+    },
+    {
+      "testId": "agents-add",
+      "files": [
+        "src/components/agents/AgentsPage.tsx"
+      ]
+    },
+    {
+      "testId": "agents-band",
+      "files": [
+        "src/components/agents/AgentsPage.tsx"
+      ]
+    },
+    {
+      "testId": "agents-banner",
+      "files": [
+        "src/components/agents/AgentsPage.tsx"
+      ]
+    },
+    {
+      "testId": "agents-cards",
+      "files": [
+        "src/components/agents/AgentsPage.tsx"
+      ]
+    },
+    {
+      "testId": "agents-check",
+      "files": [
+        "src/components/agents/AgentModal.tsx"
+      ]
+    },
+    {
+      "testId": "agents-check-all",
+      "files": [
+        "src/components/agents/AgentsPage.tsx"
+      ]
+    },
+    {
+      "testId": "agents-check-block",
+      "files": [
+        "src/components/agents/AgentModal.tsx"
+      ]
+    },
+    {
+      "testId": "agents-check-now",
+      "files": [
+        "src/components/agents/AgentModal.tsx"
+      ]
+    },
+    {
+      "testId": "agents-check-result",
+      "files": [
+        "src/components/agents/AgentModal.tsx"
+      ]
+    },
+    {
+      "testId": "agents-command",
+      "files": [
+        "src/components/agents/AgentModal.tsx"
+      ]
+    },
+    {
+      "testId": "agents-copy",
+      "files": [
+        "src/components/agents/AgentModal.tsx"
+      ]
+    },
+    {
+      "testId": "agents-count",
+      "files": [
+        "src/components/agents/AgentsCount.tsx"
+      ]
+    },
+    {
+      "testId": "agents-empty",
+      "files": [
+        "src/components/agents/AgentsPage.tsx"
+      ]
+    },
+    {
+      "testId": "agents-fix",
+      "files": [
+        "src/components/agents/AgentsPage.tsx"
+      ]
+    },
+    {
+      "testId": "agents-foot",
+      "files": [
+        "src/components/agents/AgentsPage.tsx"
+      ]
+    },
+    {
+      "testId": "agents-governed",
+      "files": [
+        "src/components/agents/AgentsPage.tsx"
+      ]
+    },
+    {
+      "testId": "agents-health-link",
+      "files": [
+        "src/components/agents/AgentsPage.tsx"
+      ]
+    },
+    {
+      "testId": "agents-issue",
+      "files": [
+        "src/components/agents/AgentModal.tsx"
+      ]
+    },
+    {
+      "testId": "agents-loading",
+      "files": [
+        "src/components/agents/AgentsPage.tsx"
+      ]
+    },
+    {
+      "testId": "agents-login",
+      "files": [
+        "src/components/agents/containerSignIn.tsx"
+      ]
+    },
+    {
+      "testId": "agents-login-close",
+      "files": [
+        "src/components/agents/containerSignIn.tsx"
+      ]
+    },
+    {
+      "testId": "agents-login-line",
+      "files": [
+        "src/components/agents/containerSignIn.tsx"
+      ]
+    },
+    {
+      "testId": "agents-login-scrim",
+      "files": [
+        "src/components/agents/containerSignIn.tsx"
+      ]
+    },
+    {
+      "testId": "agents-modal",
+      "files": [
+        "src/components/agents/AgentModal.tsx"
+      ]
+    },
+    {
+      "testId": "agents-modal-close",
+      "files": [
+        "src/components/agents/AgentModal.tsx"
+      ]
+    },
+    {
+      "testId": "agents-modal-count",
+      "files": [
+        "src/components/agents/AgentModal.tsx"
+      ]
+    },
+    {
+      "testId": "agents-modal-foot",
+      "files": [
+        "src/components/agents/AgentModal.tsx"
+      ]
+    },
+    {
+      "testId": "agents-offline-how",
+      "files": [
+        "src/components/agents/AgentsPage.tsx"
+      ]
+    },
+    {
+      "testId": "agents-page",
+      "files": [
+        "src/components/agents/AgentsPage.tsx"
+      ]
+    },
+    {
+      "testId": "agents-panel",
+      "files": [
+        "src/components/agents/AgentsPage.tsx"
+      ]
+    },
+    {
+      "testId": "agents-partial",
+      "files": [
+        "src/components/agents/AgentsPage.tsx"
+      ]
+    },
+    {
+      "testId": "agents-ready",
+      "files": [
+        "src/components/agents/AgentsPage.tsx"
+      ]
+    },
+    {
+      "testId": "agents-row",
+      "files": [
+        "src/components/agents/AgentsPage.tsx"
+      ]
+    },
+    {
+      "testId": "agents-setup",
+      "files": [
+        "src/components/agents/SetupPanel.tsx"
+      ]
+    },
+    {
+      "testId": "agents-setup-change",
+      "files": [
+        "src/components/agents/SetupPanel.tsx"
+      ]
+    },
+    {
+      "testId": "agents-setup-count",
+      "files": [
+        "src/components/agents/SetupPanel.tsx"
+      ]
+    },
+    {
+      "testId": "agents-setup-desk",
+      "files": [
+        "src/components/agents/SetupPanel.tsx"
+      ]
+    },
+    {
+      "testId": "agents-setup-guide",
+      "files": [
+        "src/components/agents/AgentsPage.tsx"
+      ]
+    },
+    {
+      "testId": "agents-setup-move",
+      "files": [
+        "src/components/agents/SetupPanel.tsx"
+      ]
+    },
+    {
+      "testId": "agents-setup-place-reading",
+      "files": [
+        "src/components/agents/SetupPanel.tsx"
+      ]
+    },
+    {
+      "testId": "agents-setup-project",
+      "files": [
+        "src/components/agents/SetupPanel.tsx"
+      ]
+    },
+    {
+      "testId": "agents-setup-ready",
+      "files": [
+        "src/components/agents/SetupPanel.tsx"
+      ]
+    },
+    {
+      "testId": "agents-setup-skip",
+      "files": [
+        "src/components/agents/SetupPanel.tsx"
+      ]
+    },
+    {
+      "testId": "agents-setup-step-agents",
+      "files": [
+        "src/components/agents/SetupPanel.tsx"
+      ]
+    },
+    {
+      "testId": "agents-setup-step-defaults",
+      "files": [
+        "src/components/agents/SetupPanel.tsx"
+      ]
+    },
+    {
+      "testId": "agents-setup-step-project",
+      "files": [
+        "src/components/agents/SetupPanel.tsx"
+      ]
+    },
+    {
+      "testId": "agents-setup-unsaved",
+      "files": [
+        "src/components/agents/SetupPanel.tsx"
+      ]
+    },
+    {
+      "testId": "agents-sign",
+      "files": [
+        "src/components/agents/AgentsPage.tsx"
+      ]
+    },
+    {
+      "testId": "agents-signin",
+      "files": [
+        "src/components/agents/AgentModal.tsx"
+      ]
+    },
+    {
+      "testId": "agents-signout",
+      "files": [
+        "src/components/agents/AgentModal.tsx"
+      ]
+    },
+    {
+      "testId": "agents-signout-how",
+      "files": [
+        "src/components/agents/AgentModal.tsx"
+      ]
+    },
+    {
+      "testId": "agents-steps",
+      "files": [
+        "src/components/agents/AgentModal.tsx"
+      ]
+    },
+    {
+      "testId": "agents-table",
+      "files": [
+        "src/components/agents/AgentsPage.tsx"
+      ]
+    },
+    {
+      "testId": "agents-tech",
+      "files": [
+        "src/components/agents/AgentModal.tsx"
+      ]
+    },
+    {
+      "testId": "agents-tile-checked",
+      "files": [
+        "src/components/agents/AgentsPage.tsx"
+      ]
+    },
+    {
+      "testId": "agents-tile-fix",
+      "files": [
+        "src/components/agents/AgentsPage.tsx"
+      ]
+    },
+    {
+      "testId": "agents-tile-ready",
+      "files": [
+        "src/components/agents/AgentsPage.tsx"
+      ]
+    },
+    {
+      "testId": "agents-tiles",
+      "files": [
+        "src/components/agents/AgentsPage.tsx"
+      ]
+    },
+    {
+      "testId": "agents-version",
+      "files": [
+        "src/components/agents/AgentsPage.tsx"
       ]
     },
     {
@@ -153,54 +507,21 @@
       ]
     },
     {
-      "testId": "artifact-demo-video",
-      "files": [
-        "src/components/session/ArtifactMorph.tsx"
-      ]
-    },
-    {
-      "testId": "artifact-export",
-      "files": [
-        "src/components/session/ArtifactMorph.tsx"
-      ]
-    },
-    {
       "testId": "artifact-export-download",
       "files": [
-        "src/components/editorHost/PluginCard.tsx",
-        "src/components/session/ArtifactMorph.tsx"
-      ]
-    },
-    {
-      "testId": "artifact-export-file",
-      "files": [
-        "src/components/session/ArtifactMorph.tsx"
+        "src/components/editorHost/PluginCard.tsx"
       ]
     },
     {
       "testId": "artifact-export-format",
       "files": [
-        "src/components/editorHost/PluginCard.tsx",
-        "src/components/session/ArtifactMorph.tsx"
-      ]
-    },
-    {
-      "testId": "artifact-export-line",
-      "files": [
-        "src/components/session/ArtifactMorph.tsx"
+        "src/components/editorHost/PluginCard.tsx"
       ]
     },
     {
       "testId": "artifact-export-menu",
       "files": [
-        "src/components/editorHost/PluginCard.tsx",
-        "src/components/session/ArtifactMorph.tsx"
-      ]
-    },
-    {
-      "testId": "artifact-exports",
-      "files": [
-        "src/components/session/ArtifactMorph.tsx"
+        "src/components/editorHost/PluginCard.tsx"
       ]
     },
     {
@@ -225,6 +546,12 @@
       "testId": "artifact-lens-line",
       "files": [
         "src/components/session/ArtifactVersions.tsx"
+      ]
+    },
+    {
+      "testId": "artifact-loading",
+      "files": [
+        "src/components/session/ArtifactMorph.tsx"
       ]
     },
     {
@@ -2037,12 +2364,6 @@
       ]
     },
     {
-      "testId": "desk-agents-pending",
-      "files": [
-        "src/components/desk/AgentsTabPending.tsx"
-      ]
-    },
-    {
       "testId": "desk-analyses-past",
       "files": [
         "src/components/desk/DeskUnderstand.tsx"
@@ -3120,24 +3441,6 @@
       ]
     },
     {
-      "testId": "doc-coverage",
-      "files": [
-        "src/components/session/DocCoverage.tsx"
-      ]
-    },
-    {
-      "testId": "doc-coverage-line",
-      "files": [
-        "src/components/session/DocCoverage.tsx"
-      ]
-    },
-    {
-      "testId": "doc-coverage-row",
-      "files": [
-        "src/components/session/DocCoverage.tsx"
-      ]
-    },
-    {
       "testId": "doc-delete-bridge-hint",
       "files": [
         "src/components/DocDelete.tsx"
@@ -3411,6 +3714,12 @@
       "testId": "editor-plugins-unsupported",
       "files": [
         "src/components/editors/EditorPluginsSettings.tsx"
+      ]
+    },
+    {
+      "testId": "editor-protocol-toggle",
+      "files": [
+        "src/components/editors/EditorHostPage.tsx"
       ]
     },
     {
@@ -3781,30 +4090,6 @@
     },
     {
       "testId": "everything-handed-row",
-      "files": [
-        "src/components/everything/EverythingPage.tsx"
-      ]
-    },
-    {
-      "testId": "everything-helper",
-      "files": [
-        "src/components/everything/EverythingPage.tsx"
-      ]
-    },
-    {
-      "testId": "everything-helper-detail",
-      "files": [
-        "src/components/everything/EverythingPage.tsx"
-      ]
-    },
-    {
-      "testId": "everything-helper-signin",
-      "files": [
-        "src/components/everything/EverythingPage.tsx"
-      ]
-    },
-    {
-      "testId": "everything-helpers",
       "files": [
         "src/components/everything/EverythingPage.tsx"
       ]
@@ -6946,21 +7231,18 @@
     {
       "testId": "page-edit-input",
       "files": [
-        "src/components/session/PageEditor.tsx",
         "src/plugins/_shared/pageEditor.ts"
       ]
     },
     {
       "testId": "page-editor",
       "files": [
-        "src/components/session/PageEditor.tsx",
         "src/plugins/_shared/pageEditor.ts"
       ]
     },
     {
       "testId": "page-frame",
       "files": [
-        "src/components/session/PageEditor.tsx",
         "src/components/ui/PageFrame.tsx",
         "src/plugins/_shared/pageEditor.ts"
       ]
@@ -6968,21 +7250,18 @@
     {
       "testId": "page-handle",
       "files": [
-        "src/components/session/PageEditor.tsx",
         "src/plugins/_shared/pageEditor.ts"
       ]
     },
     {
       "testId": "page-hint",
       "files": [
-        "src/components/session/PageEditor.tsx",
         "src/plugins/_shared/pageEditor.ts"
       ]
     },
     {
       "testId": "page-hover-box",
       "files": [
-        "src/components/session/PageEditor.tsx",
         "src/plugins/_shared/pageEditor.ts"
       ]
     },
@@ -6990,7 +7269,6 @@
       "testId": "page-line",
       "files": [
         "src/components/editorHost/PluginCard.tsx",
-        "src/components/session/PageEditor.tsx",
         "src/components/session/PluginArtifact.tsx"
       ]
     },
@@ -7021,7 +7299,6 @@
     {
       "testId": "page-selected-box",
       "files": [
-        "src/components/session/PageEditor.tsx",
         "src/plugins/_shared/pageEditor.ts"
       ]
     },
@@ -7053,7 +7330,6 @@
       "testId": "page-undo",
       "files": [
         "src/components/editorHost/PluginCard.tsx",
-        "src/components/session/PageEditor.tsx",
         "src/components/session/PluginArtifact.tsx"
       ]
     },
@@ -10549,6 +10825,12 @@
       ]
     },
     {
+      "testId": "sheet-seat-agents",
+      "files": [
+        "src/components/sheets/ObjectSheet.tsx"
+      ]
+    },
+    {
       "testId": "sheet-seat-signin",
       "files": [
         "src/components/sheets/ObjectSheet.tsx"
@@ -10568,6 +10850,12 @@
     },
     {
       "testId": "sheet-signin-action",
+      "files": [
+        "src/components/sheets/ObjectSheet.tsx"
+      ]
+    },
+    {
+      "testId": "sheet-signin-agents",
       "files": [
         "src/components/sheets/ObjectSheet.tsx"
       ]
@@ -10670,37 +10958,13 @@
       ]
     },
     {
-      "testId": "signin-check",
-      "files": [
-        "src/components/SignInPanel.tsx"
-      ]
-    },
-    {
-      "testId": "signin-line",
-      "files": [
-        "src/components/SignInPanel.tsx"
-      ]
-    },
-    {
-      "testId": "signin-no-line",
-      "files": [
-        "src/components/SignInPanel.tsx"
-      ]
-    },
-    {
-      "testId": "signin-panel",
-      "files": [
-        "src/components/SignInPanel.tsx"
-      ]
-    },
-    {
-      "testId": "signin-result",
-      "files": [
-        "src/components/SignInPanel.tsx"
-      ]
-    },
-    {
       "testId": "signin-warning",
+      "files": [
+        "src/components/ChatInput.tsx"
+      ]
+    },
+    {
+      "testId": "signin-warning-fix",
       "files": [
         "src/components/ChatInput.tsx"
       ]
@@ -14597,6 +14861,8 @@
         "src/components/SkillsPage.tsx",
         "src/components/Tech.tsx",
         "src/components/WhatWhere.tsx",
+        "src/components/agents/AgentsPage.tsx",
+        "src/components/agents/SetupPanel.tsx",
         "src/components/charts/CategoryBars.tsx",
         "src/components/charts/Chart.tsx",
         "src/components/dashboardKit.tsx",
