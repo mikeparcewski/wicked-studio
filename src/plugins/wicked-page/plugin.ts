@@ -125,7 +125,8 @@ export function start(): void {
   let surface: Surface = 'options';
   let mode: Mode = 'simple';
   let v2: V2Port | null = null;
-  const advanced = (): boolean => protocol < 2 || mode === 'advanced';
+  const canEditText = (): boolean => protocol === 1 ? size !== 'inline' : surface === 'full';
+  const canRestyle = (): boolean => canEditText() && (protocol === 1 || mode === 'advanced');
   /** The theme the page wears (its `--wi-*`), the Style panel's starting point. */
   let themeTokens: ThemeTokens | null = null;
   let seq = 0;
@@ -145,6 +146,7 @@ export function start(): void {
   let current: ScrollState = { scrollX: 0, scrollY: 0 };
   let hover: string | null = null;
   let selected: string | null = null;
+  let bufferedSelection: string | null = null;
   let editing: { wid: string; before: string } | null = null;
   let busy = false;
   /** EP-P3: the page's own theme colours (this version's `--wi-*`), and the width the page is shown at. */
@@ -239,13 +241,13 @@ export function start(): void {
     if (editing !== null) place(input, box(editing.wid), 160, 30); else input.hidden = true;
     tools.hidden = size === 'inline';
     editor.dataset['mode'] = protocol >= 2 ? mode : '';
-    // Simple mode keeps the peek to the section step; the element's style and Remove are Advanced (§9).
-    removeBtn.hidden = !advanced();
-    fills.hidden = !advanced();
-    inks.hidden = !advanced();
+    // The element's peek, style and Remove are Advanced in full screen (§9).
+    removeBtn.hidden = !canRestyle();
+    fills.hidden = !canRestyle();
+    inks.hidden = !canRestyle();
     drawPeek();
     // The hint: what the pick lets you do (S8 words), or why typing cannot change this element.
-    if (!pickable() || editing !== null) { hint.hidden = true; return; }
+    if (!canEditText() || !pickable() || editing !== null) { hint.hidden = true; return; }
     hint.hidden = false;
     if (selected === null) { hint.removeAttribute('data-editable'); hint.textContent = 'Click an element to make it the subject · type on it to change it'; return; }
     const words = anchorWords(selected, 'page');
@@ -259,7 +261,7 @@ export function start(): void {
 
   /** The picked element's peek: below its box (above when there is no room), at pane and full size. */
   const drawPeek = (): void => {
-    const b = pickable() && editing === null && !busy ? box(selected) : null;
+    const b = canRestyle() && pickable() && editing === null && !busy ? box(selected) : null;
     if (b === null || selected === null) { peek.hidden = true; return; }
     peek.hidden = false;
     toSection.hidden = inventory?.blocks[selected]?.section === undefined;
@@ -299,6 +301,7 @@ export function start(): void {
   /** An element becomes the subject: picked, a chip on the composer (the host writes its words), and
    *  typing reaches this document — never the frame the click focused. */
   const select = (wid: string | null): void => {
+    bufferedSelection = null;
     selected = wid;
     cancelEdit();
     draw();
@@ -309,6 +312,29 @@ export function start(): void {
   };
 
   const scrollTo = (wid: string): void => { asks += 1; postToFrame(makeScrollToWid(wid, asks)); };
+
+  const acceptRead = (payload: Record<string, unknown>): void => {
+    const version = payload['version'];
+    if (typeof version === 'number' && head !== null && version < head) return;
+    note.hidden = true;
+    const content = payload['content'] as { type?: unknown; html?: unknown } | undefined;
+    const html = typeof content?.html === 'string' ? content.html : '';
+    head = typeof payload['version'] === 'number' ? payload['version'] : head;
+    swatches = themeSwatches(html);
+    themeTokens = tokensFromHtml(html) ?? themeTokens;
+    style?.refresh();
+    fillSwatches(fills, 'background');
+    fillSwatches(inks, 'color');
+    gen += 1;
+    armed = returnTo;
+    returnTo = null;
+    inventory = null;
+    hover = null;
+    selected = null;
+    cancelEdit();
+    draw();
+    mountFrame(hasInstrumentBridge(html) ? html : appendInstrumentBridge(html));
+  };
 
   /** Render one version: the host's HTML, the bridge appended, in the nested sandboxed frame. */
   const render = async (version?: number): Promise<void> => {
@@ -325,24 +351,7 @@ export function start(): void {
     try {
       const r = await req('artifact.read', version === undefined ? {} : { version });
       if (!r.ok) { note.hidden = false; note.textContent = r.error.code === 'not_granted' ? 'This editor may not read the page here.' : `The page could not be read (${r.error.code}).`; return; }
-      note.hidden = true;
-      const content = r.payload['content'] as { type?: unknown; html?: unknown } | undefined;
-      const html = typeof content?.html === 'string' ? content.html : '';
-      head = typeof r.payload['version'] === 'number' ? r.payload['version'] : head;
-      swatches = themeSwatches(html);
-      themeTokens = tokensFromHtml(html) ?? themeTokens;
-      style?.refresh();
-      fillSwatches(fills, 'background');
-      fillSwatches(inks, 'color');
-      gen += 1;
-      armed = returnTo;
-      returnTo = null;
-      inventory = null;
-      hover = null;
-      selected = null;
-      cancelEdit();
-      draw();
-      mountFrame(hasInstrumentBridge(html) ? html : appendInstrumentBridge(html));
+      acceptRead(r.payload);
     } finally {
       rendering = false;
       reading = null;
@@ -366,6 +375,10 @@ export function start(): void {
       const back = armed;
       armed = null;
       if (back !== null && msg.widMap[back] !== undefined) scrollTo(back);
+      if (bufferedSelection !== null && msg.widMap[bufferedSelection] !== undefined) {
+        selected = bufferedSelection;
+        bufferedSelection = null;
+      }
       draw();
     } else if (msg.type === 'scroll-state') {
       current = { scrollX: msg.scrollX, scrollY: msg.scrollY };
@@ -376,7 +389,8 @@ export function start(): void {
       hover = msg.wid;
       draw();
     } else if (msg.type === 'wid-click') {
-      if (size === 'inline') return; // the preview is one control: the host's catch opens it
+      if (protocol === 1 && size === 'inline') return; // v1's host hit layer owns the preview
+      if (protocol === 2 && surface === 'card') { select(msg.wid); return; }
       // R-c: a second click on the picked element picks its section.
       const up = msg.wid === selected ? inventory?.blocks[msg.wid]?.section : undefined;
       select(up !== undefined && inventory?.widMap[up] !== undefined ? up : msg.wid);
@@ -385,7 +399,7 @@ export function start(): void {
 
   // ── edit by touching ──────────────────────────────────────────────────────────────────
   const beginEdit = (wid: string, typed: string | null): void => {
-    if (busy || inventory === null || typingOn(inventory, wid) !== 'yes') return;
+    if (!canEditText() || busy || inventory === null || typingOn(inventory, wid) !== 'yes') return;
     const before = inventory.blocks[wid]?.text ?? '';
     // The field exists and holds the focus before this key event returns: the characters typed right
     // behind it land in the field (no frame is awaited — S8 lost them to the frame once).
@@ -444,7 +458,7 @@ export function start(): void {
   /** R-a: remove the picked element — one version; the host's Undo puts it back. */
   const remove = async (wid: string): Promise<void> => {
     // Removing is Advanced in full screen (and v1's editor); never from the card's preview (codex h4-r1).
-    if (!advanced() || size === 'inline') return;
+    if (!canRestyle()) return;
     if (busy || inventory?.widMap[wid] === undefined) return;
     const words = anchorWords(wid, 'page');
     const section = inventory.blocks[wid]?.section ?? null;
@@ -454,7 +468,7 @@ export function start(): void {
 
   /** R-b: one colour on the picked element — one version, with Undo. */
   const restyle = async (wid: string, prop: 'background' | 'color', value: string, label: string): Promise<void> => {
-    if (busy || inventory?.widMap[wid] === undefined) return;
+    if (!canRestyle() || busy || inventory?.widMap[wid] === undefined) return;
     const words = anchorWords(wid, 'page');
     handle.focus();
     await write([{ op: 'style', anchor: wid, style: { [prop]: value } }], words, `${prop === 'background' ? 'Filling' : 'Colouring the text of'} ${words}: ${label.toLowerCase()}…`, wid);
@@ -534,11 +548,11 @@ export function start(): void {
     }
     if (e.metaKey || e.ctrlKey || e.altKey) return;
     if (onButton && e.key.length !== 1) return;
-    if (e.key === 'Enter') { if (selected !== null && !busy && size !== 'inline') { e.preventDefault(); beginEdit(selected, null); } return; }
+    if (e.key === 'Enter') { if (selected !== null && !busy && canEditText()) { e.preventDefault(); beginEdit(selected, null); } return; }
     // Bare Backspace / Delete never remove anything (§7.1 R-a).
     if (e.key.length !== 1) return;
     e.preventDefault();
-    if (selected !== null && !busy && size !== 'inline') { beginEdit(selected, e.key); return; }
+    if (selected !== null && !busy && canEditText()) { beginEdit(selected, e.key); return; }
     // Rule 2: the first printable key outside an editable goes to the composer — never an action.
     send('ui.typed', { grapheme: e.key });
   });
@@ -594,6 +608,7 @@ export function start(): void {
         }
         case 'selection.cleared':
           // The chip was removed on the composer: the element is no longer the subject here either.
+          bufferedSelection = null;
           if (selected !== null) { selected = null; cancelEdit(); draw(); }
           return;
         default:
@@ -623,7 +638,12 @@ export function start(): void {
         selection: (anchors) => {
           // Another instance pointed at an element: show it picked here too (ids only; the host checked them).
           const a = anchors.find((x): x is { kind: 'element'; id: string } => typeof x === 'object' && x !== null && (x as { kind?: unknown }).kind === 'element' && typeof (x as { id?: unknown }).id === 'string');
-          if (a !== undefined && inventory?.widMap[a.id] !== undefined && surface !== 'options') { selected = a.id; draw(); }
+          if (surface === 'options') return;
+          bufferedSelection = a?.id ?? null;
+          selected = a !== undefined && inventory?.widMap[a.id] !== undefined ? a.id : null;
+          if (selected !== null) bufferedSelection = null;
+          cancelEdit();
+          draw();
         },
       });
       showSurface();
@@ -641,6 +661,7 @@ export function start(): void {
     if (options && style === null) {
       style = mountStyle(styleRoot, {
         tokens: () => themeTokens,
+        key: (key) => send('ui.key', { key }),
         apply: async (tokens) => {
           for (let attempt = 0; attempt < 2; attempt += 1) {
             if (head === null) return { ok: false, reason: 'The page is not loaded yet' };
@@ -652,9 +673,12 @@ export function start(): void {
               return { ok: true };
             }
             if (r.error.code !== 'head_moved') return { ok: false, reason: r.error.message };
-            // Re-read the head the host named before the one retry, so the retry's base is a version we have seen.
-            const h = r.payload?.['head'];
-            await render(typeof h === 'number' ? h : undefined);
+            const read = await req('artifact.read', {});
+            if (!read.ok) return { ok: false, reason: read.error.message || read.error.code };
+            const nextHead = read.payload['version'];
+            if (typeof nextHead !== 'number' || (head !== null && nextHead < head)) return { ok: false, reason: 'The current page version could not be read.' };
+            acceptRead(read.payload);
+            if (attempt === 1) return { ok: false, reason: r.error.message || r.error.code };
           }
           return { ok: false, reason: 'The page changed again: try once more' };
         },

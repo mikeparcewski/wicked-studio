@@ -3,16 +3,48 @@ import { copyTokens, FONTS, mountStyle, THEMES, type ThemeTokens } from '../src/
 
 let root: HTMLDivElement;
 let tokens: ThemeTokens | null;
+const key = vi.fn<(key: string) => void>();
 const apply = vi.fn(async (next: ThemeTokens): Promise<{ ok: true } | { ok: false; reason: string }> => { tokens = next; return { ok: true }; });
 beforeEach(() => {
   root = document.createElement('div'); document.body.replaceChildren(root);
-  tokens = copyTokens(THEMES[0]!); apply.mockClear();
-  mountStyle(root, { tokens: () => tokens, apply });
+  tokens = copyTokens(THEMES[0]!); apply.mockClear(); key.mockClear();
+  mountStyle(root, { tokens: () => tokens, apply, key });
 });
 const change = (node: HTMLInputElement | HTMLSelectElement, value: string): void => { node.value = value; node.dispatchEvent(new Event('change', { bubbles: true })); };
 const field = (label: string): HTMLInputElement => root.querySelector(`input[aria-label="${label}"]`)!;
 
 describe('shared artifact Style panel', () => {
+  it('forwards host chords from buttons, inputs and selects while preserving native keys', () => {
+    for (const control of [root.querySelector('button')!, field('Accent hex'), root.querySelector('select')!]) {
+      for (const [init, forwarded] of [
+        [{ key: 'Escape' }, 'Escape'], [{ key: 'k', ctrlKey: true }, 'Mod+K'],
+        [{ key: 'k', metaKey: true }, 'Mod+K'], [{ key: 's', code: 'KeyS', altKey: true }, 'Alt+S'],
+      ] as const) {
+        const e = new KeyboardEvent('keydown', { ...init, bubbles: true, cancelable: true });
+        control.dispatchEvent(e);
+        expect(e.defaultPrevented).toBe(true); expect(key).toHaveBeenLastCalledWith(forwarded);
+      }
+      for (const native of ['a', 'ArrowDown', 'Enter', ' ']) {
+        const before = key.mock.calls.length;
+        const e = new KeyboardEvent('keydown', { key: native, bubbles: true, cancelable: true });
+        control.dispatchEvent(e);
+        expect(e.defaultPrevented).toBe(false); expect(key).toHaveBeenCalledTimes(before);
+      }
+    }
+  });
+  it('forwards Tab only at the first and last enabled controls', () => {
+    const controls = Array.from(root.querySelectorAll<HTMLElement>('button, input, select'));
+    const press = (at: number, shiftKey: boolean): KeyboardEvent => {
+      controls[at]!.focus();
+      const e = new KeyboardEvent('keydown', { key: 'Tab', shiftKey, bubbles: true, cancelable: true });
+      controls[at]!.dispatchEvent(e); return e;
+    };
+    expect(press(0, true).defaultPrevented).toBe(true); expect(key).toHaveBeenLastCalledWith('Shift+Tab');
+    expect(press(controls.length - 1, false).defaultPrevented).toBe(true); expect(key).toHaveBeenLastCalledWith('Tab');
+    key.mockClear();
+    expect(press(0, false).defaultPrevented).toBe(false); expect(press(1, true).defaultPrevented).toBe(false);
+    expect(key).not.toHaveBeenCalled();
+  });
   it('shows the three built-in themes with swatches and applies exact tokens in one call', async () => {
     const cards = Array.from(root.querySelectorAll<HTMLButtonElement>('button[data-theme]'));
     expect(cards.map((b) => b.textContent)).toEqual(['Corporate Light', 'Midnight Purple', 'Warm Dark']);
