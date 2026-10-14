@@ -2,9 +2,9 @@ import { create } from 'zustand';
 
 /**
  * "checked at 0:34 ▸" (WT-U2, scene 22 checked-link): a chip on the chain asks the run's walkthrough
- * artifact to open at a moment. The artifact (`WalkthroughEditor`) watches its run's request: at the
- * inline size it grows to the pane and places the playhead there once the player is up; open, it
- * seeks. `n` makes a repeated ask for the same second a new one.
+ * artifact to open at a moment. The host's walkthrough PluginCard (or the legacy WalkthroughEditor)
+ * watches its run's request, opens the player and places the playhead once it is ready.
+ * `n` makes a repeated ask for the same second a new one.
  */
 
 export interface SeekRequest {

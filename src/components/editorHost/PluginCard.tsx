@@ -2,9 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { apiBase } from '../../api/client.js';
 import type { EditorView } from '../../api/editors.js';
 import { editedLine, notUndoneLine, undoneLine, writtenWords, type EditorKind, type WriteVerb } from '../../board/artifactMorph.js';
-import { EditorHost, type HostLogEntry } from '../../editors/host.js';
+import { EditorHost, type HostLogEntry, type HostUi } from '../../editors/host.js';
 import {
-  LIVE_FRAME_CAP, adapterFor, dropLive, firstTabOf, setGroupShown, groupKey, hostTabsFor, isLive, joinGroup, relay, touchLive, useHostChrome, useHostPanel, useLiveCards,
+  LIVE_FRAME_CAP, adapterFor, dropLive, firstTabOf, setGroupShown, groupKey, hostTabsFor, isLive, joinGroup, relay, replayGroupSelection, touchLive, useHostChrome, useHostPanel, useLiveCards,
   type ExportOutcome, type ExportedFile, type PluginCardProps, type SurfaceAdapter,
 } from '../../editors/hostApi.js';
 import { bundleUrl, fetchGrants } from '../../editors/model.js';
@@ -15,6 +15,7 @@ import { artifactSizeOf, registerArtifact, setArtifactSize, useArtifactSizes } f
 import { useArtifactAddress } from '../session/ArtifactAddress.js';
 import { VersionLens } from '../session/ArtifactVersions.js';
 import { useEditorFor } from '../../store/editors.js';
+import { consumeWalkthroughSeek, useWalkthroughSeek } from '../../store/walkthroughSeek.js';
 import '../../editors/adapters/index.js';
 import './hostTabs.js';
 import { chipsToComposer, focusComposer, forwardedKey, typedToComposer } from './composerBridge.js';
@@ -76,6 +77,10 @@ function CappedCard(props: PluginCardProps & { editor: EditorView }): React.Reac
   useEffect(() => registerArtifact(key), [key]);
   const asked = useArtifactSizes((st) => artifactSizeOf(st, key) !== 'inline');
   const routeKey = useArtifactAddress()?.routeKey ?? null;
+  const seekRun = props.binding.kind === 'walkthrough' ? props.binding.runId : undefined;
+  const seek = useWalkthroughSeek((s) => seekRun === undefined ? undefined : s.byRun[seekRun]);
+  // Evidence can point at a resting card too. Wake it; its live host answers after the handshake.
+  useEffect(() => { if (seek !== undefined && !live) touchLive(key); }, [seek, live, key]);
   useEffect(() => {
     if (!openedByAddress.has(key) || routeKey === key) return;
     openedByAddress.delete(key);
@@ -164,6 +169,12 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
     if (frameBox.current === null || adapter === null) return undefined;
     let cancelled = false;
     setTorn(null);
+    // Card and Options writes use the same host words, edit line and Undo handler.
+    const written: NonNullable<HostUi['written']> = (w) => {
+      announced.current = w.version;
+      relay(group, 'card', { type: 'changed', head: w.version, kind: w.verb === 'restyled' ? 'theme' : 'deterministic' });
+      if (live.current) setLine({ kind: 'edited', version: w.version, base: w.base, what: w.words ?? writtenWords(w.anchors, binding.kind as EditorKind), verb: w.verb });
+    };
     const start = async (): Promise<void> => {
       const decided = grantsProp !== undefined ? { grants: grantsProp, note: null } : await fetchGrants(editor.id, editor.version, editor.sha256, binding.projectId === '' ? null : binding.projectId);
       await adapter.refresh?.().catch(() => null);
@@ -174,7 +185,6 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
       setNote(decided.note);
       const src = srcProp ?? bundleUrl(apiBase(), editor.id, editor.version, editor.sha256);
       loaded.current = { src, grants: decided.grants };
-      const kind = binding.kind as EditorKind;
       const bridge = adapter.mcpBridge?.();
       const startedFull = fullRef.current;
       const host = new EditorHost({
@@ -214,18 +224,16 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
           },
           status: (l) => { if (live.current) setLine({ kind: 'status', text: l }); },
           notes: () => undefined,
-          // A theme write (the only `thread` line without `written`) reaches the group's options instance too.
-          thread: () => { const h = adapter.artifact().head; relay(group, 'card', { type: 'changed', head: h, kind: 'theme' }); },
-          written: (w) => {
-            announced.current = w.version;
-            relay(group, 'card', { type: 'changed', head: w.version, kind: 'deterministic' });
-            if (live.current) setLine({ kind: 'edited', version: w.version, base: w.base, what: w.words ?? writtenWords(w.anchors, kind), verb: w.verb });
-          },
+          // `written` owns the structured line and the group announcement.
+          thread: () => undefined,
+          written,
+          writeFailed: (text) => { if (live.current) setLine({ kind: 'failed', text }); },
           shown: (v) => setGroupShown(group, v),
           fullscreen: async () => { if (live.current) setOffer('full'); return false; },
           torn: (reason) => { if (live.current) setTorn(reason); },
           log: (e) => { logRef.current.push(e); if (logRef.current.length > 200) logRef.current.shift(); },
           surfaces: (s, p, n) => {
+            replayGroupSelection(group, 'card');
             // A morph made before the handshake had no port: say the surface now shown (codex h2-r8 P2).
             const now = fullRef.current ? 'full' : 'card';
             if (now !== (startedFull ? 'full' : 'card')) queueMicrotask(() => hostRef.current?.setSurface(fullRef.current ? 'full' : 'card'));
@@ -251,6 +259,13 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
     const leave = joinGroup(group, 'card', (e) => {
       if (e.type === 'selection') hostRef.current?.relaySelection(e.anchors);
       else if (e.type === 'changed') hostRef.current?.artifactChanged(e.head, e.kind);
+      else if (e.type === 'write') {
+        if (e.ok) {
+          hostRef.current?.adopt(e.write.version);
+          hostRef.current?.artifactChanged(e.write.version, e.write.verb === 'restyled' ? 'theme' : 'deterministic');
+          written(e.write);
+        } else if (live.current) setLine({ kind: 'failed', text: e.message });
+      } else if (e.type === 'status') { if (live.current) setLine({ kind: 'status', text: e.text }); }
       else {
         // A version the host's own chrome wrote for this artifact (Match a website): this card owns its Undo — offered
         // only once the adapter has re-read the manifest, so Undo knows the version's parent (codex h2-r11 P2).
@@ -259,9 +274,8 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
         void Promise.resolve(adapter?.refresh?.()).then(
           () => {
             hostRef.current?.adopt(v);
-            announced.current = v;
             hostRef.current?.artifactChanged(v, 'theme');
-            if (live.current) setLine({ kind: 'edited', version: v, base: e.base ?? v, what: e.words, verb: 'restyled' });
+            written({ version: v, base: e.base ?? v, summary: e.words, words: e.words, anchors: [], verb: 'restyled' });
           },
           // The manifest could not be re-read: say what changed, with no Undo that could not find its parent (codex h2-r12 P2).
           // No announcement either: the head has not moved here yet; the idle re-read announces it when it does
@@ -269,7 +283,7 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
           () => { if (live.current) setLine({ kind: 'status', text: `The theme changed · version ${v}` }); },
         );
       }
-    });
+    }, () => hostRef.current?.connected === true);
     return () => {
       cancelled = true;
       leave();
@@ -298,6 +312,8 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
   const key = binding.artifactKey;
   const size = useArtifactSizes((st) => artifactSizeOf(st, key));
   const ready = decl !== null;
+  const seekRun = binding.kind === 'walkthrough' ? binding.runId : undefined;
+  const seek = useWalkthroughSeek((s) => seekRun === undefined ? undefined : s.byRun[seekRun]);
   const lensVersion = address !== null && address.routeKey === key ? address.routeVersion : null;
   useEffect(() => {
     const owner = useHostChrome.getState().full;
@@ -314,6 +330,15 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
     // Only this card's own full screen: another card's deep link may already own it (codex h2-r7 P2).
     else if (size === 'inline' && owner === key) exitFull();
   }, [size, key, ready, enterFull, exitFull]);
+  useEffect(() => {
+    const host = hostRef.current;
+    if (seekRun === undefined || seek === undefined || !ready || protocol < 2 || !host?.connected) return;
+    // Run evidence names an artifact and a time, independent of which editor claims its kind.
+    // Keep the ask until the port is ready; the plugin buffers it while loading the recording.
+    if (decl?.full != null) enterFull(key);
+    host.relaySelection([{ kind: 'time', atSec: seek.sec }]);
+    consumeWalkthroughSeek(seekRun, seek.n);
+  }, [seekRun, seek, ready, protocol, decl, key, enterFull]);
   // The address says "pane" exactly while this card's Options group is open (operator: it said pane with nothing open):
   // the Options button pushes it, closing the group (×) takes it back.
   const pressOptions = (): void => {

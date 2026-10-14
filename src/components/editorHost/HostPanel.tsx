@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { EditorHost } from '../../editors/host.js';
 import {
-  PANEL_RIBBON_BELOW_PX, RUN_TAB, useGroupShown, hostTabsFor, joinGroup, relay, sameTab, tabFootersFor, useHostChrome, useHostPanel,
+  PANEL_RIBBON_BELOW_PX, RUN_TAB, useGroupShown, hostTabsFor, joinGroup, relay, replayGroupSelection, sameTab, tabFootersFor, useHostChrome, useHostPanel,
   type HostPanelProps, type HostTabContext, type OptionsGroup, type PanelTab,
 } from '../../editors/hostApi.js';
 import { readThemeTokens } from '../../editors/theme.js';
@@ -214,13 +214,15 @@ function OptionsInstance({ group, hostRef, visible, withRun, initialTab, onValue
         },
         // An options instance never changes a host surface (codex h2b-r1/r2 P1): Full screen is the card's host button.
         morph: () => undefined,
-        status: () => undefined,
+        status: (text) => relay(group.key, 'options', { type: 'status', text }),
         notes: () => undefined,
-        thread: () => relay(group.key, 'options', { type: 'changed', head: group.adapter.artifact().head, kind: 'theme' }),
+        thread: () => undefined,
         shown: () => cb.current.onShown(),
         fullscreen: async () => false,
-        // Its writes reach the card instance as `artifact.changed` (codex h2b-r2 P2).
-        written: (w) => relay(group.key, 'options', { type: 'changed', head: w.version, kind: 'deterministic' }),
+        // The card owns the thread line and Undo, including writes from Options.
+        written: (write) => relay(group.key, 'options', { type: 'write', ok: true, write }),
+        writeFailed: (message) => relay(group.key, 'options', { type: 'write', ok: false, message }),
+        surfaces: () => replayGroupSelection(group.key, 'options'),
         torn: (r) => cb.current.onTorn(r),
         log: () => undefined,
         optionsValues: (t, v) => cb.current.onValues(t, v),
@@ -232,8 +234,8 @@ function OptionsInstance({ group, hostRef, visible, withRun, initialTab, onValue
     const leave = joinGroup(group.key, 'options', (ev) => {
       if (ev.type === 'selection') host.relaySelection(ev.anchors);
       else if (ev.type === 'changed') host.artifactChanged(ev.head, ev.kind);
-      else host.artifactChanged(ev.version, 'theme');
-    });
+      else if (ev.type === 'wrote') host.artifactChanged(ev.version, 'theme');
+    }, () => host.connected);
     return () => { leave(); host.teardown('The options were closed'); if (hostRef.current === host) hostRef.current = null; };
   }, [group, hostRef, tab0]);
   return <div ref={box} data-testid="host-panel-frame" hidden={!visible} className="wk-hpanel-frame" />;

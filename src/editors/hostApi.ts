@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { create } from 'zustand';
 import type { EditorView } from '../api/editors.js';
-import type { HostAdapter, McpHostBridge } from './host.js';
+import type { HostAdapter, HostUi, McpHostBridge } from './host.js';
 import type { VersionKind } from './model.js';
 import type { AnchorRef, PermissionId } from './protocol.js';
 import type { FullMode, Surfaces } from './surfaces.js';
@@ -138,20 +138,45 @@ export function groupKey(editorId: string, artifactKey: string): string { return
 export type GroupEvent =
   | { type: 'selection'; anchors: readonly AnchorRef[] }
   | { type: 'changed'; head: number; kind: VersionKind }
+  | { type: 'write'; ok: true; write: Parameters<NonNullable<HostUi['written']>>[0] }
+  | { type: 'write'; ok: false; message: string }
+  | { type: 'status'; text: string }
   /** The host's own chrome wrote this version (Match a website): the card instance adopts it and draws its Undo. */
   | { type: 'wrote'; version: number; base: number | null; words: string };
 type GroupListener = (e: GroupEvent) => void;
-const relays = new Map<string, Map<string, GroupListener>>();
-/** An instance joins its group's relay; the returned function leaves it. */
-export function joinGroup(group: string, instance: string, on: GroupListener): () => void {
-  let m = relays.get(group);
-  if (m === undefined) { m = new Map(); relays.set(group, m); }
-  m.set(instance, on);
-  return () => { const g = relays.get(group); g?.delete(instance); if (g?.size === 0) relays.delete(group); };
+type GroupSelection = Extract<GroupEvent, { type: 'selection' }>;
+interface GroupMember { on: GroupListener; connected(): boolean; seen: GroupSelection | null }
+interface InstanceGroup { members: Map<string, GroupMember>; selection: GroupSelection | null }
+const relays = new Map<string, InstanceGroup>();
+/** An instance joins its group's relay; the returned function leaves it. Selection waits for its handshake. */
+export function joinGroup(group: string, instance: string, on: GroupListener, connected: () => boolean = () => true): () => void {
+  let g = relays.get(group);
+  if (g === undefined) { g = { members: new Map(), selection: null }; relays.set(group, g); }
+  g.members.set(instance, { on, connected, seen: null });
+  replayGroupSelection(group, instance);
+  return () => { const current = relays.get(group); current?.members.delete(instance); if (current?.members.size === 0) relays.delete(group); };
+}
+/** Called at the handshake as well as on join: replay the latest pointing once the instance has a port. */
+export function replayGroupSelection(group: string, instance: string): void {
+  const g = relays.get(group);
+  const member = g?.members.get(instance);
+  if (g?.selection == null || member === undefined || !member.connected() || member.seen === g.selection) return;
+  member.seen = g.selection;
+  member.on(g.selection);
 }
 /** An event from `from` reaches every OTHER instance of the group, never another group. */
 export function relay(group: string, from: string, e: GroupEvent): void {
-  for (const [id, fn] of relays.get(group) ?? []) if (id !== from) fn(e);
+  const g = relays.get(group);
+  if (g === undefined) return;
+  if (e.type === 'selection') g.selection = e.anchors.length === 0 ? null : { type: 'selection', anchors: e.anchors.map((a) => ({ ...a })) };
+  for (const [id, member] of g.members) {
+    if (id === from) continue;
+    if (e.type === 'selection') {
+      if (!member.connected()) continue;
+      member.seen = g.selection;
+    }
+    member.on(e);
+  }
 }
 
 // ── the host panel (run page option B, §7.2) ────────────────────────────────────────────────────────
