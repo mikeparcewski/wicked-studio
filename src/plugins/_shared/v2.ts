@@ -42,8 +42,11 @@ export function helloOf(payload: unknown): Hello {
   const p = isObj(payload) ? payload : {};
   const size: Size = p['size'] === 'inline' || p['size'] === 'full' ? p['size'] : 'pane';
   const protocol = p['protocol'] === 2 ? 2 : 1;
-  const surface = protocol === 2 && SURFACES.includes(p['surface'] as Surface) ? p['surface'] as Surface : surfaceOfSize(size);
   const tab = protocol === 2 && typeof p['tab'] === 'string' ? p['tab'] : null;
+  const asked = protocol === 2 && SURFACES.includes(p['surface'] as Surface) ? p['surface'] as Surface : surfaceOfSize(size);
+  // An options instance always names its tab (DES §4). A host that mounts a v2 plugin at the v1 `pane` size with no
+  // tab (the conformance host, an older host) is asking for the editor: give it the full editor, not an empty tab.
+  const surface: Surface = asked === 'options' && tab === null ? 'full' : asked;
   const mode = protocol === 2 && (p['mode'] === 'simple' || p['mode'] === 'advanced') ? p['mode'] : null;
   return { protocol, surface, tab, mode, size };
 }
@@ -56,6 +59,26 @@ export function readyPayload(editor: string, version: string, surfaces: unknown)
 export function announceReady(editor: string, surfaces: unknown): void {
   const version = document.querySelector('meta[name="wicked-editor-version"]')?.getAttribute('content') ?? '0.0.0';
   parent.postMessage({ p: PROTOCOL, v: ENVELOPE, type: 'plugin.ready', payload: readyPayload(editor, version, surfaces) }, '*');
+}
+
+/** Options controls keep their native keys; host chords and Tab at either boundary leave the frame. */
+export function forwardOptionsKey(e: KeyboardEvent, root: HTMLElement, send: (key: string) => void): boolean {
+  const mod = e.metaKey || e.ctrlKey;
+  let key: string | null = null;
+  if (e.key === 'Escape') key = 'Escape';
+  else if (mod && !e.altKey && e.key.toLowerCase() === 'k') key = 'Mod+K';
+  else if (e.altKey && !mod && /^Key[A-Z]$/.test(e.code)) key = `Alt+${e.code.slice(3)}`;
+  else if (e.key === 'Tab') {
+    const controls = Array.from(root.querySelectorAll<HTMLElement>('button, input, select, textarea, [tabindex]'))
+      .filter((c) => c.tabIndex >= 0 && !c.matches(':disabled') && c.closest('[hidden]') === null);
+    const at = controls.indexOf(e.target as HTMLElement);
+    if (e.shiftKey ? at <= 0 : at === -1 || at === controls.length - 1) key = e.shiftKey ? 'Shift+Tab' : 'Tab';
+  }
+  if (key === null) return false;
+  e.preventDefault();
+  e.stopPropagation();
+  send(key);
+  return true;
 }
 
 export interface OptionsReply { applied: boolean; values: Record<string, unknown>; reason?: string }

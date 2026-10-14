@@ -1,3 +1,6 @@
+import themesJson from './themes.json';
+import { forwardOptionsKey } from './v2.js';
+
 /** Artifact theme controls shared by the framework-free editors. No host chrome or network access. */
 export interface ThemeTokens {
   name: string;
@@ -7,14 +10,12 @@ export interface ThemeTokens {
 export interface StyleContext {
   tokens(): ThemeTokens | null;
   apply(tokens: ThemeTokens): Promise<{ ok: true } | { ok: false; reason: string }>;
+  key?(key: string): void;
 }
 
 /** Verbatim colors/fonts from wicked-interactive's built-in theme JSON. */
-export const THEMES: readonly (ThemeTokens & { display_name: string })[] = [
-  { name: 'corporate-light', display_name: 'Corporate Light', colors: { background: '#FFFFFF', surface: '#F8FAFC', primary: '#1E3A5F', secondary: '#2563EB', accent: '#0891B2', text_primary: '#1E293B', text_secondary: '#64748B', text_muted: '#94A3B8', border: '#E2E8F0' }, fonts: { heading: 'Calibri', body: 'Calibri', mono: 'Consolas' } },
-  { name: 'midnight-purple', display_name: 'Midnight Purple', colors: { background: '#0A0A0F', surface: '#13091D', primary: '#A100FF', secondary: '#6B2FA0', accent: '#F59E0B', text_primary: '#FFFFFF', text_secondary: '#A0A0B0', text_muted: '#6B6B80', border: '#2A2A3D' }, fonts: { heading: 'Calibri', body: 'Calibri', mono: 'Consolas' } },
-  { name: 'warm-dark', display_name: 'Warm Dark', colors: { background: '#1A1A2E', surface: '#16213E', primary: '#FF6B6B', secondary: '#C44569', accent: '#FFD93D', text_primary: '#F8F8F2', text_secondary: '#B0B0C0', text_muted: '#6B6B80', border: '#2D2D44' }, fonts: { heading: 'Calibri', body: 'Calibri', mono: 'Consolas' } },
-];
+/** wicked-interactive's built-in themes (src/themes/*.json), verbatim: theme DATA, so it lives in JSON, not UI code. */
+export const THEMES: readonly (ThemeTokens & { display_name: string })[] = themesJson;
 export const FONTS = ['Inter', 'Roboto', 'Source Sans 3', 'IBM Plex Sans', 'Calibri', 'Georgia', 'system-ui'] as const;
 const COLORS = [['background', 'Background'], ['surface', 'Surface'], ['primary', 'Primary'], ['accent', 'Accent'], ['text_primary', 'Text']] as const;
 export const copyTokens = (t: ThemeTokens): ThemeTokens => ({ name: t.name, colors: { ...t.colors }, fonts: { ...t.fonts } });
@@ -22,6 +23,7 @@ export const copyTokens = (t: ThemeTokens): ThemeTokens => ({ name: t.name, colo
 export function mountStyle(root: HTMLElement, ctx: StyleContext): { refresh(): void } {
   root.replaceChildren();
   root.classList.add('plugin-style');
+  root.onkeydown = (e) => { if (ctx.key !== undefined) forwardOptionsKey(e, root, ctx.key); };
   const css = document.createElement('style');
   css.textContent = `.plugin-style{padding:16px;box-sizing:border-box;color:var(--ink-high);background:var(--surface-base);font:13px var(--font-sans,system-ui)}
 .plugin-style h2{font-size:16px;margin:0 0 12px}.plugin-style .theme-cards{display:grid;gap:8px;margin-bottom:18px}
@@ -43,7 +45,7 @@ export function mountStyle(root: HTMLElement, ctx: StyleContext): { refresh(): v
     const t = current();
     for (const { key, picker, hex } of colors) {
       hex.value = t.colors[key];
-      picker.value = /^#[0-9a-f]{6}$/i.test(t.colors[key]) ? t.colors[key] : '#000000';
+      picker.value = /^#[0-9a-f]{6}$/i.test(t.colors[key]) ? t.colors[key] : '';
     }
     for (const { key, select } of fonts) select.value = FONTS.includes(t.fonts[key] as typeof FONTS[number]) ? t.fonts[key] : 'system-ui';
     for (const b of Array.from(cards.querySelectorAll('button'))) b.setAttribute('aria-pressed', String(b.dataset['theme'] === t.name));
@@ -71,7 +73,7 @@ export function mountStyle(root: HTMLElement, ctx: StyleContext): { refresh(): v
     const picker = document.createElement('input'); picker.type = 'color'; picker.setAttribute('aria-label', text);
     const hex = document.createElement('input'); hex.type = 'text'; hex.maxLength = 7; hex.setAttribute('aria-label', `${text} hex`);
     const change = (value: string): void => {
-      if (!/^#[0-9a-f]{6}$/i.test(value)) { status.textContent = 'Enter a six-digit hex colour, such as #2563EB.'; refresh(); return; }
+      if (!/^#[0-9a-f]{6}$/i.test(value)) { status.textContent = 'Enter a six-digit hex colour: a # and six digits or letters a to f.'; refresh(); return; }
       const t = current(); t.name = 'custom'; t.colors[key] = value; void apply(t);
     };
     picker.addEventListener('change', () => change(picker.value)); hex.addEventListener('change', () => change(hex.value));

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { EditorHost, type HostLogEntry, type HostUi } from '../src/editors/host.js';
+import { EditorHost, type HostAdapter, type HostLogEntry, type HostUi } from '../src/editors/host.js';
 import { FakeDocAdapter } from '../src/editors/fakeAdapter.js';
 import { negotiate, parseInbound, parseReady, type PermissionId } from '../src/editors/protocol.js';
 import {
@@ -178,6 +178,7 @@ describe('protocol negotiation and the v2-only messages', () => {
 function makeHost(opts: { grants?: PermissionId[]; declared?: unknown; surface?: 'card' | 'options' | 'full' } = {}) {
   const log: HostLogEntry[] = [];
   const spies = {
+    written: vi.fn<NonNullable<HostUi['written']>>(),
     surfaces: vi.fn<(s: Surfaces, protocol: number, note: string | null) => void>(),
     optionsValues: vi.fn<(tab: string, values: Record<string, unknown>) => void>(),
     cardHeight: vi.fn<(px: number) => void>(),
@@ -187,7 +188,7 @@ function makeHost(opts: { grants?: PermissionId[]; declared?: unknown; surface?:
   const ui: HostUi = {
     chips: vi.fn(), draft: vi.fn(), typed: vi.fn(), key: vi.fn(), morph: vi.fn(), status: vi.fn(), notes: vi.fn(),
     thread: vi.fn(), fullscreen: vi.fn(async () => true), torn: spies.torn, log: (e) => log.push(e),
-    surfaces: spies.surfaces, optionsValues: spies.optionsValues, cardHeight: spies.cardHeight, selected: spies.selected,
+    written: spies.written, surfaces: spies.surfaces, optionsValues: spies.optionsValues, cardHeight: spies.cardHeight, selected: spies.selected,
   };
   const container = document.createElement('div');
   document.body.appendChild(container);
@@ -233,6 +234,23 @@ function plugin(port: MessagePort, answer: (m: { type: string; id: string; paylo
 afterEach(() => { document.body.innerHTML = ''; vi.useRealTimers(); });
 
 describe('the host, protocol 2', () => {
+  it('reports theme writes as restyles with an Undo base and owns the resulting version', async () => {
+    const { host, ui, adapter, ready } = makeHost({ grants: ['artifact.read', 'artifact.theme', 'artifact.write'] });
+    const theme = vi.fn<NonNullable<HostAdapter['theme']>>(async (base) => adapter.write(base, [{ selector: 'hero-title', type: 'style-edit', style: { color: '#123456' } }], 'the theme'));
+    Object.assign(adapter, { theme });
+    const undo = vi.spyOn(adapter, 'undo');
+    const port = ready([2], DECL); const seen = plugin(port);
+    const base = adapter.artifact().head;
+    port.postMessage(env('theme.set', { base, tokens: {} }, 'theme-write'));
+    await vi.waitFor(() => expect(seen.find((m) => m.re === 'theme-write')).toMatchObject({ ok: true, payload: { version: base + 1 } }));
+    expect(ui.written).toHaveBeenCalledExactlyOnceWith({ version: base + 1, base, summary: 'the theme', anchors: [], verb: 'restyled', words: 'the theme' });
+    // Ownership is observable through the plugin's version.undo request.
+    port.postMessage(env('version.undo', { version: base + 1 }, 'theme-undo'));
+    await vi.waitFor(() => expect(seen.find((m) => m.re === 'theme-undo')).toMatchObject({ ok: true, payload: { undone: true } }));
+    expect(undo).toHaveBeenCalledWith(base + 1);
+    host.teardown('done');
+  });
+
   it('negotiates 2, says the surface in host.hello and hands the surfaces to the UI', () => {
     const { host, ui, ready, hello } = makeHost({ surface: 'card' });
     ready([1, 2], DECL);

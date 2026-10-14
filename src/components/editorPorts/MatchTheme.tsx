@@ -28,20 +28,23 @@ export function MatchTheme({ projectId, docId, onVersion }: {
 
   const match = async (): Promise<void> => {
     if (!learnReady(kind, value) || busy) return;
+    const ctl = new AbortController();
+    abort.current = ctl;
     setBusy(true);
     setLine({ text: `Reading the ${LEARN_LABEL[kind].noun}…`, bad: false });
     // The theme already learned, if any: a later readback is this learn's answer only when it differs. A failed
     // read is not "none" (an older theme would then pass for this one's, codex h4-r1): stop and say so.
     let before: Awaited<ReturnType<typeof getLearnedTheme>>;
     try { before = await getLearnedTheme(projectId, docId); } catch (e: unknown) {
+      if (ctl.signal.aborted) return;
       setLine({ text: `Could not read the current theme: ${e instanceof Error ? e.message : String(e)}`, bad: true });
       setBusy(false);
       return;
     }
+    if (ctl.signal.aborted) return;
     const asked = await learnThemeFromThread({ projectId, docId, kind, value });
+    if (ctl.signal.aborted) return;
     if (!asked.ok) { setLine({ text: asked.reason, bad: true }); setBusy(false); return; }
-    const ctl = new AbortController();
-    abort.current = ctl;
     const out = await pollLearnedTheme({
       signal: ctl.signal,
       // A learn that landed BEFORE this one is not this one's answer.
@@ -50,17 +53,20 @@ export function MatchTheme({ projectId, docId, onVersion }: {
         return t !== null && (before === null || t.learned_at !== before.learned_at) ? t : null;
       },
     });
-    if (out.kind === 'cancelled') return;
+    if (ctl.signal.aborted || out.kind === 'cancelled') return;
     if (out.kind !== 'learned') {
       setLine({ text: out.kind === 'bridge-error' ? out.reason : 'No theme came back in about a minute. The thread says why when it knows.', bad: true });
       setBusy(false);
       return;
     }
     try {
+      if (ctl.signal.aborted) return;
       const r = await putLearnedTheme(projectId, docId, out.result.tokens, true);
+      if (ctl.signal.aborted) return;
       if (r.version !== null) onVersion?.(r.version);
       setLine({ text: r.version !== null ? `Matched: version ${r.version} wears it` : 'Matched: this version already looks like that', bad: false });
     } catch (e: unknown) {
+      if (ctl.signal.aborted) return;
       setLine({ text: e instanceof Error ? e.message : String(e), bad: true });
     }
     setBusy(false);

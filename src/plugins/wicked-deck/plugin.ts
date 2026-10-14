@@ -1,5 +1,5 @@
 import surfaces from './surfaces.json';
-import { announceReady, helloOf, V2Port, sizeOfSurface, type Surface } from '../_shared/v2.js';
+import { announceReady, forwardOptionsKey, helloOf, V2Port, sizeOfSurface, type Surface } from '../_shared/v2.js';
 import { mountStyle, copyTokens, tokensFromHtml, type ThemeTokens } from '../_shared/style.js';
 import { deckOf, topSlideElements, type DeckSlide } from '../../board/deck.js';
 import { overlayBox, type OverlayBox, type ScrollState } from '../../interactive/anchoring.js';
@@ -235,13 +235,15 @@ export function start(): void {
     return { x: Math.max(0, (w - SLIDE_W * s) / 2), y: Math.max(0, (h - SLIDE_H * s) / 2), s };
   };
   const placeFrame = (): void => {
+    const fit = zoom === 'fit' || size === 'inline' || present;
+    stage.dataset['zoom'] = fit ? 'fit' : '100';
+    fitBtn.setAttribute('aria-pressed', String(fit));
+    zoomBtn.setAttribute('aria-pressed', String(!fit));
+    if (fit) { stage.scrollLeft = 0; stage.scrollTop = 0; }
     if (frame === null) return;
     const g = geom();
     slideBox.style.cssText = `left:${g.x}px;top:${g.y}px;width:${SLIDE_W * g.s}px;height:${SLIDE_H * g.s}px`;
     frame.style.cssText = `width:${SLIDE_W}px;height:${SLIDE_H}px;transform:scale(${g.s})`;
-    stage.dataset['zoom'] = zoom === '100' && size !== 'inline' && !present ? '100' : 'fit';
-    fitBtn.setAttribute('aria-pressed', String(zoom === 'fit'));
-    zoomBtn.setAttribute('aria-pressed', String(zoom === '100'));
     drawCutoff();
   };
 
@@ -330,6 +332,7 @@ export function start(): void {
     place(selBox, pickable && editing === null ? box(selected) : null);
     if (editing !== null) place(input, box(editing.wid), 160, 30); else input.hidden = true;
     tools.hidden = size === 'inline' || present || options;
+    fullscreenBtn.hidden = !grants.includes('ui.fullscreen');
     if (size === 'inline' || present || options || editing !== null) { hint.hidden = true; return; }
     hint.hidden = false;
     if (selected === null) { hint.removeAttribute('data-editable'); hint.textContent = n === 0 ? '' : '← → to move between slides · click a line to point at it · type on it to change it'; return; }
@@ -419,7 +422,7 @@ export function start(): void {
     selected = null;
     cancelEdit();
     const i = protocol === 1 && size === 'inline' ? 0 : at();
-    if (slides.length === 0) { slideBox.replaceChildren(); frame = null; draw(); return; }
+    if (slides.length === 0) { slideBox.replaceChildren(); frame = null; placeFrame(); draw(); return; }
     const doc = oneSlideHtml(html, i, { thumbnail: false });
     const next = document.createElement('iframe');
     for (const [k, v] of Object.entries({ 'data-testid': 'deck-frame', sandbox: 'allow-scripts', title: `Slide ${i + 1}` })) next.setAttribute(k, v);
@@ -479,8 +482,8 @@ export function start(): void {
     } else if (!slides.some((s) => keyOf(s) === current)) {
       current = slides[0] === undefined ? null : keyOf(slides[0]);
     }
-    const followed = slides.find((s) => s.id === followedSlide || s.wid === followedSlide);
-    if (surface === 'options' && followed !== undefined) current = keyOf(followed);
+    const followed = followedSlide === null ? undefined : slides.find((s) => s.id === followedSlide || s.wid === followedSlide) ?? slideHolding(followedSlide);
+    if (surface === 'options' && followed !== undefined) { followedSlide = keyOf(followed); current = keyOf(followed); }
     buildStrip();
     showSlide();
     if (protocol === 2 && surface !== 'options') pointAtSlide();
@@ -517,6 +520,7 @@ export function start(): void {
 
   const stylePanel = mountStyle(styleRoot, {
     tokens: () => themeTokens,
+    key: (key) => send('ui.key', { key }),
     apply: async (tokens) => {
       if (protocol !== 2 || !grants.includes('artifact.theme')) return { ok: false, reason: 'Theme changes are not granted here.' };
       if (head === null) return { ok: false, reason: 'The deck has not loaded yet.' };
@@ -565,7 +569,10 @@ export function start(): void {
       hover = msg.wid;
       draw();
     } else if (msg.type === 'wid-click') {
-      if (size === 'inline') return;
+      if (size === 'inline') {
+        if (protocol === 2) select(msg.wid);
+        return;
+      }
       if (present) { step(1); return; }
       select(msg.wid === cur()?.wid ? null : msg.wid);
       if (msg.wid === cur()?.wid) pointAtSlide();
@@ -615,6 +622,7 @@ export function start(): void {
   };
 
   const moveSlide = async (key: string, after: string | null): Promise<void> => {
+    if (size === 'inline' || present) return;
     const s = slides.find((x) => keyOf(x) === key);
     if (s?.id == null) return;
     const from = slides.indexOf(s);
@@ -631,6 +639,7 @@ export function start(): void {
     if (by === 1 && i < slides.length - 1) void moveSlide(keyOf(s), slides[i + 1]?.id ?? null);
   };
   const duplicate = (): void => {
+    if (size === 'inline' || present) return;
     const s = cur();
     if (s?.id == null) return;
     goIndexAfterRender = at() + 1;
@@ -638,18 +647,21 @@ export function start(): void {
   };
   /** Add a slide laid out like `layout` (one of the deck's own), right after the current one. */
   const addLike = (layout: DeckSlide): void => {
+    if (size === 'inline' || present) return;
     const c = cur();
     if (layout.id === null || c?.id == null) return;
     goIndexAfterRender = at() + 1;
     void write([{ op: 'slide-insert', slide: layout.id, after: c.id }], `a slide after slide ${c.n}`, `Adding a slide after slide ${c.n}…`);
   };
   const deleteSlide = (): void => {
+    if (size === 'inline' || present) return;
     const s = cur();
     if (s?.wid == null || slides.length === 0) return;
     goIndexAfterRender = Math.max(0, at() - (at() === slides.length - 1 ? 1 : 0));
     void write([{ op: 'remove', anchor: s.wid }], `slide ${s.n}`, `Deleting slide ${s.n}…`);
   };
   const removeElement = (wid: string): void => {
+    if (size === 'inline' || present) return;
     if (inventory?.widMap[wid] === undefined) return;
     void write([{ op: 'remove', anchor: wid }], 'part of the slide', 'Removing it…');
   };
@@ -685,8 +697,13 @@ export function start(): void {
   notes.addEventListener('blur', () => commitNotes());
   notes.addEventListener('keydown', (e) => {
     e.stopPropagation();
+    if (protocol === 2 && surface === 'options' && forwardOptionsKey(e, notesBox, (key) => {
+      if (key === 'Tab' || key === 'Shift+Tab') notes.blur();
+      send('ui.key', { key });
+    })) return;
+    if (e.altKey && !e.metaKey && !e.ctrlKey && /^Key[A-Z]$/.test(e.code)) { e.preventDefault(); send('ui.key', { key: `Alt+${e.code.slice(3)}` }); return; }
     if (e.key === 'Escape') { e.preventDefault(); if (notesDraft?.key === current) notesDraft = null; notes.value = cur()?.notes ?? ''; notesFor = null; handle.focus(); return; }
-    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); handle.focus(); return; }
+    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); if (protocol === 2 && surface === 'options') notes.blur(); else handle.focus(); return; }
     // ⌘K is the host's, from inside the field too (codex r1); Tab past the last control leaves to the host.
     if ((e.metaKey || e.ctrlKey) && !e.altKey && e.key.toLowerCase() === 'k') { e.preventDefault(); send('ui.key', { key: 'Mod+K' }); return; }
     if (e.key === 'Tab' && !e.shiftKey) { e.preventDefault(); notes.blur(); send('ui.key', { key: 'Tab' }); return; }
@@ -696,7 +713,7 @@ export function start(): void {
   // ── typing on the slide ──────────────────────────────────────────────────────────────
   const cancelEdit = (): void => { if (editing === null) return; editing = null; input.hidden = true; input.value = ''; draw(); };
   const beginEdit = (wid: string, typed: string | null): void => {
-    if (busy || !canWrite() || inventory === null || editable(wid) !== 'yes') return;
+    if (size === 'inline' || present || busy || !canWrite() || inventory === null || editable(wid) !== 'yes') return;
     const before = inventory.blocks[wid]?.text ?? '';
     editing = { wid, before };
     input.value = typed ?? before;
@@ -781,7 +798,7 @@ export function start(): void {
   // ── keys (§5.10) ─────────────────────────────────────────────────────────────────────
   const ring = (): HTMLElement[] => [
     ...Array.from(thumbs.querySelectorAll<HTMLButtonElement>('button')).filter(() => size !== 'inline' && !present),
-    ...Array.from(tools.querySelectorAll<HTMLButtonElement>('button')).filter((b) => !tools.hidden && !b.disabled),
+    ...Array.from(tools.querySelectorAll<HTMLButtonElement>('button')).filter((b) => !tools.hidden && !b.hidden && !b.disabled),
     handle,
     ...(size === 'inline' || present ? [] : [notes]),
   ];
@@ -851,7 +868,7 @@ export function start(): void {
     }
     if (e.key.length !== 1) return;
     e.preventDefault();
-    if (selected !== null && !busy) { beginEdit(selected, e.key); return; }
+    if (size !== 'inline' && !present && selected !== null && !busy) { beginEdit(selected, e.key); return; }
     // A digit is a slide number only while the FILMSTRIP has the focus — a focused composite's own key
     // (§5.10 rule 1). Anywhere else it is typing, and goes to the composer like any other (codex r1).
     if (/^[0-9]$/.test(e.key) && onThumb) { goto(e.key); return; }
@@ -964,7 +981,7 @@ export function start(): void {
           // A line on a slide names its own wid: the slide that holds it is the one to follow (codex h4-r1).
           const slide = slides.find((s) => s.id === a.id || s.wid === a.id) ?? slideHolding(a.id);
           // A selection may arrive before the first artifact.read answers.
-          if (slides.length === 0 || slide !== undefined) followedSlide = a.id;
+          if (slides.length === 0 || slide !== undefined) followedSlide = slide === undefined ? a.id : keyOf(slide);
           if (slide !== undefined) { notes.blur(); go(keyOf(slide), false); break; }
         }
       },
