@@ -29,7 +29,8 @@ export function MadeOpen({ projectId, docId, title, style, onClose }: {
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       if (e.key !== 'Escape' || e.defaultPrevented) return;
-      if (useHostChrome.getState().full === key || useHostPanel.getState().group !== null) return;
+      // Only this card's own group holds the Esc (codex h4-fix r1 P2): another page's left-over group does not.
+      if (useHostChrome.getState().full === key || useHostPanel.getState().group?.binding.artifactKey === key) return;
       if (useArtifactSizes.getState().sizes[key] === 'full') return; // the deep link has not opened full screen yet
       const t = e.target as HTMLElement | null;
       if (t !== null && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;

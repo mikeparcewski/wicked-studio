@@ -408,17 +408,20 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
   };
   // studio#234: the files already exported for the version shown, from the adapter's listing — re-read on a new head
   // and after an export, so a download made in an earlier session is still offered after a reload.
-  const [onDisk, setOnDisk] = useState<readonly ExportedFile[]>([]);
+  // The rows belong to the (artifact, version) they were read for: after a head or document change they are not shown
+  // until the new listing lands (codex h4-fix r1 P2).
+  const [onDisk, setOnDisk] = useState<{ of: string; rows: readonly ExportedFile[] } | null>(null);
   const [diskReads, setDiskReads] = useState(0);
   const listsExports = exports.length > 0 && head >= 1 && adapter?.exported !== undefined;
+  const diskOf = `${binding.artifactKey}@${head}`;
   useEffect(() => {
-    if (!listsExports || adapter?.exported === undefined) { setOnDisk([]); return undefined; }
+    if (!listsExports || adapter?.exported === undefined) { setOnDisk(null); return undefined; }
     let cancelled = false;
-    adapter.exported(head).then((rows) => { if (!cancelled) setOnDisk(rows); }, () => { if (!cancelled) setOnDisk([]); });
+    adapter.exported(head).then((rows) => { if (!cancelled) setOnDisk({ of: diskOf, rows }); }, () => { if (!cancelled) setOnDisk(null); });
     return () => { cancelled = true; };
-  }, [listsExports, adapter, head, diskReads]);
+  }, [listsExports, adapter, head, diskReads, diskOf]);
   const linkedFile = line?.kind === 'export' && line.out.ok ? line.out.file : null;
-  const filesOnDisk = onDisk.filter((x) => x.name !== linkedFile);
+  const filesOnDisk = listsExports && onDisk !== null && onDisk.of === diskOf ? onDisk.rows.filter((x) => x.name !== linkedFile) : [];
 
   const runAction = async (a: CardAction): Promise<void> => {
     if (a.verb === 'host:export') { setExportOpen((o) => !o); return; }
@@ -533,7 +536,15 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
       {!full && (
         <footer className="wk-pcard-foot">
           {actions.map((a) => (
-            <span key={a.id} className="wk-pcard-action-wrap">
+            <span key={a.id} className="wk-pcard-action-wrap"
+              // Esc with the Export menu open closes the menu, not what the card sits in (the Made list's close), and
+              // gives Export its focus back (codex h4-fix r1 P2).
+              onKeyDown={(e) => {
+                if (e.key !== 'Escape' || a.verb !== 'host:export' || !exportOpen) return;
+                e.preventDefault();
+                setExportOpen(false);
+                (e.currentTarget.querySelector('[data-verb="host:export"]') as HTMLButtonElement | null)?.focus();
+              }}>
               <button type="button" data-testid="plugin-card-action" data-action={a.id} data-verb={a.verb}
                 disabled={a.verb === 'host:export' && (exports.length === 0 || head < 1)}
                 className={a.primary ? 'wk-host-btn wk-host-btn--primary' : 'wk-host-btn'} onClick={() => void runAction(a)}>

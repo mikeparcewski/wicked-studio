@@ -74,6 +74,7 @@ import { TurnWho } from './TurnWho.js';
 import { RunRibbon, RunTab } from './RunTab.js';
 import { useRunHostValue } from './RunHost.js';
 import { HostPanel } from '../editorHost/HostPanel.js';
+import { useHostPanel } from '../../editors/hostApi.js';
 import { RunHostProvider } from '../editorHost/RunHostContext.js';
 
 /** S16a-2c: the hash that lands a run's session on its sheet's Governance tab. */
@@ -594,6 +595,9 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
   const pane = useArtifactSizes(paneOpen);
   const artifactMissing = useArtifactMissing(artifactKey, ready && mine.length > 0);
   useEffect(() => () => collapseArtifacts(), [sessionId]);
+  // Leaving the session leaves no Options group behind for the next page (codex h4-fix r1 P2: a Made-list card
+  // would read it as its own).
+  useEffect(() => () => { useHostPanel.getState().closeGroup(); }, [sessionId]);
 
   // DES §7.4: the retired "Demo video" header button is an ordinary turn suggestion — a run here that made a deck or a
   // document offers "Make a demo video of this", which opens the New job form's demo video in its project.
