@@ -152,7 +152,7 @@
     const named = (e) => {
       if (lastCall.name === null) return true;
       if (e.truncated || typeof e.text !== 'string') return false;
-      try { const m = JSON.parse(e.text); const p = (m && m.params) || {}; return p.name === lastCall.name || p.uri === lastCall.name; } catch { return false; }
+      try { const m = JSON.parse(e.text); const p = (m && m.params) || {}; return (lastCall.method === 'resources/read' ? p.uri : p.name) === lastCall.name; } catch { return false; }
     };
     const matches = log.filter((e) => !e.gap && e.seq > lastCall.after && e.dir === 'out' && e.kind === 'request' && e.method === lastCall.method && named(e));
     const sent = matches[matches.length - 1];
