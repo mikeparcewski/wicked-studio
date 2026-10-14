@@ -167,3 +167,24 @@ describe('FullShell', () => {
     expect(onExit).toHaveBeenCalled();
   });
 });
+
+describe('composer bridge (ev2-ports follow-ups)', () => {
+  it('elements and chapters both become about: chips in the host words', async () => {
+    const { chipsToComposer } = await import('../src/components/editorHost/composerBridge.js');
+    const { useComposerChips } = await import('../src/store/composerChips.js');
+    chipsToComposer({ artifactKey: 'k', title: 'T', kind: 'demo-video', source: 'fake', projectId: 'p', docId: 'd', composerKey: 'ck' }, [
+      { anchor: { kind: 'element', id: 'hero' }, label: 'the hero heading' },
+      { anchor: { kind: 'chapter', id: 'c2' }, label: 'Enter the bill' },
+    ]);
+    const chips = JSON.stringify(useComposerChips.getState());
+    expect(chips).toContain('el:d/hero');
+    expect(chips).toContain('ch:d/c2');
+    expect(chips).toContain('Enter the bill');
+  });
+  it('the panel does not say Run twice: no heading without a plugin group', () => {
+    wide(false);
+    render(<HostPanel runTab={<p>run body</p>} ribbon={<span>r</span>} />);
+    expect(screen.getByTestId('host-panel').querySelector('.wk-hpanel-heading')).toBeNull();
+    expect(screen.getAllByTestId('host-panel-tab').map((t) => t.textContent)).toEqual(['Run']);
+  });
+});

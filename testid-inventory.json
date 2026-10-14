@@ -12,8 +12,8 @@
   "studioVersion": "0.7.13",
   "counts": {
     "files": 223,
-    "occurrences": 2755,
-    "static": 2372,
+    "occurrences": 2757,
+    "static": 2374,
     "dynamic": 69,
     "computed": 24
   },
@@ -579,6 +579,12 @@
       "testId": "artifact-lens-line",
       "files": [
         "src/components/session/ArtifactVersions.tsx"
+      ]
+    },
+    {
+      "testId": "artifact-loading",
+      "files": [
+        "src/components/session/ArtifactMorph.tsx"
       ]
     },
     {
@@ -3705,6 +3711,12 @@
       "testId": "editor-plugins-unsupported",
       "files": [
         "src/components/editors/EditorPluginsSettings.tsx"
+      ]
+    },
+    {
+      "testId": "editor-protocol-toggle",
+      "files": [
+        "src/components/editors/EditorHostPage.tsx"
       ]
     },
     {

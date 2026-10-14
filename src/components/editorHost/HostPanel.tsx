@@ -5,7 +5,7 @@ import {
   type HostPanelProps, type HostTabContext, type OptionsGroup, type PanelTab,
 } from '../../editors/hostApi.js';
 import { readThemeTokens } from '../../editors/theme.js';
-import { addAboutChip } from '../../store/composerChips.js';
+import { chipsToComposer, forwardedKey, typedToComposer } from './composerBridge.js';
 import type { Control, OptionsTab } from '../../editors/surfaces.js';
 
 /**
@@ -50,7 +50,8 @@ export function HostPanel({ runTab, ribbon }: HostPanelProps): React.ReactElemen
       )}
     <aside data-testid={collapsed ? undefined : 'host-panel'} hidden={collapsed} data-narrow={narrow ? 'true' : 'false'} aria-label="Run and options" className={`wk-hpanel${narrow ? ' wk-hpanel--overlay' : ''}`}>
       <div className="wk-hpanel-head">
-        <span className="wk-hpanel-heading">{group === null ? 'Run' : `${group.editor.title} options`}</span>
+        {/* Without a group the tab already says Run: no second "Run" above it. */}
+        {group !== null && <span className="wk-hpanel-heading">{`${group.editor.title} options`}</span>}
         <span className="wk-hpanel-gap" />
         {group !== null && (
           <button type="button" data-testid="host-panel-close" aria-label={`Close ${group.editor.title} options`} className="wk-host-btn" onClick={closeGroup}>×</button>
@@ -143,7 +144,9 @@ function hostCtx(group: OptionsGroup, hostRef: React.MutableRefObject<EditorHost
     pointAt: async (wid) => (await hostRef.current?.pointAt(wid)) ?? false,
     changed: (head, kind) => {
       hostRef.current?.artifactChanged(head, kind);
-      relay(group.key, 'options', { type: 'changed', head, kind });
+      // A theme the host's own chrome wrote (Match a website) is the card's to Undo (ev2-ports: Undo ownership).
+      if (kind === 'theme') relay(group.key, 'options', { type: 'wrote', version: head, base: null, words: 'the theme' });
+      else relay(group.key, 'options', { type: 'changed', head, kind });
     },
   };
 }
@@ -188,11 +191,16 @@ function OptionsInstance({ group, hostRef, visible, initialTab, onValues, onTorn
       sizes: e.sizes,
       ui: {
         // The options instance points too: its chips (and the Checks tab's "point at") reach the composer (codex h2b-r1 P2).
-        chips: (chips) => { const b = group.binding; for (const c of chips) if (c.anchor.kind === 'element') addAboutChip(b.composerKey, { kind: 'about', key: `el:${b.docId ?? b.artifactKey}/${c.anchor.id}`, label: c.label }); },
+        chips: (chips) => chipsToComposer(group.binding, chips),
         draft: () => undefined,
-        typed: () => undefined,
+        // The options panel takes keys like the card (ev2-ports codex h4b-r2): the first typed character reaches the
+        // composer, Tab leaves the frame, Mod+K and the Alt chords run the host's shortcuts.
+        typed: (g) => typedToComposer(group.binding.composerKey, g),
         // Only with the focus in this options frame (codex h2b-r4): a hidden instance cannot switch tabs.
-        key: (k) => { if (k === 'Escape' && document.activeElement === hostRef.current?.frame) useHostPanel.getState().setTab(RUN_TAB); },
+        key: (k) => {
+          if (k === 'Escape') { if (document.activeElement === hostRef.current?.frame) useHostPanel.getState().setTab(RUN_TAB); }
+          else forwardedKey(k, hostRef.current?.frame ?? null);
+        },
         // An options instance never changes a host surface (codex h2b-r1/r2 P1): Full screen is the card's host button.
         morph: () => undefined,
         status: () => undefined,
@@ -212,7 +220,8 @@ function OptionsInstance({ group, hostRef, visible, initialTab, onValues, onTorn
     host.mount();
     const leave = joinGroup(group.key, 'options', (ev) => {
       if (ev.type === 'selection') host.relaySelection(ev.anchors);
-      else host.artifactChanged(ev.head, ev.kind);
+      else if (ev.type === 'changed') host.artifactChanged(ev.head, ev.kind);
+      else host.artifactChanged(ev.version, 'theme');
     });
     return () => { leave(); host.teardown('The options were closed'); if (hostRef.current === host) hostRef.current = null; };
   }, [group, hostRef, tab0]);
