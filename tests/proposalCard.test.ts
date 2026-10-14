@@ -254,9 +254,33 @@ describe('after an accepted hand-over is pruned', () => {
 describe('the status sentence and the outcome line', () => {
   it('says what is happening in words', () => {
     const c = chain([step('a', 'Research', 'done'), step('b', 'Build', 'failed')]);
-    expect(statusSentence(run('r', 'failed'), c, undefined)).toBe('Stopped at Build · 1 of 2 done');
+    expect(statusSentence(run('r', 'failed'), c, undefined)).toBe('Failed at Build · 1 of 2 done');
     expect(statusSentence(run('r', 'awaiting_human'), c, planGate())).toBe('Waiting on your go for the plan · 1 of 2 done');
     expect(statusSentence(run('r', 'executing'), EMPTY, undefined)).toBe('Being worked on');
+  });
+
+  it('run clarity: a failed run reads "Failed" (the header’s word), and says when no step finished', () => {
+    const none = chain([step('a', 'Research', 'todo'), step('b', 'Build', 'todo')]);
+    expect(statusSentence(run('r', 'failed'), none, undefined)).toBe('Failed before any step finished · 0 of 2 done');
+    const some = chain([step('a', 'Research', 'done'), step('b', 'Build', 'todo')]);
+    expect(statusSentence(run('r', 'failed'), some, undefined)).toBe('Failed · 1 of 2 done');
+    expect(statusSentence(run('r', 'failed'), EMPTY, undefined)).toBe('Failed');
+  });
+
+  it('run clarity: a plain wait names the step it waits at; a plan or hand-over wait does not', () => {
+    const c = chain([step('u1', 'Research', 'done'), step('u2', 'Test', 'todo')], { source: 'units' });
+    expect(statusSentence(run('r', 'awaiting_human'), c, openGate({ ord: 2, prompt: 'Unit 2 failed and triage escalated' }))).toBe('Waiting on you at Test · 1 of 2 done');
+    // A gate at a unit the chain has no step for says no step.
+    expect(statusSentence(run('r', 'awaiting_human'), c, openGate({ ord: 7, prompt: 'Approve?' }))).toBe('Waiting on you · 1 of 2 done');
+    // A team chain names the step by the unit's phase id, never by a step merely NAMED `u2` (codex r1).
+    const team = chain([step('u2', 'Research', 'done'), step('test', 'Test', 'todo')]);
+    const units = [makeUnit({ id: 'r:a', session_id: 'r', ord: 1, status: 'done', description: 'u2 — research' }), makeUnit({ id: 'r:b', session_id: 'r', ord: 2, status: 'pending', description: 'test — the test' })];
+    expect(statusSentence(run('r', 'awaiting_human', units), team, openGate({ ord: 2, prompt: 'Approve?' }))).toBe('Waiting on you at Test · 1 of 2 done');
+    // A plan or hand-over wait at a unit that HAS a step still names none (agy r1).
+    expect(statusSentence(run('r', 'awaiting_human'), c, openGate({ ord: 2, prompt: 'Approve unit 2 before it runs: deliver', gateKind: 'deliver' }))).toBe('Ready to deliver — waiting on you · 1 of 2 done');
+    expect(statusSentence(run('r', 'awaiting_human'), c, planGate(2))).toBe('Waiting on your go for the plan · 1 of 2 done');
+    // No gate cached yet (the status alone): no step is guessed.
+    expect(statusSentence(run('r', 'awaiting_human'), c, undefined)).toBe('Waiting on you · 1 of 2 done');
   });
 
   it('a kept-local run and a stranded one read differently; neither promises a PR', () => {
