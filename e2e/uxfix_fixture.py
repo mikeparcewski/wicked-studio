@@ -8127,8 +8127,15 @@ class W2Handler(SimpleHTTPRequestHandler):
                 mcp_on = state["mcp_inspect"]
             if mcp_on:
                 body = (REPO / "e2e" / "editor-fixtures" / "mcp-inspector.html").read_bytes()
-                editors.append({"id": "acme-mcp", "title": "Acme MCP inspector", "version": "0.1.0", "protocol": [1],
-                                "kinds": ["mcp-server"], "sizes": ["pane", "full"],
+                editors.append({"id": "acme-mcp", "title": "Acme MCP inspector", "version": "0.1.0", "protocol": [1, 2],
+                                "kinds": ["mcp-server"], "sizes": ["inline", "pane", "full"],
+                                "surfaces": {
+                                    "card": {"interactive": True, "aspect": "auto", "actions": [{"id": "refresh", "label": "List again", "verb": "plugin"}]},
+                                    "options": {"tabs": [{"id": "resources", "label": "Resources", "render": "plugin"},
+                                                         {"id": "prompts", "label": "Prompts", "render": "plugin"},
+                                                         {"id": "log", "label": "Log", "render": "plugin"}]},
+                                    "full": {"modes": ["simple", "advanced"], "default": "simple"},
+                                },
                                 "permissions": [{"id": "artifact.read", "why": "show the server"},
                                                 {"id": "mcp.session", "why": "talk to the server you connect"},
                                                 {"id": "ui.fullscreen", "why": "go full screen"}],
