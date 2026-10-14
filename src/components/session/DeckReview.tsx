@@ -5,7 +5,8 @@ import {
 } from '../../api/interactive.js';
 import { AUDIENCES, audienceLabel, deckOf, type AudiencePreset, type DeckSlide, type Length } from '../../board/deck.js';
 import { diffSummary, slideDiff, type SlideDiffRow, type WordPart } from '../../board/deckDiff.js';
-import { adaptItems, proposalView, reviewRows, reviewSummary, type ReviewRow } from '../../board/deckReview.js';
+import { adaptItems, proposalRun, proposalView, reviewRows, reviewSummary, type ProposalRunLike, type ReviewRow } from '../../board/deckReview.js';
+import { api } from '../../api/client.js';
 import { FEEDBACK_EVENT } from '../../interactive/feedbackBatch.js';
 
 /**
@@ -104,6 +105,16 @@ export function DeckReview({ projectId, docId, head, onForked }: {
     const t = setInterval(() => setAsks((n) => n + 1), 5_000);
     return () => clearInterval(t);
   }, [waiting]);
+  // studio#771: while it waits, the runs are read too, so a run that ended without landing is said.
+  const [runs, setRuns] = useState<ProposalRunLike[]>([]);
+  useEffect(() => {
+    if (!waiting) return undefined;
+    let cancelled = false;
+    api.listRuns()
+      .then((r) => { if (!cancelled) setRuns(r.runs.map((v) => v.session as unknown as ProposalRunLike)); })
+      .catch(() => { /* not read: the proposal keeps waiting, as before */ });
+    return () => { cancelled = true; };
+  }, [waiting, asks]);
 
   // A compare is of one proposed version: when the head moves on, it is no longer what Keep would keep,
   // and a compare still being read for an older head is dropped when it arrives (codex r2).
@@ -140,7 +151,7 @@ export function DeckReview({ projectId, docId, head, onForked }: {
   }
 
   const rows = reviewRows(slides, review);
-  const proposal = proposalView(review.proposal, head);
+  const proposal = proposalView(review.proposal, head, proposalRun(runs, review.proposal, projectId, docId));
   const behind = loadedFor !== head;
   const locked = busy !== null || behind;
 
@@ -200,6 +211,20 @@ export function DeckReview({ projectId, docId, head, onForked }: {
       setCompare(null);
       reread();
     } catch (e) { fail('Not kept', e); } finally { setBusy(null); }
+  };
+
+  /** studio#771: a stopped rewrite's Try again — close it (nothing landed, so nothing to restore) and reopen the
+   *  audience form with the same audience. */
+  const retry = async (): Promise<void> => {
+    if (review.proposal === null) return;
+    const p = review.proposal;
+    setBusy('dropping');
+    try {
+      await closeDeckProposal(projectId, docId, { outcome: 'dropped' });
+      setForm({ preset: p.preset as AudiencePreset, label: p.label ?? '', length: 'keep', keepApproved: true });
+      setLine(null);
+      reread();
+    } catch (e) { fail('Not reopened', e); } finally { setBusy(null); }
   };
 
   const drop = async (base: number): Promise<void> => {
@@ -279,7 +304,9 @@ export function DeckReview({ projectId, docId, head, onForked }: {
         <div data-testid="deck-proposal" data-state={proposal.state} className="wk-deck-proposal">
           {proposal.state === 'waiting'
             ? <p>Rewriting version {proposal.base} for {proposal.audience}: a helper is working on it. It opens here when it lands.</p>
-            : <p>Proposed for {proposal.audience}: version {proposal.proposed} (from version {proposal.base}).</p>}
+            : proposal.state === 'stopped'
+              ? <p data-testid="deck-proposal-stopped">The rewrite for {proposal.audience} stopped: its run {proposal.how === 'ended' ? 'ended' : `was ${proposal.how}`} before a new version landed. Drop it, or try again.</p>
+              : <p>Proposed for {proposal.audience}: version {proposal.proposed} (from version {proposal.base}).</p>}
           <p className="wk-deck-form-row">
             {proposal.state === 'ready' && (
               <>
@@ -288,6 +315,9 @@ export function DeckReview({ projectId, docId, head, onForked }: {
               </>
             )}
             <button type="button" data-testid="deck-proposal-drop" className="wk-btn wk-btn--quiet wk-btn--sm" disabled={locked} onClick={() => void drop(proposal.base)}>Drop it</button>
+            {proposal.state === 'stopped' && (
+              <>{' '}<button type="button" data-testid="deck-proposal-retry" className="wk-btn wk-btn--secondary wk-btn--sm" disabled={locked} onClick={() => void retry()}>Try again</button></>
+            )}
           </p>
           {compare !== null && compare.proposed === head && <Compare rows={compare.rows} base={compare.base} proposed={compare.proposed} />}
         </div>
