@@ -109,6 +109,9 @@
 
 /* The modal: centered on desktop, a bottom sheet on phone. */
 .wk-agents-scrim { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; background: var(--scrim); }
+/* The login container's terminal (crew#1006) opens over the agent's modal. */
+.wk-agents-scrim--login { z-index: 70; }
+.wk-agents-modal.wk-agents-modal--login { width: min(820px, calc(100vw - 32px)); }
 .wk-agents-modal {
   width: min(680px, calc(100vw - 32px)); max-height: calc(100dvh - 48px); overflow: hidden; outline: none;
   display: flex; flex-direction: column;

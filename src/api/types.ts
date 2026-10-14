@@ -234,3 +234,4 @@ export interface RunInventoryResponse {
   units: { ord: number; unitId: string; claims: InventoryClaim[] }[];
   unreadUnits: string[];
 }
+

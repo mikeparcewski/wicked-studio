@@ -3,7 +3,8 @@ import { createPortal } from 'react-dom';
 import { AlertCircle, AlertTriangle, Info } from 'lucide-react';
 import { issueCopy, SEVERITY_WORD, type CopyCommand } from '../../board/agentsCopy.js';
 import { authOf, commandDisplay, countWords, rowForKey, type AgentIssue, type AgentRow } from '../../board/agentsModel.js';
-import { useAgentLogin, useAuthOps } from './agentLogin.js';
+import { hookOffers, useAgentLogin, useAuthOps } from './agentLogin.js';
+import { holdInert, useLoginCover } from './inertHold.js';
 import type { RosterSeat } from '../../api/types.js';
 import { getCachedRoster, setCachedRoster } from '../../store/rosterCache.js';
 
@@ -49,6 +50,7 @@ type Outcome =
   | { kind: 'still' }
   | { kind: 'failed' }
   | { kind: 'status-only' }
+  | { kind: 'container-in' }
   | { kind: 'cant-confirm' }
   | { kind: 'couldnt' }
   | { kind: 'not-rechecked' }
@@ -63,6 +65,7 @@ const OUTCOME_WORDS: Record<Exclude<Outcome['kind'], 'idle'>, (name: string) => 
   free: (n) => ({ lead: `${n} needs no sign-in.`, tone: 'ok', line: null }),
   still: () => ({ lead: 'Still signed out.', tone: 'fail', line: 'Finish the sign-in, then check again.' }),
   failed: () => ({ lead: 'The sign-in worked. One thing still stops it, below.', tone: 'ok', line: null }),
+  'container-in': (n) => ({ lead: `${n} is signed in.`, tone: 'ok', line: 'Studio’s service keeps the sign-in; its first step confirms it with a request.' }),
   'status-only': (n) => ({ lead: `${n}’s own check says it is signed in.`, tone: 'ok', line: 'Studio couldn’t confirm it with a request yet; its first step will.' }),
   'cant-confirm': () => ({ lead: 'Looks signed in.', tone: 'quiet', line: 'It has no way to confirm; its first step will.' }),
   couldnt: () => ({ lead: 'Couldn’t check just now.', tone: 'fail', line: 'Nothing changed; try again.' }),
@@ -84,6 +87,10 @@ function outcomeOf(fresh: readonly RosterSeat[], key: string, answer: 'probed' |
   if (auth === 'signed_out') return { kind: after === 'sign-out' ? 'out-done' : 'still' };
   // "It answered a request" only from THIS check's fresh answer (codex S4 r1): an old reading proves nothing new.
   if (auth === 'signed_in' && check === 'live' && answer === 'probed') return { kind: mine.council_eligible === false || mine.recent_bench !== undefined ? 'failed' : 'in' };
+  // A container sign-in (crew#1006): the reading is crew's credential broker's, not the CLI's own check.
+  if (auth === 'signed_in' && mine.sign_in === 'container' && answer === 'probed') {
+    return { kind: mine.council_eligible === false || mine.recent_bench !== undefined ? 'failed' : 'container-in' };
+  }
   if (auth === 'signed_in' && check === 'status' && answer === 'probed') return { kind: 'status-only' };
   // An agent with no status command (pi, copilot) is never re-probed: the answer is the reading.
   if (auth === 'signed_in') return { kind: 'cant-confirm' };
@@ -138,18 +145,35 @@ export function AgentModal({ agentKey, onClose, intent }: {
   const live = useRef(true);
   const dialog = useRef<HTMLDivElement | null>(null);
   useModalEscape(onClose);
+  // Inert while the container login window covers it, however it got there (codex r6).
+  const covered = useLoginCover((c) => c.open);
+  const scrim = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!covered) return undefined;
+    const release = holdInert(scrim.current);
+    return () => {
+      release();
+      // Focus comes back here only now that this modal is no longer inert (codex r7): the trigger the login
+      // window was opened from when it can take focus, else the dialog itself.
+      const a = document.activeElement;
+      if (a !== null && a !== document.body && a.isConnected) return;
+      const to = useLoginCover.getState().returnTo;
+      if (to !== null && to.isConnected && dialog.current?.contains(to) === true && !to.matches(':disabled')) to.focus();
+      else dialog.current?.focus();
+    };
+  }, [covered]);
 
   useEffect(() => {
     live.current = true;
     const back = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    dialog.current?.focus();
+    // Mounted under an open login window (codex r6): focus stays in that window.
+    if (!useLoginCover.getState().open) dialog.current?.focus();
     // aria-modal for real (codex PR r2 P1): the app behind is inert while the modal is open.
-    const root = document.getElementById('root');
-    const wasInert = root?.hasAttribute('inert') ?? true;
-    if (root !== null && !wasInert) root.setAttribute('inert', '');
+    // Held, not owned: the container login window over this modal holds it too (inertHold.ts).
+    const release = holdInert(document.getElementById('root'));
     return () => {
       live.current = false;
-      if (root !== null && !wasInert) root.removeAttribute('inert');
+      release();
       back?.focus?.();
     };
   }, []);
@@ -210,7 +234,7 @@ export function AgentModal({ agentKey, onClose, intent }: {
   /** Run one sign-in or sign-out hook; a throw and a rejection both say so (codex S4 r5, r6). */
   const runAuth = (kind: 'in' | 'out', key: string): void => {
     const hook = kind === 'in' ? login.signIn : login.signOut;
-    if (hook === undefined || !useAuthOps.getState().begin(key, kind)) return;
+    if (hook === undefined || !hookOffers(login, kind, row?.seat) || !useAuthOps.getState().begin(key, kind)) return;
     gen.current += 1; clearDeadline(); checking.current = false; // a check in flight is stale now
     const mine = ++outGen.current;
     const current = (): boolean => live.current && outGen.current === mine;
@@ -240,10 +264,13 @@ export function AgentModal({ agentKey, onClose, intent }: {
   const gone = row === undefined && rosterState === 'ok';
   useEffect(() => { if (gone) onClose(); }, [gone, onClose]);
 
+  // The hooks' buttons, for the agents they handle (the container hooks: only crew's container seats).
+  const hookSignIn = hookOffers(login, 'in', row?.seat);
+  const hookSignOut = hookOffers(login, 'out', row?.seat);
   const now = Date.now();
-  const cards = useMemo(() => (row === undefined ? [] : row.issues.map((i) => ({ issue: i, copy: issueCopy(i, row, rows, now) }))),
+  const cards = useMemo(() => (row === undefined ? [] : row.issues.map((i) => ({ issue: i, copy: issueCopy(i, row, rows, now, hookSignIn) }))),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [row, rows]);
+    [row, rows, hookSignIn]);
 
   if (row === undefined && rosterState === 'ok') return null; // the effect above closes it
   const name = row?.name ?? '';
@@ -258,10 +285,10 @@ export function AgentModal({ agentKey, onClose, intent }: {
   const settledOutcome = from === 'card' && outcome.kind !== 'idle' && row !== undefined && !row.issues.some((i) => i.code === 'signed_out' || i.code === 'live_check_failed');
   // A card carries its own check block; then the footer has none (Check now lives in one place at a time).
   const cardChecks = row !== undefined && (cards.some(({ copy }) => copy.fix.some((f) => f.check === true))
-    || (intent === 'sign-in' && !row.issues.some((i) => i.code === 'signed_out') && (row.login !== null || login.signIn !== undefined)));
+    || (intent === 'sign-in' && !row.issues.some((i) => i.code === 'signed_out') && (row.login !== null || hookSignIn)));
   // The result line's one place: the top once its own block is gone (a card that cleared, or a footer check that found a card).
   const topResult = (from === 'card' && settledOutcome) || (from === 'foot' && cardChecks && outcome.kind !== 'idle');
-  const signInButton = login.signIn !== undefined && row !== undefined ? (
+  const signInButton = hookSignIn && row !== undefined ? (
     <div><button type="button" data-testid="agents-signin" className="wk-btn wk-btn--primary" disabled={busy !== null} onClick={() => runAuth('in', row.key)}>{`Sign in to ${name}`}</button></div>
   ) : null;
   const checkBlock = (
@@ -270,14 +297,14 @@ export function AgentModal({ agentKey, onClose, intent }: {
         <button type="button" data-testid="agents-check" onClick={() => checkAgain('card')} disabled={outcome.kind === 'checking' || busy !== null} aria-busy={outcome.kind === 'checking'} className="wk-btn wk-btn--primary">
           I’ve signed in: check again
         </button>
-        <span className="wk-agents-check-hint">{`After you sign in, this asks ${name} and sends one short request.`}</span>
+        <span className="wk-agents-check-hint">{hookSignIn ? `After you sign in, this reads ${name}’s sign-in from studio’s service.` : `After you sign in, this asks ${name} and sends one short request.`}</span>
       </div>
       {from === 'card' && !settledOutcome && resultLine}
     </div>
   );
 
   return createPortal(
-    <div className="wk-agents-scrim" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+    <div ref={scrim} className="wk-agents-scrim" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div ref={dialog} tabIndex={-1} onKeyDown={trapTab} role="dialog" aria-modal="true" aria-labelledby={titleId} data-testid="agents-modal" data-agent={agentKey} className="wk-agents-modal">
         <div className="wk-agents-modal-head">
           <h2 id={titleId} className="wk-agents-modal-title">{name}</h2>
@@ -320,15 +347,15 @@ export function AgentModal({ agentKey, onClose, intent }: {
                       <li key={i}>
                         <b>{f.lead}</b>{f.text !== '' ? ` ${f.text}` : ''}
                         {/* The container sign-in replaces the terminal step (the login hooks), so its command and note go. */}
-                        {f.check === true && issue.code === 'signed_out' && signInButton}
-                        {!(f.check === true && issue.code === 'signed_out' && signInButton !== null) && f.commands.map((c) => <Command key={c.label} c={c} />)}
+                        {f.signIn === true && signInButton}
+                        {!(f.signIn === true && signInButton !== null) && f.commands.map((c) => <Command key={c.label} c={c} />)}
                         {f.check === true && checkBlock}
-                        {f.note !== null && !(issue.code === 'signed_out' && signInButton !== null) && <span className="wk-agents-safe">{f.note}</span>}
+                        {f.note !== null && !(f.signIn === true && signInButton !== null) && <span className="wk-agents-safe">{f.note}</span>}
                         {f.sub !== undefined && (() => {
                           const list = (
                             <ol className="wk-agents-fixes wk-agents-fixes--sub">
                               {f.sub.map((g, k) => (
-                                <li key={k}><b>{g.lead}</b>{g.text !== '' ? ` ${g.text}` : ''}{g.commands.map((c) => <Command key={c.label} c={c} />)}
+                                <li key={k}><b>{g.lead}</b>{g.text !== '' ? ` ${g.text}` : ''}{g.signIn === true && signInButton}{!(g.signIn === true && signInButton !== null) && g.commands.map((c) => <Command key={c.label} c={c} />)}
                                   {g.tech !== undefined && <TechDetails data-testid="agents-tech" summary={g.tech.summary} text={g.tech.text} />}</li>
                               ))}
                             </ol>
@@ -349,7 +376,7 @@ export function AgentModal({ agentKey, onClose, intent }: {
         {row !== undefined && (() => {
           // Check now and Sign out for every agent (the login hooks); the check block inside a card wins.
           const signedIn = row.sign.word === 'Signed in' || row.sign.word === 'Looks signed in';
-          const signOut = !signedIn ? null : login.signOut !== undefined
+          const signOut = !signedIn ? null : hookSignOut
             // Signing out retires a check still in flight, so its older answer can't land after it (codex S4 r3).
             ? <button type="button" data-testid="agents-signout" className="wk-btn wk-btn--quiet" disabled={busy !== null} aria-busy={busy === 'out'} onClick={() => runAuth('out', row.key)}>{busy === 'out' ? 'Signing out…' : `Sign ${name} out`}</button>
             : row.logout !== null ? (

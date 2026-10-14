@@ -60,6 +60,31 @@ const over = (key: string, extra: Record<string, unknown>): RosterSeat[] => ROST
 const codes = (r: AgentRow): string[] => r.issues.map((i) => i.code);
 const find = (r: AgentRow, code: string): AgentIssue => r.issues.find((i) => i.code === code)!;
 
+describe('container seats (crew#1006)', () => {
+  const signedIn = { auth: 'signed_in', login_check: 'status', council_eligible: true, issues: [issue('live_check_failed', 'warning')] };
+  it('a container seat reads Signed in, and crew’s live_check_failed for its broker reading is dropped', () => {
+    const r = by({ ...base, roster: over('claude', { ...signedIn, sign_in: 'container' }) });
+    expect(r.claude!.sign).toMatchObject({ word: 'Signed in', tone: 'ok' });
+    expect(codes(r.claude!)).not.toContain('live_check_failed');
+  });
+  it('every "sign in again" step of a container agent is the Sign in button, never a host command (codex r7)', () => {
+    const r = by({ ...base, roster: over('claude', { auth: 'signed_in', login_check: 'status', council_eligible: false, sign_in: 'container', issues: [] }) });
+    const card = issueCopy(find(r.claude!, 'not_admitted'), r.claude!, agentRows(base), NOW, true);
+    const again = card.fix.find((f) => f.lead.startsWith('If it keeps happening'))!;
+    expect(again).toMatchObject({ lead: 'If it keeps happening, sign in again here.', signIn: true, commands: [] });
+    // A host agent keeps its own command.
+    const host = issueCopy(find(r.claude!, 'not_admitted'), r.claude!, agentRows(base), NOW, false);
+    expect(host.fix.find((f) => f.lead.startsWith('If it keeps happening'))!.commands.length).toBe(1);
+  });
+  it('a host seat keeps its real live_check_failed, even folded under a container seat (per seat, codex r3)', () => {
+    const roster = over('claude', { ...signedIn, sign_in: 'container' }).map((s) => (s.key === 'claude-eval' ? ({ ...s, ...signedIn } as RosterSeat) : s));
+    const r = by({ ...base, roster });
+    expect(r.claude!.keys).toEqual(['claude', 'claude-eval']);
+    expect(codes(r.claude!)).toContain('live_check_failed');
+    expect(codes(by({ ...base, roster: over('claude', signedIn) }).claude!)).toContain('live_check_failed');
+  });
+});
+
 describe('one row per agent, in plain words (§3.1)', () => {
   it('folds the reviewer-only seat into its agent (#735): one Claude Code row, "Also reviews work"', () => {
     const rows = agentRows(base);

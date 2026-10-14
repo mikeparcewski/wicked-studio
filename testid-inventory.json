@@ -11,9 +11,9 @@
   "version": 1,
   "studioVersion": "0.7.13",
   "counts": {
-    "files": 218,
-    "occurrences": 2702,
-    "static": 2330,
+    "files": 219,
+    "occurrences": 2706,
+    "static": 2334,
     "dynamic": 69,
     "computed": 24
   },
@@ -162,6 +162,30 @@
       "testId": "agents-loading",
       "files": [
         "src/components/agents/AgentsPage.tsx"
+      ]
+    },
+    {
+      "testId": "agents-login",
+      "files": [
+        "src/components/agents/containerSignIn.tsx"
+      ]
+    },
+    {
+      "testId": "agents-login-close",
+      "files": [
+        "src/components/agents/containerSignIn.tsx"
+      ]
+    },
+    {
+      "testId": "agents-login-line",
+      "files": [
+        "src/components/agents/containerSignIn.tsx"
+      ]
+    },
+    {
+      "testId": "agents-login-scrim",
+      "files": [
+        "src/components/agents/containerSignIn.tsx"
       ]
     },
     {

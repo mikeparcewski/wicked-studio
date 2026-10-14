@@ -278,6 +278,15 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          #   is observable). The refresh marks the key probed (as `roster_probed`) and answers
          #   `refresh: {key, outcome: "probed"}`.
          "roster_refresh_delay_ms": 600,
+         # container_login — (e2e/desk_agents_signin_test.py; crew#1006) [key, ...]: these seats sign in through
+         #   crew's disposable login container: the roster marks them `sign_in: "container"` and their check
+         #   reads crew's broker (`login_check` "status"). POST /seats/:key/container-login answers a fake
+         #   terminal id; its /ws/terminals/:id is a FAKE login prompt (Enter = "signed in", no credential
+         #   anywhere), and closing it early ingests nothing. The ingest lands `container_ingest_delay_ms`
+         #   after the terminal closes (GET /seats/:key/container-login 404s until then), and flips the seat
+         #   in `roster_signed_in`. POST /seats/:key/container-logout flips it back. Posts:
+         #   GET /__fixture/container-login-posts; `reset_container_login` clears it all. Default []: off.
+         "container_login": [], "container_ingest_delay_ms": 800,
          # runs_fail — GET /runs answers 500 (studio#466: a failed read is not an empty list).
          "runs_fail": False,
          # gate_move_tail — studio#430 (e2e/desk_gate_moves_test.py; needs `gate_move`): r-review's
@@ -5312,6 +5321,67 @@ def ws_frame(payload: dict) -> bytes:
     return head + data
 
 
+# crew#1006 container sign-in (switch `container_login`): fake login terminals, their ingest outcomes,
+# and every POST the studio sent to the container routes. Nothing here is a credential.
+container_terms: dict = {}     # terminal id -> {"cli", "done"}
+container_outcomes: dict = {}  # cli -> SeatContainerLoginOutcome
+container_posts: list = []     # {"method", "path", "body"}
+container_seq = [0]
+
+
+def term_frame(data: bytes, opcode: int = 0x2) -> bytes:
+    """One server→client WebSocket frame (unmasked), binary by default — raw PTY bytes, like crew's TerminalHub."""
+    n = len(data)
+    if n < 126:
+        head = bytes([0x80 | opcode, n])
+    elif n < 65536:
+        head = bytes([0x80 | opcode, 126]) + n.to_bytes(2, "big")
+    else:
+        head = bytes([0x80 | opcode, 127]) + n.to_bytes(8, "big")
+    return head + data
+
+
+def read_client_frame(rfile):
+    """One client→server frame → (opcode, payload), or (None, b"") at EOF. Clients always mask."""
+    head = rfile.read(2)
+    if len(head) < 2:
+        return None, b""
+    opcode, n = head[0] & 0x0F, head[1] & 0x7F
+    if n == 126:
+        n = int.from_bytes(rfile.read(2), "big")
+    elif n == 127:
+        n = int.from_bytes(rfile.read(8), "big")
+    mask = rfile.read(4) if head[1] & 0x80 else b"\0\0\0\0"
+    data = rfile.read(n)
+    return opcode, bytes(b ^ mask[i % 4] for i, b in enumerate(data))
+
+
+def finish_container_login(term_id: str, ok: bool) -> None:
+    """crew's ingest after the login terminal exits: lands after `container_ingest_delay_ms` (the outcome 404s until then)."""
+    with state_lock:
+        term = container_terms.get(term_id)
+        if term is None or term["done"]:
+            return
+        term["done"] = True
+        cli = term["cli"]
+        delay = state["container_ingest_delay_ms"]
+
+    def ingest() -> None:
+        time.sleep(delay / 1000)
+        now = int(time.time() * 1000)
+        with state_lock:
+            if container_terms.get(term_id) is not term:  # reset meanwhile
+                return
+            outcome = {"cli": cli, "ok": ok, "at": iso(now)}
+            if ok:
+                outcome.update({"files": ["fixture-placeholder.json"], "expires_at": now + 8 * HOUR})
+                state["roster_signed_in"] = {**state["roster_signed_in"], cli: True}
+            else:
+                outcome["error"] = "no credential in the login volume (fixture)"
+            container_outcomes[cli] = outcome
+    threading.Thread(target=ingest, daemon=True).start()
+
+
 class W2Handler(SimpleHTTPRequestHandler):
     """SPA + the whole /api/v1 surface the home route reads + /ws, one origin."""
 
@@ -5363,6 +5433,86 @@ class W2Handler(SimpleHTTPRequestHandler):
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
+
+    def _terminal_ws(self, term_id: str) -> None:
+        """`/ws/terminals/:id` for a fake login container (crew#1006): a prompt; Enter = signed in, then exit."""
+        key = self.headers.get("Sec-WebSocket-Key", "")
+        accept = base64.b64encode(hashlib.sha1((key + WS_GUID).encode()).digest()).decode()
+        self.wfile.write(
+            ("HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\n"
+             f"Connection: Upgrade\r\nSec-WebSocket-Accept: {accept}\r\n\r\n").encode())
+        self.wfile.flush()
+        with state_lock:
+            term = container_terms.get(term_id)
+        if term is None or term["done"]:
+            self.wfile.write(term_frame(b"", 0x8))
+            self.wfile.flush()
+            return
+        cli = term["cli"]
+        try:
+            self.wfile.write(term_frame(
+                (f"\x1b[1mFixture login container\x1b[0m for {cli} (a stand-in: nothing signs in for real).\r\n"
+                 "Press Enter to finish the fake sign-in: ").encode()))
+            self.wfile.flush()
+            while True:
+                opcode, data = read_client_frame(self.rfile)
+                if opcode is None or opcode == 0x8:
+                    finish_container_login(term_id, ok=False)
+                    return
+                if opcode in (0x1, 0x2) and (b"\r" in data or b"\n" in data):
+                    self.wfile.write(term_frame(b"\r\nSigned in (fixture). The login container exits.\r\n"))
+                    self.wfile.flush()
+                    time.sleep(0.4)  # the exit line is readable before the window closes
+                    finish_container_login(term_id, ok=True)
+                    self.wfile.write(term_frame(b"", 0x8))  # the PTY exited: crew closes the socket
+                    self.wfile.flush()
+                    return
+        except (BrokenPipeError, ConnectionResetError, OSError):
+            finish_container_login(term_id, ok=False)
+
+    def _container_post(self, path: str, body) -> bool:
+        """POST /seats/:cli/container-login|container-logout and /terminals/:id/close|resize (crew#1006)."""
+        m = re.match(r"^/api/v1/seats/([^/]+)/container-(login|logout)$", path)
+        t = re.match(r"^/api/v1/terminals/([^/]+)/(close|resize)$", path)
+        if m is None and t is None:
+            return False
+        with state_lock:
+            container_posts.append({"method": "POST", "path": path, "body": body})
+            seats = list(state["container_login"])
+        if t is not None:
+            term_id, verb = urllib.parse.unquote(t.group(1)), t.group(2)
+            with state_lock:
+                known = term_id in container_terms
+            if not known:
+                self._json(404, {"error": f"unknown terminal: {term_id}"})
+                return True
+            if verb == "close":
+                finish_container_login(term_id, ok=False)
+            self._json(200, {"status": "ok"})
+            return True
+        cli, verb = urllib.parse.unquote(m.group(1)), m.group(2)
+        if cli not in seats:
+            self._json(404, {"error": f"container {verb} unavailable for seat: {cli}"})
+            return True
+        # The answer is decided under the lock and sent after it (`_json` takes state_lock itself, codex r1).
+        with state_lock:
+            if verb == "logout":
+                for term in container_terms.values():
+                    if term["cli"] == cli:
+                        term["done"] = True
+                container_outcomes.pop(cli, None)
+                state["roster_signed_in"] = {**state["roster_signed_in"], cli: False}
+                status, payload = 200, {"cli": cli, "action": "sign_out"}
+            elif any(x["cli"] == cli and not x["done"] for x in container_terms.values()):
+                status, payload = 409, {"error": f"a sign-in is already open for {cli}; finish or close it first"}
+            else:
+                container_seq[0] += 1
+                term_id = f"login-{cli}-{container_seq[0]}"
+                container_terms[term_id] = {"cli": cli, "done": False}
+                container_outcomes.pop(cli, None)
+                status, payload = 201, {"terminalId": term_id, "cli": cli, "action": "sign_in"}
+        self._json(status, payload)
+        return True
 
     def _ws(self) -> None:
         """Accept the upgrade, then stream `unitOutputDelta` frames for the live
@@ -5881,6 +6031,11 @@ class W2Handler(SimpleHTTPRequestHandler):
                 now_iso = iso(int(time.time() * 1000))
                 roster = [{**s, "probed_at": now_iso, "login_check": "live" if s.get("auth") == "signed_in" or s.get("signed_in") is True else "status"}
                           if s["key"] in probed else s for s in roster]
+                # crew#1006: a container seat says so, and its check is the broker's reading ("status").
+                with state_lock:
+                    boxed = list(state["container_login"])
+                roster = [{**s, "sign_in": "container", **({"login_check": "status"} if "login_check" in s else {})}
+                          if s["key"] in boxed else s for s in roster]
                 # api-types 0.115.0 (A6): every seat carries crew's coded issues, derived like crew's seatIssues.
                 roster = [s if "issues" in s else {**s, "issues": crew_issues(s)} for s in roster]
                 self._json(200, {"roster": roster, **({"refresh": {"key": refresh, "outcome": "probed"}} if refresh is not None else {})})
@@ -7671,8 +7826,23 @@ class W2Handler(SimpleHTTPRequestHandler):
 
     def do_GET(self):  # noqa: N802 (stdlib naming)
         if self.headers.get("Upgrade", "").lower() == "websocket":
+            ws_path = urllib.parse.urlparse(self.path).path
+            if ws_path.startswith("/ws/terminals/"):
+                return self._terminal_ws(urllib.parse.unquote(ws_path[len("/ws/terminals/"):]))
             return self._ws()
         path = urllib.parse.urlparse(self.path).path
+        if path == "/__fixture/container-login-posts":
+            with state_lock:
+                posts = list(container_posts)
+            return self._json(200, {"posts": posts})
+        cm = re.match(r"^/api/v1/seats/([^/]+)/container-login$", path)
+        if cm is not None:
+            cli = urllib.parse.unquote(cm.group(1))
+            with state_lock:
+                outcome = container_outcomes.get(cli) if cli in state["container_login"] else None
+            if outcome is None:
+                return self._json(404, {"error": f"no container login outcome for seat: {cli}"})
+            return self._json(200, outcome)
         # Wave 2a: the SERVER-side record of every gate decision that arrived —
         # the only witness for "closing the tab during the undo window sends nothing".
         if path == "/__fixture/ask-posts":
@@ -8024,7 +8194,14 @@ class W2Handler(SimpleHTTPRequestHandler):
         body = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
         if path.startswith("/api/v1/mcp-inspect/") and self._mcp_inspect("POST", path, body):
             return None
+        if self._container_post(path, body):
+            return None
         if path == "/__fixture":
+            if body.get("reset_container_login"):
+                with state_lock:
+                    container_terms.clear()
+                    container_outcomes.clear()
+                    container_posts.clear()
             if body.get("reset_mcp_inspect"):
                 with mcp_inspect_cond:
                     mcp_inspect_sessions.clear()
