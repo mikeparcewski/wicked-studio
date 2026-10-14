@@ -93,11 +93,17 @@
     port.postMessage({ p: 'wicked.editor', v: 1, type, id, payload });
   });
   // The log seq before a call: its request and answer are the entries after it.
+  const calls = [];
+  const claimed = new Set();
   // Each call keeps its own cursor (the log seq when it left), so a later call can never take its wire entries.
   const mcp = async (method, params) => {
     const after = lastSeq === null ? -1 : lastSeq;
+    // Recorded at dispatch, in order, even if its detail view is gone by the reply: its request entry is its own.
+    const call = { method, after, sentSeq: null, refused: null, name: params && typeof params.name === 'string' ? params.name : (params && params.uri) || null };
+    calls.push(call); if (calls.length > 50) calls.shift();
     const r = await req('mcp.request', params === undefined ? { method } : { method, params });
-    return Object.assign(r, { after });
+    if (!r.ok) { const c = (r.error && r.error.code) || 'refused'; if (NOT_SENT.includes(c)) call.refused = c; }
+    return Object.assign(r, { after, call });
   };
   // Refused before anything was sent; a timeout or a transport failure may still have reached the server.
   // `unavailable` can follow a dispatch (a transport failure after send): it is an uncertain outcome, not 'not sent'.
@@ -126,6 +132,16 @@
     }
   }
 
+  // Calls are one at a time and each sends exactly one request, so the log's outgoing requests are claimed in
+  // order: the first unclaimed request after a call's cursor, with its method, is that call's (codex h5-r4).
+  function claim() {
+    for (const c of calls) {
+      if (c.sentSeq !== null || c.refused) continue;
+      const e = log.find((x) => !x.gap && x.seq > c.after && x.dir === 'out' && x.kind === 'request' && x.method === c.method && !claimed.has(x.seq));
+      if (!e) break;
+      c.sentSeq = e.seq; claimed.add(e.seq);
+    }
+  }
   function syncRaw() {
     const reqEl = $('raw-request'), resEl = $('raw-response');
     if (!reqEl || !resEl) return;
@@ -139,8 +155,8 @@
       resEl.textContent = '';
       return;
     }
-    const named = (e) => lastCall.name === null || (typeof e.text === 'string' && e.text.includes(JSON.stringify(lastCall.name)));
-    const sent = log.find((e) => !e.gap && e.seq > lastCall.after && e.dir === 'out' && e.kind === 'request' && e.method === lastCall.method && named(e));
+    claim();
+    const sent = lastCall.sentSeq === null ? undefined : log.find((e) => e.seq === lastCall.sentSeq);
     const got = sent ? log.find((e) => !e.gap && e.kind === 'response' && e.rpcId === sent.rpcId) : undefined;
     reqEl.textContent = sent ? sent.text : 'Waiting for the log…';
     resEl.textContent = got ? got.text : (sent ? 'Waiting for the answer in the log…' : '');
@@ -278,7 +294,7 @@
   function show(out, r, method, params) {
     out.hidden = false;
     const code = r.ok ? null : (r.error && r.error.code) || 'refused';
-    lastCall = { method, after: r.after, name: params && typeof params.name === 'string' ? params.name : (params && params.uri) || null, refused: code !== null && NOT_SENT.includes(code) ? code : null };
+    lastCall = r.call || { method, after: r.after, sentSeq: null, name: null, refused: code !== null && NOT_SENT.includes(code) ? code : null };
     if (!r.ok) { out.dataset.error = '1'; out.textContent = words(r); syncRaw(); sendHeight(); return; }
     const res = r.payload.response;
     out.dataset.error = res.error || (res.result && res.result.isError) ? '1' : '0';
