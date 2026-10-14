@@ -168,14 +168,17 @@ def manifest(page, doc: str) -> list:
     return [m["head"]] + [[v["version"], v["parent"], v["feedback_file"] is not None] for v in sorted(m["versions"], key=lambda v: v["version"])]
 
 
-def open_session(page, step: str) -> None:
+def open_session(page, step: str, editor: str | None = None) -> None:
     page.goto(f"{origin}/s/run%3A{RUN}", wait_until="networkidle")
     page.get_by_test_id("session").wait_for(state="visible", timeout=15000)
     try:
-        page.get_by_test_id("artifact").wait_for(state="visible", timeout=15000)
+        if editor is None:
+            page.get_by_test_id("artifact").wait_for(state="visible", timeout=15000)
+        else:
+            page.locator(f'[data-testid="plugin-card"][data-editor="{editor}"][data-protocol="2"]').wait_for(state="visible", timeout=15000)
     except Exception:
         page.screenshot(path=str(SHOTS / f"desk-doc-editors-{step}-missing.png"))
-        fail(step, "no [data-testid=artifact] in the session's run block")
+        fail(step, f"no {editor or 'artifact'} in the session's run block")
 
 
 with sync_playwright() as p:
@@ -310,54 +313,64 @@ with sync_playwright() as p:
 
     # ════ THE SLIDE EDITOR (P-D1: the `wicked-deck` plugin; desk_deck_editor_test.py walks it) ═══
     set_fixture(origin, doc_bound_run={"pid": PID, "doc": DECK}, editors=True)
-    open_session(page, "deck")
-    d0 = page.evaluate(ARTIFACT)
-    page.get_by_test_id("artifact-open").click()
-    deck_frame = page.frame_locator('[data-testid="editor-frame"][data-editor="wicked-deck"]')
+    open_session(page, "deck", editor="wicked-deck")
+    card = page.locator('[data-testid="plugin-card"][data-editor="wicked-deck"]')
+    deck_frame = page.frame_locator('[data-testid="plugin-card"][data-editor="wicked-deck"] [data-testid="editor-frame"]')
+    d0 = {"surface": card.get_attribute("data-surface"), "key": card.get_attribute("data-artifact")}
+    card.get_by_test_id("plugin-card-full").click()
+    page.get_by_test_id("full-shell").wait_for(state="visible", timeout=5000)
     try:
         deck_frame.locator('[data-testid="deck-thumb"]').first.wait_for(state="visible", timeout=15000)
     except Exception:
         page.screenshot(path=str(SHOTS / "desk-doc-editors-deck-missing.png"))
-        fail("deck-plugin", "the open deck shows no wicked-deck filmstrip")
+        fail("deck-plugin", "the full deck shows no wicked-deck filmstrip")
     titles = deck_frame.locator('[data-testid="deck-thumb"]').evaluate_all("bs => bs.map(b => b.dataset.n + ' ' + b.querySelector('.t').innerText)")
-    d1 = page.evaluate(ARTIFACT)
     page.wait_for_timeout(SETTLE_MS)
-    page.screenshot(path=str(SHOTS / "desk-doc-editors-deck-pane.png"))
-    # ── 8. kind + the deck's own editor ────────────────────────────────────────────
-    check("deck-plugin", d0["kind"] == "deck" and d1["size"] == "pane" and d1["strip"] == 0
-          and page.locator('[data-testid="plugin-artifact"][data-editor="wicked-deck"]').count() == 1
+    page.screenshot(path=str(SHOTS / "desk-doc-editors-deck-full.png"))
+    # ── 8. kind + the deck's own full editor ──────────────────────────────────────
+    check("deck-plugin", d0 == {"surface": "card", "key": f"{RUN}:{PID}/{DECK}"}
+          and card.get_attribute("data-surface") == "full"
+          and deck_frame.locator('[data-testid="deck-editor"]').get_attribute("data-kind") == "deck"
           and titles == ["1 Library room booking", "2 Residents first", "3 Staff stay in control", "4 The pilot"],
-          inline=d0, pane=d1, filmstrip=titles)
+          card=d0, filmstrip=titles)
 
-    # ── 12. export ─────────────────────────────────────────────────────────────────
-    FOCUS = """() => { const a = document.activeElement; return a ? (a.dataset.format || a.dataset.testid || a.tagName) : null; }"""
-    page.get_by_test_id("artifact-export").click()
-    formats = page.evaluate("""() => [...document.querySelectorAll('[data-testid="artifact-export-format"]')].map(b => [b.dataset.format, b.innerText])""")
+    # ── 12. export: the host card's declared action, keyboard access, ready download ─
+    page.get_by_test_id("full-shell-exit").click()
+    page.get_by_test_id("full-shell").wait_for(state="detached", timeout=5000)
+    export = card.locator('[data-testid="plugin-card-action"][data-action="export"]')
+    export.focus()
+    page.keyboard.press("Enter")
+    card.get_by_test_id("artifact-export-menu").wait_for(state="visible", timeout=5000)
+    formats = card.get_by_test_id("artifact-export-format").evaluate_all("bs => bs.map(b => [b.dataset.format, b.innerText])")
+    FOCUS = "() => document.activeElement?.dataset.format || document.activeElement?.dataset.action || null"
+    # Host buttons use native Tab order. The action toggles its own menu on Enter.
+    page.keyboard.press("Tab")
     first_focus = page.evaluate(FOCUS)
-    page.keyboard.press("ArrowDown")
+    page.keyboard.press("Tab")
     next_focus = page.evaluate(FOCUS)
-    page.keyboard.press("Escape")
-    page.wait_for_timeout(200)
-    closed = {"menu": page.locator('[data-testid="artifact-export-menu"]').count(), "focus": page.evaluate(FOCUS), "size": page.evaluate(ARTIFACT)["size"]}
-    keys_ok = first_focus == "pptx" and next_focus == "pdf" and closed == {"menu": 0, "focus": "artifact-export", "size": "pane"}
-    page.keyboard.press("Enter")  # Export again, by keyboard: the menu opens on its first format
-    page.wait_for_selector('[data-testid="artifact-export-menu"]', timeout=5000)
+    page.keyboard.press("Shift+Tab")
+    page.keyboard.press("Shift+Tab")
+    page.keyboard.press("Enter")
+    closed = {"menu": card.get_by_test_id("artifact-export-menu").count(), "focus": page.evaluate(FOCUS), "surface": card.get_attribute("data-surface")}
+    keys_ok = first_focus == "pptx" and next_focus == "pdf" and closed == {"menu": 0, "focus": "export", "surface": "card"}
+    page.keyboard.press("Enter")
+    card.get_by_test_id("artifact-export-menu").wait_for(state="visible", timeout=5000)
+    page.keyboard.press("Tab")
     page.keyboard.press("Enter")  # PowerPoint
     try:
-        page.wait_for_selector('[data-testid="artifact-export-line"][data-state="ready"]', timeout=10000)
+        card.locator('[data-testid="page-line"][data-kind="export"] [data-testid="artifact-export-download"]').wait_for(state="visible", timeout=10000)
     except Exception:
         page.screenshot(path=str(SHOTS / "desk-doc-editors-export-timeout.png"))
-        el = page.query_selector('[data-testid="artifact-export-line"]')
-        fail("export", {"why": "no ready export line", "line": el.inner_text() if el else None})
-    ex_line = page.get_by_test_id("artifact-export-line").inner_text()
-    ex_href = page.get_by_test_id("artifact-export-download").get_attribute("href")
-    page.get_by_test_id("artifact-grow").click()
-    page.wait_for_timeout(400)
-    d2 = page.evaluate(ARTIFACT)
-    page.screenshot(path=str(SHOTS / "desk-doc-editors-deck-full.png"))
+        fail("export", {"why": "no ready host export line", "line": card.get_by_test_id("page-line").all_inner_texts()})
+    ex_line = card.get_by_test_id("page-line").inner_text()
+    ex_href = card.get_by_test_id("artifact-export-download").get_attribute("href")
+    card.get_by_test_id("plugin-card-full").click()
+    page.get_by_test_id("full-shell").wait_for(state="visible", timeout=5000)
+    page.screenshot(path=str(SHOTS / "desk-doc-editors-deck-export.png"))
+    overflow = page.evaluate("() => document.documentElement.scrollWidth > document.documentElement.clientWidth")
     check("export", keys_ok and formats == [["pptx", "PowerPoint"], ["pdf", "PDF"]] and ex_line.startswith(f"PPTX export ready — {DECK}_v1.pptx")
-          and ex_line.endswith("Download") and "/api/export/file/" in (ex_href or "") and d2["size"] == "full" and not d2["hscroll"],
-          formats=formats, keyboard={"opened_on": first_focus, "after_down": next_focus, "after_esc": closed}, line=ex_line, href=ex_href, full=d2)
+          and ex_line.endswith("Download") and "/api/export/file/" in (ex_href or "") and card.get_attribute("data-surface") == "full" and not overflow,
+          formats=formats, keyboard={"first_format": first_focus, "next_format": next_focus, "closed": closed}, line=ex_line, href=ex_href)
 
     check("no-errors", not errors, errors=errors[:5])
     browser.close()

@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """
-desk_artifact_versions_test.py — S16a-4b: a page opened FULL screen in its session lists its versions;
+desk_artifact_versions_test.py — S16a-4b: a page's Options → Versions tab lists its versions;
 `?v=N` on the artifact address is a read-only lens; "Make this the working version" forks once, at
 1440x700 on the Desk.
 
 Against the in-process fixture with the bound document desk_page_editor uses (project `notes`, doc
 `offsite-plan`, run `r-doc-bound`), a second version made first (a fork of v1 on the bridge):
 
-  1. LIST: full screen lists two versions newest first, version 2 marked working.
+  1. LIST: the host Versions tab lists two versions newest first, version 2 marked working.
   2. LENS: picking version 1 puts `v=1` in the address and shows "Looking at version 1 — Back to the
      working version" over a read-only frame of v1.
   3. BACK: the browser's Back returns to the working version (no `v`, no lens); the lens line's own
@@ -66,7 +66,7 @@ from playwright.sync_api import sync_playwright  # noqa: E402
 
 SHOTS.mkdir(parents=True, exist_ok=True)
 errors: list[str] = []
-SIZE = "() => document.querySelector('[data-testid=\"artifact\"]')?.dataset.size ?? null"
+CARD = '[data-testid="plugin-card"][data-editor="wicked-page"]'
 
 
 def addr(page) -> dict:
@@ -89,9 +89,10 @@ with sync_playwright() as p:
 
     page.goto(f"{origin}/", wait_until="networkidle")
     page.goto(f"{origin}/s/run%3A{RUN}", wait_until="networkidle")
-    page.get_by_test_id("artifact").first.wait_for(state="visible", timeout=15000)
-    page.get_by_test_id("artifact-open").first.click()
-    page.get_by_test_id("artifact-grow").first.click()
+    page.locator(f'{CARD}[data-protocol="2"]').wait_for(state="visible", timeout=15000)
+    page.locator(CARD).get_by_test_id("plugin-card-options").click()
+    page.get_by_test_id("host-panel").wait_for(state="visible", timeout=5000)
+    page.locator('[data-testid="host-panel-tab"][data-group="host"][data-tab="versions"]').click()
 
     # ── 1. the list ────────────────────────────────────────────────────────────────────────────
     page.get_by_test_id("artifact-versions").wait_for(state="visible", timeout=10000)
@@ -100,6 +101,8 @@ with sync_playwright() as p:
     page.screenshot(path=str(SHOTS / "desk-artifact-versions-list.png"))
     check("list-newest-first-head-working", rows[:2] == [["2", "true"], ["1", "false"]], rows=rows)
 
+    # Keep the address/bookmark assertions: the host lens must still preserve this contract.
+    # hostTabs currently stores its lens locally; a missing address integration must fail here.
     # ── 2. the lens ────────────────────────────────────────────────────────────────────────────
     page.locator('[data-testid="artifact-version-row"][data-version="1"] [data-testid="artifact-version-lens"]').click()
     page.get_by_test_id("artifact-lens-line").wait_for(state="visible", timeout=8000)

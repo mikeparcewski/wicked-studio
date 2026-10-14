@@ -7,17 +7,17 @@ Against the in-process fixture: the `launch-page` document (its theme as `--wi-*
 `section-{i}` containers, as interactive renders a page) on project `notes`, a run bound to it, crew's
 editor registry stand-in, and crew's checks read (EP-C2) serving four reviewers' verdicts.
 
-  1. CHECKS: the pane shows the checks panel under the page — four reviewers (Intent, Accessibility,
+  1. CHECKS: Options → the host Checks tab shows the checks panel — four reviewers (Intent, Accessibility,
      Copy, Quality), each with its state and who reviewed (independent or not, as recorded); a finding's
      "Point at it" puts a chip on the session composer in the HOST's words.
-  2. WIDTHS: Phone / Tablet / Desktop set the width the page lays out at (the nested document's own
+  2. WIDTHS (full screen, Advanced): Phone / Tablet / Desktop set the width the page lays out at (the nested document's own
      `innerWidth` is 390 / 820 / 1280); the pressed width again lets the page fill the editor.
   3. SECTION: a picked heading's ⌥↑ picks its section; a second click on the picked element does too.
   4. RESTYLE: a fill swatch from the page's theme lands ONE version — the host's line "Restyled … ·
      Undo" — and the element wears the colour; Undo forks the page before it, the colour is gone.
   5. REMOVE: bare Backspace on a picked paragraph removes nothing; Ctrl+Backspace lands ONE version
      ("Removed …"), the paragraph is gone; Undo brings it back.
-  6. A NARROW PANE (a 640 px window): a picked element's peek stays inside the editor.
+  6. A NARROW FULL EDITOR (a 640 px window): a picked element's peek stays inside the editor.
   7. 0 page errors; no horizontal scroll.
 
 Captures: e2e/shots/desk-page-acts-*.png. Env: FEEDBACK_PORT (default 4362).
@@ -179,23 +179,21 @@ with sync_playwright() as p:
     page.goto(f"{origin}/s/run%3A{RUN}", wait_until="networkidle")
     page.get_by_test_id("session").wait_for(state="visible", timeout=15000)
     try:
-        page.locator('[data-testid="plugin-artifact"][data-editor="wicked-page"]').wait_for(state="attached", timeout=15000)
+        page.locator('[data-testid="plugin-card"][data-editor="wicked-page"][data-protocol="2"]').wait_for(state="attached", timeout=15000)
     except Exception:
         page.screenshot(path=str(SHOTS / "desk-page-acts-missing.png"))
         fail("open", {"why": "no wicked-page plugin in the run's block"})
-    page.get_by_test_id("artifact-open").click()
-    page.locator('[data-testid="artifact"][data-size="pane"]').wait_for(state="visible", timeout=8000)
-    wait_pickable(page, 1)
-    plugin = page.frame_locator('[data-testid="editor-frame"]')
-    doc = plugin.frame_locator('[data-testid="page-frame"]')
-
+    card = page.locator('[data-testid="plugin-card"][data-editor="wicked-page"]')
+    card.get_by_test_id("plugin-card-options").click()
+    page.get_by_test_id("host-panel").wait_for(state="visible", timeout=5000)
+    page.locator('[data-testid="host-panel-tab"][data-group="host"][data-tab="checks"]').click()
     # ── 1. the checks panel: four reviewers, who reviewed, a finding pointed at ───────────
     panel = page.get_by_test_id("artifact-checks")
     try:
         panel.wait_for(state="visible", timeout=10000)
     except Exception:
         page.screenshot(path=str(SHOTS / "desk-page-acts-checks-missing.png"))
-        fail("checks", {"why": "no [data-testid=artifact-checks] under the page in the pane"})
+        fail("checks", {"why": "no [data-testid=artifact-checks] in the host Checks tab"})
     rows = page.evaluate("""() => [...document.querySelectorAll('[data-testid="artifact-check"]')].map(r => ({
       reviewer: r.dataset.reviewer, state: r.dataset.state,
       independent: r.querySelector('[data-testid="artifact-check-by"]').dataset.independent,
@@ -213,6 +211,16 @@ with sync_playwright() as p:
           and summary.startswith("Checks · 2 pass · 1 asks for changes · 1 could not run")
           and any(c["kind"] == "about" and "How it works" in c["text"] for c in pointed),
           rows=rows, summary=summary, chips=pointed)
+
+    # Close Options before editing: its frame is a separate Style instance.
+    page.get_by_test_id("host-panel-close").click()
+    card.get_by_test_id("plugin-card-full").click()
+    page.get_by_test_id("full-shell").wait_for(state="visible", timeout=5000)
+    page.locator('[data-testid="full-shell-mode"][data-mode="advanced"]').click()
+    page.wait_for_function("""() => document.querySelector('[data-testid="full-shell-mode"][data-mode="advanced"]')?.getAttribute('aria-checked') === 'true'""", timeout=5000)
+    wait_pickable(page, 1)
+    plugin = page.frame_locator('[data-testid="plugin-card"][data-editor="wicked-page"] [data-testid="editor-frame"]')
+    doc = plugin.frame_locator('[data-testid="page-frame"]')
 
     # ── 2. widths: the page lays out at 390 / 820 / 1280; pressed again, it fills the editor ──
     widths = {}
@@ -289,7 +297,7 @@ with sync_playwright() as p:
           and gone is True and back is True,
           head_after_bare=head_after_bare, still=still, line=removed, gone=gone, back=back)
 
-    # ── 6. a narrow pane: the peek stays inside the editor (codex r1/r2) ──────────────────
+    # ── 6. a narrow full editor: the peek stays inside the editor (codex r1/r2) ──────────────────
     page.set_viewport_size({"width": 640, "height": 700})
     page.wait_for_timeout(600)
     wait_pickable(page, 5)
