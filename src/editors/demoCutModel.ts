@@ -9,8 +9,9 @@ export interface VideoStyle {
   theme: {
     titleCard: { on: boolean; title: string; subtitle: string; seconds: number };
     endCard: { on: boolean; title: string; subtitle: string; seconds: number };
+    palette?: 'skin' | 'custom';
     background: string; foreground: string; accent: string;
-    font: 'Inter' | 'Roboto' | 'Source Sans 3' | 'IBM Plex Sans' | 'system-ui';
+    font: 'Inter' | 'Roboto' | 'Source Sans 3' | 'IBM Plex Sans' | 'system-ui' | 'Archivo';
   };
   captions: { on: boolean; burnIn: boolean; position: 'bottom' | 'top'; size: number; maxLines: number; wrapChars: number; style: 'bar' | 'outline' | 'plain' };
 }
@@ -23,11 +24,11 @@ export interface RecordingProof {
   checks: { id: string; chapter: string; atSec: number | null; text: string; state: 'PASS' | 'FAIL' | 'PENDING' }[];
 }
 export interface DemoChapter { id: string; title: string; say: string; take: string; inSec: number; outSec: number; durationSec: number; startSec: number; verdict?: RecordingVerdict }
-export interface DemoCut { type: 'demo-cut'; title: string; rev: number; version: number; chapters: DemoChapter[]; takes: Record<string, DemoTake[]>; style: VideoStyle; ffmpeg?: { ok: boolean; burnIn: boolean }; proof?: RecordingProof }
+export interface DemoCut { type: 'demo-cut'; title: string; rev: number; version: number; chapters: DemoChapter[]; takes: Record<string, DemoTake[]>; style: VideoStyle; resolvedTheme?: VideoColours & { font?: VideoStyle['theme']['font'] }; ffmpeg?: { ok: boolean; burnIn: boolean }; proof?: RecordingProof }
 export type ChapterOp = Extract<Op, { chapter: string }>;
 
 export function defaultVideoStyle(title: string): VideoStyle {
-  return { theme: { titleCard: { on: true, title, subtitle: '', seconds: 2.5 }, endCard: { on: true, title: 'Thanks for watching', subtitle: '', seconds: 2.5 }, ...VIDEO_COLOURS, font: 'Inter' }, captions: { on: true, burnIn: true, position: 'bottom', size: 36, maxLines: 2, wrapChars: 42, style: 'bar' } };
+  return { theme: { titleCard: { on: true, title, subtitle: '', seconds: 2.5 }, endCard: { on: true, title: 'Thanks for watching', subtitle: '', seconds: 2.5 }, palette: 'skin', ...VIDEO_COLOURS, font: 'system-ui' }, captions: { on: true, burnIn: true, position: 'bottom', size: 36, maxLines: 2, wrapChars: 42, style: 'bar' } };
 }
 /** E1 accepts partial styles; the editor publishes their effective defaults. */
 export function effectiveVideoStyle(title: string, style: Partial<VideoStyle> = {}): VideoStyle {
@@ -71,25 +72,26 @@ export interface VideoColours { background: string; foreground: string; accent: 
 export type PaletteId = 'studio' | 'corporate' | 'midnight' | 'warm' | 'custom';
 const PALETTES = VIDEO_PALETTES as Readonly<Record<'corporate' | 'midnight' | 'warm', VideoColours>>;
 const same = (a: VideoColours, b: VideoColours): boolean => (['background', 'foreground', 'accent'] as const).every((k) => a[k].toLowerCase() === b[k].toLowerCase());
-/** Which palette a style wears: an untouched cut (E1's own defaults) or the skin's colours = the studio skin. */
-export function paletteOf(t: VideoColours, skin: VideoColours | null): PaletteId {
-  if (same(t, VIDEO_COLOURS) || (skin !== null && same(t, skin))) return 'studio';
+/** E1 resolves the studio skin per render; stored colours only select a preset in custom mode. */
+export function paletteOf(t: VideoColours & { palette?: 'skin' | 'custom' }): PaletteId {
+  if (t.palette === undefined || t.palette === 'skin') return 'studio';
   for (const [id, p] of Object.entries(PALETTES)) if (same(t, p)) return id as PaletteId;
   return 'custom';
 }
 /** The colours a style shows: the skin's while it wears the studio palette. */
-export function shownColours(t: VideoColours, skin: VideoColours | null): VideoColours {
-  return paletteOf(t, skin) === 'studio' && skin !== null ? skin : { background: t.background, foreground: t.foreground, accent: t.accent };
+export function shownColours(t: VideoColours & { palette?: 'skin' | 'custom' }, skin: VideoColours | null, resolved?: VideoColours): VideoColours {
+  const shown = paletteOf(t) === 'studio' ? resolved ?? skin ?? t : t;
+  return { background: shown.background, foreground: shown.foreground, accent: shown.accent };
 }
-const fonts = { inter: 'Inter', roboto: 'Roboto', 'source-sans': 'Source Sans 3', plex: 'IBM Plex Sans', system: 'system-ui' } as const;
-export function videoValues(style: VideoStyle, tab: string, skin: VideoColours | null = null): Record<string, unknown> {
+const fonts = { inter: 'Inter', roboto: 'Roboto', 'source-sans': 'Source Sans 3', plex: 'IBM Plex Sans', system: 'system-ui', archivo: 'Archivo' } as const;
+export function videoValues(style: VideoStyle, tab: string, skin: VideoColours | null = null, resolved?: DemoCut['resolvedTheme']): Record<string, unknown> {
   const c = style.captions, t = style.theme;
   if (tab === 'captions') return { on: c.on, burn: c.burnIn, position: c.position, size: c.size, lines: c.maxLines, wrap: c.wrapChars, look: c.style };
-  if (tab === 'theme') { const shown = shownColours(t, skin); return { palette: paletteOf(t, skin), title: t.titleCard.on, titletext: t.titleCard.title, end: t.endCard.on, endtext: t.endCard.title, background: shown.background, foreground: shown.foreground, accent: shown.accent, font: Object.keys(fonts).find(k => fonts[k as keyof typeof fonts] === t.font) ?? 'system' }; }
+  if (tab === 'theme') { const shown = shownColours(t, skin, resolved), font = paletteOf(t) === 'studio' ? resolved?.font ?? t.font : t.font; return { palette: paletteOf(t), title: t.titleCard.on, titletext: t.titleCard.title, end: t.endCard.on, endtext: t.endCard.title, background: shown.background, foreground: shown.foreground, accent: shown.accent, font: Object.keys(fonts).find(k => fonts[k as keyof typeof fonts] === font) ?? 'system' }; }
   return {};
 }
 /** The caller checks the value against the declared control before applying it. */
-export function changedVideoStyle(style: VideoStyle, tab: string, id: string, value: unknown, skin: VideoColours | null = null): VideoStyle {
+export function changedVideoStyle(style: VideoStyle, tab: string, id: string, value: unknown): VideoStyle {
   const next = JSON.parse(JSON.stringify(style)) as VideoStyle;
   if (tab === 'captions') {
     const keys = { on: 'on', burn: 'burnIn', position: 'position', size: 'size', lines: 'maxLines', wrap: 'wrapChars', look: 'style' } as const;
@@ -100,14 +102,12 @@ export function changedVideoStyle(style: VideoStyle, tab: string, id: string, va
       case 'titletext': next.theme.titleCard.title = value as string; break;
       case 'end': next.theme.endCard.on = value as boolean; break;
       case 'endtext': next.theme.endCard.title = value as string; break;
-      case 'font': next.theme.font = fonts[value as keyof typeof fonts]; break;
+      case 'font': next.theme.font = fonts[value as keyof typeof fonts]; next.theme.palette = 'custom'; break;
       case 'palette':
-        // The studio skin writes the skin's own colours (resolved from the host's tokens) so the render wears it;
-        // a preset writes its colours; Custom keeps what is there for the colour controls to change.
-        if (value === 'studio') Object.assign(next.theme, skin ?? VIDEO_COLOURS);
-        else if (value === 'corporate' || value === 'midnight' || value === 'warm') Object.assign(next.theme, PALETTES[value]);
+        next.theme.palette = value === 'studio' ? 'skin' : 'custom';
+        if (value === 'corporate' || value === 'midnight' || value === 'warm') Object.assign(next.theme, PALETTES[value]);
         break;
-      default: Object.assign(next.theme, { [id]: value });
+      default: Object.assign(next.theme, { [id]: value, palette: 'custom' });
     }
   }
   return next;

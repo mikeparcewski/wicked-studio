@@ -49,7 +49,7 @@ async function show(cut: DemoCut): Promise<HTMLVideoElement> {
   return node<HTMLVideoElement>('video-player');
 }
 
-async function open(protocol = 2, surface = 'card'): Promise<void> {
+async function open(protocol = 2, surface = 'card', size = surface === 'card' ? 'inline' : surface === 'options' ? 'pane' : 'full'): Promise<void> {
   adapter = fakeDemoCutAdapter(); seen = []; refuseTheme = false; refuseMedia = false;
   ch = new MessageChannel();
   ch.port1.onmessage = async (event: MessageEvent) => {
@@ -64,14 +64,14 @@ async function open(protocol = 2, surface = 'card'): Promise<void> {
     } else if (d.type === 'theme.set') {
       if (refuseTheme) {
         refuseTheme = false;
-        await adapter.theme(adapter.artifact().head, { kind: 'video-style', style: { ...demoCut4.style, theme: { ...demoCut4.style.theme, accent: '#112233' } } });
+        await adapter.theme(adapter.artifact().head, { kind: 'video-style', style: { ...demoCut4.style, theme: { ...demoCut4.style.theme, palette: 'custom', accent: '#112233' } } });
         result = { error: 'head_moved', message: 'The cut moved.' };
       } else result = await adapter.theme(d.payload?.['base'] as number, d.payload?.['tokens'] as Record<string, unknown>);
     } else return;
     const r = result as { error?: string; message?: string };
     ch.port1.postMessage({ p: 'wicked.editor', v: 1, re: d.id, ok: r.error === undefined, ...(r.error === undefined ? { payload: result } : { error: { code: r.error, message: r.message } }) });
   };
-  window.dispatchEvent(Object.assign(new Event('message'), { data: env('host.hello', { protocol, size: surface === 'card' ? 'inline' : 'full', surface, mode: 'simple', grants: ['artifact.read', 'artifact.write', 'artifact.theme', 'media.read', 'selection.chip'], theme: { '--accent': '#123456' } }), ports: [ch.port2] }));
+  window.dispatchEvent(Object.assign(new Event('message'), { data: env('host.hello', { protocol, size, surface, ...(surface === 'options' ? { tab: 'chapters' } : {}), mode: 'simple', grants: ['artifact.read', 'artifact.write', 'artifact.theme', 'media.read', 'selection.chip'], theme: { '--accent': '#123456' } }), ports: [ch.port2] }));
   await vi.waitFor(() => expect(document.querySelectorAll('[data-testid="video-chip"]')).toHaveLength(4));
 }
 beforeAll(async () => {
@@ -150,6 +150,43 @@ describe('chapter edits are one operation in one write', () => {
     node('video-rename').click(); node('video-rename-input').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); expect(node('video-rename-input')).toBeNull(); expect(messages('version.write')).toHaveLength(1);
     await new Promise(r => setTimeout(r, 30)); expect(messages('ui.key')).toHaveLength(0);
   });
+  it('preserves rename text, selection, focus and original chapter across playback redraws and ignores a second Rename', async () => {
+    node('video-rename').click();
+    const input = node<HTMLInputElement>('video-rename-input'); input.value = 'Keep my title';
+    input.dispatchEvent(new Event('input')); input.setSelectionRange(4, 7);
+    node('video-rename').click();
+    expect(document.querySelectorAll('[data-testid="video-rename-input"]')).toHaveLength(1);
+    expect(node('video-rename-input')).toBe(input);
+    const player = node<HTMLVideoElement>('video-player');
+    player.currentTime = demoCut4.chapters[1]!.startSec + 1; player.dispatchEvent(new Event('timeupdate'));
+    const restored = node<HTMLInputElement>('video-rename-input');
+    expect(restored.value).toBe('Keep my title'); expect(document.activeElement).toBe(restored);
+    expect([restored.selectionStart, restored.selectionEnd]).toEqual([4, 7]);
+    expect(root().dataset['current']).toBe('pick-a-plan');
+    node('video-rename').click(); expect(document.querySelectorAll('[data-testid="video-rename-input"]')).toHaveLength(1);
+    restored.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); await settled(2);
+    expect(messages('version.write')[0]?.payload?.['ops']).toEqual([{ op: 'chapter-rename', chapter: 'open-the-scope', title: 'Keep my title' }]);
+    expect(node('video-rename-input')).toBeNull();
+  });
+  it('restores focused chapter ids containing selector punctuation by literal dataset equality', async () => {
+    const id = 'scope"[odd]\\id';
+    const cut = { ...demoCut4, chapters: demoCut4.chapters.map((c, i) => i === 0 ? { ...c, id } : c) };
+    const player = await show(cut);
+    const focused = node('video-chapter'); focused.focus(); expect(focused.dataset['chapter']).toBe(id);
+    player.currentTime = cut.chapters[1]!.startSec + 1;
+    expect(() => player.dispatchEvent(new Event('timeupdate'))).not.toThrow();
+    expect((document.activeElement as HTMLElement).dataset['chapter']).toBe(id);
+  });
+  it.each([-1, 0])('does not trim a chapter with duration %s using pointer or keyboard handles', async durationSec => {
+    const chapter = { ...demoCut4.chapters[0]!, inSec: 0, outSec: durationSec };
+    await show({ ...demoCut4, chapters: [chapter], takes: {} });
+    const handle = node('video-trim-out'); expect(handle).toBeDisabled();
+    handle.dispatchEvent(new MouseEvent('pointerdown', { clientX: 10, bubbles: true }));
+    window.dispatchEvent(new MouseEvent('pointermove', { clientX: 100 }));
+    window.dispatchEvent(new MouseEvent('pointerup', { clientX: 100 }));
+    handle.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+    await new Promise(r => setTimeout(r, 30)); expect(messages('version.write')).toHaveLength(0);
+  });
   it('trims on number input release and refuses invalid trim values locally', async () => {
     const input = node<HTMLInputElement>('video-in'); input.value = '0.5'; input.dispatchEvent(new Event('change')); await settled(2);
     expect(messages('version.write')[0]?.payload?.['ops']).toEqual([{ op: 'chapter-trim', chapter: 'open-the-scope', inSec: 0.5, outSec: 8 }]);
@@ -213,8 +250,8 @@ describe('native control host keys', () => {
   it('forwards host chords from native controls', async () => {
     const control = node('video-take'); control.focus();
     control.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true, bubbles: true, cancelable: true }));
-    control.dispatchEvent(new KeyboardEvent('keydown', { key: 'v', code: 'KeyV', altKey: true, bubbles: true, cancelable: true }));
-    await vi.waitFor(() => expect(messages('ui.key').map(m => m.payload)).toEqual([{ key: 'Mod+K' }, { key: 'Alt+V' }]));
+    control.dispatchEvent(new KeyboardEvent('keydown', { key: 'j', code: 'KeyJ', altKey: true, bubbles: true, cancelable: true }));
+    await vi.waitFor(() => expect(messages('ui.key').map(m => m.payload)).toEqual([{ key: 'Mod+K' }, { key: 'Alt+J' }]));
   });
 });
 
@@ -336,6 +373,18 @@ describe('video timing and caption overlays', () => {
 });
 
 describe('controls tabs publish and confirm the cut style', () => {
+  it('publishes crew’s resolved skin colours and Archivo and ignores later host colour tokens', async () => {
+    const resolvedTheme = { background: '#101112', foreground: '#fafafa', accent: '#abcdef', font: 'Archivo' as const };
+    await show({ ...demoCut4, resolvedTheme });
+    await vi.waitFor(() => expect(values('theme')).toMatchObject({ palette: 'studio', ...resolvedTheme, font: 'archivo' }));
+    expect(root().style.getPropertyValue('--video-accent')).toBe(resolvedTheme.accent);
+    expect(root().style.getPropertyValue('--video-font')).toBe('Archivo');
+    send('host.theme', { theme: { '--surface-base': '#000000', '--ink-high': '#ffffff', '--accent': '#112233' } });
+    await vi.waitFor(() => expect(document.documentElement.style.getPropertyValue('--accent')).toBe('#112233'));
+    expect(values('theme')).toMatchObject({ background: resolvedTheme.background, accent: resolvedTheme.accent });
+    const fontControl = surfaces.options.tabs.find(t => t.id === 'theme')?.controls?.find(c => c.id === 'font');
+    expect(fontControl?.options).toContainEqual({ id: 'archivo', label: 'Archivo' });
+  });
   it('publishes values on hello, applies one theme.set and confirms whole-tab truth', async () => {
     await vi.waitFor(() => expect(values('captions')).toEqual(videoValues(demoCut4.style, 'captions')));
     expect(values('theme')).toEqual(videoValues(demoCut4.style, 'theme'));
@@ -360,6 +409,30 @@ describe('controls tabs publish and confirm the cut style', () => {
     send('host.teardown', {}); await new Promise(r => setTimeout(r, 30)); ch.port1.close(); ch.port2.close();
     document.body.replaceChildren(); start(); await open(1);
     expect(root().dataset['surface']).toBe('card'); expect(messages('options.values')).toHaveLength(0);
+    send('host.size', { size: 'pane' }); await vi.waitFor(() => expect(root().dataset['surface']).toBe('full'));
+    expect(document.getElementById('work')).not.toHaveAttribute('hidden');
+    send('host.size', { size: 'inline' }); await vi.waitFor(() => expect(root().dataset['surface']).toBe('card'));
     send('host.size', { size: 'full' }); await vi.waitFor(() => expect(root().dataset['surface']).toBe('full'));
+  });
+  it('keeps a protocol-1 pane hello and later pane resize on the full editor', async () => {
+    send('host.teardown', {}); await new Promise(r => setTimeout(r, 30)); ch.port1.close(); ch.port2.close();
+    document.body.replaceChildren(); start(); await open(1, 'full', 'pane');
+    expect(root().dataset['surface']).toBe('full'); expect(document.getElementById('work')).not.toHaveAttribute('hidden');
+    send('host.size', { size: 'inline' }); await vi.waitFor(() => expect(root().dataset['surface']).toBe('card'));
+    send('host.size', { size: 'pane' }); await vi.waitFor(() => expect(root().dataset['surface']).toBe('full'));
+    await vi.waitFor(() => expect(node('video-player').getAttribute('src')).toMatch(/^blob:/));
+  });
+  it.each(['host.size', 'host.surface'])('requests media when %s moves an options-only instance to card or full', async type => {
+    send('host.teardown', {}); await new Promise(r => setTimeout(r, 30)); ch.port1.close(); ch.port2.close();
+    document.body.replaceChildren(); start(); await open(2, 'options');
+    expect(root().dataset['surface']).toBe('options'); expect(messages('artifact.media')).toHaveLength(0);
+    send(type, type === 'host.size' ? { size: 'inline' } : { surface: 'card' });
+    await vi.waitFor(() => expect(node('video-player').getAttribute('src')).toMatch(/^blob:/));
+    expect(document.getElementById('work')).not.toHaveAttribute('hidden');
+    const before = messages('artifact.media').length;
+    send('host.surface', { surface: 'options' }); await vi.waitFor(() => expect(root().dataset['surface']).toBe('options'));
+    send(type, type === 'host.size' ? { size: 'full' } : { surface: 'full' });
+    await vi.waitFor(() => expect(messages('artifact.media')).toHaveLength(before + 1));
+    expect(document.getElementById('work')).not.toHaveAttribute('hidden');
   });
 });

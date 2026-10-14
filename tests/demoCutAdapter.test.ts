@@ -51,7 +51,16 @@ describe('demo cut adapter over the E1 proxy', () => {
   it('reads effective defaults, the document title and chapter start/duration', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(json({ ...demoCut4, style: {} })));
     const a = new DemoCutAdapter('p', 'demo', 'Doc title'); const r = await a.read();
-    expect(r).toMatchObject({ version: 1, content: { type: 'demo-cut', title: 'Doc title', ffmpeg: { ok: true, burnIn: true }, style: { captions: { on: true }, theme: { titleCard: { title: 'Doc title' } } }, chapters: [{ startSec: 2.5, durationSec: 8 }, {}, {}, {}] } });
+    expect(r).toMatchObject({ version: 1, content: { type: 'demo-cut', title: 'Doc title', ffmpeg: { ok: true, burnIn: true }, style: { captions: { on: true }, theme: { palette: 'skin', background: '#16181d', foreground: '#f5f6f8', accent: '#b8bec9', font: 'system-ui', titleCard: { title: 'Doc title' } } }, chapters: [{ startSec: 2.5, durationSec: 8 }, {}, {}, {}] } });
+  });
+  it('carries crew’s resolvedTheme through reads and snapshots without replacing the stored theme', async () => {
+    const resolvedTheme = { background: '#101112', foreground: '#fafafa', accent: '#abcdef', font: 'Archivo' };
+    const fetchMock = vi.fn().mockResolvedValueOnce(json({ ...demoCut4, resolvedTheme }))
+      .mockResolvedValueOnce(json({ ...demoCut4, version: 2, resolvedTheme: { ...resolvedTheme, accent: '#123456' } }));
+    vi.stubGlobal('fetch', fetchMock);
+    const a = new DemoCutAdapter('p', 'demo', 'Demo');
+    expect(await a.read()).toMatchObject({ content: { resolvedTheme, style: { theme: demoCut4.style.theme } } });
+    expect(await a.read(1)).toMatchObject({ version: 1, content: { resolvedTheme, style: { theme: demoCut4.style.theme } } });
   });
   it('fetches MP4 and chapter takes as Blobs through the contained recording route', async () => {
     const fetchMock = vi.fn().mockResolvedValueOnce(json(demoCut4)).mockResolvedValueOnce(new Response('video', { headers: { 'Content-Type': 'video/mp4' } })).mockResolvedValueOnce(json(demoCut4)).mockResolvedValueOnce(new Response('', { headers: { 'Content-Type': 'video/webm' } })); vi.stubGlobal('fetch', fetchMock);

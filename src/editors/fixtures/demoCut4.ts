@@ -10,7 +10,7 @@ export const demoCut4: DemoCut = timedCut({ type: 'demo-cut', title: 'Build a te
     take: `_take-${id}-1.webm`, inSec: 0, outSec: [8, 10, 6, 12][i]!, durationSec: 0, startSec: 0,
   })),
   takes: Object.fromEntries(['open-the-scope', 'pick-a-plan', 'add-a-seat', 'invite-the-team'].map((id, i) => [id, Array.from({ length: i % 2 === 0 ? 2 : 1 }, (_, n) => ({ file: `_take-${id}-${n + 1}.webm`, durationSec: [8, 10, 6, 12][i]! + n }))])),
-  style: defaultVideoStyle('Build a team'),
+  style: defaultVideoStyle('Build a team'), // E1: palette 'skin', stored neutral colours and system-ui.
   ffmpeg: { ok: true, burnIn: true },
 });
 const copy = <T>(v: T): T => JSON.parse(JSON.stringify(v)) as T;
