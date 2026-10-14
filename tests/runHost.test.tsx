@@ -48,6 +48,7 @@ describe('the run host context', () => {
   });
 
   it('an artifact of the run with the open gate gets Approve (queued, undoable) and the way to the gate card', () => {
+    useGateStore.setState({ gates: { r1: { runId: 'r1', ord: 1, prompt: 'Approve unit 2 before it runs', lifecycle: 'open', receivedAt: 1, gateKind: 'def' } } });
     render(<Harness runs={[run('r1', 'awaiting_human')]} />);
     expect(ctx?.runId).toBe('r1');
     render(<>{ctx!.gateActions!(binding('r1:p/home'))}</>);
@@ -60,6 +61,18 @@ describe('the run host context', () => {
     render(<Harness runs={[run('r1', 'awaiting_human')]} />);
     const { container } = render(<>{ctx!.gateActions!(binding('r9:p/home', 'r9'))}</>);
     expect(container.querySelector('[data-testid="run-gate-actions"]')).toBeNull();
+  });
+
+  it('fail closed (codex final P1): a gate of unknown kind (a late join), an escalation, a consent or a free-text gate gets no bare Approve', () => {
+    const cases: Array<Record<string, unknown>> = [{}, { gateKind: 'escalation' }, { gateKind: 'consent' }, { gateKind: 'def', choices: null }, { gateKind: 'def', choices: ['a', 'b', 'c'] }];
+    for (const extra of cases) {
+      cleanup();
+      useGateStore.setState({ gates: { r1: { runId: 'r1', ord: 1, prompt: 'Gate?', lifecycle: 'open', receivedAt: 1, ...extra } as never } });
+      render(<Harness runs={[run('r1', 'awaiting_human')]} />);
+      render(<>{ctx!.gateActions!(binding('r1:p/home'))}</>);
+      expect(screen.queryByTestId('run-gate-approve')).toBeNull();
+      expect(screen.getByTestId('run-gate-open')).toHaveTextContent('Answer in the thread');
+    }
   });
 
   it('a deliver gate offers only the way to its card (the push is answered there)', () => {

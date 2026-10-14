@@ -63,7 +63,9 @@ export class RecordingSurfaceAdapter implements SurfaceAdapter {
   capabilities(): readonly AdapterCapability[] {
     // No 'checks' capability: the host's Checks tab reads an interactive document's checks, which a run's recording
     // is not. The proof is drawn by the plugin (timeline marks, verdicts, Advanced's Checks list) and served by checks().
-    const caps: AdapterCapability[] = ['read', 'media', 'versions'];
+    // No 'versions' either: a recording is one take, and the host's Versions tab reads an interactive document's
+    // history, so it hung on "Reading the versions…" for one (codex final review P2). artifact.versions still answers.
+    const caps: AdapterCapability[] = ['read', 'media'];
     if (this.exports().length > 0) caps.push('export');
     return caps;
   }

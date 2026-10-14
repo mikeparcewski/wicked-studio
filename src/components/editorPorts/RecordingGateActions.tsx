@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { putDemoScript } from '../../api/demo.js';
 import { walkthroughApi, type WalkthroughView } from '../../api/walkthrough.js';
 import { commitGateDecision, refreshGate } from '../../board/gateActions.js';
 import { escalationOpen, fixNote, gateVerbs, recordingOf, takeFingerprint, type Recording, type RecordingKind, type UnitLike } from '../../board/walkthroughModel.js';
@@ -10,7 +11,7 @@ import { useRecording } from './useRecording.js';
 type RetakeProps = { adapter: DemoCutSurfaceAdapter; chapter: string };
 
 /** The run's gate controls live in host chrome, alongside the recording plugin. */
-export function RecordingGateActions({ runId, kind, step, units, onChanged, onEditOpen, retake }: {
+export function RecordingGateActions({ runId, kind, step, units, onChanged, onEditOpen, retake, script = false }: {
   runId: string;
   kind: RecordingKind;
   step: string | null;
@@ -19,8 +20,17 @@ export function RecordingGateActions({ runId, kind, step, units, onChanged, onEd
   /** "Edit the check" opened its storyline box: a host that can give it room (an inline slot grows to the pane) does. */
   onEditOpen?: () => void;
   retake?: RetakeProps;
+  /** Draw the plan gate's script editor: on a plugin card only (the morphing slot's own editor has its box). */
+  script?: boolean;
 }): React.ReactElement | null {
-  if (kind === 'demo-video') return retake === undefined ? null : <RetakeChapter key={retake.chapter} {...retake} {...(onChanged === undefined ? {} : { onChanged })} />;
+  if (kind === 'demo-video') {
+    return (
+      <>
+        {script && <DemoScriptActions runId={runId} units={units} {...(onChanged === undefined ? {} : { onChanged })} />}
+        {retake !== undefined && <RetakeChapter key={retake.chapter} {...retake} {...(onChanged === undefined ? {} : { onChanged })} />}
+      </>
+    );
+  }
   return <WalkthroughGateActions runId={runId} step={step} units={units} {...(onChanged === undefined ? {} : { onChanged })} {...(onEditOpen === undefined ? {} : { onEditOpen })} />;
 }
 
@@ -33,9 +43,9 @@ function WalkthroughGateActions({ runId, step, units, onChanged, onEditOpen }: {
   return load.kind === 'ready' ? <GateActions rec={load.rec} units={units} reload={changed} {...(onEditOpen === undefined ? {} : { onEditOpen })} /> : null;
 }
 
-export function recordingGateActions(binding: ArtifactBinding, units: readonly UnitLike[], onEditOpen?: () => void): ReactNode | null {
+export function recordingGateActions(binding: ArtifactBinding, units: readonly UnitLike[], onEditOpen?: () => void, script = false): ReactNode | null {
   if ((binding.source !== 'walkthrough' && binding.source !== 'demo') || binding.runId === undefined) return null;
-  return <RecordingGateActions runId={binding.runId} kind={binding.source === 'walkthrough' ? 'walkthrough' : 'demo-video'} step={binding.source === 'walkthrough' ? binding.docId || null : null} units={units} {...(onEditOpen === undefined ? {} : { onEditOpen })} />;
+  return <RecordingGateActions runId={binding.runId} kind={binding.source === 'walkthrough' ? 'walkthrough' : 'demo-video'} step={binding.source === 'walkthrough' ? binding.docId || null : null} units={units} script={script} {...(onEditOpen === undefined ? {} : { onEditOpen })} />;
 }
 
 function GateActions({ rec, units, reload, onEditOpen }: { rec: Recording; units: readonly UnitLike[]; reload: () => void; onEditOpen?: () => void }): React.ReactElement | null {
@@ -156,6 +166,57 @@ function GateActions({ rec, units, reload, onEditOpen }: { rec: Recording; units
     )}
     {note !== null && <p data-testid="walkthrough-note" data-tone={note.tone} role={note.tone === 'bad' ? 'alert' : 'status'} className={`wk-walk-quiet${note.tone === 'bad' ? ' wk-walk-bad' : ''}`}>{note.text}</p>}
   </>;
+}
+
+/**
+ * S15d's presenter script, rewritten at the plan gate only (crew refuses the PUT at any other stage), as host chrome
+ * beside the recording (codex final review P2: a protocol-2 video editor had replaced the only place it was edited).
+ * Outside the plan gate there is nothing to draw: the narration is the plugin's to show.
+ */
+function DemoScriptActions({ runId, units, onChanged }: { runId: string; units: readonly UnitLike[]; onChanged?: () => void }): React.ReactElement | null {
+  const { load, reload } = useRecording(runId, 'demo-video', null, JSON.stringify(units));
+  const [draft, setDraft] = useState<{ take: string; text: string } | null>(null);
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<{ tone: 'ok' | 'bad'; text: string } | null>(null);
+  const live = useRef(true);
+  useLayoutEffect(() => { live.current = true; return () => { live.current = false; }; }, []);
+  if (load.kind !== 'ready' || !load.rec.scriptEditable || load.rec.script === null) return null;
+  const rec = load.rec;
+  const take = takeFingerprint(rec);
+  const text = draft !== null && draft.take === take ? draft.text : (rec.script ?? '');
+  const save = async (): Promise<void> => {
+    if (busy) return;
+    setBusy(true);
+    setNote(null);
+    try {
+      await putDemoScript(rec.runId, text);
+      if (!live.current) return;
+      setDraft(null);
+      setNote({ tone: 'ok', text: 'Script saved — the recorder reads it when you approve the plan.' });
+      reload();
+      onChanged?.();
+    } catch (e) {
+      if (live.current) setNote({ tone: 'bad', text: e instanceof Error ? e.message : String(e) });
+    } finally {
+      if (live.current) setBusy(false);
+    }
+  };
+  return (
+    <div data-testid="demo-script-actions" className="wk-walk-actions">
+      <button type="button" data-testid="demo-script-edit" aria-expanded={open} onClick={() => setOpen((o) => !o)} className="wk-prop-btn wk-prop-btn--ghost">Edit the script</button>
+      {open && (
+        <div data-testid="demo-script-box" className="wk-walk-edit">
+          <p className="wk-walk-quiet">The presenter’s script. Change it here before anything records; the recorder reads it when you approve the plan.</p>
+          <textarea data-testid="demo-script" value={text} onChange={(e) => setDraft({ take, text: e.target.value })} rows={6} className="wk-walk-storyline" aria-label="The presenter’s script" />
+          <div className="wk-prop-btns">
+            <button type="button" data-testid="demo-script-save" disabled={busy || text.trim() === '' || text === (rec.script ?? '')} onClick={() => void save()} className="wk-prop-btn wk-prop-btn--primary">Save the script</button>
+          </div>
+        </div>
+      )}
+      {note !== null && <p data-testid="demo-script-note" data-tone={note.tone} role={note.tone === 'bad' ? 'alert' : 'status'} className={`wk-walk-quiet${note.tone === 'bad' ? ' wk-walk-bad' : ''}`}>{note.text}</p>}
+    </div>
+  );
 }
 
 /** The demo cut adapter owns the take request; only host chrome offers the verb. */
