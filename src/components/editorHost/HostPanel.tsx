@@ -48,7 +48,7 @@ export function HostPanel({ runTab, ribbon }: HostPanelProps): React.ReactElemen
         <button type="button" data-testid="host-panel-ribbon" data-folded={narrow ? 'false' : 'true'}
           className={narrow ? 'wk-hpanel-ribbon' : 'wk-hpanel-ribbon wk-hpanel-ribbon--side'}
           onClick={() => { if (narrow) setOverlay(true); else setFolded(false); }} aria-label="Show the panel">
-          {ribbon}
+          {ribbon ?? (group !== null ? `${group.editor.title} options` : 'Options')}
         </button>
       )}
     <aside data-testid={collapsed ? undefined : 'host-panel'} hidden={collapsed} data-narrow={narrow ? 'true' : 'false'} aria-label="Run and options" className={`wk-hpanel${narrow ? ' wk-hpanel--overlay' : ''}`}>
@@ -62,9 +62,9 @@ export function HostPanel({ runTab, ribbon }: HostPanelProps): React.ReactElemen
         <button type="button" data-testid="host-panel-fold" aria-label="Hide the panel" className="wk-host-btn"
           onClick={() => { if (narrow) setOverlay(false); else setFolded(true); }}>⟩</button>
       </div>
-      <PanelTabs group={group} tab={tab} setTab={setTab} />
+      <PanelTabs group={group} tab={tab} setTab={setTab} withRun={runTab !== undefined} />
       <div className="wk-hpanel-body">
-        <div hidden={tab.owner !== 'run'} data-testid="host-panel-run">{runTab}</div>
+        {runTab !== undefined && <div hidden={tab.owner !== 'run'} data-testid="host-panel-run">{runTab}</div>}
         {group !== null && <GroupBody key={group.key} group={group} tab={tab} />}
       </div>
     </aside>
@@ -72,8 +72,8 @@ export function HostPanel({ runTab, ribbon }: HostPanelProps): React.ReactElemen
   );
 }
 
-function PanelTabs({ group, tab, setTab }: { group: OptionsGroup | null; tab: PanelTab; setTab: (t: PanelTab) => void }): React.ReactElement {
-  const items: { tab: PanelTab; label: string; owner: string; id: string }[] = [{ tab: RUN_TAB, label: 'Run', owner: 'run', id: 'run' }];
+function PanelTabs({ group, tab, setTab, withRun }: { group: OptionsGroup | null; tab: PanelTab; setTab: (t: PanelTab) => void; withRun: boolean }): React.ReactElement {
+  const items: { tab: PanelTab; label: string; owner: string; id: string }[] = withRun ? [{ tab: RUN_TAB, label: 'Run', owner: 'run', id: 'run' }] : [];
   if (group !== null) {
     for (const t of group.surfaces.options?.tabs ?? []) items.push({ tab: { owner: 'plugin', id: t.id }, label: t.label, owner: 'plugin', id: t.id });
     for (const h of hostTabsFor(group.adapter)) items.push({ tab: { owner: 'host', id: h.id }, label: h.label, owner: 'host', id: h.id });

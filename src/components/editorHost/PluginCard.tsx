@@ -5,7 +5,7 @@ import { editedLine, notUndoneLine, undoneLine, writtenWords, type EditorKind, t
 import { EditorHost, type HostLogEntry } from '../../editors/host.js';
 import {
   LIVE_FRAME_CAP, adapterFor, dropLive, firstTabOf, setGroupShown, groupKey, hostTabsFor, isLive, joinGroup, relay, touchLive, useHostChrome, useHostPanel, useLiveCards,
-  type ExportOutcome, type PluginCardProps, type SurfaceAdapter,
+  type ExportOutcome, type ExportedFile, type PluginCardProps, type SurfaceAdapter,
 } from '../../editors/hostApi.js';
 import { bundleUrl, fetchGrants } from '../../editors/model.js';
 import type { PermissionId } from '../../editors/protocol.js';
@@ -404,8 +404,21 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
     const label = exports.find((x) => x.format === format)?.label ?? format;
     setLine({ kind: 'working', text: `Making the ${label} of version ${head}…` });
     const out = await adapter.exportFile(format, head);
-    if (live.current) setLine({ kind: 'export', out });
+    if (live.current) { setLine({ kind: 'export', out }); if (out.ok) setDiskReads((n) => n + 1); }
   };
+  // studio#234: the files already exported for the version shown, from the adapter's listing — re-read on a new head
+  // and after an export, so a download made in an earlier session is still offered after a reload.
+  const [onDisk, setOnDisk] = useState<readonly ExportedFile[]>([]);
+  const [diskReads, setDiskReads] = useState(0);
+  const listsExports = exports.length > 0 && head >= 1 && adapter?.exported !== undefined;
+  useEffect(() => {
+    if (!listsExports || adapter?.exported === undefined) { setOnDisk([]); return undefined; }
+    let cancelled = false;
+    adapter.exported(head).then((rows) => { if (!cancelled) setOnDisk(rows); }, () => { if (!cancelled) setOnDisk([]); });
+    return () => { cancelled = true; };
+  }, [listsExports, adapter, head, diskReads]);
+  const linkedFile = line?.kind === 'export' && line.out.ok ? line.out.file : null;
+  const filesOnDisk = onDisk.filter((x) => x.name !== linkedFile);
 
   const runAction = async (a: CardAction): Promise<void> => {
     if (a.verb === 'host:export') { setExportOpen((o) => !o); return; }
@@ -495,6 +508,17 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
           {(line.kind === 'working' || line.kind === 'failed' || line.kind === 'status') && line.text}
           {line.kind === 'drafted' && <>Suggested by {line.editor}: {line.text}</>}
           {line.kind === 'export' && <>{line.out.text}{line.out.ok && <> <a data-testid="artifact-export-download" href={line.out.href} download={line.out.file} className="wk-since-toggle">Download</a></>}</>}
+        </p>
+      )}
+      {!full && filesOnDisk.length > 0 && (
+        <p data-testid="artifact-exports" className="wk-artifact-line">
+          Exported version {head}:{' '}
+          {filesOnDisk.map((x, i) => (
+            <span key={x.name}>
+              {i > 0 && ' · '}
+              <a data-testid="artifact-export-file" data-format={x.format} href={x.href} download={x.name} className="wk-since-toggle">{x.label}</a>
+            </span>
+          ))}
         </p>
       )}
       {offer !== null && !full && (
