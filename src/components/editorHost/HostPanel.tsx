@@ -293,8 +293,7 @@ function ControlInput({ c, id, value, onChange }: { c: Control; id: string; valu
       );
     case 'color':
       // The native picker needs SOME hex until the plugin's value arrives: a control value, not host styling.
-      // eslint-disable-next-line no-restricted-syntax
-      return <input id={id} type="color" value={typeof value === 'string' && /^#[0-9a-f]{6}$/iu.test(value) ? value : '#000000'} onChange={(e) => onChange(e.target.value)} className="wk-hcontrol-color" />;
+      return <input id={id} type="color" value={swatchHex(value)} onChange={(e) => onChange(e.target.value)} className="wk-hcontrol-color" />;
     case 'text':
       return <TextControl id={id} max={c.maxChars ?? 200} value={typeof value === 'string' ? value : ''} onChange={onChange} />;
     case 'range':
@@ -305,6 +304,22 @@ function ControlInput({ c, id, value, onChange }: { c: Control; id: string; valu
         </span>
       );
   }
+}
+
+/** What a colour control shows: the native picker takes `#rrggbb` only, so a plugin's `#rgb` or `rgb()` value (the
+ *  studio skin resolved to plain colours) is converted, never shown as black. Anything else shows black. */
+// eslint-disable-next-line no-restricted-syntax -- the native picker's empty value, not a style
+const PICKER_EMPTY = '#000000';
+export function swatchHex(value: unknown): string {
+  if (typeof value !== 'string') return PICKER_EMPTY;
+  const v = value.trim();
+  if (/^#[0-9a-f]{6}$/iu.test(v)) return v.toLowerCase();
+  const short = /^#([0-9a-f])([0-9a-f])([0-9a-f])$/iu.exec(v);
+  if (short !== null) return `#${short[1]}${short[1]}${short[2]}${short[2]}${short[3]}${short[3]}`.toLowerCase();
+  const rgb = /^rgba?\(\s*(\d{1,3})[\s,]+(\d{1,3})[\s,]+(\d{1,3})(?:\s*[,/]\s*[\d.]+%?)?\s*\)$/iu.exec(v);
+  if (rgb === null) return PICKER_EMPTY;
+  const hex = rgb.slice(1, 4).map((n) => Math.min(255, Number(n)).toString(16).padStart(2, '0')).join('');
+  return `#${hex}`;
 }
 
 /** Text commits on Enter or blur, not per keystroke (one `options.changed` per edit). */

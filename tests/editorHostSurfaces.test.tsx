@@ -6,7 +6,7 @@ import {
 } from '../src/editors/hostApi.js';
 import type { Surfaces } from '../src/editors/surfaces.js';
 import { FullShell } from '../src/components/editorHost/FullShell.js';
-import { ControlsTab, HostPanel } from '../src/components/editorHost/HostPanel.js';
+import { ControlsTab, HostPanel, swatchHex } from '../src/components/editorHost/HostPanel.js';
 // The host's own Versions and Checks tabs register on import (as PluginCard imports them in the app).
 import '../src/components/editorHost/hostTabs.js';
 
@@ -186,5 +186,17 @@ describe('composer bridge (ev2-ports follow-ups)', () => {
     render(<HostPanel runTab={<p>run body</p>} ribbon={<span>r</span>} />);
     expect(screen.getByTestId('host-panel').querySelector('.wk-hpanel-heading')).toBeNull();
     expect(screen.getAllByTestId('host-panel-tab').map((t) => t.textContent)).toEqual(['Run']);
+  });
+});
+
+describe('a colour control shows the colour it holds', () => {
+  it('converts #rgb and rgb() (the studio skin resolved to plain colours), never black for a real colour', () => {
+    expect(swatchHex('#1A2B3C')).toBe('#1a2b3c');
+    expect(swatchHex('#abc')).toBe('#aabbcc');
+    expect(swatchHex('rgb(17, 24, 39)')).toBe('#111827');
+    expect(swatchHex('rgba(255,255,255,0.5)')).toBe('#ffffff');
+    expect(swatchHex('rgb(17 24 39 / 50%)')).toBe('#111827');
+    expect(swatchHex('var(--x)')).toBe('#000000');
+    expect(swatchHex(undefined)).toBe('#000000');
   });
 });
