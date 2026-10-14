@@ -543,7 +543,13 @@ export class EditorHost {
         this.writing = true;
         try {
           const r = await a.theme(p['base'] as number, p['tokens'] as Record<string, unknown>);
-          if (!('error' in r)) { this.ownVersions.add(r.version); this.inventory = null; this.o.ui.thread(`${this.o.firstParty ? 'You' : this.o.name} changed the theme · Version ${r.version}`); }
+          if (!('error' in r)) {
+            this.ownVersions.add(r.version);
+            this.inventory = null;
+            this.timeoutLine = null;
+            this.o.ui.thread(`${this.o.firstParty ? 'You' : this.o.name} changed the theme · Version ${r.version}`);
+            this.o.ui.written?.({ version: r.version, base: p['base'] as number, summary: 'the theme', anchors: [], verb: 'restyled', words: 'the theme' });
+          }
           return r;
         } finally {
           this.writing = false;
