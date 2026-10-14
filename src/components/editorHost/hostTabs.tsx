@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useArtifactAddress } from '../session/ArtifactAddress.js';
 import { registerHostTab, type HostTabContext } from '../../editors/hostApi.js';
 import { ArtifactVersions, useVersionList, VersionLens } from '../session/ArtifactVersions.js';
 import { ChecksPanel } from '../session/ChecksPanel.js';
@@ -10,13 +11,19 @@ import { ChecksPanel } from '../session/ChecksPanel.js';
 
 function VersionsTab({ ctx }: { ctx: HostTabContext }): React.ReactElement {
   const { projectId, docId = '' } = ctx.binding;
-  const [lens, setLens] = useState<number | null>(null);
+  // The lens is the address's (S16a-4b): `?v=N` on the artifact's full address, so it can be bookmarked; the card
+  // shows it full screen. Without an address (the test page) it stays local, shown here.
+  const address = useArtifactAddress();
+  const key = ctx.binding.artifactKey;
+  const [local, setLocal] = useState<number | null>(null);
+  const lens = address !== null ? (address.routeKey === key ? address.routeVersion : null) : local;
+  const look = (v: number | null): void => { if (address !== null) address.pickVersion(key, v, 'push'); else setLocal(v); };
   const list = useVersionList(projectId, docId, ctx.shown, true);
   return (
     <div className="wk-htab-versions">
-      {lens !== null && <VersionLens projectId={projectId} docId={docId} version={lens} onBack={() => setLens(null)} />}
-      <ArtifactVersions projectId={projectId} docId={docId} head={ctx.shown} list={list} lens={lens} onLook={setLens}
-        onRestored={(h) => { setLens(null); ctx.changed(h, 'fork'); }} />
+      {address === null && lens !== null && <VersionLens projectId={projectId} docId={docId} version={lens} onBack={() => setLocal(null)} />}
+      <ArtifactVersions projectId={projectId} docId={docId} head={ctx.shown} list={list} lens={lens} onLook={look}
+        onRestored={(h) => { if (address === null) setLocal(null); else if (address.routeKey === key && address.routeVersion !== null) address.pickVersion(key, null, 'replace'); ctx.changed(h, 'fork'); }} />
     </div>
   );
 }
