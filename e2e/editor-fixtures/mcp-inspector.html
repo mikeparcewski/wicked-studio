@@ -12,6 +12,7 @@
   #status[data-stale="1"] { color: var(--muted); }
   .note { color: var(--muted); font-size: 12px; margin: 0; }
   nav { display: flex; gap: 4px; padding: 10px 18px 0; border-bottom: 1px solid var(--border); }
+  nav[hidden] { display: none; }
   nav button { border: 0; background: none; padding: 8px 12px; font: inherit; color: var(--muted); border-bottom: 2px solid transparent; cursor: pointer; }
   nav button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); font-weight: 600; }
   .panes { display: grid; grid-template-columns: minmax(180px, 240px) minmax(0, 1fr); min-height: 0; }
@@ -35,6 +36,9 @@
   #log li[data-error="1"] { color: var(--fail); }
   #log li.gap { color: var(--muted); font-style: italic; }
   .empty { color: var(--muted); }
+  body[data-surface="card"], body[data-surface="card"] main { height: auto; }
+  body[data-surface="card"] main { grid-template-rows: auto; }
+  body[data-surface="card"] .panes > * { overflow: visible; }
   @media (max-width: 560px) {
     .panes { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
     #list { border-right: 0; border-bottom: 1px solid var(--border); flex-direction: row; flex-wrap: wrap; }
@@ -49,7 +53,7 @@
     <span id="status" data-testid="plugin-status">Not connected</span>
     <p class="note" id="hint">Connect in studio, beside this inspector.</p>
   </header>
-  <nav role="tablist" aria-label="What to inspect">
+  <nav id="tabs" role="tablist" aria-label="What to inspect">
     <button type="button" role="tab" data-tab="tools" aria-selected="true">Tools</button>
     <button type="button" role="tab" data-tab="resources" aria-selected="false">Resources</button>
     <button type="button" role="tab" data-tab="prompts" aria-selected="false">Prompts</button>
@@ -63,28 +67,137 @@
 <script>
 (() => {
   const EDITOR = 'acme-mcp', VERSION = '0.1.0';
+  const SURFACES = {
+    card: { interactive: true, aspect: 'auto', actions: [{ id: 'refresh', label: 'List again', verb: 'plugin' }] },
+    options: { tabs: [{ id: 'resources', label: 'Resources', render: 'plugin' }, { id: 'prompts', label: 'Prompts', render: 'plugin' }, { id: 'log', label: 'Log', render: 'plugin' }] },
+    full: { modes: ['simple', 'advanced'], default: 'simple' },
+  };
   const WORDS = {
     not_granted: 'Not allowed to talk to MCP servers.',
     unavailable: 'Not connected. Use Connect in studio.',
     bad_request: "This studio can't inspect MCP servers.",
   };
   let port = null, seq = 0, state = 'none', tab = 'tools', items = { tools: [], resources: [], prompts: [] }, current = null, lastSeq = null;
+  let protocol = 1, surface = 'options', mode = 'simple', size = 'pane', optionsTab = null, lastHeight = null, lastCall = null;
   const log = [];
   const pending = new Map();
   const $ = (id) => document.getElementById(id);
   const el = (tag, attrs, text) => { const e = document.createElement(tag); for (const [k, v] of Object.entries(attrs || {})) e.setAttribute(k, v); if (text !== undefined) e.textContent = text; return e; };
+  const surfaceOfSize = (s) => s === 'inline' ? 'card' : s === 'pane' ? 'options' : 'full';
+  const sizeOfSurface = (s) => s === 'card' ? 'inline' : s === 'options' ? 'pane' : 'full';
+  const isOptionTab = (t) => t === 'resources' || t === 'prompts' || t === 'log';
+  const reply = (re, payload) => port && port.postMessage({ p: 'wicked.editor', v: 1, re, ok: true, payload });
   const req = (type, payload) => new Promise((resolve) => {
     const id = 'r' + (++seq);
     pending.set(id, resolve);
     port.postMessage({ p: 'wicked.editor', v: 1, type, id, payload });
   });
-  const mcp = (method, params) => req('mcp.request', params === undefined ? { method } : { method, params });
+  // The log seq before a call: its request and answer are the entries after it.
+  // Each call keeps its own cursor (the log seq when it left), so a later call can never take its wire entries.
+  const mcp = async (method, params) => {
+    const after = lastSeq === null ? -1 : lastSeq;
+    // Recorded at dispatch, in order, even if its detail view is gone by the reply: its request entry is its own.
+    const call = { method, after, refused: null, name: params && typeof params.name === 'string' ? params.name : (params && params.uri) || null };
+    // Only the calls whose raw exchange is shown (a detail's own call) take part, and only when connected: a call
+    // made while not connected was never sent, so it can never take a later call's request (codex h5-r5).
+    const r = await req('mcp.request', params === undefined ? { method } : { method, params });
+    if (!r.ok) { const c = (r.error && r.error.code) || 'refused'; if (NOT_SENT.includes(c)) call.refused = c; }
+    return Object.assign(r, { after, call });
+  };
+  // Refused before anything was sent; a timeout or a transport failure may still have reached the server.
+  // `unavailable` can follow a dispatch (a transport failure after send): it is an uncertain outcome, not 'not sent'.
+  const NOT_SENT = ['not_granted', 'refused', 'bad_request', 'write_not_granted', 'server_changed', 'rate_limited'];
+  // One call at a time (codex h5-r3), and a reply that belongs to a detail view no longer shown never
+  // touches the one on screen.
+  let calling = false;
+  let viewGen = 0;
+  const once = async (fn) => { if (calling) return; calling = true; const gen = viewGen; try { await fn(gen); } finally { calling = false; } };
   const words = (r) => {
     const c = r.error.code;
     if (c === 'write_not_granted') return r.error.message + ' Enable it on the MCP tools page.';
     if (c === 'server_changed') return r.error.message + ' Restart to reconnect.';
     return WORDS[c] || (c + ': ' + r.error.message);
   };
+
+  function sendHeight() {
+    if (protocol < 2 || surface !== 'card' || !port) return;
+    // The content's own height, not the frame's (html/body are 100% tall, so their scrollHeight never shrinks).
+    let bottom = 0;
+    for (const c of Array.from(document.body.children)) if (!c.hidden && c.tagName !== 'SCRIPT') bottom = Math.max(bottom, c.getBoundingClientRect().bottom);
+    const px = Math.round(bottom + 8);
+    if (px !== lastHeight) {
+      lastHeight = px;
+      port.postMessage({ p: 'wicked.editor', v: 1, type: 'ui.height', payload: { px } });
+    }
+  }
+
+  function syncRaw() {
+    const reqEl = $('raw-request'), resEl = $('raw-response');
+    if (!reqEl || !resEl) return;
+    const vis = protocol === 2 && surface === 'full' && mode === 'advanced' && lastCall !== null;
+    reqEl.hidden = !vis;
+    resEl.hidden = !vis;
+    if (!lastCall) return;
+    // The wire as the bridge logged it (scrubbed text, the real rpc id), never a reconstruction (codex h5-r1).
+    if (lastCall.refused) {
+      reqEl.textContent = 'Not sent: the host refused it (' + lastCall.refused + ')';
+      resEl.textContent = '';
+      return;
+    }
+    // The plugin is never told a call's rpc id, so it does not claim to know which log entry is this call's
+    // (codex h5-r2..r6): it shows the NEWEST matching request in the log since this call left (same method, same
+    // tool or resource), and its own answer by rpc id, and says so.
+    // The logged request's own params, parsed: its tool or prompt name, or its resource uri (codex h5-r7). A cut or
+    // unparseable entry can't be checked, so it never passes for this call.
+    const named = (e) => {
+      if (lastCall.name === null) return true;
+      if (e.truncated || typeof e.text !== 'string') return false;
+      try { const m = JSON.parse(e.text); const p = (m && m.params) || {}; return (lastCall.method === 'resources/read' ? p.uri : p.name) === lastCall.name; } catch { return false; }
+    };
+    const matches = log.filter((e) => !e.gap && e.seq > lastCall.after && e.dir === 'out' && e.kind === 'request' && e.method === lastCall.method && named(e));
+    const sent = matches[matches.length - 1];
+    const got = sent ? log.find((e) => !e.gap && e.kind === 'response' && e.rpcId === sent.rpcId) : undefined;
+    reqEl.textContent = sent ? 'Newest matching request in the log' + (matches.length > 1 ? ' (' + matches.length + ' since this call)' : '') + ':\n' + sent.text : 'Waiting for the log…';
+    resEl.textContent = got ? got.text : (sent ? 'Waiting for the answer in the log…' : '');
+  }
+
+  function syncTabs() {
+    for (const o of document.querySelectorAll('nav button')) o.setAttribute('aria-selected', String(o.dataset.tab === tab));
+  }
+
+  function applySurface(redraw) {
+    document.body.dataset.protocol = String(protocol);
+    document.body.dataset.size = protocol === 2 ? sizeOfSurface(surface) : size;
+    if (protocol < 2) {
+      delete document.body.dataset.surface;
+      delete document.body.dataset.mode;
+      document.documentElement.style.height = '';
+      $('tabs').hidden = false;
+      if (redraw) drawList();
+      return;
+    }
+    document.body.dataset.surface = surface;
+    document.body.dataset.mode = mode;
+    document.documentElement.style.height = surface === 'card' ? 'auto' : '';
+    const nav = $('tabs');
+    if (surface === 'card') {
+      nav.hidden = true;
+      lastHeight = null;
+      if (tab !== 'tools') { tab = 'tools'; current = null; lastCall = null; redraw = true; }
+    } else if (surface === 'options') {
+      if (optionsTab !== null) {
+        nav.hidden = true;
+        if (tab !== optionsTab) { tab = optionsTab; current = null; lastCall = null; redraw = true; }
+      } else {
+        nav.hidden = false;
+      }
+    } else {
+      nav.hidden = false;
+    }
+    syncTabs();
+    if (redraw) drawList();
+    else { syncRaw(); sendHeight(); }
+  }
 
   async function refresh() {
     if (state !== 'ready') return;
@@ -96,31 +209,49 @@
     drawList();
   }
 
+  async function refreshTools() {
+    const t = await mcp('tools/list');
+    if (t.ok && t.payload.response.result) items.tools = t.payload.response.result.tools || [];
+    else if (!t.ok && state === 'ready') $('hint').textContent = words(t);
+    drawList();
+    return { handled: true, status: 'Listed ' + items.tools.length + ' tools' };
+  }
+
   function drawList() {
     const list = $('list');
     list.textContent = '';
     if (tab === 'log') { list.appendChild(el('li', { class: 'empty' }, log.length + ' lines')); drawLog(); return; }
-    const xs = items[tab];
+    const xs = items[tab] || [];
     if (xs.length === 0) { list.appendChild(el('li', { class: 'empty' }, state === 'ready' ? 'None.' : 'Not connected.')); }
     for (const x of xs) {
       const li = el('li');
       const b = el('button', { type: 'button', 'data-item': x.name || x.uri }, x.name || x.uri);
       if (current && (current.name || current.uri) === (x.name || x.uri)) b.setAttribute('aria-current', 'true');
       if (x.description) b.appendChild(el('span', { class: 'desc' }, x.description));
-      b.addEventListener('click', () => { current = x; drawList(); drawDetail(); });
+      b.addEventListener('click', () => { current = x; lastCall = null; drawList(); drawDetail(); });
       li.appendChild(b); list.appendChild(li);
     }
-    if (!current || !xs.includes(current)) { current = null; $('detail').replaceChildren(el('p', { class: 'empty' }, xs.length ? 'Pick one.' : 'Nothing to show yet.')); }
+    if (!current || !xs.includes(current)) {
+      current = null;
+      lastCall = null;
+      $('detail').replaceChildren(el('p', { class: 'empty' }, xs.length ? 'Pick one.' : 'Nothing to show yet.'));
+    }
+    sendHeight();
   }
 
   function drawDetail() {
+    viewGen += 1;
     const d = $('detail');
     d.textContent = '';
-    if (!current) return;
+    if (!current) { sendHeight(); return; }
     d.appendChild(el('h2', {}, current.name || current.uri));
     if (current.description) d.appendChild(el('p', { class: 'note' }, current.description));
     const out = el('pre', { id: 'result', 'data-testid': 'plugin-result' }, '');
     out.hidden = true;
+    const rawReq = el('pre', { id: 'raw-request', 'data-raw': 'request' }, '');
+    const rawRes = el('pre', { id: 'raw-response', 'data-raw': 'response' }, '');
+    rawReq.hidden = true;
+    rawRes.hidden = true;
     if (tab === 'tools') {
       const props = (current.inputSchema && current.inputSchema.properties) || {};
       const inputs = {};
@@ -133,28 +264,42 @@
       call.addEventListener('click', async () => {
         const args = {};
         for (const [k, [inp, t]] of Object.entries(inputs)) if (inp.value !== '') args[k] = t === 'number' || t === 'integer' ? Number(inp.value) : inp.value;
-        const r = await mcp('tools/call', { name: current.name, arguments: args });
-        show(out, r);
+        const params = { name: current.name, arguments: args };
+        await once(async (gen) => { const r = await mcp('tools/call', params); if (gen === viewGen) show(out, r, 'tools/call', params); });
       });
       d.appendChild(call);
     } else if (tab === 'resources') {
       const read = el('button', { type: 'button', class: 'primary' }, 'Read it');
-      read.addEventListener('click', async () => show(out, await mcp('resources/read', { uri: current.uri })));
+      read.addEventListener('click', async () => {
+        const params = { uri: current.uri };
+        await once(async (gen) => { const r = await mcp('resources/read', params); if (gen === viewGen) show(out, r, 'resources/read', params); });
+      });
       d.appendChild(read);
     } else if (tab === 'prompts') {
       const get = el('button', { type: 'button', class: 'primary' }, 'Get it');
-      get.addEventListener('click', async () => show(out, await mcp('prompts/get', { name: current.name, arguments: {} })));
+      get.addEventListener('click', async () => {
+        const params = { name: current.name, arguments: {} };
+        await once(async (gen) => { const r = await mcp('prompts/get', params); if (gen === viewGen) show(out, r, 'prompts/get', params); });
+      });
       d.appendChild(get);
     }
     d.appendChild(out);
+    d.appendChild(rawReq);
+    d.appendChild(rawRes);
+    syncRaw();
+    sendHeight();
   }
 
-  function show(out, r) {
+  function show(out, r, method, params) {
     out.hidden = false;
-    if (!r.ok) { out.dataset.error = '1'; out.textContent = words(r); return; }
+    const code = r.ok ? null : (r.error && r.error.code) || 'refused';
+    lastCall = r.call || { method, after: r.after, name: null, refused: code !== null && NOT_SENT.includes(code) ? code : null };
+    if (!r.ok) { out.dataset.error = '1'; out.textContent = words(r); syncRaw(); sendHeight(); return; }
     const res = r.payload.response;
     out.dataset.error = res.error || (res.result && res.result.isError) ? '1' : '0';
     out.textContent = (res.error ? 'The server answered an error\n' : '') + JSON.stringify(res.error || res.result, null, 2) + '\n· ' + r.payload.ms + ' ms' + (r.payload.truncated ? ' · cut' : '');
+    syncRaw();
+    sendHeight();
   }
 
   function drawLog() {
@@ -168,11 +313,12 @@
       ul.appendChild(li);
     }
     d.replaceChildren(el('h2', {}, 'JSON-RPC log'), ul);
+    sendHeight();
   }
 
   for (const b of document.querySelectorAll('nav button')) b.addEventListener('click', () => {
-    tab = b.dataset.tab; current = null;
-    for (const o of document.querySelectorAll('nav button')) o.setAttribute('aria-selected', String(o === b));
+    tab = b.dataset.tab; current = null; lastCall = null;
+    syncTabs();
     drawList();
   });
 
@@ -181,11 +327,52 @@
     try {
       if (!d || d.p !== 'wicked.editor' || d.v !== 1) return;
       if (d.re && pending.has(d.re)) { const r = pending.get(d.re); pending.delete(d.re); r(d); return; }
+      const p = d.payload && typeof d.payload === 'object' ? d.payload : {};
       switch (d.type) {
-        case 'host.ping': port.postMessage({ p: 'wicked.editor', v: 1, re: d.id, ok: true, payload: {} }); break;
-        case 'host.theme': theme(d.payload.theme || {}); break;
+        case 'host.ping': reply(d.id, {}); break;
+        case 'host.theme': theme(p.theme || {}); break;
+        case 'host.size':
+          if (p.size === 'inline' || p.size === 'pane' || p.size === 'full') { size = p.size; if (protocol < 2) document.body.dataset.size = size; }
+          break;
+        case 'host.surface':
+          if (protocol >= 2 && (p.surface === 'card' || p.surface === 'options' || p.surface === 'full')) {
+            surface = p.surface;
+            if (p.mode === 'simple' || p.mode === 'advanced') mode = p.mode;
+            if (surface === 'options' && optionsTab === null) optionsTab = 'resources';
+            applySurface(false);
+          }
+          break;
+        case 'host.mode':
+          if (typeof d.id === 'string') {
+            if (p.mode === 'simple' || p.mode === 'advanced') {
+              mode = p.mode;
+              document.body.dataset.mode = mode;
+              syncRaw();
+              reply(d.id, { mode });
+            } else {
+              port.postMessage({ p: 'wicked.editor', v: 1, re: d.id, ok: false, error: { code: 'bad_request', message: 'mode is simple or advanced' } });
+            }
+          }
+          break;
+        case 'host.action':
+          if (typeof d.id === 'string') {
+            if (p.id === 'refresh') void refreshTools().then((res) => reply(d.id, res), () => reply(d.id, { handled: false }));
+            else reply(d.id, { handled: false });
+          }
+          break;
+        case 'host.tab':
+          if (protocol >= 2 && isOptionTab(p.tab)) {
+            optionsTab = p.tab;
+            tab = p.tab;
+            current = null;
+            lastCall = null;
+            applySurface(true);
+          }
+          break;
+        case 'host.selection':
+          break;
         case 'mcp.state': {
-          const s = d.payload;
+          const s = p;
           state = s.state;
           const st = $('status');
           st.dataset.state = state;
@@ -196,12 +383,13 @@
           break;
         }
         case 'mcp.log': {
-          for (const e of d.payload.entries || []) {
+          for (const e of p.entries || []) {
             if (lastSeq !== null && e.seq > lastSeq + 1) log.push({ gap: e.seq - lastSeq - 1 });
             lastSeq = e.seq; log.push(e);
           }
           if (log.length > 1000) log.splice(0, log.length - 1000);
           if (tab === 'log') drawList();
+          syncRaw();
           break;
         }
         default: break;
@@ -218,16 +406,22 @@
     if (port || !e.data || e.data.type !== 'host.hello' || !e.ports[0]) return;
     port = e.ports[0];
     port.onmessage = onPort;
-    theme(e.data.payload.theme || {});
-    document.body.dataset.size = e.data.payload.size;
-    drawList();
+    const p = e.data.payload && typeof e.data.payload === 'object' ? e.data.payload : {};
+    theme(p.theme || {});
+    size = p.size === 'inline' || p.size === 'full' ? p.size : 'pane';
+    protocol = p.protocol === 2 ? 2 : 1;
+    surface = protocol === 2 && (p.surface === 'card' || p.surface === 'options' || p.surface === 'full') ? p.surface : surfaceOfSize(size);
+    mode = protocol === 2 && (p.mode === 'simple' || p.mode === 'advanced') ? p.mode : 'simple';
+    optionsTab = protocol === 2 && surface === 'options' && isOptionTab(p.tab) ? p.tab : null;
+    if (optionsTab !== null) tab = optionsTab;
+    applySurface(true);
   });
   // The journey's hostile probe: a tool call nobody clicked for (the host must refuse it).
   // Playwright's evaluate runs WITH a user gesture, so the call is made from a timer once that
   // gesture's transient activation (about 5 s) has expired; the result lands in window.__autoResult.
   window.__autoCall = (afterMs) => { window.__autoResult = null; setTimeout(async () => { const r = await mcp('tools/call', { name: 'echo', arguments: { text: 'unasked' } }); window.__autoResult = r.ok ? 'ok' : r.error.code; }, afterMs); };
   window.__listNow = async () => { const r = await mcp('tools/list'); return r.ok ? 'ok' : r.error.code; };
-  parent.postMessage({ p: 'wicked.editor', v: 1, type: 'plugin.ready', payload: { editor: EDITOR, version: VERSION, protocol: [1] } }, '*');
+  parent.postMessage({ p: 'wicked.editor', v: 1, type: 'plugin.ready', payload: { editor: EDITOR, version: VERSION, protocol: [1, 2], surfaces: SURFACES } }, '*');
 })();
 </script>
 </body></html>

@@ -1,16 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
-import { exportFileUrl, interactiveUrl, listExports, type ExportFormat, type ExportListEntry } from '../../api/interactive.js';
 import { grow, shrink, type ArtifactSize, type EditorKind } from '../../board/artifactMorph.js';
-import { exportReadyText, runExport } from '../../interactive/exportWire.js';
 import { artifactSizeOf, artifactSizeWrites, registerArtifact, setArtifactSize, topmostArtifact, useArtifactSizes } from '../../store/artifactSizes.js';
 import { useArtifactAddress } from './ArtifactAddress.js';
 import { ArtifactVersions, lensVersion, useVersionList, VersionLens } from './ArtifactVersions.js';
-import { DocCoverage } from './DocCoverage.js';
-import { PageEditor, type FrameParts } from './PageEditor.js';
 import { NoEditorPage, PluginArtifact } from './PluginArtifact.js';
 import { useEditorFor, useEditors } from '../../store/editors.js';
-import { DEMO_VIDEO_ID, openLaunchWizard } from '../../store/launchWizard.js';
 import { PluginCard } from '../editorHost/PluginCard.js';
 import { hasAdapter, type AdapterSource } from '../../editors/hostApi.js';
 // The adapters register on import; the routing above asks which exist.
@@ -31,25 +26,13 @@ export interface ArtifactSlot {
  * same `<section>` changes class, so the frame inside keeps its state and the shared-element morph
  * (View Transitions where the browser has them; nothing animates under reduced motion) is honest.
  *
- * The kind slot: a page is opened by the editor PLUGIN crew's registry names for `page` — the
- * built-in `wicked-page`, hash-pinned in studio's own bundle (EP-P2, {@link PluginArtifact}); with
- * no registry, or none claiming the kind, the page is shown read-only and the sentence says so
- * (DES-EDITOR-PLUGINS-001 §3.1). A written document and a deck (S9) host the studio editor with what
- * stands beside its frame — the document's requirement coverage at full screen, the deck's slide
- * strip — and an Export in the header, until EP-P4 re-hosts them the same way.
+ * Since protocol 2 this section is only the fallback, the same for every kind: a protocol-1 plugin that claims the
+ * kind ({@link PluginArtifact}), a slot body no plugin claims yet, or the artifact as served, read-only, when no
+ * editor claims it (DES-EDITOR-PLUGINS-001 §3.1). The per-kind code is gone (the document editor, its coverage
+ * column, the deck review rail, the Demo video button, the per-kind Export table): those live in wicked-doc,
+ * wicked-deck and the host's review capability, and Export is the adapter's.
  */
 
-/** What each kind exports to, in the order offered (interactive's own formats). */
-const EXPORTS: Readonly<Record<EditorKind, ReadonlyArray<{ format: ExportFormat; label: string }>>> = {
-  page: [],
-  document: [{ format: 'pdf', label: 'PDF' }, { format: 'html', label: 'Web page' }],
-  deck: [{ format: 'pptx', label: 'PowerPoint' }, { format: 'pdf', label: 'PDF' }],
-};
-
-type ExportLine =
-  | { state: 'working'; text: string }
-  | { state: 'ready'; text: string; href: string; file: string }
-  | { state: 'failed'; text: string };
 
 type ArtifactMorphProps = {
   artifactKey: string;
@@ -98,7 +81,7 @@ export function ArtifactMorph(props: ArtifactMorphProps): React.ReactElement {
   return <MorphingArtifact {...props} />;
 }
 
-function MorphingArtifact({ artifactKey, title, projectId, docId, composerKey, kind = 'page', repoId = null, slot }: {
+function MorphingArtifact({ artifactKey, title, projectId, docId, composerKey, kind = 'page', slot }: {
   artifactKey: string;
   title: string;
   projectId: string;
@@ -106,85 +89,19 @@ function MorphingArtifact({ artifactKey, title, projectId, docId, composerKey, k
   composerKey: string;
   /** Which editor the document opens in (S9) — from the style it was created with. */
   kind?: EditorKind;
-  /** The run's repository, when it has one: where a document's requirement coverage is read. */
-  repoId?: string | null;
   /** WT-U1: what the slot hosts instead of the page editor (see {@link ArtifactSlot}). */
   slot?: ArtifactSlot;
 }): React.ReactElement {
   const size = useArtifactSizes((s) => artifactSizeOf(s, artifactKey));
   const topmost = useArtifactSizes((s) => topmostArtifact(s) === artifactKey);
   const [head, setHead] = useState<number | null>(null);
-  // EP-P2: which plugin opens a page here (`undefined` while the registry is read; `null` = none).
-  const pageEditor = useEditorFor('page');
-  // P-D1: a deck opens in `wicked-deck` (operator decision D1: its own plugin).
-  const deckEditor = useEditorFor('deck');
+  // The protocol-1 plugin that claims this kind, if any (`undefined` while the registry is read; `null` = none).
+  const v1Editor = useEditorFor(kind);
   const noEditorReason = useEditors((s) => s.reason);
   const shrinkBtn = useRef<HTMLButtonElement | null>(null);
   const growBtn = useRef<HTMLButtonElement | null>(null);
-  const [exportOpen, setExportOpen] = useState(false);
-  const [exported, setExported] = useState<ExportLine | null>(null);
-  const exportBtn = useRef<HTMLButtonElement | null>(null);
-  const exportMenu = useRef<HTMLSpanElement | null>(null);
-  // The menu is a menu: opened, its first format holds the focus (arrows move, Enter chooses);
-  // closed — by Esc or by a choice — the focus is back on Export.
-  useEffect(() => {
-    if (exportOpen) exportMenu.current?.querySelector<HTMLButtonElement>('[role="menuitem"]')?.focus();
-  }, [exportOpen]);
-  const closeExport = (): void => { setExportOpen(false); exportBtn.current?.focus(); };
-  const onExportKey = (e: React.KeyboardEvent<HTMLSpanElement>): void => {
-    if (!exportOpen) return;
-    // Esc closes the open menu first; it does not also shrink the artifact.
-    if (e.key === 'Escape') { e.stopPropagation(); closeExport(); return; }
-    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
-    e.preventDefault();
-    const items = [...(exportMenu.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]') ?? [])];
-    if (items.length === 0) return;
-    const at = items.findIndex((b) => b === document.activeElement);
-    items[(at + (e.key === 'ArrowDown' ? 1 : items.length - 1) + items.length) % items.length]?.focus();
-  };
-  const live = useRef(true);
-  useEffect(() => { live.current = true; return () => { live.current = false; }; }, []);
 
-  // What stands beside the frame: a document's requirements at full screen (the pane has no room for
-  // a column) and only for a run that has a repository. A deck's slides are its editor's own (P-D1).
-  const side = useCallback((parts: FrameParts | null): React.ReactNode => {
-    if (parts === null) return null;
-    if (kind === 'document' && size === 'full' && repoId !== null) return <DocCoverage parts={parts} repoId={repoId} composerKey={composerKey} />;
-    return null;
-  }, [kind, size, repoId, composerKey]);
 
-  // studio#236: version 0 is the "Building…" placeholder — nothing to export until a version lands.
-  const canExport = head !== null && head >= 1;
-  // studio#234: the exports already on disk for the version shown, read from the bridge's listing
-  // (wicked-interactive#236) whenever the artifact is open — so a download made in an earlier
-  // session (or one whose answer never reached this control) is still here after a reload.
-  // A listing that fails shows nothing: never a guessed link.
-  const [onDisk, setOnDisk] = useState<readonly ExportListEntry[]>([]);
-  const [listGen, setListGen] = useState(0);
-  const listOn = canExport && size !== 'inline' && slot === undefined && EXPORTS[kind].length > 0;
-  useEffect(() => {
-    if (!listOn) { setOnDisk([]); return undefined; }
-    let cancelled = false;
-    listExports(projectId, docId)
-      .then((rows) => { if (!cancelled) setOnDisk(Array.isArray(rows) ? rows : []); })
-      .catch(() => { if (!cancelled) setOnDisk([]); });
-    return () => { cancelled = true; };
-  }, [listOn, projectId, docId, head, listGen]);
-
-  const exportAs = async (format: ExportFormat, label: string): Promise<void> => {
-    if (head === null || head < 1) return;
-    closeExport();
-    setExported({ state: 'working', text: `Making the ${label} of version ${head}…` });
-    const out = await runExport({ projectId, docId, version: head, format });
-    if (!live.current) return;
-    if (out.ok) setExported({ state: 'ready', text: exportReadyText(format, out.file, out.report), href: interactiveUrl(projectId, out.result.download), file: out.file });
-    else setExported({ state: 'failed', text: `The ${label} was not made — ${out.hint}` });
-    // Either way the listing is re-read: a file the answer lost is still found on disk.
-    setListGen((g) => g + 1);
-  };
-  const exportsHere = size === 'inline' ? [] : EXPORTS[kind];
-  // Folded back to the preview, the menu is gone — it must not be open when the artifact grows again.
-  useEffect(() => { if (size === 'inline') setExportOpen(false); }, [size]);
 
   // S16a-4a: the morph writes the address too (grow pushes, shrink goes Back or replaces) — Esc and
   // the buttons share this one path.
@@ -223,8 +140,6 @@ function MorphingArtifact({ artifactKey, title, projectId, docId, composerKey, k
   const [localLens, setLocalLens] = useState<number | null>(null);
   const pinned = address === null ? localLens : address.routeKey === artifactKey ? address.routeVersion : null;
   const lens = versionsOn ? lensVersion(pinned, head, versions) : null;
-  // P-D1: a deck in its editor, at full size and not on a version lens, has the host's review rail.
-  const deckReviewOn = editorKind && kind === 'deck' && size === 'full' && lens === null && deckEditor !== null && deckEditor !== undefined;
   const look = (v: number | null): void => { if (address === null) setLocalLens(v); else address.pickVersion(artifactKey, v, 'push'); };
 
   // Esc shrinks one step (rule 1) — the topmost open artifact only, and not while something inside
@@ -297,31 +212,12 @@ function MorphingArtifact({ artifactKey, title, projectId, docId, composerKey, k
       data-doc={docId}
       data-kind={slot?.kind ?? kind}
       aria-label={`${title} — ${size === 'inline' ? 'preview' : size === 'pane' ? 'open beside the thread' : 'full screen'}`}
-      className={`wk-artifact wk-artifact--${size}${versionsOn ? ' wk-artifact--versions' : ''}${deckReviewOn ? ' wk-artifact--deckreview' : ''}`}
+      className={`wk-artifact wk-artifact--${size}${versionsOn ? ' wk-artifact--versions' : ''}`}
       style={{ viewTransitionName: `artifact-${slug}` } as React.CSSProperties}
     >
       <header data-testid="artifact-head" className="wk-artifact-head">
         <span className="wk-artifact-title">{title}</span>
         <span data-testid="artifact-version">{lens !== null ? `looking at version ${lens}` : head === null ? '' : versionsOn ? `version ${head} (working)` : `version ${head}`}</span>
-        {/* studio#664 (DES-PRESENTATION-EDITOR-001 D-S1): a deck or a document opens the New job
-            wizard's Demo video form, in this document's project. */}
-        {slot === undefined && (kind === 'deck' || kind === 'document') && size !== 'inline' && (
-          <button type="button" data-testid="artifact-demo-video" title="Make a demo video of a running app"
-            onClick={() => openLaunchWizard({ workflowId: DEMO_VIDEO_ID, projectId, composerKey })}
-            className="wk-artifact-btn">Demo video</button>
-        )}
-        {exportsHere.length > 0 && canExport && (
-          <span className="wk-artifact-export" onKeyDown={onExportKey}>
-            <button ref={exportBtn} type="button" data-testid="artifact-export" aria-haspopup="menu" aria-expanded={exportOpen} onClick={() => setExportOpen((o) => !o)} className="wk-artifact-btn">Export ▾</button>
-            {exportOpen && (
-              <span ref={exportMenu} role="menu" aria-label="Export as" data-testid="artifact-export-menu" className="wk-artifact-menu">
-                {exportsHere.map((x) => (
-                  <button key={x.format} type="button" role="menuitem" data-testid="artifact-export-format" data-format={x.format} onClick={() => void exportAs(x.format, x.label)} className="wk-artifact-menu-item">{x.label}</button>
-                ))}
-              </span>
-            )}
-          </span>
-        )}
         {size !== 'full' && (
           <button ref={growBtn} type="button" data-testid="artifact-grow" aria-label={size === 'inline' ? 'Open beside the thread' : 'Full screen'} title={size === 'inline' ? 'Open' : 'Full screen'} onClick={() => morph(grow(size))} className="wk-artifact-btn">⤢</button>
         )}
@@ -333,19 +229,12 @@ function MorphingArtifact({ artifactKey, title, projectId, docId, composerKey, k
         ? <VersionLens projectId={projectId} docId={docId} version={lens} onBack={() => look(null)} />
         : slot !== undefined
         ? slot.body(size, morph)
-        : kind === 'page'
-          ? (pageEditor === undefined
-            ? <div className="wk-artifact-body" data-testid="artifact-opening" />
-            : pageEditor === null
-              ? <NoEditorPage projectId={projectId} docId={docId} size={size} reason={noEditorReason} onHead={setHead} />
-              : <PluginArtifact projectId={projectId} docId={docId} title={title} composerKey={composerKey} size={size} morph={morph} editor={pageEditor} onHead={setHead} />)
-          : kind === 'deck'
-            ? (deckEditor === undefined
-              ? <div className="wk-artifact-body" data-testid="artifact-opening" />
-              : deckEditor === null
-                ? <NoEditorPage projectId={projectId} docId={docId} size={size} reason={noEditorReason} onHead={setHead} what="decks" />
-                : <PluginArtifact projectId={projectId} docId={docId} title={title} composerKey={composerKey} size={size} morph={morph} editor={deckEditor} onHead={setHead} kind="deck" />)
-            : <PageEditor projectId={projectId} docId={docId} composerKey={composerKey} size={size} kind={kind} side={side} onHead={setHead} />}
+        : v1Editor === undefined
+          ? <div className="wk-artifact-body" data-testid="artifact-opening" />
+          : v1Editor === null
+            // No plugin claims the kind: the artifact as served, read-only, and the sentence says so (EP §3.1).
+            ? <NoEditorPage projectId={projectId} docId={docId} size={size} reason={noEditorReason} onHead={setHead} what={`${kind}s`} />
+            : <PluginArtifact projectId={projectId} docId={docId} title={title} composerKey={composerKey} size={size} morph={morph} editor={v1Editor} onHead={setHead} kind={kind} />}
       {versionsOn && (
         <ArtifactVersions
           projectId={projectId}
@@ -357,31 +246,6 @@ function MorphingArtifact({ artifactKey, title, projectId, docId, composerKey, k
           onRestored={(newHead) => { setHead(newHead); if (address === null) setLocalLens(null); else if (address.routeKey === artifactKey) address.pickVersion(artifactKey, null, 'replace'); }}
         />
       )}
-      {exported !== null && size !== 'inline' && (
-        <p data-testid="artifact-export-line" data-state={exported.state} className={`wk-artifact-line${exported.state === 'failed' ? ' wk-artifact-line--bad' : ''}`}>
-          {exported.text}
-          {exported.state === 'ready' && (
-            <> <a data-testid="artifact-export-download" href={exported.href} download={exported.file} className="wk-since-toggle">Download</a></>
-          )}
-        </p>
-      )}
-      {(() => {
-        // The files on disk for the version shown — minus the one the result line above already links.
-        const linked = exported?.state === 'ready' ? exported.file : null;
-        const files = size === 'inline' || head === null ? [] : onDisk.filter((x) => x.version === head && x.name !== linked);
-        if (files.length === 0) return null;
-        return (
-          <p data-testid="artifact-exports" className="wk-artifact-line">
-            Exported version {head}:{' '}
-            {files.map((x, i) => (
-              <span key={x.name}>
-                {i > 0 && ' · '}
-                <a data-testid="artifact-export-file" data-format={x.format} href={exportFileUrl(projectId, docId, x.name)} download={x.name} className="wk-since-toggle">{x.format.toUpperCase()}</a>
-              </span>
-            ))}
-          </p>
-        );
-      })()}
       {size === 'inline' && (
         <button type="button" data-testid="artifact-open" aria-label={`Open ${title}`} className="wk-artifact-catch" onClick={() => morph('pane')} />
       )}

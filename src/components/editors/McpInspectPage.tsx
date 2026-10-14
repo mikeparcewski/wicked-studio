@@ -7,7 +7,8 @@ import {
   type McpInspectLogEntry, type McpInspectSessionView, type McpInspectState, type McpInspectTarget,
 } from '../../api/mcpInspect.js';
 import { ApiError } from '../../api/errors.js';
-import { EditorHost, type HostAdapter, type McpCall } from '../../editors/host.js';
+import { EditorHost, type McpCall } from '../../editors/host.js';
+import { McpSurfaceAdapter } from '../../editors/adapters/mcp.js';
 import { bundleUrl, fetchGrants } from '../../editors/model.js';
 import type { PermissionId } from '../../editors/protocol.js';
 import { readThemeTokens } from '../../editors/theme.js';
@@ -63,19 +64,6 @@ function outcomeWords(c: Extract<McpCall, { phase: 'done' }>): string {
     case 'bad_request': return 'refused: not a method the inspector sends';
     default: return `refused (${c.outcome})`;
   }
-}
-
-/** The plugin's artifact is the server itself: no content beyond what `mcp.state` says. Read-only. */
-function serverAdapter(title: () => string): HostAdapter {
-  const at = new Date().toISOString();
-  return {
-    artifact: () => ({ kind: MCP_SERVER_KIND, title: title(), version: 1, head: 1, readonly: true, lockedParts: [] }),
-    read: async () => ({ version: 1, content: { type: MCP_SERVER_KIND, title: title() } }),
-    versions: async () => ({ versions: [{ version: 1, parent: null, createdAt: at }], head: 1 }),
-    write: async () => ({ error: 'unsupported', message: 'an MCP server is not edited here' }),
-    undo: async () => ({ error: 'unsupported', message: 'an MCP server is not edited here' }),
-    fork: async () => ({ error: 'unsupported', message: 'an MCP server is not edited here' }),
-  };
 }
 
 function statePayload(live: Live | null): Record<string, unknown> {
@@ -378,7 +366,7 @@ export function McpInspectPage({ navigate, search }: { navigate: (p: string) => 
       theme: readThemeTokens(),
       prefs: { reducedMotion: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false, techDetails: true, locale: navigator.language },
       firstParty: editor.first_party,
-      adapter: serverAdapter(() => titleRef.current),
+      adapter: new McpSurfaceAdapter(() => titleRef.current),
       mcp: bridge,
       ui: {
         chips: () => {}, draft: () => {}, typed: () => {}, key: () => {}, morph: () => {}, status: () => {}, notes: () => {}, thread: () => {},
