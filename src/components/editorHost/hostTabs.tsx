@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import { useArtifactAddress } from '../session/ArtifactAddress.js';
 import { registerHostTab, type HostTabContext } from '../../editors/hostApi.js';
 import { ArtifactVersions, useVersionList, VersionLens } from '../session/ArtifactVersions.js';
@@ -17,6 +17,10 @@ function VersionsTab({ ctx }: { ctx: HostTabContext }): React.ReactElement {
   // The address as it is when a restore lands, not when it started (codex h2-r19 P2).
   const addressRef = useRef(address);
   addressRef.current = address;
+  // A restore that lands after this tab went away (another tab, another page) leaves the address alone: the ref
+  // stopped following the address when the tab unmounted (codex h2-r20 P2). Its change notification still goes out.
+  const mounted = useRef(true);
+  useLayoutEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   const key = ctx.binding.artifactKey;
   const [local, setLocal] = useState<number | null>(null);
   const lens = address !== null ? (address.routeKey === key ? address.routeVersion : null) : local;
@@ -26,7 +30,11 @@ function VersionsTab({ ctx }: { ctx: HostTabContext }): React.ReactElement {
     <div className="wk-htab-versions">
       {address === null && lens !== null && <VersionLens projectId={projectId} docId={docId} version={lens} onBack={() => setLocal(null)} />}
       <ArtifactVersions projectId={projectId} docId={docId} head={ctx.shown} list={list} lens={lens} onLook={look}
-        onRestored={(h) => { const a = addressRef.current; if (a === null) setLocal(null); else if (a.routeKey === key && a.routeVersion !== null) a.pickVersion(key, null, 'replace'); ctx.changed(h, 'fork'); }} />
+        onRestored={(h) => {
+          const a = addressRef.current;
+          if (mounted.current) { if (a === null) setLocal(null); else if (a.routeKey === key && a.routeVersion !== null) a.pickVersion(key, null, 'replace'); }
+          ctx.changed(h, 'fork');
+        }} />
     </div>
   );
 }
