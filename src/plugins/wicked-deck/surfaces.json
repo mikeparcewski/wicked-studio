@@ -1,0 +1,19 @@
+{
+  "card": {
+    "interactive": true,
+    "aspect": "16:9",
+    "actions": [
+      { "id": "prev", "label": "Previous slide", "verb": "plugin" },
+      { "id": "next", "label": "Next slide", "verb": "plugin", "primary": true },
+      { "id": "ask", "label": "Ask about this", "verb": "host:ask" },
+      { "id": "export", "label": "Export", "verb": "host:export" }
+    ]
+  },
+  "options": {
+    "tabs": [
+      { "id": "style", "label": "Style", "render": "plugin" },
+      { "id": "notes", "label": "Speaker notes", "render": "plugin" }
+    ]
+  },
+  "full": {}
+}

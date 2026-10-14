@@ -1,8 +1,8 @@
 // @vitest-environment node
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import deckSurfaces from '../src/plugins/wicked-deck/surfaces.json';
 import { buildEditors, EDITORS, externalReferences } from '../scripts/build-editors.mjs';
 
 /**
@@ -10,7 +10,7 @@ import { buildEditors, EDITORS, externalReferences } from '../scripts/build-edit
  * §8.6; crew `registry.ts` `discoverStudioEditors`): one self-contained HTML entry beside its manifest,
  * under the host cap, loading nothing from outside itself, named `wicked-*` in a directory of its id.
  */
-const out = mkdtempSync(join(tmpdir(), 'wicked-editors-'));
+const out = mkdtempSync(join(process.cwd(), 'tests', '.wicked-editors-'));
 let written: Awaited<ReturnType<typeof buildEditors>>;
 
 beforeAll(async () => { written = await buildEditors(out, { version: '9.9.9' }); }, 60_000);
@@ -41,10 +41,17 @@ describe('the first-party editor bundles', () => {
       expect(html).toContain(`type:"plugin.ready"`.replace(/"/g, '"')); // the one window message is in the bundle
     }
   });
-  it('the page editor speaks wicked.editor/1 for `page` and asks only for what it uses', () => {
+  it('the deck manifest declares protocol 2, its unchanged surfaces and theme permission', () => {
+    const deck = written.find((w) => w.id === 'wicked-deck')!;
+    const manifest = JSON.parse(readFileSync(join(deck.dir, 'editor.json'), 'utf8'));
+    expect(manifest.protocol).toEqual([1, 2]);
+    expect(manifest.surfaces).toEqual(deckSurfaces);
+    expect(manifest.permissions.map((p: { id: string }) => p.id)).toContain('artifact.theme');
+  });
+  it('the page editor speaks wicked.editor/2 for `page` and asks only for what it uses', () => {
     const page = EDITORS.find((e) => e.id === 'wicked-page');
     expect(page?.kinds).toEqual(['page']);
-    expect(page?.protocol).toEqual([1]);
-    expect(page?.permissions.map((p) => p.id).sort()).toEqual(['artifact.read', 'artifact.write', 'network.media', 'selection.chip']);
+    expect(page?.protocol).toEqual([1, 2]);
+    expect(page?.permissions.map((p) => p.id).sort()).toEqual(['artifact.read', 'artifact.theme', 'artifact.write', 'network.media', 'selection.chip', 'ui.fullscreen']);
   });
 });
