@@ -5,6 +5,7 @@ import { TestingPage } from '../src/components/TestingPage.js';
 import { ApiError } from '../src/api/errors.js';
 import type { EvalReport } from '../src/api/testing.js';
 import { useGateStore } from '../src/store/gates.js';
+import { useEvalReportStore } from '../src/store/evalReport.js';
 
 /**
  * The Evals sub-page over the PINNED testing wire (`POST /testing/evals/run`,
@@ -26,6 +27,8 @@ const listRepos = vi.fn(() => Promise.resolve({ repos: [] }));
 vi.mock('../src/api/client.js', () => ({
   api: {
     listRepos: () => listRepos(),
+    // The surface reads the rules for "what evals can measure" (only effect-bearing rules gate).
+    listConformanceRules: () => Promise.resolve({ rules: [] }),
     launchRun: vi.fn(),
     confirmGate: vi.fn(),
     cancelRun: vi.fn(),
@@ -80,6 +83,8 @@ beforeEach(() => {
   apiFetch.mockReset();
   listRepos.mockClear();
   useGateStore.setState({ gates: {}, approaching: {} });
+  // A run made here is the newest answer (useLatestEval); never let one test's run leak into the next.
+  useEvalReportStore.setState({ latest: null });
 });
 
 describe('Evals — the run', () => {
@@ -94,6 +99,8 @@ describe('Evals — the run', () => {
     });
     page();
 
+    // Type and corpus sit behind the Run tile's "Type and corpus" (DES-steer-eval §3.1).
+    await user.click(screen.getByTestId('evaluate-options-toggle'));
     await user.selectOptions(screen.getByTestId('testing-evals-type'), 'security');
     await user.type(screen.getByTestId('testing-evals-corpus'), 'evals:dev-behaviors');
     await user.click(screen.getByTestId('testing-evals-run'));
@@ -107,7 +114,7 @@ describe('Evals — the run', () => {
     const summary = screen.getByTestId('testing-evals-summary');
     expect(summary).toHaveTextContent('1 blocked');
     expect(summary).toHaveTextContent('0 passed');
-    expect(summary).toHaveTextContent('1 uncovered behavior');
+    expect(summary).toHaveTextContent('1 uncovered behaviour');
     expect(summary).toHaveTextContent('1 false positives');
 
     // The report header names its corpus (provenance, qe finding).
@@ -198,7 +205,7 @@ describe('Evals — the run', () => {
 
     await user.click(screen.getByTestId('testing-evals-run'));
     await user.click(await screen.findByTestId('testing-evals-gap-toggle'));
-    expect(await screen.findByTestId('testing-evals-nearest-empty')).toHaveTextContent(/No nearby rules recalled/);
+    expect(await screen.findByTestId('testing-evals-nearest-empty')).toHaveTextContent(/No nearby rules/);
   });
 
   it('degraded: "facet-only" renders the VISIBLE no-embedder notice beside the real numbers', async () => {
@@ -208,7 +215,7 @@ describe('Evals — the run', () => {
 
     await user.click(screen.getByTestId('testing-evals-run'));
     expect(await screen.findByTestId('testing-evals-degraded')).toHaveTextContent(
-      'Facet match only: these runs matched rules on their tags alone, because this setup has no embedding model. Verdicts are real; the nearest-rule hints are weaker.',
+      'Tags only: these runs matched rules on their tags alone, because this setup has no embedding model. Verdicts are real; the nearest-rule hints are weaker.',
     );
     // The report still renders — degraded is a caveat, not a refusal.
     expect(screen.getByTestId('testing-evals-summary')).toHaveTextContent('3 samples');
@@ -296,6 +303,7 @@ describe('Evals — corpus import', () => {
     );
     expect(importBody).toEqual({ name: 'dev-behaviors', samples: SAMPLES });
     // The next run targets what just landed.
+    // The options open on their own so the operator sees where the scope went.
     expect(screen.getByTestId('testing-evals-corpus')).toHaveValue('evals:dev-behaviors');
   });
 
@@ -311,7 +319,7 @@ describe('Evals — corpus import', () => {
       screen.getByTestId('testing-corpus-file-input'),
       new File([JSON.stringify(SAMPLES)], 'x.json', { type: 'application/json' }),
     );
-    expect(await screen.findByTestId('testing-corpus-summary')).toHaveTextContent('Facet match only');
+    expect(await screen.findByTestId('testing-corpus-summary')).toHaveTextContent('tags only');
   });
 
   it('501 on import folds into the same honest core-ts callout', async () => {

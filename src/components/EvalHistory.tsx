@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { getEvalRun, listEvalRuns } from '../api/testing.js';
 import { isRouteAbsent, readErrorKind } from '../api/errors.js';
 import type { EvalRunDetail, EvalRunSummary } from '../api/types.js';
+import { storeMatch } from '../board/evalModel.js';
 import { absTime, relTime } from '../board/relTime.js';
 import { EmptyState, StateBanner } from './ui/index.js';
 
@@ -13,6 +14,9 @@ export function groupEvalRuns(runs: readonly EvalRunSummary[]): { key: string; r
   const signature = (r: EvalRunSummary): string => JSON.stringify([
     r.corpus, r.type_filter, r.degraded,
     r.summary.caught, r.summary.gaps, r.summary.false_positives, r.summary.total,
+    // Runs judged against different rule stores never fold together: the group's store tag is then
+    // true of every member (codex r2 #7).
+    r.rule_store,
   ]);
   let previousSignature: string | null = null;
   for (const run of runs) {
@@ -40,9 +44,12 @@ type DetailLoad =
   | { id: string; kind: 'ready'; data: EvalRunDetail };
 
 /** Persisted eval history; a group's drilldown always loads its newest run. */
-export function EvalHistory({ refreshKey = 0, now = Date.now() }: {
+export function EvalHistory({ refreshKey = 0, now = Date.now(), daemonStore = null }: {
   refreshKey?: number;
   now?: number;
+  /** This daemon's rule store (`GET /diagnostics`): a run judged against another one says so,
+   *  row by row and in its drill-down (DES-steer-eval §3.2). `null` = unknown: nothing is said. */
+  daemonStore?: string | null;
 }): React.ReactElement {
   const [load, setLoad] = useState<Load>({ kind: 'loading' });
   const [retryKey, setRetryKey] = useState(0);
@@ -119,6 +126,9 @@ export function EvalHistory({ refreshKey = 0, now = Date.now() }: {
               <span className="wk-evals-history-labels">
                 <span className="wk-evals-history-name">{r.corpus ?? 'built-in dev-behaviors'}</span>
                 <span className="wk-tag">{r.type_filter ?? 'all types'}</span>
+                {storeMatch(r.rule_store, daemonStore) === 'other' && (
+                  <span className="wk-tag wk-tag--gate" data-testid="eval-history-other-store" title={`Judged against ${r.rule_store}, not this daemon’s rule store`}>Another rule store</span>
+                )}
                 {r.degraded === 'facet-only' && (
                   <span className="wk-tag wk-tag--gate" title={EVAL_FACET_MATCH_EXPLANATION}
                     aria-label={`Facet match only: ${EVAL_FACET_MATCH_EXPLANATION}`}>Facet match only</span>
@@ -154,7 +164,7 @@ export function EvalHistory({ refreshKey = 0, now = Date.now() }: {
                       onRetry={() => loadDetail(detail.id)} />
                   </div>
                 ) : (
-                  <DetailBody detail={detail.data} />
+                  <DetailBody detail={detail.data} other={storeMatch(detail.data.rule_store, daemonStore) === 'other'} />
                 )}
               </div>
             )}
@@ -166,12 +176,21 @@ export function EvalHistory({ refreshKey = 0, now = Date.now() }: {
 }
 
 /** One run's rollup and non-caught samples. */
-function DetailBody({ detail }: { detail: EvalRunDetail }): React.ReactElement {
+function DetailBody({ detail, other }: { detail: EvalRunDetail; other: boolean }): React.ReactElement {
   const misses = detail.results.filter((x) => x.verdict !== 'caught');
+  // "caught" split as on the Evaluate tiles: a bad sample blocked vs a good one left alone.
+  const bad = detail.results.filter((x) => x.sample.kind === 'bad').length;
+  const blocked = detail.results.filter((x) => x.verdict === 'caught' && x.sample.kind === 'bad').length;
+  const passed = detail.results.filter((x) => x.verdict === 'caught' && x.sample.kind !== 'bad').length;
   return (
-    <div className="flex flex-col gap-2 text-xs">
-      <p className="wk-evals-muted">
-        {detail.summary.total} samples · {detail.summary.caught} caught · {detail.summary.gaps} gaps · {detail.summary.false_positives} false positives
+    <div className="flex flex-col gap-2 text-xs" data-testid="eval-history-detail-body">
+      {other && (
+        <p className="wk-field-note" data-testid="eval-history-detail-other-store">
+          Judged against a different rule store ({detail.rule_store}), not this daemon’s: it did not test the rules in force here.
+        </p>
+      )}
+      <p className="wk-evals-muted" data-testid="eval-history-detail-summary">
+        {detail.summary.total} samples · {blocked} of {bad} bad blocked · {passed} good left alone · {detail.summary.gaps} gaps · {detail.summary.false_positives} false positives
       </p>
       {misses.slice(0, 12).map((x) => (
         <div key={x.sample.id} className="wk-evals-history-miss">
@@ -183,7 +202,9 @@ function DetailBody({ detail }: { detail: EvalRunDetail }): React.ReactElement {
         </div>
       ))}
       {misses.length === 0 && (
-        <p className="wk-evals-caught">Every behavior caught — no gaps or false positives.</p>
+        <p className={bad > 0 ? 'wk-evals-caught' : 'wk-evals-muted'}>
+          {bad > 0 ? 'Every bad behaviour blocked, and no false alarms.' : 'No gaps or false alarms, but this run had no bad behaviours to block.'}
+        </p>
       )}
     </div>
   );

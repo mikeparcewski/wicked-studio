@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { RULES_PATH, rulePath } from '../src/api/decisions.js';
 import type { SteeringRule } from '../src/api/steering.js';
 import { fromYourWords, groupOf, orderRules, rulesSentence } from '../src/board/rulesPage.js';
-import { RulesPage } from '../src/components/rules/RulesPage.js';
+import { SteerSurface } from '../src/components/steer/SteerSurface.js';
 import { useSteeringRedirect } from '../src/hooks/useLegacyRedirect.js';
 import { parseRoute } from '../src/hooks/useRoute.js';
 import { ROUTE_SHAPES } from '../src/palette/routeTargets.js';
@@ -28,6 +28,8 @@ vi.mock('../src/api/client.js', () => ({
     listConformanceRules: (...a: unknown[]) => listConformanceRules(...a),
     retireConformanceRule: (...a: unknown[]) => retireConformanceRule(...a),
     upsertConformanceRule: (...a: unknown[]) => upsertConformanceRule(...a),
+    // The Steer surface's gate-check tile; an older crew without the route is "unsupported", never 0.
+    listClaims: () => Promise.reject(new Error('not in this fixture')),
   },
   apiFetch: (...a: unknown[]) => apiFetch(...a),
 }));
@@ -138,31 +140,44 @@ describe('the words (no rule model: grouping and counts over crew’s rules)', (
 });
 
 describe('the page', () => {
-  it('lists crew’s rules as sentences, grouped, each opening on its own address; "All rules" reaches the steering grid', async () => {
+  it('lists crew’s rules as sentences, most serious first after your words, each opening on its own address; the table editor is one link away', async () => {
     listConformanceRules.mockResolvedValue({ rules: [PATTERN, TESTING, WORDS] });
     const navigate = vi.fn();
-    render(<RulesPage ruleId={null} runs={[]} navigate={navigate} />);
+    render(<SteerSurface pathname="/rules" search="" runs={[]} navigate={navigate} />);
     await waitFor(() => expect(screen.getByTestId('rules-sentence').textContent).toBe('3 rules in force · 1 from your words · 1 testing rule'));
-    const groups = screen.getAllByTestId('rules-group').map((g) => g.getAttribute('data-group'));
-    expect(groups).toStrictEqual(['words', 'testing', 'other']);
     const rows = screen.getAllByTestId('rules-row');
+    // DES-steer-eval §2.2: your words first, then by severity (warn before info), then newest.
     expect(rows.map((r) => r.getAttribute('data-rule-id'))).toStrictEqual(['proposal:pr-auto', 'TST-1002', 'PAT-100']);
-    // The row's line is DC's sentence for the rule, with the project's NAME.
+    expect(rows.map((r) => r.getAttribute('data-group'))).toStrictEqual(['words', 'testing', 'other']);
+    // The row's line keeps DC's sentence for the rule (with the project's NAME) as its description.
     expect(rows[0]?.querySelector('[data-testid="rules-row-line"]')?.getAttribute('data-sentence')).toBe('A Development rule for Kestrel — helpers are told about it when it applies; it never blocks.');
-    // studio#689 row 46: tags, not the sentence repeated under every rule.
-    expect(rows[0]?.querySelector('[data-testid="rules-row-line"]')?.textContent).toBe('DevelopmentKestrelGuidanceWarning');
-    expect(screen.queryByTestId('rules-row-aside')).toBeNull();
+    // Short facts, not the sentence repeated under every rule: id, type, reach, origin.
+    expect(rows[0]?.querySelector('[data-testid="rules-row-line"]')?.textContent).toBe('Proposed ruleDevelopmentKestrelFrom your words');
     const open = rows[0]?.querySelector('[data-testid="rules-row-open"]') as HTMLAnchorElement;
     expect(open.getAttribute('href')).toBe('/rules/proposal%3Apr-auto');
     fireEvent.click(open);
     expect(navigate).toHaveBeenCalledWith('/rules/proposal%3Apr-auto');
-    const all = screen.getByTestId('rules-all');
-    expect(all.getAttribute('href')).toBe('/steering/policies');
-    fireEvent.click(all);
-    expect(navigate).toHaveBeenLastCalledWith('/steering/policies');
+    const table = screen.getByTestId('steer-table');
+    expect(table.getAttribute('href')).toBe('/steering/policies?view=table');
+    fireEvent.click(table);
+    expect(navigate).toHaveBeenLastCalledWith('/steering/policies?view=table');
     // No drawer without a rule in the address; "Followed" is nowhere (DC rev 2 B10).
     expect(screen.queryByTestId('steering-rule-drawer')).toBeNull();
     expect(document.body.textContent).not.toContain('Followed');
+  });
+
+  it('on a filtered view a rule opens with ?rule= so the filter stays, and closing drops only the rule', async () => {
+    listConformanceRules.mockResolvedValue({ rules: [PATTERN, TESTING, WORDS] });
+    const navigate = vi.fn();
+    const { rerender } = render(<SteerSurface pathname="/steering/policies" search="?type=testing" runs={[]} navigate={navigate} />);
+    const rows = await screen.findAllByTestId('rules-row');
+    expect(rows.map((r) => r.getAttribute('data-rule-id'))).toStrictEqual(['TST-1002']);
+    fireEvent.click(rows[0]!.querySelector('[data-testid="rules-row-open"]') as HTMLElement);
+    expect(navigate).toHaveBeenCalledWith('/steering/policies?type=testing&rule=TST-1002');
+    rerender(<SteerSurface pathname="/steering/policies" search="?type=testing&rule=TST-1002" runs={[]} navigate={navigate} />);
+    const drawer = await screen.findByTestId('steering-rule-drawer');
+    fireEvent.click(drawer.querySelector('[aria-label="Close rule detail"]') as HTMLElement);
+    expect(navigate).toHaveBeenLastCalledWith('/steering/policies?type=testing');
   });
 
   it('a newer read is never overwritten by an older one (StrictMode replays the mount read; a reload after Hold or Retire must win)', async () => {
@@ -170,7 +185,7 @@ describe('the page', () => {
     listConformanceRules
       .mockImplementationOnce(() => new Promise((r) => { first = r; }))
       .mockResolvedValueOnce({ rules: [PATTERN, TESTING] });
-    render(<StrictMode><RulesPage ruleId={null} runs={[]} navigate={vi.fn()} /></StrictMode>);
+    render(<StrictMode><SteerSurface pathname={'/rules'} search="" runs={[]} navigate={vi.fn()} /></StrictMode>);
     await waitFor(() => expect(screen.getAllByTestId('rules-row')).toHaveLength(2));
     first({ rules: [PATTERN] });
     await new Promise((r) => setTimeout(r, 20));
@@ -181,7 +196,7 @@ describe('the page', () => {
   it('/rules/:ruleId opens the rule as DC’s components — the sentence, ORIGIN, no Hold on a decision rule; closing returns to /rules', async () => {
     listConformanceRules.mockResolvedValue({ rules: [PATTERN, TESTING, WORDS] });
     const navigate = vi.fn();
-    render(<RulesPage ruleId="proposal:pr-auto" runs={[]} navigate={navigate} />);
+    render(<SteerSurface pathname={rulePath('proposal:pr-auto')} search="" runs={[]} navigate={navigate} />);
     const drawer = await screen.findByTestId('steering-rule-drawer');
     expect(drawer.querySelector('[data-testid="rule-sentence"]')?.textContent).toBe('A Development rule for Kestrel — helpers are told about it when it applies; it never blocks.');
     expect(drawer.querySelector('[data-testid="steering-rule-statement"]')?.textContent).toBe(WORDS.statement);
@@ -196,7 +211,7 @@ describe('the page', () => {
 
   it('Hold appears only where DC’s drawer renders it (a testing rule) — the page adds none of its own', async () => {
     listConformanceRules.mockResolvedValue({ rules: [PATTERN, TESTING, WORDS] });
-    render(<RulesPage ruleId="TST-1002" runs={[]} navigate={vi.fn()} />);
+    render(<SteerSurface pathname={rulePath('TST-1002')} search="" runs={[]} navigate={vi.fn()} />);
     const drawer = await screen.findByTestId('steering-rule-drawer');
     expect(drawer.textContent).toContain('Hold work to it');
     expect(screen.getAllByText('Hold work to it')).toHaveLength(1);
@@ -204,11 +219,11 @@ describe('the page', () => {
 
   it('the editor belongs to the address: Back to the list (or another rule) closes an open edit form (codex r1)', async () => {
     listConformanceRules.mockResolvedValue({ rules: [PATTERN, TESTING, WORDS] });
-    const { rerender } = render(<RulesPage ruleId="proposal:pr-auto" runs={[]} navigate={vi.fn()} />);
+    const { rerender } = render(<SteerSurface pathname={rulePath('proposal:pr-auto')} search="" runs={[]} navigate={vi.fn()} />);
     const drawer = await screen.findByTestId('steering-rule-drawer');
     fireEvent.click(drawer.querySelector('[data-testid="steering-edit-open"]') as HTMLElement);
     expect(screen.getByTestId('steering-rule-form')).toBeTruthy();
-    rerender(<RulesPage ruleId={null} runs={[]} navigate={vi.fn()} />);
+    rerender(<SteerSurface pathname={'/rules'} search="" runs={[]} navigate={vi.fn()} />);
     expect(screen.queryByTestId('steering-rule-form')).toBeNull();
     expect(screen.queryByTestId('steering-rule-drawer')).toBeNull();
   });
@@ -217,11 +232,11 @@ describe('the page', () => {
     listConformanceRules.mockResolvedValue({ rules: [PATTERN, TESTING, WORDS] });
     let finishA: (v: unknown) => void = () => {};
     upsertConformanceRule.mockImplementationOnce(() => new Promise((r) => { finishA = r; }));
-    const { rerender } = render(<RulesPage ruleId="proposal:pr-auto" runs={[]} navigate={vi.fn()} />);
+    const { rerender } = render(<SteerSurface pathname={rulePath('proposal:pr-auto')} search="" runs={[]} navigate={vi.fn()} />);
     const a = await screen.findByTestId('steering-rule-drawer');
     fireEvent.click(a.querySelector('[data-testid="steering-edit-open"]') as HTMLElement);
     fireEvent.click(screen.getByTestId('steering-form-save')); // A's save is in flight when the address moves on
-    rerender(<RulesPage ruleId="TST-1002" runs={[]} navigate={vi.fn()} />);
+    rerender(<SteerSurface pathname={rulePath('TST-1002')} search="" runs={[]} navigate={vi.fn()} />);
     const b = await screen.findByTestId('steering-rule-drawer');
     fireEvent.click(b.querySelector('[data-testid="steering-edit-open"]') as HTMLElement);
     expect((screen.getByTestId('steering-form-statement') as HTMLTextAreaElement).value).toBe(TESTING.statement);
@@ -236,11 +251,11 @@ describe('the page', () => {
     const BARE = rule({ ...TESTING, id: 'TST-2000', statement: 'A payments change gets a walkthrough.', obligations: [] });
     const TESTING2 = rule({ ...TESTING, id: 'TST-2001', statement: 'A schema change gets a migration review.' });
     listConformanceRules.mockResolvedValue({ rules: [BARE, TESTING2] });
-    const { rerender } = render(<RulesPage ruleId="TST-2000" runs={[]} navigate={vi.fn()} />);
+    const { rerender } = render(<SteerSurface pathname={rulePath('TST-2000')} search="" runs={[]} navigate={vi.fn()} />);
     const drawer = await screen.findByTestId('steering-rule-drawer');
     fireEvent.click(drawer.querySelector('[data-testid="steering-rule-hold-switch"]') as HTMLElement);
     expect(screen.getByTestId('steering-rule-hold-pick')).toBeTruthy();
-    rerender(<RulesPage ruleId="TST-2001" runs={[]} navigate={vi.fn()} />);
+    rerender(<SteerSurface pathname={rulePath('TST-2001')} search="" runs={[]} navigate={vi.fn()} />);
     const next = await screen.findByTestId('steering-rule-drawer');
     expect(next.querySelector('[data-testid="steering-rule-statement"]')?.textContent).toBe(TESTING2.statement);
     expect(screen.queryByTestId('steering-rule-hold-pick')).toBeNull();
@@ -250,7 +265,7 @@ describe('the page', () => {
     listConformanceRules.mockResolvedValue({ rules: [PATTERN, TESTING, WORDS] });
     let finishA: (v: unknown) => void = () => {};
     upsertConformanceRule.mockImplementationOnce(() => new Promise((r) => { finishA = r; }));
-    render(<RulesPage ruleId="proposal:pr-auto" runs={[]} navigate={vi.fn()} />);
+    render(<SteerSurface pathname={rulePath('proposal:pr-auto')} search="" runs={[]} navigate={vi.fn()} />);
     const drawer = await screen.findByTestId('steering-rule-drawer');
     fireEvent.click(drawer.querySelector('[data-testid="steering-edit-open"]') as HTMLElement);
     fireEvent.click(screen.getByTestId('steering-form-save')); // the first editor's save is in flight
@@ -266,7 +281,7 @@ describe('the page', () => {
 
   it('a rule the daemon does not list is said to be missing, with the rest of the page still there', async () => {
     listConformanceRules.mockResolvedValue({ rules: [PATTERN] });
-    render(<RulesPage ruleId="proposal:pr-gone" runs={[]} navigate={vi.fn()} />);
+    render(<SteerSurface pathname={rulePath('proposal:pr-gone')} search="" runs={[]} navigate={vi.fn()} />);
     await waitFor(() => expect(screen.getByTestId('rules-missing').textContent).toContain('proposal:pr-gone'));
     expect(screen.getAllByTestId('rules-row')).toHaveLength(1);
     expect(screen.queryByTestId('steering-rule-drawer')).toBeNull();
@@ -274,7 +289,7 @@ describe('the page', () => {
 
   it('a failed read says so and offers Try again; it is never shown as "no rules"', async () => {
     listConformanceRules.mockRejectedValueOnce(new Error('daemon away')).mockResolvedValueOnce({ rules: [PATTERN] });
-    render(<RulesPage ruleId={null} runs={[]} navigate={vi.fn()} />);
+    render(<SteerSurface pathname={'/rules'} search="" runs={[]} navigate={vi.fn()} />);
     const err = await screen.findByTestId('rules-error');
     expect(err.textContent).toContain('Couldn’t load the rules.');
     expect(within(err).getByTestId('rules-error-detail')).toHaveTextContent('daemon away');

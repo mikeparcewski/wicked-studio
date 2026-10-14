@@ -14,9 +14,16 @@ export interface EvalDeposit {
   report: EvalReport;
   /** What the report ran against (`null` = the built-in default corpus). */
   corpus: string | null;
-  /** When the report landed (ms epoch). */
+  /** When the report landed (ms epoch) — for display only, never for ordering. */
   at: number;
+  /** Its place in this tab's read/run sequence ({@link nextEvalSeq}): only a history read that
+   *  STARTED after it landed can supersede it (codex r3 #1). */
+  seq: number;
 }
+
+let evalSeq = 0;
+/** One counter for this tab's eval deposits and history reads: orders them without any clock. */
+export function nextEvalSeq(): number { evalSeq += 1; return evalSeq; }
 
 interface EvalReportState {
   latest: EvalDeposit | null;
@@ -25,5 +32,5 @@ interface EvalReportState {
 
 export const useEvalReportStore = create<EvalReportState>((set) => ({
   latest: null,
-  deposit: (report, corpus) => set({ latest: { report, corpus, at: Date.now() } }),
+  deposit: (report, corpus) => set({ latest: { report, corpus, at: Date.now(), seq: nextEvalSeq() } }),
 }));
