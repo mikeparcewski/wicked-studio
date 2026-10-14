@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { EditorHostPage } from './components/editors/EditorHostPage.js';
+import { useHostChrome } from './editors/hostApi.js';
 import { AskDock } from './components/AskDock.js';
 import { useAskDock, type AskRequest } from './store/askDock.js';
 import { useAskThreadStore } from './store/askThread.js';
@@ -119,6 +120,7 @@ const DESK_COMPOSER_PX = 96;
 export function App(): React.ReactElement {
   const { panel, runId, repoId, projectId, artifactId, showLaunch, campaignId, steeringSection, testingPage, artifactKey, navigate, search, pathname } = useRoute();
   const { runs, refresh, loaded: runsLoaded, error: runsError } = useRuns();
+  const navCollapsed = useHostChrome((s) => s.navCollapsed);
   const ingestGate = useGateStore((s) => s.ingest);
   const ingestCampaign = useCampaignsStore((s) => s.ingest);
   const ingestAnnotation = useAnnotationStore((s) => s.ingest);
@@ -700,7 +702,7 @@ export function App(): React.ReactElement {
   return (
     // One shell (S18d): the session rail on every route, the Desk on `/`. `data-shell="desk"` stays
     // stamped as a constant — e2e waits on it.
-    <div className="flex h-screen overflow-hidden bg-surface-base" data-shell="desk">
+    <div className="flex h-screen overflow-hidden bg-surface-base" data-shell="desk" data-nav-collapsed={navCollapsed ? 'true' : 'false'}>
       {/* The FIRST tabbable element (usability review #10): one Tab reaches a
           jump to the main content instead of a page's top-right Refresh. */}
       <SkipLink />

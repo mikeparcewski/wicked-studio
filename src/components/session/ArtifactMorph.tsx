@@ -11,6 +11,10 @@ import { PageEditor, type FrameParts } from './PageEditor.js';
 import { NoEditorPage, PluginArtifact } from './PluginArtifact.js';
 import { useEditorFor, useEditors } from '../../store/editors.js';
 import { DEMO_VIDEO_ID, openLaunchWizard } from '../../store/launchWizard.js';
+import { PluginCard } from '../editorHost/PluginCard.js';
+import { hasAdapter, type AdapterSource } from '../../editors/hostApi.js';
+// The adapters register on import; the routing above asks which exist.
+import '../../editors/adapters/index.js';
 
 /** WT-U1: a body other than the page-editor family — a run's walkthrough, a demo's video (EP-D3) —
  *  behind the same chrome: its kind (the artifact's `data-kind`) and the body drawn at each size.
@@ -47,7 +51,54 @@ type ExportLine =
   | { state: 'ready'; text: string; href: string; file: string }
   | { state: 'failed'; text: string };
 
-export function ArtifactMorph({ artifactKey, title, projectId, docId, composerKey, kind = 'page', repoId = null, slot }: {
+type ArtifactMorphProps = {
+  artifactKey: string;
+  title: string;
+  projectId: string;
+  docId: string;
+  composerKey: string;
+  kind?: EditorKind;
+  repoId?: string | null;
+  slot?: ArtifactSlot;
+  /** Who produced the version shown (H3 passes the seat), for the card's turn line. */
+  producedBy?: string | null;
+};
+
+/**
+ * H2 (DES-EDITOR-PLUGIN-CONTRACT-001 §7; HOST-API §2): an artifact whose kind an installed editor plugin claims is
+ * rendered by the host from the plugin's declaration — {@link PluginCard} (card, Options group, full screen) — when
+ * the plugin speaks protocol 2. A protocol-1 plugin renders exactly as today. Only a kind no plugin claims yet (a `document` until `wicked-doc`, H4b)
+ * and the slot bodies (walkthrough, demo video, plan, until H6) keep the morphing section below.
+ */
+/** The data plane a slot body lives in (HOST-API §2): a walkthrough's recording, a demo video's cut. */
+const SLOT_SOURCE: Readonly<Record<ArtifactSlot['kind'], AdapterSource | null>> = { walkthrough: 'walkthrough', 'demo-video': 'demo', plan: null };
+
+export function ArtifactMorph(props: ArtifactMorphProps): React.ReactElement {
+  // A slot (walkthrough, demo video) is claimed by its slot kind; anything else by the document's kind.
+  const kind: string = props.slot?.kind ?? props.kind ?? 'page';
+  const source: AdapterSource | null = props.slot === undefined ? 'interactive-doc' : SLOT_SOURCE[props.slot.kind];
+  const editor = useEditorFor(kind);
+  // A protocol-1 plugin keeps rendering exactly as today (DES §7.1, codex h2a-r1 P2); a plugin that speaks 2 is drawn
+  // from its declaration (and falls back to the v1 mapping inside the card if its declaration is refused).
+  // While the registry is read, nothing that registers or sizes the artifact mounts: the legacy section would take a
+  // deep link's size and, on unmounting, fold it back (a ?size=full address then never opened full; desk_artifact_address).
+  if (source !== null && hasAdapter(source) && editor === undefined) {
+    return <section data-testid="artifact-loading" aria-busy="true" aria-label={props.title} className="wk-pcard wk-pcard--opening" />;
+  }
+  if (source !== null && hasAdapter(source) && editor !== null && editor !== undefined && editor.protocol.includes(2)) {
+    // The run is the key's own prefix (`artifactKey(projectId, docId, runId)` = `<runId>:<projectId>/<docId>`).
+    const runId = props.artifactKey.includes(':') ? props.artifactKey.slice(0, props.artifactKey.indexOf(':')) : undefined;
+    return (
+      <PluginCard
+        binding={{ artifactKey: props.artifactKey, title: props.title, kind, source, projectId: props.projectId, docId: props.docId, ...(runId !== undefined ? { runId } : {}), composerKey: props.composerKey, repoId: props.repoId ?? null, producedBy: props.producedBy ?? null }}
+        editor={editor}
+      />
+    );
+  }
+  return <MorphingArtifact {...props} />;
+}
+
+function MorphingArtifact({ artifactKey, title, projectId, docId, composerKey, kind = 'page', repoId = null, slot }: {
   artifactKey: string;
   title: string;
   projectId: string;

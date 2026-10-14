@@ -855,6 +855,10 @@ export class EditorHost {
     return r;
   }
 
+  /** A version the host's own chrome wrote for this artifact (Match a website, HOST-API §4 tab footers): this editor's
+   *  session owns it, so the thread line's Undo (`undo`) may fork back from it. */
+  adopt(version: number): void { if (!this.torn) this.ownVersions.add(version); }
+
   /** A new version landed (interactive `version.created`): the plugin hears who wrote it. */
   artifactChanged(version: number, kind: VersionKind): void {
     const by = changedBy(version, kind, this.ownVersions);
