@@ -166,6 +166,7 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
     const start = async (): Promise<void> => {
       const decided = grantsProp !== undefined ? { grants: grantsProp, note: null } : await fetchGrants(editor.id, editor.version, editor.sha256, binding.projectId === '' ? null : binding.projectId);
       await adapter.refresh?.().catch(() => null);
+      announced.current = adapter.artifact().head;
       if (cancelled || frameBox.current === null) return;
       setNote(decided.note);
       const src = srcProp ?? bundleUrl(apiBase(), editor.id, editor.version, editor.sha256);
@@ -213,6 +214,7 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
           // A theme write (the only `thread` line without `written`) reaches the group's options instance too.
           thread: () => { const h = adapter.artifact().head; relay(group, 'card', { type: 'changed', head: h, kind: 'theme' }); },
           written: (w) => {
+            announced.current = w.version;
             relay(group, 'card', { type: 'changed', head: w.version, kind: 'deterministic' });
             if (live.current) setLine({ kind: 'edited', version: w.version, base: w.base, what: w.words ?? writtenWords(w.anchors, kind), verb: w.verb });
           },
@@ -254,6 +256,7 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
         void Promise.resolve(adapter?.refresh?.()).then(
           () => {
             hostRef.current?.adopt(v);
+            announced.current = v;
             hostRef.current?.artifactChanged(v, 'theme');
             if (live.current) setLine({ kind: 'edited', version: v, base: e.base ?? v, what: e.words, verb: 'restyled' });
           },
@@ -342,6 +345,8 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
   }, []);
 
   // A version a helper lands: this instance hears it, and so does the group's options instance.
+  /** The head every instance was last told about (the card's own writes and host-chrome writes included). */
+  const announced = useRef<number | null>(null);
   const busyRef = useRef(false);
   busyRef.current = busy;
   useEffect(() => {
@@ -349,9 +354,15 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
     const timer = setInterval(() => {
       if (busyRef.current) return;
       void adapter.refresh?.().then((moved) => {
-        if (moved === null || !live.current) return;
-        hostRef.current?.artifactChanged(moved.head, moved.kind);
-        relay(group, 'card', { type: 'changed', head: moved.head, kind: moved.kind });
+        if (!live.current) return;
+        // Announced by head, not only by a move this re-read saw: another read (an options frame's
+        // artifact.versions) may have moved the shared adapter's head first (codex h2-r15 P2).
+        const head = adapter.artifact().head;
+        if (moved === null && head === announced.current) return;
+        announced.current = head;
+        const kind = moved?.kind ?? 'generated';
+        hostRef.current?.artifactChanged(head, kind);
+        relay(group, 'card', { type: 'changed', head, kind });
       }).catch(() => undefined);
     }, IDLE_MS);
     return () => clearInterval(timer);
