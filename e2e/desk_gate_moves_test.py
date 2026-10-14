@@ -157,11 +157,15 @@ with sync_playwright() as p:
       const t = document.querySelector('[data-testid="session-gate-assurance-tech"]');
       const row = r ? r.closest('[data-testid="session-gate-row"]') : null;
       const toggles = row ? [...row.querySelectorAll('summary')].filter((x) => x.textContent.trim() === 'Technical details').length : null;
-      return r ? {kind: r.getAttribute('data-kind'), text: r.textContent + ' ' + (t ? t.textContent : ''), toggles} : null; }""")
+      const seen = (e) => !!e && e.getClientRects().length > 0;
+      return r ? {kind: r.getAttribute('data-kind'), text: r.textContent + ' ' + (t ? t.textContent : ''), toggles,
+                  leadSeen: seen(r.querySelector('.wk-assurance-lead')), techHidden: !seen(t)} : null; }""")
     check("gate-row-assurance-receipt", receipt is not None and receipt["kind"] == "independent"
           and receipt["text"].startswith("Checked independently")
           and "built by claude · evaluated by codex (separate seats)" in receipt["text"]
-          and "skipped: repo checks (not applicable)" in receipt["text"] and receipt["toggles"] == 1, receipt=receipt)
+          and "skipped: repo checks (not applicable)" in receipt["text"] and receipt["toggles"] == 1
+          # the lead is in the default layer (the row's Technical details may be open here: the journey read the verdict)
+          and receipt["leadSeen"], receipt=receipt)
     check("send-back-carries-the-first-finding", note is not None and "the regression test is missing" in note
           and "still reads" in note, note=note)
     set_fixture(origin, gate_move=False, gate_move_tail=False)

@@ -8,6 +8,9 @@ import { useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Composer, type ComposerSuggestion } from '../src/components/session/Composer.js';
 import { DEMO_VIDEO_ID, openLaunchWizard, resetLaunchWizard, useLaunchWizard } from '../src/store/launchWizard.js';
+import { demoVideoProjectOf } from '../src/components/session/RunArtifacts.js';
+import type { DocSummary } from '../src/api/interactive.js';
+import type { SessionView } from '../src/api/types.js';
 
 beforeEach(() => {
   resetLaunchWizard();
@@ -45,5 +48,22 @@ describe('turn suggestions in the composer', () => {
     unmount();
     render(<Harness suggestions={[]} />);
     expect(screen.queryByTestId('composer-suggestions')).toBeNull();
+  });
+});
+
+describe('which runs get the Demo video suggestion (demoVideoProjectOf)', () => {
+  const run = (project_id: unknown): SessionView => ({ session: { id: 'r1', project_id }, units: [] }) as unknown as SessionView;
+  const doc = (style: string | null): DocSummary => ({ name: 'd', kind: 'doc', style }) as unknown as DocSummary;
+  it('a deck or a document the run made: the run\'s project, unfiled too (as the header button did)', () => {
+    expect(demoVideoProjectOf(run('p1'), [doc('ppt')])).toBe('p1');
+    expect(demoVideoProjectOf(run('p1'), [doc('doc')])).toBe('p1');
+    expect(demoVideoProjectOf(run('default'), [doc('doc')])).toBe('default');
+  });
+  it('a page, nothing made, or no project: none', () => {
+    expect(demoVideoProjectOf(run('p1'), [doc('web')])).toBeNull();
+    expect(demoVideoProjectOf(run('p1'), [])).toBeNull();
+    expect(demoVideoProjectOf(run(null), [doc('ppt')])).toBeNull();
+    expect(demoVideoProjectOf(run(''), [doc('ppt')])).toBeNull();
+    expect(demoVideoProjectOf(null, [doc('ppt')])).toBeNull();
   });
 });

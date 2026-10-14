@@ -50,8 +50,7 @@ import { turnKey, useDecisionsStore } from '../../store/decisions.js';
 import { DecisionLine } from '../decisions/DecisionLine.js';
 import { TurnConsidered } from '../decisions/ConsideredLine.js';
 import { collapseArtifacts, paneOpen, useArtifactSizes } from '../../store/artifactSizes.js';
-import { RunArtifacts, useRunDocs } from './RunArtifacts.js';
-import { editorKindOf } from '../../board/artifactMorph.js';
+import { RunArtifacts, demoVideoProjectOf, useRunDocs } from './RunArtifacts.js';
 import { DEMO_VIDEO_ID, openLaunchWizard } from '../../store/launchWizard.js';
 import { OperatorMessage } from '../OperatorMessage.js';
 import { Markdown } from '../Markdown.js';
@@ -597,14 +596,13 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
   useEffect(() => () => collapseArtifacts(), [sessionId]);
 
   // DES §7.4: the retired "Demo video" header button is an ordinary turn suggestion — a run here that made a deck or a
-  // document in a project offers "Make a demo video of this", which opens the New job form's demo video in that project.
+  // document offers "Make a demo video of this", which opens the New job form's demo video in its project.
   const newest = mine.length > 0 ? mine[mine.length - 1] : null;
   const madeDocs = useRunDocs(newest);
   const suggestions = useMemo<ComposerSuggestion[]>(() => {
-    const projectId = newest?.session.project_id;
-    const made = madeDocs.some((d) => { const k = editorKindOf(d.style); return k === 'deck' || k === 'document'; });
-    if (!made || typeof projectId !== 'string' || projectId === '') return [];
-    return [{ id: 'demo-video', label: 'Make a demo video of this', title: 'A demo video of the running app, in this project',
+    const projectId = demoVideoProjectOf(newest, madeDocs);
+    if (projectId === null) return [];
+    return [{ id: 'demo-video', label: 'Make a demo video of this', title: 'A demo video of the running app, as a new job',
       onPick: () => openLaunchWizard({ workflowId: DEMO_VIDEO_ID, projectId, composerKey: sessionId }) }];
   }, [madeDocs, newest, sessionId]);
 
