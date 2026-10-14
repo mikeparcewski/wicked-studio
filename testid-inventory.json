@@ -11,9 +11,9 @@
   "version": 1,
   "studioVersion": "0.7.13",
   "counts": {
-    "files": 210,
-    "occurrences": 2515,
-    "static": 2192,
+    "files": 213,
+    "occurrences": 2547,
+    "static": 2223,
     "dynamic": 63,
     "computed": 24
   },
@@ -8451,6 +8451,18 @@
       ]
     },
     {
+      "testId": "run-chat-drawer",
+      "files": [
+        "src/components/session/SessionView.tsx"
+      ]
+    },
+    {
+      "testId": "run-chat-turn",
+      "files": [
+        "src/components/session/SessionView.tsx"
+      ]
+    },
+    {
       "testId": "run-codebase-zip",
       "files": [
         "src/components/session/CodebaseDownload.tsx"
@@ -8558,6 +8570,24 @@
       "files": [
         "src/components/FinishedRunRow.tsx",
         "src/components/everything/FinishedRunMenu.tsx"
+      ]
+    },
+    {
+      "testId": "run-gate-actions",
+      "files": [
+        "src/components/session/RunHost.tsx"
+      ]
+    },
+    {
+      "testId": "run-gate-approve",
+      "files": [
+        "src/components/session/RunHost.tsx"
+      ]
+    },
+    {
+      "testId": "run-gate-open",
+      "files": [
+        "src/components/session/RunHost.tsx"
       ]
     },
     {
@@ -8669,6 +8699,144 @@
       "testId": "run-revise-pr",
       "files": [
         "src/components/RunDelivery.tsx"
+      ]
+    },
+    {
+      "testId": "run-ribbon-line",
+      "files": [
+        "src/components/session/RunTab.tsx"
+      ]
+    },
+    {
+      "testId": "run-tab",
+      "files": [
+        "src/components/session/RunTab.tsx"
+      ]
+    },
+    {
+      "testId": "run-tab-acceptance",
+      "files": [
+        "src/components/session/RunTab.tsx"
+      ]
+    },
+    {
+      "testId": "run-tab-actions",
+      "files": [
+        "src/components/session/RunTab.tsx"
+      ]
+    },
+    {
+      "testId": "run-tab-agent",
+      "files": [
+        "src/components/session/RunTab.tsx"
+      ]
+    },
+    {
+      "testId": "run-tab-agents",
+      "files": [
+        "src/components/session/RunTab.tsx"
+      ]
+    },
+    {
+      "testId": "run-tab-checks",
+      "files": [
+        "src/components/session/RunTab.tsx"
+      ]
+    },
+    {
+      "testId": "run-tab-download",
+      "files": [
+        "src/components/session/RunTab.tsx"
+      ]
+    },
+    {
+      "testId": "run-tab-empty",
+      "files": [
+        "src/components/session/RunTab.tsx"
+      ]
+    },
+    {
+      "testId": "run-tab-look",
+      "files": [
+        "src/components/session/RunTab.tsx"
+      ]
+    },
+    {
+      "testId": "run-tab-orphaned",
+      "files": [
+        "src/components/session/RunTab.tsx"
+      ]
+    },
+    {
+      "testId": "run-tab-phase",
+      "files": [
+        "src/components/session/RunTab.tsx"
+      ]
+    },
+    {
+      "testId": "run-tab-phases",
+      "files": [
+        "src/components/session/RunTab.tsx"
+      ]
+    },
+    {
+      "testId": "run-tab-repo",
+      "files": [
+        "src/components/session/RunTab.tsx"
+      ]
+    },
+    {
+      "testId": "run-tab-run-pick",
+      "files": [
+        "src/components/session/RunTab.tsx"
+      ]
+    },
+    {
+      "testId": "run-tab-spend",
+      "files": [
+        "src/components/session/RunTab.tsx"
+      ]
+    },
+    {
+      "testId": "run-tab-stop",
+      "files": [
+        "src/components/session/RunTab.tsx"
+      ]
+    },
+    {
+      "testId": "run-tab-stop-confirm",
+      "files": [
+        "src/components/session/RunTab.tsx"
+      ]
+    },
+    {
+      "testId": "run-tab-stop-confirm-row",
+      "files": [
+        "src/components/session/RunTab.tsx"
+      ]
+    },
+    {
+      "testId": "run-tab-stop-keep",
+      "files": [
+        "src/components/session/RunTab.tsx"
+      ]
+    },
+    {
+      "testId": "run-tab-stranded",
+      "files": [
+        "src/components/session/RunTab.tsx"
+      ]
+    },
+    {
+      "testId": "run-tab-tech",
+      "files": [
+        "src/components/session/RunTab.tsx"
+      ]
+    },
+    {
+      "testId": "run-tab-workflow",
+      "files": [
+        "src/components/session/RunTab.tsx"
       ]
     },
     {
@@ -8903,6 +9071,12 @@
     },
     {
       "testId": "session-failed-resume-error-detail",
+      "files": [
+        "src/components/session/SessionView.tsx"
+      ]
+    },
+    {
+      "testId": "session-frame",
       "files": [
         "src/components/session/SessionView.tsx"
       ]
@@ -12554,6 +12728,18 @@
       "testId": "trust-receipt-question",
       "files": [
         "src/components/TrustReceipt.tsx"
+      ]
+    },
+    {
+      "testId": "turn-who",
+      "files": [
+        "src/components/session/TurnWho.tsx"
+      ]
+    },
+    {
+      "testId": "turn-who-seat",
+      "files": [
+        "src/components/session/TurnWho.tsx"
       ]
     },
     {
