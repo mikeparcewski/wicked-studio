@@ -80,6 +80,11 @@ export function ArtifactMorph(props: ArtifactMorphProps): React.ReactElement {
   const editor = useEditorFor(kind);
   // A protocol-1 plugin keeps rendering exactly as today (DES §7.1, codex h2a-r1 P2); a plugin that speaks 2 is drawn
   // from its declaration (and falls back to the v1 mapping inside the card if its declaration is refused).
+  // While the registry is read, nothing that registers or sizes the artifact mounts: the legacy section would take a
+  // deep link's size and, on unmounting, fold it back (a ?size=full address then never opened full; desk_artifact_address).
+  if (source !== null && hasAdapter(source) && editor === undefined) {
+    return <section data-testid="artifact-loading" aria-busy="true" aria-label={props.title} className="wk-pcard wk-pcard--opening" />;
+  }
   if (source !== null && hasAdapter(source) && editor !== null && editor !== undefined && editor.protocol.includes(2)) {
     // The run is the key's own prefix (`artifactKey(projectId, docId, runId)` = `<runId>:<projectId>/<docId>`).
     const runId = props.artifactKey.includes(':') ? props.artifactKey.slice(0, props.artifactKey.indexOf(':')) : undefined;

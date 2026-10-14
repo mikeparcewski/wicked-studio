@@ -73,6 +73,7 @@ export function EditorHostPage({ mode, navigate }: { mode: 'dev' | 'conformance'
   const frameBox = useRef<HTMLDivElement | null>(null);
   const composerBox = useRef<HTMLTextAreaElement | null>(null);
   const [mountKey, setMountKey] = useState(0);
+  const [showProtocol, setShowProtocol] = useState(false);
   const [size, setSize] = useState<Size>('pane');
   const [torn, setTorn] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
@@ -179,9 +180,19 @@ export function EditorHostPage({ mode, navigate }: { mode: 'dev' | 'conformance'
   return (
     <div data-testid="editor-host-page" data-mode={mode} className="wk-editor-page">
       {/* H7: the three surfaces, drawn by the run page's own host components from the plugin's declaration. */}
-      {mode === 'dev' && page.editor !== '' && page.version !== '' && page.sha !== '' && (
-        <EditorSurfacesView editor={page.editor} version={page.version} sha={page.sha} title={page.title} kind={page.kind} />
+      {mode === 'dev' && (
+        <>
+          <EditorSurfacesView editor={page.editor} version={page.version} sha={page.sha} title={page.title} kind={page.kind} />
+          {/* The one-frame protocol view stays for debugging, folded away (operator: it sat below the surfaces). */}
+          <p className="wk-editor-protocol-toggle">
+            <button type="button" data-testid="editor-protocol-toggle" aria-expanded={showProtocol} className="wk-since-toggle"
+              onClick={() => { setShowProtocol((v) => !v); setMountKey((k) => k + 1); }}>
+              {showProtocol ? 'Hide the one-frame protocol view' : 'Show the one-frame protocol view (sizes, log)'}
+            </button>
+          </p>
+        </>
       )}
+      {(mode === 'conformance' || showProtocol) && (<>
       <div ref={container} data-testid="editor-artifact-frame" data-size={size} className={`wk-editor-artifact wk-editor-artifact--${size}`}>
         <header className="wk-editor-head">
           <span className="wk-editor-title">{page.title}</span>
@@ -227,6 +238,7 @@ export function EditorHostPage({ mode, navigate }: { mode: 'dev' | 'conformance'
           />
         </div>
       </section>
+      </>)}
     </div>
   );
 }

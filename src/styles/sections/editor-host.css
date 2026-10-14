@@ -36,7 +36,8 @@
 .wk-pcard-action-wrap .wk-artifact-menu { top: calc(100% + 4px); bottom: auto; left: 0; right: auto; }
 
 /* ── full screen: the same card, morphed (the iframe never re-parents) ── */
-.wk-pcard--full { position: fixed; inset: 0; z-index: 40; margin: 0; max-width: none; border: 0; border-radius: 0; box-shadow: none; background: var(--surface-base); }
+/* Above the floating ask bubble (z 40), below the palette, modals and toasts (z 50). */
+.wk-pcard--full { position: fixed; inset: 0; z-index: 45; margin: 0; max-width: none; border: 0; border-radius: 0; box-shadow: none; background: var(--surface-base); }
 .wk-full { display: contents; }
 .wk-pcard--full .wk-full { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
 .wk-full-row--closed, .wk-full--closed .wk-full-body { display: contents; }

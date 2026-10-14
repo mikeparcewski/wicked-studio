@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { apiBase } from '../../api/client.js';
 import type { EditorView } from '../../api/editors.js';
 import { editedLine, notUndoneLine, undoneLine, writtenWords, type EditorKind, type WriteVerb } from '../../board/artifactMorph.js';
-import { focusBeside } from '../../editors/focus.js';
 import { EditorHost, type HostLogEntry } from '../../editors/host.js';
 import {
   LIVE_FRAME_CAP, adapterFor, dropLive, setGroupShown, groupKey, hostTabsFor, isLive, joinGroup, relay, touchLive, useHostChrome, useHostPanel, useLiveCards,
@@ -13,12 +12,11 @@ import type { PermissionId } from '../../editors/protocol.js';
 import type { CardAction, FullMode, Surfaces } from '../../editors/surfaces.js';
 import { readThemeTokens } from '../../editors/theme.js';
 import { artifactSizeOf, registerArtifact, setArtifactSize, useArtifactSizes } from '../../store/artifactSizes.js';
-import { addAboutChip } from '../../store/composerChips.js';
 import { useArtifactAddress } from '../session/ArtifactAddress.js';
 import { useEditorFor } from '../../store/editors.js';
-import { useSessionDrafts } from '../../store/sessionDrafts.js';
 import '../../editors/adapters/index.js';
 import './hostTabs.js';
+import { chipsToComposer, focusComposer, forwardedKey, typedToComposer } from './composerBridge.js';
 import { FullShell } from './FullShell.js';
 import { useRunHost } from './RunHostContext.js';
 
@@ -40,22 +38,11 @@ type Line =
   | { kind: 'drafted'; editor: string; text: string }
   | { kind: 'export'; out: ExportOutcome };
 
-function focusComposer(composerKey: string): void {
-  const el = document.querySelector<HTMLTextAreaElement>(`[data-testid="composer"][data-composer="${composerKey}"] textarea`);
-  if (el === null) return;
-  el.focus();
-  requestAnimationFrame(() => { const n = el.value.length; el.setSelectionRange(n, n); });
-}
-
 /** A plugin's own request to change a host surface (`ui.morph`, `ui.fullscreen`) is honoured only under the
  *  operator's real click INSIDE that plugin's frame (codex h2a-r1 P1): never a scripted morph. */
 export function clickedIn(frame: HTMLIFrameElement | null | undefined): boolean {
   const active = (navigator as Navigator & { userActivation?: { isActive: boolean } }).userActivation?.isActive === true;
   return active && frame != null && document.activeElement === frame;
-}
-
-function pressInHost(init: KeyboardEventInit): void {
-  document.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init }));
 }
 
 export function PluginCard(props: PluginCardProps): React.ReactElement {
@@ -156,6 +143,7 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
 
   const openOptions = useCallback((): void => {
     if (adapter === null || decl === null || loaded.current === null) return;
+    if (useHostPanel.getState().group?.key === group) return;
     openGroup({ key: group, binding, editor, surfaces: decl, protocol, src: loaded.current.src, grants: loaded.current.grants, adapter });
   }, [adapter, decl, group, binding, editor, protocol, openGroup]);
   const openOptionsRef = useRef(openOptions);
@@ -195,20 +183,13 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
         sizes: editor.sizes,
         ui: {
           // The binding is read through its ref: a composer that changes while the card stays mounted gets the chips.
-          chips: (chips) => { const b = bindingRef.current; for (const c of chips) if (c.anchor.kind === 'element') addAboutChip(b.composerKey, { kind: 'about', key: `el:${b.docId ?? b.artifactKey}/${c.anchor.id}`, label: c.label }); },
+          chips: (chips) => chipsToComposer(bindingRef.current, chips),
           draft: (text, chips) => { if (live.current) setLine({ kind: 'drafted', editor: editor.title, text: chips.length > 0 ? `${text} (about ${chips.map((c) => c.label).join(', ')})` : text }); },
-          typed: (g) => {
-            const key = bindingRef.current.composerKey;
-            const s = useSessionDrafts.getState();
-            s.setDraft(key, `${s.drafts[key] ?? ''}${g}`);
-            focusComposer(key);
-          },
+          typed: (g) => typedToComposer(bindingRef.current.composerKey, g),
           key: (k) => {
             // Escape is honoured only with the focus in this frame (codex h2a-r3 P1), like every plugin-made shrink.
             if (k === 'Escape') { if (clickedIn(hostRef.current?.frame) || document.activeElement === hostRef.current?.frame) leaveFull(); }
-            else if (k === 'Mod+K') pressInHost({ key: 'k', code: 'KeyK', metaKey: true, ctrlKey: true });
-            else if (k.startsWith('Alt+')) pressInHost({ key: k.slice(4).toLowerCase(), code: `Key${k.slice(4)}`, altKey: true });
-            else if (k === 'Tab' || k === 'Shift+Tab') focusBeside(hostRef.current?.frame ?? null, k === 'Shift+Tab');
+            else forwardedKey(k, hostRef.current?.frame ?? null);
           },
           // v1 sizes: pane is the Options group (the "Editor" tab), full is full screen, inline is the card.
           // A plugin never changes a host surface itself (codex h2a-r1/r2 P1): its ask to grow becomes a host-drawn
@@ -255,7 +236,13 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
     void start();
     const leave = joinGroup(group, 'card', (e) => {
       if (e.type === 'selection') hostRef.current?.relaySelection(e.anchors);
-      else hostRef.current?.artifactChanged(e.head, e.kind);
+      else if (e.type === 'changed') hostRef.current?.artifactChanged(e.head, e.kind);
+      else {
+        // A version the host's own chrome wrote for this artifact (Match a website): this card owns its Undo.
+        hostRef.current?.adopt(e.version);
+        hostRef.current?.artifactChanged(e.version, 'theme');
+        if (live.current) setLine({ kind: 'edited', version: e.version, base: e.base ?? e.version, what: e.words, verb: 'restyled' });
+      }
     });
     return () => {
       cancelled = true;
@@ -300,6 +287,18 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
     // Only this card's own full screen: another card's deep link may already own it (codex h2-r7 P2).
     else if (size === 'inline' && owner === key) exitFull();
   }, [size, key, ready, enterFull, exitFull]);
+  // The address says "pane" exactly while this card's Options group is open (operator: it said pane with nothing open):
+  // the Options button pushes it, closing the group (×) takes it back.
+  const pressOptions = (): void => {
+    openOptions();
+    if (address !== null && address.routeKey !== key && !fullRef.current) address.write(key, 'inline', 'pane');
+  };
+  const wasOpen = useRef(optionsOpen);
+  useEffect(() => {
+    const closed = wasOpen.current && !optionsOpen;
+    wasOpen.current = optionsOpen;
+    if (closed && address !== null && address.routeKey === key && !fullRef.current) address.write(key, 'pane', 'inline');
+  }, [optionsOpen, address, key]);
   const wasFull = useRef(full);
   useEffect(() => {
     if (wasFull.current === full) return;
@@ -357,7 +356,9 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
     setBusy(false);
   };
 
-  const exports = adapter?.capabilities().includes('export') === true ? (adapter.exports?.() ?? []) : [];
+  // Export needs the adapter's capability AND the editor's decided artifact.export grant (ev2-ports codex h4b-r2).
+  const exportGranted = loaded.current?.grants.includes('artifact.export') === true;
+  const exports = exportGranted && adapter?.capabilities().includes('export') === true ? (adapter.exports?.() ?? []) : [];
   const head = adapter?.artifact().head ?? 0;
   const exportAs = async (format: string): Promise<void> => {
     setExportOpen(false);
@@ -481,7 +482,7 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
           {gate}
           <span className="wk-pcard-gap" />
           {hasOptions && (
-            <button type="button" data-testid="plugin-card-options" aria-pressed={optionsOpen} className="wk-host-btn" onClick={openOptions} disabled={decl === null}>Options</button>
+            <button type="button" data-testid="plugin-card-options" aria-pressed={optionsOpen} className="wk-host-btn" onClick={pressOptions} disabled={decl === null}>Options</button>
           )}
           {hasFull && (
             <button type="button" data-testid="plugin-card-full" className="wk-host-btn" onClick={() => enterFull(binding.artifactKey)}>⤢ Full screen</button>

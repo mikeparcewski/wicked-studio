@@ -131,7 +131,9 @@ export function groupKey(editorId: string, artifactKey: string): string { return
  *  (`artifact.changed`), so every instance shows the same version. */
 export type GroupEvent =
   | { type: 'selection'; anchors: readonly AnchorRef[] }
-  | { type: 'changed'; head: number; kind: VersionKind };
+  | { type: 'changed'; head: number; kind: VersionKind }
+  /** The host's own chrome wrote this version (Match a website): the card instance adopts it and draws its Undo. */
+  | { type: 'wrote'; version: number; base: number | null; words: string };
 type GroupListener = (e: GroupEvent) => void;
 const relays = new Map<string, Map<string, GroupListener>>();
 /** An instance joins its group's relay; the returned function leaves it. */
