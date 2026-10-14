@@ -46,16 +46,51 @@ export function reviewSummary(rows: readonly ReviewRow[]): string {
   return parts.join(' · ');
 }
 
-/** Where an audience proposal stands for the version on screen: still being written, or ready to compare. */
+/** Where an audience proposal stands for the version on screen: still being written, ready to compare, or
+ *  stopped — its run ended without landing a version (studio#771). */
 export type ProposalView =
   | { state: 'none' }
   | { state: 'waiting'; base: number; audience: string }
+  | { state: 'stopped'; base: number; audience: string; how: 'cancelled' | 'failed' | 'ended' }
   | { state: 'ready'; base: number; proposed: number; audience: string };
 
-export function proposalView(p: DeckProposal | null, head: number): ProposalView {
+/** The fields of a run the proposal's run is found by (a `GET /runs` session). */
+export interface ProposalRunLike { id: string; workflow_id?: string | null; status: string; project_id?: string | null; created_at?: number; ended_at?: number; problem?: string }
+
+/** The run is launched AFTER the proposal opens (DeckReview opens it, then posts the batch), on the same daemon's
+ *  clock: one second covers `created_at`'s whole-second rounding, and nothing earlier is this proposal's run. */
+const RUN_SLACK_S = 1;
+
+/**
+ * studio#771: the run a proposal waits for. Crew names an edit run's document and the version it edits in its
+ * problem (`… document "<doc>" (editing version <n>) …`, crew `editProblem`), so the run is bound by both — never
+ * a nearby run of another document or another proposal (codex rp-r1). Of those created since the proposal opened
+ * (to the second), and not ended before it, the newest; `null` when none is listed (the proposal keeps waiting).
+ */
+export function proposalRun(runs: readonly ProposalRunLike[], p: DeckProposal | null, projectId: string, docId: string): ProposalRunLike | null {
+  if (p === null) return null;
+  const at = Date.parse(p.at) / 1000;
+  if (!Number.isFinite(at)) return null;
+  // The one structured marker, whole (codex rp-r4): the document and the version together, as crew writes them.
+  const marker = `document "${docId}" (editing version ${p.base})`;
+  const mine = runs.filter((r) => r.workflow_id === 'interactive-edit' && r.project_id === projectId
+    && typeof r.created_at === 'number' && r.created_at >= at - RUN_SLACK_S
+    // A run that had already ended when this proposal opened belongs to an earlier attempt (codex rp-r2: a
+    // quick Try again on the same document and version).
+    && !(typeof r.ended_at === 'number' && r.ended_at < at)
+    && typeof r.problem === 'string' && r.problem.includes(marker));
+  return [...mine].sort((a, b) => (b.created_at ?? 0) - (a.created_at ?? 0))[0] ?? null;
+}
+
+export function proposalView(p: DeckProposal | null, head: number, run: ProposalRunLike | null = null): ProposalView {
   if (p === null) return { state: 'none' };
   const audience = audienceLabel({ preset: p.preset, label: p.label });
-  return head > p.base ? { state: 'ready', base: p.base, proposed: head, audience } : { state: 'waiting', base: p.base, audience };
+  if (head > p.base) return { state: 'ready', base: p.base, proposed: head, audience };
+  // The run behind it ended and no version landed: nothing will — say so, never "a helper is working".
+  if (run !== null && (run.status === 'cancelled' || run.status === 'failed' || run.status === 'completed')) {
+    return { state: 'stopped', base: p.base, audience, how: run.status === 'completed' ? 'ended' : run.status };
+  }
+  return { state: 'waiting', base: p.base, audience };
 }
 
 /** One structural item of an audience change: the slide, by its own anchor, and what to do with it. */

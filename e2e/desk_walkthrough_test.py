@@ -301,7 +301,11 @@ with sync_playwright() as p:
 
         # ── a6. the demo video in the same slot (scene 41) ─────────────────────────────
         d0 = open_session(page, "r-walk-demo", "demo-video")
-        page.locator('[data-testid="artifact"][data-kind="demo-video"] [data-testid="artifact-open"]').click()
+        # studio#772: the inline player spans the card's middle (a click ON it plays it), so the catch
+        # is clicked in the open space beside the player.
+        catch = page.locator('[data-testid="artifact"][data-kind="demo-video"] [data-testid="artifact-open"]')
+        cb = catch.bounding_box()
+        catch.click(position={"x": cb["width"] - 16, "y": min(cb["height"] - 16, 140)})
         page.get_by_test_id("walkthrough-video").wait_for(state="visible", timeout=10000)
         page.wait_for_function("""() => { const v = document.querySelector('[data-testid="walkthrough-video"]'); return !!v && v.readyState >= 1; }""", timeout=10000)
         page.locator('[data-testid="walkthrough-marker"]').nth(1).click()

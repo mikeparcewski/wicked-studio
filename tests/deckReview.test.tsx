@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { proposalView, reviewRows, reviewSummary, adaptItems } from '../src/board/deckReview.js';
+import { proposalRun, proposalView, reviewRows, reviewSummary, adaptItems } from '../src/board/deckReview.js';
 import { deckOf } from '../src/board/deck.js';
 
 /**
@@ -86,6 +86,33 @@ describe('the review model', () => {
     // keep approved: the CURRENT approval (a) is left alone; a stale one (b) is rewritten
     expect(adaptItems(rows, { preset: 'eng' }, 'keep', true).map((i) => i.selector)).toStrictEqual(['section-1', 'section-2', 'section-3']);
     expect(adaptItems(rows, { preset: 'eng' }, 'keep', false)).toHaveLength(4);
+  });
+});
+
+describe('studio#771 — a rewrite whose run ended without landing', () => {
+  const p = { base: 3, preset: 'exec' as const, label: null, at: '2026-10-13T10:00:00Z' };
+  const at = Date.parse(p.at) / 1000;
+  const problem = (doc: string, v: number) => `Fulfil 6 structural edit(s) on the wicked-interactive document "${doc}" (editing version ${v}). Read the handoff file`;
+  const run = (over: Record<string, unknown>) => ({ id: 'r', workflow_id: 'interactive-edit', status: 'executing', project_id: 'proj', created_at: at + 2, problem: problem('deck-1', 3), ...over });
+  it('binds the proposal to the edit run naming its document AND the version it adapts', () => {
+    const runs = [run({ id: 'old', created_at: at - 600 }), run({ id: 'other-proj', project_id: 'x' }), run({ id: 'other-doc', created_at: at + 9, problem: problem('deck-10', 3) }),
+      run({ id: 'other-version', created_at: at + 8, problem: problem('deck-1', 4) }), run({ id: 'b', created_at: at + 3 }), run({ id: 'chat', workflow_id: 'ask' })];
+    expect(proposalRun(runs, p, 'proj', 'deck-1')?.id).toBe('b');
+    expect(proposalRun([run({ problem: 'edit deck-1' })], p, 'proj', 'deck-1')).toBeNull();
+    expect(proposalRun([run({ problem: `${problem('other', 3)} use "deck-1" as a reference` })], p, 'proj', 'deck-1')).toBeNull();
+    // codex rp-r2: a quick Try again — the earlier attempt's run (same doc, same version) is not this proposal's.
+    expect(proposalRun([run({ id: 'earlier', created_at: at - 20, status: 'cancelled', ended_at: at - 2 })], p, 'proj', 'deck-1')).toBeNull();
+    expect(proposalRun([run({ id: 'earlier2', created_at: at - 3, status: 'cancelled' })], p, 'proj', 'deck-1')).toBeNull();
+    expect(proposalRun([], p, 'proj', 'deck-1')).toBeNull();
+    expect(proposalRun(runs, null, 'proj', 'deck-1')).toBeNull();
+  });
+  it('a cancelled, failed or finished run with no new version is "stopped", never "a helper is working"', () => {
+    expect(proposalView(p, 3, run({ status: 'cancelled' }))).toStrictEqual({ state: 'stopped', base: 3, audience: 'Executives', how: 'cancelled' });
+    expect(proposalView(p, 3, run({ status: 'failed' }))).toMatchObject({ state: 'stopped', how: 'failed' });
+    expect(proposalView(p, 3, run({ status: 'completed' }))).toMatchObject({ state: 'stopped', how: 'ended' });
+    expect(proposalView(p, 3, run({ status: 'executing' }))).toMatchObject({ state: 'waiting' });
+    // A version that landed wins, whatever the run says.
+    expect(proposalView(p, 4, run({ status: 'cancelled' }))).toMatchObject({ state: 'ready', proposed: 4 });
   });
 });
 

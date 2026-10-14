@@ -132,7 +132,11 @@ with sync_playwright() as p:
           and any(c.startswith("about: chapter 2 · ") for c in chips), chips=chips, t=d1["video"]["t"])
 
     # ── 3. one player across the morph: the catch opens the pane ────────────────
-    page.locator('[data-testid="artifact"][data-kind="demo-video"] [data-testid="artifact-open"]').click()
+    # studio#772: the inline player spans up to 720px of the card, so the catch is clicked where it is
+    # reachable — the open space beside the player (a click ON the player plays it, rule 1).
+    catch = page.locator('[data-testid="artifact"][data-kind="demo-video"] [data-testid="artifact-open"]')
+    cb = catch.bounding_box()
+    catch.click(position={"x": cb["width"] - 16, "y": min(cb["height"] - 16, 140)})
     page.wait_for_function("""() => (document.querySelector('[data-testid="artifact"][data-kind="demo-video"]')||{}).dataset?.size === 'pane'""", timeout=5000)
     page.wait_for_timeout(700)
     d2 = page.evaluate(ART)
