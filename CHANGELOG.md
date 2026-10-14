@@ -12,6 +12,10 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+## [0.8.0] — 2026-10-14
+
+Desk v2: one Desk with Work, Report, Understand, Steer, Agents and Evaluate tabs; the Steer, Evaluate and Agents tabs rebuilt on real data; Slides for decks; a clearer run page; and editor plugin protocol 2 on the host side. Pins `wicked-crew-api-types` 0.116.0.
+
 ### Added
 - **Slides, a built-in editor plugin for decks** (`wicked-deck`, DES-PRESENTATION-EDITOR-001 P-D1). A deck opens in it instead of studio's own editor:
   - a filmstrip of the slides in document order, numbered by their place. Before, a moved slide kept its old number;
@@ -30,10 +34,17 @@ npm publish dates. Every version listed here exists on
 - The Plugins page opens real documents in the built-in editor. Its row lists the documents it opens, newest first, and a click opens that document full size in the editor, with its versions, instead of only the sample page. Written documents still open in studio's own editor, and the row says so.
 - **New job › Demo video** (#749, closes #664): a way back in to the demo recorder. The same form opens from ⌘K "New Demo", a deck or document's header, and Made › Videos.
 - The app builder ("Vibe") is listed as coming soon on the Plugins page and at the end of the New job cards. It is disabled and links nowhere: apps are built by pipelines today.
+- **The Steer and Evaluate tabs, rebuilt** (#758). Steer is one surface for `/rules`, `/steering/dashboard` and `/steering/policies`: rules in force, proposals and caught-in-the-last-eval tiles, the seven steering types as filter cards with a severity bar, the rule list (In force, Proposals, Retired) with search and Retire, import, add with chat, a health card, and "Edit as a table". Evaluate has Caught, Gaps and False alarms tiles, Run evals, coverage by steering type, gaps to close with **Draft rules** (it fills the steering assistant's composer; nothing is sent until you press Send), every behaviour with its nearest rule, and the run history. A failed eval read says so instead of "no eval yet".
+- **The Agents tab** (#759, DES-seats-page S3 + S4): one row per AI agent on crew's `/roster`, with its sign-in, whether it is ready for work, how its actions are checked, its version and its fixes; each agent opens one modal. Check now re-checks that agent on the service (`GET /roster?refresh=`). A new install that is not ready yet opens on the setup steps. `/agents` and `/everything?tab=helpers` open the tab.
+- **Sign in and Sign out in a login container** (#782, login scheme C4): for an agent crew marks `sign_in: 'container'` (wicked-crew#1006, under `WICKED_SEAT_FLOOR=container`), Sign in opens the agent's login container in studio's terminal over crew's PTY, in a window over the agent's modal, and the result re-checks the agent; Sign out signs it out through crew. Every other agent keeps the copy-the-command steps.
+- **Editor plugin protocol 2, host side** (#773, `wicked.editor/2`): a plugin declares its inline card, its options tabs and full screen (with optional Simple/Advanced), and the host renders them from the declaration. Protocol 1 plugins keep working through a mapping. No UI change yet.
 
 ### Fixed
 - A document opened from Everything made (`?open=`) now opens in the editor its recorded style picks. It had passed the document's kind as its style, so an unstyled or page document opened in studio's own editor instead of the built-in plugin, and a page document opened from a `kind=documents` address was not found.
 - Picking a version of a document opened on the Made list shows that version. The list had no address to write, so the pick did nothing.
+- **The run page says what is happening** (#760): a closed-chat ask run shows its open question with Approve / Approve and steer / Stop; the decision card sits right under the status sentence; a failed run says Failed everywhere and gives the engine's own reason when no step was refused; the status names the step ("Waiting on you at Test", "Failed at Build"); one step is marked now / waiting on you / stopped here.
+- A worker's open question survives a page reload (#769). An accepted review on a distinct agent counts as a check, so "nothing checked" shows only when nothing was (#770). A deck rewrite whose edit run ended with no new version says it stopped and offers Try again (#771). A demo video beside the thread fills its pane at 16:9 and the thread clears it; inline it is 16:9 up to 720 px (#772). (#774)
+- The Agents tab's tiles show their numbers inside the Desk (#783).
 
 ### Removed
 - The deck branch of studio's own document editor, and its slide strip. Decks open in Slides.
@@ -2145,7 +2156,8 @@ The merged interactive layer: wicked-interactive's UI moved into this skin (DES-
   `git subtree split` (92 commits).
 - The SPA as a pure HTTP/WS client of the wicked-crew daemon: runs, gates, live CoreEvents.
 
-[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.7.13...HEAD
+[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/mikeparcewski/wicked-studio/compare/v0.7.13...v0.8.0
 [0.7.13]: https://github.com/mikeparcewski/wicked-studio/compare/v0.7.12...v0.7.13
 [0.7.12]: https://github.com/mikeparcewski/wicked-studio/compare/v0.7.11...v0.7.12
 [0.7.11]: https://github.com/mikeparcewski/wicked-studio/compare/v0.7.10...v0.7.11
