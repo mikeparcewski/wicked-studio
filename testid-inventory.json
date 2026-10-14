@@ -12,8 +12,8 @@
   "studioVersion": "0.8.0",
   "counts": {
     "files": 228,
-    "occurrences": 2812,
-    "static": 2422,
+    "occurrences": 2813,
+    "static": 2423,
     "dynamic": 71,
     "computed": 24
   },
@@ -2025,6 +2025,12 @@
     },
     {
       "testId": "deck-notes-tab",
+      "files": [
+        "src/plugins/wicked-deck/plugin.ts"
+      ]
+    },
+    {
+      "testId": "deck-notes-toggle",
       "files": [
         "src/plugins/wicked-deck/plugin.ts"
       ]

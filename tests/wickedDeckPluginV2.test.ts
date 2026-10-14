@@ -141,7 +141,7 @@ describe('wicked-deck protocol 2 card and full', () => {
     expect(node('deck-fit').getAttribute('aria-pressed')).toBe('true');
     expect(node('deck-zoom-100').getAttribute('aria-pressed')).toBe('false');
     expect(getComputedStyle(document.querySelector('#slide-box')!).overflow).toBe('hidden');
-    expect(frame.srcdoc).toContain('html,body{overflow:hidden!important}');
+    expect(frame.srcdoc).toContain('[data-wi-deck-current]{position:absolute!important;left:0!important;top:0!important;width:1280px!important;height:720px!important');
   });
   it('marks overflowing measured content at the bottom/right and rejects foreign or malformed measurements', () => {
     const frame = stageFrame(); frame.dispatchEvent(new Event('load'));
