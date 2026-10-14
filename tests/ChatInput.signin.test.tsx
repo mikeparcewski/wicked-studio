@@ -53,14 +53,14 @@ describe('ChatInput seat sign-in warning (launch check)', () => {
 
     const warning = await screen.findByTestId('signin-warning');
     expect(warning).toHaveTextContent(
-      "⚠ codex isn't signed in — runs routed there will fall back or fail. Sign in in Settings.",
+      "⚠ codex isn't signed in — runs routed there will fall back or fail.",
     );
     expect(warning).not.toHaveTextContent('cursor');
     expect(warning).not.toHaveTextContent('antigravity');
     expect(warning).not.toHaveTextContent('claude');
   });
 
-  it('navigates to Settings (/system) from the warning', async () => {
+  it('links the warning to the agent’s fix on the Agents page (DES-seats-page §2.2)', async () => {
     const navigate = vi.fn();
     const user = userEvent.setup();
     vi.mocked(client.api.getRoster).mockResolvedValue({
@@ -70,8 +70,8 @@ describe('ChatInput seat sign-in warning (launch check)', () => {
     render(<ChatInput runId={null} runStatus={null} onLaunched={vi.fn()} navigate={navigate} />);
 
     await screen.findByTestId('signin-warning');
-    await user.click(screen.getByRole('button', { name: 'Open Settings' }));
-    expect(navigate).toHaveBeenCalledWith('/system');
+    await user.click(screen.getByRole('button', { name: 'How to sign in' }));
+    expect(navigate).toHaveBeenCalledWith('/agents?fix=codex');
   });
 
   it('does NOT block the launch — Send stays available with the warning up', async () => {

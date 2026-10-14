@@ -101,12 +101,12 @@ describe('the move calls the real route', () => {
     expect(result).toHaveTextContent('rule refused: bad id');
   });
 
-  it('sign-in opens the plain-words panel with the seat\'s own line (Amendment 5) — never a terminal', async () => {
+  it('sign-in opens the agent\'s modal with the seat\'s own line (DES-seats-page §4) — never a terminal', async () => {
     render(<HealthPage />);
     fireEvent.click(within(await moveOf('pi')).getByTestId('rail-seat-move-button'));
-    expect(await screen.findByTestId('signin-line')).toHaveTextContent('pi login');
-    expect(screen.getByRole('dialog')).toHaveTextContent('Sign in — Pi');
-    expect(screen.getByTestId('signin-check')).toBeInTheDocument();
+    expect(await screen.findByTestId('agents-command')).toHaveTextContent('pi login');
+    expect(screen.getByRole('dialog', { name: 'Pi' })).toBeInTheDocument();
+    expect(screen.getByTestId('agents-check')).toBeInTheDocument();
     expect(screen.queryByTestId('fake-terminal')).toBeNull();
     expect(upsertConformanceRule).not.toHaveBeenCalled();
   });

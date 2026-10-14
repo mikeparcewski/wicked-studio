@@ -4,6 +4,8 @@ import { skillsPath } from '../api/skills.js';
 import type { NeedRow } from './needsYou.js';
 import { DELIVERED_LINE, KEPT_LINE, jobTitle, jobTitleFull, keptLocally } from './deskWords.js';
 import { PAGE_NAMES } from './pageNames.js';
+import { agentFixPath } from '../hooks/useRoute.js';
+import { foldReviewers } from './agentsModel.js';
 import { sessionIdOf, sessionPath, sessionState as stateOfStatus, summarize, type SessionState } from './sessionModel.js';
 import { statusWord, type StatusTone, type StatusWord } from './statusWords.js';
 import { absTime, relTime } from './relTime.js';
@@ -359,7 +361,7 @@ export interface DeskChore {
   rosterSeat: RosterSeat;
   title: string;
   line: string;
-  /** The fallback address (Configuration); the Desk opens the sign-in panel in place instead. */
+  /** The fallback address (`/agents?fix=<key>`); the Desk opens the agent's modal in place instead. */
   action: { label: string; path: string };
 }
 
@@ -384,7 +386,10 @@ export function noSignedInHelper(roster: readonly RosterSeat[] | null): boolean 
 /** A seat whose sign-in lapsed is the one chore the wire can state today. */
 export function lapsedSeatChores(roster: readonly RosterSeat[] | null): DeskChore[] {
   if (roster === null) return [];
-  return roster
+  // One chore per agent: a reviewer-only seat named like an agent folds into it (#735), so the
+  // Desk never asks to sign "Claude Code (judge)" in beside Claude Code.
+  return foldReviewers(roster)
+    .map((f) => f.seat)
     .filter(signInLapsed)
     .map((s) => {
       const name = s.display_name || s.key;
@@ -394,7 +399,7 @@ export function lapsedSeatChores(roster: readonly RosterSeat[] | null): DeskChor
         rosterSeat: s,
         title: `An AI agent (${name}) needs signing in again`,
         line: 'No sign-in seen for it — work given to it may pause or move to another agent',
-        action: { label: 'Sign in', path: '/system' },
+        action: { label: 'Sign in', path: agentFixPath(s.key) },
       };
     });
 }

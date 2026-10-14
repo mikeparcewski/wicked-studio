@@ -26,7 +26,7 @@ import type {
   ProjectDetail,
   ProjectMember,
   RepoEntry,
-  RosterSeat,
+  RosterResponse,
   SessionView,
   ElicitationInfo,
   ElicitationResponse,
@@ -356,7 +356,8 @@ export const api = {
     }),
 
   /** The council seats for the launch form. */
-  getRoster: () => apiFetch<{ roster: RosterSeat[] }>('/roster'),
+  /** `GET /roster`; with `refresh` the daemon re-runs that agent's sign-in check and waits for it (≤ 20 s, api-types 0.115.0 A3b). */
+  getRoster: (refresh?: string) => apiFetch<RosterResponse>(refresh === undefined ? '/roster' : `/roster?refresh=${encodeURIComponent(refresh)}`),
   /** TR-W8: the watch feed (`GET /watch`, crew TR-W5a) — a late join's page, or one run's
    *  findings + coverage with `run`. A daemon before the registry 404s: callers read that as "no feed". */
   getWatch: (q: { run?: string; project?: string; kind?: string; limit?: number } = {}) => {
@@ -672,6 +673,14 @@ export const api = {
     apiFetch<{ settings: Record<string, unknown> }>('/settings', {
       method: 'PUT',
       body: JSON.stringify({ 'studio.composer': prefs }),
+    }),
+
+  /** DES-seats-page §5: `studio.setup` (first use: when setup completed or was skipped) rides the SAME
+   *  settings store; the merged blob it returns is the read-back. */
+  putSetupSettings: (setup: import('../board/firstUse.js').SetupState) =>
+    apiFetch<{ settings: Record<string, unknown> }>('/settings', {
+      method: 'PUT',
+      body: JSON.stringify({ 'studio.setup': setup }),
     }),
 
   /** DES-studio-rebuild S3: `studio.view` ("Show technical details") rides the SAME settings

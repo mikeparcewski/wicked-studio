@@ -5,9 +5,10 @@ import { useViewPrefsStore } from '../src/store/viewPrefs.js';
 import { ROSTER, WEEK } from './fixtures/seatWeek.js';
 
 /**
- * studio#467: the sign-in panel printed the worker home's absolute path. The line reads `~/…` in the
- * default layer; what Copy carries is the line as the daemon gave it (Amendment 5: studio shows the
- * command, the operator runs it — no terminal here).
+ * studio#467: the sign-in panel printed the worker home's absolute path. In the agent modal
+ * (DES-seats-page §4.2) the command reads `$HOME/…` — it expands inside the command's double quotes,
+ * `~` would not — and what Copy carries is the line as the daemon gave it (studio shows the command,
+ * the operator runs it — no terminal here).
  */
 const LINE = 'PI_CONFIG_DIR="/Users/reel-operator/.wicked-worker/pi" pi login';
 
@@ -27,8 +28,9 @@ const openSignIn = async (): Promise<void> => {
   render(<HealthPage />);
   const moves = await screen.findAllByTestId('rail-seat-move');
   fireEvent.click(within(moves.find((m) => m.getAttribute('data-seat') === 'pi')!).getByTestId('rail-seat-move-button'));
-  await screen.findByTestId('signin-line');
+  await screen.findByTestId('agents-command');
 };
+const shown = (): string => (screen.getByTestId('agents-command').textContent ?? '');
 
 beforeEach(() => {
   useConnectionStore.setState({ status: 'connected' });
@@ -36,19 +38,23 @@ beforeEach(() => {
 });
 afterEach(() => cleanup());
 
-describe('the sign-in panel never prints the home directory in the default layer', () => {
-  it('the line reads ~/…; Copy carries the line as given (Amendment 5: the panel shows, the operator runs)', async () => {
+describe('the agent modal never prints the home directory in the default layer', () => {
+  it('the command reads $HOME/…; Copy carries the line as given', async () => {
+    const writeText = vi.fn(() => Promise.resolve());
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
     await openSignIn();
-    expect(screen.getByTestId('signin-line')).toHaveTextContent('PI_CONFIG_DIR="~/.wicked-worker/pi" pi login');
+    expect(shown()).toBe('PI_CONFIG_DIR="$HOME/.wicked-worker/pi" pi login');
     expect(screen.getByRole('dialog').textContent).not.toContain('/Users/reel-operator');
-    expect(screen.getByTestId('copy-command')).toHaveAttribute('aria-label', 'copy the sign-in command for Pi');
-    expect(screen.getByTestId('copy-command').getAttribute('title') ?? '').not.toContain('/Users/reel-operator');
-    expect(screen.getByTestId('copy-command')).toHaveAttribute('data-command', LINE);
+    const copy = screen.getAllByTestId('agents-copy')[0]!;
+    expect(copy).toHaveAttribute('aria-label', 'Copy the sign-in command');
+    expect(copy.outerHTML).not.toContain('/Users/reel-operator');
+    fireEvent.click(copy);
+    expect(writeText).toHaveBeenCalledWith(LINE);
   });
 
-  it('with technical details on, the full path shows', async () => {
+  it('with technical details on, the command still reads $HOME (a command to retype, not a path to read)', async () => {
     useViewPrefsStore.setState((s) => ({ prefs: { ...s.prefs, technical_details: true } }));
     await openSignIn();
-    expect(screen.getByTestId('signin-line')).toHaveTextContent(LINE);
+    expect(shown()).toBe('PI_CONFIG_DIR="$HOME/.wicked-worker/pi" pi login');
   });
 });

@@ -20,7 +20,7 @@ vi.mock('../src/api/teamPlan.js', () => ({ teamPlanApi: {
 vi.mock('../src/api/diagnostics.js', () => ({ getDiagnostics: vi.fn().mockResolvedValue({}) }));
 vi.mock('../src/components/NotificationSettings.js', () => ({ NotificationSettings: () => null }));
 vi.mock('../src/components/Terminal.js', () => ({ Terminal: () => null }));
-vi.mock('../src/components/SignInPanel.js', () => ({ SignInPanel: () => null }));
+vi.mock('../src/components/agents/AgentModal.js', () => ({ AgentModal: () => null }));
 
 beforeEach(() => {
   cleanup();

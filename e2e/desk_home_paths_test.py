@@ -283,7 +283,7 @@ with sync_playwright() as p:
     check("run-page-no-home-path", not run_leaks and {"whatwhere", "files", "data", "delivery"} <= set(sections)
           and "~/w2/" in run_text, sections=sections, leaks=run_leaks)
 
-    # ── 6. #467: the sign-in panel's line ──────────────────────────────────────────
+    # ── 6. #467: the agent modal's sign-in command ──────────────────────────────────────────
     set_fixture(origin, seat_week=True)
     page.goto(f"{origin}/", wait_until="networkidle")
     link = page.get_by_test_id("desk-rail-health")
@@ -292,11 +292,12 @@ with sync_playwright() as p:
     pi_move = page.locator('[data-testid="rail-seat-move"][data-seat="pi"] [data-testid="rail-seat-move-button"]')
     pi_move.wait_for(state="visible", timeout=15000)
     pi_move.click()
-    page.get_by_test_id("signin-line").wait_for(state="visible", timeout=10000)
-    line = page.get_by_test_id("signin-line").inner_text()
+    page.get_by_test_id("agents-command").first.wait_for(state="visible", timeout=10000)
+    line = page.get_by_test_id("agents-command").first.inner_text()
     got = scan_now("signin")
     page.screenshot(path=str(SHOTS / "desk-home-paths-signin.png"))
-    check("signin-line-no-home-path", line.startswith('PI_CONFIG_DIR="~/w2/.wicked-worker/pi"') and got["text"] is None
+    # DES-seats-page §4.2: a command shows the home directory as $HOME (it expands inside the quotes).
+    check("signin-line-no-home-path", line.startswith('PI_CONFIG_DIR="$HOME/w2/.wicked-worker/pi"') and got["text"] is None
           and not got["titles"], line=line, leak=got["text"])
     page.keyboard.press("Escape")
     set_fixture(origin, seat_week=False)

@@ -118,7 +118,7 @@ with sync_playwright() as p:
         return {"href": href, "label": label, "ok": not dead and went, "pushed": pushed[:3], "landed": path}
 
     # ── 2. every parameterless destination ──────────────────────────────────────────
-    FIXED = {"/", "/watch", "/rules", "/everything?tab=sessions", "/everything?tab=made", "/everything?tab=helpers",
+    FIXED = {"/", "/watch", "/rules", "/everything?tab=sessions", "/everything?tab=made", "/agents",
              "/everything?tab=handed", "/everything?tab=projects", "/steering/dashboard",
              "/steering/policies", "/steering/memories", "/testing/evals", "/repos", "/repos/new",
              "/runs/new", "/workflows", "/skills", "/mcp", "/plugins", "/learn", "/system", "/theme", "/editors/dev"}
