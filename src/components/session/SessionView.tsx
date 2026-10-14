@@ -1,5 +1,5 @@
 import { CodebaseDownload, DeliverCredentialsNotice } from './CodebaseDownload.js';
-import { useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from 'react';
+import { Fragment, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { ApiError, api } from '../../api/client.js';
 import type { ChatPathView, CoreEvent, SessionView as RunView } from '../../api/types.js';
 import { needsByRun } from '../../board/deskModel.js';
@@ -66,6 +66,8 @@ import { splitToolFailures } from '../../board/askThread.js';
 import { useRoster } from '../../hooks/useRoster.js';
 import { isCliSeat, seatLabel } from '../../board/seatNames.js';
 import { chatStatusWord } from '../../board/statusWords.js';
+import { CREW, gateResponder, responderKey, turnResponder, type Responder } from '../../board/responder.js';
+import { TurnWho } from './TurnWho.js';
 
 /** S16a-2c: the hash that lands a run's session on its sheet's Governance tab. */
 export const GOVERNANCE_HASH = '#governance';
@@ -337,6 +339,12 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
       ? isAskTurnGate(askKnow, askRunId, askGate.gateKind, askGate.prompt, askGate.ord)
       : askView?.session.status !== 'awaiting_human' || askRunId in turnGates));
 
+  // H3: who responded, per thread entry (the roster names the seats).
+  const roster = useRoster();
+  const whoOfEntry = (e: ThreadEntry): Responder => (e.kind === 'turn' || e.kind === 'typing' ? turnResponder(e.who, roster)
+    : e.kind === 'proposal' ? turnResponder(e.ask.by, roster) : CREW);
+  // The closed line above the entries is crew's: the first crew entry under it needs no second label.
+  const leadWho: Responder | null = conversation === 'closed' && mine.length > 0 ? CREW : null;
   const badges = useMemo(() => needsByRun(needRows), [needRows]);
   const badge = mine.reduce((n, v) => n + (badges[v.session.id] ?? 0), 0);
   const state: SessionState = mine.some((v) => v.session.status === 'awaiting_human') ? 'waiting'
@@ -654,7 +662,10 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
           }}
         >
           {conversation === 'closed' && mine.length > 0 && (
-            <p data-testid="session-closed-line" className="wk-session-grey">{CLOSED_LINE}</p>
+            <>
+              <TurnWho who={CREW} />
+              <p data-testid="session-closed-line" className="wk-session-grey">{CLOSED_LINE}</p>
+            </>
           )}
           {chatError !== null && (
             <StateBanner data-testid="session-chat-error" kind={readErrorKind(chatError)} what="this conversation" error={chatError}
@@ -692,7 +703,15 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
           {ready && ref.kind === 'chat' && !askPathOn && conversation === 'live' && messages.length > 0 && (
             <p data-testid="session-ask-older" className="wk-session-grey">Every helper answers at once in this conversation: this version of Studio’s service has no reviewer or help requests.</p>
           )}
-          {entries.map((e) => (e.kind === 'line'
+          {entries.map((e, i) => {
+            // H3: who responded. A turn says it in its own bubble; any other entry gets the line when the
+            // responder changes (consecutive crew lines share one), so the thread reads as a conversation.
+            const who = whoOfEntry(e);
+            const prev = i === 0 ? leadWho : whoOfEntry(entries[i - 1]!);
+            const label = e.kind !== 'turn' && (prev === null || responderKey(prev) !== responderKey(who))
+              ? <TurnWho who={who} runId={e.kind === 'run' || e.kind === 'proposal' ? e.view.session.id : askRunId} {...(e.kind === 'typing' ? { suffix: 'thinking' } : {})} />
+              : null;
+            const node = (e.kind === 'line'
             ? <AskLineView key={e.key} line={e.line} onSignIn={() => openSheet({ kind: 'session', sessionId }, 'signins')} onRetry={askTeamRetry} />
             : e.kind === 'typing'
               ? <AskTyping key={e.key} who={e.who} />
@@ -701,7 +720,7 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
                 : e.kind === 'turn'
             ? (
               <div key={e.key} data-testid="session-turn" data-who={e.who === 'you' ? 'you' : 'helper'} {...(e.pending ? { 'data-pending': 'true' } : {})} className={`wk-session-turn wk-session-turn--${e.who === 'you' ? 'you' : 'helper'}${e.pending ? ' wk-session-turn--pending' : ''}`}>
-                <p className="wk-session-who">{e.who === 'you' ? 'You' : e.pending ? `${e.who} · answering` : e.who}</p>
+                <TurnWho who={who} runId={askRunId} {...(e.pending ? { suffix: 'answering' } : {})} />
                 {e.who === 'you'
                   ? <p className={`wk-session-text${e.ok ? '' : ' wk-session-grey'}`}><OperatorMessage text={e.text} /></p>
                   : (
@@ -719,7 +738,9 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
                 {e.who === 'you' && ref.kind === 'chat' && e.turnId !== null && <TurnDecisions chatId={ref.chatId} turnId={e.turnId} navigate={navigate} />}
               </div>
             )
-            : <RunBlock key={e.key} view={e.view} badge={badges[e.view.session.id] ?? 0} sessionId={sessionId} navigate={navigate} solo={mine.length === 1 ? title : null} />))}
+            : <RunBlock key={e.key} view={e.view} badge={badges[e.view.session.id] ?? 0} sessionId={sessionId} navigate={navigate} solo={mine.length === 1 ? title : null} />);
+            return <Fragment key={e.key}>{label}{node}</Fragment>;
+          })}
           {/* S16a-4g: the chat's own question and gate (keyed by the chat id) at the thread's foot. */}
           {ref.kind === 'chat' && <ChatQuestions chatId={ref.chatId} />}
         </div>
@@ -904,6 +925,9 @@ export function RunBlock({ view, badge, sessionId, navigate, solo = null }: {
       {/* S15e: plan and deliver go through ProposalCard; every other gate kind is answered in the thread.
           Run clarity: the action comes first — the card sits right under the status sentence, above the
           run's notes (who reviewed, what wasn't checked), so what you can do is never below the fold. */}
+      {/* H3: a gate a seat raised is labelled with the seat that is asking (crew's own gates sit under the
+          run's crew line). */}
+      <GateAsker view={view} gate={gate} />
       {effectiveKind === 'plan' || effectiveKind === 'deliver'
         ? <ProposalCard view={view} chain={chain} acceptance={acceptance?.summary ?? null} />
         : finished === 'handed'
@@ -935,6 +959,14 @@ export function RunBlock({ view, badge, sessionId, navigate, solo = null }: {
       <RunHelpers view={view} />
     </section>
   );
+}
+
+/** H3: the seat asking at a run's open gate, when a seat raised it; nothing for crew's own gates. */
+function GateAsker({ view, gate }: { view: RunView; gate: { ord: number; gateKind?: string } | undefined }): React.ReactElement | null {
+  const roster = useRoster();
+  const who = gateResponder(view, gate, roster);
+  if (gate === undefined || who.role !== 'seat') return null;
+  return <TurnWho who={who} runId={view.session.id} suffix="is asking" className="wk-who--asking" />;
 }
 
 /**
