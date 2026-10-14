@@ -83,6 +83,7 @@ export interface HostAdapter {
   write(base: number, items: WireItem[], summary: string): Promise<AdapterResult<{ version: number }>>;
   undo(version: number): Promise<AdapterResult<{ undone: true }>>;
   fork(from: number): Promise<AdapterResult<{ version: number }>>;
+  checks?(): Promise<AdapterResult<{ checks: { id: string; text: string }[]; total: number }>>;
   exportAs?(format: string): Promise<AdapterResult<{ started: true }>>;
   /** Protocol 2 `theme.set` (§6): write the artifact's theme tokens on `base`, as a new version. */
   theme?(base: number, tokens: Record<string, unknown>): Promise<AdapterResult<{ version: number }>>;
@@ -485,6 +486,7 @@ export class EditorHost {
     switch (type) {
       case 'artifact.read': return a.read(typeof p['version'] === 'number' ? p['version'] : undefined);
       case 'artifact.versions': return a.versions();
+      case 'checks.read': return a.checks !== undefined ? a.checks() : { error: 'unsupported', message: 'no checks for this artifact' };
       case 'version.write': {
         if (this.writing) return { error: 'rate_limited', message: 'one write at a time' };
         if (a.artifact().readonly) return { error: 'refused', message: 'this artifact is read-only here' };

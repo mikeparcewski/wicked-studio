@@ -2,6 +2,7 @@ import { ApiError } from '../api/errors.js';
 import { getVersions, HeadMovedError, interactiveDocUrl, postDeckOp, postEvent, postFork, putLearnedTheme, type VersionEntry } from '../api/interactive.js';
 import { notUndoneLine } from '../board/artifactMorph.js';
 import { FEEDBACK_EVENT } from '../interactive/feedbackBatch.js';
+import type { DocumentRequirements } from './adapters/requirements.js';
 import type { AdapterResult, ArtifactRef, HostAdapter, MovedOn } from './host.js';
 import type { VersionKind } from './model.js';
 import type { WireItem } from './ops.js';
@@ -39,6 +40,7 @@ export class InteractiveDocAdapter implements HostAdapter {
   readonly writes = new Map<number, number>();
 
   private readonly pollForMs: number;
+  private readonly requirements: (() => Promise<DocumentRequirements>) | undefined;
 
   constructor(
     private readonly projectId: string,
@@ -46,9 +48,20 @@ export class InteractiveDocAdapter implements HostAdapter {
     private readonly title: string,
     private readonly kind: string = 'page',
     private readonly onHead?: (head: number) => void,
-    opts: { pollForMs?: number } = {},
+    opts: { pollForMs?: number; requirements?: () => Promise<DocumentRequirements> } = {},
   ) {
     this.pollForMs = opts.pollForMs ?? POLL_FOR_MS;
+    this.requirements = opts.requirements;
+  }
+
+  async checks(): Promise<AdapterResult<{ checks: { id: string; text: string }[]; total: number }>> {
+    if (this.requirements === undefined) return { error: 'unsupported', message: 'no requirements source for this artifact' };
+    try {
+      const { rows, total } = await this.requirements();
+      return { checks: rows.map((r) => ({ id: r.id, text: r.title })), total };
+    } catch {
+      return { error: 'unavailable', message: 'the requirements could not be read' };
+    }
   }
 
   artifact(): ArtifactRef {
