@@ -1775,3 +1775,57 @@ html :is(input, textarea)::placeholder { color: var(--ink-placeholder); opacity:
   .wk-health-row > span:nth-child(3) { flex-basis: 100%; padding-left: 20px; margin-left: 0 !important; text-align: left !important; }
   .wk-health-card p, .wk-health-card span { overflow-wrap: break-word !important; word-break: normal; }
 }
+
+/* H3: the run tab of the host panel */
+.wk-run-tab { display: flex; flex-direction: column; gap: var(--space-4); min-width: 0; color: var(--ink-body); font-size: var(--text-sm); }
+.wk-run-tab-section { min-width: 0; padding-top: var(--space-3); border-top: 1px solid var(--border); }
+.wk-run-tab-heading { margin: 0 0 var(--space-2); color: var(--ink-high); font-size: var(--text-xs); font-weight: var(--weight-semi); }
+.wk-run-tab-line { margin: var(--space-1) 0; overflow-wrap: anywhere; }
+.wk-run-tab-muted { color: var(--ink-muted); }
+p.wk-run-tab-muted { margin: var(--space-1) 0; }
+.wk-run-tab-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-2); }
+.wk-run-tab-phase, .wk-run-tab-agent { display: flex; align-items: baseline; gap: var(--space-2); }
+.wk-run-tab-phase[data-current="true"] { color: var(--ink-high); font-weight: var(--weight-semi); }
+.wk-run-tab-pill { display: inline-block; padding: 2px var(--space-2); border: 1px solid var(--border); border-radius: var(--radius-full); color: var(--ink-muted); font-size: var(--text-xs); font-weight: var(--weight-medium); }
+.wk-run-tab-pick, .wk-run-tab-button { padding: var(--space-1) var(--space-2); border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-card); color: var(--ink-body); font: inherit; }
+.wk-run-tab-pick { width: 100%; }
+.wk-run-tab-button { min-height: var(--control-h-sm); cursor: pointer; }
+.wk-run-tab-button:disabled { color: var(--ink-muted); cursor: default; }
+.wk-run-tab-name, .wk-run-tab-ribbon { border: none; padding: 0; background: none; color: var(--ink-body); font: inherit; text-align: left; cursor: pointer; }
+.wk-run-tab-name:hover { text-decoration: underline; }
+.wk-run-tab-warning { margin: 0; padding: var(--space-2); border-left: 2px solid var(--border); color: var(--ink-muted); }
+.wk-run-tab-confirm { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin-top: var(--space-2); }
+.wk-run-tab-tech { margin-top: var(--space-3); color: var(--ink-muted); font-size: var(--text-xs); overflow-wrap: anywhere; }
+.wk-run-tab-tech summary { cursor: pointer; }
+.wk-run-tab-ribbon { display: block; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-muted); font-size: var(--text-xs); }
+.wk-run-tab :is(button, select, summary):focus-visible, .wk-run-tab-ribbon:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-shadow: var(--focus-ring); }
+/* H3: the run page is the chat — the thread beside the one host panel (option B), the ribbon below 1200 px. */
+.wk-session-frame { flex: 1 1 auto; display: flex; min-width: 0; min-height: 0; }
+.wk-session-frame > .wk-session { flex: 1 1 auto; }
+.wk-session-frame > .wk-hpanel { overflow: hidden; }
+/* A slot artifact (walkthrough, demo video, plan) opened beside the thread takes the panel's place until it
+   moves into the panel's options tabs (H6): the two never stack on the same strip of the page. */
+.wk-session-frame:has(> .wk-session--pane) > .wk-hpanel,
+.wk-session-frame:has(> .wk-session--pane) > [data-testid="host-panel-ribbon"] { display: none; }
+.wk-session-frame > .wk-hpanel .wk-hpanel-body { overflow-y: auto; }
+@media (max-width: 1199px) {
+  .wk-session-frame { flex-direction: column; }
+  .wk-session-frame > [data-testid="host-panel-ribbon"] { order: -1; flex-shrink: 0; }
+}
+/* H3: who responded — a quiet name line over each turn and card; seat, you, or crew. */
+.wk-who { display: flex; align-items: center; gap: 6px; margin: 0; font-size: var(--text-xs); font-weight: var(--weight-semi); color: var(--ink-muted); }
+.wk-who-dot { width: 6px; height: 6px; border-radius: 999px; background: var(--border); flex-shrink: 0; }
+.wk-who--seat .wk-who-dot { background: var(--accent); }
+.wk-who--operator .wk-who-dot { background: var(--ink-high); }
+.wk-who--crew { color: var(--ink-dim); font-weight: var(--weight-normal); }
+.wk-who-name { font: inherit; color: inherit; }
+button.wk-who-name { background: none; border: 0; padding: 0; cursor: pointer; }
+button.wk-who-name:hover { text-decoration: underline; }
+.wk-who-suffix { font-weight: var(--weight-normal); }
+.wk-who--asking, .wk-who--made { margin-top: 6px; }
+.wk-run-gate-actions { display: inline-flex; gap: 6px; }
+/* H3: the full-screen chat drawer's compact thread. */
+.wk-run-chat { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+.wk-run-chat-thread { flex: 1 1 auto; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding: 12px; }
+.wk-run-chat-turn .wk-session-text { margin: 2px 0 0; }
+.wk-run-chat-composer { flex-shrink: 0; margin: 8px 12px 12px; }
