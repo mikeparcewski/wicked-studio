@@ -1,4 +1,4 @@
-import { demoFileUrl, getDemo } from '../../api/demo.js';
+import { demoFileUrl, getDemo, type DemoView } from '../../api/demo.js';
 import { interactiveUrl } from '../../api/interactive.js';
 import { walkthroughApi, walkthroughFileUrl } from '../../api/walkthrough.js';
 import { checksTrack, exportOptions, failedChapter, recordingOf, recordingOfDemo, takeFingerprint, type Recording } from '../../board/walkthroughModel.js';
@@ -7,6 +7,7 @@ import { defaultVideoStyle, type DemoChapter, type DemoCut, type RecordingProof 
 import type { AdapterResult, ArtifactRef } from '../host.js';
 import { registerAdapter, type AdapterCapability, type ArtifactBinding, type ExportOption, type ExportOutcome, type StatusPill, type SurfaceAdapter } from '../hostApi.js';
 import type { MediaRef } from '../protocol.js';
+import { publishRecording, withdrawRecording } from '../../store/recordings.js';
 
 /**
  * The video data planes (HOST-API §3, slice H6), so `wicked-video` edits what `WalkthroughEditor` showed:
@@ -79,8 +80,16 @@ export class RecordingSurfaceAdapter implements SurfaceAdapter {
 
   private async load(): Promise<Recording> {
     const runId = this.binding.runId ?? '';
-    const demo = this.source === 'demo' ? await getDemo(runId) : null;
-    const rec = demo !== null ? recordingOfDemo(demo) : recordingOf(await walkthroughApi.view(runId, null));
+    let demo: DemoView | null;
+    let rec: Recording;
+    try {
+      demo = this.source === 'demo' ? await getDemo(runId) : null;
+      rec = demo !== null ? recordingOfDemo(demo) : recordingOf(await walkthroughApi.view(runId, this.binding.docId || null));
+      publishRecording(rec);
+    } catch (e) {
+      if (this.source === 'walkthrough') withdrawRecording(runId);
+      throw e;
+    }
     const content = JSON.stringify({
       cut: cutOfRecording(rec, this.binding.title), video: rec.video, step: rec.step,
       state: rec.state, chapters: rec.chapters.length,

@@ -155,7 +155,28 @@ describe('recording gate controls in host chrome', () => {
       ? <RecordingGateActions runId={RUN} kind="demo-video" step={null} units={units} />
       : controls(scenario === 'watch only' ? [] : units));
     await act(async () => { await Promise.resolve(); });
-    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    if (scenario === 'demo') expect(fetchMock).not.toHaveBeenCalled();
+    else await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    expect(container.innerHTML).toBe('');
+  });
+
+  it.each([undefined, '', STEP])('passes the bound walkthrough docId=%s to gate reads', async docId => {
+    const { fetchMock } = server();
+    const b = { ...binding, source: 'walkthrough' as const, kind: 'walkthrough', ...(docId === undefined ? {} : { docId }) };
+    render(<>{recordingGateActions(b, units)}</>);
+    await screen.findByTestId('walkthrough-fix');
+    const reads = fetchMock.mock.calls.filter(([url]) => url.includes('/walkthrough'));
+    expect(String(reads[0]?.[0])).toContain(`/api/v1/runs/run%20one/walkthrough${docId ? `?step=${STEP}` : ''}`);
+  });
+
+  it('mounts walkthrough loading only when the kind becomes walkthrough', async () => {
+    const { fetchMock } = server();
+    const { rerender, container } = render(<RecordingGateActions runId={RUN} kind="demo-video" step={null} units={units} />);
+    await act(async () => { await Promise.resolve(); });
+    expect(fetchMock).not.toHaveBeenCalled(); expect(container.innerHTML).toBe('');
+    rerender(controls()); await screen.findByTestId('walkthrough-fix');
+    expect(fetchMock).toHaveBeenCalled();
+    rerender(<RecordingGateActions runId={RUN} kind="demo-video" step={null} units={units} />);
     expect(container.innerHTML).toBe('');
   });
 
@@ -175,16 +196,41 @@ describe('host chapter retake', () => {
     const fetchMock = vi.fn(async (url: string): Promise<Response> => url.endsWith('/takes')
       ? new Promise<Response>(resolve => { finish = resolve; }) : json(demoCut4));
     vi.stubGlobal('fetch', fetchMock);
-    render(<RetakeChapter adapter={adapter} chapter="open-the-scope" />);
+    const onChanged = vi.fn();
+    render(<RetakeChapter adapter={adapter} chapter="open-the-scope" onChanged={onChanged} />);
     const button = screen.getByTestId('demo-retake-chapter');
     fireEvent.click(button);
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
     expect((button as HTMLButtonElement).disabled).toBe(true);
+    expect(onChanged).not.toHaveBeenCalled();
     expect(fetchMock.mock.calls[1]?.[0]).toContain('/api/demo/takes');
     await act(async () => { finish(json({ rev: 2, version: 2 })); });
     expect((button as HTMLButtonElement).disabled).toBe(false);
     expect(screen.getByTestId('demo-retake-note').textContent).toBe('The chapter was recorded again.');
     expect(adapter.artifact().head).toBe(2);
+    expect(onChanged).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders only a retake for demo cuts and forwards onChanged after success without loading a run recording', async () => {
+    const { fetchMock } = server(); const onChanged = vi.fn();
+    const adapter = new DemoCutSurfaceAdapter({ ...binding, docId: 'demo cut' });
+    const retake = vi.spyOn(adapter, 'retake').mockResolvedValue({ version: 2 });
+    render(<RecordingGateActions runId={RUN} kind="demo-video" step={null} units={units} onChanged={onChanged} retake={{ adapter, chapter: 'open-the-scope' }} />);
+    expect(screen.queryByTestId('walkthrough-actions')).toBeNull();
+    fireEvent.click(screen.getByTestId('demo-retake-chapter'));
+    await waitFor(() => expect(onChanged).toHaveBeenCalledTimes(1));
+    expect(retake).toHaveBeenCalledWith('open-the-scope'); expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('does not call onChanged for adapter errors or thrown retake failures', async () => {
+    const adapter = new DemoCutSurfaceAdapter({ ...binding, docId: 'demo cut' }); const onChanged = vi.fn();
+    const retake = vi.spyOn(adapter, 'retake').mockResolvedValueOnce({ error: 'unavailable', message: 'offline' }).mockRejectedValueOnce(new Error('failed'));
+    render(<RetakeChapter adapter={adapter} chapter="open-the-scope" onChanged={onChanged} />);
+    fireEvent.click(screen.getByTestId('demo-retake-chapter'));
+    await waitFor(() => expect(screen.getByTestId('demo-retake-note').textContent).toBe('offline'));
+    fireEvent.click(screen.getByTestId('demo-retake-chapter'));
+    await waitFor(() => expect(screen.getByTestId('demo-retake-note').textContent).toBe('failed'));
+    expect(retake).toHaveBeenCalledTimes(2); expect(onChanged).not.toHaveBeenCalled();
   });
 
   it('shows a refused chapter request and offers the verb only with demo retake props', async () => {

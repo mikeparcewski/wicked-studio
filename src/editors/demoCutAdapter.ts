@@ -42,6 +42,7 @@ export class DemoCutAdapter implements HostAdapter {
   }
   private async load(): Promise<DemoCut> {
     const raw = await this.json<DemoCut>('cut');
+    // Preserve E1's resolvedTheme alongside the stored style: skin colours are resolved by crew per render.
     const cut = timedCut({ ...raw, type: 'demo-cut', title: this.title, style: effectiveVideoStyle(this.title, raw.style) });
     this.cut = cut; this.snapshots.set(cut.version, cut); this.setHead(cut.version);
     return cut;
