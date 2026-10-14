@@ -26,8 +26,7 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 export const EDITORS = [
   {
     id: 'wicked-page',
-    // The operator's name for it (2026-10-12): the editor of an interactive document, plainly.
-    title: 'Document',
+    title: 'Page',
     protocol: [1, 2],
     kinds: ['page'],
     sizes: ['inline', 'pane', 'full'],
@@ -38,6 +37,22 @@ export const EDITORS = [
       { id: 'network.media', why: 'to show the page’s web images and fonts' },
       { id: 'artifact.theme', why: 'to change the page’s theme, colours and fonts from its Style tab, as one version with Undo' },
       { id: 'ui.fullscreen', why: 'to show the page full screen' },
+    ],
+  },
+  {
+    id: 'wicked-doc',
+    title: 'Document',
+    protocol: [1, 2],
+    kinds: ['document'],
+    sizes: ['inline', 'pane', 'full'],
+    permissions: [
+      { id: 'artifact.read', why: 'to show the document and read its words' },
+      { id: 'artifact.write', why: 'to land what you type on an element as one version, with Undo' },
+      { id: 'selection.chip', why: 'to make the element you click the subject of your next message' },
+      { id: 'network.media', why: 'to show the document’s web images and fonts' },
+      { id: 'checks.read', why: 'to show which requirements this document names' },
+      { id: 'artifact.theme', why: 'to change the document’s theme, colours and fonts from its Style tab, as one version with Undo' },
+      { id: 'ui.fullscreen', why: 'to show the document full screen' },
     ],
   },
   {

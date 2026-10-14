@@ -38,6 +38,7 @@ export class InteractiveDocAdapter implements HostAdapter {
   readonly writes = new Map<number, number>();
 
   private readonly pollForMs: number;
+  private readonly requirements: (() => Promise<{ id: string; title: string }[] | null>) | undefined;
 
   constructor(
     private readonly projectId: string,
@@ -45,9 +46,20 @@ export class InteractiveDocAdapter implements HostAdapter {
     private readonly title: string,
     private readonly kind: string = 'page',
     private readonly onHead?: (head: number) => void,
-    opts: { pollForMs?: number } = {},
+    opts: { pollForMs?: number; requirements?: () => Promise<{ id: string; title: string }[] | null> } = {},
   ) {
     this.pollForMs = opts.pollForMs ?? POLL_FOR_MS;
+    this.requirements = opts.requirements;
+  }
+
+  async checks(): Promise<AdapterResult<{ checks: { id: string; text: string }[] }>> {
+    if (this.requirements === undefined) return { error: 'unsupported', message: 'no requirements source for this artifact' };
+    try {
+      const rows = await this.requirements();
+      return { checks: (rows ?? []).map((r) => ({ id: r.id, text: r.title })) };
+    } catch {
+      return { error: 'unavailable', message: 'the requirements could not be read' };
+    }
   }
 
   artifact(): ArtifactRef {
