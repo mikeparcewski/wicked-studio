@@ -12,23 +12,27 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+## [0.9.3] — 2026-10-15
+
+A patch release: the project page builds the project's code graph, a question card names the seat that asked, and the Desk no longer calls open chats "runs working".
+
 ### Added
 - The project page builds the project's code graph (#802). The Repositories section shows the graph's
   standing in crew's words and a **Build code graph** button (**Refresh code graph** once it is built)
   that calls `POST /projects/:id/graph/refresh` — the control crew's chat scope names ("build it from
   the project page"). The button says it is building until crew answers, then shows what was indexed
-  and names any repository that could not be.
+  and names any repository that could not be (#803).
 
 ### Fixed
 - A run's question card names the seat that asked. With helpers, the card read "Codex · is asking" for a question a pi
   helper asked: it named the seat running the run's current step. It now reads the asking seat from the question
   (`seat`, from wicked-core's ask frame), else the asking step's seat (`ord`), and only then the current step's seat, as
-  before. Kept across a reload when the daemon returns them on `GET /runs/:id/elicitation`.
+  before. Kept across a reload when the daemon returns them on `GET /runs/:id/elicitation` (#801).
 - The Desk's "Nothing needs you" line no longer counts an open chat as a run working. It read "5 runs working" beside
   "Running now 0 · nothing executing": the five were chats waiting for their next message. A paused run read as working
   the same way. The calm line and the Desk's Alt peek now count by the Running now card's own rule ("N runs working, M
   chats open", "nothing running right now; M chats open", "· N running · M chats open"), and the card's note says
-  "working now" / "nothing running", since it also counts runs that are still planning.
+  "working now" / "nothing running", since it also counts runs that are still planning (#804).
 
 ## [0.9.2] — 2026-10-15
 
@@ -2219,7 +2223,8 @@ The merged interactive layer: wicked-interactive's UI moved into this skin (DES-
   `git subtree split` (92 commits).
 - The SPA as a pure HTTP/WS client of the wicked-crew daemon: runs, gates, live CoreEvents.
 
-[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.9.2...HEAD
+[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.9.3...HEAD
+[0.9.3]: https://github.com/mikeparcewski/wicked-studio/compare/v0.9.2...v0.9.3
 [0.9.2]: https://github.com/mikeparcewski/wicked-studio/compare/v0.9.1...v0.9.2
 [0.9.1]: https://github.com/mikeparcewski/wicked-studio/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/mikeparcewski/wicked-studio/compare/v0.8.0...v0.9.0
