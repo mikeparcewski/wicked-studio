@@ -4,16 +4,16 @@ import type { Navigate } from '../../hooks/useRoute.js';
 import { useWatchFeed } from '../../hooks/useWatchFeed.js';
 import { attentionBadge } from '../../board/attention.js';
 import type { NeedRow } from '../../board/needsYou.js';
+import { deskLiveCounts } from '../../board/statusWords.js';
 
-/** Not running: finished, or stopped at a gate (a gate is waiting on you, not working — metrics.ts). */
-const NOT_RUNNING: ReadonlySet<string> = new Set(['completed', 'failed', 'cancelled', 'awaiting_human']);
 
 /** How long the card stays open after it opened itself for something new that needs you. */
 export const SELF_OPEN_MS = 8_000;
 
-/** The runs moving right now. */
+/** The runs moving right now: the Desk's own count (statusWord via deskLiveCounts), so a gate, a paused
+ *  run, an idle chat and a run Needs you holds are not "running" here either (studio#805). */
 export function liveCount(runs: readonly SessionView[]): number {
-  return runs.filter((v) => !NOT_RUNNING.has(v.session.status)).length;
+  return deskLiveCounts(runs).working;
 }
 
 /** The Watchtower's one quiet sentence, from the SAME count the Desk says (DES-STUDIO §3 rule 10). */

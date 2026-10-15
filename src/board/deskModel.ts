@@ -6,7 +6,7 @@ import { DELIVERED_LINE, KEPT_LINE, jobTitle, jobTitleFull, keptLocally } from '
 import { PAGE_NAMES } from './pageNames.js';
 import { agentFixPath } from '../hooks/useRoute.js';
 import { foldReviewers } from './agentsModel.js';
-import { sessionIdOf, sessionPath, sessionState as stateOfStatus, summarize, type SessionState } from './sessionModel.js';
+import { runState, sessionIdOf, sessionPath, summarize, type SessionState } from './sessionModel.js';
 import { statusWord, type StatusTone, type StatusWord } from './statusWords.js';
 import { absTime, relTime } from './relTime.js';
 
@@ -179,7 +179,7 @@ function toSessions(
     const deliveredJustNow = deliveredNow.has(newest);
     // The dot's word: the newest run whose own state is the session's (live work first, as `summarize`).
     // A run that really waits on you outranks an answered ask parked at its turn gate.
-    const matching = [...views].reverse().filter((v) => stateOfStatus(v.session.status) === sum.state);
+    const matching = [...views].reverse().filter((v) => runState(v) === sum.state);
     const setter = matching.find((v) => statusWord(v).word !== 'Answered') ?? matching[0] ?? newestView ?? views[0]!;
     const kept = !deliveredJustNow && sum.state === 'done' && sum.badge === 0 && newestView !== undefined && keptLocally(newestView);
     return {

@@ -48,6 +48,7 @@ import type { ComposerSend } from './components/session/Composer.js';
 import { ObjectSheet } from './components/sheets/ObjectSheet.js';
 import { AltPeek } from './components/sheets/AltPeek.js';
 import { needRunId } from './board/deskModel.js';
+import { markHeld } from './board/heldRuns.js';
 import { objectCommands, type ObjectCommands } from './components/sheets/objectCommands.js';
 import { cmdkObject, trackPointedObject } from './store/sheets.js';
 import { useNeedsClock, useNeedsRows } from './hooks/useNeedsRows.js';
@@ -451,6 +452,9 @@ export function App(): React.ReactElement {
   const needRows = useNeedsRows(runs, needsNow, runsLoaded);
   // The runs a Needs-you row holds: the Desk peek leaves them out of "running", as Running now does.
   const heldByNeeds = useMemo(() => new Set(needRows.map(needRunId).filter((id): id is string => id !== null)), [needRows]);
+  // studio#805: the Desk's surfaces read a held live run as waiting on you (statusWord reads the mark).
+  // Needs-you rows above are folded from the raw runs; gate logic and actions keep the raw runs too.
+  const shownRuns = useMemo(() => markHeld(runs, heldByNeeds), [runs, heldByNeeds]);
 
   // ── Studio wave 2a: peek (P), jump (G), back (B) — and the panels "back" reopens ──
   const peek = usePeekJump(runs, navigate, needRows);
@@ -503,7 +507,7 @@ export function App(): React.ReactElement {
       // The Helpers tab moved to the Agents page (DES-seats-page §2.2): its old address redirects.
       if (new URLSearchParams(search).get('tab') === 'helpers') return <RouteRedirect to={AGENTS_PATH} navigate={navigate} />;
       // Like the Desk: the page owns its scroller (`.wk-desk-scroll`) — no clipping wrapper (main_scroll).
-      return <EverythingPage runs={runs} runsLoaded={runsLoaded} runsError={runsError} onRetryRuns={refresh} needRows={needRows} navigate={navigate} search={search} />;
+      return <EverythingPage runs={shownRuns} runsLoaded={runsLoaded} runsError={runsError} onRetryRuns={refresh} needRows={needRows} navigate={navigate} search={search} />;
     }
     // Wave 1 ("raw in one step"): a run's raw event JSON / worktree files as routes — the
     // palette's `>events <run>` / `>files <run>` verbs land here, and Back returns.
@@ -529,7 +533,7 @@ export function App(): React.ReactElement {
           artifactKey={artifactKey}
           artifactSize={sizeOf(search)}
           artifactVersion={versionOf(search)}
-          runs={runs}
+          runs={shownRuns}
           runsLoaded={runsLoaded}
           runsError={runsError}
           onRetryRuns={refresh}
@@ -543,7 +547,7 @@ export function App(): React.ReactElement {
     // still at `/runs`, which the `panel === 'runs'` fallback below keeps rendering.
     if (panel === 'home') {
       // The Desk (S4) — the one shell since the classic skins retired (S18d).
-      return <DeskV2 hosted={renderHosted} runs={runs} runsLoaded={runsLoaded} runsError={runsError} onRetryRuns={refresh} needRows={needRows} now={needsNow} navigate={navigate} onCommand={openPalette} search={search} />;
+      return <DeskV2 hosted={renderHosted} runs={shownRuns} runsLoaded={runsLoaded} runsError={runsError} onRetryRuns={refresh} needRows={needRows} now={needsNow} navigate={navigate} onCommand={openPalette} search={search} />;
     }
     if (panel === 'workflows') {
       return (
@@ -580,7 +584,7 @@ export function App(): React.ReactElement {
     if (panel === 'watch') {
       return (
         <div className="flex flex-1 overflow-hidden">
-          <WatchtowerPage count={attentionBadge(needRows)} runs={runs} runsLoaded={runsLoaded} runsError={runsError} onRetryRuns={refresh} navigate={navigate} now={needsNow} search={search} />
+          <WatchtowerPage count={attentionBadge(needRows)} runs={shownRuns} runsLoaded={runsLoaded} runsError={runsError} onRetryRuns={refresh} navigate={navigate} now={needsNow} search={search} />
         </div>
       );
     }
@@ -645,7 +649,7 @@ export function App(): React.ReactElement {
           <TestingPage
             page={testingPage !== null && isTestingSubPage(testingPage) ? testingPage : 'campaigns'}
             campaignId={campaignId}
-            runs={runs}
+            runs={shownRuns}
             navigate={navigate}
             // The landing's `?new=` arrival intent (the rail's ＋ / Run recon row — #203).
             launchIntent={readLaunchIntent(search)}
@@ -676,7 +680,7 @@ export function App(): React.ReactElement {
     }
     // `/projects/:id` — the same Desk, filtered to this project.
     if (panel === 'project-detail' && projectId) {
-      return <ProjectDesk projectId={projectId} navigate={navigate} runs={runs} needRows={needRows} now={needsNow} search={search} runsLoaded={runsLoaded} runsError={runsError} onRetryRuns={refresh} hosted={renderHosted} onCommand={openPalette} />;
+      return <ProjectDesk projectId={projectId} navigate={navigate} runs={shownRuns} needRows={needRows} now={needsNow} search={search} runsLoaded={runsLoaded} runsError={runsError} onRetryRuns={refresh} hosted={renderHosted} onCommand={openPalette} />;
     }
     if (panel === 'system') {
       return (
@@ -711,14 +715,14 @@ export function App(): React.ReactElement {
       <SkipLink />
       {/* UI-CONTRACT §3 (studio#680): the rail as before on desktop; a drawer behind a top bar on a phone. */}
       <RailDrawer pathname={pathname} badge={<PhoneNeedsBadge needRows={needRows} runsKnown={runsLoaded} runsFailed={runsError !== null} />}>
-        <SessionRail runs={runs} needRows={needRows} navigate={navigate} pathname={pathname} runsKnown={runsLoaded} runsFailed={runsError !== null} />
+        <SessionRail runs={shownRuns} needRows={needRows} navigate={navigate} pathname={pathname} runsKnown={runsLoaded} runsFailed={runsError !== null} />
       </RailDrawer>
 
       {/* studio#722: the gate notice is a strip IN the main column's flow, above the page — it pushes
           the page down instead of covering its composer, cards or thread. */}
       <div id="main" tabIndex={-1} className="flex flex-1 flex-col overflow-hidden min-w-0" style={{ outline: 'none' }}>
         {panel !== 'home' && (
-          <GateNotifications onSelect={selectRun} runId={runId} projectId={projectId} runs={runs} />
+          <GateNotifications onSelect={selectRun} runId={runId} projectId={projectId} runs={shownRuns} />
         )}
         <div className="flex flex-1 overflow-hidden min-h-0">
           {renderCenter()}
@@ -727,7 +731,7 @@ export function App(): React.ReactElement {
 
       {/* Right panel only when a run is selected */}
       {selected !== null && (
-        <RightPanel view={selected} runs={runs} onSelectRun={selectRun} navigate={navigate} />
+        <RightPanel view={selected} runs={shownRuns} onSelectRun={selectRun} navigate={navigate} />
       )}
 
       {/* ASK — the floating chat bubble bottom-right (studio#323 R1) and, while open,
@@ -745,7 +749,7 @@ export function App(): React.ReactElement {
         {askOpen && (
           <AskDock
             key={askKey}
-            runs={runs}
+            runs={shownRuns}
             pathname={pathname}
             navigate={navigate}
             onClose={() => setAskOpen(false)}
@@ -767,8 +771,8 @@ export function App(): React.ReactElement {
       </AskLauncher>
 
       {/* S11: the open "look underneath" sheet (a step, a helper, a session, the Desk). */}
-      <ObjectSheet runs={runs} navigate={navigate} needCount={attentionBadge(needRows)} />
-      <AltPeek runs={runs} needCount={attentionBadge(needRows)} heldRuns={heldByNeeds} />
+      <ObjectSheet runs={shownRuns} navigate={navigate} needCount={attentionBadge(needRows)} />
+      <AltPeek runs={shownRuns} needCount={attentionBadge(needRows)} heldRuns={heldByNeeds} />
 
       {/* The universal command palette (DES-FEEDBACK-002 §1, slice G) — corpus
           from already-loaded stores + the runs prop; repos cached on first open. */}
@@ -776,7 +780,7 @@ export function App(): React.ReactElement {
         open={paletteOpen}
         onClose={() => { setPaletteOpen(false); setPaletteSeed(''); }}
         seed={paletteSeed}
-        runs={runs}
+        runs={shownRuns}
         navigate={navigate}
         runPath={runPath}
         // codex on studio#664: the ONE ambient rule — a page outside the project shell that carries

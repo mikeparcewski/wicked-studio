@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { DEFAULT_REFINE, type Refine } from '../src/board/deskInsights.js';
 import { durationWords, runsView, type RunStatusFilter } from '../src/board/deskRuns.js';
 import { makeUnit } from './factories.js';
+import { markHeld } from '../src/board/heldRuns.js';
 import { DAY, NOW, deskRun, names, outcomeRuns, title } from './fixtures/deskV2.js';
 
 describe('Desk Runs model', () => {
@@ -41,6 +42,21 @@ describe('Desk Runs model', () => {
         expect(runsView(runs, DEFAULT_REFINE, status, query, NOW, title, names).stats).toEqual(stats);
       }
     }
+  });
+
+  it('does not count a run Needs you holds as running (studio#805)', () => {
+    const runs = outcomeRuns();
+    const working = runsView(runs, DEFAULT_REFINE, 'all', '', NOW, title, names).rows.filter((r) => r.outcome === 'Working').map((r) => r.id);
+    expect(working).toHaveLength(1);
+    const held = markHeld(runs, new Set(working));
+    const view = runsView(held, DEFAULT_REFINE, 'all', '', NOW, title, names);
+    expect(view.stats.running).toBe(0);
+    expect(view.stats.waiting).toBe(2);
+    // It stays listed, as waiting on you: under Waiting, not under Running.
+    expect(view.rows.find((r) => r.id === working[0])?.outcome).toBe('Waiting on you');
+    const filtered = (status: RunStatusFilter) => runsView(held, DEFAULT_REFINE, status, '', NOW, title, names).rows.map((r) => r.id);
+    expect(filtered('working')).not.toContain(working[0]);
+    expect(filtered('waiting')).toContain(working[0]);
   });
 
   it.each<[Partial<Refine>, number]>([

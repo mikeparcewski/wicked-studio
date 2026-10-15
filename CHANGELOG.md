@@ -12,6 +12,14 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+### Fixed
+- A run Needs you holds (a stall, an orphan, an open question, a steer hold) reads as **Waiting on you** across
+  the Desk (#805). Before, its DTO still said `executing`, so the Runs tab, the rail, the Report, the Watchtower and
+  the peeks called it working beside "Running now 0" and "nothing is working on it". One mechanism now: App marks
+  such a run (`markHeld`, a client-side copy) and `statusWord` reads the mark, so every surface that names a run's
+  state agrees. The peeks and the Desk sheet stop treating its step cursor as live work. A run at a gate keeps
+  "waiting on you", and the wire status, gate logic and actions are unchanged.
+
 ## [0.9.3] — 2026-10-15
 
 A patch release: the project page builds the project's code graph, a question card names the seat that asked, and the Desk no longer calls open chats "runs working".

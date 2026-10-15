@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { plainGateQuestion } from '../../board/deskWords.js';
 import { seatLabel } from '../../board/seatNames.js';
 import { api, downloadRunEvidence } from '../../api/client.js';
-import { executingOrd } from '../../api/run-state.js';
+import { executingOrd as rawExecutingOrd } from '../../api/run-state.js';
+import { isHeldRun } from '../../board/heldRuns.js';
 import type { ChatPathView, CoreEvent, RosterSeat, SessionView } from '../../api/types.js';
 import { everythingPath } from '../../board/everythingModel.js';
 import { narratorCtxOf } from '../../board/homeActivity.js';
@@ -84,6 +85,10 @@ function helpersOf(v: SessionView): string[] {
  * helper, a session or the Desk — with its tabs (DESIGN-simple §4) and its one primary action. The
  * rest of each object's actions are ⌘K for it (`sheets/objectCommands.ts`).
  */
+/** The step in hand — none when Needs you holds the run (a stall, an orphan, an open question):
+ *  its DTO's cursor is not live work (studio#805). */
+const executingOrd: typeof rawExecutingOrd = (session, units) => (isHeldRun(session) ? null : rawExecutingOrd(session, units));
+
 export function ObjectSheet({ runs, navigate, needCount }: { runs: SessionView[]; navigate: Navigate; needCount: number }): React.ReactElement | null {
   const open = useSheets((s) => s.open);
   if (open === null) return null;

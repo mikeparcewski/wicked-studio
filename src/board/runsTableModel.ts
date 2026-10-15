@@ -1,7 +1,7 @@
 import type { SessionView } from '../api/types.js';
 import { jobTitle } from './deskWords.js';
 import { endedAtMs, finishedAtMs } from './needsYou.js';
-import { sessionIdOf, sessionState, type SessionState } from './sessionModel.js';
+import { sessionIdOf, runState, type SessionState } from './sessionModel.js';
 import { matchesSessionFilter, type SessionFilter } from './everythingModel.js';
 
 /**
@@ -70,7 +70,7 @@ export function runRows(
     out.push({
       runId: v.session.id,
       sessionId: sessionIdOf(v, opts.runChatId),
-      status: sessionState(v.session.status),
+      status: runState(v),
       title: jobTitle(v.session),
       projectId,
       project: opts.nameOf(projectId),
