@@ -75,14 +75,11 @@ with sync_playwright() as p:
     set_fixture(origin, wave1=True, editors=True, shell_csp=True, mcp_inspect=True, mcp_inspect_grant=True, reset_mcp_inspect=True)
 
     def plugin():
-        f = page.frame_locator('[data-testid="editor-frame"]')
+        f = page.get_by_test_id("plugin-card").frame_locator('[data-testid="editor-frame"]')
         return f
 
     def plugin_frame():
-        for fr in page.frames:
-            if "/api/v1/editors/acme-mcp/" in fr.url:
-                return fr
-        return None
+        return page.get_by_test_id("plugin-card").get_by_test_id("editor-frame").element_handle().content_frame()
 
     # ── 1. the door from a server row ──────────────────────────────────────────────────
     page.goto(f"{origin}/mcp", wait_until="domcontentloaded")
@@ -134,11 +131,33 @@ with sync_playwright() as p:
     plugin().locator('[data-testid="plugin-result"][data-error="1"]').wait_for(state="visible")
     page.wait_for_function("() => document.querySelector('[data-testid=mcp-inspect-calls]').textContent.includes('the server answered an error')")
     check("server-error-shown", "boom" in plugin().locator('[data-testid="plugin-result"]').inner_text())
-    plugin().get_by_role("tab", name="Log").click()
-    log = plugin().locator('[data-testid="plugin-log"]')
+    # The host renders Options and full-screen modes from the declaration. Card ↔ full keeps its frame.
+    fr = plugin_frame()
+    page.get_by_test_id("plugin-card-full").click()
+    page.get_by_test_id("full-shell").wait_for(state="visible")
+    page.locator('[data-testid="full-shell-mode"][data-mode="advanced"]').click()
+    fr.wait_for_function("() => document.body.dataset.mode === 'advanced'")
+    check("shared-full-modes", fr == plugin_frame()
+          and page.locator('[data-testid="full-shell-mode"][data-mode="advanced"]').get_attribute("aria-checked") == "true")
+    page.locator('[data-testid="full-shell-mode"][data-mode="simple"]').click()
+    fr.wait_for_function("() => document.body.dataset.mode === 'simple'")
+    page.get_by_test_id("full-shell-exit").click()
+    fr.wait_for_function("() => document.body.dataset.surface === 'card'")
+
+    page.get_by_test_id("plugin-card-options").click()
+    panel = page.get_by_test_id("host-panel")
+    panel.wait_for(state="visible")
+    check("options-without-run", panel.get_by_role("tab", name="Run", exact=True).count() == 0)
+    panel.get_by_role("tab", name="Resources", exact=True).click()
+    options = panel.frame_locator('[data-testid="editor-frame"]')
+    options.locator('[data-testid="plugin-status"][data-state="ready"]').wait_for(state="visible")
+    options.locator('[data-item]').first.wait_for(state="visible")
+    panel.get_by_role("tab", name="Log", exact=True).click()
+    log = options.locator('[data-testid="plugin-log"]')
     log.wait_for(state="visible")
     text = log.inner_text()
     check("log-view", "initialize" in text and "tools/call" in text and "listening on stdio" in text, lines=log.locator("li").count())
+    page.get_by_test_id("host-panel-close").click()
 
     # ── 4. no click, no tool call ─────────────────────────────────────────────────────
     fr = plugin_frame()

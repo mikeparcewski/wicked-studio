@@ -49,13 +49,17 @@ async function show(cut: DemoCut): Promise<HTMLVideoElement> {
   return node<HTMLVideoElement>('video-player');
 }
 
-async function open(protocol = 2, surface = 'card', size = surface === 'card' ? 'inline' : surface === 'options' ? 'pane' : 'full'): Promise<void> {
+async function open(protocol = 2, surface = 'card', size = surface === 'card' ? 'inline' : surface === 'options' ? 'pane' : 'full', initialSeek?: number): Promise<void> {
   adapter = fakeDemoCutAdapter(); seen = []; refuseTheme = false; refuseMedia = false;
   ch = new MessageChannel();
   ch.port1.onmessage = async (event: MessageEvent) => {
     const d = event.data as Message; seen.push(d);
     let result: unknown;
-    if (d.type === 'artifact.read') result = await adapter.read();
+    if (d.type === 'artifact.read') {
+      // Deliver evidence before the first read reply: the plugin has a port but no cut or media yet.
+      if (initialSeek !== undefined) { send('host.selection', { anchors: [{ kind: 'time', atSec: initialSeek }] }); initialSeek = undefined; }
+      result = await adapter.read();
+    }
     else if (d.type === 'artifact.media') result = refuseMedia ? { error: 'unsupported', message: 'No video' } : await adapter.media();
     else if (d.type === 'version.write') {
       const r = await adapter.read(); if ('error' in r) throw new Error(r.message);
@@ -86,6 +90,69 @@ afterEach(async () => { send('host.teardown', {}); await new Promise(r => setTim
 afterAll(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 describe('wicked-video protocol 2 surfaces and player', () => {
+  it('seeks to an exact host time anchor on a loaded player without echoing a selection or writing', async () => {
+    const player = node<HTMLVideoElement>('video-player');
+    await vi.waitFor(() => expect(player.getAttribute('src')).toMatch(/^blob:/));
+    Object.defineProperty(player, 'readyState', { configurable: true, value: 1 });
+    player.dispatchEvent(new Event('loadedmetadata'));
+    send('host.selection', { anchors: [{ kind: 'time', atSec: 34 }] });
+    await vi.waitFor(() => expect(player.currentTime).toBe(34));
+    expect(root().dataset['current']).toBe('invite-the-team');
+    send('host.surface', { surface: 'full', mode: 'simple' });
+    await vi.waitFor(() => expect(root().dataset['surface']).toBe('full'));
+    expect(node('video-player')).toBe(player);
+    expect(player.currentTime).toBe(34);
+    player.currentTime = 0;
+    send('host.selection', { anchors: [{ kind: 'time', atSec: 34 }] });
+    await vi.waitFor(() => expect(player.currentTime).toBe(34));
+    expect(messages('selection.set')).toHaveLength(0);
+    expect(messages('version.write')).toHaveLength(0);
+  });
+
+  it('buffers a seek received before the initial read through media loading and metadata', async () => {
+    send('host.teardown', {}); await new Promise(r => setTimeout(r, 30)); ch.port1.close(); ch.port2.close();
+    document.body.replaceChildren(); start(); await open(2, 'card', 'inline', 34);
+    const player = node<HTMLVideoElement>('video-player');
+    await vi.waitFor(() => expect(player.getAttribute('src')).toMatch(/^blob:/));
+    expect(player.currentTime).toBe(0);
+    send('host.surface', { surface: 'full', mode: 'simple' });
+    await vi.waitFor(() => expect(root().dataset['surface']).toBe('full'));
+    player.dispatchEvent(new Event('loadedmetadata'));
+    expect(player.currentTime).toBe(34);
+    expect(root().dataset['current']).toBe('invite-the-team');
+    expect(messages('selection.set')).toHaveLength(0);
+    expect(messages('version.write')).toHaveLength(0);
+  });
+
+  it('keeps the newest pending time through metadata and ignores invalid times', async () => {
+    const player = node<HTMLVideoElement>('video-player');
+    await vi.waitFor(() => expect(player.getAttribute('src')).toMatch(/^blob:/));
+    for (const atSec of [34, 13, -1, Infinity, NaN]) send('host.selection', { anchors: [{ kind: 'time', atSec }] });
+    send('host.ping', {}, 'seeks-delivered');
+    await vi.waitFor(() => expect(seen.some(m => m.re === 'seeks-delivered')).toBe(true));
+    player.dispatchEvent(new Event('loadedmetadata'));
+    expect(player.currentTime).toBe(13);
+    expect(root().dataset['current']).toBe('pick-a-plan');
+  });
+
+  it('leaves a take preview and seeks on the combined recording when the host names a time', async () => {
+    send('host.surface', { surface: 'full', mode: 'advanced' });
+    await vi.waitFor(() => expect(node('video-preview-take')).toBeTruthy());
+    const player = node<HTMLVideoElement>('video-player');
+    await vi.waitFor(() => expect(player.getAttribute('src')).toMatch(/^blob:/));
+    const combinedSrc = player.getAttribute('src');
+    node('video-preview-take').click();
+    await vi.waitFor(() => expect(player.getAttribute('src')).not.toBe(combinedSrc));
+    player.dispatchEvent(new Event('loadedmetadata'));
+    const previewSrc = player.getAttribute('src');
+    send('host.selection', { anchors: [{ kind: 'time', atSec: 34 }] });
+    await vi.waitFor(() => expect(player.getAttribute('src')).not.toBe(previewSrc));
+    player.dispatchEvent(new Event('loadedmetadata'));
+    expect(player.currentTime).toBe(34);
+    expect(messages('artifact.media').at(-1)?.payload).toEqual({ ref: 'video' });
+    expect(messages('selection.set')).toHaveLength(0);
+  });
+
   it('announces [1,2] and the same canonical surfaces as its manifest declaration', () => {
     expect(ready[0]?.payload?.['protocol']).toEqual([1, 2]);
     const actual = parseSurfaces(ready[0]?.payload?.['surfaces']), expected = parseSurfaces(surfaces);

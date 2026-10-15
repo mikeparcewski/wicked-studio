@@ -24,6 +24,7 @@ export function start(): void {
   let seq = 0, busy = false, disposed = false, dragged: string | null = null;
   let renaming: string | null = null, renameText = '', renameBase = 0;
   let mediaUrl: string | null = null, mediaGeneration = 0, readingGeneration = 0, takePreview = false;
+  let pendingSeek: number | null = null, loadingMedia = false;
   const pending = new Map<string, { resolve: (r: Reply) => void; timer: ReturnType<typeof setTimeout> }>();
   const send = (type: string, payload: unknown): void => port?.postMessage({ p: PROTOCOL, v: ENVELOPE, type, payload });
   const req = (type: string, payload: unknown): Promise<Reply> => new Promise(resolve => {
@@ -73,18 +74,21 @@ export function start(): void {
   }
   async function media(ref: 'video' | { chapter: string } = 'video', seekSec?: number): Promise<void> {
     const generation = ++mediaGeneration;
-    if (!grants.includes('media.read')) { revoke(); el('unavailable').hidden = false; return; }
+    loadingMedia = true;
+    if (!grants.includes('media.read')) { loadingMedia = false; revoke(); el('unavailable').hidden = false; return; }
     const r = await req('artifact.media', { ref });
     if (disposed || generation !== mediaGeneration) return;
     revoke();
     const blob = r.payload?.['blob'], type = r.payload?.['type'];
-    if (!r.ok || !(blob instanceof Blob) || typeof type !== 'string' || !type.startsWith('video/') || typeof URL.createObjectURL !== 'function') { el('unavailable').hidden = false; void poster(generation); return; }
+    if (!r.ok || !(blob instanceof Blob) || typeof type !== 'string' || !type.startsWith('video/') || typeof URL.createObjectURL !== 'function') { loadingMedia = false; el('unavailable').hidden = false; void poster(generation); return; }
     (el('poster') as HTMLImageElement).hidden = true;
     if (posterUrl !== null) { URL.revokeObjectURL(posterUrl); posterUrl = null; (el('poster') as HTMLImageElement).removeAttribute('src'); }
     mediaUrl = URL.createObjectURL(blob); player.src = mediaUrl;
     el('unavailable').hidden = true;
     drawCaption();
     player.onloadedmetadata = () => {
+      if (disposed || generation !== mediaGeneration) return;
+      loadingMedia = false;
       if (!takePreview && cut !== null && Number.isFinite(player.duration)) {
         for (const [i, c] of cut.chapters.entries()) if (c.startSec >= 0 && c.durationSec < 0) {
           const end = cut.chapters.slice(i + 1).find(next => next.startSec >= 0)?.startSec ?? player.duration;
@@ -92,7 +96,13 @@ export function start(): void {
         }
         draw();
       }
-      player.currentTime = seekSec ?? (takePreview ? current()?.inSec ?? 0 : Math.max(0, current()?.startSec ?? 0));
+      player.currentTime = pendingSeek ?? seekSec ?? (takePreview ? current()?.inSec ?? 0 : Math.max(0, current()?.startSec ?? 0));
+      if (pendingSeek !== null) {
+        pendingSeek = null;
+        const c = chapterAt(player.currentTime);
+        if (c !== undefined) selected = c.id;
+        draw();
+      }
     };
   }
   const button = (text: string, fn: () => void, testid?: string): HTMLButtonElement => {
@@ -102,11 +112,25 @@ export function start(): void {
   };
   function go(id: string, point = true): void {
     if (!cut?.chapters.some(c => c.id === id && c.startSec >= 0)) return;
+    pendingSeek = null;
     selected = id;
     if (takePreview) { takePreview = false; void media(); }
     player.currentTime = current()?.startSec ?? 0;
     draw();
     if (point && grants.includes('selection.chip')) send('selection.set', { anchors: [{ kind: 'chapter', id }] });
+  }
+  function seek(sec: number): void {
+    if (!Number.isFinite(sec) || sec < 0) return;
+    pendingSeek = sec;
+    if (cut === null) return;
+    const c = chapterAt(sec);
+    if (c !== undefined) selected = c.id;
+    if (takePreview) { takePreview = false; void media(); }
+    else if (!loadingMedia && mediaUrl !== null && player.readyState >= 1) {
+      player.currentTime = sec;
+      pendingSeek = null;
+    }
+    draw();
   }
   function move(id: string, delta: number): void {
     const chapters = cut?.chapters ?? [], i = chapters.findIndex(c => c.id === id), to = i + delta;
@@ -406,7 +430,11 @@ export function start(): void {
         return { handled: true, status: `Chapter ${cut.chapters.indexOf(c) + 1} of ${cut.chapters.length} · ${c.title}` };
       },
       tab(t) { tab = t; draw(); },
-      selection(anchors) { const a = anchors.find(x => typeof x === 'object' && x !== null && (x as { kind: unknown }).kind === 'chapter') as { id?: unknown } | undefined; if (typeof a?.id === 'string') go(a.id, false); },
+      selection(anchors) {
+        const a = anchors.find(x => typeof x === 'object' && x !== null && ['chapter', 'time'].includes((x as { kind: string }).kind)) as { kind: string; id?: unknown; atSec?: unknown } | undefined;
+        if (a?.kind === 'time' && typeof a.atSec === 'number') seek(a.atSec);
+        else if (typeof a?.id === 'string') go(a.id, false);
+      },
       optionsChanged,
     });
     port.onmessage = (event: MessageEvent) => {

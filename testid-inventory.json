@@ -12,8 +12,8 @@
   "studioVersion": "0.8.0",
   "counts": {
     "files": 228,
-    "occurrences": 2804,
-    "static": 2425,
+    "occurrences": 2808,
+    "static": 2426,
     "dynamic": 71,
     "computed": 24
   },
@@ -2359,13 +2359,27 @@
     {
       "testId": "demo-script",
       "files": [
+        "src/components/editorPorts/RecordingGateActions.tsx",
         "src/components/session/WalkthroughEditor.tsx"
+      ]
+    },
+    {
+      "testId": "demo-script-actions",
+      "files": [
+        "src/components/editorPorts/RecordingGateActions.tsx"
       ]
     },
     {
       "testId": "demo-script-box",
       "files": [
+        "src/components/editorPorts/RecordingGateActions.tsx",
         "src/components/session/WalkthroughEditor.tsx"
+      ]
+    },
+    {
+      "testId": "demo-script-edit",
+      "files": [
+        "src/components/editorPorts/RecordingGateActions.tsx"
       ]
     },
     {
@@ -2375,8 +2389,15 @@
       ]
     },
     {
+      "testId": "demo-script-note",
+      "files": [
+        "src/components/editorPorts/RecordingGateActions.tsx"
+      ]
+    },
+    {
       "testId": "demo-script-save",
       "files": [
+        "src/components/editorPorts/RecordingGateActions.tsx",
         "src/components/session/WalkthroughEditor.tsx"
       ]
     },
@@ -6117,12 +6138,6 @@
       ]
     },
     {
-      "testId": "mcp-inspect-reload",
-      "files": [
-        "src/components/editors/McpInspectPage.tsx"
-      ]
-    },
-    {
       "testId": "mcp-inspect-restart",
       "files": [
         "src/components/editors/McpInspectPage.tsx"
@@ -6184,12 +6199,6 @@
     },
     {
       "testId": "mcp-inspect-target",
-      "files": [
-        "src/components/editors/McpInspectPage.tsx"
-      ]
-    },
-    {
-      "testId": "mcp-inspect-torn",
       "files": [
         "src/components/editors/McpInspectPage.tsx"
       ]

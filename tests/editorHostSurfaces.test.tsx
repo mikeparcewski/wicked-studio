@@ -2,7 +2,7 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { FakeSurfaceAdapter } from '../src/editors/adapters/fake.js';
 import {
-  RUN_TAB, firstTabOf, groupKey, joinGroup, relay, sameTab, useHostChrome, useHostPanel, type OptionsGroup,
+  RUN_TAB, firstTabOf, groupKey, joinGroup, relay, replayGroupSelection, sameTab, useHostChrome, useHostPanel, type OptionsGroup,
 } from '../src/editors/hostApi.js';
 import type { Surfaces } from '../src/editors/surfaces.js';
 import { FullShell } from '../src/components/editorHost/FullShell.js';
@@ -82,6 +82,39 @@ describe('host panel store: tabs by owner', () => {
 });
 
 describe('the group relay', () => {
+  it('replays the latest selection once connected, inside its group only', () => {
+    const card = vi.fn(); const options = vi.fn(); const other = vi.fn();
+    let connected = false;
+    const offCard = joinGroup('late', 'card', card);
+    relay('late', 'card', { type: 'selection', anchors: [{ kind: 'element', id: 'section-0' }] });
+    const offOptions = joinGroup('late', 'options', options, () => connected);
+    const offOther = joinGroup('other', 'options', other);
+    const latest = { type: 'selection' as const, anchors: [{ kind: 'element' as const, id: 'section-2' }] };
+    relay('late', 'card', latest);
+    expect(options).not.toHaveBeenCalled();
+    connected = true;
+    replayGroupSelection('late', 'options');
+    replayGroupSelection('late', 'options');
+    expect(options).toHaveBeenCalledExactlyOnceWith(latest);
+    expect(other).not.toHaveBeenCalled();
+    offOther(); offOptions(); offCard();
+  });
+
+  it('does not replay a cleared selection or retain it after the last instance leaves', () => {
+    const offCard = joinGroup('cleared', 'card', vi.fn());
+    relay('cleared', 'card', { type: 'selection', anchors: [{ kind: 'element', id: 'section-2' }] });
+    relay('cleared', 'card', { type: 'selection', anchors: [] });
+    const options = vi.fn();
+    const offOptions = joinGroup('cleared', 'options', options);
+    expect(options).not.toHaveBeenCalled();
+    relay('cleared', 'card', { type: 'selection', anchors: [{ kind: 'element', id: 'section-1' }] });
+    offOptions(); offCard();
+    const next = vi.fn();
+    const offNext = joinGroup('cleared', 'card', next);
+    expect(next).not.toHaveBeenCalled();
+    offNext();
+  });
+
   it('reaches the other instances of the same group only', () => {
     const a = vi.fn(); const b = vi.fn(); const other = vi.fn();
     const off = [joinGroup('g1', 'card', a), joinGroup('g1', 'options', b), joinGroup('g2', 'card', other)];
@@ -132,6 +165,19 @@ describe('HostPanel', () => {
     fireEvent.click(screen.getByTestId('host-panel-close'));
     expect(screen.getAllByTestId('host-panel-tab')).toHaveLength(1);
     expect(screen.getByText('run body')).toBeTruthy();
+  });
+  it('a protocol-1 pane-only plugin (no full screen) gets its pane as the Options frame, not a dead end (codex fu r4)', () => {
+    wide(false);
+    render(<HostPanel runTab={<p>run body</p>} ribbon={<span>ribbon</span>} />);
+    const paneOnly: Surfaces = { card: { interactive: false, aspect: '16:9', actions: [] }, options: { tabs: [{ id: 'editor', label: 'Editor', render: 'plugin' }] }, full: null };
+    act(() => { useHostPanel.getState().openGroup(group(paneOnly)); });
+    expect(screen.queryByTestId('host-panel-v1')).toBeNull();
+    const frame = screen.getByTestId('host-panel-frame');
+    expect(frame.hidden).toBe(false);
+    // Run shown: the same frame stays mounted, hidden (codex fu r5 P2).
+    act(() => { useHostPanel.getState().setTab(RUN_TAB); });
+    expect(screen.getByTestId('host-panel-frame')).toBe(frame);
+    expect(frame.hidden).toBe(true);
   });
   it('below 1200 px it is the ribbon, which opens the panel', () => {
     wide(true);

@@ -315,3 +315,11 @@ describe('recording refresh and media', () => {
     expect(await a.undo()).toMatchObject({ error: 'unsupported' }); expect(await a.fork()).toMatchObject({ error: 'unsupported' });
   });
 });
+
+describe('a recording earns no Versions tab (codex final review P2)', () => {
+  it('RecordingSurfaceAdapter does not advertise versions: the host tab reads an interactive document, a take is one version', async () => {
+    const { RecordingSurfaceAdapter } = await import('../src/editors/adapters/recording.js');
+    const a = new RecordingSurfaceAdapter({ artifactKey: 'run:r1/walkthrough', title: 'Walkthrough', kind: 'walkthrough', source: 'walkthrough', projectId: '', composerKey: 'c', runId: 'r1' }, 'walkthrough');
+    expect(a.capabilities()).not.toContain('versions');
+  });
+});

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { EditorHost } from '../../editors/host.js';
 import {
-  PANEL_RIBBON_BELOW_PX, RUN_TAB, useGroupShown, hostTabsFor, joinGroup, relay, sameTab, tabFootersFor, useHostChrome, useHostPanel,
+  PANEL_RIBBON_BELOW_PX, RUN_TAB, useGroupShown, hostTabsFor, joinGroup, relay, replayGroupSelection, sameTab, tabFootersFor, useHostChrome, useHostPanel,
   type HostPanelProps, type HostTabContext, type OptionsGroup, type PanelTab,
 } from '../../editors/hostApi.js';
 import { readThemeTokens } from '../../editors/theme.js';
@@ -102,7 +102,11 @@ function GroupBody({ group, tab, withRun }: { group: OptionsGroup; tab: PanelTab
   const v2 = group.protocol >= 2;
   const pluginTab = tab.owner === 'plugin' ? group.surfaces.options?.tabs.find((t) => t.id === tab.id) ?? null : null;
   const hostTab = tab.owner === 'host' ? hostTabsFor(group.adapter).find((h) => h.id === tab.id) ?? null : null;
-  const showFrame = v2 && pluginTab?.render === 'plugin';
+  // A protocol-1 plugin with no full screen (sizes ['pane']): its pane is the Options tab's frame, the v1 mapping
+  // (DES §4: pane -> a single options tab), not a dead end (codex fu r4 P2). Generic: from the declaration only.
+  // Decided by the group's surfaces, not the tab shown: the frame stays mounted for the group's life (codex fu r5 P2).
+  const v1Pane = !v2 && group.surfaces.full === null && (group.surfaces.options?.tabs.length ?? 0) > 0;
+  const showFrame = (v2 && pluginTab?.render === 'plugin') || (v1Pane && pluginTab !== null);
   const firstPluginTab = group.surfaces.options?.tabs.find((t) => t.render === 'plugin')?.id;
   const [, setShownTick] = useState(0);
   // The card's shown version re-renders the host tabs (codex h2b-r3 P2).
@@ -110,7 +114,7 @@ function GroupBody({ group, tab, withRun }: { group: OptionsGroup; tab: PanelTab
 
   return (
     <>
-      {v2 && (
+      {(v2 || v1Pane) && (
         <OptionsInstance group={group} hostRef={hostRef} visible={showFrame} withRun={withRun} initialTab={pluginTab?.render === 'plugin' ? pluginTab.id : firstPluginTab}
           onValues={(t, v) => setValues((s) => ({ ...s, [t]: v }))} onTorn={setTorn} onShown={() => setShownTick((n) => n + 1)} />
       )}
@@ -119,7 +123,7 @@ function GroupBody({ group, tab, withRun }: { group: OptionsGroup; tab: PanelTab
       {pluginTab !== null && pluginTab.render === 'controls' && v2 && (
         <ControlsTab key={pluginTab.id} tab={pluginTab} confirmed={values[pluginTab.id] ?? {}} change={(id, value) => hostRef.current?.changeOption(pluginTab.id, id, value) ?? Promise.resolve(false)} />
       )}
-      {pluginTab !== null && !v2 && (
+      {pluginTab !== null && !v2 && !v1Pane && (
         <div data-testid="host-panel-v1" className="wk-hpanel-v1">
           <p>This editor opens full screen.</p>
           {group.surfaces.full !== null && (
@@ -179,6 +183,7 @@ function OptionsInstance({ group, hostRef, visible, withRun, initialTab, onValue
   useEffect(() => {
     if (box.current === null) return undefined;
     const e = group.editor;
+    const bridge = group.adapter.mcpBridge?.();
     const host = new EditorHost({
       container: box.current,
       src: group.src,
@@ -194,6 +199,7 @@ function OptionsInstance({ group, hostRef, visible, withRun, initialTab, onValue
       prefs: { reducedMotion: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false, techDetails: false, locale: navigator.language },
       firstParty: e.first_party,
       adapter: group.adapter,
+      ...(bridge !== undefined ? { mcp: bridge } : {}),
       declared: (e as typeof e & { surfaces?: unknown }).surfaces,
       sizes: e.sizes,
       ui: {
@@ -214,13 +220,15 @@ function OptionsInstance({ group, hostRef, visible, withRun, initialTab, onValue
         },
         // An options instance never changes a host surface (codex h2b-r1/r2 P1): Full screen is the card's host button.
         morph: () => undefined,
-        status: () => undefined,
+        status: (text) => relay(group.key, 'options', { type: 'status', text }),
         notes: () => undefined,
-        thread: () => relay(group.key, 'options', { type: 'changed', head: group.adapter.artifact().head, kind: 'theme' }),
+        thread: () => undefined,
         shown: () => cb.current.onShown(),
         fullscreen: async () => false,
-        // Its writes reach the card instance as `artifact.changed` (codex h2b-r2 P2).
-        written: (w) => relay(group.key, 'options', { type: 'changed', head: w.version, kind: 'deterministic' }),
+        // The card owns the thread line and Undo, including writes from Options.
+        written: (write) => relay(group.key, 'options', { type: 'write', ok: true, write }),
+        writeFailed: (message) => relay(group.key, 'options', { type: 'write', ok: false, message }),
+        surfaces: () => replayGroupSelection(group.key, 'options'),
         torn: (r) => cb.current.onTorn(r),
         log: () => undefined,
         optionsValues: (t, v) => cb.current.onValues(t, v),
@@ -232,8 +240,8 @@ function OptionsInstance({ group, hostRef, visible, withRun, initialTab, onValue
     const leave = joinGroup(group.key, 'options', (ev) => {
       if (ev.type === 'selection') host.relaySelection(ev.anchors);
       else if (ev.type === 'changed') host.artifactChanged(ev.head, ev.kind);
-      else host.artifactChanged(ev.version, 'theme');
-    });
+      else if (ev.type === 'wrote') host.artifactChanged(ev.version, 'theme');
+    }, () => host.connected);
     return () => { leave(); host.teardown('The options were closed'); if (hostRef.current === host) hostRef.current = null; };
   }, [group, hostRef, tab0]);
   return <div ref={box} data-testid="host-panel-frame" hidden={!visible} className="wk-hpanel-frame" />;

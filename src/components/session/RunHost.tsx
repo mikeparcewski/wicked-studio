@@ -39,6 +39,12 @@ export function GateButtons({ runId }: { runId: string }): React.ReactElement | 
   const action = useGateActionStore((s) => s.byGate[runId] ?? IDLE_GATE_ACTION);
   if (gate === undefined) return null;
   const busy = action.queued || action.busy || action.answered !== null;
+  // Fail closed (codex final review P1): the bare Approve is offered only for a gate KNOWN to be the plain
+  // pre-run review (`def`) with the two plain answers. A gate whose kind is not known (a late join: GET
+  // /runs/:id/gate carries none), a deliver or plan gate, an escalation, a consent, a free-text or
+  // multi-choice gate is answered on its card in the thread, where its disclosures are.
+  // `choices` absent is the plain gate's two answers; any named choices (even two) are the card's (codex fu r1 P1).
+  const plainApprove = gate.gateKind === 'def' && gate.choices === undefined;
   const toThread = (): void => {
     useHostChrome.getState().exitFull();
     // The gate card leads its run's block in the thread (run clarity): bring it into view and focus it.
@@ -48,13 +54,13 @@ export function GateButtons({ runId }: { runId: string }): React.ReactElement | 
   };
   return (
     <span data-testid="run-gate-actions" data-run-id={runId} className="wk-run-gate-actions">
-      {gate.gateKind !== 'deliver' && gate.gateKind !== 'plan_approval' && (
+      {plainApprove && (
         <button type="button" data-testid="run-gate-approve" disabled={busy} onClick={() => { void decideGate(runId, { approve: true }); }} className="wk-btn wk-btn--primary wk-btn--sm">
           {action.queued ? 'Approving…' : 'Approve'}
         </button>
       )}
       <button type="button" data-testid="run-gate-open" onClick={toThread} className="wk-btn wk-btn--secondary wk-btn--sm">
-        {gate.gateKind === 'deliver' || gate.gateKind === 'plan_approval' ? 'Answer in the thread' : 'Send back or more'}
+        {plainApprove ? 'Send back or more' : 'Answer in the thread'}
       </button>
     </span>
   );
@@ -85,7 +91,7 @@ export function useRunHostValue(runs: readonly RunView[], renderChat: () => Reac
       // A recording (walkthrough, demo video) brings its own gate verbs — Ask helpers to fix, Edit the
       // check, Re-record this chapter — drawn from the run's state by the host (H6, RecordingGateActions);
       // they read the binding's run, which is the run resolved here (never another run's).
-      const recording = recordingGateActions({ ...binding, runId: run.session.id }, run.units);
+      const recording = recordingGateActions({ ...binding, runId: run.session.id }, run.units, undefined, true);
       return <>{recording}<GateButtons runId={run.session.id} /></>;
     },
     liveFrameCap: 6,

@@ -247,3 +247,40 @@ describe('host chapter retake', () => {
     expect(screen.queryByTestId('demo-retake-chapter')).toBeNull();
   });
 });
+
+describe('the demo script at the plan gate, as host chrome (codex final review P2)', () => {
+  function planDemo(stage: string): DemoView {
+    return { ...demo(), stage, script: 'Open the app. Click Sign up.', video: null } as unknown as DemoView;
+  }
+  function demoServer(view: DemoView) {
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit): Promise<Response> => {
+      if (url.endsWith('/demo/script') && init?.method === 'PUT') return json({ ok: true });
+      if (url.endsWith('/demo')) return json(view);
+      throw new Error(`Unexpected route: ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    return fetchMock;
+  }
+  it('a plugin card offers Edit the script at the plan gate and PUTs the new script', async () => {
+    const fetchMock = demoServer(planDemo('plan_gate'));
+    render(<RecordingGateActions runId={RUN} kind="demo-video" step={null} units={units} script />);
+    fireEvent.click(await screen.findByTestId('demo-script-edit'));
+    fireEvent.change(screen.getByTestId('demo-script'), { target: { value: 'Open the app. Click Start.' } });
+    fireEvent.click(screen.getByTestId('demo-script-save'));
+    await waitFor(() => expect(screen.getByTestId('demo-script-note').textContent).toMatch(/^Script saved/));
+    const put = fetchMock.mock.calls.find(([u, i]) => String(u).endsWith('/demo/script') && i?.method === 'PUT');
+    expect(put).toBeDefined();
+    expect(String(put![1]!.body)).toContain('Click Start');
+  });
+  it('not after the plan gate, and not in the morphing slot (its own editor has the box)', async () => {
+    demoServer(planDemo('recording'));
+    const { unmount } = render(<RecordingGateActions runId={RUN} kind="demo-video" step={null} units={units} script />);
+    await new Promise((r) => setTimeout(r, 50));
+    expect(screen.queryByTestId('demo-script-edit')).toBeNull();
+    unmount();
+    demoServer(planDemo('plan_gate'));
+    render(<RecordingGateActions runId={RUN} kind="demo-video" step={null} units={units} />);
+    await new Promise((r) => setTimeout(r, 50));
+    expect(screen.queryByTestId('demo-script-edit')).toBeNull();
+  });
+});

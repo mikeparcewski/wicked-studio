@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { apiBase } from '../../api/client.js';
 import { editorFor, listEditors, MCP_SERVER_KIND, type EditorView } from '../../api/editors.js';
 import { mcpApi, mcpPath, type McpServer } from '../../api/mcp.js';
 import {
@@ -7,14 +6,16 @@ import {
   type McpInspectLogEntry, type McpInspectSessionView, type McpInspectState, type McpInspectTarget,
 } from '../../api/mcpInspect.js';
 import { ApiError } from '../../api/errors.js';
-import { EditorHost, type McpCall } from '../../editors/host.js';
+import type { McpCall, McpHostBridge, McpSessionEvents } from '../../editors/host.js';
 import { McpSurfaceAdapter } from '../../editors/adapters/mcp.js';
-import { bundleUrl, fetchGrants } from '../../editors/model.js';
+import { useHostPanel, type ArtifactBinding } from '../../editors/hostApi.js';
+import { fetchGrants } from '../../editors/model.js';
 import type { PermissionId } from '../../editors/protocol.js';
-import { readThemeTokens } from '../../editors/theme.js';
 import { PAGE_NAMES } from '../../board/pageNames.js';
 import { EmptyState, PageFrame, Segmented, Skeleton, StateBanner } from '../ui/index.js';
 import { startCreateEditorPlugin } from './EditorPluginsSettings.js';
+import { PluginCard } from '../editorHost/PluginCard.js';
+import { HostPanel } from '../editorHost/HostPanel.js';
 
 /**
  * THE MCP INSPECTOR (DES-MCP-INSPECTOR-001 §2, §4, §5), `/mcp/inspect[?server=<name>]`.
@@ -88,9 +89,9 @@ export function pluginEntries(entries: readonly McpInspectLogEntry[]): McpInspec
   return entries.map((e) => (e.dir === 'host' ? { ...e, text: e.kind === 'state' ? 'the connection changed state (studio shows the detail)' : '(a line of studio’s, shown in studio)' } : e));
 }
 
-/** The editor that inspects here, with its size: a `pane` if it has one, else `full`. */
+/** The enabled inspector, including plugins that declare only the shared card surface. */
 function inspectorEditor(editors: readonly EditorView[]): EditorView | null {
-  return editorFor(editors, MCP_SERVER_KIND, 'pane') ?? editorFor(editors, MCP_SERVER_KIND, 'full');
+  return editorFor(editors, MCP_SERVER_KIND, 'inline') ?? editorFor(editors, MCP_SERVER_KIND, 'pane') ?? editorFor(editors, MCP_SERVER_KIND, 'full');
 }
 
 type Boot =
@@ -119,16 +120,22 @@ export function McpInspectPage({ navigate, search }: { navigate: (p: string) => 
   const [live, setLive] = useState<Live | null>(null);
   const [calls, setCalls] = useState<CallLine>({ count: 0, last: null, tail: null });
   const [grants, setGrants] = useState<PermissionId[] | null>(null);
-  const [torn, setTorn] = useState<string | null>(null);
-  const [mountKey, setMountKey] = useState(0);
   const [copied, setCopied] = useState<string | null>(null);
 
   const liveRef = useRef<Live | null>(null);
   liveRef.current = live;
   const lastAsk = useRef<Ask | null>(null);
   const entries = useRef<McpInspectLogEntry[]>([]);
-  const hostRef = useRef<EditorHost | null>(null);
-  const frameBox = useRef<HTMLDivElement | null>(null);
+  const listeners = useRef(new Set<McpSessionEvents>());
+  /** The session each sent call left in (by the host's call number). */
+  const callSession = useRef(new Map<number, string | null>());
+  /** The state every frame was last told, replayed to a frame that subscribes later; while a session is being
+   *  replaced it says `connecting`, and no request goes to the old session (codex fu r3 P2). */
+  const toldState = useRef<Record<string, unknown>>(statePayload(null));
+  const tell = (payload: Record<string, unknown>): void => {
+    toldState.current = payload;
+    for (const listener of listeners.current) listener.state(payload);
+  };
   const pollAbort = useRef<AbortController | null>(null);
   const titleRef = useRef('MCP server');
   /** Every session this page started that is not yet deleted. */
@@ -184,8 +191,8 @@ export function McpInspectPage({ navigate, search }: { navigate: (p: string) => 
     // Only the server's own name: the target's name comes from the command or URL, which the plugin
     // never sees (codex r1).
     titleRef.current = next?.session.initialize?.serverInfo?.name ?? 'MCP server';
-    hostRef.current?.mcpState(statePayload(next));
-  }, []);
+    tell(statePayload(next));
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps -- tell only writes refs
 
   const stopPoll = useCallback(() => { pollAbort.current?.abort(); pollAbort.current = null; }, []);
 
@@ -207,7 +214,7 @@ export function McpInspectPage({ navigate, search }: { navigate: (p: string) => 
           failures = 0;
           if (r.entries.length > 0) {
             entries.current = [...entries.current, ...r.entries].slice(-1000);
-            hostRef.current?.mcpLog(pluginEntries(r.entries));
+            for (const listener of listeners.current) listener.log(pluginEntries(r.entries));
           }
           const was = liveRef.current;
           const next: Live = { ...was, next: r.next, state: r.state, error: r.error };
@@ -271,7 +278,7 @@ export function McpInspectPage({ navigate, search }: { navigate: (p: string) => 
     // The page was left while the old session was being stopped: start nothing (codex r4).
     if (generation.current !== g) return;
     entries.current = [];
-    hostRef.current?.mcpState({ ...statePayload(null), state: 'connecting' });
+    tell({ ...statePayload(null), state: 'connecting' });
     try {
       const session = await startSession(ask.target);
       owned.current.add(session.id);
@@ -338,70 +345,50 @@ export function McpInspectPage({ navigate, search }: { navigate: (p: string) => 
   }, [closeOwned, pushState]);
 
   /** The host's answer to `mcp.request`: the one session this page holds, or "not connected". */
-  const bridge = useMemo(() => ({
+  const bridge = useMemo<McpHostBridge>(() => ({
     request: async (method: string, params: Record<string, unknown> | undefined) => {
       const cur = liveRef.current;
-      if (cur === null || cur.state !== 'ready') return { error: 'unavailable' as const, message: 'not connected' };
+      if (cur === null || cur.state !== 'ready' || toldState.current['state'] !== 'ready') return { error: 'unavailable' as const, message: 'not connected' };
       try {
         return await sendRpc(cur.session.id, method, params);
       } catch (e) {
         return rpcErrorCode(e);
       }
     },
+    subscribe: (listener) => {
+      listeners.current.add(listener);
+      listener.state(toldState.current);
+      listener.log(pluginEntries(entries.current));
+      return () => { listeners.current.delete(listener); };
+    },
+    onCall: (c) => {
+      // A sent call belongs to the session it was sent in: its end after a restart is the old session's, not this
+      // one's call line (codex fu r4 P2).
+      if (c.phase === 'sent' && c.call !== undefined) callSession.current.set(c.call, liveRef.current?.session.id ?? null);
+      if (c.phase === 'done' && c.sent && c.call !== undefined) {
+        const from = callSession.current.get(c.call);
+        callSession.current.delete(c.call);
+        if (from !== undefined && from !== (liveRef.current?.session.id ?? null)) return;
+      }
+      setCalls((l) => {
+        const what = `${c.method}${c.tool !== null ? ` ${c.tool}` : ''}`;
+        if (c.phase === 'sent') return { count: l.count + 1, last: what, tail: 'waiting…' };
+        // A refused call counts once; a sent call was counted on `sent`.
+        return { count: c.sent ? l.count : l.count + 1, last: what, tail: outcomeWords(c) };
+      });
+    },
   }), []);
 
-  // ── the plugin frame ────────────────────────────────────────────────────────────────────
-  useEffect(() => {
-    if (editor === null || grants === null || frameBox.current === null) return;
-    setTorn(null);
-    const host = new EditorHost({
-      container: frameBox.current,
-      src: bundleUrl(apiBase(), editor.id, editor.version, editor.sha256),
-      editor: editor.id,
-      version: editor.version,
-      name: editor.title,
-      title: `${editor.title}: MCP inspector`,
-      size: editor.sizes.includes('pane') ? 'pane' : 'full',
-      grants,
-      theme: readThemeTokens(),
-      prefs: { reducedMotion: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false, techDetails: true, locale: navigator.language },
-      firstParty: editor.first_party,
-      adapter: new McpSurfaceAdapter(() => titleRef.current),
-      mcp: bridge,
-      ui: {
-        chips: () => {}, draft: () => {}, typed: () => {}, key: () => {}, morph: () => {}, status: () => {}, notes: () => {}, thread: () => {},
-        fullscreen: async () => {
-          const el = frameBox.current?.parentElement ?? null;
-          if (el === null || document.fullscreenEnabled === false) return false;
-          try { await el.requestFullscreen(); return true; } catch { return false; }
-        },
-        torn: (reason) => setTorn(reason),
-        log: () => {},
-        mcpCall: (c) => setCalls((l) => {
-          const what = `${c.method}${c.tool !== null ? ` ${c.tool}` : ''}`;
-          if (c.phase === 'sent') return { count: l.count + 1, last: what, tail: 'waiting…' };
-          // A call the host refused before it left is counted here, once; a sent one was counted on `sent`.
-          return { count: c.sent ? l.count : l.count + 1, last: what, tail: outcomeWords(c) };
-        }),
-      },
-    });
-    hostRef.current = host;
-    host.mount();
-    // A new frame hears where things stand: the state now, and the log so far.
-    host.mcpState(statePayload(liveRef.current));
-    host.mcpLog(pluginEntries(entries.current));
-    return () => {
-      host.teardown('The inspector was closed');
-      hostRef.current = null;
-    };
-  }, [editor, grants, bridge, mountKey]);
-
-  // The plugin follows light and dark as the page does (as PluginArtifact).
-  useEffect(() => {
-    const seen = new MutationObserver(() => hostRef.current?.setTheme(readThemeTokens()));
-    seen.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'style', 'class'] });
-    return () => seen.disconnect();
-  }, []);
+  const adapter = useMemo(() => new McpSurfaceAdapter(() => titleRef.current, bridge), [bridge]);
+  const binding = useMemo<ArtifactBinding>(() => ({
+    artifactKey: 'mcp-inspect', title: 'MCP server', kind: MCP_SERVER_KIND, source: 'mcp',
+    projectId: '', composerKey: 'mcp-inspect',
+  }), []);
+  const grouped = useHostPanel((s) => s.group?.binding.artifactKey === binding.artifactKey);
+  useEffect(() => () => {
+    const panel = useHostPanel.getState();
+    if (panel.group?.binding.artifactKey === binding.artifactKey) panel.closeGroup();
+  }, [binding.artifactKey]);
 
   // ── the target ──────────────────────────────────────────────────────────────────────────
   const ask = (): Ask | null => {
@@ -638,12 +625,12 @@ export function McpInspectPage({ navigate, search }: { navigate: (p: string) => 
           <span className="wk-tag">{editor.first_party ? 'Built in' : 'Installed'}</span>
           <span className="wk-mcpi-meta">Sees the server’s traffic only, never the command, URL or secrets.</span>
         </p>
-        {torn !== null && (
-          <p data-testid="mcp-inspect-torn" className="wk-editor-torn">
-            {torn} · <button type="button" data-testid="mcp-inspect-reload" onClick={() => setMountKey((k) => k + 1)} className="wk-since-toggle">Reload it</button>
-          </p>
-        )}
-        <div ref={frameBox} key={mountKey} className="wk-editor-frame-box wk-mcpi-frame" />
+        <div className="wk-made-open-row">
+          <div className="wk-made-open-card">
+            {grants !== null && <PluginCard binding={binding} editor={editor} adapter={adapter} grants={grants} />}
+          </div>
+          {grouped && <HostPanel />}
+        </div>
       </section>
     </div>,
   );

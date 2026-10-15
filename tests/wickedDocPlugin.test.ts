@@ -33,14 +33,15 @@ async function boot({ surface = 'options', tab = 'coverage', mode = 'simple', ch
   const announcement = ready.mock.calls[0]![0] as Message;
   const seen: Message[] = [];
   let currentHTML = html;
+  let currentHead = 1;
   let currentChecksError = checksError;
   const port = {
     onmessage: null as ((event: MessageEvent) => void) | null,
     postMessage(m: Message) {
       seen.push(m);
       if (m.type !== 'artifact.read' && m.type !== 'checks.read' && m.type !== 'version.write') return;
-      const fail = m.type === 'checks.read' ? currentChecksError : null;
-      const payload = m.type === 'checks.read' ? { checks, total } : m.type === 'version.write' ? { version: Number(m.payload?.['base']) + 1 } : { version: m.payload?.['version'] ?? 1, content: { type: 'html', html: currentHTML } };
+      const fail = m.type === 'checks.read' ? currentChecksError : m.type === 'version.write' && m.payload?.['base'] !== currentHead ? 'head_moved' : null;
+      const payload = m.type === 'checks.read' ? { checks, total } : m.type === 'version.write' ? (fail ? { head: currentHead } : { version: ++currentHead }) : { version: m.payload?.['version'] ?? currentHead, content: { type: 'html', html: currentHTML } };
       queueMicrotask(() => port.onmessage?.(new MessageEvent('message', { data: {
         p: 'wicked.editor', v: 1, re: m.id, ok: !fail, payload,
         ...(fail ? { error: { code: fail, message: 'could not read checks' } } : {}),
@@ -54,6 +55,7 @@ async function boot({ surface = 'options', tab = 'coverage', mode = 'simple', ch
   }));
   await vi.waitFor(() => expect(document.querySelector('#stage iframe')).not.toBeNull());
   return { announcement, seen, send, changeHTML: (html: string) => { currentHTML = html; },
+    changeHead: (version: number) => { currentHead = version; },
     failChecks: (error: string | null) => { currentChecksError = error; } };
 }
 
@@ -74,6 +76,57 @@ const measure = (frame: HTMLIFrameElement) => {
 };
 
 describe('wicked-doc protocol 2', () => {
+  it.each(['Escape', 'blur', 'unchanged'])('keeps the draft and frame across newer reads, then applies only the newest on %s', async (end) => {
+    const { seen, send, changeHead } = await boot({ surface: 'full' });
+    const frame = document.querySelector<HTMLIFrameElement>('#stage iframe')!;
+    measure(frame);
+    send('host.selection', { anchors: [{ kind: 'element', id: 'paragraph-1' }] });
+    keyOn(document.querySelector<HTMLElement>('#handle')!, 'Enter');
+    const input = document.querySelector<HTMLTextAreaElement>('#input')!;
+    input.value = 'Unfinished words';
+    for (const version of [3, 2, 1]) {
+      changeHead(3);
+      send('artifact.changed', { version });
+      // Let the read response reach acceptRead, including the older read after version 3.
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(input.hidden).toBe(false);
+      expect(input.value).toBe('Unfinished words');
+      expect(document.querySelector('#stage iframe')).toBe(frame);
+      expect(document.querySelector('#editor')?.getAttribute('data-head')).toBe('1');
+      expect(document.activeElement).toBe(input);
+      expect(seen.filter((m) => m.type === 'ui.status')).toHaveLength(0);
+    }
+    if (end === 'blur') input.blur();
+    else if (end === 'unchanged') { input.value = 'We name (req-1).'; keyOn(input, 'Enter'); }
+    else keyOn(input, 'Escape');
+    expect(input.hidden).toBe(true);
+    expect(document.querySelector('#editor')?.getAttribute('data-head')).toBe('3');
+    expect(document.querySelector('#stage iframe')).not.toBe(frame);
+    expect(seen.filter((m) => m.type === 'version.write')).toHaveLength(0);
+  });
+
+  it('commits against the draft base after a deferred read, reports head_moved and re-reads without retrying the write', async () => {
+    const { seen, send, changeHead } = await boot({ surface: 'full' });
+    measure(document.querySelector<HTMLIFrameElement>('#stage iframe')!);
+    send('host.selection', { anchors: [{ kind: 'element', id: 'paragraph-1' }] });
+    keyOn(document.querySelector<HTMLElement>('#handle')!, 'Enter');
+    const input = document.querySelector<HTMLTextAreaElement>('#input')!;
+    input.value = 'My draft';
+    changeHead(2);
+    send('artifact.changed', { version: 2 });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(input.hidden).toBe(false);
+    expect(input.value).toBe('My draft');
+    keyOn(input, 'Enter');
+    await vi.waitFor(() => expect(seen.filter((m) => m.type === 'artifact.read')).toHaveLength(3));
+    expect(seen.filter((m) => m.type === 'version.write').map((m) => m.payload)).toEqual([
+      { base: 1, ops: [{ op: 'text', anchor: 'paragraph-1', value: 'My draft', before: 'We name (req-1).' }], summary: 'this part' },
+    ]);
+    expect(seen.filter((m) => m.type === 'ui.status').at(-1)?.payload).toEqual({ line: 'Not changed: it moved while you typed' });
+    expect(document.querySelector('#editor')?.getAttribute('data-head')).toBe('2');
+    expect(input.hidden).toBe(true);
+  });
+
   it('announces both protocols and the exact manifest surfaces; coverage uses whole requirement ids in leaf blocks', async () => {
     const { announcement, seen } = await boot();
     expect(announcement.type).toBe('plugin.ready');

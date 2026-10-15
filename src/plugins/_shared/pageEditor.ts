@@ -251,7 +251,9 @@ body[data-coverage="side"] #coverage{position:absolute;right:0;top:0;width:min(3
   let current: ScrollState = { scrollX: 0, scrollY: 0 };
   let hover: string | null = null;
   let selected: string | null = null;
-  let editing: { wid: string; before: string } | null = null;
+  let editing: { wid: string; before: string; base: number } | null = null;
+  // A host refresh must not replace the draft's document. Keep only the newest read until the edit ends.
+  let deferredRead: Record<string, unknown> | null = null;
   let busy = false;
   /** EP-P3: the page's own theme colours (this version's `--wi-*`), and the width the page is shown at. */
   let swatches: Swatch[] = [];
@@ -400,7 +402,16 @@ body[data-coverage="side"] #coverage{position:absolute;right:0;top:0;width:min(3
     add(DEFAULT_COLOUR, 'Default');
   };
 
-  const cancelEdit = (): void => { if (editing === null) return; editing = null; input.hidden = true; input.value = ''; draw(); };
+  const cancelEdit = (): void => {
+    if (editing === null) return;
+    editing = null;
+    input.hidden = true;
+    input.value = '';
+    const next = deferredRead;
+    deferredRead = null;
+    if (next !== null) acceptRead(next);
+    draw();
+  };
 
   /** An element becomes the subject: picked, a chip on the composer (the host writes its words), and
    *  typing reaches this document — never the frame the click focused. */
@@ -420,6 +431,12 @@ body[data-coverage="side"] #coverage{position:absolute;right:0;top:0;width:min(3
   const acceptRead = (payload: Record<string, unknown>): void => {
     const version = payload['version'];
     if (typeof version === 'number' && head !== null && version < head) return;
+    if (editing !== null) {
+      const deferredVersion = deferredRead?.['version'];
+      if (typeof version === 'number' && version > editing.base
+        && (typeof deferredVersion !== 'number' || version >= deferredVersion)) deferredRead = payload;
+      return;
+    }
     note.hidden = true;
     const content = payload['content'] as { type?: unknown; html?: unknown } | undefined;
     const html = typeof content?.html === 'string' ? content.html : '';
@@ -506,11 +523,11 @@ body[data-coverage="side"] #coverage{position:absolute;right:0;top:0;width:min(3
 
   // ── edit by touching ──────────────────────────────────────────────────────────────────
   const beginEdit = (wid: string, typed: string | null): void => {
-    if (!canEditText() || busy || inventory === null || typingOn(inventory, wid) !== 'yes') return;
+    if (!canEditText() || busy || head === null || inventory === null || typingOn(inventory, wid) !== 'yes') return;
     const before = inventory.blocks[wid]?.text ?? '';
     // The field exists and holds the focus before this key event returns: the characters typed right
     // behind it land in the field (no frame is awaited — S8 lost them to the frame once).
-    editing = { wid, before };
+    editing = { wid, before, base: head };
     input.value = typed ?? before;
     draw();
     input.focus();
@@ -520,14 +537,14 @@ body[data-coverage="side"] #coverage{position:absolute;right:0;top:0;width:min(3
 
   /** One write — a text edit, a remove, a restyle — and what its answer means for the page on screen.
    *  `back` is the element the next version opens scrolled to. */
-  const write = async (ops: unknown[], summary: string, saying: string, back: string | null): Promise<void> => {
+  const write = async (ops: unknown[], summary: string, saying: string, back: string | null, base = head): Promise<void> => {
     if (head === null || busy) return;
     busy = true;
     draw();
     status(saying);
     const wid = back;
     try {
-      const r = await req('version.write', { base: head, ops, summary });
+      const r = await req('version.write', { base, ops, summary });
       if (r.ok) {
         returnTo = wid;
         await render(typeof r.payload['version'] === 'number' ? r.payload['version'] : undefined);
@@ -536,7 +553,8 @@ body[data-coverage="side"] #coverage{position:absolute;right:0;top:0;width:min(3
         status(r.error.code === 'stale' && r.error.message ? r.error.message : 'Not changed: it moved while you typed');
         returnTo = wid;
         const moved = r.payload?.['head'];
-        if (typeof moved === 'number' && moved !== head) await render(moved);
+        if (r.error.code === 'head_moved') await render(typeof moved === 'number' ? moved : undefined);
+        else if (typeof moved === 'number' && moved !== head) await render(moved);
       } else if (r.error.code === 'timeout') {
         // The host said it when its timer fired, before any late landing's line (codex r4): no echo here.
       } else if (r.error.code === 'refused') {
@@ -552,14 +570,14 @@ body[data-coverage="side"] #coverage{position:absolute;right:0;top:0;width:min(3
 
   const commit = async (): Promise<void> => {
     if (editing === null || head === null || busy) return;
-    const { wid, before } = editing;
+    const { wid, before, base } = editing;
     // One line of text: a pasted line break is a space, as the page would render it.
     const value = input.value.replace(/\s*\n\s*/g, ' ');
     cancelEdit();
     handle.focus();
     if (value === before) return;
     const words = anchorWords(wid, cfg.kind);
-    await write([{ op: 'text', anchor: wid, value, before }], words, `Changing ${words}…`, wid);
+    await write([{ op: 'text', anchor: wid, value, before }], words, `Changing ${words}…`, wid, base);
   };
 
   /** R-a: remove the picked element — one version; the host's Undo puts it back. */

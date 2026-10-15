@@ -66,13 +66,25 @@ export type McpBridgeResult = { response: unknown; ms: number; truncated: boolea
  *  by the page, never by the plugin. Absent (the dev and conformance hosts) = no session: `unavailable`. */
 export interface McpHostBridge {
   request(method: string, params: Record<string, unknown> | undefined): Promise<McpBridgeResult>;
+  /** Each surface hears the current session and log backlog on subscribe, then live updates. */
+  subscribe?(events: McpSessionEvents): () => void;
+  /** The session owner's call line includes calls and refusals from every surface. */
+  onCall?(call: McpCall): void;
+}
+
+export interface McpSessionEvents {
+  state(payload: Record<string, unknown>): void;
+  log(entries: readonly unknown[]): void;
 }
 
 /** One `mcp.request`, as the host's call line counts it: `sent` when it leaves, `done` with its outcome. */
 export type McpCall =
-  | { phase: 'sent'; method: string; tool: string | null }
-  /** `sent: false` = the host refused it before it left (no click, not connected, not a listed method). */
-  | { phase: 'done'; method: string; tool: string | null; sent: boolean; ms: number | null; outcome: 'ok' | 'server-error' | ErrorCode };
+  | { phase: 'sent'; method: string; tool: string | null; call?: number }
+  /** `sent: false` = the host refused it before it left (no click, not connected, not a listed method). `call` ties a
+   *  sent call's `done` to its `sent` (page-wide, across frames), so a session owner can drop an obsolete completion. */
+  | { phase: 'done'; method: string; tool: string | null; sent: boolean; ms: number | null; outcome: 'ok' | 'server-error' | ErrorCode; call?: number };
+
+let mcpCallSeq = 0;
 
 export type AdapterResult<T> = (T & { moved?: MovedOn }) | { error: ErrorCode; message: string; head?: number; moved?: MovedOn };
 
@@ -105,6 +117,8 @@ export interface HostUi {
    *  are the HOST-checked ids the write touched — the words of the line come from them, never from
    *  the plugin's `summary` (codex r1). */
   written?(w: { version: number; base: number; summary: string; anchors: string[]; verb: WriteVerb; words?: string }): void;
+  /** A write refused or failed, for the host's failed line (including writes from Options). */
+  writeFailed?(message: string): void;
   /** EP-P3 (codex r1): the version the plugin read — the one it shows, which the checks panel describes. */
   shown?(version: number): void;
   fullscreen(): Promise<boolean>;
@@ -239,6 +253,7 @@ export class EditorHost {
   /** `mcp.state` / `mcp.log` the page posted before the handshake: delivered right after `host.hello`. */
   private pendingMcpState: Record<string, unknown> | null = null;
   private pendingMcpLog: unknown[] = [];
+  private unsubscribeMcp: (() => void) | undefined;
   /** Window messages after the handshake: counted against the flood limit, logged only the first few. */
   private ignoredWindow = 0;
   /** One typed character per gesture (§5.10): spent by an accepted `ui.typed`, re-armed only when
@@ -286,6 +301,10 @@ export class EditorHost {
     this.readyTimer = setTimeout(() => { if (!this.handshaken) this.teardown('This editor didn’t load'); }, LIMITS.loadMs);
     this.frame.src = this.o.src;
     this.o.container.appendChild(this.frame);
+    this.unsubscribeMcp = this.o.mcp?.subscribe?.({
+      state: (payload) => this.mcpState(payload),
+      log: (entries) => this.mcpLog(entries),
+    });
   }
 
   get alive(): boolean { return !this.torn; }
@@ -411,9 +430,11 @@ export class EditorHost {
     this.log({ kind: 'in', type: msg.type, ok: true });
     if (msg.kind === 'event') { this.handleEvent(msg.type, msg.payload); return; }
     const need = REQUESTS[msg.type];
+    const isWrite = msg.type === 'version.write' || msg.type === 'theme.set';
     if (!this.grants.has(need)) {
       this.log({ kind: 'refused', type: msg.type, code: 'not_granted', why: `needs ${need}` });
       this.post(refuse(msg.id, 'not_granted', `needs ${need}`));
+      if (isWrite) this.o.ui.writeFailed?.(`Not changed: needs ${need}`);
       return;
     }
     const id = msg.id;
@@ -457,6 +478,7 @@ export class EditorHost {
           const e = r as { error: ErrorCode; message: string; head?: number };
           this.log({ kind: 'refused', type: msg.type, code: e.error, why: e.message });
           this.post({ ...refuse(id, e.error, e.message), ...(e.head !== undefined ? { payload: { head: e.head } } : {}) });
+          if (isWrite && !this.torn) this.o.ui.writeFailed?.(UNSENT.has(e.error) ? `Not changed: ${e.message}` : e.message);
         } else {
           this.post(reply(id, r));
           // EP-P3 (codex r1/r2): the version the plugin now shows is the one a read answered IN TIME —
@@ -470,6 +492,7 @@ export class EditorHost {
         settled = true;
         clearTimeout(timer);
         this.post(refuse(id, 'unavailable', e instanceof Error ? e.message : String(e)));
+        if (isWrite && !this.torn) this.o.ui.writeFailed?.(`Whether it changed is not known: ${e instanceof Error ? e.message : String(e)}`);
       });
   }
 
@@ -582,6 +605,11 @@ export class EditorHost {
     }
   }
 
+  private reportMcpCall(call: McpCall): void {
+    this.o.ui.mcpCall?.(call);
+    this.o.mcp?.onCall?.(call);
+  }
+
   /**
    * `mcp.request` (DES-MCP-INSPECTOR-001 §4). Judged at receipt, before any await: the method must be
    * on the bridge's list, and a `tools/call` needs the operator's real activation (a click or Enter in
@@ -593,7 +621,7 @@ export class EditorHost {
     const params = p['params'] as Record<string, unknown> | undefined;
     const tool = method === 'tools/call' && typeof params?.['name'] === 'string' ? params['name'].slice(0, 80) : null;
     if (!MCP_METHODS.has(method)) {
-      this.o.ui.mcpCall?.({ phase: 'done', method: method.slice(0, 80), tool: null, sent: false, ms: null, outcome: 'bad_request' });
+      this.reportMcpCall({ phase: 'done', method: method.slice(0, 80), tool: null, sent: false, ms: null, outcome: 'bad_request' });
       return { error: 'bad_request', message: `${method} is not a method the inspector sends` };
     }
     // A click in the host's own chrome (Connect, Copy log) also activates the page, so the click must
@@ -601,20 +629,24 @@ export class EditorHost {
     const clicked = (this.o.activation ?? NO_ACTIVATION)() && (this.o.focusInFrame ?? ((f) => document.activeElement === f))(this.frame);
     if (method === 'tools/call' && !clicked) {
       this.mcpRefusals += 1;
-      this.o.ui.mcpCall?.({ phase: 'done', method, tool, ms: null, sent: false, outcome: 'refused' });
+      this.reportMcpCall({ phase: 'done', method, tool, ms: null, sent: false, outcome: 'refused' });
       if (this.mcpRefusals >= LIMITS.mcpRefusalsBeforeTeardown) this.teardown('This editor called tools nobody clicked for');
       return { error: 'refused', message: 'a tool call needs your click in the editor' };
     }
     if (this.o.mcp === undefined) {
-      this.o.ui.mcpCall?.({ phase: 'done', method, tool, ms: null, sent: false, outcome: 'unavailable' });
+      this.reportMcpCall({ phase: 'done', method, tool, ms: null, sent: false, outcome: 'unavailable' });
       return { error: 'unavailable', message: 'not connected' };
     }
-    this.o.ui.mcpCall?.({ phase: 'sent', method, tool });
+    mcpCallSeq += 1;
+    const call = mcpCallSeq;
+    this.reportMcpCall({ phase: 'sent', method, tool, call });
     const r = await this.o.mcp.request(method, params);
-    if (!this.torn) {
-      const outcome = 'error' in r ? r.error : (r.response as { error?: unknown } | null)?.error !== undefined ? 'server-error' : 'ok';
-      this.o.ui.mcpCall?.({ phase: 'done', method, tool, sent: true, ms: 'error' in r ? null : r.ms, outcome });
-    }
+    const outcome = 'error' in r ? r.error : (r.response as { error?: unknown } | null)?.error !== undefined ? 'server-error' : 'ok';
+    const done: McpCall = { phase: 'done', method, tool, sent: true, ms: 'error' in r ? null : r.ms, outcome, call };
+    // The session owner hears every sent call finish, also one whose frame was closed meanwhile (an Options frame):
+    // its call line would otherwise wait forever (codex fu r3 P2). The frame's own UI only while it lives.
+    if (!this.torn) this.o.ui.mcpCall?.(done);
+    this.o.mcp?.onCall?.(done);
     return r;
   }
 
@@ -906,6 +938,8 @@ export class EditorHost {
     if (this.torn) return;
     this.post(event('host.teardown', { reason }));
     this.torn = true;
+    this.unsubscribeMcp?.();
+    this.unsubscribeMcp = undefined;
     window.removeEventListener('message', this.onWindow);
     window.removeEventListener('blur', this.onHostBlur);
     this.frame.removeEventListener('load', this.onLoad);
