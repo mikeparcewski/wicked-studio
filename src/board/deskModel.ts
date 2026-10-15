@@ -54,7 +54,7 @@ export function needsHeadline(count: number): string {
 // ── Needs per session ────────────────────────────────────────────────────────
 
 /** The fold's row kinds whose key suffix is a run id (`needsYou.ts` keys). */
-const RUN_KEY_PREFIXES = ['gate:', 'fail:', 'stall-esc:', 'stalled:', 'stranded:', 'elicit:', 'steer:'] as const;
+const RUN_KEY_PREFIXES = ['gate:', 'fail:', 'stall-esc:', 'stalled:', 'stranded:', 'orphaned:', 'elicit:', 'steer:'] as const;
 
 /** The run a needs-you row is about, or null for a row that belongs to no run. */
 export function needRunId(row: NeedRow): string | null {

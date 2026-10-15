@@ -47,16 +47,20 @@ export function chatStatusWord(views: readonly Pick<SessionView, 'session'>[]): 
 
 /**
  * The Desk's one "how much is live" count, by {@link statusWord}: `working` = runs whose word is
- * Working (the Running now card's rule, before Needs you holds any), `chatsOpen` = chats answered
- * and waiting at their turn for the next message. The calm line and the Desk peek say these
- * numbers, so neither can call a paused run or an idle chat "working" beside "Running now 0".
+ * Working and that Needs you does not hold (`held`: a stall, an orphan, an open question — the
+ * Running now card's exact rule), `chatsOpen` = chats answered and waiting at their turn for the next
+ * message. The calm line and the Desk peek say these numbers, so neither can call a paused run, a
+ * held run or an idle chat "working" beside "Running now 0".
  */
-export function deskLiveCounts(runs: readonly Pick<SessionView, 'session'>[]): { working: number; chatsOpen: number } {
+export function deskLiveCounts(
+  runs: readonly Pick<SessionView, 'session'>[],
+  held: ReadonlySet<string> = new Set(),
+): { working: number; chatsOpen: number } {
   let working = 0;
   let chatsOpen = 0;
   for (const v of runs) {
     const { word, tone } = statusWord(v);
-    if (tone === 'run') working += 1;
+    if (tone === 'run') { if (!held.has(v.session.id)) working += 1; }
     else if (word === 'Answered') chatsOpen += 1;
   }
   return { working, chatsOpen };

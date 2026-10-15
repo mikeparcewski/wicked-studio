@@ -52,7 +52,7 @@ export function DeskRuns({ runs, runsShown, refine, refineBar, now, navigate, pa
       {refineBar}
       <ul className="wk-stats wk-dr-stats" aria-label={`Runs, ${win}`} data-testid="desk-runs-stats">
         <DeskStat icon={Activity} tone="run" label="Running" testId="desk-runs-stat-running" value={runsShown ? String(s.running) : null}
-          note={s.running === 0 ? 'nothing executing' : 'executing now'} />
+          note={s.running === 0 ? 'nothing running' : 'working now'} />
         <DeskStat icon={Hourglass} tone="gate" label="Waiting on you" testId="desk-runs-stat-waiting" value={runsShown ? String(s.waiting) : null}
           note={s.waiting === 0 ? 'nothing waiting' : 'a decision or an answer'} />
         <DeskStat icon={CheckCircle2} tone="ok" label="Finished" testId="desk-runs-stat-finished" value={runsShown ? String(s.finished) : null}

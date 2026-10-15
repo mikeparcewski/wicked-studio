@@ -196,6 +196,10 @@ describe('⌥ peek says one telling fact', () => {
     // An idle chat is open, not running (the calm line's count).
     const chat = { session: { ...ctx.runs[0]!.session, id: 'c1', status: 'awaiting_human', ask_turn: true } } as unknown as (typeof ctx.runs)[number];
     expect(peekFact({ kind: 'desk' }, { ...ctx, runs: [...ctx.runs, chat] })).toBe('2 things need you · 1 running · 1 chat open');
+    // A run Needs you holds (a stall, an orphan, a question) is not "running", as on the Running now card.
+    expect(peekFact({ kind: 'desk' }, { ...ctx, held: new Set([ctx.runs[0]!.session.id]) })).toBe('2 things need you · 0 running');
+    // Hovering the idle chat says it is open, not "waiting on you".
+    expect(peekFact({ kind: 'session', sessionId: 'run:c1' }, { ...ctx, runs: [chat] })).toMatch(/ · open, waiting for your next message$/);
     expect(peekFact({ kind: 'helper', runId: 'r1', cli: 'claude' }, ctx)).toBe('claude · not working right now · signed in');
     expect(peekFact({ kind: 'step', runId: 'r1', ord: 0 }, ctx)).toBe('Done · claude');
     expect(peekFact({ kind: 'session', sessionId: 'run:r1' }, ctx)).toBe('fix the double charge · being worked on');

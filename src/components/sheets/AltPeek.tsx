@@ -10,6 +10,7 @@ import { isTypingContext } from '../../hooks/useGlobalShortcuts.js';
 import { seatStandingWord } from '../HealthRailSection.js';
 import { humanTitle } from '../runIdentity.js';
 import { deskLiveCounts } from '../../board/statusWords.js';
+import { isAskTurnRun } from '../../board/askTurn.js';
 
 const RUN_WORD: Record<string, string> = {
   executing: 'being worked on', distributing: 'being handed out', planning: 'being planned', awaiting_human: 'waiting on you',
@@ -17,10 +18,11 @@ const RUN_WORD: Record<string, string> = {
 };
 
 /** The one telling fact a peek shows for an object (DESIGN-interaction rule 9). */
-export function peekFact(ref: ObjectRef, ctx: { runs: readonly SessionView[]; needCount: number; runChatId: boolean; standing: (cli: string) => string | null }): string {
+export function peekFact(ref: ObjectRef, ctx: { runs: readonly SessionView[]; needCount: number; runChatId: boolean; standing: (cli: string) => string | null; held?: ReadonlySet<string> }): string {
   if (ref.kind === 'desk') {
     // The calm line's count (deskLiveCounts): an idle chat is open, not running.
-    const { working, chatsOpen } = deskLiveCounts(ctx.runs);
+    // `held`: the runs a Needs-you row is about, which the Running now card leaves out too.
+    const { working, chatsOpen } = deskLiveCounts(ctx.runs, ctx.held);
     const chats = chatsOpen > 0 ? ` · ${chatsOpen} ${chatsOpen === 1 ? 'chat' : 'chats'} open` : '';
     return `${ctx.needCount === 0 ? 'Nothing needs you' : `${ctx.needCount} ${ctx.needCount === 1 ? 'thing needs' : 'things need'} you`} · ${working} running${chats}`;
   }
@@ -29,7 +31,9 @@ export function peekFact(ref: ObjectRef, ctx: { runs: readonly SessionView[]; ne
     const mine = s.kind === 'run' ? ctx.runs.filter((v) => v.session.id === s.runId) : ctx.runs.filter((v) => ctx.runChatId && runChatIdOf(v) === s.chatId);
     const v = mine[mine.length - 1];
     if (v === undefined) return 'Nothing in this session is on this daemon';
-    return `${humanTitle(v.session.problem || v.session.id)} · ${RUN_WORD[v.session.status] ?? v.session.status}${mine.length > 1 ? ` · ${mine.length} runs` : ''}`;
+    // An answered chat waits for its next message, not on you (statusWord's "Answered").
+    const word = v.session.status === 'awaiting_human' && isAskTurnRun(v.session) ? 'open, waiting for your next message' : (RUN_WORD[v.session.status] ?? v.session.status);
+    return `${humanTitle(v.session.problem || v.session.id)} · ${word}${mine.length > 1 ? ` · ${mine.length} runs` : ''}`;
   }
   const v = ctx.runs.find((x) => x.session.id === ref.runId);
   if (v === undefined) return 'Not on this daemon';
@@ -48,7 +52,7 @@ export function peekFact(ref: ObjectRef, ctx: { runs: readonly SessionView[]; ne
  * a helper, a session, the Desk — and one telling fact appears beside it. Letting go, or any other key,
  * hides it. A click opens the full sheet; ⌘K lists its actions.
  */
-export function AltPeek({ runs, needCount }: { runs: SessionView[]; needCount: number }): React.ReactElement | null {
+export function AltPeek({ runs, needCount, heldRuns }: { runs: SessionView[]; needCount: number; heldRuns?: ReadonlySet<string> }): React.ReactElement | null {
   const pointed = useSheets((s) => s.pointed);
   const runChatId = useCapabilities((s) => s.runChatId);
   const roster = useRoster();
@@ -81,7 +85,7 @@ export function AltPeek({ runs, needCount }: { runs: SessionView[]; needCount: n
   const left = rect !== undefined ? Math.max(8, Math.min(window.innerWidth - 340, rect.left)) : 80;
   return (
     <div data-testid="alt-peek" data-object={objectAttr(pointed)} role="status" className="wk-alt-peek" style={{ top, left }}>
-      {peekFact(pointed, { runs, needCount, runChatId, standing })}
+      {peekFact(pointed, { runs, needCount, runChatId, standing, ...(heldRuns !== undefined ? { held: heldRuns } : {}) })}
     </div>
   );
 }

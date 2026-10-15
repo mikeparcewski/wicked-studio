@@ -56,7 +56,8 @@ describe('the greeting and the one sentence', () => {
 
 describe('needs per session', () => {
   it('maps every run-scoped row kind to its run, and nothing else', () => {
-    for (const k of ['gate:r1', 'fail:r1', 'stall-esc:r1', 'stalled:r1', 'stranded:r1', 'elicit:r1', 'steer:r1']) {
+    // `orphaned:` too (codex calm r2): its run is held off Running now, beside "nothing is working on it".
+    for (const k of ['gate:r1', 'fail:r1', 'stall-esc:r1', 'stalled:r1', 'stranded:r1', 'orphaned:r1', 'elicit:r1', 'steer:r1']) {
       expect(needRunId(need(k)), k).toBe('r1');
     }
     for (const k of ['repo:x', 'campaign:c', 'chat:c', 'proposal:p']) expect(needRunId(need(k)), k).toBeNull();
