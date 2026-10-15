@@ -8,7 +8,7 @@
 // mutation bumps, so an async GET that started before the mutation can never write after it.
 
 import { beforeEach, describe, expect, it } from 'vitest';
-import { useElicitationStore, type OpenElicitation } from '../src/store/elicitations.js';
+import { askerOf, useElicitationStore, type OpenElicitation } from '../src/store/elicitations.js';
 
 const RUN = 'run-1';
 
@@ -179,4 +179,24 @@ describe('the component is actually reachable', () => {
       expect(jsx, `mount in ${f} is missing key={...}`).toMatch(/\bkey=\{/);
     }
   }, 30_000);
+});
+
+describe('ask: the frame names who asked', () => {
+  it('keeps the asking seat and step from an elicitationCreated frame', () => {
+    useElicitationStore.getState().ingest({ type: 'elicitationCreated', session: RUN, elicitationId: 'ask-1', message: 'A or B?', options: ['A', 'B'], source: 'ask', ord: 3, attempt: 0, seat: 'pi' } as never);
+    expect(useElicitationStore.getState().elicitations[RUN]).toMatchObject({ elicitationId: 'ask-1', seat: 'pi', ord: 3 });
+  });
+  it('a frame without them (an older daemon, another producer) stores neither', () => {
+    useElicitationStore.getState().ingest({ type: 'elicitationCreated', session: RUN, elicitationId: 'e-1', message: 'q', options: null } as never);
+    const e = useElicitationStore.getState().elicitations[RUN];
+    expect(e).toBeDefined();
+    expect('seat' in (e as object)).toBe(false);
+    expect('ord' in (e as object)).toBe(false);
+  });
+  it('drops malformed values', () => {
+    expect(askerOf({ seat: '', ord: -1 })).toEqual({});
+    expect(askerOf({ seat: 7, ord: 1.5 })).toEqual({});
+    expect(askerOf({ seat: 'codex#2', ord: 0 })).toEqual({ seat: 'codex#2', ord: 0 });
+    expect(askerOf(null)).toEqual({});
+  });
 });

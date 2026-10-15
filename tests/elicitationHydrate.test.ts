@@ -42,6 +42,12 @@ describe('studio#769 — late-join elicitation hydration', () => {
     expect(useElicitationStore.getState().elicitations['r1']).toBeUndefined();
   });
 
+  it('keeps who asked when the daemon says it', async () => {
+    getElicitation.mockResolvedValue({ ...info('r1', 'q1'), seat: 'pi', ord: 3 });
+    await hydrateElicitations([run('r1', 'executing')]);
+    expect(useElicitationStore.getState().elicitations['r1']).toMatchObject({ elicitationId: 'q1', seat: 'pi', ord: 3 });
+  });
+
   it('a failed read leaves the store as it was', async () => {
     getElicitation.mockRejectedValue(new Error('500'));
     await hydrateElicitations([run('r1', 'executing')]);

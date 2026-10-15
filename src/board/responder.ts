@@ -58,8 +58,18 @@ export function gateResponder(view: RunView | null, gate: { ord: number; gateKin
   return unitResponder(view, gate.ord, roster);
 }
 
-/** Who is asking a live run's question (an MCP server's, through the seat running the current step). */
-export function askingResponder(view: RunView, roster: Roster): Responder {
+/**
+ * Who is asking a live run's question. An ask question says which seat asked (`seat`) and from which
+ * step (`ord`), and the card names that seat: in a run with helpers, the seat running the current
+ * step is often not the one asking. Without either (an older daemon, another producer), the seat
+ * running the current step, as before.
+ */
+export function askingResponder(view: RunView, roster: Roster, asker?: { seat?: string; ord?: number }): Responder {
+  if (typeof asker?.seat === 'string' && asker.seat.trim() !== '') return seatResponder(asker.seat, roster);
+  if (typeof asker?.ord === 'number') {
+    const byStep = unitResponder(view, asker.ord, roster);
+    if (byStep.role === 'seat') return byStep;
+  }
   return unitResponder(view, view.session.unit_ix, roster);
 }
 
