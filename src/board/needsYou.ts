@@ -705,9 +705,18 @@ export function needsYouRows(inputs: NeedsYouInputs): NeedRow[] {
  */
 export function calmCopy(runs: SessionView[]): string {
   const { working } = runStats(runs);
-  return working > 0
-    ? `Nothing needs you — ${plural(working, 'run')} working.`
-    : 'Nothing needs you — nothing running right now.';
+  // runStats counts a chat waiting for its next message as live (studio#588), but nothing is
+  // executing there: said as "working" it contradicted "Running now: 0 · nothing executing" on
+  // the same Desk. An open chat is named as one.
+  const chatsOpen = runs.filter(
+    (v) => v.session.archived_at == null && v.session.status === 'awaiting_human' && isAskTurnRun(v.session),
+  ).length;
+  const executing = working - chatsOpen;
+  const chats = chatsOpen > 0 ? `${plural(chatsOpen, 'chat')} open` : '';
+  if (executing > 0) return `Nothing needs you — ${plural(executing, 'run')} working${chats === '' ? '' : `, ${chats}`}.`;
+  return chats === ''
+    ? 'Nothing needs you — nothing running right now.'
+    : `Nothing needs you — nothing running right now; ${chats}.`;
 }
 
 /** True when the portfolio has never seen work — the fresh-install welcome

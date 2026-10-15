@@ -267,6 +267,17 @@ describe('the calm branch and its inputs', () => {
     expect(calmCopy([])).toBe('Nothing needs you — nothing running right now.');
   });
 
+  it('calmCopy names a chat waiting for its next message as open, not as a run working', () => {
+    // Seen on a Desk: "5 runs working" beside "Running now 0 · nothing executing" — five chats.
+    const chat = (id: string) => makeView({ id, status: 'awaiting_human', ask_turn: true } as Parameters<typeof makeView>[0]);
+    expect(calmCopy([chat('a'), chat('b')])).toBe('Nothing needs you — nothing running right now; 2 chats open.');
+    expect(calmCopy([makeView({ id: 'r', status: 'executing' }), chat('a')]))
+      .toBe('Nothing needs you — 1 run working, 1 chat open.');
+    // An archived chat counts for neither.
+    expect(calmCopy([makeView({ id: 'x', status: 'awaiting_human', ask_turn: true, archived_at: 1 } as Parameters<typeof makeView>[0])]))
+      .toBe('Nothing needs you — nothing running right now.');
+  });
+
   it('oldestNeedAt picks the oldest honest clock, ignoring clockless rows', () => {
     const rows = needsYouRows(inputs({
       runs: [
