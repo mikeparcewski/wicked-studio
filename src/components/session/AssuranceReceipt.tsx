@@ -1,5 +1,5 @@
 import type { SessionView } from '../../api/types.js';
-import { QE_FORCE_DISCLOSURE, QE_FORCE_LABEL, QE_SKIP_DISCLOSURE, QE_SKIP_LABEL, REDUCED_ASSURANCE_LABEL, REDUCED_OPT_IN_DISCLOSURE, REDUCED_OPT_IN_LABEL, isReduced, qeWords, sessionQe, unverifiedDeliveryLine, type DeliveryAssuranceView, type QeDecision, receiptWords, sessionAssurance, type AssuranceReceipt as Receipt } from '../../board/assuranceModel.js';
+import { QE_FORCE_DISCLOSURE, QE_FORCE_LABEL, QE_SKIP_DISCLOSURE, QE_SKIP_LABEL, REDUCED_ASSURANCE_LABEL, REDUCED_OPT_IN_DISCLOSURE, REDUCED_OPT_IN_LABEL, isReduced, qeSkippedText, qeWords, sessionQe, unverifiedDeliveryLine, type DeliveryAssuranceView, type QeDecision, receiptWords, sessionAssurance, type AssuranceReceipt as Receipt } from '../../board/assuranceModel.js';
 import { useRunEvents } from '../../hooks/useRunEvents.js';
 import { useDisplayText } from '../../hooks/useHomePath.js';
 import { TechDetails } from '../ui/index.js';
@@ -184,7 +184,7 @@ export function DeliveryAssuranceLines({ recorded, testIdPrefix }: { recorded: D
       {qe !== null && (
         <p data-testid={`${testIdPrefix}-qe`} data-status={qe.status ?? 'required'} data-satisfied={qe.satisfied ? 'true' : 'false'} className={qe.satisfied ? 'wk-assurance' : 'wk-assurance wk-assurance-kind--unchecked'}>
           {qe.status === 'waived' || qe.status === 'skipped'
-            ? showText(qe.status === 'waived' ? `QE acceptance: waived (${qe.reason.replace(/^waived:\s*/, '')})` : `QE acceptance: skipped by operator (${qe.reason.replace(/^QE acceptance skipped by operator:\s*/, '')})`)
+            ? showText(qe.status === 'waived' ? `QE acceptance: waived (${qe.reason.replace(/^waived:\s*/, '')})` : qeSkippedText(qe.reason))
             : qe.satisfied
               ? `QE acceptance: PASS${qe.reviewer !== null ? ` by ${qe.reviewer}` : ''}${qe.verdictId !== null ? ` (${qe.verdictId})` : ''}`
               : `QE acceptance not met: ${showText(qe.reason)}`}

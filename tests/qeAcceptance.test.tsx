@@ -11,7 +11,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as client from '../src/api/client.js';
 import type { CoreEvent, LaunchBodyWithDeliver } from '../src/api/types.js';
-import { qeDecisionOf, qeWords, receiptOf, sessionQe, workflowRequiresQe } from '../src/board/assuranceModel.js';
+import { qeDecisionOf, qeSkippedText, qeWords, receiptOf, sessionQe, workflowRequiresQe } from '../src/board/assuranceModel.js';
 import { ChatInput } from '../src/components/ChatInput.js';
 import { AssuranceReceipt, DeliveryAssuranceLines, QeAcceptanceLabel } from '../src/components/session/AssuranceReceipt.js';
 import { setRetryPrefill, takeRetryPrefill } from '../src/store/retryPrefill.js';
@@ -27,6 +27,11 @@ const SKIPPED = {
   status: 'skipped', basis: 'operator', score: null, threshold: 20, ord: null, tree: null,
   reason: 'QE acceptance skipped by operator: docs-only hotfix', reasons: [],
 };
+const SKIPPED_BY_SETTINGS = {
+  status: 'skipped', basis: 'operator', score: null, threshold: 20, ord: null, tree: null,
+  reason: "QE acceptance skipped by operator: QE acceptance is off on this daemon (Settings: QE acceptance off, qeAcceptance: 'off')",
+  reasons: [],
+};
 const PROVISIONAL = {
   status: 'required', basis: 'plan', score: null, threshold: 20, ord: null, tree: null,
   reason: 'required (provisional): the binding decision is made from the run\'s diff when its QE phase starts', reasons: [],
@@ -34,12 +39,19 @@ const PROVISIONAL = {
 const DIFF_REQUIRED = { ...PROVISIONAL, basis: 'diff', score: 60, reason: 'required: impact score 60 above the waiver line 20 (novelty +20: 1 new dependency(ies))' };
 
 describe('the decision, spelled once', () => {
-  it('required (provisional / scored / forced), waived (score N), skipped by operator (reason)', () => {
+  it('required (provisional / scored / forced), waived (score N), off on this computer (Settings), skipped by operator (reason)', () => {
     expect(qeWords(qeDecisionOf(PROVISIONAL)!).text).toBe('QE acceptance: required, provisional');
     expect(qeWords(qeDecisionOf(DIFF_REQUIRED)!).text).toBe('QE acceptance: required (score 60)');
     expect(qeWords(qeDecisionOf({ ...PROVISIONAL, basis: 'operator', reason: 'QE acceptance forced by operator: no score waives it' })!).text)
       .toBe('QE acceptance: required, forced by operator');
     expect(qeWords(qeDecisionOf(WAIVED)!).text).toBe('QE acceptance: waived (score 20)');
+    expect(qeSkippedText(SKIPPED_BY_SETTINGS.reason)).toBe('QE acceptance: off on this computer (Settings)');
+    expect(qeSkippedText("QE acceptance is off on this daemon (Settings: QE acceptance off, qeAcceptance: 'off')"))
+      .toBe('QE acceptance: off on this computer (Settings)');
+    expect(qeSkippedText(SKIPPED.reason)).toBe('QE acceptance: skipped by operator (docs-only hotfix)');
+    const offWords = qeWords(qeDecisionOf(SKIPPED_BY_SETTINGS)!);
+    expect(offWords.text).toBe('QE acceptance: off on this computer (Settings)');
+    expect(offWords.detail).toBe(SKIPPED_BY_SETTINGS.reason);
     expect(qeWords(qeDecisionOf(SKIPPED)!).text).toBe('QE acceptance: skipped by operator (docs-only hotfix)');
     expect(qeDecisionOf({ status: '' })).toBeNull();
     expect(workflowRequiresQe({ required_instruments: ['distinct_evaluator', 'judge', 'qe_acceptance'] })).toBe(true);
@@ -63,6 +75,11 @@ describe('the decision, spelled once', () => {
     cleanup();
     render(<QeAcceptanceLabel qe={qeDecisionOf(SKIPPED)!} />);
     expect(screen.getByTestId('qe-acceptance').textContent).toBe('QE acceptance: skipped by operator (docs-only hotfix)');
+    expect(screen.getByTestId('qe-acceptance').getAttribute('title')).toBe(SKIPPED.reason);
+    cleanup();
+    render(<QeAcceptanceLabel qe={qeDecisionOf(SKIPPED_BY_SETTINGS)!} />);
+    expect(screen.getByTestId('qe-acceptance').textContent).toBe('QE acceptance: off on this computer (Settings)');
+    expect(screen.getByTestId('qe-acceptance').getAttribute('title')).toBe(SKIPPED_BY_SETTINGS.reason);
   });
 
   it('the delivery says waived or skipped instead of a PASS it never read', () => {
@@ -72,6 +89,9 @@ describe('the decision, spelled once', () => {
     cleanup();
     render(<DeliveryAssuranceLines recorded={{ ...base, qeAcceptance: { status: 'skipped', satisfied: true, reason: SKIPPED.reason, verdictId: null, reviewer: null } }} testIdPrefix="d" />);
     expect(screen.getByTestId('d-qe').textContent).toBe('QE acceptance: skipped by operator (docs-only hotfix)');
+    cleanup();
+    render(<DeliveryAssuranceLines recorded={{ ...base, qeAcceptance: { status: 'skipped', satisfied: true, reason: SKIPPED_BY_SETTINGS.reason, verdictId: null, reviewer: null } }} testIdPrefix="d" />);
+    expect(screen.getByTestId('d-qe').textContent).toBe('QE acceptance: off on this computer (Settings)');
   });
 });
 

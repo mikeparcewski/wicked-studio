@@ -964,7 +964,6 @@ export function RunBlock({ view, badge, sessionId, navigate, solo = null }: {
             <span className="wk-session-run-title">{runTitleText}</span>
           </>
         )}
-        <RunAssuranceLabel view={view} />
         {badge > 0 && solo === null && <span className="wk-session-run-state">Needs you</span>}
         {/* S15d (Amendment 5 item 1): the run stays in the thread — its depth (every step and what it did,
             the changes, the evidence) is the look-underneath sheet of THIS run (its own `run:` session,
@@ -978,6 +977,9 @@ export function RunBlock({ view, badge, sessionId, navigate, solo = null }: {
           {view.session.archived_at != null && <span data-testid="session-run-archived" className="wk-session-grey"> · Archived</span>}
         </p>
       )}
+      <p className="wk-session-run-labels">
+        <RunAssuranceLabel view={view} />
+      </p>
       {/* S15e: plan and deliver go through ProposalCard; every other gate kind is answered in the thread.
           Run clarity: the action comes first — the card sits right under the status sentence, above the
           run's notes (who reviewed, what wasn't checked), so what you can do is never below the fold. */}

@@ -940,6 +940,9 @@ select:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-
 .wk-session-ask-proposal .wk-prop { margin: 0; }
 .wk-session-run { background: var(--surface-card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 8px 14px; min-width: 0; }
 .wk-session-run-head { margin: 0 0 6px; display: flex; align-items: center; gap: 8px; min-width: 0; }
+.wk-session-run-labels { margin: 2px 0 6px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: var(--text-xs); color: var(--ink-muted); white-space: normal; }
+.wk-session-run-labels:empty { display: none; }
+.wk-session-run-labels .wk-assurance-reduced { margin-left: 0; }
 .wk-session-run-title { flex: 1 1 auto; min-width: 0; font-weight: var(--weight-semi); color: var(--ink-high); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .wk-session-run-state { font-size: var(--text-xs); color: var(--ink-muted); flex-shrink: 0; }
 .wk-session-link { font-size: var(--text-xs); color: var(--ink-muted); }

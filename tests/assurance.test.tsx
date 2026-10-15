@@ -10,13 +10,16 @@ import * as client from '../src/api/client.js';
 import type { CoreEvent, WorkUnit } from '../src/api/types.js';
 import { useGateActionStore } from '../src/board/gateActions.js';
 import {
-  assuranceKind, deliveryReceiptOf, gateReceiptFor, receiptOf, receiptWords, sessionAssurance, waitsForJudge,
+  assuranceKind, deliveryReceiptOf, gateReceiptFor, qeSkippedText, receiptOf, receiptWords, sessionAssurance, waitsForJudge,
   type AssuranceReceipt,
 } from '../src/board/assuranceModel.js';
+import { teamPlanApi } from '../src/api/teamPlan.js';
 import { GateRow } from '../src/components/session/GateRow.js';
 import { AssuranceReceipt as ReceiptView, RunAssuranceLabel } from '../src/components/session/AssuranceReceipt.js';
+import { RunBlock } from '../src/components/session/SessionView.js';
 import { useRunEventStore } from '../src/store/events.js';
 import { useGateStore, type OpenGate } from '../src/store/gates.js';
+import { usePlanCatalog } from '../src/store/planCatalog.js';
 import { makeUnit, makeView } from './factories.js';
 
 const RUN = 'r-850';
@@ -261,5 +264,46 @@ describe('the receipt renders', () => {
     fireEvent.click(screen.getByTestId('session-gate-judge-signin'));
     expect(navigate).toHaveBeenCalledWith('/system');
     expect(screen.getByTestId('assurance-kind').textContent).toBe('Floor checks only');
+  });
+
+  it('studio#788: the run assurance label sits on its own line under the status sentence (outside .wk-session-run-head), and the status sentence is complete', () => {
+    const offReason = "QE acceptance skipped by operator: QE acceptance is off on this daemon (Settings: QE acceptance off, qeAcceptance: 'off')";
+    expect(qeSkippedText(offReason)).toBe('QE acceptance: off on this computer (Settings)');
+    expect(qeSkippedText('QE acceptance skipped by operator: docs-only hotfix')).toBe('QE acceptance: skipped by operator (docs-only hotfix)');
+    // An operator's own reason that merely starts like the Settings wording stays theirs (codex on #796).
+    expect(qeSkippedText('QE acceptance skipped by operator: QE acceptance is off on this daemon only for this hotfix')).toBe('QE acceptance: skipped by operator (QE acceptance is off on this daemon only for this hotfix)');
+    usePlanCatalog.setState({ catalog: 'ready', entries: [] });
+    vi.spyOn(teamPlanApi, 'team').mockResolvedValue({ teamed: false, rows: [], units: [] });
+    vi.spyOn(client.api, 'getWatch').mockResolvedValue({ coverage: [] } as never);
+    vi.spyOn(client.api, 'getRoster').mockResolvedValue({ roster: [] } as never);
+    useRunEventStore.setState({ byRun: { [RUN]: [] } });
+    const qeOff = { status: 'skipped', basis: 'operator', score: null, threshold: 20, ord: null, tree: null, reason: offReason, reasons: [] };
+    const view = makeView(
+      { id: RUN, problem: 'Fix the signup crash', status: 'completed', delivery: 'stranded', assurance: { mode: 'full', required: ['qe_acceptance'], qe: qeOff } } as never,
+      UNITS,
+    );
+    // Solo arm: the head IS the status sentence; the label sits under the head, not inside it.
+    render(<RunBlock view={view} badge={0} sessionId={`run:${RUN}`} solo="Fix the signup crash" />);
+    const runCard = screen.getByTestId('session-run');
+    const head = runCard.querySelector('.wk-session-run-head')!;
+    const labels = runCard.querySelector('.wk-session-run-labels')!;
+    const qeLabel = screen.getByTestId('session-run-qe');
+    expect(head.contains(qeLabel)).toBe(false);
+    expect(labels.contains(qeLabel)).toBe(true);
+    expect(qeLabel.textContent).toBe('QE acceptance: off on this computer (Settings)');
+    expect(qeLabel.getAttribute('title')).toBe(offReason);
+    expect(screen.getByTestId('session-status-sentence').textContent).toBe('Finished · kept on this machine, not pushed · 1 of 2 done');
+    cleanup();
+    // Non-solo arm: the label sits directly under the status sentence paragraph, outside the head.
+    render(<RunBlock view={view} badge={0} sessionId="chat-1" />);
+    const card2 = screen.getByTestId('session-run');
+    const head2 = card2.querySelector('.wk-session-run-head')!;
+    const statusP = screen.getByTestId('session-status-sentence');
+    const labels2 = card2.querySelector('.wk-session-run-labels')!;
+    const qeLabel2 = screen.getByTestId('session-run-qe');
+    expect(head2.contains(qeLabel2)).toBe(false);
+    expect(labels2.contains(qeLabel2)).toBe(true);
+    expect(statusP.nextElementSibling).toBe(labels2);
+    expect(statusP.textContent).toBe('Finished · kept on this machine, not pushed · 1 of 2 done');
   });
 });
