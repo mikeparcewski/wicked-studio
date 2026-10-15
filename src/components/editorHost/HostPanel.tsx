@@ -102,7 +102,10 @@ function GroupBody({ group, tab, withRun }: { group: OptionsGroup; tab: PanelTab
   const v2 = group.protocol >= 2;
   const pluginTab = tab.owner === 'plugin' ? group.surfaces.options?.tabs.find((t) => t.id === tab.id) ?? null : null;
   const hostTab = tab.owner === 'host' ? hostTabsFor(group.adapter).find((h) => h.id === tab.id) ?? null : null;
-  const showFrame = v2 && pluginTab?.render === 'plugin';
+  // A protocol-1 plugin with no full screen (sizes ['pane']): its pane is the Options tab's frame, the v1 mapping
+  // (DES §4: pane -> a single options tab), not a dead end (codex fu r4 P2). Generic: from the declaration only.
+  const v1Pane = !v2 && pluginTab !== null && group.surfaces.full === null;
+  const showFrame = (v2 && pluginTab?.render === 'plugin') || v1Pane;
   const firstPluginTab = group.surfaces.options?.tabs.find((t) => t.render === 'plugin')?.id;
   const [, setShownTick] = useState(0);
   // The card's shown version re-renders the host tabs (codex h2b-r3 P2).
@@ -110,7 +113,7 @@ function GroupBody({ group, tab, withRun }: { group: OptionsGroup; tab: PanelTab
 
   return (
     <>
-      {v2 && (
+      {(v2 || v1Pane) && (
         <OptionsInstance group={group} hostRef={hostRef} visible={showFrame} withRun={withRun} initialTab={pluginTab?.render === 'plugin' ? pluginTab.id : firstPluginTab}
           onValues={(t, v) => setValues((s) => ({ ...s, [t]: v }))} onTorn={setTorn} onShown={() => setShownTick((n) => n + 1)} />
       )}
@@ -119,7 +122,7 @@ function GroupBody({ group, tab, withRun }: { group: OptionsGroup; tab: PanelTab
       {pluginTab !== null && pluginTab.render === 'controls' && v2 && (
         <ControlsTab key={pluginTab.id} tab={pluginTab} confirmed={values[pluginTab.id] ?? {}} change={(id, value) => hostRef.current?.changeOption(pluginTab.id, id, value) ?? Promise.resolve(false)} />
       )}
-      {pluginTab !== null && !v2 && (
+      {pluginTab !== null && !v2 && !v1Pane && (
         <div data-testid="host-panel-v1" className="wk-hpanel-v1">
           <p>This editor opens full screen.</p>
           {group.surfaces.full !== null && (

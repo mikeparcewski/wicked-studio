@@ -127,6 +127,8 @@ export function McpInspectPage({ navigate, search }: { navigate: (p: string) => 
   const lastAsk = useRef<Ask | null>(null);
   const entries = useRef<McpInspectLogEntry[]>([]);
   const listeners = useRef(new Set<McpSessionEvents>());
+  /** The session each sent call left in (by the host's call number). */
+  const callSession = useRef(new Map<number, string | null>());
   /** The state every frame was last told, replayed to a frame that subscribes later; while a session is being
    *  replaced it says `connecting`, and no request goes to the old session (codex fu r3 P2). */
   const toldState = useRef<Record<string, unknown>>(statePayload(null));
@@ -359,12 +361,22 @@ export function McpInspectPage({ navigate, search }: { navigate: (p: string) => 
       listener.log(pluginEntries(entries.current));
       return () => { listeners.current.delete(listener); };
     },
-    onCall: (c) => setCalls((l) => {
-      const what = `${c.method}${c.tool !== null ? ` ${c.tool}` : ''}`;
-      if (c.phase === 'sent') return { count: l.count + 1, last: what, tail: 'waiting…' };
-      // A refused call counts once; a sent call was counted on `sent`.
-      return { count: c.sent ? l.count : l.count + 1, last: what, tail: outcomeWords(c) };
-    }),
+    onCall: (c) => {
+      // A sent call belongs to the session it was sent in: its end after a restart is the old session's, not this
+      // one's call line (codex fu r4 P2).
+      if (c.phase === 'sent' && c.call !== undefined) callSession.current.set(c.call, liveRef.current?.session.id ?? null);
+      if (c.phase === 'done' && c.sent && c.call !== undefined) {
+        const from = callSession.current.get(c.call);
+        callSession.current.delete(c.call);
+        if (from !== undefined && from !== (liveRef.current?.session.id ?? null)) return;
+      }
+      setCalls((l) => {
+        const what = `${c.method}${c.tool !== null ? ` ${c.tool}` : ''}`;
+        if (c.phase === 'sent') return { count: l.count + 1, last: what, tail: 'waiting…' };
+        // A refused call counts once; a sent call was counted on `sent`.
+        return { count: c.sent ? l.count : l.count + 1, last: what, tail: outcomeWords(c) };
+      });
+    },
   }), []);
 
   const adapter = useMemo(() => new McpSurfaceAdapter(() => titleRef.current, bridge), [bridge]);

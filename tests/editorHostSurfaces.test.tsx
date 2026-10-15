@@ -166,6 +166,15 @@ describe('HostPanel', () => {
     expect(screen.getAllByTestId('host-panel-tab')).toHaveLength(1);
     expect(screen.getByText('run body')).toBeTruthy();
   });
+  it('a protocol-1 pane-only plugin (no full screen) gets its pane as the Options frame, not a dead end (codex fu r4)', () => {
+    wide(false);
+    render(<HostPanel runTab={<p>run body</p>} ribbon={<span>ribbon</span>} />);
+    const paneOnly: Surfaces = { card: { interactive: false, aspect: '16:9', actions: [] }, options: { tabs: [{ id: 'editor', label: 'Editor', render: 'plugin' }] }, full: null };
+    act(() => { useHostPanel.getState().openGroup(group(paneOnly)); });
+    expect(screen.queryByTestId('host-panel-v1')).toBeNull();
+    const frame = screen.getByTestId('host-panel-frame');
+    expect(frame.hidden).toBe(false);
+  });
   it('below 1200 px it is the ribbon, which opens the panel', () => {
     wide(true);
     render(<HostPanel runTab={<p>run body</p>} ribbon={<span>ribbon line</span>} />);

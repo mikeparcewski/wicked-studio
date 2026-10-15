@@ -280,7 +280,8 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
           // A write that lands while the frame is being remade (Reload it, waking) is adopted once the new host
           // has shaken hands, so its Undo is this card's (codex fu r2 P2).
           // adopt() needs no handshake: the version is this card's as soon as a host exists (codex fu r3 P2).
-          if (hostRef.current !== null) hostRef.current.adopt(e.write.version);
+          // Only a live host records it; a torn one would drop it (codex fu r4 P2) — queued for the next host instead.
+          if (hostRef.current?.alive === true) hostRef.current.adopt(e.write.version);
           else pendingAdopt.current.push({ group, version: e.write.version });
           hostRef.current?.artifactChanged(e.write.version, e.write.verb === 'restyled' ? 'theme' : 'deterministic');
           written(e.write);
