@@ -80,7 +80,9 @@ export function runsView(runs: readonly SessionView[], refine: Refine, status: R
   const { kept, undated } = refineRuns(runs, refine, now, allTime);
   // How many more an All time view would hold (older, undated or archived): the switch says so.
   const beyond = allTime ? 0 : refineRuns(runs, refine, now, true).kept.length - kept.length;
-  const all = kept.map((v) => rowOf(v, title));
+  // A run Needs you holds (a stall, an orphan, an open question) waits on you, whatever its DTO says:
+  // its row, the status filter and both tiles read it as Waiting, never Working (studio#805).
+  const all = kept.map((v) => rowOf(v, title)).map((r) => (r.outcome === 'Working' && held.has(r.id) ? { ...r, outcome: 'Waiting on you' as const } : r));
   const count = (o: readonly Outcome[]): number => all.filter((r) => o.some((word) => word === r.outcome)).length;
   const words = query.trim().toLowerCase().split(/\s+/).filter((w) => w !== '');
   const rows = all
@@ -91,9 +93,7 @@ export function runsView(runs: readonly SessionView[], refine: Refine, status: R
     rows,
     stats: {
       inWindow: all.length,
-      // A run Needs you holds (a stall, an orphan, an open question) is not running — the Work
-      // tab's Running now card leaves it out the same way (studio#805).
-      running: all.filter((r) => OF_FILTER.working.some((word) => word === r.outcome) && !held.has(r.id)).length,
+      running: count(OF_FILTER.working),
       waiting: count(OF_FILTER.waiting),
       finished: count(OF_FILTER.finished),
       failed: count(OF_FILTER.failed),

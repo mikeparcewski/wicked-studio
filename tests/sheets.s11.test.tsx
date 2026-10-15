@@ -152,6 +152,19 @@ describe('the sheets', () => {
     expect(useSheets.getState().open).toBeNull();
   });
 
+  it('the Desk sheet does not call a helper of a held run working (studio#805)', () => {
+    const { unmount } = render(<ObjectSheet runs={[RUN]} navigate={() => {}} needCount={0} />);
+    act(() => openSheet({ kind: 'desk' }, 'helpers'));
+    expect(screen.getByTestId('sheet-helpers')).toHaveTextContent(/— working on/);
+    act(() => closeSheet());
+    unmount();
+    render(<ObjectSheet runs={[RUN]} navigate={() => {}} needCount={1} heldRuns={new Set(['r1'])} />);
+    act(() => openSheet({ kind: 'desk' }, 'helpers'));
+    expect(screen.getByTestId('sheet-helpers')).not.toHaveTextContent(/— working on/);
+    expect(screen.getByTestId('sheet-helpers')).toHaveTextContent(/— waiting on/);
+    act(() => closeSheet());
+  });
+
   it('a helper’s terminal is read-only until you turn typing on', () => {
     render(<ObjectSheet runs={[RUN]} navigate={() => {}} needCount={0} />);
     act(() => openSheet({ kind: 'helper', runId: 'r1', cli: 'codex' }, 'terminal'));

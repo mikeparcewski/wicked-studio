@@ -49,8 +49,12 @@ describe('Desk Runs model', () => {
     expect(working).toHaveLength(1);
     const view = runsView(runs, DEFAULT_REFINE, 'all', '', NOW, title, names, false, new Set(working));
     expect(view.stats.running).toBe(0);
-    // The row itself stays listed: only the count of live work changes.
-    expect(view.rows.map((r) => r.id)).toContain(working[0]);
+    expect(view.stats.waiting).toBe(2);
+    // It stays listed, as waiting on you: under Waiting, not under Running.
+    expect(view.rows.find((r) => r.id === working[0])?.outcome).toBe('Waiting on you');
+    const filtered = (status: RunStatusFilter) => runsView(runs, DEFAULT_REFINE, status, '', NOW, title, names, false, new Set(working)).rows.map((r) => r.id);
+    expect(filtered('working')).not.toContain(working[0]);
+    expect(filtered('waiting')).toContain(working[0]);
   });
 
   it.each<[Partial<Refine>, number]>([

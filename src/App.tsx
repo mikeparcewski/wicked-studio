@@ -767,7 +767,7 @@ export function App(): React.ReactElement {
       </AskLauncher>
 
       {/* S11: the open "look underneath" sheet (a step, a helper, a session, the Desk). */}
-      <ObjectSheet runs={runs} navigate={navigate} needCount={attentionBadge(needRows)} />
+      <ObjectSheet runs={runs} navigate={navigate} needCount={attentionBadge(needRows)} heldRuns={heldByNeeds} />
       <AltPeek runs={runs} needCount={attentionBadge(needRows)} heldRuns={heldByNeeds} />
 
       {/* The universal command palette (DES-FEEDBACK-002 §1, slice G) — corpus

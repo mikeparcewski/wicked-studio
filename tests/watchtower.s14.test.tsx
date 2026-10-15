@@ -61,6 +61,8 @@ describe('the pill opens itself only for something new that needs you', () => {
     expect(screen.getByTestId('watchtower-sentence').getAttribute('data-count')).toBe('0');
     expect(screen.getByTestId('watchtower-sentence').textContent).toBe('Nothing open — 1 thing is running.');
     expect(watchSentence(2, liveCount(runs))).toBe('2 things need you — 1 thing is running.');
+    // studio#805: a run a Needs-you row holds is not running.
+    expect(liveCount(runs, new Set(['r1']))).toBe(0);
     fireEvent.click(screen.getByTestId('watch-pill'));
     expect(navigate).toHaveBeenCalledWith('/watch');
   });

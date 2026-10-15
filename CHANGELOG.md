@@ -13,9 +13,12 @@ npm publish dates. Every version listed here exists on
 ## [Unreleased]
 
 ### Fixed
-- A run Needs you holds (a stall, an orphan, an open question) is no longer "working" anywhere on the Desk (#805). The
-  Runs tab's Running count leaves it out, as the Work tab's Running now card does, and the Alt peeks of that run, its
-  helper and its step say "held, see Needs you" / "not working right now" instead of "being worked on" / "Working".
+- A run Needs you holds (a stall, an orphan, an open question) is no longer "working" anywhere on the Desk (#805).
+  - **Runs tab:** the run reads Waiting on you in its row, under the Waiting filter and in both tiles, not Running.
+  - **Watchtower pill:** the run is not counted as running.
+  - **Desk sheet:** its helper and step lists no longer say "working on…".
+  - **Alt peeks:** the run's peek says "held, see Needs you". Its helper's says "not working right now", and its step's says "Held, see Needs you".
+  - **Unchanged:** a run at a gate still says "waiting on you".
 
 ## [0.9.3] — 2026-10-15
 
