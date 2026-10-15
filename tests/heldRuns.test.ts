@@ -3,6 +3,7 @@ import { isHeldRun, markHeld } from '../src/board/heldRuns.js';
 import { deskLiveCounts, statusWord } from '../src/board/statusWords.js';
 import { liveRows, outcomeOf } from '../src/board/deskInsights.js';
 import { makeView } from './factories.js';
+import { runState, sessionState } from '../src/board/sessionModel.js';
 
 /** studio#805: a live run a Needs-you row holds reads as waiting on you everywhere statusWord speaks. */
 describe('held runs: one mark, read by statusWord', () => {
@@ -28,6 +29,15 @@ describe('held runs: one mark, read by statusWord', () => {
     expect(deskLiveCounts([held!]).working).toBe(0);
     expect(liveRows([held!], () => 't')).toHaveLength(0);
     expect(liveRows([live], () => 't')).toHaveLength(1);
+  });
+
+  it('a held run is a waiting session to the rail, Everything and the session page (runState)', () => {
+    const [held] = markHeld([live], new Set(['r1']));
+    expect(sessionState(held!.session.status)).toBe('working');
+    expect(runState(held!)).toBe('waiting');
+    expect(runState(live)).toBe('working');
+    expect(runState(gate)).toBe('waiting');
+    expect(runState(done)).toBe('done');
   });
 
   it('an archived run still reads Archived', () => {

@@ -8,7 +8,7 @@ import { endedAtMs, finishedAtMs } from '../../board/needsYou.js';
 import type { WatchCoverage } from '../../api/watch-wire.js';
 import { coverageSummary } from '../../store/watch.js';
 import {
-  CLOSED_LINE, composerScopeNote, conversationOf, ORPHANED_LINE, orphanedOf, parseSessionId, runChatIdOf, sessionPath, sessionState, sessionTitle, sinceYouLeft,
+  CLOSED_LINE, composerScopeNote, conversationOf, ORPHANED_LINE, orphanedOf, parseSessionId, runChatIdOf, sessionPath, runState, sessionTitle, sinceYouLeft,
   type Conversation, type SessionState,
 } from '../../board/sessionModel.js';
 import type { Navigate } from '../../hooks/useRoute.js';
@@ -356,8 +356,8 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
   const badges = useMemo(() => needsByRun(needRows), [needRows]);
   const badge = mine.reduce((n, v) => n + (badges[v.session.id] ?? 0), 0);
   const state: SessionState = mine.some((v) => v.session.status === 'awaiting_human') ? 'waiting'
-    : mine.some((v) => sessionState(v.session.status) === 'working') ? 'working'
-      : mine.length > 0 ? sessionState(mine[mine.length - 1]!.session.status) : 'quiet';
+    : mine.some((v) => runState(v) === 'working') ? 'working'
+      : mine.length > 0 ? runState(mine[mine.length - 1]!) : 'quiet';
 
   // R2: the last visit, read once per session before this visit is stamped.
   // (A memo runs during render, before the effect below stamps this visit; switching away stamps
@@ -888,7 +888,7 @@ export function RunBlock({ view, badge, sessionId, navigate, solo = null }: {
 }): React.ReactElement {
   const { chain: planChain, teamError, retry } = useRunChain(view);
   const id = view.session.id;
-  const state = sessionState(view.session.status);
+  const state = runState(view);
   const isTerminal = ['completed', 'cancelled', 'failed'].includes(view.session.status);
   const endedMs = isTerminal ? (endedAtMs(view) ?? finishedAtMs(view)) : null;
   const [watchCoverage, setWatchCoverage] = useState<WatchCoverage[] | undefined>(undefined);

@@ -533,7 +533,7 @@ export function App(): React.ReactElement {
           artifactKey={artifactKey}
           artifactSize={sizeOf(search)}
           artifactVersion={versionOf(search)}
-          runs={runs}
+          runs={shownRuns}
           runsLoaded={runsLoaded}
           runsError={runsError}
           onRetryRuns={refresh}
@@ -649,7 +649,7 @@ export function App(): React.ReactElement {
           <TestingPage
             page={testingPage !== null && isTestingSubPage(testingPage) ? testingPage : 'campaigns'}
             campaignId={campaignId}
-            runs={runs}
+            runs={shownRuns}
             navigate={navigate}
             // The landing's `?new=` arrival intent (the rail's ＋ / Run recon row — #203).
             launchIntent={readLaunchIntent(search)}
@@ -722,7 +722,7 @@ export function App(): React.ReactElement {
           the page down instead of covering its composer, cards or thread. */}
       <div id="main" tabIndex={-1} className="flex flex-1 flex-col overflow-hidden min-w-0" style={{ outline: 'none' }}>
         {panel !== 'home' && (
-          <GateNotifications onSelect={selectRun} runId={runId} projectId={projectId} runs={runs} />
+          <GateNotifications onSelect={selectRun} runId={runId} projectId={projectId} runs={shownRuns} />
         )}
         <div className="flex flex-1 overflow-hidden min-h-0">
           {renderCenter()}
@@ -731,7 +731,7 @@ export function App(): React.ReactElement {
 
       {/* Right panel only when a run is selected */}
       {selected !== null && (
-        <RightPanel view={selected} runs={runs} onSelectRun={selectRun} navigate={navigate} />
+        <RightPanel view={selected} runs={shownRuns} onSelectRun={selectRun} navigate={navigate} />
       )}
 
       {/* ASK — the floating chat bubble bottom-right (studio#323 R1) and, while open,
@@ -749,7 +749,7 @@ export function App(): React.ReactElement {
         {askOpen && (
           <AskDock
             key={askKey}
-            runs={runs}
+            runs={shownRuns}
             pathname={pathname}
             navigate={navigate}
             onClose={() => setAskOpen(false)}
@@ -780,7 +780,7 @@ export function App(): React.ReactElement {
         open={paletteOpen}
         onClose={() => { setPaletteOpen(false); setPaletteSeed(''); }}
         seed={paletteSeed}
-        runs={runs}
+        runs={shownRuns}
         navigate={navigate}
         runPath={runPath}
         // codex on studio#664: the ONE ambient rule — a page outside the project shell that carries

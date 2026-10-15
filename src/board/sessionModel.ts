@@ -1,3 +1,4 @@
+import { isHeldRun } from './heldRuns.js';
 import type { SessionView } from '../api/types.js';
 import { jobTitle, plainRunTitle } from './deskWords.js';
 import { endedAtMs } from './needsYou.js';
@@ -26,6 +27,11 @@ export function sessionState(status: string): SessionState {
     case 'cancelled': return 'quiet';
     default: return 'working';
   }
+}
+
+/** A run's session state: its status's, except a live run Needs you holds, which waits (studio#805). */
+export function runState(view: Pick<SessionView, 'session'>): SessionState {
+  return isHeldRun(view.session) ? 'waiting' : sessionState(view.session.status);
 }
 
 /** The chat a run was launched from (C1, api-types 0.71.0), or `null` (absent, or an older daemon). */
@@ -65,7 +71,7 @@ function launchedMs(v: SessionView): number {
 
 // Live work first; then the newest run's own state.
 function aggregateState(runs: readonly SessionView[]): SessionState {
-  const states = runs.map((v) => sessionState(v.session.status));
+  const states = runs.map((v) => runState(v));
   if (states.includes('waiting')) return 'waiting';
   if (states.includes('working')) return 'working';
   return states[states.length - 1] ?? 'quiet';
