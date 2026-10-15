@@ -12,6 +12,13 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+### Added
+- The project page builds the project's code graph (#802). The Repositories section shows the graph's
+  standing in crew's words and a **Build code graph** button (**Refresh code graph** once it is built)
+  that calls `POST /projects/:id/graph/refresh` — the control crew's chat scope names ("build it from
+  the project page"). The button says it is building until crew answers, then shows what was indexed
+  and names any repository that could not be.
+
 ### Fixed
 - A run's question card names the seat that asked. With helpers, the card read "Codex · is asking" for a question a pi
   helper asked: it named the seat running the run's current step. It now reads the asking seat from the question
