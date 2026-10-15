@@ -1,4 +1,6 @@
+import { QeSettingOffer } from './QeRefusalWarning.js';
 import { useDecisionResults, useUndoToasts } from '../hooks/useUndoToasts.js';
+import { holdResult, releaseResult } from '../board/undoQueue.js';
 
 const RESULT_COLOR = { sent: 'var(--status-run)', failed: 'var(--status-fail)', 'not-sent': 'var(--status-gate)' } as const;
 
@@ -25,10 +27,13 @@ export function UndoToasts(): React.ReactElement | null {
           aria-live="polite"
           data-testid="undo-result"
           data-kind={r.kind}
+          onFocus={() => holdResult(r.id)}
+          onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) releaseResult(r.id); }}
           className="wk-toast"
           style={{ margin: 0, maxWidth: 480, padding: '7px 12px', fontSize: 'var(--text-xs)', color: RESULT_COLOR[r.kind] }}
         >
           {r.text}
+          {r.qe === true && <>{' '}<QeSettingOffer refusalKey={`toast:${r.id}`} refreshOnFocus={false} testId="undo-result-qe" /></>}
         </p>
       ))}
       {toasts.map((t) => (

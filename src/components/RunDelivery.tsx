@@ -11,6 +11,7 @@ import { DeliverLift } from './DeliverLift.js';
 import { deliveryAssuranceOf, deliveryReceiptOf } from '../board/assuranceModel.js';
 import { AssuranceReceipt, DeliveryAssuranceLines } from './session/AssuranceReceipt.js';
 import { deliverLift, textCarriesFailure } from './deliverLiftModel.js';
+import { QeRefusalWarning } from './QeRefusalWarning.js';
 import {
   DELIVERY_COLOR,
   DELIVERY_LABEL,
@@ -463,7 +464,10 @@ export function RunDelivery({ view, navigate }: Props): React.ReactElement {
               {postHoc?.phase === 'delivering' ? 'Delivering…' : 'Deliver — open a PR'}
             </button>
           </div>
-          {postHoc?.phase === 'error' && (
+          {postHoc?.phase === 'error' && postHoc.qe === true && (
+            <QeRefusalWarning kind="delivery" refusalKey={runId} detail={postHoc.detail ?? null} navigate={navigate} testId="run-deliver-qe-refused" />
+          )}
+          {postHoc?.phase === 'error' && postHoc.qe !== true && (
             <div data-testid="run-deliver-error" className="flex flex-col gap-1">
               <p style={{ color: 'var(--status-fail)' }}>
                 Delivery failed — the run is still stranded.

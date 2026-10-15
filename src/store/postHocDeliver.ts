@@ -1,6 +1,8 @@
 import { useMemo } from 'react';
 import { create } from 'zustand';
-import { api } from '../api/client.js';
+import { api, apiWire } from '../api/client.js';
+import { qeRefusalOf } from '../board/qeRefusal.js';
+import { QE_REFUSED_TEXT } from '../board/gateActions.js';
 
 /**
  * Post-hoc delivery (crew#393) — the one-click "Deliver" on a STRANDED run's
@@ -28,7 +30,7 @@ import { api } from '../api/client.js';
 export type PostHocDeliver =
   | { phase: 'delivering' }
   | { phase: 'delivered'; prUrl: string; assurance?: unknown }
-  | { phase: 'error'; error: string };
+  | { phase: 'error'; error: string; qe?: true; detail?: string };
 
 interface PostHocDeliverStore {
   /** Per run id. ABSENT = never attempted this session. */
@@ -57,6 +59,13 @@ export const usePostHocDeliverStore = create<PostHocDeliverStore>((set, get) => 
         // words) — apiFetch extracted it. Kept VERBATIM; empty degrades to a
         // plain sentence rather than a blank red paragraph (the absent-and-
         // empty-are-one-thing rule from store/delivery.ts).
+        // crew refused it because QE acceptance hasn't passed (409 `qe_acceptance_required`): plain words,
+        // its sentence kept for Technical details, and the card shows the way to the setting.
+        if (qeRefusalOf(err) === 'delivery') {
+          const detail = apiWire(err) ?? '';
+          set((s) => ({ byRun: { ...s.byRun, [runId]: { phase: 'error', error: QE_REFUSED_TEXT, qe: true, detail } } }));
+          return;
+        }
         const raw = err instanceof Error ? err.message : String(err);
         const error = raw.trim() !== '' ? raw : 'the daemon rejected the delivery and gave no reason';
         set((s) => ({ byRun: { ...s.byRun, [runId]: { phase: 'error', error } } }));

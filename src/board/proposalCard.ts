@@ -374,7 +374,7 @@ export function finishedDeliveryArm(view: SessionView, gate: OpenGate | undefine
 export type StrandedPress =
   | { phase: 'delivering' }
   | { phase: 'delivered'; prUrl: string }
-  | { phase: 'error'; error: string }
+  | { phase: 'error'; error: string; qe?: true; detail?: string }
   | undefined;
 
 export interface StrandedCardModel {
@@ -386,7 +386,7 @@ export interface StrandedCardModel {
   /** delivered: the pull request the POST answered. */
   prUrl: string | null;
   /** error: studio's headline, then the daemon's words verbatim. */
-  error: { headline: string; detail: string } | null;
+  error: { headline: string; detail: string; qe?: true } | null;
 }
 
 /** The stranded card (S16a-1a): pure over the run and the post-hoc deliver's answer. */
@@ -395,5 +395,6 @@ export function strandedCard(view: SessionView, press: StrandedPress): StrandedC
   if (press === undefined) return base;
   if (press.phase === 'delivering') return { ...base, state: 'delivering', act: 'Delivering…' };
   if (press.phase === 'delivered') return { ...base, state: 'delivered', out: 'Finished · delivered', prUrl: press.prUrl };
+  if (press.qe === true) return { ...base, state: 'error', error: { headline: 'Delivery failed — the run is still stranded.', detail: press.detail ?? press.error, qe: true } };
   return { ...base, state: 'error', error: { headline: 'Delivery failed — the run is still stranded.', detail: press.error } };
 }

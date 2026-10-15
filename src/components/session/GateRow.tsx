@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { RosterSeat, SessionView as RunView } from '../../api/types.js';
+import { QeRefusalWarning } from '../QeRefusalWarning.js';
 import { GATE_HASH, IDLE_GATE_ACTION, commitGateDecision, commitGateReassign, useGateActionStore, type GateAnswer } from '../../board/gateActions.js';
 import { FLOOR_FIX_LABEL, sessionGateChoices, type GateRowChoice, type GateRowModel } from '../../board/gateRowModel.js';
 import { INITIAL_PICK, pickKey, type RowPick } from '../../board/questionRow.js';
@@ -751,7 +752,11 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
           </div>
         </details>
       )}
-      {action.error !== null && (
+      {action.error !== null && action.qeRefusal === true && (
+        // crew refused the hand-over because QE acceptance hasn't passed: why, and the way to the setting.
+        <QeRefusalWarning kind="delivery" refusalKey={runId} detail={action.errorDetail ?? null} testId="session-gate-qe-refused" />
+      )}
+      {action.error !== null && action.qeRefusal !== true && (
         // The refusal in its own words (a 409 names what moved); paths read `~` (studio#650).
         <p data-testid="session-gate-error" role="alert" className="wk-session-gate-error">{showText(action.error)}</p>
       )}

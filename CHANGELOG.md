@@ -12,10 +12,14 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+### Added
+- **A failure because QE acceptance is required says why, and links to the switch that turns it off.** Wherever crew refuses something because QE acceptance is required, studio shows one calm warning instead of crew's raw sentence (which stays under Technical details). It says what failed and why ("Not started: this job needs QE acceptance", "Not delivered: QE acceptance hasn't passed. Nothing was pushed."). Then, only when this computer's service reports `qeAcceptance: 'required'` (read fresh from `GET /health` for each refusal, and again when the window regains focus), it says QE acceptance can be turned off in Settings, with a link that lands on the "Require QE acceptance before delivery" switch (`/system#qe-acceptance`: scrolled to, focused and ringed). A refused delivery is told that the switch applies to jobs started after it, because a running job keeps the decision it started with. When QE acceptance is already off, the warning says the job keeps the requirement it started with and what else to do, and offers no link. It covers a launch refused in the composer and in the New job wizard (crew's 400, matched on `code: 'qe_acceptance_required'`, or an older crew's sentence on both of its fixed parts), the deliver card, the gate row and the reassign control after a refused approve, the stranded card and the Delivery card after a refused post-hoc deliver (crew's 409 `qe_acceptance_required`), a deliver card that is waiting on QE acceptance before it is pressed, and, in a short form, the decision toast and the approvals bar's failure rows.
+
 ### Fixed
 - Built-in editors run on protocol 2 when crew serves them: the host reads the registry's surfaces in the parsed wire form (`full.modes: null`, `options: null`) instead of refusing them and falling back to protocol 1 (wicked-studio#791).
 - The Ask dock's header names the project it reads (`Tiny tip r3 · 1 repo`), not its raw id, and a resumed chat no longer shows a cut-off "scope: not stated…" (wicked-studio#789).
 - A job launched with QE acceptance off in Settings says "QE acceptance: off on this computer (Settings)" on its own line under the status, which no longer gets cut off (wicked-studio#788).
+- **A launch refused because QE acceptance is required is sent once.** The composer's fallback for a pre-0.18 daemon re-sent a launch without `deliver` whenever a 400's message mentioned "deliver". Crew's QE refusal mentions it, so every refused launch was posted twice (crew refuses the second one the same way, since `deliverGate: 'auto'` stays on it). A QE refusal is never retried.
 
 ## [0.9.0] — 2026-10-14
 

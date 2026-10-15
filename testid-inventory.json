@@ -11,10 +11,10 @@
   "version": 1,
   "studioVersion": "0.9.0",
   "counts": {
-    "files": 228,
-    "occurrences": 2808,
-    "static": 2426,
-    "dynamic": 71,
+    "files": 229,
+    "occurrences": 2827,
+    "static": 2437,
+    "dynamic": 72,
     "computed": 24
   },
   "static": [
@@ -5178,6 +5178,12 @@
       ]
     },
     {
+      "testId": "launch-qe-refused",
+      "files": [
+        "src/components/ChatInput.tsx"
+      ]
+    },
+    {
       "testId": "launch-reduced-assurance",
       "files": [
         "src/components/session/AssuranceReceipt.tsx"
@@ -5419,6 +5425,12 @@
     },
     {
       "testId": "launch-wizard-qe-off",
+      "files": [
+        "src/components/launch/LaunchWizard.tsx"
+      ]
+    },
+    {
+      "testId": "launch-wizard-qe-refused",
       "files": [
         "src/components/launch/LaunchWizard.tsx"
       ]
@@ -6914,6 +6926,12 @@
     },
     {
       "testId": "need-group-failure",
+      "files": [
+        "src/components/desk/ApprovalGroupActions.tsx"
+      ]
+    },
+    {
+      "testId": "need-group-failure-qe",
       "files": [
         "src/components/desk/ApprovalGroupActions.tsx"
       ]
@@ -8552,6 +8570,12 @@
       ]
     },
     {
+      "testId": "qe-acceptance-setting",
+      "files": [
+        "src/components/SystemSettings.tsx"
+      ]
+    },
+    {
       "testId": "qe-acceptance-toggle",
       "files": [
         "src/components/SystemSettings.tsx"
@@ -9495,6 +9519,12 @@
       ]
     },
     {
+      "testId": "run-deliver-qe-refused",
+      "files": [
+        "src/components/RunDelivery.tsx"
+      ]
+    },
+    {
       "testId": "run-delivery",
       "files": [
         "src/components/RunDelivery.tsx"
@@ -10209,6 +10239,12 @@
       ]
     },
     {
+      "testId": "session-gate-qe-refused",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
       "testId": "session-gate-question",
       "files": [
         "src/components/session/GateRow.tsx"
@@ -10559,6 +10595,18 @@
       ]
     },
     {
+      "testId": "session-proposal-qe-fix",
+      "files": [
+        "src/components/session/ProposalCard.tsx"
+      ]
+    },
+    {
+      "testId": "session-proposal-qe-refused",
+      "files": [
+        "src/components/session/ProposalCard.tsx"
+      ]
+    },
+    {
       "testId": "session-proposal-reason",
       "files": [
         "src/components/session/ProposalCard.tsx"
@@ -10767,6 +10815,12 @@
     },
     {
       "testId": "session-stranded-leave",
+      "files": [
+        "src/components/session/StrandedCard.tsx"
+      ]
+    },
+    {
+      "testId": "session-stranded-qe-refused",
       "files": [
         "src/components/session/StrandedCard.tsx"
       ]
@@ -12906,6 +12960,12 @@
       ]
     },
     {
+      "testId": "steering-reassign-qe-refused",
+      "files": [
+        "src/components/ReassignControl.tsx"
+      ]
+    },
+    {
       "testId": "steering-reassign-retry",
       "files": [
         "src/components/ReassignControl.tsx"
@@ -13981,6 +14041,12 @@
       ]
     },
     {
+      "testId": "undo-result-qe",
+      "files": [
+        "src/components/UndoToasts.tsx"
+      ]
+    },
+    {
       "testId": "undo-toast",
       "files": [
         "src/components/UndoToasts.tsx"
@@ -14667,6 +14733,7 @@
     {
       "pattern": "*-detail",
       "files": [
+        "src/components/QeRefusalWarning.tsx",
         "src/components/RepoFindings.tsx",
         "src/components/ui/StateBanner.tsx"
       ]
@@ -14687,6 +14754,12 @@
       "pattern": "*-fill",
       "files": [
         "src/components/ui/Progress.tsx"
+      ]
+    },
+    {
+      "pattern": "*-fix",
+      "files": [
+        "src/components/QeRefusalWarning.tsx"
       ]
     },
     {
@@ -14720,6 +14793,7 @@
     {
       "pattern": "*-link",
       "files": [
+        "src/components/QeRefusalWarning.tsx",
         "src/components/session/CodebaseDownload.tsx"
       ]
     },
@@ -15117,6 +15191,7 @@
         "src/components/NeedsYouQueue.tsx",
         "src/components/ProvenanceLine.tsx",
         "src/components/QeOffNote.tsx",
+        "src/components/QeRefusalWarning.tsx",
         "src/components/RepoFindings.tsx",
         "src/components/RunSparkline.tsx",
         "src/components/SkillChips.tsx",
