@@ -31,6 +31,8 @@ The editor stack on protocol 2: every first-party editor (Page, Slides, Document
 
 ### Fixed
 - **A host Approve beside an artifact is offered only for a plain pre-run review gate** (#787). Before, a late join could approve a delivery gate from an artifact card without its push disclosure. Every other gate is answered on its card in the thread. A run's recording no longer shows an empty Versions tab, and the presenter's script is editable again at the plan gate.
+- **Protocol-2 packs can pass conformance** (#776). Studio's conformance page (`/editors/conformance`) ignored `surface`, `tab` and `mode`, so every protocol-2 instance it hosted was the card, no pack could pass cases 14 and 15, and crew refused the install. It now mounts the instance it is asked for and reports the options values it accepted.
+- **Editor reliability** (#787): a group replays its latest pointing, so Options opens on the slide you picked; a write from the Options panel (a theme, a speaker note) gets the card's edit line and Undo; a helper's new version no longer clears an unfinished paragraph edit (it applies when the edit ends); the run page's "checked at 0:34" chips seek the video in the walkthrough card again; the MCP inspector page draws the plugin through the shared host surfaces.
 - **One "Agents ready" count** (#786) on the Desk and the Agents tab, from the same readings; while an agent's sign-in reads unknown, the Agents tab re-reads the roster every 15 s (at most 8 tries in a row). Tile notes wrap.
 
 ## [0.8.0] — 2026-10-14
