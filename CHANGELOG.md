@@ -12,6 +12,10 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+## [0.9.4] — 2026-10-15
+
+A patch release: a run Needs you holds reads as waiting on you across the Desk, never "working".
+
 ### Fixed
 - A run Needs you holds (a stall, an orphan, an open question, a steer hold) reads as **Waiting on you** across
   the Desk (#805). Before, its DTO still said `executing`, so the Runs tab, the rail, the Report, the Watchtower and
@@ -2231,7 +2235,8 @@ The merged interactive layer: wicked-interactive's UI moved into this skin (DES-
   `git subtree split` (92 commits).
 - The SPA as a pure HTTP/WS client of the wicked-crew daemon: runs, gates, live CoreEvents.
 
-[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.9.3...HEAD
+[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.9.4...HEAD
+[0.9.4]: https://github.com/mikeparcewski/wicked-studio/compare/v0.9.3...v0.9.4
 [0.9.3]: https://github.com/mikeparcewski/wicked-studio/compare/v0.9.2...v0.9.3
 [0.9.2]: https://github.com/mikeparcewski/wicked-studio/compare/v0.9.1...v0.9.2
 [0.9.1]: https://github.com/mikeparcewski/wicked-studio/compare/v0.9.0...v0.9.1
