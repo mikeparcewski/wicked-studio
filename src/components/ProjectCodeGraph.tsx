@@ -69,22 +69,29 @@ export function ProjectCodeGraph({ projectId, repoCount }: Props): React.ReactEl
   /** Wait on this project's build (ours or one a previous mount started) and apply its answer. */
   const follow = useCallback((forProject: string, run: Promise<ProjectGraphRefreshResult>) => {
     setPending(true);
+    let failed = false;
     run
       .then((r) => {
         if (live.current !== forProject) return;
         readGen.current += 1; // a read that started before this answer is stale now
+        setReadError(null); // …and so is a read's failure (codex r2)
         setResult(r);
         setStatus(r.status);
       })
       .catch((e: unknown) => {
+        failed = true;
         if (live.current !== forProject) return;
         setBuildError(message(e));
       })
       .finally(() => {
         if (building.get(forProject) === run) building.delete(forProject);
-        if (live.current === forProject) setPending(false);
+        if (live.current !== forProject) return;
+        setPending(false);
+        // (codex r2) A failed build leaves the standing unknown to a mount that re-attached to it
+        // (its own read was dropped while the build ran): read it again, so Build is offered.
+        if (failed) read(forProject);
       });
-  }, []);
+  }, [read]);
 
   useEffect(() => {
     live.current = projectId;
@@ -110,7 +117,7 @@ export function ProjectCodeGraph({ projectId, repoCount }: Props): React.ReactEl
     follow(projectId, run);
   }
 
-  if (status === null && readError === null && !pending) return null;
+  if (status === null && readError === null && buildError === null && !pending) return null;
   const built = status !== null && isBuilt(status);
   const offered = status !== null && (status.action === 'projects.graph.refresh' || built);
   const failed = result?.failed ?? [];

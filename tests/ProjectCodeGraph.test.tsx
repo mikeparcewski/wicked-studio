@@ -126,4 +126,34 @@ describe('ProjectCodeGraph (studio#802)', () => {
     fireEvent.click(screen.getByTestId('project-graph-read-retry'));
     expect(await screen.findByTestId('project-graph-build')).toHaveTextContent('Build code graph');
   });
+
+  it('a build that fails after a remount shows its error and offers Build again (codex r2)', async () => {
+    getProjectGraph.mockResolvedValue({ status: status({ action: 'projects.graph.refresh' }) });
+    let fail: (e: Error) => void = () => undefined;
+    refreshProjectGraph.mockImplementation(() => new Promise<ProjectGraphRefreshResult>((_done, reject) => { fail = reject; }));
+    const first = render(<ProjectCodeGraph projectId="proj-1" repoCount={1} />);
+    fireEvent.click(await screen.findByTestId('project-graph-build'));
+    await waitFor(() => expect(refreshProjectGraph).toHaveBeenCalledTimes(1));
+    first.unmount();
+    render(<ProjectCodeGraph projectId="proj-1" repoCount={1} />);
+    await screen.findByTestId('project-graph-build');
+    fail(new Error('estate exited 2'));
+    expect(await screen.findByTestId('project-graph-build-error')).toHaveTextContent('couldn’t be built');
+    await waitFor(() => expect(screen.getByTestId('project-graph-build')).not.toBeDisabled());
+    expect(screen.getByTestId('project-graph-build')).toHaveTextContent('Build code graph');
+  });
+
+  it('a status read that failed during a build is cleared by the build answer (codex r2)', async () => {
+    getProjectGraph.mockResolvedValueOnce({ status: status({ action: 'projects.graph.refresh' }) });
+    let finish: (r: ProjectGraphRefreshResult) => void = () => undefined;
+    refreshProjectGraph.mockImplementation(() => new Promise<ProjectGraphRefreshResult>((done) => { finish = done; }));
+    const { rerender } = render(<ProjectCodeGraph projectId="proj-1" repoCount={1} />);
+    fireEvent.click(await screen.findByTestId('project-graph-build'));
+    getProjectGraph.mockRejectedValueOnce(new Error('503'));
+    rerender(<ProjectCodeGraph projectId="proj-1" repoCount={2} />);
+    expect(await screen.findByTestId('project-graph-read-error')).toBeInTheDocument();
+    finish({ status: status({ state: 'ready-single-repo', detail: 'Built.' }), indexed: ['tiny-tip'], skipped: [], failed: [] });
+    expect(await screen.findByTestId('project-graph-result')).toHaveTextContent('1 indexed');
+    expect(screen.queryByTestId('project-graph-read-error')).toBeNull();
+  });
 });
