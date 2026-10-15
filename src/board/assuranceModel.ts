@@ -54,6 +54,9 @@ export function qeDecisionOf(raw: unknown): QeDecision | null {
   };
 }
 
+/** crew's reason when Settings turned QE acceptance off (`QE_OFF_REASON`, packages/crew/src/core/qe-acceptance-setting.ts). */
+export const QE_OFF_SETTINGS_REASON = "QE acceptance is off on this daemon (Settings: QE acceptance off, qeAcceptance: 'off')";
+
 /**
  * The ONE spelling for a skipped QE acceptance decision: when the engine reason is the daemon's
  * Settings switch ("QE acceptance is off on this daemon …"), say "QE acceptance: off on this
@@ -62,7 +65,9 @@ export function qeDecisionOf(raw: unknown): QeDecision | null {
  */
 export function qeSkippedText(reason: string): string {
   const why = reason.replace(/^QE acceptance skipped by operator:\s*/, '');
-  if (why.startsWith('QE acceptance is off on this daemon')) {
+  // The WHOLE reason must be crew's Settings wording: an operator's own skip reason that merely starts the
+  // same way is still theirs (codex on #796).
+  if (why.trim() === QE_OFF_SETTINGS_REASON) {
     return 'QE acceptance: off on this computer (Settings)';
   }
   return `QE acceptance: skipped by operator (${why})`;

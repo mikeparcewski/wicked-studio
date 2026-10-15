@@ -270,6 +270,8 @@ describe('the receipt renders', () => {
     const offReason = "QE acceptance skipped by operator: QE acceptance is off on this daemon (Settings: QE acceptance off, qeAcceptance: 'off')";
     expect(qeSkippedText(offReason)).toBe('QE acceptance: off on this computer (Settings)');
     expect(qeSkippedText('QE acceptance skipped by operator: docs-only hotfix')).toBe('QE acceptance: skipped by operator (docs-only hotfix)');
+    // An operator's own reason that merely starts like the Settings wording stays theirs (codex on #796).
+    expect(qeSkippedText('QE acceptance skipped by operator: QE acceptance is off on this daemon only for this hotfix')).toBe('QE acceptance: skipped by operator (QE acceptance is off on this daemon only for this hotfix)');
     usePlanCatalog.setState({ catalog: 'ready', entries: [] });
     vi.spyOn(teamPlanApi, 'team').mockResolvedValue({ teamed: false, rows: [], units: [] });
     vi.spyOn(client.api, 'getWatch').mockResolvedValue({ coverage: [] } as never);
