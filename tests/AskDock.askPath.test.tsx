@@ -153,7 +153,8 @@ describe('the PA is still answering (§8 F6)', () => {
     await ask('first');
     await waitFor(() => expect(sendChatMessage).toHaveBeenCalledTimes(1));
     const chatId = lastBody().chatId!;
-    const error = "This chat's repositories changed since it started (2 now in scope). Start a new chat to read them — this one keeps its original scope.";
+    // crew's exact sentence, which the text fallback does NOT match: the body's code must carry it (codex on #799).
+    const error = "This chat's repositories or their code graph changed since it started (2 now in scope). Start a new chat to read them — this one keeps its original scope.";
     sendChatMessage.mockRejectedValueOnce(new ApiError(409, error, { code: 'chat_scope_changed', error }));
     getChat.mockResolvedValue({ chatId, seats: ['claude', 'codex'], scope: null, messages: [] });
     await ask('what is in the new repo?');
