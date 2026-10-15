@@ -104,8 +104,9 @@ function GroupBody({ group, tab, withRun }: { group: OptionsGroup; tab: PanelTab
   const hostTab = tab.owner === 'host' ? hostTabsFor(group.adapter).find((h) => h.id === tab.id) ?? null : null;
   // A protocol-1 plugin with no full screen (sizes ['pane']): its pane is the Options tab's frame, the v1 mapping
   // (DES §4: pane -> a single options tab), not a dead end (codex fu r4 P2). Generic: from the declaration only.
-  const v1Pane = !v2 && pluginTab !== null && group.surfaces.full === null;
-  const showFrame = (v2 && pluginTab?.render === 'plugin') || v1Pane;
+  // Decided by the group's surfaces, not the tab shown: the frame stays mounted for the group's life (codex fu r5 P2).
+  const v1Pane = !v2 && group.surfaces.full === null && (group.surfaces.options?.tabs.length ?? 0) > 0;
+  const showFrame = (v2 && pluginTab?.render === 'plugin') || (v1Pane && pluginTab !== null);
   const firstPluginTab = group.surfaces.options?.tabs.find((t) => t.render === 'plugin')?.id;
   const [, setShownTick] = useState(0);
   // The card's shown version re-renders the host tabs (codex h2b-r3 P2).

@@ -174,6 +174,10 @@ describe('HostPanel', () => {
     expect(screen.queryByTestId('host-panel-v1')).toBeNull();
     const frame = screen.getByTestId('host-panel-frame');
     expect(frame.hidden).toBe(false);
+    // Run shown: the same frame stays mounted, hidden (codex fu r5 P2).
+    act(() => { useHostPanel.getState().setTab(RUN_TAB); });
+    expect(screen.getByTestId('host-panel-frame')).toBe(frame);
+    expect(frame.hidden).toBe(true);
   });
   it('below 1200 px it is the ribbon, which opens the panel', () => {
     wide(true);
