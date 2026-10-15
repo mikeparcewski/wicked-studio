@@ -214,7 +214,7 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
         prefs: { reducedMotion: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false, techDetails: false, locale: navigator.language },
         firstParty: editor.first_party,
         adapter,
-        declared: declared ?? (editor as EditorView & { surfaces?: unknown }).surfaces,
+        declared: declared ?? editor.surfaces,
         ...(bridge !== undefined ? { mcp: bridge } : {}),
         sizes: editor.sizes,
         ui: {

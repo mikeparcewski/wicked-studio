@@ -12,6 +12,29 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+## [0.9.0] — 2026-10-14
+
+The editor stack on protocol 2: every first-party editor (Page, Slides, Document, Video) and the MCP inspector is a `wicked.editor/2` plugin, drawn by the host as a card, an options panel and full screen; the run page is the chat; and QE acceptance can be turned off in Settings. Pins `wicked-crew-api-types` 0.120.0.
+
+### Added
+- **The host surfaces** (#775, H2, H7): PluginCard (the card in the thread, with host chrome and the plugin's declared actions), HostPanel (the Run tab, plugin and host tabs, host-drawn controls; a ribbon below 1200 px) and FullShell (the same frame at full screen, with Simple/Advanced and a chat drawer), all drawn from the plugin's declaration. The editor test page shows the three surfaces.
+- **The run page is the chat** (#776, H3): who responded on every turn, the host panel's Run tab, and the run host context the cards share. A plugin's frame has 90 s to load and then 3 s for `plugin.ready` from its load, so a daemon slow to serve a bundle no longer tears a healthy editor down; a tab picked before the handshake is the one the options frame opens on.
+- **Page and Slides on protocol 2** (#777, H4): Page's card is the page preview (a click points at an element for "Ask about this"), its options the Style tab, and full screen the editor (Simple edits words, Advanced adds colours and Remove). Slides' card is the current slide at 16:9 with prev/next; options are Style and Speaker notes; full screen fills the canvas at 16:9, marks content cut off past the slide, and offers Fit | 100% and true full screen. Review is a host tab. The **Style tab** applies interactive's built-in themes, colours and fonts as one `theme.set` each (permission `artifact.theme`).
+- **Document, a protocol-2 editor** (#778, H4b): `wicked-doc` (kind document) with the Style and Coverage tabs. Coverage lists the repository's requirements and where the document mentions each; a click points at it.
+- **Video, a protocol-2 editor** (#779, H6): `wicked-video` (demo videos and walkthroughs). The card is the player with chapter chips; options are Chapters (reorder, rename, trim, take), Captions and Theme; full screen has Simple and Advanced (trim handles, take picker, Text and Theme inspectors). Chapter edits are versions the host checks against the cut's chapter list; Re-record stays a host control.
+- **The MCP inspector on protocol 2** (#780, H5): the card holds the tool list, the argument form, Call and the result; options are Resources, Prompts and Log; Advanced adds the raw JSON-RPC. One call at a time; a stale reply is ignored.
+- **QE acceptance off in Settings** (#785): Settings › General › "Require QE acceptance before delivery" (crew's `SystemSettings.qeAcceptance`). When the service has it off, the New job wizard and the chat launch form say so calmly instead of offering the skip, send no skip (the service adds it, labelled), and keep Force for one job.
+
+### Changed
+- `wicked-crew-api-types` 0.116.0 → 0.120.0 (still pinned exactly). The local typings that waited for it (`qeAcceptance`, `councilSize` and `deliverIdentityLogin` on the settings, and an editor's `surfaces`) now use the contract's own types.
+- A project's Steer, Agents and Evaluate tabs no longer carry the "applies to every project" notes (#784).
+
+### Fixed
+- **A host Approve beside an artifact is offered only for a plain pre-run review gate** (#787). Before, a late join could approve a delivery gate from an artifact card without its push disclosure. Every other gate is answered on its card in the thread. A run's recording no longer shows an empty Versions tab, and the presenter's script is editable again at the plan gate.
+- **Protocol-2 packs can pass conformance** (#776). Studio's conformance page (`/editors/conformance`) ignored `surface`, `tab` and `mode`, so every protocol-2 instance it hosted was the card, no pack could pass cases 14 and 15, and crew refused the install. It now mounts the instance it is asked for and reports the options values it accepted.
+- **Editor reliability** (#787): a group replays its latest pointing, so Options opens on the slide you picked; a write from the Options panel (a theme, a speaker note) gets the card's edit line and Undo; a helper's new version no longer clears an unfinished paragraph edit (it applies when the edit ends); the run page's "checked at 0:34" chips seek the video in the walkthrough card again; the MCP inspector page draws the plugin through the shared host surfaces.
+- **One "Agents ready" count** (#786) on the Desk and the Agents tab, from the same readings; while an agent's sign-in reads unknown, the Agents tab re-reads the roster every 15 s (at most 8 tries in a row). Tile notes wrap.
+
 ## [0.8.0] — 2026-10-14
 
 Desk v2: one Desk with Work, Report, Understand, Steer, Agents and Evaluate tabs; the Steer, Evaluate and Agents tabs rebuilt on real data; Slides for decks; a clearer run page; and editor plugin protocol 2 on the host side. Pins `wicked-crew-api-types` 0.116.0.
@@ -2156,7 +2179,8 @@ The merged interactive layer: wicked-interactive's UI moved into this skin (DES-
   `git subtree split` (92 commits).
 - The SPA as a pure HTTP/WS client of the wicked-crew daemon: runs, gates, live CoreEvents.
 
-[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/mikeparcewski/wicked-studio/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/mikeparcewski/wicked-studio/compare/v0.7.13...v0.8.0
 [0.7.13]: https://github.com/mikeparcewski/wicked-studio/compare/v0.7.12...v0.7.13
 [0.7.12]: https://github.com/mikeparcewski/wicked-studio/compare/v0.7.11...v0.7.12

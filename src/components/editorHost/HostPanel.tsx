@@ -200,7 +200,7 @@ function OptionsInstance({ group, hostRef, visible, withRun, initialTab, onValue
       firstParty: e.first_party,
       adapter: group.adapter,
       ...(bridge !== undefined ? { mcp: bridge } : {}),
-      declared: (e as typeof e & { surfaces?: unknown }).surfaces,
+      declared: e.surfaces,
       sizes: e.sizes,
       ui: {
         // The options instance points too: its chips (and the Checks tab's "point at") reach the composer (codex h2b-r1 P2).

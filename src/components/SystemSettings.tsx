@@ -32,14 +32,8 @@ function isAbsolutePathLike(p: string): boolean {
   return p.startsWith('/') || p.startsWith('\\\\') || /^[A-Za-z]:[\\/]/.test(p);
 }
 
-/**
- * The daemon's settings plus the keys studio's pinned `wicked-crew-api-types` does not carry yet
- * (crew#549 `deliverIdentityLogin`, in api-types 0.67.0). Delete the extension the moment studio
- * bumps its pin — the same TODO shape `api/types.ts` uses for the delivery wire.
- */
-// api-types 0.109.0 carries councilSize; extend the pinned settings type locally until then.
-/** `qeAcceptance` is api-types 0.120.0 (crew): typed here until studio's pin carries it. */
-type LocalSettings = Settings & { deliverIdentityLogin?: string; councilSize?: number; qeAcceptance?: 'required' | 'off' };
+/** The daemon's settings (`deliverIdentityLogin`, `councilSize` and `qeAcceptance` are all typed by api-types 0.120.0). */
+type LocalSettings = Settings;
 
 /**
  * Client-side mirror of the daemon's deliver-identity rule (crew#549): a GitHub login — letters,
