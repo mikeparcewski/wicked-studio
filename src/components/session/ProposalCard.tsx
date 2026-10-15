@@ -27,6 +27,7 @@ import { useDiffDrift } from '../../store/gateDiffSeen.js';
 import { deliveryAssuranceOf, deliveryReceiptOf, sessionQe } from '../../board/assuranceModel.js';
 import { usePostHocDeliverStore } from '../../store/postHocDeliver.js';
 import { AssuranceReceipt, DeliveryAssuranceLines } from './AssuranceReceipt.js';
+import { QeDeliveryFixLine, QeRefusalWarning } from '../QeRefusalWarning.js';
 
 /**
  * THE PROPOSAL CARD (DES-STUDIO-REBUILD-001 §3 scenes 07/08/24/42, slice S6b): a run's plan or
@@ -295,6 +296,8 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
                 {card.end !== undefined && <button type="button" data-testid="session-proposal-end" onClick={end} className="wk-prop-btn wk-prop-btn--ghost">{card.end}</button>}
               </div>
               {deliverRefused && <p id={`${runId}-go-why`} data-testid="session-proposal-go-why" className="wk-field-note">Delivery is refused until QE acceptance passes.</p>}
+              {/* The way on: turn QE acceptance off for later jobs (the link lands on the switch), or what else. */}
+              {deliverRefused && <QeDeliveryFixLine refusalKey={`${runId}:parked`} testId="session-proposal-qe-fix" />}
             </>
           )}
         </>
@@ -331,10 +334,15 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
       {card.state === 'done' && card.kind === 'deliver' && <DeliveryAssuranceLines recorded={recordedDelivery} testIdPrefix="session-proposal" />}
       {card.state === 'fail' && (
         <>
-          <p className="wk-prop-status">
-            <b className="wk-prop-bad">Didn’t work</b>
-            <span data-testid="session-proposal-reason" className="wk-prop-live">{card.reason}</span>
-          </p>
+          {/* crew refused the hand-over because QE acceptance hasn't passed: why, and the way to the setting. */}
+          {action.qeRefusal === true
+            ? <QeRefusalWarning kind="delivery" refusalKey={runId} detail={action.errorDetail ?? null} testId="session-proposal-qe-refused" />
+            : (
+              <p className="wk-prop-status">
+                <b className="wk-prop-bad">Didn’t work</b>
+                <span data-testid="session-proposal-reason" className="wk-prop-live">{card.reason}</span>
+              </p>
+            )}
           {card.canRetry && (
             <>
               {draft !== null && <p data-testid="session-proposal-draft" className="wk-prop-why"><b>{draftLine(draft, planWords)}</b> Approving sends your changes with it; nothing has been sent yet.</p>}

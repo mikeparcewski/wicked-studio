@@ -1024,6 +1024,23 @@ select:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-
 .wk-assurance-optin { margin: 6px 0; padding: 6px 10px; border: 1px solid var(--border); border-radius: var(--radius-md); font-size: var(--text-xs); color: var(--ink-body); }
 .wk-assurance-optin-label { display: inline-flex; align-items: center; gap: 6px; font-weight: var(--weight-semi); cursor: pointer; }
 .wk-assurance-optin-why { margin: 4px 0 0; color: var(--ink-muted); }
+/* A refusal because QE acceptance is required: what failed, why, and the way to the setting — one
+   calm card in the state banner's language (warn rule on the left, ink text, the link in accent). */
+.wk-qe-warning { margin: 6px 0; padding: 8px 12px; border-radius: var(--radius-md); background: var(--surface-card); box-shadow: var(--shadow-card); border-left: 3px solid var(--status-warn); font-size: var(--text-xs); color: var(--ink-body); min-width: 0; overflow-wrap: anywhere; }
+.wk-qe-warning--inline { margin: 4px 0 0; padding: 4px 10px; box-shadow: none; background: none; }
+.wk-qe-warning-title { margin: 0; color: var(--ink-high); font-size: var(--text-sm); font-weight: var(--weight-semi); }
+.wk-qe-warning-body { margin: 2px 0 0; }
+.wk-qe-warning-fix { margin: 4px 0 0; color: var(--ink-body); }
+.wk-qe-warning--inline .wk-qe-warning-fix { margin: 0; }
+/* The accent, mixed toward the text ink so a dark custom accent stays readable on the dark theme. */
+.wk-qe-warning-link { color: color-mix(in oklab, var(--accent) 60%, var(--ink-high)); font-weight: var(--weight-semi); text-decoration: underline; text-underline-offset: 2px; white-space: nowrap; }
+.wk-qe-warning-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px; }
+.wk-qe-warning .wk-tech-details { margin-top: 4px; }
+.wk-qe-offer { color: var(--ink-body); font-family: var(--font-sans); }
+/* Settings: the QE acceptance switch, when a warning's link lands on it. */
+.wk-setting-target { margin: 8px -10px; padding: 6px 10px; border-radius: var(--radius-md); outline: 2px solid transparent; outline-offset: 0; transition: outline-color 200ms ease; }
+.wk-setting-target[data-targeted="true"] { outline-color: color-mix(in oklab, var(--accent) 60%, var(--ink-high)); }
+.wk-setting-target:focus:not([data-targeted="true"]) { outline-color: transparent; }
 .wk-assurance-reduced { display: inline-block; margin-left: 6px; padding: 0 6px; border: 1px solid var(--status-warn); border-radius: var(--radius-full); font-size: var(--text-2xs); font-weight: var(--weight-semi); color: var(--status-warn); }
 .wk-session-gate-detail-item { margin: 4px 0 0 14px; max-height: 180px; overflow: auto; font-size: var(--text-xs); color: var(--ink-muted); white-space: pre-wrap; overflow-wrap: anywhere; }
 .wk-session-gate-detail-summary { font-size: var(--text-sm); font-weight: var(--weight-semi); color: var(--ink-high); }

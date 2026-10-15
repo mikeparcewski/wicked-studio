@@ -1,4 +1,5 @@
-import { commitGateDecision, commitGateReassign } from '../board/gateActions.js';
+import { commitGateDecision, commitGateReassign, useGateActionStore } from '../board/gateActions.js';
+import { QeRefusalWarning } from './QeRefusalWarning.js';
 import { reportDecision } from '../board/undoQueue.js';
 import { useMemo, useState } from 'react';
 import { api } from '../api/client.js';
@@ -86,6 +87,11 @@ export function ReassignControl({
   const [phase, setPhase] = useState<Phase>('idle');
   const [approved, setApproved] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // The approve (or the approve-and-move) went through the one gate send, which records crew's QE
+  // refusal on the gate (409 `qe_acceptance_required`): then the warning, with the way to the setting.
+  // (The plain reassign after it runs only on an executing run, which crew never gates.)
+  const qeRefused = useGateActionStore((s) => s.byGate[runId]?.qeRefusal === true);
+  const qeDetail = useGateActionStore((s) => s.byGate[runId]?.errorDetail ?? null);
   const busy = phase === 'approving' || phase === 'waiting' || phase === 'reassigning';
 
   if (candidates.length === 0) {
@@ -227,9 +233,10 @@ export function ReassignControl({
           {statusWord[phase]}
         </p>
       )}
+      {error !== null && qeRefused && <QeRefusalWarning kind="delivery" refusalKey={`${runId}:reassign`} detail={qeDetail} testId="steering-reassign-qe-refused" />}
       {error !== null && (
         <div className="flex items-center gap-2 flex-wrap">
-          <span data-testid="steering-reassign-error" style={{ ...mono, color: 'var(--status-fail)' }}>{error}</span>
+          {!qeRefused && <span data-testid="steering-reassign-error" style={{ ...mono, color: 'var(--status-fail)' }}>{error}</span>}
           {chosen !== undefined && (
             <button
               type="button"

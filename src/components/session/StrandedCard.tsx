@@ -1,5 +1,6 @@
 import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { TechDetails } from '../ui/TechDetails.js';
+import { QeRefusalWarning } from '../QeRefusalWarning.js';
 import type { SessionView } from '../../api/types.js';
 import { strandedCard } from '../../board/proposalCard.js';
 import { DELIVER_HASH } from '../../board/needsYou.js';
@@ -99,7 +100,10 @@ export function StrandedCard({ view }: { view: SessionView }): React.ReactElemen
           <TechDetails summary="Where it is" text={workdir} />
         </div>
       )}
-      {card.error !== null && (
+      {card.error !== null && card.error.qe === true && (
+        <QeRefusalWarning kind="delivery" refusalKey={runId} detail={card.error.detail} testId="session-stranded-qe-refused" />
+      )}
+      {card.error !== null && card.error.qe !== true && (
         <div data-testid="session-stranded-error" role="alert" className="wk-prop-why">
           <p className="wk-prop-bad">{card.error.headline}</p>
           <p className="wk-prop-live" style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{card.error.detail}</p>

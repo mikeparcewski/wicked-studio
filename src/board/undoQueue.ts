@@ -51,6 +51,8 @@ export interface DecisionResult {
   kind: 'sent' | 'failed' | 'not-sent';
   text: string;
   at: number;
+  /** The failure is crew's refusal because QE acceptance is required: the toast links to the setting. */
+  qe?: true;
 }
 
 /** How long a result stays on screen. */
@@ -68,12 +70,29 @@ export const useUndoQueue = create<UndoQueueStore>(() => ({ pending: [], results
 let nextResultId = 1;
 
 /** Record an outcome (a toast-level line, gone after {@link RESULT_TTL_MS}). */
-export function reportDecision(kind: DecisionResult['kind'], text: string): void {
+export function reportDecision(kind: DecisionResult['kind'], text: string, opts: { qe?: boolean } = {}): void {
   const id = nextResultId++;
-  useUndoQueue.setState((s) => ({ results: [...s.results, { id, kind, text, at: Date.now() }] }));
+  useUndoQueue.setState((s) => ({ results: [...s.results, { id, kind, text, at: Date.now(), ...(opts.qe === true ? { qe: true as const } : {}) }] }));
   setTimeout(() => {
+    // A result whose link has keyboard focus stays until focus leaves it (releaseResult).
+    if (heldResults.has(id)) { expiredResults.add(id); return; }
     useUndoQueue.setState((s) => ({ results: s.results.filter((r) => r.id !== id) }));
   }, RESULT_TTL_MS);
+}
+
+const heldResults = new Set<number>();
+const expiredResults = new Set<number>();
+
+/** Focus entered a result (its Settings link): it is not taken away while focus is in it. */
+export function holdResult(id: number): void {
+  heldResults.add(id);
+}
+
+/** Focus left a result: one that outlived its time while held goes now. */
+export function releaseResult(id: number): void {
+  heldResults.delete(id);
+  if (!expiredResults.delete(id)) return;
+  useUndoQueue.setState((s) => ({ results: s.results.filter((r) => r.id !== id) }));
 }
 
 /** Hand a note back after an Undo. */

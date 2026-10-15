@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { api } from '../api/client.js';
-import { ApiError } from '../api/errors.js';
+import { ApiError, apiWire } from '../api/errors.js';
+import { qeRefusalOf } from './qeRefusal.js';
 import { isDeliveriesFrozen } from '../api/deliveryFreeze.js';
 import { useDeliveryFreezeStore } from '../store/deliveryFreeze.js';
 import type { GateDecision, SessionView } from '../api/types.js';
@@ -59,12 +60,20 @@ export interface GateActionState {
   answered: 'approved' | 'rejected' | null;
   /** The named failure, adjacent to the still-enabled controls (§3.3). */
   error: string | null;
+  /** The failure is crew's refusal BECAUSE QE acceptance is required (409 `qe_acceptance_required`):
+   *  the card shows the QE warning (why, and the way to the setting) instead of the bare line. */
+  qeRefusal?: true | undefined;
+  /** crew's own sentence for a QE refusal (Technical details only). */
+  errorDetail?: string | undefined;
   /** The sent answer's receipt: kind tells RunBlock which component to keep mounted; chosenLabel
    *  and sentAt give GateRow its fold line on remount. Cleared when a new gate arrives. */
   receipt: { kind: 'plan' | 'deliver' | 'row'; chosenLabel: string; sentAt: number } | null;
 }
 
 export const IDLE_GATE_ACTION: GateActionState = { queued: false, busy: false, answered: null, error: null, receipt: null };
+
+/** No failure on record (a new attempt starts clean). */
+const NO_ERROR = { error: null, qeRefusal: undefined, errorDetail: undefined } as const;
 
 interface GateActionsStore {
   byGate: Record<string, GateActionState>;
@@ -256,7 +265,7 @@ export function commitGateDecision(
     reportDecision('not-sent', dropNotice(runId, cur));
     return Promise.resolve('dropped');
   }
-  patch(runId, { queued: true, error: null });
+  patch(runId, { queued: true, ...NO_ERROR });
   // studio#368: a deliver gate's approve pushes — the host names the branch and repo when it knows
   // them; any other caller (palette, triage keys) still gets the push line off the gate's kind.
   const deliver = opts.deliver ?? (useGateStore.getState().gates[runId]?.gateKind === 'deliver' ? { branch: null, repo: null } : null);
@@ -293,7 +302,7 @@ export function commitGateDecision(
           reportDecision('sent', opts.notice?.sent ?? `${PAST[verb] ?? 'Answered'} ${label}.`);
           resolve('sent');
         } else {
-          reportDecision('failed', `Not sent: ${label} — ${error}`);
+          reportDecision('failed', `Not sent: ${label} — ${error}`, { qe: useGateActionStore.getState().byGate[runId]?.qeRefusal === true });
           reject(new Error(error));
         }
       },
@@ -327,7 +336,7 @@ export function commitGateReassign(runId: string, cli: string, seatLabel: string
     reportDecision('not-sent', dropNotice(runId, cur));
     return Promise.resolve('dropped');
   }
-  patch(runId, { queued: true, error: null });
+  patch(runId, { queued: true, ...NO_ERROR });
   const label = gateLabel(runId);
   const gateNow = useGateStore.getState().gates[runId];
   return new Promise<DecisionOutcome>((resolve, reject) => {
@@ -346,9 +355,10 @@ export function commitGateReassign(runId: string, cli: string, seatLabel: string
           reportDecision('sent', `Moved ${label} to ${seatLabel}; the retry runs there.`);
           resolve('sent');
         } catch (e) {
-          const why = e instanceof Error ? e.message : String(e);
-          patch(runId, { busy: false, error: why });
-          reportDecision('failed', `Not moved: ${label} — ${why}`);
+          const failed = failureOf(e);
+          const why = failed.error;
+          patch(runId, { busy: false, ...failed });
+          reportDecision('failed', `Not moved: ${label} — ${why}`, { qe: failed.qeRefusal === true });
           reject(new Error(why));
         }
       },
@@ -368,7 +378,7 @@ export function commitGateReassign(runId: string, cli: string, seatLabel: string
 export async function sendGateDecision(runId: string, decision: GateDecisionWire): Promise<string | null> {
   const cur = useGateActionStore.getState().byGate[runId] ?? IDLE_GATE_ACTION;
   if (cur.busy || cur.answered !== null) return 'not sent — already answered or still in flight';
-  patch(runId, { busy: true, error: null });
+  patch(runId, { busy: true, ...NO_ERROR });
   try {
     // The ONLY `confirmGate` call in studio (tests/gateWireSingleCaller.test.ts pins it). A refusal
     // (400, 409 gate_changed / gate_unknown) is never retried: the caller reports it as "Not sent".
@@ -391,12 +401,23 @@ export async function sendGateDecision(runId: string, decision: GateDecisionWire
     // Idea 15: a frozen deliver approve is refused and the gate stays open — re-read the switch
     // so the status bar's banner shows who froze it, even when someone else did.
     if (isDeliveriesFrozen(e)) void useDeliveryFreezeStore.getState().load();
-    const error = e instanceof Error ? e.message : String(e);
-    patch(runId, { error });
-    return error;
+    const failed = failureOf(e);
+    patch(runId, failed);
+    return failed.error;
   } finally {
     patch(runId, { busy: false });
   }
+}
+
+/** What a hand-over refused because QE acceptance hasn't passed says, wherever the failure is told
+ *  (the card, the toast, a batch's failure list); the card adds the way to the setting. */
+export const QE_REFUSED_TEXT = 'Not delivered: QE acceptance hasn’t passed, so nothing was pushed.';
+
+/** A failed decision's state: crew's QE refusal in plain words (its sentence kept as the detail), else
+ *  the translated refusal as it was. */
+function failureOf(e: unknown): Pick<GateActionState, 'error' | 'qeRefusal' | 'errorDetail'> & { error: string } {
+  if (qeRefusalOf(e) === 'delivery') return { error: QE_REFUSED_TEXT, qeRefusal: true, errorDetail: apiWire(e) ?? undefined };
+  return { error: e instanceof Error ? e.message : String(e), qeRefusal: undefined, errorDetail: undefined };
 }
 
 /** What the person reads when their decision outlived its gate. */

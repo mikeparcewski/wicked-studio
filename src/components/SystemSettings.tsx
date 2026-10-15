@@ -21,6 +21,8 @@ import { getCachedRoster } from '../store/rosterCache.js';
 import { homeDirsIn } from '../board/homePath.js';
 import { PAGE_NAMES } from '../board/pageNames.js';
 import { Segmented } from './ui/Segmented.js';
+import { scrollBehavior } from './ui/motion.js';
+import { QE_SETTING_ANCHOR } from '../board/qeRefusal.js';
 
 const CLI_DEFAULTS_KEY = 'wicked_default_clis';
 
@@ -125,6 +127,32 @@ export function SystemSettings({ navigate = (p) => { history.pushState(null, '',
       .catch(() => { /* no diagnostics: the row says "not reported", never a guessed posture */ });
     return () => { cancelled = true; };
   }, []);
+  // A QE refusal's warning links here (`/system#qe-acceptance`): once the settings are read, the page
+  // brings the switch into view, focuses it and rings it until focus leaves. Re-checked on every
+  // in-app navigation, which arrives as popstate.
+  const qeRef = useRef<HTMLDivElement | null>(null);
+  const [qeTargeted, setQeTargeted] = useState(false);
+  const [addressTick, setAddressTick] = useState(0);
+  useEffect(() => {
+    const on = (): void => setAddressTick((n) => n + 1);
+    window.addEventListener('popstate', on);
+    window.addEventListener('hashchange', on);
+    return () => { window.removeEventListener('popstate', on); window.removeEventListener('hashchange', on); };
+  }, []);
+  const settingsRead = settings !== null;
+  useEffect(() => {
+    if (!settingsRead || window.location.hash !== `#${QE_SETTING_ANCHOR}`) return;
+    const timer = setTimeout(() => {
+      const el = qeRef.current;
+      if (el === null) return;
+      el.scrollIntoView?.({ block: 'center', behavior: scrollBehavior() });
+      // The switch takes focus; a disabled one (a service without the setting) cannot, so the row does.
+      const sw = el.querySelector<HTMLButtonElement>('[role="switch"]');
+      (sw !== null && !sw.disabled ? sw : el).focus({ preventScroll: true });
+      setQeTargeted(true);
+    }, 100);
+    return () => clearTimeout(timer);
+  }, [settingsRead, addressTick]);
   function load(): void {
     setError(null);
     setErrorSource(null);
@@ -261,13 +289,16 @@ export function SystemSettings({ navigate = (p) => { history.pushState(null, '',
         </SettingRow>
         {/* api-types 0.120.0: off = studio's service skips QE acceptance for every job that would wait
             for it, and labels each one; a daemon before the setting sends no key and keeps it required. */}
+        <div id={QE_SETTING_ANCHOR} ref={qeRef} tabIndex={-1} data-testid="qe-acceptance-setting" data-targeted={qeTargeted ? 'true' : 'false'} className="wk-setting-target"
+          onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setQeTargeted(false); }}>
         <Switch label="Require QE acceptance before delivery" data-testid="qe-acceptance-toggle" checked={merged.qeAcceptance !== 'off'}
           onChange={(checked) => patch('qeAcceptance', checked ? 'required' : 'off')}
           disabled={settings === null ? 'Reading this setting…'
             : settings.qeAcceptance === undefined ? 'Studio’s service doesn’t have this setting yet, so QE acceptance stays required.' : null}
           hint={merged.qeAcceptance === 'off'
-            ? 'Off: jobs that change the application deliver without waiting for a QE check. Each job, its gates and its delivery say it was skipped.'
+            ? 'Off: jobs that change the application deliver without waiting for a QE check. Each job, its gates and its delivery say it was skipped. A job already started keeps the setting it started with.'
             : 'Jobs that change the application wait for a QE acceptance pass before they deliver.'} />
+        </div>
         <Switch label="Open a PR when a build run finishes" data-testid="deliver-pr-toggle" checked={deliverPr}
           onChange={(checked) => updateComposerPrefs({ deliverPr: checked })}
           hint="Push the finished branch and open a pull request when a workflow and repository are selected; you decide when to merge." />

@@ -1,7 +1,9 @@
 import { defaultOn } from '../store/composerSeats.js';
 import { commitGateDecision } from '../board/gateActions.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { api, ApiError } from '../api/client.js';
+import { api, ApiError, apiWire } from '../api/client.js';
+import { qeRefusalOf } from '../board/qeRefusal.js';
+import { QeRefusalWarning } from './QeRefusalWarning.js';
 import type { BaseSkillPosture, BaseSkillRefusedResponse, DeliverTargetResponse, EntityMode, LaunchBodyWithDeliver, Project, RepoEntry, RosterSeat, WorkflowDef } from '../api/types.js';
 import { COMPOSER_DEFAULT_GATE_POSTURE } from './composerDefaults.js';
 import { isShortcutsPaletteOpen } from '../hooks/useGlobalShortcuts.js';
@@ -523,6 +525,9 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   const [error, setError] = useState<string | null>(null);
   /** studio#275: a 422 `base_skill_refused` launch — the typed card, not a bare sentence. */
   const [baseSkillRefusal, setBaseSkillRefusal] = useState<BaseSkillRefusedResponse | null>(null);
+  /** The launch was refused because its workflow requires QE acceptance (crew's `qe_acceptance_required`). */
+  const [qeRefusal, setQeRefusal] = useState<{ key: string; detail: string | null; forced: boolean } | null>(null);
+  const qeAttempt = useRef(0);
   /** studio#404: the id this launch was sent under (client-minted), while its POST is outstanding. */
   const [pendingRunId, setPendingRunId] = useState<string | null>(null);
   /** studio#404: the pending run is already on the daemon — offered while the POST is still out. */
@@ -779,6 +784,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
       return;
     }
     setBaseSkillRefusal(null);
+    setQeRefusal(null);
     setStartedRunId(null);
     openedEarly.current = null;
 
@@ -865,11 +871,14 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
         // phase — omitting the key reproduces the only behavior it is capable of (no
         // delivery), for either toggle state — so retry once without it rather than failing
         // a launch over a field the daemon cannot honor.
+        // A refusal BECAUSE QE acceptance is required also says "deliver": it is never retried
+        // without the key (crew refuses that copy the same way; it would only post twice).
         if (
           body.deliver !== undefined &&
           err instanceof ApiError &&
           err.status === 400 &&
-          err.message.includes('deliver')
+          err.message.includes('deliver') &&
+          qeRefusalOf(err) === null
         ) {
           const withoutDeliver = { ...body };
           delete withoutDeliver.deliver;
@@ -888,6 +897,10 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
     } catch (err) {
       const refused = baseSkillRefusalOf(err);
       if (refused !== null) setBaseSkillRefusal(refused);
+      else if (qeRefusalOf(err) === 'launch') {
+        qeAttempt.current += 1;
+        setQeRefusal({ key: `launch:${qeAttempt.current}`, detail: apiWire(err), forced: body.forceQeAcceptance === true });
+      }
       else setError(err instanceof Error ? err.message : String(err));
     } finally {
       setSubmitting(false);
@@ -2043,6 +2056,11 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
             </p>
           )}
         </div>
+      )}
+
+      {/* A launch refused because QE acceptance is required: why, and the way to the setting. */}
+      {qeRefusal !== null && (
+        <QeRefusalWarning kind="launch" refusalKey={qeRefusal.key} detail={qeRefusal.detail} forced={qeRefusal.forced} navigate={navigate} testId="launch-qe-refused" />
       )}
 
       {/* Error message */}

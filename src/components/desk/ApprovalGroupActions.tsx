@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
+import { useGateActionStore } from '../../board/gateActions.js';
+import { QeSettingOffer } from '../QeRefusalWarning.js';
 import {
   BATCH_NOTE_KEY, retryBatchOne, runBatchDecision, useBatchGateStore,
 } from '../../board/batchGates.js';
@@ -33,6 +35,9 @@ export function ApprovalGroupActions({ runIds, label }: {
   // Filter to this group's ids only: the store is shared, and a prior batch's failures for
   // different run ids must not appear here (they belong to whatever row triggered that batch).
   const failures = allFailures.filter((f) => (runIds as string[]).includes(f.runId));
+  // A member crew refused because QE acceptance hasn't passed: the row links to the setting.
+  const byGate = useGateActionStore((st) => st.byGate);
+  const qeRefused: Record<string, boolean> = Object.fromEntries(failures.map((f) => [f.runId, byGate[f.runId]?.qeRefusal === true]));
   const [reasonOpen, setReasonOpen] = useState(false);
   // A reject reason handed back by Undo re-seeds the input (never lost).
   const [note, setNote] = useState(() => takeRestoredNote(BATCH_NOTE_KEY));
@@ -140,6 +145,7 @@ export function ApprovalGroupActions({ runIds, label }: {
           <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {`failed: ${f.runId} (${f.error})`}
           </span>
+          {qeRefused[f.runId] === true && <QeSettingOffer refusalKey={`batch:${f.runId}`} testId="need-group-failure-qe" />}
           <button
             type="button"
             data-testid="need-group-retry"

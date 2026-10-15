@@ -1,5 +1,7 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
-import { api } from '../../api/client.js';
+import { api, apiWire } from '../../api/client.js';
+import { qeRefusalOf } from '../../board/qeRefusal.js';
+import { goToPath, QeRefusalWarning } from '../QeRefusalWarning.js';
 import type { RepoEntry } from '../../api/types.js';
 import { gatePostureWord, workflowLaunchBody } from '../../board/launchModel.js';
 import { qeAcceptanceSetting, workflowRequiresQe } from '../../board/assuranceModel.js';
@@ -98,6 +100,10 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
   const [force, setForce] = useState(false);
   const [launching, setLaunching] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** The launch was refused because its workflow requires QE acceptance (crew's `qe_acceptance_required`). */
+  const [qeRefused, setQeRefused] = useState<{ key: string; detail: string | null; forced: boolean } | null>(null);
+  const forcedRef = useRef(false);
+  const attemptRef = useRef(0);
   const drafting = draft.workflowId === DRAFT_EPICS_ID;
   const demoing = draft.workflowId === DEMO_VIDEO_ID;
   const [step, setStep] = useState<Step>(draft.workflowId === null ? 'workflow' : drafting ? 'requirements' : demoing ? 'demo' : 'what');
@@ -259,6 +265,7 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
       launchingRef.current = true;
       setLaunching(true);
       setError(null);
+      setQeRefused(null);
       try {
         // Unfiled is the `default` mount: crew launches the run unfiled (recording.ts, UNFILED_PROJECT).
         const out = await launchDemo(draft.projectId ?? UNFILED_MOUNT, {
@@ -283,6 +290,7 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
       launchingRef.current = true;
       setLaunching(true);
       setError(null);
+      setQeRefused(null);
       try {
         const steer = draft.intent.trim();
         const out = await composeProduct(draft.projectId!, {
@@ -320,6 +328,7 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
         chatId,
       });
       if (offerQe && force && (qeOff || !draft.skipQe)) body.forceQeAcceptance = true;
+      forcedRef.current = body.forceQeAcceptance === true;
       const { runId } = await api.launchRun(body);
       useProvenanceStore.getState().markLaunchedHere(runId);
       if (key !== null) clearAboutChips(key);
@@ -327,6 +336,8 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
       navigate?.(chatId !== null ? sessionPath(chatId) : sessionPath(`run:${runId}`));
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
+      attemptRef.current += 1;
+      setQeRefused(qeRefusalOf(err) === 'launch' ? { key: `launch:${attemptRef.current}`, detail: apiWire(err), forced: forcedRef.current } : null);
     } finally {
       launchingRef.current = false;
       setLaunching(false);
@@ -651,7 +662,13 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
             </dl>
           )}
 
-          {error !== null && (
+          {/* A launch refused because QE acceptance is required: why, and the way to the setting (the
+              wizard closes on the way, keeping the draft). */}
+          {error !== null && qeRefused !== null && (
+            <QeRefusalWarning kind="launch" refusalKey={qeRefused.key} detail={qeRefused.detail} forced={qeRefused.forced} testId="launch-wizard-qe-refused"
+              navigate={(p) => { closeStore(); (navigate ?? goToPath)(p); }} />
+          )}
+          {error !== null && qeRefused === null && (
             <div role="alert" data-testid="launch-wizard-error" className="wk-composer-note wk-composer-note--bad">
               Couldn’t launch this. Your choices are kept, so you can try again.
               <TechDetails text={error} data-testid="launch-wizard-error-detail" />
