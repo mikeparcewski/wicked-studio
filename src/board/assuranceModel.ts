@@ -522,9 +522,15 @@ export function receiptWords(r: AssuranceReceipt, passed: boolean | null = null)
   const seats: string[] = [];
   if (r.creator !== null) seats.push(`built by ${r.creator}`);
   if (r.evaluator !== null) seats.push(`evaluated by ${r.evaluator}`);
-  // A fallback judge is named by the engine's own line, never as a plain "judged by" (operator ruling 2026-10-14).
+  // A fallback judge is named by the engine's own line, never as a plain "judged by" (operator ruling 2026-10-14);
+  // every other judge keeps its plain words (a delivery can mix the run's own judges and a fallback).
   const fallbacks = r.judgeFallbacks ?? [];
-  if (r.judge !== null && fallbacks.length === 0) seats.push(`judged by ${r.judge}`);
+  const fallbackSeats = fallbacks.flatMap((l) => {
+    const m = /^judge: (\S+) \(fallback/.exec(l);
+    return m !== null ? [m[1]!] : [];
+  });
+  const ownJudges = (r.judge ?? '').split(', ').filter((j) => j !== '' && !fallbackSeats.includes(j));
+  if (ownJudges.length > 0) seats.push(`judged by ${ownJudges.join(', ')}`);
   const sep = separationWords(r);
   const named = seats.length === 0 ? null : `${seats.join(' · ')}${sep !== null ? ` (${sep})` : ''}`;
   const who = fallbacks.length === 0 ? named : [named, ...fallbacks].filter((x): x is string => x !== null).join(' · ');

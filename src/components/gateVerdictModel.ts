@@ -169,6 +169,9 @@ export interface GateVerdictView {
    * pre-0.33 frame, which claims nothing either way.
    */
   judgeReported: boolean;
+  /** (wicked-core judge fallback) The engine's disclosure line when `judgeCli` was seated as a FALLBACK for a
+   *  benched or unavailable preferred judge (`assurance.judgeFallbacks[0].label`, shown as-is); absent otherwise. */
+  judgeFallback?: string | null;
   /**
    * The engine SAYS the unit went ungated (api-types 0.36.0 `gateEvaluated.ungated` — wave 6,
    * F-7R2-005): no eligible judge seat could be convened, so evaluator ≠ creator was not held and
@@ -373,6 +376,7 @@ export function gateVerdict(events: readonly CoreEvent[], gateOrd?: number): Gat
     judgeCli: str(ev.judgeCli),
     judgeDistinct: typeof ev.judgeDistinct === 'boolean' ? ev.judgeDistinct : null,
     judgeReported: 'judgeCli' in (ev as Record<string, unknown>),
+    judgeFallback: fallbackLabelOf((ev as Record<string, unknown>)['assurance']),
     ungated,
     ungatedReason,
     attempt: ord === null ? null : attemptBefore(events, ord, idx),
@@ -920,6 +924,18 @@ export function shortId(id: string, n = 10): string {
   return id.length > n ? id.slice(0, n) : id;
 }
 
+/** The first fallback-judge disclosure a receipt carries (`judgeFallbacks[].label`), or `null`. */
+export function fallbackLabelOf(assurance: unknown): string | null {
+  if (typeof assurance !== 'object' || assurance === null) return null;
+  const list = (assurance as { judgeFallbacks?: unknown }).judgeFallbacks;
+  if (!Array.isArray(list)) return null;
+  for (const f of list) {
+    const label = typeof f === 'object' && f !== null ? (f as { label?: unknown }).label : null;
+    if (typeof label === 'string' && label.trim() !== '') return label.trim();
+  }
+  return null;
+}
+
 /**
  * studio#430: which layer denied, when the card's lines would otherwise read as a contradiction — a
  * DENIED head over "judge: pass" and an evaluator-policy layer that passed, because the evaluator
@@ -932,5 +948,6 @@ export function layerLine(view: GateVerdictView): string | null {
   if (view.judgeSkipped !== null && view.judgeSkipped !== undefined) return null;
   const judge = (view.agentVerdict ?? '').trim().toLowerCase();
   if (judge !== 'pass') return null;
-  return `judge${view.judgeCli !== null ? ` (${view.judgeCli})` : ''}: pass · evaluator’s own verdict: FAIL — the evaluator is what denied it`;
+  const who = view.judgeCli !== null ? ` (${view.judgeCli}${view.judgeFallback ? ', fallback' : ''})` : '';
+  return `judge${who}: pass · evaluator’s own verdict: FAIL — the evaluator is what denied it`;
 }
