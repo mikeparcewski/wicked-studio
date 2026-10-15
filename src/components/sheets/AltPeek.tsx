@@ -9,8 +9,8 @@ import { useSheets } from '../../store/sheets.js';
 import { isTypingContext } from '../../hooks/useGlobalShortcuts.js';
 import { seatStandingWord } from '../HealthRailSection.js';
 import { humanTitle } from '../runIdentity.js';
+import { deskLiveCounts } from '../../board/statusWords.js';
 
-const TERMINAL = new Set(['completed', 'failed', 'cancelled']);
 const RUN_WORD: Record<string, string> = {
   executing: 'being worked on', distributing: 'being handed out', planning: 'being planned', awaiting_human: 'waiting on you',
   completed: 'finished', failed: 'stopped', cancelled: 'cancelled', pending: 'not started',
@@ -19,8 +19,10 @@ const RUN_WORD: Record<string, string> = {
 /** The one telling fact a peek shows for an object (DESIGN-interaction rule 9). */
 export function peekFact(ref: ObjectRef, ctx: { runs: readonly SessionView[]; needCount: number; runChatId: boolean; standing: (cli: string) => string | null }): string {
   if (ref.kind === 'desk') {
-    const live = ctx.runs.filter((v) => !TERMINAL.has(v.session.status)).length;
-    return `${ctx.needCount === 0 ? 'Nothing needs you' : `${ctx.needCount} ${ctx.needCount === 1 ? 'thing needs' : 'things need'} you`} · ${live} running`;
+    // The calm line's count (deskLiveCounts): an idle chat is open, not running.
+    const { working, chatsOpen } = deskLiveCounts(ctx.runs);
+    const chats = chatsOpen > 0 ? ` · ${chatsOpen} ${chatsOpen === 1 ? 'chat' : 'chats'} open` : '';
+    return `${ctx.needCount === 0 ? 'Nothing needs you' : `${ctx.needCount} ${ctx.needCount === 1 ? 'thing needs' : 'things need'} you`} · ${working} running${chats}`;
   }
   if (ref.kind === 'session') {
     const s = parseSessionId(ref.sessionId);

@@ -193,6 +193,9 @@ describe('⌥ peek says one telling fact', () => {
   it('per object', () => {
     const ctx = { runs: [RUN], needCount: 2, runChatId: false, standing: () => 'signed in' };
     expect(peekFact({ kind: 'desk' }, ctx)).toBe('2 things need you · 1 running');
+    // An idle chat is open, not running (the calm line's count).
+    const chat = { session: { ...ctx.runs[0]!.session, id: 'c1', status: 'awaiting_human', ask_turn: true } } as unknown as (typeof ctx.runs)[number];
+    expect(peekFact({ kind: 'desk' }, { ...ctx, runs: [...ctx.runs, chat] })).toBe('2 things need you · 1 running · 1 chat open');
     expect(peekFact({ kind: 'helper', runId: 'r1', cli: 'claude' }, ctx)).toBe('claude · not working right now · signed in');
     expect(peekFact({ kind: 'step', runId: 'r1', ord: 0 }, ctx)).toBe('Done · claude');
     expect(peekFact({ kind: 'session', sessionId: 'run:r1' }, ctx)).toBe('fix the double charge · being worked on');

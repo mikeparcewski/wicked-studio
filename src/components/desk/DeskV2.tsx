@@ -370,7 +370,7 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
           missing={settled.missing} onRetry={rereadSources} retrying={rereading} />
         <ul className="wk-work-blocks" aria-label="At a glance" data-testid="desk-blocks">
           <DeskStat icon={Activity} tone="run" label="Running now" testId="desk-block-running" href={runningPath} navigate={navigate}
-            value={runsShown ? String(allRunning) : null} note={allRunning === 0 ? 'nothing executing' : 'executing a step'} />
+            value={runsShown ? String(allRunning) : null} note={allRunning === 0 ? 'nothing running' : 'working now'} />
           <DeskStat icon={CircleAlert} tone="fail" label="Failed" testId="desk-block-failed" href={everythingPath({ tab: 'sessions', filter: 'failed', ...(projectId !== undefined ? { project: projectId } : {}) })} navigate={navigate}
             value={runsShown ? String(workFailed.inWindow.length) : null}
             note={workFailed.inWindow.length === 0 ? (workFailed.older > 0 ? `none new · ${workFailed.older} older still open` : 'none in the last 30 days') : `last 30 days, not retried${workFailed.retried > 0 ? ` · ${workFailed.retried} retried` : ''}`} />
