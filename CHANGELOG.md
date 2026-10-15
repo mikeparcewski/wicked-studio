@@ -14,6 +14,7 @@ npm publish dates. Every version listed here exists on
 
 ### Fixed
 - Built-in editors run on protocol 2 when crew serves them: the host reads the registry's surfaces in the parsed wire form (`full.modes: null`, `options: null`) instead of refusing them and falling back to protocol 1 (wicked-studio#791).
+- The Ask dock's header names the project it reads (`Tiny tip r3 · 1 repo`), not its raw id, and a resumed chat no longer shows a cut-off "scope: not stated…" (wicked-studio#789).
 
 ## [0.9.0] — 2026-10-14
 

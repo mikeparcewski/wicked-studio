@@ -705,7 +705,12 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
       {/* Header */}
       <div className="flex shrink-0 items-center gap-2 px-3 py-2" style={{ borderBottom: '1px solid var(--surface-raised)' }}>
         <span className="text-[11px] font-semibold" style={{ color: 'var(--ink-high)' }}>{context.title}</span>
-        <span data-testid="assist-context" className="truncate text-[11px]" style={{ color: 'var(--ink-muted)' }}>
+        <span
+          data-testid="assist-context"
+          title={context.contextLabel}
+          className="min-w-0 text-[11px]"
+          style={{ color: 'var(--ink-muted)', minWidth: 0, overflowWrap: 'anywhere' }}
+        >
           {context.contextLabel}
         </span>
         {onExpandChat !== undefined && latestChatId !== null && (
