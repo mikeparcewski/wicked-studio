@@ -13,7 +13,7 @@ import { jobTitle } from '../board/deskWords.js';
 import { useMembershipStore } from '../store/membership.js';
 import { readErrorKind } from '../api/errors.js';
 import { useDisplayText } from '../hooks/useHomePath.js';
-import { keepEntryState } from '../hooks/useHistoryState.js';
+import { announceHistoryChange, keepEntryState, useHistoryEntryValue } from '../hooks/useHistoryState.js';
 import { EmptyState, PageFrame, SectionTitle, Skeleton, StateBanner, StatLine, TechDetails } from './ui/index.js';
 
 interface Props {
@@ -24,11 +24,6 @@ interface Props {
 }
 
 const TERMINAL_STATUSES = new Set(['completed', 'failed', 'cancelled']);
-
-function readLocationOnboardError(): string | null {
-  const error = keepEntryState().onboardError;
-  return typeof error === 'string' && error.trim() !== '' ? error : null;
-}
 
 /**
  * §7.10 (slice X2): contributor identity de-duplicates. Git histories routinely
@@ -78,10 +73,13 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph }: P
   const [reload, setReload] = useState(0);
   const [expanded, setExpanded] = useState(false);
   const [onboarding, setOnboarding] = useState(false);
-  const [onboardError, setOnboardError] = useState<unknown>(() => readLocationOnboardError());
+  const [rerunError, setRerunError] = useState<unknown>(null);
+  const entryOnboardError = useHistoryEntryValue('onboardError');
+  const registrationError = typeof entryOnboardError === 'string' && entryOnboardError.trim() !== '' ? entryOnboardError : null;
 
   useEffect(() => {
-    setOnboardError(readLocationOnboardError());
+    setRerunError(null);
+    setOnboarding(false);
   }, [repoId]);
 
   useEffect(() => {
@@ -201,23 +199,30 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph }: P
   const graphStats = graph?.stats;
   const graphTotals = graph?.totals;
 
-  function dismissOnboardError(): void {
-    setOnboardError(null);
+  function clearRegistrationError(): void {
     const state = keepEntryState();
     delete state.onboardError;
     window.history.replaceState(state, '');
+    announceHistoryChange();
+  }
+
+  function dismissOnboardError(): void {
+    if (rerunError !== null) setRerunError(null);
+    else clearRegistrationError();
   }
 
   async function startOnboarding(): Promise<void> {
+    const forRepo = repoId;
     setOnboarding(true);
-    dismissOnboardError();
+    setRerunError(null);
+    clearRegistrationError();
     try {
-      const { runId } = await api.rerunOnboarding(repoId);
-      onSelectRun(runId);
+      const { runId } = await api.rerunOnboarding(forRepo);
+      if (repoRef.current === forRepo) onSelectRun(runId);
     } catch (e: unknown) {
-      setOnboardError(e);
+      if (repoRef.current === forRepo) setRerunError(e);
     } finally {
-      setOnboarding(false);
+      if (repoRef.current === forRepo) setOnboarding(false);
     }
   }
 
@@ -225,6 +230,8 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph }: P
   // The finding row carries Re-run onboarding when a finding asks for it; the header keeps it otherwise.
   const findingOffersOnboard = (repo.findings ?? []).some(findingNeedsReonboard);
   const gitLink = repo.git_url && /^https?:\/\//i.test(repo.git_url) ? repo.git_url : null;
+  // A re-run failure takes precedence without overwriting the current entry's registration notice.
+  const onboardError = rerunError ?? registrationError;
   const onboardErrorText = onboardError === null
     ? null
     : onboardError instanceof Error
@@ -275,7 +282,7 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph }: P
           <div data-testid="repo-onboard-error" role="status" className="wk-state-banner wk-state-banner--warn">
             <div className="wk-state-banner-row">
               <p className="wk-state-banner-text">
-                {onboardError instanceof Error ? 'Couldn’t start onboarding: ' : 'Registered. Onboarding couldn’t start: '}
+                {rerunError !== null ? 'Couldn’t start onboarding: ' : 'Registered. Onboarding couldn’t start: '}
                 {showText(onboardErrorText)}
               </p>
               <button

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { isSteeringSection, isSteeringType, type SteeringSection } from '../api/steering.js';
 import { isTestingSubPage } from '../api/testing.js';
-import { announceNavigateAway, inAppEntryState, isInAppEntry, replacedEntryState } from './useHistoryState.js';
+import { announceHistoryChange, announceNavigateAway, inAppEntryState, isInAppEntry, replacedEntryState } from './useHistoryState.js';
 
 // `everything` is "See everything" (`/everything`, DES-STUDIO-REBUILD-001 §5.4, slices S15c/S17a): five
 // tabs — Sessions, Everything made, Helpers, Handed over, Projects — selected by `?tab=`; the Sessions tab keeps
@@ -347,11 +347,11 @@ export function useRoute(): Route & {
   }, []);
 
   const navigate = useCallback<Navigate>((path, opts) => {
-    if (opts?.replace) history.replaceState({ ...replacedEntryState(), ...opts.state }, '', path);
+    if (opts?.replace) history.replaceState({ ...opts.state, ...replacedEntryState() }, '', path);
     else {
       // The LEAVING entry snapshots its view state first (useHistoryState), so Back restores it.
       announceNavigateAway();
-      history.pushState({ ...inAppEntryState(), ...opts?.state }, '', path);
+      history.pushState({ ...opts?.state, ...inAppEntryState() }, '', path);
     }
     // Parse pathname-only for the panel/mode router (a hash like `#gate` must
     // not ride into the artifact id), but also capture the search string so
@@ -359,6 +359,7 @@ export function useRoute(): Route & {
     const url = new URL(path, window.location.origin);
     setPathname(url.pathname);
     setSearch(url.search);
+    announceHistoryChange();
   }, []);
 
   const panelPath = useCallback((p: Panel) => (p === 'home' ? '/' : `/${p}`), []);

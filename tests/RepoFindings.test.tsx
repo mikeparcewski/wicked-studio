@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, renderHook, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, renderHook, screen, waitFor, within } from '@testing-library/react';
 import type { RepoEntry } from '../src/api/types.js';
 import { useRoute } from '../src/hooks/useRoute.js';
 import {
@@ -22,8 +22,8 @@ const REPOS: RepoEntry[] = [REPO_CLEAN, REPO_PREDATES_FINDINGS, REPO_INTREE_LIVE
 const listRepos = vi.fn(() => Promise.resolve({ repos: REPOS }));
 const listRuns = vi.fn(() => Promise.resolve({ runs: [makeView({ id: 'r-1', repo_ref: 'billing', workflow_id: 'onboarding', status: 'completed' })] }));
 const rerunOnboarding = vi.fn<(repoId: string) => Promise<{ runId: string }>>(() => Promise.resolve({ runId: 'run-reonboard' }));
-const registerRepo = vi.fn<(name: string, rootPath: string) => Promise<{ repo: RepoEntry; onboardRunId: string | null; onboardError?: string; projectAttachError?: string }>>();
-const cloneAndRegisterRepo = vi.fn<(name: string, gitUrl: string, checkoutPath?: string) => Promise<{ repo: RepoEntry; onboardRunId: string | null; onboardError?: string; projectAttachError?: string }>>();
+const registerRepo = vi.fn<(name: string, rootPath: string) => Promise<{ repo: RepoEntry; onboardRunId: string | null; onboardError?: string }>>();
+const cloneAndRegisterRepo = vi.fn<(name: string, gitUrl: string, checkoutPath?: string) => Promise<{ repo: RepoEntry; onboardRunId: string | null; onboardError?: string }>>();
 const attachProjectMember = vi.fn<(projectId: string, body: unknown) => Promise<unknown>>(() => Promise.resolve({
   member: {
     id: 'm-new',
@@ -313,7 +313,7 @@ describe('registering a repo whose onboarding cannot start (wicked-crew#1019)', 
     });
     expect(screen.queryByTestId('repo-register-error')).toBeNull();
     expect(screen.queryByTestId('repo-register')).toBeNull();
-    expect(screen.getByRole('heading', { name: 'billing' })).toBeInTheDocument();
+    expect(window.location.pathname).toBe('/repo-detail/billing');
     expect(screen.queryByTestId('repos-empty')).toBeNull();
     expect(route.result.current).toMatchObject({ panel: 'repo-detail', repoId: 'billing' });
     expect(window.history.state).toMatchObject({ onboardError: ONBOARD_REASON });
@@ -355,6 +355,93 @@ describe('registering a repo whose onboarding cannot start (wicked-crew#1019)', 
     render(<RepoDetailPage {...props} />);
     await screen.findByRole('heading', { name: 'billing' });
     expect(screen.queryByTestId('repo-onboard-error')).toBeNull();
+  });
+
+  it('shows a rejected re-run as a re-run failure, with the reason', async () => {
+    rerunOnboarding.mockRejectedValueOnce(new Error('the required indexing tool is unavailable'));
+    const onSelectRun = vi.fn();
+    render(<RepoDetailPage repoId="billing" onSelectRun={onSelectRun} navigate={vi.fn()} onOpenGraph={vi.fn()} />);
+    fireEvent.click(await screen.findByTestId('repo-run-onboarding'));
+
+    expect(await screen.findByTestId('repo-onboard-error')).toHaveTextContent(
+      'Couldn’t start onboarding: the required indexing tool is unavailable',
+    );
+    expect(onSelectRun).not.toHaveBeenCalled();
+    expect(screen.getByTestId('repo-run-onboarding')).toBeEnabled();
+  });
+
+  it.each(['rejects', 'resolves'])('ignores repo-a’s re-run when it %s after switching to repo-b', async (outcome) => {
+    const repos = ['repo-a', 'repo-b'].map((id) => ({ ...REPO_CLEAN, id, name: id }));
+    listRepos.mockResolvedValueOnce({ repos }).mockResolvedValueOnce({ repos });
+    let settleA!: () => void;
+    let settleB!: () => void;
+    rerunOnboarding.mockReturnValueOnce(new Promise((resolve, reject) => {
+      settleA = () => outcome === 'rejects' ? reject(new Error('repo-a failed')) : resolve({ runId: 'run-a' });
+    }));
+    rerunOnboarding.mockReturnValueOnce(new Promise((resolve) => {
+      settleB = () => resolve({ runId: 'run-b' });
+    }));
+    const props = { onSelectRun: vi.fn(), navigate: vi.fn(), onOpenGraph: vi.fn() };
+    const page = render(<RepoDetailPage {...props} repoId="repo-a" />);
+    fireEvent.click(await screen.findByTestId('repo-run-onboarding'));
+    expect(rerunOnboarding).toHaveBeenCalledWith('repo-a');
+
+    page.rerender(<RepoDetailPage {...props} repoId="repo-b" />);
+    await screen.findByRole('heading', { name: 'repo-b' });
+    expect(screen.getByTestId('repo-run-onboarding')).toBeEnabled();
+    fireEvent.click(screen.getByTestId('repo-run-onboarding'));
+    expect(rerunOnboarding).toHaveBeenCalledWith('repo-b');
+
+    await act(async () => { settleA(); });
+
+    expect(screen.queryByTestId('repo-onboard-error')).toBeNull();
+    expect(props.onSelectRun).not.toHaveBeenCalled();
+    expect(screen.getByTestId('repo-run-onboarding')).toBeDisabled();
+    await act(async () => { settleB(); });
+    expect(props.onSelectRun).toHaveBeenCalledExactlyOnceWith('run-b');
+    expect(screen.getByTestId('repo-run-onboarding')).toBeEnabled();
+  });
+
+  it('reads the current entry on same-repo navigation and Back/Forward', async () => {
+    window.history.replaceState({ onboardError: ONBOARD_REASON }, '', '/repo-detail/billing');
+    const route = renderHook(() => useRoute());
+    render(<RepoDetailPage repoId="billing" onSelectRun={vi.fn()} navigate={route.result.current.navigate} onOpenGraph={vi.fn()} />);
+    expect(await screen.findByTestId('repo-onboard-error')).toHaveTextContent('unresolved tool dependencies');
+
+    act(() => route.result.current.navigate('/repo-detail/billing', { state: { onboardError: 'Another registration failed' } }));
+    expect(screen.getByTestId('repo-onboard-error')).toHaveTextContent('Another registration failed');
+    act(() => route.result.current.navigate('/repo-detail/billing'));
+    expect(screen.queryByTestId('repo-onboard-error')).toBeNull();
+
+    act(() => window.history.back());
+    await waitFor(() => expect(screen.getByTestId('repo-onboard-error')).toHaveTextContent('Another registration failed'));
+    act(() => window.history.back());
+    await waitFor(() => expect(screen.getByTestId('repo-onboard-error')).toHaveTextContent('unresolved tool dependencies'));
+    act(() => window.history.forward());
+    await waitFor(() => expect(screen.getByTestId('repo-onboard-error')).toHaveTextContent('Another registration failed'));
+    act(() => window.history.forward());
+    await waitFor(() => expect(screen.queryByTestId('repo-onboard-error')).toBeNull());
+  });
+
+  it('keeps a re-run failure separate from a registration notice restored by Back', async () => {
+    window.history.replaceState({ onboardError: ONBOARD_REASON }, '', '/repo-detail/billing');
+    const route = renderHook(() => useRoute());
+    act(() => route.result.current.navigate('/repo-detail/billing', { state: { onboardError: 'New registration failed' } }));
+    rerunOnboarding.mockRejectedValueOnce(new Error('re-run refused'));
+    render(<RepoDetailPage repoId="billing" onSelectRun={vi.fn()} navigate={route.result.current.navigate} onOpenGraph={vi.fn()} />);
+    fireEvent.click(await screen.findByTestId('repo-run-onboarding'));
+    expect(await screen.findByTestId('repo-onboard-error')).toHaveTextContent('Couldn’t start onboarding: re-run refused');
+    expect(window.history.state).not.toHaveProperty('onboardError');
+
+    act(() => window.history.back());
+    await waitFor(() => expect(window.history.state).toHaveProperty('onboardError', ONBOARD_REASON));
+    expect(screen.getByTestId('repo-onboard-error')).toHaveTextContent('Couldn’t start onboarding: re-run refused');
+    fireEvent.click(within(screen.getByTestId('repo-onboard-error')).getByRole('button', { name: 'Dismiss' }));
+    expect(screen.getByTestId('repo-onboard-error')).toHaveTextContent('Registered. Onboarding couldn’t start:');
+    expect(window.history.state).toHaveProperty('onboardError', ONBOARD_REASON);
+    fireEvent.click(within(screen.getByTestId('repo-onboard-error')).getByRole('button', { name: 'Dismiss' }));
+    expect(screen.queryByTestId('repo-onboard-error')).toBeNull();
+    expect(window.history.state).not.toHaveProperty('onboardError');
   });
 
   it('the normal 201 path is unchanged', async () => {

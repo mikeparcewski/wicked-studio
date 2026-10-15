@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type Dispatch, type RefObject, type SetStateAction } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore, type Dispatch, type RefObject, type SetStateAction } from 'react';
 
 /**
  * View state that belongs to a HISTORY ENTRY (studio wave 1, "raw in one step"): a band the
@@ -11,6 +11,26 @@ import { useEffect, useRef, useState, type Dispatch, type RefObject, type SetSta
  */
 
 const NAVIGATE_AWAY = 'wk:navigate-away';
+const HISTORY_CHANGE = 'wk:history-change';
+
+/** pushState/replaceState do not emit popstate; announce app-written entry changes too. */
+export function announceHistoryChange(): void {
+  window.dispatchEvent(new Event(HISTORY_CHANGE));
+}
+
+function onHistoryChange(fn: () => void): () => void {
+  window.addEventListener('popstate', fn);
+  window.addEventListener(HISTORY_CHANGE, fn);
+  return () => {
+    window.removeEventListener('popstate', fn);
+    window.removeEventListener(HISTORY_CHANGE, fn);
+  };
+}
+
+/** Read a value from the CURRENT entry, including same-address Back/Forward and navigation. */
+export function useHistoryEntryValue(key: string): unknown {
+  return useSyncExternalStore(onHistoryChange, () => readEntry(key));
+}
 
 /** The history-state key marking an entry the app itself pushed (wave 1 round 2). */
 const IN_APP = 'wk.inApp';
