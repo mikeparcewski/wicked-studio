@@ -75,14 +75,11 @@ function haystack(r: RunRow, names: { project: (id: string) => string; agent: (c
 }
 
 export function runsView(runs: readonly SessionView[], refine: Refine, status: RunStatusFilter, query: string, now: number,
-  title: (v: SessionView) => string, names: { project: (id: string) => string; agent: (cli: string) => string }, allTime = false,
-  held: ReadonlySet<string> = new Set()): RunsView {
+  title: (v: SessionView) => string, names: { project: (id: string) => string; agent: (cli: string) => string }, allTime = false): RunsView {
   const { kept, undated } = refineRuns(runs, refine, now, allTime);
   // How many more an All time view would hold (older, undated or archived): the switch says so.
   const beyond = allTime ? 0 : refineRuns(runs, refine, now, true).kept.length - kept.length;
-  // A run Needs you holds (a stall, an orphan, an open question) waits on you, whatever its DTO says:
-  // its row, the status filter and both tiles read it as Waiting, never Working (studio#805).
-  const all = kept.map((v) => rowOf(v, title)).map((r) => (r.outcome === 'Working' && held.has(r.id) ? { ...r, outcome: 'Waiting on you' as const } : r));
+  const all = kept.map((v) => rowOf(v, title));
   const count = (o: readonly Outcome[]): number => all.filter((r) => o.some((word) => word === r.outcome)).length;
   const words = query.trim().toLowerCase().split(/\s+/).filter((w) => w !== '');
   const rows = all

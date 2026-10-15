@@ -1,8 +1,9 @@
-import { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { plainGateQuestion } from '../../board/deskWords.js';
 import { seatLabel } from '../../board/seatNames.js';
 import { api, downloadRunEvidence } from '../../api/client.js';
-import { executingOrd } from '../../api/run-state.js';
+import { executingOrd as rawExecutingOrd } from '../../api/run-state.js';
+import { isHeldRun } from '../../board/heldRuns.js';
 import type { ChatPathView, CoreEvent, RosterSeat, SessionView } from '../../api/types.js';
 import { everythingPath } from '../../board/everythingModel.js';
 import { narratorCtxOf } from '../../board/homeActivity.js';
@@ -84,26 +85,21 @@ function helpersOf(v: SessionView): string[] {
  * helper, a session or the Desk — with its tabs (DESIGN-simple §4) and its one primary action. The
  * rest of each object's actions are ⌘K for it (`sheets/objectCommands.ts`).
  */
-/** The runs a Needs-you row holds (a stall, an orphan, an open question): no step of theirs is live work,
- *  whatever the DTO's cursor says (studio#805). Provided once by the sheet, read by every list in it. */
-const HeldRuns = createContext<ReadonlySet<string>>(new Set());
-/** The step in hand, unless Needs you holds the run. */
-function useLiveOrd(view: SessionView | null): number | null {
-  const held = useContext(HeldRuns);
-  return view === null || held.has(view.session.id) ? null : executingOrd(view.session, view.units);
-}
+/** The step in hand — none when Needs you holds the run (a stall, an orphan, an open question):
+ *  its DTO's cursor is not live work (studio#805). */
+const executingOrd: typeof rawExecutingOrd = (session, units) => (isHeldRun(session) ? null : rawExecutingOrd(session, units));
 
-export function ObjectSheet({ runs, navigate, needCount, heldRuns }: { runs: SessionView[]; navigate: Navigate; needCount: number; heldRuns?: ReadonlySet<string> }): React.ReactElement | null {
+export function ObjectSheet({ runs, navigate, needCount }: { runs: SessionView[]; navigate: Navigate; needCount: number }): React.ReactElement | null {
   const open = useSheets((s) => s.open);
   if (open === null) return null;
   const { ref, tab } = open;
-  const body = ref.kind === 'step' ? <StepSheet key={objectAttr(ref)} r={ref} tab={tab} runs={runs} navigate={navigate} />
-    : ref.kind === 'helper' ? <HelperSheet key={objectAttr(ref)} r={ref} tab={tab} runs={runs} navigate={navigate} />
-    : ref.kind === 'session' ? <SessionSheet key={objectAttr(ref)} r={ref} tab={tab} runs={runs} navigate={navigate} />
-    : <DeskSheet tab={tab} runs={runs} navigate={navigate} needCount={needCount} />;
-  return <HeldRuns.Provider value={heldRuns ?? EMPTY_HELD}>{body}</HeldRuns.Provider>;
+  switch (ref.kind) {
+    case 'step': return <StepSheet key={objectAttr(ref)} r={ref} tab={tab} runs={runs} navigate={navigate} />;
+    case 'helper': return <HelperSheet key={objectAttr(ref)} r={ref} tab={tab} runs={runs} navigate={navigate} />;
+    case 'session': return <SessionSheet key={objectAttr(ref)} r={ref} tab={tab} runs={runs} navigate={navigate} />;
+    case 'desk': return <DeskSheet tab={tab} runs={runs} navigate={navigate} needCount={needCount} />;
+  }
 }
-const EMPTY_HELD: ReadonlySet<string> = new Set();
 
 /** "Message it": a box that sends to the working helper (`POST /runs/:id/inject`). */
 function MessageBox({ runId, target, can }: { runId: string; target: string; can: string | null }): React.ReactElement {
@@ -168,7 +164,7 @@ function UnitOutput({ runId, unit }: { runId: string; unit: SessionView['units']
 function StepSheet({ r, tab, runs, navigate }: { r: Extract<ObjectRef, { kind: 'step' }>; tab: string; runs: SessionView[]; navigate: Navigate }): React.ReactElement {
   const view = runs.find((v) => v.session.id === r.runId) ?? null;
   const unit = view?.units.find((u) => u.ord === r.ord) ?? null;
-  const live = useLiveOrd(view);
+  const live = view !== null ? executingOrd(view.session, view.units) : null;
   const events = useRunRawEvents(r.runId);
   const name = unit !== null ? stepName(unit) : `Step ${r.ord + 1}`;
   const can = view === null ? "This run is not available from Studio's service."
@@ -247,7 +243,7 @@ function HelperSheet({ r, tab, runs, navigate }: { r: Extract<ObjectRef, { kind:
   const roster = useRoster();
   const seat = roster?.find((s) => s.key === r.cli);
   const units = (view?.units ?? []).filter((u) => u.assigned_cli === r.cli).sort((a, b) => a.ord - b.ord);
-  const live = useLiveOrd(view);
+  const live = view !== null ? executingOrd(view.session, view.units) : null;
   const liveUnit = units.find((u) => u.ord === live) ?? null;
   const [typing, setTyping] = useState(false);
   const [messaging, setMessaging] = useState(false);
@@ -401,7 +397,7 @@ function FinishedVerdict({ view }: { view: SessionView }): React.ReactElement | 
 }
 
 function StepsList({ view }: { view: SessionView }): React.ReactElement {
-  const live = useLiveOrd(view);
+  const live = executingOrd(view.session, view.units);
   const units = [...view.units].sort((a, b) => a.ord - b.ord);
   return (
     <>
@@ -463,7 +459,6 @@ function useAskPath(sessionId: string | null): ChatPathView | null {
 
 function HelpersList({ runs, sessionId = null, onSignIn, roster = null }: { runs: readonly SessionView[]; sessionId?: string | null; onSignIn?: () => void; roster?: RosterSeat[] | null }): React.ReactElement {
   const rows = runs.flatMap((v) => helpersOf(v).map((cli) => ({ v, cli })));
-  const held = useContext(HeldRuns);
   // studio#724: each helper by its one name (the card's "Claude Code"), never the raw key.
   const nameOf = (cli: string): string => {
     const seat = roster?.find((s) => s.key === cli);
@@ -505,7 +500,7 @@ function HelpersList({ runs, sessionId = null, onSignIn, roster = null }: { runs
       })}
       {rows.length === 0 && roles.length === 0 && <li className="wk-session-grey">No helper has been given work here yet.</li>}
       {rows.map(({ v, cli }) => {
-        const live = held.has(v.session.id) ? null : executingOrd(v.session, v.units);
+        const live = executingOrd(v.session, v.units);
         const working = v.units.some((u) => u.ord === live && u.assigned_cli === cli);
         const ref: ObjectRef = { kind: 'helper', runId: v.session.id, cli };
         return (

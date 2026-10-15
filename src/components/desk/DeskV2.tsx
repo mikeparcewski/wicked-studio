@@ -481,7 +481,7 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
   );
 
   const runsTab = (
-    <DeskRuns {...(runActions !== undefined ? { rowActions: runActions } : {})} held={heldByNeeds} runs={runs} runsShown={runsShown} refine={refine} refineBar={refineBarOf(false)} now={now} navigate={navigate} pathOf={pathOfRun}
+    <DeskRuns {...(runActions !== undefined ? { rowActions: runActions } : {})} runs={runs} runsShown={runsShown} refine={refine} refineBar={refineBarOf(false)} now={now} navigate={navigate} pathOf={pathOfRun}
       panelId={panelId('runs')} labelledBy={tabId('runs')}
       agentName={agentName} projectName={projectName} title={jobTitleOf} showProject={projectId === undefined} />
   );

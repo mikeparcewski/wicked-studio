@@ -1,5 +1,6 @@
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { markHeld } from '../src/board/heldRuns.js';
 import { liveCount, selfOpens, SELF_OPEN_MS, WatchPill, watchSentence } from '../src/components/desk/WatchPill.js';
 import { ago, foldAlike, plainWatchLine, WatchtowerPage } from '../src/components/watch/WatchtowerPage.js';
 import { absTime } from '../src/board/relTime.js';
@@ -62,7 +63,7 @@ describe('the pill opens itself only for something new that needs you', () => {
     expect(screen.getByTestId('watchtower-sentence').textContent).toBe('Nothing open — 1 thing is running.');
     expect(watchSentence(2, liveCount(runs))).toBe('2 things need you — 1 thing is running.');
     // studio#805: a run a Needs-you row holds is not running.
-    expect(liveCount(runs, new Set(['r1']))).toBe(0);
+    expect(liveCount(markHeld(runs, new Set(['r1'])))).toBe(0);
     fireEvent.click(screen.getByTestId('watch-pill'));
     expect(navigate).toHaveBeenCalledWith('/watch');
   });

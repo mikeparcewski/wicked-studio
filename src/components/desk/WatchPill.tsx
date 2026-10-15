@@ -4,18 +4,16 @@ import type { Navigate } from '../../hooks/useRoute.js';
 import { useWatchFeed } from '../../hooks/useWatchFeed.js';
 import { attentionBadge } from '../../board/attention.js';
 import type { NeedRow } from '../../board/needsYou.js';
-import { needRunId } from '../../board/deskModel.js';
 import { deskLiveCounts } from '../../board/statusWords.js';
 
 
 /** How long the card stays open after it opened itself for something new that needs you. */
 export const SELF_OPEN_MS = 8_000;
 
-/** The runs moving right now: the Desk's own count (deskLiveCounts), so the pill never says "1 thing is
- *  running" beside Running now 0 — a gate, a paused run, an idle chat and a run Needs you holds are not
- *  running (studio#805). */
-export function liveCount(runs: readonly SessionView[], held: ReadonlySet<string> = new Set()): number {
-  return deskLiveCounts(runs, held).working;
+/** The runs moving right now: the Desk's own count (statusWord via deskLiveCounts), so a gate, a paused
+ *  run, an idle chat and a run Needs you holds are not "running" here either (studio#805). */
+export function liveCount(runs: readonly SessionView[]): number {
+  return deskLiveCounts(runs).working;
 }
 
 /** The Watchtower's one quiet sentence, from the SAME count the Desk says (DES-STUDIO §3 rule 10). */
@@ -57,8 +55,7 @@ export function WatchPill({ needRows, runs, navigate, onFeed = false, secondary 
   secondary?: boolean;
 }): React.ReactElement {
   const count = attentionBadge(needRows);
-  const held = new Set(needRows.map(needRunId).filter((id): id is string => id !== null));
-  const sentence = watchSentence(count, liveCount(runs, held));
+  const sentence = watchSentence(count, liveCount(runs));
   const recent = useWatchFeed({}).filter((r) => r.state === 'open').slice(0, 2);
   const [self, setSelf] = useState(false);
   const since = useRef(Date.now());

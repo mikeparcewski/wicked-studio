@@ -1,5 +1,6 @@
 import type { SessionStatus, SessionView } from '../api/types.js';
 import { isAskTurnRun } from './askTurn.js';
+import { isHeldRun } from './heldRuns.js';
 
 /**
  * ONE STATUS WORD PER STATE (design/UI-CONTRACT.md §5; studio#687, UX audit row 36). The Desk, the
@@ -36,6 +37,8 @@ export function statusWord(view: Pick<SessionView, 'session'>): { word: StatusWo
   const s = view.session as { status?: string; archived_at?: number | string | null };
   if (s.archived_at !== null && s.archived_at !== undefined && s.archived_at !== '') return { word: 'Archived', tone: 'quiet' };
   if (s.status === 'awaiting_human' && isAskTurnRun(view.session)) return { word: 'Answered', tone: 'ok' };
+  // A live run a Needs-you row holds (App's mark, heldRuns.ts) waits on you, not working (studio#805).
+  if (isHeldRun(view.session)) return { word: 'Waiting on you', tone: 'gate' };
   return STATUS_TABLE[String(s.status ?? '').toLowerCase()] ?? { word: 'Unknown', tone: 'quiet' };
 }
 
