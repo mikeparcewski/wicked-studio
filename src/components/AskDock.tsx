@@ -30,7 +30,7 @@ import {
   type AskScopeChoice,
 } from './ChatScopeSelect.js';
 import { defaultSelection, describeChatOpenRefusal } from '../board/chatOpen.js';
-import { apiStatus, apiWire } from '../api/errors.js';
+import { ApiError, apiStatus, apiWire } from '../api/errors.js';
 import { ambientProjectId } from '../hooks/ambientProject.js';
 import { peekTypedSeed, takeTypedSeed } from '../hooks/useTypeToComposer.js';
 import { useAskThreadStore } from '../store/askThread.js';
@@ -57,7 +57,8 @@ import { useCapabilities } from '../store/capabilities.js';
  * launches the run and later ones continue it; the 202 names the turn and the run. The dock
  * deposits each turn in the ask-thread store so the session thread shows the question at once,
  * passes the one seat the operator named (`primary`) when they named one, and says in plain words
- * when the PA is still answering (409 `turn_in_flight`) — the draft is kept.
+ * when the PA is still answering (409 `turn_in_flight`) or the chat's repositories changed since
+ * it started (409 `chat_scope_changed`, crew#1020) — the draft is kept.
  */
 
 /** The persisted scope rides only when the daemon stated one (a missing key reads as not stated). */
@@ -75,13 +76,24 @@ function deposit(chatId: string, typed: string, res: { turnId?: string; runId?: 
   });
 }
 
-/** §8 F6: a message while the PA is answering is refused 409 `turn_in_flight` — said in plain words;
- *  the dock keeps the draft. Anything else is rethrown as it came. */
-function stillAnswering(chatId: string): (e: unknown) => never {
+/** §8 F6, crew#1020: a 409 `turn_in_flight` (the PA is still answering) or `chat_scope_changed`
+ *  (the chat's repositories changed since it started) is said in plain words; the dock keeps the
+ *  draft. Anything else is rethrown as it came. */
+function plainSendRefusal(chatId: string): (e: unknown) => never {
   return (e: unknown) => {
-    if (apiStatus(e) === 409 && /turn_in_flight|in flight|still answering/i.test(apiWire(e) ?? '')) {
-      const pa = useAskThreadStore.getState().paByChat[chatId] ?? 'The helper';
-      throw new Error(`${pa} is still answering — wait for the reply; your message was not sent.`);
+    if (apiStatus(e) === 409) {
+      const wire = apiWire(e) ?? '';
+      const body = e instanceof ApiError && typeof e.body === 'object' && e.body !== null
+        ? (e.body as { code?: unknown; error?: unknown })
+        : null;
+      if (body?.code === 'chat_scope_changed' || /repositories changed since it started/i.test(wire)) {
+        const sentence = typeof body?.error === 'string' && body.error !== '' ? body.error : wire;
+        throw new Error(sentence);
+      }
+      if (/turn_in_flight|in flight|still answering/i.test(wire)) {
+        const pa = useAskThreadStore.getState().paByChat[chatId] ?? 'The helper';
+        throw new Error(`${pa} is still answering — wait for the reply; your message was not sent.`);
+      }
     }
     throw e;
   };
@@ -250,7 +262,7 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
         if (id !== null && resumed !== null && id === resumed.chatId) {
           const message = seededRef.current ? text : `${text}${PACK_JOIN}${buildContextPack(packInputs.current)}`;
           try {
-            deposit(id, text, await api.sendChatMessage(id, message).catch(stillAnswering(id)));
+            deposit(id, text, await api.sendChatMessage(id, message).catch(plainSendRefusal(id)));
             if (!seededRef.current) {
               seededRef.current = true;
               writeAskSession({ chatId: id, title: titleRef.current, seeded: true, ...scopeField(scopeRef.current) });
@@ -321,7 +333,7 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
           useLiveChatsStore.getState().upsert(id, ready, { origin: 'ask', title: text });
         }
         const message = seededRef.current ? text : `${text}${PACK_JOIN}${buildContextPack(packInputs.current)}`;
-        deposit(id, text, await api.sendChatMessage(id, message).catch(stillAnswering(id)));
+        deposit(id, text, await api.sendChatMessage(id, message).catch(plainSendRefusal(id)));
         if (!seededRef.current) {
           seededRef.current = true;
           writeAskSession({ chatId: id, title: titleRef.current, seeded: true, ...scopeField(scopeRef.current) });
