@@ -133,6 +133,10 @@ export interface AssuranceReceipt extends RunAssurance {
   judge: string | null;
   tree: string | null;
   attempt: number;
+  /** (crew api-types 0.121.0, operator ruling 2026-10-14) The engine's disclosure line for each judge seated as a
+   *  FALLBACK for a benched or unavailable preferred judge (`judgeFallbacks[].label`, shown as-is:
+   *  `judge: agy (fallback; codex benched: …)`); absent when every judge was the run's own. */
+  judgeFallbacks?: string[];
   /** Studio's mark on a DELIVERY receipt (every gate's instruments, unioned): its kind, decided per
    *  gate before the union. Its seat names are the gates' names joined for display only. */
   aggregateKind?: AssuranceKind;
@@ -159,8 +163,15 @@ export function receiptOf(raw: unknown): AssuranceReceipt | null {
       return [{ instrument: s['instrument'], reason: typeof s['reason'] === 'string' ? s['reason'] : '', detail: str(s['detail']) }];
     })
     : [];
+  const fallbacks = Array.isArray(raw['judgeFallbacks'])
+    ? raw['judgeFallbacks'].flatMap((f) => {
+      const label = isRecord(f) ? str(typeof f['label'] === 'string' ? f['label'].trim() : null) : null;
+      return label === null ? [] : [label];
+    })
+    : [];
   return {
     ...run,
+    ...(fallbacks.length > 0 ? { judgeFallbacks: fallbacks } : {}),
     ran: strings(raw['ran']),
     skipped,
     creator: str(raw['creator']),
@@ -270,7 +281,8 @@ export function deliveryReceiptOf(
   const recorded = lifted === null ? recordedDelivery?.receipt ?? null : null;
   if (lifted !== null || recorded !== null) {
     const r = lifted !== null ? lifted.r : recorded!;
-    return { ...r, creator: r.creator ?? who.creator, evaluator: r.evaluator ?? who.evaluator, judge: r.judge ?? who.judge, aggregateKind: deliveryKind(r, gates) };
+    const fb = fallbacksOf([r, ...gates]);
+    return { ...r, ...(fb.length > 0 ? { judgeFallbacks: fb } : {}), creator: r.creator ?? who.creator, evaluator: r.evaluator ?? who.evaluator, judge: r.judge ?? who.judge, aggregateKind: deliveryKind(r, gates) };
   }
   if (gates.length === 0) return null;
   const run = sessionAssurance(view, log) ?? { mode: gates[0]!.mode, required: gates[0]!.required };
@@ -279,7 +291,15 @@ export function deliveryReceiptOf(
     for (const r of g.ran) if (!out.ran.includes(r)) out.ran.push(r);
     for (const s of g.skipped) if (!out.skipped.some((k) => k.instrument === s.instrument)) out.skipped.push(s);
   }
-  return { ...out, aggregateKind: deliveryKind(out, gates) };
+  const fb = fallbacksOf(gates);
+  return { ...out, ...(fb.length > 0 ? { judgeFallbacks: fb } : {}), aggregateKind: deliveryKind(out, gates) };
+}
+
+/** Every fallback-judge line the receipts carry, once each, in first-seen order. */
+function fallbacksOf(receipts: readonly AssuranceReceipt[]): string[] {
+  const out: string[] = [];
+  for (const r of receipts) for (const l of r.judgeFallbacks ?? []) if (!out.includes(l)) out.push(l);
+  return out;
 }
 
 /**
@@ -502,9 +522,18 @@ export function receiptWords(r: AssuranceReceipt, passed: boolean | null = null)
   const seats: string[] = [];
   if (r.creator !== null) seats.push(`built by ${r.creator}`);
   if (r.evaluator !== null) seats.push(`evaluated by ${r.evaluator}`);
-  if (r.judge !== null) seats.push(`judged by ${r.judge}`);
+  // A fallback judge is named by the engine's own line, never as a plain "judged by" (operator ruling 2026-10-14);
+  // every other judge keeps its plain words (a delivery can mix the run's own judges and a fallback).
+  const fallbacks = r.judgeFallbacks ?? [];
+  const fallbackSeats = fallbacks.flatMap((l) => {
+    const m = /^judge: (\S+) \(fallback/.exec(l);
+    return m !== null ? [m[1]!] : [];
+  });
+  const ownJudges = (r.judge ?? '').split(', ').filter((j) => j !== '' && !fallbackSeats.includes(j));
+  if (ownJudges.length > 0) seats.push(`judged by ${ownJudges.join(', ')}`);
   const sep = separationWords(r);
-  const who = seats.length === 0 ? null : `${seats.join(' · ')}${sep !== null ? ` (${sep})` : ''}`;
+  const named = seats.length === 0 ? null : `${seats.join(' · ')}${sep !== null ? ` (${sep})` : ''}`;
+  const who = fallbacks.length === 0 ? named : [named, ...fallbacks].filter((x): x is string => x !== null).join(' · ');
   const skipped = r.skipped.length === 0
     ? null
     : `skipped: ${r.skipped.map((s) => `${instrumentWord(s.instrument)} (${skipReasonWord(s.reason)})`).join(', ')}`;

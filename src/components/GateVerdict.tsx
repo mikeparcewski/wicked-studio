@@ -74,15 +74,18 @@ export function GateVerdict({ view, phase }: { view: GateVerdictView; phase: str
             data-judge-cli={view.judgeCli}
             data-judge-distinct={view.judgeDistinct === null ? 'unknown' : String(view.judgeDistinct)}
             style={{ color: 'var(--ink-muted)' }}
+            {...(view.judgeFallback ? { 'data-judge-fallback': 'true' } : {})}
             title={
-              view.judgeDistinct === true
-                ? 'the judge ran on a seat identity-distinct from the creator (the rotation pick)'
-                : view.judgeDistinct === false
-                  ? 'the judge fell back to the single default runner — the same seat as the creator'
-                  : 'which seat rendered the judge verdict'
+              view.judgeFallback
+                ? 'the run\'s preferred judge was benched or unavailable, so the engine seated this distinct seat as a fallback judge'
+                : view.judgeDistinct === true
+                  ? 'the judge ran on a seat identity-distinct from the creator (the rotation pick)'
+                  : view.judgeDistinct === false
+                    ? 'the judge fell back to the single default runner — the same seat as the creator'
+                    : 'which seat rendered the judge verdict'
             }
           >
-            {' · '}judge: {view.judgeCli}
+            {' · '}{view.judgeFallback ? view.judgeFallback : `judge: ${view.judgeCli}`}
           </span>
         )}
       </p>

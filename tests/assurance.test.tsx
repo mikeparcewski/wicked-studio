@@ -154,6 +154,29 @@ describe('the receipt model', () => {
     expect(assuranceKind(lift)).toBe('independent');
   });
 
+  it('operator ruling 2026-10-14: a fallback judge is named by the engine line, on the gate and the delivery', () => {
+    const label = "judge: agy (fallback; codex benched: codex cannot work in this run's worktree on this host)";
+    const fb = [{ seat: 'agy', preferred: ['codex'], reason: 'codex benched: …', label }];
+    const gate = receiptOf({ ...wire({ ran: ['distinct_evaluator', 'judge'], creator: 'claude', evaluator: 'pi', judge: 'agy' }), judgeFallbacks: fb })!;
+    expect(gate.judgeFallbacks).toEqual([label]);
+    expect(receiptWords(gate, true).who).toBe(`built by claude · evaluated by pi (separate seats) · ${label}`);
+    // The run's own judge: no fallback field, the plain words.
+    const own = receiptOf(wire({ ran: ['judge'], creator: 'claude', judge: 'pi' }))!;
+    expect(own.judgeFallbacks).toBeUndefined();
+    expect(receiptWords(own).who).toBe('built by claude · judged by pi (judged on a separate seat)');
+    // A malformed entry is dropped, never shown.
+    expect(receiptOf({ ...wire(), judgeFallbacks: [{ label: ' ' }, null, 'x'] })!.judgeFallbacks).toBeUndefined();
+    // The delivery aggregate lists every gate's line once.
+    const view = makeView({ id: RUN, status: 'awaiting_human' } as never, UNITS);
+    const gates = [
+      { type: 'gateEvaluated', ord: 1, assurance: { ...wire({ ran: ['judge'], creator: 'claude', judge: 'agy' }), judgeFallbacks: fb } },
+      { type: 'gateEvaluated', ord: 2, assurance: { ...wire({ ran: ['distinct_evaluator', 'judge'], creator: 'claude', evaluator: 'pi', judge: 'agy' }), judgeFallbacks: fb } },
+    ] as unknown as CoreEvent[];
+    const agg = deliveryReceiptOf(view, gates)!;
+    expect(agg.judgeFallbacks).toEqual([label]);
+    expect(receiptWords(agg, true).who).toContain(label);
+  });
+
   it('the session contract: the record, else sessionStarted', () => {
     expect(sessionAssurance(makeView({ id: RUN } as never, UNITS), [{ type: 'sessionStarted', assurance: { mode: 'reduced', required: [] } } as unknown as CoreEvent])!.mode).toBe('reduced');
     expect(sessionAssurance(makeView({ id: RUN } as never, UNITS), [])).toBeNull();
