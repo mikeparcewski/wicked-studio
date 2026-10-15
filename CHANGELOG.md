@@ -12,6 +12,9 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+### Fixed
+- An Ask chat whose project gained a repository after it started says so and asks for a new chat, instead of an error (wicked-crew#1020).
+
 ## [0.9.1] — 2026-10-15
 
 A patch release: a failure because QE acceptance is required says why and links to the setting that turns it off (#793), a fallback judge is named on receipts and the verdict card (#792), and fixes to the built-in editors, the Ask dock header and the QE-off status line.

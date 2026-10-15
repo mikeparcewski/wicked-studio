@@ -148,6 +148,25 @@ describe('the PA is still answering (§8 F6)', () => {
     expect(useAskThreadStore.getState().turns[chatId]!.filter((t) => t.who === 'you')).toHaveLength(1);
   });
 
+  it('a 409 chat_scope_changed says to start a new chat in crew’s own plain words and keeps the draft (crew#1020)', async () => {
+    render(<AskDock runs={[]} pathname="/" onClose={() => undefined} />);
+    await ask('first');
+    await waitFor(() => expect(sendChatMessage).toHaveBeenCalledTimes(1));
+    const chatId = lastBody().chatId!;
+    // crew's exact sentence, which the text fallback does NOT match: the body's code must carry it (codex on #799).
+    const error = "This chat's repositories or their code graph changed since it started (2 now in scope). Start a new chat to read them — this one keeps its original scope.";
+    sendChatMessage.mockRejectedValueOnce(new ApiError(409, error, { code: 'chat_scope_changed', error }));
+    getChat.mockResolvedValue({ chatId, seats: ['claude', 'codex'], scope: null, messages: [] });
+    await ask('what is in the new repo?');
+    await waitFor(() => expect(sendChatMessage).toHaveBeenCalledTimes(2));
+    const note = await screen.findByText(/Start a new chat to read them/);
+    expect(note).toHaveTextContent(error);
+    expect(note).not.toHaveTextContent(/the daemon refused this/i);
+    expect((screen.getByTestId('assist-input') as HTMLTextAreaElement).value).toBe('what is in the new repo?');
+    expect(openChat).toHaveBeenCalledTimes(1);
+    expect(useAskThreadStore.getState().turns[chatId]!.filter((t) => t.who === 'you')).toHaveLength(1);
+  });
+
   it('no eligible helper: the refusal names it', async () => {
     openChat.mockResolvedValue({ chatId: 'c-2', seats: [], refused: [], scope: null });
     render(<AskDock runs={[]} pathname="/" onClose={() => undefined} />);
