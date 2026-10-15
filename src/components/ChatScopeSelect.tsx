@@ -35,22 +35,34 @@ export function askScopeIsScoped(choice: AskScopeChoice): boolean {
   return choice !== 'system';
 }
 
-/** One line for a resolved scope — what the dock header states once the chat is open. */
-export function describeResolvedScope(scope: ChatScope | null | undefined): string {
-  if (scope === null || scope === undefined) return 'scope: not stated by the daemon';
+/**
+ * One line for a resolved scope — what the dock header states in plain words once the chat is
+ * open (studio#789). Returns `""` when the daemon did not state a scope so the header omits the
+ * scope suffix entirely.
+ */
+export function describeResolvedScope(
+  scope: ChatScope | null | undefined,
+  names?: { projects?: readonly Pick<Project, 'id' | 'name'>[] },
+): string {
+  if (scope === null || scope === undefined) return '';
   const n = scope.repos.length;
-  const repos = `${n} repo${n === 1 ? '' : 's'}`;
+  const repos = n === 0 ? 'no repositories' : `${n} repo${n === 1 ? '' : 's'}`;
   switch (scope.kind) {
     case 'system':
-      return 'scope: system — the platform itself, no repositories';
+      return 'the platform itself';
     case 'everything':
-      return `scope: everything · ${repos}`;
-    case 'project':
-      return `scope: project${scope.projectId !== undefined ? ` ${scope.projectId}` : ''} · ${repos}`;
+      return `every repository · ${repos}`;
+    case 'project': {
+      const name =
+        scope.projectId !== undefined
+          ? names?.projects?.find((p) => p.id === scope.projectId)?.name?.trim()
+          : undefined;
+      return `${name !== undefined && name !== '' ? name : 'a project'} · ${repos}`;
+    }
     case 'repos':
-      return `scope: ${scope.repos.map((r) => r.name).join(', ') || repos}`;
+      return scope.repos.map((r) => r.name).join(', ') || repos;
     default:
-      return 'scope: unscoped — no repositories';
+      return 'no repositories';
   }
 }
 

@@ -157,8 +157,67 @@ describe('Ask scope control (studio#323 R4)', () => {
     );
     dock('/steering');
     await ask();
-    await waitFor(() => expect(screen.getByTestId('assist-context')).toHaveTextContent('scope: system'));
+    await waitFor(() => expect(screen.getByTestId('assist-context')).toHaveTextContent('from Steering · the platform itself'));
     expect(screen.queryByTestId('ask-scope')).toBeNull();
+  });
+
+  it('a project scope names the project (never its raw id), and falls back to "a project" when unknown (studio#789)', async () => {
+    const { describeResolvedScope } = await import('../src/components/ChatScopeSelect.js');
+    const tinyTip = {
+      id: 'proj_179201823695100000',
+      name: 'Tiny tip r3',
+      description: null,
+      status: 'active',
+      scope: 'project:proj_179201823695100000',
+      created_at: 1,
+      updated_at: 5,
+    };
+    useProjectsStore.setState({ projects: [tinyTip] as never, loading: false, error: null });
+    const resolvedProject: ChatScope = {
+      kind: 'project',
+      projectId: 'proj_179201823695100000',
+      repos: [{ id: 'r-billing', name: 'billing', rootPath: '/w/billing' }],
+      cwd: '/tmp/chats/x',
+      graph: { bound: false, reason: 'stated by the daemon' },
+      dangling: [],
+    };
+    openChat.mockImplementation((body: ChatOpenBody) =>
+      Promise.resolve({ chatId: body.chatId, seats: [{ cliKey: 'claude', ok: true }], scope: resolvedProject }),
+    );
+
+    dock('/');
+    const user = userEvent.setup();
+    await user.selectOptions(screen.getByTestId('ask-scope'), 'project:proj_179201823695100000');
+    await ask();
+
+    const header = screen.getByTestId('assist-context');
+    await waitFor(() => expect(header).toHaveTextContent('from the Desk · Tiny tip r3 · 1 repo'));
+    expect(header.textContent).toBe('from the Desk · Tiny tip r3 · 1 repo');
+    expect(header.textContent).not.toContain('proj_179201823695100000');
+    expect(header.textContent).not.toContain('scope:');
+    expect(header).toHaveAttribute('title', 'from the Desk · Tiny tip r3 · 1 repo');
+    expect(header).not.toHaveClass('truncate');
+    expect(header.style.overflowWrap).toBe('anywhere');
+
+    // 0 repositories on a known project
+    expect(
+      describeResolvedScope({ ...resolvedProject, repos: [] }, { projects: [tinyTip] }),
+    ).toBe('Tiny tip r3 · no repositories');
+
+    // Unknown project (not loaded / deleted) -> "a project · N repos", never the raw id
+    const unknownScope = describeResolvedScope(
+      { ...resolvedProject, projectId: 'proj_deleted_999', repos: [...resolvedProject.repos, { id: 'r-2', name: 'auth', rootPath: '/w/auth' }] },
+      { projects: [tinyTip] },
+    );
+    expect(unknownScope).toBe('a project · 2 repos');
+    expect(unknownScope).not.toContain('proj_deleted_999');
+
+    // Other resolved kinds and null/undefined
+    expect(describeResolvedScope(scopeOf('system'))).toBe('the platform itself');
+    expect(describeResolvedScope({ ...scopeOf('repos'), repos: [{ id: 'r-billing', name: 'billing', rootPath: '/w/billing' }] })).toBe('billing');
+    expect(describeResolvedScope(scopeOf('unscoped' as ChatScope['kind']))).toBe('no repositories');
+    expect(describeResolvedScope(null)).toBe('');
+    expect(describeResolvedScope(undefined)).toBe('');
   });
 });
 
@@ -188,17 +247,17 @@ describe('Ask scope survives close/reopen with the session', () => {
     getChat.mockResolvedValue({ chatId: 'c0ffee00-0000-4000-8000-000000000001', seats: ['claude'] });
     dock('/steering');
     expect(screen.queryByTestId('ask-scope')).toBeNull();
-    expect(screen.getByTestId('assist-context')).toHaveTextContent('scope: everything · 1 repo');
+    expect(screen.getByTestId('assist-context')).toHaveTextContent('from Steering · every repository · 1 repo');
   });
 
-  it('a stored session saved WITHOUT a scope still hides the select and says the scope was not stated', async () => {
+  it('a stored session saved WITHOUT a scope still hides the select and omits the scope part (studio#789)', async () => {
     sessionStorage.setItem('wicked.ask.session', JSON.stringify({
       chatId: 'c0ffee00-0000-4000-8000-000000000002', title: 'older', seeded: true,
     }));
     getChat.mockResolvedValue({ chatId: 'c0ffee00-0000-4000-8000-000000000002', seats: ['claude'] });
-    dock('/steering');
+    dock('/');
     expect(screen.queryByTestId('ask-scope')).toBeNull();
-    expect(screen.getByTestId('assist-context')).toHaveTextContent('scope: not stated by the daemon');
+    expect(screen.getByTestId('assist-context').textContent).toBe('from the Desk');
   });
 });
 

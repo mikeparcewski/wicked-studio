@@ -360,6 +360,9 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
     [runs, gates, failedAt, attachedAt, projectIds, projects, repos],
   );
 
+  const place = `from ${placeWords(sectionLabel(pathname))}`;
+  const resolvedScope = openedScope === undefined ? '' : describeResolvedScope(openedScope, { projects });
+
   return (
     <AssistDock
       context={{
@@ -367,10 +370,7 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
         title: 'Ask',
         // Concept A (DES-frontdoor): the Desk's Chat lands here, so the default layer speaks plainly;
         // what the question carries stays in the context pack, never in this line.
-        contextLabel:
-          openedScope === undefined
-            ? `from ${placeWords(sectionLabel(pathname))}`
-            : `from ${placeWords(sectionLabel(pathname))} · ${describeResolvedScope(openedScope)}`,
+        contextLabel: resolvedScope === '' ? place : `${place} · ${resolvedScope}`,
         placeholder: 'Ask about your projects, repositories and jobs, or studio itself…',
         hint:
           'Ask a question and helpers answer it from your code, your jobs and studio’s own records. ' +
