@@ -55,18 +55,32 @@ export function qeDecisionOf(raw: unknown): QeDecision | null {
 }
 
 /**
+ * The ONE spelling for a skipped QE acceptance decision: when the engine reason is the daemon's
+ * Settings switch ("QE acceptance is off on this daemon …"), say "QE acceptance: off on this
+ * computer (Settings)"; when the operator skipped it at launch with a reason, keep
+ * "QE acceptance: skipped by operator (<reason>)".
+ */
+export function qeSkippedText(reason: string): string {
+  const why = reason.replace(/^QE acceptance skipped by operator:\s*/, '');
+  if (why.startsWith('QE acceptance is off on this daemon')) {
+    return 'QE acceptance: off on this computer (Settings)';
+  }
+  return `QE acceptance: skipped by operator (${why})`;
+}
+
+/**
  * The ONE spelling of the decision — the plan, the gate and the delivery all show it:
  * "QE acceptance: required" (", provisional" until the run's QE step scores the diff; ", forced by
- * operator" when forced), "QE acceptance: waived (score N)", "QE acceptance: skipped by operator
- * (<reason>)". `detail` is the engine's full words (the hover).
+ * operator" when forced), "QE acceptance: waived (score N)", "QE acceptance: off on this computer
+ * (Settings)", "QE acceptance: skipped by operator (<reason>)". `detail` is the engine's full words
+ * (the hover).
  */
 export function qeWords(qe: QeDecision): { status: string; text: string; detail: string } {
   if (qe.status === 'waived') {
     return { status: 'waived', text: `QE acceptance: waived (score ${qe.score ?? '?'})`, detail: qe.reason };
   }
   if (qe.status === 'skipped') {
-    const why = qe.reason.replace(/^QE acceptance skipped by operator:\s*/, '');
-    return { status: 'skipped', text: `QE acceptance: skipped by operator (${why})`, detail: qe.reason };
+    return { status: 'skipped', text: qeSkippedText(qe.reason), detail: qe.reason };
   }
   const how = qe.basis === 'operator'
     ? ', forced by operator'
