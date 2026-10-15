@@ -250,6 +250,30 @@ export function parseSurfaces(raw: unknown): Parsed<Surfaces> {
   return { ok: true, value: { card: { interactive, aspect, actions }, options, full } };
 }
 
+/**
+ * Parse the registry's copy of `surfaces` (`EditorSurfaces` in `wicked-crew-api-types`, wicked-studio#791).
+ * Crew's `GET /api/v1/editors` serves the parsed wire form (defaults filled, `options`/`full` `null` when
+ * omitted, `full.modes: null` with `default: "simple"` for a single-mode full surface), whereas `plugin.ready`
+ * carries the raw declaration. Map the wire form back to a declaration so `parseSurfaces` enforces one set of
+ * rules on both.
+ */
+export function parseWireSurfaces(raw: unknown): Parsed<Surfaces> {
+  if (!isObj(raw)) return parseSurfaces(raw);
+  const { options, full, ...rest } = raw;
+  let fullDecl: unknown = full;
+  if (isObj(full) && full['modes'] === null && (full['default'] === undefined || full['default'] === 'simple')) {
+    const f = { ...full };
+    delete f['modes'];
+    delete f['default'];
+    fullDecl = f;
+  }
+  return parseSurfaces({
+    ...rest,
+    ...(options !== null && options !== undefined ? { options } : {}),
+    ...(full !== null && full !== undefined ? { full: fullDecl } : {}),
+  });
+}
+
 /** The canonical JSON of parsed surfaces (fields in a fixed order, defaults filled): what "the same" means. */
 export function canonicalSurfaces(s: Surfaces): string {
   const control = (c: Control): unknown => ({

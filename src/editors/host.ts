@@ -6,7 +6,7 @@ import {
   EVENTS, LIMITS, MCP_METHODS, REQUESTS, event, negotiate, parseInbound, parseReady, refuse, reply, request, sizeOf,
   type MediaRef, type AnchorRef, type ErrorCode, type PermissionId, type Size,
 } from './protocol.js';
-import { clampCardHeight, parseSurfaces, sameSurfaces, v1Surfaces, valuesOk, controlValueOk, type FullMode, type Surfaces } from './surfaces.js';
+import { clampCardHeight, parseSurfaces, parseWireSurfaces, sameSurfaces, v1Surfaces, valuesOk, controlValueOk, type FullMode, type Surfaces } from './surfaces.js';
 
 /** Protocol 2's three surfaces (DES-EDITOR-PLUGIN-CONTRACT-001 §4). */
 export type Surface = 'card' | 'options' | 'full';
@@ -338,7 +338,7 @@ export class EditorHost {
       const mine = parseSurfaces(ready.surfaces);
       if (!mine.ok) note = `This editor's surfaces were refused (${mine.reason}); shown the protocol-1 way.`;
       else if (this.o.declared !== undefined) {
-        const reg = parseSurfaces(this.o.declared);
+        const reg = parseWireSurfaces(this.o.declared);
         if (!reg.ok || !sameSurfaces(reg.value, mine.value)) note = 'This editor declares other surfaces than its manifest; shown the protocol-1 way.';
         else decl = mine.value;
       } else decl = mine.value;

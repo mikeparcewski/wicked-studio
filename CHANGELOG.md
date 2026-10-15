@@ -12,6 +12,9 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+### Fixed
+- Built-in editors run on protocol 2 when crew serves them: the host reads the registry's surfaces in the parsed wire form (`full.modes: null`, `options: null`) instead of refusing them and falling back to protocol 1 (wicked-studio#791).
+
 ## [0.9.0] — 2026-10-14
 
 The editor stack on protocol 2: every first-party editor (Page, Slides, Document, Video) and the MCP inspector is a `wicked.editor/2` plugin, drawn by the host as a card, an options panel and full screen; the run page is the chat; and QE acceptance can be turned off in Settings. Pins `wicked-crew-api-types` 0.120.0.
