@@ -29,7 +29,9 @@ export function peekFact(ref: ObjectRef, ctx: { runs: readonly SessionView[]; ne
   if (ref.kind === 'session') {
     const s = parseSessionId(ref.sessionId);
     const mine = s.kind === 'run' ? ctx.runs.filter((v) => v.session.id === s.runId) : ctx.runs.filter((v) => ctx.runChatId && runChatIdOf(v) === s.chatId);
-    const v = mine[mine.length - 1];
+    // The chat's NEWEST run speaks for it (chatStatusWord's rule): the daemon lists actionable runs
+    // first, so the list's last entry can be an older finished run of the same chat.
+    const v = [...mine].sort((a, b) => Number((b.session as { created_at?: number }).created_at ?? 0) - Number((a.session as { created_at?: number }).created_at ?? 0))[0];
     if (v === undefined) return 'Nothing in this session is on this daemon';
     // An answered chat waits for its next message, not on you (statusWord's "Answered").
     const word = v.session.status === 'awaiting_human' && isAskTurnRun(v.session) ? 'open, waiting for your next message' : (RUN_WORD[v.session.status] ?? v.session.status);

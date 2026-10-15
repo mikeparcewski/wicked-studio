@@ -200,6 +200,12 @@ describe('⌥ peek says one telling fact', () => {
     expect(peekFact({ kind: 'desk' }, { ...ctx, held: new Set([ctx.runs[0]!.session.id]) })).toBe('2 things need you · 0 running');
     // Hovering the idle chat says it is open, not "waiting on you".
     expect(peekFact({ kind: 'session', sessionId: 'run:c1' }, { ...ctx, runs: [chat] })).toMatch(/ · open, waiting for your next message$/);
+    // A chat with an older finished run: its newest run speaks for it, whatever the list order (codex calm r3).
+    const s0 = ctx.runs[0]!.session;
+    const older = { session: { ...s0, id: 'c0', status: 'completed', chat_id: 'ch', created_at: 100 } } as unknown as (typeof ctx.runs)[number];
+    const newer = { session: { ...s0, id: 'c2', status: 'awaiting_human', ask_turn: true, chat_id: 'ch', created_at: 200 } } as unknown as (typeof ctx.runs)[number];
+    expect(peekFact({ kind: 'session', sessionId: 'ch' }, { ...ctx, runChatId: true, runs: [newer, older] }))
+      .toMatch(/ · open, waiting for your next message · 2 runs$/);
     expect(peekFact({ kind: 'helper', runId: 'r1', cli: 'claude' }, ctx)).toBe('claude · not working right now · signed in');
     expect(peekFact({ kind: 'step', runId: 'r1', ord: 0 }, ctx)).toBe('Done · claude');
     expect(peekFact({ kind: 'session', sessionId: 'run:r1' }, ctx)).toBe('fix the double charge · being worked on');
