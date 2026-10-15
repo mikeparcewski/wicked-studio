@@ -12,8 +12,8 @@
   "studioVersion": "0.9.2",
   "counts": {
     "files": 230,
-    "occurrences": 2833,
-    "static": 2443,
+    "occurrences": 2835,
+    "static": 2445,
     "dynamic": 72,
     "computed": 24
   },
@@ -8180,7 +8180,19 @@
       ]
     },
     {
+      "testId": "project-graph-live",
+      "files": [
+        "src/components/ProjectCodeGraph.tsx"
+      ]
+    },
+    {
       "testId": "project-graph-read-error",
+      "files": [
+        "src/components/ProjectCodeGraph.tsx"
+      ]
+    },
+    {
+      "testId": "project-graph-read-retry",
       "files": [
         "src/components/ProjectCodeGraph.tsx"
       ]

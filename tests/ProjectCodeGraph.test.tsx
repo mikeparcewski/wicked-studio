@@ -18,7 +18,7 @@ vi.mock('../src/api/client.js', () => ({
   },
 }));
 
-const { ProjectCodeGraph } = await import('../src/components/ProjectCodeGraph.js');
+const { ProjectCodeGraph, resetProjectGraphBuilds } = await import('../src/components/ProjectCodeGraph.js');
 
 function status(over: Partial<ProjectGraphStatus>): ProjectGraphStatus {
   return {
@@ -30,6 +30,7 @@ function status(over: Partial<ProjectGraphStatus>): ProjectGraphStatus {
 }
 
 beforeEach(() => {
+  resetProjectGraphBuilds();
   getProjectGraph.mockReset();
   refreshProjectGraph.mockReset();
 });
@@ -45,9 +46,11 @@ describe('ProjectCodeGraph (studio#802)', () => {
     expect(button).toHaveTextContent('Build code graph');
     expect(screen.getByTestId('project-graph-detail')).toHaveTextContent('has not been built yet');
     fireEvent.click(button);
-    expect(refreshProjectGraph).toHaveBeenCalledWith('proj-1');
+    await waitFor(() => expect(refreshProjectGraph).toHaveBeenCalledWith('proj-1'));
     expect(screen.getByTestId('project-graph-build')).toBeDisabled();
     expect(screen.getByTestId('project-graph-build')).toHaveTextContent('Building the code graph…');
+    expect(screen.getByTestId('project-graph-live')).toHaveAttribute('role', 'status');
+    expect(screen.getByTestId('project-graph-live')).toHaveTextContent('Building the code graph.');
     finish({ status: status({ state: 'ready-single-repo', detail: 'Built from 1 repository.' }), indexed: ['tiny-tip'], skipped: [], failed: [] });
     await waitFor(() => expect(screen.getByTestId('project-graph')).toHaveAttribute('data-state', 'ready-single-repo'));
     expect(screen.getByTestId('project-graph-detail')).toHaveTextContent('Built from 1 repository.');
@@ -79,5 +82,48 @@ describe('ProjectCodeGraph (studio#802)', () => {
     await screen.findByTestId('project-graph-build');
     rerender(<ProjectCodeGraph projectId="proj-1" repoCount={2} />);
     await waitFor(() => expect(getProjectGraph).toHaveBeenCalledTimes(2));
+  });
+
+  it('a status read that started before the build answered never overwrites it (codex r1)', async () => {
+    getProjectGraph.mockResolvedValueOnce({ status: status({ action: 'projects.graph.refresh' }) });
+    let lateRead: (v: { status: ProjectGraphStatus }) => void = () => undefined;
+    let finish: (r: ProjectGraphRefreshResult) => void = () => undefined;
+    refreshProjectGraph.mockImplementation(() => new Promise<ProjectGraphRefreshResult>((done) => { finish = done; }));
+    const { rerender } = render(<ProjectCodeGraph projectId="proj-1" repoCount={1} />);
+    fireEvent.click(await screen.findByTestId('project-graph-build'));
+    getProjectGraph.mockImplementationOnce(() => new Promise((done) => { lateRead = done; }));
+    rerender(<ProjectCodeGraph projectId="proj-1" repoCount={2} />);
+    await waitFor(() => expect(getProjectGraph).toHaveBeenCalledTimes(2));
+    finish({ status: status({ state: 'ready-single-repo', detail: 'Built.' }), indexed: ['tiny-tip'], skipped: [], failed: [] });
+    await waitFor(() => expect(screen.getByTestId('project-graph')).toHaveAttribute('data-state', 'ready-single-repo'));
+    lateRead({ status: status({ action: 'projects.graph.refresh', detail: 'stale: not built' }) });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(screen.getByTestId('project-graph')).toHaveAttribute('data-state', 'ready-single-repo');
+    expect(screen.getByTestId('project-graph-detail')).toHaveTextContent('Built.');
+  });
+
+  it('leaving and coming back re-attaches to the build still running; no second build starts (codex r1)', async () => {
+    getProjectGraph.mockResolvedValue({ status: status({ action: 'projects.graph.refresh' }) });
+    let finish: (r: ProjectGraphRefreshResult) => void = () => undefined;
+    refreshProjectGraph.mockImplementation(() => new Promise<ProjectGraphRefreshResult>((done) => { finish = done; }));
+    const first = render(<ProjectCodeGraph projectId="proj-1" repoCount={1} />);
+    fireEvent.click(await screen.findByTestId('project-graph-build'));
+    first.unmount();
+    render(<ProjectCodeGraph projectId="proj-1" repoCount={1} />);
+    const again = await screen.findByTestId('project-graph-build');
+    expect(again).toBeDisabled();
+    fireEvent.click(again);
+    expect(refreshProjectGraph).toHaveBeenCalledTimes(1);
+    finish({ status: status({ state: 'ready-single-repo', detail: 'Built.' }), indexed: ['tiny-tip'], skipped: [], failed: [] });
+    expect(await screen.findByTestId('project-graph-result')).toHaveTextContent('1 indexed');
+  });
+
+  it('a failed status read can be retried', async () => {
+    getProjectGraph.mockRejectedValueOnce(new Error('503 daemon busy'));
+    getProjectGraph.mockResolvedValueOnce({ status: status({ action: 'projects.graph.refresh' }) });
+    render(<ProjectCodeGraph projectId="proj-1" repoCount={1} />);
+    expect(await screen.findByTestId('project-graph-read-error')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('project-graph-read-retry'));
+    expect(await screen.findByTestId('project-graph-build')).toHaveTextContent('Build code graph');
   });
 });
