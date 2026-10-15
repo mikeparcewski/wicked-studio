@@ -4,6 +4,7 @@ import { deskLiveCounts, statusWord } from '../src/board/statusWords.js';
 import { liveRows, outcomeOf } from '../src/board/deskInsights.js';
 import { makeView } from './factories.js';
 import { runState, sessionState } from '../src/board/sessionModel.js';
+import { railGroups } from '../src/board/deskModel.js';
 
 /** studio#805: a live run a Needs-you row holds reads as waiting on you everywhere statusWord speaks. */
 describe('held runs: one mark, read by statusWord', () => {
@@ -38,6 +39,14 @@ describe('held runs: one mark, read by statusWord', () => {
     expect(runState(live)).toBe('working');
     expect(runState(gate)).toBe('waiting');
     expect(runState(done)).toBe('done');
+  });
+
+  it('the rail dot of a chat whose older run is held reads Waiting on you, not the newer run\'s word', () => {
+    const older = makeView({ id: 'h1', status: 'executing', chat_id: 'c', created_at: 100 } as Parameters<typeof makeView>[0]);
+    const newer = makeView({ id: 'n1', status: 'completed', chat_id: 'c', created_at: 200 } as Parameters<typeof makeView>[0]);
+    const runs = markHeld([newer, older], new Set(['h1']));
+    const [group] = railGroups([], runs, { h1: 1 }, 5, {}, true);
+    expect(group!.sessions[0]!.status.word).toBe('Waiting on you');
   });
 
   it('an archived run still reads Archived', () => {

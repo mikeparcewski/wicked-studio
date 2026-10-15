@@ -355,7 +355,7 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
   const leadWho: Responder | null = conversation === 'closed' && mine.length > 0 ? CREW : null;
   const badges = useMemo(() => needsByRun(needRows), [needRows]);
   const badge = mine.reduce((n, v) => n + (badges[v.session.id] ?? 0), 0);
-  const state: SessionState = mine.some((v) => v.session.status === 'awaiting_human') ? 'waiting'
+  const state: SessionState = mine.some((v) => runState(v) === 'waiting') ? 'waiting'
     : mine.some((v) => runState(v) === 'working') ? 'working'
       : mine.length > 0 ? runState(mine[mine.length - 1]!) : 'quiet';
 
