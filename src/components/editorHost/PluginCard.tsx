@@ -246,8 +246,6 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
           torn: (reason) => { if (live.current) setTorn(reason); },
           log: (e) => { logRef.current.push(e); if (logRef.current.length > 200) logRef.current.shift(); },
           surfaces: (s, p, n) => {
-            // Only this group's: a queue left by another artifact's group is dropped, never adopted here.
-            for (const p of pendingAdopt.current.splice(0)) if (p.group === group) host.adopt(p.version);
             replayGroupSelection(group, 'card');
             // A morph made before the handshake had no port: say the surface now shown (codex h2-r8 P2).
             const now = fullRef.current ? 'full' : 'card';
@@ -268,6 +266,9 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
         },
       });
       hostRef.current = host;
+      // Writes from Options that landed while there was no host: this card's, as soon as it has one (only this
+      // group's; a queue left by another artifact's group is dropped).
+      for (const p of pendingAdopt.current.splice(0)) if (p.group === group) host.adopt(p.version);
       host.mount();
     };
     void start();
@@ -278,7 +279,8 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
         if (e.ok) {
           // A write that lands while the frame is being remade (Reload it, waking) is adopted once the new host
           // has shaken hands, so its Undo is this card's (codex fu r2 P2).
-          if (hostRef.current?.connected === true) hostRef.current.adopt(e.write.version);
+          // adopt() needs no handshake: the version is this card's as soon as a host exists (codex fu r3 P2).
+          if (hostRef.current !== null) hostRef.current.adopt(e.write.version);
           else pendingAdopt.current.push({ group, version: e.write.version });
           hostRef.current?.artifactChanged(e.write.version, e.write.verb === 'restyled' ? 'theme' : 'deterministic');
           written(e.write);

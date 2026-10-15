@@ -127,6 +127,13 @@ export function McpInspectPage({ navigate, search }: { navigate: (p: string) => 
   const lastAsk = useRef<Ask | null>(null);
   const entries = useRef<McpInspectLogEntry[]>([]);
   const listeners = useRef(new Set<McpSessionEvents>());
+  /** The state every frame was last told, replayed to a frame that subscribes later; while a session is being
+   *  replaced it says `connecting`, and no request goes to the old session (codex fu r3 P2). */
+  const toldState = useRef<Record<string, unknown>>(statePayload(null));
+  const tell = (payload: Record<string, unknown>): void => {
+    toldState.current = payload;
+    for (const listener of listeners.current) listener.state(payload);
+  };
   const pollAbort = useRef<AbortController | null>(null);
   const titleRef = useRef('MCP server');
   /** Every session this page started that is not yet deleted. */
@@ -182,8 +189,8 @@ export function McpInspectPage({ navigate, search }: { navigate: (p: string) => 
     // Only the server's own name: the target's name comes from the command or URL, which the plugin
     // never sees (codex r1).
     titleRef.current = next?.session.initialize?.serverInfo?.name ?? 'MCP server';
-    for (const listener of listeners.current) listener.state(statePayload(next));
-  }, []);
+    tell(statePayload(next));
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps -- tell only writes refs
 
   const stopPoll = useCallback(() => { pollAbort.current?.abort(); pollAbort.current = null; }, []);
 
@@ -269,7 +276,7 @@ export function McpInspectPage({ navigate, search }: { navigate: (p: string) => 
     // The page was left while the old session was being stopped: start nothing (codex r4).
     if (generation.current !== g) return;
     entries.current = [];
-    for (const listener of listeners.current) listener.state({ ...statePayload(null), state: 'connecting' });
+    tell({ ...statePayload(null), state: 'connecting' });
     try {
       const session = await startSession(ask.target);
       owned.current.add(session.id);
@@ -339,7 +346,7 @@ export function McpInspectPage({ navigate, search }: { navigate: (p: string) => 
   const bridge = useMemo<McpHostBridge>(() => ({
     request: async (method: string, params: Record<string, unknown> | undefined) => {
       const cur = liveRef.current;
-      if (cur === null || cur.state !== 'ready') return { error: 'unavailable' as const, message: 'not connected' };
+      if (cur === null || cur.state !== 'ready' || toldState.current['state'] !== 'ready') return { error: 'unavailable' as const, message: 'not connected' };
       try {
         return await sendRpc(cur.session.id, method, params);
       } catch (e) {
@@ -348,7 +355,7 @@ export function McpInspectPage({ navigate, search }: { navigate: (p: string) => 
     },
     subscribe: (listener) => {
       listeners.current.add(listener);
-      listener.state(statePayload(liveRef.current));
+      listener.state(toldState.current);
       listener.log(pluginEntries(entries.current));
       return () => { listeners.current.delete(listener); };
     },

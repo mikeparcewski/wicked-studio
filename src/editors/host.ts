@@ -636,10 +636,12 @@ export class EditorHost {
     }
     this.reportMcpCall({ phase: 'sent', method, tool });
     const r = await this.o.mcp.request(method, params);
-    if (!this.torn) {
-      const outcome = 'error' in r ? r.error : (r.response as { error?: unknown } | null)?.error !== undefined ? 'server-error' : 'ok';
-      this.reportMcpCall({ phase: 'done', method, tool, sent: true, ms: 'error' in r ? null : r.ms, outcome });
-    }
+    const outcome = 'error' in r ? r.error : (r.response as { error?: unknown } | null)?.error !== undefined ? 'server-error' : 'ok';
+    const done: McpCall = { phase: 'done', method, tool, sent: true, ms: 'error' in r ? null : r.ms, outcome };
+    // The session owner hears every sent call finish, also one whose frame was closed meanwhile (an Options frame):
+    // its call line would otherwise wait forever (codex fu r3 P2). The frame's own UI only while it lives.
+    if (!this.torn) this.o.ui.mcpCall?.(done);
+    this.o.mcp?.onCall?.(done);
     return r;
   }
 
