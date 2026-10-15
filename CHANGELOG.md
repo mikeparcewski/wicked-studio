@@ -12,8 +12,13 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+## [0.9.2] — 2026-10-15
+
+A patch release for crew 0.12.1: a repository whose onboarding couldn't start keeps its project and says why, and an Ask chat whose repositories changed asks for a new chat.
+
 ### Fixed
-- An Ask chat whose project gained a repository after it started says so and asks for a new chat, instead of an error (wicked-crew#1020).
+- Registering a repository whose onboarding can't start (for example, a missing tool on the daemon's PATH) keeps it in the chosen project and says why on its page, with Re-run onboarding (#797, wicked-crew#1019).
+- An Ask chat whose project gained a repository after it started says so and asks for a new chat, instead of an error (#799, wicked-crew#1020).
 
 ## [0.9.1] — 2026-10-15
 
@@ -28,11 +33,6 @@ A patch release: a failure because QE acceptance is required says why and links 
 - The Ask dock's header names the project it reads (`Tiny tip r3 · 1 repo`), not its raw id, and a resumed chat no longer shows a cut-off "scope: not stated…" (#795, wicked-studio#789).
 - A job launched with QE acceptance off in Settings says "QE acceptance: off on this computer (Settings)" on its own line under the status, which no longer gets cut off (#796, wicked-studio#788).
 - **A launch refused because QE acceptance is required is sent once** (#793). The composer's fallback for a pre-0.18 daemon re-sent a launch without `deliver` whenever a 400's message mentioned "deliver". Crew's QE refusal mentions it, so every refused launch was posted twice (crew refuses the second one the same way, since `deliverGate: 'auto'` stays on it). A QE refusal is never retried.
-- Built-in editors run on protocol 2 when crew serves them: the host reads the registry's surfaces in the parsed wire form (`full.modes: null`, `options: null`) instead of refusing them and falling back to protocol 1 (wicked-studio#791).
-- The Ask dock's header names the project it reads (`Tiny tip r3 · 1 repo`), not its raw id, and a resumed chat no longer shows a cut-off "scope: not stated…" (wicked-studio#789).
-- A job launched with QE acceptance off in Settings says "QE acceptance: off on this computer (Settings)" on its own line under the status, which no longer gets cut off (wicked-studio#788).
-- **A launch refused because QE acceptance is required is sent once.** The composer's fallback for a pre-0.18 daemon re-sent a launch without `deliver` whenever a 400's message mentioned "deliver". Crew's QE refusal mentions it, so every refused launch was posted twice (crew refuses the second one the same way, since `deliverGate: 'auto'` stays on it). A QE refusal is never retried.
-- Registering a repository whose onboarding can't start (for example, a missing tool on the daemon's PATH) keeps it in the chosen project and says why on its page, with Re-run onboarding (wicked-crew#1019).
 
 ## [0.9.0] — 2026-10-14
 
@@ -2201,7 +2201,8 @@ The merged interactive layer: wicked-interactive's UI moved into this skin (DES-
   `git subtree split` (92 commits).
 - The SPA as a pure HTTP/WS client of the wicked-crew daemon: runs, gates, live CoreEvents.
 
-[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.9.1...HEAD
+[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.9.2...HEAD
+[0.9.2]: https://github.com/mikeparcewski/wicked-studio/compare/v0.9.1...v0.9.2
 [0.9.1]: https://github.com/mikeparcewski/wicked-studio/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/mikeparcewski/wicked-studio/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/mikeparcewski/wicked-studio/compare/v0.7.13...v0.8.0
