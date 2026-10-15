@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, renderHook, screen, waitFor, within } from '@testing-library/react';
 import type { RepoEntry } from '../src/api/types.js';
+import { useRoute } from '../src/hooks/useRoute.js';
 import {
   REPO_CLEAN, REPO_INTREE_LIVE, REPO_INTREE_NO_LIVE, REPO_PREDATES_FINDINGS, REPO_ROOT_UNRESOLVABLE,
 } from './fixtures/wave2.js';
@@ -21,6 +22,18 @@ const REPOS: RepoEntry[] = [REPO_CLEAN, REPO_PREDATES_FINDINGS, REPO_INTREE_LIVE
 const listRepos = vi.fn(() => Promise.resolve({ repos: REPOS }));
 const listRuns = vi.fn(() => Promise.resolve({ runs: [makeView({ id: 'r-1', repo_ref: 'billing', workflow_id: 'onboarding', status: 'completed' })] }));
 const rerunOnboarding = vi.fn<(repoId: string) => Promise<{ runId: string }>>(() => Promise.resolve({ runId: 'run-reonboard' }));
+const registerRepo = vi.fn<(name: string, rootPath: string) => Promise<{ repo: RepoEntry; onboardRunId: string | null; onboardError?: string; projectAttachError?: string }>>();
+const cloneAndRegisterRepo = vi.fn<(name: string, gitUrl: string, checkoutPath?: string) => Promise<{ repo: RepoEntry; onboardRunId: string | null; onboardError?: string; projectAttachError?: string }>>();
+const attachProjectMember = vi.fn<(projectId: string, body: unknown) => Promise<unknown>>(() => Promise.resolve({
+  member: {
+    id: 'm-new',
+    project_id: 'proj-1',
+    member_kind: 'crew.repo',
+    member_ref: 'billing',
+    attached_by: 'studio',
+    attached_at: 1,
+  },
+}));
 const getRepoGraph = vi.fn(() => Promise.resolve({ graph: null }));
 const getRepoGitHistory = vi.fn(() => Promise.resolve({ commits: [] }));
 const getRepoContributors = vi.fn(() => Promise.resolve({ contributors: [] }));
@@ -30,11 +43,13 @@ vi.mock('../src/api/client.js', () => ({
     listRepos: () => listRepos(),
     listRuns: () => listRuns(),
     rerunOnboarding: (id: string) => rerunOnboarding(id),
+    registerRepo: (name: string, rootPath: string) => registerRepo(name, rootPath),
+    cloneAndRegisterRepo: (name: string, gitUrl: string, checkoutPath?: string) => cloneAndRegisterRepo(name, gitUrl, checkoutPath),
     getRepoGraph: () => getRepoGraph(),
     getRepoGitHistory: () => getRepoGitHistory(),
     getRepoContributors: () => getRepoContributors(),
     listProjects: () => Promise.resolve({ projects: [] }),
-    attachProjectMember: () => Promise.reject(new Error('not in this suite')),
+    attachProjectMember: (projectId: string, body: unknown) => attachProjectMember(projectId, body),
     detachProjectMember: () => Promise.reject(new Error('not in this suite')),
   },
 }));
@@ -48,6 +63,10 @@ const { clearRepoCache, fetchReposCached } = await import('../src/store/repoCach
 beforeEach(() => {
   listRepos.mockClear();
   rerunOnboarding.mockClear();
+  registerRepo.mockReset();
+  cloneAndRegisterRepo.mockReset();
+  attachProjectMember.mockClear();
+  window.history.replaceState(null, '', '/');
   clearRepoCache();
 });
 afterEach(() => cleanup());
@@ -247,5 +266,124 @@ describe('the project page repo rows (ProjectRepositories)', () => {
     const note = await screen.findByTestId('project-repo-reonboard-note');
     expect(note).toHaveAttribute('data-failed', 'true');
     expect(note.textContent).toContain('re-run refused: the daemon refused this — repo is already onboarding');
+  });
+});
+
+describe('registering a repo whose onboarding cannot start (wicked-crew#1019)', () => {
+  const ONBOARD_REASON =
+    "workflow 'onboarding' cannot start — unresolved tool dependencies: phase 'index' requires tool 'wicked-estate' (not found on PATH /Users/alice/.local/bin)";
+
+  it.each(['local', 'remote'])('%s: a 201 with onboardError still attaches the project member and navigates with the reason', async (source) => {
+    const route = renderHook(() => useRoute());
+    const navigate = vi.fn(route.result.current.navigate);
+    const register = source === 'remote' ? cloneAndRegisterRepo : registerRepo;
+    register.mockResolvedValueOnce({
+      repo: REPO_CLEAN,
+      onboardRunId: null,
+      onboardError: ONBOARD_REASON,
+    });
+
+    listRepos.mockResolvedValueOnce({ repos: [] });
+    render(<RepositoriesPanel navigate={navigate} ambientProject="proj-1" autoShowRegister />);
+    await screen.findByTestId('repos-empty');
+
+    if (source === 'remote') {
+      fireEvent.click(screen.getByRole('radio', { name: 'From a URL' }));
+      fireEvent.change(screen.getByTestId('repo-git-url'), { target: { value: 'https://example.com/billing.git' } });
+    } else {
+      fireEvent.change(screen.getByTestId('repo-path'), { target: { value: '/w2/repos/billing' } });
+    }
+    fireEvent.click(screen.getByTestId('repo-register-submit'));
+
+    await waitFor(() => expect(register).toHaveBeenCalledTimes(1));
+    if (source === 'remote') {
+      expect(cloneAndRegisterRepo).toHaveBeenCalledWith('billing', 'https://example.com/billing.git', undefined);
+    } else {
+      expect(registerRepo).toHaveBeenCalledWith('billing', '/w2/repos/billing');
+    }
+    await waitFor(() =>
+      expect(attachProjectMember).toHaveBeenCalledWith('proj-1', {
+        kind: 'crew.repo',
+        ref: 'billing',
+        attachedBy: 'studio',
+      }),
+    );
+    expect(navigate).toHaveBeenCalledWith('/repo-detail/billing', {
+      state: { onboardError: ONBOARD_REASON },
+    });
+    expect(screen.queryByTestId('repo-register-error')).toBeNull();
+    expect(screen.queryByTestId('repo-register')).toBeNull();
+    expect(screen.getByRole('heading', { name: 'billing' })).toBeInTheDocument();
+    expect(screen.queryByTestId('repos-empty')).toBeNull();
+    expect(route.result.current).toMatchObject({ panel: 'repo-detail', repoId: 'billing' });
+    expect(window.history.state).toMatchObject({ onboardError: ONBOARD_REASON });
+  });
+
+  it('the detail page shows the reason and Re-run onboarding starts a run', async () => {
+    const onSelectRun = vi.fn();
+    window.history.replaceState({ onboardError: ONBOARD_REASON }, '', '/repo-detail/billing');
+
+    render(<RepoDetailPage repoId="billing" onSelectRun={onSelectRun} navigate={() => undefined} onOpenGraph={() => undefined} />);
+    const notice = await screen.findByTestId('repo-onboard-error');
+    expect(notice.textContent).toContain('Registered. Onboarding couldn’t start:');
+    expect(notice.textContent).toContain("unresolved tool dependencies: phase 'index' requires tool 'wicked-estate'");
+    // Home paths inside the error text are abbreviated in the default layer.
+    expect(notice.textContent).toContain('~/.local/bin');
+    expect(notice.textContent).not.toContain('/Users/alice');
+
+    const rerunBtn = screen.getByTestId('repo-run-onboarding');
+    expect(rerunBtn).toHaveTextContent('Re-run onboarding');
+    fireEvent.click(rerunBtn);
+    await waitFor(() => expect(rerunOnboarding).toHaveBeenCalledWith('billing'));
+    await waitFor(() => expect(onSelectRun).toHaveBeenCalledWith('run-reonboard'));
+    expect(screen.queryByTestId('repo-onboard-error')).toBeNull();
+    expect(window.history.state).not.toHaveProperty('onboardError');
+  });
+
+  it('dismissing the notice keeps it dismissed after remount and preserves other view state', async () => {
+    window.history.replaceState({ onboardError: ONBOARD_REASON, 'wk.inApp': true }, '', '/repo-detail/billing');
+    const props = { repoId: 'billing', onSelectRun: vi.fn(), navigate: vi.fn(), onOpenGraph: vi.fn() };
+    const page = render(<RepoDetailPage {...props} />);
+    const notice = await screen.findByTestId('repo-onboard-error');
+
+    fireEvent.click(within(notice).getByRole('button', { name: 'Dismiss' }));
+
+    expect(screen.queryByTestId('repo-onboard-error')).toBeNull();
+    expect(window.history.state).toEqual({ 'wk.inApp': true });
+    expect(rerunOnboarding).not.toHaveBeenCalled();
+    page.unmount();
+    render(<RepoDetailPage {...props} />);
+    await screen.findByRole('heading', { name: 'billing' });
+    expect(screen.queryByTestId('repo-onboard-error')).toBeNull();
+  });
+
+  it('the normal 201 path is unchanged', async () => {
+    const navigate = vi.fn();
+    registerRepo.mockResolvedValueOnce({
+      repo: REPO_CLEAN,
+      onboardRunId: 'run-onboard-ok',
+    });
+
+    listRepos.mockResolvedValueOnce({ repos: [] });
+    render(<RepositoriesPanel navigate={navigate} ambientProject="proj-1" autoShowRegister />);
+    await screen.findByTestId('repos-empty');
+
+    fireEvent.change(screen.getByTestId('repo-path'), { target: { value: '/w2/repos/billing' } });
+    fireEvent.click(screen.getByTestId('repo-register-submit'));
+
+    await waitFor(() =>
+      expect(attachProjectMember).toHaveBeenCalledWith('proj-1', {
+        kind: 'crew.repo',
+        ref: 'billing',
+        attachedBy: 'studio',
+      }),
+    );
+    expect(navigate).toHaveBeenCalledWith('/repo-detail/billing');
+    expect(navigate).toHaveBeenCalledTimes(1);
+
+    cleanup();
+    render(<RepoDetailPage repoId="billing" onSelectRun={() => undefined} navigate={() => undefined} onOpenGraph={() => undefined} />);
+    await screen.findByRole('heading', { name: 'billing' });
+    expect(screen.queryByTestId('repo-onboard-error')).toBeNull();
   });
 });

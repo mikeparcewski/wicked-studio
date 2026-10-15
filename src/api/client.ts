@@ -380,7 +380,7 @@ export const api = {
 
   /** Register a local git repo and launch an onboarding run. Returns the repo and run id. */
   registerRepo: (name: string, rootPath: string) =>
-    apiFetch<{ repo: RepoEntry; onboardRunId: string }>('/repos', {
+    apiFetch<{ repo: RepoEntry; onboardRunId: string | null; onboardError?: string; projectAttachError?: string }>('/repos', {
       method: 'POST',
       body: JSON.stringify({ name, rootPath }),
     }),
@@ -388,7 +388,7 @@ export const api = {
   /** Clone a remote git URL, register it, and launch an onboarding run.
    *  `checkoutPath` (absolute) overrides the default ~/.wicked/repos/<name>. */
   cloneAndRegisterRepo: (name: string, gitUrl: string, checkoutPath?: string) =>
-    apiFetch<{ repo: RepoEntry; onboardRunId: string }>('/repos', {
+    apiFetch<{ repo: RepoEntry; onboardRunId: string | null; onboardError?: string; projectAttachError?: string }>('/repos', {
       method: 'POST',
       body: JSON.stringify({ name, gitUrl, ...(checkoutPath ? { rootPath: checkoutPath } : {}) }),
     }),

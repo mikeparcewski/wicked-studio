@@ -316,7 +316,7 @@ function parse(pathname: string): Route {
 }
 
 /** `replace` swaps the current history entry — used by redirects so Back never re-enters them. */
-export type Navigate = (path: string, opts?: { replace?: boolean }) => void;
+export type Navigate = (path: string, opts?: { replace?: boolean; state?: Record<string, unknown> }) => void;
 
 /** The pure address → route parse (tests and the palette's route coverage read it). */
 export function parseRoute(pathname: string): Route {
@@ -347,11 +347,11 @@ export function useRoute(): Route & {
   }, []);
 
   const navigate = useCallback<Navigate>((path, opts) => {
-    if (opts?.replace) history.replaceState(replacedEntryState(), '', path);
+    if (opts?.replace) history.replaceState({ ...replacedEntryState(), ...opts.state }, '', path);
     else {
       // The LEAVING entry snapshots its view state first (useHistoryState), so Back restores it.
       announceNavigateAway();
-      history.pushState(inAppEntryState(), '', path);
+      history.pushState({ ...inAppEntryState(), ...opts?.state }, '', path);
     }
     // Parse pathname-only for the panel/mode router (a hash like `#gate` must
     // not ride into the artifact id), but also capture the search string so

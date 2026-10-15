@@ -12,6 +12,8 @@ import { relTime } from '../board/relTime.js';
 import { jobTitle } from '../board/deskWords.js';
 import { useMembershipStore } from '../store/membership.js';
 import { readErrorKind } from '../api/errors.js';
+import { useDisplayText } from '../hooks/useHomePath.js';
+import { keepEntryState } from '../hooks/useHistoryState.js';
 import { EmptyState, PageFrame, SectionTitle, Skeleton, StateBanner, StatLine, TechDetails } from './ui/index.js';
 
 interface Props {
@@ -22,6 +24,11 @@ interface Props {
 }
 
 const TERMINAL_STATUSES = new Set(['completed', 'failed', 'cancelled']);
+
+function readLocationOnboardError(): string | null {
+  const error = keepEntryState().onboardError;
+  return typeof error === 'string' && error.trim() !== '' ? error : null;
+}
 
 /**
  * §7.10 (slice X2): contributor identity de-duplicates. Git histories routinely
@@ -54,6 +61,7 @@ export function dedupeContributors(rows: readonly GitContributor[]): GitContribu
 }
 
 export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph }: Props): React.ReactElement {
+  const showText = useDisplayText();
   const [requirementsOpen, setRequirementsOpen] = useState(false);
   const [repo, setRepo] = useState<RepoEntry | null>(null);
   const [runs, setRuns] = useState<SessionView[]>([]);
@@ -70,7 +78,11 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph }: P
   const [reload, setReload] = useState(0);
   const [expanded, setExpanded] = useState(false);
   const [onboarding, setOnboarding] = useState(false);
-  const [onboardError, setOnboardError] = useState<unknown>(null);
+  const [onboardError, setOnboardError] = useState<unknown>(() => readLocationOnboardError());
+
+  useEffect(() => {
+    setOnboardError(readLocationOnboardError());
+  }, [repoId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -189,9 +201,16 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph }: P
   const graphStats = graph?.stats;
   const graphTotals = graph?.totals;
 
+  function dismissOnboardError(): void {
+    setOnboardError(null);
+    const state = keepEntryState();
+    delete state.onboardError;
+    window.history.replaceState(state, '');
+  }
+
   async function startOnboarding(): Promise<void> {
     setOnboarding(true);
-    setOnboardError(null);
+    dismissOnboardError();
     try {
       const { runId } = await api.rerunOnboarding(repoId);
       onSelectRun(runId);
@@ -206,6 +225,11 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph }: P
   // The finding row carries Re-run onboarding when a finding asks for it; the header keeps it otherwise.
   const findingOffersOnboard = (repo.findings ?? []).some(findingNeedsReonboard);
   const gitLink = repo.git_url && /^https?:\/\//i.test(repo.git_url) ? repo.git_url : null;
+  const onboardErrorText = onboardError === null
+    ? null
+    : onboardError instanceof Error
+      ? onboardError.message
+      : String(onboardError);
 
   return (
     <div className="wk-pg-crumbed">
@@ -247,10 +271,21 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph }: P
           )}
         </p>
 
-        {onboardError !== null && (
-          <div data-testid="repo-onboard-error">
-            <p className="wk-field-note wk-field-note--bad">Couldn’t start onboarding. Try again in a moment.</p>
-            <TechDetails text={onboardError instanceof Error ? onboardError.message : String(onboardError)} />
+        {onboardErrorText !== null && (
+          <div data-testid="repo-onboard-error" role="status" className="wk-state-banner wk-state-banner--warn">
+            <div className="wk-state-banner-row">
+              <p className="wk-state-banner-text">
+                {onboardError instanceof Error ? 'Couldn’t start onboarding: ' : 'Registered. Onboarding couldn’t start: '}
+                {showText(onboardErrorText)}
+              </p>
+              <button
+                type="button"
+                className="wk-btn wk-btn--quiet wk-btn--sm"
+                onClick={dismissOnboardError}
+              >
+                Dismiss
+              </button>
+            </div>
           </div>
         )}
 
