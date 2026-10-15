@@ -13,6 +13,8 @@ import {
 } from '../src/board/needsYou.js';
 import { ORPHANED_LINE } from '../src/board/sessionModel.js';
 import { makeView } from './factories.js';
+import { deskLiveCounts } from '../src/board/statusWords.js';
+import { liveRows } from '../src/board/deskInsights.js';
 
 /**
  * The needs-you queue fold (DES-HOME-COMMAND-CENTER §3): severity order,
@@ -265,6 +267,31 @@ describe('the calm branch and its inputs', () => {
       makeView({ id: 'c', status: 'completed' }),
     ])).toBe('Nothing needs you — 2 runs working.');
     expect(calmCopy([])).toBe('Nothing needs you — nothing running right now.');
+  });
+
+  it('calmCopy names a chat waiting for its next message as open, not as a run working', () => {
+    // Seen on a Desk: "5 runs working" beside "Running now 0 · nothing executing" — five chats.
+    const chat = (id: string) => makeView({ id, status: 'awaiting_human', ask_turn: true } as Parameters<typeof makeView>[0]);
+    expect(calmCopy([chat('a'), chat('b')])).toBe('Nothing needs you — nothing running right now; 2 chats open.');
+    expect(calmCopy([makeView({ id: 'r', status: 'executing' }), chat('a')]))
+      .toBe('Nothing needs you — 1 run working, 1 chat open.');
+    // An archived chat counts for neither.
+    expect(calmCopy([makeView({ id: 'x', status: 'awaiting_human', ask_turn: true, archived_at: 1 } as Parameters<typeof makeView>[0])]))
+      .toBe('Nothing needs you — nothing running right now.');
+  });
+
+  it('calmCopy agrees with the Running now card in every status (codex r1)', () => {
+    // A paused run is "Stopped", not working: it used to read "1 run working" beside "Running now 0".
+    // `paused` is a status the table maps but the wire type does not list.
+    expect(calmCopy([makeView({ id: 'p', status: 'paused' as never })])).toBe('Nothing needs you — nothing running right now.');
+    const statuses = ['executing', 'distributing', 'pending', 'planning', 'running', 'awaiting_human', 'paused',
+      'stopped', 'halted', 'completed', 'done', 'failed', 'cancelled'] as const;
+    for (const status of statuses) {
+      for (const askTurn of [false, true]) {
+        const runs = [makeView({ id: 'r', status: status as never, ...(askTurn ? { ask_turn: true } : {}) } as Parameters<typeof makeView>[0])];
+        expect(deskLiveCounts(runs).working, `${status} ask_turn=${askTurn}`).toBe(liveRows(runs, () => 't').length);
+      }
+    }
   });
 
   it('oldestNeedAt picks the oldest honest clock, ignoring clockless rows', () => {

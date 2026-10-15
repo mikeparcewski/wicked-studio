@@ -13,7 +13,8 @@ import { STALLED_IDLE_SECS, stalledLiveChats, type LiveChatSnapshot } from './ch
 import { gateOpenPath } from './gateActions.js';
 import { ORPHANED_LINE, sessionPath } from './sessionModel.js';
 import { gateRowVerb } from '../components/gateMoveModel.js';
-import { outcomeOf, runStats } from './metrics.js';
+import { outcomeOf } from './metrics.js';
+import { deskLiveCounts } from './statusWords.js';
 import { repoOnboard } from './repoStats.js';
 import { onboardEstimate, type OnboardEstimate } from './repairMoves.js';
 import { plausibleClock } from './ageHonesty.js';
@@ -704,10 +705,15 @@ export function needsYouRows(inputs: NeedsYouInputs): NeedRow[] {
  * (the structural guard: same fold, one branch). The count is live.
  */
 export function calmCopy(runs: SessionView[]): string {
-  const { working } = runStats(runs);
-  return working > 0
-    ? `Nothing needs you — ${plural(working, 'run')} working.`
-    : 'Nothing needs you — nothing running right now.';
+  // The Running now card's own rule (statusWord), not runStats: runStats counts a chat waiting
+  // for its next message, and a paused run, as live, which read "5 runs working" beside
+  // "Running now 0 · nothing executing" on the same Desk.
+  const { working, chatsOpen } = deskLiveCounts(runs);
+  const chats = chatsOpen > 0 ? `${plural(chatsOpen, 'chat')} open` : '';
+  if (working > 0) return `Nothing needs you — ${plural(working, 'run')} working${chats === '' ? '' : `, ${chats}`}.`;
+  return chats === ''
+    ? 'Nothing needs you — nothing running right now.'
+    : `Nothing needs you — nothing running right now; ${chats}.`;
 }
 
 /** True when the portfolio has never seen work — the fresh-install welcome

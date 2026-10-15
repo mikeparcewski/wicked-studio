@@ -47,6 +47,7 @@ import { SessionPage } from './components/session/SessionView.js';
 import type { ComposerSend } from './components/session/Composer.js';
 import { ObjectSheet } from './components/sheets/ObjectSheet.js';
 import { AltPeek } from './components/sheets/AltPeek.js';
+import { needRunId } from './board/deskModel.js';
 import { objectCommands, type ObjectCommands } from './components/sheets/objectCommands.js';
 import { cmdkObject, trackPointedObject } from './store/sheets.js';
 import { useNeedsClock, useNeedsRows } from './hooks/useNeedsRows.js';
@@ -448,6 +449,8 @@ export function App(): React.ReactElement {
   // the right rail renders it on every route, peek shows its top item, Home reads the same.
   const needsNow = useNeedsClock();
   const needRows = useNeedsRows(runs, needsNow, runsLoaded);
+  // The runs a Needs-you row holds: the Desk peek leaves them out of "running", as Running now does.
+  const heldByNeeds = useMemo(() => new Set(needRows.map(needRunId).filter((id): id is string => id !== null)), [needRows]);
 
   // ── Studio wave 2a: peek (P), jump (G), back (B) — and the panels "back" reopens ──
   const peek = usePeekJump(runs, navigate, needRows);
@@ -765,7 +768,7 @@ export function App(): React.ReactElement {
 
       {/* S11: the open "look underneath" sheet (a step, a helper, a session, the Desk). */}
       <ObjectSheet runs={runs} navigate={navigate} needCount={attentionBadge(needRows)} />
-      <AltPeek runs={runs} needCount={attentionBadge(needRows)} />
+      <AltPeek runs={runs} needCount={attentionBadge(needRows)} heldRuns={heldByNeeds} />
 
       {/* The universal command palette (DES-FEEDBACK-002 §1, slice G) — corpus
           from already-loaded stores + the runs prop; repos cached on first open. */}

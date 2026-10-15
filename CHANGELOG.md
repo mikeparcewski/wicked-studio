@@ -24,6 +24,11 @@ npm publish dates. Every version listed here exists on
   helper asked: it named the seat running the run's current step. It now reads the asking seat from the question
   (`seat`, from wicked-core's ask frame), else the asking step's seat (`ord`), and only then the current step's seat, as
   before. Kept across a reload when the daemon returns them on `GET /runs/:id/elicitation`.
+- The Desk's "Nothing needs you" line no longer counts an open chat as a run working. It read "5 runs working" beside
+  "Running now 0 · nothing executing": the five were chats waiting for their next message. A paused run read as working
+  the same way. The calm line and the Desk's Alt peek now count by the Running now card's own rule ("N runs working, M
+  chats open", "nothing running right now; M chats open", "· N running · M chats open"), and the card's note says
+  "working now" / "nothing running", since it also counts runs that are still planning.
 
 ## [0.9.2] — 2026-10-15
 
