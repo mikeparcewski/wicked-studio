@@ -12,6 +12,11 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+### Fixed
+- A run Needs you holds (a stall, an orphan, an open question) is no longer "working" anywhere on the Desk (#805). The
+  Runs tab's Running count leaves it out, as the Work tab's Running now card does, and the Alt peeks of that run, its
+  helper and its step say "held, see Needs you" / "not working right now" instead of "being worked on" / "Working".
+
 ## [0.9.3] — 2026-10-15
 
 A patch release: the project page builds the project's code graph, a question card names the seat that asked, and the Desk no longer calls open chats "runs working".

@@ -16,7 +16,9 @@ const PAGE = 40;
  * a status filter and a search, then one table of runs, newest first. A row opens its run.
  * Real data only: the run list App already keeps live over `/ws`.
  */
-export function DeskRuns({ runs, runsShown, refine, refineBar, now, navigate, pathOf, agentName, projectName, title, showProject, panelId, labelledBy, rowActions }: {
+export function DeskRuns({ runs, runsShown, refine, refineBar, now, navigate, pathOf, agentName, projectName, title, showProject, panelId, labelledBy, rowActions, held }: {
+  /** The runs a Needs-you row holds: not counted as running (studio#805). */
+  held?: ReadonlySet<string>;
   /** A row's own actions (a project's page: Remove from project), or none. */
   rowActions?: (runId: string, title: string) => readonly MenuItem[];
   panelId?: string;
@@ -39,8 +41,8 @@ export function DeskRuns({ runs, runsShown, refine, refineBar, now, navigate, pa
   const [query, setQuery] = useState('');
   const [shown, setShown] = useState(PAGE);
   const [allTime, setAllTime] = useState(false);
-  const view = useMemo(() => runsView(runs, refine, status, query, now, title, { project: projectName, agent: agentName }, allTime),
-    [runs, refine, status, query, now, title, projectName, agentName, allTime]);
+  const view = useMemo(() => runsView(runs, refine, status, query, now, title, { project: projectName, agent: agentName }, allTime, held),
+    [runs, refine, status, query, now, title, projectName, agentName, allTime, held]);
   const s = view.stats;
   const win = allTime ? 'all time' : `last ${refine.days} days`;
   const rows = view.rows.slice(0, shown);

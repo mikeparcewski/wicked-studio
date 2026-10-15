@@ -43,6 +43,16 @@ describe('Desk Runs model', () => {
     }
   });
 
+  it('does not count a run Needs you holds as running (studio#805)', () => {
+    const runs = outcomeRuns();
+    const working = runsView(runs, DEFAULT_REFINE, 'all', '', NOW, title, names).rows.filter((r) => r.outcome === 'Working').map((r) => r.id);
+    expect(working).toHaveLength(1);
+    const view = runsView(runs, DEFAULT_REFINE, 'all', '', NOW, title, names, false, new Set(working));
+    expect(view.stats.running).toBe(0);
+    // The row itself stays listed: only the count of live work changes.
+    expect(view.rows.map((r) => r.id)).toContain(working[0]);
+  });
+
   it.each<[Partial<Refine>, number]>([
     [{ days: 7 }, 2], [{ project: 'studio' }, 2], [{ agent: 'claude' }, 2], [{ workflow: 'fix-bug' }, 2],
     [{ days: 7, project: 'studio', agent: 'claude', workflow: 'fix-bug' }, 1],

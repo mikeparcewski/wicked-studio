@@ -75,7 +75,8 @@ function haystack(r: RunRow, names: { project: (id: string) => string; agent: (c
 }
 
 export function runsView(runs: readonly SessionView[], refine: Refine, status: RunStatusFilter, query: string, now: number,
-  title: (v: SessionView) => string, names: { project: (id: string) => string; agent: (cli: string) => string }, allTime = false): RunsView {
+  title: (v: SessionView) => string, names: { project: (id: string) => string; agent: (cli: string) => string }, allTime = false,
+  held: ReadonlySet<string> = new Set()): RunsView {
   const { kept, undated } = refineRuns(runs, refine, now, allTime);
   // How many more an All time view would hold (older, undated or archived): the switch says so.
   const beyond = allTime ? 0 : refineRuns(runs, refine, now, true).kept.length - kept.length;
@@ -90,7 +91,9 @@ export function runsView(runs: readonly SessionView[], refine: Refine, status: R
     rows,
     stats: {
       inWindow: all.length,
-      running: count(OF_FILTER.working),
+      // A run Needs you holds (a stall, an orphan, an open question) is not running — the Work
+      // tab's Running now card leaves it out the same way (studio#805).
+      running: all.filter((r) => OF_FILTER.working.some((word) => word === r.outcome) && !held.has(r.id)).length,
       waiting: count(OF_FILTER.waiting),
       finished: count(OF_FILTER.finished),
       failed: count(OF_FILTER.failed),

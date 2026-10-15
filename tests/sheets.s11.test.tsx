@@ -198,6 +198,13 @@ describe('⌥ peek says one telling fact', () => {
     expect(peekFact({ kind: 'desk' }, { ...ctx, runs: [...ctx.runs, chat] })).toBe('2 things need you · 1 running · 1 chat open');
     // A run Needs you holds (a stall, an orphan, a question) is not "running", as on the Running now card.
     expect(peekFact({ kind: 'desk' }, { ...ctx, held: new Set([ctx.runs[0]!.session.id]) })).toBe('2 things need you · 0 running');
+    // studio#805: the same held run's own peeks do not call it worked on.
+    const heldCtx = { ...ctx, held: new Set([ctx.runs[0]!.session.id]) };
+    expect(peekFact({ kind: 'session', sessionId: 'run:r1' }, heldCtx)).toBe('fix the double charge · held, see Needs you');
+    expect(peekFact({ kind: 'helper', runId: 'r1', cli: 'codex' }, ctx)).toBe('codex · working now · signed in');
+    expect(peekFact({ kind: 'helper', runId: 'r1', cli: 'codex' }, heldCtx)).toBe('codex · not working right now · signed in');
+    expect(peekFact({ kind: 'step', runId: 'r1', ord: 1 }, ctx)).toBe('Working · codex');
+    expect(peekFact({ kind: 'step', runId: 'r1', ord: 1 }, heldCtx)).toBe('Held, see Needs you · codex');
     // Hovering the idle chat says it is open, not "waiting on you".
     expect(peekFact({ kind: 'session', sessionId: 'run:c1' }, { ...ctx, runs: [chat] })).toMatch(/ · open, waiting for your next message$/);
     // A chat with an older finished run: its newest run speaks for it, whatever the list order (codex calm r3).

@@ -34,19 +34,24 @@ export function peekFact(ref: ObjectRef, ctx: { runs: readonly SessionView[]; ne
     const v = [...mine].sort((a, b) => Number((b.session as { created_at?: number }).created_at ?? 0) - Number((a.session as { created_at?: number }).created_at ?? 0))[0];
     if (v === undefined) return 'Nothing in this session is on this daemon';
     // An answered chat waits for its next message, not on you (statusWord's "Answered").
-    const word = v.session.status === 'awaiting_human' && isAskTurnRun(v.session) ? 'open, waiting for your next message' : (RUN_WORD[v.session.status] ?? v.session.status);
+    // A run Needs you holds (a stall, an orphan, an open question) is not being worked on (studio#805).
+    const word = ctx.held?.has(v.session.id) === true ? 'held, see Needs you'
+      : v.session.status === 'awaiting_human' && isAskTurnRun(v.session) ? 'open, waiting for your next message'
+      : (RUN_WORD[v.session.status] ?? v.session.status);
     return `${humanTitle(v.session.problem || v.session.id)} · ${word}${mine.length > 1 ? ` · ${mine.length} runs` : ''}`;
   }
   const v = ctx.runs.find((x) => x.session.id === ref.runId);
   if (v === undefined) return 'Not on this daemon';
+  // The cursor of a run Needs you holds is not live work (studio#805).
+  const held = ctx.held?.has(v.session.id) === true;
   if (ref.kind === 'helper') {
-    const working = v.units.some((u) => u.ord === executingOrd(v.session, v.units) && u.assigned_cli === ref.cli);
+    const working = !held && v.units.some((u) => u.ord === executingOrd(v.session, v.units) && u.assigned_cli === ref.cli);
     return `${ref.cli} · ${working ? 'working now' : 'not working right now'}${ctx.standing(ref.cli) !== null ? ` · ${ctx.standing(ref.cli)}` : ''}`;
   }
   const u = v.units.find((x) => x.ord === ref.ord);
   if (u === undefined) return 'Not started';
   const live = executingOrd(v.session, v.units) === u.ord;
-  return `${live ? 'Working' : u.status === 'done' ? 'Done' : u.status === 'rejected' ? 'Stopped' : 'Not started'}${u.assigned_cli ? ` · ${u.assigned_cli}` : ''}`;
+  return `${live ? (held ? 'Held, see Needs you' : 'Working') : u.status === 'done' ? 'Done' : u.status === 'rejected' ? 'Stopped' : 'Not started'}${u.assigned_cli ? ` · ${u.assigned_cli}` : ''}`;
 }
 
 /**
