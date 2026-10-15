@@ -11,9 +11,9 @@
   "version": 1,
   "studioVersion": "0.9.2",
   "counts": {
-    "files": 229,
-    "occurrences": 2827,
-    "static": 2437,
+    "files": 230,
+    "occurrences": 2835,
+    "static": 2445,
     "dynamic": 72,
     "computed": 24
   },
@@ -8153,6 +8153,54 @@
       "testId": "project-first-run",
       "files": [
         "src/components/desk/ProjectDesk.tsx"
+      ]
+    },
+    {
+      "testId": "project-graph",
+      "files": [
+        "src/components/ProjectCodeGraph.tsx"
+      ]
+    },
+    {
+      "testId": "project-graph-build",
+      "files": [
+        "src/components/ProjectCodeGraph.tsx"
+      ]
+    },
+    {
+      "testId": "project-graph-build-error",
+      "files": [
+        "src/components/ProjectCodeGraph.tsx"
+      ]
+    },
+    {
+      "testId": "project-graph-detail",
+      "files": [
+        "src/components/ProjectCodeGraph.tsx"
+      ]
+    },
+    {
+      "testId": "project-graph-live",
+      "files": [
+        "src/components/ProjectCodeGraph.tsx"
+      ]
+    },
+    {
+      "testId": "project-graph-read-error",
+      "files": [
+        "src/components/ProjectCodeGraph.tsx"
+      ]
+    },
+    {
+      "testId": "project-graph-read-retry",
+      "files": [
+        "src/components/ProjectCodeGraph.tsx"
+      ]
+    },
+    {
+      "testId": "project-graph-result",
+      "files": [
+        "src/components/ProjectCodeGraph.tsx"
       ]
     },
     {

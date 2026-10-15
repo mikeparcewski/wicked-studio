@@ -9,6 +9,7 @@ import { SectionTitle } from './ui/PageFrame.js';
 import { StatLine } from './ui/StatLine.js';
 import { EmptyState, Skeleton, StateBanner } from './ui/StateBanner.js';
 import { TechDetails } from './ui/TechDetails.js';
+import { ProjectCodeGraph } from './ProjectCodeGraph.js';
 import type { ProjectIssueHandler } from './product/ProjectAggregates.js';
 import type { RepoUse } from '../board/projectModel.js';
 
@@ -388,6 +389,8 @@ export function ProjectRepositories({ projectId, members, onMembersChange, onIss
           })}
         </div>
       )}
+      {/* studio#802: the build/refresh control crew's chat scope names ("build it from the project page"). */}
+      {repoMembers.length > 0 && <ProjectCodeGraph projectId={projectId} repoCount={repoMembers.length} />}
       <label className="wk-pg-proj-field">Attach a registered repository
         <input data-testid="project-repo-search" className="wk-field" value={query} onFocus={openPicker}
           onChange={(e) => { setQuery(e.target.value); if (!pickerOpen) openPicker(); }}
