@@ -12,6 +12,7 @@ import { humanTitle } from '../runIdentity.js';
 import { deskLiveCounts } from '../../board/statusWords.js';
 import { isAskTurnRun } from '../../board/askTurn.js';
 
+const TERMINAL_RUN = new Set(['completed', 'failed', 'cancelled']);
 const RUN_WORD: Record<string, string> = {
   executing: 'being worked on', distributing: 'being handed out', planning: 'being planned', awaiting_human: 'waiting on you',
   completed: 'finished', failed: 'stopped', cancelled: 'cancelled', pending: 'not started',
@@ -34,8 +35,10 @@ export function peekFact(ref: ObjectRef, ctx: { runs: readonly SessionView[]; ne
     const v = [...mine].sort((a, b) => Number((b.session as { created_at?: number }).created_at ?? 0) - Number((a.session as { created_at?: number }).created_at ?? 0))[0];
     if (v === undefined) return 'Nothing in this session is on this daemon';
     // An answered chat waits for its next message, not on you (statusWord's "Answered").
-    // A run Needs you holds (a stall, an orphan, an open question) is not being worked on (studio#805).
-    const word = ctx.held?.has(v.session.id) === true ? 'held, see Needs you'
+    // A run Needs you holds while it still reads as live (a stall, an orphan, an open question) is not
+    // being worked on (studio#805); a run at a gate keeps its own words ("waiting on you").
+    const live = !TERMINAL_RUN.has(v.session.status) && v.session.status !== 'awaiting_human';
+    const word = live && ctx.held?.has(v.session.id) === true ? 'held, see Needs you'
       : v.session.status === 'awaiting_human' && isAskTurnRun(v.session) ? 'open, waiting for your next message'
       : (RUN_WORD[v.session.status] ?? v.session.status);
     return `${humanTitle(v.session.problem || v.session.id)} · ${word}${mine.length > 1 ? ` · ${mine.length} runs` : ''}`;

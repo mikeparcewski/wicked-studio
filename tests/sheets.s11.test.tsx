@@ -201,6 +201,9 @@ describe('⌥ peek says one telling fact', () => {
     // studio#805: the same held run's own peeks do not call it worked on.
     const heldCtx = { ...ctx, held: new Set([ctx.runs[0]!.session.id]) };
     expect(peekFact({ kind: 'session', sessionId: 'run:r1' }, heldCtx)).toBe('fix the double charge · held, see Needs you');
+    // A run at a gate is held by its gate row too, and keeps its own words.
+    const gated = makeView({ id: 'g1', status: 'awaiting_human', problem: 'approve the plan' });
+    expect(peekFact({ kind: 'session', sessionId: 'run:g1' }, { ...ctx, runs: [gated], held: new Set(['g1']) })).toBe('approve the plan · waiting on you');
     expect(peekFact({ kind: 'helper', runId: 'r1', cli: 'codex' }, ctx)).toBe('codex · working now · signed in');
     expect(peekFact({ kind: 'helper', runId: 'r1', cli: 'codex' }, heldCtx)).toBe('codex · not working right now · signed in');
     expect(peekFact({ kind: 'step', runId: 'r1', ord: 1 }, ctx)).toBe('Working · codex');
