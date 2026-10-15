@@ -56,9 +56,9 @@ export function RunQuestions({ view }: { view: RunView }): React.ReactElement | 
   return (
     <div ref={ref} data-testid="session-run-questions" data-run-id={id} className="wk-session-questions">
       {/* `key`: a half-typed answer to question A never survives into B (v0.24 F3). */}
-      {/* H3: a question card says who is asking — the seat running the step (an MCP server's question
-          reaches you through it); the stall watchdog's hand-off is crew's. */}
-      {elicitation !== undefined && <TurnWho who={askingResponder(view, roster)} runId={id} suffix="is asking" className="wk-who--asking" />}
+      {/* H3: a question card says who is asking — the seat that asked (an ask question names it),
+          else the seat running the step; the stall watchdog's hand-off is crew's. */}
+      {elicitation !== undefined && <TurnWho who={askingResponder(view, roster, elicitation)} runId={id} suffix="is asking" className="wk-who--asking" />}
       {elicitation !== undefined && <ElicitationPrompt key={elicitation.elicitationId} e={elicitation} />}
       {needsYou !== null && <TurnWho who={CREW} suffix="handing this to you" className="wk-who--asking" />}
       {needsYou !== null && <NeedsYouCard view={view} state={needsYou} />}

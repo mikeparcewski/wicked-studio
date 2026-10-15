@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { api, apiStatus } from '../api/client.js';
-import { useElicitationStore, type OpenElicitation } from '../store/elicitations.js';
+import { askerOf, useElicitationStore, type OpenElicitation } from '../store/elicitations.js';
 
 /**
  * The operator's answer surface for an MCP server's mid-session question (DES-002).
@@ -67,6 +67,7 @@ export function ElicitationPrompt({ e }: { e: OpenElicitation }): React.ReactEle
                 message: fresh.message,
                 options: fresh.options,
                 receivedAt: fresh.receivedAt,
+                ...askerOf(fresh),
               },
         );
         // If the swap was refused, a newer prompt arrived by WS and already owns the slot —

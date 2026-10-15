@@ -48,6 +48,19 @@ describe('unit, gate and question responders', () => {
   it('a live run’s question is asked through the seat running the current step', () => {
     expect(askingResponder(view, ROSTER).cli).toBe('codex');
   });
+  it('an ask question names the seat that asked, not the seat running the current step', () => {
+    // L11 j3: a pi helper asked while the run's current step ran on codex; the card said "Codex".
+    expect(askingResponder(view, ROSTER, { seat: 'pi', ord: 0 })).toEqual({ role: 'seat', name: 'pi', cli: 'pi' });
+    expect(askingResponder(view, ROSTER, { seat: 'claude' }).name).toBe('Claude Code');
+  });
+  it('without a seat, the asking step names it; without either, the current step (older daemon)', () => {
+    expect(askingResponder(view, ROSTER, { ord: 0 }).cli).toBe('claude');
+    // A step with no seat cannot name the asker: fall back to the current step, never "crew".
+    expect(askingResponder(view, ROSTER, { ord: 2 }).cli).toBe('codex');
+    expect(askingResponder(view, ROSTER, { seat: ' ' }).cli).toBe('codex');
+    expect(askingResponder(view, ROSTER, {}).cli).toBe('codex');
+    expect(askingResponder(view, ROSTER, undefined).cli).toBe('codex');
+  });
   it('an artifact is produced by the newest finished making step on a seat — never the reviewer', () => {
     expect(producerOf(view, ROSTER).cli).toBe('claude');
     const reviewed = makeView({}, [makeUnit({ ord: 0, assigned_cli: 'claude', status: 'done' }), makeUnit({ ord: 1, assigned_cli: 'codex', status: 'done', stage: 'review' })]);

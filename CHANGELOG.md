@@ -12,6 +12,12 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+### Fixed
+- A run's question card names the seat that asked. With helpers, the card read "Codex · is asking" for a question a pi
+  helper asked: it named the seat running the run's current step. It now reads the asking seat from the question
+  (`seat`, from wicked-core's ask frame), else the asking step's seat (`ord`), and only then the current step's seat, as
+  before. Kept across a reload when the daemon returns them on `GET /runs/:id/elicitation`.
+
 ## [0.9.2] — 2026-10-15
 
 A patch release for crew 0.12.1: a repository whose onboarding couldn't start keeps its project and says why, and an Ask chat whose repositories changed asks for a new chat.

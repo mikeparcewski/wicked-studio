@@ -27,6 +27,25 @@ export interface OpenElicitation {
   /** Ordered set of valid responses; `null` means free-text. */
   options: string[] | null;
   receivedAt: string;
+  /** (ask) The seat key that asked — the frame's additive `seat` (wicked-core, ask frames only). */
+  seat?: string;
+  /** (ask) The asking unit's ordinal — the frame's additive `ord`. */
+  ord?: number;
+}
+
+/**
+ * Who asked, as the wire says it: an ask question's `elicitationCreated` frame (and, on a daemon that
+ * keeps them, the `GET /runs/:id/elicitation` body) carries the asking seat and unit ordinal. Kept only
+ * when well-formed; absent on an older daemon or another producer, and then the card names the step
+ * the run is on (`askingResponder`).
+ */
+export function askerOf(raw: unknown): Pick<OpenElicitation, 'seat' | 'ord'> {
+  if (raw === null || typeof raw !== 'object') return {};
+  const { seat, ord } = raw as { seat?: unknown; ord?: unknown };
+  return {
+    ...(typeof seat === 'string' && seat.trim() !== '' ? { seat } : {}),
+    ...(typeof ord === 'number' && Number.isInteger(ord) && ord >= 0 ? { ord } : {}),
+  };
 }
 
 interface ElicitationStore {
@@ -127,6 +146,7 @@ export const useElicitationStore = create<ElicitationStore>((set, get) => ({
         message,
         options: Array.isArray(event.options) ? event.options : null,
         receivedAt: new Date().toISOString(),
+        ...askerOf(event),
       });
       return;
     }

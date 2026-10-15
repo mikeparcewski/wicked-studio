@@ -5,7 +5,7 @@ import type { SessionView } from '../api/types.js';
 import { useConnectionStore } from '../store/connection.js';
 import { useCapabilities } from '../store/capabilities.js';
 import { choicesOf, recommendedOf, useGateStore } from '../store/gates.js';
-import { useElicitationStore } from '../store/elicitations.js';
+import { askerOf, useElicitationStore } from '../store/elicitations.js';
 import { rememberWorkTitles } from '../board/gateActions.js';
 
 /**
@@ -39,7 +39,7 @@ export async function hydrateElicitations(runs: readonly SessionView[], cancelle
     }
     if (cancelled() || e === null) return;
     store().setFromGetIfUnchanged(id, gen, {
-      runId: e.runId, elicitationId: e.elicitationId, message: e.message, options: e.options, receivedAt: e.receivedAt,
+      runId: e.runId, elicitationId: e.elicitationId, message: e.message, options: e.options, receivedAt: e.receivedAt, ...askerOf(e),
     });
   }));
 }
