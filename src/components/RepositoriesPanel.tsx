@@ -18,13 +18,14 @@ import { ago } from './AgeStamp.js';
 import { ProjectSwitcher } from './ProjectSwitcher.js';
 import { RepoFindings } from './RepoFindings.js';
 import { useNeedsSources } from '../store/needsSources.js';
+import type { Navigate } from '../hooks/useRoute.js';
 
 type SourceMode = 'local' | 'remote';
 
 interface Props {
   onSelectRun?: (runId: string) => void;
   autoShowRegister?: boolean;
-  navigate: (path: string) => void;
+  navigate: Navigate;
   /**
    * Slice S (DES-UX-001 §2.3 rule 1): the ambient project carried into
    * `/repos/new?project=<id>` by an entry point inside a project context —
@@ -301,7 +302,7 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
     setRegisterError(null);
     setRegistering(true);
     try {
-      const { repo } = isRemote
+      const { repo, onboardError } = isRemote
         ? await api.cloneAndRegisterRepo(name, target, checkoutPath.trim() || undefined)
         : await api.registerRepo(name, target);
 
@@ -332,7 +333,12 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
       setSelectedProjectId(ambientProject);
       nameEditedRef.current = false;
 
-      navigate('/repo-detail/' + encodeURIComponent(repo.id));
+      const detailPath = '/repo-detail/' + encodeURIComponent(repo.id);
+      if (onboardError) {
+        navigate(detailPath, { state: { onboardError } });
+      } else {
+        navigate(detailPath);
+      }
     } catch (err) {
       setRegisterError(err);
     } finally {

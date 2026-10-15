@@ -35,6 +35,35 @@ describe('useRoute — the existing panel routes keep working', () => {
 });
 
 describe('navigate', () => {
+  it.each([false, true])('preserves reserved entry state over caller state (replace: %s)', (replace) => {
+    const r = routeAt('/repos');
+    act(() => r.current.navigate('/repos/new'));
+
+    act(() => r.current.navigate('/repo-detail/billing', {
+      replace,
+      state: { 'wk.inApp': false, onboardError: 'Registration could not start onboarding' },
+    }));
+
+    expect(window.history.state).toEqual({
+      'wk.inApp': true,
+      onboardError: 'Registration could not start onboarding',
+    });
+  });
+
+  it.each([false, true])('carries navigation state only to the destination entry (replace: %s)', (replace) => {
+    const r = routeAt('/repos/new');
+    const onboardError = 'A required tool could not be found.';
+
+    act(() => r.current.navigate('/repo-detail/billing', { replace, state: { onboardError } }));
+
+    expect(r.current).toMatchObject({ panel: 'repo-detail', repoId: 'billing' });
+    expect(window.history.state).toMatchObject({ onboardError });
+
+    act(() => r.current.navigate('/repo-detail/another-repo'));
+
+    expect(window.history.state).not.toHaveProperty('onboardError');
+  });
+
   it('pushes a history entry by default, so Back returns to the previous page', () => {
     const r = routeAt('/testing/campaigns');
     const before = window.history.length;

@@ -12,6 +12,8 @@ import { relTime } from '../board/relTime.js';
 import { jobTitle } from '../board/deskWords.js';
 import { useMembershipStore } from '../store/membership.js';
 import { readErrorKind } from '../api/errors.js';
+import { useDisplayText } from '../hooks/useHomePath.js';
+import { announceHistoryChange, keepEntryState, useHistoryEntryValue } from '../hooks/useHistoryState.js';
 import { EmptyState, PageFrame, SectionTitle, Skeleton, StateBanner, StatLine, TechDetails } from './ui/index.js';
 
 interface Props {
@@ -54,6 +56,7 @@ export function dedupeContributors(rows: readonly GitContributor[]): GitContribu
 }
 
 export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph }: Props): React.ReactElement {
+  const showText = useDisplayText();
   const [requirementsOpen, setRequirementsOpen] = useState(false);
   const [repo, setRepo] = useState<RepoEntry | null>(null);
   const [runs, setRuns] = useState<SessionView[]>([]);
@@ -70,7 +73,14 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph }: P
   const [reload, setReload] = useState(0);
   const [expanded, setExpanded] = useState(false);
   const [onboarding, setOnboarding] = useState(false);
-  const [onboardError, setOnboardError] = useState<unknown>(null);
+  const [rerunError, setRerunError] = useState<unknown>(null);
+  const entryOnboardError = useHistoryEntryValue('onboardError');
+  const registrationError = typeof entryOnboardError === 'string' && entryOnboardError.trim() !== '' ? entryOnboardError : null;
+
+  useEffect(() => {
+    setRerunError(null);
+    setOnboarding(false);
+  }, [repoId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -189,16 +199,30 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph }: P
   const graphStats = graph?.stats;
   const graphTotals = graph?.totals;
 
+  function clearRegistrationError(): void {
+    const state = keepEntryState();
+    delete state.onboardError;
+    window.history.replaceState(state, '');
+    announceHistoryChange();
+  }
+
+  function dismissOnboardError(): void {
+    if (rerunError !== null) setRerunError(null);
+    else clearRegistrationError();
+  }
+
   async function startOnboarding(): Promise<void> {
+    const forRepo = repoId;
     setOnboarding(true);
-    setOnboardError(null);
+    setRerunError(null);
+    clearRegistrationError();
     try {
-      const { runId } = await api.rerunOnboarding(repoId);
-      onSelectRun(runId);
+      const { runId } = await api.rerunOnboarding(forRepo);
+      if (repoRef.current === forRepo) onSelectRun(runId);
     } catch (e: unknown) {
-      setOnboardError(e);
+      if (repoRef.current === forRepo) setRerunError(e);
     } finally {
-      setOnboarding(false);
+      if (repoRef.current === forRepo) setOnboarding(false);
     }
   }
 
@@ -206,6 +230,13 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph }: P
   // The finding row carries Re-run onboarding when a finding asks for it; the header keeps it otherwise.
   const findingOffersOnboard = (repo.findings ?? []).some(findingNeedsReonboard);
   const gitLink = repo.git_url && /^https?:\/\//i.test(repo.git_url) ? repo.git_url : null;
+  // A re-run failure takes precedence without overwriting the current entry's registration notice.
+  const onboardError = rerunError ?? registrationError;
+  const onboardErrorText = onboardError === null
+    ? null
+    : onboardError instanceof Error
+      ? onboardError.message
+      : String(onboardError);
 
   return (
     <div className="wk-pg-crumbed">
@@ -247,10 +278,21 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph }: P
           )}
         </p>
 
-        {onboardError !== null && (
-          <div data-testid="repo-onboard-error">
-            <p className="wk-field-note wk-field-note--bad">Couldn’t start onboarding. Try again in a moment.</p>
-            <TechDetails text={onboardError instanceof Error ? onboardError.message : String(onboardError)} />
+        {onboardErrorText !== null && (
+          <div data-testid="repo-onboard-error" role="status" className="wk-state-banner wk-state-banner--warn">
+            <div className="wk-state-banner-row">
+              <p className="wk-state-banner-text">
+                {rerunError !== null ? 'Couldn’t start onboarding: ' : 'Registered. Onboarding couldn’t start: '}
+                {showText(onboardErrorText)}
+              </p>
+              <button
+                type="button"
+                className="wk-btn wk-btn--quiet wk-btn--sm"
+                onClick={dismissOnboardError}
+              >
+                Dismiss
+              </button>
+            </div>
           </div>
         )}
 
