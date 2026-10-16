@@ -12,6 +12,10 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+## [0.9.5] — 2026-10-16
+
+A patch release: the run page reads as a conversation from its first line, and shows a step being worked on.
+
 ### Changed
 - **The run page reads as a conversation from its first line (operator feedback, 2026-10-15).**
   - **Kickoff bubble:** a run started outside a chat (New job, an added step) opens on your own bubble with the words that started it, instead of a status card under a header. A chat crew has closed (reclaimed: no scope, no messages) gets the same bubble from its runs' words, so it no longer opens on a card alone. An Ask run's scope briefing is never shown as your words.
@@ -2240,7 +2244,8 @@ The merged interactive layer: wicked-interactive's UI moved into this skin (DES-
   `git subtree split` (92 commits).
 - The SPA as a pure HTTP/WS client of the wicked-crew daemon: runs, gates, live CoreEvents.
 
-[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.9.4...HEAD
+[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.9.5...HEAD
+[0.9.5]: https://github.com/mikeparcewski/wicked-studio/compare/v0.9.4...v0.9.5
 [0.9.4]: https://github.com/mikeparcewski/wicked-studio/compare/v0.9.3...v0.9.4
 [0.9.3]: https://github.com/mikeparcewski/wicked-studio/compare/v0.9.2...v0.9.3
 [0.9.2]: https://github.com/mikeparcewski/wicked-studio/compare/v0.9.1...v0.9.2
