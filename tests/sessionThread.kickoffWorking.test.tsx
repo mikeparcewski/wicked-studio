@@ -49,11 +49,29 @@ describe('a chat whose transcript holds none of your words', () => {
   });
 });
 
+describe('an Ask run’s briefing is never shown as your words', () => {
+  it('a run whose problem is crew’s chat-scope statement gets no kickoff bubble', async () => {
+    useCapabilities.setState({ loaded: true, runChatId: true } as never);
+    vi.spyOn(client.api, 'getChat').mockResolvedValue({ chatId: 'chat-s', seats: ['claude'], scope: null, messages: [] } as never);
+    const briefing = '# Chat scope\nThis directory is the scratch root of wicked-crew chat chat-s.\n- **studio-api**';
+    const askRun = makeView({ id: 'r1', status: 'awaiting_human', problem: briefing, chat_id: 'chat-s', created_at: 1_700_000_000 } as never, []);
+    render(<SessionPage sessionId="chat-s" runs={[askRun]} runsLoaded needRows={[]} navigate={() => {}} onAsk={() => {}} />);
+    await screen.findByTestId('session-thread');
+    await new Promise((r) => setTimeout(r, 20));
+    expect(screen.queryAllByTestId('session-turn').filter((t) => t.getAttribute('data-who') === 'you')).toHaveLength(0);
+    expect(screen.getByTestId('session-thread')).not.toHaveTextContent('scratch root');
+  });
+});
+
 describe('the thread shows work in progress', () => {
   it('an executing step says it is being worked on, at the thread’s foot', () => {
     page([run('executing')]);
     const line = screen.getByTestId('session-working');
     expect(line).toHaveTextContent('Working on build…');
+    // At the thread's foot: nothing in the thread comes after it.
+    const thread = screen.getByTestId('session-thread');
+    const all = [...thread.querySelectorAll('[data-testid]')];
+    expect(all.slice(all.indexOf(line) + 1).filter((n) => !line.contains(n))).toHaveLength(0);
     expect(line).toHaveAttribute('aria-live', 'polite');
   });
   it('a finished run, or one Needs you holds, shows no working line', () => {

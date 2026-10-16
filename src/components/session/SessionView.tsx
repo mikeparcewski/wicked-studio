@@ -14,7 +14,7 @@ import {
 import type { Navigate } from '../../hooks/useRoute.js';
 import { useCapabilities } from '../../store/capabilities.js';
 import { readSessionVisit, useSessionDrafts, writeSessionVisit } from '../../store/sessionDrafts.js';
-import { jobTitle } from '../../board/deskWords.js';
+import { jobTitle, isChatScopeProblem } from '../../board/deskWords.js';
 import type { ChatCitations } from '../../api/chat-wire.js';
 import { IDLE_GATE_ACTION, useGateActionStore } from '../../board/gateActions.js';
 import { finishedDeliveryArm, proposalKindOf, statusSentence } from '../../board/proposalCard.js';
@@ -462,10 +462,13 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
     // added) has no chat, so no message of yours, and the thread opened on a status card. A chat's
     // transcript is where your words are — but once it has LOADED with none of yours (a reclaimed or
     // older chat), its runs' own words stand in, so the thread never opens on a card alone.
-    const transcriptLacksYou = chatDetail !== null && !messages.some((m) => m.kind === 'user');
+    // "None of yours" is judged on the MERGED thread (codex chat-r1): a question just sent is a live
+    // turn before the transcript records it, and must not gain a second bubble. An Ask run's problem
+    // is crew's scope briefing, never your words (askTitle; crew#823), so it never stands in.
+    const transcriptLacksYou = chatDetail !== null && !out.some((e) => e.kind === 'turn' && e.who === 'you');
     for (const v of mine) {
       const problem = (v.session.problem ?? '').trim();
-      if (problem !== '' && (runChatIdOf(v) === null || transcriptLacksYou)) {
+      if (problem !== '' && !isChatScopeProblem(problem) && (runChatIdOf(v) === null || transcriptLacksYou)) {
         out.push({ kind: 'turn', key: `kick:${v.session.id}`, at: launchedMs(v) - 1, who: 'you', text: problem, ok: true, turnId: null });
       }
       if (askBlockHidden && v.session.id === askRunId) {
