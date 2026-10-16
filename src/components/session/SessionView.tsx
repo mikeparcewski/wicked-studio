@@ -460,12 +460,13 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
     }
     // What started each run, as the operator's own bubble: a run launched from New job (or a step
     // added) has no chat, so no message of yours, and the thread opened on a status card. A chat's
-    // transcript is where your words are — but once it has LOADED with none of yours (a reclaimed or
-    // older chat), its runs' own words stand in, so the thread never opens on a card alone.
+    // transcript is where your words are — but a CLOSED chat (crew reclaimed it: no scope, no
+    // messages) has none left, so its runs' own words stand in and the thread never opens on a card
+    // alone. A live chat's empty transcript is left as it is.
     // "None of yours" is judged on the MERGED thread (codex chat-r1): a question just sent is a live
     // turn before the transcript records it, and must not gain a second bubble. An Ask run's problem
     // is crew's scope briefing, never your words (askTitle; crew#823), so it never stands in.
-    const transcriptLacksYou = chatDetail !== null && !out.some((e) => e.kind === 'turn' && e.who === 'you');
+    const transcriptLacksYou = conversation === 'closed' && !out.some((e) => e.kind === 'turn' && e.who === 'you');
     for (const v of mine) {
       const problem = (v.session.problem ?? '').trim();
       if (problem !== '' && !isChatScopeProblem(problem) && (runChatIdOf(v) === null || transcriptLacksYou)) {
@@ -493,7 +494,7 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
       }
     }
     return out.map((e, i) => ({ e, i })).sort((a, b) => a.e.at - b.e.at || a.i - b.i).map((x) => x.e);
-  }, [messages, chatDetail, mine, liveTurns, lines, thinking, askBlockHidden, askRunId, askRows, askPathOn, proposal]);
+  }, [messages, conversation, mine, liveTurns, lines, thinking, askBlockHidden, askRunId, askRows, askPathOn, proposal]);
 
   // DC-S8: the considered line sits under the LAST reply of each turn (one Consideration per turn,
   // whatever the number of seats); it is re-read when the turn gains a reply.

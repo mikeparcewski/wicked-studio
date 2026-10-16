@@ -49,6 +49,18 @@ describe('a chat whose transcript holds none of your words', () => {
   });
 });
 
+describe('a live chat’s empty transcript is left as it is', () => {
+  it('no stand-in bubble while crew still holds the chat (scope set)', async () => {
+    useCapabilities.setState({ loaded: true, runChatId: true } as never);
+    vi.spyOn(client.api, 'getChat').mockResolvedValue({ chatId: 'chat-l', seats: ['claude'], scope: { kind: 'none' }, messages: [] } as never);
+    const chatRun = makeView({ id: 'r1', status: 'completed', problem: 'hello there', chat_id: 'chat-l', created_at: 1_700_000_000 } as never, []);
+    render(<SessionPage sessionId="chat-l" runs={[chatRun]} runsLoaded needRows={[]} navigate={() => {}} onAsk={() => {}} />);
+    await screen.findByTestId('session-thread');
+    await new Promise((r) => setTimeout(r, 20));
+    expect(screen.queryAllByTestId('session-turn')).toHaveLength(0);
+  });
+});
+
 describe('an Ask run’s briefing is never shown as your words', () => {
   it('a run whose problem is crew’s chat-scope statement gets no kickoff bubble', async () => {
     useCapabilities.setState({ loaded: true, runChatId: true } as never);
