@@ -73,12 +73,18 @@ interface ComposerPrefsStore {
 }
 
 let persistTimer: ReturnType<typeof setTimeout> | null = null;
-/** The startup read, so a save never goes out before it (it would write defaults over stored values). */
+/** The startup read, shared by every caller (StrictMode runs the startup effect twice), so a save
+ *  never goes out before it and it never runs twice. */
 let loadPromise: Promise<void> | null = null;
 /** Fields edited before the startup read landed; they win over what it reads. */
 let editedBeforeLoad: Partial<StudioComposerPrefs> = {};
-/** Bumped on every edit: only the save of the latest edit may set the verdict. */
+/** Bumped on every edit: only a save that still holds the latest edit may set the verdict. */
 let revision = 0;
+/** Saves run one after another, each writing the store's prefs as they are when it starts, so the
+ *  daemon always ends on the latest edit (never an older write landing last). */
+let saves: Promise<void> = Promise.resolve();
+
+const sleep = (ms: number): Promise<void> => new Promise((r) => { setTimeout(r, ms); });
 
 export const useComposerPrefsStore = create<ComposerPrefsStore>((set, get) => ({
   prefs: DEFAULT_COMPOSER_PREFS,
@@ -86,6 +92,7 @@ export const useComposerPrefsStore = create<ComposerPrefsStore>((set, get) => ({
   persist: 'unknown',
 
   load: () => {
+    if (loadPromise !== null) return loadPromise;
     loadPromise = (async () => {
       try {
         const { settings } = await api.getAppearanceSettings();
@@ -108,34 +115,37 @@ export const useComposerPrefsStore = create<ComposerPrefsStore>((set, get) => ({
     if (persistTimer !== null) clearTimeout(persistTimer);
     persistTimer = setTimeout(() => {
       persistTimer = null;
-      // Fire-and-forget with ONE silent retry; the retry re-reads the store so
-      // a newer edit is never clobbered by a stale snapshot (the sibling
-      // stores' rule). The read-back verdict is the only non-silent part.
-      void attempt(get, set).catch(() => {
-        setTimeout(() => {
-          void attempt(get, set).catch(() => set({ persist: 'dropped' }));
-        }, RETRY_MS);
-      });
+      saves = saves.then(() => save(get, set));
     }, PERSIST_DEBOUNCE_MS);
   },
 }));
 
-/** One PUT plus the read-back check (wicked-crew#323). Rejects on transport
- *  failure so the caller can run its single retry. */
-async function attempt(
+/** One save: wait for the startup read, PUT the current prefs, check the read-back (wicked-crew#323),
+ *  with ONE silent retry on a transport failure. A save a newer edit has overtaken stops, and never
+ *  sets the verdict: the newer edit's own save, queued behind it, does. Never rejects. */
+async function save(
   get: () => ComposerPrefsStore,
   set: (partial: Partial<ComposerPrefsStore>) => void,
 ): Promise<void> {
   if (loadPromise !== null) await loadPromise;
-  const rev = revision;
-  const sent = get().prefs;
-  const { settings } = await api.putComposerSettings(sent);
-  if (rev !== revision) return; // a newer edit has its own save coming; its answer is the verdict
-  const echoed = (settings as Record<string, unknown>)[COMPOSER_PREFS_KEY];
-  // Landed = the daemon gives back exactly what we sent, field by field: a default read into a
-  // missing or garbled value is not proof.
-  const back = echoed !== null && typeof echoed === 'object' ? (echoed as Record<string, unknown>) : null;
-  set({ persist: back !== null && back.deliverPr === sent.deliverPr && back.startInChat === sent.startInChat ? 'ok' : 'dropped' });
+  for (let attempt = 0; attempt < 2; attempt++) {
+    if (attempt === 1) await sleep(RETRY_MS);
+    const rev = revision;
+    const sent = get().prefs;
+    try {
+      const { settings } = await api.putComposerSettings(sent);
+      if (rev !== revision) return;
+      const echoed = (settings as Record<string, unknown>)[COMPOSER_PREFS_KEY];
+      // Landed = the daemon gives back exactly what we sent, field by field: a default read into a
+      // missing or garbled value is not proof.
+      const back = echoed !== null && typeof echoed === 'object' ? (echoed as Record<string, unknown>) : null;
+      set({ persist: back !== null && back.deliverPr === sent.deliverPr && back.startInChat === sent.startInChat ? 'ok' : 'dropped' });
+      return;
+    } catch {
+      if (rev !== revision) return;
+    }
+  }
+  set({ persist: 'dropped' });
 }
 
 /** The startup read while it is in flight, else null (never started, or already landed). A caller
@@ -151,4 +161,5 @@ export function resetComposerPrefsPersistence(): void {
   loadPromise = null;
   editedBeforeLoad = {};
   revision = 0;
+  saves = Promise.resolve();
 }

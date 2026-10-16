@@ -59,6 +59,11 @@ with sync_playwright() as p:
         "document.addEventListener('DOMContentLoaded', () => { const s = document.createElement('style'); "
         f"s.textContent = {json.dumps(HIDE_GATE_TOASTS)}; document.head.appendChild(s); }});")
 
+    # A saved "don't open a PR" must survive everything below (codex on #811).
+    page.goto(f"{origin}/", wait_until="networkidle")
+    page.evaluate("""() => fetch('/api/v1/settings', { method: 'PUT', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ 'studio.composer': { deliverPr: false } }) })""")
+
     # 1. the picker offers it
     page.goto(f"{origin}/", wait_until="networkidle")
     page.get_by_test_id("desk-new-job").click()
@@ -75,7 +80,8 @@ with sync_playwright() as p:
     stored = wait_stored(page, True)
     page.screenshot(path=str(SHOTS / "desk-newjob-chat-ticked.png"))
     check("ticked-goes-to-chat", page.get_by_test_id("launch-wizard").count() == 0
-          and isinstance(stored, dict) and stored.get("startInChat") is True, stored=stored)
+          and isinstance(stored, dict) and stored.get("startInChat") is True and stored.get("deliverPr") is False,
+          stored=stored)
 
     # 3. after a reload, New job is a chat
     page.goto(f"{origin}/", wait_until="networkidle")
@@ -97,7 +103,8 @@ with sync_playwright() as p:
     check("settings-shows-off", not toggle.is_checked())
     toggle.click()
     stored = wait_stored(page, False)
-    check("settings-saved-off", isinstance(stored, dict) and stored.get("startInChat") is False, stored=stored)
+    check("settings-saved-off", isinstance(stored, dict) and stored.get("startInChat") is False
+          and stored.get("deliverPr") is False, stored=stored)
     page.goto(f"{origin}/", wait_until="networkidle")
     page.get_by_test_id("desk-new-job").click()
     page.get_by_test_id("launch-wizard-cards").wait_for(state="visible", timeout=8000)

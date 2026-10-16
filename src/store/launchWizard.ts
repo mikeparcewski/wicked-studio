@@ -116,7 +116,11 @@ export function isGenericNewJob(init: OpenLaunchWizard): boolean {
   return (init.workflowId ?? null) === null && init.requirements === undefined;
 }
 
+/** Bumped by every open: a New job waiting on the settings read gives way to anything opened since. */
+let openGeneration = 0;
+
 export function openLaunchWizard(init: OpenLaunchWizard): void {
+  const gen = ++openGeneration;
   if (!isGenericNewJob(init)) {
     useLaunchWizard.getState().openWith(init);
     return;
@@ -125,7 +129,7 @@ export function openLaunchWizard(init: OpenLaunchWizard): void {
   // until the settings read lands.
   const loading = composerPrefsLoading();
   if (loading !== null) {
-    void loading.then(() => openGenericNewJob(init));
+    void loading.then(() => { if (gen === openGeneration) openGenericNewJob(init); });
     return;
   }
   openGenericNewJob(init);

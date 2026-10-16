@@ -67,6 +67,21 @@ describe('which opens follow "start in chat"', () => {
     expect(useAskDock.getState().request).toMatchObject({ fresh: true });
   });
 
+  it('a New job waiting on the settings read gives way to a job opened meanwhile', async () => {
+    resetComposerPrefsPersistence();
+    useComposerPrefsStore.setState({ prefs: DEFAULT_COMPOSER_PREFS, loaded: false });
+    let answer: (v: { settings: Record<string, unknown> }) => void = () => {};
+    vi.spyOn(client.api, 'getAppearanceSettings').mockReturnValue(new Promise((r) => { answer = r as typeof answer; }) as ReturnType<typeof client.api.getAppearanceSettings>);
+    const loading = useComposerPrefsStore.getState().load();
+    openLaunchWizard({ composerKey: 'desk' });
+    openLaunchWizard({ workflowId: 'learn' });
+    answer({ settings: { 'studio.composer': { deliverPr: true, startInChat: true } } });
+    await loading;
+    await Promise.resolve();
+    expect(useLaunchWizard.getState().draft?.workflowId).toBe('learn');
+    expect(useAskDock.getState().request).toBeNull();
+  });
+
   it('with the preference off (the default), New job opens the picker as before', () => {
     openLaunchWizard({});
     expect(useLaunchWizard.getState().open).toBe(true);

@@ -179,17 +179,43 @@ describe('saves and the startup read (codex on studio#811)', () => {
     expect(useComposerPrefsStore.getState().persist).toBe('dropped');
   });
 
-  it('only the latest edit\'s save sets the verdict', async () => {
-    let first: (v: { settings: Record<string, unknown> }) => void = () => {};
-    putComposer.mockImplementationOnce(() => new Promise((r) => { first = r as typeof first; }) as ReturnType<typeof putComposer>);
+  it('saves never overlap: the daemon ends on the latest edit, and that save sets the verdict', async () => {
+    let stored: Record<string, unknown> | null = null;
+    let release: () => void = () => {};
+    putComposer.mockImplementationOnce((prefs) => new Promise((r) => {
+      release = () => { stored = { ...prefs }; r({ settings: { [COMPOSER_PREFS_KEY]: prefs } } as never); };
+    }) as ReturnType<typeof putComposer>);
+    putComposer.mockImplementation((prefs) => { stored = { ...prefs }; return Promise.resolve({ settings: { [COMPOSER_PREFS_KEY]: prefs } }); });
     useComposerPrefsStore.getState().update({ startInChat: true });
     await vi.advanceTimersByTimeAsync(400); // the first save is in flight
     useComposerPrefsStore.getState().update({ startInChat: false });
-    await vi.advanceTimersByTimeAsync(400); // the second save lands, echoed
-    expect(useComposerPrefsStore.getState().persist).toBe('ok');
-    first({ settings: { [COMPOSER_PREFS_KEY]: { deliverPr: true, startInChat: true } } }); // the stale answer
+    await vi.advanceTimersByTimeAsync(400); // the second waits its turn
+    expect(putComposer).toHaveBeenCalledTimes(1);
+    release();
     await vi.advanceTimersByTimeAsync(0);
+    expect(putComposer).toHaveBeenCalledTimes(2);
+    expect(stored).toEqual({ deliverPr: true, startInChat: false });
     expect(useComposerPrefsStore.getState().persist).toBe('ok');
-    expect(useComposerPrefsStore.getState().prefs.startInChat).toBe(false);
+  });
+
+  it('a retry an edit has overtaken never sets the verdict', async () => {
+    putComposer.mockRejectedValueOnce(new Error('API 500'));
+    useComposerPrefsStore.getState().update({ startInChat: true });
+    await vi.advanceTimersByTimeAsync(400); // fails; its retry waits 2 s
+    useComposerPrefsStore.getState().update({ startInChat: false });
+    await vi.advanceTimersByTimeAsync(2400);
+    expect(useComposerPrefsStore.getState().persist).toBe('ok');
+    expect(putComposer.mock.calls.at(-1)?.[0]).toEqual({ deliverPr: true, startInChat: false });
+  });
+
+  it('the startup read runs once however often load is called (StrictMode runs the effect twice)', async () => {
+    useComposerPrefsStore.setState({ loaded: false });
+    getSettings.mockResolvedValue({ settings: { [COMPOSER_PREFS_KEY]: { deliverPr: false, startInChat: false } } });
+    const one = useComposerPrefsStore.getState().load();
+    useComposerPrefsStore.getState().update({ startInChat: true });
+    const two = useComposerPrefsStore.getState().load();
+    await Promise.all([one, two]);
+    expect(getSettings).toHaveBeenCalledTimes(1);
+    expect(useComposerPrefsStore.getState().prefs).toEqual({ deliverPr: false, startInChat: true });
   });
 });
