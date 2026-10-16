@@ -10,7 +10,7 @@ import * as client from '../src/api/client.js';
 import { LaunchWizard } from '../src/components/launch/LaunchWizard.js';
 import { SystemSettings } from '../src/components/SystemSettings.js';
 import { useAskDock } from '../src/store/askDock.js';
-import { DEFAULT_COMPOSER_PREFS, useComposerPrefsStore } from '../src/store/composerPrefs.js';
+import { DEFAULT_COMPOSER_PREFS, resetComposerPrefsPersistence, useComposerPrefsStore } from '../src/store/composerPrefs.js';
 import { DEMO_VIDEO_ID, isGenericNewJob, openLaunchWizard, resetLaunchWizard, useLaunchWizard } from '../src/store/launchWizard.js';
 import { clearCachedWorkflows, setCachedWorkflows } from '../src/store/workflowCache.js';
 
@@ -31,23 +31,40 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
 describe('which opens follow "start in chat"', () => {
-  it('only a generic New job: no job named, no picks, not from a composer', () => {
+  it('only a generic New job: no job named and no picks (the Desk buttons pass composerKey "desk")', () => {
     expect(isGenericNewJob({})).toBe(true);
-    expect(isGenericNewJob({ projectId: 'p1', intent: 'x' })).toBe(true);
+    expect(isGenericNewJob({ composerKey: 'desk' })).toBe(true); // Desk/DeskV2 New job, Start a job
+    expect(isGenericNewJob({ projectId: 'p1', composerKey: 'desk' })).toBe(true); // the rail, ⌘K
+    expect(isGenericNewJob({ projectId: 'p1', workflowId: null, composerKey: 'desk' })).toBe(true); // a project's New job
     expect(isGenericNewJob({ workflowId: 'learn' })).toBe(false);
-    expect(isGenericNewJob({ workflowId: DEMO_VIDEO_ID })).toBe(false);
-    expect(isGenericNewJob({ requirements: [] })).toBe(false);
-    expect(isGenericNewJob({ composerKey: 'desk' })).toBe(false);
+    expect(isGenericNewJob({ workflowId: DEMO_VIDEO_ID, composerKey: 'desk' })).toBe(false);
+    expect(isGenericNewJob({ workflowId: 'feature', composerKey: 's1', intent: 'x' })).toBe(false); // a composer's /workflow-…
+    expect(isGenericNewJob({ workflowId: 'draft-epics', requirements: [] })).toBe(false);
   });
 
   it('with the preference on, New job opens a fresh chat in its project with its words; a named job still opens the wizard', () => {
     useComposerPrefsStore.setState({ prefs: { ...DEFAULT_COMPOSER_PREFS, startInChat: true } });
-    openLaunchWizard({ projectId: 'p1', intent: 'tidy the README' });
+    openLaunchWizard({ projectId: 'p1', intent: 'tidy the README', composerKey: 'desk' });
     expect(useLaunchWizard.getState().open).toBe(false);
     expect(useAskDock.getState().request).toMatchObject({ fresh: true, projectId: 'p1', seedText: 'tidy the README' });
 
     openLaunchWizard({ workflowId: 'learn' });
     expect(useLaunchWizard.getState().open).toBe(true);
+  });
+
+  it('a New job clicked before the settings read lands follows the SAVED choice, not the default', async () => {
+    resetComposerPrefsPersistence();
+    useComposerPrefsStore.setState({ prefs: DEFAULT_COMPOSER_PREFS, loaded: false });
+    let answer: (v: { settings: Record<string, unknown> }) => void = () => {};
+    vi.spyOn(client.api, 'getAppearanceSettings').mockReturnValue(new Promise((r) => { answer = r as typeof answer; }) as ReturnType<typeof client.api.getAppearanceSettings>);
+    const loading = useComposerPrefsStore.getState().load();
+    openLaunchWizard({ composerKey: 'desk' });
+    expect(useLaunchWizard.getState().open).toBe(false); // not decided on the default
+    answer({ settings: { 'studio.composer': { deliverPr: true, startInChat: true } } });
+    await loading;
+    await Promise.resolve();
+    expect(useLaunchWizard.getState().open).toBe(false);
+    expect(useAskDock.getState().request).toMatchObject({ fresh: true });
   });
 
   it('with the preference off (the default), New job opens the picker as before', () => {
@@ -73,11 +90,28 @@ describe('the picker\'s checkbox', () => {
       });
       expect(useComposerPrefsStore.getState().prefs.startInChat).toBe(true);
       expect(client.api.putComposerSettings).toHaveBeenCalledWith({ deliverPr: true, startInChat: true });
+      expect(screen.queryByTestId('launch-wizard')).toBeNull();
       expect(useLaunchWizard.getState().open).toBe(false);
       expect(useAskDock.getState().request).toMatchObject({ fresh: true, projectId: 'p1', seedText: 'add a CSV export' });
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe('the picker\'s checkbox, opened by a named job', () => {
+  it('shows the saved choice ticked, and unticking turns New job back on without leaving the picker', () => {
+    useComposerPrefsStore.setState({ prefs: { ...DEFAULT_COMPOSER_PREFS, startInChat: true } });
+    render(<LaunchWizard navigate={() => {}} />);
+    act(() => { openLaunchWizard({}); }); // generic: goes to chat
+    expect(screen.queryByTestId('launch-wizard')).toBeNull();
+    act(() => { useLaunchWizard.getState().openWith({}); }); // the picker itself, e.g. Change job
+    const box = screen.getByTestId('launch-wizard-skip-toggle') as HTMLInputElement;
+    expect(box.checked).toBe(true);
+    expect(box.getAttribute('aria-describedby')).toBe('launch-wizard-skip-note');
+    fireEvent.click(box);
+    expect(useComposerPrefsStore.getState().prefs.startInChat).toBe(false);
+    expect(screen.getByTestId('launch-wizard')).toBeTruthy();
   });
 });
 

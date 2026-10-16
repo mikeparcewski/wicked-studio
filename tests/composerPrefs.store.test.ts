@@ -20,7 +20,7 @@ vi.mock('../src/api/client.js', () => ({
 
 const { api } = await import('../src/api/client.js');
 const {
-  COMPOSER_PREFS_KEY, DEFAULT_COMPOSER_PREFS, sanitizeComposerPrefs, useComposerPrefsStore,
+  COMPOSER_PREFS_KEY, DEFAULT_COMPOSER_PREFS, resetComposerPrefsPersistence, sanitizeComposerPrefs, useComposerPrefsStore,
 } = await import('../src/store/composerPrefs.js');
 
 const getSettings = vi.mocked(api.getAppearanceSettings);
@@ -35,6 +35,7 @@ function echoingDaemon(): void {
 
 beforeEach(() => {
   vi.useFakeTimers();
+  resetComposerPrefsPersistence();
   getSettings.mockReset().mockResolvedValue({ settings: {} });
   putComposer.mockReset();
   echoingDaemon();
@@ -153,5 +154,42 @@ describe('startInChat (operator 2026-10-16: New job → chat)', () => {
     useComposerPrefsStore.getState().update({ startInChat: true });
     await vi.advanceTimersByTimeAsync(400);
     expect(useComposerPrefsStore.getState().persist).toBe('dropped');
+  });
+});
+
+describe('saves and the startup read (codex on studio#811)', () => {
+  it('an edit before the read lands waits for it, keeps the stored deliverPr, and wins for its own field', async () => {
+    let answer: (v: { settings: Record<string, unknown> }) => void = () => {};
+    getSettings.mockReturnValueOnce(new Promise((r) => { answer = r as typeof answer; }) as ReturnType<typeof getSettings>);
+    const loading = useComposerPrefsStore.getState().load();
+    useComposerPrefsStore.getState().update({ startInChat: true });
+    await vi.advanceTimersByTimeAsync(400);
+    expect(putComposer).not.toHaveBeenCalled(); // not before the read
+    answer({ settings: { [COMPOSER_PREFS_KEY]: { deliverPr: false, startInChat: false } } });
+    await loading;
+    await vi.advanceTimersByTimeAsync(0);
+    expect(useComposerPrefsStore.getState().prefs).toEqual({ deliverPr: false, startInChat: true });
+    expect(putComposer).toHaveBeenCalledWith({ deliverPr: false, startInChat: true });
+  });
+
+  it('an echo that only defaults to the sent values is not proof', async () => {
+    putComposer.mockImplementation(() => Promise.resolve({ settings: { [COMPOSER_PREFS_KEY]: {} } }));
+    useComposerPrefsStore.getState().update({ deliverPr: true });
+    await vi.advanceTimersByTimeAsync(400);
+    expect(useComposerPrefsStore.getState().persist).toBe('dropped');
+  });
+
+  it('only the latest edit\'s save sets the verdict', async () => {
+    let first: (v: { settings: Record<string, unknown> }) => void = () => {};
+    putComposer.mockImplementationOnce(() => new Promise((r) => { first = r as typeof first; }) as ReturnType<typeof putComposer>);
+    useComposerPrefsStore.getState().update({ startInChat: true });
+    await vi.advanceTimersByTimeAsync(400); // the first save is in flight
+    useComposerPrefsStore.getState().update({ startInChat: false });
+    await vi.advanceTimersByTimeAsync(400); // the second save lands, echoed
+    expect(useComposerPrefsStore.getState().persist).toBe('ok');
+    first({ settings: { [COMPOSER_PREFS_KEY]: { deliverPr: true, startInChat: true } } }); // the stale answer
+    await vi.advanceTimersByTimeAsync(0);
+    expect(useComposerPrefsStore.getState().persist).toBe('ok');
+    expect(useComposerPrefsStore.getState().prefs.startInChat).toBe(false);
   });
 });

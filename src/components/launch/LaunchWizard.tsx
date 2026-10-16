@@ -74,10 +74,14 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
   // codex r1: a launch in flight holds the dialog open (no second POST from a reopened draft).
   const launchingRef = useRef(false);
   const close = (): void => { if (!launchingRef.current) closeStore(); };
-  // "Don't show this again" (operator 2026-10-16): remember it, then go to chat now with what was typed.
-  const startInChatFromHere = (): void => {
+  // "Don't show this again" (operator 2026-10-16): the saved choice, shown as it is. Ticking it saves
+  // it and goes to chat now with what was typed; unticking (seen when a named job opened the picker)
+  // turns New job back on.
+  const startInChat = useComposerPrefsStore((s) => s.prefs.startInChat);
+  const setStartInChat = (on: boolean): void => {
     if (launchingRef.current || draft === null) return;
-    useComposerPrefsStore.getState().update({ startInChat: true });
+    useComposerPrefsStore.getState().update({ startInChat: on });
+    if (!on) return;
     closeStore();
     openAskDock({ fresh: true, projectId: draft.projectId, seedText: draft.intent });
   };
@@ -690,10 +694,11 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
           {step === 'workflow' && (
             <div className="wk-launch-wizard-skip" data-testid="launch-wizard-skip">
               <label className="wk-launch-wizard-skip-label">
-                <input type="checkbox" data-testid="launch-wizard-skip-toggle" checked={false} onChange={() => startInChatFromHere()} />
+                <input type="checkbox" data-testid="launch-wizard-skip-toggle" aria-describedby="launch-wizard-skip-note" checked={startInChat}
+                  onChange={(e) => setStartInChat(e.target.checked)} />
                 Don’t show this again — start in chat
               </label>
-              <p className="wk-field-note">You can turn New job back on in Settings → View.</p>
+              <p id="launch-wizard-skip-note" className="wk-field-note">You can turn New job back on in Settings → View.</p>
             </div>
           )}
           {(step === 'review' ? launchBlocker : blocker) !== null && step !== 'workflow' && <p className="wk-field-note" data-testid="launch-wizard-blocker" role="status">{step === 'review' ? launchBlocker : blocker}</p>}

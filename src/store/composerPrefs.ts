@@ -73,24 +73,37 @@ interface ComposerPrefsStore {
 }
 
 let persistTimer: ReturnType<typeof setTimeout> | null = null;
+/** The startup read, so a save never goes out before it (it would write defaults over stored values). */
+let loadPromise: Promise<void> | null = null;
+/** Fields edited before the startup read landed; they win over what it reads. */
+let editedBeforeLoad: Partial<StudioComposerPrefs> = {};
+/** Bumped on every edit: only the save of the latest edit may set the verdict. */
+let revision = 0;
 
 export const useComposerPrefsStore = create<ComposerPrefsStore>((set, get) => ({
   prefs: DEFAULT_COMPOSER_PREFS,
   loaded: false,
   persist: 'unknown',
 
-  load: async () => {
-    try {
-      const { settings } = await api.getAppearanceSettings();
-      const stored = (settings as Record<string, unknown>)[COMPOSER_PREFS_KEY];
-      set({ prefs: sanitizeComposerPrefs(stored), loaded: true });
-    } catch {
-      set({ loaded: true }); // no settings surface — the default (ON) stands
-    }
+  load: () => {
+    loadPromise = (async () => {
+      try {
+        const { settings } = await api.getAppearanceSettings();
+        const stored = (settings as Record<string, unknown>)[COMPOSER_PREFS_KEY];
+        // An edit made before the read landed wins over the stored value for the fields it touched.
+        set({ prefs: { ...sanitizeComposerPrefs(stored), ...editedBeforeLoad }, loaded: true });
+      } catch {
+        set({ loaded: true }); // no settings surface — the default (ON) stands
+      }
+      editedBeforeLoad = {};
+    })();
+    return loadPromise;
   },
 
   update: (patch) => {
+    if (!get().loaded) editedBeforeLoad = { ...editedBeforeLoad, ...patch };
     const prefs = { ...get().prefs, ...patch };
+    revision += 1;
     set({ prefs, persist: 'unknown' });
     if (persistTimer !== null) clearTimeout(persistTimer);
     persistTimer = setTimeout(() => {
@@ -113,10 +126,29 @@ async function attempt(
   get: () => ComposerPrefsStore,
   set: (partial: Partial<ComposerPrefsStore>) => void,
 ): Promise<void> {
+  if (loadPromise !== null) await loadPromise;
+  const rev = revision;
   const sent = get().prefs;
   const { settings } = await api.putComposerSettings(sent);
+  if (rev !== revision) return; // a newer edit has its own save coming; its answer is the verdict
   const echoed = (settings as Record<string, unknown>)[COMPOSER_PREFS_KEY];
-  // Landed = the daemon gives back what we sent, field by field, not merely the key.
-  const back = echoed === undefined ? null : sanitizeComposerPrefs(echoed);
+  // Landed = the daemon gives back exactly what we sent, field by field: a default read into a
+  // missing or garbled value is not proof.
+  const back = echoed !== null && typeof echoed === 'object' ? (echoed as Record<string, unknown>) : null;
   set({ persist: back !== null && back.deliverPr === sent.deliverPr && back.startInChat === sent.startInChat ? 'ok' : 'dropped' });
+}
+
+/** The startup read while it is in flight, else null (never started, or already landed). A caller
+ *  that must decide by a saved choice waits on it rather than reading the default. */
+export function composerPrefsLoading(): Promise<void> | null {
+  return useComposerPrefsStore.getState().loaded ? null : loadPromise;
+}
+
+/** Test hook: forget the startup read and any edits made before it. */
+export function resetComposerPrefsPersistence(): void {
+  if (persistTimer !== null) clearTimeout(persistTimer);
+  persistTimer = null;
+  loadPromise = null;
+  editedBeforeLoad = {};
+  revision = 0;
 }
