@@ -27,6 +27,8 @@ import { fetchReposCached, getCachedRepos } from '../../store/repoCache.js';
 import { useWorkflowDefs } from '../../store/workflowCache.js';
 import { workflowLabel } from '../../board/workflowNames.js';
 import { DEMO_VIDEO_ID, DRAFT_EPICS_ID, useLaunchWizard, type LaunchDraft } from '../../store/launchWizard.js';
+import { openAskDock } from '../../store/askDock.js';
+import { useComposerPrefsStore } from '../../store/composerPrefs.js';
 import { launchDemo } from '../../api/demo.js';
 import { DEMO_AUDIENCES, DEMO_AUDIENCE_MAX, DEMO_SHOW_MAX, DEMO_URL_MAX, DEMO_VIDEO_LINE, demoBlocker } from '../../board/demoLaunch.js';
 import { UNFILED_MOUNT } from '../../api/interactive.js';
@@ -72,6 +74,17 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
   // codex r1: a launch in flight holds the dialog open (no second POST from a reopened draft).
   const launchingRef = useRef(false);
   const close = (): void => { if (!launchingRef.current) closeStore(); };
+  // "Don't show this again" (operator 2026-10-16): the saved choice, shown as it is. Ticking it saves
+  // it and goes to chat now with what was typed; unticking (seen when a named job opened the picker)
+  // turns New job back on.
+  const startInChat = useComposerPrefsStore((s) => s.prefs.startInChat);
+  const setStartInChat = (on: boolean): void => {
+    if (launchingRef.current || draft === null) return;
+    useComposerPrefsStore.getState().update({ startInChat: on });
+    if (!on) return;
+    closeStore();
+    openAskDock({ fresh: true, projectId: draft.projectId, seedText: draft.intent });
+  };
   useModalEscape(close);
   // codex r1: focus returns to whatever opened the wizard when it closes.
   useEffect(() => {
@@ -678,6 +691,16 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
 
         <footer className="wk-launch-wizard-foot">
           {step === 'workflow' && <p className="wk-field-note wk-launch-wizard-keys" data-testid="launch-wizard-keys">Arrow keys move between the jobs; Enter picks one.</p>}
+          {step === 'workflow' && (
+            <div className="wk-launch-wizard-skip" data-testid="launch-wizard-skip">
+              <label className="wk-launch-wizard-skip-label">
+                <input type="checkbox" data-testid="launch-wizard-skip-toggle" aria-describedby="launch-wizard-skip-note" checked={startInChat}
+                  onChange={(e) => setStartInChat(e.target.checked)} />
+                Don’t show this again — start in chat
+              </label>
+              <p id="launch-wizard-skip-note" className="wk-field-note">You can turn New job back on in Settings → View.</p>
+            </div>
+          )}
           {(step === 'review' ? launchBlocker : blocker) !== null && step !== 'workflow' && <p className="wk-field-note" data-testid="launch-wizard-blocker" role="status">{step === 'review' ? launchBlocker : blocker}</p>}
           <div className="wk-launch-wizard-actions">
             {step !== 'workflow' && step !== 'what' && step !== 'requirements' && step !== 'demo' && (

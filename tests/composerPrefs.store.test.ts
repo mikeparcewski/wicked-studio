@@ -20,7 +20,7 @@ vi.mock('../src/api/client.js', () => ({
 
 const { api } = await import('../src/api/client.js');
 const {
-  COMPOSER_PREFS_KEY, DEFAULT_COMPOSER_PREFS, sanitizeComposerPrefs, useComposerPrefsStore,
+  COMPOSER_PREFS_KEY, DEFAULT_COMPOSER_PREFS, resetComposerPrefsPersistence, sanitizeComposerPrefs, useComposerPrefsStore,
 } = await import('../src/store/composerPrefs.js');
 
 const getSettings = vi.mocked(api.getAppearanceSettings);
@@ -35,6 +35,7 @@ function echoingDaemon(): void {
 
 beforeEach(() => {
   vi.useFakeTimers();
+  resetComposerPrefsPersistence();
   getSettings.mockReset().mockResolvedValue({ settings: {} });
   putComposer.mockReset();
   echoingDaemon();
@@ -51,15 +52,15 @@ afterEach(() => {
 describe('sanitizeComposerPrefs (the ?? trap)', () => {
   it('defaults ON when the value is ABSENT — the fresh-install case', () => {
     expect(DEFAULT_COMPOSER_PREFS.deliverPr).toBe(true);
-    expect(sanitizeComposerPrefs(undefined)).toEqual({ deliverPr: true });
-    expect(sanitizeComposerPrefs({})).toEqual({ deliverPr: true });
-    expect(sanitizeComposerPrefs(null)).toEqual({ deliverPr: true });
-    expect(sanitizeComposerPrefs('nonsense')).toEqual({ deliverPr: true });
+    expect(sanitizeComposerPrefs(undefined)).toEqual({ deliverPr: true, startInChat: false });
+    expect(sanitizeComposerPrefs({})).toEqual({ deliverPr: true, startInChat: false });
+    expect(sanitizeComposerPrefs(null)).toEqual({ deliverPr: true, startInChat: false });
+    expect(sanitizeComposerPrefs('nonsense')).toEqual({ deliverPr: true, startInChat: false });
   });
 
   it('a stored false stays false — absence and false are distinguishable', () => {
-    expect(sanitizeComposerPrefs({ deliverPr: false })).toEqual({ deliverPr: false });
-    expect(sanitizeComposerPrefs({ deliverPr: true })).toEqual({ deliverPr: true });
+    expect(sanitizeComposerPrefs({ deliverPr: false })).toEqual({ deliverPr: false, startInChat: false });
+    expect(sanitizeComposerPrefs({ deliverPr: true })).toEqual({ deliverPr: true, startInChat: false });
   });
 });
 
@@ -67,7 +68,7 @@ describe('load (startup read)', () => {
   it('a settings blob WITHOUT the key yields the default (ON)', async () => {
     getSettings.mockResolvedValue({ settings: { graphNodeLimit: 150 } });
     await useComposerPrefsStore.getState().load();
-    expect(useComposerPrefsStore.getState().prefs).toEqual({ deliverPr: true });
+    expect(useComposerPrefsStore.getState().prefs).toEqual({ deliverPr: true, startInChat: false });
     expect(useComposerPrefsStore.getState().loaded).toBe(true);
     expect(putComposer).not.toHaveBeenCalled();
   });
@@ -75,7 +76,7 @@ describe('load (startup read)', () => {
   it('a stored false survives the round trip — never re-defaulted to ON', async () => {
     getSettings.mockResolvedValue({ settings: { [COMPOSER_PREFS_KEY]: { deliverPr: false } } });
     await useComposerPrefsStore.getState().load();
-    expect(useComposerPrefsStore.getState().prefs).toEqual({ deliverPr: false });
+    expect(useComposerPrefsStore.getState().prefs).toEqual({ deliverPr: false, startInChat: false });
   });
 
   it('a daemon without a settings surface fails silently — the default stands', async () => {
@@ -89,12 +90,12 @@ describe('load (startup read)', () => {
 describe('update (optimistic + debounced persist)', () => {
   it('applies now, PUTs the studio.composer key once after the debounce', async () => {
     useComposerPrefsStore.getState().update({ deliverPr: false });
-    expect(useComposerPrefsStore.getState().prefs).toEqual({ deliverPr: false });
+    expect(useComposerPrefsStore.getState().prefs).toEqual({ deliverPr: false, startInChat: false });
     expect(putComposer).not.toHaveBeenCalled(); // still inside the debounce
 
     await vi.advanceTimersByTimeAsync(400);
     expect(putComposer).toHaveBeenCalledTimes(1);
-    expect(putComposer).toHaveBeenCalledWith({ deliverPr: false });
+    expect(putComposer).toHaveBeenCalledWith({ deliverPr: false, startInChat: false });
     expect(useComposerPrefsStore.getState().persist).toBe('ok');
   });
 
@@ -106,7 +107,7 @@ describe('update (optimistic + debounced persist)', () => {
 
     await vi.advanceTimersByTimeAsync(2000);
     expect(putComposer).toHaveBeenCalledTimes(2);
-    expect(putComposer.mock.calls.at(-1)?.[0]).toEqual({ deliverPr: false });
+    expect(putComposer.mock.calls.at(-1)?.[0]).toEqual({ deliverPr: false, startInChat: false });
     expect(useComposerPrefsStore.getState().persist).toBe('ok');
   });
 
@@ -120,7 +121,7 @@ describe('update (optimistic + debounced persist)', () => {
     expect(useComposerPrefsStore.getState().persist).toBe('dropped');
     // The optimistic value still stands for this session — no silent revert,
     // and no spin: exactly one PUT answered the question.
-    expect(useComposerPrefsStore.getState().prefs).toEqual({ deliverPr: false });
+    expect(useComposerPrefsStore.getState().prefs).toEqual({ deliverPr: false, startInChat: false });
     await vi.advanceTimersByTimeAsync(10_000);
     expect(putComposer).toHaveBeenCalledTimes(1);
   });
@@ -131,5 +132,90 @@ describe('update (optimistic + debounced persist)', () => {
     await vi.advanceTimersByTimeAsync(400 + 2000);
     expect(putComposer).toHaveBeenCalledTimes(2);
     expect(useComposerPrefsStore.getState().persist).toBe('dropped');
+  });
+});
+
+describe('startInChat (operator 2026-10-16: New job → chat)', () => {
+  it('is off unless a strict true is stored', () => {
+    expect(sanitizeComposerPrefs({ startInChat: true }).startInChat).toBe(true);
+    expect(sanitizeComposerPrefs({ startInChat: 'yes' }).startInChat).toBe(false);
+    expect(sanitizeComposerPrefs({}).startInChat).toBe(false);
+  });
+
+  it('an update keeps deliverPr, and the verdict compares the echoed VALUE, not just the key', async () => {
+    useComposerPrefsStore.getState().update({ deliverPr: false });
+    useComposerPrefsStore.getState().update({ startInChat: true });
+    await vi.advanceTimersByTimeAsync(400);
+    expect(putComposer).toHaveBeenCalledWith({ deliverPr: false, startInChat: true });
+    expect(useComposerPrefsStore.getState().persist).toBe('ok');
+
+    // A daemon that keeps the key but drops the new field: not saved.
+    putComposer.mockImplementation(() => Promise.resolve({ settings: { [COMPOSER_PREFS_KEY]: { deliverPr: false } } }));
+    useComposerPrefsStore.getState().update({ startInChat: true });
+    await vi.advanceTimersByTimeAsync(400);
+    expect(useComposerPrefsStore.getState().persist).toBe('dropped');
+  });
+});
+
+describe('saves and the startup read (codex on studio#811)', () => {
+  it('an edit before the read lands waits for it, keeps the stored deliverPr, and wins for its own field', async () => {
+    let answer: (v: { settings: Record<string, unknown> }) => void = () => {};
+    getSettings.mockReturnValueOnce(new Promise((r) => { answer = r as typeof answer; }) as ReturnType<typeof getSettings>);
+    const loading = useComposerPrefsStore.getState().load();
+    useComposerPrefsStore.getState().update({ startInChat: true });
+    await vi.advanceTimersByTimeAsync(400);
+    expect(putComposer).not.toHaveBeenCalled(); // not before the read
+    answer({ settings: { [COMPOSER_PREFS_KEY]: { deliverPr: false, startInChat: false } } });
+    await loading;
+    await vi.advanceTimersByTimeAsync(0);
+    expect(useComposerPrefsStore.getState().prefs).toEqual({ deliverPr: false, startInChat: true });
+    expect(putComposer).toHaveBeenCalledWith({ deliverPr: false, startInChat: true });
+  });
+
+  it('an echo that only defaults to the sent values is not proof', async () => {
+    putComposer.mockImplementation(() => Promise.resolve({ settings: { [COMPOSER_PREFS_KEY]: {} } }));
+    useComposerPrefsStore.getState().update({ deliverPr: true });
+    await vi.advanceTimersByTimeAsync(400);
+    expect(useComposerPrefsStore.getState().persist).toBe('dropped');
+  });
+
+  it('saves never overlap: the daemon ends on the latest edit, and that save sets the verdict', async () => {
+    let stored: Record<string, unknown> | null = null;
+    let release: () => void = () => {};
+    putComposer.mockImplementationOnce((prefs) => new Promise((r) => {
+      release = () => { stored = { ...prefs }; r({ settings: { [COMPOSER_PREFS_KEY]: prefs } } as never); };
+    }) as ReturnType<typeof putComposer>);
+    putComposer.mockImplementation((prefs) => { stored = { ...prefs }; return Promise.resolve({ settings: { [COMPOSER_PREFS_KEY]: prefs } }); });
+    useComposerPrefsStore.getState().update({ startInChat: true });
+    await vi.advanceTimersByTimeAsync(400); // the first save is in flight
+    useComposerPrefsStore.getState().update({ startInChat: false });
+    await vi.advanceTimersByTimeAsync(400); // the second waits its turn
+    expect(putComposer).toHaveBeenCalledTimes(1);
+    release();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(putComposer).toHaveBeenCalledTimes(2);
+    expect(stored).toEqual({ deliverPr: true, startInChat: false });
+    expect(useComposerPrefsStore.getState().persist).toBe('ok');
+  });
+
+  it('a retry an edit has overtaken never sets the verdict', async () => {
+    putComposer.mockRejectedValueOnce(new Error('API 500'));
+    useComposerPrefsStore.getState().update({ startInChat: true });
+    await vi.advanceTimersByTimeAsync(400); // fails; its retry waits 2 s
+    useComposerPrefsStore.getState().update({ startInChat: false });
+    await vi.advanceTimersByTimeAsync(2400);
+    expect(useComposerPrefsStore.getState().persist).toBe('ok');
+    expect(putComposer.mock.calls.at(-1)?.[0]).toEqual({ deliverPr: true, startInChat: false });
+  });
+
+  it('the startup read runs once however often load is called (StrictMode runs the effect twice)', async () => {
+    useComposerPrefsStore.setState({ loaded: false });
+    getSettings.mockResolvedValue({ settings: { [COMPOSER_PREFS_KEY]: { deliverPr: false, startInChat: false } } });
+    const one = useComposerPrefsStore.getState().load();
+    useComposerPrefsStore.getState().update({ startInChat: true });
+    const two = useComposerPrefsStore.getState().load();
+    await Promise.all([one, two]);
+    expect(getSettings).toHaveBeenCalledTimes(1);
+    expect(useComposerPrefsStore.getState().prefs).toEqual({ deliverPr: false, startInChat: true });
   });
 });

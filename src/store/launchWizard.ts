@@ -1,5 +1,7 @@
 import { create } from 'zustand';
 import type { ConfirmMode } from '../components/ContextPopover.js';
+import { openAskDock } from './askDock.js';
+import { composerPrefsLoading, useComposerPrefsStore } from './composerPrefs.js';
 
 /**
  * THE LAUNCH WIZARD's state (operator 2026-10-11 15:15Z): every way to start a job — a `/workflow`
@@ -106,7 +108,38 @@ export const useLaunchWizard = create<LaunchWizardStore>((set, get) => ({
   finish: () => set({ open: false, draft: null }),
 }));
 
+/** A plain "New job": no job named and no picks. Only these follow "start in chat"; every opener that
+ *  names a job (Learn, an editor plugin, a demo video, Draft epics, a composer's `/workflow-<key>`)
+ *  keeps its wizard and its context. The Desk's buttons pass `composerKey: 'desk'`, so the composer key
+ *  says nothing about intent and is not part of the rule. */
+export function isGenericNewJob(init: OpenLaunchWizard): boolean {
+  return (init.workflowId ?? null) === null && init.requirements === undefined;
+}
+
+/** Bumped by every open: a New job waiting on the settings read gives way to anything opened since. */
+let openGeneration = 0;
+
 export function openLaunchWizard(init: OpenLaunchWizard): void {
+  const gen = ++openGeneration;
+  if (!isGenericNewJob(init)) {
+    useLaunchWizard.getState().openWith(init);
+    return;
+  }
+  // A click right after the page loads must follow the SAVED choice, not the default the store holds
+  // until the settings read lands.
+  const loading = composerPrefsLoading();
+  if (loading !== null) {
+    void loading.then(() => { if (gen === openGeneration) openGenericNewJob(init); });
+    return;
+  }
+  openGenericNewJob(init);
+}
+
+function openGenericNewJob(init: OpenLaunchWizard): void {
+  if (useComposerPrefsStore.getState().prefs.startInChat) {
+    openAskDock({ fresh: true, projectId: init.projectId ?? null, seedText: init.intent ?? '' });
+    return;
+  }
   useLaunchWizard.getState().openWith(init);
 }
 
