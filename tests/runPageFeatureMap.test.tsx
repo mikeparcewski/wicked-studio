@@ -96,8 +96,10 @@ describe('where today’s features go (one row each)', () => {
 
   it('the run block itself (status sentence, record lines) → turns from crew', () => {
     page([live()]);
-    const first = within(thread()).getAllByTestId('turn-who')[0]!;
-    expect(first).toHaveAttribute('data-role', 'crew');
+    // The thread opens on what kicked the run off (your bubble); crew introduces the run's block.
+    const whos = within(thread()).getAllByTestId('turn-who');
+    expect(whos[0]).toHaveAttribute('data-role', 'operator');
+    expect(whos.some((w) => w.getAttribute('data-role') === 'crew')).toBe(true);
     expect(within(thread()).getByTestId('session-status-sentence')).toBeTruthy();
   });
 

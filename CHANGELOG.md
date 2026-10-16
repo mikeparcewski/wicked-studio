@@ -12,6 +12,11 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+### Changed
+- **The run page reads as a conversation from its first line (operator feedback, 2026-10-15).**
+  - **Kickoff bubble:** a run started outside a chat (New job, an added step) opens on your own bubble with the words that started it, instead of a status card under a header. A chat crew has closed (reclaimed: no scope, no messages) gets the same bubble from its runs' words, so it no longer opens on a card alone. An Ask run's scope briefing is never shown as your words.
+  - **Working line:** while a step executes, the thread's foot says so: the helper's name with "working", then "Working on <step>…" with a live dot, announced politely to screen readers. Nobody has to type again or click because nothing seems to move. A run Needs you holds, a finished run, and a chat already showing its own "thinking" line get no working line.
+
 ## [0.9.4] — 2026-10-15
 
 A patch release: a run Needs you holds reads as waiting on you across the Desk, never "working".

@@ -113,7 +113,7 @@ with sync_playwright() as p:
               and bool(rt.get("workflow")) and len(rt.get("phases", [])) > 0 and rt.get("look") and rt.get("tech")
               and (rt.get("checks") or "").startswith("Checks and spend"), page=d)
         check(f"{theme}-who-responded", len(d["who"]) > 0 and all(w["role"] in ("seat", "operator", "crew") for w in d["who"])
-              and d["who"][0]["role"] == "crew", who=d["who"])
+              and d["who"][0]["role"] in ("operator", "crew") and any(w["role"] == "crew" for w in d["who"]), who=d["who"])
         check(f"{theme}-gate-inline", d["gateInThread"] and not d["gateInPanel"], page={k: d[k] for k in ("gateInThread", "gateInPanel")})
 
         # The finished demo run: its artifact in the thread, the panel beside it.

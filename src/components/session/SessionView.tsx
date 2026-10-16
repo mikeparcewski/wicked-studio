@@ -14,7 +14,7 @@ import {
 import type { Navigate } from '../../hooks/useRoute.js';
 import { useCapabilities } from '../../store/capabilities.js';
 import { readSessionVisit, useSessionDrafts, writeSessionVisit } from '../../store/sessionDrafts.js';
-import { jobTitle } from '../../board/deskWords.js';
+import { jobTitle, isChatScopeProblem } from '../../board/deskWords.js';
 import type { ChatCitations } from '../../api/chat-wire.js';
 import { IDLE_GATE_ACTION, useGateActionStore } from '../../board/gateActions.js';
 import { finishedDeliveryArm, proposalKindOf, statusSentence } from '../../board/proposalCard.js';
@@ -69,6 +69,9 @@ import { splitToolFailures } from '../../board/askThread.js';
 import { useRoster } from '../../hooks/useRoster.js';
 import { isCliSeat, seatLabel } from '../../board/seatNames.js';
 import { chatStatusWord } from '../../board/statusWords.js';
+import { isHeldRun } from '../../board/heldRuns.js';
+import { executingOrd } from '../../api/run-state.js';
+import { phaseLabel } from '../gateVerdictModel.js';
 import { CREW, gateResponder, responderKey, turnResponder, type Responder } from '../../board/responder.js';
 import { TurnWho } from './TurnWho.js';
 import { RunRibbon, RunTab } from './RunTab.js';
@@ -119,10 +122,12 @@ interface ChatDetail {
 }
 
 type ThreadEntry =
-  | { kind: 'turn'; key: string; at: number; who: 'you' | string; text: string; ok: boolean; citations?: ChatCitations; turnId: string | null; pending?: boolean }
+  | { kind: 'turn'; key: string; at: number; who: 'you' | string; text: string; ok: boolean; citations?: ChatCitations; turnId: string | null; pending?: boolean; kickoff?: boolean }
   | { kind: 'run'; key: string; at: number; view: RunView }
   | { kind: 'line'; key: string; at: number; line: AskLine }
   | { kind: 'typing'; key: string; at: number; who: string }
+  /** A run's step is executing: the helper on it is working now (studio: the thread shows it). */
+  | { kind: 'working'; key: string; at: number; who: string; runId: string; step: string }
   | { kind: 'proposal'; key: string; at: number; view: RunView; ask: AskProposal };
 
 const NO_TRAIL: readonly CoreEvent[] = [];
@@ -349,7 +354,7 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
 
   // H3: who responded, per thread entry (the roster names the seats).
   const roster = useRoster();
-  const whoOfEntry = (e: ThreadEntry): Responder => (e.kind === 'turn' || e.kind === 'typing' ? turnResponder(e.who, roster)
+  const whoOfEntry = (e: ThreadEntry): Responder => (e.kind === 'turn' || e.kind === 'typing' || e.kind === 'working' ? turnResponder(e.who, roster)
     : e.kind === 'proposal' ? turnResponder(e.ask.by, roster) : CREW);
   // The closed line above the entries is crew's: the first crew entry under it needs no second label.
   const leadWho: Responder | null = conversation === 'closed' && mine.length > 0 ? CREW : null;
@@ -453,15 +458,43 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
         out.push({ kind: 'typing', key: `typing:${th.ord}`, at: th.at, who: th.by });
       }
     }
+    // What started each run, as the operator's own bubble: a run launched from New job (or a step
+    // added) has no chat, so no message of yours, and the thread opened on a status card. A chat's
+    // transcript is where your words are — but a CLOSED chat (crew reclaimed it: no scope, no
+    // messages) has none left, so its runs' own words stand in and the thread never opens on a card
+    // alone. A live chat's empty transcript is left as it is.
+    // "None of yours" is judged on the MERGED thread (codex chat-r1): a question just sent is a live
+    // turn before the transcript records it, and must not gain a second bubble. An Ask run's problem
+    // is crew's scope briefing, never your words (askTitle; crew#823), so it never stands in.
+    const transcriptLacksYou = conversation === 'closed' && !out.some((e) => e.kind === 'turn' && e.who === 'you');
     for (const v of mine) {
+      const problem = (v.session.problem ?? '').trim();
+      if (problem !== '' && !isChatScopeProblem(problem) && (runChatIdOf(v) === null || transcriptLacksYou)) {
+        out.push({ kind: 'turn', key: `kick:${v.session.id}`, at: launchedMs(v) - 1, who: 'you', text: problem, ok: true, turnId: null, kickoff: true });
+      }
       if (askBlockHidden && v.session.id === askRunId) {
         if (proposal !== null) out.push({ kind: 'proposal', key: `p:${proposal.proposalId}`, at: proposal.at, view: v, ask: proposal });
         continue;
       }
       out.push({ kind: 'run', key: `r:${v.session.id}`, at: launchedMs(v), view: v });
     }
+    // Something visible while a helper works: a step executing (and not held by Needs you) gets a
+    // live line at the thread's foot, so nobody types again or clicks because nothing seems to move.
+    // A chat's own "thinking" line already says it for the answering step.
+    if (!out.some((e) => e.kind === 'typing')) {
+      for (const v of mine) {
+        if (isHeldRun(v.session)) continue;
+        const ord = executingOrd(v.session, v.units);
+        if (ord === null) continue;
+        const unit = v.units.find((u) => u.ord === ord);
+        out.push({
+          kind: 'working', key: `working:${v.session.id}`, at: Number.MAX_SAFE_INTEGER,
+          who: unit?.assigned_cli ?? 'helper', runId: v.session.id, step: phaseLabel(v.session.id, v.units, ord),
+        });
+      }
+    }
     return out.map((e, i) => ({ e, i })).sort((a, b) => a.e.at - b.e.at || a.i - b.i).map((x) => x.e);
-  }, [messages, mine, liveTurns, lines, thinking, askBlockHidden, askRunId, askRows, askPathOn, proposal]);
+  }, [messages, conversation, mine, liveTurns, lines, thinking, askBlockHidden, askRunId, askRows, askPathOn, proposal]);
 
   // DC-S8: the considered line sits under the LAST reply of each turn (one Consideration per turn,
   // whatever the number of seats); it is re-read when the turn gains a reply.
@@ -773,18 +806,26 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
             const who = whoOfEntry(e);
             const prev = i === 0 ? leadWho : whoOfEntry(entries[i - 1]!);
             const label = e.kind !== 'turn' && (prev === null || responderKey(prev) !== responderKey(who))
-              ? <TurnWho who={who} runId={e.kind === 'run' || e.kind === 'proposal' ? e.view.session.id : askRunId} {...(e.kind === 'typing' ? { suffix: 'thinking' } : {})} />
+              ? <TurnWho who={who} runId={e.kind === 'run' || e.kind === 'proposal' ? e.view.session.id : e.kind === 'working' ? e.runId : askRunId} {...(e.kind === 'typing' ? { suffix: 'thinking' } : e.kind === 'working' ? { suffix: 'working' } : {})} />
               : null;
             const node = (e.kind === 'line'
             ? <AskLineView key={e.key} line={e.line} onSignIn={() => openSheet({ kind: 'session', sessionId }, 'signins')} onRetry={askTeamRetry} />
             : e.kind === 'typing'
               ? <AskTyping key={e.key} who={e.who} />
+              : e.kind === 'working'
+              ? (
+                <p key={e.key} data-testid="session-working" data-run-id={e.runId} className="wk-ask-line wk-ask-line--quiet wk-ask-typing" aria-live="polite">
+                  <span aria-hidden className="wk-desk-dot wk-desk-dot--working" /> Working on {e.step}…
+                </p>
+              )
               : e.kind === 'proposal'
                 ? <AskProposalBlock key={e.key} view={e.view} ask={e.ask} onBringBack={() => setDraft(sessionId, 'Go ahead with the plan you proposed.')} />
                 : e.kind === 'turn'
             ? (
-              <div key={e.key} data-testid="session-turn" data-who={e.who === 'you' ? 'you' : 'helper'} {...(e.pending ? { 'data-pending': 'true' } : {})} className={`wk-session-turn wk-session-turn--${e.who === 'you' ? 'you' : 'helper'}${e.pending ? ' wk-session-turn--pending' : ''}`}>
-                <TurnWho who={who} runId={askRunId} {...(e.pending ? { suffix: 'answering' } : {})} />
+              <div key={e.key} data-testid="session-turn" data-who={e.who === 'you' ? 'you' : 'helper'} {...(e.pending ? { 'data-pending': 'true' } : {})} {...(e.kickoff ? { 'data-kickoff': 'true', title: e.text } : {})} className={`wk-session-turn wk-session-turn--${e.who === 'you' ? 'you' : 'helper'}${e.pending ? ' wk-session-turn--pending' : ''}${e.kickoff ? ' wk-session-turn--kickoff' : ''}`}>
+                {/* The kickoff is one compact line ("You · <what started it>", two lines at most; the
+                    full words on hover), so the run's own block below stays in the first view. */}
+                <TurnWho who={who} runId={askRunId} {...(e.pending ? { suffix: 'answering' } : {})} {...(e.kickoff ? { inline: true } : {})} />
                 {e.who === 'you'
                   ? <p className={`wk-session-text${e.ok ? '' : ' wk-session-grey'}`}><OperatorMessage text={e.text} /></p>
                   : (

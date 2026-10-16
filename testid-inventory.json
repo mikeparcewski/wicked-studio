@@ -12,8 +12,8 @@
   "studioVersion": "0.9.4",
   "counts": {
     "files": 230,
-    "occurrences": 2835,
-    "static": 2445,
+    "occurrences": 2836,
+    "static": 2446,
     "dynamic": 72,
     "computed": 24
   },
@@ -10917,6 +10917,12 @@
     },
     {
       "testId": "session-turn",
+      "files": [
+        "src/components/session/SessionView.tsx"
+      ]
+    },
+    {
+      "testId": "session-working",
       "files": [
         "src/components/session/SessionView.tsx"
       ]
