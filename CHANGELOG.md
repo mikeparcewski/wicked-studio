@@ -12,6 +12,10 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+## [0.9.6] — 2026-10-16
+
+A patch release: New job can start a chat instead.
+
 ### Added
 - **New job can start a chat instead (operator 2026-10-16, DES-CHAT-FIRST-001 C5).** The job picker's footer has
   "Don't show this again — start in chat", with the note "You can turn New job back on in Settings → View." Ticking it
@@ -2254,7 +2258,8 @@ The merged interactive layer: wicked-interactive's UI moved into this skin (DES-
   `git subtree split` (92 commits).
 - The SPA as a pure HTTP/WS client of the wicked-crew daemon: runs, gates, live CoreEvents.
 
-[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.9.5...HEAD
+[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.9.6...HEAD
+[0.9.6]: https://github.com/mikeparcewski/wicked-studio/compare/v0.9.5...v0.9.6
 [0.9.5]: https://github.com/mikeparcewski/wicked-studio/compare/v0.9.4...v0.9.5
 [0.9.4]: https://github.com/mikeparcewski/wicked-studio/compare/v0.9.3...v0.9.4
 [0.9.3]: https://github.com/mikeparcewski/wicked-studio/compare/v0.9.2...v0.9.3
