@@ -63,6 +63,10 @@
 .wk-launch-wizard-review dd { margin: 0; color: var(--ink-high); overflow-wrap: anywhere; }
 .wk-launch-wizard-review-intent { white-space: pre-wrap; }
 .wk-launch-wizard-foot { display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-3) var(--space-5) var(--space-4); border-top: 1px solid var(--border-subtle); }
+.wk-launch-wizard-skip { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px var(--space-3); }
+.wk-launch-wizard-skip .wk-field-note { margin: 0; }
+.wk-launch-wizard-skip-label { display: inline-flex; align-items: center; gap: var(--space-2); font-size: var(--text-sm); color: var(--ink-body); cursor: pointer; }
+.wk-launch-wizard-skip-label input { accent-color: var(--accent); }
 .wk-launch-wizard-actions { display: flex; justify-content: flex-end; gap: var(--space-2); }
 .wk-launch-wizard-actions > :first-child:not(:last-child) { margin-right: auto; }
 @media (max-width: 767px) {

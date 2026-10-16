@@ -77,7 +77,7 @@ describe('SystemSettings — Runs (#123)', () => {
 
     expect(screen.getByTestId('deliver-pr-toggle')).not.toBeChecked();
     // A stored false is a real false, not an unset key that re-defaults to ON.
-    expect(client.api.putComposerSettings).toHaveBeenCalledExactlyOnceWith({ deliverPr: false });
+    expect(client.api.putComposerSettings).toHaveBeenCalledExactlyOnceWith({ deliverPr: false, startInChat: false });
     // The key read back out of the merged response — verified, not assumed.
     expect(useComposerPrefsStore.getState().persist).toBe('ok');
     expect(screen.queryByTestId('deliver-pr-unsaved')).toBeNull();

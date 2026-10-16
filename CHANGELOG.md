@@ -12,6 +12,16 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+### Added
+- **New job can start a chat instead (operator 2026-10-16, DES-CHAT-FIRST-001 C5).** The job picker's footer has
+  "Don't show this again — start in chat", with the note "You can turn New job back on in Settings → View." Ticking it
+  saves the choice and moves you straight to a fresh chat, carrying anything you had typed and the project. From then on
+  a plain New job (Desk, ⌘K, the rail, a project) opens a chat. Anything that names a job still opens the picker with its
+  context: Learn, an editor plugin, a demo video, Draft epics, a composer's `/workflow-…`. Settings → View gets
+  **Show New job** to turn it back. The choice is saved in crew's settings (`studio.composer.startInChat`). If the
+  daemon doesn't keep the value it was sent, the switch says "Not stored … applies to this session only" instead of
+  showing it saved.
+
 ## [0.9.5] — 2026-10-16
 
 A patch release: the run page reads as a conversation from its first line, and shows a step being worked on.

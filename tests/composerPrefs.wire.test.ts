@@ -42,7 +42,7 @@ afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
 describe('putComposerSettings (the studio.composer wire)', () => {
   it('PUTs /settings with the studio.composer key — the exact string the store reads back', async () => {
     const calls = stubFetch({ settings: { [COMPOSER_PREFS_KEY]: { deliverPr: false } } });
-    await api.putComposerSettings({ deliverPr: false });
+    await api.putComposerSettings({ deliverPr: false, startInChat: false });
 
     expect(calls).toHaveLength(1);
     const { url, init } = calls[0]!;
@@ -50,13 +50,13 @@ describe('putComposerSettings (the studio.composer wire)', () => {
     expect(init?.method).toBe('PUT');
     // The whole contract: ONE namespaced key, spelled exactly as the store's
     // read-back looks for it, carrying the prefs verbatim.
-    expect(JSON.parse(init?.body as string)).toEqual({ 'studio.composer': { deliverPr: false } });
+    expect(JSON.parse(init?.body as string)).toEqual({ 'studio.composer': { deliverPr: false, startInChat: false } });
     expect(Object.keys(JSON.parse(init?.body as string))).toEqual([COMPOSER_PREFS_KEY]);
   });
 
   it('a stored false travels as false — never dropped from the body', async () => {
     const calls = stubFetch({ settings: {} });
-    await api.putComposerSettings({ deliverPr: false });
+    await api.putComposerSettings({ deliverPr: false, startInChat: false });
     const sent = JSON.parse(calls[0]!.init?.body as string) as Record<string, { deliverPr: boolean }>;
     expect(sent[COMPOSER_PREFS_KEY]!.deliverPr).toBe(false);
   });

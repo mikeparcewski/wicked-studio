@@ -1,5 +1,7 @@
 import { create } from 'zustand';
 import type { ConfirmMode } from '../components/ContextPopover.js';
+import { openAskDock } from './askDock.js';
+import { useComposerPrefsStore } from './composerPrefs.js';
 
 /**
  * THE LAUNCH WIZARD's state (operator 2026-10-11 15:15Z): every way to start a job — a `/workflow`
@@ -106,7 +108,18 @@ export const useLaunchWizard = create<LaunchWizardStore>((set, get) => ({
   finish: () => set({ open: false, draft: null }),
 }));
 
+/** A plain "New job": no job named, no picks, not from a composer. Only these follow "start in chat";
+ *  every opener that names a job (Learn, an editor plugin, a demo video, Draft epics, `/workflow-<key>`)
+ *  keeps its wizard and its context. */
+export function isGenericNewJob(init: OpenLaunchWizard): boolean {
+  return (init.workflowId ?? null) === null && init.requirements === undefined && (init.composerKey ?? null) === null;
+}
+
 export function openLaunchWizard(init: OpenLaunchWizard): void {
+  if (isGenericNewJob(init) && useComposerPrefsStore.getState().prefs.startInChat) {
+    openAskDock({ fresh: true, projectId: init.projectId ?? null, seedText: init.intent ?? '' });
+    return;
+  }
   useLaunchWizard.getState().openWith(init);
 }
 

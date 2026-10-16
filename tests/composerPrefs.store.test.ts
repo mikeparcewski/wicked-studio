@@ -51,15 +51,15 @@ afterEach(() => {
 describe('sanitizeComposerPrefs (the ?? trap)', () => {
   it('defaults ON when the value is ABSENT — the fresh-install case', () => {
     expect(DEFAULT_COMPOSER_PREFS.deliverPr).toBe(true);
-    expect(sanitizeComposerPrefs(undefined)).toEqual({ deliverPr: true });
-    expect(sanitizeComposerPrefs({})).toEqual({ deliverPr: true });
-    expect(sanitizeComposerPrefs(null)).toEqual({ deliverPr: true });
-    expect(sanitizeComposerPrefs('nonsense')).toEqual({ deliverPr: true });
+    expect(sanitizeComposerPrefs(undefined)).toEqual({ deliverPr: true, startInChat: false });
+    expect(sanitizeComposerPrefs({})).toEqual({ deliverPr: true, startInChat: false });
+    expect(sanitizeComposerPrefs(null)).toEqual({ deliverPr: true, startInChat: false });
+    expect(sanitizeComposerPrefs('nonsense')).toEqual({ deliverPr: true, startInChat: false });
   });
 
   it('a stored false stays false — absence and false are distinguishable', () => {
-    expect(sanitizeComposerPrefs({ deliverPr: false })).toEqual({ deliverPr: false });
-    expect(sanitizeComposerPrefs({ deliverPr: true })).toEqual({ deliverPr: true });
+    expect(sanitizeComposerPrefs({ deliverPr: false })).toEqual({ deliverPr: false, startInChat: false });
+    expect(sanitizeComposerPrefs({ deliverPr: true })).toEqual({ deliverPr: true, startInChat: false });
   });
 });
 
@@ -67,7 +67,7 @@ describe('load (startup read)', () => {
   it('a settings blob WITHOUT the key yields the default (ON)', async () => {
     getSettings.mockResolvedValue({ settings: { graphNodeLimit: 150 } });
     await useComposerPrefsStore.getState().load();
-    expect(useComposerPrefsStore.getState().prefs).toEqual({ deliverPr: true });
+    expect(useComposerPrefsStore.getState().prefs).toEqual({ deliverPr: true, startInChat: false });
     expect(useComposerPrefsStore.getState().loaded).toBe(true);
     expect(putComposer).not.toHaveBeenCalled();
   });
@@ -75,7 +75,7 @@ describe('load (startup read)', () => {
   it('a stored false survives the round trip — never re-defaulted to ON', async () => {
     getSettings.mockResolvedValue({ settings: { [COMPOSER_PREFS_KEY]: { deliverPr: false } } });
     await useComposerPrefsStore.getState().load();
-    expect(useComposerPrefsStore.getState().prefs).toEqual({ deliverPr: false });
+    expect(useComposerPrefsStore.getState().prefs).toEqual({ deliverPr: false, startInChat: false });
   });
 
   it('a daemon without a settings surface fails silently — the default stands', async () => {
@@ -89,12 +89,12 @@ describe('load (startup read)', () => {
 describe('update (optimistic + debounced persist)', () => {
   it('applies now, PUTs the studio.composer key once after the debounce', async () => {
     useComposerPrefsStore.getState().update({ deliverPr: false });
-    expect(useComposerPrefsStore.getState().prefs).toEqual({ deliverPr: false });
+    expect(useComposerPrefsStore.getState().prefs).toEqual({ deliverPr: false, startInChat: false });
     expect(putComposer).not.toHaveBeenCalled(); // still inside the debounce
 
     await vi.advanceTimersByTimeAsync(400);
     expect(putComposer).toHaveBeenCalledTimes(1);
-    expect(putComposer).toHaveBeenCalledWith({ deliverPr: false });
+    expect(putComposer).toHaveBeenCalledWith({ deliverPr: false, startInChat: false });
     expect(useComposerPrefsStore.getState().persist).toBe('ok');
   });
 
@@ -106,7 +106,7 @@ describe('update (optimistic + debounced persist)', () => {
 
     await vi.advanceTimersByTimeAsync(2000);
     expect(putComposer).toHaveBeenCalledTimes(2);
-    expect(putComposer.mock.calls.at(-1)?.[0]).toEqual({ deliverPr: false });
+    expect(putComposer.mock.calls.at(-1)?.[0]).toEqual({ deliverPr: false, startInChat: false });
     expect(useComposerPrefsStore.getState().persist).toBe('ok');
   });
 
@@ -120,7 +120,7 @@ describe('update (optimistic + debounced persist)', () => {
     expect(useComposerPrefsStore.getState().persist).toBe('dropped');
     // The optimistic value still stands for this session — no silent revert,
     // and no spin: exactly one PUT answered the question.
-    expect(useComposerPrefsStore.getState().prefs).toEqual({ deliverPr: false });
+    expect(useComposerPrefsStore.getState().prefs).toEqual({ deliverPr: false, startInChat: false });
     await vi.advanceTimersByTimeAsync(10_000);
     expect(putComposer).toHaveBeenCalledTimes(1);
   });
@@ -130,6 +130,28 @@ describe('update (optimistic + debounced persist)', () => {
     useComposerPrefsStore.getState().update({ deliverPr: false });
     await vi.advanceTimersByTimeAsync(400 + 2000);
     expect(putComposer).toHaveBeenCalledTimes(2);
+    expect(useComposerPrefsStore.getState().persist).toBe('dropped');
+  });
+});
+
+describe('startInChat (operator 2026-10-16: New job → chat)', () => {
+  it('is off unless a strict true is stored', () => {
+    expect(sanitizeComposerPrefs({ startInChat: true }).startInChat).toBe(true);
+    expect(sanitizeComposerPrefs({ startInChat: 'yes' }).startInChat).toBe(false);
+    expect(sanitizeComposerPrefs({}).startInChat).toBe(false);
+  });
+
+  it('an update keeps deliverPr, and the verdict compares the echoed VALUE, not just the key', async () => {
+    useComposerPrefsStore.getState().update({ deliverPr: false });
+    useComposerPrefsStore.getState().update({ startInChat: true });
+    await vi.advanceTimersByTimeAsync(400);
+    expect(putComposer).toHaveBeenCalledWith({ deliverPr: false, startInChat: true });
+    expect(useComposerPrefsStore.getState().persist).toBe('ok');
+
+    // A daemon that keeps the key but drops the new field: not saved.
+    putComposer.mockImplementation(() => Promise.resolve({ settings: { [COMPOSER_PREFS_KEY]: { deliverPr: false } } }));
+    useComposerPrefsStore.getState().update({ startInChat: true });
+    await vi.advanceTimersByTimeAsync(400);
     expect(useComposerPrefsStore.getState().persist).toBe('dropped');
   });
 });

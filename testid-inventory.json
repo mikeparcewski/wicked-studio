@@ -12,8 +12,8 @@
   "studioVersion": "0.9.5",
   "counts": {
     "files": 230,
-    "occurrences": 2836,
-    "static": 2446,
+    "occurrences": 2840,
+    "static": 2450,
     "dynamic": 72,
     "computed": 24
   },
@@ -5479,6 +5479,18 @@
     },
     {
       "testId": "launch-wizard-seat",
+      "files": [
+        "src/components/launch/LaunchWizard.tsx"
+      ]
+    },
+    {
+      "testId": "launch-wizard-skip",
+      "files": [
+        "src/components/launch/LaunchWizard.tsx"
+      ]
+    },
+    {
+      "testId": "launch-wizard-skip-toggle",
       "files": [
         "src/components/launch/LaunchWizard.tsx"
       ]
@@ -11306,6 +11318,18 @@
       "files": [
         "src/board/objectActions.ts",
         "src/components/ShortcutOverlay.tsx"
+      ]
+    },
+    {
+      "testId": "show-new-job-toggle",
+      "files": [
+        "src/components/SystemSettings.tsx"
+      ]
+    },
+    {
+      "testId": "show-new-job-unsaved",
+      "files": [
+        "src/components/SystemSettings.tsx"
       ]
     },
     {

@@ -30,12 +30,15 @@ import { api } from '../api/client.js';
 export interface StudioComposerPrefs {
   /** Open a PR when a build run finishes (`deliver: 'pr'`). Default ON. */
   deliverPr: boolean;
+  /** New job starts a chat instead of the job picker (operator 2026-10-16, DES-CHAT-FIRST-001 C5).
+   *  Default OFF; set by the picker's "Don't show this again", cleared by Settings → View. */
+  startInChat: boolean;
 }
 
 export const COMPOSER_PREFS_KEY = 'studio.composer';
 
 /** #123's operator decision: ON — a build run delivers unless told otherwise. */
-export const DEFAULT_COMPOSER_PREFS: StudioComposerPrefs = { deliverPr: true };
+export const DEFAULT_COMPOSER_PREFS: StudioComposerPrefs = { deliverPr: true, startInChat: false };
 
 /** Whether the last persist was OBSERVED to land in crew's settings blob. */
 export type PersistState = 'unknown' | 'ok' | 'dropped';
@@ -50,6 +53,8 @@ export function sanitizeComposerPrefs(raw: unknown): StudioComposerPrefs {
   const o = (raw !== null && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
   return {
     deliverPr: o.deliverPr === false ? false : DEFAULT_COMPOSER_PREFS.deliverPr,
+    // The opposite default, so the opposite strictness: only a stored `true` turns it on.
+    startInChat: o.startInChat === true,
   };
 }
 
@@ -108,7 +113,10 @@ async function attempt(
   get: () => ComposerPrefsStore,
   set: (partial: Partial<ComposerPrefsStore>) => void,
 ): Promise<void> {
-  const { settings } = await api.putComposerSettings(get().prefs);
+  const sent = get().prefs;
+  const { settings } = await api.putComposerSettings(sent);
   const echoed = (settings as Record<string, unknown>)[COMPOSER_PREFS_KEY];
-  set({ persist: echoed === undefined ? 'dropped' : 'ok' });
+  // Landed = the daemon gives back what we sent, field by field, not merely the key.
+  const back = echoed === undefined ? null : sanitizeComposerPrefs(echoed);
+  set({ persist: back !== null && back.deliverPr === sent.deliverPr && back.startInChat === sent.startInChat ? 'ok' : 'dropped' });
 }

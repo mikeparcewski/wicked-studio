@@ -246,7 +246,7 @@ describe('ChatInput delivery (#123)', () => {
     // The 0.18.0 wire reshape: the daemon now defaults an omitted `deliver` to
     // `'pr'` for repo-scoped code work, so "off" must be said on the wire. The
     // consequence is visible text, not silence: the run's work will strand.
-    useComposerPrefsStore.setState({ prefs: { deliverPr: false } });
+    useComposerPrefsStore.setState({ prefs: { deliverPr: false, startInChat: false } });
     const user = userEvent.setup();
     render(<ChatInput runId={null} runStatus={null} onLaunched={vi.fn()} />);
     await bind(user, { workflow: 'feature', repo: 'studio-api' });
@@ -282,7 +282,7 @@ describe('ChatInput delivery (#123)', () => {
   });
 
   it('the per-launch override flips back ON over an OFF preference', async () => {
-    useComposerPrefsStore.setState({ prefs: { deliverPr: false } });
+    useComposerPrefsStore.setState({ prefs: { deliverPr: false, startInChat: false } });
     const user = userEvent.setup();
     render(<ChatInput runId={null} runStatus={null} onLaunched={vi.fn()} />);
     await bind(user, { workflow: 'feature', repo: 'studio-api' });

@@ -104,6 +104,7 @@ export function SystemSettings({ navigate = (p) => { history.pushState(null, '',
   // Runs (studio#123): `studio.composer` on the crew settings wire — the
   // `useNotifPrefsStore` pattern, self-saving, outside the `dirty` patch.
   const deliverPr = useComposerPrefsStore((s) => s.prefs.deliverPr);
+  const startInChat = useComposerPrefsStore((s) => s.prefs.startInChat);
   const composerPersist = useComposerPrefsStore((s) => s.persist);
   const updateComposerPrefs = useComposerPrefsStore((s) => s.update);
 
@@ -269,6 +270,10 @@ export function SystemSettings({ navigate = (p) => { history.pushState(null, '',
           onChange={(checked) => updateViewPrefs({ technical_details: checked })}
           hint="Shows full file locations in technical details and additional references beside your work." />
         {viewPersist === 'dropped' && <p className="wk-field-note" data-testid="tech-details-unsaved">Not stored by Studio's service — applies to this session only.</p>}
+        <Switch label="Show New job" data-testid="show-new-job-toggle" checked={!startInChat}
+          onChange={(checked) => updateComposerPrefs({ startInChat: !checked })}
+          hint={startInChat ? 'Off: New job starts a chat. Picking a specific job (Learn, a demo video, /workflow-…) still opens it.' : 'New job opens the job picker.'} />
+        {composerPersist === 'dropped' && <p className="wk-field-note" data-testid="show-new-job-unsaved">Not stored by Studio's service — applies to this session only.</p>}
       </section>
 
       {/* Work section */}
