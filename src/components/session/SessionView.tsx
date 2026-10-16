@@ -122,7 +122,7 @@ interface ChatDetail {
 }
 
 type ThreadEntry =
-  | { kind: 'turn'; key: string; at: number; who: 'you' | string; text: string; ok: boolean; citations?: ChatCitations; turnId: string | null; pending?: boolean }
+  | { kind: 'turn'; key: string; at: number; who: 'you' | string; text: string; ok: boolean; citations?: ChatCitations; turnId: string | null; pending?: boolean; kickoff?: boolean }
   | { kind: 'run'; key: string; at: number; view: RunView }
   | { kind: 'line'; key: string; at: number; line: AskLine }
   | { kind: 'typing'; key: string; at: number; who: string }
@@ -470,7 +470,7 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
     for (const v of mine) {
       const problem = (v.session.problem ?? '').trim();
       if (problem !== '' && !isChatScopeProblem(problem) && (runChatIdOf(v) === null || transcriptLacksYou)) {
-        out.push({ kind: 'turn', key: `kick:${v.session.id}`, at: launchedMs(v) - 1, who: 'you', text: problem, ok: true, turnId: null });
+        out.push({ kind: 'turn', key: `kick:${v.session.id}`, at: launchedMs(v) - 1, who: 'you', text: problem, ok: true, turnId: null, kickoff: true });
       }
       if (askBlockHidden && v.session.id === askRunId) {
         if (proposal !== null) out.push({ kind: 'proposal', key: `p:${proposal.proposalId}`, at: proposal.at, view: v, ask: proposal });
@@ -822,8 +822,10 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
                 ? <AskProposalBlock key={e.key} view={e.view} ask={e.ask} onBringBack={() => setDraft(sessionId, 'Go ahead with the plan you proposed.')} />
                 : e.kind === 'turn'
             ? (
-              <div key={e.key} data-testid="session-turn" data-who={e.who === 'you' ? 'you' : 'helper'} {...(e.pending ? { 'data-pending': 'true' } : {})} className={`wk-session-turn wk-session-turn--${e.who === 'you' ? 'you' : 'helper'}${e.pending ? ' wk-session-turn--pending' : ''}`}>
-                <TurnWho who={who} runId={askRunId} {...(e.pending ? { suffix: 'answering' } : {})} />
+              <div key={e.key} data-testid="session-turn" data-who={e.who === 'you' ? 'you' : 'helper'} {...(e.pending ? { 'data-pending': 'true' } : {})} {...(e.kickoff ? { 'data-kickoff': 'true', title: e.text } : {})} className={`wk-session-turn wk-session-turn--${e.who === 'you' ? 'you' : 'helper'}${e.pending ? ' wk-session-turn--pending' : ''}${e.kickoff ? ' wk-session-turn--kickoff' : ''}`}>
+                {/* The kickoff is one compact line ("You · <what started it>", two lines at most; the
+                    full words on hover), so the run's own block below stays in the first view. */}
+                <TurnWho who={who} runId={askRunId} {...(e.pending ? { suffix: 'answering' } : {})} {...(e.kickoff ? { inline: true } : {})} />
                 {e.who === 'you'
                   ? <p className={`wk-session-text${e.ok ? '' : ' wk-session-grey'}`}><OperatorMessage text={e.text} /></p>
                   : (
