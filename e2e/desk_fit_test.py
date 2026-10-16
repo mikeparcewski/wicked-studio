@@ -11,7 +11,7 @@ a common laptop browser height). Four defects the released 0.6.1 Desk showed on 
   2. studio#515 — Skills: the drawer (a fixed right-side aside) covered the header's Refresh baseline /
      Analyze / Publish and the catalog re-read while a skill was open — the re-read being meant for
      exactly that moment. Now the drawer starts where the header ends: with a skill open, each verb's
-     centre hits the verb itself (`elementFromPoint`), and the drawer's top is at the header's bottom.
+     centre hits the verb itself (`elementFromPoint`), and the drawer's top is at the header block's bottom.
   3. studio#516 — Configuration: a long worker_config_root refusal (a ~130-character sentence from the
      daemon's 400) rendered on one line and made the control column as wide as the sentence; the
      label column collapsed to a word per line. Now the error wraps at the input's width (224 px),
@@ -176,12 +176,15 @@ with sync_playwright() as p:
     page.wait_for_timeout(200)
     hits = {tid: page.evaluate(HIT, f'[data-testid="{tid}"]') for tid in ("skills-reload", "skills-publish", "skills-analyze", "skills-refresh")}
     head = page.evaluate(RECT, '[data-testid="skills-header"]')
+    # The page measure (2026-10-16) sets the verbs beside the title, so the header block the drawer
+    # opens under is the page head (title, intro and verbs) — whichever ends lower.
+    block = page.evaluate(RECT, '[data-testid="skills-page"] .wk-page-head')
     drawer = page.evaluate(RECT, '[data-testid="skills-drawer"]')
     page.screenshot(path=str(SHOTS / "desk-fit-skills-drawer.png"))
     check("skills-verbs-reachable",
           all(h is not None and h["hit"] for h in hits.values()) and head is not None and drawer is not None
-          and abs(drawer["top"] - head["bottom"]) <= 2 and drawer["bottom"] >= H - 1,
-          hits=hits, header=head, drawer=drawer)
+          and block is not None and abs(drawer["top"] - max(head["bottom"], block["bottom"])) <= 2 and drawer["bottom"] >= H - 1,
+          hits=hits, header=head, block=block, drawer=drawer)
     # And the re-read really is clickable from here: the catalog is asked for again.
     reloads = {"n": 0}
     page.on("request", lambda req: reloads.__setitem__("n", reloads["n"] + 1) if req.url.endswith("/api/v1/skills") else None)
