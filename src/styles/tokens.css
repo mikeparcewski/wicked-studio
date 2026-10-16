@@ -186,6 +186,14 @@
   --rail-w:     236px;
   --topbar-h:   52px;
 
+  /* ── The page measure (operator 2026-10-16): a routed page and a session's thread sit centred in
+     the main column at a constrained width (sections/layout.css applies it; `--page-pad` is the
+     gutter at the edges, smaller on a phone). Widths include the gutters. ── */
+  --page-max:        1120px;
+  --page-max-narrow: 832px;
+  --thread-max:      896px;
+  --page-pad:        var(--space-8);
+
   /* ── The floating Ask bubble (AskLauncher.tsx: ASK_BUBBLE_PX / ASK_GUTTER_PX) — a surface
      that ends under it reserves this much room, so the bubble never covers an action. ── */
   --fab-size:   48px;

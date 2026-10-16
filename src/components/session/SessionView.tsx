@@ -710,7 +710,7 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
         Run tab, a plugin's Options tabs added on demand; below 1200 px a one-line ribbon. */}
     <div data-testid="session-frame" className="wk-session-frame">
     <div data-testid="session" data-object={`session:${sessionId}`} data-session-id={sessionId} data-conversation={conversation} data-state={state} data-pane={pane} className={`wk-session${pane ? ' wk-session--pane' : ''}`}>
-      <header className="wk-session-head">
+      <header className="wk-session-head wk-measure wk-measure--thread">
         <span aria-hidden className={`wk-desk-dot wk-desk-dot--${state}`} />
         <div className="wk-session-head-body">
           {/* Audit row 62: until the session's reads settle, the title is a skeleton and no state word
@@ -761,7 +761,7 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
         <div
           ref={scroller}
           data-testid="session-thread"
-          className="wk-session-thread"
+          className="wk-session-thread wk-measure wk-measure--thread"
           onScroll={(e) => {
             const el = e.currentTarget;
             // The thread's own scroll (a restore, a follow) is not the operator's place.
@@ -874,10 +874,10 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
       </div>
       {/* Rule 3: while the thread is the chain, the shape line names the path's steps for the operator. */}
       {askBlockHidden && askPath.shape.length > 0 && (
-        <p data-testid="session-ask-shape" className="wk-session-grey wk-session-shape">{askShapeFooter(askPath)}</p>
+        <p data-testid="session-ask-shape" className="wk-session-grey wk-session-shape wk-measure wk-measure--thread">{askShapeFooter(askPath)}</p>
       )}
 
-      <Composer {...composerProps} className="wk-session-composer" />
+      <Composer {...composerProps} className="wk-session-composer wk-measure wk-measure--thread" />
     </div>
     <HostPanel runTab={<RunTab runs={mine} sessionId={sessionId} title={title} navigate={navigate} />} ribbon={<RunRibbon runs={mine} />} />
     </div>

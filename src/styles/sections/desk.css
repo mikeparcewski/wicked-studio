@@ -153,8 +153,8 @@
   /* Toasts: one compact card docked bottom, above the composer, never a stack over the page. */
   /* Row moves size to their words on phone (still 44 px tall), so a group's answers share a line. */
   .wk-desk-need .wk-need-act { min-width: 0; padding: 0 var(--space-3); }
-  .wk-watchtower-head { padding: var(--space-4); }
-  .wk-watchtower-body { padding: var(--space-3) var(--space-4) var(--space-6); }
+  .wk-watchtower-head { padding-block: var(--space-4); }
+  .wk-watchtower-body { padding-block: var(--space-3) var(--space-6); }
   .wk-watchtower-row { flex-wrap: wrap; }
   .wk-watchtower-row .wk-desk-need-line { white-space: normal; }
   .wk-watchtower-row > .wk-desk-need-body { flex: 1 1 calc(100% - 24px); }

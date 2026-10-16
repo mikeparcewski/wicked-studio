@@ -247,7 +247,7 @@ export function SystemSettings({ navigate = (p) => { history.pushState(null, '',
   const deliverIdentityInvalid = deliverIdentity !== '' && !isGitHubLoginLike(deliverIdentity.trim());
 
   return (
-    <PageFrame title={PAGE_NAMES.system} intro="Choose how Studio displays your work and uses your helpers.">
+    <PageFrame width="narrow" title={PAGE_NAMES.system} intro="Choose how Studio displays your work and uses your helpers.">
       <div className="wk-pg-set-content">
       {error && <StateBanner kind={readErrorKind(errorSource ?? error)} what="system settings" error={error} onRetry={load} />}
       {settings === null && error === null && <Skeleton rows={3} variant="card" />}

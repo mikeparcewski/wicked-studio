@@ -18,7 +18,7 @@ import { PageFrame } from './ui/PageFrame.js';
  */
 export function ThemePage(): React.ReactElement {
   return (
-    <PageFrame title="Theme" intro="Choose the colors and branding for your workspace.">
+    <PageFrame width="narrow" title="Theme" intro="Choose the colors and branding for your workspace.">
       <div className="wk-pg-set-content">
       <AppearanceSettings />
       <BrandLearn />

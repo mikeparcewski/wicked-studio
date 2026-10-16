@@ -224,7 +224,7 @@ export function WatchtowerPage({ runs, runsLoaded = true, runsError = null, onRe
 
   return (
     <div data-testid="watchtower" data-registry={registry} className="wk-watchtower">
-      <header className="wk-watchtower-head">
+      <header className="wk-watchtower-head wk-measure">
         <h1 className="wk-session-title">Watchtower</h1>
         {/* No verdict over a feed that could not be read (the banner below says so). */}
         {!(feedError !== null && all.length === 0) && (
@@ -236,7 +236,7 @@ export function WatchtowerPage({ runs, runsLoaded = true, runsError = null, onRe
           </p>
         )}
       </header>
-      <div className="wk-watchtower-body">
+      <div className="wk-watchtower-body wk-measure">
         <div role="group" aria-label="Show" className="wk-watchtower-kinds">
           {KINDS.map((k) => (
             <button

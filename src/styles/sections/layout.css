@@ -1,0 +1,32 @@
+/* Section CSS: layout — THE page measure (operator 2026-10-16: "workspace pages … should be centered
+   and constrained"; "run pages … like the workspace ones"). One mechanism, two forms, both reading the
+   `--page-*` / `--thread-max` tokens in tokens.css:
+
+   1. `.wk-page` (PageFrame) is itself the centred box: `--page-max` wide (`.wk-page--narrow` for the
+      settings-style pages whose cards are a form's width; `.wk-page--full` for a tool that needs the
+      whole column), its gutters inside.
+   2. `.wk-measure` is for a box that must span the column — a scroller whose scrollbar belongs at the
+      column's edge (the Watchtower feed, a session's thread) or a bar with a full-width rule under it:
+      its inline padding grows so the content inside sits at the same centred measure.
+      `.wk-measure--thread` uses the reading width of a conversation instead.
+
+   Nothing else sets a routed page's width or side gutters. */
+
+.wk-page { margin-inline: auto; width: 100%; max-width: var(--page-max); box-sizing: border-box; }
+.wk-page--narrow { max-width: var(--page-max-narrow); }
+.wk-page--full { max-width: none; }
+
+.wk-measure {
+  --measure-max: var(--page-max);
+  box-sizing: border-box;
+  padding-inline: max(var(--page-pad), calc((100% - var(--measure-max)) / 2 + var(--page-pad)));
+}
+.wk-measure--narrow { --measure-max: var(--page-max-narrow); }
+.wk-measure--thread { --measure-max: var(--thread-max); }
+
+/* A page inside the Desk (a hosted tab: Agents, Repositories) keeps the Desk's own edges. */
+.wk-desk2-hosted .wk-page { max-width: none; margin-inline: 0; }
+
+@media (max-width: 767px) {
+  :root { --page-pad: var(--space-4); }
+}
