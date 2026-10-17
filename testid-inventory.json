@@ -12,8 +12,8 @@
   "studioVersion": "0.9.6",
   "counts": {
     "files": 230,
-    "occurrences": 2852,
-    "static": 2465,
+    "occurrences": 2859,
+    "static": 2472,
     "dynamic": 70,
     "computed": 24
   },
@@ -5610,6 +5610,42 @@
       ]
     },
     {
+      "testId": "learn-file",
+      "files": [
+        "src/components/BrandLearn.tsx"
+      ]
+    },
+    {
+      "testId": "learn-file-choose",
+      "files": [
+        "src/components/BrandLearn.tsx"
+      ]
+    },
+    {
+      "testId": "learn-file-input",
+      "files": [
+        "src/components/BrandLearn.tsx"
+      ]
+    },
+    {
+      "testId": "learn-file-name",
+      "files": [
+        "src/components/BrandLearn.tsx"
+      ]
+    },
+    {
+      "testId": "learn-file-preview",
+      "files": [
+        "src/components/BrandLearn.tsx"
+      ]
+    },
+    {
+      "testId": "learn-file-problem",
+      "files": [
+        "src/components/BrandLearn.tsx"
+      ]
+    },
+    {
       "testId": "learn-input",
       "files": [
         "src/components/BrandLearn.tsx"
@@ -5631,6 +5667,12 @@
       "testId": "learn-page",
       "files": [
         "src/components/learn/LearnPage.tsx"
+      ]
+    },
+    {
+      "testId": "learn-path-toggle",
+      "files": [
+        "src/components/BrandLearn.tsx"
       ]
     },
     {
