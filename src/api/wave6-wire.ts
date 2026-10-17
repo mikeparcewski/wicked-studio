@@ -93,6 +93,9 @@ export function docsIndexOf(body: unknown): InteractiveDocsIndexRow[] | null {
       name,
       kind: str(b['kind']) ?? 'doc',
       head: typeof b['head'] === 'number' ? b['head'] : 0,
+      // studio#765 (codex r1): a row that names no head is NOT "no version" — said so, so the Made
+      // list never hides an existing document behind a draft card.
+      ...(typeof b['head'] === 'number' ? {} : { head_unknown: true as const }),
       versions: typeof b['versions'] === 'number' ? b['versions'] : 0,
       updated_at: str(b['updated_at']) ?? str(b['updatedAt']),
       ...(style !== null ? { style } : {}),

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../../api/client.js';
 import type { Project } from '../../api/types.js';
 import type { SessionView } from '../../api/types.js';
@@ -32,6 +32,7 @@ import { GroundingChip } from '../GroundingChip.js';
 import { madeOpenAddress } from '../../board/madeMoves.js';
 import { MadeOpen } from './MadeOpen.js';
 import { DraftStatus } from './DraftStatus.js';
+import { draftCard, draftRunOf } from '../../board/draftStatus.js';
 import { NewDocument } from './NewDocument.js';
 import { DEMO_VIDEO_ID, openLaunchWizard } from '../../store/launchWizard.js';
 import { DocDeleteConfirm } from '../DocDelete.js';
@@ -740,6 +741,13 @@ function MadeTab({ runs, runsLoaded = true, q, navigate, go }: { runs: SessionVi
     if (q.open === null || q.open === undefined) return null;
     return madeRows(byProject, [], {}, 'all', q.project).find((r) => r.doc !== undefined && r.doc.name === q.open) ?? null;
   }, [byProject, q.open, q.project]);
+  // studio#765 (codex r1): a page with a confirmed head of 0 and a known draft run opens on its draft
+  // card; "Open it anyway" (or a finished draft whose version the list never shows) opens the editor.
+  const [anyway, setAnyway] = useState<string | null>(null);
+  const openedKey = opened === null ? null : opened.key;
+  const draftRun = opened !== null && opened.doc !== undefined && opened.doc.head === 0 ? draftRunOf(runs, opened.projectId ?? 'default', opened.doc.name) : null;
+  const draft = opened === null || opened.doc === undefined || anyway === openedKey ? null : draftCard(opened.doc.head, draftRun, runsLoaded);
+  const openAnyway = useCallback(() => setAnyway(openedKey), [openedKey]);
   const askable = projects.filter((p) => p.id !== 'default').map((p) => p.id);
   const loadAll = (): void => { void useDocsCache.getState().loadAll(askable); };
   // studio#687 row 75: plain words — no "daemon", no "index". The complete list says nothing about itself.
@@ -755,8 +763,8 @@ function MadeTab({ runs, runsLoaded = true, q, navigate, go }: { runs: SessionVi
     <div data-testid="everything-made" data-count={rows.length} data-kind={q.kind} data-census={census} data-index={index}>
       {opened !== null && opened.doc !== undefined && (
         <MadeOpen key={opened.key} projectId={opened.projectId ?? 'default'} docId={opened.doc.name} title={showText(opened.title)} style={opened.doc.style ?? null} onClose={() => navigate(everythingPath({ tab: 'made', kind: q.kind, project: q.project }), { replace: true })}
-          draft={(opened.doc.head ?? 1) > 0 ? undefined
-            : <DraftStatus projectId={opened.projectId ?? 'default'} docId={opened.doc.name} title={showText(opened.title)} runs={runs} runsLoaded={runsLoaded} runChatId={runChatId} navigate={(p) => navigate(p)} />} />
+          draft={draft === null ? undefined
+            : <DraftStatus projectId={opened.projectId ?? 'default'} docId={opened.doc.name} title={showText(opened.title)} state={draft} run={draftRun} runChatId={runChatId} navigate={(p) => navigate(p)} onOpenAnyway={openAnyway} />} />
       )}
       <div className="wk-everything-bar">
         <div role="group" aria-label="Show" className="wk-everything-chips">

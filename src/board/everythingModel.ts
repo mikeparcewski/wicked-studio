@@ -206,7 +206,7 @@ export function madeRows(
   const out: MadeRow[] = [];
   for (const [pid, docs] of Object.entries(byProject)) {
     for (const d of docs) {
-      out.push({ key: `doc:${pid}:${d.name}`, kind: madeKindOf(d), title: d.name, projectId: pid, updatedAt: isoMs(d.updated_at), doc: { name: d.name, kind: d.kind, ...(d.style !== undefined ? { style: d.style } : {}), ...(d.grounding !== undefined ? { grounding: d.grounding } : {}), ...(typeof d.head === 'number' ? { head: d.head } : {}) } });
+      out.push({ key: `doc:${pid}:${d.name}`, kind: madeKindOf(d), title: d.name, projectId: pid, updatedAt: isoMs(d.updated_at), doc: { name: d.name, kind: d.kind, ...(d.style !== undefined ? { style: d.style } : {}), ...(d.grounding !== undefined ? { grounding: d.grounding } : {}), ...(typeof d.head === 'number' && (d as { head_unknown?: boolean }).head_unknown !== true ? { head: d.head } : {}) } });
     }
   }
   for (const v of runs) {

@@ -14,6 +14,8 @@ at 1440x700 against the in-process fixture (switches editors, doc_v0, doc_silent
      the run (#765). The link opens the run's session.
   5. The draft run fails (the engine's "evaluator≠creator unsatisfiable" error): the page says the draft
      stopped and why, in plain words, with the run linked (#765).
+  6. The draft run finished but no version is listed: the page says it is reading it and "Open it
+     anyway" opens the editor (it also opens by itself after a few re-reads).
 
 Captures (e2e/shots/): desk-new-document-{form,writing,stopped}-{light,dark}.png.
 Env: FEEDBACK_PORT (default 4613). JSON report; exit 0/1.
@@ -136,6 +138,15 @@ with sync_playwright() as p:
           and "No second helper could check the work" in text and "≠" not in text
           and page.get_by_test_id("made-draft-run").inner_text() == "Open the run", text=text)
     shoot(page, "stopped")
+
+    # 6. The draft finished but the list never shows its version (codex r1): the card says it is
+    #    reading it, offers "Open it anyway", and that opens the editor.
+    set_fixture(origin, doc_bound_run={"pid": PID, "doc": DOC, "status": "completed"})
+    page.goto(f"{origin}/everything?tab=made&project={PID}&kind=pages&open={DOC}", wait_until="networkidle")
+    page.wait_for_function("() => document.querySelector('[data-testid=\"made-draft-status\"]')?.dataset.state === 'landing'")
+    page.get_by_test_id("made-draft-open").click()
+    page.get_by_test_id("editor-frame").wait_for(state="visible")
+    check("landing-opens-anyway", page.get_by_test_id("made-draft-status").count() == 0)
     browser.close()
 
 check("no-page-errors", errors == [], errors=errors[:3])

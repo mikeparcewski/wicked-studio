@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { SessionView } from '../src/api/types.js';
-import { draftRunOf, draftState } from '../src/board/draftStatus.js';
+import { draftCard, draftRunOf, draftState } from '../src/board/draftStatus.js';
+import { docsIndexOf } from '../src/api/wave6-wire.js';
+import { madeRows } from '../src/board/everythingModel.js';
 import { engineFailureOf } from '../src/board/engineFailure.js';
 import { formatForMadeKind, madeKindForFormat } from '../src/board/everythingModel.js';
 import { madeKindForEditor } from '../src/components/editors/OpenDocumentList.js';
@@ -29,6 +31,23 @@ describe('studio#765 — a page with no version says what its draft is doing', (
     expect(draftState(run('a', 'cancelled', []))).toBe('stopped');
     expect(draftState(run('a', 'completed', []))).toBe('landing');
     expect(draftState(null)).toBe('none');
+  });
+
+  it('codex r1: the card shows only for a CONFIRMED head 0 with a known draft run; otherwise the editor opens', () => {
+    const live = run('live', 'executing', ['/s/interactive-drafts/tip-page']);
+    expect(draftCard(0, live, true)).toBe('writing');
+    expect(draftCard(1, live, true)).toBeNull();
+    expect(draftCard(undefined, live, true)).toBeNull();
+    expect(draftCard(0, null, true)).toBeNull();
+    expect(draftCard(0, null, false)).toBe('reading');
+    expect(draftCard(0, run('done', 'completed', []), true)).toBe('landing');
+  });
+
+  it('codex r1: an index row that names no head is never read as "no version"', () => {
+    const rows = docsIndexOf({ docs: [{ project_id: 'notes', name: 'old', kind: 'doc', versions: 3 }, { project_id: 'notes', name: 'new', kind: 'doc', head: 0, versions: 1 }] })!;
+    const made = madeRows({ notes: rows as never }, [], {});
+    expect(made.find((r) => r.title === 'old')!.doc!.head).toBeUndefined();
+    expect(made.find((r) => r.title === 'new')!.doc!.head).toBe(0);
   });
 
   it('the engine\'s evaluator≠creator refusal reads in plain words', () => {

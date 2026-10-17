@@ -13,7 +13,7 @@ import { LIVE_RUN } from '../store/docThread.js';
  *   landing  — the draft run finished but the list still says no version: re-read it.
  *   none     — no draft run is known for it (the run list does not reach back that far, or none ran).
  */
-export type DraftState = 'writing' | 'stopped' | 'landing' | 'none';
+export type DraftState = 'writing' | 'stopped' | 'landing' | 'none' | 'reading';
 
 /** The run that drafts `docId` in `projectId`: newest live first, else the newest. Pure. */
 export function draftRunOf(runs: readonly SessionView[], projectId: string, docId: string): SessionView | null {
@@ -34,10 +34,23 @@ export function draftState(run: SessionView | null): DraftState {
   return 'landing';
 }
 
+/**
+ * Whether a document opens on its draft card, and in which state; `null` = open the editor (codex r1).
+ * The card shows only for a CONFIRMED head of 0 with a draft run known for the document (or the run
+ * list not read yet): a list row whose head is unknown, or a document no draft run is known for,
+ * opens the editor as before — an existing document is never hidden behind a card.
+ */
+export function draftCard(head: number | undefined, run: SessionView | null, runsLoaded: boolean): DraftState | null {
+  if (head === undefined || head > 0) return null;
+  if (run === null) return runsLoaded ? null : 'reading';
+  return draftState(run);
+}
+
 /** The plain line for each state (the stopped one is followed by the reason). */
 export const DRAFT_WORDS: Readonly<Record<DraftState, string>> = {
   writing: 'This page is being written. It opens here when the first version lands.',
   stopped: 'The draft stopped before it wrote a first version.',
   landing: 'The draft finished. Reading its first version…',
   none: 'This page has no version yet, and no helper is writing it.',
+  reading: 'Reading what this page’s draft is doing…',
 };
