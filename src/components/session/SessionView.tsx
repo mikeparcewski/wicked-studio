@@ -877,7 +877,8 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
         <p data-testid="session-ask-shape" className="wk-session-grey wk-session-shape wk-measure wk-measure--thread">{askShapeFooter(askPath)}</p>
       )}
 
-      <Composer {...composerProps} className="wk-session-composer wk-measure wk-measure--thread" />
+      {/* The measure sits on a wrapper: the composer's own box (its `/` and `@` menus anchor to it) stays the input's width. */}
+      <div className="wk-session-composer-wrap wk-measure wk-measure--thread"><Composer {...composerProps} className="wk-session-composer" /></div>
     </div>
     <HostPanel runTab={<RunTab runs={mine} sessionId={sessionId} title={title} navigate={navigate} />} ribbon={<RunRibbon runs={mine} />} />
     </div>

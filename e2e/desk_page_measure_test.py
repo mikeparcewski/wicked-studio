@@ -9,7 +9,9 @@ Theme, General), then Health, then a run's page and a chat's page. On each, at 1
   2. it is constrained: never wider than the measure (1120 px for a page, 832 px for General / Theme /
      Health, 896 px for a session's thread), so at 1920 there is room on both sides;
   3. the session's header, thread and composer share one left edge and one right edge;
-  4. on a phone (390x844) nothing scrolls sideways.
+  4. at 1920 the composer's `/` menu opens under its input, and with an artifact open beside the thread
+     the head, thread and composer centre in the room left (the composer keeps a usable width);
+  5. on a phone (390x844) nothing scrolls sideways.
 
 Captures: e2e/shots/desk-page-measure-*.png. Env: FEEDBACK_PORT (default 4601).
 """
@@ -95,13 +97,37 @@ with sync_playwright() as p:
             page.get_by_test_id("session-thread").wait_for(state="visible", timeout=8000)
             page.wait_for_timeout(300)
             boxes = {part: page.evaluate(BOX, [sel, "[data-testid='session']"]) for part, sel in
-                     (("head", ".wk-session-head"), ("thread", "[data-testid='session-thread']"), ("composer", ".wk-session-composer"))}
+                     (("head", ".wk-session-head"), ("thread", "[data-testid='session-thread']"), ("composer", ".wk-session-composer-wrap"))}
             page.screenshot(path=str(SHOTS / f"desk-page-measure-{name}-{w}.png"))
             t = boxes["thread"]
             check(f"session-{name}-{w}-centred", t is not None and abs(t["left"] - t["right"]) <= 2, boxes=boxes)
             check(f"session-{name}-{w}-constrained", t["width"] <= 896 - 64, boxes=boxes)
             check(f"session-{name}-{w}-one-edge", all(b is not None and abs(b["left"] - t["left"]) <= 1 and abs(b["right"] - t["right"]) <= 1
                                                      for b in boxes.values()), boxes=boxes)
+        if w == 1920:
+            # 4a. The `/` menu opens under the input it belongs to (its left edge is the form's).
+            page.goto(f"{origin}/s/chat-pay", wait_until="networkidle")
+            box_in = page.get_by_test_id("session-composer-input")
+            box_in.click()
+            page.keyboard.type("/")
+            page.get_by_test_id("composer-menu").wait_for(state="visible", timeout=8000)
+            edges = page.evaluate("""() => ({ form: Math.round(document.querySelector('.wk-session-composer .wk-desk-composer').getBoundingClientRect().left),
+              menu: Math.round(document.querySelector('[data-testid="composer-menu"]').getBoundingClientRect().left) })""")
+            check("slash-menu-under-input", abs(edges["menu"] - edges["form"]) <= 2, edges=edges)
+            page.keyboard.press("Escape")
+            # 4b. With an artifact open beside the thread, head, thread and composer centre in what is left
+            #    and the composer keeps a usable width.
+            set_fixture(origin, walkthrough=True, walk_recorded=3, extra_frames=[], reset_walkthrough=True)
+            page.goto(f"{origin}/s/run%3Ar-walk-fail", wait_until="networkidle")
+            page.get_by_test_id("walkthrough-watch").click()
+            page.wait_for_selector(".wk-session--pane", timeout=10000)
+            page.wait_for_timeout(500)
+            boxes = {part: page.evaluate(BOX, [sel, "[data-testid='session']"]) for part, sel in
+                     (("head", ".wk-session-head"), ("thread", "[data-testid='session-thread']"), ("composer", ".wk-session-composer-wrap"))}
+            page.screenshot(path=str(SHOTS / "desk-page-measure-pane-1920.png"))
+            t = boxes["thread"]
+            check("pane-one-edge", all(b is not None and abs(b["left"] - t["left"]) <= 1 and abs(b["width"] - t["width"]) <= 1 for b in boxes.values())
+                  and boxes["composer"]["width"] >= 400, boxes=boxes)
         ctx.close()
 
     # Phone: nothing scrolls sideways on any of them.

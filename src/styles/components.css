@@ -948,7 +948,8 @@ select:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-
 .wk-session-run-title { flex: 1 1 auto; min-width: 0; font-weight: var(--weight-semi); color: var(--ink-high); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .wk-session-run-state { font-size: var(--text-xs); color: var(--ink-muted); flex-shrink: 0; }
 .wk-session-link { font-size: var(--text-xs); color: var(--ink-muted); }
-.wk-session-composer { flex-shrink: 0; margin: 8px 0 12px; }
+.wk-session-composer-wrap { flex-shrink: 0; }
+.wk-session-composer { margin: 8px 0 12px; }
 
 /* S6b: the run's one status sentence, the proposal card (ask → progress → receipt), the sources
    under a helper's reply and a source's passage. Tokens only. */
@@ -1337,7 +1338,9 @@ select:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-
 .wk-artifact--inline { height: 200px; }
 .wk-artifact--pane { margin: 0; position: fixed; top: 52px; right: 12px; bottom: 12px; width: min(46vw, 760px); z-index: 30; box-shadow: var(--shadow-card); }
 .wk-artifact--full { margin: 0; position: fixed; inset: 0; z-index: 40; border: 0; border-radius: 0; }
-.wk-session--pane .wk-session-body, .wk-session--pane .wk-session-composer { margin-right: calc(min(46vw, 760px) + 24px); }
+/* The page measure (2026-10-16): the session itself gives the pane its room, so its head, thread and composer
+   centre in what is left (a child margin would leave the measure's percentage gutters on the full width). */
+.wk-session--pane { padding-right: calc(min(46vw, 760px) + 24px); }
 /* studio#772: the pane sits 12px in from the right edge; the thread and composer clear it with room to spare. */
 .wk-artifact-head { position: relative; z-index: 3; display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-bottom: 1px solid var(--border); background: var(--surface-card); font-size: var(--text-xs); color: var(--ink-muted); flex-shrink: 0; }
 .wk-artifact-title { flex: 1 1 auto; min-width: 0; color: var(--ink-high); font-weight: var(--weight-semi); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
