@@ -22,11 +22,13 @@
   padding-inline: max(var(--page-pad), calc((100% - var(--measure-max)) / 2 + var(--page-pad)));
 }
 .wk-measure--narrow { --measure-max: var(--page-max-narrow); }
-.wk-measure--thread { --measure-max: var(--thread-max); }
+/* A conversation keeps a wider gutter than a page (its column sits beside the run panel): the thread,
+   its head and its composer read as one column with air on both sides. */
+.wk-measure--thread { --measure-max: var(--thread-max); --page-pad: var(--space-12); }
 
 /* A page inside the Desk (a hosted tab: Agents, Repositories) keeps the Desk's own edges. */
 .wk-desk2-hosted .wk-page { max-width: none; margin-inline: 0; }
 
 @media (max-width: 767px) {
-  :root { --page-pad: var(--space-4); }
+  :root, .wk-measure--thread { --page-pad: var(--space-4); }
 }

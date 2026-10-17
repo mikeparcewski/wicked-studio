@@ -101,7 +101,7 @@ with sync_playwright() as p:
             page.screenshot(path=str(SHOTS / f"desk-page-measure-{name}-{w}.png"))
             t = boxes["thread"]
             check(f"session-{name}-{w}-centred", t is not None and abs(t["left"] - t["right"]) <= 2, boxes=boxes)
-            check(f"session-{name}-{w}-constrained", t["width"] <= 896 - 64, boxes=boxes)
+            check(f"session-{name}-{w}-constrained", t["width"] <= 896 - 96, boxes=boxes)
             check(f"session-{name}-{w}-one-edge", all(b is not None and abs(b["left"] - t["left"]) <= 1 and abs(b["right"] - t["right"]) <= 1
                                                      for b in boxes.values()), boxes=boxes)
         if w == 1920:
