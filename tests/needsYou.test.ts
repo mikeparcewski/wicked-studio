@@ -152,7 +152,7 @@ describe('needsYouRows — dedupe', () => {
     expect(rows).toHaveLength(1);
     expect(rows[0]!.kind).toBe('repo-graph');
     expect(rows[0]!.severity).toBe(30);
-    expect(rows[0]!.action).toEqual({ kind: 'open', path: '/repo-detail/repo-x', label: 'Open repo ›' });
+    expect(rows[0]!.action).toEqual({ kind: 'open', path: '/repo-detail/repo-x', label: 'Index it ›' });
   });
 
   it('D6: a never-indexed row is dated in ms off the wire\'s epoch-seconds registered_at (never "20702d")', () => {

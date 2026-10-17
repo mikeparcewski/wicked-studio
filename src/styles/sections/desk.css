@@ -317,14 +317,6 @@
 .wk-desk2-top > * { height: 100%; overflow: hidden; }
 .wk-inbox, .wk-now { display: flex; flex-direction: column; min-height: 0; }
 .wk-desk2 .wk-inbox, .wk-desk2 .wk-now { padding: var(--space-5, 20px) var(--d2-pad) var(--space-4); }
-.wk-inbox-head { display: flex; align-items: center; gap: var(--space-2) var(--space-3); flex-wrap: wrap; padding-bottom: var(--space-3); }
-.wk-inbox-folders { display: flex; gap: var(--space-1); margin-left: auto; flex-wrap: wrap; }
-.wk-inbox-folder { gap: 6px; border-color: transparent; background: transparent; }
-.wk-inbox-folder[aria-selected="true"] { background: var(--accent-wash); color: var(--ink-high); }
-.wk-inbox-folder-n { font-variant-numeric: tabular-nums; color: var(--ink-dim); font-size: var(--text-2xs); }
-.wk-inbox-empty { padding: var(--space-3) 0; flex: 1 1 auto; min-height: 0; }
-.wk-inbox-foot { display: flex; align-items: center; gap: var(--space-3); padding-top: var(--space-3); margin-top: auto; border-top: 1px solid var(--border-subtle); font-size: var(--text-xs); flex: 0 0 auto; }
-.wk-inbox-head { flex: 0 0 auto; }
 .wk-now-every { margin-left: auto; }
 .wk-live-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--status-ok); margin-right: 4px; box-shadow: 0 0 0 0 color-mix(in oklab, var(--status-ok) 60%, transparent); animation: wk-pulse 2s ease-out infinite; vertical-align: 1px; }
 @keyframes wk-pulse { 0% { box-shadow: 0 0 0 0 color-mix(in oklab, var(--status-ok) 55%, transparent); } 70% { box-shadow: 0 0 0 6px transparent; } 100% { box-shadow: 0 0 0 0 transparent; } }
@@ -350,50 +342,6 @@
 .wk-stream-age { font-size: var(--text-2xs); color: var(--ink-dim); white-space: nowrap; font-variant-numeric: tabular-nums; padding-top: 2px; }
 .wk-stream-waiting { position: sticky; top: 0; z-index: 1; align-self: center; margin: 2px 0 var(--space-2); padding: 3px 10px; border-radius: var(--radius-full); background: var(--accent-wash); color: var(--ink-high); font-size: var(--text-2xs); }
 @media (prefers-reduced-motion: reduce) { .wk-stream-item[data-live="true"], .wk-live-dot { animation: none; } }
-.wk-inbox-split { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: var(--space-5, 20px); }
-.wk-inbox-list { list-style: none; margin: 0; padding: 0; overflow-y: auto; min-height: 0; display: flex; flex-direction: column; gap: 2px; }
-.wk-inbox-row {
-  width: 100%; display: grid; grid-template-columns: 3px minmax(0, 1fr); grid-template-rows: auto auto auto; column-gap: var(--space-3); row-gap: 3px;
-  padding: var(--space-3) var(--space-3) var(--space-3) var(--space-2); border: 0; border-radius: var(--radius-md);
-  background: transparent; text-align: left; font: inherit; color: var(--ink-body); cursor: pointer;
-}
-.wk-inbox-row:hover { background: var(--surface-raised); }
-.wk-inbox-row[aria-current="true"] { background: var(--accent-wash); }
-.wk-inbox-row:focus-visible { outline: 2px solid transparent; box-shadow: inset 0 0 0 2px var(--accent); }
-.wk-inbox-mark { grid-row: 1 / 4; border-radius: 2px; background: transparent; }
-.wk-inbox-row[data-unread="true"] .wk-inbox-mark { background: var(--accent); }
-.wk-inbox-mark[data-section="failure"] { background: var(--status-fail) !important; }
-.wk-inbox-row:not([data-unread="true"]) .wk-inbox-mark[data-section="failure"] { opacity: 0.35; }
-.wk-inbox-from { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: var(--text-xs); color: var(--ink-muted); }
-.wk-inbox-sender { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.wk-inbox-row[data-unread="true"] .wk-inbox-sender { color: var(--ink-body); font-weight: var(--weight-semi); }
-.wk-inbox-age { margin-left: auto; flex-shrink: 0; color: var(--ink-dim); font-variant-numeric: tabular-nums; }
-.wk-inbox-subject { font-size: var(--text-sm); color: var(--ink-high); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.wk-inbox-row[data-unread="true"] .wk-inbox-subject { font-weight: var(--weight-semi); }
-.wk-inbox-snippet { font-size: var(--text-xs); color: var(--ink-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.wk-inbox-pane { min-height: 0; overflow: hidden; display: flex; flex-direction: column; padding: var(--space-1) var(--space-1) var(--space-2) var(--space-5, 20px); border-left: 1px solid var(--border-subtle); }
-.wk-inbox-read { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: var(--space-3); }
-.wk-inbox-read-scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: var(--space-3); padding-right: var(--space-1); }
-.wk-inbox-read-dock { flex: 0 0 auto; display: flex; flex-direction: column; gap: var(--space-2); padding-top: var(--space-3); border-top: 1px solid var(--border-subtle); }
-.wk-inbox-read-dock:empty { display: none; }
-.wk-inbox-read-meta { margin: 0; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: var(--text-xs); color: var(--ink-dim); }
-.wk-inbox-read-subject { margin: 0; font-size: var(--text-lg); font-weight: var(--weight-semi); color: var(--ink-high); line-height: var(--leading-tight); }
-.wk-inbox-read-job { font-size: var(--text-sm); align-self: flex-start; }
-.wk-inbox-read-body { margin: 0; font-size: var(--text-sm); color: var(--ink-body); }
-.wk-inbox-read-acts { display: flex; gap: var(--space-2); align-items: center; flex-wrap: wrap; }
-.wk-inbox-read-acts .wk-btn svg { margin-right: 4px; }
-/* The gate's own answer moves in the pane read as the one button system (not the row-pill style). */
-.wk-inbox-read .wk-need-acts { display: flex; gap: var(--space-2); flex-wrap: wrap; }
-.wk-inbox-read .wk-need-act {
-  display: inline-flex; align-items: center; min-height: var(--control-h-sm); padding: 0 10px; border-radius: var(--radius-md);
-  border: 1px solid var(--border-strong); background: var(--surface-raised); color: var(--ink-high); font-size: var(--text-xs); font-weight: var(--weight-semi);
-  box-shadow: var(--shadow-button); text-decoration: none;
-}
-.wk-inbox-read .wk-need-act:hover:not(:disabled) { border-color: var(--accent); }
-.wk-inbox-read .wk-need-act--quiet { border-color: transparent; background: transparent; box-shadow: none; color: var(--ink-muted); }
-.wk-inbox-read .wk-need-why { margin: 0; padding: 0; border: 0; }
-.wk-inbox-confirm { display: inline-flex; gap: var(--space-2); align-items: center; flex-wrap: wrap; font-size: var(--text-xs); color: var(--ink-body); }
-.wk-inbox-members { margin: 0; padding-left: var(--space-4); font-size: var(--text-sm); display: flex; flex-direction: column; gap: 6px; }
 
 .wk-now-scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: var(--space-3); }
 .wk-now-quiet { margin: 0; font-size: var(--text-sm); color: var(--ink-muted); }
@@ -556,9 +504,6 @@
   .wk-desk2-top { grid-template-columns: minmax(0, 1fr); height: auto; }
   .wk-desk2-top > .wk-inbox { height: 400px; }
   .wk-desk2-top > .wk-now { height: 360px; }
-  .wk-inbox-split { grid-template-columns: minmax(0, 1fr); }
-  .wk-inbox-pane { display: none; }
-  .wk-inbox-row { min-height: var(--tap-min); }
   .wk-refine-select { flex: 1 1 45%; }
   .wk-refine-select select { max-width: none; width: 100%; }
   .wk-refine-group { margin-left: 0; flex-wrap: wrap; }
@@ -567,7 +512,9 @@
 }
 
 /* ── Desk v2 tabs: Work and Understand ─────────────────────────────────────────────────────── */
-.wk-desk2 { --blk-h: 156px; }
+/* 2026-10-16: the inbox is the Desk's lead and reads as a list — two block rows tall enough for it to show
+   four items and its reading pane without scrolling a three-line item out of view. */
+.wk-desk2 { --blk-h: 184px; }
 .wk-desk2-tabs { display: flex; gap: var(--space-6); border-bottom: 1px solid var(--border-subtle); margin-top: calc(-1 * var(--space-2)); }
 .wk-desk2-tab { padding: var(--space-2) 0 var(--space-3); font-size: var(--text-md); font-weight: var(--weight-medium, 500); color: var(--ink-muted); text-decoration: none; border-bottom: 2px solid transparent; margin-bottom: -1px; }
 .wk-desk2-tab:hover { color: var(--ink-high); }
@@ -579,7 +526,9 @@
 /* The inbox is EXACTLY two block rows plus the gap between them (measured: bin/stable.mjs). */
 .wk-work-top > .wk-inbox { height: calc(2 * var(--blk-h) + var(--d2-gap)); }
 .wk-work-blocks { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: repeat(2, var(--blk-h)); gap: var(--d2-gap); }
-.wk-work-blocks .wk-stat { height: var(--blk-h); align-content: start; }
+.wk-work-blocks .wk-stat { height: var(--blk-h); align-content: start; grid-template-rows: auto auto minmax(0, 1fr); }
+/* The taller row (2026-10-16): the note sits at the tile's foot, the number stays by its label. */
+.wk-work-blocks .wk-stat-foot { align-self: end; }
 .wk-work-blocks .wk-stat-value { font-size: var(--text-2xl); }
 /* A Work tile's note gets two lines before it is cut ("Agents ready": "1 more with limits · 2 can't tell"). */
 .wk-work-blocks .wk-stat-note { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
@@ -714,38 +663,165 @@
   .wk-und-cards { grid-template-columns: minmax(0, 1fr) !important; }
 }
 
-/* ── Inbox rows = the needs queue laid out as mail (same keys, moves and testids as before). ── */
-.wk-inbox-list { overflow-y: auto; min-height: 0; }
-.wk-inbox-list .wk-desk-needs { display: flex; flex-direction: column; gap: 2px; outline: none; }
+/* ── NEEDS YOU, THE INBOX (operator 2026-10-16: "the inbox just looks like a thing of boxes in both
+   light/dark modes - needs more design"). One card; inside it a mail list and a reading pane, and no
+   box inside a box:
+   - the head: the title, the count, and the folders as one segmented control with count badges;
+   - the list: three lines per item (who · when / what / which job), a round kind mark on the left
+     (decision, failure, to review, worth a look — each in its own tone) carrying the unread dot,
+     hairlines between items, quiet section labels with counts, the moves as small quiet buttons at
+     the end of the job's line (an answer being given opens under the item, full width);
+   - the reading pane: a raised panel with the item's kind tag, its question as the headline and its
+     moves docked at the foot;
+   - the chores for whoever runs studio: one tinted callout above the list.
+   Tokens only, so both themes (and the wicked pair) read from the same rules. ── */
+/* Its identity (operator 2026-10-17: "it's still not obvious what it is just needs a little more definition"):
+   a bordered component with an inbox mark, its name, a count pill and one line saying what lands here. */
+.wk-desk2 .wk-inbox { border: 1px solid var(--border); }
+.wk-inbox-head { flex: 0 0 auto; display: flex; align-items: center; gap: var(--space-2) var(--space-3); flex-wrap: wrap; padding-bottom: var(--space-4); }
+.wk-inbox-icon { flex: 0 0 auto; display: grid; place-items: center; width: 36px; height: 36px; border-radius: var(--radius-md); background: var(--accent-wash); color: var(--accent); }
+.wk-inbox-heading { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.wk-inbox-heading .wk-desk2-title { margin: 0; line-height: var(--leading-tight); }
+.wk-inbox-subtitle { margin: 0; font-size: var(--text-xs); color: var(--ink-muted); }
+.wk-inbox-title-row { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
+.wk-inbox-head .wk-inbox-count { padding: 2px 10px; border-radius: var(--radius-full); background: var(--surface-raised); color: var(--ink-body); font-size: var(--text-xs); font-weight: var(--weight-semi); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.wk-inbox-head .wk-inbox-count[data-count]:not([data-count="0"]) { background: var(--accent-wash); color: var(--ink-high); }
+.wk-inbox-folders { display: inline-flex; gap: 2px; margin-left: auto; padding: 3px; flex-wrap: wrap; border-radius: var(--radius-full); background: var(--surface-raised); box-shadow: inset 0 0 0 1px var(--border-subtle); }
+.wk-inbox-folders .wk-inbox-folder { gap: 6px; min-height: 28px; padding: 0 6px 0 12px; border: 0; border-radius: var(--radius-full); background: transparent; color: var(--ink-muted); font-weight: var(--weight-medium); }
+.wk-inbox-folders .wk-inbox-folder:hover { background: transparent; color: var(--ink-high); }
+.wk-inbox-folders .wk-inbox-folder[aria-selected="true"] { background: var(--surface-card); color: var(--ink-high); font-weight: var(--weight-semi); box-shadow: var(--shadow-button); }
+/* codex r1: the selected pill's shadow must not swallow the keyboard's ring. */
+.wk-inbox-folders .wk-inbox-folder:focus-visible { outline: 2px solid transparent; box-shadow: var(--focus-ring); }
+.wk-inbox-folder-n { min-width: 20px; padding: 0 6px; border-radius: var(--radius-full); background: var(--border-subtle); color: var(--ink-body); font-size: var(--text-2xs); font-weight: var(--weight-semi); font-variant-numeric: tabular-nums; line-height: 18px; text-align: center; }
+.wk-inbox-folder[aria-selected="true"] .wk-inbox-folder-n { background: var(--accent); color: var(--accent-fg); }
+
+.wk-inbox-empty { padding: var(--space-3) 0; flex: 1 1 auto; min-height: 0; }
+.wk-inbox-split { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr); gap: var(--space-4); }
+.wk-inbox-split--calm { grid-template-columns: minmax(0, 1fr); }
+.wk-inbox-list { list-style: none; margin: 0; padding: 0 var(--space-1) 0 0; overflow-y: auto; min-height: 0; display: flex; flex-direction: column; }
+.wk-inbox-list .wk-desk-needs { display: flex; flex-direction: column; outline: none; }
 .wk-inbox-list .wk-desk-needs:focus-visible { box-shadow: var(--focus-ring); border-radius: var(--radius-md); }
-.wk-inbox-list .wk-need-section { margin: var(--space-2) 0 2px var(--space-2); font-size: var(--text-2xs); font-weight: var(--weight-semi); color: var(--ink-muted); }
+.wk-inbox-list .wk-need-section { margin: var(--space-4) 0 var(--space-1); padding: 0 var(--space-2); font-size: var(--text-xs); font-weight: var(--weight-semi); color: var(--ink-high); }
+.wk-inbox-list .wk-need-section-count { font-weight: var(--weight-normal); color: var(--ink-muted); }
 .wk-inbox-list [role="group"]:first-of-type .wk-need-section { margin-top: 0; }
-.wk-inbox-list div.wk-inbox-row { display: grid; grid-template-columns: 3px minmax(0, 1fr); column-gap: var(--space-3); row-gap: 3px; padding: var(--space-3) var(--space-3) var(--space-3) var(--space-2); border-radius: var(--radius-md); cursor: pointer; }
-.wk-inbox-list div.wk-inbox-row > :not(.wk-inbox-mark) { grid-column: 2; }
-.wk-inbox-list div.wk-inbox-row .wk-inbox-mark { grid-row: 1 / 5; }
+.wk-inbox-list p[data-testid="home-calm"] { padding: var(--space-3) var(--space-2) !important; }
+
+/* An item: kind mark | who · when / what / which job + its moves. */
+.wk-inbox-list div.wk-inbox-row {
+  position: relative; display: grid; grid-template-columns: 28px minmax(0, 1fr) auto;
+  grid-template-areas: "mark from from" "mark subject subject" "mark snippet acts";
+  column-gap: var(--space-3); row-gap: 2px; align-items: center;
+  padding: var(--space-3) var(--space-2); border-radius: var(--radius-md); cursor: pointer;
+  transition: background-color var(--dur-fast) var(--ease-out);
+}
+/* Hairlines between items, from the text's edge (never under the mark), gone beside a lit item. */
+.wk-inbox-list div.wk-inbox-row::after { content: ''; position: absolute; left: calc(var(--space-2) + 28px + var(--space-3)); right: var(--space-2); bottom: 0; height: 1px; background: var(--border-subtle); }
+.wk-inbox-list [role="group"]:last-child > div.wk-inbox-row::after,
+.wk-inbox-list div.wk-inbox-row:hover::after, .wk-inbox-list div.wk-inbox-row[aria-current="true"]::after { display: none; }
 .wk-inbox-list div.wk-inbox-row:hover { background: var(--surface-raised); }
-.wk-inbox-list div.wk-inbox-row[aria-current="true"] { background: var(--accent-wash); }
-.wk-inbox-list div.wk-inbox-row[data-kbd-selected="true"] { box-shadow: inset 0 0 0 2px var(--accent); }
-.wk-inbox-list .wk-inbox-row--member { margin-left: var(--space-4); }
+.wk-inbox-list div.wk-inbox-row[aria-current="true"] { background: var(--accent-wash); box-shadow: inset 3px 0 0 var(--accent); }
+/* The keyboard's place in the list is ringed only while the keyboard is in it (a click selects and reads). */
+.wk-inbox-list .wk-desk-needs:is(:focus-visible, :has(:focus-visible)) div.wk-inbox-row[data-kbd-selected="true"] { box-shadow: inset 0 0 0 2px var(--accent); }
+.wk-inbox-list .wk-inbox-row--member { margin-left: var(--space-6); }
+
+.wk-inbox-mark { grid-area: mark; align-self: start; position: relative; width: 28px; height: 28px; margin-top: 2px; display: grid; place-items: center; border-radius: var(--radius-full); background: var(--surface-raised); color: var(--ink-muted); }
+.wk-inbox-mark[data-section="decision"] { background: var(--accent-wash); color: var(--accent); }
+.wk-inbox-mark[data-section="failure"] { background: var(--status-fail-dim); color: var(--status-fail); }
+.wk-inbox-mark[data-section="review"] { background: var(--status-warn-dim); color: var(--status-warn); }
+.wk-inbox-row[aria-current="true"] .wk-inbox-mark[data-section="decision"] { background: var(--surface-card); }
+.wk-inbox-row[data-unread="true"] .wk-inbox-mark::after { content: ''; position: absolute; top: -1px; right: -1px; width: 9px; height: 9px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 2px var(--surface-card); }
+
+.wk-inbox-from { grid-area: from; display: flex; align-items: center; gap: 6px; min-width: 0; font-size: var(--text-xs); color: var(--ink-muted); }
+/* What kind of item, in a word, on its first line. */
+.wk-inbox-kind-chip { flex: 0 0 auto; display: inline-flex; align-items: center; height: 18px; padding: 0 7px; border-radius: var(--radius-full); background: var(--surface-raised); color: var(--ink-body); font-size: var(--text-2xs); font-weight: var(--weight-semi); white-space: nowrap; }
+.wk-inbox-kind-chip[data-section="decision"] { background: var(--accent-wash); color: var(--ink-high); }
+.wk-inbox-kind-chip[data-section="failure"] { background: var(--status-fail-dim); color: var(--status-fail); }
+.wk-inbox-kind-chip[data-section="review"] { background: var(--status-warn-dim); color: var(--ink-high); }
+.wk-inbox-row[aria-current="true"] .wk-inbox-kind-chip[data-section="decision"] { background: var(--surface-card); }
+/* Empty, it is still recognizably the inbox. */
+.wk-inbox-list .wk-inbox-calm { flex: 1 1 auto; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--space-1); padding: var(--space-6) var(--space-4); text-align: center; border-radius: var(--radius-lg); background: var(--surface-raised); }
+.wk-inbox-calm-icon { color: var(--status-ok); }
+.wk-inbox-calm-title { margin: 0; font-size: var(--text-md); font-weight: var(--weight-semi); color: var(--ink-high); }
+.wk-inbox-calm-line { margin: 0; font-size: var(--text-xs); color: var(--ink-muted); }
 .wk-inbox-list .wk-inbox-sender { padding: 0; border: 0; background: none; font: inherit; color: inherit; cursor: pointer; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .wk-inbox-list .wk-inbox-sender:focus-visible { outline: 2px solid transparent; box-shadow: var(--focus-ring); border-radius: var(--radius-sm); }
-.wk-inbox-list .wk-inbox-from [data-testid="need-age"] { margin-left: auto; flex-shrink: 0; font-size: var(--text-xs); color: var(--ink-dim); }
-.wk-inbox-list a.wk-inbox-snippet { text-decoration: none; color: var(--ink-dim); }
+.wk-inbox-row[data-unread="true"] .wk-inbox-sender { color: var(--ink-body); font-weight: var(--weight-semi); }
+.wk-inbox-list .wk-inbox-from [data-testid="need-age"] { margin-left: auto; flex-shrink: 0; font-size: var(--text-2xs); color: var(--ink-dim); font-variant-numeric: tabular-nums; }
+.wk-inbox-subject { grid-area: subject; font-size: var(--text-sm); line-height: var(--leading-tight); color: var(--ink-body); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wk-inbox-row[data-unread="true"] .wk-inbox-subject { color: var(--ink-high); font-weight: var(--weight-semi); }
+.wk-inbox-snippet { grid-area: snippet; min-width: 0; font-size: var(--text-xs); color: var(--ink-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wk-inbox-list a.wk-inbox-snippet { justify-self: start; max-width: 100%; text-decoration: none; color: var(--ink-dim); }
 .wk-inbox-list a.wk-inbox-snippet:hover { text-decoration: underline; color: var(--ink-body); }
-.wk-inbox-acts { margin-top: var(--space-1); }
-.wk-inbox-acts .wk-need-acts { display: flex; gap: var(--space-2); flex-wrap: wrap; align-items: center; }
-.wk-inbox-acts .wk-need-act { min-height: var(--control-h-sm); padding: 0 10px; font-size: var(--text-xs); }
-.wk-inbox-list [data-testid="home-calm"] { padding: var(--space-3) 0 !important; }
-.wk-inbox-split--calm { grid-template-columns: minmax(0, 1fr); }
 
-.wk-inbox-chores { display: flex; flex-direction: column; gap: 2px; padding-bottom: var(--space-2); margin-bottom: var(--space-2); border-bottom: 1px solid var(--border-subtle); }
-.wk-inbox-chore { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-2) var(--space-3) var(--space-2) var(--space-4); border-radius: var(--radius-md); }
-.wk-inbox-chore:hover { background: var(--surface-raised); }
+/* The moves: small and quiet at the end of the job's line; an answer in progress (the choices, the
+   chosen line with its Undo, an open "why") takes its own full-width line under the item. */
+.wk-inbox-acts { grid-area: acts; justify-self: end; min-width: 0; }
+/* A group's batch moves (codex r1) always take their own line: beside the snippet they squeezed it to nothing. */
+.wk-inbox-acts:has(.wk-need-answer, .wk-need-chosen, [aria-expanded="true"]),
+.wk-inbox-list div.wk-inbox-row:not([data-count="1"]) > .wk-inbox-acts { grid-area: 4 / 2 / 5 / -1; justify-self: stretch; margin-top: var(--space-2); }
+.wk-inbox-acts .wk-need-acts { display: flex; gap: var(--space-1); flex-wrap: wrap; align-items: center; justify-content: flex-end; }
+.wk-inbox-acts:has(.wk-need-answer, .wk-need-chosen, [aria-expanded="true"]) .wk-need-acts,
+.wk-inbox-list div.wk-inbox-row:not([data-count="1"]) > .wk-inbox-acts .wk-need-acts { justify-content: flex-start; }
+/* The item's move reads as its action (operator 2026-10-17): an outlined button in the accent; a quiet second move stays text. */
+.wk-inbox-acts .wk-need-act { min-width: 0; min-height: var(--control-h-sm); padding: 0 var(--space-3); border: 1px solid color-mix(in oklab, var(--accent) 50%, transparent); border-radius: var(--radius-md); background: var(--surface-card); color: var(--accent); font-size: var(--text-xs); }
+.wk-inbox-acts .wk-need-act:hover:not(:disabled) { border-color: var(--accent); background: var(--accent-wash); color: var(--ink-high); }
+.wk-inbox-acts .wk-need-act--quiet { border-color: transparent; background: transparent; color: var(--ink-muted); }
+.wk-inbox-acts .wk-need-act--quiet:hover:not(:disabled) { border-color: transparent; background: var(--surface-raised); color: var(--ink-high); }
+
+/* For whoever runs studio: one tinted callout above the list, its moves small and solid. */
+.wk-inbox-chores { display: flex; flex-direction: column; gap: 2px; margin: 0 0 var(--space-2); padding: var(--space-2); border-radius: var(--radius-lg); background: var(--status-warn-dim); }
+.wk-inbox-chores > .wk-need-section { margin: 0; padding: 2px var(--space-2) var(--space-1); font-size: var(--text-xs); font-weight: var(--weight-semi); color: var(--ink-high); }
+.wk-inbox-chore { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-1) var(--space-2); border-radius: var(--radius-md); }
 .wk-inbox-chore-body { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-.wk-inbox-chore-title { font-size: var(--text-sm); color: var(--ink-high); font-weight: var(--weight-medium, 500); }
-.wk-inbox-chore-line { font-size: var(--text-xs); color: var(--ink-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.wk-inbox-chore-lead { margin: 0 var(--space-3); font-size: var(--text-sm); color: var(--ink-body); }
-.wk-inbox-chores .wk-need-act { min-height: var(--control-h-sm); padding: 0 10px; font-size: var(--text-xs); }
+.wk-inbox-chore-title { font-size: var(--text-sm); color: var(--ink-high); font-weight: var(--weight-medium); }
+.wk-inbox-chore-line { font-size: var(--text-xs); color: var(--ink-body); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wk-inbox-chore-lead { margin: 0 var(--space-2); font-size: var(--text-sm); color: var(--ink-body); }
+.wk-inbox-chores .wk-need-act { min-width: 0; min-height: var(--control-h-sm); padding: 0 var(--space-3); border-color: transparent; background: var(--surface-card); color: var(--ink-high); font-size: var(--text-xs); box-shadow: var(--shadow-button); }
+.wk-inbox-chores .wk-need-act:hover:not(:disabled) { background: var(--surface-card); border-color: var(--border-strong); }
+
+/* The reading pane: a raised panel; what it is scrolls, what you can do is docked at its foot. */
+.wk-inbox-pane { min-height: 0; overflow: hidden; display: flex; flex-direction: column; padding: var(--space-4) var(--space-5, 20px) var(--space-3); border-radius: var(--radius-lg); background: var(--surface-raised); }
+.wk-inbox-pane > .wk-viz-state { margin: auto; color: var(--ink-muted); }
+.wk-inbox-read { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: var(--space-3); }
+.wk-inbox-read-scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: var(--space-2); padding-right: var(--space-1); }
+.wk-inbox-read-dock { flex: 0 0 auto; display: flex; flex-direction: column; gap: var(--space-2); padding-top: var(--space-3); border-top: 1px solid var(--border-subtle); }
+.wk-inbox-read-dock:empty { display: none; }
+.wk-inbox-read-meta { margin: 0; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: var(--text-xs); color: var(--ink-muted); }
+.wk-inbox-kind { display: inline-flex; align-items: center; height: 20px; margin-right: 2px; padding: 0 var(--space-2); border-radius: var(--radius-full); background: var(--surface-card); color: var(--ink-body); font-size: var(--text-2xs); font-weight: var(--weight-semi); }
+.wk-inbox-kind[data-section="decision"] { background: var(--accent-wash); color: var(--ink-high); }
+.wk-inbox-kind[data-section="failure"] { background: var(--status-fail-dim); color: var(--status-fail); }
+.wk-inbox-kind[data-section="review"] { background: var(--status-warn-dim); color: var(--ink-high); }
+.wk-inbox-read-subject { margin: var(--space-1) 0 0; font-size: var(--text-lg); font-weight: var(--weight-semi); color: var(--ink-high); line-height: var(--leading-tight); text-wrap: balance; }
+.wk-inbox-read-job { font-size: var(--text-sm); align-self: flex-start; }
+.wk-inbox-read-body { margin: 0; font-size: var(--text-sm); color: var(--ink-body); }
+.wk-inbox-read-acts { display: flex; gap: var(--space-2); align-items: center; flex-wrap: wrap; }
+.wk-inbox-read-acts .wk-btn svg { margin-right: 4px; }
+/* The gate's own answer moves in the pane read as the one button system (not the row's quiet style). */
+.wk-inbox-read .wk-need-acts { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+.wk-inbox-read .wk-need-act {
+  display: inline-flex; align-items: center; min-height: var(--control-h-sm); padding: 0 10px; border-radius: var(--radius-md);
+  border: 1px solid var(--border-strong); background: var(--surface-card); color: var(--ink-high); font-size: var(--text-xs); font-weight: var(--weight-semi);
+  box-shadow: var(--shadow-button); text-decoration: none;
+}
+.wk-inbox-read .wk-need-act:hover:not(:disabled) { border-color: var(--accent); }
+.wk-inbox-read .wk-need-act--quiet { border-color: transparent; background: transparent; box-shadow: none; color: var(--ink-muted); }
+.wk-inbox-read .wk-need-why { margin: 0; padding: 0; border: 0; }
+.wk-inbox-confirm { display: inline-flex; gap: var(--space-2); align-items: center; flex-wrap: wrap; font-size: var(--text-xs); color: var(--ink-body); }
+.wk-inbox-members { margin: 0; padding-left: var(--space-4); font-size: var(--text-sm); display: flex; flex-direction: column; gap: 6px; }
+.wk-inbox-foot { flex: 0 0 auto; display: flex; align-items: center; gap: var(--space-3); padding-top: var(--space-3); margin-top: auto; border-top: 1px solid var(--border-subtle); font-size: var(--text-xs); }
+
+@media (max-width: 767px) {
+  .wk-inbox-split { grid-template-columns: minmax(0, 1fr); }
+  .wk-inbox-pane { display: none; }
+  .wk-inbox-folders { margin-left: 0; }
+  .wk-inbox-folders .wk-inbox-folder { min-height: var(--tap-min); }
+  /* No reading pane on a phone: the moves keep their own line under the item, at the tap size. */
+  .wk-inbox-list div.wk-inbox-row { min-height: var(--tap-min); grid-template-columns: 28px minmax(0, 1fr); grid-template-areas: "mark from" "mark subject" "mark snippet" ". acts"; }
+  .wk-inbox-acts { justify-self: start; margin-top: var(--space-1); }
+  .wk-inbox-acts .wk-need-acts { justify-content: flex-start; }
+  .wk-inbox-acts .wk-need-act, .wk-inbox-chores .wk-need-act { min-height: var(--tap-min); }
+}
+@media (prefers-reduced-motion: reduce) { .wk-inbox-list div.wk-inbox-row { transition: none; } }
 
 /* Report: the big number is each tile's hero. */
 .wk-understand .wk-stats .wk-stat, .wk-dr .wk-stats .wk-stat { grid-template-columns: auto minmax(0, 1fr); row-gap: var(--space-1); padding: var(--space-5, 20px); }

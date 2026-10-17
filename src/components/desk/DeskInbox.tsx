@@ -1,5 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
-import { Archive, ExternalLink, RotateCcw } from 'lucide-react';
+import { Archive, ExternalLink, Inbox, RotateCcw } from 'lucide-react';
 import { api } from '../../api/client.js';
 import type { SessionView } from '../../api/types.js';
 import type { NeedRow } from '../../board/needsYou.js';
@@ -49,7 +49,9 @@ function readSeen(): Set<string> {
 
 function seenId(row: NeedRow): string { return `${row.key}@${row.at ?? ''}`; }
 
-export function DeskInbox({ rows, runs, navigate, now, settled, agentName, extra = null, missing = [], onRetry, retrying = false }: {
+export function DeskInbox({ rows, runs, navigate, now, settled, agentName, extra = null, setupCount = 0, missing = [], onRetry, retrying = false }: {
+  /** Studio's own setup items above the list (codex r2: the inbox never reads all-clear beside them). */
+  setupCount?: number;
   /** Needs sources that did not answer (a partial read): named, with a retry. */
   missing?: readonly string[];
   onRetry?: () => void;
@@ -83,7 +85,7 @@ export function DeskInbox({ rows, runs, navigate, now, settled, agentName, extra
   const total = byFolder.get('all') ?? 0;
   const folderEmpty = folder !== 'all' && total > 0
     ? `Nothing in ${FOLDERS.find((f) => f.id === folder)?.label ?? 'this folder'} now · ${total}${settled === 'partial' ? '+' : ''} still waiting in All.`
-    : undefined;
+    : total === 0 && setupCount > 0 ? 'Nothing else needs you right now' : undefined;
   const flat = useMemo(() => queue.rows.flatMap((r) => [r, ...(r.members ?? [])]), [queue.rows]);
   const current = flat.find((r) => r.key === selected) ?? null;
   const runOf = (row: NeedRow): SessionView | null => { const id = needRunId(row); return id === null ? null : runs.find((v) => v.session.id === id) ?? null; };
@@ -116,9 +118,17 @@ export function DeskInbox({ rows, runs, navigate, now, settled, agentName, extra
 
   return (
     <section id="desk-inbox" aria-labelledby="desk-inbox-title" data-testid="desk-inbox" className="wk-card wk-inbox">
+      {/* What it is, at a glance (operator 2026-10-17: "it's still not obvious what it is"): the inbox mark, its
+          name, the count, and one line saying what lands here. */}
       <header className="wk-inbox-head">
-        <h2 id="desk-inbox-title" className="wk-desk2-title">Needs you</h2>
-        {settled !== 'loading' && <span className="wk-viz-meta" data-testid="desk-inbox-count" data-phase={settled} data-count={needCount(rows)}>{byFolder.get('all') === 0 ? (settled === 'partial' ? 'not everything could be read' : 'nothing is waiting for you') : `${byFolder.get('all')}${settled === 'partial' ? '+' : ''} waiting${unread > 0 ? ` · ${unread} unread` : ''}`}</span>}
+        <span aria-hidden className="wk-inbox-icon"><Inbox size={18} /></span>
+        <div className="wk-inbox-heading">
+          <div className="wk-inbox-title-row">
+            <h2 id="desk-inbox-title" className="wk-desk2-title">Needs you</h2>
+            {settled !== 'loading' && <span className="wk-viz-meta wk-inbox-count" data-testid="desk-inbox-count" data-phase={settled} data-count={needCount(rows)}>{byFolder.get('all') === 0 ? (settled === 'partial' ? 'not everything could be read' : setupCount > 0 ? `${setupCount} to set up` : 'nothing is waiting for you') : `${byFolder.get('all')}${settled === 'partial' ? '+' : ''} waiting${unread > 0 ? ` · ${unread} unread` : ''}`}</span>}
+          </div>
+          <p data-testid="desk-inbox-subtitle" className="wk-inbox-subtitle">Decisions, questions and problems waiting on you</p>
+        </div>
         <div role="tablist" aria-label="Show" className="wk-inbox-folders">
           {FOLDERS.filter((f) => f.id === 'all' || (byFolder.get(f.id) ?? 0) > 0 || folder === f.id).map((f) => (
             <button key={f.id} type="button" role="tab" id={tabId(f.id)} aria-controls={panelId(f.id)} tabIndex={folder === f.id ? 0 : -1}
@@ -155,6 +165,9 @@ export function DeskInbox({ rows, runs, navigate, now, settled, agentName, extra
     </section>
   );
 }
+
+/** The reading pane's kind tag: what this item is, in one word, in its section's tone. */
+const KIND_WORD: Record<NeedSection, string> = { decision: 'Decision', failure: 'Failed', review: 'To review', other: 'Worth a look' };
 
 function senderOf(row: NeedRow): string {
   if (row.kind === 'repo-graph') return 'Repositories';
@@ -206,6 +219,7 @@ function ReadingPane({ row, view, queueAct, navigate, now, agentName }: {
       {/* What it is scrolls; what you can do about it is pinned under it, always in view. */}
       <div className="wk-inbox-read-scroll">
         <p className="wk-inbox-read-meta">
+          <span data-testid="desk-inbox-kind" data-section={needSection(row)} className="wk-inbox-kind">{KIND_WORD[needSection(row)]}</span>
           {agent !== null && <><i aria-hidden className="wk-chart-swatch" style={{ background: agentColor(agent) }} />{agentName(agent)} · </>}
           {view !== null ? workflowOf(view).label : senderOf(row)}
           {row.at !== null && <> · {relTime(row.at, now)}</>}

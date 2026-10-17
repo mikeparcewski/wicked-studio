@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { CheckCircle2, CircleAlert, CircleHelp, Eye, Sparkles } from 'lucide-react';
 import type { SessionView } from '../api/types.js';
 import { calmCopy, type NeedRow } from '../board/needsYou.js';
 import { focusLockNote, memberPage, needCount, needSection, SECTIONS, visibleMembers, type NeedSection } from '../board/needsQueue.js';
@@ -62,6 +63,21 @@ const CSS = {
     flexShrink: 0, minWidth: '3.5em', textAlign: 'right', fontVariantNumeric: 'tabular-nums',
   },
 } as const satisfies Record<string, React.CSSProperties>;
+
+/** The inbox row's kind, in a word (operator 2026-10-17: "each row reads as an actionable item: what kind"). */
+const KIND_WORD: Record<NeedRow['kind'], string> = {
+  gate: 'Decision', elicitation: 'Question', 'steer-request': 'Steer request', proposal: 'To review',
+  'failed-run': 'Failed', 'orphaned-run': 'Stopped', 'stalled-run': 'Stalled', 'stall-escalated': 'Stalled',
+  'stranded-run': 'Ready to deliver', campaign: 'Tests', 'stalled-chat': 'Chat', 'repo-graph': 'Repository',
+} as Record<NeedRow['kind'], string>;
+
+/** The inbox row's kind mark: one icon per section, the same four the folders name. */
+const SECTION_ICON: Record<NeedSection, React.ReactElement> = {
+  decision: <CircleHelp size={15} />,
+  failure: <CircleAlert size={15} />,
+  review: <Eye size={15} />,
+  other: <Sparkles size={15} />,
+};
 
 /** Desk v2's inbox look for the queue's rows (the inbox owns sender, unread and the reading pane). */
 export interface InboxRowLook {
@@ -254,8 +270,11 @@ export function NeedsYouQueue({ queue, runs, navigate, now, inbox, partial = fal
         className={`wk-inbox-row${testId === 'need-member' ? ' wk-inbox-row--member' : ''}${revealed.has(row.key) ? ' wk-need-row--reveal' : ''}`}
         onClick={(e) => { if ((e.target as Element).closest('a, button, input, textarea, select, [role="radio"]') === null) look.onSelect(row); }}
       >
-        <span aria-hidden className="wk-inbox-mark" data-section={needSection(row)} />
+        {/* The kind at a glance: a decision, a failure, something to review or another look (one icon
+            per section); the dot on it is "unread", like a mail list. */}
+        <span aria-hidden className="wk-inbox-mark" data-section={needSection(row)}>{SECTION_ICON[needSection(row)]}</span>
         <span className="wk-inbox-from">
+          <span data-testid="need-kind" data-section={needSection(row)} className="wk-inbox-kind-chip">{isGroup ? `${row.members?.length ?? 0} ${KIND_WORD[row.kind] ?? 'items'}` : KIND_WORD[row.kind] ?? 'Needs you'}</span>
           {urgent && <span aria-hidden data-urgent="true" className="wk-desk-dot wk-desk-dot--urgent" title="Most urgent" />}
           {from.color !== null && <i aria-hidden className="wk-chart-swatch wk-chart-swatch--dot" style={{ background: from.color }} />}
           <button type="button" className="wk-inbox-sender" data-testid="desk-inbox-row" data-key={row.key} onClick={() => look.onSelect(row)} aria-label={`Read: ${row.question ?? row.text}`}>{from.label}</button>
@@ -367,6 +386,7 @@ export function NeedsYouQueue({ queue, runs, navigate, now, inbox, partial = fal
     return (
       <p data-testid="need-section" data-section={id} className="wk-need-section">
         {sec?.title}
+        {inbox !== undefined && sec !== undefined && <span className="wk-need-section-count"> · {sec.count}</span>}
       </p>
     );
   };
@@ -425,7 +445,14 @@ export function NeedsYouQueue({ queue, runs, navigate, now, inbox, partial = fal
           </button>
         </p>
       )}
-      {queue.rows.length === 0 ? (
+      {queue.rows.length === 0 && inbox !== undefined ? (
+        // The inbox's own empty state (operator 2026-10-17): recognizable as the inbox even with nothing in it.
+        <div data-testid="home-calm" className="wk-inbox-calm">
+          <span aria-hidden className="wk-inbox-calm-icon"><CheckCircle2 size={22} /></span>
+          <p className="wk-inbox-calm-title">{emptyCopy !== undefined ? emptyCopy : partial ? 'Nothing to show from what could be read; some sources did not answer.' : 'Nothing needs you right now'}</p>
+          {emptyCopy === undefined && !partial && <p className="wk-inbox-calm-line">{calmLine(calmCopy(runs))}</p>}
+        </div>
+      ) : queue.rows.length === 0 ? (
         // The ONLY calm copy on the page — same fold, one branch (§3).
         <p
           data-testid="home-calm"
@@ -528,4 +555,10 @@ export function FocusLockToggle({ items }: { items: number }): React.ReactElemen
       <Switch data-testid="home-focus-toggle" label="Show only the most urgent need" checked={on} onChange={(v) => useFocusLockStore.getState().setOn(v)} />
     </span>
   );
+}
+
+/** The calm sentence's second half for the inbox's empty state: "Nothing needs you — 2 runs working." → "2 runs working." */
+function calmLine(copy: string): string {
+  const rest = copy.replace(/^Nothing needs you\s*—\s*/u, '');
+  return rest.charAt(0).toUpperCase() + rest.slice(1);
 }
