@@ -388,6 +388,10 @@ def main(p) -> None:  # noqa: ANN001, C901
     page = browser.new_page(viewport={"width": W, "height": H}, device_scale_factor=1)
     page.on("pageerror", lambda e: errors.append(str(e)))
     page.add_init_script(f"window.__walkRun = {json.dumps(RUN)};")
+    # DES-CHAT-NATIVE-RUN: the run's chain line and record live in its Details fold — opened as the operator would
+    # (the same script as uxfix_fixture.OPEN_RUN_DETAILS; this journey stays importable without the fixture).
+    page.add_init_script("(() => { const open = () => document.querySelectorAll('details[data-testid=chat-run-details]:not([open])')"
+                         ".forEach((d) => { d.open = true; }); new MutationObserver(open).observe(document, { childList: true, subtree: true }); })();")
 
     # The browser, too, speaks only to the daemon at STUDIO_URL: a request to any other origin (a redirect,
     # a link, an asset) is aborted and named — the proof never touches the rig or another host.
@@ -577,6 +581,12 @@ def main(p) -> None:  # noqa: ANN001, C901
                 # NOT exercised — said so, never certified.
                 cap("failed", "thin result: no Watch verb, so the pane, full screen and Esc were not exercised", state=art["state"], under=art["under"], verbs=art["verbs"])
         if "fix" in LEGS:
+            # The fix verb rides the run's open escalation, read from the daemon after the page paints: a slow runner
+            # has the artifact before it has the gate, so the verb is waited for (bounded) before it is called absent.
+            if FIX and "walkthrough-fix" not in art["verbs"]:
+                got_fix, art_fix, _ = wait_for(page, "the fix verb", lambda a, c: "walkthrough-fix" in (a.get("verbs") or []), min(WAIT_S, 20) if WAIT_S > 0 else 0)
+                if got_fix:
+                    art = art_fix
             if not FIX or "walkthrough-fix" not in art["verbs"]:
                 cap("fix", "LIVE_FIX=no or no fix verb on screen — the failure is left to the operator", verbs=art["verbs"])
             else:

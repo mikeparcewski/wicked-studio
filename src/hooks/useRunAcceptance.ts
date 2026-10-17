@@ -13,13 +13,15 @@ import { useRunAcceptanceStore } from '../store/runAcceptance.js';
  * every read, never stored. A run with neither is never read: no fan-out on a list, no read for a
  * plan that proves nothing. `null` = the read failed, nothing is drawn.
  */
-export function useRunAcceptance(view: SessionView, chain: ChainModel, gate: OpenGate | undefined): RunAcceptanceView | null {
+/** `finished`: the chat-native run page (DES-CHAT-NATIVE-RUN) reads it for a finished run too — its final message
+ *  says what checked the work in crew's own words. */
+export function useRunAcceptance(view: SessionView, chain: ChainModel, gate: OpenGate | undefined, finished = false): RunAcceptanceView | null {
   const id = view.session.id;
   const walkthrough = chain.steps.some((s) => s.catalog === 'walkthrough_review' && s.state !== 'struck' && s.state !== 'replaced');
   const deliver = gate !== undefined && isDeliverGate(id, view.units, gate.ord);
   // The pair removed by the accepted plan's override (WT §4.9): crew's read is the only place
   // "end-to-end testing is yours" comes from, so it is asked for although no step names a walkthrough.
-  const wants = walkthrough || deliver || overrideRemovedWalkthrough(view.session);
+  const wants = walkthrough || deliver || overrideRemovedWalkthrough(view.session) || (finished && view.session.status === 'completed');
   const moved = `${view.session.status}:${view.session.unit_ix}:${gate?.ord ?? ''}:${gate?.receivedAt ?? ''}`;
   useEffect(() => {
     if (wants) void useRunAcceptanceStore.getState().read(id);

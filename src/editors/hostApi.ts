@@ -224,6 +224,9 @@ export interface HostPanelState {
   /** Bumped to show the panel again (unfold, and open the overlay below 1200 px) without touching the group. */
   revealed: number;
   reveal(): void;
+  /** Below 1200 px: the panel is open over the page. */
+  overlay: boolean;
+  setOverlay(open: boolean): void;
 }
 
 export const useHostPanel = create<HostPanelState>((set, get) => ({
@@ -236,6 +239,8 @@ export const useHostPanel = create<HostPanelState>((set, get) => ({
   setFolded: (folded) => set({ folded }),
   revealed: 0,
   reveal: () => set((s) => ({ folded: false, revealed: s.revealed + 1 })),
+  overlay: false,
+  setOverlay: (overlay) => set({ overlay }),
 }));
 
 /** The panel is a ribbon below this width (css px). */
@@ -338,6 +343,9 @@ export interface HostPanelProps {
   runTab?: ReactNode;
   /** The ribbon's one line below 1200 px ("Building · phase 3 of 5 · $1.20"); without a run, the open group's name. */
   ribbon?: ReactNode;
+  /** DES-CHAT-NATIVE-RUN: the page has its own toggle (the session header's Details), so a folded panel leaves
+   *  nothing behind — no side strip, no ribbon line above the conversation. */
+  toggledByPage?: boolean;
 }
 
 export interface FullShellProps {

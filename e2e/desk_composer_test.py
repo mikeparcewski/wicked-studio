@@ -144,7 +144,8 @@ with sync_playwright() as p:
 
     # ── 6a. a selection in the thread becomes a chip; Backspace removes it ───────────
     page.evaluate("""() => {
-      const el = document.querySelector('[data-testid="session-run"] .wk-session-run-title');
+      // DES-CHAT-NATIVE-RUN: a sentence the run said (its first message), selected in the thread.
+      const el = document.querySelector('[data-testid="session-run"] .wk-chat-body');
       const r = document.createRange(); r.selectNodeContents(el);
       const s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
       el.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));

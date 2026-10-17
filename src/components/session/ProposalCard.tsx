@@ -43,7 +43,7 @@ import { QeDeliveryFixLine, QeRefusalWarning } from '../QeRefusalWarning.js';
  *  deliver unit then says so (`proposalCard`'s late-join evidence). */
 const lastKinds = new Map<string, ProposalKind>();
 
-export function ProposalCard({ view, chain, acceptance = null, ask = null, onBringBack, handedOver = false }: {
+export function ProposalCard({ view, chain, acceptance = null, ask = null, onBringBack, handedOver = false, variant = 'card', onEdit, editing = false }: {
   view: SessionView;
   chain: ChainModel;
   /** WT-U2 / WT-W3: crew's acceptance summary for the run — the deliver card's one line, verbatim. */
@@ -55,6 +55,12 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
   /** S16a-1a: the run finished with a hand-over on record (delivered / pushed) and this browser holds
    *  no receipt — the card is that hand-over's receipt, read off the run's delivery verdict. */
   handedOver?: boolean;
+  /** DES-CHAT-NATIVE-RUN: `chat` — the card is the body of an assistant message (no box of its own); a plan card
+   *  adds "Edit" (the plan editor under the message). */
+  variant?: 'card' | 'chat';
+  /** chat: "Edit" opens the plan editor under the message (the plan's own artifact). */
+  onEdit?: () => void;
+  editing?: boolean;
 }): React.ReactElement | null {
   const runId = view.session.id;
   const showText = useDisplayText();
@@ -127,8 +133,11 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
   // "Approve with these changes" sends it — as the gate's answer, through the one decision path.
   const drafts = usePlanDrafts((s) => s.gate);
   if (card === null) return null;
+  const chat = variant === 'chat';
   const instance = gateInstance(gate);
-  const draft = card.kind === 'plan' && card.state === 'ask' ? gateDraftFor(drafts, runId, instance) : null;
+  // A refused approval that can be tried again keeps the plan's draft too (codex r2 #2: an Edit made after the
+  // refusal must ride the retry).
+  const draft = card.kind === 'plan' && (card.state === 'ask' || (card.state === 'fail' && card.canRetry)) ? gateDraftFor(drafts, runId, instance) : null;
   // studio#574: the draft's order line names each step as the editor's rows do — from the SAME
   // plan-gate view the draft was seeded from (`planGate.view.planSteps`), never the chain's steps,
   // whose floor insertions can shift the `<catalog>#<n>` keys (codex r1) — so the card and the
@@ -190,7 +199,7 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
   };
 
   return (
-    <div ref={cardRef} tabIndex={-1} data-testid="session-proposal" data-run-id={runId} data-kind={card.kind} data-state={card.state} className={`wk-prop wk-prop--${card.state}`}>
+    <div ref={cardRef} tabIndex={-1} data-testid="session-proposal" data-run-id={runId} data-kind={card.kind} data-state={card.state} data-variant={variant} className={`wk-prop wk-prop--${card.state}${chat ? ' wk-prop--chat' : ''}`}>
       {(card.state === 'ask' || card.state === 'confirm') && (
         <>
           <p data-testid="session-proposal-text" className="wk-prop-text">{card.text}</p>
@@ -292,6 +301,7 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
                   {card.kind === 'deliver' && seat.record !== null && <span data-testid="session-proposal-track-record" className="wk-session-gate-record">{seat.record}</span>}
                 </button>
                 {draft !== null && <button type="button" data-testid="session-proposal-drop-draft" onClick={() => dropGateDraft(runId, draft.gateKey)} className="wk-prop-btn wk-prop-btn--ghost">Drop the changes</button>}
+                {chat && card.kind === 'plan' && onEdit !== undefined && <button type="button" data-testid="session-proposal-edit" aria-expanded={editing} onClick={onEdit} className="wk-prop-btn wk-prop-btn--ghost">{editing ? 'Done editing' : 'Edit'}</button>}
                 <button type="button" data-testid="session-proposal-not-now" onClick={notNow} className="wk-prop-btn wk-prop-btn--ghost">Not now</button>
                 {card.end !== undefined && <button type="button" data-testid="session-proposal-end" onClick={end} className="wk-prop-btn wk-prop-btn--ghost">{card.end}</button>}
               </div>
@@ -349,6 +359,8 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
               <div className="wk-prop-btns">
                 <button ref={goRef} type="button" data-testid="session-proposal-go" data-draft={draft !== null ? 'true' : 'false'} onClick={go} className="wk-prop-btn wk-prop-btn--primary">{draft !== null ? 'Approve with these changes' : card.act}</button>
                 {draft !== null && <button type="button" data-testid="session-proposal-drop-draft" onClick={() => dropGateDraft(runId, draft.gateKey)} className="wk-prop-btn wk-prop-btn--ghost">Drop the changes</button>}
+                {/* codex r1 #7: a refused approval keeps the way to correct the plan. */}
+                {chat && card.kind === 'plan' && onEdit !== undefined && <button type="button" data-testid="session-proposal-edit" aria-expanded={editing} onClick={onEdit} className="wk-prop-btn wk-prop-btn--ghost">{editing ? 'Done editing' : 'Edit'}</button>}
                 <button type="button" data-testid="session-proposal-not-now" onClick={notNow} className="wk-prop-btn wk-prop-btn--ghost">Not now</button>
                 {card.end !== undefined && <button type="button" data-testid="session-proposal-end" onClick={end} className="wk-prop-btn wk-prop-btn--ghost">{card.end}</button>}
               </div>

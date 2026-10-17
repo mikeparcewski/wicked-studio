@@ -103,6 +103,10 @@ with sync_playwright() as p:
     def open_session(rid: str) -> None:
         page.goto(f"{origin}/s/run:{rid}", wait_until="networkidle")
         page.get_by_test_id("session").wait_for(state="visible", timeout=15000)
+        # DES-CHAT-NATIVE-RUN: while the plan waits on you, its editor opens from the plan message's Edit.
+        page.wait_for_timeout(800)
+        if page.get_by_test_id("session-proposal-edit").count() > 0 and page.get_by_test_id("session-proposal-edit").get_attribute("aria-expanded") != "true":
+            page.get_by_test_id("session-proposal-edit").click()
         plan.wait_for(state="visible", timeout=15000)
         rows.first.wait_for(state="visible", timeout=8000)
 

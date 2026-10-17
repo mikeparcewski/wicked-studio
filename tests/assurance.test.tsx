@@ -282,28 +282,24 @@ describe('the receipt renders', () => {
       { id: RUN, problem: 'Fix the signup crash', status: 'completed', delivery: 'stranded', assurance: { mode: 'full', required: ['qe_acceptance'], qe: qeOff } } as never,
       UNITS,
     );
-    // Solo arm: the head IS the status sentence; the label sits under the head, not inside it.
-    render(<RunBlock view={view} badge={0} sessionId={`run:${RUN}`} solo="Fix the signup crash" />);
-    const runCard = screen.getByTestId('session-run');
-    const head = runCard.querySelector('.wk-session-run-head')!;
-    const labels = runCard.querySelector('.wk-session-run-labels')!;
-    const qeLabel = screen.getByTestId('session-run-qe');
-    expect(head.contains(qeLabel)).toBe(false);
-    expect(labels.contains(qeLabel)).toBe(true);
-    expect(qeLabel.textContent).toBe('QE acceptance: off on this computer (Settings)');
-    expect(qeLabel.getAttribute('title')).toBe(offReason);
-    expect(screen.getByTestId('session-status-sentence').textContent).toBe('Finished · kept on this machine, not pushed · 1 of 2 done');
-    cleanup();
-    // Non-solo arm: the label sits directly under the status sentence paragraph, outside the head.
-    render(<RunBlock view={view} badge={0} sessionId="chat-1" />);
-    const card2 = screen.getByTestId('session-run');
-    const head2 = card2.querySelector('.wk-session-run-head')!;
-    const statusP = screen.getByTestId('session-status-sentence');
-    const labels2 = card2.querySelector('.wk-session-run-labels')!;
-    const qeLabel2 = screen.getByTestId('session-run-qe');
-    expect(head2.contains(qeLabel2)).toBe(false);
-    expect(labels2.contains(qeLabel2)).toBe(true);
-    expect(statusP.nextElementSibling).toBe(labels2);
-    expect(statusP.textContent).toBe('Finished · kept on this machine, not pushed · 1 of 2 done');
+    // DES-CHAT-NATIVE-RUN: the run has no card head any more — its record (status sentence, then the labels on their
+    // own line under it) is the run's Details fold; the label is still never inside a heading line.
+    for (const sessionId of [`run:${RUN}`, 'chat-1']) {
+      render(<RunBlock view={view} badge={0} sessionId={sessionId} {...(sessionId.startsWith('run:') ? { solo: 'Fix the signup crash' } : {})} />);
+      const runCard = screen.getByTestId('session-run');
+      expect(runCard.querySelector('.wk-session-run-head')).toBeNull();
+      const details = screen.getByTestId('chat-run-details');
+      const statusP = screen.getByTestId('session-status-sentence');
+      const labels = runCard.querySelector('.wk-session-run-labels')!;
+      const qeLabel = screen.getByTestId('session-run-qe');
+      expect(details.contains(statusP) && details.contains(labels)).toBe(true);
+      expect(labels.contains(qeLabel)).toBe(true);
+      expect(statusP.contains(qeLabel)).toBe(false);
+      expect(statusP.nextElementSibling).toBe(labels);
+      expect(qeLabel.textContent).toBe('QE acceptance: off on this computer (Settings)');
+      expect(qeLabel.getAttribute('title')).toBe(offReason);
+      expect(statusP.textContent).toBe('Finished · kept on this machine, not pushed · 1 of 2 done');
+      cleanup();
+    }
   });
 });

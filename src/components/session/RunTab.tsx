@@ -17,7 +17,20 @@ import { useGateStore } from '../../store/gates.js';
 import { openSheet, stopRun, useSheets } from '../../store/sheets.js';
 import { useRunChain } from './ChainLine.js';
 import { RunAssuranceLabel } from './AssuranceReceipt.js';
-import { CodebaseDownload } from './CodebaseDownload.js';
+import { CodebaseDownload, DeliverCredentialsNotice } from './CodebaseDownload.js';
+import { AssuranceReceipt, DeliveryAssuranceLines } from './AssuranceReceipt.js';
+import { RunRecordLines, RunStory } from './RunRecord.js';
+import { RecoveryRow } from './RunConversation.js';
+import { IDLE_GATE_ACTION, useGateActionStore } from '../../board/gateActions.js';
+import { outcomeLine, statusSentence } from '../../board/proposalCard.js';
+import { deliveryAssuranceOf, deliveryReceiptOf } from '../../board/assuranceModel.js';
+import { deliveryOf } from '../delivery.js';
+import { useRunCoverage } from '../../hooks/useRunCoverage.js';
+import { endedAtMs, finishedAtMs } from '../../board/needsYou.js';
+import { ago } from '../AgeStamp.js';
+import { TechDetails } from '../ui/index.js';
+import { useHostPanel } from '../../editors/hostApi.js';
+import { useNarrow } from '../editorHost/HostPanel.js';
 
 function isTerminal(view: SessionView): boolean {
   return ['completed', 'cancelled', 'failed'].includes(view.session.status);
@@ -49,7 +62,12 @@ function spendWords(view: SessionView): string | null {
   return typeof cost === 'number' && Number.isFinite(cost) ? moneyWords(cost) : null;
 }
 
-export function RunTab({ runs, sessionId, title }: {
+function startedMs(view: SessionView): number | null {
+  const c = (view.session as unknown as { created_at?: unknown }).created_at;
+  return typeof c === 'number' && Number.isFinite(c) ? c * 1000 : null;
+}
+
+export function RunTab({ runs, sessionId, title, navigate }: {
   runs: SessionView[];
   sessionId: string;
   title: string;
@@ -68,17 +86,35 @@ export function RunTab({ runs, sessionId, title }: {
         </select>
       )}
       {/* A confirmation belongs to one run; changing the pick starts a fresh confirmation. */}
-      <RunTabDetails key={view.session.id} view={view} title={title} />
+      <RunTabDetails key={view.session.id} view={view} title={title} {...(navigate !== undefined ? { navigate } : {})} />
     </div>
   );
 }
 
-function RunTabDetails({ view, title }: { view: SessionView; title: string }): React.ReactElement {
+function RunTabDetails({ view, title, navigate }: { view: SessionView; title: string; navigate?: Navigate }): React.ReactElement {
   const id = view.session.id;
   const { chain } = useRunChain(view);
   const gate = useGateStore((s) => s.gates[id]);
-  const acceptance = useRunAcceptance(view, chain, gate);
-  const { events } = useRunEvents(id, view.session.status === 'executing');
+  const acceptance = useRunAcceptance(view, chain, gate, true);
+  // The whole log (not only while executing): a finished run's delivery receipt reads it too.
+  const { events } = useRunEvents(id);
+  const action = useGateActionStore((s) => s.byGate[id] ?? IDLE_GATE_ACTION);
+  // DES-CHAT-NATIVE-RUN: everything the run's old in-thread summary said lives here now, grouped.
+  const coverage = useRunCoverage(view);
+  const delivery = deliveryOf(view);
+  const recorded = deliveryAssuranceOf(view);
+  const receipt = view.session.status === 'completed' ? deliveryReceiptOf(view, events ?? null, recorded) : null;
+  const started = startedMs(view);
+  const ended = isTerminal(view) ? (endedAtMs(view) ?? finishedAtMs(view)) : null;
+  const doneSteps = chain.steps.filter((s) => s.state === 'done' || s.state === 'checked').length;
+  const summary = acceptance?.summary as unknown;
+  const acceptanceLine = typeof summary === 'string' ? summary
+    : summary !== null && typeof summary === 'object' && typeof (summary as { line?: unknown }).line === 'string' ? (summary as { line: string }).line : null;
+  // The thread draws the run's story, recovery buttons and record lines too: the panel draws its copies only while it
+  // is open, so a closed panel never doubles them (one live instance of each on the page you are reading).
+  const narrow = useNarrow();
+  const panelShown = useHostPanel((st) => (narrow ? st.overlay : !st.folded));
+  const prNumber = delivery.url === null ? null : (/\/pull\/(\d+)/.exec(delivery.url)?.[1] ?? null);
   const roster = useRoster();
   const stopping = useSheets((s) => s.stopping[id] !== undefined);
   const [confirmStop, setConfirmStop] = useState(false);
@@ -87,6 +123,15 @@ function RunTabDetails({ view, title }: { view: SessionView; title: string }): R
   const session = view.session;
   return (
     <>
+      <section data-testid="run-tab-now" className="wk-run-tab-section">
+        <h3 className="wk-run-tab-heading">Now</h3>
+        <p data-testid="run-tab-status" role="status" className="wk-run-tab-line">{statusSentence(view, chain, gate, action)}</p>
+        {(started !== null || ended !== null) && (
+          <p data-testid="run-tab-times" className="wk-run-tab-muted">
+            {started !== null && `Started ${ago(started)} ago`}{started !== null && ended !== null && ' · '}{ended !== null && `ended ${ago(ended)} ago`}
+          </p>
+        )}
+      </section>
       <section data-testid="run-tab-workflow" className="wk-run-tab-section">
         <h3 className="wk-run-tab-heading">Workflow</h3>
         <p className="wk-run-tab-line">{workflowLabel(session.workflow_id)}{' '}
@@ -98,12 +143,14 @@ function RunTabDetails({ view, title }: { view: SessionView; title: string }): R
       </section>
       <section data-testid="run-tab-phases" className="wk-run-tab-section">
         <h3 className="wk-run-tab-heading">Phases</h3>
+        {chain.steps.length > 0 && <p data-testid="run-tab-phase-count" className="wk-run-tab-muted">{doneSteps} of {chain.steps.length} done</p>}
+        {chain.transportLine !== null && <p data-testid="run-tab-transport" className="wk-run-tab-warning">{chain.transportLine}</p>}
         {chain.steps.length === 0 ? <p className="wk-run-tab-muted">No phases yet.</p> : (
           <ol className="wk-run-tab-list">
             {chain.steps.map((step) => (
               <li key={step.id} data-testid="run-tab-phase" data-state={step.state} data-current={step === current ? 'true' : 'false'} className="wk-run-tab-phase">
                 {(step.state === 'done' || step.state === 'checked') && <span aria-label="Done">✓ </span>}
-                {step.label}{step === current && <span className="wk-run-tab-pill">{view.session.status === 'awaiting_human' ? 'waiting on you' : 'now'}</span>}
+                {step.label}{step.state === 'checked' && <span className="wk-run-tab-pill">checked</span>}{step.state === 'failed' && <span className="wk-run-tab-pill">failed</span>}{step === current && <span className="wk-run-tab-pill">{view.session.status === 'awaiting_human' ? 'waiting on you' : 'now'}</span>}
               </li>
             ))}
           </ol>
@@ -130,9 +177,38 @@ function RunTabDetails({ view, title }: { view: SessionView; title: string }): R
       <section data-testid="run-tab-checks" className="wk-run-tab-section">
         <h3 className="wk-run-tab-heading">Checks and spend</h3>
         <RunAssuranceLabel view={view} />
-        {typeof acceptance?.summary === 'string' && <p data-testid="run-tab-acceptance" className="wk-run-tab-line">{acceptance.summary}</p>}
+        {/* crew's acceptance line (WT-W3 `summary.line`; a bare string from an older read). */}
+        {acceptanceLine !== null && <p data-testid="run-tab-acceptance" className="wk-run-tab-line">{acceptanceLine}</p>}
+        {coverage !== null && <p data-testid="run-tab-coverage" className="wk-run-tab-line">{coverage.line}</p>}
+        {coverage !== null && coverage.reasons.length > 0 && <TechDetails data-testid="run-tab-coverage-why" text={coverage.reasons} />}
         <p data-testid="run-tab-spend" className="wk-run-tab-line">{spendWords(view) ?? 'Not reported'}</p>
       </section>
+      {/* A run still going has nothing delivered to say ("in-flight" is only "it has a deliver step"). */}
+      {((delivery.state !== 'none' && delivery.state !== 'in-flight') || receipt !== null) && (
+        <section data-testid="run-tab-delivery" className="wk-run-tab-section">
+          <h3 className="wk-run-tab-heading">Delivery</h3>
+          <p data-testid="run-tab-delivery-outcome" className="wk-run-tab-line">{view.session.status === 'completed' ? outcomeLine(view) : 'Not delivered'}</p>
+          {delivery.url !== null && <p className="wk-run-tab-line"><a data-testid="run-tab-pr" href={delivery.url} target="_blank" rel="noreferrer">Pull request{prNumber !== null ? ` #${prNumber}` : ''} ↗</a></p>}
+          {delivery.pushed !== undefined && <p data-testid="run-tab-branch" className="wk-run-tab-line">Branch <code>{delivery.pushed.branch}</code></p>}
+          {delivery.reason !== null && delivery.state !== 'delivered' && <p data-testid="run-tab-delivery-reason" className="wk-run-tab-muted">{delivery.reason}</p>}
+          {receipt !== null && <AssuranceReceipt receipt={receipt} passed={recorded !== null && !recorded.verified ? null : true} testId="run-tab-assurance" />}
+          <DeliveryAssuranceLines recorded={recorded} testIdPrefix="run-tab" />
+          {panelShown && <DeliverCredentialsNotice view={view} />}
+        </section>
+      )}
+      {panelShown && (session.status === 'failed' || session.status === 'cancelled') && (
+        <section data-testid="run-tab-story" className="wk-run-tab-section">
+          <h3 className="wk-run-tab-heading">Why it stopped</h3>
+          <RunStory view={view} events={events ?? []} {...(navigate !== undefined ? { navigate } : {})} />
+          <RecoveryRow view={view} {...(navigate !== undefined ? { navigate } : {})} />
+        </section>
+      )}
+      {panelShown && (
+        <section data-testid="run-tab-record" className="wk-run-tab-section">
+          <h3 className="wk-run-tab-heading">Record</h3>
+          <RunRecordLines view={view} jumped={false} withStory={false} {...(navigate !== undefined ? { navigate } : {})} />
+        </section>
+      )}
       {orphanedOf(session.status, events ?? undefined) !== null && <p data-testid="run-tab-orphaned" role="status" className="wk-run-tab-warning">{ORPHANED_LINE}</p>}
       {finishedDeliveryArm(view, gate) === 'stranded' && (
         <p data-testid="run-tab-stranded" role="status" className="wk-run-tab-warning">Nobody has taken this work yet: its delivery card is in the thread.</p>

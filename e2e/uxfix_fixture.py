@@ -224,6 +224,8 @@ from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
+import chat_native_corpus  # noqa: E402 — e2e/ is on sys.path for every rig (they import this module from there)
+
 REPO = Path(__file__).resolve().parent.parent
 SHOTS = REPO / "e2e" / "shots" / "uxfix"
 NPM = "npm.cmd" if os.name == "nt" else "npm"
@@ -236,6 +238,16 @@ NPM = "npm.cmd" if os.name == "nt" else "npm"
 # outer layer is `gate-notification-layer`, pointer-events: none), so this
 # hider keeps hiding every card; nothing about its mechanism changed.
 HIDE_GATE_TOASTS = '[data-testid="gate-notification"] { display: none !important; }'
+
+# DES-CHAT-NATIVE-RUN: a run's record (status sentence, chain line, record lines, helpers, technical handles) lives in
+# its closed "Details" fold under the run's messages. Rigs that assert on that record open every fold as it renders —
+# `page.add_init_script(OPEN_RUN_DETAILS)` — what an operator does by pressing Details on the run. The fold's closed
+# default and the conversation itself are e2e/desk_chat_native_test.py's to prove.
+OPEN_RUN_DETAILS = (
+    "(() => { const open = () => document.querySelectorAll('details[data-testid=\"chat-run-details\"]:not([open])')"
+    ".forEach((d) => { d.open = true; });"
+    " new MutationObserver(open).observe(document, { childList: true, subtree: true }); })();"
+)
 
 # Studio wave 1 (dark when healthy): the home board's WORKING band collapses to a count line
 # by default, and its expansion rides the history entry (`home.workingOpen`). Rigs that assert
@@ -738,6 +750,10 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          #   (the stale-graph fail-closed score, the floor's additions). Pair with team_plan
          #   for GET /catalog (the plan edit's picker).
          "plan_gate": False,
+         # chat_native — the run page as a chat (e2e/desk_chat_native_test.py, e2e/chat_native_corpus.py): a finished
+         #   Bug run with its steps' outputs and PR #12, a run at its plan approval, a run in progress, a plain chat
+         #   Q&A (chat-cn-qa) and an old archived run whose chat crew reclaimed (r-cn-old / chat-cn-gone).
+         "chat_native": False,
          # gate_move — brainstorm-actionable ideas 1+2 (e2e/gate_move_test.py): r-review, paused at an
          #   evaluator NOT PASS escalation (the engine's recorded `VERDICT: FAIL` frames), rides GET
          #   /runs; its events, gate and the creator phase's transcript are served for the card.
@@ -4632,6 +4648,10 @@ def assemble_runs() -> list:
             if r["session"]["id"] in status_over:
                 r["session"]["status"] = status_over[r["session"]["id"]]
             r["session"].update(session_over.get(r["session"]["id"], {}))
+    # chat_native stands alone, like the sessions corpus: the rail shows exactly its runs.
+    with state_lock:
+        if state["chat_native"] and not state["no_runs"]:
+            runs = chat_native_corpus.corpus(NOW0)["runs"]
     return runs
 
 
@@ -5868,6 +5888,13 @@ class W2Handler(SimpleHTTPRequestHandler):
     def _api(self, path: str) -> bool:
         if self._considered_route(path):
             return True
+        with state_lock:
+            cn_on = state["chat_native"]
+        if cn_on:
+            served = chat_native_corpus.get(path, NOW0)
+            if served is not None:
+                self._json(served[0], served[1])
+                return True
         # Behaviour 10: GET /standing-orders. Switch off: fall through to the ideas 7/8/13 handler
         # below (its orders, or the unknown-route 404 of a daemon predating the surface).
         if path == "/api/v1/standing-orders":

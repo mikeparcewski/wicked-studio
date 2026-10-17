@@ -31,7 +31,7 @@ import os
 import sys
 import urllib.request
 
-from uxfix_fixture import GATE_NOW_PROMPT, HIDE_GATE_TOASTS, REPO, ensure_build, set_fixture, start_server
+from uxfix_fixture import GATE_NOW_PROMPT, HIDE_GATE_TOASTS, REPO, ensure_build, set_fixture, start_server, OPEN_RUN_DETAILS
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4351"))
 W, H = 1440, 700
@@ -77,6 +77,7 @@ SHOTS.mkdir(parents=True, exist_ok=True)
 with sync_playwright() as p:
     browser = p.chromium.launch()
     page = browser.new_page(viewport={"width": W, "height": H}, device_scale_factor=1)
+    page.add_init_script(OPEN_RUN_DETAILS)  # the run's record is in its Details fold (DES-CHAT-NATIVE-RUN)
     page.add_init_script(
         "document.addEventListener('DOMContentLoaded', () => { const s = document.createElement('style'); "
         f"s.textContent = {json.dumps(HIDE_GATE_TOASTS)}; document.head.appendChild(s); }});")
@@ -190,6 +191,7 @@ with sync_playwright() as p:
     set_fixture(origin, wave1=True, wave2a_feed=False, wave2b=True, simple_gates=["g1", "g2"],
                 gate_now=[], extra_gates=[], extra_frames=[], status_over={})
     q = browser.new_page(viewport={"width": W, "height": H}, device_scale_factor=1)
+    q.add_init_script(OPEN_RUN_DETAILS)  # the run's record is in its Details fold (DES-CHAT-NATIVE-RUN)
     q.add_init_script(
         "document.addEventListener('DOMContentLoaded', () => { const s = document.createElement('style'); "
         f"s.textContent = {json.dumps(HIDE_GATE_TOASTS)}; document.head.appendChild(s); }});")
