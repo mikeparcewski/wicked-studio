@@ -396,6 +396,10 @@ export function App(): React.ReactElement {
   useEffect(() => {
     if (chatFlow === null || chatFlow.nonce === seenChatFlow.current) return;
     seenChatFlow.current = chatFlow.nonce;
+    // codex r1: a new chat is its own page — an Ask panel left open (another conversation) closes.
+    setAskOpen(false);
+    setAskHandoff(null);
+    setAskStart(null);
     navigate(sessionPath(chatFlow.chatId));
   }, [chatFlow, navigate]);
   // §5.6 rule 4 (S2b): letters always type — into the open Ask dock, else the page's

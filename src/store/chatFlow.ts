@@ -29,6 +29,9 @@ interface ChatFlowStore {
   /** The latest open: App navigates to its page once per nonce. */
   request: ChatFlowRequest | null;
   fresh: Readonly<Record<string, FreshChat>>;
+  /** Fresh chats whose first Send is being opened on the daemon (codex r1: one open per chat — a second
+   *  Send waits for it). In memory only: a reload forgets an open in flight. */
+  opening: Readonly<Record<string, true>>;
 }
 
 const FRESH_KEY = 'studio.chat.fresh';
@@ -50,7 +53,7 @@ function writeFresh(fresh: Record<string, FreshChat>): void {
   try { sessionStorage.setItem(FRESH_KEY, JSON.stringify(fresh)); } catch { /* private mode: this tab only */ }
 }
 
-export const useChatFlow = create<ChatFlowStore>(() => ({ request: null, fresh: readFresh() }));
+export const useChatFlow = create<ChatFlowStore>(() => ({ request: null, fresh: readFresh(), opening: {} }));
 
 function newChatId(): string {
   return typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
@@ -75,18 +78,33 @@ export function freshChat(chatId: string): FreshChat | null {
   return useChatFlow.getState().fresh[chatId] ?? null;
 }
 
-/** The daemon opened the chat: it is an ordinary chat from here on. */
+/** A fresh chat's first Send was handed over: its open is in flight. False when one already is. */
+export function beginChatOpen(chatId: string): boolean {
+  if (useChatFlow.getState().opening[chatId] === true) return false;
+  useChatFlow.setState((s) => ({ opening: { ...s.opening, [chatId]: true } }));
+  return true;
+}
+
+/** The open failed (the Ask panel says why): the page's Send is free again. */
+export function chatOpenFailed(chatId: string): void {
+  if (useChatFlow.getState().opening[chatId] !== true) return;
+  useChatFlow.setState((s) => { const opening = { ...s.opening }; delete opening[chatId]; return { opening }; });
+}
+
+/** The daemon opened the chat (or a read found it live): it is an ordinary chat from here on. */
 export function chatOpened(chatId: string): void {
-  const cur = useChatFlow.getState().fresh;
-  if (!(chatId in cur)) return;
+  const { fresh: cur, opening: busy } = useChatFlow.getState();
+  if (!(chatId in cur) && busy[chatId] !== true) return;
   const fresh = { ...cur };
   delete fresh[chatId];
+  const opening = { ...busy };
+  delete opening[chatId];
   writeFresh(fresh);
-  useChatFlow.setState({ fresh });
+  useChatFlow.setState({ fresh, opening });
 }
 
 /** Test hook. */
 export function resetChatFlow(): void {
   writeFresh({});
-  useChatFlow.setState({ request: null, fresh: {} });
+  useChatFlow.setState({ request: null, fresh: {}, opening: {} });
 }

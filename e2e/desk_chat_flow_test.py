@@ -100,8 +100,15 @@ with sync_playwright() as p:
         body: JSON.stringify({ 'studio.composer': { deliverPr: true, startInChat: false } }) })""")
     page.goto(f"{origin}/", wait_until="networkidle")
 
-    # 1. New job offers "Start with chat" first, and it lands on a new chat's page.
-    page.get_by_test_id("desk-new-job").click()
+    # 1. New job offers "Start with chat" first, and it lands on a new chat's page — and an Ask panel
+    #    left open (another conversation) closes (codex r1).
+    page.get_by_test_id("desk-chat").click()
+    page.get_by_test_id("assist-input").wait_for(state="visible", timeout=8000)
+    # The Ask panel covers the Desk's buttons: New job from ⌘K, as an operator in Ask would reach it.
+    page.keyboard.press("ControlOrMeta+k")
+    page.get_by_test_id("palette-input").wait_for(state="visible", timeout=5000)
+    page.get_by_test_id("palette-input").fill("> New job")
+    page.keyboard.press("Enter")
     page.get_by_test_id("launch-wizard-cards").wait_for(state="visible", timeout=8000)
     page.wait_for_timeout(300)
     first = page.evaluate("""() => { const b = document.querySelector('[data-testid="launch-wizard-cards"] button');

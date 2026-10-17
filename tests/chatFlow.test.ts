@@ -5,7 +5,7 @@
  * asks App to go there; `chatOpened` retires the mark once the daemon opened the chat.
  */
 import { beforeEach, describe, expect, it } from 'vitest';
-import { chatOpened, freshChat, openChatFlow, resetChatFlow, useChatFlow } from '../src/store/chatFlow.js';
+import { beginChatOpen, chatOpened, chatOpenFailed, freshChat, openChatFlow, resetChatFlow, useChatFlow } from '../src/store/chatFlow.js';
 import { useSessionDrafts } from '../src/store/sessionDrafts.js';
 import { sessionPath } from '../src/board/sessionModel.js';
 import { parseRoute } from '../src/hooks/useRoute.js';
@@ -43,6 +43,17 @@ describe('openChatFlow', () => {
     expect(freshChat(id)).toBeNull();
     expect(JSON.parse(sessionStorage.getItem('studio.chat.fresh') ?? '{}')[id]).toBeUndefined();
     chatOpened(id); // idempotent
+    expect(freshChat(id)).toBeNull();
+  });
+
+  it('one open per fresh chat: a second Send waits; a failed open frees it; the open retires both marks', () => {
+    const id = openChatFlow({});
+    expect(beginChatOpen(id)).toBe(true);
+    expect(beginChatOpen(id)).toBe(false);
+    chatOpenFailed(id);
+    expect(beginChatOpen(id)).toBe(true);
+    chatOpened(id);
+    expect(useChatFlow.getState().opening[id]).toBeUndefined();
     expect(freshChat(id)).toBeNull();
   });
 });
