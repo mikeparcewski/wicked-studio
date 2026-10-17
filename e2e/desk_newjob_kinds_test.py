@@ -45,7 +45,7 @@ with sync_playwright() as p:
     page = browser.new_page(viewport={"width": 1440, "height": 700}, device_scale_factor=1)
     page.set_default_timeout(10000)
     page.on("pageerror", lambda e: errors.append(str(e)))
-    page.on("request", lambda r: posts.append(f"{r.method} {r.url}") if r.method == "POST" and ("/launch" in r.url or "/demo" in r.url or "/compose" in r.url) else None)
+    page.on("request", lambda r: posts.append(f"{r.method} {r.url}") if r.method == "POST" and (r.url.split("?")[0].endswith("/api/v1/runs") or "/launch" in r.url or "/demo" in r.url or "/compose" in r.url) else None)
     page.add_init_script(
         "document.addEventListener('DOMContentLoaded', () => { const s = document.createElement('style'); "
         f"s.textContent = {json.dumps(HIDE_GATE_TOASTS)}; document.head.appendChild(s); }});")

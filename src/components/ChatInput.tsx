@@ -279,6 +279,9 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   // gate, and must not send `deliverGate` (the older launch schema rejects it). `null` = not yet
   // known (loading, or the read failed) — no promise either way.
   const [daemonDeliverGate, setDaemonDeliverGate] = useState<boolean | null>(null);
+  // studio#763 (codex r1): whether the health read has ANSWERED (or failed). A delivering launch waits
+  // for it: before it, neither the words nor the body can know whether this daemon keeps the gate.
+  const [healthSettled, setHealthSettled] = useState(false);
   // …and whether it can REVISE an open PR (`capabilities.revisesPr`, crew 0.7.36 / DES-L9): the
   // "Revise PR #N" pre-fill sends `revisesPr` only on `true`; `null` = not yet known.
   const [daemonRevisesPr, setDaemonRevisesPr] = useState<boolean | null>(null);
@@ -321,8 +324,9 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
         setDaemonQe(h.capabilities?.qeAcceptanceOverride === true);
         setQeOff(qeAcceptanceSetting(h.capabilities as Record<string, unknown> | undefined) === 'off');
         setBaseSkill(h.baseSkill);
+        setHealthSettled(true);
       })
-      .catch(() => { if (!cancelled) { setDaemonDeliverGate(null); setDaemonRevisesPr(null); setDaemonChatId(null); } });
+      .catch(() => { if (!cancelled) { setDaemonDeliverGate(null); setDaemonRevisesPr(null); setDaemonChatId(null); setHealthSettled(true); } });
     return () => { cancelled = true; };
   }, []);
   /** The PR this launch revises (DES-L9 pre-fill) — clearable, like the lineage pill. */
@@ -763,6 +767,8 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
     // does not launch — the Send button is already disabled with the reason on
     // screen; this guards the Cmd+Enter path the same way. Nothing is guessed.
     if (targetRequired) return;
+    // studio#763: Cmd+Enter waits for the health read too, as the disabled Send does.
+    if (deliverWaits) return;
     setPreflightBlocked(false);
     setSubmitting(true);
     setError(null);
@@ -1188,7 +1194,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   // engine — no PA scope, no evaluator, no deliver. It still sends (a repo as context, D2); the form
   // says what it will be before it does, instead of promising a planned run.
   const planMissing = targetRepoRef !== null && selection.plan === null && launchWorkflow === '';
-  const { canSubmit, noSeatReason, planNote } = launchSubmit({ problem, selectedClis, submitting, targetRequired, roster, planMissing });
+  const { canSubmit: canSubmitBase, noSeatReason, planNote } = launchSubmit({ problem, selectedClis, submitting, targetRequired, roster, planMissing });
 
   // The switcher's current binding (§5.2). Pre-bound (§4.3): the project rides
   // the route, so it shows even before the name resolves — id first, name once
@@ -1287,9 +1293,9 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
             text:
               daemonDeliverGate === false
                 ? `When this finishes it ${what} — this daemon delivers WITHOUT a deliver gate (upgrade crew to 0.7.33+ to confirm the push first).${merging}`
-                // studio#763: the wording comes from what is SENT (the posture), never from whether
-                // the health read has answered yet — the same config reads the same on every load.
-                : autoDeliver
+                // studio#763: the wording is what is SENT — the opt-out rides the body only when this
+                // daemon says it keeps the gate (codex r1), so the same config reads the same every load.
+                : autoDeliver && daemonDeliverGate === true
                     ? `When this finishes it ${what} — with NO deliver gate: this posture is auto-deliver.${merging}`
                     : `When this finishes it pauses at the deliver gate; approve it and the run ${what}.${merging}`,
           };
@@ -1304,12 +1310,19 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
     }
   })();
 
+  // studio#763 (codex r1): a delivering launch waits for the health read, so what it promises about
+  // the deliver gate and what it sends come from the same answer.
+  const deliverWaits = deliverNotice?.state === 'on' && !healthSettled;
+  const canSubmit = canSubmitBase && !deliverWaits;
+
   // The deliver-gate word the notice and the confirm line share (F-E2E-030): what the posture asks
   // for. studio#763: a pending or failed health read used to print "after verify" for the same
   // config that read "after you approve the deliver gate" once it answered; only a daemon that SAYS
   // it keeps no deliver gate (`false`, crew before 0.7.33) changes the words.
+  // codex r1: `auto` exactly when the body carries `deliverGate: 'auto'` (below, `daemonDeliverGate === true`);
+  // with the read failed the body omits it and a current daemon keeps its gate, which is what it says.
   const deliverGateWord: 'human' | 'auto' | 'unsupported' =
-    daemonDeliverGate === false ? 'unsupported' : autoDeliver ? 'auto' : 'human';
+    daemonDeliverGate === false ? 'unsupported' : autoDeliver && daemonDeliverGate === true ? 'auto' : 'human';
 
   // Determine whether CLIs differ from the defaults that loaded from the roster
   const defaultCliSet = new Set(
