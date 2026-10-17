@@ -267,7 +267,7 @@ describe('codex r1 fixes', () => {
   it('#7 the table editor’s own filter moves keep the table, on the Steer tab’s address', () => {
     expect(tableAddress('/steering/policies?type=security')).toBe(deskTabPath('steer', '/steering/policies?type=security&view=table'));
     expect(tableAddress('/steering/policies')).toBe(deskTabPath('steer', '/steering/policies?view=table'));
-    expect(tableAddress('/steering/dashboard')).toBe(deskTabPath('steer', '/steering/dashboard'));
+    expect(tableAddress('/steering/proposals')).toBe(deskTabPath('steer', '/steering/proposals'));
     expect(tableAddress('/s/run-1')).toBe('/s/run-1');
   });
 

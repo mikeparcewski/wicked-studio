@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import {
   memoryPayload,
   policyPayload,
@@ -24,13 +25,19 @@ function PayloadText({ proposal }: { proposal: Proposal }): React.ReactElement {
   return <p data-testid="proposal-raw-payload" className="wk-gk-content">A proposal Studio can&rsquo;t show in words; its details are below.</p>;
 }
 
-function ProposalCard({ proposal, deciding, onApprove, onReject }: {
+function ProposalCard({ proposal, deciding, onApprove, onReject, editable }: {
   proposal: Proposal;
   deciding: boolean;
-  onApprove: (id: string) => void;
+  /** `content`: approve a memory proposal with these words instead of its own. */
+  onApprove: (id: string, content?: string) => void;
   onReject: (id: string) => void;
+  editable: boolean;
 }): React.ReactElement {
   const kind = proposalKind(proposal);
+  const [draft, setDraft] = useState<string | null>(null);
+  const canEdit = editable && kind === 'memory';
+  const original = memoryPayload(proposal).content ?? '';
+  const edited = draft !== null && draft.trim() !== '' && draft.trim() !== original.trim();
   const steeringType = kind === 'policy' ? policySteeringType(proposal) : null;
   const severity = policyPayload(proposal).severity;
   const tier = kind === 'memory' ? memoryPayload(proposal).tier : null;
@@ -49,7 +56,12 @@ function ProposalCard({ proposal, deciding, onApprove, onReject }: {
         {steeringType !== null && <span data-testid="proposal-policy-target" className="wk-tag">{cap(steeringType)}</span>}
         {tier != null && <span data-testid="proposal-memory-tier" className="wk-tag">{cap(tier)}</span>}
       </div>
-      <PayloadText proposal={proposal} />
+      {draft === null ? <PayloadText proposal={proposal} /> : (
+        <label className="wk-se-field">
+          <span>The memory, in your words</span>
+          <textarea data-testid="proposal-edit-text" className="wk-field" rows={3} maxLength={4000} value={draft} onChange={(e) => setDraft(e.target.value)} />
+        </label>
+      )}
       {/* studio#689 row 79: what approving does, said once, in plain words. */}
       {kind === 'policy' && (
         <p className="wk-gk-muted">
@@ -60,24 +72,34 @@ function ProposalCard({ proposal, deciding, onApprove, onReject }: {
       <p data-testid="proposal-provenance" className="wk-gk-muted">Proposed by {proposer ?? 'a helper'}</p>
       <div data-testid="proposal-facets"><TechDetails text={details} /></div>
       <div className="wk-gk-actions">
-        <button data-testid="proposal-reject" type="button" disabled={deciding} onClick={() => onReject(proposal.id)} className="wk-btn wk-btn--secondary">Reject</button>
-        <button data-testid="proposal-approve" type="button" disabled={deciding} onClick={() => onApprove(proposal.id)} className="wk-btn wk-btn--primary">Approve</button>
+        {draft === null ? <>
+          <button data-testid="proposal-reject" type="button" disabled={deciding} onClick={() => onReject(proposal.id)} className="wk-btn wk-btn--secondary">Reject</button>
+          {canEdit && <button data-testid="proposal-edit" type="button" disabled={deciding} onClick={() => setDraft(original)} className="wk-btn wk-btn--secondary">Edit</button>}
+          <button data-testid="proposal-approve" type="button" disabled={deciding} onClick={() => onApprove(proposal.id)} className="wk-btn wk-btn--primary">Approve</button>
+        </> : <>
+          <button data-testid="proposal-edit-cancel" type="button" disabled={deciding} onClick={() => setDraft(null)} className="wk-btn wk-btn--secondary">Cancel</button>
+          <button data-testid="proposal-approve-edited" type="button" disabled={deciding || !edited}
+            title={edited ? undefined : 'Change the words to approve an edit, or Cancel and approve it as filed'}
+            onClick={() => onApprove(proposal.id, draft.trim())} className="wk-btn wk-btn--primary">Approve with this edit</button>
+        </>}
       </div>
     </li>
   );
 }
 
-export function ProposalsList({ proposals, loading, error, decidingIds, onApprove, onReject, onRetry, errorKind }: {
+export function ProposalsList({ proposals, loading, error, decidingIds, onApprove, onReject, onRetry, errorKind, editable = false }: {
   proposals: Proposal[];
   loading: boolean;
   error: string | null;
   decidingIds: ReadonlySet<string>;
-  onApprove: (id: string) => void;
+  onApprove: (id: string, content?: string) => void;
+  editable?: boolean;
   onReject: (id: string) => void;
   onRetry?: () => void;
   errorKind?: 'offline' | 'error';
 }): React.ReactElement {
-  if (loading) return <Skeleton data-testid="proposals-loading" variant="card" />;
+  // Only the first read shows the skeleton: a background re-read keeps the cards (and any draft) mounted.
+  if (loading && proposals.length === 0) return <Skeleton data-testid="proposals-loading" variant="card" />;
   if (error !== null) {
     return <StateBanner data-testid="proposals-error" kind={errorKind ?? readErrorKind(error)} what="proposals" error={error} {...(onRetry !== undefined ? { onRetry } : {})} />;
   }
@@ -85,7 +107,7 @@ export function ProposalsList({ proposals, loading, error, decidingIds, onApprov
   return (
     <ul data-testid="proposals-list" className="wk-gk-list">
       {proposals.map((proposal) => (
-        <ProposalCard key={proposal.id} proposal={proposal} deciding={decidingIds.has(proposal.id)} onApprove={onApprove} onReject={onReject} />
+        <ProposalCard key={proposal.id} editable={editable} proposal={proposal} deciding={decidingIds.has(proposal.id)} onApprove={onApprove} onReject={onReject} />
       ))}
     </ul>
   );

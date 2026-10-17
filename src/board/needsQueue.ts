@@ -26,7 +26,7 @@ const GROUP_WORDS: Record<NeedGroupKey, { one: string; many: string; line: strin
   proposal: {
     one: 'proposal to review',
     many: 'proposals to review',
-    line: 'Policies and memories waiting on review',
+    line: 'Proposals waiting on your review',
   },
   reindex: {
     one: 'repo never indexed',

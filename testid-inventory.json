@@ -12,9 +12,9 @@
   "studioVersion": "0.9.6",
   "counts": {
     "files": 230,
-    "occurrences": 2859,
-    "static": 2472,
-    "dynamic": 70,
+    "occurrences": 2884,
+    "static": 2497,
+    "dynamic": 69,
     "computed": 24
   },
   "static": [
@@ -6768,153 +6768,285 @@
       ]
     },
     {
-      "testId": "mem-stat-facets",
+      "testId": "memories-clear",
       "files": [
-        "src/components/MemoriesPanel.tsx"
+        "src/components/memory/MemoryPage.tsx"
       ]
     },
     {
-      "testId": "mem-stat-total",
+      "testId": "memories-count",
       "files": [
-        "src/components/MemoriesPanel.tsx"
-      ]
-    },
-    {
-      "testId": "memories-coverage",
-      "files": [
-        "src/components/MemoriesPanel.tsx"
+        "src/components/memory/MemoryPage.tsx"
       ]
     },
     {
       "testId": "memories-empty",
       "files": [
-        "src/components/MemoriesPanel.tsx"
+        "src/components/memory/MemoryPage.tsx"
       ]
     },
     {
       "testId": "memories-error",
       "files": [
-        "src/components/MemoriesPanel.tsx"
+        "src/components/memory/MemoryPage.tsx"
       ]
     },
     {
       "testId": "memories-facet-filter",
       "files": [
-        "src/components/MemoriesPanel.tsx"
+        "src/components/memory/MemoryPage.tsx"
       ]
     },
     {
       "testId": "memories-list",
       "files": [
-        "src/components/MemoriesPanel.tsx"
+        "src/components/memory/MemoryPage.tsx"
       ]
     },
     {
       "testId": "memories-loading",
       "files": [
-        "src/components/MemoriesPanel.tsx"
+        "src/components/memory/MemoryPage.tsx"
       ]
     },
     {
       "testId": "memories-note",
       "files": [
-        "src/components/MemoriesPanel.tsx"
-      ]
-    },
-    {
-      "testId": "memories-panel",
-      "files": [
-        "src/components/MemoriesPanel.tsx"
+        "src/components/memory/MemoryPage.tsx"
       ]
     },
     {
       "testId": "memories-refresh",
       "files": [
-        "src/components/MemoriesPanel.tsx"
+        "src/components/memory/MemoryPage.tsx"
       ]
     },
     {
       "testId": "memories-search",
       "files": [
-        "src/components/MemoriesPanel.tsx"
+        "src/components/memory/MemoryPage.tsx"
       ]
     },
     {
       "testId": "memories-search-go",
       "files": [
-        "src/components/MemoriesPanel.tsx"
-      ]
-    },
-    {
-      "testId": "memories-stats",
-      "files": [
-        "src/components/MemoriesPanel.tsx"
+        "src/components/memory/MemoryPage.tsx"
       ]
     },
     {
       "testId": "memories-unsupported",
       "files": [
-        "src/components/MemoriesPanel.tsx"
+        "src/components/memory/MemoryPage.tsx"
+      ]
+    },
+    {
+      "testId": "memory-actions",
+      "files": [
+        "src/components/memory/MemoryPage.tsx"
+      ]
+    },
+    {
+      "testId": "memory-add",
+      "files": [
+        "src/components/memory/MemoryPage.tsx"
+      ]
+    },
+    {
+      "testId": "memory-add-cancel",
+      "files": [
+        "src/components/memory/MemoryPage.tsx"
+      ]
+    },
+    {
+      "testId": "memory-add-dialog",
+      "files": [
+        "src/components/memory/MemoryPage.tsx"
+      ]
+    },
+    {
+      "testId": "memory-add-project",
+      "files": [
+        "src/components/memory/MemoryPage.tsx"
+      ]
+    },
+    {
+      "testId": "memory-add-save",
+      "files": [
+        "src/components/memory/MemoryPage.tsx"
+      ]
+    },
+    {
+      "testId": "memory-add-text",
+      "files": [
+        "src/components/memory/MemoryPage.tsx"
+      ]
+    },
+    {
+      "testId": "memory-add-tile",
+      "files": [
+        "src/components/memory/MemoryPage.tsx"
       ]
     },
     {
       "testId": "memory-content",
       "files": [
-        "src/components/MemoriesPanel.tsx"
+        "src/components/memory/MemoryPage.tsx"
       ]
     },
     {
-      "testId": "memory-facets",
+      "testId": "memory-edit-cancel",
       "files": [
-        "src/components/MemoriesPanel.tsx"
+        "src/components/memory/MemoryPage.tsx"
+      ]
+    },
+    {
+      "testId": "memory-edit-dialog",
+      "files": [
+        "src/components/memory/MemoryPage.tsx"
+      ]
+    },
+    {
+      "testId": "memory-edit-save",
+      "files": [
+        "src/components/memory/MemoryPage.tsx"
+      ]
+    },
+    {
+      "testId": "memory-edit-text",
+      "files": [
+        "src/components/memory/MemoryPage.tsx"
+      ]
+    },
+    {
+      "testId": "memory-intro",
+      "files": [
+        "src/components/memory/MemoryPage.tsx"
+      ]
+    },
+    {
+      "testId": "memory-kind",
+      "files": [
+        "src/components/memory/MemoryPage.tsx"
+      ]
+    },
+    {
+      "testId": "memory-kinds",
+      "files": [
+        "src/components/memory/MemoryPage.tsx"
+      ]
+    },
+    {
+      "testId": "memory-list-card",
+      "files": [
+        "src/components/memory/MemoryPage.tsx"
+      ]
+    },
+    {
+      "testId": "memory-meta",
+      "files": [
+        "src/components/memory/MemoryPage.tsx"
+      ]
+    },
+    {
+      "testId": "memory-page",
+      "files": [
+        "src/components/memory/MemoryPage.tsx"
+      ]
+    },
+    {
+      "testId": "memory-proposals",
+      "files": [
+        "src/components/memory/MemoryPage.tsx"
       ]
     },
     {
       "testId": "memory-retire",
       "files": [
-        "src/components/MemoriesPanel.tsx"
+        "src/components/memory/MemoryPage.tsx"
       ]
     },
     {
       "testId": "memory-retire-cancel",
       "files": [
-        "src/components/MemoriesPanel.tsx"
+        "src/components/memory/MemoryPage.tsx"
       ]
     },
     {
       "testId": "memory-retire-confirm",
       "files": [
-        "src/components/MemoriesPanel.tsx"
+        "src/components/memory/MemoryPage.tsx"
       ]
     },
     {
-      "testId": "memory-retire-confirm-banner",
+      "testId": "memory-retire-content",
       "files": [
-        "src/components/MemoriesPanel.tsx"
+        "src/components/memory/MemoryPage.tsx"
       ]
     },
     {
-      "testId": "memory-retire-one",
+      "testId": "memory-retire-dialog",
       "files": [
-        "src/components/MemoriesPanel.tsx"
+        "src/components/memory/MemoryPage.tsx"
       ]
     },
     {
       "testId": "memory-row",
       "files": [
-        "src/components/MemoriesPanel.tsx"
+        "src/components/memory/MemoryPage.tsx"
       ]
     },
     {
       "testId": "memory-scope",
       "files": [
-        "src/components/MemoriesPanel.tsx"
+        "src/components/memory/MemoryPage.tsx"
+      ]
+    },
+    {
+      "testId": "memory-stat-review",
+      "files": [
+        "src/components/memory/MemoryPage.tsx"
+      ]
+    },
+    {
+      "testId": "memory-stat-total",
+      "files": [
+        "src/components/memory/MemoryPage.tsx"
       ]
     },
     {
       "testId": "memory-tier",
       "files": [
-        "src/components/MemoriesPanel.tsx"
+        "src/components/memory/MemoryPage.tsx"
+      ]
+    },
+    {
+      "testId": "memory-tiles",
+      "files": [
+        "src/components/memory/MemoryPage.tsx"
+      ]
+    },
+    {
+      "testId": "memory-view",
+      "files": [
+        "src/components/memory/MemoryPage.tsx"
+      ]
+    },
+    {
+      "testId": "memory-view-memories",
+      "files": [
+        "src/components/memory/MemoryPage.tsx"
+      ]
+    },
+    {
+      "testId": "memory-view-proposals",
+      "files": [
+        "src/components/memory/MemoryPage.tsx"
+      ]
+    },
+    {
+      "testId": "memory-where",
+      "files": [
+        "src/components/memory/MemoryPage.tsx"
       ]
     },
     {
@@ -8636,7 +8768,31 @@
       ]
     },
     {
+      "testId": "proposal-approve-edited",
+      "files": [
+        "src/components/ProposalsList.tsx"
+      ]
+    },
+    {
       "testId": "proposal-card",
+      "files": [
+        "src/components/ProposalsList.tsx"
+      ]
+    },
+    {
+      "testId": "proposal-edit",
+      "files": [
+        "src/components/ProposalsList.tsx"
+      ]
+    },
+    {
+      "testId": "proposal-edit-cancel",
+      "files": [
+        "src/components/ProposalsList.tsx"
+      ]
+    },
+    {
+      "testId": "proposal-edit-text",
       "files": [
         "src/components/ProposalsList.tsx"
       ]
@@ -12510,12 +12666,6 @@
       ]
     },
     {
-      "testId": "steer-memories",
-      "files": [
-        "src/components/steer/SteerSurface.tsx"
-      ]
-    },
-    {
       "testId": "steer-prefill",
       "files": [
         "src/components/ChatInput.tsx"
@@ -15291,12 +15441,6 @@
       ]
     },
     {
-      "pattern": "mem-stat-tier-*",
-      "files": [
-        "src/components/MemoriesPanel.tsx"
-      ]
-    },
-    {
       "pattern": "rail-accordion-*",
       "files": [
         "src/components/RightPanel.tsx"
@@ -15403,6 +15547,7 @@
         "src/components/dashboardKit.tsx",
         "src/components/desk/DeskParts.tsx",
         "src/components/everything/FinishedRunMenu.tsx",
+        "src/components/memory/MemoryPage.tsx",
         "src/components/product/RequirementsBrowser.tsx",
         "src/components/session/AssuranceReceipt.tsx",
         "src/components/session/CodebaseDownload.tsx",

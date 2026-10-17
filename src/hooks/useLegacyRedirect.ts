@@ -1,6 +1,8 @@
 import { useEffect } from 'react';
-import { isSteeringType, policiesPath, steeringDashboardPath } from '../api/steering.js';
+import { memoryPath } from '../api/memory.js';
+import { isSteeringType, policiesPath, steerProposalsPath } from '../api/steering.js';
 import { testingPath } from '../api/testing.js';
+import { deskTabPath } from '../components/desk/DeskV2.js';
 import type { Navigate } from './useRoute.js';
 
 /*
@@ -10,56 +12,37 @@ import type { Navigate } from './useRoute.js';
  */
 
 /**
- * The unified Steering surface's address normalizer (DES-MEM-FACETED-001, unified surface;
- * governed-knowledge dashboard). `/steering/dashboard`, `/steering/policies` and
- * `/steering/memories` are the real addresses and never redirect; every OTHER parse that landed on
- * `panel: 'steering'` with `steeringSection === null` is an address that needs to resolve onto one
- * of the sub-sections:
+ * Where a steering-family address lands (App redirects every `steering` and `rules` parse here, with
+ * REPLACE, so Back never re-enters the old address). Steer lives on the Desk's Steer tab and Memory
+ * on its Memory tab (operator 2026-10-17: "memories and steering are separate"):
  *
- *   /steering                → /steering/dashboard            (the review-forward home)
- *   /steering/:type          → /steering/policies?type=:type  (the seven pages collapsed into a
- *                              filter — bookmarks keep their type)
- *   /wiki, /policies         → /steering/policies             (the retired governance panels — the
- *                              rule-management surface)
- *   /proposals               → /steering/dashboard            (the retired standalone review queue
- *                              → the dashboard's consolidated review inbox, its successor — for
- *                              every ?type=, since the inbox reviews BOTH kinds in one place)
+ *   /steering/memories          → the Memory tab
+ *   /proposals?type=memory      → the Memory tab's proposals (`/memory?view=proposals`)
+ *   /steering/dashboard         → Steer's policy proposals (`/steering/proposals`)
+ *   /proposals (any other type) → Steer's policy proposals
+ *   /steering/:type             → Steer's Policies filtered to that type (bookmarks keep their type)
+ *   /wiki, /policies            → Steer's Policies (the retired governance panels)
+ *   /steering                   → the Steer tab's home
+ *   anything else               → the Steer tab at that address (`/steering/policies…`, `/rules…`)
  *
- * A typo'd `/steering/foo` parses to `not-found` (usability review #4), so this hook never sees
- * `panel: 'steering'` for it and leaves the address alone. REPLACE, like every redirect in this
- * module, so Back never re-enters the dead address.
+ * `base` is the Desk the address was on (`/`, or a project's page when a project Desk hosted it), so an
+ * old project-hosted bookmark stays on that project. A typo'd `/steering/foo` parses to `not-found`
+ * (usability review #4), so it never comes here.
  */
-export function useSteeringRedirect(
-  panel: string,
-  steeringSection: string | null,
-  pathname: string,
-  search: string,
-  navigate: Navigate,
-): void {
-  useEffect(() => {
-    if (panel !== 'steering' || steeringSection !== null) return;
-    const [, first = '', second = ''] = pathname.split('/');
-    // The retired standalone review queue → the dashboard's consolidated review inbox (its
-    // successor), which reviews memory AND policy proposals in one place (its old ?type= filter no
-    // longer forks the target — `search` stays a dep only so a query-only change still re-runs).
-    if (first === 'proposals') {
-      navigate(steeringDashboardPath(), { replace: true });
-      return;
-    }
-    // A legacy `/steering/:type` keeps its type as the Policies filter.
-    if (first === 'steering' && isSteeringType(second)) {
-      navigate(policiesPath(second), { replace: true });
-      return;
-    }
-    // The retired `/wiki` `/policies` panels are the rule-management surface → Policies. (`/rules`
-    // is a real route again — the Rules page, S12 — and never reaches this hook.)
-    if (first === 'wiki' || first === 'policies') {
-      navigate(policiesPath(), { replace: true });
-      return;
-    }
-    // Bare `/steering` → the review-forward dashboard home.
-    navigate(steeringDashboardPath(), { replace: true });
-  }, [panel, steeringSection, pathname, search, navigate]);
+export function legacySteeringTarget(pathname: string, search: string, base = '/'): string {
+  const [, first = '', second = ''] = pathname.split('/');
+  const tab = (t: 'steer' | 'memory', at?: string): string => deskTabPath(t, at, base);
+  if (first === 'proposals') {
+    return new URLSearchParams(search).get('type') === 'memory' ? tab('memory', memoryPath('proposals')) : tab('steer', steerProposalsPath());
+  }
+  if (first === 'wiki' || first === 'policies') return tab('steer', policiesPath());
+  if (first === 'steering') {
+    if (second === 'memories') return tab('memory');
+    if (second === 'dashboard') return tab('steer', steerProposalsPath());
+    if (isSteeringType(second)) return tab('steer', policiesPath(second));
+    if (second === '') return tab('steer');
+  }
+  return tab('steer', pathname + search);
 }
 
 /**
@@ -79,7 +62,7 @@ export function useRetiredSettingsRedirect(pathname: string, navigate: Navigate)
 
 
 /**
- * The Testing surface's address normalizer (same grammar as {@link useSteeringRedirect}):
+ * The Testing surface's address normalizer:
  *
  *  - the RETIRED flat campaign addresses `/campaigns` and `/campaigns/:id` (the campaign
  *    surface MOVED under Testing) rewrite onto `/testing/campaigns[...]` — the path tail rides

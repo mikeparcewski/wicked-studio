@@ -65,6 +65,16 @@ describe('the model: what an accept does, read from kind_type', () => {
     expect([...(group.action as { ids: string[] }).ids].sort()).toEqual(MEMS.map((p) => p.id).sort());
   });
 
+  it('Review opens where each proposal is decided: a memory on the Memory page, a rule on Steer', () => {
+    const rows = needsYouRows(inputs([mem(0), pol(0)]));
+    const memRow = rows.find((r) => r.key === 'proposal:mem-0')!;
+    const polRow = rows.find((r) => r.key === 'proposal:pol-0')!;
+    expect(memRow.action).toMatchObject({ kind: 'open', path: '/memory?view=proposals', label: 'Review ›' });
+    expect(memRow.subjectPath).toBe('/memory?view=proposals');
+    expect(polRow.action).toMatchObject({ kind: 'open', path: '/steering/proposals', label: 'Review ›' });
+    expect(polRow.subjectPath).toBe('/steering/proposals');
+  });
+
   it('a group with no memory proposals offers no batch accept', () => {
     const group = groupAlike(needsYouRows(inputs(POLS)), NOW).find((r) => r.groupKey === 'proposal')!;
     expect(group.action.kind).toBe('open');

@@ -1,21 +1,17 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { renderHook } from '@testing-library/react';
 import { useRoute } from '../src/hooks/useRoute.js';
-import { useRetiredSettingsRedirect, useSteeringRedirect } from '../src/hooks/useLegacyRedirect.js';
+import { legacySteeringTarget, useRetiredSettingsRedirect } from '../src/hooks/useLegacyRedirect.js';
 import { STEERING_TYPES } from '../src/api/steering.js';
+import { deskTabPath } from '../src/components/desk/DeskV2.js';
 
 /**
- * The unified Steering surface's routes (DES-MEM-FACETED-001, unified surface): one home, two
- * sub-sections (`/steering/policies`, `/steering/memories`), each managing existing items AND
- * reviewing proposals.
- *  - `/steering/policies` and `/steering/memories` parse to the steering panel with their section;
- *  - bare `/steering` and a LEGACY `/steering/:type` (a valid type — the seven pages collapsed into
- *    a `?type=` filter on Policies) parse with `steeringSection: null`, then `useSteeringRedirect`
- *    REPLACES the address (bare → `/steering/policies`, legacy type → `/steering/policies?type=…`);
- *  - the RETIRED addresses `/wiki`, `/policies` (the old governance panels) and
- *    `/proposals` (the standalone review queue — proposals now live inside the sub-sections) parse
- *    to the steering panel with a null section and are REPLACED onto the right sub-section
- *    (`/proposals?type=memory` → Memories, everything else → Policies);
+ * Steer's and Memory's routes (operator 2026-10-17: "memories and steering are separate"):
+ *  - `/steering/policies` and `/steering/proposals` parse to the steering panel with their section;
+ *  - `/memory` parses to the memory panel (its view rides `?view=`);
+ *  - bare `/steering`, a LEGACY `/steering/:type` and the retired `/steering/dashboard` and
+ *    `/steering/memories` parse with `steeringSection: null`, and so do the retired `/wiki`,
+ *    `/policies` and `/proposals`; `legacySteeringTarget` says which Desk tab each lands on;
  *  - a typo'd `/steering/foo` normalizes onto nothing — it is the not-found panel (review #4);
  *  - the RETIRED `/coverage` and `/domain` settings panels parse to System and get REPLACED with
  *    `/system` by `useRetiredSettingsRedirect`.
@@ -30,20 +26,27 @@ afterEach(() => {
   window.history.replaceState(null, '', '/');
 });
 
-describe('useRoute — /steering/{dashboard,policies,memories}', () => {
-  it('parses the dashboard home + the two management sub-sections to the one steering panel', () => {
-    const dash = routeAt('/steering/dashboard').current;
-    expect(dash).toMatchObject({ panel: 'steering', steeringSection: 'dashboard' });
-    expect(dash.runId).toBeNull();
-    expect(dash.projectId).toBeNull();
+describe('useRoute — /steering/{policies,proposals} and /memory', () => {
+  it('parses the two Steer sub-sections to the one steering panel', () => {
     const pol = routeAt('/steering/policies').current;
     expect(pol).toMatchObject({ panel: 'steering', steeringSection: 'policies' });
     expect(pol.runId).toBeNull();
     expect(pol.projectId).toBeNull();
-    expect(routeAt('/steering/memories').current).toMatchObject({ panel: 'steering', steeringSection: 'memories' });
+    expect(routeAt('/steering/proposals').current).toMatchObject({ panel: 'steering', steeringSection: 'proposals' });
   });
 
-  it('a bare /steering parses with steeringSection null — the redirect resolves it onto the Dashboard', () => {
+  it('/memory is its own page; a deeper spelling is a dead address', () => {
+    expect(routeAt('/memory').current).toMatchObject({ panel: 'memory', steeringSection: null });
+    expect(routeAt('/memory/').current.panel).toBe('memory');
+    expect(routeAt('/memory/x').current.panel).toBe('not-found');
+  });
+
+  it('the retired /steering/dashboard and /steering/memories parse with no section (they only redirect)', () => {
+    expect(routeAt('/steering/dashboard').current).toMatchObject({ panel: 'steering', steeringSection: null });
+    expect(routeAt('/steering/memories').current).toMatchObject({ panel: 'steering', steeringSection: null });
+  });
+
+  it('a bare /steering parses with steeringSection null — the redirect resolves it', () => {
     expect(routeAt('/steering').current).toMatchObject({ panel: 'steering', steeringSection: null });
     expect(routeAt('/steering/').current).toMatchObject({ panel: 'steering', steeringSection: null });
   });
@@ -92,51 +95,36 @@ describe('useRoute — /steering/{dashboard,policies,memories}', () => {
   });
 });
 
-describe('useSteeringRedirect', () => {
-  it('leaves the real sub-section addresses alone (dashboard / policies / memories)', () => {
-    const navigate = vi.fn();
-    renderHook(() => useSteeringRedirect('steering', 'dashboard', '/steering/dashboard', '', navigate));
-    renderHook(() => useSteeringRedirect('steering', 'policies', '/steering/policies', '', navigate));
-    renderHook(() => useSteeringRedirect('steering', 'memories', '/steering/memories', '', navigate));
-    expect(navigate).not.toHaveBeenCalled();
+describe('legacySteeringTarget — where each steering-family address lands', () => {
+  it('memory addresses land on the Memory tab', () => {
+    expect(legacySteeringTarget('/steering/memories', '')).toBe(deskTabPath('memory'));
+    expect(legacySteeringTarget('/proposals', '?type=memory')).toBe(deskTabPath('memory', '/memory?view=proposals'));
   });
 
-  it('REPLACES bare /steering with the Dashboard home (the review-forward default)', () => {
-    const navigate = vi.fn();
-    renderHook(() => useSteeringRedirect('steering', null, '/steering', '', navigate));
-    expect(navigate).toHaveBeenCalledWith('/steering/dashboard', { replace: true });
-  });
-
-  it('REPLACES the retired /wiki, /policies rule-management panels with the Policies home', () => {
-    for (const path of ['/wiki', '/policies']) {
-      const navigate = vi.fn();
-      renderHook(() => useSteeringRedirect('steering', null, path, '', navigate));
-      expect(navigate).toHaveBeenCalledWith('/steering/policies', { replace: true });
+  it('the dashboard and the old review queue land on Steer\'s policy Proposals', () => {
+    for (const [path, search] of [['/steering/dashboard', ''], ['/proposals', ''], ['/proposals', '?type=policy']] as const) {
+      expect(legacySteeringTarget(path, search)).toBe(deskTabPath('steer', '/steering/proposals'));
     }
   });
 
-  it('REPLACES a legacy /steering/:type with Policies filtered to that type (bookmarks keep their type)', () => {
-    const navigate = vi.fn();
-    renderHook(() => useSteeringRedirect('steering', null, '/steering/security', '', navigate));
-    expect(navigate).toHaveBeenCalledWith('/steering/policies?type=security', { replace: true });
+  it('a legacy /steering/:type keeps its type as the Policies filter (bookmarks keep their type)', () => {
+    expect(legacySteeringTarget('/steering/security', '')).toBe(deskTabPath('steer', '/steering/policies?type=security'));
   });
 
-  it('REPLACES the retired /proposals queue onto the Dashboard review inbox (its successor), for every ?type=', () => {
-    // The standalone review queue folded into the dashboard's consolidated inbox, which reviews
-    // BOTH kinds in one place — so every proposals bookmark (and its old ?type= filter) lands there.
-    for (const search of ['', '?type=memory', '?type=policy']) {
-      const navigate = vi.fn();
-      renderHook(() => useSteeringRedirect('steering', null, '/proposals', search, navigate));
-      expect(navigate).toHaveBeenCalledWith('/steering/dashboard', { replace: true });
-    }
+  it('the retired /wiki and /policies panels land on Policies; bare /steering on the Steer tab', () => {
+    expect(legacySteeringTarget('/wiki', '')).toBe(deskTabPath('steer', '/steering/policies'));
+    expect(legacySteeringTarget('/policies', '')).toBe(deskTabPath('steer', '/steering/policies'));
+    expect(legacySteeringTarget('/steering', '')).toBe(deskTabPath('steer'));
   });
 
-  it('leaves a typo (parsed not-found) and every non-steering panel alone', () => {
-    const navigate = vi.fn();
-    // `/steering/bogus` parses to not-found, so this hook never sees `panel: 'steering'` for it.
-    renderHook(() => useSteeringRedirect('not-found', null, '/steering/bogus', '', navigate));
-    renderHook(() => useSteeringRedirect('system', null, '/system', '', navigate));
-    expect(navigate).not.toHaveBeenCalled();
+  it("an old address on a project's Desk stays on that project", () => {
+    expect(legacySteeringTarget('/steering/memories', '', '/projects/p1')).toBe(deskTabPath('memory', undefined, '/projects/p1'));
+    expect(legacySteeringTarget('/steering/dashboard', '', '/projects/p1')).toBe(deskTabPath('steer', '/steering/proposals', '/projects/p1'));
+  });
+
+  it('a current address rides onto the Steer tab as it is', () => {
+    expect(legacySteeringTarget('/steering/policies', '?type=testing&view=table')).toBe(deskTabPath('steer', '/steering/policies?type=testing&view=table'));
+    expect(legacySteeringTarget('/steering/proposals', '')).toBe(deskTabPath('steer', '/steering/proposals'));
   });
 });
 
@@ -151,7 +139,7 @@ describe('useRetiredSettingsRedirect', () => {
 
   it('leaves every live route alone', () => {
     const navigate = vi.fn();
-    for (const path of ['/system', '/theme', '/workflows', '/steering/policies', '/steering/memories', '/']) {
+    for (const path of ['/system', '/theme', '/workflows', '/steering/policies', '/memory', '/']) {
       renderHook(() => useRetiredSettingsRedirect(path, navigate));
     }
     expect(navigate).not.toHaveBeenCalled();

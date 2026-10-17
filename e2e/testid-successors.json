@@ -875,6 +875,16 @@
     "seat-freetier-*": "agents-free-tier",
     "seat-logout-*": "agents-signout-run",
     "seat-signin-*": "agents-sign",
-    "seat-logout-line": "agents-signout-terminal"
+    "seat-logout-line": "agents-signout-terminal",
+    "mem-stat-tier-*": "memory-kind",
+    "mem-stat-facets": "memories-facet-filter",
+    "mem-stat-total": "memory-stat-total",
+    "memories-coverage": "memory-stat-total",
+    "memories-panel": "memory-page",
+    "memories-stats": "memory-tiles",
+    "memory-facets": "memory-meta",
+    "memory-retire-confirm-banner": "memory-retire-dialog",
+    "memory-retire-one": "memory-actions",
+    "steer-memories": "desk-tab-*"
   }
 }

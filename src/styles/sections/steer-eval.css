@@ -113,6 +113,13 @@
 .wk-se-empty-title { margin: 0; font-size: var(--text-md); font-weight: var(--weight-semi); color: var(--ink-high); }
 .wk-se-mono { font-family: var(--font-mono, ui-monospace, monospace); }
 
+/* Memory (the Desk's Memory tab): Steer's language, with a memory row in place of a rule row */
+.wk-mem .wk-se-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.wk-mem .wk-se-type { width: 100%; text-align: left; font: inherit; border: 0; cursor: pointer; }
+.wk-mem-row .wk-se-sev { min-width: 76px; text-align: center; }
+.wk-mem-content { color: var(--ink-high); font-size: var(--text-sm); line-height: var(--leading-body); white-space: pre-wrap; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+.wk-mem-quote { margin: 0; padding: var(--space-3) var(--space-4); border-left: 3px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--surface-raised); color: var(--ink-body); font-size: var(--text-sm); line-height: var(--leading-body); white-space: pre-wrap; overflow-wrap: anywhere; max-height: 9em; overflow-y: auto; }
+
 /* The assistant, over the page's right edge */
 .wk-se-dock { position: absolute; top: 0; right: 0; bottom: 0; width: min(420px, 100%); z-index: 30; display: flex; background: var(--surface-card); box-shadow: var(--shadow-raised); border-left: 1px solid var(--border); }
 .wk-se-dock > * { flex: 1 1 auto; min-width: 0; }
@@ -182,6 +189,7 @@
   .wk-se-types > li { flex: 1 1 180px; }
 }
 @media (max-width: 767px) {
+  .wk-mem .wk-se-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .wk-se { --se-gap: var(--space-4); --se-pad: var(--space-4); }
   .wk-se-scroll { padding: var(--space-4) var(--space-4) var(--space-12); }
   .wk-se-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }

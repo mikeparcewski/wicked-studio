@@ -77,10 +77,12 @@ with sync_playwright() as p:
         page.wait_for_timeout(150)
 
     # ── 1. the GO TO group (a word lists the per-item rows too) ─────────────────────
-    # 27 destinations: 25 (operator 2026-10-12: Product and the Testing landing left GO TO, Plugins joined; the MCP
+    # 27 destinations, then 28: 25 (operator 2026-10-12: Product and the Testing landing left GO TO, Plugins joined; the MCP
     # inspector joined, DES-MCP-INSPECTOR-001 §5; the retired "General settings" overview left, rail restructure 2026-10-13)
     # plus Desk v2's Report, Understand and Agents tabs (operator 2026-10-13), minus Everything's Helpers tab, which
     # moved to the Agents page (DES-seats-page §2.2; the Agents tab's row is the agents shape, /agents).
+    # 28 since Memory left Steering (operator 2026-10-17): the Steering dashboard and memories rows left; Steer's
+    # Proposals, Memory and Memory's Proposals joined.
     open_palette("go:")
     dest_rows = page.get_by_test_id("palette-row").count()
     page.keyboard.press("Escape")
@@ -90,7 +92,7 @@ with sync_playwright() as p:
     page.screenshot(path=str(SHOTS / "desk-cmdk-go.png"))
     page.keyboard.press("Escape")
     groups = {r["group"] for r in rows}
-    check("go-group", groups == {"go"} and dest_rows == 27 and len(rows) > 27, groups=sorted(groups), destinations=dest_rows, rows=len(rows))
+    check("go-group", groups == {"go"} and dest_rows == 28 and len(rows) > 28, groups=sorted(groups), destinations=dest_rows, rows=len(rows))
 
     def reach(href: str, label: str) -> dict:
         open_palette(f"go: {label}")
@@ -120,8 +122,8 @@ with sync_playwright() as p:
 
     # ── 2. every parameterless destination ──────────────────────────────────────────
     FIXED = {"/", "/watch", "/rules", "/everything?tab=sessions", "/everything?tab=made", "/agents",
-             "/everything?tab=handed", "/everything?tab=projects", "/steering/dashboard",
-             "/steering/policies", "/steering/memories", "/testing/evals", "/repos", "/repos/new",
+             "/everything?tab=handed", "/everything?tab=projects", "/steering/proposals",
+             "/steering/policies", "/memory", "/memory?view=proposals", "/testing/evals", "/repos", "/repos/new",
              "/runs/new", "/workflows", "/skills", "/mcp", "/plugins", "/learn", "/system", "/theme", "/editors/dev"}
     open_palette("go:")
     fixed = page.get_by_test_id("palette-row").evaluate_all(

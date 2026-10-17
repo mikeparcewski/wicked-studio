@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 /**
  * The proposal-queue wire (DES-MEM-FACETED-001), pinned:
  *  - `proposalKind` folds `kind_type` to memory / policy / other; an unrecognized kind is still
- *    classified `other` (LISTED under `all`, never invisible) and `policySteeringType` pulls the
+ *    classified `other` (counted in Needs you, never invisible) and `policySteeringType` pulls the
  *    steering type out of `policy:<type>`;
  *  - the payload narrowers read `unknown` payloads defensively — a non-object payload, or a
  *    missing field, degrades to null, never a throw;
@@ -26,11 +26,8 @@ const {
   policyPayload,
   policySteeringType,
   proposalKind,
-  proposalMatchesKind,
-  proposalsPath,
-  PROPOSAL_KINDS,
-  readProposalKind,
   rejectProposal,
+  fileProposal,
 } = await import('../src/api/proposals.js');
 const { ApiError } = await import('../src/api/errors.js');
 type Proposal = import('../src/api/proposals.js').Proposal;
@@ -61,7 +58,7 @@ describe('proposalKind + policySteeringType — the kind fold', () => {
     expect(proposalKind(proposal({ kind_type: 'memory' }))).toBe('memory');
     expect(proposalKind(proposal({ kind_type: 'policy:security' }))).toBe('policy');
     expect(proposalKind(proposal({ kind_type: 'policy' }))).toBe('policy');
-    // An unrecognized kind is classified `other` — LISTED under `all`, never invisible.
+    // An unrecognized kind is classified `other` — counted in Needs you, never invisible.
     expect(proposalKind(proposal({ kind_type: 'insight:foo' }))).toBe('other');
   });
 
@@ -69,18 +66,6 @@ describe('proposalKind + policySteeringType — the kind fold', () => {
     expect(policySteeringType(proposal({ kind_type: 'policy:security' }))).toBe('security');
     expect(policySteeringType(proposal({ kind_type: 'policy' }))).toBeNull();
     expect(policySteeringType(proposal({ kind_type: 'memory' }))).toBeNull();
-  });
-});
-
-describe('proposalMatchesKind — the filter predicate', () => {
-  it('all matches everything; a specific kind matches only its own', () => {
-    const mem = proposal({ kind_type: 'memory' });
-    const pol = proposal({ kind_type: 'policy:testing' });
-    expect(proposalMatchesKind(mem, 'all')).toBe(true);
-    expect(proposalMatchesKind(pol, 'all')).toBe(true);
-    expect(proposalMatchesKind(mem, 'memory')).toBe(true);
-    expect(proposalMatchesKind(mem, 'policy')).toBe(false);
-    expect(proposalMatchesKind(pol, 'policy')).toBe(true);
   });
 });
 
@@ -97,22 +82,6 @@ describe('payload narrowers — read unknown payloads defensively', () => {
     // The steering wire spells the rule text `statement` — fall back to it.
     expect(policyPayload(proposal({ payload: { statement: 'do Y', severity: 'warn' } }))).toEqual({ rule: 'do Y', severity: 'warn' });
     expect(policyPayload(proposal({ payload: 42 }))).toEqual({ rule: null, severity: null });
-  });
-});
-
-describe('proposalsPath + readProposalKind — the one URL spelling', () => {
-  it('bare /proposals for all, ?type= for a kind', () => {
-    expect(proposalsPath('all')).toBe('/proposals');
-    expect(proposalsPath('memory')).toBe('/proposals?type=memory');
-    expect(proposalsPath('policy')).toBe('/proposals?type=policy');
-  });
-
-  it('reads the filter back from a search string; unknown/absent → all', () => {
-    expect(readProposalKind('?type=memory')).toBe('memory');
-    expect(readProposalKind('?type=policy')).toBe('policy');
-    expect(readProposalKind('')).toBe('all');
-    expect(readProposalKind('?type=bogus')).toBe('all');
-    for (const k of PROPOSAL_KINDS) expect(readProposalKind(proposalsPath(k).replace('/proposals', ''))).toBe(k);
   });
 });
 
@@ -139,6 +108,18 @@ describe('the wire calls — path + method', () => {
     apiFetch.mockResolvedValue({ ok: true, id: 'p1' });
     await expect(approveProposal('p1')).resolves.toEqual({ ok: true, id: 'p1' });
     expect(apiFetch).toHaveBeenCalledWith('/proposals/p1/approve', { method: 'POST' });
+  });
+
+  it('approveProposal with an edit sends the edited words as the body (memory approve-with-edit)', async () => {
+    apiFetch.mockResolvedValue({ outcome: 'promoted', active_id: 'proposal:p9' });
+    await approveProposal('p1', { content: 'the edited words' });
+    expect(apiFetch).toHaveBeenCalledWith('/proposals/p1/approve', { method: 'POST', body: JSON.stringify({ content: 'the edited words' }) });
+  });
+
+  it('fileProposal POSTs /proposals with the memory words and answers the pending id', async () => {
+    apiFetch.mockResolvedValue({ id: 'p9' });
+    await expect(fileProposal({ content: 'remember Y', project: 'wicked' })).resolves.toEqual({ id: 'p9' });
+    expect(apiFetch).toHaveBeenCalledWith('/proposals', { method: 'POST', body: JSON.stringify({ content: 'remember Y', project: 'wicked' }) });
   });
 
   it('rejectProposal POSTs /proposals/:id/reject', async () => {

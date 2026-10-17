@@ -1,8 +1,9 @@
 /**
- * The memory-management wire — types and calls for the Memories sub-section of the Steering
- * surface (`/steering/memories`): browse the estate memory store, filter by facet, and retire a
- * scope subtree. The read/decide twin (memory PROPOSALS) rides the shared proposal wire in
- * `./proposals.ts` — this module is only the "manage existing memories" half.
+ * The memory wire — types and calls for the Memory page (`/memory`, a Desk tab beside Steer):
+ * browse the estate memory store, filter by tier and facet, read the store's real totals, add a
+ * memory, and retire one memory or a scope subtree. Memory is what helpers REMEMBER (witnessed or
+ * told context they recall); Steering is the rules they are HELD to (operator 2026-10-17: "memories
+ * and steering are separate"). Memory PROPOSALS ride the shared proposal wire in `./proposals.ts`.
  *
  * ── CONTRACT (faceted-memory build) ───────────────────────────────────────────────────────────
  * `MemoryItem` comes from `wicked-crew-api-types` (pin 0.92.0, ASK-S1) — the engine's serde output,
@@ -18,12 +19,31 @@
  * {@link isMemoryUnsupported} folds both so every caller renders the honest state, never a raw
  * refusal.
  *
- * estate MCP stays READ-ONLY: the retire write below goes through crew's API, the governed
- * operator path — studio never touches estate directly.
+ * crew has no direct memory write: a new memory is FILED as a proposal (`POST /proposals`) and
+ * then approved (`POST /proposals/:id/approve`) — {@link addMemory}. Every write goes through
+ * crew's API, the governed operator path; studio never touches estate directly.
  */
 
 import { apiFetch } from './client.js';
 import { ApiError, isRouteAbsent } from './errors.js';
+import { approveProposal, fileProposal } from './proposals.js';
+
+// ── The page's addresses ─────────────────────────────────────────────────────────────────────
+
+/** The Memory page's views: the memories kept, and the memory proposals waiting on review. */
+export type MemoryView = 'memories' | 'proposals';
+
+export const MEMORY_PATH = '/memory';
+
+/** The Memory page's address — bare for the memories, `?view=proposals` for the proposals. */
+export function memoryPath(view: MemoryView = 'memories'): string {
+  return view === 'proposals' ? `${MEMORY_PATH}?view=proposals` : MEMORY_PATH;
+}
+
+/** The view a Memory address names (anything but `proposals` is the memories). */
+export function readMemoryView(search: string): MemoryView {
+  return new URLSearchParams(search).get('view') === 'proposals' ? 'proposals' : 'memories';
+}
 
 // ── The memory item (from the contract package) ───────────────────────────────────────────────
 
@@ -117,6 +137,54 @@ export function retireMemoryItem(body: { memory_id: string }): Promise<{ erased:
  * was deleted either way — the panel says so and never falls back to a subtree erase.
  */
 export function isEraseByIdUnsupported(e: unknown): boolean {
+  return (e instanceof ApiError && e.status === 501) || isRouteAbsent(e);
+}
+
+/**
+ * Add a memory. crew has no direct memory write, so this is two calls: `POST /proposals` files the
+ * words as a pending memory proposal (crew makes it a `semantic` memory; `project` becomes its
+ * `project` facet, so it is recalled on that project only), then `POST /proposals/:id/approve`
+ * approves it, which writes the memory. When the approve fails the proposal stays pending —
+ * {@link AddMemoryApproveError} names it, so the page can say it waits under Proposals.
+ */
+export async function addMemory(body: { content: string; project?: string }): Promise<{ proposalId: string; memoryId: string | null }> {
+  const { id } = await fileProposal(body.project !== undefined ? { content: body.content, project: body.project } : { content: body.content });
+  try {
+    const out = await approveProposal(id);
+    const active = (out as { active_id?: unknown }).active_id;
+    return { proposalId: id, memoryId: typeof active === 'string' ? active : null };
+  } catch (e) {
+    throw new AddMemoryApproveError(id, e);
+  }
+}
+
+/** The memory was filed as a proposal but approving it failed: it is pending, nothing was written. */
+export class AddMemoryApproveError extends Error {
+  constructor(readonly proposalId: string, readonly reason: unknown) {
+    super(reason instanceof Error ? reason.message : String(reason));
+    this.name = 'AddMemoryApproveError';
+  }
+}
+
+/**
+ * `POST /memory/edit` (crew, the memory-edit route) — change one memory's words. estate has no
+ * in-place update, so crew writes the new words as a new memory with the old one's tier, scope and
+ * facets, then retires the old one; if the retire fails it takes the new one back out, so an edit
+ * lands whole or not at all. Answers the new memory's id.
+ *
+ * The body and answer are mirrored here until the contract package publishes them (crew's
+ * `EditMemoryBody` / `EditMemoryResponse`); a daemon without the route answers the bare 404
+ * {@link isMemoryEditUnsupported} reads, and nothing changes.
+ */
+export interface EditMemoryBody { memory_id: string; content: string }
+export interface EditMemoryResponse { memory_id: string; retired: string }
+
+export function editMemory(body: EditMemoryBody): Promise<EditMemoryResponse> {
+  return apiFetch<EditMemoryResponse>('/memory/edit', { method: 'POST', body: JSON.stringify(body) });
+}
+
+/** True when this daemon cannot edit a memory: crew predates the route, or its estate cannot. */
+export function isMemoryEditUnsupported(e: unknown): boolean {
   return (e instanceof ApiError && e.status === 501) || isRouteAbsent(e);
 }
 
