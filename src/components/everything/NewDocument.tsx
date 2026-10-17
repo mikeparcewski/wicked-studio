@@ -9,6 +9,9 @@ import { docSlug } from '../../interactive/docSlug.js';
 import { useDocsCache } from '../../store/docsCache.js';
 import { DocSubjectPicker, type DocFormat, type SubjectStatus } from '../DocSubjectPicker.js';
 
+/** studio#765: one helper writes the document and a different one checks it. */
+export const MIN_DOC_SEATS = 2;
+
 /**
  * S16a-4d: "New document" on Everything › Made — project, name (derived from the brief unless
  * edited), what it is about, the format and the repositories (DocSubjectPicker as it is). One press
@@ -18,13 +21,15 @@ import { DocSubjectPicker, type DocFormat, type SubjectStatus } from '../DocSubj
  * document with "Open it"; any other refusal keeps the form with the daemon's words verbatim;
  * nothing is retried by itself. On success the door closes onto the new document (`open=`).
  */
-export function NewDocument({ projects, initialProject, onClose, onCreated, onOpen }: {
+export function NewDocument({ projects, initialProject, initialFormat = '', onClose, onCreated, onOpen }: {
   projects: readonly Project[];
   /** The ambient project (`?project=`), preselected; null = Unfiled. */
   initialProject: string | null;
+  /** studio#768: the format the list it opened from makes (a Pages list: a web page); '' = from the brief. */
+  initialFormat?: DocFormat;
   onClose: () => void;
-  /** The document was created: its project and canonical name. */
-  onCreated: (projectId: string, name: string) => void;
+  /** The document was created: its project, canonical name and the format it was made in. */
+  onCreated: (projectId: string, name: string, format: DocFormat) => void;
   /** "Open it" on a collision: the existing document's project and name. */
   onOpen: (projectId: string, name: string) => void;
 }): React.ReactElement {
@@ -33,7 +38,7 @@ export function NewDocument({ projects, initialProject, onClose, onCreated, onOp
   const [name, setName] = useState('');
   const [nameEdited, setNameEdited] = useState(false);
   const [repoRefs, setRepoRefs] = useState<string[]>([]);
-  const [format, setFormat] = useState<DocFormat>('');
+  const [format, setFormat] = useState<DocFormat>(initialFormat);
   const [noGrounding, setNoGrounding] = useState(false);
   const [subject, setSubject] = useState<SubjectStatus>('loading');
   const [busy, setBusy] = useState(false);
@@ -49,7 +54,9 @@ export function NewDocument({ projects, initialProject, onClose, onCreated, onOp
   const chosen = roster !== null && selected !== null ? chosenSeats(roster, selected) : null;
   // No roster yet (or none answered): no council can be chosen, so nothing is created — a create
   // without seats would convene the whole roster, which is the bug (codex r1 on #302).
-  const seatBlocked = chosen === null || chosen.length === 0;
+  // studio#765: a document's draft needs a second helper to check it (evaluator ≠ creator); with one,
+  // the create succeeded and the draft then failed at plan, leaving an empty page. Said up front.
+  const seatBlocked = chosen === null || chosen.length < MIN_DOC_SEATS;
   const leftOut = (defaults?.leftOut ?? []).filter((x) => selected === null || !selected.has(x.key));
   const toggleSeat = (key: string): void => {
     if (selected === null) return;
@@ -74,7 +81,7 @@ export function NewDocument({ projects, initialProject, onClose, onCreated, onOp
       const created = await createDoc(projectId, body);
       // The list shows it at once: one re-read of this project's documents into the shared cache.
       void listDocs(projectId).then((docs) => useDocsCache.getState().deposit(projectId, docs)).catch(() => undefined);
-      onCreated(projectId, created.name);
+      onCreated(projectId, created.name, format);
     } catch (e) {
       const wire = e instanceof Error ? e.message : String(e);
       if (apiStatus(e) === 409 || /\b409\b|already exists/i.test(wire)) setCollision(docSlug(body.name ?? newDocName(brief, nameEdited ? name : "")));
@@ -89,18 +96,18 @@ export function NewDocument({ projects, initialProject, onClose, onCreated, onOp
     <div data-testid="made-new-document-form" role="group" aria-label="New document" className="wk-made-new">
       <label className="wk-made-new-field">
         <span>Project</span>
-        <select data-testid="made-new-document-project" value={projectId} onChange={(e) => setProjectId(e.target.value)}>
+        <select data-testid="made-new-document-project" className="wk-field" value={projectId} onChange={(e) => setProjectId(e.target.value)}>
           <option value={UNFILED_MOUNT}>Unfiled</option>
           {projects.filter((p) => p.id !== UNFILED_MOUNT).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
         </select>
       </label>
       <label className="wk-made-new-field">
         <span>What is it about?</span>
-        <textarea data-testid="made-new-document-brief" rows={3} value={brief} onChange={(e) => setBrief(e.target.value)} placeholder="A one-page brief for the offsite: agenda, budget, who goes" />
+        <textarea data-testid="made-new-document-brief" className="wk-field" rows={3} value={brief} onChange={(e) => setBrief(e.target.value)} placeholder="A one-page brief for the offsite: agenda, budget, who goes" />
       </label>
       <label className="wk-made-new-field">
         <span>Name</span>
-        <input data-testid="made-new-document-name" value={shownName} onChange={(e) => { setName(e.target.value); setNameEdited(true); }} />
+        <input data-testid="made-new-document-name" className="wk-field" value={shownName} onChange={(e) => { setName(e.target.value); setNameEdited(true); }} />
       </label>
       <DocSubjectPicker
         projectId={projectId}
@@ -114,11 +121,11 @@ export function NewDocument({ projects, initialProject, onClose, onCreated, onOp
         onStatus={setSubject}
       />
       {(roster === null || selected === null) && (
-        <p data-testid="made-new-document-council" className="wk-made-new-field">Reading the seats (GET /roster) — the council is chosen from them.</p>
+        <p data-testid="made-new-document-council" className="wk-made-new-field">Reading which helpers are available…</p>
       )}
       {roster !== null && selected !== null && (
-        <div data-testid="made-new-document-seats" role="group" aria-label="Council" className="wk-made-new-field">
-          <span>Council</span>
+        <div data-testid="made-new-document-seats" role="group" aria-label="Helpers" className="wk-made-new-field">
+          <span>Helpers</span>
           <span className="wk-prop-btns">
             {roster.map((s) => {
               const on = selected.has(s.key);
@@ -132,7 +139,7 @@ export function NewDocument({ projects, initialProject, onClose, onCreated, onOp
                   disabled={busy}
                   onClick={() => toggleSeat(s.key)}
                   className="wk-chip"
-                  title={on ? `${s.key} sits on this document's council — click to leave it out` : `${s.key} is left out — click to add it`}
+                  title={on ? `${s.display_name || s.key} works on this document. Click to leave it out.` : `${s.display_name || s.key} is left out. Click to add it.`}
                 >
                   {s.display_name || s.key}
                 </button>
@@ -141,8 +148,10 @@ export function NewDocument({ projects, initialProject, onClose, onCreated, onOp
           </span>
           <span data-testid="made-new-document-council" role={seatBlocked ? 'alert' : undefined}>
             {seatBlocked
-              ? 'Choose at least one seat — a document run needs a council.'
-              : `council: ${(chosen ?? []).map((s) => s.key).join(' · ')}`}
+              ? (chosen ?? []).length === 0
+                ? 'Choose two helpers: one writes the document and another checks it.'
+                : 'Add a second helper: one writes the document and another checks it.'
+              : `Helpers: ${(chosen ?? []).map((s) => s.display_name || s.key).join(' · ')}`}
             {leftOut.length > 0 && ` — left out: ${leftOut.map((x) => `${x.key} (${x.detail})`).join(', ')}`}
           </span>
         </div>

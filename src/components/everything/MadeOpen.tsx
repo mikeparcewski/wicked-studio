@@ -11,19 +11,25 @@ import { ArtifactMorph } from '../session/ArtifactMorph.js';
  * (no session to send to). Esc from full screen comes back to the card (DES §7.3), whose Options hold its
  * Versions; Esc on the card, or Close, closes it back to the list.
  */
-export function MadeOpen({ projectId, docId, title, style, onClose }: {
+export function MadeOpen({ projectId, docId, title, style, onClose, draft }: {
   projectId: string;
   docId: string;
   title: string;
   /** The document's recorded style (`doc` / `ppt` / …), for the editor kind. */
   style: string | null;
   onClose: () => void;
+  /** studio#765: a page with no version yet shows what its draft is doing INSTEAD of the editor (an
+   *  empty editor opened full screen over it, saying only "The page could not be read"). The editor
+   *  opens once a version lands. Absent = the document has a version. */
+  draft?: React.ReactNode;
 }): React.ReactElement {
   const key = artifactKey(projectId, docId, 'made');
+  const waiting = draft !== undefined && draft !== null;
   useEffect(() => {
+    if (waiting) return;
     setArtifactSize(key, 'full');
     return () => setArtifactSize(key, 'inline');
-  }, [key]);
+  }, [key, waiting]);
   // Esc on the card closes it — not while it is full screen (that Esc is the shell's: back to the card), not while
   // its Options group is open, and not when something inside consumed it (an input, a menu).
   useEffect(() => {
@@ -48,12 +54,14 @@ export function MadeOpen({ projectId, docId, title, style, onClose }: {
       <div className="wk-made-open-bar">
         <button type="button" data-testid="everything-made-close" className="wk-host-btn" onClick={onClose}>Close · back to the list</button>
       </div>
-      <div className="wk-made-open-row">
-        <div className="wk-made-open-card">
-          <ArtifactMorph artifactKey={key} title={title} projectId={projectId} docId={docId} composerKey={`made:${projectId}/${docId}`} kind={editorKindOf(style)} />
+      {waiting ? draft : (
+        <div className="wk-made-open-row">
+          <div className="wk-made-open-card">
+            <ArtifactMorph artifactKey={key} title={title} projectId={projectId} docId={docId} composerKey={`made:${projectId}/${docId}`} kind={editorKindOf(style)} />
+          </div>
+          {grouped && <HostPanel />}
         </div>
-        {grouped && <HostPanel />}
-      </div>
+      )}
     </div>
   );
 }

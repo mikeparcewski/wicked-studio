@@ -1,6 +1,6 @@
 import { useEffect, useMemo } from 'react';
 import { editorKindOf } from '../../board/artifactMorph.js';
-import { everythingPath, madeRows, type MadeRow } from '../../board/everythingModel.js';
+import { everythingPath, madeRows, type MadeKind, type MadeRow } from '../../board/everythingModel.js';
 import { relTime } from '../../board/relTime.js';
 import { useDisplayText } from '../../hooks/useHomePath.js';
 import { useDocsCache } from '../../store/docsCache.js';
@@ -24,6 +24,12 @@ export function documentsFor(rows: readonly MadeRow[], kinds: readonly string[])
   return rows.filter((r) => r.doc !== undefined && r.doc.kind !== 'demo' && kinds.includes(editorKindOf(r.doc.style)));
 }
 
+/** studio#768: the Made list an editor's new document is filed under (its first kind); All when unknown. */
+export function madeKindForEditor(kinds: readonly string[]): MadeKind {
+  const k = kinds[0];
+  return k === 'page' ? 'pages' : k === 'deck' ? 'decks' : k === 'document' ? 'documents' : 'all';
+}
+
 /** Where one document opens: full size on its project's Made list. */
 export function openDocumentHref(r: Pick<MadeRow, 'projectId'> & { doc?: { name: string } }): string {
   return everythingPath({ tab: 'made', kind: 'all', project: r.projectId, open: r.doc?.name ?? null });
@@ -40,7 +46,9 @@ export function OpenDocumentList({ kinds, navigate }: { kinds: readonly string[]
   const reading = index === 'untried' || (index === 'present' && census === 'opened');
   const go = (href: string) => (ev: React.MouseEvent) => { ev.preventDefault(); navigate(href); };
   const allHref = everythingPath({ tab: 'made', kind: 'all' });
-  const newHref = everythingPath({ tab: 'made', kind: 'documents', new: 'document' });
+  // studio#768: New document lands on the list this editor's documents are filed under (the page
+  // editor's: Pages, where New document starts on a web page), not on Documents.
+  const newHref = everythingPath({ tab: 'made', kind: madeKindForEditor(kinds), new: 'document' });
   const nameOf = (id: string | null): string => (id === null ? 'Not in a project' : projects.find((p) => p.id === id)?.name ?? id);
 
   if (reading && docs.length === 0) return <Skeleton rows={2} data-testid="plugin-documents-reading" />;

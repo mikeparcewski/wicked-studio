@@ -69,7 +69,7 @@ describe('S16a-4d — the New document door', () => {
     expect(interactive.createDoc).not.toHaveBeenCalled();
     await userEvent.type(screen.getByTestId('made-new-document-brief'), 'Offsite plan');
     await userEvent.click(screen.getByTestId('made-new-document-create'));
-    await waitFor(() => expect(onCreated).toHaveBeenCalledWith('notes', 'offsite-plan'));
+    await waitFor(() => expect(onCreated).toHaveBeenCalledWith('notes', 'offsite-plan', ''));
     expect(interactive.createDoc).toHaveBeenCalledTimes(1);
     expect(vi.mocked(interactive.createDoc).mock.calls[0]![1]).toMatchObject({ name: 'Offsite plan', project: 'notes', kind: 'source' });
   });
@@ -82,24 +82,28 @@ describe('S16a-4d — the New document door', () => {
       ['claude', 'true'], ['pi', 'true'], ['copilot', 'false'], ['codex', 'false'], ['opencode', 'false'],
     ]);
     const line = screen.getByTestId('made-new-document-council');
-    expect(line).toHaveTextContent('council: claude · pi');
+    expect(line).toHaveTextContent('Helpers: claude · pi');
     expect(line).toHaveTextContent('left out: copilot (not picked for checks — quota_exhausted), codex (');
-    await userEvent.click(seats[1]!); // pi out
-    expect(line).toHaveTextContent('council: claude');
     await userEvent.type(screen.getByTestId('made-new-document-brief'), 'Offsite plan');
+    // studio#765: one helper cannot both write and check the draft — Create waits and says so.
+    await userEvent.click(seats[1]!); // pi out
+    expect(line).toHaveTextContent('Add a second helper: one writes the document and another checks it.');
+    expect(screen.getByTestId('made-new-document-create')).toBeDisabled();
+    await userEvent.click(seats[1]!); // pi back in
+    expect(line).toHaveTextContent('Helpers: claude · pi');
     await userEvent.click(screen.getByTestId('made-new-document-create'));
     await waitFor(() => expect(interactive.createDoc).toHaveBeenCalledTimes(1));
     const body = vi.mocked(interactive.createDoc).mock.calls[0]![1] as { clisJson?: string };
-    expect(JSON.parse(body.clisJson ?? 'null')).toEqual([ROSTER[0]]);
+    expect(JSON.parse(body.clisJson ?? 'null')).toEqual([ROSTER[0], ROSTER[1]]);
   });
 
   it('studio#302: every seat unchecked refuses Create and says why; the stored Build default wins over enabled_for_council', async () => {
     localStorage.setItem('wicked_default_clis', JSON.stringify(['pi', 'opencode']));
     render(<NewDocument projects={PROJECTS} initialProject="notes" onClose={vi.fn()} onCreated={vi.fn()} onOpen={vi.fn()} />);
-    expect(screen.getByTestId('made-new-document-council')).toHaveTextContent('council: pi · opencode');
+    expect(screen.getByTestId('made-new-document-council')).toHaveTextContent('Helpers: pi · opencode');
     await userEvent.type(screen.getByTestId('made-new-document-brief'), 'Offsite plan');
     for (const b of screen.getAllByTestId('made-new-document-seat').filter((x) => x.getAttribute('aria-pressed') === 'true')) await userEvent.click(b);
-    expect(screen.getByTestId('made-new-document-council')).toHaveTextContent('Choose at least one seat');
+    expect(screen.getByTestId('made-new-document-council')).toHaveTextContent('Choose two helpers: one writes the document and another checks it.');
     expect(screen.getByTestId('made-new-document-create')).toBeDisabled();
     expect(interactive.createDoc).not.toHaveBeenCalled();
   });
@@ -108,7 +112,7 @@ describe('S16a-4d — the New document door', () => {
     clearCachedRoster();
     render(<NewDocument projects={PROJECTS} initialProject="notes" onClose={vi.fn()} onCreated={vi.fn()} onOpen={vi.fn()} />);
     expect(screen.queryByTestId('made-new-document-seats')).toBeNull();
-    expect(screen.getByTestId('made-new-document-council')).toHaveTextContent('Reading the seats (GET /roster)');
+    expect(screen.getByTestId('made-new-document-council')).toHaveTextContent('Reading which helpers are available');
     await userEvent.type(screen.getByTestId('made-new-document-brief'), 'p');
     expect(screen.getByTestId('made-new-document-create')).toBeDisabled();
     expect(interactive.createDoc).not.toHaveBeenCalled();

@@ -563,7 +563,7 @@ export function CommandPalette({
         name: 'New Document',
         action: () => {
           onClose();
-          navigate(everythingPath({ tab: 'made', kind: 'documents', ...(projectId !== null && projectId !== 'default' ? { project: projectId } : {}), new: 'document' }));
+          navigate(everythingPath({ tab: 'made', ...(projectId !== null && projectId !== 'default' ? { project: projectId } : {}), new: 'document' }));
         },
       },
       {

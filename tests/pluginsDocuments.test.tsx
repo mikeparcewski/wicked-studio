@@ -112,7 +112,8 @@ describe('the Plugins page: the built-in Document editor opens real documents', 
     await waitFor(() => expect(screen.getByTestId('plugin-documents-empty')).toBeTruthy());
     expect(screen.getByTestId('plugin-documents-empty').textContent).toContain('No documents for it yet.');
     fireEvent.click(screen.getByTestId('plugin-documents-new'));
-    expect(navigate).toHaveBeenLastCalledWith('/everything?tab=made&kind=documents&new=document');
+    // studio#768: the page editor's New document lands on Pages (where a web page is filed).
+    expect(navigate).toHaveBeenLastCalledWith('/everything?tab=made&kind=pages&new=document');
     cleanup();
     useDocsCache.setState({ byProject: {}, census: 'opened', index: 'untried' });
     stub(() => json({ message: 'Route GET:/api/v1/interactive/docs not found', error: 'Not Found', statusCode: 404 }, 404));

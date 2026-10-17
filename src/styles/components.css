@@ -48,7 +48,12 @@
 .wk-btn--primary:disabled,
 .wk-btn--secondary:disabled,
 .wk-btn--danger:disabled,
-.wk-btn--link:disabled {
+.wk-btn--link:disabled,
+/* studio#766: the proposal / form buttons (`.wk-prop-btn`, New document's Create among them) take the
+   same disabled structure — a disabled primary drew as the same filled button as an enabled one. */
+.wk-prop-btn:disabled,
+.wk-prop-btn--primary:disabled {
+  cursor: not-allowed;
   background: transparent;
   color: var(--ink-dim);
   border-color: var(--border-strong);
@@ -837,6 +842,16 @@ select:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-
 .wk-made-open-card { flex: 1 1 auto; min-width: 0; }
 .wk-made-open-row > .wk-hpanel { border: 1px solid var(--border); border-radius: var(--radius-md); max-height: 80vh; }
 .wk-made-open-row > .wk-hpanel .wk-hpanel-body { overflow-y: auto; }
+/* studio#765: what a version-less document's draft is doing, above the page. */
+.wk-made-draft { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 12px; margin: 0 0 8px; padding: 16px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface-card); }
+.wk-made-draft-title { flex-basis: 100%; margin: 0; font-size: var(--text-base); font-weight: var(--weight-semi); color: var(--ink-high); }
+.wk-made-draft--bad { border-color: color-mix(in oklab, var(--status-fail) 45%, var(--border)); }
+.wk-made-draft-line { margin: 0; font-size: var(--text-sm); color: var(--ink-high); }
+.wk-made-draft > a { font-size: var(--text-sm); }
+/* studio#766: the form's fields keep the shared inset and type size (the element reset outranks :where()). */
+.wk-made-new .wk-field { padding: 4px var(--control-px); font-size: var(--text-sm); }
+.wk-made-new textarea.wk-field { padding-block: var(--space-2); }
+.wk-made-draft > :last-child:not(.wk-made-draft-line):not(a) { flex-basis: 100%; }
 .wk-made-new { display: flex; flex-direction: column; gap: 8px; margin: 8px 0; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface-card); }
 .wk-made-new-field { display: flex; flex-direction: column; gap: 4px; font-size: var(--text-xs); color: var(--ink-muted); }
 .wk-made-li { display: flex; align-items: center; gap: 8px; }

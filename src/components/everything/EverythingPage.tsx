@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../../api/client.js';
 import type { Project } from '../../api/types.js';
 import type { SessionView } from '../../api/types.js';
@@ -7,8 +7,7 @@ import { canDeliver, DELIVERY_LABEL, deliveryOf, resolveDelivery } from '../deli
 import { useIsSystemWorkflow } from '../../store/workflowCache.js';
 import {
   EVERYTHING_TABS, EVERYTHING_VIEWS, everythingPath, filterGroups, handedRows, MADE_KINDS, MADE_WORD, madeRows, readEverythingQuery, searchGroups,
-  SESSION_FILTERS, TAB_LABEL, type EverythingQuery, type EverythingTab, type HandedRow, type MadeRow,
-} from '../../board/everythingModel.js';
+  SESSION_FILTERS, TAB_LABEL, type EverythingQuery, type EverythingTab, type HandedRow, type MadeRow, formatForMadeKind, madeKindForFormat } from '../../board/everythingModel.js';
 import { endedAtMs, finishedAtMs, type NeedRow } from '../../board/needsYou.js';
 import { sessionPath, type SessionState } from '../../board/sessionModel.js';
 import { filterRunRows, pageRunRows, runRows, sortRunRows, type RunSortKey, type SortDir } from '../../board/runsTableModel.js';
@@ -32,6 +31,8 @@ import { projectRows } from '../../board/projectsModel.js';
 import { GroundingChip } from '../GroundingChip.js';
 import { madeOpenAddress } from '../../board/madeMoves.js';
 import { MadeOpen } from './MadeOpen.js';
+import { DraftStatus } from './DraftStatus.js';
+import { draftCard, draftRunOf } from '../../board/draftStatus.js';
 import { NewDocument } from './NewDocument.js';
 import { DEMO_VIDEO_ID, openLaunchWizard } from '../../store/launchWizard.js';
 import { DocDeleteConfirm } from '../DocDelete.js';
@@ -115,7 +116,7 @@ export function EverythingPage({ runs, runsLoaded, runsError = null, onRetryRuns
           {q.tab === 'sessions' && (
             <SessionsTab runs={runs} runsLoaded={runsLoaded} runsError={runsError} onRetryRuns={onRetryRuns} needRows={needRows} q={{ ...q, project }} navigate={navigate} go={go} />
           )}
-          {q.tab === 'made' && <MadeTab runs={runs} q={q} navigate={navigate} go={go} />}
+          {q.tab === 'made' && <MadeTab runs={runs} runsLoaded={runsLoaded} q={q} navigate={navigate} go={go} />}
           {q.tab === 'handed' && <HandedTab runs={runs} runsLoaded={runsLoaded} runsError={runsError} onRetryRuns={onRetryRuns} go={go} />}
           {q.tab === 'projects' && <ProjectsTab q={q} runs={runs} runsLoaded={runsLoaded} runsError={runsError} onRetryRuns={onRetryRuns} needRows={needRows} navigate={navigate} />}
         </section>
@@ -703,7 +704,7 @@ function LiveChats({ known, go }: { known: ReadonlySet<string>; go: Go }): React
 
 // ── Everything made ──────────────────────────────────────────────────────────────────────────
 
-function MadeTab({ runs, q, navigate, go }: { runs: SessionView[]; q: EverythingQuery; navigate: Navigate; go: Go }): React.ReactElement {
+function MadeTab({ runs, runsLoaded = true, q, navigate, go }: { runs: SessionView[]; runsLoaded?: boolean; q: EverythingQuery; navigate: Navigate; go: Go }): React.ReactElement {
   const byProject = useDocsCache((s) => s.byProject);
   const unavailable = useDocsCache((s) => s.unavailable);
   const index = useDocsCache((s) => s.index);
@@ -740,6 +741,13 @@ function MadeTab({ runs, q, navigate, go }: { runs: SessionView[]; q: Everything
     if (q.open === null || q.open === undefined) return null;
     return madeRows(byProject, [], {}, 'all', q.project).find((r) => r.doc !== undefined && r.doc.name === q.open) ?? null;
   }, [byProject, q.open, q.project]);
+  // studio#765 (codex r1): a page with a confirmed head of 0 and a known draft run opens on its draft
+  // card; "Open it anyway" (or a finished draft whose version the list never shows) opens the editor.
+  const [anyway, setAnyway] = useState<string | null>(null);
+  const openedKey = opened === null ? null : opened.key;
+  const draftRun = opened !== null && opened.doc !== undefined && opened.doc.head === 0 ? draftRunOf(runs, opened.projectId ?? 'default', opened.doc.name) : null;
+  const draft = opened === null || opened.doc === undefined || anyway === openedKey ? null : draftCard(opened.doc.head, draftRun, runsLoaded);
+  const openAnyway = useCallback(() => setAnyway(openedKey), [openedKey]);
   const askable = projects.filter((p) => p.id !== 'default').map((p) => p.id);
   const loadAll = (): void => { void useDocsCache.getState().loadAll(askable); };
   // studio#687 row 75: plain words — no "daemon", no "index". The complete list says nothing about itself.
@@ -754,7 +762,9 @@ function MadeTab({ runs, q, navigate, go }: { runs: SessionView[]; q: Everything
   return (
     <div data-testid="everything-made" data-count={rows.length} data-kind={q.kind} data-census={census} data-index={index}>
       {opened !== null && opened.doc !== undefined && (
-        <MadeOpen key={opened.key} projectId={opened.projectId ?? 'default'} docId={opened.doc.name} title={showText(opened.title)} style={opened.doc.style ?? null} onClose={() => navigate(everythingPath({ tab: 'made', kind: q.kind, project: q.project }), { replace: true })} />
+        <MadeOpen key={opened.key} projectId={opened.projectId ?? 'default'} docId={opened.doc.name} title={showText(opened.title)} style={opened.doc.style ?? null} onClose={() => navigate(everythingPath({ tab: 'made', kind: q.kind, project: q.project }), { replace: true })}
+          draft={draft === null ? undefined
+            : <DraftStatus projectId={opened.projectId ?? 'default'} docId={opened.doc.name} title={showText(opened.title)} state={draft} run={draftRun} runChatId={runChatId} navigate={(p) => navigate(p)} onOpenAnyway={openAnyway} />} />
       )}
       <div className="wk-everything-bar">
         <div role="group" aria-label="Show" className="wk-everything-chips">
@@ -782,9 +792,12 @@ function MadeTab({ runs, q, navigate, go }: { runs: SessionView[]; q: Everything
         <NewDocument
           projects={projects}
           initialProject={q.project}
+          initialFormat={formatForMadeKind(q.kind)}
           onClose={() => navigate(withDoor(false), { replace: true })}
-          onCreated={(pid, name) => navigate(everythingPath({ tab: 'made', kind: 'documents', project: pid, open: name }), { replace: true })}
-          onOpen={(pid, name) => navigate(everythingPath({ tab: 'made', kind: 'documents', project: pid, open: name }))}
+          // studio#768: land on the list the new item is filed under (a web page under Pages), never
+          // on a filter that says "No documents yet" beside it; an existing one opens on All.
+          onCreated={(pid, name, format) => navigate(everythingPath({ tab: 'made', kind: madeKindForFormat(format), project: pid, open: name }), { replace: true })}
+          onOpen={(pid, name) => navigate(everythingPath({ tab: 'made', kind: 'all', project: pid, open: name }))}
         />
       )}
       {deleting !== null && (

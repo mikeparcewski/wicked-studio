@@ -167,7 +167,9 @@ describe('failure detail', () => {
     const raw = 'the PA-scoped plan could not be decided: no eligible seat for 89da69fb: evaluator≠creator unsatisfiable for unit(s) [3, 5, 6]';
     const v = makeView({ id: 'r', status: 'failed', unit_ix: 0 }, [makeUnit({ id: 'r:pa-scope', ord: 1, status: 'done' })]);
     const why = failureWhy(v, [{ type: 'error', message: raw }, { type: 'sessionFailed', ord: 1 }]);
-    expect(why.plain).toBe('No helper was eligible to take the work — Technical details say why.');
+    // studio#765: the engine's evaluator≠creator refusal names its cause — no second helper could check
+    // (true whether the other seats are missing or not eligible).
+    expect(why.plain).toBe('No second helper could check the work: one helper writes it and a different one checks it.');
     expect(why.detail).toEqual([raw]);
     // A step's own failure still leads when there is one.
     const stepped = failureWhy(makeView({ id: 'r', status: 'failed', unit_ix: 1 }, [makeUnit({ id: 'r:review', ord: 1, status: 'distributed' })]),

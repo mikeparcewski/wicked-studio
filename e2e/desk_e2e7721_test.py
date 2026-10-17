@@ -167,7 +167,8 @@ with sync_playwright() as p:
     why.scroll_into_view_if_needed()
     page.screenshot(path=str(SHOTS / "desk-e2e7721-4-failure-why.png"))
     line = why.inner_text()
-    check("815-why", line == "No helper was eligible to take the work — Technical details say why.", line=line)
+    # studio#765: the engine's evaluator≠creator refusal names its cause in plain words.
+    check("815-why", line == "No second helper could check the work: one helper writes it and a different one checks it.", line=line)
     page.close()
 
     # ── 4. studio#816: a closed ask keeps its answer ────────────────────────────────

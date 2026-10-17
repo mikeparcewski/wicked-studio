@@ -133,6 +133,21 @@ export const MADE_WORD: Readonly<Record<MadeThing, string>> = {
   documents: 'document', pages: 'page', decks: 'deck', videos: 'video',
 };
 
+/**
+ * studio#768: the Made list a new document lands on — the kind its chosen format files it under
+ * (Web page → Pages, Slides → Decks, Document / Brochure → Documents). "From the brief" lets the
+ * helpers choose, so where it lands is not known yet: All.
+ */
+export function madeKindForFormat(format: string): MadeKind {
+  return format === '' ? 'all' : format === 'web' ? 'pages' : format === 'ppt' ? 'decks' : 'documents';
+}
+
+/** studio#768: the format New document starts on from a list — a Pages list makes a web page, a
+ *  Decks list slides; anywhere else the brief decides. */
+export function formatForMadeKind(kind: MadeKind): '' | 'web' | 'ppt' {
+  return kind === 'pages' ? 'web' : kind === 'decks' ? 'ppt' : '';
+}
+
 /** What a registry row is: a demo is a video; the recorded style says page (`web`) or deck (`ppt`); else a document. */
 export function madeKindOf(doc: Pick<DocSummary, 'kind' | 'style'>): MadeThing {
   if (doc.kind === 'demo') return 'videos';
@@ -150,7 +165,8 @@ export interface MadeRow {
   updatedAt: number | null;
   /** A registry document (opened on its document route). */
   /** `style` is the recorded style (`web` / `doc` / `ppt` / …) — what picks the editor (`editorKindOf`). */
-  doc?: { name: string; kind: DocSummary['kind']; style?: string; grounding?: DocSummary['grounding'] };
+  /** `head` (studio#765): the newest version on the list; 0 = none yet (its draft has not landed). */
+  doc?: { name: string; kind: DocSummary['kind']; style?: string; grounding?: DocSummary['grounding']; head?: number };
   /** A demo run's video (opened on the run). */
   runId?: string;
   /** The demo run's status, for a video row (`completed`, `executing`, …). */
@@ -190,7 +206,7 @@ export function madeRows(
   const out: MadeRow[] = [];
   for (const [pid, docs] of Object.entries(byProject)) {
     for (const d of docs) {
-      out.push({ key: `doc:${pid}:${d.name}`, kind: madeKindOf(d), title: d.name, projectId: pid, updatedAt: isoMs(d.updated_at), doc: { name: d.name, kind: d.kind, ...(d.style !== undefined ? { style: d.style } : {}), ...(d.grounding !== undefined ? { grounding: d.grounding } : {}) } });
+      out.push({ key: `doc:${pid}:${d.name}`, kind: madeKindOf(d), title: d.name, projectId: pid, updatedAt: isoMs(d.updated_at), doc: { name: d.name, kind: d.kind, ...(d.style !== undefined ? { style: d.style } : {}), ...(d.grounding !== undefined ? { grounding: d.grounding } : {}), ...(typeof d.head === 'number' && (d as { head_unknown?: boolean }).head_unknown !== true ? { head: d.head } : {}) } });
     }
   }
   for (const v of runs) {

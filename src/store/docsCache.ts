@@ -99,7 +99,9 @@ export const useDocsCache = create<DocsCacheStore>((set, get) => ({
           name: r.name, kind: r.kind as DocSummary['kind'], head: r.head, versions: r.versions, updated_at: r.updated_at,
           ...(r.style !== undefined ? { style: r.style } : {}),
           ...(r.grounding !== undefined ? { grounding: r.grounding } : {}),
-        });
+          // studio#765 (codex r1): an index row that named no head keeps saying so (never "no version").
+          ...((r as { head_unknown?: boolean }).head_unknown === true ? { head_unknown: true } : {}),
+        } as DocSummary);
       }
       set((s) => ({
         // The index is the daemon's word for EVERY project: a project it lists nothing for holds nothing.
