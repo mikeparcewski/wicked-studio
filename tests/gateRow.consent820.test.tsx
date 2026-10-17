@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as client from '../src/api/client.js';
 import type { CoreEvent } from '../src/api/types.js';
 import { useGateActionStore } from '../src/board/gateActions.js';
-import { consentChoicesOf, sessionGateChoices } from '../src/board/gateRowModel.js';
+import { consentChoicesOf, consentMissingOf, sessionGateChoices } from '../src/board/gateRowModel.js';
 import { setUndoWindowForTest } from '../src/board/undoQueue.js';
 import { GateRow } from '../src/components/session/GateRow.js';
 import { useRunEventStore } from '../src/store/events.js';
@@ -62,6 +62,34 @@ describe('core#820 — the model', () => {
     const m = sessionGateChoices({ runId: RUN, gate: bare, units: UNITS, events: [missing], pool: [], roster: null })!;
     expect(m.choices.map((c) => c.key)).toEqual(['approve', 'decline']);
     expect(consentChoicesOf(gate(), [])).toBeNull();
+  });
+});
+
+describe('studio#639 — no install plan: the engine says why, where the file lists would be', () => {
+  const SAID = 'No install plan ran, so the files each choice writes cannot be listed (the dry-run step was skipped).';
+  const missing = { ...(FRAME as unknown as Record<string, unknown>), choices: undefined, writeTargets: undefined, writeTargetsMissing: SAID } as unknown as CoreEvent;
+  const { choices: _omit, ...bare } = gate();
+  void _omit;
+
+  it('the model carries the sentence; the choices stay Approve / Decline', () => {
+    expect(consentMissingOf(bare, [missing])).toBe(SAID);
+    const m = sessionGateChoices({ runId: RUN, gate: bare, units: UNITS, events: [missing], pool: [], roster: null })!;
+    expect(m.consentMissing).toBe(SAID);
+    expect(m.choices.map((c) => c.key)).toEqual(['approve', 'decline']);
+    // A frame WITH a plan carries no such sentence.
+    expect(sessionGateChoices({ runId: RUN, gate: gate(), units: UNITS, events: [FRAME], pool: [], roster: null })!.consentMissing).toBeUndefined();
+  });
+
+  it('the row shows it', async () => {
+    vi.restoreAllMocks();
+    useGateStore.setState({ gates: { [RUN]: bare } });
+    useGateActionStore.setState({ byGate: {} });
+    useRunEventStore.setState({ byRun: { [RUN]: [missing] } });
+    vi.spyOn(client.api, 'getRunDiff').mockResolvedValue({ diff: '' } as never);
+    render(<GateRow view={makeView({ id: RUN, status: 'awaiting_human' } as never, UNITS)} gate={bare} />);
+    expect(await screen.findByTestId('session-gate-consent-missing')).toHaveTextContent(SAID);
+    expect(screen.queryByTestId('session-gate-consent-writes')).toBeNull();
+    cleanup();
   });
 });
 

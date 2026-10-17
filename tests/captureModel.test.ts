@@ -48,13 +48,13 @@ describe('captureClass', () => {
 
 describe('the triage line names what a capture filed, consequence first', () => {
   it('a captured decision is memory-only', () => {
-    expect(proposalConsequenceLine(row('d', 'decision'))).toBe('Memory only — a captured decision: adds a memory; enforcement unchanged');
+    expect(proposalConsequenceLine(row('d', 'decision'))).toBe('Adds a memory from your decision; no rule changes');
   });
   it('a captured rule changes enforcement', () => {
-    expect(proposalConsequenceLine(rule('r'))).toBe('Changes enforcement — lands a development rule (warn) from your capture');
+    expect(proposalConsequenceLine(rule('r'))).toBe('Adds a development rule (warning) from your capture');
   });
   it('a row no capture filed keeps its line', () => {
-    expect(proposalConsequenceLine(row('m', undefined))).toBe('Memory only — adds a memory; enforcement unchanged');
+    expect(proposalConsequenceLine(row('m', undefined))).toBe('Adds a memory; no rule changes');
   });
 });
 
@@ -89,9 +89,9 @@ describe('captureFiled / captureFiledLine', () => {
     expect(captureFiledLine(none, 'upload-endpoint', false)).toBe('Captured to upload-endpoint: the team is reading it…');
     expect(captureFiledLine(none, 'upload-endpoint', true)).toBe('Captured to upload-endpoint: the team filed nothing');
     expect(captureFiledLine({ seen: 3, waiting: 3, memoryOnly: 2, changesEnforcement: 1 }, 'upload-endpoint', true))
-      .toBe('3 proposals from your capture waiting in Needs You: 2 memory-only, 1 changes enforcement');
+      .toBe('3 proposals from your capture waiting in Needs You: 2 memories, 1 rule change');
     expect(captureFiledLine({ seen: 1, waiting: 1, memoryOnly: 1, changesEnforcement: 0 }, 'upload-endpoint', false))
-      .toBe('1 proposal from your capture waiting in Needs You: 1 memory-only (the team is still reading)');
+      .toBe('1 proposal from your capture waiting in Needs You: 1 memory (the team is still reading)');
     expect(captureFiledLine({ seen: 3, waiting: 0, memoryOnly: 0, changesEnforcement: 0 }, 'upload-endpoint', true))
       .toBe('3 proposals filed from your capture to upload-endpoint: all decided');
   });

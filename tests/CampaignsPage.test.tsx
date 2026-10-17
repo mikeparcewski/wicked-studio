@@ -271,11 +271,12 @@ describe('the cards — scoreboard stats condensed, needs-you FIRST', () => {
     expect(within(cards[0]!).getByTestId('campaign-card-progress').textContent).toBe('2 of 6 landed');
     expect(within(cards[1]!).getByTestId('campaign-card-progress').textContent).toBe('15 of 18 landed');
     expect(within(cards[1]!).getByTestId('campaign-card-split').textContent).toBe('1 failed');
-    // studio#685 row 8: the bar fills only what landed / failed / waits / runs — pending is empty track.
+    // studio#733: the bar fills only what finished (landed / failed), the count its line says — a
+    // waiting or running step is empty track (it is said in words beside the bar).
     const bar = within(cards[0]!).getByTestId('campaign-card-bar');
     expect(bar.getAttribute('aria-label')).toBe('2 landed, 0 failed of 6');
     const widths = [...bar.children].map((c) => parseFloat((c as HTMLElement).style.width));
-    expect(widths.reduce((a, w) => a + w, 0)).toBeCloseTo((4 / 6) * 100, 5);
+    expect(widths.reduce((a, w) => a + w, 0)).toBeCloseTo((2 / 6) * 100, 5);
 
     fireEvent.click(cards[1]!);
     expect(navigate).toHaveBeenCalledWith('/testing/campaigns/DES-MERGE-001');

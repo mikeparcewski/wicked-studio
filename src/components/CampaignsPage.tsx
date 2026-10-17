@@ -68,11 +68,12 @@ const CARD_SET_CAP = 3;
  * (studio#685 row 8: "0 of 2 landed" over a full bar read as complete).
  */
 function StatusBar({ m }: { m: CampaignCardModel }): React.ReactElement {
+  // studio#733: the bar fills only what FINISHED (landed, failed) — the same count the line above it
+  // says. Waiting and running steps filled it too, so "0 of 6 landed so far" sat over a two-thirds bar;
+  // they are said in words beside it (N running, N need you).
   const seg = [
     { n: m.landed, tone: 'done' },
     { n: m.failed, tone: 'fail' },
-    { n: m.awaitingHuman, tone: 'gate' },
-    { n: m.running, tone: 'run' },
   ];
   const total = Math.max(1, m.total);
   return (

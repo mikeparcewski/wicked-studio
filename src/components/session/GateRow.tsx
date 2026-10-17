@@ -643,6 +643,10 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
       {assurance}
       {/* S16a-1c (TR-W8): a watch finding attached to this gate, as one quiet line (nothing when absent). */}
       {gate !== undefined && <WatchGateLine runId={runId} ord={typeof gate.ord === 'number' ? gate.ord : null} />}
+      {/* studio#639: no install plan ran, so no file list — the engine's own reason, where the lists would be. */}
+      {model.consentMissing !== undefined && (
+        <p data-testid="session-gate-consent-missing" className="wk-session-gate-detail-item">{showText(model.consentMissing)}</p>
+      )}
       {/* core#820: what each install choice writes, before it is taken — the operator's own files said so. */}
       {[...model.choices, ...model.overflow].filter((c) => c.writes !== undefined).map((c) => (
         <details key={`writes-${c.key}`} data-testid="session-gate-consent-writes" data-choice-key={c.key} className="wk-tech-details">

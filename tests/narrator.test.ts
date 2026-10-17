@@ -31,7 +31,7 @@ describe('narrate — the event → status-line templates (§4)', () => {
     [{ type: 'councilSeatFailed', session: 'r', ord: 1, cli: 'codex', kind: 'timed_out' }, 'Seat codex did not vote (timed_out)', 'fail'],
     [{ type: 'unitDistributed', session: 'r', ord: 2, cli: 'claude', agreementPct: 83 }, 'phase-2 routed to claude — council 83%', 'info'],
     [{ type: 'unitDispatched', session: 'r', ord: 2, attempt: 0 }, 'Worker started phase-2', 'work'],
-    [{ type: 'unitDispatched', session: 'r', ord: 2, attempt: 1 }, 'phase-2 re-dispatched (attempt 2)', 'work'],
+    [{ type: 'unitDispatched', session: 'r', ord: 2, attempt: 1 }, 'phase-2 ran again (attempt 2)', 'work'],
     [{ type: 'unitExecuting', session: 'r', ord: 2 }, 'phase-2 is running', 'work'],
     [{ type: 'unitOutputCaptured', session: 'r', ord: 2, outputBytes: 4096, stepStatus: 'ok' }, 'phase-2 finished — output captured (4 KB)', 'work'],
     [{ type: 'unitOutputCaptured', session: 'r', ord: 2, outputBytes: 10, stepStatus: 'failed' }, 'phase-2 finished with errors', 'fail'],

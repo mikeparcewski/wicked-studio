@@ -75,7 +75,8 @@ export function NeedsYouCard({ view, state }: { view: SessionView; state: NeedsY
     try {
       if (kind === 'reassign') {
         const r = await api.reassignRun(runId);
-        setNote({ tone: 'ok', text: `Unit ${r.ord} re-dispatched${r.cli !== undefined ? ` to ${r.cli}` : ''}.` });
+        // studio#734: plain words — the step runs again, on the seat it was moved to.
+        setNote({ tone: 'ok', text: `Step ${r.ord} is running again${r.cli !== undefined ? ` on ${r.cli}` : ''}.` });
       } else {
         await api.injectMessage(runId, NUDGE, 'all');
         setNote({ tone: 'ok', text: 'Message sent to the worker.' });

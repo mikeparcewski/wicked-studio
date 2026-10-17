@@ -141,6 +141,9 @@ const JUST_DECIDED_MS = 15_000;
 const OPEN_GRACE_MS = 60_000;
 
 
+/** studio#663: a kickoff longer than this opens in full on a click (a shorter one fits its line). */
+const KICKOFF_LONG = 80;
+
 function launchedMs(v: RunView): number {
   const c = (v.session as unknown as { created_at?: unknown }).created_at;
   return typeof c === 'number' && Number.isFinite(c) ? c * 1000 : 0;
@@ -237,6 +240,9 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
   // Opened on the daemon: read the chat again, and until THAT read answers the page stays the new chat
   // (codex r1: the read from before the open said "closed", which is not what the page now is).
   const [openedAt, setOpenedAt] = useState<number | null>(null);
+  // studio#663: a kickoff line longer than its one line opens in full on a click / Enter (the run's
+  // goal and instructions are one step away, not only on hover).
+  const [kickoffOpen, setKickoffOpen] = useState<string | null>(null);
   const wasFresh = useRef(fresh !== null);
   const chatTryRef = useRef(chatTry);
   chatTryRef.current = chatTry;
@@ -893,7 +899,17 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
                 ? <AskProposalBlock key={e.key} view={e.view} ask={e.ask} onBringBack={() => setDraft(sessionId, 'Go ahead with the plan you proposed.')} />
                 : e.kind === 'turn'
             ? (
-              <div key={e.key} data-testid="session-turn" data-who={e.who === 'you' ? 'you' : 'helper'} {...(e.pending ? { 'data-pending': 'true' } : {})} {...(e.kickoff ? { 'data-kickoff': 'true', title: e.text } : {})} className={`wk-session-turn wk-session-turn--${e.who === 'you' ? 'you' : 'helper'}${e.pending ? ' wk-session-turn--pending' : ''}${e.kickoff ? ' wk-session-turn--kickoff' : ''}`}>
+              <div key={e.key} data-testid="session-turn" data-who={e.who === 'you' ? 'you' : 'helper'} {...(e.pending ? { 'data-pending': 'true' } : {})}
+                {...(e.kickoff ? {
+                  'data-kickoff': 'true', title: e.text,
+                  ...(e.text.length > KICKOFF_LONG ? {
+                    role: 'button', tabIndex: 0, 'aria-expanded': kickoffOpen === e.key,
+                    'aria-label': kickoffOpen === e.key ? 'Show less of what started this run' : 'Show all of what started this run',
+                    onClick: () => setKickoffOpen((k) => (k === e.key ? null : e.key)),
+                    onKeyDown: (ev: React.KeyboardEvent) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); setKickoffOpen((k) => (k === e.key ? null : e.key)); } },
+                  } : {}),
+                } : {})}
+                className={`wk-session-turn wk-session-turn--${e.who === 'you' ? 'you' : 'helper'}${e.pending ? ' wk-session-turn--pending' : ''}${e.kickoff ? ' wk-session-turn--kickoff' : ''}${e.kickoff && kickoffOpen === e.key ? ' wk-session-turn--kickoff-open' : ''}`}>
                 {/* The kickoff is one compact line ("You · <what started it>", two lines at most; the
                     full words on hover), so the run's own block below stays in the first view. */}
                 <TurnWho who={who} runId={askRunId} {...(e.pending ? { suffix: 'answering' } : {})} {...(e.kickoff ? { inline: true } : {})} />

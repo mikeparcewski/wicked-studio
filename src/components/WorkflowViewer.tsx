@@ -25,7 +25,8 @@ export function gateLabel(gate: GateSpec): string {
   if (gate && typeof gate === 'object' && 'human_confirm' in gate) {
     return gate.human_confirm.unconditional ? 'Human (always)' : 'Human';
   }
-  return 'Human if not PASS';
+  // studio#734: plain words for `human_confirm_if: verdict_not_pass`.
+  return 'Asks you if the check fails';
 }
 
 function PhaseCard({ phase, index }: { phase: PhaseDef; index: number }): React.ReactElement {

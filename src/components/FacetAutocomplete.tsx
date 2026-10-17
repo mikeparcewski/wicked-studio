@@ -87,7 +87,7 @@ export function FacetAutocomplete({
         <span
           data-testid={`${testId}-active`}
           data-facet={value}
-          className="inline-flex items-center gap-1 rounded px-1.5 py-1 text-[10px] font-mono"
+          className="inline-flex items-center gap-1 rounded px-1.5 py-1 text-xs"
           style={{ background: 'var(--surface-raised)', color: 'var(--ink-high)', border: '1px solid var(--surface-raised)' }}
         >
           {value}
@@ -114,8 +114,8 @@ export function FacetAutocomplete({
         onFocus={() => { if (blurTimer.current !== null) clearTimeout(blurTimer.current); setOpen(true); }}
         onBlur={() => { blurTimer.current = setTimeout(() => setOpen(false), 120); }}
         onKeyDown={onKeyDown}
-        className="min-w-[12rem] flex-1 rounded px-2 py-1 text-[11px] focus:outline-none focus-visible:ring-1"
-        style={{ background: 'var(--surface-base)', border: '1px solid var(--surface-raised)', color: 'var(--ink-high)' }}
+        // studio#713: a real field (the shared .wk-field box: its edge, height and type size), not a faint 27 px strip.
+        className="wk-field min-w-[12rem] flex-1"
       />
       {open && matches.length > 0 && (
         <ul
@@ -134,7 +134,7 @@ export function FacetAutocomplete({
                 // onMouseDown (not onClick) so the pick lands before the input's blur closes the list.
                 onMouseDown={(e) => { e.preventDefault(); apply(pair); }}
                 onMouseEnter={() => setHighlight(i)}
-                className="w-full px-2 py-1 text-left text-[11px] font-mono transition-colors"
+                className="w-full px-2 py-1 text-left text-sm transition-colors"
                 style={{
                   background: i === highlight ? 'var(--surface-raised)' : 'transparent',
                   color: value === pair ? 'var(--ink-high)' : 'var(--ink-muted)',

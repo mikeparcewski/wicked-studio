@@ -438,6 +438,9 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
             type="button"
             data-testid="repos-add"
             onClick={toggleRegister}
+            // studio#684 row 59: no write while the service is unreachable — the banner below says so and offers Retry.
+            disabled={!showRegister && error !== null && readErrorKind(error) === 'offline'}
+            title={!showRegister && error !== null && readErrorKind(error) === 'offline' ? 'Studio can’t reach its service right now. Retry first.' : undefined}
             className={showRegister ? 'wk-btn wk-btn--quiet' : 'wk-btn wk-btn--primary'}
           >
             {showRegister ? 'Cancel' : 'Add repository'}

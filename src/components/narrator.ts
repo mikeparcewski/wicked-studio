@@ -271,7 +271,7 @@ export function narrate(event: CoreEvent, ctx: NarratorContext): NarrationLine |
       const discipline = disciplineLine((event as Record<string, unknown>)['baseSkill'], ctx.handedGenOf?.(ord) ?? null);
       const tail = discipline === null ? '' : ` — ${discipline}`;
       return attempt > 0
-        ? line(`${phase} re-dispatched (attempt ${attempt + 1})${tail}`, 'work')
+        ? line(`${phase} ran again (attempt ${attempt + 1})${tail}`, 'work')
         : line(`Worker started ${phase}${tail}`, 'work');
     }
     case 'unitExecuting':

@@ -100,7 +100,7 @@ function pausedStepQuestion(p: string, gateKind: string | undefined): string | n
     }
     return 'The step did not pass review — how should it go on?';
   }
-  if (/^\s*Unit\s+\d+\s+failed its deterministic floor\b/i.test(p)) return 'The floor failed — how should the step go on?';
+  if (/^\s*Unit\s+\d+\s+failed its deterministic floor\b/i.test(p)) return 'A required check failed — how should the step go on?';
   if (/^\s*Unit\s+\d+\s+was DENIED by input governance\b/i.test(p)) {
     const tool = /tool call was refused\s*\(\s*`?([A-Za-z0-9_.:-]+)`?\s*\)/i.exec(p)?.[1];
     return tool !== undefined ? `A ${tool} call was denied — how should the step go on?` : 'A tool call was denied — how should the step go on?';

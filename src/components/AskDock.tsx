@@ -36,6 +36,7 @@ import { ambientProjectId } from '../hooks/ambientProject.js';
 import { peekTypedSeed, takeTypedSeed } from '../hooks/useTypeToComposer.js';
 import { useAskThreadStore } from '../store/askThread.js';
 import { useCapabilities } from '../store/capabilities.js';
+import { isReviewerOnly } from '../board/seatNames.js';
 
 /**
  * ASK — the app-wide binding of the ASSIST DOCK (DES-ASSIST-DOCK §5: "the dock becomes
@@ -310,7 +311,8 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
             }
             const choice = scopeChoiceRef.current;
             // studio#631: the composer's helpers row decides — the admitted seats minus the ones turned off.
-            const eligible = defaultSelection(roster, askScopeIsScoped(choice));
+            // studio#713: never a reviewer-only seat ("Claude Code (judge)") — the composer's helper row rule.
+            const eligible = defaultSelection(roster.filter((s) => !isReviewerOnly(s)), askScopeIsScoped(choice));
             const clis = chosenSeats(eligible, useComposerSeats.getState().dropped, useComposerSeats.getState().picked);
             if (eligible.length > 0 && clis.length === 0) throw new Error(NO_SEAT_PICKED);
             // A failed open keeps the page's id for the retry; only a chat the daemon opened spends it.

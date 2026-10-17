@@ -56,12 +56,12 @@ describe('the model: what an accept does, read from kind_type', () => {
     expect(proposalConsequence({ ...mem(0), kind_type: 'skill' })).toBe('unknown');
   });
 
-  it('the group row names the split and carries "Accept 5 memory-only ›" for exactly the memories', () => {
+  it('the group row names the split and carries "Accept 5 memories ›" for exactly the memories', () => {
     const rows = groupAlike(needsYouRows(inputs(MIXED)), NOW);
     const group = rows.find((r) => r.groupKey === 'proposal')!;
     expect(group.subject).toBe('11 proposals to review');
     expect(group.text).toBe('5 memories · 6 rule changes');
-    expect(group.action).toMatchObject({ kind: 'accept-memory', label: 'Accept 5 memory-only ›' });
+    expect(group.action).toMatchObject({ kind: 'accept-memory', label: 'Accept 5 memories ›' });
     expect([...(group.action as { ids: string[] }).ids].sort()).toEqual(MEMS.map((p) => p.id).sort());
   });
 
@@ -88,7 +88,7 @@ describe('the model: what an accept does, read from kind_type', () => {
     expect(first.items.every((m) => m.proposal?.consequence === 'enforcement')).toBe(true);
     expect(first.pages).toBe(3);
     expect(memberPage(group, 1).items.map((m) => m.proposal?.consequence)).toEqual(['enforcement', 'enforcement', 'memory', 'memory']);
-    expect(first.items[0]!.text).toBe('Changes enforcement — lands a security rule (warn)');
+    expect(first.items[0]!.text).toBe('Adds a security rule (warning)');
   });
 });
 

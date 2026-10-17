@@ -72,13 +72,13 @@ export type { LaunchIntent };
 
 const INTENT_COPY: Record<LaunchIntent, { title: string; blurb: string; governedBlurb: string; cta: string; prefix: string }> = {
   recon: {
-    title: 'Run recon',
+    title: 'Suggest tests',
     blurb:
       'Launches a governed recon run. It pauses at its intake gate before the survey starts — ' +
       'approve it in the run’s thread to let the survey run. The survey reads the attached codebases and writes a ' +
       'test plan (the scenarios and their dependencies) as the run’s output; it launches nothing.',
     governedBlurb: '',
-    cta: 'Launch recon',
+    cta: 'Suggest tests',
     prefix: RECON_PROBLEM_PREFIX,
   },
   campaign: {

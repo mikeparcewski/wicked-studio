@@ -3,7 +3,7 @@
 // kicked the run off. The thread now starts with the operator's own bubble for a run started outside
 // a chat, and says, at its foot, which step is being worked on while one executes.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import * as client from '../src/api/client.js';
 import { SessionPage } from '../src/components/session/SessionView.js';
 import { useSheets } from '../src/store/sheets.js';
@@ -34,6 +34,29 @@ describe('the thread opens on what kicked the run off', () => {
     const turns = screen.getAllByTestId('session-turn');
     expect(turns[0]).toHaveAttribute('data-who', 'you');
     expect(turns[0]).toHaveTextContent(PROBLEM);
+  });
+});
+
+describe('studio#663 — the run\'s whole goal is one step away', () => {
+  const LONG = 'New test: cover the refund flow end to end. Seed two customers, one with a partial refund already applied; '
+    + 'check the ledger totals after each refund, and fail the test if any refund is applied twice or lands on the wrong card.';
+  it('a long kickoff opens in full on a click and on Enter, and closes again', () => {
+    render(<SessionPage sessionId="run:r1" runs={[makeView({ id: 'r1', status: 'executing', problem: LONG, unit_ix: 0, created_at: 1_700_000_000 } as never, [])]} runsLoaded needRows={[]} navigate={() => {}} onAsk={() => {}} />);
+    const kick = screen.getAllByTestId('session-turn').find((t) => t.dataset.kickoff === 'true')!;
+    expect(kick).toHaveAttribute('role', 'button');
+    expect(kick).toHaveAttribute('aria-expanded', 'false');
+    expect(kick).toHaveTextContent(LONG);
+    fireEvent.click(kick);
+    expect(kick).toHaveAttribute('aria-expanded', 'true');
+    expect(kick.className).toContain('wk-session-turn--kickoff-open');
+    fireEvent.keyDown(kick, { key: 'Enter' });
+    expect(kick).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('a short kickoff is not a button (it fits its line)', () => {
+    page([run('executing')]);
+    const kick = screen.getAllByTestId('session-turn').find((t) => t.dataset.kickoff === 'true')!;
+    expect(kick).not.toHaveAttribute('role');
   });
 });
 

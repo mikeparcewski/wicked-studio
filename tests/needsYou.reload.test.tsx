@@ -86,7 +86,7 @@ describe('needs-you after a reload (studio#284)', () => {
     );
     reassignRun.mockResolvedValue({ status: 'ok', ord: 5, cli: 'codex' });
     fireEvent.click(screen.getByTestId('needs-you-reassign'));
-    await waitFor(() => expect(screen.getByTestId('needs-you-note')).toHaveTextContent('Unit 5 re-dispatched to codex.'));
+    await waitFor(() => expect(screen.getByTestId('needs-you-note')).toHaveTextContent('Step 5 is running again on codex.'));
     expect(reassignRun).toHaveBeenCalledWith(RUN);
     expect(screen.getByTestId('needs-you-nudge')).toBeEnabled();
   });
