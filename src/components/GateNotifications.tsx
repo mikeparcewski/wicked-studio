@@ -49,9 +49,13 @@ interface Props {
   /** App's one `useRuns()` array — the DTO's own `project_id` claim is the
    *  first word on which project a gate's run belongs to (mirror fallback). */
   runs?: SessionView[];
+  /** studio#735: the runs of the session on screen — their own thread asks their gates. */
+  hideRuns?: ReadonlySet<string>;
 }
 
-export function GateNotifications({ onSelect, runId, projectId = null, runs = [] }: Props): React.ReactElement {
+const NO_RUNS: ReadonlySet<string> = new Set();
+
+export function GateNotifications({ onSelect, runId, projectId = null, runs = [], hideRuns = NO_RUNS }: Props): React.ReactElement {
   const gates = useGateStore((s) => s.gates);
   // studio#441: the toast speaks the Desk's words (the plain question, the work's title), in its
   // palette — no run hash, engine ordinal, raw prompt, violet or mono. The Desk is the one shell (S18d).
@@ -61,7 +65,7 @@ export function GateNotifications({ onSelect, runId, projectId = null, runs = []
   const [, bump] = useReducer((n: number) => n + 1, 0);
 
   const all = Object.values(gates);
-  const scoped = runId ? all.filter((g) => g.runId === runId) : all;
+  const scoped = (runId ? all.filter((g) => g.runId === runId) : all).filter((g) => !hideRuns.has(g.runId));
 
   // B4 (§7.1): inside a project shell, keep only THIS project's gates as
   // cards. DTO claim first (CREW-UX-2), membership mirror second; a gate we

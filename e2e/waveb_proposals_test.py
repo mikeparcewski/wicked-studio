@@ -5,8 +5,8 @@ waveb_proposals_test.py — studio Wave B, idea 4 (1440x700): TRIAGE BY CONSEQUE
 
 Against 11 pending proposals (5 memory, 6 policy) served on crew's GET /proposals wire:
 
-  row      the group row counts what an accept does ("5 memory-only · 6 change enforcement") and
-           carries "Accept 5 memory-only ›".
+  row      the group row counts what an accept does ("5 memories · 6 rule changes") and
+           carries "Accept 5 memories ›".
   list     expanded, it shows at most 4 at a time, enforcement-changing ones first, and pages.
   preview  the click names exactly the 5 memories and posts NOTHING.
   undo     confirm queues it behind the undo window; Undo in the toast sends nothing.
@@ -102,7 +102,7 @@ with sync_playwright() as p:
         check("list-at-most-4", len(keys) == 4, keys=keys)
         check("list-enforcement-first", all(k.startswith("proposal:pol-") for k in keys), keys=keys)
         check("list-member-consequence",
-              "Changes enforcement" in members.first.get_by_test_id("need-line").inner_text())
+              members.first.get_by_test_id("need-line").inner_text().startswith("Adds a "))
         page.screenshot(path=str(SHOTS / f"waveb-desk-row.png"))
         page.get_by_test_id("need-page-next").click()
         check("list-pages", "Showing 5–8 of 11" in page.get_by_test_id("need-members-pager").inner_text(),

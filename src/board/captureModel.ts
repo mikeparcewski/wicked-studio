@@ -65,8 +65,9 @@ export function captureFiledLine(f: CaptureFiled, projectName: string, runDone: 
   }
   if (f.waiting === 0) return `${n(f.seen, 'proposal', 'proposals')} filed from your capture to ${projectName}: all decided`;
   const split = [
-    ...(f.memoryOnly > 0 ? [`${f.memoryOnly} memory-only`] : []),
-    ...(f.changesEnforcement > 0 ? [`${f.changesEnforcement} ${f.changesEnforcement === 1 ? 'changes' : 'change'} enforcement`] : []),
+    // studio#713: the Needs you group's words ("2 memories · 1 rule change").
+    ...(f.memoryOnly > 0 ? [`${f.memoryOnly} ${f.memoryOnly === 1 ? 'memory' : 'memories'}`] : []),
+    ...(f.changesEnforcement > 0 ? [`${f.changesEnforcement} ${f.changesEnforcement === 1 ? 'rule change' : 'rule changes'}`] : []),
   ].join(', ');
   const still = runDone ? '' : ' (the team is still reading)';
   return `${n(f.waiting, 'proposal', 'proposals')} from your capture waiting in Needs You${split !== '' ? `: ${split}` : ''}${still}`;

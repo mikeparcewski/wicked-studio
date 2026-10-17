@@ -91,6 +91,21 @@ export interface ConsentWrite {
  * `recommended` (the default's index). `null` when the frame names no `consent:` choice (an older
  * engine, or no dry-run plan ran: `writeTargetsMissing`) — the row then keeps Approve / Decline.
  */
+/**
+ * studio#639: a consent gate with no dry-run plan carries `writeTargetsMissing` — the engine's sentence
+ * saying why it cannot list the files (no plan ran). The row shows it where the file lists would be.
+ * `null` when the frame names a plan, or says nothing.
+ */
+export function consentMissingOf(gate: OpenGate, events: readonly CoreEvent[] | null): string | null {
+  for (let i = (events ?? []).length - 1; i >= 0; i--) {
+    const e = events![i] as unknown as Record<string, unknown>;
+    if (e['type'] !== 'awaitingHuman' || e['ord'] !== gate.ord) continue;
+    const said = e['writeTargetsMissing'];
+    return typeof said === 'string' && said.trim() !== '' ? said.trim() : null;
+  }
+  return null;
+}
+
 export function consentChoicesOf(gate: OpenGate, events: readonly CoreEvent[] | null): GateRowChoice[] | null {
   let frame: Record<string, unknown> | null = null;
   for (let i = (events ?? []).length - 1; i >= 0; i--) {
@@ -167,6 +182,8 @@ export interface GateRowModel {
   /** studio#761/#762: the gate opened on the run's QE review — the row leads with why (its `lead`
    *  replaces the plain question) and says what went wrong under it; absent on every other gate. */
   qe?: QeGate;
+  /** studio#639: a consent gate with no install plan — the engine's sentence on why no files are listed. */
+  consentMissing?: string;
 }
 
 /** The choice set before the depth fields (`withDepth` adds them). */
@@ -428,9 +445,11 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
     if (install !== null) {
       return { reason: 'consent', question: gate.prompt, choices: install.slice(0, 4), overflow: install.slice(4), noteDefault: '', recommended: null, detailItems: [shownPrompt(gate.prompt)] };
     }
+    const missing = consentMissingOf(gate, events);
     return {
       reason: 'consent',
       question: gate.prompt,
+      ...(missing !== null ? { consentMissing: missing } : {}),
       choices: [
         { key: 'approve', label: 'Approve', decision: { approve: true }, needsNote: false, title: 'Give consent: the phase runs now. Nothing in it has run yet.' },
         { key: 'decline', label: 'Decline', decision: { approve: false }, needsNote: false, title: 'Cancel the run without running this phase.' },

@@ -91,12 +91,15 @@ export function coachSeat(record: SeatRecord | undefined, seat: RosterSeat, wind
 
   const authBenches = Object.entries(r.benchReasons).filter(([reason]) => AUTH_REASON.test(reason)).reduce((n, [, c]) => n + c, 0);
   const line = typeof seat.login_invocation === 'string' ? seat.login_invocation.trim() : '';
-  if (authBenches > 0 && line !== '') {
+  // studio#735: the week's benches are history — a seat the roster says is signed in NOW is not
+  // offered a sign-in (Health offered it beside a Helpers card reading "active · signed in").
+  const signedInNow = seat.auth === 'signed_in' || (seat.auth === undefined && seat.signed_in === true);
+  if (authBenches > 0 && line !== '' && !signedInNow) {
     return {
       kind: 'sign-in',
       label: `Sign in to ${name}`,
       why: `skipped for ${plural(authBenches, 'run')} this week: not signed in`,
-      consequence: `Shows the one command that signs ${name} in. Once it is signed in, the next run seats it again.`,
+      consequence: `Shows the one command that signs ${name} in. Once it is signed in, the next run uses it again.`,
       line,
     };
   }

@@ -94,7 +94,7 @@ import { useComposerPrefsStore } from './store/composerPrefs.js';
 import { useViewPrefsStore } from './store/viewPrefs.js';
 import { useDeliveryFreezeStore } from './store/deliveryFreeze.js';
 import { notifyGateIfUnfocused } from './board/desktopNotify.js';
-import { sessionPath } from './board/sessionModel.js';
+import { parseSessionId, sessionIdOf, sessionPath } from './board/sessionModel.js';
 import { sizeOf, versionOf } from './board/artifactAddress.js';
 
 /** Frames that change run-list / unit state → trigger a `GET /runs` reconcile. */
@@ -489,6 +489,17 @@ export function App(): React.ReactElement {
     [repoId],
   );
 
+  // studio#735: the runs of the session on screen — their gates are asked in its own thread, so the
+  // notice strip above the page does not repeat them.
+  const runChatIdCap = useCapabilities((s) => s.runChatId);
+  const viewedRunIds = useMemo((): ReadonlySet<string> => {
+    if (panel !== 'session' || artifactId === null) return new Set();
+    const ref = parseSessionId(artifactId);
+    const ids = new Set(shownRuns.filter((v) => sessionIdOf(v, runChatIdCap) === artifactId).map((v) => v.session.id));
+    if (ref.kind === 'run') ids.add(ref.runId);
+    return ids;
+  }, [panel, artifactId, shownRuns, runChatIdCap]);
+
   // S16a-3: the run page retired — a run lives in its session thread (`/s/run%3A<id>`), so the run
   // surface is only the launch form (`/runs/new`, `/p/:pid/build/new`, `/chat/new`).
   const runSurface = (): React.ReactElement => (
@@ -732,7 +743,7 @@ export function App(): React.ReactElement {
           the page down instead of covering its composer, cards or thread. */}
       <div id="main" tabIndex={-1} className="flex flex-1 flex-col overflow-hidden min-w-0" style={{ outline: 'none' }}>
         {panel !== 'home' && (
-          <GateNotifications onSelect={selectRun} runId={runId} projectId={projectId} runs={shownRuns} />
+          <GateNotifications onSelect={selectRun} runId={runId} projectId={projectId} runs={shownRuns} hideRuns={viewedRunIds} />
         )}
         <div className="flex flex-1 overflow-hidden min-h-0">
           {renderCenter()}

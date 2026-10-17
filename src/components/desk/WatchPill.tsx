@@ -5,6 +5,7 @@ import { useWatchFeed } from '../../hooks/useWatchFeed.js';
 import { attentionBadge } from '../../board/attention.js';
 import type { NeedRow } from '../../board/needsYou.js';
 import { deskLiveCounts } from '../../board/statusWords.js';
+import { plainWatchLine } from '../../board/watchLine.js';
 
 
 /** How long the card stays open after it opened itself for something new that needs you. */
@@ -89,7 +90,8 @@ export function WatchPill({ needRows, runs, navigate, onFeed = false, secondary 
       {!onFeed && <div data-testid="watch-pill-card" role="status" className="wk-watch-card">
         <p className="wk-watch-card-sentence">{sentence}</p>
         {recent.map((r) => (
-          <p key={r.id} data-testid="watch-pill-row" className="wk-watch-card-row">{r.sentence}</p>
+          // studio#734: the feed's own short line (the engine's reasons stay on the Watchtower, under Technical details).
+          <p key={r.id} data-testid="watch-pill-row" className="wk-watch-card-row" title={r.sentence}>{plainWatchLine(r.sentence).line}</p>
         ))}
         <p className="wk-watch-card-foot">It opens itself only for something that needs you. Click or ⌥W for the full feed.</p>
       </div>}

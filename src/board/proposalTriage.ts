@@ -59,23 +59,29 @@ export function proposalConsequenceLine(p: Proposal): string {
   const captured = captureClass(p);
   if (c === 'memory') {
     return captured !== null && captured !== 'rule'
-      ? `Memory only — a captured ${captured}: adds a memory; enforcement unchanged`
-      : 'Memory only — adds a memory; enforcement unchanged';
+      ? `Adds a memory from your ${captured}; no rule changes`
+      : 'Adds a memory; no rule changes';
   }
   if (c === 'enforcement') {
     const type = policySteeringType(p);
     const sev = policyPayload(p).severity;
-    const what = `${type !== null ? `a ${type} rule` : 'a steering rule'}${sev !== null ? ` (${sev})` : ''}`;
+    // studio#713: plain words — "Adds a development rule (warning)", never "Changes enforcement — lands …".
+    const what = `${type !== null ? `a ${type} rule` : 'a rule'}${sev !== null ? ` (${SEVERITY_WORD[sev] ?? sev})` : ''}`;
     // A `capture: "decision"` payload says nothing by itself (anyone can write one): only a row the
     // ledger backs says "From your words" (needsYou.ts, with the ledger's own statement).
-    return `Changes enforcement — lands ${what}${captured === 'rule' ? ' from your capture' : ''}`;
+    return `Adds ${what}${captured === 'rule' ? ' from your capture' : ''}`;
   }
   return `Unknown kind "${p.kind_type}" — review it`;
 }
 
-/** The group row's move label: "Accept 21 memory-only ›". */
+/** A rule's severity in plain words. */
+// The rule's severity token in words — never an enforcement claim (codex r1: a rule's effect, not its
+// severity, says whether it blocks anything).
+const SEVERITY_WORD: Readonly<Record<string, string>> = { info: 'information', warn: 'warning', warning: 'warning', error: 'error', critical: 'critical' };
+
+/** The group row's move label: "Accept 21 memories ›" (studio#713). */
 export function acceptMemoryLabel(n: number): string {
-  return `Accept ${n} memory-only ›`;
+  return `Accept ${n} ${n === 1 ? 'memory' : 'memories'} ›`;
 }
 
 /** What the batch accept will do, spelled once for the preview and the undo toast. */

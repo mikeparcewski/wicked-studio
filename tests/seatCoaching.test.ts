@@ -40,6 +40,15 @@ describe('one coaching move per seat, from its week', () => {
     expect(m).toMatchObject({ kind: 'sign-in', label: 'Sign in to Pi', line: 'pi login', why: 'skipped for 2 runs this week: not signed in' });
   });
 
+  it('studio#735: a seat benched this week but signed in now is not offered a sign-in', () => {
+    const pi = ROSTER.find((s) => s.key === 'pi')!;
+    expect(coachSeat(byKey.get('pi'), { ...pi, auth: 'signed_in' }, WEEK).kind).not.toBe('sign-in');
+    const { auth: _auth, ...noAuth } = pi;
+    void _auth;
+    expect(coachSeat(byKey.get('pi'), { ...noAuth, signed_in: true }, WEEK).kind).not.toBe('sign-in');
+    expect(coachSeat(byKey.get('pi'), { ...pi, auth: 'signed_out' }, WEEK).kind).toBe('sign-in');
+  });
+
   it('a benched seat without a sign-in line is not offered one', () => {
     const { login_invocation: _line, ...noLine } = ROSTER[2]!;
     void _line;

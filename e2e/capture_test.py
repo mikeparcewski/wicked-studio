@@ -16,10 +16,10 @@ rule into the `proposals` queue):
                the notes verbatim, the transcript as text, the photo as real PNG bytes; the page
                launches nothing itself. The popover closes; the status line stays.
   3 triage     the 5 filed rows appear in Home's proposal group with the other queue rows: the group
-               line and "Accept 5 memory-only" count them, the expanded list leads with the captured
+               line and "Accept 5 memories" count them, the expanded list leads with the captured
                rule ("Changes enforcement … from your capture") and names each captured class. The
-               status line says "5 proposals from your capture waiting in Needs You: 4 memory-only,
-               1 changes enforcement".
+               status line says "5 proposals from your capture waiting in Needs You: 4 memories,
+               1 rule change".
   4 decide     accept the memory-only ones through the triage's own move (preview → confirm → the
                undo window) → exactly those POST approve; the status line drops to the rule.
   5 ask        the Ask dock carries the same drop, inline, with its consequence; opening it posts
@@ -179,7 +179,7 @@ with sync_playwright() as p:
         status = chip.get_attribute("title") or ""
         check("status-says-where-they-wait",
               chip.inner_text() == "· 5 waiting"
-              and status.startswith("5 proposals from your capture waiting in Needs You: 4 memory-only, 1 changes enforcement"),
+              and status.startswith("5 proposals from your capture waiting in Needs You: 4 memories, 1 rule change"),
               chip=chip.inner_text(), status=status)
         # The header's actions row (Chat, New job, ⋯ — Capture rides in ⋯ since Desk v2) stays one row while the status chip shows.
         header_rows = page.evaluate("""() => { const rs = [...document.querySelector('[data-testid="desk"] .wk-desk2-actions').children]
@@ -190,9 +190,9 @@ with sync_playwright() as p:
         members = page.locator(MEMBERS)
         lines = [members.nth(i).get_by_test_id("need-line").inner_text() for i in range(members.count())]
         check("rule-leads-with-its-consequence",
-              lines[0] == "Changes enforcement — lands a development rule (warn) from your capture", lines=lines)
+              lines[0] == "Adds a development rule (warning) from your capture", lines=lines)
         check("captured-classes-named",
-              any("a captured intent" in l for l in lines) and any("a captured decision" in l for l in lines),
+              any("from your intent" in l for l in lines) and any("from your decision" in l for l in lines),
               lines=lines)
         page.screenshot(path=str(SHOTS / f"capture-desk-triage.png"))
 
@@ -214,7 +214,7 @@ with sync_playwright() as p:
             """() => document.querySelector('[data-testid="capture-status"]')?.dataset.waiting === '1'""", timeout=15000)
         status = page.get_by_test_id("capture-status-line").get_attribute("title") or ""
         check("status-follows-the-triage",
-              status.startswith("1 proposal from your capture waiting in Needs You: 1 changes enforcement"), status=status)
+              status.startswith("1 proposal from your capture waiting in Needs You: 1 rule change"), status=status)
 
     def section_ask() -> None:
         page.keyboard.press("Control+Shift+A")  # the Desk's composer stands in for Home's Ask invite

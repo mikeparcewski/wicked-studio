@@ -82,7 +82,7 @@ describe('studio#570: session-gate-question reads each gate kind in the row\'s w
       prompt: 'Unit 4 failed its deterministic floor (pinned_validator): the pinned validator exited 1 — confirm to retry the phase, request changes to send it back, or reject to cancel the run',
     };
     render(<GateRow view={makeView({ id: MOVE_RUN, status: 'awaiting_human' }, MOVE_UNITS)} gate={gate} />);
-    expect(screen.getByTestId('session-gate-question').textContent).toBe('The floor failed — how should the step go on?');
+    expect(screen.getByTestId('session-gate-question').textContent).toBe('A required check failed — how should the step go on?');
   });
 
   it('an input-governance denial names the refused tool', () => {

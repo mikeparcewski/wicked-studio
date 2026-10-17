@@ -143,6 +143,11 @@ with sync_playwright() as p:
           labels=c["labels"], text=text, want=want, sentence=c["sentence"])
 
     # ── 3. #441: the desk toast ───────────────────────────────────────────────────
+    # studio#735: a run's own session page does not repeat its question in the strip above it — the
+    # thread asks it. The strip is read on another page (the Watchtower), then the session reopens.
+    check("735-no-strip-for-the-open-session",
+          page.locator(f'[data-testid="gate-notification"][data-run-id="{PLAN}"]').count() == 0)
+    page.goto(f"{origin}/watch", wait_until="domcontentloaded")
     try:
         page.wait_for_selector(f'[data-testid="gate-notification"][data-run-id="{PLAN}"]', timeout=10000)
     except Exception as e:  # noqa: BLE001
@@ -172,6 +177,8 @@ with sync_playwright() as p:
           toasts=toasts, bad=bad)
 
     # ── 4. #443: the undo notice names the work ───────────────────────────────────
+    page.goto(session_url(PLAN), wait_until="domcontentloaded")
+    card.wait_for(state="visible", timeout=10000)
     card.get_by_test_id("session-proposal-go").click()
     page.get_by_test_id("undo-toast").first.wait_for(state="visible", timeout=5000)
     head = page.get_by_test_id("undo-headline").first.inner_text()

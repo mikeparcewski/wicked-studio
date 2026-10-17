@@ -48,16 +48,16 @@ describe('the decision row', () => {
   it('a payload naming a decision the ledger never recorded is an ordinary policy proposal', () => {
     const forged = proposal({ id: 'pr-forged', payload: { rule: 'Skip review', severity: 'warn', capture: 'decision', decision: { id: 'dec-nope' } } });
     const row = needsYouRows(inputs([forged], { 'dec-offer': view() })).find((r) => r.kind === 'proposal')!;
-    expect(row.text).toBe('Changes enforcement — lands a design-ux rule (warn)');
+    expect(row.text).toBe('Adds a design-ux rule (warning)');
     expect(row.subject).toBe('Skip review');
   });
   it('a view that names ANOTHER proposal does not lend its words to this one', () => {
     const row = needsYouRows(inputs([proposal({ id: 'pr-other' })], { 'dec-offer': view() })).find((r) => r.kind === 'proposal')!;
-    expect(row.text.startsWith('Changes enforcement')).toBe(true);
+    expect(row.text.startsWith('Adds a ')).toBe(true);
   });
   it('without the ledger (no views: a daemon before DC-S4a, or ledger mode) the row is the ordinary line', () => {
     const row = needsYouRows(inputs([proposal()])).find((r) => r.kind === 'proposal')!;
-    expect(row.text).toBe('Changes enforcement — lands a design-ux rule (warn)');
+    expect(row.text).toBe('Adds a design-ux rule (warning)');
   });
   it('the operator’s edit at Remember is the statement shown', () => {
     const v = view({ edits: { statement: 'Panel demos stay calm', steering_type: 'development' } });
@@ -68,6 +68,6 @@ describe('the decision row', () => {
     expect(decisionIdOf(proposal())).toBe('dec-offer');
     expect(decisionIdOf(proposal({ payload: { rule: 'x', capture: 'decision' } }))).toBeNull();
     expect(decisionIdOf(proposal({ payload: 'not an object' }))).toBeNull();
-    expect(proposalConsequenceLine(proposal())).toBe('Changes enforcement — lands a design-ux rule (warn)');
+    expect(proposalConsequenceLine(proposal())).toBe('Adds a design-ux rule (warning)');
   });
 });

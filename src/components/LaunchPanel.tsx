@@ -62,7 +62,7 @@ function ModePill({
           onClick={readOnly ? undefined : () => onChange(m)}
           onKeyDown={readOnly ? undefined : (e) => handleKey(e, idx)}
           disabled={readOnly}
-          className="px-3 py-1 text-[11px] font-mono font-medium transition-colors disabled:cursor-default"
+          className="px-3 py-1 text-xs font-medium transition-colors disabled:cursor-default"
           // The selected segment is an interactive selection → the accent
           // (mirrors the mode switcher's active fill, §5.2/§2.5); never amber —
           // that's the gate's color.
