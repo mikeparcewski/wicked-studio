@@ -36,6 +36,7 @@ import {
 import type { ReassignCandidate } from '../components/gateVerdictModel.js';
 import type { GateAnswer } from './gateActions.js';
 import type { RerunOffer } from '../components/rerunModel.js';
+import { qeGateOf, QE_RETRY_LABEL, QE_RETRY_NOTE_LABEL, QE_RETRY_NOTE_TITLE, QE_RETRY_TITLE, type QeGate } from './qeEscalation.js';
 
 /**
  * SESSION GATE ROW MODEL (S15e): pure classification and choice set for the session thread's
@@ -163,6 +164,9 @@ export interface GateRowModel {
   /** studio#403: a refused hand-over's reason (the row leads with it, and says what Deliver again
    *  re-pushes above the choices); absent on every other gate. */
   refusal?: DeliverRefusal;
+  /** studio#761/#762: the gate opened on the run's QE review — the row leads with why (its `lead`
+   *  replaces the plain question) and says what went wrong under it; absent on every other gate. */
+  qe?: QeGate;
 }
 
 /** The choice set before the depth fields (`withDepth` adds them). */
@@ -382,7 +386,12 @@ function withDepth(base: BaseRowModel, input: SessionGateInput): GateRowModel {
   // no seat re-runs the phase with the note, so the move's "reruns with N failing checks" is not
   // what happens; the fix's own consequence is said instead.
   const floorFix = suggested && base.choices[base.recommended!]?.key === 'steer' && isFloorFixGate(gate.prompt, verdict, units, gate.ord);
-  const consequence = floorFix
+  // studio#761: a QE review that recorded no verdict judged nothing — the retry's consequence is its
+  // own, and there are no failing criteria to list beside the creator's claims.
+  const qeNoVerdict = base.qe?.outcome === 'no-verdict';
+  const consequence = qeNoVerdict
+    ? 'Only the QE check and its review run again; the earlier steps are kept'
+    : floorFix
     ? `A seat other than this phase makes the fix from the ${rec!.items.length > 0 ? `${rec!.items.length} failing check${rec!.items.length === 1 ? '' : 's'}` : 'note'}; only the floor re-runs`
     : suggested && rec!.consequence !== '' ? rec!.consequence : null;
   const source = gateSourceLine(gate.gateKind ?? gateFrameFor(events, gate.ord)?.gateKind ?? null);
@@ -399,7 +408,7 @@ function withDepth(base: BaseRowModel, input: SessionGateInput): GateRowModel {
   }
   return {
     ...base, overflow, consequence, source,
-    failing: rec?.items ?? [],
+    failing: qeNoVerdict ? [] : rec?.items ?? [],
     reviewedOrd: verdict?.ord ?? null,
   };
 }
@@ -638,14 +647,26 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
     // there is no reviewer finding to return, and no reviewer note to pre-fill.
     const deniedUnit = isDeniedUnitEscalation(gate.prompt, verdict, gate.ord);
     if (deniedUnit) noteDefault = '';
+    // studio#761: the QE review's gate. The engine's Approve re-dispatches the QE unit alone, so the
+    // retry is named for what it does. When the reviewer recorded NO verdict nothing was judged:
+    // there is no finding for the creator, so Send back (and the rewind behind it) is not offered.
+    const qe = qeGateOf(events, units, gate.ord);
+    const qeNoVerdict = qe?.outcome === 'no-verdict';
+    if (qeNoVerdict) noteDefault = '';
 
     // Build core choices WITHOUT stop: send-back (or the denied unit's re-run), escalation arms, steer.
     // Stop is always the last inline choice, appended after the reassign slot.
     const coreWithoutStop: GateRowChoice[] = [];
     if (deniedUnit) {
       coreWithoutStop.push({ key: 'approve', label: 'Approve', decision: { approve: true }, needsNote: false, title: 'Re-run the step from the start under the same policies; the captured output is not accepted.' });
+    } else if (qeNoVerdict) {
+      coreWithoutStop.push({ key: 'retry', label: QE_RETRY_LABEL, decision: { approve: true }, needsNote: false, title: QE_RETRY_TITLE });
     } else if (sendBackAccepted(units, gate.ord)) {
       coreWithoutStop.push({ key: 'send-back', label: 'Send back', decision: { approve: false, action: 'request_changes' }, needsNote: true, title: 'Return to the creator with the reviewer\'s failing items.' });
+    }
+    // A QE FAIL keeps Send back first (the work is what failed), and offers the review again beside it.
+    if (qe?.outcome === 'fail') {
+      coreWithoutStop.push({ key: 'retry', label: QE_RETRY_LABEL, decision: { approve: true }, needsNote: false, title: QE_RETRY_TITLE });
     }
 
     // Escalation arms: timeout (extend / targeted / accept_partial) or adopted suggestion.
@@ -664,9 +685,15 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
     // FLOOR FIX — a distinct seat makes the note's fix, then only the floor re-runs. No creator phase
     // runs, so "steer the next creator phase" would be wrong there; the wire is unchanged.
     const floorFix = isFloorFixGate(gate.prompt, verdict, units, gate.ord);
+    // studio#761: at a QE review's gate an approve with a note re-runs the QE unit WITH the note —
+    // nothing is approved, so it is not called that. (The judge-unavailable QE gate keeps its
+    // approve: there the operator's approve IS the judgment.)
+    const qeRetryNote = qe !== undefined && qe !== null && qe.outcome !== 'unavailable';
     coreWithoutStop.push(floorFix
       ? { key: 'steer', label: FLOOR_FIX_LABEL, decision: { approve: true }, needsNote: true, title: FLOOR_FIX_TITLE }
-      : { key: 'steer', label: 'Approve and steer', decision: escalationScopeTarget !== null ? { approve: true, amendScope: 'creator' } : { approve: true }, needsNote: true, title: 'Approve and add a note to steer the next creator phase.' });
+      : qeRetryNote
+        ? { key: 'steer', label: QE_RETRY_NOTE_LABEL, decision: { approve: true }, needsNote: true, title: QE_RETRY_NOTE_TITLE }
+        : { key: 'steer', label: 'Approve and steer', decision: escalationScopeTarget !== null ? { approve: true, amendScope: 'creator' } : { approve: true }, needsNote: true, title: 'Approve and add a note to steer the next creator phase.' });
 
     // Cap at 3 (stop always occupies the 4th inline slot); excess goes to overflow.
     const escInline = coreWithoutStop.slice(0, 3);
@@ -713,13 +740,15 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
     // The denied unit's suggested arm is the re-run (index 0) when its other layers passed.
     // studio#556: otherwise the row suggests whatever recommendGateMove recommends — send back,
     // retry with findings, or approve — on the inline choice that IS that move.
-    const recommended = deniedUnit ? (deniedUnitJudgedOk(verdict) ? 0 : null) : recommendedChoiceIndex(escInline, rec);
+    const recommended = deniedUnit ? (deniedUnitJudgedOk(verdict) ? 0 : null)
+      : qeNoVerdict ? 0
+        : recommendedChoiceIndex(escInline, rec);
     // A retry with findings is taken with ITS note (a validator's failing checks are not "the
     // reviewer's"), so the note field opens on the move's own prefill.
-    if (!deniedUnit && recommended !== null && rec?.kind === 'retry-findings' && rec.prefill !== null) {
+    if (!deniedUnit && !qeNoVerdict && recommended !== null && rec?.kind === 'retry-findings' && rec.prefill !== null) {
       noteDefault = rec.prefill;
     }
-    return { reason, question, choices: escInline, overflow, noteDefault, recommended, detailItems };
+    return { reason, question, choices: escInline, overflow, noteDefault, recommended, detailItems, ...(qe !== null ? { qe } : {}) };
   }
 
   if (reason === 'retry') {

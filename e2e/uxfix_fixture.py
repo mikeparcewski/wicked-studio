@@ -2318,6 +2318,45 @@ ESC_EVENTS["r-denied"] = [
      "prompt": ESC_DENIED_PROMPT, "reviewingOrd": 2, "gateKind": "escalation"},
 ]
 
+# studio#761/#762: the QE review recorded no verdict (wicked-core `qe_review` outcome `invalid`), as the
+# verify program's w16 canary run did (rec/events-rerun.json seq 394-398): the `test` unit passed its
+# floor, its distinct evaluator and its judge; the isolated QE reviewer recorded nothing. Served under
+# the same `escalation_arms` switch (e2e/desk_qe_escalation_test.py).
+ESC_QE_PROMPT = ("Unit 4 verdict is NOT PASS — confirm to retry the phase, request changes to send the review "
+                 "back to the creator phase, or reject to cancel the run")
+ESC_QE_SUMMARY = ("QE acceptance: the reviewer's verdict could not be bound: the reviewer recorded no verdict on "
+                  "QE run 56b40976-b3b4-4885-b2b8-65ea743de28b")
+_qe_units = [_esc_unit("r-qe-noverdict", "clarify", 1, "recon", "neutral", "done", "pi"),
+             _esc_unit("r-qe-noverdict", "build", 2, "build", "creator", "done", "pi"),
+             _esc_unit("r-qe-noverdict", "adversarial-review", 3, "review", "evaluator", "done", "claude"),
+             _esc_unit("r-qe-noverdict", "test", 4, "test", "evaluator", "rejected", "claude"),
+             _esc_unit("r-qe-noverdict", "deliver", 5, "build", "neutral", "distributed", "bash")]
+_qe_units[3]["qe_review"] = {"outcome": "invalid", "reason": ESC_QE_SUMMARY[len("QE acceptance: "):],
+                             "qe_run_id": "56b40976-b3b4-4885-b2b8-65ea743de28b", "verdict": None,
+                             "attempts": [{"attempt": 0, "basis": "executor_seat", "seat": "claude", "status": "invalid"}]}
+ESC_RUNS.append(_esc_run("r-qe-noverdict", 3, _qe_units))
+ESC_RUNS[-1]["session"]["clis"] = ["pi", "claude"]
+ESC_GATES["r-qe-noverdict"] = (4, ESC_QE_PROMPT)
+ESC_EVENTS["r-qe-noverdict"] = [
+    {"type": "unitDispatched", "session": "r-qe-noverdict", "ord": 2, "attempt": 0, "ts": ESC_T0, "seq": 1},
+    {"type": "unitDone", "session": "r-qe-noverdict", "ord": 2, "ts": ESC_T0 + 5 * MIN, "seq": 2},
+    {"type": "unitDispatched", "session": "r-qe-noverdict", "ord": 3, "attempt": 0, "ts": ESC_T0 + 6 * MIN, "seq": 3},
+    {"type": "unitDone", "session": "r-qe-noverdict", "ord": 3, "ts": ESC_T0 + 8 * MIN, "seq": 4},
+    {"type": "unitDispatched", "session": "r-qe-noverdict", "ord": 4, "attempt": 0, "ts": ESC_T0 + 9 * MIN, "seq": 5},
+    {"type": "gateEvaluated", "session": "r-qe-noverdict", "ord": 4, "ts": ESC_T0 + 11 * MIN, "seq": 6,
+     "criterion": "the run left a change in its worktree", "hasDeterministicFloor": True, "deterministicPass": True,
+     "agentVerdict": "pass", "agentReasoning": "PASS — the worktree shows the change.", "evaluatorPass": True,
+     "evaluatorPolicies": [], "evaluatorVerdict": "PASS", "denialReason": ESC_QE_SUMMARY,
+     "denial": {"source": "qe_review", "reason": ESC_QE_SUMMARY, "claimId": None, "ruleIds": [], "deniedTool": None,
+                "phase": "unit-4"},
+     "combined": False, "judgeCli": "pi", "judgeDistinct": True},
+    {"type": "gateEscalated", "session": "r-qe-noverdict", "ord": 4, "ts": ESC_T0 + 11 * MIN, "seq": 7, "attempt": 0,
+     "condition": "verdict_not_pass", "defGate": True, "denialSource": "qe_review", "discarded": [],
+     "outputCaptured": True, "restored": False, "suggestionRef": None, "verdictSummary": ESC_QE_SUMMARY},
+    {"type": "awaitingHuman", "session": "r-qe-noverdict", "ord": 4, "ts": ESC_T0 + 11 * MIN + SEC, "seq": 8,
+     "prompt": ESC_QE_PROMPT, "reviewingOrd": 4, "gateKind": "escalation"},
+]
+
 ESC_OUTPUTS = {("r-prerun", "recon"): {"output": "Recon: the importer reads with split('\\n') and drops a trailing "
                                                  "row with no newline (src/importer.ts:41). Two call sites."}}
 

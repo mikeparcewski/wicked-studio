@@ -418,7 +418,8 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
     }
   }, [noteOpen]);
 
-  const question = plainGateQuestion(gate?.prompt, gate?.gateKind);
+  // studio#762: a QE review's gate leads with WHY it stopped (the engine's prompt only says NOT PASS).
+  const question = model?.qe?.lead ?? plainGateQuestion(gate?.prompt, gate?.gateKind);
 
   // ── Folded view: must come BEFORE model null guard so the receipt shows after clearGate ──
   if (chosen !== null && (chosen.key === gateKey || (chosen.sentAt !== null && gate === undefined))) {
@@ -573,6 +574,9 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
       }}
     >
       <p data-testid="session-gate-question" className="wk-session-gate-question">{question}</p>
+      {model.qe !== undefined && (
+        <p data-testid="session-gate-qe-why" data-qe-outcome={model.qe.outcome} className="wk-session-gate-detail-item">{model.qe.why}</p>
+      )}
       {/* A refused hand-over says what Deliver again does BEFORE the choice that takes it. */}
       {refusalLines !== null && <>
         <p data-testid="session-gate-refusal" className="wk-session-gate-detail-item">{refusalLines.lead}</p>
