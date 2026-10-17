@@ -159,9 +159,14 @@ with sync_playwright() as p:
         check("d11-no-steer", card.get_by_test_id("session-gate-note").count() == 0
               and page.locator('[data-testid="session-gate-choice"][data-choice-key="steer"]').count() == 0)
         plan = page.locator('[data-testid="artifact"][data-kind="plan"]')
+        # DES-CHAT-NATIVE-RUN: the plan's editor opens from the plan message's Edit (nothing to scroll past until then).
+        edit = page.get_by_test_id("session-proposal-edit")
+        closed_before = plan.count() == 0
+        edit.click()
+        plan.first.wait_for(state="visible", timeout=8000)
         check("d11-plan-actions", page.get_by_test_id("session-proposal-go").is_visible()
               and page.get_by_test_id("session-proposal-not-now").is_visible()
-              and plan.count() > 0)
+              and closed_before and edit.get_attribute("aria-expanded") == "true" and plan.count() > 0)
         composer = page.get_by_test_id("composer")
         check("d11-composer-is-a-team-message", composer.count() > 0
               and "approves gate" not in (composer.first.text_content() or ""))

@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import * as client from '../src/api/client.js';
 import type { SessionView } from '../src/api/types.js';
-import { SessionPage } from '../src/components/session/SessionView.js';
+import { SessionPage, resetDetailsDefault } from '../src/components/session/SessionView.js';
 import { useSheets } from '../src/store/sheets.js';
 import { useRunEventStore } from '../src/store/events.js';
 import { useCapabilities } from '../src/store/capabilities.js';
@@ -50,11 +50,20 @@ const panel = (): HTMLElement => screen.getByTestId('host-panel');
 const thread = (): HTMLElement => screen.getByTestId('session-thread');
 
 describe('run page B: the thread beside the one host panel', () => {
-  it('the page is the thread plus the panel, whose base tab is the run', () => {
+  it('the page is the thread, with the panel (base tab: the run) closed until Details opens it (DES-CHAT-NATIVE-RUN)', () => {
+    resetDetailsDefault();
     page([live()]);
     const frame = screen.getByTestId('session-frame');
     expect(within(frame).getByTestId('session')).toBeTruthy();
+    const toggle = screen.getByTestId('session-details-toggle');
+    expect(screen.queryByTestId('host-panel')).toBeNull();
+    expect(screen.queryByTestId('host-panel-ribbon')).toBeNull();
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    act(() => { fireEvent.click(toggle); });
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
     expect(within(panel()).getByTestId('run-tab')).toHaveAttribute('data-run-id', 'r1');
+    act(() => { fireEvent.click(toggle); });
+    expect(screen.queryByTestId('host-panel')).toBeNull();
   });
 });
 
@@ -88,7 +97,8 @@ describe('where today’s features go (one row each)', () => {
     useGateStore.setState({ gates: { r1: REVIEW_GATE } });
     page([live()]);
     const block = within(thread()).getByTestId('session-run');
-    const asking = within(block).getAllByTestId('turn-who').find((w) => w.textContent?.includes('is asking'));
+    // DES-CHAT-NATIVE-RUN: the question is an assistant message from the seat asking it.
+    const asking = within(within(block).getByTestId('chat-gate')).getAllByTestId('turn-who').find((w) => w.textContent?.includes('needs your answer'));
     expect(asking).toHaveAttribute('data-role', 'seat');
     expect(asking).toHaveTextContent('Codex');
     expect(within(block).getByTestId('session-gate-row')).toBeTruthy();

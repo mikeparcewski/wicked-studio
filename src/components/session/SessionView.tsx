@@ -1,66 +1,39 @@
-import { CodebaseDownload, DeliverCredentialsNotice } from './CodebaseDownload.js';
 import { beginChatOpen, chatOpened, useChatFlow } from '../../store/chatFlow.js';
 import { useProjectsStore } from '../../store/projects.js';
 import { Fragment, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { ApiError, api } from '../../api/client.js';
-import type { ChatPathView, CoreEvent, SessionView as RunView } from '../../api/types.js';
+import type { ChatPathView, SessionView as RunView } from '../../api/types.js';
 import { needsByRun } from '../../board/deskModel.js';
 import type { NeedRow } from '../../board/needsYou.js';
-import { endedAtMs, finishedAtMs } from '../../board/needsYou.js';
-import type { WatchCoverage } from '../../api/watch-wire.js';
-import { coverageSummary } from '../../store/watch.js';
-import {
-  CLOSED_LINE, composerScopeNote, conversationOf, ORPHANED_LINE, orphanedOf, parseSessionId, runChatIdOf, sessionPath, runState, sessionTitle, sinceYouLeft,
-  type Conversation, type SessionState,
-} from '../../board/sessionModel.js';
+import { CLOSED_LINE, composerScopeNote, conversationOf, parseSessionId, runChatIdOf, sessionPath, runState, sessionTitle, sinceYouLeft, type Conversation, type SessionState } from '../../board/sessionModel.js';
 import type { Navigate } from '../../hooks/useRoute.js';
 import { useCapabilities } from '../../store/capabilities.js';
 import { readSessionVisit, useSessionDrafts, writeSessionVisit } from '../../store/sessionDrafts.js';
-import { jobTitle, isChatScopeProblem, plainRunTitle } from '../../board/deskWords.js';
+import { isChatScopeProblem, plainRunTitle } from '../../board/deskWords.js';
 import type { ChatCitations } from '../../api/chat-wire.js';
-import { IDLE_GATE_ACTION, useGateActionStore } from '../../board/gateActions.js';
-import { finishedDeliveryArm, proposalKindOf, statusSentence } from '../../board/proposalCard.js';
 import { useGateStore } from '../../store/gates.js';
-import { useRunEventStore } from '../../store/events.js';
-import { ChainLine, useRunChain, type RunPhase } from './ChainLine.js';
+import { useRunChain } from './ChainLine.js';
 import { ProposalCard } from './ProposalCard.js';
-import { useRunEvents } from '../../hooks/useRunEvents.js';
-import { StrandedCard } from './StrandedCard.js';
-import { RunRecordLines, RunStory } from './RunRecord.js';
 import { ArtifactAddressProvider, useArtifactMissing } from './ArtifactAddress.js';
 import { chatPromotePrefill } from '../../board/chatPromote.js';
 import { setRetryPrefill } from '../../store/retryPrefill.js';
-import { startRetry } from './RunActions.js';
-import { Tech, runTechParts } from '../Tech.js';
-import { parseJump } from '../../store/watch.js';
-import { GateRow } from './GateRow.js';
-import { RunAssuranceLabel } from './AssuranceReceipt.js';
-import { independentReviewers } from '../../board/assuranceModel.js';
-import { reviewerName } from '../WatchLines.js';
-import { ChatQuestions, RunQuestions } from './ThreadQuestions.js';
+import { ChatQuestions } from './ThreadQuestions.js';
 import { SourceChips } from './SourceChips.js';
 import { SinceYouLeft } from './SinceYouLeft.js';
 import { Composer, type ComposerSend, type ComposerSuggestion } from './Composer.js';
 import { quoteLabel } from '../../board/aboutChips.js';
 import { addAboutChip } from '../../store/composerChips.js';
-import { usePlanDrafts } from '../../store/planDrafts.js';
-import { wordOf } from '../../board/planDraft.js';
-import { undoDecision } from '../../board/undoQueue.js';
 import { openSheet, stopRun, useSheets } from '../../store/sheets.js';
 import type { DecisionView } from '../../api/decisions.js';
 import { turnKey, useDecisionsStore } from '../../store/decisions.js';
 import { DecisionLine } from '../decisions/DecisionLine.js';
 import { TurnConsidered } from '../decisions/ConsideredLine.js';
 import { collapseArtifacts, paneOpen, useArtifactSizes } from '../../store/artifactSizes.js';
-import { RunArtifacts, demoVideoProjectOf, useRunDocs } from './RunArtifacts.js';
+import { demoVideoProjectOf, useRunDocs } from './RunArtifacts.js';
 import { DEMO_VIDEO_ID, openLaunchWizard } from '../../store/launchWizard.js';
 import { OperatorMessage } from '../OperatorMessage.js';
 import { Markdown } from '../Markdown.js';
 import { CitationStrip, citationLabel, citationMarks } from '../citations.js';
-import { applyCheckState } from '../../board/checkState.js';
-import { useRunAcceptance } from '../../hooks/useRunAcceptance.js';
-import { momentOfRecording, useRecordingsStore } from '../../store/recordings.js';
-import { requestWalkthroughSeek } from '../../store/walkthroughSeek.js';
 import { askAnswerOrds, askCompletedAt, askLines, askPathOf, askProposal, askShapeFooter, askThinking, isAskTurnGate, type AskLine, type AskProposal } from '../../board/askThread.js';
 import { useAskAnswers } from '../../hooks/useAskAnswers.js';
 import { useAskThreadStore } from '../../store/askThread.js';
@@ -70,18 +43,19 @@ import { Skeleton, StateBanner, TechDetails } from '../ui/index.js';
 import { readErrorKind } from '../../api/errors.js';
 import { splitToolFailures } from '../../board/askThread.js';
 import { useRoster } from '../../hooks/useRoster.js';
-import { isCliSeat, seatLabel } from '../../board/seatNames.js';
 import { chatStatusWord } from '../../board/statusWords.js';
 import { isHeldRun } from '../../board/heldRuns.js';
 import { executingOrd } from '../../api/run-state.js';
 import { phaseLabel } from '../gateVerdictModel.js';
-import { CREW, gateResponder, responderKey, turnResponder, type Responder } from '../../board/responder.js';
+import { CREW, responderKey, turnResponder, type Responder } from '../../board/responder.js';
 import { TurnWho } from './TurnWho.js';
 import { RunRibbon, RunTab } from './RunTab.js';
 import { useRunHostValue } from './RunHost.js';
-import { HostPanel } from '../editorHost/HostPanel.js';
+import { HostPanel, useNarrow } from '../editorHost/HostPanel.js';
 import { useHostPanel } from '../../editors/hostApi.js';
 import { RunHostProvider } from '../editorHost/RunHostContext.js';
+import { RunBlock } from './RunConversation.js';
+import { stepWord } from '../../board/runConversation.js';
 
 /** S16a-2c: the hash that lands a run's session on its sheet's Governance tab. */
 export const GOVERNANCE_HASH = '#governance';
@@ -133,7 +107,11 @@ type ThreadEntry =
   | { kind: 'working'; key: string; at: number; who: string; runId: string; step: string }
   | { kind: 'proposal'; key: string; at: number; view: RunView; ask: AskProposal };
 
-const NO_TRAIL: readonly CoreEvent[] = [];
+
+/** DES-CHAT-NATIVE-RUN: the details panel's closed default is applied once per app load. */
+let detailsDefaulted = false;
+/** Test seam: the next session page is the app's first again (its details panel starts closed). */
+export function resetDetailsDefault(): void { detailsDefaulted = false; }
 
 /** How long a just-decided proposal keeps the run's block away while the daemon's status catches up. */
 const JUST_DECIDED_MS = 15_000;
@@ -141,8 +119,9 @@ const JUST_DECIDED_MS = 15_000;
 const OPEN_GRACE_MS = 60_000;
 
 
-/** studio#663: a kickoff longer than this opens in full on a click (a shorter one fits its line). */
-const KICKOFF_LONG = 80;
+/** studio#663: a kickoff longer than this shows its first lines with Show all (DES-CHAT-NATIVE-RUN: a chat bubble
+ *  holds the rest of a goal in full — `.wk-session-turn--kickoff` clamps at 8 lines, about this many characters). */
+const KICKOFF_LONG = 600;
 
 function launchedMs(v: RunView): number {
   const c = (v.session as unknown as { created_at?: unknown }).created_at;
@@ -604,24 +583,28 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
   const nearBottom = useRef(true);
   const newestKey = useRef<string | null>(null);
   const lastHeight = useRef(0);
-  const programmatic = useRef(false);
+  // Where the thread's OWN last scroll put it: a scroll event landing there is the thread's, not the operator's.
+  // A position, not a flag — a first visit scrolls more than once before the events arrive (to the newest message,
+  // then to an open gate's run), and a browser may fold several assignments into one event.
+  const programmatic = useRef<number | null>(null);
   const restore = useRef<{ top: number; pending: boolean }>({ top: 0, pending: false });
   const scrollThread = (el: HTMLDivElement, top: number): void => {
     const before = el.scrollTop;
     el.scrollTop = top;
-    if (el.scrollTop !== before) programmatic.current = true;
+    if (el.scrollTop !== before) programmatic.current = el.scrollTop;
   };
   useLayoutEffect(() => {
     if (!ready) return;
     const el = scroller.current;
     const saved = useSessionDrafts.getState().scroll[sessionId];
-    // A first visit starts at the top: the scroller is reused across sessions (Copilot). A SAVED place —
-    // the top included — means they were reading there: nothing follows until they scroll again (r3 #5).
+    // DES-CHAT-NATIVE-RUN: a first visit opens where a chat app opens — at the newest message, following the thread
+    // as it fills (a step's words land after the page). A SAVED place — the top included — means they were reading
+    // there: nothing follows until they scroll again (r3 #5). The scroller is reused across sessions (Copilot).
     const top = saved ?? 0;
     restore.current = { top, pending: top > 0 };
     if (el !== null) {
-      scrollThread(el, top);
-      nearBottom.current = saved === undefined && el.scrollHeight - el.clientHeight < 80;
+      scrollThread(el, saved === undefined ? el.scrollHeight : top);
+      nearBottom.current = saved === undefined;
       lastHeight.current = el.scrollHeight;
     }
   }, [sessionId, ready]);
@@ -641,6 +624,26 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
     }
     if (grew && nearBottom.current) scrollThread(el, el.scrollHeight);
   }, [entries, ready]);
+  // DES-CHAT-NATIVE-RUN: a run's messages fill in after their entry lands (each step's words are read on demand),
+  // so growth INSIDE an entry follows too while the operator is at the newest message.
+  useEffect(() => {
+    const el = scroller.current;
+    if (!ready || el === null || typeof ResizeObserver !== 'function') return undefined;
+    const ro = new ResizeObserver(() => {
+      if (el.scrollHeight === lastHeight.current) return;
+      lastHeight.current = el.scrollHeight;
+      // A returning visitor's place is finished here too: it may need words that land after the entries (codex r1 #4).
+      if (restore.current.pending) {
+        const max = el.scrollHeight - el.clientHeight;
+        if (max >= restore.current.top) { scrollThread(el, restore.current.top); restore.current.pending = false; }
+        else scrollThread(el, max);
+        return;
+      }
+      if (nearBottom.current) scrollThread(el, el.scrollHeight);
+    });
+    for (const child of Array.from(el.children)) ro.observe(child);
+    return () => ro.disconnect();
+  }, [entries, ready]);
 
   // Run clarity: the action first. On a first visit (no saved place — a saved place means they were
   // reading there) a run of this session with an open gate brings its block — the card leads it — into
@@ -658,8 +661,11 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
     shownGate.current = key;
     nearBottom.current = false;
     restore.current.pending = false;
+    // DES-CHAT-NATIVE-RUN: the question is a message inside the run's conversation (the plan, a step's question,
+    // the hand-over) — that message is what comes into view, not the run's first message.
+    const asking = block.querySelector<HTMLElement>('[data-testid="chat-plan"][data-open="true"], [data-testid="chat-gate"], [data-testid="chat-final"][data-kind="deliver"]') ?? block;
     const view = el.getBoundingClientRect();
-    const at = block.getBoundingClientRect().top;
+    const at = asking.getBoundingClientRect().top;
     if (at >= view.top && at <= view.bottom - 160) return; // already in view
     scrollThread(el, Math.max(0, el.scrollTop + at - view.top - 8));
   }, [ready, gatedRunId, sessionId, entries]);
@@ -691,6 +697,15 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
   // Leaving the session leaves no Options group behind for the next page (codex h4-fix r1 P2: a Made-list card
   // would read it as its own).
   useEffect(() => () => { useHostPanel.getState().closeGroup(); }, [sessionId]);
+  // DES-CHAT-NATIVE-RUN: the details panel starts closed (once per app load); after that it is where you left it.
+  useEffect(() => {
+    if (detailsDefaulted) return;
+    detailsDefaulted = true;
+    if (useHostPanel.getState().group === null) useHostPanel.getState().setFolded(true);
+  }, []);
+  // Open is the panel beside the chat (wide) or over it (below 1200 px): the toggle says which it is now.
+  const panelNarrow = useNarrow();
+  const detailsOpen = useHostPanel((s) => (panelNarrow ? s.overlay : !s.folded));
 
   // DES §7.4: the retired "Demo video" header button is an ordinary turn suggestion — a run here that made a deck or a
   // document offers "Make a demo video of this", which opens the New job form's demo video in its project.
@@ -803,6 +818,16 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
             <button type="button" data-testid="session-stop-keep" onClick={() => setConfirmStop(false)} className="wk-btn wk-btn--quiet wk-btn--sm">Keep going</button>
           </span>
         )}
+        {/* DES-CHAT-NATIVE-RUN: the run's details (status, steps, agents, checks, spend) open beside the conversation
+            on demand — closed by default, never between you and the chat. */}
+        {mine.length > 0 && (
+          <button type="button" data-testid="session-details-toggle" aria-expanded={detailsOpen} aria-controls="run-details-panel"
+            title={detailsOpen ? 'Hide the details' : 'Show the run’s details: status, steps, agents, checks and spend'}
+            onClick={() => { const hp = useHostPanel.getState(); if (panelNarrow) hp.setOverlay(!hp.overlay); else hp.setFolded(!hp.folded); }}
+            className={`wk-chat-details-toggle${detailsOpen ? ' wk-chat-details-toggle--on' : ''}`}>
+            <span aria-hidden className="wk-chat-details-icon" /><span className="wk-chat-details-label">Details</span>
+          </button>
+        )}
         <button type="button" data-testid="session-sheet-open" aria-label="Look underneath this session" title="Look underneath (⌘K for everything else)" onClick={() => openSheet({ kind: 'session', sessionId })} className="wk-sheet-open">⋯</button>
       </header>
 
@@ -817,7 +842,8 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
           onScroll={(e) => {
             const el = e.currentTarget;
             // The thread's own scroll (a restore, a follow) is not the operator's place.
-            if (programmatic.current) { programmatic.current = false; return; }
+            if (programmatic.current !== null && Math.abs(el.scrollTop - programmatic.current) < 2) return;
+            programmatic.current = null;
             restore.current.pending = false;
             nearBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
             setScroll(sessionId, el.scrollTop);
@@ -836,10 +862,8 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
             <p data-testid="session-fresh" className="wk-session-grey wk-session-fresh">Ask anything, or say what you want done. Your first message starts this chat; a job starts only when you choose one.</p>
           )}
           {conversation === 'closed' && mine.length > 0 && (
-            <>
-              <TurnWho who={CREW} />
-              <p data-testid="session-closed-line" className="wk-session-grey">{CLOSED_LINE}</p>
-            </>
+            // DES-CHAT-NATIVE-RUN: a quiet divider, not a speaker — what follows is rebuilt from the work itself.
+            <p data-testid="session-closed-line" role="note" className="wk-chat-divider">{CLOSED_LINE}</p>
           )}
           {chatError !== null && (
             <StateBanner data-testid="session-chat-error" kind={readErrorKind(chatError)} what="this conversation" error={chatError}
@@ -882,8 +906,9 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
             // responder changes (consecutive crew lines share one), so the thread reads as a conversation.
             const who = whoOfEntry(e);
             const prev = i === 0 ? leadWho : whoOfEntry(entries[i - 1]!);
-            const label = e.kind !== 'turn' && (prev === null || responderKey(prev) !== responderKey(who))
-              ? <TurnWho who={who} runId={e.kind === 'run' || e.kind === 'proposal' ? e.view.session.id : e.kind === 'working' ? e.runId : askRunId} {...(e.kind === 'typing' ? { suffix: 'thinking' } : e.kind === 'working' ? { suffix: 'working' } : {})} />
+            // DES-CHAT-NATIVE-RUN: a run's messages carry their own speakers, and the working line names its helper.
+            const label = e.kind !== 'turn' && e.kind !== 'run' && e.kind !== 'working' && (prev === null || responderKey(prev) !== responderKey(who))
+              ? <TurnWho who={who} runId={e.kind === 'proposal' ? e.view.session.id : askRunId} {...(e.kind === 'typing' ? { suffix: 'thinking' } : {})} />
               : null;
             const node = (e.kind === 'line'
             ? <AskLineView key={e.key} line={e.line} onSignIn={() => openSheet({ kind: 'session', sessionId }, 'signins')} onRetry={askTeamRetry} />
@@ -891,8 +916,9 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
               ? <AskTyping key={e.key} who={e.who} />
               : e.kind === 'working'
               ? (
-                <p key={e.key} data-testid="session-working" data-run-id={e.runId} className="wk-ask-line wk-ask-line--quiet wk-ask-typing" aria-live="polite">
-                  <span aria-hidden className="wk-desk-dot wk-desk-dot--working" /> Working on {e.step}…
+                <p key={e.key} data-testid="session-working" data-run-id={e.runId} className="wk-chat-working" aria-live="polite">
+                  <span aria-hidden className="wk-chat-working-dots"><i /><i /><i /></span>
+                  <span className="wk-chat-working-who">{who.role === 'crew' ? 'studio' : who.name}</span> Working on {stepWord(e.step)}…
                 </p>
               )
               : e.kind === 'proposal'
@@ -902,9 +928,9 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
               <div key={e.key} data-testid="session-turn" data-who={e.who === 'you' ? 'you' : 'helper'} {...(e.pending ? { 'data-pending': 'true' } : {})}
                 {...(e.kickoff ? { 'data-kickoff': 'true', title: e.text } : {})}
                 className={`wk-session-turn wk-session-turn--${e.who === 'you' ? 'you' : 'helper'}${e.pending ? ' wk-session-turn--pending' : ''}${e.kickoff ? ' wk-session-turn--kickoff' : ''}${e.kickoff && kickoffOpen === e.key ? ' wk-session-turn--kickoff-open' : ''}`}>
-                {/* The kickoff is one compact line ("You · <what started it>", two lines at most; the
-                    full words on hover), so the run's own block below stays in the first view. */}
-                <TurnWho who={who} runId={askRunId} {...(e.pending ? { suffix: 'answering' } : {})} {...(e.kickoff ? { inline: true } : {})} />
+                {/* DES-CHAT-NATIVE-RUN: what started the run is your first message, a bubble like any other; a very long
+                    one shows its first lines with Show all (studio#663). */}
+                <TurnWho who={who} runId={askRunId} {...(e.pending ? { suffix: 'answering' } : {})} />
                 {e.who === 'you'
                   ? <>
                     <p id={e.kickoff ? `kickoff-${e.key}` : undefined} className={`wk-session-text${e.ok ? '' : ' wk-session-grey'}`}><OperatorMessage text={e.text} /></p>
@@ -947,7 +973,7 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
       {/* The measure sits on a wrapper: the composer's own box (its `/` and `@` menus anchor to it) stays the input's width. */}
       <div className="wk-session-composer-wrap wk-measure wk-measure--thread"><Composer {...composerProps} className="wk-session-composer" /></div>
     </div>
-    <HostPanel runTab={<RunTab runs={mine} sessionId={sessionId} title={title} navigate={navigate} />} ribbon={<RunRibbon runs={mine} />} />
+    <HostPanel toggledByPage runTab={<RunTab runs={mine} sessionId={sessionId} title={title} navigate={navigate} />} ribbon={<RunRibbon runs={mine} />} />
     </div>
     </RunHostProvider>
     </ArtifactAddressProvider>
@@ -1007,294 +1033,5 @@ function TurnDecisions({ chatId, turnId, navigate }: { chatId: string; turnId: s
   return <DecisionLine decisions={decisions} navigate={navigate} />;
 }
 
-export function RunBlock({ view, badge, sessionId, navigate, solo = null }: {
-  view: RunView;
-  badge: number;
-  sessionId: string;
-  /** Audit row 26: the session's title when this is its ONLY run — the header already says the
-   *  title, the state and what needs you, so the card does not say them again. */
-  solo?: string | null;
-  /** S16a-1c: the record lines' links (the stop story's "All runs ›", rule links). */
-  navigate?: Navigate;
-}): React.ReactElement {
-  const { chain: planChain, teamError, retry } = useRunChain(view);
-  const id = view.session.id;
-  const state = runState(view);
-  const isTerminal = ['completed', 'cancelled', 'failed'].includes(view.session.status);
-  const endedMs = isTerminal ? (endedAtMs(view) ?? finishedAtMs(view)) : null;
-  const [watchCoverage, setWatchCoverage] = useState<WatchCoverage[] | undefined>(undefined);
-  const watchFetchedFor = useRef<string | null>(null);
-  useEffect(() => {
-    if (!isTerminal || watchFetchedFor.current === id) return;
-    watchFetchedFor.current = id;
-    api.getWatch({ run: id, limit: 1 })
-      .then((r) => { setWatchCoverage(r.coverage ?? []); })
-      .catch(() => {
-        // Any failure (404/501 absent registry, or other error) → leave watchCoverage undefined.
-        // Only a successful read with no checked entry adds "· nothing checked".
-      });
-  }, [id, isTerminal]);
-  // studio#770: an accepted review on a distinct seat counts as checked.
-  const runEvents = useRunEvents(id, isTerminal).events;
-  const noEvidenceSummary = coverageSummary(
-    watchCoverage,
-    isTerminal,
-    endedMs,
-    (e) => e.replace(/[-_]+/g, ' '),
-    Date.now(),
-    independentReviewers(runEvents, reviewerName),
-  );
-  const trail = useRunEventStore((s) => s.byRun[id]) ?? NO_TRAIL;
-  // Run clarity: the "now" marker's run phase — an orphaned run is not working (OrphanedRow says so).
-  const phase: RunPhase = view.session.status === 'executing'
-    ? (orphanedOf(view.session.status, trail) === null ? 'working' : 'other')
-    : view.session.status === 'failed' || view.session.status === 'cancelled' ? 'stopped' : 'other';
-  const gate = useGateStore((s) => s.gates[id]);
-  const action = useGateActionStore((s) => s.byGate[id] ?? IDLE_GATE_ACTION);
-  // WT-U2: "checked" comes only from the acceptance read (crew's per-step check state); the chips'
-  // moments from the walkthrough the artifact below reads; the deliver card's line is crew's summary.
-  const acceptance = useRunAcceptance(view, planChain, gate);
-  const checks = acceptance?.walkthrough?.steps ?? null;
-  const chain = useMemo(() => applyCheckState(planChain, checks), [planChain, checks]);
-  const recording = useRecordingsStore((s) => s.byRun[id]);
-  const momentOf = useMemo(() => momentOfRecording(recording), [recording]);
-  const proposalKind = proposalKindOf(id, gate, view.units);
-  // Rule 5: store-based receipt survives remount; no useRef.
-  const effectiveKind = gate !== undefined ? proposalKind
-    : action.receipt?.kind === 'plan' || action.receipt?.kind === 'deliver' ? action.receipt.kind : null;
-  // S16a-1a (studio#583 / #587): a finished run opened fresh — no gate, no receipt here — still
-  // answers its hand-over in the thread, off the daemon's delivery verdict: the receipt (PR link or
-  // branch) for a hand-over, the "Deliver — open a PR" door for a stranded run.
-  const finished = effectiveKind === null ? finishedDeliveryArm(view, gate) : null;
-  // S16a-1c: the Watchtower's "Jump in" lands here with `?jump=ord:attempt:at` — read on arrival.
-  // Recomputed whenever the address's search changes (an in-app navigation re-renders the thread), so
-  // a second Jump in onto the same mounted run is read afresh (codex r1).
-  const searchNow = typeof window === 'undefined' ? '' : window.location.search;
-  // The jump is this run's when the thread is the run's own (`run:<id>`), or — on a chat's thread of
-  // many runs — when the address pins it to this run (`jumpRun=<id>`, set by the run → chat move).
-  const jump = useMemo(() => {
-    const pinned = new URLSearchParams(searchNow).get('jumpRun');
-    const mine = pinned !== null ? pinned === id : sessionId === `run:${id}`;
-    return mine ? parseJump(searchNow) : null;
-  }, [searchNow, id, sessionId]);
-  const runTitleText = jobTitle(view.session);
-  const soloHead = solo !== null && solo === runTitleText;
-  return (
-    <section data-testid="session-run" data-run-id={id} data-state={state} {...(acceptance !== null ? { 'data-acceptance': 'read' } : {})} className="wk-session-run">
-      <p className="wk-session-run-head">
-        {/* Audit row 26: one status per surface. A session's only run does not repeat the page's title,
-            dot or "needs you": its head IS its status sentence. */}
-        {soloHead ? (
-          <span data-testid="session-status-sentence" role="status" className="wk-session-run-title wk-session-status-sentence">
-            {statusSentence(view, chain, gate, action)}
-            {view.session.archived_at != null && <span data-testid="session-run-archived" className="wk-session-grey"> · Archived</span>}
-          </span>
-        ) : (
-          <>
-            <span aria-hidden className={`wk-desk-dot wk-desk-dot--${state}`} />
-            <span className="wk-session-run-title">{runTitleText}</span>
-          </>
-        )}
-        {badge > 0 && solo === null && <span className="wk-session-run-state">Needs you</span>}
-        {/* S15d (Amendment 5 item 1): the run stays in the thread — its depth (every step and what it did,
-            the changes, the evidence) is the look-underneath sheet of THIS run (its own `run:` session,
-            not the chat's: a chat's sheet would show its newest run), never a page of its own. */}
-        <button type="button" data-testid="session-run-look" aria-label="Look underneath this run: its steps, changes and evidence" title="Steps, changes, evidence" onClick={() => openSheet({ kind: 'session', sessionId: `run:${id}` }, 'steps')} className="wk-sheet-open wk-sheet-open--run">⋯</button>
-      </p>
-      {/* S6b: the run's ONE status sentence, then its proposal (the plan, the hand-over). */}
-      {!soloHead && (
-        <p data-testid="session-status-sentence" role="status" className="wk-session-status-sentence">
-          {statusSentence(view, chain, gate, action)}
-          {view.session.archived_at != null && <span data-testid="session-run-archived" className="wk-session-grey"> · Archived</span>}
-        </p>
-      )}
-      <p className="wk-session-run-labels">
-        <RunAssuranceLabel view={view} />
-      </p>
-      {/* S15e: plan and deliver go through ProposalCard; every other gate kind is answered in the thread.
-          Run clarity: the action comes first — the card sits right under the status sentence, above the
-          run's notes (who reviewed, what wasn't checked), so what you can do is never below the fold. */}
-      {/* H3: a gate a seat raised is labelled with the seat that is asking (crew's own gates sit under the
-          run's crew line). */}
-      <GateAsker view={view} gate={gate} />
-      {effectiveKind === 'plan' || effectiveKind === 'deliver'
-        ? <ProposalCard view={view} chain={chain} acceptance={acceptance?.summary ?? null} />
-        : finished === 'handed'
-          ? <ProposalCard view={view} chain={chain} acceptance={acceptance?.summary ?? null} handedOver />
-          : finished === 'stranded'
-            ? <StrandedCard view={view} />
-            : <GateRow view={view} gate={gate} {...(navigate !== undefined ? { navigate } : {})} />}
-      {/* S16a-1d: the run's technical handles, when Settings › Show technical details is on. */}
-      <Tech data-testid="tech-session-run" parts={runTechParts({ id, base_commit: view.session.base_commit, clis: view.session.clis })} block />
-      <OrphanedRow view={view} />
-      {/* S16a-1c: why it stopped. Run clarity: the reason, then the ways on, then the run's notes. */}
-      <RunStory view={view} events={trail} {...(navigate === undefined ? {} : { navigate })} />
-      {/* Audit row 27: a stopped run's two ways on, as two buttons: Resume (this run, in place) and
-          Start over (S16a-1d: the launch form prefilled; nothing starts until you send). */}
-      <RecoveryRow view={view} {...(navigate === undefined ? {} : { navigate })} />
-      {/* S16a-1c: the run's record lines — the amended acceptance list, a short council, the
-          Watchtower's lines (and "You jumped in" when the address carries ?jump=). */}
-      <RunRecordLines view={view} jumped={jump !== null} withStory={false} {...(navigate === undefined ? {} : { navigate })} />
-      {/* crew#720: whatever the card above says, a deliver phase that refused for want of the provider
-          credential says so, and the run's final code is downloadable — every outcome. */}
-      <DeliverCredentialsNotice view={view} />
-      <CodebaseDownload view={view} />
-      {/* S16a-4g: an MCP server's question and the stall watchdog's hand-off, under the run's card. */}
-      <RunQuestions view={view} />
-      <PlanStepLines runId={id} />
-      <ChainLine chain={chain} runId={id} units={view.units} teamError={teamError} onRetry={retry} checks={checks} momentOf={momentOf} onOpenAt={(sec) => requestWalkthroughSeek(id, sec)} nothingChecked={noEvidenceSummary?.nothing === true} jumpOrd={jump?.ord ?? null} waitOrd={gate !== undefined && effectiveKind !== 'plan' ? gate.ord : null} phase={phase} />
-      {/* S8: the page the run is producing — a live preview that morphs inline → pane → full. */}
-      <RunArtifacts view={view} composerKey={sessionId} chain={chain} />
-      <RunHelpers view={view} />
-    </section>
-  );
-}
-
-/** H3: the seat asking at a run's open gate, when a seat raised it; nothing for crew's own gates. */
-function GateAsker({ view, gate }: { view: RunView; gate: { ord: number; gateKind?: string } | undefined }): React.ReactElement | null {
-  const roster = useRoster();
-  const who = gateResponder(view, gate, roster);
-  if (gate === undefined || who.role !== 'seat') return null;
-  return <TurnWho who={who} runId={view.session.id} suffix="is asking" className="wk-who--asking" />;
-}
-
-/**
- * studio#545: a run the daemon restart orphaned says so — the engine's `runOrphaned` report is the
- * newest dispatch-or-orphan frame of its trail (`board/sessionModel.orphanedOf`) — and offers the one
- * move that fixes it: Resume (`POST /runs/:id/resume`). The trail is read once here when nothing else
- * on the page has (a late join); a failed read is no verdict, so a bare run never claims an orphan.
- */
-function OrphanedRow({ view }: { view: RunView }): React.ReactElement | null {
-  const id = view.session.id;
-  const status = view.session.status;
-  // studio#558: the session page's one run-event read (a failed read is no verdict: frames stay unread).
-  const frames = useRunEvents(id, status === 'executing').events ?? undefined;
-  const [sent, setSent] = useState<'idle' | 'sending' | 'asked' | 'failed'>('idle');
-  const [error, setError] = useState<string | null>(null);
-  useEffect(() => { setSent('idle'); setError(null); }, [id]);
-  const orphan = orphanedOf(status, frames);
-  if (orphan === null) return null;
-  const resume = (): void => {
-    setSent('sending');
-    api.resumeRun(id)
-      .then(() => api.getRunEvents(id))
-      .then(({ events }) => { useRunEventStore.getState().hydrate(id, events); setSent('asked'); })
-      .catch((e: unknown) => { setSent('failed'); setError(e instanceof Error ? e.message : String(e)); });
-  };
-  return (
-    <p data-testid="session-orphaned" role="status" {...(orphan.ord !== null ? { 'data-ord': String(orphan.ord) } : {})} className="wk-session-grey wk-session-orphaned">
-      {ORPHANED_LINE}{' '}
-      {sent === 'asked'
-        ? <span data-testid="session-orphaned-asked">Resume asked — waiting for the step to start again.</span>
-        : <button type="button" data-testid="session-orphaned-resume" disabled={sent === 'sending'} onClick={resume} className="wk-btn wk-btn--secondary wk-btn--sm">{sent === 'sending' ? 'Resuming…' : 'Resume'}</button>}
-      {sent === 'failed' && <span data-testid="session-orphaned-error"> Resume didn’t go through.</span>}
-      {sent === 'failed' && error !== null && <TechDetails data-testid="session-orphaned-error-detail" text={error} />}
-    </p>
-  );
-}
-
-/**
- * studio#615 + audit row 27: a stopped run's ways on, as two separate buttons.
- *  - Resume (`POST /runs/:id/resume`, FAILED runs only) continues THIS run from its cursor — the same
- *    worktree, the same finished steps; a re-opened gate comes back to the thread.
- *  - Start over (S16a-1d, failed or cancelled) opens the launch form prefilled with this run's intent
- *    and settings — nothing starts until you send.
- * A refusal (crew's 409) is said in plain words; its own text is Technical details.
- */
-function RecoveryRow({ view, navigate }: { view: RunView; navigate?: Navigate }): React.ReactElement | null {
-  const id = view.session.id;
-  const status = view.session.status;
-  const [sent, setSent] = useState<'idle' | 'sending' | 'asked' | 'failed'>('idle');
-  const [error, setError] = useState<string | null>(null);
-  // A receipt is for ONE failure: leaving the failed state (the resume took) clears it, so the same
-  // run failing again offers Resume again (codex r1).
-  useEffect(() => { setSent('idle'); setError(null); }, [id, status]);
-  const canResume = status === 'failed' && view.session.archived_at == null;
-  const canStartOver = navigate !== undefined && (status === 'failed' || status === 'cancelled');
-  if (!canResume && !canStartOver) return null;
-  const resume = (): void => {
-    setSent('sending');
-    setError(null);
-    api.resumeRun(id).then(
-      () => {
-        // The POST took: say so whatever the refresh does — a failed event read never re-offers a
-        // second state-changing POST (codex r1). The run list's poll brings the new state anyway.
-        setSent('asked');
-        api.getRunEvents(id).then(({ events }) => useRunEventStore.getState().hydrate(id, events)).catch(() => {});
-      },
-      (e: unknown) => { setSent('failed'); setError(e instanceof Error ? e.message : String(e)); },
-    );
-  };
-  return (
-    <div data-testid="session-failed-resume" role="status" className="wk-session-recovery">
-      <div className="wk-session-recovery-actions">
-        {canResume && (sent === 'asked'
-          ? <span data-testid="session-failed-resume-asked" className="wk-session-grey">Resuming: the run picks up where it stopped.</span>
-          : <button type="button" data-testid="session-failed-resume-button" disabled={sent === 'sending'} onClick={resume} className="wk-btn wk-btn--secondary wk-btn--sm" title="Continue this run where it stopped: the same worktree and finished steps; nothing new is launched">{sent === 'sending' ? 'Resuming…' : 'Resume'}</button>)}
-        {canStartOver && navigate !== undefined && (
-          <button type="button" data-testid="session-run-retry" onClick={() => startRetry(view, navigate)} className="wk-btn wk-btn--quiet wk-btn--sm" title="Open the launch form prefilled with this run's intent and settings; nothing starts until you send">Start over</button>
-        )}
-      </div>
-      {sent === 'failed' && <p data-testid="session-failed-resume-error" className="wk-session-grey">Resume was refused.</p>}
-      {sent === 'failed' && error !== null && <TechDetails data-testid="session-failed-resume-error-detail" text={error} />}
-    </div>
-  );
-}
-
-/**
- * S7: the steps a `/` command added mid-run, in the run's own block — "Adding Test · Undo" while the
- * 10 s window is open, then "Added Test" with no Undo (a running plan only grows).
- */
-function PlanStepLines({ runId }: { runId: string }): React.ReactElement | null {
-  const queued = usePlanDrafts((s) => s.queued[runId]);
-  const added = usePlanDrafts((s) => s.added[runId]);
-  if ((queued?.length ?? 0) === 0 && (added?.length ?? 0) === 0) return null;
-  return (
-    <div className="wk-session-steps">
-      {(added ?? []).map((c, i) => (
-        <p key={`a${i}`} data-testid="session-step-added" data-catalog={c} className="wk-session-grey">Added {wordOf(c)} — it stays: a running plan only grows.</p>
-      ))}
-      {(queued ?? []).map((q) => (
-        <p key={`q${q.id}`} data-testid="session-step-queued" data-catalog={q.catalog} className="wk-session-grey">
-          Adding {wordOf(q.catalog)} ·{' '}
-          <button type="button" data-testid="session-step-undo" onClick={() => undoDecision(q.id)} className="wk-btn wk-btn--quiet wk-btn--sm">Undo</button>
-        </p>
-      ))}
-    </div>
-  );
-}
-
-/**
- * S11: the helpers working on a run, each a way into its sheet (terminal, what it did, sign-in).
- * Audit row 26: only real helpers (CLI seats on the roster) are listed, each by its one name
- * (`seatLabel`); a non-CLI tool a step ran on ("wicked-estate") is not a helper.
- */
-function RunHelpers({ view }: { view: RunView }): React.ReactElement | null {
-  const roster = useRoster();
-  const assigned = [...new Set(view.units.map((u) => u.assigned_cli).filter((c): c is string => typeof c === 'string' && c !== ''))];
-  if (roster === null) return null;
-  const helpers = assigned
-    .map((cli) => ({ cli, seat: roster.find((s) => s.key === cli) }))
-    .filter((h): h is { cli: string; seat: NonNullable<typeof h.seat> } => h.seat !== undefined && isCliSeat(h.seat));
-  if (helpers.length === 0) return null;
-  return (
-    <p data-testid="session-run-helpers" className="wk-session-grey">
-      Helpers:{' '}
-      {helpers.map(({ cli, seat }, i) => (
-        <span key={cli}>
-          {i > 0 && ' · '}
-          <button
-            type="button"
-            data-testid="session-run-helper"
-            data-cli={cli}
-            data-object={`helper:${view.session.id}:${cli}`}
-            onClick={() => openSheet({ kind: 'helper', runId: view.session.id, cli })}
-            className="wk-link wk-session-helper-link"
-          >
-            {seatLabel(seat)}
-          </button>
-        </span>
-      ))}
-    </p>
-  );
-}
+/** The run's block in the thread is its conversation (DES-CHAT-NATIVE-RUN): see RunConversation. */
+export { RunBlock };

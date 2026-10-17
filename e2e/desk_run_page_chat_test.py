@@ -13,7 +13,8 @@ Against the fixture's runs it proves, at `/s/run:r-review` (paused at a review g
      you or crew (`data-role`), and the run's own block is crew's.
   3. THE GATE CARD is inline in the thread, in the run's block (the panel holds no gate card).
   4. LOOK UNDERNEATH from the Run tab opens the run's sheet.
-  5. NARROW (1100x700): the panel is a one-line ribbon above the thread; pressing it opens the panel over the page.
+  5. NARROW (1100x700): no ribbon line over the chat; the header's Details opens the panel over the page
+     (DES-CHAT-NATIVE-RUN: the panel is closed by default and opened from Details, wide or narrow).
   6. 0 page errors.
 
 Captures: e2e/shots/desk-run-page-chat-{review,demo}-{light,dark}.png, desk-run-page-chat-narrow{,-open}-light.png.
@@ -87,6 +88,9 @@ def open_run(page, run_id: str, theme: str) -> dict:
     page.goto(f"{origin}/s/run%3A{run_id}", wait_until="networkidle")
     try:
         page.get_by_test_id("session-run").first.wait_for(state="visible", timeout=15000)
+        # DES-CHAT-NATIVE-RUN: the panel is closed until the header's Details opens it (its place is remembered).
+        if page.get_by_test_id("session-details-toggle").get_attribute("aria-expanded") != "true":
+            page.get_by_test_id("session-details-toggle").click()
         page.locator('[data-testid="host-panel"] [data-testid="run-tab"]').wait_for(state="visible", timeout=10000)
     except Exception:
         page.screenshot(path=str(SHOTS / f"desk-run-page-chat-{run_id}-missing.png"))
@@ -131,19 +135,21 @@ with sync_playwright() as p:
     check("look-underneath", True)
     page.keyboard.press("Escape")
 
-    # ── 5. narrow: the ribbon, and it opens the panel over the page ──────────────────────────────
+    # ── 5. narrow: no ribbon line over the chat (DES-CHAT-NATIVE-RUN); Details opens the panel over the page ──
     page.set_viewport_size({"width": 1100, "height": H})
     set_fixture(origin, gate_move=True, walkthrough=False, sessions=False, run_chat_id=False, appearance={**DEFAULT_APPEARANCE, "theme": "light"})
     page.goto(f"{origin}/s/run%3Ar-review", wait_until="networkidle")
-    page.get_by_test_id("host-panel-ribbon").wait_for(state="visible", timeout=15000)
+    page.get_by_test_id("session-details-toggle").wait_for(state="visible", timeout=15000)
     page.wait_for_timeout(500)
     d3 = page.evaluate(PAGE)
     page.screenshot(path=str(SHOTS / "desk-run-page-chat-narrow-light.png"))
-    check("narrow-ribbon", d3["panel"] is None and d3["ribbon"] is not None and d3["ribbon"]["t"] < d3["thread"]["t"] and not d3["hscroll"], page=d3)
-    page.get_by_test_id("host-panel-ribbon").click()
+    check("narrow-no-ribbon", d3["panel"] is None and d3["ribbon"] is None and not d3["hscroll"]
+          and page.get_by_test_id("session-details-toggle").get_attribute("aria-expanded") == "false", page=d3)
+    page.get_by_test_id("session-details-toggle").click()
     page.locator('[data-testid="host-panel"] [data-testid="run-tab"]').wait_for(state="visible", timeout=5000)
     page.screenshot(path=str(SHOTS / "desk-run-page-chat-narrow-open-light.png"))
-    check("narrow-opens", page.evaluate(PAGE)["panel"] is not None)
+    check("narrow-opens", page.evaluate(PAGE)["panel"] is not None
+          and page.get_by_test_id("session-details-toggle").get_attribute("aria-expanded") == "true")
 
     check("no-page-errors", errors == [], errors=errors)
     browser.close()

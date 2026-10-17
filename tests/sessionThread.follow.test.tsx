@@ -80,17 +80,21 @@ describe('run clarity: an open gate is the action — the thread brings its run 
     useGateStore.setState({ gates: { [RUN]: { runId: RUN, ord: 1, prompt: 'Approve the output of unit 1 (build) before unit 2 runs', lifecycle: 'open', receivedAt: 1, gateKind: 'def' } }, approaching: {} });
     // The run's block sits inside the 500 px view: already in view, so no move — but no follow either.
     vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
-      const top = this.dataset['testid'] === 'session-run' ? 100 : 0;
+      const top = ['session-run', 'chat-gate'].includes(this.dataset['testid'] ?? '') ? 100 : 0;
       return { top, bottom: this.dataset['testid'] === 'session-thread' ? 500 : top + 50, left: 0, right: 0, width: 0, height: 0, x: 0, y: top, toJSON: () => ({}) } as DOMRect;
     });
     render(<SessionPage sessionId="chat-pay" runs={[WAITING]} runsLoaded needRows={[]} navigate={() => {}} onAsk={() => {}} />);
     await waitFor(() => expect(screen.queryAllByTestId('session-turn').length).toBe(1));
     await screen.findByTestId('session-run');
     const el = screen.getByTestId('session-thread');
+    // DES-CHAT-NATIVE-RUN: a first visit opens at the newest message; the gate's run is in view, so it stays there.
+    await new Promise((r) => setTimeout(r, 5));
+    const opened = el.scrollTop;
     act(() => { useAskThreadStore.getState().ingest({ type: 'chatReply', chat: 'chat-pay', cliKey: 'claude', text: REPLY.text, ok: true, turn_id: 't1' } as never); });
     await screen.findByText(/both post the charge/);
-    expect(el.scrollHeight - 500).toBeGreaterThan(80);
-    expect(el.scrollTop).toBe(0);
+    // The reply grew the thread well past where it opened, and the thread did not follow it down.
+    expect(el.scrollHeight - 500 - opened).toBeGreaterThan(80);
+    expect(el.scrollTop).toBe(opened);
   });
 
   it('the run’s block below the view is scrolled to (the card leads it), as the thread’s own scroll — never saved as their place', async () => {
@@ -100,7 +104,9 @@ describe('run clarity: an open gate is the action — the thread brings its run 
     const WAITING = { ...VIEW, session: { ...VIEW.session, status: 'awaiting_human' } } as typeof VIEW;
     useGateStore.setState({ gates: { [RUN]: { runId: RUN, ord: 1, prompt: 'Approve the output of unit 1 (build) before unit 2 runs', lifecycle: 'open', receivedAt: 1, gateKind: 'def' } }, approaching: {} });
     vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
-      const top = this.dataset['testid'] === 'session-run' ? 708 - (tops.get(this.closest('[data-testid="session-thread"]') ?? this) ?? 0) : 0;
+      // The run starts at 708; its question message (chat-gate) sits 200 px further down, under its steps.
+      const base = this.dataset['testid'] === 'session-run' ? 708 : this.dataset['testid'] === 'chat-gate' ? 908 : null;
+      const top = base !== null ? base - (tops.get(this.closest('[data-testid="session-thread"]') ?? this) ?? 0) : 0;
       return { top, bottom: this.dataset['testid'] === 'session-thread' ? 500 : top + 50, left: 0, right: 0, width: 0, height: 0, x: 0, y: top, toJSON: () => ({}) } as DOMRect;
     });
     render(<SessionPage sessionId="chat-pay" runs={[WAITING]} runsLoaded needRows={[]} navigate={() => {}} onAsk={() => {}} />);
@@ -108,8 +114,8 @@ describe('run clarity: an open gate is the action — the thread brings its run 
     await screen.findByTestId('session-run');
     const el = screen.getByTestId('session-thread');
     expect(el.scrollHeight - 500).toBeGreaterThan(1500);
-    // 708 − 8 = 700: the block's top, not the bottom of the thread.
-    await waitFor(() => expect(el.scrollTop).toBe(700));
+    // 908 − 8 = 900: the question message's top — not the run's first message, not the bottom of the thread.
+    await waitFor(() => expect(el.scrollTop).toBe(900));
     await new Promise((r) => setTimeout(r, 5));
     expect(useSessionDrafts.getState().scroll['chat-pay']).toBeUndefined();
   });
@@ -129,7 +135,8 @@ describe('the thread follows its newest line only from the bottom', () => {
     render(<SessionPage sessionId="chat-pay" runs={[VIEW]} runsLoaded needRows={[]} navigate={() => {}} onAsk={() => {}} />);
     await waitFor(() => expect(screen.queryAllByTestId('session-turn').length).toBe(1));
     const el = screen.getByTestId('session-thread');
-    expect(el.scrollTop).toBe(0);
+    // DES-CHAT-NATIVE-RUN: a first visit opens at the newest message (the bottom, as far as the box scrolls).
+    expect(el.scrollTop).toBe(Math.max(0, el.scrollHeight - 500));
     act(() => { useAskThreadStore.getState().ingest({ type: 'chatReply', chat: 'chat-pay', cliKey: 'claude', text: REPLY.text, ok: true, turn_id: 't1' } as never); });
     await screen.findByText(/both post the charge/);
     // Two turns: the thread moved to its newest line (the bottom, as far as the box scrolls).

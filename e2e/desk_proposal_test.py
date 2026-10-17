@@ -32,7 +32,7 @@ import sys
 import time
 import urllib.request
 
-from uxfix_fixture import HIDE_GATE_TOASTS, REPO, ensure_build, set_fixture, start_server
+from uxfix_fixture import HIDE_GATE_TOASTS, REPO, ensure_build, set_fixture, start_server, OPEN_RUN_DETAILS
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4348"))
 W, H = 1440, 700
@@ -73,6 +73,7 @@ errors: list[str] = []
 with sync_playwright() as p:
     browser = p.chromium.launch()
     page = browser.new_page(viewport={"width": W, "height": H}, device_scale_factor=1)
+    page.add_init_script(OPEN_RUN_DETAILS)  # the run's record is in its Details fold (DES-CHAT-NATIVE-RUN)
     page.on("pageerror", lambda e: errors.append(str(e)))
     page.add_init_script(
         "document.addEventListener('DOMContentLoaded', () => { const s = document.createElement('style'); "
@@ -97,7 +98,7 @@ with sync_playwright() as p:
     buttons = [plan.get_by_test_id("session-proposal-go").inner_text(), plan.get_by_test_id("session-proposal-not-now").inner_text()]
     tech = re.findall(r"\b(?:rev|unit|band|mode|understand)\b", text.lower())
     check("proposal-one-sentence", text.startswith("Here’s the plan:") and "(4 steps)" in text and not tech
-          and status.startswith("Waiting on your go for the plan") and buttons == ["Go", "Not now"],
+          and status.startswith("Waiting on your go for the plan") and buttons == ["Approve plan", "Not now"],
           text=text, status=status, buttons=buttons, tech=tech)
 
     # ── 2. Not now sends nothing; Bring it back ───────────────────────────────────
@@ -209,18 +210,20 @@ with sync_playwright() as p:
                 session_over={"r-ship-deliver": {"delivery": "delivered", "deliverUrl": SHIP_PR}},
                 extra_frames=[{"type": "unitDone", "session": "r-ship-deliver", "ord": 4,
                                "ts": int(time.time() * 1000), "seq": 9001}])
+    # DES-CHAT-NATIVE-RUN: once the run has finished, its hand-over is answered by the run's FINAL message — plain
+    # words and the pull request as a chip — in place of the card the operator approved it from.
+    final = page.locator('[data-testid="session-run"][data-run-id="r-ship-deliver"] [data-testid="chat-final"][data-kind="completed"]')
     try:
-        page.wait_for_function(
-            f"() => document.querySelector('{CARD.format('r-ship-deliver')}')?.dataset.state === 'done'", timeout=25000)
+        final.wait_for(state="visible", timeout=25000)
     except Exception as e:  # noqa: BLE001
         page.screenshot(path=str(SHOTS / "desk-proposal-delivered-missing.png"))
-        fail("delivered-receipt", {"why": f"the hand-over card never reached its receipt: {e}",
+        fail("delivered-receipt", {"why": f"the finished hand-over never said so: {e}",
                                    "state": page.evaluate(f"() => document.querySelector('{CARD.format('r-ship-deliver')}')?.dataset.state ?? null")})
-    pr_link = deliver.get_by_test_id("session-proposal-pr")
-    outcome = deliver.get_by_test_id("session-proposal-outcome").inner_text()
-    check("delivered-receipt", outcome == "Finished · delivered" and pr_link.count() == 1
+    pr_link = final.get_by_test_id("chat-final-pr")
+    outcome = final.get_by_test_id("chat-final-text").inner_text()
+    check("delivered-receipt", outcome.startswith("Done.") and "Pull request #42 is open." in outcome and pr_link.count() == 1
           and pr_link.get_attribute("href") == SHIP_PR and pr_link.get_attribute("target") == "_blank"
-          and pr_link.inner_text() == "Pull request ↗" and deliver.get_by_test_id("session-proposal-branch").count() == 0,
+          and pr_link.inner_text() == "Pull request #42 ↗" and page.locator(CARD.format("r-ship-deliver")).count() == 0,
           outcome=outcome, href=pr_link.get_attribute("href") if pr_link.count() else None)
     page.screenshot(path=str(SHOTS / "desk-proposal-delivered.png"))
 

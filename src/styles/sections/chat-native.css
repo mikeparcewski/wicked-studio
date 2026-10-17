@@ -1,0 +1,192 @@
+/* Section CSS: the run page as a chat (DES-CHAT-NATIVE-RUN; operator 2026-10-17: "remember we are trying to mimic
+   chatgpt/claude interfaces users are used to"). One centred column (the thread measure, 768 px of text), your
+   messages as right-aligned bubbles, the assistants' turns as readable un-boxed text under a small speaker label,
+   the composer pinned at the same width. Tokens only. Loaded after session.css: these rules win over it. */
+
+/* ── The column ─────────────────────────────────────────────────────────────────────────────── */
+.wk-session-head { border-bottom: 0; align-items: center; }
+.wk-session-head .wk-session-title { font-size: var(--text-lg); font-weight: var(--weight-semi); }
+.wk-session-thread { gap: 22px; padding-block: 20px 28px; font-size: var(--text-md); line-height: 1.65; }
+.wk-session-composer { margin: 4px 0 14px; }
+
+/* ── Your messages: right-aligned bubbles, the label quiet above ─────────────────────────────── */
+.wk-session-turn--you,
+.wk-session-turn--you:not(.wk-session-turn--kickoff) {
+  align-self: flex-end; display: flex; flex-direction: column; align-items: flex-end; gap: 4px;
+  max-width: min(600px, 85%); padding: 0; background: none; border: 0; border-radius: 0; box-shadow: none;
+}
+.wk-session-turn--you > .wk-who { font-weight: var(--weight-normal); color: var(--ink-dim); }
+.wk-session-turn--you > .wk-who .wk-who-dot { display: none; }
+.wk-session-turn--you > .wk-session-text {
+  margin: 0; padding: 10px 16px; border-radius: 20px; background: var(--surface-raised); color: var(--ink-high);
+  white-space: pre-wrap; overflow-wrap: anywhere;
+}
+
+/* ── An assistant's turn (a chat reply, a step, the plan, the final word): un-boxed text ─────── */
+.wk-session-turn--helper {
+  align-self: stretch; max-width: none; padding: 0; background: none; border: 0; border-radius: 0; box-shadow: none;
+}
+.wk-session-turn--helper.wk-session-turn--pending { border: 0; opacity: 0.85; }
+.wk-session-turn--helper > .wk-session-who,
+.wk-chat-who { margin: 0 0 6px; }
+.wk-session-turn--helper .wk-session-text { white-space: normal; color: var(--ink-body); }
+
+/* The speaker: a small round mark with the helper's initial, then its name — who said it reads first. */
+.wk-session-thread .wk-who { font-size: var(--text-sm); gap: 8px; color: var(--ink-high); }
+.wk-session-thread .wk-who-dot { width: 22px; height: 22px; border-radius: var(--radius-full); background: var(--surface-raised); }
+.wk-session-thread .wk-who--seat .wk-who-dot { background: color-mix(in oklab, var(--accent) 22%, var(--surface-card)); box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--accent) 45%, transparent); }
+.wk-session-thread .wk-who--crew { color: var(--ink-high); font-weight: var(--weight-semi); }
+.wk-session-thread .wk-who-suffix { color: var(--ink-muted); font-weight: var(--weight-normal); }
+
+.wk-chat-run { display: flex; flex-direction: column; gap: 22px; min-width: 0; }
+.wk-chat-run-title { margin: 8px 0 -6px; font-size: var(--text-sm); color: var(--ink-muted); font-weight: var(--weight-semi); }
+.wk-chat-msg { min-width: 0; }
+.wk-chat-msg--assistant { align-self: stretch; }
+.wk-chat-msg--you { align-self: flex-end; max-width: min(600px, 85%); }
+.wk-chat-you-text { margin: 0; padding: 8px 16px; border-radius: 20px; background: var(--surface-raised); color: var(--ink-high); }
+.wk-chat-p { margin: 0 0 8px; }
+.wk-chat-p:last-child { margin-bottom: 0; }
+.wk-chat-quiet { margin: 0; color: var(--ink-muted); font-size: var(--text-sm); }
+.wk-chat-plan { margin: 4px 0 10px; padding-left: 1.4em; list-style: decimal; }
+.wk-chat-plan li { margin: 2px 0; padding-left: 4px; }
+.wk-chat-verdict { margin: 0 0 6px; font-weight: var(--weight-semi); }
+.wk-chat-verdict--pass { color: var(--status-ok, var(--ink-high)); }
+.wk-chat-verdict--fail { color: var(--status-fail); }
+
+/* Readable markdown inside a turn: headings a step above body text, lists with air, code blocks with room. */
+.wk-chat-md, .wk-session-turn--helper .wk-session-text { overflow-wrap: anywhere; }
+.wk-chat-md h1, .wk-chat-md h2, .wk-chat-md h3,
+.wk-session-turn--helper .wk-session-text h1, .wk-session-turn--helper .wk-session-text h2, .wk-session-turn--helper .wk-session-text h3 {
+  margin: 14px 0 6px; font-size: var(--text-md); font-weight: var(--weight-semi); color: var(--ink-high); line-height: 1.4;
+}
+.wk-chat-md > :first-child, .wk-session-turn--helper .wk-session-text > :first-child { margin-top: 0; }
+.wk-chat-md p, .wk-session-turn--helper .wk-session-text p { margin: 0 0 10px; }
+.wk-chat-md ul, .wk-chat-md ol, .wk-session-turn--helper .wk-session-text ul, .wk-session-turn--helper .wk-session-text ol { margin: 4px 0 10px; padding-left: 1.4em; }
+.wk-chat-md ul, .wk-session-turn--helper .wk-session-text ul { list-style: disc; }
+.wk-chat-md ol, .wk-session-turn--helper .wk-session-text ol { list-style: decimal; }
+.wk-chat-md li, .wk-session-turn--helper .wk-session-text li { margin: 3px 0; }
+.wk-chat-md :not(pre) > code, .wk-session-turn--helper .wk-session-text :not(pre) > code { font-size: 0.88em; padding: 1px 5px; border-radius: 5px; background: var(--surface-raised); }
+.wk-chat-md pre, .wk-session-turn--helper .wk-session-text pre { position: relative; margin: 8px 0 12px; }
+.wk-session-thread .wk-md-pre {
+  margin: 8px 0 12px; border-radius: var(--radius-lg); background: var(--surface-raised); overflow: hidden;
+}
+.wk-md-pre-head { display: flex; align-items: center; justify-content: space-between; padding: 4px 8px 4px 14px; font-size: var(--text-xs); color: var(--ink-muted); border-bottom: 1px solid var(--border-subtle); }
+.wk-md-pre-copy { border: 0; background: none; color: var(--ink-muted); font: inherit; cursor: pointer; padding: 2px 6px; border-radius: var(--radius-sm); }
+.wk-md-pre-copy:hover, .wk-md-pre-copy:focus-visible { color: var(--ink-high); background: var(--surface-card); }
+.wk-session-thread .wk-md-pre pre { margin: 0; padding: 12px 14px; overflow-x: auto; font-size: var(--text-sm); line-height: 1.55; background: none; }
+
+/* Actions under a message: quiet links and chips. */
+.wk-chat-actions { margin: 6px 0 0; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; font-size: var(--text-sm); }
+.wk-chat-actions:empty { display: none; }
+.wk-chat-link { border: 0; background: none; padding: 0; font: inherit; font-size: var(--text-sm); color: var(--ink-muted); cursor: pointer; text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--border); }
+.wk-chat-link:hover, .wk-chat-link:focus-visible { color: var(--ink-high); }
+.wk-chat-chips { margin: 10px 0 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.wk-chat-chip {
+  display: inline-flex; align-items: center; gap: 6px; min-height: 30px; padding: 4px 12px; border-radius: var(--radius-full);
+  border: 1px solid var(--border); background: var(--surface-card); color: var(--ink-high); font: inherit; font-size: var(--text-sm);
+  text-decoration: none; cursor: pointer;
+}
+.wk-chat-chip:hover, .wk-chat-chip:focus-visible { border-color: var(--border-strong); background: var(--surface-raised); }
+.wk-chat-chip--quiet { min-height: 0; padding: 0 8px; border: 0; background: var(--surface-raised); color: var(--ink-muted); font-size: var(--text-xs); cursor: default; }
+.wk-chat-chip--attn { min-height: 0; padding: 0 8px; margin-left: 6px; border: 0; background: var(--status-gate-subtle, var(--accent-subtle)); color: var(--ink-high); font-size: var(--text-xs); }
+.wk-chat-body .wk-session-codebase { margin-top: 8px; color: var(--ink-muted); }
+
+/* The run's whole record: one quiet fold under its messages. */
+.wk-chat-details { margin: -8px 0 0 30px; font-size: var(--text-sm); color: var(--ink-muted); }
+.wk-chat-details[open] { padding: 10px 14px; border-radius: var(--radius-lg); background: var(--surface-card); box-shadow: var(--shadow-card); }
+.wk-chat-details-summary { cursor: pointer; color: var(--ink-muted); list-style: none; display: inline-flex; align-items: center; gap: 6px; }
+.wk-chat-details-summary::-webkit-details-marker { display: none; }
+.wk-chat-details-summary::before { content: '▸'; font-size: var(--text-xs); }
+.wk-chat-details[open] > .wk-chat-details-summary::before { content: '▾'; }
+.wk-chat-details[open] > .wk-chat-details-summary { margin-bottom: 8px; }
+
+/* The proposal (plan / hand-over) and a question, inside a message: no box — the message is the frame. */
+.wk-prop--chat { margin: 6px 0 0; padding: 0; border: 0; background: none; }
+.wk-chat-body .wk-session-gate-row, .wk-chat-body .wk-session-gate { margin: 0; }
+
+/* A run's step is executing: one quiet line, three soft dots. */
+.wk-chat-working { margin: 0; display: flex; align-items: center; gap: 8px; color: var(--ink-muted); font-size: var(--text-sm); }
+.wk-chat-working-who { color: var(--ink-high); font-weight: var(--weight-semi); }
+.wk-chat-working-dots { display: inline-flex; gap: 3px; width: 22px; justify-content: center; }
+.wk-chat-working-dots i { width: 5px; height: 5px; border-radius: var(--radius-full); background: var(--ink-muted); animation: wk-chat-dot 1.2s infinite ease-in-out; }
+.wk-chat-working-dots i:nth-child(2) { animation-delay: 0.15s; }
+.wk-chat-working-dots i:nth-child(3) { animation-delay: 0.3s; }
+@keyframes wk-chat-dot { 0%, 80%, 100% { opacity: 0.25; } 40% { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .wk-chat-working-dots i { animation: none; opacity: 0.6; } }
+
+/* A conversation crew reclaimed: a centred divider, not a speaker. */
+.wk-chat-divider { margin: 0; display: flex; align-items: center; gap: 12px; font-size: var(--text-xs); color: var(--ink-dim); text-align: center; }
+.wk-chat-divider::before, .wk-chat-divider::after { content: ''; flex: 1 1 0; height: 1px; background: var(--border-subtle); }
+
+/* The details toggle in the session header. */
+.wk-chat-details-toggle {
+  display: inline-flex; align-items: center; gap: 6px; height: var(--control-h); padding: 0 12px; border-radius: var(--radius-md);
+  border: 1px solid var(--border); background: var(--surface-card); color: var(--ink-body); font: inherit; font-size: var(--text-sm); cursor: pointer;
+}
+.wk-chat-details-toggle:hover, .wk-chat-details-toggle:focus-visible { border-color: var(--border-strong); color: var(--ink-high); }
+.wk-chat-details-toggle--on { background: var(--surface-raised); color: var(--ink-high); }
+.wk-chat-details-icon { width: 14px; height: 12px; border: 1.5px solid currentColor; border-radius: 3px; position: relative; }
+.wk-chat-details-icon::after { content: ''; position: absolute; top: 0; bottom: 0; right: 3px; width: 1.5px; background: currentColor; }
+
+@media (max-width: 767px) {
+  .wk-session-thread { gap: 18px; font-size: var(--text-md); }
+  .wk-chat-details { margin-left: 0; }
+  .wk-session-turn--you, .wk-chat-msg--you { max-width: 88%; }
+  .wk-chat-details-toggle { min-height: var(--tap-min); }
+  .wk-chat-chip { min-height: var(--tap-min); }
+}
+
+/* Code blocks everywhere markdown renders: language + Copy over the code; the fence's own dress steps back. */
+.wk-md-pre { border-radius: var(--radius-lg); background: var(--surface-base); overflow: hidden; box-shadow: 0 0 0 1px var(--border-subtle); }
+.wk-md-pre > pre { margin: 0; }
+.wk-md-pre > pre > code { margin: 0 !important; border-radius: 0 !important; background: none !important; }
+.wk-session-thread .wk-md-pre > pre > code { font-size: var(--text-sm); line-height: 1.6; }
+.wk-chat-md li, .wk-session-turn--helper .wk-session-text li { font-size: inherit; }
+.wk-session-thread .wk-who-dot { display: inline-flex; align-items: center; justify-content: center; }
+.wk-session-thread .wk-who-dot::after { content: attr(data-initial); font-size: 11px; font-weight: var(--weight-semi); color: var(--ink-high); line-height: 1; }
+.wk-session-thread .wk-md-pre pre { padding: 0; }
+.wk-md-pre > pre > code { padding: 12px 14px !important; }
+/* Operator 2026-10-17 (answer 1): an agent's turn is a BUBBLE — left-aligned, its speaker named above it with the
+   round initial, its corner nearest the speaker squared; distinct from your right-aligned bubble (raised fill). */
+.wk-chat-body, .wk-session-turn--helper > .wk-session-text {
+  box-sizing: border-box; width: fit-content; max-width: 88%; min-width: min(240px, 100%); margin: 0 0 0 30px;
+  padding: 12px 16px; border-radius: 18px; border-top-left-radius: var(--radius-sm);
+  background: var(--surface-card); border: 1px solid var(--border-subtle); box-shadow: var(--shadow-card); color: var(--ink-body);
+}
+.wk-session-turn--helper.wk-session-turn--pending > .wk-session-text { border-style: dashed; box-shadow: none; }
+.wk-chat-body .wk-md-pre, .wk-session-turn--helper .wk-md-pre { background: var(--surface-base); }
+@media (max-width: 767px) {
+  .wk-chat-body, .wk-session-turn--helper > .wk-session-text { margin-left: 0; max-width: 92%; }
+}
+
+/* The details panel's Record section says nothing when the run recorded no such lines. */
+[data-testid="run-tab-record"]:not(:has(> :nth-child(2))) { display: none; }
+.wk-chat-run-title.wk-session-run-title { flex: none; color: var(--ink-muted); font-weight: var(--weight-semi); white-space: normal; }
+/* Phone: the header stays one row — the title (two lines at most), then Details as an icon and ⋯. */
+@media (max-width: 767px) {
+  .wk-session-head { flex-wrap: nowrap; }
+  .wk-session-head-body { flex: 1 1 auto; min-width: 0; }
+  .wk-chat-details-toggle { width: var(--tap-min); padding: 0; justify-content: center; flex-shrink: 0; }
+  .wk-chat-details-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .wk-session-head .wk-sheet-open { flex-shrink: 0; }
+}
+/* An agent's message that carries what it made: the bubble spans the column so the preview card keeps its measure. */
+.wk-chat-msg--wide > .wk-chat-body { width: calc(100% - 30px); max-width: calc(100% - 30px); padding: 10px; }
+.wk-chat-msg--wide > .wk-chat-body > [data-testid="run-artifacts"] { display: flex; flex-direction: column; gap: 10px; }
+@media (max-width: 767px) { .wk-chat-msg--wide > .wk-chat-body { width: 100%; max-width: 100%; } }
+/* While what it made is open beside the conversation (or full screen), its bubble says where it went. */
+.wk-chat-msg--wide > .wk-chat-body:has([data-testid="artifact"][data-size="pane"], [data-testid="artifact"][data-size="full"]):not(:has([data-testid="artifact"][data-size="inline"]))::after {
+  content: 'Open beside the conversation'; display: block; padding: 2px 6px; font-size: var(--text-sm); color: var(--ink-muted);
+}
+/* The run keeps its old class (wrapping and phone tap-target rules in session.css still apply — codex r3 #2), with the
+   card's own box removed: the run is its messages now. */
+.wk-chat-run.wk-session-run { background: none; border: 0; border-radius: 0; padding: 0; }
+.wk-chat-run .wk-prop-btns { flex-wrap: wrap; }
+/* studio#663 in the chat: the kickoff is a full bubble; only a very long one is clamped (8 lines) until Show all. */
+.wk-session-turn--kickoff:not(.wk-session-turn--you) { display: block; }
+.wk-session-turn--you.wk-session-turn--kickoff > .wk-session-text {
+  white-space: pre-wrap; overflow: hidden; text-overflow: clip; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 8;
+  font-size: inherit; line-height: inherit; padding: 10px 16px;
+}
+.wk-session-turn--you.wk-session-turn--kickoff-open > .wk-session-text { display: block; -webkit-line-clamp: none; overflow: visible; }
+.wk-session-turn--you.wk-session-turn--kickoff { padding: 0; }

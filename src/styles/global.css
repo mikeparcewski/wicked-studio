@@ -18,6 +18,7 @@
 @import './components.css';
 @import './sections/desk.css';
 @import './sections/session.css';
+@import './sections/chat-native.css';
 @import './sections/composer.css';
 @import './sections/everything.css';
 @import './sections/steering-testing.css';

@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { Components } from 'react-markdown';
@@ -114,6 +114,39 @@ function codeElement({
   );
 }
 
+/** The text and language of a fenced block's `code` child (react-markdown hands `pre` the rendered `code`). */
+function fenceOf(children: React.ReactNode): { text: string; lang: string | null } {
+  const child = Array.isArray(children) ? children[0] : children;
+  const props = (child as { props?: { className?: string; children?: React.ReactNode } } | null)?.props;
+  const raw = props?.children;
+  const text = typeof raw === 'string' ? raw : Array.isArray(raw) ? raw.filter((x) => typeof x === 'string').join('') : '';
+  const lang = /language-([\w+-]+)/.exec(props?.className ?? '')?.[1] ?? null;
+  return { text: text.replace(/\n$/, ''), lang };
+}
+
+/** A fenced code block with its language and a Copy button (DES-CHAT-NATIVE-RUN: "code blocks with copy"). */
+function CodeBlock({ children }: { children?: React.ReactNode }): React.ReactElement {
+  const { text, lang } = fenceOf(children);
+  const [copied, setCopied] = useState<'idle' | 'copied' | 'failed'>('idle');
+  const copy = (): void => {
+    const clip = typeof navigator === 'undefined' ? undefined : navigator.clipboard;
+    if (clip === undefined || typeof clip.writeText !== 'function') { setCopied('failed'); return; }
+    clip.writeText(text).then(() => setCopied('copied'), () => setCopied('failed'));
+    setTimeout(() => setCopied('idle'), 2000);
+  };
+  return (
+    <div data-testid="md-code-block" className="wk-md-pre my-2">
+      <div className="wk-md-pre-head">
+        <span>{lang ?? 'code'}</span>
+        <button type="button" data-testid="md-code-copy" onClick={copy} aria-label={lang !== null ? `Copy the ${lang} code` : 'Copy the code'} className="wk-md-pre-copy">
+          {copied === 'copied' ? 'Copied' : copied === 'failed' ? 'Copy failed' : 'Copy'}
+        </button>
+      </div>
+      <pre>{children}</pre>
+    </div>
+  );
+}
+
 const components: Components = {
   h1: ({ children }) => <h1 className="text-lg font-bold mt-4 mb-2" style={{ color: 'var(--ink-high)' }}>{children}</h1>,
   h2: ({ children }) => <h2 className="text-base font-bold mt-3 mb-1.5" style={{ color: 'var(--ink-high)' }}>{children}</h2>,
@@ -130,7 +163,7 @@ const components: Components = {
     </span>
   ),
   code: codeElement,
-  pre: ({ children }) => <pre className="my-2">{children}</pre>,
+  pre: ({ children }) => <CodeBlock>{children}</CodeBlock>,
   blockquote: ({ children }) => (
     <blockquote
       className="pl-3 my-2 italic text-sm"

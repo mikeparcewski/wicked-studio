@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { recordingGateActions } from '../editorPorts/RecordingGateActions.js';
 import type { ArtifactSize } from '../../board/artifactMorph.js';
-import { producerOf } from '../../board/responder.js';
+import { producerOf, type Responder } from '../../board/responder.js';
 import { useRoster } from '../../hooks/useRoster.js';
 import { TurnWho } from './TurnWho.js';
 import { isDemoRun } from '../../api/demo.js';
@@ -83,25 +83,36 @@ export function demoVideoProjectOf(view: SessionView | null | undefined, made: r
   return made.some((d) => { const k = editorKindOf(d.style); return k === 'deck' || k === 'document'; }) ? projectId : null;
 }
 
-export function RunArtifacts({ view, composerKey, chain }: { view: SessionView; composerKey: string; chain?: ChainModel }): React.ReactElement | null {
+export function RunArtifacts({ view, composerKey, chain, only, frame }: {
+  view: SessionView; composerKey: string; chain?: ChainModel;
+  /** DES-CHAT-NATIVE-RUN: the chat thread draws the plan editor only when you press Edit on the plan (`plan`),
+   *  and what the run made everywhere else (`made`). Absent: both, as before. */
+  only?: 'plan' | 'made';
+  /** DES-CHAT-NATIVE-RUN: the host's frame for the artifacts — the chat puts them in the producing agent's message
+   *  bubble (who made it, "made this", then the preview cards). Absent: the "who · made this" line above them. */
+  frame?: (who: Responder, suffix: string, cards: React.ReactNode) => React.ReactElement;
+}): React.ReactElement | null {
   const projectId = projectOf(view);
   const runId = view.session.id;
   const roots = useCapabilities((s) => s.walkthroughRoots);
   // WT-U1 / EP-D3: the run's walkthrough (its `walkthrough_review` step) and a demo run's video open
   // in the same slot — a recording is a run's artifact whether or not the run is filed.
-  const walkStep = walkthroughStepOf(chain, roots);
-  const demo = isDemoRun(view);
-  const mine = useRunDocs(view);
+  const made = only !== 'plan';
+  const walkStep = made ? walkthroughStepOf(chain, roots) : null;
+  const demo = made && isDemoRun(view);
+  const docs = useRunDocs(view);
+  const mine = made ? docs : [];
   // S10: a planned run's plan is its artifact too — the ordered editor, while the run is going.
-  const plan = hasPlanEditor(view, chain);
+  const plan = only !== 'made' && hasPlanEditor(view, chain);
   const count = mine.length + (walkStep !== null ? 1 : 0) + (demo ? 1 : 0) + (plan ? 1 : 0);
   const roster = useRoster();
   const producer = producerOf(view, roster);
   if (count === 0) return null;
-  return (
+  const suffix = count === 1 ? 'made this' : 'made these';
+  const cards = (
     <div data-testid="run-artifacts" data-run-id={runId} data-count={count}>
-      {/* H3: who made what is shown below — the seat of the run's newest step that ran (HOST-API §2 producedBy). */}
-      <TurnWho who={producer} runId={runId} suffix={count === 1 ? 'made this' : 'made these'} className="wk-who--made" />
+      {/* H3: who made what is shown with them — the seat of the run's newest step that ran (HOST-API §2 producedBy). */}
+      {frame === undefined && <TurnWho who={producer} runId={runId} suffix={suffix} className="wk-who--made" />}
       {plan && chain !== undefined && (
         <ArtifactMorph
           artifactKey={artifactKey('run', 'plan', runId)} title="Plan" projectId={projectId ?? ''} docId="" composerKey={composerKey}
@@ -134,6 +145,7 @@ export function RunArtifacts({ view, composerKey, chain }: { view: SessionView; 
       ))}
     </div>
   );
+  return frame !== undefined ? frame(producer, suffix, cards) : cards;
 }
 
 /**

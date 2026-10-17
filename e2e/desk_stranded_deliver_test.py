@@ -18,8 +18,8 @@ with a PR url.
      verbatim under "Delivery failed — the run is still stranded."; the button stays.
   4. DELIVERED: a second press sends one more POST (two in all); the card becomes the receipt with
      the pull request link the POST answered.
-  5. A FRESH LOAD OF A DELIVERED RUN: /s/run%3Ar-handed shows "Finished · delivered" with its PR link,
-     with no gate and no receipt in this browser.
+  5. A FRESH LOAD OF A DELIVERED RUN: /s/run%3Ar-handed ends on its final message ("Done. … Pull request #N is
+     open.") with the PR link as a chip, with no gate and no receipt in this browser (DES-CHAT-NATIVE-RUN).
   6. 0 page errors.
 
 Captures: e2e/shots/desk-stranded-deliver-*.png. Env: FEEDBACK_PORT (default 4473). Prints a JSON
@@ -183,15 +183,15 @@ with sync_playwright() as p:
     page.screenshot(path=str(SHOTS / "desk-stranded-deliver-delivered.png"))
     check("delivered-receipt", state["posts"] == 2 and pr == PR_POSTED, posts=state["posts"], pr=pr)
 
-    # ── 5. a delivered run opened fresh shows its receipt and link ──────────────────────────────
+    # ── 5. a delivered run opened fresh shows its outcome and link — DES-CHAT-NATIVE-RUN: in its final message ──
     page.goto(f"{origin}/s/run%3A{HANDED}", wait_until="networkidle")
-    prop = page.locator(f'[data-testid="session-proposal"][data-run-id="{HANDED}"]')
-    prop.wait_for(state="visible", timeout=10000)
-    out = prop.get_by_test_id("session-proposal-outcome").inner_text().strip()
-    link = prop.get_by_test_id("session-proposal-pr").get_attribute("href")
+    final = page.locator(f'[data-testid="session-run"][data-run-id="{HANDED}"] [data-testid="chat-final"]')
+    final.wait_for(state="visible", timeout=10000)
+    out = final.get_by_test_id("chat-final-text").inner_text().strip()
+    link = final.get_by_test_id("chat-final-pr").get_attribute("href")
     page.screenshot(path=str(SHOTS / "desk-stranded-deliver-fresh.png"))
-    check("fresh-receipt", prop.get_attribute("data-state") == "done" and out == "Finished · delivered"
-          and link == PR_HANDED, state=prop.get_attribute("data-state"), out=out, link=link)
+    check("fresh-receipt", final.get_attribute("data-kind") == "completed" and out.startswith("Done.") and "Pull request #" in out
+          and link == PR_HANDED, out=out, link=link)
 
     check("no-page-errors", not errors, errors=errors[:5])
     browser.close()
