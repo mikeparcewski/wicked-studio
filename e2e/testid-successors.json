@@ -871,6 +871,10 @@
     "artifact-export-file": "artifact-export-download",
     "doc-coverage": "host-panel-frame",
     "doc-coverage-line": "host-panel-frame",
-    "doc-coverage-row": "host-panel-frame"
+    "doc-coverage-row": "host-panel-frame",
+    "seat-freetier-*": "agents-free-tier",
+    "seat-logout-*": "agents-signout-run",
+    "seat-signin-*": "agents-signin",
+    "seat-logout-line": "agents-signout-terminal"
   }
 }

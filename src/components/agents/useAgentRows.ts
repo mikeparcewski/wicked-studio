@@ -15,6 +15,20 @@ export function storedDefaults(): string[] | null {
   }
 }
 
+/**
+ * Pick an agent for new work, or leave it out (the stored defaults the composers read). Written as the
+ * whole list of picked agents, so the default rule stops applying once a choice is made; every surface
+ * that reads the rows hears it at once (a `storage` event).
+ */
+export function setPickedForNewWork(rows: readonly AgentRow[], key: string, on: boolean): void {
+  const picked = rows.filter((r) => r.picked).map((r) => r.key);
+  const next = on ? [...new Set([...picked, key])] : picked.filter((k) => k !== key);
+  try {
+    globalThis.localStorage?.setItem(DEFAULT_CLIS_KEY, JSON.stringify(next));
+    window.dispatchEvent(new StorageEvent('storage', { key: DEFAULT_CLIS_KEY }));
+  } catch { /* storage unavailable: the choice stays as it was */ }
+}
+
 export interface AgentRowsView {
   rows: AgentRow[];
   /** A roster is in hand (read now, or kept from an earlier read). */

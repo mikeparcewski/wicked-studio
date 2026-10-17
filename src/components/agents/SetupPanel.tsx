@@ -1,6 +1,6 @@
 import { useEffect, useId, useState } from 'react';
 import { Check } from 'lucide-react';
-import { DEFAULT_CLIS_KEY } from '../../board/docSeats.js';
+import { setPickedForNewWork } from './useAgentRows.js';
 import { goodEnough, setupAgents, setupMove, setupSettled, setupSteps } from '../../board/firstUse.js';
 import type { AgentRow } from '../../board/agentsModel.js';
 import type { Navigate } from '../../hooks/useRoute.js';
@@ -21,11 +21,7 @@ function names(rows: readonly AgentRow[]): string {
 
 /** Turn one agent on for new work in the stored defaults (the composer's own key, until S2 moves it). */
 function pickForNewWork(rows: readonly AgentRow[], key: string): void {
-  const next = [...new Set([...rows.filter((r) => r.picked).map((r) => r.key), key])];
-  try {
-    globalThis.localStorage?.setItem(DEFAULT_CLIS_KEY, JSON.stringify(next));
-    window.dispatchEvent(new StorageEvent('storage', { key: DEFAULT_CLIS_KEY }));
-  } catch { /* storage unavailable: the step stays as it was */ }
+  setPickedForNewWork(rows, key, true);
 }
 
 function Step({ n, done, testId, children }: { n: number; done: boolean; testId: string; children: React.ReactNode }): React.ReactElement {

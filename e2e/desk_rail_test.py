@@ -196,10 +196,11 @@ with sync_playwright() as p:
     unfiled.wait_for(state="visible", timeout=5000)
     label = unfiled.get_attribute("aria-label")
     unfiled.click()
-    page.wait_for_function("() => window.location.pathname === '/everything'", timeout=5000)
+    # 2026-10-16: "Not in a project" opens its own dashboard, the same ProjectDesk every project has.
+    page.wait_for_function("() => window.location.pathname === '/projects/default'", timeout=5000)
     where = page.evaluate("() => window.location.pathname + window.location.search")
-    page.get_by_test_id("projects-unfiled").wait_for(state="visible", timeout=8000)
-    check("group-icons", dash == f"/projects/{pid}" and label == "Open work not in a project" and where == "/everything?tab=projects",
+    page.get_by_test_id("project-desk").wait_for(state="visible", timeout=8000)
+    check("group-icons", dash == f"/projects/{pid}" and label == "Open work not in a project" and where == "/projects/default",
           dash=dash, pid=pid, label=label, where=where)
     set_fixture(origin, project_dto=False)
 

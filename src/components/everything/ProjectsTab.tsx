@@ -6,7 +6,7 @@ import { everythingPath, type EverythingQuery } from '../../board/everythingMode
 import { filterProjectRows, projectRows, type ProjectRow } from '../../board/projectsModel.js';
 import type { NeedRow } from '../../board/needsYou.js';
 import { useBoardModel } from '../../hooks/useBoardModel.js';
-import type { Navigate } from '../../hooks/useRoute.js';
+import { projectDetailPath, type Navigate } from '../../hooks/useRoute.js';
 import { useCapabilities } from '../../store/capabilities.js';
 import { useDeliveredNow } from '../../store/postHocDeliver.js';
 import { useProjectsStore } from '../../store/projects.js';
@@ -148,7 +148,9 @@ export function ProjectsTab({ q, runs, runsLoaded = true, runsError = null, onRe
         <h2 className="wk-project-title">Not in a project</h2>
         <StatLine items={[{ label: unfiled === 1 ? 'session' : 'sessions', value: unfiled }]} />
         <div className="wk-project-actions">
-          <a href={everythingPath({ tab: 'sessions' })} className="wk-btn wk-btn--sm wk-btn--secondary" data-testid="projects-unfiled-open" onClick={(e) => { e.preventDefault(); navigate(everythingPath({ tab: 'sessions' })); }}>See them in Sessions</a>
+          {/* Its dashboard is a project's dashboard (operator 2026-10-16), like every card beside it. */}
+          <a href={projectDetailPath('default')} className="wk-btn wk-btn--sm wk-btn--secondary" data-testid="projects-unfiled-open" onClick={(e) => { e.preventDefault(); navigate(projectDetailPath('default')); }}>Open</a>
+          <a href={everythingPath({ tab: 'sessions' })} className="wk-btn wk-btn--sm wk-btn--quiet" data-testid="projects-unfiled-sessions" onClick={(e) => { e.preventDefault(); navigate(everythingPath({ tab: 'sessions' })); }}>See them in Sessions</a>
         </div>
       </section>
     )}
