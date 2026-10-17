@@ -18,9 +18,9 @@ test.describe('insight rail [data-rail]', () => {
     await expect(rail.locator('[data-rail-chip].is-active')).toHaveText('Burn');
     await expect(line).toContainText('Tokens, cost, and rework');
 
-    // Click Term → the PTY caption, with the real WS route.
+    // Click Term → the terminal caption.
     await rail.getByRole('button', { name: 'Term', exact: true }).click();
-    await expect(line).toContainText('/ws/terminals/:id');
+    await expect(line).toContainText('real terminal');
     await expect(rail.locator('[data-rail-chip].is-active')).toHaveText('Term');
 
     // Click Decisions → the ledger caption.

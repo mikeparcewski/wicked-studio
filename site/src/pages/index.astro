@@ -36,13 +36,21 @@
  *  - Governance vocabulary (deny-dominates, evaluator ≠ creator, gates) is
  *    crew's — studio SURFACES it, it does not own it. The skin never grades
  *    anything.
- *  - Panels named on the board are the SPA's real routes (useRoute.ts):
- *    runs, work, chats, workflows, steering, testing, repos. The governance
- *    panel is STEERING (`/steering/{policies,memories}`) — the seven-type rule
- *    corpus and the memory store, each with a propose→promote queue. The old
- *    policies/rules/coverage/domain panels retired: policies+rules folded into
- *    Steering, coverage+domain into System. The requirements/domain graph is
- *    elevated to its own "forward view" section, not an auto-cycling panel.
+ *  - Panels named on the board are the Desk's real tabs (DESK_TABS in
+ *    src/components/desk/DeskV2.tsx): Work, Runs, Repositories, Report,
+ *    Understand, Steer, Memory, Agents, Evaluate. Steer (`/rules`) and Memory
+ *    (`/memory`) are separate peers: rules are enforceable, with an explicit
+ *    reach (all projects, one project, one repo); memory is what happened and
+ *    what you told it. Memory is NOT inside Steering.
+ *  - Public words (operator decisions 2026-10-17): job (the UI's "New job"),
+ *    agent (not seat), sandbox (not floor/container in headlines), rules (not
+ *    steering doctrine). A review on the builder's own agent is REFUSED unless
+ *    the job is launched with reduced assurance (crew 0.9.0 EX-01), so never
+ *    describe a "single runner" fallback.
+ *  - Agents run in containers by default: Claude Code, Codex, Copilot,
+ *    OpenCode and Pi have sandbox images; credentials stay in a broker and the
+ *    sandbox sees only placeholders. Demo recordings are captioned screen
+ *    recordings with no voice-over (wicked-interactive demo-cut.js renders -an).
  */
 import Base from 'wicked-web/layouts/Base.astro';
 import Topbar from 'wicked-web/components/Topbar.astro';
@@ -50,39 +58,39 @@ import Footer from 'wicked-web/components/Footer.astro';
 import SameGarden from 'wicked-web/components/SameGarden.astro';
 import '../styles/studio.css';
 
-const title = 'wicked-studio — no agent approves its own work';
+const title = 'wicked-studio — where you direct your coding agents';
 // Same attribution boundary as the on-page copy: the DAEMON drives the CLIs, studio is its
 // client. This string is what search results and social cards show, so it is read far more often
 // than the page — getting the boundary right on the page and wrong here would put the inaccurate
 // version in front of most people who ever see either.
 const description =
-  'Where product work happens: brainstorm it, build it under a check no agent can approve on its own, then produce the doc, deck or demo. A browser client of the wicked-crew daemon, which drives the coding CLIs you already pay for — on your own machine.';
+  'Where you direct your coding agents. Start a job with a chat; it proposes a plan and nothing starts until you confirm it. Your own agents (Claude Code, Codex, Copilot, OpenCode, Pi), signed in once on the Agents tab, work in sandboxes run by the wicked-crew daemon on your machine. No agent can approve its own work: a different agent reviews it, and every decision that matters waits for you with the evidence.';
 const repo = 'https://github.com/mikeparcewski/wicked-studio';
 
 // The SPA's real surfaces (src/App.tsx — the Desk is the one shell since the classic skins
 // retired), each fed by a real /api/v1 route (src/api/client.ts). The board auto-cycles; click to pin.
 const PANELS = [
-  { id: 'desk',      api: 'GET /runs · WS /ws',            line: 'The Desk — the one shell: what needs you first (gates, questions, stalled seats), then what is in flight. Launch from a brief or a chat right here.' },
-  { id: 'session',   api: 'GET /runs/:id/events · WS /ws', line: 'Every run or chat is one thread: the live record, gate rows you answer in place, the composer to steer. Old /runs/:id links land here.' },
-  { id: 'everything', api: 'GET /runs · GET /projects',     line: 'Sessions, everything made, helpers, handed-over work and projects in one place, scoped by project — what’s streaming, what’s held at a gate, what landed.' },
-  { id: 'product',    api: 'GET /projects/:id/requirements', line: 'What you are building: one project’s requirements across all its repos. Choose some, and Draft epics starts a governed draft → review → approve run in its own session.' },
-  { id: 'chats',     api: 'POST /chats',                   line: 'Chat with one or several warm seats: each answers in the thread, and every path, path:line and commit a reply cites is checked against the repo.' },
-  { id: 'workflows',  api: 'GET /workflows',                 line: 'The WorkflowDef JSON that will drive a run — phases, gates, validation — inspected before you commit a brief to it.' },
-  { id: 'steering',   api: 'GET /governance/rules · /proposals', line: 'The governance surface: the seven-type steering-rule corpus and the memory store, each with a proposals queue — agents propose, you promote. The skin surfaces the rules; it never grades.' },
-  { id: 'testing',    api: 'POST /testing/evals/run',        line: 'Run the seven steering types against your own dev-behavior corpora — each verdict lands caught, gap, or false-positive, so a rule earns its keep before it governs a run.' },
-  { id: 'repos',      api: 'POST /repos',                    line: 'Registered repos, their onboarding runs, and code-graph summaries — the ground the workers stand on.' },
+  { id: 'work',         api: 'GET /runs · WS /ws',             line: 'What needs you first (gates, questions, stalled agents), then what is in flight. Start a New job here, with a chat or a short brief.' },
+  { id: 'runs',         api: 'GET /runs/:id/events · WS /ws',  line: 'Every job as one thread: the live record, the gates you answer in place, and a composer to add a note mid-job.' },
+  { id: 'repositories', api: 'POST /repos',                    line: 'Your registered repos, their onboarding jobs, and code-graph summaries: the ground your agents stand on.' },
+  { id: 'report',       api: 'GET /runs',                      line: 'What your agents did over the last days: outcomes and spend, by project, with a one-click question to chat about it.' },
+  { id: 'understand',   api: 'POST /runs',                     line: 'Pick jobs, repos or agents and compare them side by side, then start an analysis job on the selection.' },
+  { id: 'steer',        api: 'GET /governance/rules',          line: 'Your rules, each with its reach: everywhere, one project, or one repo. Agents propose new ones; you approve or reject.' },
+  { id: 'memory',       api: 'GET /memory',                    line: 'What happened and what you told it, kept apart from the rules. Your own memories apply across projects; see, edit, or erase any one.' },
+  { id: 'agents',       api: 'POST /seats/:cli/container-login', line: 'Sign in each agent once (Claude Code, Codex, Copilot, OpenCode, Pi). Credentials stay in a broker; the sandboxes only see placeholders.' },
+  { id: 'evaluate',     api: 'POST /testing/evals/run',        line: 'Run your rules against your own dev-behavior examples. Each lands caught, gap, or false-positive, so a rule earns its keep before it checks a job.' },
 ];
 
 // The insight rail: the per-run panels fed by the CoreEvent stream.
 const RAIL = [
-  { id: 'Burn',        line: 'Tokens, cost, and rework per CLI — live during the run, not on the invoice.' },
+  { id: 'Burn',        line: 'Tokens, cost, and rework per agent — live during the job, not on the invoice.' },
   { id: 'Decisions',   line: 'Every human call on the record: who approved what, when, and why.' },
-  { id: 'Governance',  line: 'The audit view: which steering rules were checked, which verdicts held the run.' },
+  { id: 'Governance',  line: 'The audit view: which rules were checked, which verdicts held the job.' },
   { id: 'Assumptions', line: 'External transforms recorded with honest confidence — needs-research is badged for you.' },
   { id: 'Steering',    line: 'The timeline of gates raised and answered — approve, amend, reject.' },
-  { id: 'Files',       line: 'The diffs each unit produced, straight from the worktree.' },
-  { id: 'Term',        line: 'A real PTY into the worker’s worktree — raw bytes over /ws/terminals/:id.' },
-  { id: 'Cov',         line: 'Repo-scoped coverage, one click from the run that changed it.' },
+  { id: 'Files',       line: 'The diffs each step produced, straight from the working copy.' },
+  { id: 'Term',        line: 'A real terminal into the agent’s working copy.' },
+  { id: 'Cov',         line: 'Repo-scoped coverage, one click from the job that changed it.' },
 ];
 
 // Injected at build time from the repo's package.json via astro.config.mjs
@@ -97,20 +105,20 @@ const studioVersion = __WICKED_STUDIO_VERSION__;
   <section class="hero">
     <div class="amber-floor" aria-hidden="true"></div>
     <div class="wrap hero-head">
-      <div class="kicker kicker--plane">brainstorm it, build it, then produce the thing you show people</div>
+      <div class="kicker kicker--plane">where you direct your coding agents</div>
       <!-- No forced <br>. It used to sit after "work", which bought a THIRD line (the first
            clause wrapped anyway) and — since a <br> contributes no text node — shipped the
            textContent as "...own workinto your codebase.". A real space, and 66px cheaper. -->
       <h1>No agent can approve its own work <span class="y">into your codebase.</span></h1>
       <p class="lede">
-        The daemon behind it drives the coding CLIs you already pay for, on your own machine, and calls a
-        change done only when a <b>deterministic check passes</b>. A second agent judges it too — and
-        <b>can reject, but is never enough to approve</b>.
+        Start a job with a <b>chat</b> and confirm its plan. The daemon behind it runs your own agents
+        in <b>sandboxes</b>; a change is done only when <b>automated checks pass</b>, and a <b>different
+        agent</b> reviews it — it <b>can reject, but never approves alone</b>.
       </p>
       <p class="fine">
-        The judge is identity-distinct where the roster allows one and a single runner where it doesn’t,
-        so the <b>veto</b> is the guarantee, not the separation. Brainstorms, docs and demos share the
-        project, <b>not that check</b>. Below is not a mock — it <b>is</b> the interface.
+        With one agent signed in, the job stops — unless you launch it as <b>reduced assurance</b>,
+        labelled everywhere. Docs and demos share the project, <b>not that check</b>. Below is the
+        interface — drive it.
       </p>
     </div>
 
@@ -119,18 +127,18 @@ const studioVersion = __WICKED_STUDIO_VERSION__;
            LiveOutput → the feed, SteeringGate → the gate, AgentTerminal → the
            term line, InsightRail → the chips). Auto-runs on scroll-in, then
            hands you the wheel at the gate. Vocabulary = real /api/v1 routes. -->
-      <div class="console" data-console aria-label="wicked-studio — launch, watch, and steer a governed run">
+      <div class="console" data-console aria-label="wicked-studio — start a job, watch it, answer its gate">
         <div class="mock-bar">
           <span class="mock-dots"><i></i><i></i><i></i></span>
           <span class="mock-url">127.0.0.1:7701 · served by your crew daemon · same-origin</span>
         </div>
         <div class="console-body">
           <form class="console-launch" data-console-launch>
-            <label class="cl-k" for="console-brief">launch a run</label>
+            <label class="cl-k" for="console-brief">new job · start with chat</label>
             <input id="console-brief" class="cl-input" data-console-input type="text"
                    value="add rate-limiting to the public API" autocomplete="off" spellcheck="false"
-                   aria-label="Brief — launch a governed run from a plain-text problem" />
-            <button type="submit" class="cl-go" data-console-go>Launch ↵</button>
+                   aria-label="What you want — start a job from plain text" />
+            <button type="submit" class="cl-go" data-console-go>Start ↵</button>
           </form>
           <div class="console-cols">
             <div class="console-feed" data-console-feed role="log" aria-live="polite" aria-label="live CoreEvent feed">
@@ -142,18 +150,18 @@ const studioVersion = __WICKED_STUDIO_VERSION__;
                    of the console row. A verdict badge belongs in a panel header anyway. -->
               <div class="cg-head">
                 <span class="cg-stamp" data-cg-stamp>DENY</span>
-                <span class="cg-k">steering gate · awaiting your decision</span>
+                <span class="cg-k">gate · waiting for your decision</span>
               </div>
               <span class="cg-t" data-cg-t>schema-drift · re-verified against the worktree</span>
               <div class="cg-actions">
                 <button type="button" class="cg-btn cg-btn--ok" data-cg-action="approve">Approve</button>
-                <button type="button" class="cg-btn" data-cg-action="steer">Approve with steer</button>
+                <button type="button" class="cg-btn" data-cg-action="steer">Approve with a note</button>
                 <button type="button" class="cg-btn" data-cg-action="reject">Reject</button>
               </div>
             </div>
           </div>
           <div class="console-term">
-            <span class="ct-line" data-console-term><span class="ct-p">studio ›</span> term attach r-7c19 <span class="ct-c"># real PTY · /ws/terminals/:id</span></span>
+            <span class="ct-line" data-console-term><span class="ct-p">studio ›</span> term attach r-7c19 <span class="ct-c"># a real terminal into the job</span></span>
           </div>
           <!-- The insight rail — click a chip to read what that panel answers. -->
           <div class="console-rail" data-rail aria-label="Insight rail panels">
@@ -171,9 +179,9 @@ const studioVersion = __WICKED_STUDIO_VERSION__;
            compact static list. -->
       <div class="console-static">
         <ol class="cs-steps">
-          <li><span class="cs-n">1</span><div><b>Launch</b> a run from a plain-text brief: <code>add rate-limiting to the public API</code></div></li>
-          <li><span class="cs-n">2</span><div><b>Watch</b> live CoreEvents stream over <code>/ws</code> — phase ladder, unit list, burn, diffs</div></li>
-          <li><span class="cs-n">3</span><div><b>Steer</b> the gate — approve, amend, or reject. <span class="cs-chip">schema-drift · DENY → held for you</span></div></li>
+          <li><span class="cs-n">1</span><div><b>Start</b> a job with a chat: <code>add rate-limiting to the public API</code>, then confirm the plan it proposes</div></li>
+          <li><span class="cs-n">2</span><div><b>Watch</b> your sandboxed agents work live — phases, steps, spend, diffs</div></li>
+          <li><span class="cs-n">3</span><div><b>Decide</b> at the gate — approve, add a note, or reject. <span class="cs-chip">schema-drift · FAIL → held for you</span></div></li>
         </ol>
       </div>
     </div>
@@ -183,10 +191,10 @@ const studioVersion = __WICKED_STUDIO_VERSION__;
            two (85px). "the decision is yours" now lives on the gate itself, where it is doing
            work, and "dark / light" was the least load-bearing claim on the page. -->
       <div class="hero-tags" role="list">
-        <span role="listitem">pure client of /api/v1 + /ws</span>
-        <span role="listitem">zero crew source imported</span>
-        <span role="listitem">bundled or standalone</span>
-        <span role="listitem">local-first</span>
+        <span role="listitem">start with chat</span>
+        <span role="listitem">sandboxed agents</span>
+        <span role="listitem">a different agent reviews</span>
+        <span role="listitem">evidence on every gate</span>
       </div>
     </div>
   </section>
@@ -195,16 +203,15 @@ const studioVersion = __WICKED_STUDIO_VERSION__;
   <section class="board" aria-labelledby="board-h">
     <div class="wrap">
       <div class="sec-head sec-head--wide">
-        <div class="kicker">The Desk and its surfaces · the SPA’s real routes</div>
-        <h2 id="board-h">If the daemon exposes it, studio shows it.</h2>
+        <div class="kicker">The Desk · its real tabs</div>
+        <h2 id="board-h">One Desk for everything your agents do.</h2>
         <p class="sec-sub">
-          Every panel below is a real route in the SPA, fed by a real route on the daemon —
-          <b>nothing rendered here is privileged</b>. The governance vocabulary you’ll meet
-          (deny-dominates gates, evaluator ≠ creator) is <a href="https://wc.wickedagile.com">crew’s</a>;
-          studio surfaces it. Wherever the engine recorded one, a gate or a delivery shows the run’s
-          assurance receipt: what was required, what ran, who built and checked it, and what was skipped. So a “Floor-only approval”
-          never reads like “Independently accepted”, and a run launched with reduced assurance says so
-          everywhere. Studio never grades anything. The board auto-cycles — click a panel to pin it.
+          These are the Desk’s tabs, each fed by the same open API your own tools can call. Every gate
+          and delivery shows the job’s receipt: what was required, what ran, who built it, who checked
+          it, and what was skipped. So “passed automated checks, no second agent reviewed it” never reads
+          like “independently accepted”, and a job launched with reduced assurance says so everywhere.
+          The checks are <a href="https://wc.wickedagile.com">crew’s</a>; studio never grades anything.
+          The board auto-cycles — click a tab to pin it.
         </p>
       </div>
 
@@ -219,7 +226,7 @@ const studioVersion = __WICKED_STUDIO_VERSION__;
         </div>
         <div class="board-stage" data-board-stage>
           <div class="board-stage-bar">
-            <span class="bs-name" data-bs-name>desk</span>
+            <span class="bs-name" data-bs-name>{PANELS[0].id}</span>
             <code class="bs-api" data-bs-api>{PANELS[0].api}</code>
           </div>
           <p class="bs-line" data-bs-line>{PANELS[0].line}</p>
@@ -234,54 +241,52 @@ const studioVersion = __WICKED_STUDIO_VERSION__;
     </div>
   </section>
 
-  <!-- ── Steering + governed knowledge — governance is more than a gate ───── -->
+  <!-- ── Rules, memory, knowledge — three peers, not one box (DES-memory-vs-knowledge) ── -->
   <section class="steer" aria-labelledby="steer-h">
     <div class="wrap">
       <div class="sec-head sec-head--wide">
-        <div class="kicker">Governance · steering, not a settings page</div>
-        <h2 id="steer-h">The gate is the floor. Steering is the doctrine.</h2>
+        <div class="kicker">Rules · memory · knowledge — three different things</div>
+        <h2 id="steer-h">Rules you set. Memory you can edit. Knowledge it learned.</h2>
         <p class="sec-sub">
-          A deny-dominates gate is the deterministic floor a run must clear. <b>Steering</b> is the
-          layer above it: the ecosystem’s doctrine, authored as rules and projected into the record
-          as citable law a run can point at. And the record isn’t written by the agents that use it —
-          they <b>propose</b>, you <b>promote</b>. The vocabulary is
-          <a href="https://wc.wickedagile.com">crew’s</a> and the store is
-          <a href="https://we.wickedagile.com">estate’s</a>; the skin surfaces both and grades nothing.
+          A gate checks the work against <b>rules</b>. <b>Memory</b> is what happened and what you
+          told it. <b>Knowledge</b> is what was learned from your code and docs. They live apart, and
+          the agents that use them never write to them on their own — agents <b>suggest</b>, you
+          <b>approve</b>. The checks are <a href="https://wc.wickedagile.com">crew’s</a> and the store
+          is <a href="https://we.wickedagile.com">estate’s</a>; studio shows both and grades nothing.
         </p>
       </div>
 
       <div class="gk-grid">
         <div class="gk-card">
-          <span class="gk-k">steering · seven types</span>
+          <span class="gk-k">rules · the Steer tab</span>
           <p class="gk-p">
             Rules across <b>architecture, development, security, testing, operations, compliance and
-            design/UX</b> — authored in git or here, projected into the record as rules a run can
-            cite. One home, type-filtered: <code>GET /governance/rules</code>.
+            design/UX</b>, each with an explicit reach: <b>everywhere</b>, <b>one project</b>, or
+            <b>one repo</b>. Authored in git or here; a job’s gate cites the ones it checked.
           </p>
         </div>
         <div class="gk-card">
-          <span class="gk-k">governed knowledge · propose → promote</span>
+          <span class="gk-k">memory · its own tab</span>
           <p class="gk-p">
-            An agent never writes to the record. A run <b>proposes</b> a memory or a policy; it lands
-            <code>pending</code> in a queue with its provenance; you approve or reject. Nothing enters
-            doctrine without a human call — <code>POST /proposals/:id/approve</code>.
+            What happened, and what you told it. Your own memories apply <b>across projects</b>. See,
+            edit or erase any one; a job’s suggested memory waits <code>pending</code>, with where it
+            came from, until you approve or reject it.
           </p>
         </div>
         <div class="gk-card gk-card--limit">
-          <span class="gk-k">the rule that stays in command</span>
+          <span class="gk-k">knowledge · learned from code and docs</span>
           <p class="gk-p">
-            estate’s MCP is <b>read-only</b>; every write rides crew’s governed operator path. The
-            skin shows you the corpus and the queue and <b>never self-writes, never grades</b> — the
-            promote button is yours, and only yours.
+            What estate learned by reading your repos and documents, cited back to the source. It is
+            acquired, not told, so it is kept apart from memory and from the rules.
           </p>
         </div>
       </div>
 
       <p class="gk-foot">
-        The Steering surface is <code>/steering/{'{'}policies,memories{'}'}</code> — one home, two
-        sub-sections, each carrying a manage view <b>and</b> a proposals queue. Run the seven types
-        against your own dev-behavior corpora under <b>Testing</b>; verdicts land caught, gap or
-        false-positive, so a rule earns its keep before it ever governs a run.
+        <b>Steer</b> opens <code>/rules</code> and <b>Memory</b> opens <code>/memory</code>: two tabs,
+        each with its own approve queue. Run your rules against your own dev-behavior examples under
+        <b>Evaluate</b>; each lands caught, gap or false-positive, so a rule earns its keep before it
+        ever checks a job.
       </p>
     </div>
   </section>
@@ -295,7 +300,7 @@ const studioVersion = __WICKED_STUDIO_VERSION__;
         <p class="sec-sub">
           A project groups runs, chats and docs, and its activity feed <b>merges</b> crew’s durable
           core events with the document engine’s bus events carrying the same <code>project_id</code>.
-          A governed run and the deck you write about it land in the <b>same room</b> — flip the lens
+          A job and the deck you write about it land in the <b>same room</b> — flip the lens
           below to centre the same feed on the runs or on the document.
         </p>
       </div>
@@ -311,18 +316,18 @@ const studioVersion = __WICKED_STUDIO_VERSION__;
 
         <!-- The RUNS lens: the merged activity feed centred on the runs. -->
         <ol class="proj-feed proj-feed--studio" aria-label="The project feed centred on the runs">
-          <li><span class="pf-src pf-src--crew">crew</span><code>run r-7c19</code><span class="pf-note">feature workflow · build → adversarial-review → test — held once, steered, landed</span></li>
+          <li><span class="pf-src pf-src--crew">crew</span><code>job r-7c19</code><span class="pf-note">feature workflow · build → adversarial-review → test — held once, noted, landed</span></li>
           <li><span class="pf-src pf-src--crew">crew</span><code>gate decision</code><span class="pf-note">schema-drift DENY → approved with steer · on the decisions ledger</span></li>
           <li><span class="pf-src pf-src--int">interactive</span><code>doc payments-deck</code><span class="pf-note">the document engine’s deck, in this same feed — created, drafted, delivered</span></li>
-          <li><span class="pf-src pf-src--crew">crew</span><code>chat c-2214</code><span class="pf-note">three seats on one chat: “what breaks if we shard the ledger?” — each answered, citations checked</span></li>
+          <li><span class="pf-src pf-src--crew">crew</span><code>chat c-2214</code><span class="pf-note">three agents on one chat: “what breaks if we shard the ledger?” — each answered, citations checked</span></li>
         </ol>
 
         <!-- The DOCUMENT rendering: the same project centred on the document engine's work. -->
         <ol class="proj-feed proj-feed--interactive" aria-label="The project as the document view renders it">
           <li><span class="pf-src pf-src--int">interactive</span><code>wicked.interactive.doc.created</code><span class="pf-note">the deck asks for a first draft — over the bus, from the document engine crew proxies</span></li>
-          <li><span class="pf-src pf-src--crew">crew</span><code>governed run answers</code><span class="pf-note">a crew run drafts it — heartbeats stream while it works</span></li>
+          <li><span class="pf-src pf-src--crew">crew</span><code>a job answers</code><span class="pf-note">a crew job drafts it — heartbeats stream while it works</span></li>
           <li><span class="pf-src pf-src--int">interactive</span><code>wicked.interactive.draft.completed</code><span class="pf-note">a real draft, idempotency-keyed — replays can’t double-deliver</span></li>
-          <li><span class="pf-src pf-src--crew">crew</span><code>run r-7c19 · evidence</code><span class="pf-note">the coder’s run sits in the document view too — same feed, one project</span></li>
+          <li><span class="pf-src pf-src--crew">crew</span><code>job r-7c19 · evidence</code><span class="pf-note">the coder’s job sits in the document view too — same feed, one project</span></li>
         </ol>
 
         <div class="proj-foot">
@@ -357,8 +362,8 @@ const studioVersion = __WICKED_STUDIO_VERSION__;
           <span class="work-k">software · gated</span>
           <h3>Code that clears twice</h3>
           <p>
-            Launch a run against your own repos, watch the worker’s raw output live, clear the gates
-            yourself. A deterministic check and a separate judge must both agree —
+            Start a job against your own repos, watch the agent’s raw output live, clear the gates
+            yourself. Automated checks and a different agent must both agree —
             <b>either can stop it, neither can approve alone</b>.
           </p>
           <p class="work-n">the deepest surface here, by a wide margin</p>
@@ -379,10 +384,10 @@ const studioVersion = __WICKED_STUDIO_VERSION__;
           <span class="work-k">brainstorming</span>
           <h3>Ask several models</h3>
           <p>
-            Put one question to several models in the same thread and see how many seats answered —
-            then hand the thread off as a run the moment it turns into actual work.
+            Put one question to several agents in the same thread and see how many answered —
+            then turn the thread into a job the moment it becomes actual work.
           </p>
-          <p class="work-n">“3 of 5 seats”, or “3 polled” when the count is unknown — never backfilled</p>
+          <p class="work-n">“3 of 5 agents”, or “3 polled” when the count is unknown — never backfilled</p>
         </article>
 
         <article class="work-card">
@@ -390,7 +395,7 @@ const studioVersion = __WICKED_STUDIO_VERSION__;
           <h3>A recorded walkthrough</h3>
           <p>
             A wizard authors the steps; the document service runs them in a real browser and hands
-            back a recording of the click-through — a screen capture, not a narrated film.
+            back a captioned screen recording of the click-through, with title cards and no voice-over.
           </p>
           <p class="work-n">the thinnest surface here — judge it last</p>
         </article>
@@ -398,8 +403,8 @@ const studioVersion = __WICKED_STUDIO_VERSION__;
 
       <p class="work-foot">
         <b>The two-sided check covers code, and only code.</b> Documents do have human gates — an
-        agent asks in the thread, you answer there — but not the deterministic check plus independent
-        judge a code run carries. All four share the project; they do not share that verdict.
+        agent asks in the thread, you answer there — but not the automated checks plus a different
+        agent’s review a code job carries. All four share the project; they do not share that verdict.
         Docs, decks and demos also need wicked-garden and a reachable document service to open at
         all — code runs and chat never gate on either.
       </p>
@@ -424,7 +429,7 @@ const studioVersion = __WICKED_STUDIO_VERSION__;
           <b>“not found”</b> about the other two, confidently, because a per-repo graph has no way
           to know it was asked about something outside itself. Attach repos to a project and crew
           builds <b>one co-located code graph</b> over all of them
-          (<code>POST /api/v1/projects/:id/graph/refresh</code>). Runs filed into that project are
+          (<code>POST /api/v1/projects/:id/graph/refresh</code>). Jobs filed into that project are
           <b>bound to it</b>.
         </p>
       </div>
@@ -440,10 +445,10 @@ const studioVersion = __WICKED_STUDIO_VERSION__;
           </p>
         </div>
         <div class="ctx-card">
-          <span class="ctx-k">the run says what it saw</span>
+          <span class="ctx-k">the job says what it saw</span>
           <p class="ctx-p">
-            The binding decision is recorded on <b>both</b> outcomes. “This run sees the project”
-            and “this run sees one repo, <b>because X</b>” are equally facts about what the run
+            The binding decision is recorded on <b>both</b> outcomes. “This job sees the project”
+            and “this job sees one repo, <b>because X</b>” are equally facts about what the job
             could observe — and the second is the one you need when a worker reports that a sibling
             repo does not exist.
           </p>
@@ -463,7 +468,7 @@ const studioVersion = __WICKED_STUDIO_VERSION__;
       <p class="ctx-foot">
         A refresh is <code>wicked-estate index</code> per member, bounded at ten minutes
         <b>each</b> — so it never happens implicitly at launch, and a missing or stale graph
-        degrades the run to its own repo’s graph and says so. It needs an estate that supports
+        degrades the job to its own repo’s graph and says so. It needs an estate that supports
         <code>--repo</code> co-location, capability-probed before anything is indexed — an older
         binary accepts the flag, <b>ignores it</b>, and exits 0.
       </p>
@@ -477,10 +482,10 @@ const studioVersion = __WICKED_STUDIO_VERSION__;
         <div class="kicker">The forward view · requirements as the record</div>
         <h2 id="reqs-h">The code graph is what exists. The requirements graph is where it’s going.</h2>
         <p class="sec-sub">
-          A run needs more than a picture of the code it’s about to change — it needs to know what
+          A job needs more than a picture of the code it’s about to change — it needs to know what
           the code is <b>for</b>. Every registered repo carries a <b>requirements graph</b>:
           requirements and their edges, browsable and searchable right here. It’s the forward edge of
-          the record — and it’s <b>becoming the source of truth</b> a run is measured against, not a
+          the record — and it’s <b>becoming the source of truth</b> a job is measured against, not a
           spec doc that rots in a folder. <code>GET /domain-graph</code> ·
           per-repo <code>requirements_graph.json</code>.
         </p>
@@ -498,7 +503,7 @@ const studioVersion = __WICKED_STUDIO_VERSION__;
         <div class="gk-card">
           <span class="gk-k">the forward view, not a snapshot</span>
           <p class="gk-p">
-            The requirements graph is the intent a governed run answers to. <b>“Done” is re-derived
+            The requirements graph is the intent a job answers to. <b>“Done” is re-derived
             from evidence against it</b> — never asserted by the agent that wrote the code — so the
             record leads the work instead of trailing it.
           </p>
@@ -515,7 +520,7 @@ const studioVersion = __WICKED_STUDIO_VERSION__;
 
       <p class="gk-foot">
         Elevated from one panel in the cycle to the point of the thing: the app’s intent, versioned
-        beside its code, that every governed run is answerable to. Where estate holds the record,
+        beside its code, that every job is answerable to. Where estate holds the record,
         this is the part of it that points <b>forward</b>.
       </p>
     </div>
@@ -591,8 +596,10 @@ wsBase()  → ws://127.0.0.1:7701                  <span class="c"># same contra
           <h2>One command. The studio is already in it.</h2>
           <p>
             The studio ships <b>bundled inside wicked-crew</b>: <code>npx wicked-crew serve</code>
-            starts the daemon and serves this skin same-origin on one port — nothing else to
-            install. Running the skin <b>standalone</b> against any daemon is equally supported;
+            starts the daemon and serves studio on one port. You also need a <b>container
+            runtime</b> (Rancher Desktop, Docker, Podman, Colima or OrbStack), because agents run in
+            containers. Open the printed URL, sign in each agent once on the <b>Agents</b> tab, then
+            start a New job. Running studio <b>standalone</b> against any daemon is equally supported;
             it’s the same build, pointed by one env var.
           </p>
           <p class="get-alt">
@@ -609,10 +616,10 @@ wsBase()  → ws://127.0.0.1:7701                  <span class="c"># same contra
                 onclick="navigator.clipboard&&navigator.clipboard.writeText('npx wicked-crew serve').then(()=>{this.textContent='Copied';setTimeout(()=>{this.textContent='Copy';},1400);})">Copy</button>
             </div>
             <pre class="install__code"><code>npx wicked-crew serve   <span class="c"># daemon + this studio · one port · same origin</span></code></pre>
-            <p class="install__note">Node ≥ 22. The daemon serves the studio at its own origin — open the printed URL and launch a run. <span class="install__ver">wicked-studio npm v{studioVersion}</span></p>
+            <p class="install__note">Node ≥ 22 and a container runtime. Open the printed URL, sign in your agents on the Agents tab, and start a job. <span class="install__ver">wicked-studio npm v{studioVersion}</span></p>
           </div>
 
-          <div class="install-or" aria-hidden="true"><span>or run the skin standalone</span></div>
+          <div class="install-or" aria-hidden="true"><span>or run studio standalone</span></div>
 
           <div class="install install--secondary" role="group" aria-label="Run wicked-studio standalone against a daemon">
             <div class="install__bar">
@@ -718,11 +725,11 @@ npx serve dist          <span class="c"># any static server · SPA fallback to i
       // streams CoreEvents, the gate holds until POST /runs/:id/gate answers it.
       function steps(worker) {
         return [
-          { h: 'run <b>r-7c19</b> launched · workflow <b>feature</b> · <b>POST /api/v1/runs</b>' },
-          { h: 'ws <b>/ws</b> subscribed · CoreEvents streaming · phase ladder live' },
-          { h: 'unit <b>2/6</b> build · <b>' + worker + '</b> session · usage 38k in / 5k out' },
-          { h: 'diff captured · Files panel updated · Burn ticking per CLI' },
-          { h: 'evaluator ≠ creator · review unit routed to a <b>different CLI</b>' },
+          { h: 'job <b>r-7c19</b> started · plan confirmed · workflow <b>feature</b>' },
+          { h: 'live events streaming · phase ladder live' },
+          { h: 'step <b>2/6</b> build · <b>' + worker + '</b> in its sandbox · usage 38k in / 5k out' },
+          { h: 'diff captured · Files panel updated · Burn ticking per agent' },
+          { h: 'review goes to a <b>different agent</b> than the builder' },
           { h: 'policy <b>schema-drift</b> · <b>FAIL</b> — migration ≠ checked-in schema', c: 'cf-row--gate' },
           { h: 'gate raised · <b>held for your decision</b>', c: 'cf-row--gate' }
         ];
@@ -733,7 +740,7 @@ npx serve dist          <span class="c"># any static server · SPA fallback to i
         var seq = runSeq;
         clearFeed();
         hideGate();
-        setTerm('term attach r-7c19', 'real PTY · /ws/terminals/:id');
+        setTerm('term attach r-7c19', 'a real terminal into the job');
         var list = steps(worker);
         if (reduced) {
           for (var i = 0; i < list.length; i++) addRow(list[i].h, list[i].c);
@@ -758,13 +765,13 @@ npx serve dist          <span class="c"># any static server · SPA fallback to i
         addRow('transition <b>allowed</b> → ship', 'cf-row--ok');
         gate.setAttribute('data-verdict', 'allow');
         stamp.textContent = 'ALLOW';
-        if (gateT) gateT.textContent = 'your call · recorded in the steering timeline';
+        if (gateT) gateT.textContent = 'your call · recorded on the job timeline';
         setTerm('gate approve r-7c19', 'POST /api/v1/runs/r-7c19/gate');
       }
       function resolveReject() {
         if (resolved) return;
         resolved = true; setButtons(false); hideCue(); dropAmend();
-        addRow('run <b>rejected</b> · returned to build', 'cf-row--gate');
+        addRow('job <b>rejected</b> · returned to build', 'cf-row--gate');
         addRow('unit 2 reopened · awaiting a new diff');
         gate.setAttribute('data-verdict', 'deny');
         stamp.textContent = 'DENY';
@@ -854,21 +861,12 @@ npx serve dist          <span class="c"># any static server · SPA fallback to i
   </script>
 
   <!-- ── The insight rail chips: click a panel, read what it answers ─────── -->
-  <script is:inline>
+  <script is:inline define:vars={{ RAIL }}>
     (function () {
       var chips = Array.prototype.slice.call(document.querySelectorAll('[data-rail-chip]'));
       var line = document.querySelector('[data-rail-line]');
       if (!chips.length || !line) return;
-      var LINES = [
-        'Tokens, cost, and rework per CLI — live during the run, not on the invoice.',
-        'Every human call on the record: who approved what, when, and why.',
-        'The audit view: which steering rules were checked, which verdicts held the run.',
-        'External transforms recorded with honest confidence — needs-research is badged for you.',
-        'The timeline of gates raised and answered — approve, amend, reject.',
-        'The diffs each unit produced, straight from the worktree.',
-        'A real PTY into the worker’s worktree — raw bytes over /ws/terminals/:id.',
-        'Repo-scoped coverage, one click from the run that changed it.'
-      ];
+      var LINES = RAIL.map(function (r) { return r.line; });
       chips.forEach(function (chip) {
         chip.addEventListener('click', function () {
           var i = parseInt(chip.getAttribute('data-i'), 10);
@@ -882,7 +880,7 @@ npx serve dist          <span class="c"># any static server · SPA fallback to i
   </script>
 
   <!-- ── The run board: auto-cycling panel switcher (click to pin) ───────── -->
-  <script is:inline>
+  <script is:inline define:vars={{ PANELS }}>
     (function () {
       var items = Array.prototype.slice.call(document.querySelectorAll('[data-board-item]'));
       var stage = document.querySelector('[data-board-stage]');
@@ -893,17 +891,6 @@ npx serve dist          <span class="c"># any static server · SPA fallback to i
       var statusTxt = document.querySelector('[data-board-status-txt]');
       if (!items.length || !stage || !nameEl || !apiEl || !lineEl) return;
 
-      var PANELS = [
-        { id: 'desk',      api: 'GET /runs · WS /ws',            line: 'The Desk — the one shell: what needs you first (gates, questions, stalled seats), then what is in flight. Launch from a brief or a chat right here.' },
-        { id: 'session',   api: 'GET /runs/:id/events · WS /ws', line: 'Every run or chat is one thread: the live record, gate rows you answer in place, the composer to steer. Old /runs/:id links land here.' },
-        { id: 'everything', api: 'GET /runs · GET /projects',     line: 'Sessions, everything made, helpers, handed-over work and projects in one place, scoped by project — what’s streaming, what’s held at a gate, what landed.' },
-        { id: 'product',   api: 'GET /projects/:id/requirements', line: 'What you are building: one project’s requirements across all its repos. Choose some, and Draft epics starts a governed draft → review → approve run in its own session.' },
-        { id: 'chats',     api: 'POST /chats',                   line: 'Chat with one or several warm seats: each answers in the thread, and every path, path:line and commit a reply cites is checked against the repo.' },
-        { id: 'workflows', api: 'GET /workflows',                 line: 'The WorkflowDef JSON that will drive a run — phases, gates, validation — inspected before you commit a brief to it.' },
-        { id: 'steering',  api: 'GET /governance/rules · /proposals', line: 'The governance surface: the seven-type steering-rule corpus and the memory store, each with a proposals queue — agents propose, you promote. The skin surfaces the rules; it never grades.' },
-        { id: 'testing',   api: 'POST /testing/evals/run',        line: 'Run the seven steering types against your own dev-behavior corpora — each verdict lands caught, gap, or false-positive, so a rule earns its keep before it governs a run.' },
-        { id: 'repos',     api: 'POST /repos',                    line: 'Registered repos, their onboarding runs, and code-graph summaries — the ground the workers stand on.' }
-      ];
       var reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
       var current = 0;
       var timer = null;

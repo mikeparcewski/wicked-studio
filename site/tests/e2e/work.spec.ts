@@ -54,11 +54,12 @@ test.describe('four kinds of work [.work]', () => {
 
   test('the hero scopes the mechanism to code rather than to everything', async ({ page }) => {
     await page.goto('/');
-    // Was "wrote the code" — the headline claimed the AUTHOR never grades its own work, and
-    // wicked-core/src/validator.rs:1131-1146 has a single-runner FALLBACK for an empty or
-    // fully-excluded roster, so on one seat the same binary can judge. Identity separation is
-    // best-effort; the VETO is unconditional (validator.rs:10, "can NEVER be the sole approver").
+    // Since crew 0.9.0 (EX-01) a review on the builder's own agent is refused unless the job is
+    // launched with reduced assurance, so the hero states the refusal, never a single-runner
+    // fallback. The VETO stays unconditional (a model can never be the sole approver).
     await expect(page.locator('h1')).toContainText('approve its own work');
+    await expect(page.locator('.hero')).toContainText('reduced assurance');
+    await expect(page.locator('.hero')).not.toContainText('single runner');
     // Lives in the hero's .fine small print now, not .lede — the lede was cut to two sentences
     // because it had grown into a 700-char wall. Asserting on .hero keeps the guard on the CLAIM.
     await expect(page.locator('.hero')).toContainText('not that check');
@@ -84,7 +85,7 @@ test.describe('claims the adversarial pass required', () => {
     // studio is a pure HTTP/WS client: exportWire.ts says "nothing in this module renders
     // anything", and the demo wizard posts an event rather than driving a browser. Copy that says
     // "studio exports" or "studio drives Playwright" claims capability that lives elsewhere.
-    await expect(page.locator('.lede')).toContainText('daemon behind it drives');
+    await expect(page.locator('.lede')).toContainText('daemon behind it runs');
     await expect(page.locator('section.work')).toContainText('the document service does the rendering');
     await expect(page.locator('section.work')).not.toContainText('drives Playwright');
   });
