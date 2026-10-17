@@ -59,7 +59,8 @@ import { applyCheckState } from '../../board/checkState.js';
 import { useRunAcceptance } from '../../hooks/useRunAcceptance.js';
 import { momentOfRecording, useRecordingsStore } from '../../store/recordings.js';
 import { requestWalkthroughSeek } from '../../store/walkthroughSeek.js';
-import { askAnswerOrds, askLines, askPathOf, askProposal, askShapeFooter, askThinking, isAskTurnGate, type AskLine, type AskProposal } from '../../board/askThread.js';
+import { askAnswerOrds, askCompletedAt, askLines, askPathOf, askProposal, askShapeFooter, askThinking, isAskTurnGate, type AskLine, type AskProposal } from '../../board/askThread.js';
+import { useAskAnswers } from '../../hooks/useAskAnswers.js';
 import { useAskThreadStore } from '../../store/askThread.js';
 import { useTeamFold } from '../../hooks/useTeamFold.js';
 import { AskLineView, AskTyping } from './AskThread.js';
@@ -312,6 +313,8 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
     return out;
   }, [askRows, askFold, askTeamError]);
   const thinking = useMemo(() => askThinking(askRows), [askRows]);
+  // studio#816: a closed chat's answers, read back from its runs (the transcript holds none).
+  const askAnswers = useAskAnswers(mine, askPathOn && conversation === 'closed');
   // S2 (§4.7): the PA's pending proposal to build — its card sits in the thread, not in a run block.
   const proposal = useMemo(() => askProposal(askRows), [askRows]);
   const askGate = useGateStore((s) => (askRunId === null ? undefined : s.gates[askRunId]));
@@ -429,6 +432,25 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
       if (t.ord !== undefined) liveOrd.set(key, t.ord);
       out.push({ kind: 'turn', key, at: t.at, who: t.who, text: t.text, ok: t.ok, turnId: t.turnId, ...(t.pending ? { pending: true } : {}) });
     }
+    // studio#816: a CLOSED chat's transcript is gone (crew drops it on close and at boot), but each
+    // answer is still its run's answer step output — read back (`useAskAnswers`) and shown as the
+    // reply it was, unless this client still holds that reply live.
+    // Placed when its step completed (the team row); else right after the question this client
+    // still holds for that step; else in step order after the run's launch (codex r1 on #818). Its
+    // unit ord rides along, so a finding attaches under ITS reply, not by position.
+    const liveReplied = new Set(liveOrd.values());
+    const completedAt = askCompletedAt(askRows);
+    for (const a of askAnswers) {
+      if (liveReplied.has(a.ord)) continue;
+      const run = mine.find((v) => v.session.id === a.runId);
+      const asked = (liveTurns ?? []).find((t) => t.who === 'you' && t.runId === a.runId && t.stepId === a.key);
+      const at = (a.runId === askRunId ? completedAt.get(a.ord) : undefined)
+        ?? (asked !== undefined ? asked.at + 1 : undefined)
+        ?? (run !== undefined ? launchedMs(run) + a.ord : a.ord);
+      const key = `answer:${a.runId}:${a.ord}`;
+      liveOrd.set(key, a.ord);
+      out.push({ kind: 'turn', key, at, who: a.by ?? 'helper', text: a.text, ok: true, turnId: null });
+    }
     // A line marked `under` (a finding on the answer, a help exchange) goes right after the reply bubble
     // of ITS answer step — matched by unit, not by time (codex on ASK-S1 #4): a live reply carries the
     // relay's `ord`; the transcript's k-th PA reply is the k-th answer step's (`step.claimed` order).
@@ -494,7 +516,7 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
       }
     }
     return out.map((e, i) => ({ e, i })).sort((a, b) => a.e.at - b.e.at || a.i - b.i).map((x) => x.e);
-  }, [messages, conversation, mine, liveTurns, lines, thinking, askBlockHidden, askRunId, askRows, askPathOn, proposal]);
+  }, [messages, conversation, mine, liveTurns, lines, thinking, askBlockHidden, askRunId, askRows, askPathOn, proposal, askAnswers]);
 
   // DC-S8: the considered line sits under the LAST reply of each turn (one Consideration per turn,
   // whatever the number of seats); it is re-read when the turn gains a reply.

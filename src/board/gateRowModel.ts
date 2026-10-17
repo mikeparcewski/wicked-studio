@@ -25,6 +25,7 @@ import {
   gateVerdictFor,
   layerLine,
   reassignCandidates,
+  reassignRefusedOf,
   isRestoredRetry,
   isFloorFixGate,
   sendBackAccepted,
@@ -32,6 +33,7 @@ import {
   steerScopeTarget,
   type GateVerdictView,
 } from '../components/gateVerdictModel.js';
+import type { ReassignCandidate } from '../components/gateVerdictModel.js';
 import type { GateAnswer } from './gateActions.js';
 import type { RerunOffer } from '../components/rerunModel.js';
 
@@ -209,6 +211,12 @@ function mapChoiceTitle(value: string): string {
  * studio#571 (N3): the engine's prompt as the row's Details show it — its ` ||| ` segment marker
  * (`INSTRUCTION_SEP`, "never rendered") joined on ` — `, as every other gate surface does.
  */
+/** studio#813: the seats a reassign leaves out because the engine refuses them, said under Technical
+ *  details — a seat never vanishes from the choices without a word. */
+function refusedSeatLines(candidates: readonly ReassignCandidate[]): string[] {
+  return candidates.filter((c) => c.state === 'refused').map((c) => `Not offered for reassign: ${c.label} — ${c.note}.`);
+}
+
 export function shownPrompt(prompt: string): string {
   return prompt.split(INSTRUCTION_SEP).join(' — ');
 }
@@ -668,11 +676,13 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
     const failedCli = failedSeatOf(units, gate.ord);
     const reassignList: GateRowChoice[] = [];
     if (!isToolUnitGate(units, gate.ord) && isSeatFailure(isEscalationGate(gate.prompt, verdict), failedCli)) {
-      for (const c of reassignCandidates(pool, failedCli ?? null, roster)) {
+      const candidates = reassignCandidates(pool, failedCli ?? null, roster, reassignRefusedOf(units, gate.ord));
+      for (const c of candidates) {
         if (isOfferable(c)) {
           reassignList.push({ key: `reassign:${c.cli}`, label: `Reassign to ${c.label}`, decision: null, reassignCli: c.cli, needsNote: false, title: `Move the failed unit to ${c.label}; it retries there.` });
         }
       }
+      detailItems.push(...refusedSeatLines(candidates));
     }
     // First reassign inline when there's still room in the 3-slot cap; rest to overflow.
     if (escInline.length < 3 && reassignList.length > 0) {
@@ -725,7 +735,8 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
     // another seat meets the same environment. Gate 11 Item 2 operator ruling.
     const launchRefusal = isLaunchRefusal(gate.prompt, events, gate.ord);
     if (!launchRefusal && !isToolUnitGate(units, gate.ord) && failedCli !== null && failedCli !== undefined) {
-      const candidates = reassignCandidates(pool, failedCli, roster);
+      const candidates = reassignCandidates(pool, failedCli, roster, reassignRefusedOf(units, gate.ord));
+      detailItems.push(...refusedSeatLines(candidates));
       let inlineReassignDone = false;
       for (const c of candidates) {
         if (isOfferable(c)) {

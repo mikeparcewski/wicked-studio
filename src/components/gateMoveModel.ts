@@ -603,8 +603,11 @@ export const INSTRUCTION_SEP = ' ||| ';
  * refused: <the deliver script's output>. Approve to re-run the deliver phase now …"). `remote` is
  * crew's push refusal sentence ("deliver: the remote refused the push of <branch> after commit:
  * <reason>; the work is committed on <branch> and nothing was pushed …"); anything else is the
- * script's own first line, with its identity line ("deliver: pushing as …") and markers dropped.
- * `null` when the gate is not a refused hand-over.
+ * script's own LAST line — the one it failed on, since every refusal echoes its reason and exits
+ * (studio#814: the first line was an advisory, "the push identity … applies to github.com origins
+ * only", not the cause) — with its identity line ("deliver: pushing as …") and markers (the bare
+ * `deliver: WORD` ones and the `deliver: OUTCOME <nonce> <verdict>` sentinel) dropped. `null` when
+ * the gate is not a refused hand-over.
  */
 export interface DeliverRefusal {
   remote: boolean;
@@ -624,10 +627,10 @@ export function deliverRefusalOf(prompt: string | undefined): DeliverRefusal | n
   const lines = body
     .split(/\n/)
     .map((l) => l.trim())
-    .filter((l) => l !== '' && !/^deliver: pushing as\b/i.test(l) && !/^deliver: [A-Z-]+$/.test(l))
+    .filter((l) => l !== '' && !/^deliver: pushing as\b/i.test(l) && !/^deliver: [A-Z-]+$/.test(l) && !/^deliver: OUTCOME\b/.test(l))
     .map((l) => l.replace(/^deliver:\s*/i, ''));
-  const first = lines[0] ?? 'the deliver step failed';
-  return { remote: false, branch: null, reason: first.length > 240 ? `${first.slice(0, 239)}…` : first };
+  const cause = lines[lines.length - 1] ?? 'the deliver step failed';
+  return { remote: false, branch: null, reason: cause.length > 240 ? `${cause.slice(0, 239)}…` : cause };
 }
 
 /** A unified diff's size in words ("3 files changed, +40, −2"), or null when it changes no file —

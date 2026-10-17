@@ -308,6 +308,18 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          #   /runs/r-seat/reassign is recorded (GET /__fixture/reassign-posts) and, while
          #   `reassign_refuse` > 0, refused with crew's 400 (studio#480).
          "seat_escalation": False, "reassign_refuse": 0,
+         # e2e7721 — the defects the :7721 E2E found (e2e/desk_e2e7721_test.py; wicked-studio#813-#816):
+         #   r-7721-reassign: a review unit failed on copilot; pi authored the work it checks, so crew
+         #     serves `reassign_refused: ["pi"]` on it (wicked-crew#1058). POST /runs/r-7721-reassign/
+         #     reassign is recorded (GET /__fixture/reassign-posts); `e2e7721_reassign_409` answers it
+         #     with crew's refusal (the gate stays open).
+         #   r-7721-handover: a refused hand-over (nothing to deliver) parked at its escalation on the
+         #     deliver unit. GET /runs/:id/gate answers WITHOUT `gateKind` (an older crew) unless
+         #     `e2e7721_gate_kind` (crew with the 0.124.0 wire).
+         #   r-7721-failed: failed at planning — an engine `error` frame, `sessionFailed`, no step failed.
+         #   chat-7721 / r-7721-ask: a CLOSED ask (crew dropped the transcript) whose answer is the run's
+         #     `answer-1` output (needs `ask_path` + `run_chat_id`).
+         "e2e7721": False, "e2e7721_gate_kind": False, "e2e7721_reassign_409": False,
          # retry_gate — r-retry paused on the RETRY kind (studio#557): the review unit on codex
          #   changed the tree under review, the engine restored the creator's tree (worktree_guard
          #   denial, `restored: true`), and the gate carries no escalation kind or spelling — so the
@@ -4036,6 +4048,96 @@ SEAT_EVENTS = [
 ]
 
 
+# ── e2e7721 (wicked-studio#813-#816, e2e/desk_e2e7721_test.py) ─────────────────
+E7721_T0 = NOW0 - 20 * MIN
+E7721_REASSIGN_PROMPT = ("Unit 3 failed and triage escalated: copilot exited 1 (no BYOK model) — confirm to retry "
+                         "the phase, or reject to cancel the run")
+E7721_HANDOVER_PROMPT = (
+    "The deliver phase refused: deliver: the push identity mikeparcewski applies to github.com origins only; this "
+    "origin is not one, so gh and git use their own credentials\n"
+    "deliver: nothing to deliver — the run produced no committed change (wicked/r-7721-handover is not ahead of "
+    "origin/main); nothing was pushed\n"
+    "deliver: OUTCOME 5f2a9c failed. Approve to re-run the deliver phase now (the engine re-lifts and re-verifies "
+    "first; no second deliver gate), reject to cancel the run and keep the worktree.")
+E7721_FAILED_ERROR = ("the PA-scoped plan could not be decided: no eligible seat for r-7721-failed: evaluator≠creator "
+                      "unsatisfiable for unit(s) [3, 5, 6]: every remaining seat authored the work")
+E7721_ANSWER = ("SCOPE answer\nThe off-by-one is in `sum()`: the loop starts at `i = 1`, so the first element is "
+                "never added. Start it at `i = 0` and the test passes.")
+# crew's 409 when the engine refuses the seat a parked unit is re-seated on (wicked-crew#1058): here the
+# engine's ballot-only refusal (core#572), the gate untouched.
+E7721_REFUSED_409 = ("seat `claude` is a ballot-only seat (seat_eligible_for_work = false) and cannot be reassigned "
+                     "work. Nothing was approved; the gate is still open.")
+
+
+def _e7721_unit(rid: str, key: str, ord_: int, stage: str, status: str, cli, **extra) -> dict:
+    return {"id": f"{rid}:{key}", "session_id": rid, "ord": ord_, "description": key, "stage": stage,
+            "assigned_cli": cli, "assigned_invocation": None, "council_task_ref": None, "routing": None,
+            "denial_reason": None, "phase_ref": key, "conformance_ref": None, "phase_status": None,
+            "collection_scope": None, "status": status, **extra}
+
+
+def e7721_runs() -> list:
+    reassign = session("r-7721-reassign", "awaiting_human", "Fix the off-by-one in tiny-math", "scope")
+    reassign["session"].update(clis=["pi", "copilot", "claude"], unit_ix=2, created_at=E7721_T0 // 1000)
+    reassign["units"] = [
+        _e7721_unit("r-7721-reassign", "scope", 1, "recon", "done", "pi"),
+        _e7721_unit("r-7721-reassign", "triage", 2, "recon", "done", "pi"),
+        _e7721_unit("r-7721-reassign", "reproduce", 3, "test", "rejected", "copilot",
+                    routing={"method": "evaluator_distinct", "was": "pi"}, reassign_refused=["pi"]),
+    ]
+    handover = session("r-7721-handover", "awaiting_human", "Tidy the README of tiny-math", "build")
+    handover["session"].update(clis=["pi"], unit_ix=1, created_at=(E7721_T0 + MIN) // 1000)
+    handover["units"] = [
+        _e7721_unit("r-7721-handover", "build", 1, "build", "done", "pi"),
+        _e7721_unit("r-7721-handover", "deliver", 2, "build", "rejected", "bash",
+                    tool_cmd=["bash", "-lc", "deliver"]),
+    ]
+    failed = session("r-7721-failed", "failed", "Fix the flaky sum test", "pa-scope")
+    failed["session"].update(clis=["pi"], unit_ix=0, created_at=(E7721_T0 + 2 * MIN) // 1000,
+                             ended_at=(E7721_T0 + 3 * MIN) // 1000)
+    failed["units"] = [_e7721_unit("r-7721-failed", "pa-scope", 1, "recon", "done", "pi")]
+    ask = session("r-7721-ask", "cancelled", "In the tiny-math repo, what does the sum() function get wrong?", "answer-1")
+    ask["session"].update(clis=["pi"], unit_ix=1, chat_id="chat-7721", ask_path=True,
+                          created_at=(E7721_T0 + 4 * MIN) // 1000, ended_at=(E7721_T0 + 6 * MIN) // 1000)
+    ask["units"] = [
+        dict(_e7721_unit("r-7721-ask", "answer-1", 1, "recon", "done", "pi"), description="answer-1 — answer the question"),
+        _e7721_unit("r-7721-ask", "deliver", 2, "build", "pending", None, tool_cmd=["bash", "-lc", "deliver"]),
+    ]
+    return [reassign, handover, failed, ask]
+
+
+E7721_EVENTS = {
+    "r-7721-reassign": [
+        {"type": "sessionStarted", "session": "r-7721-reassign", "problem": "Fix the off-by-one in tiny-math",
+         "workflowId": "bug", "cliCount": 3, "governed": True, "entityMode": "shared", "ts": E7721_T0, "seq": 1},
+        {"type": "unitDispatched", "session": "r-7721-reassign", "ord": 3, "cli": "copilot", "attempt": 0,
+         "ts": E7721_T0 + 5 * MIN, "seq": 2},
+        {"type": "stepFailed", "session": "r-7721-reassign", "ord": 3, "failureKind": "workerError",
+         "detail": "copilot exited 1 (no BYOK model)", "ts": E7721_T0 + 6 * MIN, "seq": 3},
+        {"type": "awaitingHuman", "session": "r-7721-reassign", "ord": 3, "prompt": E7721_REASSIGN_PROMPT,
+         "reviewingOrd": None, "gateKind": "escalation", "ts": E7721_T0 + 6 * MIN + SEC, "seq": 4},
+    ],
+    "r-7721-handover": [
+        {"type": "sessionStarted", "session": "r-7721-handover", "problem": "Tidy the README of tiny-math",
+         "workflowId": "bug", "cliCount": 1, "governed": True, "entityMode": "shared", "ts": E7721_T0 + MIN, "seq": 1},
+        {"type": "awaitingHuman", "session": "r-7721-handover", "ord": 2, "prompt": "Approve delivery before unit 2 runs.",
+         "reviewingOrd": 1, "gateKind": "deliver", "ts": E7721_T0 + 5 * MIN, "seq": 2},
+        {"type": "gateDecided", "session": "r-7721-handover", "ord": 2, "allow": True, "ts": E7721_T0 + 6 * MIN, "seq": 3},
+        {"type": "resumed", "session": "r-7721-handover", "ord": 2, "ts": E7721_T0 + 6 * MIN + 10, "seq": 4},
+        {"type": "stepFailed", "session": "r-7721-handover", "ord": 2, "failureKind": "toolFailed",
+         "detail": "deliver: nothing to deliver — the run produced no committed change", "ts": E7721_T0 + 6 * MIN + 2 * SEC, "seq": 5},
+        {"type": "awaitingHuman", "session": "r-7721-handover", "ord": 2, "prompt": E7721_HANDOVER_PROMPT,
+         "reviewingOrd": None, "gateKind": "escalation", "ts": E7721_T0 + 6 * MIN + 3 * SEC, "seq": 6},
+    ],
+    "r-7721-failed": [
+        {"type": "sessionStarted", "session": "r-7721-failed", "problem": "Fix the flaky sum test", "workflowId": "bug",
+         "cliCount": 1, "governed": True, "entityMode": "shared", "ts": E7721_T0 + 2 * MIN, "seq": 1},
+        {"type": "error", "session": "r-7721-failed", "message": E7721_FAILED_ERROR, "ts": E7721_T0 + 3 * MIN - SEC, "seq": 2},
+        {"type": "sessionFailed", "session": "r-7721-failed", "ord": 1, "ts": E7721_T0 + 3 * MIN, "seq": 3},
+    ],
+}
+
+
 GOVERNANCE_BLOCKS = {
     "healthy": {
         "store": {"path": GOV_STORE, "source": "core-db-sidecar"},
@@ -4362,6 +4464,8 @@ def assemble_runs() -> list:
             runs = runs + [json.loads(json.dumps(FLOOR_RUN))]
         if state["seat_escalation"] and not state["no_runs"]:
             runs = runs + [_seat_run()]
+        if state["e2e7721"] and not state["no_runs"]:
+            runs = runs + e7721_runs()
         if state["retry_gate"] and not state["no_runs"]:
             runs = runs + [_retry_run()]
         if state["home_paths"] and not state["no_runs"]:
@@ -6249,7 +6353,13 @@ class W2Handler(SimpleHTTPRequestHandler):
                 reel_on = state["reel_runs"]
                 walk_on = state["walkthrough"]
                 ask_on = state["ask_path"]
-            if ask_on and ask_team(rid) is not None:
+            with state_lock:
+                e7721_team = state["e2e7721"] and rid.startswith("r-7721-")
+            if e7721_team:
+                # crew's answer for a run that was never teamed (RunTeamResponse, teamed: false).
+                self._json(200, {"runId": rid, "streamFloor": None, "pending": None, "units": [], "rows": [],
+                                 "teamed": False, "transport": None, "reason": None, "planRev": None, "ended": False})
+            elif ask_on and ask_team(rid) is not None:
                 self._json(200, ask_team(rid))
             elif sessions_on and walk_on and walk_team(rid) is not None:
                 self._json(200, walk_team(rid))
@@ -6291,6 +6401,19 @@ class W2Handler(SimpleHTTPRequestHandler):
             if home_gate:
                 self._json(200, {"runId": rid, "ord": 1, "lifecycle": "open", "prompt": HOME_GATE_PROMPT,
                                  "receivedAt": iso(HOME_T0 + 1000), "gateKind": "def"})
+                return True
+            with state_lock:
+                e7721_on = state["e2e7721"]
+                e7721_kind = state["e2e7721_gate_kind"]
+            if e7721_on and rid == "r-7721-reassign":
+                self._json(200, {"runId": rid, "ord": 3, "lifecycle": "open", "prompt": E7721_REASSIGN_PROMPT,
+                                 "receivedAt": iso(E7721_T0 + 6 * MIN + SEC),
+                                 **({"gateKind": "escalation"} if e7721_kind else {})})
+                return True
+            if e7721_on and rid == "r-7721-handover":
+                self._json(200, {"runId": rid, "ord": 2, "lifecycle": "open", "prompt": E7721_HANDOVER_PROMPT,
+                                 "receivedAt": iso(E7721_T0 + 6 * MIN + 3 * SEC),
+                                 **({"gateKind": "escalation"} if e7721_kind else {})})
                 return True
             with state_lock:
                 seat_gate = state["seat_escalation"] and rid == "r-seat"
@@ -6434,6 +6557,8 @@ class W2Handler(SimpleHTTPRequestHandler):
             with state_lock:
                 if state["seat_escalation"] and rid == "r-seat":
                     events = list(SEAT_EVENTS)
+                if state["e2e7721"] and rid in E7721_EVENTS:
+                    events = list(E7721_EVENTS[rid])
                 if state["retry_gate"] and rid == "r-retry":
                     events = list(RETRY_EVENTS)
             with state_lock:
@@ -6509,6 +6634,11 @@ class W2Handler(SimpleHTTPRequestHandler):
             with state_lock:
                 forensics_on = state["forensics"]
                 gate_move_on = state["gate_move"]
+            with state_lock:
+                e7721_on = state["e2e7721"]
+            if e7721_on and rid == "r-7721-ask" and key == "answer-1":
+                self._json(200, {"output": E7721_ANSWER})
+                return True
             if gate_move_on and rid == "r-review" and key in GATE_MOVE_OUTPUTS:
                 self._json(200, GATE_MOVE_OUTPUTS[key])
                 return True
@@ -8603,6 +8733,9 @@ class W2Handler(SimpleHTTPRequestHandler):
                 refuse = state["reassign_refuse"] > 0
                 if refuse:
                     state["reassign_refuse"] -= 1
+                refuse_7721 = rid == "r-7721-reassign" and state["e2e7721_reassign_409"]
+            if refuse_7721:
+                return self._json(409, {"error": E7721_REFUSED_409})
             if refuse:
                 return self._json(400, {"error": f'cli "{body.get("cli")}" is not in this run\'s seat pool (codex)'})
             return self._json(200, {"status": "ok", "ord": 1, "cli": body.get("cli"), "approved": True})

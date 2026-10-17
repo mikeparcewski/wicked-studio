@@ -7,7 +7,8 @@ import { TechDetails } from '../ui/TechDetails.js';
 /**
  * "See why" on a failed job (DES-frontdoor §4 requirement 3): the failed step in plain words, what
  * Retry does, and the engine's own words behind Technical details (sanitized: home paths read `~`).
- * The step's `stepFailed` frames are read only when the operator opens it (`?type=stepFailed`).
+ * The step's `stepFailed` frames, and the run's `error` frames (studio#815: a run can fail with no
+ * step failing), are read only when the operator opens it (`?type=stepFailed,error`).
  */
 export function FailureWhy({ view }: { view: SessionView }): React.ReactElement {
   const runId = view.session.id;
@@ -16,7 +17,7 @@ export function FailureWhy({ view }: { view: SessionView }): React.ReactElement 
   const [frames, setFrames] = useState<{ id: string; list: readonly Record<string, unknown>[] | null } | null>(null);
   useEffect(() => {
     let live = true;
-    api.getRunEvents(runId, ['stepFailed'])
+    api.getRunEvents(runId, ['stepFailed', 'error'])
       .then(({ events }) => { if (live) setFrames({ id: revision, list: events as unknown as Record<string, unknown>[] }); })
       .catch(() => { if (live) setFrames({ id: revision, list: null }); });
     return () => { live = false; };
