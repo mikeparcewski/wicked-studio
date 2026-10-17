@@ -254,3 +254,11 @@
   .wk-plugin-doc { flex-direction: column; gap: 2px; min-height: var(--tap-min); justify-content: center; }
   .wk-plugin-doc-title { max-width: 100%; }
 }
+
+/* Learn from a brand (operator 2026-10-17): a PDF or an image is chosen or dropped, never typed. */
+.wk-learn-drop { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; padding: var(--space-4); border: 1px dashed var(--border-strong); border-radius: var(--radius-lg); background: var(--surface-raised); }
+.wk-learn-drop--over { border-color: var(--accent); background: var(--accent-wash); }
+.wk-learn-drop[data-chosen="true"] { border-style: solid; }
+.wk-learn-drop-text { flex: 1 1 220px; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.wk-learn-drop-title { font-weight: var(--weight-semi); color: var(--ink-high); overflow-wrap: anywhere; }
+.wk-learn-thumb { width: 56px; height: 56px; object-fit: cover; border-radius: var(--radius-md); border: 1px solid var(--border-subtle); }
