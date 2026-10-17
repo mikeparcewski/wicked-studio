@@ -435,13 +435,21 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
     // studio#816: a CLOSED chat's transcript is gone (crew drops it on close and at boot), but each
     // answer is still its run's answer step output — read back (`useAskAnswers`) and shown as the
     // reply it was, unless this client still holds that reply live.
+    // Placed when its step completed (the team row); else right after the question this client
+    // still holds for that step; else in step order after the run's launch (codex r1 on #818). Its
+    // unit ord rides along, so a finding attaches under ITS reply, not by position.
     const liveReplied = new Set(liveOrd.values());
     const completedAt = askCompletedAt(askRows);
     for (const a of askAnswers) {
       if (liveReplied.has(a.ord)) continue;
       const run = mine.find((v) => v.session.id === a.runId);
-      const at = (a.runId === askRunId ? completedAt.get(a.ord) : undefined) ?? (run !== undefined ? launchedMs(run) + a.ord : a.ord);
-      out.push({ kind: 'turn', key: `answer:${a.runId}:${a.ord}`, at, who: a.by ?? 'helper', text: a.text, ok: true, turnId: null });
+      const asked = (liveTurns ?? []).find((t) => t.who === 'you' && t.runId === a.runId && t.stepId === a.key);
+      const at = (a.runId === askRunId ? completedAt.get(a.ord) : undefined)
+        ?? (asked !== undefined ? asked.at + 1 : undefined)
+        ?? (run !== undefined ? launchedMs(run) + a.ord : a.ord);
+      const key = `answer:${a.runId}:${a.ord}`;
+      liveOrd.set(key, a.ord);
+      out.push({ kind: 'turn', key, at, who: a.by ?? 'helper', text: a.text, ok: true, turnId: null });
     }
     // A line marked `under` (a finding on the answer, a help exchange) goes right after the reply bubble
     // of ITS answer step — matched by unit, not by time (codex on ASK-S1 #4): a live reply carries the
