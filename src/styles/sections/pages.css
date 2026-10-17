@@ -108,7 +108,7 @@
 /* == end S6 g1 == */
 
 /* == S6 g2 skills+mcp == */
-.wk-pg-skills-scroll, .wk-pg-mcp-scroll { height: 100%; min-width: 0; overflow-y: auto; overflow-x: hidden; }
+.wk-pg-skills-scroll, .wk-pg-mcp-scroll { flex: 1 1 auto; height: 100%; min-width: 0; overflow-y: auto; overflow-x: hidden; }
 .wk-pg-skills-status { color: var(--ink-muted); overflow-wrap: anywhere; }
 .wk-pg-skills-filters { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 .wk-pg-skills-filters .wk-chip { flex-shrink: 0; }

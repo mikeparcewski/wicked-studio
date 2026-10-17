@@ -21,7 +21,7 @@ export function HealthPage(): React.ReactElement {
   // Said once for the page (image review): the cards that this crew cannot fill say "Not available yet".
   const missing = [week.kind === 'absent' ? 'the week' : null, governance.kind === 'absent' ? 'governance' : null].filter((s): s is string => s !== null);
   return (
-    <div data-testid="health-page" className="wk-desk-scroll wk-health-page">
+    <div data-testid="health-page" className="wk-desk-scroll wk-health-page wk-measure wk-measure--narrow">
       <header className="wk-everything-head">
         <h1 className="wk-desk-hello">Health</h1>
         <p className="wk-desk-date">Studio's own checks: its connection and service, each helper, and where check results are saved.</p>
