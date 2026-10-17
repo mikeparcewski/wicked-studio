@@ -1287,9 +1287,9 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
             text:
               daemonDeliverGate === false
                 ? `When this finishes it ${what} — this daemon delivers WITHOUT a deliver gate (upgrade crew to 0.7.33+ to confirm the push first).${merging}`
-                : daemonDeliverGate === null
-                  ? `When this finishes it ${what}.${merging}`
-                  : autoDeliver
+                // studio#763: the wording comes from what is SENT (the posture), never from whether
+                // the health read has answered yet — the same config reads the same on every load.
+                : autoDeliver
                     ? `When this finishes it ${what} — with NO deliver gate: this posture is auto-deliver.${merging}`
                     : `When this finishes it pauses at the deliver gate; approve it and the run ${what}.${merging}`,
           };
@@ -1304,10 +1304,12 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
     }
   })();
 
-  // The deliver-gate word the notice and the confirm line share (F-E2E-030): what the daemon can
-  // keep, then what the posture asks for. `unknown` while the health read is pending/failed.
-  const deliverGateWord: 'human' | 'auto' | 'unsupported' | 'unknown' =
-    daemonDeliverGate === false ? 'unsupported' : daemonDeliverGate === null ? 'unknown' : autoDeliver ? 'auto' : 'human';
+  // The deliver-gate word the notice and the confirm line share (F-E2E-030): what the posture asks
+  // for. studio#763: a pending or failed health read used to print "after verify" for the same
+  // config that read "after you approve the deliver gate" once it answered; only a daemon that SAYS
+  // it keeps no deliver gate (`false`, crew before 0.7.33) changes the words.
+  const deliverGateWord: 'human' | 'auto' | 'unsupported' =
+    daemonDeliverGate === false ? 'unsupported' : autoDeliver ? 'auto' : 'human';
 
   // Determine whether CLIs differ from the defaults that loaded from the roster
   const defaultCliSet = new Set(
@@ -1825,11 +1827,9 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
               >
                 {deliverGateWord === 'unsupported'
                   ? 'no gate on this daemon (upgrade crew to 0.7.33+)'
-                  : deliverGateWord === 'unknown'
-                    ? 'after verify'
-                    : deliverGateWord === 'auto'
-                      ? 'auto — no gate before the push'
-                      : 'after you approve the deliver gate'}
+                  : deliverGateWord === 'auto'
+                    ? 'auto — no gate before the push'
+                    : 'after you approve the deliver gate'}
               </span>
             </>
           )}

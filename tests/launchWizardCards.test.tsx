@@ -43,7 +43,7 @@ describe('the New job cards', () => {
     expect(cardIds()).toEqual(['chat', 'bug', 'feature', 'qe-author-tests', 'acme-release', 'demo-video', 'draft-epics']);
   });
 
-  it('each card has a decorative drawing, its name and its purpose; an unknown workflow gets the neutral drawing and its phases', () => {
+  it('each card has a decorative drawing, its name and its purpose; an unknown workflow gets the neutral drawing and its steps', () => {
     render(<LaunchWizard />);
     act(() => openLaunchWizard({}));
     const bug = screen.getByTestId('launch-wizard-workflow-bug');
@@ -57,7 +57,7 @@ describe('the New job cards', () => {
     const custom = screen.getByTestId('launch-wizard-workflow-acme-release');
     expect(custom.dataset.art).toBe('fallback');
     expect(custom).toHaveTextContent('Acme release');
-    expect(custom).toHaveTextContent('2 phases: tag → publish');
+    expect(custom).toHaveTextContent('2 steps: tag → publish');
     expect(screen.getByTestId('launch-wizard-workflow-draft-epics').dataset.art).toBe('draft-epics');
     expect(screen.getByTestId('launch-wizard-workflow-demo-video').dataset.art).toBe('demo-video');
     // The accessible name is the words, not the drawing.

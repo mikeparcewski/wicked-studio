@@ -1,3 +1,4 @@
+import { stepNoun } from './deskWords.js';
 import type { WorkflowDef } from '../api/types.js';
 import type { Preset } from '../api/teamPlan.js';
 
@@ -46,26 +47,27 @@ export interface WorkflowRow {
   source: 'workflow' | 'preset';
 }
 
-/** "5 phases: recon → author → verify → review" — the def's first four phases, and the count. */
 /** The first four ids in order, then "…" when there are more (DES-slash-workflows §2). */
 function headOf(ids: readonly string[]): string {
   const head = ids.slice(0, 4).join(' → ');
   return ids.length > 4 ? `${head} → …` : head;
 }
 
+// studio#726: the line names each step in plain words ("adversarial-review" → "review", "recon" →
+// "research"), never the def's phase ids, and calls them steps — the word every other surface uses.
 export function commandLine(def: WorkflowDef): string {
   const ids = def.phases.map((p) => p.id);
-  if (ids.length === 0) return 'no phases listed';
-  const word = ids.length === 1 ? 'phase' : 'phases';
-  return `${ids.length} ${word}: ${headOf(ids)}`;
+  if (ids.length === 0) return 'no steps listed';
+  const word = ids.length === 1 ? 'step' : 'steps';
+  return `${ids.length} ${word}: ${headOf(ids.map(stepNoun))}`;
 }
 
-/** "preset · 3 steps: understand → build → deliver" — a preset's steps, in order. */
+/** "3 steps: understand → build → delivery" — a preset's steps, in order, in plain words. */
 export function presetCommandLine(preset: Preset): string {
   const ids = preset.steps.map((s) => s.catalog ?? s.id);
-  if (ids.length === 0) return `preset · ${preset.name}`;
+  if (ids.length === 0) return preset.name.replace(/[_-]+/g, ' ');
   const word = ids.length === 1 ? 'step' : 'steps';
-  return `preset · ${ids.length} ${word}: ${headOf(ids)}`;
+  return `${ids.length} ${word}: ${headOf(ids.map(stepNoun))}`;
 }
 
 /** The line the menu shows while the daemon's workflow list is still being read. */

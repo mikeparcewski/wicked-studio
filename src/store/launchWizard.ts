@@ -32,6 +32,9 @@ export interface LaunchDraft {
    *  What it should show is the draft's `intent`. */
   demoUrl: string;
   demoAudience: string;
+  /** studio#767: the words typed for each OTHER kind of job, by its id. `intent` is the current
+   *  kind's; changing kinds parks it here and brings back the new kind's own (empty the first time). */
+  intentsByKind: Readonly<Record<string, string>>;
 }
 
 /** The wizard's own job kind that is not a daemon workflow: drafting epics from a project's
@@ -81,7 +84,23 @@ export function freshDraft(init: OpenLaunchWizard): LaunchDraft {
     requirements: init.requirements ?? [],
     demoUrl: '',
     demoAudience: '',
+    intentsByKind: {},
   };
+}
+
+/**
+ * studio#767: the draft after the operator changes the kind of job. Every kind starts with its own
+ * words: Demo video's "What it should show" never prefills Draft epics' instructions. The words
+ * typed for the kind being left are kept for it, so changing back finds them. The FIRST pick (no
+ * kind yet) keeps what the opener brought — that text was written for this pick.
+ */
+export function withJobKind(draft: LaunchDraft, id: string): LaunchDraft {
+  if (id === draft.workflowId) return draft;
+  const prev = draft.workflowId;
+  const intentsByKind = prev === null ? draft.intentsByKind : { ...draft.intentsByKind, [prev]: draft.intent };
+  const intent = prev === null ? draft.intent : intentsByKind[id] ?? '';
+  // codex r1 (S5): another kind of job starts its own options (nothing carried over).
+  return { ...draft, workflowId: id, intent, intentsByKind, reduced: false, skipQe: false, skipQeReason: '' };
 }
 
 export const useLaunchWizard = create<LaunchWizardStore>((set, get) => ({
