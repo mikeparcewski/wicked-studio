@@ -409,7 +409,7 @@ export function setupChores(agents: { known: boolean; usable: readonly { name: s
   if (agents.known && agents.usable.length === 0) {
     out.push({
       key: 'agents', tone: 'fail',
-      title: agents.total === 0 ? 'Set up your agents — none is set up yet' : `Set up your agents — none can work yet (0 of ${agents.total} signed in)`,
+      title: agents.total === 0 ? 'Set up your agents — none is set up yet' : `Set up your agents — none can work yet (0 of ${agents.total} ready)`,
       line: 'Nothing can run until at least one AI agent is signed in and ready.',
       action: { label: 'Set up agents', path: paths.agents },
     });

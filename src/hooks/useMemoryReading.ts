@@ -8,8 +8,18 @@ import type { MemoryReading } from '../board/deskModel.js';
  * when the Desk opens: `ok` with the total, `down` with the daemon's reason when the read fails, and
  * `unknown` for a daemon without the route (never read as empty).
  */
-export function useMemoryReading(enabled: boolean): MemoryReading {
+export function useMemoryReading(enabled: boolean, refreshKey: unknown = null): MemoryReading {
   const [reading, setReading] = useState<MemoryReading>({ state: 'unknown' });
+  // codex r2: read again when the operator comes back (the window regains focus) or the caller's key
+  // changes (the Desk returns to Work), so an item for memory that has since been built goes away.
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    if (!enabled) return undefined;
+    const again = (): void => { if (document.visibilityState !== 'hidden') setTick((n) => n + 1); };
+    window.addEventListener('focus', again);
+    document.addEventListener('visibilitychange', again);
+    return () => { window.removeEventListener('focus', again); document.removeEventListener('visibilitychange', again); };
+  }, [enabled]);
   useEffect(() => {
     if (!enabled) return undefined;
     let live = true;
@@ -22,6 +32,6 @@ export function useMemoryReading(enabled: boolean): MemoryReading {
       },
     );
     return () => { live = false; };
-  }, [enabled]);
+  }, [enabled, refreshKey, tick]);
   return reading;
 }

@@ -5,7 +5,7 @@ beside the per-agent sign-in chores, gone once the state is fixed.
 
 States, each on a fresh Desk at 1440x700 (light and dark captured):
   fresh       no agent signed in, memory empty, one repository never indexed →
-              "Set up your agents — none can work yet (0 of N signed in)" [Set up agents → the Agents tab's setup],
+              "Set up your agents — none can work yet (0 of N ready)" [Set up agents → the Agents tab's setup],
               "Your memory is empty — …" [Build memory], and the repository's "Not indexed yet" item [Index it ›];
   one-agent   only claude can work → "Only claude can work — jobs need a second agent to review the work" [Sign in another];
   memory-down the memory read refused → "Memory isn't reachable — …" with the daemon's reason;
@@ -79,7 +79,7 @@ with sync_playwright() as p:
     f = seen["fresh"]
     keys = [s["key"] for s in f["setup"]]
     check("fresh", keys[:2] == ["agents", "memory-empty"] and f["first"] == "desk-chores"
-          and "none can work yet (0 of 4 signed in)" in f["setup"][0]["text"] and f["setup"][0]["act"] == "Set up agents"
+          and "none can work yet (0 of 4 ready)" in f["setup"][0]["text"] and f["setup"][0]["act"] == "Set up agents"
           and f["setup"][1]["act"] == "Build memory" and any("Not indexed yet" in r and "Index it" in r for r in f["repo"]), fresh=f)
     o = seen["one-agent"]
     check("one-agent", [s["key"] for s in o["setup"]] == ["second-agent"]

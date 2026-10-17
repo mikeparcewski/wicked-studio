@@ -287,7 +287,7 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
   const delivered = kept.filter((v) => { const d = (v.session as { delivery?: unknown }).delivery; return d === 'delivered' || d === 'pushed'; }).length;
   const chores = useMemo(() => lapsedSeatChores(roster), [roster]);
   // Studio's own setup (operator 2026-10-17): live items from the agents and the memory read, the Desk only.
-  const memory = useMemoryReading(projectId === undefined);
+  const memory = useMemoryReading(projectId === undefined, tab);
   const setup = useMemo(() => (projectId !== undefined ? [] : setupChores(
     { known: agentsView.hasRoster, usable: agentsView.rows.filter((r) => r.usable), total: agentsView.rows.length },
     memory,
@@ -295,7 +295,8 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
   )), [projectId, agentsView.hasRoster, agentsView.rows, memory]);
   const leadWithSignIn = noSignedInHelper(roster) && chores.length > 0 && !setup.some((c) => c.key === 'agents');
   const [choresOpen, setChoresOpen] = useState(false);
-  const choresGrouped = chores.length > 2 && !leadWithSignIn;
+  // A first run (no agent can work) lists each agent to sign in, as the lead did; otherwise many fold into one row.
+  const choresGrouped = chores.length > 2 && !leadWithSignIn && !setup.some((c) => c.key === 'agents');
   const choresFolded = choresGrouped && !choresOpen;
   const [governanceSelf, setGovernanceSelf] = useState<DiagnosticsGovernance | null>(null);
   const rereadGovernance = useCallback(() => { getDiagnostics().then((d) => setGovernanceSelf(d.governance ?? null), () => undefined); }, []);
@@ -382,7 +383,7 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
       {/* The handover is studio-wide (the audit trail and its dismissal are global): the Desk only, never a project page. */}
       {projectId === undefined && handover.since !== null && <HandoverPanel handover={handover} navigate={navigate} now={now} runs={runs} />}
       <div className="wk-work-top">
-        <DeskInbox rows={needRows} runs={runs} navigate={navigate} now={now} settled={readState === 'known' ? settled.phase : 'loading'} agentName={agentName} extra={projectId === undefined ? choresBlock : null}
+        <DeskInbox rows={needRows} runs={runs} navigate={navigate} now={now} settled={readState === 'known' ? settled.phase : 'loading'} agentName={agentName} extra={projectId === undefined ? choresBlock : null} setupCount={setup.length}
           missing={settled.missing} onRetry={rereadSources} retrying={rereading} />
         <ul className="wk-work-blocks" aria-label="At a glance" data-testid="desk-blocks">
           <DeskStat icon={Activity} tone="run" label="Running now" testId="desk-block-running" href={runningPath} navigate={navigate}

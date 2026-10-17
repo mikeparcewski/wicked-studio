@@ -49,7 +49,9 @@ function readSeen(): Set<string> {
 
 function seenId(row: NeedRow): string { return `${row.key}@${row.at ?? ''}`; }
 
-export function DeskInbox({ rows, runs, navigate, now, settled, agentName, extra = null, missing = [], onRetry, retrying = false }: {
+export function DeskInbox({ rows, runs, navigate, now, settled, agentName, extra = null, setupCount = 0, missing = [], onRetry, retrying = false }: {
+  /** Studio's own setup items above the list (codex r2: the inbox never reads all-clear beside them). */
+  setupCount?: number;
   /** Needs sources that did not answer (a partial read): named, with a retry. */
   missing?: readonly string[];
   onRetry?: () => void;
@@ -83,7 +85,7 @@ export function DeskInbox({ rows, runs, navigate, now, settled, agentName, extra
   const total = byFolder.get('all') ?? 0;
   const folderEmpty = folder !== 'all' && total > 0
     ? `Nothing in ${FOLDERS.find((f) => f.id === folder)?.label ?? 'this folder'} now · ${total}${settled === 'partial' ? '+' : ''} still waiting in All.`
-    : undefined;
+    : total === 0 && setupCount > 0 ? 'Nothing else needs you right now' : undefined;
   const flat = useMemo(() => queue.rows.flatMap((r) => [r, ...(r.members ?? [])]), [queue.rows]);
   const current = flat.find((r) => r.key === selected) ?? null;
   const runOf = (row: NeedRow): SessionView | null => { const id = needRunId(row); return id === null ? null : runs.find((v) => v.session.id === id) ?? null; };
@@ -123,7 +125,7 @@ export function DeskInbox({ rows, runs, navigate, now, settled, agentName, extra
         <div className="wk-inbox-heading">
           <div className="wk-inbox-title-row">
             <h2 id="desk-inbox-title" className="wk-desk2-title">Needs you</h2>
-            {settled !== 'loading' && <span className="wk-viz-meta wk-inbox-count" data-testid="desk-inbox-count" data-phase={settled} data-count={needCount(rows)}>{byFolder.get('all') === 0 ? (settled === 'partial' ? 'not everything could be read' : 'nothing is waiting for you') : `${byFolder.get('all')}${settled === 'partial' ? '+' : ''} waiting${unread > 0 ? ` · ${unread} unread` : ''}`}</span>}
+            {settled !== 'loading' && <span className="wk-viz-meta wk-inbox-count" data-testid="desk-inbox-count" data-phase={settled} data-count={needCount(rows)}>{byFolder.get('all') === 0 ? (settled === 'partial' ? 'not everything could be read' : setupCount > 0 ? `${setupCount} to set up` : 'nothing is waiting for you') : `${byFolder.get('all')}${settled === 'partial' ? '+' : ''} waiting${unread > 0 ? ` · ${unread} unread` : ''}`}</span>}
           </div>
           <p data-testid="desk-inbox-subtitle" className="wk-inbox-subtitle">Decisions, questions and problems waiting on you</p>
         </div>

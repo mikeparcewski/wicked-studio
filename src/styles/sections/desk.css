@@ -764,7 +764,7 @@
 .wk-inbox-list div.wk-inbox-row:not([data-count="1"]) > .wk-inbox-acts .wk-need-acts { justify-content: flex-start; }
 /* The item's move reads as its action (operator 2026-10-17): an outlined button in the accent; a quiet second move stays text. */
 .wk-inbox-acts .wk-need-act { min-width: 0; min-height: var(--control-h-sm); padding: 0 var(--space-3); border: 1px solid color-mix(in oklab, var(--accent) 50%, transparent); border-radius: var(--radius-md); background: var(--surface-card); color: var(--accent); font-size: var(--text-xs); }
-.wk-inbox-acts .wk-need-act:hover:not(:disabled) { border-color: var(--accent); background: var(--accent-wash); }
+.wk-inbox-acts .wk-need-act:hover:not(:disabled) { border-color: var(--accent); background: var(--accent-wash); color: var(--ink-high); }
 .wk-inbox-acts .wk-need-act--quiet { border-color: transparent; background: transparent; color: var(--ink-muted); }
 .wk-inbox-acts .wk-need-act--quiet:hover:not(:disabled) { border-color: transparent; background: var(--surface-raised); color: var(--ink-high); }
 
