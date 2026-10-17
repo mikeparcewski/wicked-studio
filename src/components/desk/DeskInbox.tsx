@@ -156,6 +156,9 @@ export function DeskInbox({ rows, runs, navigate, now, settled, agentName, extra
   );
 }
 
+/** The reading pane's kind tag: what this item is, in one word, in its section's tone. */
+const KIND_WORD: Record<NeedSection, string> = { decision: 'Decision', failure: 'Failed', review: 'To review', other: 'Worth a look' };
+
 function senderOf(row: NeedRow): string {
   if (row.kind === 'repo-graph') return 'Repositories';
   if (row.kind === 'proposal') return 'Steering';
@@ -206,6 +209,7 @@ function ReadingPane({ row, view, queueAct, navigate, now, agentName }: {
       {/* What it is scrolls; what you can do about it is pinned under it, always in view. */}
       <div className="wk-inbox-read-scroll">
         <p className="wk-inbox-read-meta">
+          <span data-testid="desk-inbox-kind" data-section={needSection(row)} className="wk-inbox-kind">{KIND_WORD[needSection(row)]}</span>
           {agent !== null && <><i aria-hidden className="wk-chart-swatch" style={{ background: agentColor(agent) }} />{agentName(agent)} · </>}
           {view !== null ? workflowOf(view).label : senderOf(row)}
           {row.at !== null && <> · {relTime(row.at, now)}</>}

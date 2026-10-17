@@ -12,8 +12,8 @@
   "studioVersion": "0.9.6",
   "counts": {
     "files": 230,
-    "occurrences": 2840,
-    "static": 2450,
+    "occurrences": 2841,
+    "static": 2451,
     "dynamic": 72,
     "computed": 24
   },
@@ -2695,6 +2695,12 @@
     },
     {
       "testId": "desk-inbox-gate",
+      "files": [
+        "src/components/desk/DeskInbox.tsx"
+      ]
+    },
+    {
+      "testId": "desk-inbox-kind",
       "files": [
         "src/components/desk/DeskInbox.tsx"
       ]
