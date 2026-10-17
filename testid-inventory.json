@@ -12,9 +12,9 @@
   "studioVersion": "0.9.6",
   "counts": {
     "files": 230,
-    "occurrences": 2849,
-    "static": 2458,
-    "dynamic": 72,
+    "occurrences": 2852,
+    "static": 2465,
+    "dynamic": 70,
     "computed": 24
   },
   "static": [
@@ -141,6 +141,12 @@
       ]
     },
     {
+      "testId": "agents-free-tier",
+      "files": [
+        "src/components/agents/AgentModal.tsx"
+      ]
+    },
+    {
       "testId": "agents-governed",
       "files": [
         "src/components/agents/AgentsPage.tsx"
@@ -213,9 +219,33 @@
       ]
     },
     {
+      "testId": "agents-new-work",
+      "files": [
+        "src/components/agents/AgentModal.tsx"
+      ]
+    },
+    {
+      "testId": "agents-new-work-toggle",
+      "files": [
+        "src/components/agents/AgentModal.tsx"
+      ]
+    },
+    {
       "testId": "agents-offline-how",
       "files": [
         "src/components/agents/AgentsPage.tsx"
+      ]
+    },
+    {
+      "testId": "agents-open",
+      "files": [
+        "src/components/agents/AgentsPage.tsx"
+      ]
+    },
+    {
+      "testId": "agents-optional-signin",
+      "files": [
+        "src/components/agents/AgentModal.tsx"
       ]
     },
     {
@@ -352,6 +382,18 @@
     },
     {
       "testId": "agents-signout-how",
+      "files": [
+        "src/components/agents/AgentModal.tsx"
+      ]
+    },
+    {
+      "testId": "agents-signout-run",
+      "files": [
+        "src/components/agents/AgentModal.tsx"
+      ]
+    },
+    {
+      "testId": "agents-signout-terminal",
       "files": [
         "src/components/agents/AgentModal.tsx"
       ]
@@ -8540,6 +8582,12 @@
       ]
     },
     {
+      "testId": "projects-unfiled-sessions",
+      "files": [
+        "src/components/everything/ProjectsTab.tsx"
+      ]
+    },
+    {
       "testId": "proposal-approve",
       "files": [
         "src/components/ProposalsList.tsx"
@@ -10080,12 +10128,6 @@
       "testId": "seat-citations-toggle",
       "files": [
         "src/components/session/SessionView.tsx"
-      ]
-    },
-    {
-      "testId": "seat-logout-line",
-      "files": [
-        "src/components/SystemSettings.tsx"
       ]
     },
     {
@@ -15225,28 +15267,15 @@
       ]
     },
     {
-      "pattern": "seat-freetier-*",
-      "files": [
-        "src/components/SystemSettings.tsx"
-      ]
-    },
-    {
       "pattern": "seat-health-*",
       "files": [
         "src/components/ContextPopover.tsx"
       ]
     },
     {
-      "pattern": "seat-logout-*",
-      "files": [
-        "src/components/SystemSettings.tsx"
-      ]
-    },
-    {
       "pattern": "seat-signin-*",
       "files": [
-        "src/components/ContextPopover.tsx",
-        "src/components/SystemSettings.tsx"
+        "src/components/ContextPopover.tsx"
       ]
     },
     {
