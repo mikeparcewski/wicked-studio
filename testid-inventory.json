@@ -12,8 +12,8 @@
   "studioVersion": "0.9.6",
   "counts": {
     "files": 230,
-    "occurrences": 2884,
-    "static": 2497,
+    "occurrences": 2885,
+    "static": 2498,
     "dynamic": 69,
     "computed": 24
   },
@@ -10588,6 +10588,12 @@
     },
     {
       "testId": "session-gate-qe-refused",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
+      "testId": "session-gate-qe-why",
       "files": [
         "src/components/session/GateRow.tsx"
       ]
