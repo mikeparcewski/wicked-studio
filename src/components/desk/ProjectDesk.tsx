@@ -10,6 +10,7 @@ import { projectMeta, projectRuns, reposUsed } from '../../board/projectModel.js
 import { sessionPath, sessionTitle } from '../../board/sessionModel.js';
 import { relTime } from '../../board/relTime.js';
 import { useProjectsStore } from '../../store/projects.js';
+import { useMembershipStore } from '../../store/membership.js';
 import { fetchReposCached, getCachedRepos } from '../../store/repoCache.js';
 import { openLaunchWizard } from '../../store/launchWizard.js';
 import { openAskDock } from '../../store/askDock.js';
@@ -108,7 +109,8 @@ export function ProjectDesk({ projectId, navigate, runs, needRows, now, search, 
   // (a 404) gets the stand-in, and its jobs are the runs that name no project.
   const unfiledStandIn = isDefault && !loading && detail?.project?.id !== projectId && error !== null && errorStatus === 404;
   const project = detail?.project?.id === projectId ? detail.project : unfiledStandIn ? UNFILED_PROJECT : null;
-  const members = project !== null ? detail?.members ?? NO_MEMBERS : NO_MEMBERS;
+  // codex r1: members belong to THIS project's read only — the stand-in never inherits the last project's.
+  const members = detail?.project?.id === projectId ? detail.members ?? NO_MEMBERS : NO_MEMBERS;
   const [issues, setIssues] = useState<Record<string, ProjectReadIssue>>({});
   const onIssue = useCallback<ProjectIssueHandler>((key, issue) => {
     setIssues((old) => { const next = { ...old }; if (issue === null) delete next[key]; else next[key] = issue; return next; });
@@ -187,9 +189,16 @@ export function ProjectDesk({ projectId, navigate, runs, needRows, now, search, 
   // backfill per scope, the Runs stats and the Report would otherwise start from a partial list).
   const membersRead = missingKey === '' || extra.key === missingKey;
   const allRuns = useMemo(() => (extra.key !== missingKey || extra.runs.length === 0 ? runs : [...runs, ...extra.runs.filter((x) => !runs.some((v) => v.session.id === x.session.id))]), [runs, extra, missingKey]);
+  // The stand-in's jobs follow the board's own rule (the rail's "Not in a project" group): a run's own
+  // claim when it makes one, else the memberships the board read (codex r1: a legacy run filed by
+  // membership alone is not unfiled).
+  const projectIdByRun = useMembershipStore((s) => s.projectIdByRun);
   const mine = useMemo(() => (unfiledStandIn
-    ? allRuns.filter((v) => { const p = (v.session as { project_id?: unknown }).project_id; return p === undefined || p === null || p === '' || p === 'default'; })
-    : projectRuns(allRuns, members, projectId)), [allRuns, members, projectId, unfiledStandIn]);
+    ? allRuns.filter((v) => {
+      const claimed = (v.session as { project_id?: unknown }).project_id;
+      return claimed === undefined ? projectIdByRun[v.session.id] === undefined : claimed === null || claimed === '' || claimed === 'default';
+    })
+    : projectRuns(allRuns, members, projectId)), [allRuns, members, projectId, unfiledStandIn, projectIdByRun]);
   const mineIds = useMemo(() => new Set(mine.map((v) => v.session.id)), [mine]);
   // The membership is the truth for how many jobs a project holds, even one the run list no longer serves.
   const jobsCount = useMemo(() => new Set([...mineIds, ...members.filter((m) => m.member_kind === RUN_KIND).map((m) => m.member_ref)]).size, [mineIds, members]);

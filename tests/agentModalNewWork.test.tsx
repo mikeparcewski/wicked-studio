@@ -40,7 +40,8 @@ const { clearCachedRoster } = await import('../src/store/rosterCache.js');
 const { ApiError } = await import('../src/api/errors.js');
 
 const codex: RosterSeat = { key: 'codex', display_name: 'Codex', binary: 'codex', enabled_for_council: true, auth: 'signed_in', login_check: 'live', probed_at: new Date().toISOString(), council_eligible: true, issues: [], logout_invocation: 'CODEX_HOME=/w/codex codex logout' };
-const opencode = { key: 'opencode', display_name: 'OpenCode', binary: 'opencode', enabled_for_council: true, auth: 'not_required', login_check: 'live', probed_at: new Date().toISOString(), council_eligible: true, issues: [], free_tier: 'OpenCode Zen free models (no account needed)' } as unknown as RosterSeat;
+const opencode = { key: 'opencode', display_name: 'OpenCode', binary: 'opencode', enabled_for_council: true, auth: 'not_required', login_check: 'live', probed_at: new Date().toISOString(), council_eligible: true, issues: [], free_tier: 'OpenCode Zen free models (no account needed)',
+  login_invocation: 'XDG_CONFIG_HOME=/w/opencode opencode auth login', logout_invocation: 'XDG_CONFIG_HOME=/w/opencode opencode auth logout' } as unknown as RosterSeat;
 
 beforeEach(() => {
   localStorage.clear();
@@ -90,5 +91,32 @@ describe('the agent modal carries what General settings did', () => {
     expect(within(dialog).queryByTestId('agents-signout-run')).toBeNull();
     // The command to run yourself stays.
     expect(within(dialog).getByTestId('agents-signout-how')).toHaveTextContent('codex logout');
+  });
+
+  it('every agent opens its modal from the page, a healthy one too (codex r1)', async () => {
+    const navigate = vi.fn();
+    render(<AgentsPage search="" navigate={navigate} />);
+    const rows = await screen.findAllByTestId('agents-row');
+    // Each agent offers a way in: its fix, or (nothing to fix) Open.
+    for (const r of rows) expect(within(r).queryByTestId('agents-fix') ?? within(r).queryByTestId('agents-open')).not.toBeNull();
+    const healthy = screen.getAllByTestId('agents-open');
+    expect(healthy.length).toBeGreaterThan(0);
+    fireEvent.click(healthy[0]!);
+    expect(navigate).toHaveBeenCalledWith(expect.stringContaining(`fix=${healthy[0]!.getAttribute('data-agent')}`));
+  });
+
+  it('toggling one agent keeps every other stored choice, even ones no row shows (codex r1)', async () => {
+    localStorage.setItem('wicked_default_clis', JSON.stringify(['claude-judge', 'codex', 'away-seat']));
+    render(<AgentsPage search="?fix=codex" navigate={vi.fn()} />);
+    const dialog = await screen.findByRole('dialog', { name: 'Codex' });
+    fireEvent.click(within(dialog).getByTestId('agents-new-work-toggle'));
+    expect(JSON.parse(localStorage.getItem('wicked_default_clis') ?? 'null')).toEqual(['claude-judge', 'away-seat']);
+  });
+
+  it('an agent that needs no sign-in still offers its provider sign-in and its documented sign-out (codex r1)', async () => {
+    render(<AgentsPage search="?fix=opencode" navigate={vi.fn()} />);
+    const dialog = await screen.findByRole('dialog', { name: 'OpenCode' });
+    expect(within(dialog).getByTestId('agents-optional-signin')).toHaveTextContent('opencode auth login');
+    expect(within(dialog).getByTestId('agents-signout-run')).toBeInTheDocument();
   });
 });

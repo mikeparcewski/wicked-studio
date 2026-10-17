@@ -21,8 +21,10 @@ export function storedDefaults(): string[] | null {
  * that reads the rows hears it at once (a `storage` event).
  */
 export function setPickedForNewWork(rows: readonly AgentRow[], key: string, on: boolean): void {
-  const picked = rows.filter((r) => r.picked).map((r) => r.key);
-  const next = on ? [...new Set([...picked, key])] : picked.filter((k) => k !== key);
+  // codex r1: change this one key in what is stored (keys no row shows — a folded reviewer seat, a seat
+  // away right now — stay); with nothing stored yet, start from what the default rule picks.
+  const base = storedDefaults() ?? rows.flatMap((r) => (r.picked ? r.keys : []));
+  const next = on ? [...new Set([...base, key])] : base.filter((k) => k !== key);
   try {
     globalThis.localStorage?.setItem(DEFAULT_CLIS_KEY, JSON.stringify(next));
     window.dispatchEvent(new StorageEvent('storage', { key: DEFAULT_CLIS_KEY }));

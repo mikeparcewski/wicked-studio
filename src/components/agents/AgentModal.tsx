@@ -389,13 +389,22 @@ export function AgentModal({ agentKey, onClose, intent }: {
                   onChange={(on) => setPickedForNewWork(rows, row.key, on)}
                   hint={row.picked ? 'Picked for new chats and jobs. You can still change the helpers on each one.' : 'Not picked for new chats and jobs. You can still add it to one.'} />
                 {typeof row.seat.free_tier === 'string' && row.seat.free_tier !== '' && <p data-testid="agents-free-tier" className="wk-field-note">{row.seat.free_tier}</p>}
+                {/* Free without an account, but a provider account is still an option (General offered it). */}
+                {authOf(row.seat) === 'not_required' && row.login !== null && (
+                  <details className="wk-tech-details" data-testid="agents-optional-signin">
+                    <summary className="wk-tech-details-summary">{`Sign ${name} in to a provider account (optional)`}</summary>
+                    <p>{`Run this in your terminal, then Check now:`}</p>
+                    <Command c={{ line: row.login, display: commandDisplay(row.login), label: 'sign-in' }} />
+                  </details>
+                )}
               </section>
             </>
           )}
         </div>
         {row !== undefined && (() => {
           // Check now and Sign out for every agent (the login hooks); the check block inside a card wins.
-          const signedIn = row.sign.word === 'Signed in' || row.sign.word === 'Looks signed in';
+          // A seat that needs no sign-in may still hold a provider account it can sign out of (codex r1).
+          const signedIn = row.sign.word === 'Signed in' || row.sign.word === 'Looks signed in' || authOf(row.seat) === 'not_required';
           const signOut = !signedIn ? null : hookSignOut
             // Signing out retires a check still in flight, so its older answer can't land after it (codex S4 r3).
             ? <button type="button" data-testid="agents-signout" className="wk-btn wk-btn--quiet" disabled={busy !== null} aria-busy={busy === 'out'} onClick={() => runAuth('out', row.key)}>{busy === 'out' ? 'Signing out…' : `Sign ${name} out`}</button>

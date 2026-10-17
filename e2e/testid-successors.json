@@ -874,7 +874,7 @@
     "doc-coverage-row": "host-panel-frame",
     "seat-freetier-*": "agents-free-tier",
     "seat-logout-*": "agents-signout-run",
-    "seat-signin-*": "agents-signin",
+    "seat-signin-*": "agents-sign",
     "seat-logout-line": "agents-signout-terminal"
   }
 }

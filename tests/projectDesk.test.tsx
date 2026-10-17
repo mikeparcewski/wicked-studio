@@ -6,7 +6,8 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import type { Project, ProjectMember } from '../src/api/types.js';
 import { makeView } from './factories.js';
 
-const { getProject, getRun, apiFetch, detach } = vi.hoisted(() => ({ getProject: vi.fn(), getRun: vi.fn(), apiFetch: vi.fn(), detach: vi.fn() }));
+const { getProject, getRun, apiFetch, detach, listProjects, listMembers } = vi.hoisted(() => ({ getProject: vi.fn(), getRun: vi.fn(), apiFetch: vi.fn(), detach: vi.fn(),
+  listProjects: vi.fn(() => Promise.resolve({ projects: [] as unknown[] })), listMembers: vi.fn(() => Promise.resolve({ members: [] as unknown[] })) }));
 vi.mock('../src/api/client.js', () => ({
   apiBase: () => '/api/v1',
   apiFetch: (...args: unknown[]) => apiFetch(...args),
@@ -14,8 +15,8 @@ vi.mock('../src/api/client.js', () => ({
     getProject: (...args: unknown[]) => getProject(...args),
     getRun: (...args: unknown[]) => getRun(...args),
     detachProjectMember: (...args: unknown[]) => detach(...args),
-    listProjects: () => Promise.resolve({ projects: [] }),
-    listProjectMembers: () => Promise.resolve({ members: [] }),
+    listProjects: () => listProjects(),
+    listProjectMembers: () => listMembers(),
     listRepos: () => Promise.resolve({ repos: [{ id: 'repo', name: 'Shop code', root_path: '/code', default_branch: 'main', registered_at: 1 }] }),
     listChats: () => Promise.resolve({ chats: [] }),
     getRoster: () => Promise.resolve({ roster: [] }),
@@ -209,5 +210,32 @@ describe('the project Desk', () => {
     render(<ProjectDesk {...props} />);
     expect(await screen.findByText('Project not found')).toBeInTheDocument();
     expect(screen.queryByTestId('desk')).toBeNull();
+  });
+});
+
+describe('Not in a project (operator 2026-10-16: the same dashboard as a project)', () => {
+  it('a daemon that answers 404 for the synthesized project gets the stand-in: the board\'s unfiled runs, never a stale member list', async () => {
+    const { ApiError } = await import('../src/api/errors.js');
+    // A legacy run filed by membership alone (no project_id) is NOT unfiled; null and 'default' are.
+    const legacy = makeView({ id: 'legacy', problem: 'Legacy filed', status: 'completed', created_at: NOW / 1000 - 250 });
+    delete (legacy.session as { project_id?: unknown }).project_id; // a pre-0.8.0 DTO: no claim, filed by membership
+    // The board's membership read (the rail's, and the Desk's own) knows legacy belongs to Shop.
+    listProjects.mockResolvedValue({ projects: [project] });
+    listMembers.mockResolvedValue({ members: [member('legacy')] });
+    const unfiledRuns = [runs[0]!, runs[2]!, legacy,
+      makeView({ id: 'loose', project_id: null, problem: 'Loose end', status: 'completed', created_at: NOW / 1000 - 300 }),
+      makeView({ id: 'defaulted', project_id: 'default', problem: 'Default claim', status: 'completed', created_at: NOW / 1000 - 400 })];
+    // First the real project (its members read), then Not in a project on the same mount.
+    const { rerender } = render(<ProjectDesk {...props} runs={unfiledRuns} search="?tab=runs" />);
+    await loaded();
+    getProject.mockRejectedValue(new ApiError(404, 'no such project'));
+    window.history.replaceState(null, '', '/projects/default');
+    rerender(<ProjectDesk {...props} projectId="default" runs={unfiledRuns} search="?tab=runs" />);
+    expect(await screen.findByRole('heading', { level: 1, name: 'Not in a project' })).toBeInTheDocument();
+    await waitFor(() => expect(screen.getAllByTestId('desk-runs-row').map((r) => r.getAttribute('data-run-id')).sort()).toEqual(['defaulted', 'loose']));
+    expect(screen.queryByText('Project not found')).not.toBeInTheDocument();
+    expect(screen.getByTestId('project-meta')).not.toHaveTextContent('repository attached');
+    listProjects.mockResolvedValue({ projects: [] });
+    listMembers.mockResolvedValue({ members: [] });
   });
 });
