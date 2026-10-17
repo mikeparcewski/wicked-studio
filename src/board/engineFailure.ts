@@ -33,6 +33,12 @@ function failureHeadline(raw: string): string {
   if (/every configured seat is benched/i.test(raw)) {
     return 'No helper could take the work: every helper on this run was signed out or benched. Sign one in to try again.';
   }
+  // studio#765: a run that needs a checker distinct from its writer, with only one helper on it.
+  // Only the engine's own "evaluator≠creator unsatisfiable" says that; a bare "no seat distinct from the
+  // creator" can be seats that exist but are not eligible (codex r2 below), so it says no more.
+  if (/evaluator\s*(?:≠|!=)\s*creator unsatisfiable/i.test(raw)) {
+    return 'No second helper could check the work: one helper writes it and a different one checks it.';
+  }
   if (/no eligible seat/i.test(raw)) return 'No helper was eligible to take the work — Technical details say why.';
   const first = raw.split('\n')[0]!.trim();
   const clipped = first.length > HEADLINE_MAX ? `${first.slice(0, HEADLINE_MAX - 1).trimEnd()}…` : first;

@@ -109,7 +109,7 @@ export function DocSubjectPicker({
   return (
     <div data-testid="doc-subject" data-subject-status={status} className="flex flex-wrap items-center gap-1.5">
       {status === 'loading' && (
-        <span data-testid="doc-subject-loading" className="text-[10px] font-mono" style={{ color: 'var(--ink-dim)' }}>
+        <span data-testid="doc-subject-loading" className="text-xs" style={{ color: 'var(--ink-dim)' }}>
           finding the project’s repositories…
         </span>
       )}
@@ -118,7 +118,7 @@ export function DocSubjectPicker({
           <span
             data-testid="doc-subject-error"
             role="alert"
-            className="text-[10px] font-mono"
+            className="text-xs"
             style={{ color: 'var(--status-fail, var(--danger))' }}
           >
             could not list the project’s repositories — {failure}
@@ -127,12 +127,12 @@ export function DocSubjectPicker({
             type="button"
             data-testid="doc-subject-retry"
             onClick={() => setAttempt((n) => n + 1)}
-            className="rounded-full px-2 py-0.5 text-[10px] font-mono"
+            className="rounded-full px-2 py-0.5 text-xs"
             style={{ ...chip, color: 'var(--accent)' }}
           >
             retry
           </button>
-          <label className="flex items-center gap-1 text-[10px] font-mono" style={{ color: 'var(--ink-muted)' }}>
+          <label className="flex items-center gap-1 text-xs" style={{ color: 'var(--ink-muted)' }}>
             <input
               type="checkbox"
               data-testid="doc-subject-nogrounding"
@@ -144,12 +144,12 @@ export function DocSubjectPicker({
         </>
       )}
       {status === 'ready' && repos.length === 0 && projectId !== UNFILED_MOUNT && (
-        <span data-testid="doc-subject-none" className="text-[10px] font-mono" style={{ color: 'var(--ink-dim)' }}>
-          no repositories in this project — crew grounds on the brief
+        <span data-testid="doc-subject-none" className="text-xs" style={{ color: 'var(--ink-dim)' }}>
+          No repositories in this project, so the helpers work from what you wrote.
         </span>
       )}
       {status === 'ready' && repos.length > 0 && (
-        <span className="text-[10px] font-mono" style={{ color: 'var(--ink-dim)' }}>about</span>
+        <span className="text-xs" style={{ color: 'var(--ink-dim)' }}>about</span>
       )}
       {status === 'ready' && repos.map((repo) => {
         const on = repoRefs.includes(repo.id);
@@ -162,7 +162,7 @@ export function DocSubjectPicker({
             aria-pressed={on}
             onClick={() => toggle(repo.id)}
             title={on ? `The ${mode === 'video' ? 'demo' : 'document'} is about ${repo.name} — click to drop it` : `Ground on ${repo.name}`}
-            className="rounded-full px-2 py-0.5 text-[10px] font-mono"
+            className="rounded-full px-2 py-0.5 text-xs"
             style={{
               background: on ? 'var(--accent-dim)' : 'transparent',
               color: on ? 'var(--accent)' : 'var(--ink-muted)',
@@ -180,8 +180,7 @@ export function DocSubjectPicker({
           aria-label="Document format"
           value={format}
           onChange={(e) => onFormat(e.target.value as DocFormat)}
-          className="rounded-full px-2 py-0.5 text-[10px] font-mono"
-          style={{ background: 'transparent', color: 'var(--ink-muted)', border: '1px solid var(--surface-overlay)' }}
+          className="wk-field"
         >
           {DOC_FORMATS.map((f) => (
             <option key={f.value || 'auto'} value={f.value}>{f.label}</option>

@@ -21,7 +21,7 @@ describe('S16a-4c — where a made thing opens', () => {
   });
 
   it('no run bound: the Made list with the document open', () => {
-    expect(madeOpenAddress('document', 'notes', 'offsite-plan', [], false)).toBe('/everything?tab=made&project=notes&kind=documents&open=offsite-plan');
+    expect(madeOpenAddress('document', 'notes', 'offsite-plan', [], false)).toBe('/everything?tab=made&project=notes&open=offsite-plan');
   });
 
   it('a demo video opens on its run\'s session; an unknown run lands on its session address', () => {

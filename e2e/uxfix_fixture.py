@@ -4482,7 +4482,9 @@ def assemble_runs() -> list:
         # (`extraWriteRoots: [runDir]`, runDir = <draftDir>/<docId>), filed into its project.
         bound = state["doc_bound_run"]
         if bound and not state["no_runs"]:
-            bound_run = session("r-doc-bound", "executing",
+            # studio#765: an optional "status" ("failed" / "cancelled") ends the draft, and an
+            # optional "error" is its engine `error` frame (GET /runs/r-doc-bound/events).
+            bound_run = session("r-doc-bound", bound.get("status", "executing"),
                                 f"Draft the document {bound['doc']} from its brief",
                                 "draft the document")
             bound_run["session"]["workflow_id"] = "interactive-draft"
@@ -6646,6 +6648,9 @@ class W2Handler(SimpleHTTPRequestHandler):
                     events = events + [{"type": "unitDispatched", "session": rid, "ord": 1, "attempt": 1, "cli": "claude",
                                         "ts": NOW0, "seq": 4}]
             with state_lock:
+                bound_doc = state["doc_bound_run"]
+                if bound_doc and rid == "r-doc-bound" and isinstance(bound_doc.get("error"), str):
+                    events = [{"type": "error", "session": rid, "message": bound_doc["error"], "ts": NOW0, "seq": 3}]
                 if state["seat_escalation"] and rid == "r-seat":
                     events = list(SEAT_EVENTS)
                 if state["e2e7721"] and rid in E7721_EVENTS:

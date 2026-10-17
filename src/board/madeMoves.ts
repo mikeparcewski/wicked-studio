@@ -27,6 +27,7 @@ export function madeOpenAddress(kind: 'document' | 'video', pid: string, item: s
   }
   const run = docRunOf(runs, pid, item) ?? archivedDocRun(runs, pid, item);
   return run === null
-    ? everythingPath({ tab: 'made', kind: 'documents', project: pid, open: item })
+    // studio#768: All — a page or a deck opened under the Documents filter read "No documents yet".
+    ? everythingPath({ tab: 'made', kind: 'all', project: pid, open: item })
     : artifactPath(sessionIdOf(run, runChatId), artifactKey(pid, item, run.session.id), 'full', version);
 }

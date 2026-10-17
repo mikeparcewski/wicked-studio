@@ -98,7 +98,7 @@ with sync_playwright() as p:
     page.get_by_test_id("made-new-document-create").click()
     page.wait_for_function("() => new URLSearchParams(location.search).get('open') !== null", timeout=15000)
     sent = [s.get("key") for s in json.loads(json.loads(create_bodies[0] or "{}").get("clisJson") or "[]")] if create_bodies else None
-    check("new-document-seats", len(pressed) > 0 and sent == pressed and council.startswith("council: "), pressed=pressed, sent=sent, council=council)
+    check("new-document-seats", len(pressed) > 0 and sent == pressed and council.startswith("Helpers: "), pressed=pressed, sent=sent, council=council)
     opened = urllib.parse.parse_qs(urllib.parse.urlparse(page.url).query).get("open", [None])[0]
     page.screenshot(path=str(SHOTS / "desk-made-doors-created.png"))
     check("new-document-one-post", len(creates) == 1 and opened is not None and opened.startswith("offsite-plan"), creates=creates, open=opened)

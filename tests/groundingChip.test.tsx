@@ -57,6 +57,6 @@ describe('madeRows carries the record to the Made row', () => {
       { name: 'plain', kind: 'doc', head: 1, versions: 1, updated_at: '2026-10-07T00:00:00Z' },
     ] }, [], {});
     expect(rows.find((r) => r.title === 'grounded')!.doc!.grounding).toEqual(PRESENT);
-    expect(rows.find((r) => r.title === 'plain')!.doc).toEqual({ name: 'plain', kind: 'doc' });
+    expect(rows.find((r) => r.title === 'plain')!.doc).toEqual({ name: 'plain', kind: 'doc', head: 1 });
   });
 });
