@@ -12,8 +12,8 @@
   "studioVersion": "0.9.6",
   "counts": {
     "files": 230,
-    "occurrences": 2841,
-    "static": 2451,
+    "occurrences": 2846,
+    "static": 2455,
     "dynamic": 72,
     "computed": 24
   },
@@ -2742,6 +2742,12 @@
       ]
     },
     {
+      "testId": "desk-inbox-subtitle",
+      "files": [
+        "src/components/desk/DeskInbox.tsx"
+      ]
+    },
+    {
       "testId": "desk-insights",
       "files": [
         "src/components/desk/DeskV2.tsx"
@@ -3184,6 +3190,18 @@
         "src/board/objectActions.ts",
         "src/components/desk/Desk.tsx",
         "src/components/desk/DeskHappening.tsx"
+      ]
+    },
+    {
+      "testId": "desk-setup",
+      "files": [
+        "src/components/desk/DeskV2.tsx"
+      ]
+    },
+    {
+      "testId": "desk-setup-act",
+      "files": [
+        "src/components/desk/DeskV2.tsx"
       ]
     },
     {
@@ -6980,6 +6998,12 @@
     },
     {
       "testId": "need-group-toggle",
+      "files": [
+        "src/components/NeedsYouQueue.tsx"
+      ]
+    },
+    {
+      "testId": "need-kind",
       "files": [
         "src/components/NeedsYouQueue.tsx"
       ]

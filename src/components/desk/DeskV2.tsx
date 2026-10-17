@@ -9,7 +9,9 @@ import {
   agentRows, agentsOf, governanceOf, AGENT_WORKFLOW_NOTE, PARTIAL_RECORD_NOTE, bucketsOf, callouts, DEFAULT_REFINE, GROUP_BYS, jobSeries, OUTCOMES, outcomeOf, projectOf, RANGES,
   refineRuns, spendAvailability, spendSeries, spendTotals as projectSpend, stepFor, outcomeRows, sum, workflowLabel, workflowOf, workflowRows, type AcpFallbacks, type Callout, type GroupBy, type GroupNames, type RangeDays, type Refine,
 } from '../../board/deskInsights.js';
-import { deskReadState, lapsedSeatChores, needRunId, noSignedInHelper, workFingerprint } from '../../board/deskModel.js';
+import { deskReadState, lapsedSeatChores, needRunId, noSignedInHelper, setupChores, workFingerprint } from '../../board/deskModel.js';
+import { useMemoryReading } from '../../hooks/useMemoryReading.js';
+import { AGENTS_PATH } from '../agents/AgentsPage.js';
 import { deadletterChore } from '../../board/repairMoves.js';
 import { useDeadletterReplay } from '../../hooks/useRepairMoves.js';
 import { ReplayMove } from '../ReplayMove.js';
@@ -284,7 +286,14 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
   const few = kept.length < SMALL_SAMPLE;
   const delivered = kept.filter((v) => { const d = (v.session as { delivery?: unknown }).delivery; return d === 'delivered' || d === 'pushed'; }).length;
   const chores = useMemo(() => lapsedSeatChores(roster), [roster]);
-  const leadWithSignIn = noSignedInHelper(roster) && chores.length > 0;
+  // Studio's own setup (operator 2026-10-17): live items from the agents and the memory read, the Desk only.
+  const memory = useMemoryReading(projectId === undefined);
+  const setup = useMemo(() => (projectId !== undefined ? [] : setupChores(
+    { known: agentsView.hasRoster, usable: agentsView.rows.filter((r) => r.usable), total: agentsView.rows.length },
+    memory,
+    { agents: deskTabPath('agents', `${AGENTS_PATH}?setup=1`), memory: deskTabPath('repositories') },
+  )), [projectId, agentsView.hasRoster, agentsView.rows, memory]);
+  const leadWithSignIn = noSignedInHelper(roster) && chores.length > 0 && !setup.some((c) => c.key === 'agents');
   const [choresOpen, setChoresOpen] = useState(false);
   const choresGrouped = chores.length > 2 && !leadWithSignIn;
   const choresFolded = choresGrouped && !choresOpen;
@@ -299,9 +308,16 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
   const { failedAt } = useMovableBoardModel(runs);
   const handover = useHandover(runs, failedAt);
   // The chores ride at the top of the inbox (they need a person too); the band never changes height.
-  const choresBlock = (chores.length > 0 || states.frozen || states.away || dead !== null || replaying) ? (
+  const choresBlock = (setup.length > 0 || chores.length > 0 || states.frozen || states.away || dead !== null || replaying) ? (
     <section data-testid="desk-chores" aria-label="For whoever runs studio" data-lead={leadWithSignIn ? 'true' : 'false'} className="wk-inbox-chores">
-      <p className="wk-need-section">For whoever runs studio{chores.length > 0 ? ` · ${chores.length}` : ''}</p>
+      <p className="wk-need-section">For whoever runs studio{setup.length + chores.length > 0 ? ` · ${setup.length + chores.length}` : ''}</p>
+      {/* Studio's own setup, pinned first: live from the agents and the memory read, gone once fixed. */}
+      {setup.map((c) => (
+        <div key={c.key} data-testid="desk-setup" data-setup={c.key} data-tone={c.tone} className="wk-inbox-chore wk-inbox-chore--setup">
+          <span className="wk-inbox-chore-body"><span className="wk-inbox-chore-title">{c.title}</span><span className="wk-inbox-chore-line" title={c.line}>{c.line}</span></span>
+          <a href={c.action.path} data-testid="desk-setup-act" onClick={(e) => { e.preventDefault(); navigate(c.action.path); }} className="wk-need-act">{c.action.label}</a>
+        </div>
+      ))}
       {leadWithSignIn && (
         <p data-testid="desk-signin-lead" className="wk-inbox-chore-lead">No AI agent is signed in yet, so nothing can run. Pick one below and Sign in shows the one command to run.</p>
       )}

@@ -162,18 +162,19 @@ with sync_playwright() as p:
     set_fixture(origin, seat_week=False, roster_signed_in={"claude": False, "codex": False, "agy": False, "pi": False})
     page.goto(f"{origin}/", wait_until="networkidle")
     page.get_by_test_id("desk").wait_for(state="visible", timeout=15000)
-    page.get_by_test_id("desk-signin-lead").wait_for(state="visible", timeout=10000)
+    # 2026-10-17: the lead is the pinned setup item "Set up your agents" (a live item, gone once one is signed in).
+    page.locator('[data-testid="desk-setup"][data-setup="agents"]').wait_for(state="visible", timeout=10000)
     lead = page.evaluate("""() => {
       // Desk v2: the chores lead the Needs-you inbox's list (the first thing in it).
       const main = document.querySelector('[data-testid="desk-inbox-list"]');
       const first = main ? main.firstElementChild?.dataset.testid : null;
       const chores = document.querySelector('[data-testid="desk-chores"]');
-      return { first, lead: chores?.dataset.lead, text: document.querySelector('[data-testid="desk-signin-lead"]')?.innerText,
+      return { first, lead: chores?.dataset.lead, text: document.querySelector('[data-testid="desk-setup"][data-setup="agents"]')?.innerText,
                rows: document.querySelectorAll('[data-testid="desk-chore"] [data-testid="desk-chore-signin"]').length };
     }""")
     page.screenshot(path=str(SHOTS / "desk-signin-firstrun.png"))
-    check("first-run", lead["first"] == "desk-chores" and lead["lead"] == "true" and lead["rows"] >= 4
-          and "No AI agent is signed in yet" in (lead["text"] or ""), **lead)  # Desk v2: Helpers became Agents
+    check("first-run", lead["first"] == "desk-chores" and lead["rows"] >= 4
+          and "Set up your agents" in (lead["text"] or "") and "Set up agents" in (lead["text"] or ""), **lead)
 
     check("no-errors", not errors, errors=errors[:5])
     browser.close()

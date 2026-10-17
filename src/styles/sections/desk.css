@@ -675,8 +675,17 @@
      moves docked at the foot;
    - the chores for whoever runs studio: one tinted callout above the list.
    Tokens only, so both themes (and the wicked pair) read from the same rules. ── */
+/* Its identity (operator 2026-10-17: "it's still not obvious what it is just needs a little more definition"):
+   a bordered component with an inbox mark, its name, a count pill and one line saying what lands here. */
+.wk-desk2 .wk-inbox { border: 1px solid var(--border); }
 .wk-inbox-head { flex: 0 0 auto; display: flex; align-items: center; gap: var(--space-2) var(--space-3); flex-wrap: wrap; padding-bottom: var(--space-4); }
-.wk-inbox-head [data-testid="desk-inbox-count"] { font-size: var(--text-xs); color: var(--ink-muted); font-variant-numeric: tabular-nums; }
+.wk-inbox-icon { flex: 0 0 auto; display: grid; place-items: center; width: 36px; height: 36px; border-radius: var(--radius-md); background: var(--accent-wash); color: var(--accent); }
+.wk-inbox-heading { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.wk-inbox-heading .wk-desk2-title { margin: 0; line-height: var(--leading-tight); }
+.wk-inbox-subtitle { margin: 0; font-size: var(--text-xs); color: var(--ink-muted); }
+.wk-inbox-title-row { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
+.wk-inbox-head .wk-inbox-count { padding: 2px 10px; border-radius: var(--radius-full); background: var(--surface-raised); color: var(--ink-body); font-size: var(--text-xs); font-weight: var(--weight-semi); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.wk-inbox-head .wk-inbox-count[data-count]:not([data-count="0"]) { background: var(--accent-wash); color: var(--ink-high); }
 .wk-inbox-folders { display: inline-flex; gap: 2px; margin-left: auto; padding: 3px; flex-wrap: wrap; border-radius: var(--radius-full); background: var(--surface-raised); box-shadow: inset 0 0 0 1px var(--border-subtle); }
 .wk-inbox-folders .wk-inbox-folder { gap: 6px; min-height: 28px; padding: 0 6px 0 12px; border: 0; border-radius: var(--radius-full); background: transparent; color: var(--ink-muted); font-weight: var(--weight-medium); }
 .wk-inbox-folders .wk-inbox-folder:hover { background: transparent; color: var(--ink-high); }
@@ -695,7 +704,7 @@
 .wk-inbox-list .wk-need-section { margin: var(--space-4) 0 var(--space-1); padding: 0 var(--space-2); font-size: var(--text-xs); font-weight: var(--weight-semi); color: var(--ink-high); }
 .wk-inbox-list .wk-need-section-count { font-weight: var(--weight-normal); color: var(--ink-muted); }
 .wk-inbox-list [role="group"]:first-of-type .wk-need-section { margin-top: 0; }
-.wk-inbox-list [data-testid="home-calm"] { padding: var(--space-3) var(--space-2) !important; }
+.wk-inbox-list p[data-testid="home-calm"] { padding: var(--space-3) var(--space-2) !important; }
 
 /* An item: kind mark | who · when / what / which job + its moves. */
 .wk-inbox-list div.wk-inbox-row {
@@ -723,6 +732,17 @@
 .wk-inbox-row[data-unread="true"] .wk-inbox-mark::after { content: ''; position: absolute; top: -1px; right: -1px; width: 9px; height: 9px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 2px var(--surface-card); }
 
 .wk-inbox-from { grid-area: from; display: flex; align-items: center; gap: 6px; min-width: 0; font-size: var(--text-xs); color: var(--ink-muted); }
+/* What kind of item, in a word, on its first line. */
+.wk-inbox-kind-chip { flex: 0 0 auto; display: inline-flex; align-items: center; height: 18px; padding: 0 7px; border-radius: var(--radius-full); background: var(--surface-raised); color: var(--ink-body); font-size: var(--text-2xs); font-weight: var(--weight-semi); white-space: nowrap; }
+.wk-inbox-kind-chip[data-section="decision"] { background: var(--accent-wash); color: var(--ink-high); }
+.wk-inbox-kind-chip[data-section="failure"] { background: var(--status-fail-dim); color: var(--status-fail); }
+.wk-inbox-kind-chip[data-section="review"] { background: var(--status-warn-dim); color: var(--ink-high); }
+.wk-inbox-row[aria-current="true"] .wk-inbox-kind-chip[data-section="decision"] { background: var(--surface-card); }
+/* Empty, it is still recognizably the inbox. */
+.wk-inbox-list .wk-inbox-calm { flex: 1 1 auto; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--space-1); padding: var(--space-6) var(--space-4); text-align: center; border-radius: var(--radius-lg); background: var(--surface-raised); }
+.wk-inbox-calm-icon { color: var(--status-ok); }
+.wk-inbox-calm-title { margin: 0; font-size: var(--text-md); font-weight: var(--weight-semi); color: var(--ink-high); }
+.wk-inbox-calm-line { margin: 0; font-size: var(--text-xs); color: var(--ink-muted); }
 .wk-inbox-list .wk-inbox-sender { padding: 0; border: 0; background: none; font: inherit; color: inherit; cursor: pointer; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .wk-inbox-list .wk-inbox-sender:focus-visible { outline: 2px solid transparent; box-shadow: var(--focus-ring); border-radius: var(--radius-sm); }
 .wk-inbox-row[data-unread="true"] .wk-inbox-sender { color: var(--ink-body); font-weight: var(--weight-semi); }
@@ -742,10 +762,11 @@
 .wk-inbox-acts .wk-need-acts { display: flex; gap: var(--space-1); flex-wrap: wrap; align-items: center; justify-content: flex-end; }
 .wk-inbox-acts:has(.wk-need-answer, .wk-need-chosen, [aria-expanded="true"]) .wk-need-acts,
 .wk-inbox-list div.wk-inbox-row:not([data-count="1"]) > .wk-inbox-acts .wk-need-acts { justify-content: flex-start; }
-.wk-inbox-acts .wk-need-act { min-width: 0; min-height: var(--control-h-sm); padding: 0 var(--space-2); border-color: transparent; border-radius: var(--radius-sm); background: transparent; font-size: var(--text-xs); }
-.wk-inbox-acts .wk-need-act:hover:not(:disabled) { border-color: transparent; background: var(--surface-card); }
-.wk-inbox-row[aria-current="true"] .wk-inbox-acts .wk-need-act:hover:not(:disabled) { background: var(--surface-card); }
-.wk-inbox-acts .wk-need-act--quiet { color: var(--ink-muted); }
+/* The item's move reads as its action (operator 2026-10-17): an outlined button in the accent; a quiet second move stays text. */
+.wk-inbox-acts .wk-need-act { min-width: 0; min-height: var(--control-h-sm); padding: 0 var(--space-3); border: 1px solid color-mix(in oklab, var(--accent) 50%, transparent); border-radius: var(--radius-md); background: var(--surface-card); color: var(--accent); font-size: var(--text-xs); }
+.wk-inbox-acts .wk-need-act:hover:not(:disabled) { border-color: var(--accent); background: var(--accent-wash); }
+.wk-inbox-acts .wk-need-act--quiet { border-color: transparent; background: transparent; color: var(--ink-muted); }
+.wk-inbox-acts .wk-need-act--quiet:hover:not(:disabled) { border-color: transparent; background: var(--surface-raised); color: var(--ink-high); }
 
 /* For whoever runs studio: one tinted callout above the list, its moves small and solid. */
 .wk-inbox-chores { display: flex; flex-direction: column; gap: 2px; margin: 0 0 var(--space-2); padding: var(--space-2); border-radius: var(--radius-lg); background: var(--status-warn-dim); }

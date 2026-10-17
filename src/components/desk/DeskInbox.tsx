@@ -1,5 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
-import { Archive, ExternalLink, RotateCcw } from 'lucide-react';
+import { Archive, ExternalLink, Inbox, RotateCcw } from 'lucide-react';
 import { api } from '../../api/client.js';
 import type { SessionView } from '../../api/types.js';
 import type { NeedRow } from '../../board/needsYou.js';
@@ -116,9 +116,17 @@ export function DeskInbox({ rows, runs, navigate, now, settled, agentName, extra
 
   return (
     <section id="desk-inbox" aria-labelledby="desk-inbox-title" data-testid="desk-inbox" className="wk-card wk-inbox">
+      {/* What it is, at a glance (operator 2026-10-17: "it's still not obvious what it is"): the inbox mark, its
+          name, the count, and one line saying what lands here. */}
       <header className="wk-inbox-head">
-        <h2 id="desk-inbox-title" className="wk-desk2-title">Needs you</h2>
-        {settled !== 'loading' && <span className="wk-viz-meta" data-testid="desk-inbox-count" data-phase={settled} data-count={needCount(rows)}>{byFolder.get('all') === 0 ? (settled === 'partial' ? 'not everything could be read' : 'nothing is waiting for you') : `${byFolder.get('all')}${settled === 'partial' ? '+' : ''} waiting${unread > 0 ? ` · ${unread} unread` : ''}`}</span>}
+        <span aria-hidden className="wk-inbox-icon"><Inbox size={18} /></span>
+        <div className="wk-inbox-heading">
+          <div className="wk-inbox-title-row">
+            <h2 id="desk-inbox-title" className="wk-desk2-title">Needs you</h2>
+            {settled !== 'loading' && <span className="wk-viz-meta wk-inbox-count" data-testid="desk-inbox-count" data-phase={settled} data-count={needCount(rows)}>{byFolder.get('all') === 0 ? (settled === 'partial' ? 'not everything could be read' : 'nothing is waiting for you') : `${byFolder.get('all')}${settled === 'partial' ? '+' : ''} waiting${unread > 0 ? ` · ${unread} unread` : ''}`}</span>}
+          </div>
+          <p data-testid="desk-inbox-subtitle" className="wk-inbox-subtitle">Decisions, questions and problems waiting on you</p>
+        </div>
         <div role="tablist" aria-label="Show" className="wk-inbox-folders">
           {FOLDERS.filter((f) => f.id === 'all' || (byFolder.get(f.id) ?? 0) > 0 || folder === f.id).map((f) => (
             <button key={f.id} type="button" role="tab" id={tabId(f.id)} aria-controls={panelId(f.id)} tabIndex={folder === f.id ? 0 : -1}

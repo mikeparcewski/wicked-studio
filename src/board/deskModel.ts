@@ -383,6 +383,62 @@ export function noSignedInHelper(roster: readonly RosterSeat[] | null): boolean 
   return roster.every(signInLapsed);
 }
 
+/**
+ * What studio itself still needs before work can go well (operator 2026-10-17: "if a user doesn't have any
+ * agents or memory should we seed a message that they need to set up their agents?"). NOT a stored message:
+ * live items derived from what the daemon says now, shown at the top of Needs you beside the per-agent
+ * sign-in chores, and gone the moment the state is fixed.
+ *
+ *  - no agent able to work (signed in, eligible, not benched — the Agents tab's own "usable") → set them up;
+ *  - exactly one able agent → a job needs a second to review its work (evaluator ≠ creator);
+ *  - memory (`GET /memory/coverage`) holds nothing → build it; the read failed → it is not reachable.
+ *    A daemon without the route says nothing (unknown is never "empty").
+ */
+export interface SetupChore {
+  key: 'agents' | 'second-agent' | 'memory-empty' | 'memory-down';
+  title: string;
+  line: string;
+  tone: 'fail' | 'gate';
+  action: { label: string; path: string };
+}
+
+export type MemoryReading = { state: 'ok'; total: number } | { state: 'down'; reason: string } | { state: 'unknown' };
+
+export function setupChores(agents: { known: boolean; usable: readonly { name: string }[]; total: number }, memory: MemoryReading, paths: { agents: string; memory: string }): SetupChore[] {
+  const out: SetupChore[] = [];
+  if (agents.known && agents.usable.length === 0) {
+    out.push({
+      key: 'agents', tone: 'fail',
+      title: agents.total === 0 ? 'Set up your agents — none is set up yet' : `Set up your agents — none can work yet (0 of ${agents.total} signed in)`,
+      line: 'Nothing can run until at least one AI agent is signed in and ready.',
+      action: { label: 'Set up agents', path: paths.agents },
+    });
+  } else if (agents.known && agents.usable.length === 1) {
+    out.push({
+      key: 'second-agent', tone: 'gate',
+      title: `Only ${agents.usable[0]!.name} can work — jobs need a second agent to review the work`,
+      line: 'A job’s work is checked by a different agent than the one that did it.',
+      action: { label: 'Sign in another', path: paths.agents },
+    });
+  }
+  if (memory.state === 'ok' && memory.total === 0) {
+    out.push({
+      key: 'memory-empty', tone: 'gate',
+      title: 'Your memory is empty — helpers start without your project’s history',
+      line: 'Index a repository so helpers can see its structure and what was decided.',
+      action: { label: 'Build memory', path: paths.memory },
+    });
+  } else if (memory.state === 'down') {
+    out.push({
+      key: 'memory-down', tone: 'fail',
+      title: 'Memory isn’t reachable — helpers answer without your project’s history',
+      line: memory.reason,
+      action: { label: 'See why', path: '/health' },
+    });
+  }
+  return out;
+}
+
 /** A seat whose sign-in lapsed is the one chore the wire can state today. */
 export function lapsedSeatChores(roster: readonly RosterSeat[] | null): DeskChore[] {
   if (roster === null) return [];

@@ -397,7 +397,7 @@ export function needsYouRows(inputs: NeedsYouInputs): NeedRow[] {
         groupKey: 'reindex',
         batch: { repoId: repo.id, estimate },
         subject: repo.name,
-        text: 'Never indexed — no onboarding run on record',
+        text: 'Not indexed yet — helpers can’t see its structure',
         tone: 'gate',
         // The wire's `registered_at` is epoch SECONDS; every `at` here is ms (D6: "20702d").
         at: typeof repo.registered_at === 'number' ? repo.registered_at * 1000 : null,
@@ -405,7 +405,7 @@ export function needsYouRows(inputs: NeedsYouInputs): NeedRow[] {
         action: {
           kind: 'open',
           path: `/repo-detail/${encodeURIComponent(repo.id)}`,
-          label: 'Open repo ›',
+          label: 'Index it ›',
         },
       });
     }

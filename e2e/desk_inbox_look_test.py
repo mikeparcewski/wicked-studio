@@ -67,9 +67,13 @@ LOOK = r"""() => {
       return { section: r.dataset.section, unread: r.dataset.unread === 'true', border: parseFloat(cs.borderTopWidth) + parseFloat(cs.borderLeftWidth), markIcon: !!q('svg', mark),
         markRound: parseFloat(ms.borderTopLeftRadius) >= 12, markW: Math.round(mark.getBoundingClientRect().width), markColor: ms.color, markBg: ms.backgroundColor,
         dot: getComputedStyle(mark, '::after').content !== 'none', hairline: getComputedStyle(r, '::after').content !== 'none',
-        acts: qa('.wk-inbox-acts .wk-need-act', r).map((a) => { const c = getComputedStyle(a); return c.borderTopColor === 'rgba(0, 0, 0, 0)' || parseFloat(c.borderTopWidth) === 0; }),
+        acts: qa('.wk-inbox-acts .wk-need-act', r).map((a) => { const c = getComputedStyle(a); const quiet = a.classList.contains('wk-need-act--quiet');
+          const outlined = parseFloat(c.borderTopWidth) > 0 && c.borderTopColor !== 'rgba(0, 0, 0, 0)'; return quiet ? !outlined : outlined; }),
+        chip: q('[data-testid="need-kind"]', r)?.innerText ?? null,
         subj: contrast(q('[data-testid="need-line"]', r)), sender: contrast(q('.wk-inbox-sender', r)) }; }),
     sections: qa('[data-testid="need-section"]', inbox).map((s) => s.innerText),
+    identity: { icon: !!q('.wk-inbox-icon svg', inbox), subtitle: q('[data-testid="desk-inbox-subtitle"]', inbox)?.innerText ?? null,
+      border: parseFloat(getComputedStyle(inbox).borderTopWidth), count: q('[data-testid="desk-inbox-count"]', inbox)?.innerText ?? null },
     pane: pane === null ? null : { bg: getComputedStyle(pane).backgroundColor, card: getComputedStyle(inbox).backgroundColor,
       ruleLeft: parseFloat(getComputedStyle(pane).borderLeftWidth), kind: q('[data-testid="desk-inbox-kind"]', pane)?.innerText ?? null },
     hscroll: document.documentElement.scrollWidth > document.documentElement.clientWidth,
@@ -87,7 +91,10 @@ def look_ok(tag: str, m: dict, kind: str) -> None:
     if "decision" in by and "failure" in by:
         check(f"{tag}-kinds-have-tones", by["decision"]["markColor"] != by["failure"]["markColor"], decision=by["decision"], failure=by["failure"])
     check(f"{tag}-sections-counted", all(" · " in s for s in m["sections"]), sections=m["sections"])
-    check(f"{tag}-moves-quiet", all(all(a) for r in rows for a in [r["acts"]] if a), rows=[r["acts"] for r in rows])
+    check(f"{tag}-moves-are-buttons", all(all(r["acts"]) for r in rows), rows=[r["acts"] for r in rows])
+    check(f"{tag}-each-item-says-its-kind", all((r["chip"] or "").strip() != "" for r in rows), chips=[r["chip"] for r in rows])
+    i = m["identity"]
+    check(f"{tag}-reads-as-the-inbox", i["icon"] and "waiting on you" in (i["subtitle"] or "") and i["border"] >= 1 and "waiting" in (i["count"] or ""), identity=i)
     p = m["pane"]
     check(f"{tag}-pane-raised-with-kind", p is not None and p["bg"] != p["card"] and p["ruleLeft"] == 0 and p["kind"] == kind, pane=p)
     check(f"{tag}-readable", all(r["subj"] >= 4.5 and r["sender"] >= 4.5 for r in rows), contrast=[(r["subj"], r["sender"]) for r in rows])
@@ -122,6 +129,22 @@ with sync_playwright() as p:
         m = page.evaluate(LOOK)
         page.locator('[data-testid="desk-inbox"]').screenshot(path=str(SHOTS / f"desk-inbox-look-failures-{theme}.png"))
         look_ok(f"{theme}-failures", m, "Failed")
+    # 6b. Empty, it is still the inbox: its mark, name and an explicit "Nothing needs you right now".
+    set_fixture(origin, no_runs=True, roster_signed_in={"codex": True})
+    page.goto(f"{origin}/", wait_until="networkidle")
+    page.get_by_test_id("home-calm").wait_for(state="visible", timeout=15000)
+    page.wait_for_timeout(400)
+    empty = page.evaluate("""() => ({ calm: document.querySelector('[data-testid="home-calm"]')?.innerText ?? '',
+      icon: !!document.querySelector('[data-testid="desk-inbox"] .wk-inbox-icon svg'), rows: document.querySelectorAll('[data-testid="need-row"]').length })""")
+    for theme in ("wicked-light", "wicked-dark"):
+        page.evaluate("(t) => document.documentElement.setAttribute('data-theme', t)", theme)
+        page.wait_for_timeout(150)
+        page.locator('[data-testid="desk-inbox"]').screenshot(path=str(SHOTS / f"desk-inbox-look-empty-{theme}.png"))
+    check("empty-is-still-the-inbox", empty["rows"] == 0 and "Nothing needs you right now" in empty["calm"] and empty["icon"], empty=empty)
+    set_fixture(origin, no_runs=False, roster_signed_in={})
+    page.goto(f"{origin}/", wait_until="networkidle")
+    page.locator('[data-testid="desk-inbox-count"]').wait_for(state="visible", timeout=15000)
+
     # 7. The keyboard's ring on the selected folder.
     page.get_by_test_id("desk-inbox-folder-all").click()
     page.get_by_test_id("desk-inbox-folder-all").focus()

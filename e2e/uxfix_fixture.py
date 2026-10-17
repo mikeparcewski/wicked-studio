@@ -400,6 +400,9 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          #   a dry run folds it, a real replay lands all but 8 and flips the block to what remains;
          #   receipts at GET /__fixture/replay-posts.
          "never_indexed": 0, "broken_clock": False,
+         # Studio's setup items (operator 2026-10-17): GET /memory/coverage's `total` (None = the route is
+         # absent, as on a daemon before it), or a refused read (`memory_down`, crew's 503 sentence).
+         "memory_total": 267, "memory_down": False,
          #   chat_admit_subset — with `clis` omitted on a scoped open the pre-filter admits ONLY
          #                   claude (a strict subset of the chat-capable set), so a rig can prove
          #                   the header shows exactly the admitted seats (W3S-253-09). Default False.
@@ -6096,6 +6099,17 @@ class W2Handler(SimpleHTTPRequestHandler):
                 ]})
             else:
                 self._json(200, {"contributors": REPO_CONTRIBUTORS})
+            return True
+        if path == "/api/v1/memory/coverage":
+            with state_lock:
+                total = state["memory_total"]
+                down = state["memory_down"]
+            if down:
+                self._json(503, {"error": "estate unreachable: the memory store did not answer (fixture)"})
+            elif total is None:
+                self._json(404, {"message": f"Route GET:{path} not found", "error": "Not Found", "statusCode": 404})
+            else:
+                self._json(200, {"total": total, "by_tier": {"project": total}, "by_kind": {}})
             return True
         if path == "/api/v1/roster":
             # Fix J4 round 2: the roster-unreachable branch, switch-gated.
