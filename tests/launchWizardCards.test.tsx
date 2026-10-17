@@ -31,14 +31,16 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
+/** A card's short id: the workflow's, or `chat` for the first card, "Start with chat" (2026-10-16). */
+const shortId = (testid: string | undefined): string | undefined => (testid === 'launch-wizard-start-chat' ? 'chat' : testid?.replace('launch-wizard-workflow-', ''));
 const cardIds = (): string[] =>
-  within(screen.getByTestId('launch-wizard-cards')).getAllByRole('button').map((b) => b.dataset.testid!.replace('launch-wizard-workflow-', ''));
+  within(screen.getByTestId('launch-wizard-cards')).getAllByRole('button').map((b) => shortId(b.dataset.testid)!);
 
 describe('the New job cards', () => {
-  it('one card per kind of job, in the catalog order, then Demo video and Draft epics; no system workflow', () => {
+  it('Start with chat first, then one card per kind of job, in the catalog order, then Demo video and Draft epics; no system workflow', () => {
     render(<LaunchWizard />);
     act(() => openLaunchWizard({}));
-    expect(cardIds()).toEqual(['bug', 'feature', 'qe-author-tests', 'acme-release', 'demo-video', 'draft-epics']);
+    expect(cardIds()).toEqual(['chat', 'bug', 'feature', 'qe-author-tests', 'acme-release', 'demo-video', 'draft-epics']);
   });
 
   it('each card has a decorative drawing, its name and its purpose; an unknown workflow gets the neutral drawing and its phases', () => {
@@ -79,7 +81,7 @@ describe('the New job cards', () => {
   });
 
   it('arrow keys move across the grid as laid out; Home and End go to the ends', () => {
-    // jsdom lays nothing out: place the cards 4 across (bug feature write-tests acme / demo-video draft-epics).
+    // jsdom lays nothing out: place the cards 4 across (chat bug feature write-tests / acme demo-video draft-epics).
     const spy = vi.spyOn(HTMLElement.prototype, 'offsetTop', 'get').mockImplementation(function (this: HTMLElement) {
       const sib = this.parentElement === null ? [] : [...this.parentElement.children];
       return Math.floor(sib.indexOf(this) / 4) * 100;
@@ -88,24 +90,24 @@ describe('the New job cards', () => {
       render(<LaunchWizard />);
       act(() => openLaunchWizard({}));
       const grid = screen.getByTestId('launch-wizard-cards');
-      const focused = (): string | undefined => (document.activeElement as HTMLElement | null)?.dataset.testid?.replace('launch-wizard-workflow-', '');
-      expect(focused()).toBe('bug');
+      const focused = (): string | undefined => shortId((document.activeElement as HTMLElement | null)?.dataset.testid);
+      expect(focused()).toBe('chat');
       fireEvent.keyDown(grid, { key: 'ArrowRight' });
-      expect(focused()).toBe('feature');
-      fireEvent.keyDown(grid, { key: 'ArrowDown' });
-      expect(focused()).toBe('draft-epics');
-      fireEvent.keyDown(grid, { key: 'ArrowLeft' });
-      expect(focused()).toBe('demo-video');
-      fireEvent.keyDown(grid, { key: 'ArrowUp' });
       expect(focused()).toBe('bug');
+      fireEvent.keyDown(grid, { key: 'ArrowDown' });
+      expect(focused()).toBe('demo-video');
+      fireEvent.keyDown(grid, { key: 'ArrowLeft' });
+      expect(focused()).toBe('acme-release');
+      fireEvent.keyDown(grid, { key: 'ArrowUp' });
+      expect(focused()).toBe('chat');
       // codex r1: Up from the top row stays put (never a sideways move).
       fireEvent.keyDown(grid, { key: 'ArrowRight' });
       fireEvent.keyDown(grid, { key: 'ArrowUp' });
-      expect(focused()).toBe('feature');
+      expect(focused()).toBe('bug');
       // Down into the shorter last row lands on its last card; Down from the bottom row stays.
       fireEvent.keyDown(grid, { key: 'ArrowRight' });
       fireEvent.keyDown(grid, { key: 'ArrowRight' });
-      expect(focused()).toBe('acme-release');
+      expect(focused()).toBe('qe-author-tests');
       fireEvent.keyDown(grid, { key: 'ArrowDown' });
       expect(focused()).toBe('draft-epics');
       fireEvent.keyDown(grid, { key: 'ArrowDown' });
@@ -113,7 +115,7 @@ describe('the New job cards', () => {
       fireEvent.keyDown(grid, { key: 'End' });
       expect(focused()).toBe('draft-epics');
       fireEvent.keyDown(grid, { key: 'Home' });
-      expect(focused()).toBe('bug');
+      expect(focused()).toBe('chat');
     } finally {
       spy.mockRestore();
     }
@@ -132,11 +134,11 @@ describe('the New job cards', () => {
     clearCachedWorkflows();
     render(<LaunchWizard />);
     act(() => openLaunchWizard({}));
-    // Only studio's own jobs until the catalog is read; the wizard focuses the first.
-    expect(cardIds()).toEqual(['demo-video', 'draft-epics']);
+    // Only studio's own cards until the catalog is read; the wizard focuses the first (Start with chat).
+    expect(cardIds()).toEqual(['chat', 'demo-video', 'draft-epics']);
     act(() => setCachedWorkflows(WF));
-    // The catalog arrived while focus was where the wizard put it: focus moves to the first card.
-    expect((document.activeElement as HTMLElement).dataset.testid).toBe('launch-wizard-workflow-bug');
+    // The catalog arrived while focus was where the wizard put it: focus stays on the first card.
+    expect((document.activeElement as HTMLElement).dataset.testid).toBe('launch-wizard-start-chat');
     act(() => screen.getByTestId('launch-wizard-workflow-feature').focus());
     act(() => setCachedWorkflows([...WF, def('acme-docs', ['write'])]));
     expect(cardIds()).toContain('acme-docs');

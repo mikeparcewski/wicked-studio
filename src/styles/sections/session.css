@@ -66,3 +66,19 @@
   .wk-session-run-head { flex-wrap: wrap; }
   .wk-session-run .wk-prop-btns { flex-wrap: wrap; }
 }
+
+/* ── Chat bubbles (operator 2026-10-16: "we're not putting bubbles for the agent messages which makes
+   it look like random text"). A helper's turn is a bubble on the left, with the helper named at its
+   top; the operator's stays on the right (the kickoff line of studio#809 is the operator's, unchanged).
+   Each bubble's corner nearest its speaker is squared, so who said it reads before the words do. ── */
+.wk-session-turn--helper {
+  align-self: flex-start; max-width: min(720px, 88%); min-width: 0; padding: 8px 14px 10px;
+  background: var(--surface-card); border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg); border-top-left-radius: var(--radius-sm); box-shadow: var(--shadow-card);
+}
+.wk-session-turn--helper > .wk-session-who { margin: 0 0 2px; }
+.wk-session-turn--helper .wk-session-text { margin-top: 0; }
+.wk-session-turn--helper.wk-session-turn--pending { border-style: dashed; box-shadow: none; }
+.wk-session-turn--you:not(.wk-session-turn--kickoff) { border-top-right-radius: var(--radius-sm); padding: 8px 14px 10px; }
+.wk-session-fresh { max-width: 720px; padding: var(--space-4) 0; }
+@media (max-width: 767px) { .wk-session-turn--helper { max-width: 100%; } }

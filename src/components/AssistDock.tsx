@@ -430,7 +430,8 @@ function DockChat({ chatId, resumed = false, onResumeProbe }: {
           </p>
         ) : (
           msgs.map((m, i) => (
-            <div key={i} data-testid="assist-chat-msg" data-agent={m.cliKey} data-pending={m.pending}>
+            // A helper's reply is a bubble on the left (operator 2026-10-16), the operator's own on the right.
+            <div key={i} data-testid="assist-chat-msg" data-agent={m.cliKey} data-pending={m.pending} className="self-start max-w-[92%] rounded-2xl rounded-tl-md px-3 py-2" style={{ background: 'var(--surface-raised)' }}>
               <span className="font-mono text-[10px] font-semibold" style={{ color: 'var(--accent)' }}>
                 {m.cliKey}
               </span>

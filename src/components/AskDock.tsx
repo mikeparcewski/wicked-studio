@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { chatOpened } from '../store/chatFlow.js';
 import { api } from '../api/client.js';
 import { getDiagnostics, isDiagnosticsUnsupported } from '../api/diagnostics.js';
 import type { ChatOpenBody, ChatScope, RepoEntry, SessionView } from '../api/types.js';
@@ -104,7 +105,7 @@ function placeWords(label: string): string {
   return label === 'Home' ? 'the Desk' : label;
 }
 
-export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoffTaken, sendProjectId, sendFresh = false, sendPrimary, sendChatId, startProjectId, startText, startFresh = false }: {
+export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoffTaken, sendProjectId, sendFresh = false, sendPrimary, sendChatId, sendOpenChatId, startProjectId, startText, startFresh = false }: {
   runs: SessionView[];
   pathname: string;
   /** Collapsing the dock closes Ask entirely — the launcher bubble/shortcut reopen it. */
@@ -128,6 +129,9 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
   /** S16a-4e: the handoff is a reply into THIS chat (the chat session on screen): the dock resumes
    *  it (and stores it as its session) instead of its own stored chat. */
   sendChatId?: string;
+  /** The chat flow (2026-10-16): the handoff is the FIRST message of a fresh chat whose page is on
+   *  screen (`openChatFlow` minted its id): the chat opens under THIS id, so its page becomes it. */
+  sendOpenChatId?: string;
   /** Concept A (`openAskDock`): open a FRESH chat scoped to this project, nothing sent. */
   startProjectId?: string;
   /** Words placed in the box when the dock opens, never sent (⌘K "New demo"). */
@@ -217,6 +221,8 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
   });
   /** The live chat session this dock opened — later sends reuse its warm seats. */
   const chatIdRef = useRef<string | null>(resumed?.chatId ?? null);
+  /** A fresh chat page's own id (the chat flow), used once: the first open takes it. */
+  const openIdRef = useRef<string | null>(sendText !== undefined && sendFresh ? sendOpenChatId ?? null : null);
   /** True once the context pack LANDED with a message — it seeds the first successful
    *  send only. A resumed session carries its persisted flag: a first send that failed
    *  leaves it unseeded, so the pack still rides the next question. */
@@ -304,7 +310,8 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
           const eligible = defaultSelection(roster, askScopeIsScoped(choice));
           const clis = chosenSeats(eligible, useComposerSeats.getState().dropped, useComposerSeats.getState().picked);
           if (eligible.length > 0 && clis.length === 0) throw new Error(NO_SEAT_PICKED);
-          id = crypto.randomUUID();
+          // A failed open keeps the page's id for the retry; only a chat the daemon opened spends it.
+          id = openIdRef.current ?? crypto.randomUUID();
           const body: ChatOpenBody = { chatId: id, ...askScopeOpenFields(choice, ambientProjectId(packInputs.current.pathname)) };
           if (clis.length > 0) body.clis = clis;
           // ASK-S1: the helper named with `@` answers (`selection: chosen`); unnamed, the engine picks at random.
@@ -323,6 +330,9 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
             throw new Error(`${useCapabilities.getState().askPath ? 'No helper can answer' : 'No agent seat came up'} — ${detail}`);
           }
           chatIdRef.current = id;
+          // The chat flow: a fresh chat page's chat is open on the daemon now — an ordinary chat from here.
+          openIdRef.current = null;
+          chatOpened(id);
           scopeRef.current = scope ?? null;
           setOpenedScope(scope ?? null);
           // Persist for the tab — a close/reopen (or reload) resumes THIS session.

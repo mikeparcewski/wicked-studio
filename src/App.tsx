@@ -4,6 +4,7 @@ import { useHostChrome } from './editors/hostApi.js';
 import { AskDock } from './components/AskDock.js';
 import { useAskDock, type AskRequest } from './store/askDock.js';
 import { useAskThreadStore } from './store/askThread.js';
+import { useChatFlow } from './store/chatFlow.js';
 import { AskLauncher } from './components/AskLauncher.js';
 import { CommandPalette, paletteShortcutEntries } from './components/CommandPalette.js';
 import { GateNotifications } from './components/GateNotifications.js';
@@ -388,6 +389,15 @@ export function App(): React.ReactElement {
   useEffect(() => {
     if (!askOpen) setAskStart(null);
   }, [askOpen]);
+  // The chat flow (operator 2026-10-16): New job's "Start with chat" — and New job itself once "start in
+  // chat" is saved — open a new chat on its own page (`openChatFlow`), never the dock.
+  const chatFlow = useChatFlow((s) => s.request);
+  const seenChatFlow = useRef(chatFlow?.nonce ?? 0);
+  useEffect(() => {
+    if (chatFlow === null || chatFlow.nonce === seenChatFlow.current) return;
+    seenChatFlow.current = chatFlow.nonce;
+    navigate(sessionPath(chatFlow.chatId));
+  }, [chatFlow, navigate]);
   // §5.6 rule 4 (S2b): letters always type — into the open Ask dock, else the page's
   // composer, else the Ask dock opened with them (opening it only reads).
   useTypeToComposer(useCallback(() => setAskOpen(true), []));
@@ -760,6 +770,7 @@ export function App(): React.ReactElement {
               ...(askHandoff.fresh === true ? { sendFresh: true } : {}),
               ...(askHandoff.primary !== undefined ? { sendPrimary: askHandoff.primary } : {}),
               ...(askHandoff.chatId !== undefined ? { sendChatId: askHandoff.chatId } : {}),
+              ...(askHandoff.openChatId !== undefined ? { sendOpenChatId: askHandoff.openChatId } : {}),
             } : {})}
             {...(askHandoff === null && askStart !== null ? {
               ...(askStart.projectId !== null ? { startProjectId: askStart.projectId } : {}),

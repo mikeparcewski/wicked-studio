@@ -1,4 +1,6 @@
 import { CodebaseDownload, DeliverCredentialsNotice } from './CodebaseDownload.js';
+import { useChatFlow } from '../../store/chatFlow.js';
+import { useProjectsStore } from '../../store/projects.js';
 import { Fragment, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { ApiError, api } from '../../api/client.js';
 import type { ChatPathView, CoreEvent, SessionView as RunView } from '../../api/types.js';
@@ -14,7 +16,7 @@ import {
 import type { Navigate } from '../../hooks/useRoute.js';
 import { useCapabilities } from '../../store/capabilities.js';
 import { readSessionVisit, useSessionDrafts, writeSessionVisit } from '../../store/sessionDrafts.js';
-import { jobTitle, isChatScopeProblem } from '../../board/deskWords.js';
+import { jobTitle, isChatScopeProblem, plainRunTitle } from '../../board/deskWords.js';
 import type { ChatCitations } from '../../api/chat-wire.js';
 import { IDLE_GATE_ACTION, useGateActionStore } from '../../board/gateActions.js';
 import { finishedDeliveryArm, proposalKindOf, statusSentence } from '../../board/proposalCard.js';
@@ -226,19 +228,33 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
   const chatDetail = mineChat !== null && 'detail' in mineChat ? mineChat.detail : null;
   const chatError = mineChat !== null && 'error' in mineChat ? mineChat.error : null;
   const chatLoaded = ref.kind !== 'chat' || mineChat !== null;
-  const conversation: Conversation | 'pending' | 'unreadable' = ref.kind === 'run' ? 'none'
+  // The chat flow (2026-10-16): a chat `openChatFlow` started and nothing has been sent yet — its page is
+  // "New chat" with its composer; the first Send opens it on the daemon under this id.
+  const fresh = useChatFlow((s) => (ref.kind === 'chat' ? s.fresh[ref.chatId] ?? null : null));
+  const freshProjectName = useProjectsStore((s) => (fresh?.projectId == null ? null : s.projects.find((p) => p.id === fresh.projectId)?.name ?? null));
+  const wasFresh = useRef(fresh !== null);
+  useEffect(() => {
+    // Opened on the daemon: read the chat again, so the page is the live conversation it now is.
+    if (wasFresh.current && fresh === null) setChatTry((n) => n + 1);
+    wasFresh.current = fresh !== null;
+  }, [fresh]);
+  const conversation: Conversation | 'pending' | 'unreadable' | 'fresh' = ref.kind === 'run' ? 'none'
+    : fresh !== null ? 'fresh'
     : chatError !== null ? 'unreadable'
       : chatDetail === null ? 'pending' : conversationOf(ref, chatDetail);
   const messages = useMemo(() => chatDetail?.messages ?? [], [chatDetail]);
   // studio#606 (4): on a live chat's own session the text replies into that chat; anywhere else a
   // live run here is NOT what Send reaches (it starts a separate Ask), and the composer says so.
   const scopeNote = composerScopeNote(mine, ref.kind === 'chat' && conversation === 'live');
-  const title = sessionTitle(messages, mine);
 
   // ── ASK-S1: the ask path behind this chat ──────────────────────────────────────────────────
   const askPathOn = useCapabilities((s) => s.askPath);
   const chatId = ref.kind === 'chat' ? ref.chatId : null;
   const liveTurns = useAskThreadStore((s) => (chatId === null ? undefined : s.turns[chatId]));
+  // A chat whose transcript has not been read back yet (just opened from its fresh page) is titled by
+  // the operator's first live words; a fresh chat with nothing said is "New chat".
+  const firstLiveWords = messages.length === 0 && mine.length === 0 ? liveTurns?.find((t) => t.who === 'you' && t.text.trim() !== '')?.text ?? null : null;
+  const title = firstLiveWords !== null ? plainRunTitle(firstLiveWords) : fresh !== null && messages.length === 0 && mine.length === 0 ? 'New chat' : sessionTitle(messages, mine);
   const replySeq = useAskThreadStore((s) => (chatId === null ? 0 : s.replySeq[chatId] ?? 0));
   const linkedRun = useAskThreadStore((s) => (chatId === null ? undefined : s.runByChat[chatId]));
   const askRunsKnown = useAskThreadStore((s) => s.runs);
@@ -674,7 +690,10 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
     text: draft,
     setText: (t: string) => setDraft(sessionId, t),
     // S16a-4e: on a live chat's own session the composer replies into THAT chat.
-    onSend: (text: string, opts: ComposerSend) => onAsk(text, ref.kind === 'chat' && conversation === 'live' && opts.fresh !== true && opts.projectId === undefined ? { ...opts, chatId: ref.chatId } : opts),
+    // The chat flow: a fresh chat's first Send opens it under this page's id, in the project it started in.
+    onSend: (text: string, opts: ComposerSend) => onAsk(text, ref.kind === 'chat' && fresh !== null
+      ? { ...opts, fresh: true, openChatId: ref.chatId, ...(opts.projectId === undefined && fresh.projectId !== null ? { projectId: fresh.projectId } : {}) }
+      : ref.kind === 'chat' && conversation === 'live' && opts.fresh !== true && opts.projectId === undefined ? { ...opts, chatId: ref.chatId } : opts),
     runs: mine,
     started: entries.length > 0,
     navigate,
@@ -715,12 +734,15 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
         <div className="wk-session-head-body">
           {/* Audit row 62: until the session's reads settle, the title is a skeleton and no state word
               is said — never the placeholder "A session · Quiet · Loading…". */}
-          {ready || mine.length > 0
+          {ready || mine.length > 0 || conversation === 'fresh'
             ? <h1 data-testid="session-title" className="wk-session-title">{title}</h1>
             : <div data-testid="session-title-loading" className="wk-session-title-skeleton"><Skeleton rows={1} variant="line" /></div>}
           <p data-testid="session-status" className="wk-session-status">
             {/* UI-CONTRACT §5: the one status vocabulary (never "Quiet" for a cancelled run). */}
             {ready || mine.length > 0 ? (state === 'waiting' ? 'Waiting on you' : mine.length > 0 ? chatStatusWord(mine).word : null) : null}
+            {conversation === 'fresh' && fresh !== null && mine.length === 0 && (
+              <span data-testid="session-fresh-status">{fresh.projectId !== null ? `New · in ${freshProjectName ?? 'a project'}` : 'New · not in a project'}</span>
+            )}
             {mine.length > 1 && ` · ${mine.length} runs`}
             {badge > 0 && <> · <mark className="wk-desk-mark">{badge === 1 ? '1 needs you' : `${badge} need you`}</mark></>}
           </p>
@@ -780,6 +802,9 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
             if (label !== null) addAboutChip(sessionId, { kind: 'about', key: `q:${label}`, label });
           }}
         >
+          {conversation === 'fresh' && liveTurns === undefined && mine.length === 0 && (
+            <p data-testid="session-fresh" className="wk-session-grey wk-session-fresh">Ask anything, or say what you want done. Your first message starts this chat; a job starts only when you choose one.</p>
+          )}
           {conversation === 'closed' && mine.length > 0 && (
             <>
               <TurnWho who={CREW} />
