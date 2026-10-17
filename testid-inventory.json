@@ -12,8 +12,8 @@
   "studioVersion": "0.9.6",
   "counts": {
     "files": 230,
-    "occurrences": 2843,
-    "static": 2453,
+    "occurrences": 2849,
+    "static": 2458,
     "dynamic": 72,
     "computed": 24
   },
@@ -2700,6 +2700,12 @@
       ]
     },
     {
+      "testId": "desk-inbox-kind",
+      "files": [
+        "src/components/desk/DeskInbox.tsx"
+      ]
+    },
+    {
       "testId": "desk-inbox-list",
       "files": [
         "src/components/desk/DeskInbox.tsx"
@@ -2733,6 +2739,12 @@
       "testId": "desk-inbox-row",
       "files": [
         "src/components/NeedsYouQueue.tsx"
+      ]
+    },
+    {
+      "testId": "desk-inbox-subtitle",
+      "files": [
+        "src/components/desk/DeskInbox.tsx"
       ]
     },
     {
@@ -3178,6 +3190,18 @@
         "src/board/objectActions.ts",
         "src/components/desk/Desk.tsx",
         "src/components/desk/DeskHappening.tsx"
+      ]
+    },
+    {
+      "testId": "desk-setup",
+      "files": [
+        "src/components/desk/DeskV2.tsx"
+      ]
+    },
+    {
+      "testId": "desk-setup-act",
+      "files": [
+        "src/components/desk/DeskV2.tsx"
       ]
     },
     {
@@ -6980,6 +7004,12 @@
     },
     {
       "testId": "need-group-toggle",
+      "files": [
+        "src/components/NeedsYouQueue.tsx"
+      ]
+    },
+    {
+      "testId": "need-kind",
       "files": [
         "src/components/NeedsYouQueue.tsx"
       ]
