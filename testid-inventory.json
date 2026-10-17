@@ -11,9 +11,9 @@
   "version": 1,
   "studioVersion": "0.9.6",
   "counts": {
-    "files": 230,
-    "occurrences": 2885,
-    "static": 2498,
+    "files": 231,
+    "occurrences": 2890,
+    "static": 2503,
     "dynamic": 69,
     "computed": 24
   },
@@ -5811,6 +5811,36 @@
       "testId": "logo-wicked-mark",
       "files": [
         "src/components/WickedLogo.tsx"
+      ]
+    },
+    {
+      "testId": "made-draft-detail",
+      "files": [
+        "src/components/everything/DraftStatus.tsx"
+      ]
+    },
+    {
+      "testId": "made-draft-line",
+      "files": [
+        "src/components/everything/DraftStatus.tsx"
+      ]
+    },
+    {
+      "testId": "made-draft-open",
+      "files": [
+        "src/components/everything/DraftStatus.tsx"
+      ]
+    },
+    {
+      "testId": "made-draft-run",
+      "files": [
+        "src/components/everything/DraftStatus.tsx"
+      ]
+    },
+    {
+      "testId": "made-draft-status",
+      "files": [
+        "src/components/everything/DraftStatus.tsx"
       ]
     },
     {
