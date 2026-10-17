@@ -149,7 +149,7 @@ export function BrandLearn(): React.ReactElement {
             // Said plainly (not an error banner whose reason hides in its details): it is a version, not a fault.
             setUsePath(true);
             setPhase('idle');
-            setStatus('This version of crew’s document engine can’t take a file yet. Update crew, or type the file’s location in the box below.');
+            setStatus('This version of crew’s document engine can’t take a file yet. Update crew, or type the file’s location in the box above.');
             return;
           }
           throw e;
