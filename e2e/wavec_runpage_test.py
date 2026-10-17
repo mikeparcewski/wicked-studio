@@ -25,7 +25,7 @@ import sys
 import urllib.request
 
 from uxfix_fixture import (DEFAULT_APPEARANCE, HIDE_GATE_TOASTS, REPO, ensure_build,
-                           set_fixture, start_server)
+                           set_fixture, start_server, OPEN_RUN_DETAILS)
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4481"))
 W, H = 1440, 700
@@ -101,6 +101,7 @@ SHOTS.mkdir(parents=True, exist_ok=True)
 with sync_playwright() as p:
     browser = p.chromium.launch()
     page = browser.new_page(viewport={"width": W, "height": H}, device_scale_factor=1)
+    page.add_init_script(OPEN_RUN_DETAILS)  # the run's record is in its Details fold (DES-CHAT-NATIVE-RUN)
     page.set_default_timeout(12000)
     page.add_init_script(
         "document.addEventListener('DOMContentLoaded', () => { const s = document.createElement('style'); "

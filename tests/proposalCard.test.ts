@@ -43,7 +43,7 @@ describe('the proposal: the plan, in one sentence, with Go / Not now', () => {
     expect(c.kind).toBe('plan');
     expect(c.state).toBe('ask');
     expect(c.text).toBe('Here’s the plan: Research → Build → Test → Review → Deliver (5 steps).');
-    expect(c.act).toBe('Go');
+    expect(c.act).toBe('Approve plan');
     expect(c.text).not.toMatch(/rev|unit|band|mode/);
   });
 

@@ -23,7 +23,7 @@ import os
 import sys
 
 from uxfix_fixture import (HIDE_GATE_TOASTS, REPO, WAVE1_RUNS, ensure_build, set_fixture,
-                           start_server, wave1_deliver_text)
+                           start_server, wave1_deliver_text, OPEN_RUN_DETAILS)
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4343"))
 W, H = 1440, 700
@@ -59,6 +59,7 @@ with sync_playwright() as p:
     ctx = browser.new_context(viewport={"width": W, "height": H}, device_scale_factor=1,
                               permissions=["clipboard-read", "clipboard-write"])
     page = ctx.new_page()
+    page.add_init_script(OPEN_RUN_DETAILS)  # the run's record is in its Details fold (DES-CHAT-NATIVE-RUN)
     page.add_init_script(
         "document.addEventListener('DOMContentLoaded', () => { const s = document.createElement('style'); "
         f"s.textContent = {json.dumps(HIDE_GATE_TOASTS)}; document.head.appendChild(s); }});")

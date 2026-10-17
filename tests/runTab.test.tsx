@@ -163,13 +163,13 @@ describe('RunTab', () => {
     expect(screen.getByTestId('run-tab-spend')).toHaveTextContent(words as string);
   });
 
-  it('renders a string acceptance summary, and omits a structured summary', async () => {
+  it('renders a string acceptance summary, and a structured summary’s line (DES-CHAT-NATIVE-RUN: nothing the thread used to say is lost)', async () => {
     const acceptance = { runId: 'run-1', summary: 'All checks passed.' } as unknown as RunAcceptanceView;
     useRunAcceptanceStore.setState({ byRun: { 'run-1': acceptance } });
     await tab();
     expect(screen.getByTestId('run-tab-acceptance')).toHaveTextContent('All checks passed.');
     act(() => useRunAcceptanceStore.setState({ byRun: { 'run-1': { ...acceptance, summary: { required: true, satisfied: true, line: 'Checked', walkthrough: null } } } }));
-    expect(screen.queryByTestId('run-tab-acceptance')).toBeNull();
+    expect(screen.getByTestId('run-tab-acceptance')).toHaveTextContent('Checked');
   });
 
   it('shows the exported orphan warning only while the event trail says it is orphaned', async () => {

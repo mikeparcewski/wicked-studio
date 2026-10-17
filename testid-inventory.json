@@ -11,9 +11,9 @@
   "version": 1,
   "studioVersion": "0.9.6",
   "counts": {
-    "files": 231,
-    "occurrences": 2892,
-    "static": 2505,
+    "files": 232,
+    "occurrences": 2935,
+    "static": 2543,
     "dynamic": 69,
     "computed": 24
   },
@@ -1474,6 +1474,12 @@
       ]
     },
     {
+      "testId": "chat-artifacts",
+      "files": [
+        "src/components/session/RunConversation.tsx"
+      ]
+    },
+    {
       "testId": "chat-cell",
       "files": [
         "src/components/ChatThread.tsx"
@@ -1483,6 +1489,48 @@
       "testId": "chat-cell-empty",
       "files": [
         "src/components/ChatThread.tsx"
+      ]
+    },
+    {
+      "testId": "chat-final",
+      "files": [
+        "src/components/session/RunConversation.tsx"
+      ]
+    },
+    {
+      "testId": "chat-final-acceptance",
+      "files": [
+        "src/components/session/RunConversation.tsx"
+      ]
+    },
+    {
+      "testId": "chat-final-changes",
+      "files": [
+        "src/components/session/RunConversation.tsx"
+      ]
+    },
+    {
+      "testId": "chat-final-evidence",
+      "files": [
+        "src/components/session/RunConversation.tsx"
+      ]
+    },
+    {
+      "testId": "chat-final-pr",
+      "files": [
+        "src/components/session/RunConversation.tsx"
+      ]
+    },
+    {
+      "testId": "chat-final-text",
+      "files": [
+        "src/components/session/RunConversation.tsx"
+      ]
+    },
+    {
+      "testId": "chat-gate",
+      "files": [
+        "src/components/session/RunConversation.tsx"
       ]
     },
     {
@@ -1498,6 +1546,18 @@
       ]
     },
     {
+      "testId": "chat-plan",
+      "files": [
+        "src/components/session/RunConversation.tsx"
+      ]
+    },
+    {
+      "testId": "chat-plan-steps",
+      "files": [
+        "src/components/session/RunConversation.tsx"
+      ]
+    },
+    {
       "testId": "chat-round",
       "files": [
         "src/components/ChatThread.tsx"
@@ -1507,6 +1567,60 @@
       "testId": "chat-round-grid",
       "files": [
         "src/components/ChatThread.tsx"
+      ]
+    },
+    {
+      "testId": "chat-run-details",
+      "files": [
+        "src/components/session/RunConversation.tsx"
+      ]
+    },
+    {
+      "testId": "chat-run-title",
+      "files": [
+        "src/components/session/RunConversation.tsx"
+      ]
+    },
+    {
+      "testId": "chat-step",
+      "files": [
+        "src/components/session/RunConversation.tsx"
+      ]
+    },
+    {
+      "testId": "chat-step-check",
+      "files": [
+        "src/components/session/RunConversation.tsx"
+      ]
+    },
+    {
+      "testId": "chat-step-more",
+      "files": [
+        "src/components/session/RunConversation.tsx"
+      ]
+    },
+    {
+      "testId": "chat-step-none",
+      "files": [
+        "src/components/session/RunConversation.tsx"
+      ]
+    },
+    {
+      "testId": "chat-step-open",
+      "files": [
+        "src/components/session/RunConversation.tsx"
+      ]
+    },
+    {
+      "testId": "chat-step-verdict",
+      "files": [
+        "src/components/session/RunConversation.tsx"
+      ]
+    },
+    {
+      "testId": "chat-you-decision",
+      "files": [
+        "src/components/session/RunConversation.tsx"
       ]
     },
     {
@@ -6798,6 +6912,18 @@
       ]
     },
     {
+      "testId": "md-code-block",
+      "files": [
+        "src/components/Markdown.tsx"
+      ]
+    },
+    {
+      "testId": "md-code-copy",
+      "files": [
+        "src/components/Markdown.tsx"
+      ]
+    },
+    {
       "testId": "memories-clear",
       "files": [
         "src/components/memory/MemoryPage.tsx"
@@ -10135,7 +10261,49 @@
       ]
     },
     {
+      "testId": "run-tab-assurance",
+      "files": [
+        "src/components/session/RunTab.tsx"
+      ]
+    },
+    {
+      "testId": "run-tab-branch",
+      "files": [
+        "src/components/session/RunTab.tsx"
+      ]
+    },
+    {
       "testId": "run-tab-checks",
+      "files": [
+        "src/components/session/RunTab.tsx"
+      ]
+    },
+    {
+      "testId": "run-tab-coverage",
+      "files": [
+        "src/components/session/RunTab.tsx"
+      ]
+    },
+    {
+      "testId": "run-tab-coverage-why",
+      "files": [
+        "src/components/session/RunTab.tsx"
+      ]
+    },
+    {
+      "testId": "run-tab-delivery",
+      "files": [
+        "src/components/session/RunTab.tsx"
+      ]
+    },
+    {
+      "testId": "run-tab-delivery-outcome",
+      "files": [
+        "src/components/session/RunTab.tsx"
+      ]
+    },
+    {
+      "testId": "run-tab-delivery-reason",
       "files": [
         "src/components/session/RunTab.tsx"
       ]
@@ -10159,6 +10327,12 @@
       ]
     },
     {
+      "testId": "run-tab-now",
+      "files": [
+        "src/components/session/RunTab.tsx"
+      ]
+    },
+    {
       "testId": "run-tab-orphaned",
       "files": [
         "src/components/session/RunTab.tsx"
@@ -10171,7 +10345,25 @@
       ]
     },
     {
+      "testId": "run-tab-phase-count",
+      "files": [
+        "src/components/session/RunTab.tsx"
+      ]
+    },
+    {
       "testId": "run-tab-phases",
+      "files": [
+        "src/components/session/RunTab.tsx"
+      ]
+    },
+    {
+      "testId": "run-tab-pr",
+      "files": [
+        "src/components/session/RunTab.tsx"
+      ]
+    },
+    {
+      "testId": "run-tab-record",
       "files": [
         "src/components/session/RunTab.tsx"
       ]
@@ -10190,6 +10382,12 @@
     },
     {
       "testId": "run-tab-spend",
+      "files": [
+        "src/components/session/RunTab.tsx"
+      ]
+    },
+    {
+      "testId": "run-tab-status",
       "files": [
         "src/components/session/RunTab.tsx"
       ]
@@ -10219,6 +10417,12 @@
       ]
     },
     {
+      "testId": "run-tab-story",
+      "files": [
+        "src/components/session/RunTab.tsx"
+      ]
+    },
+    {
       "testId": "run-tab-stranded",
       "files": [
         "src/components/session/RunTab.tsx"
@@ -10226,6 +10430,18 @@
     },
     {
       "testId": "run-tab-tech",
+      "files": [
+        "src/components/session/RunTab.tsx"
+      ]
+    },
+    {
+      "testId": "run-tab-times",
+      "files": [
+        "src/components/session/RunTab.tsx"
+      ]
+    },
+    {
+      "testId": "run-tab-transport",
       "files": [
         "src/components/session/RunTab.tsx"
       ]
@@ -10437,33 +10653,39 @@
       ]
     },
     {
-      "testId": "session-failed-resume",
+      "testId": "session-details-toggle",
       "files": [
         "src/components/session/SessionView.tsx"
+      ]
+    },
+    {
+      "testId": "session-failed-resume",
+      "files": [
+        "src/components/session/RunConversation.tsx"
       ]
     },
     {
       "testId": "session-failed-resume-asked",
       "files": [
-        "src/components/session/SessionView.tsx"
+        "src/components/session/RunConversation.tsx"
       ]
     },
     {
       "testId": "session-failed-resume-button",
       "files": [
-        "src/components/session/SessionView.tsx"
+        "src/components/session/RunConversation.tsx"
       ]
     },
     {
       "testId": "session-failed-resume-error",
       "files": [
-        "src/components/session/SessionView.tsx"
+        "src/components/session/RunConversation.tsx"
       ]
     },
     {
       "testId": "session-failed-resume-error-detail",
       "files": [
-        "src/components/session/SessionView.tsx"
+        "src/components/session/RunConversation.tsx"
       ]
     },
     {
@@ -10781,31 +11003,31 @@
     {
       "testId": "session-orphaned",
       "files": [
-        "src/components/session/SessionView.tsx"
+        "src/components/session/RunConversation.tsx"
       ]
     },
     {
       "testId": "session-orphaned-asked",
       "files": [
-        "src/components/session/SessionView.tsx"
+        "src/components/session/RunConversation.tsx"
       ]
     },
     {
       "testId": "session-orphaned-error",
       "files": [
-        "src/components/session/SessionView.tsx"
+        "src/components/session/RunConversation.tsx"
       ]
     },
     {
       "testId": "session-orphaned-error-detail",
       "files": [
-        "src/components/session/SessionView.tsx"
+        "src/components/session/RunConversation.tsx"
       ]
     },
     {
       "testId": "session-orphaned-resume",
       "files": [
-        "src/components/session/SessionView.tsx"
+        "src/components/session/RunConversation.tsx"
       ]
     },
     {
@@ -10935,6 +11157,12 @@
       ]
     },
     {
+      "testId": "session-proposal-edit",
+      "files": [
+        "src/components/session/ProposalCard.tsx"
+      ]
+    },
+    {
       "testId": "session-proposal-end",
       "files": [
         "src/components/session/ProposalCard.tsx"
@@ -11035,13 +11263,13 @@
     {
       "testId": "session-run",
       "files": [
-        "src/components/session/SessionView.tsx"
+        "src/components/session/RunConversation.tsx"
       ]
     },
     {
       "testId": "session-run-archived",
       "files": [
-        "src/components/session/SessionView.tsx"
+        "src/components/session/RunConversation.tsx"
       ]
     },
     {
@@ -11053,19 +11281,19 @@
     {
       "testId": "session-run-helper",
       "files": [
-        "src/components/session/SessionView.tsx"
+        "src/components/session/RunConversation.tsx"
       ]
     },
     {
       "testId": "session-run-helpers",
       "files": [
-        "src/components/session/SessionView.tsx"
+        "src/components/session/RunConversation.tsx"
       ]
     },
     {
       "testId": "session-run-look",
       "files": [
-        "src/components/session/SessionView.tsx"
+        "src/components/session/RunConversation.tsx"
       ]
     },
     {
@@ -11096,7 +11324,7 @@
       "testId": "session-run-retry",
       "files": [
         "src/board/objectActions.ts",
-        "src/components/session/SessionView.tsx"
+        "src/components/session/RunConversation.tsx"
       ]
     },
     {
@@ -11146,25 +11374,25 @@
       "testId": "session-status-sentence",
       "files": [
         "src/board/objectActions.ts",
-        "src/components/session/SessionView.tsx"
+        "src/components/session/RunConversation.tsx"
       ]
     },
     {
       "testId": "session-step-added",
       "files": [
-        "src/components/session/SessionView.tsx"
+        "src/components/session/RunConversation.tsx"
       ]
     },
     {
       "testId": "session-step-queued",
       "files": [
-        "src/components/session/SessionView.tsx"
+        "src/components/session/RunConversation.tsx"
       ]
     },
     {
       "testId": "session-step-undo",
       "files": [
-        "src/components/session/SessionView.tsx"
+        "src/components/session/RunConversation.tsx"
       ]
     },
     {
@@ -13911,7 +14139,7 @@
       "testId": "tech-session-run",
       "files": [
         "src/board/objectActions.ts",
-        "src/components/session/SessionView.tsx"
+        "src/components/session/RunConversation.tsx"
       ]
     },
     {
@@ -15599,6 +15827,7 @@
         "src/components/product/RequirementsBrowser.tsx",
         "src/components/session/AssuranceReceipt.tsx",
         "src/components/session/CodebaseDownload.tsx",
+        "src/components/session/RunConversation.tsx",
         "src/components/steer/SeStat.tsx",
         "src/components/ui/Combobox.tsx",
         "src/components/ui/DayBars.tsx",

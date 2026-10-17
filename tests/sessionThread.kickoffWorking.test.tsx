@@ -39,7 +39,11 @@ describe('the thread opens on what kicked the run off', () => {
 
 describe('studio#663 — the run\'s whole goal is one step away', () => {
   const LONG = 'New test: cover the refund flow end to end. Seed two customers, one with a partial refund already applied; '
-    + 'check the ledger totals after each refund, and fail the test if any refund is applied twice or lands on the wrong card.';
+    + 'check the ledger totals after each refund, and fail the test if any refund is applied twice or lands on the wrong card. '
+    // DES-CHAT-NATIVE-RUN: the kickoff is a full bubble; only a goal longer than the bubble shows in full (8 lines) gets Show all.
+    + 'Then repeat the run with three customers, a currency other than dollars and a refund that crosses midnight UTC; the ledger '
+    + 'must stay balanced to the cent across every case, and the report must name each customer, each refund and the card it landed on, '
+    + 'in the order the refunds were applied, so a reviewer can follow the money without opening the database or asking anyone who ran it.';
   it('a long kickoff has its own Show all / Show less button; the words themselves are not a control', () => {
     render(<SessionPage sessionId="run:r1" runs={[makeView({ id: 'r1', status: 'executing', problem: LONG, unit_ix: 0, created_at: 1_700_000_000 } as never, [])]} runsLoaded needRows={[]} navigate={() => {}} onAsk={() => {}} />);
     const kick = screen.getAllByTestId('session-turn').find((t) => t.dataset.kickoff === 'true')!;
@@ -60,7 +64,7 @@ describe('studio#663 — the run\'s whole goal is one step away', () => {
     expect(toggle).toHaveAttribute('aria-expanded', 'false');
   });
 
-  it('a short kickoff has no toggle (it fits its line)', () => {
+  it('a short kickoff has no toggle (the bubble holds it in full)', () => {
     page([run('executing')]);
     expect(screen.queryByTestId('session-kickoff-toggle')).toBeNull();
   });
@@ -108,7 +112,7 @@ describe('the thread shows work in progress', () => {
   it('an executing step says it is being worked on, at the thread’s foot', () => {
     page([run('executing')]);
     const line = screen.getByTestId('session-working');
-    expect(line).toHaveTextContent('Working on build…');
+    expect(line).toHaveTextContent('Working on Build…'); // the step in plain words (DES-CHAT-NATIVE-RUN)
     // At the thread's foot: nothing in the thread comes after it.
     const thread = screen.getByTestId('session-thread');
     const all = [...thread.querySelectorAll('[data-testid]')];

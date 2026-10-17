@@ -191,7 +191,7 @@
      gutter at the edges, smaller on a phone). Widths include the gutters. ── */
   --page-max:        1120px;
   --page-max-narrow: 832px;
-  --thread-max:      896px;
+  --thread-max:      864px;   /* 768 px of conversation + its 48 px gutters (DES-CHAT-NATIVE-RUN) */
   --page-pad:        var(--space-8);
 
   /* ── The floating Ask bubble (AskLauncher.tsx: ASK_BUBBLE_PX / ASK_GUTTER_PX) — a surface

@@ -58,7 +58,9 @@ STORED = "async () => ((await (await fetch('/api/v1/settings')).json()).settings
 BUBBLES = """() => {
   const thread = document.querySelector('[data-testid="session-thread"]').getBoundingClientRect();
   return [...document.querySelectorAll('[data-testid="session-turn"]')].map((t) => {
-    const cs = getComputedStyle(t); const r = t.getBoundingClientRect();
+    // DES-CHAT-NATIVE-RUN: the speaker's name sits above the bubble; the bubble is the turn's text box.
+    const b = t.querySelector(':scope > .wk-session-text') ?? t;
+    const cs = getComputedStyle(b); const r = b.getBoundingClientRect();
     return { who: t.dataset.who, kickoff: t.dataset.kickoff === 'true', pending: t.dataset.pending === 'true',
       bg: cs.backgroundColor, radius: parseFloat(cs.borderTopRightRadius), border: cs.borderTopStyle,
       side: (r.left - thread.left) < (thread.right - r.right) ? 'left' : 'right',

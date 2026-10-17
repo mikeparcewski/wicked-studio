@@ -26,7 +26,8 @@ export function TurnWho({ who, runId = null, suffix = null, className = '', inli
   const Tag = inline ? 'span' : 'p';
   return (
     <Tag data-testid="turn-who" data-role={who.role} {...(who.cli !== null ? { 'data-cli': who.cli } : {})} className={`wk-session-who wk-who wk-who--${who.role}${className !== '' ? ` ${className}` : ''}`}>
-      <span aria-hidden className="wk-who-dot" />
+      {/* The chat thread draws the dot as a small round mark with the speaker's initial (DES-CHAT-NATIVE-RUN). */}
+      <span aria-hidden className="wk-who-dot" data-initial={who.name.slice(0, 1).toUpperCase()} />
       {name}
       {suffix !== null && <span className="wk-who-suffix"> · {suffix}</span>}
     </Tag>

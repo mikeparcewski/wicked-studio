@@ -15,7 +15,8 @@ import type { Control, OptionsTab } from '../../editors/surfaces.js';
  * ribbon that opens the panel over the page.
  */
 
-function useNarrow(): boolean {
+/** Below {@link PANEL_RIBBON_BELOW_PX}: the panel is an overlay (and a page toggle opens that). */
+export function useNarrow(): boolean {
   const q = `(max-width: ${PANEL_RIBBON_BELOW_PX - 1}px)`;
   const [narrow, setNarrow] = useState(() => typeof matchMedia === 'function' && matchMedia(q).matches);
   useEffect(() => {
@@ -29,29 +30,33 @@ function useNarrow(): boolean {
   return narrow;
 }
 
-export function HostPanel({ runTab, ribbon }: HostPanelProps): React.ReactElement {
+export function HostPanel({ runTab, ribbon, toggledByPage = false }: HostPanelProps): React.ReactElement {
   const { group, tab, folded, setTab, closeGroup, setFolded } = useHostPanel();
   const narrow = useNarrow();
-  const [overlay, setOverlay] = useState(false);
+  // The overlay (below 1200 px) is the store's, so a page's own toggle (the session's Details) reads and sets it too.
+  const overlay = useHostPanel((s) => s.overlay);
+  const setOverlay = useHostPanel((s) => s.setOverlay);
   // A newly opened group shows the panel, also on a narrow screen.
-  useEffect(() => { if (group !== null) setOverlay(true); }, [group]);
+  useEffect(() => { if (group !== null) setOverlay(true); }, [group, setOverlay]);
+  // The overlay is this panel's while it is mounted: leaving the page leaves it closed for the next one.
+  useEffect(() => () => setOverlay(false), [setOverlay]);
   // A card's Options on an open group reveals the panel again, also as the overlay (codex h2-r12 P3).
   const revealed = useHostPanel((s) => s.revealed);
-  useEffect(() => { if (revealed > 0) setOverlay(true); }, [revealed]);
+  useEffect(() => { if (revealed > 0) setOverlay(true); }, [revealed, setOverlay]);
 
   // Folded or narrow, the panel is the ribbon — but its subtree stays mounted (hidden), so the group's options
   // instance and its confirmed values live as long as the group (codex h2b-r1 P2).
   const collapsed = narrow ? !overlay : folded;
   return (
     <>
-      {collapsed && (
+      {collapsed && !toggledByPage && (
         <button type="button" data-testid="host-panel-ribbon" data-folded={narrow ? 'false' : 'true'}
           className={narrow ? 'wk-hpanel-ribbon' : 'wk-hpanel-ribbon wk-hpanel-ribbon--side'}
           onClick={() => { if (narrow) setOverlay(true); else setFolded(false); }} aria-label="Show the panel">
           {ribbon ?? (group !== null ? `${group.editor.title} options` : 'Options')}
         </button>
       )}
-    <aside data-testid={collapsed ? undefined : 'host-panel'} hidden={collapsed} data-narrow={narrow ? 'true' : 'false'} aria-label="Run and options" className={`wk-hpanel${narrow ? ' wk-hpanel--overlay' : ''}`}>
+    <aside id="run-details-panel" data-testid={collapsed ? undefined : 'host-panel'} hidden={collapsed} data-narrow={narrow ? 'true' : 'false'} aria-label="Run and options" className={`wk-hpanel${narrow ? ' wk-hpanel--overlay' : ''}`}>
       <div className="wk-hpanel-head">
         {/* Without a group the tab already says Run: no second "Run" above it. */}
         {group !== null && <span className="wk-hpanel-heading">{`${group.editor.title} options`}</span>}
