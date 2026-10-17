@@ -526,7 +526,9 @@
 /* The inbox is EXACTLY two block rows plus the gap between them (measured: bin/stable.mjs). */
 .wk-work-top > .wk-inbox { height: calc(2 * var(--blk-h) + var(--d2-gap)); }
 .wk-work-blocks { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: repeat(2, var(--blk-h)); gap: var(--d2-gap); }
-.wk-work-blocks .wk-stat { height: var(--blk-h); align-content: start; }
+.wk-work-blocks .wk-stat { height: var(--blk-h); align-content: start; grid-template-rows: auto auto minmax(0, 1fr); }
+/* The taller row (2026-10-16): the note sits at the tile's foot, the number stays by its label. */
+.wk-work-blocks .wk-stat-foot { align-self: end; }
 .wk-work-blocks .wk-stat-value { font-size: var(--text-2xl); }
 /* A Work tile's note gets two lines before it is cut ("Agents ready": "1 more with limits · 2 can't tell"). */
 .wk-work-blocks .wk-stat-note { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
