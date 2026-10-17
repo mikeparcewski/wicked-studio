@@ -2,8 +2,9 @@
 
 The operator's path, end to end, through the real buttons:
   1. Desk → New job opens the job picker, whose footer offers the checkbox and the Settings note.
-  2. Ticking it closes the picker and opens a chat, and the choice is saved in crew's settings.
-  3. After a reload, Desk → New job opens a chat, not the picker.
+  2. Ticking it closes the picker and opens a new chat on its own page (the chat flow, 2026-10-16 —
+     never the Ask dock), and the choice is saved in crew's settings.
+  3. After a reload, Desk → New job opens a new chat's page, not the picker.
   4. Settings → View → "Show New job" turns it back; after a reload New job opens the picker again.
 
 Captures: e2e/shots/desk-newjob-chat-*.png. Env: FEEDBACK_PORT (default 4526).
@@ -76,10 +77,11 @@ with sync_playwright() as p:
 
     # 2. ticking it goes to chat and saves the choice
     page.get_by_test_id("launch-wizard-skip-toggle").click()  # the picker closes as it saves
-    page.get_by_test_id("assist-input").wait_for(state="visible", timeout=8000)
+    page.get_by_test_id("session-fresh").wait_for(state="visible", timeout=8000)
     stored = wait_stored(page, True)
     page.screenshot(path=str(SHOTS / "desk-newjob-chat-ticked.png"))
     check("ticked-goes-to-chat", page.get_by_test_id("launch-wizard").count() == 0
+          and page.get_by_test_id("assist-input").count() == 0 and "/s/" in page.url
           and isinstance(stored, dict) and stored.get("startInChat") is True and stored.get("deliverPr") is False,
           stored=stored)
 
@@ -87,14 +89,13 @@ with sync_playwright() as p:
     page.goto(f"{origin}/", wait_until="networkidle")
     page.get_by_test_id("desk-new-job").click()
     try:
-        page.get_by_test_id("assist-input").wait_for(state="visible", timeout=8000)
+        page.get_by_test_id("session-fresh").wait_for(state="visible", timeout=8000)
     except Exception:
         page.screenshot(path=str(SHOTS / "desk-newjob-chat-reload-missing.png"))
         check("reload-still-chat", False, wizard=page.get_by_test_id("launch-wizard").count(),
               assist=page.get_by_test_id("assist-input").count(), stored=page.evaluate(STORED))
     page.wait_for_timeout(300)
-    check("reload-still-chat", page.get_by_test_id("launch-wizard").count() == 0)
-    page.keyboard.press("Escape")
+    check("reload-still-chat", page.get_by_test_id("launch-wizard").count() == 0 and page.get_by_test_id("assist-input").count() == 0)
 
     # 4. Settings → View turns it back
     page.goto(f"{origin}/system", wait_until="networkidle")

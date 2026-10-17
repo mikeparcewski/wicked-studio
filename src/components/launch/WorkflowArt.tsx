@@ -1,5 +1,5 @@
 import type { ReactElement, ReactNode } from 'react';
-import { DEMO_VIDEO_ID, DRAFT_EPICS_ID } from '../../store/launchWizard.js';
+import { DEMO_VIDEO_ID, DRAFT_EPICS_ID, START_CHAT_ID } from '../../store/launchWizard.js';
 
 /**
  * THE NEW JOB CARDS' ART (operator 2026-10-12): one small line drawing per built-in workflow, and a
@@ -159,6 +159,20 @@ function DemoVideoArt(): ReactElement {
   );
 }
 
+/** Start with chat: two speech bubbles, the reply's dots in the accent. */
+function StartChatArt(): ReactElement {
+  return (
+    <Frame>
+      <path className={W} d="M14 10h36a4 4 0 0 1 4 4v12a4 4 0 0 1-4 4H28l-7 6v-6h-7a4 4 0 0 1-4-4V14a4 4 0 0 1 4-4z" />
+      <path d="M18 17h26M18 23h16" />
+      <path d="M62 32h24a4 4 0 0 1 4 4v12a4 4 0 0 1-4 4h-4v6l-7-6H62a4 4 0 0 1-4-4V36a4 4 0 0 1 4-4z" />
+      <circle className={A} cx="66" cy="42" r="1.5" />
+      <circle className={A} cx="74" cy="42" r="1.5" />
+      <circle className={A} cx="82" cy="42" r="1.5" />
+    </Frame>
+  );
+}
+
 /** A workflow studio has no drawing for: a plain run of steps. */
 function FallbackArt(): ReactElement {
   return (
@@ -183,6 +197,7 @@ const ART: Readonly<Record<string, () => ReactElement>> = {
   'qe-author-tests': WriteTestsArt,
   [DRAFT_EPICS_ID]: DraftEpicsArt,
   [DEMO_VIDEO_ID]: DemoVideoArt,
+  [START_CHAT_ID]: StartChatArt,
 };
 
 /** Whether studio has its own drawing for a workflow key (else the neutral one is drawn). */

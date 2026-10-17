@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { chatOpened, chatOpenFailed } from '../store/chatFlow.js';
 import { api } from '../api/client.js';
 import { getDiagnostics, isDiagnosticsUnsupported } from '../api/diagnostics.js';
 import type { ChatOpenBody, ChatScope, RepoEntry, SessionView } from '../api/types.js';
@@ -104,7 +105,7 @@ function placeWords(label: string): string {
   return label === 'Home' ? 'the Desk' : label;
 }
 
-export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoffTaken, sendProjectId, sendFresh = false, sendPrimary, sendChatId, startProjectId, startText, startFresh = false }: {
+export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoffTaken, sendProjectId, sendFresh = false, sendPrimary, sendChatId, sendOpenChatId, startProjectId, startText, startFresh = false }: {
   runs: SessionView[];
   pathname: string;
   /** Collapsing the dock closes Ask entirely — the launcher bubble/shortcut reopen it. */
@@ -128,6 +129,9 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
   /** S16a-4e: the handoff is a reply into THIS chat (the chat session on screen): the dock resumes
    *  it (and stores it as its session) instead of its own stored chat. */
   sendChatId?: string;
+  /** The chat flow (2026-10-16): the handoff is the FIRST message of a fresh chat whose page is on
+   *  screen (`openChatFlow` minted its id): the chat opens under THIS id, so its page becomes it. */
+  sendOpenChatId?: string;
   /** Concept A (`openAskDock`): open a FRESH chat scoped to this project, nothing sent. */
   startProjectId?: string;
   /** Words placed in the box when the dock opens, never sent (⌘K "New demo"). */
@@ -217,6 +221,8 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
   });
   /** The live chat session this dock opened — later sends reuse its warm seats. */
   const chatIdRef = useRef<string | null>(resumed?.chatId ?? null);
+  /** A fresh chat page's own id (the chat flow), used once: the first open takes it. */
+  const openIdRef = useRef<string | null>(sendText !== undefined && sendFresh ? sendOpenChatId ?? null : null);
   /** True once the context pack LANDED with a message — it seeds the first successful
    *  send only. A resumed session carries its persisted flag: a first send that failed
    *  leaves it unseeded, so the pack still rides the next question. */
@@ -291,46 +297,57 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
           }
         }
         if (id === null) {
-          // The chat-capable roster (EC44's derivation, reused verbatim) — cached when any
-          // surface already fetched it; one GET /roster otherwise.
-          let roster = getCachedRoster();
-          if (roster === null) {
-            const { roster: fetched } = await api.getRoster();
-            setCachedRoster(fetched);
-            roster = fetched;
+          // codex r1: a fresh chat page's open that fails anywhere here (no seat picked, the roster, the
+          // open itself, no helper able to answer) frees the page's Send; the panel says why.
+          try {
+            // The chat-capable roster (EC44's derivation, reused verbatim) — cached when any
+            // surface already fetched it; one GET /roster otherwise.
+            let roster = getCachedRoster();
+            if (roster === null) {
+              const { roster: fetched } = await api.getRoster();
+              setCachedRoster(fetched);
+              roster = fetched;
+            }
+            const choice = scopeChoiceRef.current;
+            // studio#631: the composer's helpers row decides — the admitted seats minus the ones turned off.
+            const eligible = defaultSelection(roster, askScopeIsScoped(choice));
+            const clis = chosenSeats(eligible, useComposerSeats.getState().dropped, useComposerSeats.getState().picked);
+            if (eligible.length > 0 && clis.length === 0) throw new Error(NO_SEAT_PICKED);
+            // A failed open keeps the page's id for the retry; only a chat the daemon opened spends it.
+            id = openIdRef.current ?? crypto.randomUUID();
+            const body: ChatOpenBody = { chatId: id, ...askScopeOpenFields(choice, ambientProjectId(packInputs.current.pathname)) };
+            if (clis.length > 0) body.clis = clis;
+            // ASK-S1: the helper named with `@` answers (`selection: chosen`); unnamed, the engine picks at random.
+            if (sendPrimary !== undefined && useCapabilities.getState().askPath && (clis.length === 0 || clis.includes(sendPrimary))) body.primary = sendPrimary;
+            // A refused open reads as the retired chat page's does (codex on #327): a pre-0.39.0 daemon's
+            // "unknown field `scopeKind`" names the upgrade, never the raw wire.
+            const { seats, scope } = await api.openChat(body).catch((e: unknown) => {
+              throw new Error(describeChatOpenRefusal(apiStatus(e), apiWire(e), e instanceof Error ? e.message : String(e)));
+            });
+            const ready = seats.filter((s) => s.ok).map((s) => s.cliKey);
+            if (ready.length === 0) {
+              const detail =
+                seats.length > 0
+                  ? seats.map((s) => `${s.cliKey}: ${s.error ?? 'failed'}`).join('; ')
+                  : useCapabilities.getState().askPath ? 'no signed-in helper is eligible to answer' : 'the daemon warmed no seats';
+              throw new Error(`${useCapabilities.getState().askPath ? 'No helper can answer' : 'No agent seat came up'} — ${detail}`);
+            }
+            chatIdRef.current = id;
+            // The chat flow: a fresh chat page's chat is open on the daemon now — an ordinary chat from here.
+            openIdRef.current = null;
+            chatOpened(id);
+            scopeRef.current = scope ?? null;
+            setOpenedScope(scope ?? null);
+            // Persist for the tab — a close/reopen (or reload) resumes THIS session.
+            titleRef.current = text;
+            writeAskSession({ chatId: id, title: text, seeded: false, ...scopeField(scopeRef.current) });
+            // The session is live — make it findable on the rail (the J4 live row) and on
+            // /chats, labelled with where it came from and what was asked (studio#323 R2).
+            useLiveChatsStore.getState().upsert(id, ready, { origin: 'ask', title: text });
+          } catch (openErr) {
+            if (openIdRef.current !== null) chatOpenFailed(openIdRef.current);
+            throw openErr;
           }
-          const choice = scopeChoiceRef.current;
-          // studio#631: the composer's helpers row decides — the admitted seats minus the ones turned off.
-          const eligible = defaultSelection(roster, askScopeIsScoped(choice));
-          const clis = chosenSeats(eligible, useComposerSeats.getState().dropped, useComposerSeats.getState().picked);
-          if (eligible.length > 0 && clis.length === 0) throw new Error(NO_SEAT_PICKED);
-          id = crypto.randomUUID();
-          const body: ChatOpenBody = { chatId: id, ...askScopeOpenFields(choice, ambientProjectId(packInputs.current.pathname)) };
-          if (clis.length > 0) body.clis = clis;
-          // ASK-S1: the helper named with `@` answers (`selection: chosen`); unnamed, the engine picks at random.
-          if (sendPrimary !== undefined && useCapabilities.getState().askPath && (clis.length === 0 || clis.includes(sendPrimary))) body.primary = sendPrimary;
-          // A refused open reads as the retired chat page's does (codex on #327): a pre-0.39.0 daemon's
-          // "unknown field `scopeKind`" names the upgrade, never the raw wire.
-          const { seats, scope } = await api.openChat(body).catch((e: unknown) => {
-            throw new Error(describeChatOpenRefusal(apiStatus(e), apiWire(e), e instanceof Error ? e.message : String(e)));
-          });
-          const ready = seats.filter((s) => s.ok).map((s) => s.cliKey);
-          if (ready.length === 0) {
-            const detail =
-              seats.length > 0
-                ? seats.map((s) => `${s.cliKey}: ${s.error ?? 'failed'}`).join('; ')
-                : useCapabilities.getState().askPath ? 'no signed-in helper is eligible to answer' : 'the daemon warmed no seats';
-            throw new Error(`${useCapabilities.getState().askPath ? 'No helper can answer' : 'No agent seat came up'} — ${detail}`);
-          }
-          chatIdRef.current = id;
-          scopeRef.current = scope ?? null;
-          setOpenedScope(scope ?? null);
-          // Persist for the tab — a close/reopen (or reload) resumes THIS session.
-          titleRef.current = text;
-          writeAskSession({ chatId: id, title: text, seeded: false, ...scopeField(scopeRef.current) });
-          // The session is live — make it findable on the rail (the J4 live row) and on
-          // /chats, labelled with where it came from and what was asked (studio#323 R2).
-          useLiveChatsStore.getState().upsert(id, ready, { origin: 'ask', title: text });
         }
         const message = seededRef.current ? text : `${text}${PACK_JOIN}${buildContextPack(packInputs.current)}`;
         deposit(id, text, await api.sendChatMessage(id, message).catch(plainSendRefusal(id)));

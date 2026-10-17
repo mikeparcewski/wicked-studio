@@ -58,7 +58,8 @@ WORKFLOWS = {"workflows": [
     {"id": i, "is_system": s, "phases": [{"id": p, "executes_code": True} for p in ph]} for (i, ph, s) in CATALOG]}
 # Today's offer: the ordinary workflows in catalog order (at most 8), then studio's own two jobs:
 # Demo video (studio#664) and Draft epics.
-EXPECTED = [i for (i, _, s) in CATALOG if not s][:8] + ["demo-video", "draft-epics"]
+# Since 2026-10-16 the first card is "Start with chat" (the chat flow), then the jobs.
+EXPECTED = ["chat"] + [i for (i, _, s) in CATALOG if not s][:8] + ["demo-video", "draft-epics"]
 
 MEASURE = r"""() => {
   const grid = document.querySelector('[data-testid=launch-wizard-cards]');
@@ -74,7 +75,7 @@ MEASURE = r"""() => {
   }
   const dlg = document.querySelector('[data-testid=launch-wizard]').getBoundingClientRect();
   return {
-    ids: cards.map((c) => c.dataset.testid.replace('launch-wizard-workflow-', '')),
+    ids: cards.map((c) => c.dataset.testid === 'launch-wizard-start-chat' ? 'chat' : c.dataset.testid.replace('launch-wizard-workflow-', '')),
     across: cards.filter((c) => Math.round(c.offsetTop) === tops[0]).length,
     rows: tops.length, full, partial,
     gridScrolls: grid.scrollHeight > grid.clientHeight + 1, overflowY: getComputedStyle(grid).overflowY,
@@ -90,7 +91,7 @@ MEASURE = r"""() => {
   };
 }"""
 
-FOCUSED = "() => document.activeElement?.dataset?.testid?.replace('launch-wizard-workflow-', '') ?? null"
+FOCUSED = "() => { const t = document.activeElement?.dataset?.testid; return t === 'launch-wizard-start-chat' ? 'chat' : t?.replace('launch-wizard-workflow-', '') ?? null; }"
 
 with sync_playwright() as p:
     browser = p.chromium.launch()
@@ -108,7 +109,7 @@ with sync_playwright() as p:
         page.goto(f"{origin}/", wait_until="networkidle")
         page.get_by_test_id("desk-new-job").click()
         page.get_by_test_id("launch-wizard-cards").wait_for(state="visible", timeout=8000)
-        page.wait_for_function(f"() => document.querySelectorAll('[data-testid^=\"launch-wizard-workflow-\"]').length >= {len(EXPECTED)}", timeout=8000)
+        page.wait_for_function(f"() => document.querySelectorAll('[data-testid^=\"launch-wizard-workflow-\"]').length >= {len(EXPECTED) - 1}", timeout=8000)  # the jobs; Start with chat is the other card
         page.wait_for_timeout(200)
         m = page.evaluate(MEASURE)
         page.screenshot(path=str(SHOTS / f"desk-newjob-cards-{w}x{h}.png"))
@@ -146,7 +147,9 @@ with sync_playwright() as p:
             page.get_by_test_id("launch-wizard-intent").wait_for(state="visible", timeout=5000)
             step = page.get_by_test_id("launch-wizard-step").get_attribute("data-step")
             title = page.locator(".wk-launch-wizard-title").inner_text()
-            check("enter-picks-into-the-first-step", step == "what" and title == "New job: MCP server", landed=step, title=title)
+            # The focused card (EXPECTED[1 + across] since Start with chat leads the grid) opens its job's first step.
+            check("enter-picks-into-the-first-step", down == EXPECTED[5] and step == "what" and title.startswith("New job: ") and title != "New job: ",
+                  landed=step, title=title, picked=down)
             page.get_by_test_id("launch-wizard-change").click()
             back = page.evaluate(FOCUSED)
             check("change-job-returns-to-the-picked-card", back == EXPECTED[5], focused=back)

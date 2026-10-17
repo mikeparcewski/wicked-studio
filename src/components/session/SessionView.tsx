@@ -1,4 +1,6 @@
 import { CodebaseDownload, DeliverCredentialsNotice } from './CodebaseDownload.js';
+import { beginChatOpen, chatOpened, useChatFlow } from '../../store/chatFlow.js';
+import { useProjectsStore } from '../../store/projects.js';
 import { Fragment, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { ApiError, api } from '../../api/client.js';
 import type { ChatPathView, CoreEvent, SessionView as RunView } from '../../api/types.js';
@@ -14,7 +16,7 @@ import {
 import type { Navigate } from '../../hooks/useRoute.js';
 import { useCapabilities } from '../../store/capabilities.js';
 import { readSessionVisit, useSessionDrafts, writeSessionVisit } from '../../store/sessionDrafts.js';
-import { jobTitle, isChatScopeProblem } from '../../board/deskWords.js';
+import { jobTitle, isChatScopeProblem, plainRunTitle } from '../../board/deskWords.js';
 import type { ChatCitations } from '../../api/chat-wire.js';
 import { IDLE_GATE_ACTION, useGateActionStore } from '../../board/gateActions.js';
 import { finishedDeliveryArm, proposalKindOf, statusSentence } from '../../board/proposalCard.js';
@@ -208,17 +210,18 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
   // The chat's transcript (and whether the daemon still holds it). Crew answers an unknown or
   // reclaimed chat with 200 `scope: null, messages: []`, so only that answer means "closed"; a
   // failed read says it failed (with a retry) and claims nothing about the conversation.
+  // `at`: the read's try, so a page waiting for the read after its chat opened knows which answer is new.
   const [chat, setChat] = useState<
-    { id: string; detail: ChatDetail } | { id: string; error: string } | null
+    { id: string; at: number; detail: ChatDetail } | { id: string; at: number; error: string } | null
   >(null);
   const [chatTry, setChatTry] = useState(0);
   useEffect(() => {
     if (ref.kind !== 'chat') return;
     let cancelled = false;
     api.getChat(ref.chatId)
-      .then((d) => { if (!cancelled) setChat({ id: ref.chatId, detail: d as unknown as ChatDetail }); })
+      .then((d) => { if (!cancelled) setChat({ id: ref.chatId, at: chatTry, detail: d as unknown as ChatDetail }); })
       .catch((e: unknown) => {
-        if (!cancelled) setChat({ id: ref.chatId, error: e instanceof Error ? e.message : String(e) });
+        if (!cancelled) setChat({ id: ref.chatId, at: chatTry, error: e instanceof Error ? e.message : String(e) });
       });
     return () => { cancelled = true; };
   }, [ref, chatTry]);
@@ -226,19 +229,48 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
   const chatDetail = mineChat !== null && 'detail' in mineChat ? mineChat.detail : null;
   const chatError = mineChat !== null && 'error' in mineChat ? mineChat.error : null;
   const chatLoaded = ref.kind !== 'chat' || mineChat !== null;
-  const conversation: Conversation | 'pending' | 'unreadable' = ref.kind === 'run' ? 'none'
+  // The chat flow (2026-10-16): a chat `openChatFlow` started and nothing has been sent yet — its page is
+  // "New chat" with its composer; the first Send opens it on the daemon under this id.
+  const fresh = useChatFlow((s) => (ref.kind === 'chat' ? s.fresh[ref.chatId] ?? null : null));
+  const freshProjectName = useProjectsStore((s) => (fresh?.projectId == null ? null : s.projects.find((p) => p.id === fresh.projectId)?.name ?? null));
+  const freshOpening = useChatFlow((s) => (ref.kind === 'chat' && s.opening[ref.chatId] === true));
+  // Opened on the daemon: read the chat again, and until THAT read answers the page stays the new chat
+  // (codex r1: the read from before the open said "closed", which is not what the page now is).
+  const [openedAt, setOpenedAt] = useState<number | null>(null);
+  const wasFresh = useRef(fresh !== null);
+  const chatTryRef = useRef(chatTry);
+  chatTryRef.current = chatTry;
+  useEffect(() => {
+    if (wasFresh.current && fresh === null) {
+      const next = chatTryRef.current + 1;
+      setOpenedAt(next);
+      setChatTry(next);
+    }
+    wasFresh.current = fresh !== null;
+  }, [fresh]);
+  useEffect(() => { setOpenedAt(null); }, [sessionId]);
+  const awaitingOpenRead = openedAt !== null && (mineChat === null || mineChat.at < openedAt);
+  // codex r1: a fresh mark another tab (or a lost answer) left behind never outranks the daemon — a read
+  // that finds the chat held retires it, and the page is that conversation.
+  const readLive = ref.kind === 'chat' && chatDetail !== null && conversationOf(ref, chatDetail) === 'live';
+  useEffect(() => { if (fresh !== null && readLive && ref.kind === 'chat') chatOpened(ref.chatId); }, [fresh, readLive, ref]);
+  const conversation: Conversation | 'pending' | 'unreadable' | 'fresh' = ref.kind === 'run' ? 'none'
+    : (fresh !== null && !readLive) || awaitingOpenRead ? 'fresh'
     : chatError !== null ? 'unreadable'
       : chatDetail === null ? 'pending' : conversationOf(ref, chatDetail);
   const messages = useMemo(() => chatDetail?.messages ?? [], [chatDetail]);
   // studio#606 (4): on a live chat's own session the text replies into that chat; anywhere else a
   // live run here is NOT what Send reaches (it starts a separate Ask), and the composer says so.
   const scopeNote = composerScopeNote(mine, ref.kind === 'chat' && conversation === 'live');
-  const title = sessionTitle(messages, mine);
 
   // ── ASK-S1: the ask path behind this chat ──────────────────────────────────────────────────
   const askPathOn = useCapabilities((s) => s.askPath);
   const chatId = ref.kind === 'chat' ? ref.chatId : null;
   const liveTurns = useAskThreadStore((s) => (chatId === null ? undefined : s.turns[chatId]));
+  // A chat whose transcript has not been read back yet (just opened from its fresh page) is titled by
+  // the operator's first live words; a fresh chat with nothing said is "New chat".
+  const firstLiveWords = messages.length === 0 && mine.length === 0 ? liveTurns?.find((t) => t.who === 'you' && t.text.trim() !== '')?.text ?? null : null;
+  const title = firstLiveWords !== null ? plainRunTitle(firstLiveWords) : fresh !== null && messages.length === 0 && mine.length === 0 ? 'New chat' : sessionTitle(messages, mine);
   const replySeq = useAskThreadStore((s) => (chatId === null ? 0 : s.replySeq[chatId] ?? 0));
   const linkedRun = useAskThreadStore((s) => (chatId === null ? undefined : s.runByChat[chatId]));
   const askRunsKnown = useAskThreadStore((s) => s.runs);
@@ -674,7 +706,17 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
     text: draft,
     setText: (t: string) => setDraft(sessionId, t),
     // S16a-4e: on a live chat's own session the composer replies into THAT chat.
-    onSend: (text: string, opts: ComposerSend) => onAsk(text, ref.kind === 'chat' && conversation === 'live' && opts.fresh !== true && opts.projectId === undefined ? { ...opts, chatId: ref.chatId } : opts),
+    // The chat flow: a fresh chat's first Send opens it under this page's id, in the project it started in.
+    // codex r1: one open per fresh chat — a Send while it is opening waits (the page says so); once it is
+    // open (even before its read lands) a Send replies into it.
+    onSend: (text: string, opts: ComposerSend) => {
+      if (ref.kind === 'chat' && fresh !== null && conversation === 'fresh') {
+        if (!beginChatOpen(ref.chatId)) return;
+        onAsk(text, { ...opts, fresh: true, openChatId: ref.chatId, ...(opts.projectId === undefined && fresh.projectId !== null ? { projectId: fresh.projectId } : {}) });
+        return;
+      }
+      onAsk(text, ref.kind === 'chat' && (conversation === 'live' || awaitingOpenRead) && opts.fresh !== true && opts.projectId === undefined ? { ...opts, chatId: ref.chatId } : opts);
+    },
     runs: mine,
     started: entries.length > 0,
     navigate,
@@ -715,12 +757,16 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
         <div className="wk-session-head-body">
           {/* Audit row 62: until the session's reads settle, the title is a skeleton and no state word
               is said — never the placeholder "A session · Quiet · Loading…". */}
-          {ready || mine.length > 0
+          {ready || mine.length > 0 || conversation === 'fresh'
             ? <h1 data-testid="session-title" className="wk-session-title">{title}</h1>
             : <div data-testid="session-title-loading" className="wk-session-title-skeleton"><Skeleton rows={1} variant="line" /></div>}
           <p data-testid="session-status" className="wk-session-status">
             {/* UI-CONTRACT §5: the one status vocabulary (never "Quiet" for a cancelled run). */}
             {ready || mine.length > 0 ? (state === 'waiting' ? 'Waiting on you' : mine.length > 0 ? chatStatusWord(mine).word : null) : null}
+            {conversation === 'fresh' && mine.length === 0 && (
+              <span data-testid="session-fresh-status">{freshOpening || awaitingOpenRead || (fresh === null) ? 'Starting the chat…'
+                : fresh.projectId !== null ? `New · in ${freshProjectName ?? 'a project'}` : 'New · not in a project'}</span>
+            )}
             {mine.length > 1 && ` · ${mine.length} runs`}
             {badge > 0 && <> · <mark className="wk-desk-mark">{badge === 1 ? '1 needs you' : `${badge} need you`}</mark></>}
           </p>
@@ -780,6 +826,9 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
             if (label !== null) addAboutChip(sessionId, { kind: 'about', key: `q:${label}`, label });
           }}
         >
+          {conversation === 'fresh' && liveTurns === undefined && mine.length === 0 && (
+            <p data-testid="session-fresh" className="wk-session-grey wk-session-fresh">Ask anything, or say what you want done. Your first message starts this chat; a job starts only when you choose one.</p>
+          )}
           {conversation === 'closed' && mine.length > 0 && (
             <>
               <TurnWho who={CREW} />

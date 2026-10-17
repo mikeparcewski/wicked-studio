@@ -2,7 +2,17 @@
  * "Don't show this again — start in chat" (operator 2026-10-16, DES-CHAT-FIRST-001 C5): New job's
  * picker can be skipped for chat. The preference lives in `studio.composer.startInChat`; one
  * predicate in `openLaunchWizard` routes only a generic New job, and Settings → View turns it back.
+ * Since 2026-10-16 "chat" is the CHAT FLOW — a new chat on its own page (`openChatFlow`), never the
+ * Ask dock — and the picker's first card, "Start with chat", goes to the same place.
  */
+
+/** The chat flow's last open: the page it goes to, its project and the words waiting in its composer. */
+function chatFlowOpen(): { chatId: string; projectId: string | null; seed: string } | null {
+  const req = useChatFlow.getState().request;
+  if (req === null) return null;
+  const fresh = useChatFlow.getState().fresh[req.chatId];
+  return { chatId: req.chatId, projectId: fresh?.projectId ?? null, seed: useSessionDrafts.getState().drafts[req.chatId] ?? '' };
+}
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { WorkflowDef } from '../src/api/types.js';
@@ -10,6 +20,8 @@ import * as client from '../src/api/client.js';
 import { LaunchWizard } from '../src/components/launch/LaunchWizard.js';
 import { SystemSettings } from '../src/components/SystemSettings.js';
 import { useAskDock } from '../src/store/askDock.js';
+import { resetChatFlow, useChatFlow } from '../src/store/chatFlow.js';
+import { useSessionDrafts } from '../src/store/sessionDrafts.js';
 import { DEFAULT_COMPOSER_PREFS, resetComposerPrefsPersistence, useComposerPrefsStore } from '../src/store/composerPrefs.js';
 import { DEMO_VIDEO_ID, isGenericNewJob, openLaunchWizard, resetLaunchWizard, useLaunchWizard } from '../src/store/launchWizard.js';
 import { clearCachedWorkflows, setCachedWorkflows } from '../src/store/workflowCache.js';
@@ -21,6 +33,7 @@ const WF = [{ id: 'feature', phases: [{ id: 'build', executes_code: true }] }] a
 beforeEach(() => {
   resetLaunchWizard();
   useAskDock.setState({ request: null });
+  resetChatFlow();
   useComposerPrefsStore.setState({ prefs: DEFAULT_COMPOSER_PREFS, loaded: true, persist: 'unknown' });
   vi.spyOn(client.api, 'putComposerSettings').mockImplementation((prefs) =>
     Promise.resolve({ settings: { 'studio.composer': prefs } }),
@@ -46,7 +59,8 @@ describe('which opens follow "start in chat"', () => {
     useComposerPrefsStore.setState({ prefs: { ...DEFAULT_COMPOSER_PREFS, startInChat: true } });
     openLaunchWizard({ projectId: 'p1', intent: 'tidy the README', composerKey: 'desk' });
     expect(useLaunchWizard.getState().open).toBe(false);
-    expect(useAskDock.getState().request).toMatchObject({ fresh: true, projectId: 'p1', seedText: 'tidy the README' });
+    expect(chatFlowOpen()).toMatchObject({ projectId: 'p1', seed: 'tidy the README' });
+    expect(useAskDock.getState().request).toBeNull(); // never the dock
 
     openLaunchWizard({ workflowId: 'learn' });
     expect(useLaunchWizard.getState().open).toBe(true);
@@ -64,7 +78,7 @@ describe('which opens follow "start in chat"', () => {
     await loading;
     await Promise.resolve();
     expect(useLaunchWizard.getState().open).toBe(false);
-    expect(useAskDock.getState().request).toMatchObject({ fresh: true });
+    expect(chatFlowOpen()).not.toBeNull();
   });
 
   it('a New job waiting on the settings read gives way to a job opened meanwhile', async () => {
@@ -79,18 +93,18 @@ describe('which opens follow "start in chat"', () => {
     await loading;
     await Promise.resolve();
     expect(useLaunchWizard.getState().draft?.workflowId).toBe('learn');
-    expect(useAskDock.getState().request).toBeNull();
+    expect(chatFlowOpen()).toBeNull();
   });
 
   it('with the preference off (the default), New job opens the picker as before', () => {
     openLaunchWizard({});
     expect(useLaunchWizard.getState().open).toBe(true);
-    expect(useAskDock.getState().request).toBeNull();
+    expect(chatFlowOpen()).toBeNull();
   });
 });
 
 describe('the picker\'s checkbox', () => {
-  it('ticking it saves the preference, closes the picker and opens chat with what was typed, and says how to undo it', async () => {
+  it('ticking it saves the preference, closes the picker and opens the chat flow with what was typed, and says how to undo it', async () => {
     vi.useFakeTimers();
     try {
       render(<LaunchWizard navigate={() => {}} />);
@@ -107,10 +121,27 @@ describe('the picker\'s checkbox', () => {
       expect(client.api.putComposerSettings).toHaveBeenCalledWith({ deliverPr: true, startInChat: true });
       expect(screen.queryByTestId('launch-wizard')).toBeNull();
       expect(useLaunchWizard.getState().open).toBe(false);
-      expect(useAskDock.getState().request).toMatchObject({ fresh: true, projectId: 'p1', seedText: 'add a CSV export' });
+      expect(chatFlowOpen()).toMatchObject({ projectId: 'p1', seed: 'add a CSV export' });
+      expect(useAskDock.getState().request).toBeNull();
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe('the picker\'s first card, "Start with chat"', () => {
+  it('is first and focused, and goes to the chat flow in the draft\'s project with its words; the preference is untouched', () => {
+    render(<LaunchWizard navigate={() => {}} />);
+    act(() => { openLaunchWizard({ projectId: 'p1', intent: 'why is login slow?' }); });
+    const grid = screen.getByTestId('launch-wizard-cards');
+    const first = grid.querySelector('button');
+    expect(first?.dataset.testid).toBe('launch-wizard-start-chat');
+    expect(first).toHaveTextContent('Start with chat');
+    expect(first?.dataset.autofocus).toBe('true');
+    fireEvent.click(screen.getByTestId('launch-wizard-start-chat'));
+    expect(screen.queryByTestId('launch-wizard')).toBeNull();
+    expect(chatFlowOpen()).toMatchObject({ projectId: 'p1', seed: 'why is login slow?' });
+    expect(useComposerPrefsStore.getState().prefs.startInChat).toBe(false);
   });
 });
 

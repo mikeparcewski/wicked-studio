@@ -26,8 +26,8 @@ import { useProvenanceStore } from '../../store/provenance.js';
 import { fetchReposCached, getCachedRepos } from '../../store/repoCache.js';
 import { useWorkflowDefs } from '../../store/workflowCache.js';
 import { workflowLabel } from '../../board/workflowNames.js';
-import { DEMO_VIDEO_ID, DRAFT_EPICS_ID, useLaunchWizard, type LaunchDraft } from '../../store/launchWizard.js';
-import { openAskDock } from '../../store/askDock.js';
+import { DEMO_VIDEO_ID, DRAFT_EPICS_ID, START_CHAT_ID, useLaunchWizard, type LaunchDraft } from '../../store/launchWizard.js';
+import { openChatFlow } from '../../store/chatFlow.js';
 import { useComposerPrefsStore } from '../../store/composerPrefs.js';
 import { launchDemo } from '../../api/demo.js';
 import { DEMO_AUDIENCES, DEMO_AUDIENCE_MAX, DEMO_SHOW_MAX, DEMO_URL_MAX, DEMO_VIDEO_LINE, demoBlocker } from '../../board/demoLaunch.js';
@@ -50,6 +50,7 @@ const STEP_TITLE: Record<Step, string> = {
 };
 /** "Draft epics" (operator 2026-10-12): a project's requirements become epics, features and stories. */
 const DRAFT_EPICS_LINE = 'Turn requirements into epics and stories';
+const START_CHAT_LINE = 'Talk it through first, then start a job';
 const INSTRUCTIONS_MAX = 500;
 /**
  * THE LAUNCH WIZARD (operator 2026-10-11 15:15Z: "someone just starts a new job by selecting a
@@ -75,15 +76,21 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
   const launchingRef = useRef(false);
   const close = (): void => { if (!launchingRef.current) closeStore(); };
   // "Don't show this again" (operator 2026-10-16): the saved choice, shown as it is. Ticking it saves
-  // it and goes to chat now with what was typed; unticking (seen when a named job opened the picker)
-  // turns New job back on.
+  // it and goes to the chat flow now (a new chat on its own page) with what was typed; unticking (seen
+  // when a named job opened the picker) turns New job back on.
   const startInChat = useComposerPrefsStore((s) => s.prefs.startInChat);
   const setStartInChat = (on: boolean): void => {
     if (launchingRef.current || draft === null) return;
     useComposerPrefsStore.getState().update({ startInChat: on });
     if (!on) return;
+    startChat();
+  };
+  // "Start with chat" (operator 2026-10-16: "No option in new job modal for just starting with chat"):
+  // the first card, and the box above — both go to the one chat flow, in the draft's project.
+  const startChat = (): void => {
+    if (launchingRef.current) return;
     closeStore();
-    openAskDock({ fresh: true, projectId: draft.projectId, seedText: draft.intent });
+    openChatFlow({ projectId: draft.projectId, seedText: draft.intent });
   };
   useModalEscape(close);
   // codex r1: focus returns to whatever opened the wizard when it closes.
@@ -388,9 +395,24 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
                   frame is a size container, so a row is a third of the room the modal leaves it. */}
               <div className="wk-launch-wizard-cards-frame">
                 <div className="wk-launch-wizard-cards" data-testid="launch-wizard-cards" onKeyDown={onCardKey}>
-                  {cards.map((c, i) => {
+                  {/* Chat first (operator 2026-10-16): not a workflow — a conversation on its own page, where
+                      a job can still be started from what is said. Focus starts here unless a job is picked. */}
+                  <button
+                    type="button"
+                    data-testid="launch-wizard-start-chat"
+                    data-autofocus={draft.workflowId !== null && cards.some((x) => x.id === draft.workflowId) ? undefined : 'true'}
+                    data-art={START_CHAT_ID}
+                    aria-pressed={false}
+                    className="wk-launch-wizard-choice wk-launch-wizard-card wk-launch-wizard-card--chat"
+                    onClick={startChat}
+                  >
+                    <span className="wk-launch-wizard-card-art"><WorkflowArt workflowKey={START_CHAT_ID} /></span>
+                    <span className="wk-launch-wizard-choice-name">Start with chat</span>
+                    <span className="wk-launch-wizard-choice-line" title={START_CHAT_LINE}>{START_CHAT_LINE}</span>
+                  </button>
+                  {cards.map((c) => {
                     const on = c.id === DRAFT_EPICS_ID ? drafting : draft.workflowId === c.id;
-                    const autofocus = draft.workflowId !== null && cards.some((x) => x.id === draft.workflowId) ? on : i === 0;
+                    const autofocus = on && draft.workflowId !== null;
                     return (
                       <button
                         key={c.key}

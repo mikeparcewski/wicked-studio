@@ -41,6 +41,9 @@ export interface ComposerSend {
   /** S16a-4e: the live chat this composer stands in (a chat's own session page) — the send is a
    *  reply INTO that chat, never into the Ask dock's own stored chat. */
   chatId?: string;
+  /** The chat flow (2026-10-16): a FRESH chat's page — the send opens the chat on the daemon under
+   *  this id (the page's own), so the conversation stays on the page it started on. */
+  openChatId?: string;
 }
 
 const TERMINAL = new Set(['completed', 'failed', 'cancelled']);

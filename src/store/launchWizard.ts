@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import type { ConfirmMode } from '../components/ContextPopover.js';
-import { openAskDock } from './askDock.js';
+import { openChatFlow } from './chatFlow.js';
 import { composerPrefsLoading, useComposerPrefsStore } from './composerPrefs.js';
 
 /**
@@ -42,6 +42,9 @@ export const DRAFT_EPICS_ID = 'draft-epics';
  *  running app, launched through crew's demo route (`POST /projects/:id/demo`), which mints the run's
  *  demo folder and brief. The `demo` preset itself stays a system preset, hidden from the `/` menu. */
 export const DEMO_VIDEO_ID = 'demo-video';
+
+/** New job's first card (operator 2026-10-16): not a job at all — a chat on its own page (the chat flow). */
+export const START_CHAT_ID = 'start-chat';
 
 export interface OpenLaunchWizard {
   workflowId?: string | null;
@@ -136,8 +139,9 @@ export function openLaunchWizard(init: OpenLaunchWizard): void {
 }
 
 function openGenericNewJob(init: OpenLaunchWizard): void {
+  // "Start in chat" saved: New job is a new chat on its own page (the chat flow), not the Ask dock.
   if (useComposerPrefsStore.getState().prefs.startInChat) {
-    openAskDock({ fresh: true, projectId: init.projectId ?? null, seedText: init.intent ?? '' });
+    openChatFlow({ projectId: init.projectId ?? null, seedText: init.intent ?? '' });
     return;
   }
   useLaunchWizard.getState().openWith(init);

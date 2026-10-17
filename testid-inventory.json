@@ -12,8 +12,8 @@
   "studioVersion": "0.9.6",
   "counts": {
     "files": 230,
-    "occurrences": 2846,
-    "static": 2455,
+    "occurrences": 2849,
+    "static": 2458,
     "dynamic": 72,
     "computed": 24
   },
@@ -5526,6 +5526,12 @@
       ]
     },
     {
+      "testId": "launch-wizard-start-chat",
+      "files": [
+        "src/components/launch/LaunchWizard.tsx"
+      ]
+    },
+    {
       "testId": "launch-wizard-step",
       "files": [
         "src/components/launch/LaunchWizard.tsx"
@@ -10192,6 +10198,18 @@
     },
     {
       "testId": "session-frame",
+      "files": [
+        "src/components/session/SessionView.tsx"
+      ]
+    },
+    {
+      "testId": "session-fresh",
+      "files": [
+        "src/components/session/SessionView.tsx"
+      ]
+    },
+    {
+      "testId": "session-fresh-status",
       "files": [
         "src/components/session/SessionView.tsx"
       ]
