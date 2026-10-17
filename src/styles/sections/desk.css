@@ -681,6 +681,8 @@
 .wk-inbox-folders .wk-inbox-folder { gap: 6px; min-height: 28px; padding: 0 6px 0 12px; border: 0; border-radius: var(--radius-full); background: transparent; color: var(--ink-muted); font-weight: var(--weight-medium); }
 .wk-inbox-folders .wk-inbox-folder:hover { background: transparent; color: var(--ink-high); }
 .wk-inbox-folders .wk-inbox-folder[aria-selected="true"] { background: var(--surface-card); color: var(--ink-high); font-weight: var(--weight-semi); box-shadow: var(--shadow-button); }
+/* codex r1: the selected pill's shadow must not swallow the keyboard's ring. */
+.wk-inbox-folders .wk-inbox-folder:focus-visible { outline: 2px solid transparent; box-shadow: var(--focus-ring); }
 .wk-inbox-folder-n { min-width: 20px; padding: 0 6px; border-radius: var(--radius-full); background: var(--border-subtle); color: var(--ink-body); font-size: var(--text-2xs); font-weight: var(--weight-semi); font-variant-numeric: tabular-nums; line-height: 18px; text-align: center; }
 .wk-inbox-folder[aria-selected="true"] .wk-inbox-folder-n { background: var(--accent); color: var(--accent-fg); }
 
@@ -734,9 +736,12 @@
 /* The moves: small and quiet at the end of the job's line; an answer in progress (the choices, the
    chosen line with its Undo, an open "why") takes its own full-width line under the item. */
 .wk-inbox-acts { grid-area: acts; justify-self: end; min-width: 0; }
-.wk-inbox-acts:has(.wk-need-answer, .wk-need-chosen, [aria-expanded="true"]) { grid-area: 4 / 2 / 5 / -1; justify-self: stretch; margin-top: var(--space-2); }
+/* A group's batch moves (codex r1) always take their own line: beside the snippet they squeezed it to nothing. */
+.wk-inbox-acts:has(.wk-need-answer, .wk-need-chosen, [aria-expanded="true"]),
+.wk-inbox-list div.wk-inbox-row:not([data-count="1"]) > .wk-inbox-acts { grid-area: 4 / 2 / 5 / -1; justify-self: stretch; margin-top: var(--space-2); }
 .wk-inbox-acts .wk-need-acts { display: flex; gap: var(--space-1); flex-wrap: wrap; align-items: center; justify-content: flex-end; }
-.wk-inbox-acts:has(.wk-need-answer, .wk-need-chosen, [aria-expanded="true"]) .wk-need-acts { justify-content: flex-start; }
+.wk-inbox-acts:has(.wk-need-answer, .wk-need-chosen, [aria-expanded="true"]) .wk-need-acts,
+.wk-inbox-list div.wk-inbox-row:not([data-count="1"]) > .wk-inbox-acts .wk-need-acts { justify-content: flex-start; }
 .wk-inbox-acts .wk-need-act { min-width: 0; min-height: var(--control-h-sm); padding: 0 var(--space-2); border-color: transparent; border-radius: var(--radius-sm); background: transparent; font-size: var(--text-xs); }
 .wk-inbox-acts .wk-need-act:hover:not(:disabled) { border-color: transparent; background: var(--surface-card); }
 .wk-inbox-row[aria-current="true"] .wk-inbox-acts .wk-need-act:hover:not(:disabled) { background: var(--surface-card); }
@@ -788,6 +793,7 @@
   .wk-inbox-split { grid-template-columns: minmax(0, 1fr); }
   .wk-inbox-pane { display: none; }
   .wk-inbox-folders { margin-left: 0; }
+  .wk-inbox-folders .wk-inbox-folder { min-height: var(--tap-min); }
   /* No reading pane on a phone: the moves keep their own line under the item, at the tap size. */
   .wk-inbox-list div.wk-inbox-row { min-height: var(--tap-min); grid-template-columns: 28px minmax(0, 1fr); grid-template-areas: "mark from" "mark subject" "mark snippet" ". acts"; }
   .wk-inbox-acts { justify-self: start; margin-top: var(--space-1); }

@@ -13,7 +13,11 @@ designed list, not boxes in boxes:
   5. the reading pane is a raised panel (its own surface, no side rule) with a kind tag ("Decision",
      "Failed") above the headline;
   6. the subject and the sender read at >= 4.5:1 on their row in every theme;
-and on a 390px phone the moves keep their own tap-sized line under the item, with no sideways scroll.
+  7. the keyboard's ring shows on the selected folder (its pill shadow never hides it);
+  8. with a group of approvals (the wave corpus), the group's batch moves take their own line and its
+     snippet keeps its width;
+and on a 390px phone the moves keep their own tap-sized line under the item, the folders are tap-sized,
+with no sideways scroll.
 
 Captures: e2e/shots/desk-inbox-look-*.png. Env: FEEDBACK_PORT (default 4603).
 """
@@ -21,7 +25,7 @@ import json
 import os
 import sys
 
-from uxfix_fixture import HIDE_GATE_TOASTS, REPO, ensure_build, start_server
+from uxfix_fixture import HIDE_GATE_TOASTS, REPO, ensure_build, set_fixture, start_server
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4603"))
 SHOTS = REPO / "e2e" / "shots"
@@ -118,6 +122,27 @@ with sync_playwright() as p:
         m = page.evaluate(LOOK)
         page.locator('[data-testid="desk-inbox"]').screenshot(path=str(SHOTS / f"desk-inbox-look-failures-{theme}.png"))
         look_ok(f"{theme}-failures", m, "Failed")
+    # 7. The keyboard's ring on the selected folder.
+    page.get_by_test_id("desk-inbox-folder-all").click()
+    page.get_by_test_id("desk-inbox-folder-all").focus()
+    page.keyboard.press("ArrowRight")
+    page.keyboard.press("ArrowLeft")
+    ring = page.evaluate("() => { const a = document.activeElement; return { id: a?.dataset?.testid, visible: a?.matches(':focus-visible'), shadow: getComputedStyle(a).boxShadow }; }")
+    page.mouse.click(5, 5)
+    shadow_rest = page.evaluate("() => getComputedStyle(document.querySelector('.wk-inbox-folder[aria-selected=\"true\"]')).boxShadow")
+    check("selected-folder-keeps-focus-ring", ring["visible"] and ring["shadow"] != shadow_rest, ring=ring, rest=shadow_rest)
+
+    # 8. A group of approvals: its moves on their own line; its snippet keeps its width.
+    set_fixture(origin, wave1=True, wave2b=True, simple_gates=["g1", "g2"], gate_now=[], status_over={}, extra_frames=[])
+    page.goto(f"{origin}/", wait_until="networkidle")
+    page.locator('[data-testid="desk-inbox-count"]').wait_for(state="visible", timeout=15000)
+    page.wait_for_timeout(500)
+    groups = page.evaluate("""() => [...document.querySelectorAll('[data-testid="need-row"]:not([data-count="1"])')].map((r) => {
+      const s = r.querySelector('.wk-inbox-snippet').getBoundingClientRect(); const a = r.querySelector('.wk-inbox-acts').getBoundingClientRect();
+      return { count: r.dataset.count, snippetW: Math.round(s.width), actsBelow: a.top >= s.bottom - 1 }; })""")
+    page.locator('[data-testid="desk-inbox"]').screenshot(path=str(SHOTS / "desk-inbox-look-groups.png"))
+    check("group-moves-own-line", len(groups) >= 1 and all(g["snippetW"] >= 60 and g["actsBelow"] for g in groups), groups=groups)
+    set_fixture(origin, wave1=False, wave2b=False, simple_gates=[], gate_now=[], status_over={}, extra_frames=[])
     ctx.close()
 
     ctx = browser.new_context(viewport={"width": 390, "height": 844}, device_scale_factor=1, is_mobile=True, has_touch=True)
@@ -130,9 +155,10 @@ with sync_playwright() as p:
       const s = r.querySelector('.wk-inbox-snippet'); const act = a.querySelector('.wk-need-act');
       return { below: a.getBoundingClientRect().top >= s.getBoundingClientRect().bottom - 1, tap: act ? act.getBoundingClientRect().height : null,
                pane: getComputedStyle(document.querySelector('.wk-inbox-pane') ?? document.body).display,
+               folders: Math.min(...[...document.querySelectorAll('.wk-inbox-folder')].map((f) => f.getBoundingClientRect().height)),
                hscroll: document.documentElement.scrollWidth > document.documentElement.clientWidth }; }""")
     page.locator('[data-testid="desk-inbox"]').screenshot(path=str(SHOTS / "desk-inbox-look-phone.png"))
-    check("phone-moves-own-line", phone["below"] and phone["tap"] is not None and phone["tap"] >= 44 and phone["pane"] == "none" and not phone["hscroll"], phone=phone)
+    check("phone-moves-own-line", phone["below"] and phone["tap"] is not None and phone["tap"] >= 44 and phone["pane"] == "none" and phone["folders"] >= 44 and not phone["hscroll"], phone=phone)
 
     check("no-page-errors", not errors, errors=errors)
     browser.close()
