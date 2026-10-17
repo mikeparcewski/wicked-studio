@@ -1,5 +1,4 @@
 import type { CoreEvent, WorkUnit } from '../api/types.js';
-import { escalationFor } from './assuranceModel.js';
 
 /**
  * studio#761 / studio#762: a gate the engine opened because the run's QE review did not pass.
@@ -44,17 +43,29 @@ function unitOutcome(units: readonly WorkUnit[], ord: number): string | null {
   return typeof outcome === 'string' ? outcome : null;
 }
 
-/** The newest `gateEvaluated.denial` for `ord` (source and reason), when the log has one. */
-function evaluatedDenial(events: readonly CoreEvent[], ord: number): { source: string; reason: string } | null {
+/**
+ * This attempt's evidence for `ord`: its newest `gateEscalated` (source, summary) and `gateEvaluated`
+ * denial, read only AFTER the unit's newest `unitDispatched` — a retried unit's earlier QE denial is
+ * the previous attempt's, never the reason this gate opened (codex r1: a retry whose worker then
+ * crashed opens a triage gate with no new escalation frame).
+ */
+function attemptDenial(events: readonly CoreEvent[], ord: number): { escalated: { source: string; summary: string } | null; evaluated: { source: string; reason: string } | null } {
+  let escalated: { source: string; summary: string } | null = null;
+  let evaluated: { source: string; reason: string } | null = null;
+  const str = (v: unknown): string => (typeof v === 'string' ? v : '');
   for (let i = events.length - 1; i >= 0; i--) {
     const e = events[i]! as Record<string, unknown>;
-    if (e['type'] !== 'gateEvaluated' || e['ord'] !== ord) continue;
-    const d = e['denial'];
-    if (d === null || typeof d !== 'object') return null;
-    const { source, reason } = d as { source?: unknown; reason?: unknown };
-    return typeof source === 'string' ? { source, reason: typeof reason === 'string' ? reason : '' } : null;
+    if (e['ord'] !== ord) continue;
+    if (e['type'] === 'unitDispatched') break;
+    if (e['type'] === 'gateEscalated' && escalated === null) {
+      escalated = { source: str(e['denialSource']), summary: str(e['verdictSummary']) };
+    } else if (e['type'] === 'gateEvaluated' && evaluated === null) {
+      const d = e['denial'];
+      const { source, reason } = (d !== null && typeof d === 'object' ? d : {}) as { source?: unknown; reason?: unknown };
+      evaluated = { source: str(source), reason: str(reason) };
+    }
   }
-  return null;
+  return { escalated, evaluated };
 }
 
 /** What went wrong in a review that recorded no verdict, from the engine's reason. */
@@ -74,9 +85,8 @@ function noVerdictWhy(reason: string): string {
 export function qeGateOf(events: readonly CoreEvent[] | null, units: readonly WorkUnit[], ord: number | undefined): QeGate | null {
   if (typeof ord !== 'number') return null;
   const log = events ?? [];
-  const esc = escalationFor(log, ord);
-  const evaluated = evaluatedDenial(log, ord);
-  const source = esc !== null && esc.denialSource !== '' ? esc.denialSource : evaluated?.source ?? '';
+  const { escalated: esc, evaluated } = attemptDenial(log, ord);
+  const source = esc !== null && esc.source !== '' ? esc.source : evaluated?.source ?? '';
   if (!QE_SOURCES.has(source)) return null;
   const reason = (esc?.summary || evaluated?.reason || '').replace(/^\s*QE acceptance:\s*/i, '');
   const recorded = unitOutcome(units, ord);

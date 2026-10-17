@@ -115,6 +115,29 @@ describe('studio#761 — a QE FAIL keeps Send back, and offers the review again'
   });
 });
 
+describe('studio#761 (codex r1) — only THIS attempt\'s denial counts', () => {
+  it('a retried QE unit whose worker then failed is not read as the earlier no-verdict gate', () => {
+    const retried = [
+      ...events(NO_VERDICT).slice(0, -1),
+      { type: 'unitDispatched', session: RUN, ord: 6, attempt: 1, ts: NOW + 1000 },
+      { type: 'awaitingHuman', session: RUN, ord: 6, prompt: 'Unit 6 failed and triage escalated: the worker exited 1 — confirm to retry the phase, or reject to cancel the run', reviewingOrd: 6, gateKind: 'escalation' },
+    ] as unknown as CoreEvent[];
+    expect(qeGateOf(retried, units(null), 6)).toBeNull();
+    const m = sessionGateChoices({ runId: RUN, gate: { ...GATE, prompt: 'Unit 6 failed and triage escalated: the worker exited 1 — confirm to retry the phase, or reject to cancel the run' }, units: units(null), events: retried, pool: [], roster: null })!;
+    expect(m.qe).toBeUndefined();
+    expect([...m.choices, ...m.overflow].some((c) => c.label === QE_RETRY_LABEL)).toBe(false);
+  });
+
+  it('the retry\'s own QE denial is read (a second no-verdict after the retry)', () => {
+    const again = [
+      ...events(NO_VERDICT),
+      { type: 'unitDispatched', session: RUN, ord: 6, attempt: 1, ts: NOW + 1000 },
+      ...events('QE acceptance: the reviewer on `codex` ended with no VERDICT line').slice(3),
+    ] as unknown as CoreEvent[];
+    expect(qeGateOf(again, units(null), 6)!.why).toMatch(/finished without giving a verdict/);
+  });
+});
+
 describe('studio#762 — other gates are untouched', () => {
   it('a judge-unavailable QE gate keeps its approve (the operator judges) and only gains its why', () => {
     const evs = events('QE acceptance: every reviewer seat failed as a seat (pi: seat_failure:quota_exhausted)', 'qe_reviewer_unavailable', 'judge_unavailable');
