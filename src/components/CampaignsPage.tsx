@@ -503,7 +503,7 @@ export function CampaignsPage({ runs, navigate, projectId = null, launchIntent =
         title="Look over a repository and suggest what to test, without writing anything"
         className="wk-btn wk-btn--secondary"
       >
-        Run recon
+        Suggest tests
       </button>
       <button
         type="button"

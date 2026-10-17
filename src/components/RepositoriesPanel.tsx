@@ -298,6 +298,7 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
     const isRemote = sourceMode === 'remote';
     const target = isRemote ? newGitUrl.trim() : newPath.trim();
     if (!name || !target) return;
+    if (error !== null && readErrorKind(error) === 'offline') return;
 
     setRegisterError(null);
     setRegistering(true);
@@ -346,9 +347,13 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
     }
   }
 
-  const canSubmit = Boolean(
+  // studio#684 row 59 (codex r1): no write while the service is unreachable — the form's own submit
+  // too (/repos/new opens with the form already up), not only the opener.
+  const offline = error !== null && readErrorKind(error) === 'offline';
+  const filled = Boolean(
     newName.trim() && (sourceMode === 'remote' ? newGitUrl.trim() : newPath.trim()),
   );
+  const canSubmit = filled && !offline;
 
   // ── The window + KPI folds (the shared positional idiom) ────────────────────
   const now = Date.now();
@@ -439,8 +444,8 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
             data-testid="repos-add"
             onClick={toggleRegister}
             // studio#684 row 59: no write while the service is unreachable — the banner below says so and offers Retry.
-            disabled={!showRegister && error !== null && readErrorKind(error) === 'offline'}
-            title={!showRegister && error !== null && readErrorKind(error) === 'offline' ? 'Studio can’t reach its service right now. Retry first.' : undefined}
+            disabled={!showRegister && offline}
+            title={!showRegister && offline ? 'Studio can’t reach its service right now. Retry first.' : undefined}
             className={showRegister ? 'wk-btn wk-btn--quiet' : 'wk-btn wk-btn--primary'}
           >
             {showRegister ? 'Cancel' : 'Add repository'}
@@ -571,7 +576,7 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
                   : sourceMode === 'remote' ? 'Clone and onboard' : 'Register and onboard'}
               </button>
               {!canSubmit && !registering && (
-                <p id="repo-register-why" data-testid="repo-register-why" className="wk-field-note">{missingReason}</p>
+                <p id="repo-register-why" data-testid="repo-register-why" className="wk-field-note">{offline ? 'Studio can’t reach its service right now. Retry above, then add it.' : missingReason}</p>
               )}
             </div>
           </section>

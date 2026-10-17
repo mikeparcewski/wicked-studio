@@ -900,21 +900,23 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
                 : e.kind === 'turn'
             ? (
               <div key={e.key} data-testid="session-turn" data-who={e.who === 'you' ? 'you' : 'helper'} {...(e.pending ? { 'data-pending': 'true' } : {})}
-                {...(e.kickoff ? {
-                  'data-kickoff': 'true', title: e.text,
-                  ...(e.text.length > KICKOFF_LONG ? {
-                    role: 'button', tabIndex: 0, 'aria-expanded': kickoffOpen === e.key,
-                    'aria-label': kickoffOpen === e.key ? 'Show less of what started this run' : 'Show all of what started this run',
-                    onClick: () => setKickoffOpen((k) => (k === e.key ? null : e.key)),
-                    onKeyDown: (ev: React.KeyboardEvent) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); setKickoffOpen((k) => (k === e.key ? null : e.key)); } },
-                  } : {}),
-                } : {})}
+                {...(e.kickoff ? { 'data-kickoff': 'true', title: e.text } : {})}
                 className={`wk-session-turn wk-session-turn--${e.who === 'you' ? 'you' : 'helper'}${e.pending ? ' wk-session-turn--pending' : ''}${e.kickoff ? ' wk-session-turn--kickoff' : ''}${e.kickoff && kickoffOpen === e.key ? ' wk-session-turn--kickoff-open' : ''}`}>
                 {/* The kickoff is one compact line ("You · <what started it>", two lines at most; the
                     full words on hover), so the run's own block below stays in the first view. */}
                 <TurnWho who={who} runId={askRunId} {...(e.pending ? { suffix: 'answering' } : {})} {...(e.kickoff ? { inline: true } : {})} />
                 {e.who === 'you'
-                  ? <p className={`wk-session-text${e.ok ? '' : ' wk-session-grey'}`}><OperatorMessage text={e.text} /></p>
+                  ? <>
+                    <p id={e.kickoff ? `kickoff-${e.key}` : undefined} className={`wk-session-text${e.ok ? '' : ' wk-session-grey'}`}><OperatorMessage text={e.text} /></p>
+                    {/* studio#663 (codex r1): its own button, so selecting the words or using a link in them never toggles it. */}
+                    {e.kickoff && e.text.length > KICKOFF_LONG && (
+                      <button type="button" data-testid="session-kickoff-toggle" className="wk-btn wk-btn--quiet wk-btn--sm wk-session-kickoff-toggle"
+                        aria-expanded={kickoffOpen === e.key} aria-controls={`kickoff-${e.key}`}
+                        onClick={() => setKickoffOpen((k) => (k === e.key ? null : e.key))}>
+                        {kickoffOpen === e.key ? 'Show less' : 'Show all'}
+                      </button>
+                    )}
+                  </>
                   : (
                     // S16a-4e (crew#561): a helper's reply on the session wears the daemon's verdicts where
                     // it cited — the marks and the strip the retired chat page's thread had — so a fabricated SHA is

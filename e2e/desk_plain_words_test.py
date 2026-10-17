@@ -69,6 +69,18 @@ with sync_playwright() as p:
     check("no-write-offline", add.is_disabled() and "Retry" in (add.get_attribute("title") or ""), title=add.get_attribute("title"))
     check("no-raw-error-in-words", "Failed to fetch" not in words.replace(banner.locator("details").inner_text() if banner.locator("details").count() > 0 else "", ""), sample=words[:300])
     shoot(page, "repos-offline")
+    # codex r1: /repos/new opens with the form already up — its own submit holds too.
+    page.goto(f"{origin}/repos/new", wait_until="networkidle")
+    page.get_by_test_id("repos-error").wait_for(state="visible")
+    page.get_by_test_id("repo-register").wait_for(state="visible")
+    page.get_by_test_id("repo-path").fill("/work/checkout-demo")
+    page.get_by_test_id("repo-name").fill("checkout-demo")
+    submit = page.get_by_test_id("repo-register-submit")
+    why = page.get_by_test_id("repo-register-why").inner_text() if page.get_by_test_id("repo-register-why").count() > 0 else ""
+    check("no-register-offline", submit.is_disabled() and "can’t reach its service" in why, why=why)
+    page.goto(f"{origin}/repos", wait_until="networkidle")
+    page.get_by_test_id("repos-error").wait_for(state="visible")
+    retry = page.get_by_test_id("repos-error").get_by_role("button", name="Retry")
     page.unroute("**/api/v1/repos*")
     retry.click()
     page.wait_for_function("() => !document.querySelector('[data-testid=\"repos-error\"]')")

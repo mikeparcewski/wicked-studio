@@ -75,7 +75,9 @@ export function proposalConsequenceLine(p: Proposal): string {
 }
 
 /** A rule's severity in plain words. */
-const SEVERITY_WORD: Readonly<Record<string, string>> = { warn: 'warning', warning: 'warning', deny: 'blocks the step', block: 'blocks the step', error: 'blocks the step', info: 'a note' };
+// The rule's severity token in words — never an enforcement claim (codex r1: a rule's effect, not its
+// severity, says whether it blocks anything).
+const SEVERITY_WORD: Readonly<Record<string, string>> = { info: 'information', warn: 'warning', warning: 'warning', error: 'error', critical: 'critical' };
 
 /** The group row's move label: "Accept 21 memories ›" (studio#713). */
 export function acceptMemoryLabel(n: number): string {
