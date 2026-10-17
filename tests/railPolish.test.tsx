@@ -234,7 +234,7 @@ describe('project quick icons', () => {
 });
 
 describe('Not in a project has an open icon too', () => {
-  it('the unfiled rail group opens the unfiled work on See everything › Projects', () => {
+  it('the unfiled rail group opens its own dashboard — a project dashboard (operator 2026-10-16)', () => {
     modelBag = { ...modelBag, unfiled: [makeView({ id: 'u1', problem: 'loose end', status: 'completed' })] };
     const navigate = vi.fn();
     render(<SessionRail runs={[]} needRows={[]} navigate={navigate} pathname="/" />);
@@ -244,7 +244,7 @@ describe('Not in a project has an open icon too', () => {
     // Only the view icon: unfiled work has no project to seed a new session in.
     expect(within(group).queryByTestId('rail-group-new')).toBeNull();
     fireEvent.click(open);
-    expect(navigate).toHaveBeenCalledWith('/everything?tab=projects');
+    expect(navigate).toHaveBeenCalledWith('/projects/default');
   });
 });
 

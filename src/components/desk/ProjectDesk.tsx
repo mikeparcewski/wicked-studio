@@ -3,12 +3,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FileText, MessageSquare, Plus } from 'lucide-react';
 import { api } from '../../api/client.js';
 import { readErrorKind } from '../../api/errors.js';
-import type { ProjectDetail, ProjectMember, RepoEntry, SessionView } from '../../api/types.js';
+import type { Project, ProjectDetail, ProjectMember, RepoEntry, SessionView } from '../../api/types.js';
+import { ApiError } from '../../api/errors.js';
 import type { NeedRow } from '../../board/needsYou.js';
 import { projectMeta, projectRuns, reposUsed } from '../../board/projectModel.js';
 import { sessionPath, sessionTitle } from '../../board/sessionModel.js';
 import { relTime } from '../../board/relTime.js';
 import { useProjectsStore } from '../../store/projects.js';
+import { useMembershipStore } from '../../store/membership.js';
 import { fetchReposCached, getCachedRepos } from '../../store/repoCache.js';
 import { openLaunchWizard } from '../../store/launchWizard.js';
 import { openAskDock } from '../../store/askDock.js';
@@ -81,12 +83,19 @@ interface Props {
 
 const NO_MEMBERS: ProjectMember[] = [];
 
+/** "Not in a project" (operator 2026-10-16: "Not in a project dashboard should be same as project
+ *  dashboard"): crew synthesizes the reserved `default` project, its members the work no project holds
+ *  (DES-PROJECT-001 §7). A daemon that does not serve it still gets the same dashboard: this stand-in,
+ *  and the runs that name no project. */
+const UNFILED_PROJECT: Project = { id: 'default', name: 'Not in a project', description: null, status: 'active', scope: '', created_at: 0, updated_at: 0 } as Project;
+
 /** A project's page is the shared Desk with its own runs, header and Work sections. */
 export function ProjectDesk({ projectId, navigate, runs, needRows, now, search, onRetryRuns, runsLoaded, runsError, hosted, onCommand }: Props): React.ReactElement {
   const { updateProject } = useProjectsStore();
   const [detail, setDetail] = useState<ProjectDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [errorStatus, setErrorStatus] = useState<number | null>(null);
   const [editing, setEditing] = useState(false);
   const [editName, setEditName] = useState('');
   const [editDesc, setEditDesc] = useState('');
@@ -96,8 +105,12 @@ export function ProjectDesk({ projectId, navigate, runs, needRows, now, search, 
   const [register, setRegister] = useState<RepoEntry[] | null>(getCachedRepos());
 
   const isDefault = projectId === 'default';
-  const project = detail?.project?.id === projectId ? detail.project : null;
-  const members = project !== null ? detail?.members ?? NO_MEMBERS : NO_MEMBERS;
+  // The unfiled dashboard never stops at "Project not found": a daemon without the synthesized project
+  // (a 404) gets the stand-in, and its jobs are the runs that name no project.
+  const unfiledStandIn = isDefault && !loading && detail?.project?.id !== projectId && error !== null && errorStatus === 404;
+  const project = detail?.project?.id === projectId ? detail.project : unfiledStandIn ? UNFILED_PROJECT : null;
+  // codex r1: members belong to THIS project's read only — the stand-in never inherits the last project's.
+  const members = detail?.project?.id === projectId ? detail.members ?? NO_MEMBERS : NO_MEMBERS;
   const [issues, setIssues] = useState<Record<string, ProjectReadIssue>>({});
   const onIssue = useCallback<ProjectIssueHandler>((key, issue) => {
     setIssues((old) => { const next = { ...old }; if (issue === null) delete next[key]; else next[key] = issue; return next; });
@@ -108,11 +121,12 @@ export function ProjectDesk({ projectId, navigate, runs, needRows, now, search, 
     const version = ++loadVersion.current;
     setLoading(true);
     setError(null);
+    setErrorStatus(null);
     try {
       const loaded = await api.getProject(projectId);
       if (loadVersion.current === version) setDetail(loaded);
     } catch (e) {
-      if (loadVersion.current === version) setError(e instanceof Error ? e.message : String(e));
+      if (loadVersion.current === version) { setError(e instanceof Error ? e.message : String(e)); setErrorStatus(e instanceof ApiError ? e.status : null); }
     } finally {
       if (loadVersion.current === version) setLoading(false);
     }
@@ -175,7 +189,16 @@ export function ProjectDesk({ projectId, navigate, runs, needRows, now, search, 
   // backfill per scope, the Runs stats and the Report would otherwise start from a partial list).
   const membersRead = missingKey === '' || extra.key === missingKey;
   const allRuns = useMemo(() => (extra.key !== missingKey || extra.runs.length === 0 ? runs : [...runs, ...extra.runs.filter((x) => !runs.some((v) => v.session.id === x.session.id))]), [runs, extra, missingKey]);
-  const mine = useMemo(() => projectRuns(allRuns, members, projectId), [allRuns, members, projectId]);
+  // The stand-in's jobs follow the board's own rule (the rail's "Not in a project" group): a run's own
+  // claim when it makes one, else the memberships the board read (codex r1: a legacy run filed by
+  // membership alone is not unfiled).
+  const projectIdByRun = useMembershipStore((s) => s.projectIdByRun);
+  const mine = useMemo(() => (unfiledStandIn
+    ? allRuns.filter((v) => {
+      const claimed = (v.session as { project_id?: unknown }).project_id;
+      return claimed === undefined ? projectIdByRun[v.session.id] === undefined : claimed === null || claimed === '' || claimed === 'default';
+    })
+    : projectRuns(allRuns, members, projectId)), [allRuns, members, projectId, unfiledStandIn, projectIdByRun]);
   const mineIds = useMemo(() => new Set(mine.map((v) => v.session.id)), [mine]);
   // The membership is the truth for how many jobs a project holds, even one the run list no longer serves.
   const jobsCount = useMemo(() => new Set([...mineIds, ...members.filter((m) => m.member_kind === RUN_KIND).map((m) => m.member_ref)]).size, [mineIds, members]);
@@ -230,7 +253,7 @@ export function ProjectDesk({ projectId, navigate, runs, needRows, now, search, 
   }
 
   const childIssues = Object.values(issues);
-  const failures = [...(error !== null ? [{ what: 'project details', error, retry: () => void load() }] : []),
+  const failures = [...(error !== null && !unfiledStandIn ? [{ what: 'project details', error, retry: () => void load() }] : []),
     ...(editErr !== null ? [{ what: 'project changes', error: editErr, retry: () => setEditErr(null) }] : []), ...childIssues];
   const failure = failures.find((f) => readErrorKind(f.error) === 'offline') ?? failures[0];
   const go = (path: string) => (e: React.MouseEvent): void => { e.preventDefault(); navigate(path); };

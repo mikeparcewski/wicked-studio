@@ -193,3 +193,4 @@
   .wk-agents-toc-item { min-height: var(--tap-min, 44px); }
   .wk-agents-modal .wk-tech-details-summary { display: flex; align-items: center; }
 }
+.wk-agents-nothing-row { display: inline-flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }

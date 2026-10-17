@@ -42,7 +42,9 @@ function CellView({ c, testId }: { c: Cell; testId?: string }): React.ReactEleme
 
 function FixButton({ row, onOpen, big = false }: { row: AgentRow; onOpen: () => void; big?: boolean }): React.ReactElement | null {
   const f = fixLabel(row);
-  if (f === null) return big ? null : <span className="wk-agents-sub wk-agents-nothing">Nothing to fix</span>;
+  // Nothing to fix still opens the agent (codex r1): its modal is where new work, sign-in and sign-out live.
+  const openIt = <button type="button" data-testid="agents-open" data-agent={row.key} onClick={onOpen} aria-label={`Open ${row.name}: new work, sign-in and sign-out`} className="wk-btn wk-btn--quiet wk-btn--sm">Open</button>;
+  if (f === null) return big ? openIt : <span className="wk-agents-nothing-row"><span className="wk-agents-sub wk-agents-nothing">Nothing to fix</span>{openIt}</span>;
   const Icon = f.tone === 'fail' ? AlertCircle : f.tone === 'gate' ? AlertTriangle : Info;
   const label = f.label;
   return (

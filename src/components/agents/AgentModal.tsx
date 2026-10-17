@@ -11,7 +11,13 @@ import { getCachedRoster, setCachedRoster } from '../../store/rosterCache.js';
 import { useModalEscape } from '../Modal.js';
 import { Skeleton } from '../ui/StateBanner.js';
 import { TechDetails } from '../ui/TechDetails.js';
-import { useAgentRows } from './useAgentRows.js';
+import { setPickedForNewWork, useAgentRows } from './useAgentRows.js';
+import { api } from '../../api/client.js';
+import { ApiError } from '../../api/errors.js';
+import { homeDirsIn } from '../../board/homePath.js';
+import { useViewPrefsStore } from '../../store/viewPrefs.js';
+import { Switch } from '../ui/Switch.js';
+import { Terminal } from '../Terminal.js';
 
 /**
  * Deposit ONE agent's fresh reading into the shared roster (codex S4 r12): a re-check answers for the agent
@@ -205,6 +211,12 @@ export function AgentModal({ agentKey, onClose, intent }: {
   useEffect(() => { gen.current += 1; outGen.current += 1; clearDeadline(); checking.current = false; setOutcome({ kind: 'idle' }); }, [agentKey]);
   useEffect(() => () => clearDeadline(), []);
 
+  /** Sign out run here (crew#615 `POST /seats/:cli/logout`, moved from General settings 2026-10-16): the terminal
+   *  is open, or the daemon answered 404 (no documented logout for this agent) and the offer is gone. */
+  const [logoutRun, setLogoutRun] = useState(false);
+  const [noLogout, setNoLogout] = useState(false);
+  useEffect(() => { setLogoutRun(false); setNoLogout(false); }, [agentKey]);
+  const techDetails = useViewPrefsStore((s) => s.prefs.technical_details);
   /** Which button asked: a card's check block, or the footer's Check now (its result shows beside it). */
   const [from, setFrom] = useState<'card' | 'foot'>('card');
   /** A check in flight, read synchronously (a retired check frees it at once, codex S4 r8). */
@@ -370,12 +382,29 @@ export function AgentModal({ agentKey, onClose, intent }: {
                   {copy.tech !== null && <TechDetails data-testid="agents-tech" text={copy.tech} {...(copy.techSummary !== undefined ? { summary: copy.techSummary } : {})} />}
                 </section>
               ))}
+              {/* New work (moved from General settings, operator 2026-10-16): whether this agent is picked for new
+                  chats and jobs by default, and its free tier when it has one. */}
+              <section data-testid="agents-new-work" aria-label="New work" className="wk-agents-new-work">
+                <Switch label={`Use ${name} for new work`} data-testid="agents-new-work-toggle" checked={row.picked}
+                  onChange={(on) => setPickedForNewWork(rows, row.key, on)}
+                  hint={row.picked ? 'Picked for new chats and jobs. You can still change the helpers on each one.' : 'Not picked for new chats and jobs. You can still add it to one.'} />
+                {typeof row.seat.free_tier === 'string' && row.seat.free_tier !== '' && <p data-testid="agents-free-tier" className="wk-field-note">{row.seat.free_tier}</p>}
+                {/* Free without an account, but a provider account is still an option (General offered it). */}
+                {authOf(row.seat) === 'not_required' && row.login !== null && (
+                  <details className="wk-tech-details" data-testid="agents-optional-signin">
+                    <summary className="wk-tech-details-summary">{`Sign ${name} in to a provider account (optional)`}</summary>
+                    <p>{`Run this in your terminal, then Check now:`}</p>
+                    <Command c={{ line: row.login, display: commandDisplay(row.login), label: 'sign-in' }} />
+                  </details>
+                )}
+              </section>
             </>
           )}
         </div>
         {row !== undefined && (() => {
           // Check now and Sign out for every agent (the login hooks); the check block inside a card wins.
-          const signedIn = row.sign.word === 'Signed in' || row.sign.word === 'Looks signed in';
+          // A seat that needs no sign-in may still hold a provider account it can sign out of (codex r1).
+          const signedIn = row.sign.word === 'Signed in' || row.sign.word === 'Looks signed in' || authOf(row.seat) === 'not_required';
           const signOut = !signedIn ? null : hookSignOut
             // Signing out retires a check still in flight, so its older answer can't land after it (codex S4 r3).
             ? <button type="button" data-testid="agents-signout" className="wk-btn wk-btn--quiet" disabled={busy !== null} aria-busy={busy === 'out'} onClick={() => runAuth('out', row.key)}>{busy === 'out' ? 'Signing out…' : `Sign ${name} out`}</button>
@@ -384,6 +413,16 @@ export function AgentModal({ agentKey, onClose, intent }: {
                 <summary className="wk-tech-details-summary">Sign out</summary>
                 <p>{`Run this in your terminal to sign ${name} out:`}</p>
                 <Command c={{ line: row.logout, display: commandDisplay(row.logout), label: 'sign-out' }} />
+                {/* Or here: studio's service runs the agent's own sign-out command in a terminal (crew#615); studio types nothing. */}
+                {!noLogout && !logoutRun && <button type="button" data-testid="agents-signout-run" className="wk-btn wk-btn--secondary wk-btn--sm" onClick={() => setLogoutRun(true)}>{`Sign ${name} out here`}</button>}
+                {logoutRun && (
+                  <div data-testid="agents-signout-terminal" className="wk-agents-signout-term">
+                    <p className="wk-field-note">Complete any prompt below, then check again.</p>
+                    <Terminal key={row.key} cwd="." open={(cols, rowsN) => api.seatLogout(row.key, { cols, rows: rowsN }).then((r) => ({ id: r.terminalId }))}
+                      onOpenError={(err) => { if (err instanceof ApiError && err.status === 404) { setNoLogout(true); setLogoutRun(false); } }}
+                      concealHome={techDetails ? [] : homeDirsIn(row.logout)} />
+                  </div>
+                )}
               </details>
             ) : null;
           if (cardChecks && signOut === null) return null;

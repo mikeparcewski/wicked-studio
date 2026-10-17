@@ -37,7 +37,9 @@ it('makes New workflow the primary action after the catalog loads', async () => 
 it('gives Show technical details a named switch', async () => {
   render(<SystemSettings />);
   expect(screen.getByRole('switch', { name: 'Show technical details' })).toHaveAttribute('aria-checked', 'false');
-  await screen.findByText('No helpers are available.');
+  // The agents block left General (2026-10-16): the page settles with no helper list.
+  await screen.findByTestId('view-settings');
+  expect(screen.queryByText('No helpers are available.')).toBeNull();
 });
 
 it('offers exactly one primary button on Not found', () => {

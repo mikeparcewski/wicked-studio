@@ -10,7 +10,6 @@ import type { NeedRow } from '../../board/needsYou.js';
 import { MoveToProject, MoveProjectStatus, useMovableBoardModel } from './MoveToProject.js';
 import { useCapabilities } from '../../store/capabilities.js';
 import { projectDetailPath, type Navigate } from '../../hooks/useRoute.js';
-import { everythingPath } from '../../board/everythingModel.js';
 import { useAppearanceStore } from '../../theming/appearance.js';
 import { openLaunchWizard } from '../../store/launchWizard.js';
 import { useRailHealthDot } from '../../hooks/useRailHealthDot.js';
@@ -38,8 +37,8 @@ export const SESSION_RAIL_PX = 236;
  *    `useRailCollapsed`; a folded group still shows its needs-you count), and a group shows its first
  *    few with "Show N more" for the rest (studio-rail-clean). A project group carries two quick icons (new session →
  *    `/` + the project's `@` chip, open project → its dashboard `/projects/:id`); the
- *    unfiled group ("Not in a project") carries only the open icon, to See everything › Projects
- *    where its "Not in a project" card lives. A session is a chat and its runs when the
+ *    unfiled group ("Not in a project") carries only the open icon, to its own dashboard — the same
+ *    project dashboard every project has (`/projects/default`, operator 2026-10-16). A session is a chat and its runs when the
  *    daemon stamps `chat_id` (C1), else one run; each opens `/s/:id` (S6a).
  *  - the "Workspace" group (operator IA 2026-10-13): Watchtower — the quiet pill (rule 10); there is no
  *    Notifications entry, the Desk is the notification surface and Watchtower the full feed — then
@@ -204,7 +203,7 @@ export function SessionRail({ runs, needRows, navigate, pathname, runsKnown = tr
                     aria-label="Open work not in a project"
                     title="Open work not in a project"
                     className="wk-rail-icon-btn"
-                    onClick={() => { navigate(everythingPath({ tab: 'projects' })); }}
+                    onClick={() => { navigate(projectDetailPath('default')); }}
                   >
                     <LayoutGrid size={14} aria-hidden />
                   </button>

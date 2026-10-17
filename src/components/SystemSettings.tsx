@@ -1,30 +1,19 @@
-import { seatStandingWord } from './HealthRailSection.js';
 import { useEffect, useRef, useState } from 'react';
-import { ApiError, api } from '../api/client.js';
-import type { BaseSkillPosture, RosterSeat, SystemSettings as Settings } from '../api/types.js';
+import { api } from '../api/client.js';
+import type { BaseSkillPosture, SystemSettings as Settings } from '../api/types.js';
 import { getDiagnostics } from '../api/diagnostics.js';
 import { readErrorKind } from '../api/errors.js';
 import { PageFrame, SectionTitle } from './ui/PageFrame.js';
-import { StateBanner, Skeleton, EmptyState } from './ui/StateBanner.js';
+import { StateBanner, Skeleton } from './ui/StateBanner.js';
 import { Switch } from './ui/Switch.js';
-import { OverflowMenu } from './ui/OverflowMenu.js';
 import { TechDetails } from './ui/TechDetails.js';
-import { seatLabel } from '../board/seatNames.js';
 import { useComposerPrefsStore } from '../store/composerPrefs.js';
 import { useViewPrefsStore } from '../store/viewPrefs.js';
-import { setCachedRoster } from '../store/rosterCache.js';
-import { Modal } from './Modal.js';
 import { NotificationSettings } from './NotificationSettings.js';
-import { Terminal } from './Terminal.js';
-import { AgentModal } from './agents/AgentModal.js';
-import { getCachedRoster } from '../store/rosterCache.js';
-import { homeDirsIn } from '../board/homePath.js';
 import { PAGE_NAMES } from '../board/pageNames.js';
 import { Segmented } from './ui/Segmented.js';
 import { scrollBehavior } from './ui/motion.js';
 import { QE_SETTING_ANCHOR } from '../board/qeRefusal.js';
-
-const CLI_DEFAULTS_KEY = 'wicked_default_clis';
 
 /**
  * Client-side mirror of the daemon's worker_config_root rule (empty or absolute).
@@ -64,14 +53,6 @@ function SettingRow({ label, description, children }: SettingRowProps): React.Re
   );
 }
 
-function loadDefaultClis(roster: RosterSeat[]): Set<string> {
-  try {
-    const stored = localStorage.getItem(CLI_DEFAULTS_KEY);
-    if (stored) return new Set(JSON.parse(stored) as string[]);
-  } catch { /* ignore */ }
-  return new Set(roster.filter((s) => s.enabled_for_council).map((s) => s.key));
-}
-
 interface SystemSettingsProps {
   navigate?: (path: string) => void;
 }
@@ -85,18 +66,6 @@ export function SystemSettings({ navigate = (p) => { history.pushState(null, '',
   const [errorSource, setErrorSource] = useState<unknown>(null);
   const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const [rosterLoading, setRosterLoading] = useState(true);
-  const [roster, setRoster] = useState<RosterSeat[]>([]);
-  const [defaultClis, setDefaultClis] = useState<Set<string>>(new Set());
-  const [clisSaved, setClisSaved] = useState(false);
-  const clisSavedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  /** The seat whose log-out terminal is open, or null (crew#615: the daemon runs the seat's logout). */
-  const [logoutSeat, setLogoutSeat] = useState<RosterSeat | null>(null);
-  /** Seats the daemon answered 404 for — no documented logout: their button is hidden. */
-  const [noLogout, setNoLogout] = useState<ReadonlySet<string>>(new Set());
-  /** The seat whose sign-in panel is open (Amendment 5: plain words, the one command, Copy, check again). */
-  const [signInSeat, setSignInSeat] = useState<RosterSeat | null>(null);
   /** Daemon 400 from a save whose patch included worker_config_root — rendered inline at the field. */
   const [workerRootError, setWorkerRootError] = useState<string | null>(null);
   const [deliverIdentityError, setDeliverIdentityError] = useState<string | null>(null);
@@ -157,7 +126,6 @@ export function SystemSettings({ navigate = (p) => { history.pushState(null, '',
   function load(): void {
     setError(null);
     setErrorSource(null);
-    setRosterLoading(true);
     api.getSettings()
       .then((res) => {
         setSettings(res.settings);
@@ -166,42 +134,8 @@ export function SystemSettings({ navigate = (p) => { history.pushState(null, '',
       })
       // EC33: the translated message, never `String(Error)`'s "Error: …" framing.
       .catch((e: unknown) => { setErrorSource((previous: unknown) => readErrorKind(previous) === 'offline' ? previous : e); setError(e instanceof Error ? e.message : String(e)); });
-    api.getRoster()
-      .then(({ roster: seats }) => {
-        // Deposit for Chat's default chips (DES-FEEDBACK-001 §6.1).
-        setCachedRoster(seats);
-        setRoster(seats);
-        setDefaultClis(loadDefaultClis(seats));
-      })
-      .catch((e: unknown) => { setErrorSource((previous: unknown) => readErrorKind(previous) === 'offline' ? previous : e); setError(e instanceof Error ? e.message : String(e)); })
-      .finally(() => setRosterLoading(false));
   }
   useEffect(() => { load(); }, []);
-
-  useEffect(() => () => {
-    if (clisSavedTimerRef.current) clearTimeout(clisSavedTimerRef.current);
-  }, []);
-
-  function toggleDefaultCli(key: string): void {
-    setDefaultClis((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key); else next.add(key);
-      return next;
-    });
-  }
-
-  function saveDefaultClis(): void {
-    setError(null);
-    try {
-      localStorage.setItem(CLI_DEFAULTS_KEY, JSON.stringify([...defaultClis]));
-    } catch (e: unknown) {
-      setError(String(e));
-      return;
-    }
-    setClisSaved(true);
-    if (clisSavedTimerRef.current) clearTimeout(clisSavedTimerRef.current);
-    clisSavedTimerRef.current = setTimeout(() => setClisSaved(false), 2500);
-  }
 
   useEffect(() => () => { if (savedTimerRef.current) clearTimeout(savedTimerRef.current); }, []);
 
@@ -358,58 +292,8 @@ export function SystemSettings({ navigate = (p) => { history.pushState(null, '',
         {(!hasDirty || saving || settings === null) && <p className="wk-field-note">{saving ? 'Wait for these changes to finish saving.' : settings === null ? 'Settings must load before changes can be saved.' : 'Change a setting before saving.'}</p>}
       </div>
 
-      {/* Helpers and sign-in section */}
-      <section className="wk-card">
-        <SectionTitle>Helpers and sign-in</SectionTitle>
-        <p className="wk-field-note">Choose the helpers selected for new work and manage their sign-in.</p>
-        {rosterLoading ? <Skeleton rows={3} /> : roster.length === 0 ? <EmptyState title="No helpers are available." body="Refresh this page after adding a helper." /> : roster.map((seat) => {
-          const standing = seatStandingWord(seat);
-          const bag = seat as Record<string, unknown>;
-          const stderrFailed = bag['auth_source'] === 'seat-stderr';
-          const evidence = typeof bag['auth_evidence'] === 'string' ? bag['auth_evidence'] : '';
-          const word = stderrFailed ? 'sign-in failed' : standing.kind === 'signed-in' ? '✓ signed in'
-            : standing.kind === 'signed-out' ? 'sign in needed' : standing.kind === 'no-sign-in-needed' ? 'no sign-in needed'
-            : standing.kind === 'ineligible' ? 'Unavailable for new work' : standing.auth === 'unknown' ? 'Sign-in unknown' : null;
-          const offerLogin = seat.login_invocation !== undefined && seat.login_invocation !== '' && standing.kind !== 'signed-in';
-          const offerLogout = typeof seat.logout_invocation === 'string' && seat.logout_invocation.trim() !== '' && !noLogout.has(seat.key)
-            && (standing.kind === 'signed-in' || standing.kind === 'no-sign-in-needed');
-          const verb = stderrFailed ? 'Re-authenticate' : 'Sign in';
-          const name = seatLabel(seat).replace(/\s*\(judge\)/ig, '');
-          return <div key={seat.key} className="wk-list-row wk-pg-set-helper">
-            <div className="wk-list-row-title"><Switch label={name} checked={defaultClis.has(seat.key)} onChange={() => toggleDefaultCli(seat.key)} /></div>
-            <div className="wk-list-row-meta">
-              {word !== null && <span data-testid={`seat-signin-${seat.key}`} data-auth={standing.auth ?? ''} data-auth-source={stderrFailed ? 'seat-stderr' : ''}>{word}</span>}
-              {typeof seat.free_tier === 'string' && seat.free_tier !== '' && <p data-testid={`seat-freetier-${seat.key}`} className="wk-field-note">{seat.free_tier}</p>}
-              <TechDetails text={[seat.key, evidence, standing.title ?? '', standing.kind === 'ineligible' ? standing.detail : '']} />
-            </div>
-            <div className="wk-list-row-actions">
-              {offerLogin && offerLogout ? <OverflowMenu label={`More actions for ${name}`} data-testid={`seat-logout-${seat.key}`} items={[
-                { id: 'signin', label: `${verb} ${name}`, onSelect: () => setSignInSeat(seat) },
-                { id: 'logout', label: `Log out ${name}`, onSelect: () => setLogoutSeat(seat) },
-              ]} /> : <>
-                {offerLogin && <button type="button" className="wk-btn wk-btn--secondary" aria-label={`${verb} ${name}`} onClick={() => setSignInSeat(seat)}>{verb}</button>}
-                {offerLogout && <button type="button" className="wk-btn wk-btn--secondary" data-testid={`seat-logout-${seat.key}`} aria-label={`Log out ${name}`} onClick={() => setLogoutSeat(seat)}>Log out</button>}
-              </>}
-
-            </div>
-          </div>;
-        })}
-        {roster.length > 0 && <div className="flex flex-wrap items-center gap-2">
-          <button type="button" onClick={saveDefaultClis} className="wk-btn wk-btn--primary">Save CLI defaults</button>
-          {clisSaved && <span role="status">Saved</span>}
-        </div>}
-      </section>
-
       {/* Editor plugins moved to their own Plugins page (`/plugins`, operator ruling 2026-10-12). */}
       </div>
-      {signInSeat !== null && <AgentModal agentKey={signInSeat.key} intent="sign-in" onClose={() => { const r = getCachedRoster(); if (r !== null) setRoster(r); setSignInSeat(null); }} />}
-      {logoutSeat !== null && <Modal title={`Log out — ${seatLabel(logoutSeat)}`} onClose={() => setLogoutSeat(null)}>
-        <p data-testid="seat-logout-line">Complete any prompt below, then close this panel.</p>
-        <TechDetails text={logoutSeat.logout_invocation ?? ''} />
-        <Terminal key={logoutSeat.key} cwd="." open={(cols, rows) => api.seatLogout(logoutSeat.key, { cols, rows }).then((r) => ({ id: r.terminalId }))}
-          onOpenError={(err) => { if (err instanceof ApiError && err.status === 404) { const key = logoutSeat.key; setNoLogout((s) => new Set([...s, key])); setLogoutSeat(null); } }}
-          concealHome={techDetails ? [] : homeDirsIn(logoutSeat.logout_invocation ?? '')} />
-      </Modal>}
     </PageFrame>
   );
 }
