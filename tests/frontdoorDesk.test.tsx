@@ -160,6 +160,20 @@ describe('failure detail', () => {
     expect(failureWhy(makeView({ id: 'r', status: 'failed' }, [makeUnit({ id: 'r:recon', ord: 0, status: 'rejected', denial_reason: 'evaluator≠creator' })]), []).plain).toBe('A check stopped the research step.');
     expect(failureWhy(makeView({ status: 'failed', unit_ix: 5 }), []).plain).toBe('No reason was recorded for this failure.');
   });
+
+  // studio#815 (E2E run 89da69fb): the run failed at planning — an engine `error` frame, then
+  // `sessionFailed`, no step failed — and the card said "No reason was recorded".
+  it('a run that failed with no step failing says the engine error, its words under Technical details', () => {
+    const raw = 'the PA-scoped plan could not be decided: no eligible seat for 89da69fb: evaluator≠creator unsatisfiable for unit(s) [3, 5, 6]';
+    const v = makeView({ id: 'r', status: 'failed', unit_ix: 0 }, [makeUnit({ id: 'r:pa-scope', ord: 1, status: 'done' })]);
+    const why = failureWhy(v, [{ type: 'error', message: raw }, { type: 'sessionFailed', ord: 1 }]);
+    expect(why.plain).toBe('No helper was eligible to take the work — Technical details say why.');
+    expect(why.detail).toEqual([raw]);
+    // A step's own failure still leads when there is one.
+    const stepped = failureWhy(makeView({ id: 'r', status: 'failed', unit_ix: 1 }, [makeUnit({ id: 'r:review', ord: 1, status: 'distributed' })]),
+      [{ type: 'error', message: raw }, { type: 'stepFailed', ord: 1, failureKind: 'timeout', detail: 'ran out' }]);
+    expect(stepped.plain).toBe('The review step ran out of time.');
+  });
 });
 
 describe('spend from the seat record', () => {

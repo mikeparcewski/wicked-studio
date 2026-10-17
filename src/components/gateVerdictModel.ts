@@ -704,12 +704,28 @@ export interface ReassignCandidate {
   /** `ready` (signed in, or no sign-in needed; not inactive) · `unknown` (no roster word) ·
    *  `signed-out` (no sign-in observed — may fail or be benched) · `inactive` · `ineligible` (the
    *  daemon SAYS a council would not seat it — api-types 0.35.0 `council_eligible: false`). */
-  state: 'ready' | 'unknown' | 'signed-out' | 'inactive' | 'ineligible';
+  state: 'ready' | 'unknown' | 'signed-out' | 'inactive' | 'ineligible' | 'refused';
   /** The suffix the picker shows after the name — empty when nothing follows from the roster. */
   note: string;
 }
 
-const CANDIDATE_RANK: Record<ReassignCandidate['state'], number> = { ready: 0, unknown: 1, 'signed-out': 2, inactive: 3, ineligible: 4 };
+const CANDIDATE_RANK: Record<ReassignCandidate['state'], number> = { ready: 0, unknown: 1, 'signed-out': 2, inactive: 3, ineligible: 4, refused: 5 };
+
+/** studio#813: why a seat the engine refuses is not offered, in plain words. */
+export const REFUSED_SEAT_NOTE = 'it made the work this step checks, and this run needs a different helper to check it';
+
+/**
+ * studio#813: the seats a reassign of the unit at `ord` is REFUSED for — crew's
+ * `WorkUnit.reassign_refused` (wicked-crew#1058, api-types 0.124.0): the authors of the work a
+ * review checks, on a run that requires a distinct evaluator. Read defensively (the pinned
+ * api-types predate the field); an older crew sends none, and every seat is offered as before.
+ */
+export function reassignRefusedOf(units: readonly WorkUnit[], ord: number | null | undefined): string[] {
+  if (typeof ord !== 'number') return [];
+  const unit = units.find((u) => u.ord === ord) as (WorkUnit & { reassign_refused?: unknown }) | undefined;
+  const refused = unit?.reassign_refused;
+  return Array.isArray(refused) ? refused.filter((s): s is string => typeof s === 'string') : [];
+}
 
 /**
  * The seat's standing as far as the wire SAYS it (never inferred): today's roster carries
@@ -792,6 +808,8 @@ export function reassignCandidates(
   pool: readonly string[],
   failedCli: string | null,
   roster: readonly RosterSeat[] | null,
+  /** studio#813: seats the engine refuses for this unit ({@link reassignRefusedOf}) — never offered. */
+  refused: readonly string[] = [],
 ): ReassignCandidate[] {
   const seen = new Set<string>();
   const out: ReassignCandidate[] = [];
@@ -799,6 +817,10 @@ export function reassignCandidates(
     if (cli === failedCli || seen.has(cli)) continue;
     seen.add(cli);
     const seat = roster?.find((s) => s.key === cli);
+    if (refused.includes(cli)) {
+      out.push({ cli, label: seat?.display_name ?? cli, state: 'refused', note: REFUSED_SEAT_NOTE });
+      continue;
+    }
     const { state, note } = seatStanding(seat);
     out.push({ cli, label: seat?.display_name ?? cli, state, note });
   }

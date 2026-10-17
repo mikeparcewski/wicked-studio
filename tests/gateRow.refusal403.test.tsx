@@ -75,6 +75,26 @@ describe('studio#403 — reading the refused hand-over', () => {
     expect(classifyRowGate({ runId: RUN, gate: fresh, units: UNITS, events: [] })).toEqual({ kind: 'card', reason: 'deliver' });
   });
 
+  // studio#814 (E2E run 9ec286dc): a refused hand-over, reloaded. An older crew's `GET /runs/:id/gate`
+  // carries no kind, so the gate on the deliver unit read as a fresh deliver card; and the reason
+  // was the script's FIRST line (an advisory), not the line it failed on.
+  const NOTHING_PROMPT =
+    'The deliver phase refused: deliver: the push identity mikeparcewski applies to github.com origins only; this origin is not one, so gh and git use their own credentials\n' +
+    'deliver: nothing to deliver — the run produced no committed change (wicked/x is not ahead of origin/main); nothing was pushed\n' +
+    'deliver: OUTCOME 5f2a failed. ' +
+    'Approve to re-run the deliver phase now (the engine re-lifts and re-verifies first; no second deliver gate), reject to cancel the run and keep the worktree.';
+  it('a reloaded refused hand-over (no gate kind) is the failure row, never the "Ready to hand it over" card', () => {
+    const reloaded: OpenGate = { runId: RUN, ord: 2, prompt: NOTHING_PROMPT, lifecycle: 'open', receivedAt: NOW };
+    expect(proposalKindOf(RUN, reloaded, UNITS)).toBeNull();
+    expect(classifyRowGate({ runId: RUN, gate: reloaded, units: UNITS, events: [] })).not.toEqual({ kind: 'card', reason: 'deliver' });
+    expect(plainGateQuestion(NOTHING_PROMPT, undefined)).toBe('The hand-over failed — deliver again or stop?');
+  });
+  it('the reason is the line the script failed on, not its first line', () => {
+    const r = deliverRefusalOf(NOTHING_PROMPT)!;
+    expect(r.remote).toBe(false);
+    expect(r.reason).toBe('nothing to deliver — the run produced no committed change (wicked/x is not ahead of origin/main); nothing was pushed');
+  });
+
   it('the words: the reason leads, the consent line names branch, repo and diffstat', () => {
     expect(plainGateQuestion(REMOTE_PROMPT, 'escalation')).toBe('The remote refused the push — deliver again or stop?');
     expect(plainGateQuestion(IDENTITY_PROMPT, 'escalation')).toBe('The hand-over failed — deliver again or stop?');

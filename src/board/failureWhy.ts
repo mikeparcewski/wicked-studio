@@ -1,12 +1,15 @@
-import type { SessionView } from '../api/types.js';
+import type { CoreEvent, SessionView } from '../api/types.js';
 import { phaseLabel } from '../components/gateVerdictModel.js';
+import { engineFailureOf } from './engineFailure.js';
 import { stepNoun } from './deskWords.js';
 
 /**
  * A failed job's reason in plain words (DES-frontdoor §4 requirement 3) from what the wire carries:
  * the step that stopped (a `rejected` unit, else the unit at the run's cursor) and its `stepFailed`
- * frames (`failureKind` + `detail`), when the operator asked to see them. The engine's own words go
- * to Technical details only.
+ * frames (`failureKind` + `detail`), when the operator asked to see them. studio#815: a run that
+ * failed with no step failing (the plan could not be decided, no seat was eligible) says the
+ * engine's own `error` frame instead, in the run page's headline (`engineFailureOf`). The engine's
+ * own words go to Technical details only.
  */
 export interface FailureWhyWords {
   plain: string;
@@ -43,6 +46,12 @@ export function failureWhy(view: SessionView, frames: readonly Record<string, un
   if (kind !== null) plain = (KIND_WORDS[kind]?.(step) ?? `The ${step} step failed.`) + times;
   else if (stopped?.status === 'rejected') plain = `A check stopped the ${step} step.`;
   else if (stopped !== null && detail.length > 0) plain = `The ${step} step failed.`;
-  else plain = 'No reason was recorded for this failure.';
+  else {
+    const engine = engineFailureOf(frames as unknown as readonly CoreEvent[]);
+    if (engine !== null) {
+      plain = engine.headline;
+      detail.push(engine.raw);
+    } else plain = 'No reason was recorded for this failure.';
+  }
   return { plain, detail };
 }

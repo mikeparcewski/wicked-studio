@@ -8,7 +8,7 @@ import type { GateDecision, SessionView } from '../api/types.js';
 import { jobTitle, plainGateQuestion } from './deskWords.js';
 import type { LaunchPlan } from '../api/teamPlan.js';
 import { sessionPath } from './sessionModel.js';
-import { choicesOf, recommendedOf, useGateStore } from '../store/gates.js';
+import { gateFromInfo, useGateStore } from '../store/gates.js';
 import { recordShown } from '../store/gateDiffSeen.js';
 import { useMembershipStore } from '../store/membership.js';
 import {
@@ -439,18 +439,7 @@ export function gateMovedCode(e: unknown): 'gate_changed' | 'gate_unknown' | nul
 export async function refreshGate(runId: string): Promise<void> {
   const store = useGateStore.getState();
   try {
-    const g = await api.getGate(runId);
-    const choices = choicesOf(g as unknown as Record<string, unknown>);
-    const recommended = recommendedOf(g as unknown as Record<string, unknown>);
-    store.setGate({
-      runId: g.runId,
-      ord: g.ord,
-      prompt: g.prompt,
-      lifecycle: g.lifecycle,
-      receivedAt: Date.parse(g.receivedAt) || Date.now(),
-      ...(choices !== undefined ? { choices } : {}),
-      ...(recommended !== undefined ? { recommended } : {}),
-    });
+    store.setGate(gateFromInfo(await api.getGate(runId)));
   } catch (e) {
     if (e instanceof ApiError && e.status === 404) store.clearGate(runId);
   }

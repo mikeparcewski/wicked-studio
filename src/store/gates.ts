@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { CoreEvent } from '../api/types.js';
+import type { CoreEvent, GateInfo } from '../api/types.js';
 import { isAwaitingPinned } from './awaitingPins.js';
 import { isAskTurnGate } from '../board/askThread.js';
 import { useAskThreadStore } from './askThread.js';
@@ -28,8 +28,9 @@ export interface OpenGate {
    * vocabulary `ElicitationInfo` already uses on this wire).
    */
   choices?: string[] | null;
-  /** The engine's gate kind off the live `awaitingHuman` frame (`plan_approval`, …); absent on a
-   *  late join (`GET /runs/:id/gate` does not carry it — the plan-gate read covers that). */
+  /** The engine's gate kind off the live `awaitingHuman` frame (`plan_approval`, …), or off
+   *  `GET /runs/:id/gate` on a late join (crew ≥ the 0.124.0 wire, wicked-crew#1058 / studio#814);
+   *  absent on an older crew's late join. */
   gateKind?: string;
   /**
    * C3 (DES-STUDIO-REBUILD-001 §5.3): the index of the answer the producer that wrote the options
@@ -63,10 +64,35 @@ export function choicesOf(bag: Record<string, unknown>): string[] | null | undef
   return bag.freeText === true ? null : undefined;
 }
 
-/** The engine's gate kind off an `awaitingHuman` frame, when it names one. */
-function gateKindOf(event: CoreEvent): { gateKind?: string } {
+/** The engine's gate kind off an `awaitingHuman` frame or a `GET /runs/:id/gate` answer, when it
+ *  names one. */
+function gateKindOf(event: CoreEvent | GateInfo): { gateKind?: string } {
   const kind = (event as unknown as Record<string, unknown>)['gateKind'];
-  return typeof kind === 'string' ? { gateKind: kind } : {};
+  return typeof kind === 'string' && kind !== '' ? { gateKind: kind } : {};
+}
+
+/**
+ * The open gate a `GET /runs/:id/gate` answer describes — the ONE reading of that answer (the runs
+ * poller's late join and `refreshGate` both use it). studio#814: the gate kind rides along when the
+ * daemon serves it, so a reloaded refused hand-over (an `escalation` on the deliver unit) is never
+ * read as a fresh deliver gate.
+ */
+export function gateFromInfo(g: GateInfo): OpenGate {
+  // The daemon-cached gate carries whatever the payload named; `GateInfo` is a closed interface,
+  // so the additive answer shape (§7.11) is read off the bag.
+  const bag = g as unknown as Record<string, unknown>;
+  const choices = choicesOf(bag);
+  const recommended = recommendedOf(bag);
+  return {
+    runId: g.runId,
+    ord: g.ord,
+    prompt: g.prompt,
+    lifecycle: g.lifecycle,
+    receivedAt: Date.parse(g.receivedAt) || Date.now(),
+    ...(choices !== undefined ? { choices } : {}),
+    ...(recommended !== undefined ? { recommended } : {}),
+    ...gateKindOf(g),
+  };
 }
 
 /**

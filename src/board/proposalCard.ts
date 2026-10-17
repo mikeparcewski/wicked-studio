@@ -1,7 +1,7 @@
 import { executingOrd } from '../api/run-state.js';
 import type { CoreEvent, SessionView, WorkUnit } from '../api/types.js';
 import { deliverUnit, deliveryOf, resolveDelivery } from '../components/delivery.js';
-import { deliverTargetOf, isDeliverGate } from '../components/gateMoveModel.js';
+import { deliverRefusalOf, deliverTargetOf, isDeliverGate } from '../components/gateMoveModel.js';
 import type { OpenGate } from '../store/gates.js';
 import type { GateActionState } from './gateActions.js';
 import { gatePlanLabels, stepAtOrd, type ChainModel } from './chainModel.js';
@@ -73,7 +73,9 @@ const FAILURE_PROMPT = /LIFT-CONFLICT|BASE MOVED|failed and triage escalated|ver
 export function proposalKindOf(runId: string, gate: OpenGate | undefined, units: readonly WorkUnit[]): ProposalKind | null {
   if (gate === undefined) return null;
   if (gate.gateKind === 'plan_approval' || /^\s*Approve plan rev \d+/i.test(gate.prompt)) return 'plan';
-  if (gate.gateKind === 'escalation' || FAILURE_PROMPT.test(gate.prompt)) return null;
+  // studio#814: the engine's retry gate after a refused hand-over sits on the deliver unit too; an
+  // older crew's late join carries no kind, so its own head says it is no fresh offer.
+  if (gate.gateKind === 'escalation' || FAILURE_PROMPT.test(gate.prompt) || deliverRefusalOf(gate.prompt) !== null) return null;
   if (gate.gateKind === 'deliver' || isDeliverGate(runId, units, gate.ord)) return 'deliver';
   return null;
 }

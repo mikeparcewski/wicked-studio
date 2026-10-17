@@ -617,3 +617,43 @@ export function isAskTurnGate(know: AskGateKnowledge, runId: string, gateKind: s
   if (gateKind !== undefined) return TURN_GATE_KINDS.has(gateKind);
   return prompt !== undefined && TURN_GATE_PROMPT.test(prompt);
 }
+
+// ── studio#816: an ask's answers from the run, once the transcript is gone ─────────────────────
+
+/** An answered ask step of a run: the unit the PA's reply was folded from. */
+export interface AskAnswerUnit {
+  runId: string;
+  ord: number;
+  /** The unit key for `GET /runs/:id/units/:key/output` (`answer-N`). */
+  key: string;
+  /** The seat that answered. */
+  by: string | null;
+}
+
+/**
+ * studio#816: the answered steps of an ask's run (`<run>:answer-N`, done), in order. crew drops a
+ * chat's transcript when the chat closes and clears it at boot (crew `chat-transcripts.ts`), and
+ * "a path that outlives the daemon is read from the run view" (crew `ask-relay.ts`): these are the
+ * units whose stored output IS the reply.
+ */
+export function askAnswerUnits(view: { session: { id: string }; units: ReadonlyArray<{ id: string; ord: number; status: string; assigned_cli: string | null; description?: string | null }> }): AskAnswerUnit[] {
+  const runId = view.session.id;
+  const out: AskAnswerUnit[] = [];
+  for (const u of [...view.units].sort((a, b) => a.ord - b.ord)) {
+    // The step id (`<run>:answer-N`), else the engine's step naming in the description
+    // (`answer-N — …`, the rule `learnRuns` classifies an ask's run by).
+    const key = u.id.startsWith(`${runId}:`) ? u.id.slice(runId.length + 1) : `u${u.ord}`;
+    const answer = isAnswerStep(key) || (typeof u.description === 'string' && /^answer-\d+ — /.test(u.description));
+    if (!answer || u.status !== 'done') continue;
+    out.push({ runId, ord: u.ord, key, by: u.assigned_cli });
+  }
+  return out;
+}
+
+/** The ask relay's control lines (crew `ask-relay.ts` `CONTROL_LINE`): never shown in a reply. */
+const CONTROL_LINE = /^\s*(?:HELP:|PLAN\+|PLAN\s+\S+\s*:|ADVICE\s+\S+\s*:|STEP\s+\S+\s*:|SCOPE\b|RISK\b|DONE\s*$)/u;
+
+/** A stored answer as the relay would have shown it: control lines dropped, trimmed. */
+export function askAnswerText(output: string): string {
+  return output.split('\n').filter((line) => !CONTROL_LINE.test(line)).join('\n').trim();
+}
