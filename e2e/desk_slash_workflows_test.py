@@ -6,7 +6,7 @@ in-process fixture (`workflow_catalog` serves GET /workflows; `repo` serves GET 
 records POST /runs):
 
   1. MENU: `/wo` groups "Start work" with the daemon's five ordinary defs (feature, bug, migration,
-     domain-extraction, capture-learnings), each line read off the catalog ("2 phases: plan → build"),
+     domain-extraction, capture-learnings), each line read off the catalog ("2 steps: plan → build"),
      and never the system flow (chat); a mid-text `/workflow-` is a sentence — no rows.
   2. WIZARD (operator 2026-10-11): picking a row opens the launch wizard — a modal dialog on its
      "what" step, focus in the box, no inline strip, no POST.
@@ -111,7 +111,7 @@ with sync_playwright() as p:
                 "workflow-capture-learnings"]
     check("menu-lists-workflows",
           "start-work" in groups and all(c in cmds for c in ordinary) and "workflow-chat" not in cmds
-          and len(feature_line) == 1 and "2 phases: plan → build" in feature_line[0],
+          and len(feature_line) == 1 and "2 steps: plan → build" in feature_line[0],
           groups=groups, cmds=cmds, feature_line=feature_line)
 
     # ── compact menu geometry: 1440×700 ──────────────────────────────────────────

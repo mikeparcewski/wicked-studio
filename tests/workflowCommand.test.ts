@@ -56,22 +56,22 @@ describe('parseWorkflowCommand', () => {
 describe('commandLine', () => {
   it('names the phase count and the first four phases', () => {
     expect(commandLine(def('qe-author-tests', ['recon', 'author', 'verify', 'review', 'deliver'])))
-      .toBe('5 phases: recon → author → verify → review → …');
+      .toBe('5 steps: research → author → check → review → …');
   });
   it('singularizes one phase and says so for none', () => {
-    expect(commandLine(def('solo', ['recon']))).toBe('1 phase: recon');
-    expect(commandLine(def('empty', []))).toBe('no phases listed');
+    expect(commandLine(def('solo', ['recon']))).toBe('1 step: research');
+    expect(commandLine(def('empty', []))).toBe('no steps listed');
   });
 });
 
 describe('presetCommandLine', () => {
   it('names a preset and its steps', () => {
     expect(presetCommandLine(preset('ship-it', ['understand', 'build', 'deliver'])))
-      .toBe('preset · 3 steps: understand → build → deliver');
+      .toBe('3 steps: understand → build → delivery');
   });
   it('falls back to the name with no steps', () => {
-    expect(presetCommandLine(preset('nothing', []))).toBe('preset · nothing');
-    expect(presetCommandLine(preset('one', ['build']))).toBe('preset · 1 step: build');
+    expect(presetCommandLine(preset('nothing', []))).toBe('nothing');
+    expect(presetCommandLine(preset('one', ['build']))).toBe('1 step: build');
   });
 });
 
@@ -93,11 +93,11 @@ describe('workflowItems', () => {
     const rows = workflowItems('', defs, presets);
     expect(rows).toHaveLength(1);
     expect(rows[0]?.source).toBe('workflow');
-    expect(rows[0]?.line).toBe('2 phases: recon → build');
+    expect(rows[0]?.line).toBe('2 steps: research → build');
   });
   it('carries the command, the launch id and the source', () => {
     expect(workflowItems('', [def('bug', ['recon'])], null)[0])
-      .toStrictEqual({ key: 'bug', cmd: 'workflow-bug', workflowId: 'bug', line: '1 phase: recon', source: 'workflow' });
+      .toStrictEqual({ key: 'bug', cmd: 'workflow-bug', workflowId: 'bug', line: '1 step: research', source: 'workflow' });
   });
   it('caps the rows at WORKFLOW_ROWS_MAX', () => {
     const many = Array.from({ length: 12 }, (_, i) => def(`wf-${i}`, []));
@@ -107,11 +107,11 @@ describe('workflowItems', () => {
     const rows = workflowItems('wo', [def('qe-author-tests', ['recon', 'author', 'verify', 'review', 'deliver'])], null);
     expect(rows).toStrictEqual([{
       key: 'qe-author-tests', cmd: 'workflow-qe-author-tests', workflowId: 'qe-author-tests',
-      line: '5 phases: recon → author → verify → review → …', source: 'workflow',
+      line: '5 steps: research → author → check → review → …', source: 'workflow',
     }]);
   });
   it('a preset of more than four steps ends in "…"', () => {
-    expect(presetCommandLine(preset('long', ['a', 'b', 'c', 'd', 'e']))).toBe('preset · 5 steps: a → b → c → d → …');
+    expect(presetCommandLine(preset('long', ['a', 'b', 'c', 'd', 'e']))).toBe('5 steps: a → b → c → d → …');
   });
   it('reads a cold catalog as no rows, never a throw', () => {
     expect(workflowItems('', null, null)).toStrictEqual([]);

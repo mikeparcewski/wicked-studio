@@ -26,7 +26,7 @@ import { useProvenanceStore } from '../../store/provenance.js';
 import { fetchReposCached, getCachedRepos } from '../../store/repoCache.js';
 import { useWorkflowDefs } from '../../store/workflowCache.js';
 import { workflowLabel } from '../../board/workflowNames.js';
-import { DEMO_VIDEO_ID, DRAFT_EPICS_ID, START_CHAT_ID, useLaunchWizard, type LaunchDraft } from '../../store/launchWizard.js';
+import { DEMO_VIDEO_ID, DRAFT_EPICS_ID, START_CHAT_ID, useLaunchWizard, withJobKind, type LaunchDraft } from '../../store/launchWizard.js';
 import { openChatFlow } from '../../store/chatFlow.js';
 import { useComposerPrefsStore } from '../../store/composerPrefs.js';
 import { launchDemo } from '../../api/demo.js';
@@ -252,8 +252,8 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
     { key: DRAFT_EPICS_ID, id: DRAFT_EPICS_ID, artKey: DRAFT_EPICS_ID, name: 'Draft epics', line: DRAFT_EPICS_LINE },
   ];
   const pickCard = (id: string): void => {
-    // codex r1: another kind of job starts its own options (nothing carried over).
-    if (id !== draft.workflowId) update({ workflowId: id, reduced: false, skipQe: false, skipQeReason: '' });
+    // codex r1: another kind of job starts its own options; studio#767: and its own words.
+    if (id !== draft.workflowId) update(withJobKind(draft, id));
     setStep(id === DRAFT_EPICS_ID ? 'requirements' : id === DEMO_VIDEO_ID ? 'demo' : 'what');
   };
   // Arrow keys move across the grid (as many across as the layout shows), Home/End to the ends;
