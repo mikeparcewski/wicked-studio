@@ -6115,13 +6115,17 @@ class W2Handler(SimpleHTTPRequestHandler):
             with state_lock:
                 total = state["memory_total"]
                 down = state["memory_down"]
-            if down:
-                self._json(503, {"error": "estate unreachable: the memory store did not answer (fixture)"})
-            elif total is None:
-                self._json(404, {"message": f"Route GET:{path} not found", "error": "Not Found", "statusCode": 404})
-            else:
-                self._json(200, {"total": total, "by_tier": {"project": total}, "by_kind": {}})
-            return True
+                seeded = state["memories"] is not None
+            # A journey that seeds `memories` gets coverage counted from them (the handler below), so
+            # the store's totals and its list always agree; `memory_total` covers only the unseeded case.
+            if not (seeded and not down):
+                if down:
+                    self._json(503, {"error": "estate unreachable: the memory store did not answer (fixture)"})
+                elif total is None:
+                    self._json(404, {"message": f"Route GET:{path} not found", "error": "Not Found", "statusCode": 404})
+                else:
+                    self._json(200, {"total": total, "by_tier": {"project": total}, "by_kind": {}})
+                return True
         if path == "/api/v1/roster":
             # Fix J4 round 2: the roster-unreachable branch, switch-gated.
             with state_lock:
