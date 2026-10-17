@@ -12,7 +12,26 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+## [0.10.0] — 2026-10-17
+
+A minor release: the run page is a chat, Memory is its own Desk tab, and the UX round from the 2026-10-16 operator review.
+
+### Added
+- **Memory is its own Desk tab (#823).** `/memory` (and `?view=proposals`, also in ⌘K) sits beside Steer: tiles read the store's totals from `GET /memory/coverage`, memories can be edited (crew's `POST /memory/edit`) and memory proposals reviewed there. Steer is the enforceable rules and policy proposals.
+- **Learn from a brand with a file you choose (#822).** For a PDF or an image, the Theme page's Learn from a brand offers an upload or file picker instead of a text box asking for a path on the service's machine (wicked-interactive's `PUT /d/:doc/api/theme/source`).
+- **New job starts with chat on the chat's own page; agent turns are bubbles (#820).** Ticking "Don't show this again" and choosing chat in New job both land on the chat's session page.
+- **Needs you is a designed inbox (#819).** One card with a mail list and a reading pane, a segmented folder control, and setup items for agents and memory, in every theme.
+
+### Fixed
+- **Desk reassign, hand-over and ask fixes from the :7721 E2E certification (#818; #813 #814 #815 #816).** A reassign no longer offers a seat the engine refuses (`WorkUnit.reassign_refused`), a reloaded refused hand-over draws its escalation card (`GateInfo.gateKind`), a failed run says why, and a closed ask shows its answers.
+- **A QE review gate says why it stopped and retries the QE review only (#824; #761 #762).**
+- **Launch wording (#825; #763 #767 #726).** One delivery wording per config, each job kind keeps its own words, and steps read in plain words.
+- **Documents (#826; #765 #766 #768).** New document needs two helpers (one writes, one checks), the form is a real form, a document lands where it is filed, and a page with no version says what its draft is doing.
+- **Plain words and offline behaviour (#828; #684 #734 #735 #733 #639 #713 #663).** Nothing writes while the service is offline, one notice per question, and the whole goal is one step away.
+
 ### Changed
+- **Workspace and session pages are centred and constrained (#817).** One page measure (`--page-max`, `--page-max-narrow`, `--thread-max`, `--page-pad`) instead of per-page widths.
+- **General settings drops the agents block; Not in a project is a project dashboard (#821).** Sign-in and agent setup live on the Agents tab.
 - **A run's page is a chat (operator 2026-10-17: "Is that experience really a chat experience?").** One centred 768 px conversation: your messages as right-aligned bubbles, each agent's turn as a left-aligned bubble under its name. A run speaks in turns rebuilt from what crew records, so an old run opens on its conversation at the newest message: the plan (Approve plan / Edit / Not now inline while it waits), your answers, one message per finished step from its captured output, a question in the flow, one quiet "Working on Build…" line, and a final message in plain words ("Done. Tests pass (38), and codex reviewed and approved it. Pull request #12 is open.") with the pull request, Changes and Evidence as chips. The run's record is one Details fold under its messages; the details panel is closed by default behind the header's Details and now also says the status, times, delivery, why a run stopped and its record. Code blocks carry a Copy button. The plan card's button reads "Approve plan".
 - **Site, README and the npm description say what ships today, in plain words.** The site hero no longer describes a "single runner" review fallback (a review on the builder's own agent is refused unless the job is launched with reduced assurance), and Memory is no longer described as part of Steering (Steer and Memory are separate Desk tabs). The hero and README lead with chat-first jobs, Agents-tab sign-in and sandboxed agents; the Desk board shows the real tabs; *Get it* names the container runtime; demos are described as captioned screen recordings with no voice-over. The package description takes effect on the next publish.
 
@@ -2262,7 +2281,8 @@ The merged interactive layer: wicked-interactive's UI moved into this skin (DES-
   `git subtree split` (92 commits).
 - The SPA as a pure HTTP/WS client of the wicked-crew daemon: runs, gates, live CoreEvents.
 
-[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.9.6...HEAD
+[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.10.0...HEAD
+[0.10.0]: https://github.com/mikeparcewski/wicked-studio/compare/v0.9.6...v0.10.0
 [0.9.6]: https://github.com/mikeparcewski/wicked-studio/compare/v0.9.5...v0.9.6
 [0.9.5]: https://github.com/mikeparcewski/wicked-studio/compare/v0.9.4...v0.9.5
 [0.9.4]: https://github.com/mikeparcewski/wicked-studio/compare/v0.9.3...v0.9.4
