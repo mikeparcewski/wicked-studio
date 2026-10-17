@@ -632,6 +632,38 @@ export function requestThemeLearn(
  * an unknown doc is an express-default 404 with no JSON error to match, a
  * dead bridge is the usual typed 503.
  */
+/** What the document engine answers for an uploaded brand source (`PUT /d/:doc/api/theme/source`). */
+export interface ThemeSourceUpload {
+  document_id: string;
+  /** Where the engine stored the file — the path `theme.requested {path}` then names. */
+  path: string;
+  format: 'pdf' | 'image';
+  bytes: number;
+}
+
+/** The content types the engine takes for a brand source, and the most it takes (it re-checks both). */
+export const THEME_SOURCE_TYPES: Record<'pdf' | 'image', readonly string[]> = {
+  pdf: ['application/pdf'],
+  image: ['image/png', 'image/jpeg', 'image/webp', 'image/gif'],
+};
+export const THEME_SOURCE_MAX_BYTES = 20 * 1024 * 1024;
+
+/**
+ * `PUT /d/:docId/api/theme/source` — the operator's chosen PDF or image (operator 2026-10-17: "it's impossible
+ * to guess what paths it would take but it could be an upload or select file"). The bytes ride a raw body with
+ * the file's own content type (no form encoding); the engine checks the type against the first bytes, stores
+ * the file in the document's theme dir and answers the path the learn then names. Nothing is served back.
+ * An engine without the route answers 404 (crew spawns an older wicked-interactive).
+ */
+export function uploadThemeSource(projectId: string, docId: string, file: Blob, signal?: AbortSignal): Promise<ThemeSourceUpload> {
+  return iFetch<ThemeSourceUpload>(`${docBase(projectId, docId)}/api/theme/source`, {
+    method: 'PUT',
+    headers: { 'Content-Type': file.type },
+    body: file,
+    ...(signal !== undefined ? { signal } : {}),
+  });
+}
+
 export function getLearnedTheme(
   projectId: string,
   docId: string,

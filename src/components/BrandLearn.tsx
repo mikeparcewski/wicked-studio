@@ -3,7 +3,8 @@ import { StateBanner, Skeleton } from './ui/StateBanner.js';
 import { TechDetails } from './ui/TechDetails.js';
 import { readErrorKind } from '../api/errors.js';
 import { useEffect, useRef, useState } from 'react';
-import { getLearnedTheme, requestThemeLearn } from '../api/interactive.js';
+import { getLearnedTheme, requestThemeLearn, THEME_SOURCE_MAX_BYTES, THEME_SOURCE_TYPES, uploadThemeSource } from '../api/interactive.js';
+import { ApiError } from '../api/errors.js';
 import { interactiveRootOf } from '../hooks/useBoardModel.js';
 import { learnBody, learnReady, LEARN_KINDS, LEARN_LABEL } from '../interactive/themeWire.js';
 import { threadKey, useDocThreadStore } from '../store/docThread.js';
@@ -41,6 +42,25 @@ import type { LearnKind } from '../api/interactive.js';
 
 type Phase = 'idle' | 'preparing' | 'queued' | 'ready' | 'applied' | 'error';
 
+/** Why a chosen file cannot be learned from, or null when it can (the engine re-checks both). */
+export function fileProblem(kind: Exclude<LearnKind, 'url'>, file: { type: string; size: number }): string | null {
+  if (!THEME_SOURCE_TYPES[kind].includes(file.type)) return kind === 'pdf' ? 'Choose a PDF file.' : 'Choose a PNG, JPEG, WebP or GIF image.';
+  if (file.size > THEME_SOURCE_MAX_BYTES) return `That file is ${sizeWords(file.size)}; the most a learn reads is ${sizeWords(THEME_SOURCE_MAX_BYTES)}.`;
+  if (file.size === 0) return 'That file is empty.';
+  return null;
+}
+
+function sizeWords(bytes: number): string {
+  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  const mb = bytes / (1024 * 1024);
+  return `${Number.isInteger(mb) ? mb : mb.toFixed(1)} MB`;
+}
+
+/** "a PDF file", "an image file". */
+function withArticle(noun: string): string {
+  return `${/^[aeiou]/i.test(noun) ? 'an' : 'a'} ${noun}`;
+}
+
 function errorText(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
 }
@@ -55,6 +75,24 @@ export function BrandLearn(): React.ReactElement {
   const [errorSource, setErrorSource] = useState<unknown>(null);
   const [mapping, setMapping] = useState<BrandTokenOverrides | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  // A PDF or an image is CHOSEN, never typed (operator 2026-10-17): the file is uploaded to the document
+  // engine, which answers the path the learn names. A path box stays behind "Use a file path instead" for an
+  // engine that cannot take an upload yet.
+  const [file, setFile] = useState<File | null>(null);
+  const [preview, setPreview] = useState<string | null>(null);
+  const [dragOver, setDragOver] = useState(false);
+  const [usePath, setUsePath] = useState(false);
+  const fileInput = useRef<HTMLInputElement | null>(null);
+  const fileKind = kind === 'url' ? null : kind;
+  const chosenProblem = fileKind === null || file === null ? null : fileProblem(fileKind, file);
+  useEffect(() => () => { if (preview !== null) URL.revokeObjectURL(preview); }, [preview]);
+  const choose = (f: File | null): void => {
+    setFile(f);
+    setPreview(f !== null && f.type.startsWith('image/') && typeof URL.createObjectURL === 'function' ? URL.createObjectURL(f) : null);
+  };
+  useEffect(() => { choose(null); setUsePath(false); }, [kind]);
+  /** Ready to learn: a URL, a usable chosen file, or (the fallback) a typed path. */
+  const ready = kind === 'url' || usePath ? learnReady(kind, source.trim()) : file !== null && chosenProblem === null;
 
   // The project list is the page's ordinary context (same load the switcher
   // does); the LEARN wires — docs, events, readback — fire only on submit.
@@ -74,7 +112,7 @@ export function BrandLearn(): React.ReactElement {
 
   async function onLearn(): Promise<void> {
     const value = source.trim();
-    if (!learnReady(kind, value) || effectiveProject === '' || busy) return;
+    if (!ready || effectiveProject === '' || busy) return;
     abortRef.current?.abort();
     const ctl = new AbortController();
     abortRef.current = ctl;
@@ -98,7 +136,27 @@ export function BrandLearn(): React.ReactElement {
       // ends this learn (identity comparison — see ThreadError).
       const key = threadKey(effectiveProject, docId);
       const baseline = useDocThreadStore.getState().lastError[key];
-      await requestThemeLearn(effectiveProject, docId, learnBody(kind, value));
+      let body = learnBody(kind, value);
+      if (kind !== 'url' && !usePath && file !== null) {
+        setStatus(`Uploading ${file.name}…`);
+        try {
+          const up = await uploadThemeSource(effectiveProject, docId, file, ctl.signal);
+          body = { kind, path: up.path };
+        } catch (e: unknown) {
+          if (ctl.signal.aborted) return;
+          // An engine from before uploads: say so, and open the path box (the old way still works there).
+          if (e instanceof ApiError && (e.status === 404 || e.status === 405)) {
+            // Said plainly (not an error banner whose reason hides in its details): it is a version, not a fault.
+            setUsePath(true);
+            setPhase('idle');
+            setStatus('This version of crew’s document engine can’t take a file yet. Update crew, or type the file’s location in the box below.');
+            return;
+          }
+          throw e;
+        }
+        if (ctl.signal.aborted) return;
+      }
+      await requestThemeLearn(effectiveProject, docId, body);
       if (ctl.signal.aborted) return;
       setPhase('queued');
       setStatus('Queued — the bridge is reading the source. Watching for the learned '
@@ -213,29 +271,68 @@ export function BrandLearn(): React.ReactElement {
         )}
       </div>
 
+      {fileKind !== null && !usePath && (
+        <div
+          data-testid="learn-file"
+          data-chosen={file !== null ? 'true' : 'false'}
+          className={`wk-learn-drop${dragOver ? ' wk-learn-drop--over' : ''}`}
+          onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={(e) => { e.preventDefault(); setDragOver(false); const f = e.dataTransfer.files[0]; if (f !== undefined && !busy) choose(f); }}
+        >
+          <input
+            ref={fileInput}
+            type="file"
+            data-testid="learn-file-input"
+            aria-label={`Upload or choose ${withArticle(LEARN_LABEL[fileKind].noun)}`}
+            accept={THEME_SOURCE_TYPES[fileKind].join(',')}
+            className="wk-sr-only"
+            tabIndex={-1}
+            onChange={(e) => { choose(e.target.files?.[0] ?? null); e.target.value = ''; }}
+          />
+          {preview !== null && <img data-testid="learn-file-preview" src={preview} alt="" className="wk-learn-thumb" />}
+          <div className="wk-learn-drop-text">
+            {file === null
+              ? <><span className="wk-learn-drop-title">{`Drop ${withArticle(LEARN_LABEL[fileKind].noun)} here`}</span><span className="wk-field-note">{fileKind === 'pdf' ? 'A brand guide or any PDF' : 'PNG, JPEG, WebP or GIF'}, up to {sizeWords(THEME_SOURCE_MAX_BYTES)}. It is sent to studio’s service on this computer to read.</span></>
+              : <><span data-testid="learn-file-name" className="wk-learn-drop-title">{file.name}</span><span className="wk-field-note">{sizeWords(file.size)}</span></>}
+          </div>
+          <button type="button" data-testid="learn-file-choose" disabled={busy} className="wk-btn wk-btn--secondary" onClick={() => fileInput.current?.click()}>
+            {file === null ? 'Upload or choose a file' : 'Choose another'}
+          </button>
+        </div>
+      )}
+      {chosenProblem !== null && <p data-testid="learn-file-problem" className="wk-field-note" role="alert">{chosenProblem}</p>}
+
       <div className="flex items-center gap-2 flex-wrap">
-        <input
-          type="text"
-          data-testid="learn-input"
-          aria-label="Brand source"
-          placeholder={LEARN_LABEL[kind].placeholder}
-          value={source}
-          onChange={(e) => setSource(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter') void onLearn(); }}
-          className="wk-field flex-1 min-w-0"
-        />
+        {(fileKind === null || usePath) && (
+          <input
+            type="text"
+            data-testid="learn-input"
+            aria-label="Brand source"
+            placeholder={LEARN_LABEL[kind].placeholder}
+            value={source}
+            onChange={(e) => setSource(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') void onLearn(); }}
+            className="wk-field flex-1 min-w-0"
+          />
+        )}
         <button
           type="button"
           data-testid="learn-submit"
-          disabled={busy || !learnReady(kind, source.trim()) || effectiveProject === ''}
+          disabled={busy || !ready || effectiveProject === ''}
           onClick={() => void onLearn()}
           className={mapping === null ? "wk-btn wk-btn--primary" : "wk-btn wk-btn--secondary"}
         >
           Learn
         </button>
+        {fileKind !== null && (
+          <button type="button" data-testid="learn-path-toggle" className="wk-btn wk-btn--quiet wk-btn--sm" aria-pressed={usePath} onClick={() => setUsePath((v) => !v)}>
+            {usePath ? 'Upload a file instead' : 'Use a file path instead'}
+          </button>
+        )}
       </div>
 
-      {(busy || !learnReady(kind, source.trim()) || effectiveProject === '') && <p className="wk-field-note">{busy ? 'Wait for learning to finish, or cancel it below.' : effectiveProject === '' ? 'Create a project before learning a brand.' : 'Enter a website address or file location to learn from.'}</p>}
+      {(busy || !ready || effectiveProject === '') && <p className="wk-field-note">{busy ? 'Wait for learning to finish, or cancel it below.' : effectiveProject === '' ? 'Create a project before learning a brand.' : fileKind !== null && !usePath ? `Upload or choose ${withArticle(LEARN_LABEL[fileKind].noun)} to learn from.` : kind === 'url' ? 'Enter a website address to learn from.' : 'Enter the file’s location on this computer.'}</p>}
       {status !== null && (phase === 'error'
         ? <StateBanner data-testid="learn-status" kind={readErrorKind(errorSource ?? status)} what="brand colors" error={status} onRetry={() => void onLearn()} />
         : <p data-testid="learn-status" className="wk-field-note" role="status">{status}</p>)}

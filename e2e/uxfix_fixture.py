@@ -581,6 +581,8 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          # no readback ripening. The brief's real failure mode (a learn that
          # hangs silently), for the client's bounded-timeout branch.
          "learn_silent": False,
+         # Learn from a brand: the engine predates PUT /d/<doc>/api/theme/source (404).
+         "theme_source_absent": False,
          # Slice AB (DES-UX-001 §7.9): the chat-repair corpus, all default-off.
          #   chat_reject_seats — cliKeys POST /chats answers ok:false with the
          #                       daemon's per-seat error (open-time
@@ -4395,6 +4397,8 @@ LEARNED_TOKENS = {
 learned_lock = threading.Lock()
 # (pid, doc) -> ready_at_ms. Readable (200) once NOW >= ready_at_ms.
 learned_themes: dict = {}
+# Learn from a brand: every uploaded source (GET /__fixture/theme-sources).
+theme_source_puts: list = []
 
 
 def assemble_runs() -> list:
@@ -8004,6 +8008,10 @@ class W2Handler(SimpleHTTPRequestHandler):
             return self._json(200, outcome)
         # Wave 2a: the SERVER-side record of every gate decision that arrived —
         # the only witness for "closing the tab during the undo window sends nothing".
+        if path == "/__fixture/theme-sources":
+            with state_lock:
+                puts = list(theme_source_puts)
+            return self._json(200, {"puts": puts})
         if path == "/__fixture/ask-posts":
             with ask_lock:
                 posts = list(ask_posts)
@@ -9119,6 +9127,26 @@ class W2Handler(SimpleHTTPRequestHandler):
 
     def do_PUT(self):  # noqa: N802 (stdlib naming)
         path = urllib.parse.urlparse(self.path).path
+        # Learn from a brand (operator 2026-10-17): the chosen PDF or image arrives as a raw body
+        # (interactive's PUT /d/:doc/api/theme/source); the answer is the path the learn then names.
+        m = re.match(r"^/api/v1/projects/([^/]+)/interactive/d/([^/]+)/api/theme/source$", path)
+        if m:
+            pid, doc = (urllib.parse.unquote(g) for g in m.groups())
+            raw = self.rfile.read(int(self.headers.get("Content-Length") or 0))
+            ctype = (self.headers.get("Content-Type") or "").split(";")[0].strip().lower()
+            kinds = {"application/pdf": ("pdf", "pdf"), "image/png": ("png", "image"), "image/jpeg": ("jpg", "image"),
+                     "image/webp": ("webp", "image"), "image/gif": ("gif", "image")}
+            with state_lock:
+                absent = bool(state.get("theme_source_absent"))
+            if absent:
+                return self._json(404, {"error": "not found"})
+            if ctype not in kinds:
+                return self._json(415, {"error": "unsupported_type"})
+            ext, fmt = kinds[ctype]
+            out = {"document_id": doc, "path": f"/docs/{doc}/theme/source_1.{ext}", "format": fmt, "bytes": len(raw)}
+            with state_lock:
+                theme_source_puts.append({"project": pid, "doc": doc, "type": ctype, "bytes": len(raw), "magic": raw[:8].hex()})
+            return self._json(200, out)
         body = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
         if self._walkthrough_route("PUT", body if isinstance(body, dict) else {}):
             return None

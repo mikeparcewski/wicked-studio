@@ -6,10 +6,12 @@
 //
 // Two guarantees this module keeps, and both of them are ABSENCES:
 //
-//   1. NOTHING UPLOADS (§4.6, §4.9). A PDF, an image and a reference folder are all
-//      submitted as a PATH the service reads in place. There is no `FormData`, no `File`
-//      and no `Blob` in this file and no file input behind it — which is what makes
-//      "it uses your actual numbers" a property rather than a promise.
+//   1. NO PATH IS GUESSED, AND NO FORM UPLOADS (§4.6, §4.9, revised 2026-10-17). A reference
+//      folder is still submitted as a PATH the service reads in place. A theme learn's PDF or
+//      image is CHOSEN by the operator ("it's impossible to guess what paths it would take but
+//      it could be an upload or select file"): BrandLearn sends the file's bytes as a raw body to
+//      the document engine (`uploadThemeSource`, never `FormData`), and the learn names the path
+//      the engine answered — the service still reads the file in place.
 //   2. THE SPA NEVER FETCHES THE TARGET. A learn-from-URL submission goes to the bridge
 //      proxy and only there. The SSRF guard stays server-side and untouched (theme-grab.js:
 //      http(s) only, reject metadata/loopback/link-local/private, resolve every address

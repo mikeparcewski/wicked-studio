@@ -27,7 +27,11 @@ const listDocs = vi.fn();
 const createDoc = vi.fn();
 const requestThemeLearn = vi.fn();
 const getLearnedTheme = vi.fn();
+const uploadThemeSource = vi.fn();
 vi.mock('../src/api/interactive.js', () => ({
+  uploadThemeSource: (...a: unknown[]) => uploadThemeSource(...a) as unknown,
+  THEME_SOURCE_TYPES: { pdf: ['application/pdf'], image: ['image/png', 'image/jpeg', 'image/webp', 'image/gif'] },
+  THEME_SOURCE_MAX_BYTES: 20 * 1024 * 1024,
   listDocs: (...a: unknown[]) => listDocs(...a) as unknown,
   createDoc: (...a: unknown[]) => createDoc(...a) as unknown,
   // Slice U (§6.2): the REAL binding rule, mirrored — real projects bind.
@@ -82,6 +86,7 @@ beforeEach(() => {
   createDoc.mockReset().mockResolvedValue({ name: SCRATCH_DOC_NAME, head: 0 });
   requestThemeLearn.mockReset().mockResolvedValue({ ok: true, event_id: 'e1', correlation_id: 'c1' });
   getLearnedTheme.mockReset().mockResolvedValue(LEARNED);
+  uploadThemeSource.mockReset().mockResolvedValue({ document_id: SCRATCH_DOC_NAME, path: '/docs/brand-learn/theme/source_1.png', format: 'image', bytes: 8 });
   vi.mocked(api.putAppearanceSettings).mockClear();
   useAppearanceStore.setState({ appearance: DEFAULT_APPEARANCE, loaded: true });
   useDocThreadStore.setState({ messages: {}, genState: {}, pending: {}, hydrated: {}, landed: {}, lastError: {} });
@@ -154,10 +159,37 @@ describe('BrandLearn — the restored /theme extraction flow', () => {
     expect(requestThemeLearn).toHaveBeenCalledTimes(1);
   });
 
-  it('a local path kind sends {kind, path} — nothing uploads from the browser', async () => {
+  it('a file kind asks for a file, not a path; the chosen file uploads and the learn names the path the engine answered', async () => {
+    render(<BrandLearn />);
+    fireEvent.click(screen.getByTestId('learn-source-image'));
+    expect(screen.queryByTestId('learn-input')).toBeNull();
+    const png = new File([new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])], 'brand.png', { type: 'image/png' });
+    fireEvent.change(screen.getByTestId('learn-file-input'), { target: { files: [png] } });
+    expect(screen.getByTestId('learn-file-name')).toHaveTextContent('brand.png');
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('learn-submit'));
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(uploadThemeSource).toHaveBeenCalledTimes(1);
+    expect(uploadThemeSource.mock.calls[0]!.slice(0, 3)).toEqual(['notes', SCRATCH_DOC_NAME, png]);
+    expect(requestThemeLearn).toHaveBeenCalledExactlyOnceWith(
+      'notes', SCRATCH_DOC_NAME, { kind: 'image', path: '/docs/brand-learn/theme/source_1.png' });
+  });
+
+  it('a file of the wrong kind says what to choose, and nothing is sent', () => {
     render(<BrandLearn />);
     fireEvent.click(screen.getByTestId('learn-source-pdf'));
+    fireEvent.change(screen.getByTestId('learn-file-input'), { target: { files: [new File(['x'], 'notes.txt', { type: 'text/plain' })] } });
+    expect(screen.getByTestId('learn-file-problem')).toHaveTextContent('Choose a PDF file.');
+    expect(screen.getByTestId('learn-submit')).toBeDisabled();
+  });
+
+  it('"Use a file path instead" still sends {kind, path} (an engine that cannot take an upload)', async () => {
+    render(<BrandLearn />);
+    fireEvent.click(screen.getByTestId('learn-source-pdf'));
+    fireEvent.click(screen.getByTestId('learn-path-toggle'));
     await learnFrom('/Users/op/brand.pdf');
+    expect(uploadThemeSource).not.toHaveBeenCalled();
     expect(requestThemeLearn).toHaveBeenCalledExactlyOnceWith(
       'notes', SCRATCH_DOC_NAME, { kind: 'pdf', path: '/Users/op/brand.pdf' });
   });
