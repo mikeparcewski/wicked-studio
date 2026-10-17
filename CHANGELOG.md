@@ -12,6 +12,9 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+### Changed
+- **Site, README and the npm description say what ships today, in plain words.** The site hero no longer describes a "single runner" review fallback (a review on the builder's own agent is refused unless the job is launched with reduced assurance), and Memory is no longer described as part of Steering (Steer and Memory are separate Desk tabs). The hero and README lead with chat-first jobs, Agents-tab sign-in and sandboxed agents; the Desk board shows the real tabs; *Get it* names the container runtime; demos are described as captioned screen recordings with no voice-over. The package description takes effect on the next publish.
+
 ## [0.9.6] — 2026-10-16
 
 A patch release: New job can start a chat instead.

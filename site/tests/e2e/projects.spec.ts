@@ -18,7 +18,7 @@ test.describe('one project, one feed [data-proj]', () => {
     // The studio rendering shows; the interactive one is hidden.
     await expect(card.locator('.proj-feed--studio')).toBeVisible();
     await expect(card.locator('.proj-feed--interactive')).toBeHidden();
-    await expect(card.locator('.proj-feed--studio li').first()).toContainText('run r-7c19');
+    await expect(card.locator('.proj-feed--studio li').first()).toContainText('job r-7c19');
     await expect(card.locator('[data-proj-skin-label]')).toHaveText('runs');
 
     // Labels were 'studio · coder' / 'interactive · creator' — the two-front-doors framing.

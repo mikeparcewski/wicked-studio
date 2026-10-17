@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import { bringIntoView } from './utils';
 
 /**
- * The Desk and its surfaces [data-board] — the SPA's real routes as an auto-cycling
+ * The Desk and its tabs [data-board] — the Desk's real tabs as an auto-cycling
  * switcher. Clicking a panel pins it (stage swaps name + API route + line);
  * the status button resumes the cycle.
  */
@@ -12,29 +12,26 @@ test.describe('the Desk and its surfaces [data-board]', () => {
     const board = page.locator('[data-board]');
     await bringIntoView(board);
     await expect(board.locator('[data-board-item]')).toHaveCount(9);
-    // The one shell is first; the retired run board / work queue are not surfaces any more.
-    await expect(board.locator('[data-board-item]').first()).toContainText('desk');
-    await expect(board.getByRole('tab', { name: 'runs' })).toHaveCount(0);
+    // The Desk's real tabs, in order (DESK_TABS in src/components/desk/DeskV2.tsx); Work is first.
+    await expect(board.locator('[data-board-item]').first()).toContainText('work');
+    await expect(board.getByRole('tab', { name: 'steering' })).toHaveCount(0);
 
-    // Pin the workflows panel: the stage swaps to its name + real route.
-    await board.getByRole('tab', { name: 'workflows' }).click();
-    await expect(page.locator('[data-bs-name]')).toHaveText('workflows');
-    await expect(page.locator('[data-bs-api]')).toHaveText('GET /workflows');
-    await expect(page.locator('[data-bs-line]')).toContainText('WorkflowDef');
-    await expect(board.getByRole('tab', { name: 'workflows' })).toHaveAttribute('aria-selected', 'true');
-
-    // The Product view (studio#655): requirements across a project's repos, Draft epics as a governed run.
-    await board.getByRole('tab', { name: 'product' }).click();
-    await expect(page.locator('[data-bs-api]')).toHaveText('GET /projects/:id/requirements');
-    await expect(page.locator('[data-bs-line]')).toContainText('Draft epics');
+    // Pin the agents tab: the stage swaps to its name + real route.
+    await board.getByRole('tab', { name: 'agents' }).click();
+    await expect(page.locator('[data-bs-name]')).toHaveText('agents');
+    await expect(page.locator('[data-bs-api]')).toHaveText('POST /seats/:cli/container-login');
+    await expect(page.locator('[data-bs-line]')).toContainText('placeholders');
+    await expect(board.getByRole('tab', { name: 'agents' })).toHaveAttribute('aria-selected', 'true');
 
     // Pinning pauses the auto-cycle and says so.
     await expect(page.locator('[data-board-status-txt]')).toContainText('pinned');
 
-    // Pin steering: the governance surface (rules + proposals) — honest line, the skin never grades.
-    await board.getByRole('tab', { name: 'steering' }).click();
-    await expect(page.locator('[data-bs-api]')).toHaveText('GET /governance/rules · /proposals');
-    await expect(page.locator('[data-bs-line]')).toContainText('never grades');
+    // Steer and Memory are separate peers: rules with a reach, memory on its own route.
+    await board.getByRole('tab', { name: 'steer' }).click();
+    await expect(page.locator('[data-bs-api]')).toHaveText('GET /governance/rules');
+    await expect(page.locator('[data-bs-line]')).toContainText('one repo');
+    await board.getByRole('tab', { name: 'memory' }).click();
+    await expect(page.locator('[data-bs-api]')).toHaveText('GET /memory');
 
     // The status button resumes the auto-cycle.
     await page.locator('[data-board-toggle]').click();

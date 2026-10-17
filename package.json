@@ -1,7 +1,7 @@
 {
   "name": "wicked-studio",
   "version": "0.9.6",
-  "description": "The coder-facing skin of the wicked experience plane — a pure HTTP/WS client of the wicked-crew daemon's /api/v1",
+  "description": "Where you direct your coding agents: start a job with a chat, sign your agents in once, watch them work in sandboxes, and approve what matters with the evidence. The browser UI for wicked-crew.",
   "type": "module",
   "repository": {
     "type": "git",

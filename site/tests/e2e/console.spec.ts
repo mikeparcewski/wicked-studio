@@ -24,7 +24,7 @@ test.describe('the console [data-console]', () => {
     const gate = console_.locator('[data-console-gate]');
     await expect(gate).toBeVisible({ timeout: 15_000 });
     await expect(feed.locator('.cf-row')).toHaveCount(7);
-    await expect(feed.locator('.cf-row').first()).toContainText('POST /api/v1/runs');
+    await expect(feed.locator('.cf-row').first()).toContainText('plan confirmed');
     await expect(feed.locator('.cf-row').last()).toContainText('held for your decision');
     const stamp = console_.locator('[data-cg-stamp]');
     await expect(stamp).toHaveText('DENY');

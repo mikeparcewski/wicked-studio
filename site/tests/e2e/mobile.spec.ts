@@ -26,9 +26,9 @@ test.describe('mobile (390×844)', () => {
     const staticConsole = page.locator('.console-static');
     await expect(staticConsole).toBeVisible();
     await expect(staticConsole.locator('.cs-steps li')).toHaveCount(3);
-    await expect(staticConsole).toContainText('Launch');
-    await expect(staticConsole).toContainText('Steer');
-    await expect(staticConsole).toContainText('DENY');
+    await expect(staticConsole).toContainText('Start');
+    await expect(staticConsole).toContainText('Decide');
+    await expect(staticConsole).toContainText('FAIL');
   });
 
   test('no horizontal overflow anywhere on the page', async ({ page }) => {

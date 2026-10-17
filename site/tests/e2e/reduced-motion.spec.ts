@@ -32,8 +32,8 @@ test.describe('reduced motion', () => {
 
     // The board stays put (no auto-cycle under reduced motion): the stage
     // still answers a click.
-    await page.locator('[data-board]').getByRole('tab', { name: 'repos' }).click();
-    await expect(page.locator('[data-bs-name]')).toHaveText('repos');
+    await page.locator('[data-board]').getByRole('tab', { name: 'repositories' }).click();
+    await expect(page.locator('[data-bs-name]')).toHaveText('repositories');
 
     expect(errors).toEqual([]);
   });

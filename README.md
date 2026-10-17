@@ -2,14 +2,14 @@
 
 > [![npm](https://img.shields.io/npm/v/wicked-studio)](https://www.npmjs.com/package/wicked-studio) · [![CI](https://github.com/mikeparcewski/wicked-studio/actions/workflows/ci.yml/badge.svg)](https://github.com/mikeparcewski/wicked-studio/actions/workflows/ci.yml) · [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 
-**The cockpit for AI coding agents you can actually trust.** wicked-studio is a browser UI for
-running coding-agent CLIs (Claude Code, Codex, Antigravity, and more) as *governed* workers:
-you give an intent, the agents do the work behind verification gates, and you approve the
-decisions that matter — with the evidence behind every "done" one click away.
+**Where you direct your coding agents.** *Your coding agents do the work. A different agent checks
+it against your rules. You get the evidence.* wicked-studio is the browser UI for running the
+coding-agent CLIs you already use (Claude Code, Codex, GitHub Copilot, OpenCode, Pi) as checked
+workers: you start a job, the agents do the work in sandboxes behind verification gates, and you
+approve the decisions that matter — with the evidence behind every "done" one click away.
 
-It's the human surface of the [wicked](https://github.com/mikeparcewski/wicked-crew) platform.
-The agents run headless in the background; studio is where you point them at your repos, watch
-them work in real time, unblock them when they need a human, and see what actually happened.
+It's the human surface of the [wicked](https://wickedagile.com) platform; the
+[wicked-crew](https://github.com/mikeparcewski/wicked-crew) daemon runs the jobs and bundles studio.
 
 ---
 
@@ -18,6 +18,15 @@ them work in real time, unblock them when they need a human, and see what actual
 Coding agents are fast but unsupervised — they assert "done," grade their own work, and bury the
 reasoning in a scrollback you'll never read. wicked-studio flips that:
 
+- **Start with a chat.** **New job → Start with chat**: describe what you want, the chat proposes a
+  plan, and nothing starts until you confirm it. (Tick "Don't show this again" to go straight to
+  chat next time.)
+- **Sign your agents in once.** The **Agents** tab signs each agent in, inside a container. Jobs run
+  every agent in a hardened sandbox (crew needs a container runtime: Rancher Desktop, Docker,
+  Podman, Colima or OrbStack). Credentials stay in a broker; the sandbox only ever sees placeholders.
+- **Rules and memory, kept apart.** **Steer** holds your rules, each with an explicit reach
+  (everywhere, one project, or one repo). **Memory** is its own tab: what happened and what you told
+  it, with your own memories applying across projects. Agents suggest both; you approve.
 - **Direct, don't babysit.** Launch runs across many repos and projects at once, then let them
   work. Attention comes to *you* when a run hits a gate — you don't sit watching one terminal.
 - **Approve what matters.** Human-in-the-loop gates surface the real decisions (approve, approve
