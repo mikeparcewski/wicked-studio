@@ -26,7 +26,7 @@ import { AGENTS_PATH, AgentsPage } from './components/agents/AgentsPage.js';
 import { useFirstUseLanding } from './components/agents/useFirstUseLanding.js';
 import { McpToolsPage } from './components/McpToolsPage.js';
 import { SteeringPage } from './components/SteeringPage.js';
-import { MemoriesPanel } from './components/MemoriesPanel.js';
+import { MemoryPage } from './components/memory/MemoryPage.js';
 import { TestingPage } from './components/TestingPage.js';
 import { LaunchPanel } from './components/LaunchPanel.js';
 import { WorkflowViewer } from './components/WorkflowViewer.js';
@@ -61,7 +61,7 @@ import { usePeekJump } from './hooks/usePeekJump.js';
 import { usePlacePanel } from './hooks/usePlacePanel.js';
 import { altChord, setShortcutsPaletteOpen, useGlobalShortcuts } from './hooks/useGlobalShortcuts.js';
 import { useTypeToComposer } from './hooks/useTypeToComposer.js';
-import { useRetiredSettingsRedirect, useSteeringRedirect, useTestingRedirect } from './hooks/useLegacyRedirect.js';
+import { legacySteeringTarget, useRetiredSettingsRedirect, useTestingRedirect } from './hooks/useLegacyRedirect.js';
 import { EverythingPage } from './components/everything/EverythingPage.js';
 import { productRedirectPath, useRoute } from './hooks/useRoute.js';
 import { useRuns } from './hooks/useRuns.js';
@@ -121,7 +121,7 @@ const RIGHT_PANEL_PX = 288;
 const DESK_COMPOSER_PX = 96;
 
 export function App(): React.ReactElement {
-  const { panel, runId, repoId, projectId, artifactId, showLaunch, campaignId, steeringSection, testingPage, artifactKey, navigate, search, pathname } = useRoute();
+  const { panel, runId, repoId, projectId, artifactId, showLaunch, campaignId, testingPage, artifactKey, navigate, search, pathname } = useRoute();
   const { runs, refresh, loaded: runsLoaded, error: runsError } = useRuns();
   const navCollapsed = useHostChrome((s) => s.navCollapsed);
   const ingestGate = useGateStore((s) => s.ingest);
@@ -201,15 +201,18 @@ export function App(): React.ReactElement {
         </div>
       );
     }
-    // DES-steer-eval: every steering address is the one Steer surface; the memories keep their page and
-    // `?view=table` keeps the spreadsheet editor (inline cell edits).
-    if (r.steeringSection === 'memories') {
-      return (
-        <div className="flex flex-1 overflow-hidden">
-          <MemoriesPanel />
-        </div>
-      );
+    // The Memory page (operator 2026-10-17: memory is separate from steering); its own moves stay on
+    // this tab's address, in this Desk (global or the project's).
+    if (tab === 'memory') {
+      const base = project === null ? '/' : projectDetailPath(project);
+      return <MemoryPage search={hs} navigate={navigate} address={(p) => deskTabPath('memory', p, base)} project={project} />;
     }
+    // An old Desk address that put a retired steering section on the Steer tab lands where it lives now.
+    if (r.panel === 'steering' && r.steeringSection === null) {
+      return <RouteRedirect to={legacySteeringTarget(u.pathname, hs, project === null ? '/' : projectDetailPath(project))} navigate={navigate} />;
+    }
+    // DES-steer-eval: every steering address is the one Steer surface; `?view=table` keeps the
+    // spreadsheet editor (inline cell edits).
     if (r.steeringSection === 'policies' && new URLSearchParams(hs).get('view') === 'table') {
       // The table's own filter moves stay in the table, on the Steer tab's address (tableAddress).
       const tableNavigate: typeof navigate = (path, opts) => { if (opts === undefined) navigate(tableAddress(path)); else navigate(tableAddress(path), opts); };
@@ -258,10 +261,6 @@ export function App(): React.ReactElement {
     void useDecisionsStore.getState().load();
   }, []);
 
-  // Bare `/steering`, a legacy `/steering/:type`, the retired governance panels
-  // (`/wiki`/`/rules`/`/policies`) and the retired standalone `/proposals` queue normalize onto
-  // the unified surface's two sub-sections (`/steering/policies[?type=]` or `/steering/memories`).
-  useSteeringRedirect(panel, steeringSection, pathname, search, navigate);
   // First use (DES-seats-page §5.1): until the computer is good enough, `/` opens on the Agents tab's setup steps.
   useFirstUseLanding(pathname, search, navigate);
 
@@ -570,17 +569,14 @@ export function App(): React.ReactElement {
         </div>
       );
     }
-    // `/steering/{dashboard,policies,memories}` — the unified governed-knowledge surface: ONE home,
-    // a review-forward DASHBOARD (the default) plus two management deep-dives. The dashboard
-    // un-buries the propose→promote review inbox; Memories renders the memory store; Policies (also
-    // the tick before useSteeringRedirect lands for a legacy `/steering/:type` or the retired
-    // `/wiki`/`/rules`/`/policies` addresses) renders the seven-type rule grid (the `?type=` filter
-    // collapsing the old seven pages). Bare `/steering` and the retired `/proposals` queue redirect
-    // to the dashboard.
-    // Desk v2: Steering lives on the Desk's Steer tab. Every old address (`/steering/...`, `/rules/...`)
-    // lands there with its own path carried as `at`, so sub-pages and deep links keep working.
+    // Desk v2: Steer and Memory are Desk tabs. Every steering address (`/steering/...`, `/rules/...`,
+    // and the retired `/wiki`, `/policies`, `/proposals`) lands on the tab where it lives now
+    // (`legacySteeringTarget`), its own path carried as `at` so sub-pages and deep links keep working.
     if (panel === 'steering' || panel === 'rules') {
-      return <RouteRedirect to={deskTabPath('steer', pathname + search)} navigate={navigate} />;
+      return <RouteRedirect to={legacySteeringTarget(pathname, search)} navigate={navigate} />;
+    }
+    if (panel === 'memory') {
+      return <RouteRedirect to={deskTabPath('memory', pathname + search)} navigate={navigate} />;
     }
     // `/skills` — the skills file manager over the daemon's effective plugin root (the skills
     // keystone): the catalog + KPI band, a drawer per skill (skill + support file trees, textarea

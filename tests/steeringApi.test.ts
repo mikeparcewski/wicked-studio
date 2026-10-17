@@ -4,11 +4,10 @@ import {
   isSteeringSection,
   isSteeringType,
   isValidRuleId,
-  memoriesPath,
   nextRuleId,
   policiesPath,
   readSteeringTypeFilter,
-  steeringDashboardPath,
+  steerProposalsPath,
   steeringPath,
   STEERING_RULE_TEMPLATE,
   STEERING_SECTIONS,
@@ -119,23 +118,23 @@ describe('the type roster and paths', () => {
   });
 });
 
-describe('the unified sub-section paths + the Policies type filter', () => {
-  it('spells the dashboard home + the two management sub-sections (dashboard leads = the default)', () => {
-    expect([...STEERING_SECTIONS]).toEqual(['dashboard', 'policies', 'memories']);
-    expect(isSteeringSection('dashboard')).toBe(true);
+describe('the Steer sub-section paths + the Policies type filter', () => {
+  it('spells the two sub-sections: Policies and the policy Proposals (memory is its own page)', () => {
+    expect([...STEERING_SECTIONS]).toEqual(['policies', 'proposals']);
     expect(isSteeringSection('policies')).toBe(true);
-    expect(isSteeringSection('memories')).toBe(true);
+    expect(isSteeringSection('proposals')).toBe(true);
+    // The retired sections are not sections: they only redirect.
+    expect(isSteeringSection('dashboard')).toBe(false);
+    expect(isSteeringSection('memories')).toBe(false);
     expect(isSteeringSection('security')).toBe(false);
-    expect(isSteeringSection('proposals')).toBe(false);
   });
 
-  it('policiesPath is bare for the All view, ?type= for a filtered one; memoriesPath + steeringDashboardPath are fixed', () => {
+  it('policiesPath is bare for the All view, ?type= for a filtered one; steerProposalsPath is fixed', () => {
     expect(policiesPath()).toBe('/steering/policies');
     expect(policiesPath(null)).toBe('/steering/policies');
     expect(policiesPath('security')).toBe('/steering/policies?type=security');
     expect(policiesPath('design-ux')).toBe('/steering/policies?type=design-ux');
-    expect(memoriesPath()).toBe('/steering/memories');
-    expect(steeringDashboardPath()).toBe('/steering/dashboard');
+    expect(steerProposalsPath()).toBe('/steering/proposals');
   });
 
   it('readSteeringTypeFilter reads the type back from search; unknown/absent → null (the All view)', () => {

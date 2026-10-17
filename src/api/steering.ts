@@ -70,33 +70,25 @@ export function steeringPath(type: SteeringType): string {
   return `/steering/${type}`;
 }
 
-// ── The unified governed-knowledge surface (`/steering/{policies,memories}`) ──────────────────
+// ── The Steer surface's addresses (`/steering/{policies,proposals}`) ──────────────────────────
 //
-// Steering is one home — a review-forward DASHBOARD (`/steering/dashboard`, the default) that
-// un-buries the propose→promote queue — plus TWO management sub-sections, each carrying BOTH
-// "manage existing" and "proposals (review)": Policies (the seven-type rule corpus) and Memories
-// (the memory store). The seven types collapsed into a `?type=` FILTER on the Policies view
-// (All + 7) — a rule still belongs to exactly one type, but the surface is one grid. `dashboard`
-// leads the list so it is the default sub-section bare `/steering` resolves onto.
+// Steering is the rules helpers are held to (operator 2026-10-17: "memories and steering are
+// separate"): Policies (the seven-type rule corpus; the seven types are a `?type=` FILTER on one
+// list) and Proposals (policy proposals waiting on review). Memory, what helpers remember, is its
+// own page (`/memory`, `api/memory.ts`). The legacy `/steering/dashboard` and `/steering/memories`
+// addresses only redirect (`hooks/useLegacyRedirect.ts`).
 
-export const STEERING_SECTIONS = ['dashboard', 'policies', 'memories'] as const;
+export const STEERING_SECTIONS = ['policies', 'proposals'] as const;
 
 export type SteeringSection = (typeof STEERING_SECTIONS)[number];
-
-export const STEERING_SECTION_LABELS: Record<SteeringSection, string> = {
-  dashboard: 'Dashboard',
-  policies: 'Policies',
-  memories: 'Memories',
-};
 
 export function isSteeringSection(s: string): s is SteeringSection {
   return (STEERING_SECTIONS as readonly string[]).includes(s);
 }
 
-/** The governed-knowledge dashboard's route — the Steering home (review-forward). Bare
- *  `/steering` redirects here, and the rail's Steering glyph + accordion link it. */
-export function steeringDashboardPath(): string {
-  return '/steering/dashboard';
+/** Steer's Proposals view: the policy proposals waiting on review. */
+export function steerProposalsPath(): string {
+  return '/steering/proposals';
 }
 
 /** The Policies sub-section's route — bare for the All view, `?type=<type>` for a filtered one
@@ -113,11 +105,6 @@ export function policiesPath(type?: SteeringType | null, mcp = false): string {
  *  MCP calls (they name an `mcp` token, or ship in the `mcp-defaults` pack). */
 export function readMcpFilter(search: string): boolean {
   return new URLSearchParams(search).get('mcp') === '1';
-}
-
-/** The Memories sub-section's route. */
-export function memoriesPath(): string {
-  return '/steering/memories';
 }
 
 /** The active Policies type FILTER read from a `location.search` string; an absent or unknown

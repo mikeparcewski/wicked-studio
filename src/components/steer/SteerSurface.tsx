@@ -9,7 +9,6 @@ import {
   authorSteeringRules,
   DEFAULT_STEERING_TYPE,
   isSteeringUnsupported,
-  memoriesPath,
   nextRuleId,
   policiesPath,
   readMcpFilter,
@@ -19,6 +18,7 @@ import {
   STEERING_TYPE_LABELS,
   STEERING_UNSUPPORTED_COPY,
   steeringTypeOf,
+  steerProposalsPath,
   type SteeringRule,
   type SteeringType,
 } from '../../api/steering.js';
@@ -68,10 +68,11 @@ function steerHref(type: SteeringType | null, mcp: boolean, unused: boolean, tab
  * THE STEER SURFACE (DES-steer-eval §2; operator-approved concept `concepts/tabs.html#steer`).
  * Desk v2's Steer tab hosts it; the standalone steering addresses render it too. One page:
  *
- *  - four tiles: rules in force, proposals to review, caught in the last eval, and the three ways
- *    to add (a rule, an import, the assistant);
+ *  - four tiles: rules in force, rule proposals to review, caught in the last eval, and the three
+ *    ways to add (a rule, an import, the assistant);
  *  - the seven steering types as cards with a severity bar (All types first) — the type filter;
- *  - the rule list: In force / Proposals / Retired, a search, each rule as its sentence with its
+ *  - the rule list: In force / Proposals (policy proposals only — memory is the Memory tab's) /
+ *    Retired, a search, each rule as its sentence with its
  *    id, type, eval status and Retire. A rule opens in the existing drawer (origin, history, hold,
  *    edit, retire). "Edit as a table" opens the existing spreadsheet editor for inline edits.
  *
@@ -187,7 +188,8 @@ export function SteerSurface({ pathname, search, navigate: navigateRaw, runs = [
     void listProposals({ state: 'pending' })
       .then((ps) => {
         if (cancelled) return;
-        setPending(ps.filter((p) => proposalKind(p) !== 'other').length);
+        // Steer reviews the POLICY proposals; memory proposals are the Memory page's.
+        setPending(ps.filter((p) => proposalKind(p) === 'policy').length);
         useNeedsSources.getState().depositProposals(ps);
       })
       .catch((e: unknown) => { if (!cancelled) setPending(isProposalsUnsupported(e) ? 'unsupported' : null); });
@@ -199,7 +201,10 @@ export function SteerSurface({ pathname, search, navigate: navigateRaw, runs = [
   const projectName = (id: string | undefined): string | null => (id === undefined ? null : projects.find((p) => p.id === id)?.name ?? null);
 
   // ── Page state ───────────────────────────────────────────────────────────────────────────────
-  const [view, setView] = useState<ListView>('live');
+  // `/steering/proposals` (Needs you's Review, ⌘K) opens on the Proposals view.
+  const askedProposals = pathname === steerProposalsPath();
+  const [view, setView] = useState<ListView>(askedProposals ? 'proposals' : 'live');
+  useEffect(() => { if (askedProposals) setView('proposals'); }, [askedProposals]);
   const [q, setQ] = useState('');
   const [facet, setFacet] = useState<string | null>(null);
   const [shown, setShown] = useState(PAGE);
@@ -334,7 +339,7 @@ export function SteerSurface({ pathname, search, navigate: navigateRaw, runs = [
           : `${live.filter((r) => sevOf(r) === 'critical').length} critical · ${totals.gating} carry an effect · ${totals.blocks === 0 ? 'none block' : `${totals.blocks} block`}${totals.retired > 0 ? ` · ${totals.retired} retired` : ''}`} />
       <SeStat icon={Inbox} tone={typeof pending === 'number' && pending > 0 ? 'gate' : 'ok'} label="Proposals to review" testId="steer-stat-review"
         value={typeof pending === 'number' ? String(pending) : pending === 'unsupported' ? '—' : null}
-        note={pending === 'unsupported' ? 'This crew has no proposal review' : pending === 0 ? 'Nothing waiting on you' : 'From helpers, waiting on you'}
+        note={pending === 'unsupported' ? 'This crew has no proposal review' : pending === 0 ? 'Nothing waiting on you' : 'Rules helpers want, waiting on you'}
         onClick={() => setView('proposals')} />
       <SeStat icon={Sparkles} tone={lastEval !== null && lastEval.summary.false_positives > 0 ? 'fail' : 'accent'} label="Caught in last eval" testId="steer-stat-eval"
         value={lastEval !== null ? String(lastEval.summary.caught) : latest.kind === 'loading' ? null : latest.kind === 'failed' ? '—' : 'None yet'}
@@ -383,7 +388,6 @@ export function SteerSurface({ pathname, search, navigate: navigateRaw, runs = [
             : 0) : '—'}
         </dd></div>
       </dl>
-      <a href={at(memoriesPath())} onClick={go(memoriesPath())} className="wk-link wk-se-health-link" data-testid="steer-memories">Memories helpers keep →</a>
     </section>
   );
 
@@ -471,7 +475,6 @@ export function SteerSurface({ pathname, search, navigate: navigateRaw, runs = [
       {view === 'proposals' ? (
         <div className="wk-se-proposals" data-testid="governance-review-inbox">
           <ProposalsSection kind="policy" heading="Rule proposals" onDecision={() => { setReviewTick((t) => t + 1); void load(); }} />
-          <ProposalsSection kind="memory" heading="Memory proposals" onDecision={() => setReviewTick((t) => t + 1)} />
         </div>
       ) : read.kind === 'loading' ? (
         <div data-testid="rules-loading"><Skeleton rows={5} /></div>

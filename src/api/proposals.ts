@@ -1,12 +1,13 @@
 /**
- * The proposal-queue wire (DES-MEM-FACETED-001) — types and calls for the "policies and
- * memories" review queue (`/proposals`): the surface where agent-proposed governed-knowledge
- * items wait, each `pending`, for a human to approve or reject.
+ * The proposal-queue wire (DES-MEM-FACETED-001) — types and calls for the review queue where
+ * agent-proposed items wait, each `pending`, for a person to approve or reject. Two pages read it:
+ * Steer reviews the POLICY proposals (`/steering/proposals`), Memory the MEMORY proposals
+ * (`/memory?view=proposals`); the Desk's Needs you lists both.
  *
  * ── CONTRACT (faceted-memory build) ───────────────────────────────────────────────────────────
  * `Proposal`, `ProposalState` and `FileProposalBody` come from `wicked-crew-api-types` (pin 0.92.0,
- * ASK-S1) — the engine's serde output, verbatim. `ProposalKind` / `ProposalApproveOutcome` below are
- * studio's own readings.
+ * ASK-S1) — the engine's serde output, verbatim. `ProposalApproveOutcome` below is
+ * studio's own reading.
  *
  * The support probe is the same two-layer adoption seam as the wiki/steering reads: a bare 404
  * (Fastify's unknown-route answer) means "this crew daemon predates the proposal routes"; a 501
@@ -25,8 +26,8 @@ import { ApiError, isRouteAbsent } from './errors.js';
 
 /** Approve returns the engine's outcome — its exact shape is not in api-types yet, so it is
  *  read permissively (a stored item id, an ok flag). */
-import type { ProposalState, Proposal, FileProposalBody } from 'wicked-crew-api-types';
-export type { ProposalState, Proposal, FileProposalBody };
+import type { ApproveProposalBody, ProposalState, Proposal, FileProposalBody } from 'wicked-crew-api-types';
+export type { ApproveProposalBody, ProposalState, Proposal, FileProposalBody };
 
 export interface ProposalApproveOutcome {
   ok?: boolean;
@@ -34,43 +35,13 @@ export interface ProposalApproveOutcome {
   [k: string]: unknown;
 }
 
-// ── The type filter (first-class, so more kinds can be added) ─────────────────────────────────
-
-/** The queue's type dimension. `all` is the default view; every other value is a kind the
- *  queue can filter to. New governed-knowledge kinds add a member here and a label below — the
- *  page derives its filter chips from this list, so nothing else changes. */
-export const PROPOSAL_KINDS = ['all', 'memory', 'policy'] as const;
-
-export type ProposalKind = (typeof PROPOSAL_KINDS)[number];
-
-export const PROPOSAL_KIND_LABELS: Record<ProposalKind, string> = {
-  all: 'All',
-  memory: 'Memory',
-  policy: 'Policy',
-};
-
-export function isProposalKind(s: string): s is ProposalKind {
-  return (PROPOSAL_KINDS as readonly string[]).includes(s);
-}
-
-/** The one spelling of the queue's route — bare `/proposals` for `all`, `?type=<kind>` for a
- *  filtered view (deep-linkable, back-button-correct; shared by the page and the rail). */
-export function proposalsPath(kind: ProposalKind = 'all'): string {
-  return kind === 'all' ? '/proposals' : `/proposals?type=${kind}`;
-}
-
-/** The active type filter read from a `location.search` string; an absent or unknown `type`
- *  resolves to `all` — a mangled bookmark shows the whole queue, never an error. */
-export function readProposalKind(search: string): ProposalKind {
-  const raw = new URLSearchParams(search).get('type');
-  return raw !== null && isProposalKind(raw) ? raw : 'all';
-}
+// ── The kind a proposal is ───────────────────────────────────────────────────────────────────
 
 /**
  * The concrete kind a proposal belongs to, folded from its `kind_type`: `"memory"` → `memory`,
  * anything starting `"policy"` (`"policy:security"`, `"policy"`) → `policy`, everything else →
- * `other`. A proposal whose kind studio does not recognize is still LISTED (under `all`) — a
- * proposal the operator cannot see is a proposal the operator cannot decide.
+ * `other`. A proposal whose kind studio does not recognize is still counted in Needs you, so it is
+ * never silently dropped.
  */
 export function proposalKind(p: Proposal): 'memory' | 'policy' | 'other' {
   const raw = p.kind_type.trim().toLowerCase();
@@ -88,11 +59,6 @@ export function policySteeringType(p: Proposal): string | null {
   if (at === -1) return null;
   const tail = raw.slice(at + 1).trim();
   return tail === '' ? null : tail;
-}
-
-/** Whether a proposal passes the active type filter (`all` matches everything). */
-export function proposalMatchesKind(p: Proposal, filter: ProposalKind): boolean {
-  return filter === 'all' || proposalKind(p) === filter;
 }
 
 // ── Payload narrowing (payload is `unknown`; read it safely, never by blind cast) ─────────────
@@ -143,15 +109,17 @@ export function listProposals(
 }
 
 /** `POST /proposals/:id/approve` — approve a pending proposal; the engine writes the
- *  governed-knowledge item and returns its outcome. */
-export function approveProposal(id: string, body?: { reach: 'project' }): Promise<ProposalApproveOutcome> {
+ *  governed-knowledge item and returns its outcome. `content` approves a MEMORY proposal with an
+ *  edit: crew files the edited copy, approves it and rejects the original (api-types 0.49.0). */
+export function approveProposal(id: string, body?: ApproveProposalBody): Promise<ProposalApproveOutcome> {
   return apiFetch<ProposalApproveOutcome>(`/proposals/${encodeURIComponent(id)}/approve`, {
     method: 'POST',
     ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
   });
 }
 
-/** `POST /proposals` — file one preference into the review queue; answers the pending id. */
+/** `POST /proposals` — file one memory into the review queue (crew files it as a pending
+ *  `semantic` memory proposal); answers the pending id. Memory's Add memory files then approves. */
 export function fileProposal(body: FileProposalBody): Promise<{ id: string }> {
   return apiFetch<{ id: string }>('/proposals', {
     method: 'POST',

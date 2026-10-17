@@ -23,7 +23,7 @@ import { PACK_OPENING } from '../board/askPack.js';
 // ── Where am I — the route → section reading ──────────────────────────────────────────────────
 
 /** The route sections (§2.1) — moved here from the classic rail (S18c). */
-export type PathKey = 'projects' | 'execute' | 'test' | 'vibe' | 'demo' | 'chat' | 'repos' | 'testing' | 'skills' | 'mcp' | 'steering' | 'settings';
+export type PathKey = 'projects' | 'execute' | 'test' | 'vibe' | 'demo' | 'chat' | 'repos' | 'testing' | 'skills' | 'mcp' | 'steering' | 'memory' | 'settings';
 
 // `wiki`, `rules` and `policies` retired into Steering (they redirect to /steering); the
 // retired `coverage` and `domain` panels redirect to /system — kept mapped here so the rail
@@ -59,9 +59,10 @@ export function headingForPath(pathname: string): PathKey | null {
   if (first === 'skills') return 'skills';
   // `/mcp` is MCP tools — a system section between Skills and Steering.
   if (first === 'mcp') return 'mcp';
-  // The retired `/wiki` + `/rules` + `/policies` panels AND the retired standalone `/proposals`
-  // queue redirect into Steering (proposals now live inside its two sub-sections) — map them
-  // there too, so the rail never flashes Settings open on the pre-redirect tick.
+  // Memory (`/memory`, and the retired `/steering/memories` that redirects there) is its own section.
+  if (first === 'memory' || (first === 'steering' && second === 'memories')) return 'memory';
+  // The retired `/wiki` + `/policies` panels AND the retired standalone `/proposals` queue redirect
+  // into Steer — map them there too, so the rail never flashes Settings open on the pre-redirect tick.
   if (first === 'steering' || first === 'wiki' || first === 'rules' || first === 'policies' || first === 'proposals') return 'steering';
   if (SETTINGS_ROUTES.has(first)) return 'settings';
   return null;
@@ -75,6 +76,7 @@ const SECTION_LABELS: Record<string, string> = {
   repos: 'Repositories',
   testing: 'Testing',
   steering: 'Steering',
+  memory: 'Memory',
   settings: 'Settings',
 };
 

@@ -1,11 +1,12 @@
 import { StrictMode } from 'react';
-import { cleanup, fireEvent, render, renderHook, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { RULES_PATH, rulePath } from '../src/api/decisions.js';
 import type { SteeringRule } from '../src/api/steering.js';
 import { fromYourWords, groupOf, orderRules, rulesSentence } from '../src/board/rulesPage.js';
 import { SteerSurface } from '../src/components/steer/SteerSurface.js';
-import { useSteeringRedirect } from '../src/hooks/useLegacyRedirect.js';
+import { legacySteeringTarget } from '../src/hooks/useLegacyRedirect.js';
+import { deskTabPath } from '../src/components/desk/DeskV2.js';
 import { parseRoute } from '../src/hooks/useRoute.js';
 import { ROUTE_SHAPES } from '../src/palette/routeTargets.js';
 import { useProjectsStore } from '../src/store/projects.js';
@@ -95,11 +96,9 @@ describe('the route', () => {
     expect(parseRoute(rulePath('proposal:pr-auto')).ruleId).toBe('proposal:pr-auto');
   });
 
-  it('the steering redirect leaves the Rules page alone', () => {
-    const navigate = vi.fn();
-    renderHook(() => useSteeringRedirect('rules', null, '/rules', '', navigate));
-    renderHook(() => useSteeringRedirect('rules', null, '/rules/proposal%3Apr-auto', '', navigate));
-    expect(navigate).not.toHaveBeenCalled();
+  it('the steering redirect carries the Rules page onto the Steer tab as it is', () => {
+    expect(legacySteeringTarget('/rules', '')).toBe(deskTabPath('steer', '/rules'));
+    expect(legacySteeringTarget('/rules/proposal%3Apr-auto', '')).toBe(deskTabPath('steer', '/rules/proposal%3Apr-auto'));
   });
 
   it('⌘K knows the shape (every route is reachable under every skin)', () => {

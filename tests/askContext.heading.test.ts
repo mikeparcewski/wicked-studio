@@ -30,9 +30,12 @@ describe('the route→heading map (§3.2)', () => {
     // Steering owns its sub-sections AND the retired /wiki + /rules + /policies panels AND the
     // retired standalone /proposals queue. The seven types are a `?type=` filter under
     // /steering/policies now, so a legacy /steering/:type still maps here too.
-    for (const p of ['/steering', '/steering/policies', '/steering/memories', '/steering/security', '/wiki', '/rules', '/policies', '/proposals']) {
+    for (const p of ['/steering', '/steering/policies', '/steering/proposals', '/steering/dashboard', '/steering/security', '/wiki', '/rules', '/policies', '/proposals']) {
       expect(headingForPath(p)).toBe('steering');
     }
+    // Memory is its own section (operator 2026-10-17), and the retired /steering/memories that
+    // redirects there maps to it too.
+    for (const p of ['/memory', '/steering/memories']) expect(headingForPath(p)).toBe('memory');
     // The /testing surface splits: Test owns campaigns/recon (+ the retired flat /campaigns
     // addresses) AND the page-less addresses — bare /testing and the retired harness — which
     // `useTestingRedirect` lands on the Test landing (F-075 / F-7R2-009); Evals (key stays

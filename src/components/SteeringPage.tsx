@@ -12,6 +12,7 @@ import {
   STEERING_TYPE_LABELS,
   STEERING_UNSUPPORTED_COPY,
   steeringTypeOf,
+  steerProposalsPath,
   type SteeringRule,
   type SteeringType,
 } from '../api/steering.js';
@@ -54,9 +55,8 @@ import { SteeringTypeFilter } from './SteeringTypeFilter.js';
  *  - the ASSIST DOCK (DES-ASSIST-DOCK) sits beside the grid: a typed message launches the governed
  *    steering-author run for the active type (architecture in the `All` view) and narrates inline;
  *    rule-shaped attachments fork import-directly vs analyze-with-chat.
- *  - the agent-proposed steering policies are REVIEWED in the governed-knowledge dashboard's
- *    consolidated inbox (`/steering/dashboard`) — no longer buried below this grid; this page is
- *    the pure "manage existing" surface.
+ *  - the agent-proposed steering policies are REVIEWED on Steer's Proposals view
+ *    (`/steering/proposals`) — not below this grid; this page is the pure "manage existing" surface.
  *
  * Every management write still goes through crew's API (the governed operator path) — estate MCP
  * stays read-only (AW-11).
@@ -375,13 +375,13 @@ export function SteeringPage({ type, navigate, search = '', runs = [] }: {
           <div className="wk-page-head-text">
             <h1 className="wk-page-title">Manage rules</h1>
             <p className="wk-page-intro">
-              Every steering rule helpers follow, by type. Edit a rule in place; proposed rules wait on the{' '}
+              Every steering rule helpers follow, by type. Edit a rule in place; proposed rules wait under{' '}
               <a
-                href="/steering/dashboard"
-                onClick={(e) => { e.preventDefault(); navigate('/steering/dashboard'); }}
+                href={steerProposalsPath()}
+                onClick={(e) => { e.preventDefault(); navigate(steerProposalsPath()); }}
                 className="wk-link"
               >
-                Steering dashboard
+                Proposals
               </a>.
             </p>
           </div>

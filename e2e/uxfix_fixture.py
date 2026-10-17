@@ -714,6 +714,13 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          #   crew's outcome (memory → promoted, policy → handed_off); receipts at
          #   GET /__fixture/approve-posts, cleared by `reset_repairs`.
          "proposals": None,
+         # memories — None: GET /memory* answers the standing unknown-route 404 (a daemon predating
+         #   memory management). A list: the memory store, served on crew's wire — GET /memory
+         #   (`query` substring, `scope_prefix`, `facets`), GET /memory/coverage (counts by tier),
+         #   POST /memory/retire-item, /memory/retire (subtree) and /memory/edit (a new memory replaces
+         #   the old). A memory proposal approved over POST /proposals/<id>/approve (with an edited
+         #   `content` or as filed) lands here as `proposal:<id>` (e2e/desk_memory_test.py).
+         "memories": None,
          # ── Team-plan UI (DES-TEAMING-002 T9, e2e/t9_plan_ui_test.py) ──
          # team_plan — GET /catalog, GET /presets, POST /plans/preview and POST /runs/:id/plan
          #   answer on the crew 0.47.0 wire, and the team corpus (TEAM_RUNS: a live preset run,
@@ -6174,6 +6181,29 @@ class W2Handler(SimpleHTTPRequestHandler):
         if path == "/api/v1/governance/claims":
             self._json(200, {"claims": GOVERNANCE_CLAIMS})
             return True
+        # GET /api/v1/memory[/coverage] — the memory store (switch-gated: None ⇒ the unknown-route 404).
+        if path in ("/api/v1/memory", "/api/v1/memory/coverage"):
+            with state_lock:
+                mems = state["memories"]
+                mems = None if mems is None else [dict(m) for m in mems]
+            if mems is None:
+                self._json(404, {"error": f"w2 fixture: no such endpoint {path}"})
+                return True
+            q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            prefix = (q.get("scope_prefix") or [""])[0]
+            mems = [m for m in mems if not prefix or m["scope"] == prefix or m["scope"].startswith(prefix + "/")]
+            if path.endswith("/coverage"):
+                by_tier: dict = {}
+                for m in mems:
+                    by_tier[m["tier"]] = by_tier.get(m["tier"], 0) + 1
+                self._json(200, {"total": len(mems), "by_tier": by_tier, "by_kind": {}})
+                return True
+            needle = (q.get("query") or [""])[0].lower()
+            facets = json.loads((q.get("facets") or ["{}"])[0])
+            mems = [m for m in mems if needle in m["content"].lower()
+                    and all(m["facets"].get(k) == v for k, v in facets.items())]
+            self._json(200, {"memories": mems})
+            return True
         # GET /api/v1/proposals — the governed-knowledge review queue (switch-gated: None ⇒ the
         # unknown-route 404 every standing rig sees).
         if path == "/api/v1/proposals":
@@ -9007,21 +9037,75 @@ class W2Handler(SimpleHTTPRequestHandler):
                     "facets": {"project": body["project"]} if body.get("project") else {},
                     "provenance": {}, "state": "pending", "created_at": int(time.time())}]
             return self._json(201, {"id": pid})
+        # The memory writes (switch `memories`): retire one, retire a subtree, edit (new replaces old).
+        # The answer is decided under the lock and sent after it (`_json` takes the lock itself).
+        if path in ("/api/v1/memory/retire-item", "/api/v1/memory/retire", "/api/v1/memory/edit"):
+            with state_lock:
+                mems = state["memories"]
+                if mems is None:
+                    out = (404, {"error": f"w2 fixture: no such endpoint {path}"})
+                elif path.endswith("/retire-item"):
+                    keep = [m for m in mems if m["id"] != body.get("memory_id")]
+                    if len(keep) == len(mems):
+                        out = (404, {"error": f"no memory {body.get('memory_id')}"})
+                    else:
+                        state["memories"] = keep
+                        out = (200, {"erased": 1})
+                elif path.endswith("/retire"):
+                    prefix = body.get("scope_prefix") or ""
+                    if not prefix.strip():
+                        out = (400, {"error": "`scope_prefix` must not be empty"})
+                    else:
+                        keep = [m for m in mems if not (m["scope"] == prefix or m["scope"].startswith(prefix + "/"))]
+                        state["memories"] = keep
+                        out = (200, {"erased": len(mems) - len(keep)})
+                else:
+                    old = next((m for m in mems if m["id"] == body.get("memory_id")), None)
+                    content = body.get("content")
+                    if old is None:
+                        out = (404, {"error": f"no memory {body.get('memory_id')}"})
+                    elif not isinstance(content, str) or not content.strip():
+                        out = (400, {"error": "`content` is required"})
+                    else:
+                        new_id = f"{old['id']}~{len(mems)}"
+                        state["memories"] = [m for m in mems if m is not old] + [dict(old, id=new_id, content=content.strip(), created_at=int(time.time()))]
+                        out = (200, {"memory_id": new_id, "retired": old["id"]})
+            return self._json(*out)
         # Wave B (idea 4): crew's POST /proposals/<id>/approve over the `proposals` switch.
         m = re.match(r"^/api/v1/proposals/([^/]+)/approve$", path)
         if m:
             pid = urllib.parse.unquote(m.group(1))
+            edited_words = body.get("content") if isinstance(body, dict) else None
             with state_lock:
                 approve_posts.append(pid)
                 rows = state["proposals"]
                 row = next((r for r in (rows or []) if r.get("id") == pid and r.get("state") == "pending"), None)
-                if row is not None:
+                if row is not None and isinstance(edited_words, str) and row.get("kind_type") == "memory":
+                    # crew's approve-with-edit: the edited COPY is filed and approved, the original rejected.
+                    copy = dict(row, id=f"{pid}-edit", state="approved",
+                                payload=dict(row.get("payload") or {}, content=edited_words, edited_from=pid))
+                    state["proposals"] = [dict(r, state="rejected") if r is row else r for r in rows] + [copy]
+                elif row is not None:
                     state["proposals"] = [dict(r, state="approved") if r is row else r for r in rows]
             if rows is None:
                 return self._json(404, {"error": f"w2 fixture: no such endpoint {path}"})
             if row is None:
                 return self._json(502, {"error": f"proposal {pid} is not pending"})
             if row.get("kind_type") == "memory":
+                edited = body.get("content") if isinstance(body, dict) else None
+                payload = row.get("payload") if isinstance(row.get("payload"), dict) else {}
+                with state_lock:
+                    landed = state["memories"] is not None
+                    if landed:
+                        state["memories"] = list(state["memories"]) + [{
+                            "id": f"proposal:{pid}-edit" if isinstance(edited, str) else f"proposal:{pid}",
+                            "content": edited if isinstance(edited, str) else payload.get("content", ""),
+                            "tier": payload.get("tier") or "semantic", "scope": "", "facets": dict(row.get("facets") or {}),
+                            "created_at": int(time.time())}]
+                if landed:
+                    return self._json(200, {"outcome": "promoted",
+                                            "active_id": f"proposal:{pid}-edit" if isinstance(edited, str) else f"proposal:{pid}",
+                                            **({"edited": {"from": pid, "to": f"{pid}-edit"}} if isinstance(edited, str) else {})})
                 return self._json(200, {"outcome": "promoted", "active_id": f"mem-active-{pid}"})
             return self._json(200, {"outcome": "handed_off", "payload": row.get("payload"),
                                     "landing": {"outcome": "landed", "ruleId": f"proposal:{pid}"}})

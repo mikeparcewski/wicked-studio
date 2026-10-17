@@ -517,8 +517,9 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
   );
 
   if (isHosted(tab)) {
-    // The Steering and Evals surfaces, hosted as Desk tabs: App renders the page for the address the
-    // tab carries (`&at=/rules/...`), so every sub-page and deep link keeps working.
+    // The hosted pages (Repositories, Steer, Memory, Agents, Evaluate): App renders the page for the
+    // address the tab carries (`&at=/rules/...`, `&at=/memory?view=proposals`), so every sub-page and
+    // deep link keeps working.
     return (
       <div data-testid="desk" data-object="desk" data-desk="v2" data-tab={tab} className="wk-desk wk-desk2 wk-desk2--hosted">
         <div className="wk-desk2-hosted-head">{header}{tabs}</div>
@@ -545,9 +546,9 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
   );
 }
 
-export type DeskTab = 'work' | 'runs' | 'repositories' | 'report' | 'understand' | 'steer' | 'agents' | 'evaluate';
-export type HostedTab = 'repositories' | 'steer' | 'agents' | 'evaluate';
-const HOSTED: readonly HostedTab[] = ['repositories', 'steer', 'agents', 'evaluate'];
+export type DeskTab = 'work' | 'runs' | 'repositories' | 'report' | 'understand' | 'steer' | 'memory' | 'agents' | 'evaluate';
+export type HostedTab = 'repositories' | 'steer' | 'memory' | 'agents' | 'evaluate';
+const HOSTED: readonly HostedTab[] = ['repositories', 'steer', 'memory', 'agents', 'evaluate'];
 function isHosted(t: DeskTab): t is HostedTab { return (HOSTED as readonly string[]).includes(t); }
 
 /** The Desk's tabs, in order (the address carries `?tab=`; Work is the default). */
@@ -558,12 +559,13 @@ export const DESK_TABS: readonly { id: DeskTab; label: string }[] = [
   { id: 'report', label: 'Report' },
   { id: 'understand', label: 'Understand' },
   { id: 'steer', label: 'Steer' },
+  { id: 'memory', label: 'Memory' },
   { id: 'agents', label: 'Agents' },
   { id: 'evaluate', label: 'Evaluate' },
 ];
 
 /** Each hosted tab's own page when the address names none. */
-export const HOSTED_HOME: Record<HostedTab, string> = { repositories: '/repos', steer: '/rules', agents: '/agents', evaluate: '/testing/evals' };
+export const HOSTED_HOME: Record<HostedTab, string> = { repositories: '/repos', steer: '/rules', memory: '/memory', agents: '/agents', evaluate: '/testing/evals' };
 
 /** A Desk tab's address; `at` = the hosted page's own address; `base` = `/` or a project's page. */
 export function deskTabPath(t: DeskTab, at?: string, base = '/'): string {

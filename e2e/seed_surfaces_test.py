@@ -2833,7 +2833,7 @@ def memory_rows(page) -> list[dict]:
     """The memories browser's rows as (id, scope, content) — read after the panel settled."""
     return tid(page, "memory-row").evaluate_all(
         "els => els.map(e => ({id: e.getAttribute('data-memory-id'), "
-        "scope: (e.querySelector('[data-testid=\"memory-scope\"]')?.textContent ?? '').trim(), "
+        "scope: e.getAttribute('data-scope') ?? '', "
         "content: (e.querySelector('[data-testid=\"memory-content\"]')?.textContent ?? '').trim()}))"
     )
 
@@ -3560,21 +3560,21 @@ def run_scenarios(rig: Rig, page) -> None:
 
     # ── Memories (read-only browse; retire is a scope-subtree erasure — never exercised, studio#206) ──
     def memories_state() -> tuple[str, int]:
-        tid(page, "memories-panel").wait_for(timeout=20_000)
+        tid(page, "memory-page").wait_for(timeout=20_000)
         tid(page, "memories-loading").wait_for(state="detached", timeout=30_000)
         seen = wait_any(page, ["memories-empty", "memories-list", "memories-unsupported", "memories-error"], 15_000)
         assert seen != "memories-error", text_of(tid(page, "memories-error"))
         return seen, tid(page, "memory-row").count()
 
     def mem2() -> str:
-        goto(page, "/steering/memories")
+        goto(page, "/memory")
         state, count = memories_state()
         tid(page, "memories-search").fill("seed-surfaces")
         tid(page, "memories-search-go").click()
         state2, count2 = memories_state()
         goto(page, f"/p/{quote(ctx['B'])}")
         tid(page, "project-dashboard", project_id=ctx["B"]).wait_for(timeout=15_000)
-        goto(page, "/steering/memories")
+        goto(page, "/memory")
         state3, count3 = memories_state()
         assert (state3, count3) == (state, count), f"memories differ by context: {(state, count)} vs {(state3, count3)}"
         return f"panel state '{state}' ({count} rows) on the isolated store; search round-trips to '{state2}' ({count2}); identical when reached after Project B ({state3}, {count3})"
@@ -3588,7 +3588,7 @@ def run_scenarios(rig: Rig, page) -> None:
             rig.estate_tool("memory.capture", {"content": content, "scope": scope, "tier": "semantic", "kind": "fact", "facets": SUITE_FACET})
         stored = memories_api(MEMORY_SCOPE_ROOT)
         assert {m["scope"] for m in stored} == {MEMORY_SCOPE_KEEP, MEMORY_SCOPE_RETIRE}, f"GET /memory under {MEMORY_SCOPE_ROOT}: {stored}"
-        goto(page, "/steering/memories")
+        goto(page, "/memory")
         state, _count = memories_state()
         assert state == "memories-list", f"memories panel state {state!r} after seeding two memories"
         rows = memory_rows(page)
@@ -3606,29 +3606,30 @@ def run_scenarios(rig: Rig, page) -> None:
     def memr() -> str:
         """Retire ONE scope through the UI (row → Retire… → typed banner → confirm): the note reports
         exactly one erased memory, the sibling scope survives, and a full reload + the wire agree."""
-        goto(page, "/steering/memories")
+        goto(page, "/memory")
         state, _ = memories_state()
         assert state == "memories-list"
-        target = tid(page, "memory-row").filter(has=page.locator('[data-testid="memory-scope"]', has_text=MEMORY_SCOPE_RETIRE))
+        target = page.locator(f'[data-testid="memory-row"][data-scope="{MEMORY_SCOPE_RETIRE}"]')
         assert target.count() == 1, f"{target.count()} rows carry scope {MEMORY_SCOPE_RETIRE}"
-        target.locator('[data-testid="memory-retire"]').click()
-        banner = tid(page, "memory-retire-confirm-banner")
-        banner.wait_for(timeout=10_000)
-        assert MEMORY_SCOPE_RETIRE in text_of(banner) and "SUBTREE" in text_of(banner), text_of(banner)
+        target.locator('[data-testid="memory-actions-button"]').click()
+        page.get_by_role("menuitem", name="Retire everything in this scope…").click()
+        dialog = tid(page, "memory-retire-dialog")
+        dialog.wait_for(timeout=10_000)
+        assert MEMORY_SCOPE_RETIRE in text_of(dialog) and "at or under" in text_of(dialog), text_of(dialog)
         tid(page, "memory-retire-confirm").click()
         note = tid(page, "memories-note")
         note.wait_for(timeout=20_000)
-        assert text_of(note) == f"Retired scope {MEMORY_SCOPE_RETIRE} — erased 1 memory.", f"retire note: {text_of(note)!r}"
-        # The panel re-reads the wire after the retire; wait for the row to be GONE (not for a loading
+        assert text_of(note).startswith(f"Retired everything in {MEMORY_SCOPE_RETIRE}: 1 memory erased."), f"retire note: {text_of(note)!r}"
+        # The page re-reads the wire after the retire; wait for the row to be GONE (not for a loading
         # marker that may have come and gone), then read the surviving rows.
         page.wait_for_function(
             "s => document.querySelector('[data-testid=\"memories-loading\"]') === null && "
-            "!Array.from(document.querySelectorAll('[data-testid=\"memory-scope\"]')).some(e => (e.textContent ?? '').trim() === s)",
+            "!document.querySelector(`[data-testid=\"memory-row\"][data-scope=\"${s}\"]`)",
             arg=MEMORY_SCOPE_RETIRE, timeout=20_000,
         )
         scopes = {r["scope"] for r in memory_rows(page)}
         assert MEMORY_SCOPE_RETIRE not in scopes and MEMORY_SCOPE_KEEP in scopes, f"rows after retire: {scopes}"
-        goto(page, "/steering/memories")
+        goto(page, "/memory")
         memories_state()
         scopes = {r["scope"] for r in memory_rows(page)}
         assert MEMORY_SCOPE_RETIRE not in scopes and MEMORY_SCOPE_KEEP in scopes, f"rows after a full reload: {scopes}"
@@ -3636,14 +3637,14 @@ def run_scenarios(rig: Rig, page) -> None:
         keep = memories_api(MEMORY_SCOPE_KEEP)
         assert len(keep) == 1 and keep[0]["content"] == MEMORY_CONTENT_KEEP, f"the sibling scope changed: {keep}"
         assert len(memories_api(MEMORY_SCOPE_ROOT)) == 1, "the suite's root scope should hold exactly the surviving sibling"
-        return (f"{MEMORY_SCOPE_RETIRE} retired through the UI (Retire… → subtree banner → confirm); note 'erased 1 memory'; "
+        return (f"{MEMORY_SCOPE_RETIRE} retired through the UI (⋯ → Retire everything in this scope… → confirm); note '1 memory erased'; "
                 f"the sibling {MEMORY_SCOPE_KEEP} survives in the UI and on the wire, before and after a full reload")
 
     suite.run("MEM-R", "Retire one exclusive scope through the UI; the sibling scope survives; reload + wire agree", memr, requires=("MEM-S",))
 
     def prps() -> str:
         """[SUBSTITUTE producer] two MEMORY proposals via `proposal.submit` on the scratch store (agents are
-        the only producer today) — the dashboard's review inbox lists both with their content."""
+        the only producer today) — the Memory page's Proposals view lists both with their content."""
         for content in (PROPOSAL_CONTENT_APPROVE, PROPOSAL_CONTENT_REJECT):
             rig.estate_tool("proposal.submit", {"kind_type": "memory", "payload": {"content": content, "tier": "semantic"}, "facets": SUITE_FACET})
         pending = proposals_api("pending")
@@ -3655,29 +3656,29 @@ def run_scenarios(rig: Rig, page) -> None:
         assert set(ids) == {PROPOSAL_CONTENT_APPROVE, PROPOSAL_CONTENT_REJECT}, f"pending proposals after submit: {pending}"
         ctx["proposal_approve"], ctx["proposal_reject"] = ids[PROPOSAL_CONTENT_APPROVE], ids[PROPOSAL_CONTENT_REJECT]
         rig.needles.extend(ids.values())
-        goto(page, "/steering/dashboard")
-        tid(page, "governance-dashboard").wait_for(timeout=20_000)
+        goto(page, "/memory?view=proposals")
+        tid(page, "memory-proposals").wait_for(timeout=20_000)
         section = proposal_section(page, "memory")
         for content, pid_ in ids.items():
             card = section.locator(f'[data-testid="proposal-card"][data-proposal-id="{pid_}"]')
             card.wait_for(timeout=15_000)
             assert card.get_attribute("data-kind") == "memory"
             assert text_of(card.locator('[data-testid="proposal-memory-content"]')) == content, text_of(card)
-        return (f"[SUBSTITUTE producer → proposal.submit ×2 (memory)] the dashboard's Memory proposals inbox lists "
+        return (f"[SUBSTITUTE producer → proposal.submit ×2 (memory)] the Memory page's proposals list "
                 f"{ctx['proposal_approve']} and {ctx['proposal_reject']} with their content")
 
-    suite.run("PRP-S", "Seed two memory proposals (substitute producer) → the dashboard inbox lists both", prps)
+    suite.run("PRP-S", "Seed two memory proposals (substitute producer) → the Memory page's proposals list both", prps)
 
     def prpa() -> str:
         pid_ = ctx["proposal_approve"]
-        goto(page, "/steering/dashboard")
+        goto(page, "/memory?view=proposals")
         section = proposal_section(page, "memory")
         card = section.locator(f'[data-testid="proposal-card"][data-proposal-id="{pid_}"]')
         card.wait_for(timeout=15_000)
         card.locator('[data-testid="proposal-approve"]').click()
         note = section.locator('[data-testid="proposals-section-note"]')
         note.wait_for(timeout=20_000)
-        assert text_of(note) == f"Approved {pid_}.", f"note after approve: {text_of(note)!r}"
+        assert text_of(note).startswith("Approved: "), f"note after approve: {text_of(note)!r}"
         card.wait_for(state="detached", timeout=15_000)
         approved = [p["id"] for p in proposals_api("approved")]
         assert pid_ in approved, f"GET /proposals?state=approved lacks {pid_}: {approved}"
@@ -3685,10 +3686,10 @@ def run_scenarios(rig: Rig, page) -> None:
         st, body = api("GET", f"/memory?query={quote(PROPOSAL_CONTENT_APPROVE, safe='')}")
         promoted = [m for m in body["memories"] if m["content"] == PROPOSAL_CONTENT_APPROVE]
         assert len(promoted) == 1, f"approval did not materialize the memory (GET /memory query): {body}"
-        goto(page, "/steering/dashboard")
+        goto(page, "/memory?view=proposals")
         section = proposal_section(page, "memory")
         assert section.locator(f'[data-testid="proposal-card"][data-proposal-id="{pid_}"]').count() == 0, "the approved proposal is still pending after a reload"
-        goto(page, "/steering/memories")
+        goto(page, "/memory")
         memories_state()
         assert PROPOSAL_CONTENT_APPROVE in {r["content"] for r in memory_rows(page)}, "the memories browser does not list the promoted memory"
         return (f"{pid_} approved through the inbox (note 'Approved …'); it left pending, GET /proposals?state=approved lists it, the memory "
@@ -3698,20 +3699,20 @@ def run_scenarios(rig: Rig, page) -> None:
 
     def prpr() -> str:
         pid_ = ctx["proposal_reject"]
-        goto(page, "/steering/dashboard")
+        goto(page, "/memory?view=proposals")
         section = proposal_section(page, "memory")
         card = section.locator(f'[data-testid="proposal-card"][data-proposal-id="{pid_}"]')
         card.wait_for(timeout=15_000)
         card.locator('[data-testid="proposal-reject"]').click()
         note = section.locator('[data-testid="proposals-section-note"]')
         note.wait_for(timeout=20_000)
-        assert text_of(note) == f"Rejected {pid_}.", f"note after reject: {text_of(note)!r}"
+        assert text_of(note).startswith("Rejected: "), f"note after reject: {text_of(note)!r}"
         card.wait_for(state="detached", timeout=15_000)
         assert pid_ in [p["id"] for p in proposals_api("rejected")], "GET /proposals?state=rejected lacks the rejected proposal"
         assert pid_ not in [p["id"] for p in proposals_api("pending")]
         st, body = api("GET", f"/memory?query={quote(PROPOSAL_CONTENT_REJECT, safe='')}")
         assert [m for m in body["memories"] if m["content"] == PROPOSAL_CONTENT_REJECT] == [], f"a REJECTED proposal wrote a memory: {body}"
-        goto(page, "/steering/dashboard")
+        goto(page, "/memory?view=proposals")
         section = proposal_section(page, "memory")
         assert section.locator(f'[data-testid="proposal-card"][data-proposal-id="{pid_}"]').count() == 0, "the rejected proposal is still pending after a reload"
         return f"{pid_} rejected through the inbox (note 'Rejected …'); it left pending, GET /proposals?state=rejected lists it, and no memory was written"

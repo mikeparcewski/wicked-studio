@@ -1,6 +1,8 @@
 import { isAskTurnRun } from './askTurn.js';
 import type { Campaign } from '../api/campaigns.js';
 import { memoryPayload, policyPayload, proposalKind, type Proposal } from '../api/proposals.js';
+import { memoryPath } from '../api/memory.js';
+import { steerProposalsPath } from '../api/steering.js';
 import type { DecisionView } from '../api/decisions.js';
 import { decisionRowText, statementOf } from './decisionLine.js';
 import type { RepoEntry, SessionView } from '../api/types.js';
@@ -692,8 +694,9 @@ export function needsYouRows(inputs: NeedsYouInputs): NeedRow[] {
       text: decision !== null ? decisionRowText(statement, decision.edits?.steering_type ?? decision.derived.steering_type) : proposalConsequenceLine(p),
       tone: 'gate',
       at: typeof p.created_at === 'number' ? p.created_at * 1000 : null,
-      subjectPath: '/steering/dashboard',
-      action: { kind: 'open', path: '/steering/dashboard', label: 'Review ›' },
+      // A memory proposal is reviewed on the Memory page, a rule proposal on Steer's Proposals view.
+      subjectPath: kind === 'memory' ? memoryPath('proposals') : steerProposalsPath(),
+      action: { kind: 'open', path: kind === 'memory' ? memoryPath('proposals') : steerProposalsPath(), label: 'Review ›' },
     });
   }
 
