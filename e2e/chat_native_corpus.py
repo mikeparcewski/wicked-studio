@@ -238,6 +238,29 @@ def get(path: str, now0: int):
                 [{"ord": 1, "rows": [{"event_id": 803, "event_type": "wicked.team.gate.opened", "payload": {
                     "kind": "plan_approval", "gate_id": "g-cn-plan", "ord": 1, "plan_rev": 1, "band": "40-69",
                     "high_risk": False, "mode": "auto", "reason": None, "reviewing_ord": 0}}]}])
+        if rid == "r-cn-live":
+            # The run's team (the run panel's Agents and spend): claude leads (chosen), score 30 → 1 monitor;
+            # codex could not open as a member (the reason is shown), pi watches; the research step went to pi.
+            return 200, _team(rid, [
+                {"event_id": 821, "event_type": "wicked.team.path.started", "payload": {
+                    "cli": "claude", "selection": "chosen", "roster": ["claude", "codex", "pi"], "workflow": "feature"}},
+                {"event_id": 822, "event_type": "wicked.team.path.scored", "payload": {
+                    "score": 30, "deterministic": 30, "basis": "intent", "plan": {"monitors": 1, "depth": "standard"},
+                    "reasons": ["reach 30: 3 changed symbols"]}}],
+                [{"ord": 1, "rows": [{"event_id": 823, "event_type": "wicked.team.step.claimed", "payload": {
+                    "ord": 1, "attempt": 0, "by": "pi", "step_id": "understand", "phase": "understand", "role": "neutral",
+                    "kind": "agent"}}]},
+                 {"ord": 2, "rows": [
+                     {"event_id": 824, "event_type": "wicked.team.step.claimed", "payload": {
+                         "ord": 2, "attempt": 0, "by": "claude", "step_id": "build", "phase": "build", "role": "creator",
+                         "kind": "agent"}},
+                     {"event_id": 825, "event_type": "wicked.team.member.joined", "payload": {
+                         "ord": 2, "attempt": 0, "member_id": "m1", "open_seq": 1, "seat": "codex", "role": "monitor",
+                         "status": "failed", "reason": "team plan monitors=1",
+                         "error": "codex's seat container could not start: the seat image is not built"}},
+                     {"event_id": 826, "event_type": "wicked.team.member.joined", "payload": {
+                         "ord": 2, "attempt": 0, "member_id": "m2", "open_seq": 1, "seat": "pi", "role": "monitor",
+                         "status": "attached", "reason": "team plan monitors=1", "error": None}}]}])
         return 200, _untamed(rid)
     if leaf == "gate":
         if rid == "r-cn-plan":

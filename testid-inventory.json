@@ -11,9 +11,9 @@
   "version": 1,
   "studioVersion": "0.10.2",
   "counts": {
-    "files": 233,
-    "occurrences": 2949,
-    "static": 2557,
+    "files": 234,
+    "occurrences": 2959,
+    "static": 2567,
     "dynamic": 69,
     "computed": 24
   },
@@ -5601,6 +5601,12 @@
       ]
     },
     {
+      "testId": "launch-wizard-lead",
+      "files": [
+        "src/components/launch/LaunchWizard.tsx"
+      ]
+    },
+    {
       "testId": "launch-wizard-next",
       "files": [
         "src/components/launch/LaunchWizard.tsx"
@@ -5668,6 +5674,12 @@
     },
     {
       "testId": "launch-wizard-review",
+      "files": [
+        "src/components/launch/LaunchWizard.tsx"
+      ]
+    },
+    {
+      "testId": "launch-wizard-review-lead",
       "files": [
         "src/components/launch/LaunchWizard.tsx"
       ]
@@ -10477,6 +10489,54 @@
       "testId": "run-tab-stranded",
       "files": [
         "src/components/session/RunTab.tsx"
+      ]
+    },
+    {
+      "testId": "run-tab-team",
+      "files": [
+        "src/components/session/TeamRosterLines.tsx"
+      ]
+    },
+    {
+      "testId": "run-tab-team-checks",
+      "files": [
+        "src/components/session/TeamRosterLines.tsx"
+      ]
+    },
+    {
+      "testId": "run-tab-team-lead",
+      "files": [
+        "src/components/session/TeamRosterLines.tsx"
+      ]
+    },
+    {
+      "testId": "run-tab-team-member",
+      "files": [
+        "src/components/session/TeamRosterLines.tsx"
+      ]
+    },
+    {
+      "testId": "run-tab-team-member-error",
+      "files": [
+        "src/components/session/TeamRosterLines.tsx"
+      ]
+    },
+    {
+      "testId": "run-tab-team-members",
+      "files": [
+        "src/components/session/TeamRosterLines.tsx"
+      ]
+    },
+    {
+      "testId": "run-tab-team-watch",
+      "files": [
+        "src/components/session/TeamRosterLines.tsx"
+      ]
+    },
+    {
+      "testId": "run-tab-team-work",
+      "files": [
+        "src/components/session/TeamRosterLines.tsx"
       ]
     },
     {

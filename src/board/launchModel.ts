@@ -204,6 +204,8 @@ export interface WorkflowLaunchChoices {
   reducedAssurance: boolean;
   skipQeReason: string | null;
   chatId: string | null;
+  /** The lead agent the operator chose (a key among `seats`, on a daemon that takes it); null = Random. */
+  primary?: string | null;
 }
 
 export function workflowLaunchBody(c: WorkflowLaunchChoices): LaunchBodyWithDeliver {
@@ -218,5 +220,15 @@ export function workflowLaunchBody(c: WorkflowLaunchChoices): LaunchBodyWithDeli
   if (body.deliver === 'pr' && c.autoDeliverGate) body.deliverGate = 'auto';
   if (c.skipQeReason !== null && c.skipQeReason.trim() !== '') body.skipQeAcceptance = { reason: c.skipQeReason.trim() };
   if (c.chatId !== null) body.chatId = c.chatId;
+  if (c.primary != null && c.seats.some((s) => s.key === c.primary)) body.primary = c.primary;
   return body;
+}
+
+/**
+ * The lead agent a launch sends (DES-TEAMING-002 §8.1): the operator's pick when the daemon takes
+ * `primary` and the pick is still one of the launch's seats, else null (Random — the engine picks).
+ */
+export function launchLead(lead: string | null, seats: readonly RosterSeat[], capable: boolean): string | null {
+  if (!capable || lead === null) return null;
+  return seats.some((s) => s.key === lead) ? lead : null;
 }

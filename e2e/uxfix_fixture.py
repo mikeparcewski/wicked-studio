@@ -6037,6 +6037,8 @@ class W2Handler(SimpleHTTPRequestHandler):
                     caps["askPath"] = True  # ASK-C1 (api-types 0.92.0)
                 if state["sessions"] and state["walkthrough"]:
                     caps["walkthroughRoots"] = True  # WT-W1 (api-types 0.74.0)
+                if state["chat_native"]:
+                    caps["launchPrimary"] = True  # the Lead agent (crew#1077, api-types 0.128.0)
             self._json(200, {"status": "ok", "version": "w2-fixture", "ping": "pong", "capabilities": caps})
             return True
         # Idea 15: the delivery freeze switch (crew#694).

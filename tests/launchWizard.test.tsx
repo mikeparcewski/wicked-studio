@@ -16,6 +16,8 @@ import { resetPlanCatalog } from '../src/store/planCatalog.js';
 import { clearRepoCache } from '../src/store/repoCache.js';
 import { clearCachedRoster, setCachedRoster } from '../src/store/rosterCache.js';
 import { clearCachedWorkflows, setCachedWorkflows } from '../src/store/workflowCache.js';
+import { useCapabilities } from '../src/store/capabilities.js';
+import { launchLead, workflowLaunchBody } from '../src/board/launchModel.js';
 
 const seat = (key: string): RosterSeat =>
   ({ key, display_name: key, binary: key, enabled_for_council: true, health: { status: 'active', since: 'x' }, signed_in: true }) as RosterSeat;
@@ -75,6 +77,7 @@ beforeEach(() => {
   clearRepoCache();
   resetLaunchWizard();
   useComposerChips.setState({ byComposer: {} });
+  useCapabilities.setState({ launchPrimary: false });
 });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); resetComposerSeats(); });
 
@@ -249,5 +252,56 @@ describe('Draft epics — a launch-wizard job (operator 2026-10-12: the Product 
     expect(await screen.findByTestId('launch-wizard-error')).toBeInTheDocument();
     expect(useLaunchWizard.getState().draft?.requirements).toHaveLength(1);
     expect(navigate).not.toHaveBeenCalled();
+  });
+});
+
+describe('the Lead agent (DES-TEAMING-002 §8.1)', () => {
+  async function toOptions(): Promise<void> {
+    render(<Harness />);
+    act(() => { openLaunchWizard({ workflowId: 'mcp-server' }); });
+    fireEvent.change(await screen.findByTestId('launch-wizard-intent'), { target: { value: 'build an MCP server for the ledger' } });
+    next();
+    await waitFor(() => expect((screen.getByTestId('launch-wizard-repo') as HTMLSelectElement).value).toBe('repo-1'));
+    next();
+  }
+
+  it('is not offered, and nothing is sent, on a daemon that does not take it', async () => {
+    await toOptions();
+    expect(screen.queryByTestId('launch-wizard-lead')).toBeNull();
+    next();
+    fireEvent.click(screen.getByTestId('launch-wizard-launch'));
+    await waitFor(() => expect(posts.some((p) => p.path === '/runs')).toBe(true));
+    expect(posts.find((p) => p.path === '/runs')!.body).not.toHaveProperty('primary');
+  });
+
+  it('defaults to Random (no primary sent), lists every helper on, and sends the one picked', async () => {
+    useCapabilities.setState({ launchPrimary: true });
+    await toOptions();
+    const pick = screen.getByTestId('launch-wizard-lead') as HTMLSelectElement;
+    expect(pick.value).toBe('');
+    expect([...pick.options].map((o) => o.textContent)).toEqual(['Random', 'claude', 'codex', 'pi', 'copilot']);
+    fireEvent.change(pick, { target: { value: 'codex' } });
+    next();
+    expect(screen.getByTestId('launch-wizard-review-lead').textContent).toContain('codex');
+    fireEvent.click(screen.getByTestId('launch-wizard-launch'));
+    await waitFor(() => expect(posts.some((p) => p.path === '/runs')).toBe(true));
+    expect(posts.find((p) => p.path === '/runs')!.body).toMatchObject({ primary: 'codex' });
+  });
+
+  it('a signed-out helper is not offered as the lead', async () => {
+    useCapabilities.setState({ launchPrimary: true });
+    setCachedRoster([seat('claude'), { ...seat('codex'), signed_in: false } as RosterSeat, seat('pi')]);
+    await toOptions();
+    const pick = screen.getByTestId('launch-wizard-lead') as HTMLSelectElement;
+    expect([...pick.options].map((o) => o.value)).toEqual(['', 'claude', 'pi']);
+  });
+
+  it('a lead whose helper is turned off reads as Random again', () => {
+    expect(launchLead('codex', [seat('claude'), seat('pi')], true)).toBeNull();
+    expect(launchLead('pi', [seat('claude'), seat('pi')], true)).toBe('pi');
+    expect(launchLead('pi', [seat('claude'), seat('pi')], false)).toBeNull();
+    const base = { workflowId: 'bug', intent: 'x', seats: [seat('claude')], repoRef: null, projectId: null, humanConfirm: undefined, deliver: null, autoDeliverGate: false, reducedAssurance: false, skipQeReason: null, chatId: null };
+    expect(workflowLaunchBody({ ...base, primary: 'codex' })).not.toHaveProperty('primary');
+    expect(workflowLaunchBody({ ...base, primary: 'claude' })).toMatchObject({ primary: 'claude' });
   });
 });

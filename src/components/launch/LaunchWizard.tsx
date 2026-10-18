@@ -3,12 +3,13 @@ import { api, apiWire } from '../../api/client.js';
 import { qeRefusalOf } from '../../board/qeRefusal.js';
 import { goToPath, QeRefusalWarning } from '../QeRefusalWarning.js';
 import type { RepoEntry } from '../../api/types.js';
-import { gatePostureWord, workflowLaunchBody } from '../../board/launchModel.js';
+import { gatePostureWord, launchLead, workflowLaunchBody } from '../../board/launchModel.js';
 import { qeAcceptanceSetting, workflowRequiresQe } from '../../board/assuranceModel.js';
 import { QeOffNote } from '../QeOffNote.js';
 import { workflowItems, WORKFLOWS_LOADING_LINE } from '../../board/workflowCommand.js';
 import { sessionPath } from '../../board/sessionModel.js';
 import { seatLabel, userSeats } from '../../board/seatNames.js';
+import { seatCanCarry } from '../gateVerdictModel.js';
 import { COMPOSER_DEFAULT_GATE_POSTURE } from '../composerDefaults.js';
 import type { ConfirmMode } from '../ContextPopover.js';
 import { useModalEscape } from '../Modal.js';
@@ -112,6 +113,7 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
   const toggleSeat = useLaunchSeats((s) => s.toggle);
   const deliverGateCap = useCapabilities((s) => s.deliverGate);
   const reducedCap = useCapabilities((s) => s.reducedAssurance);
+  const leadCap = useCapabilities((s) => s.launchPrimary);
   const chatIdOnLaunch = useCapabilities((s) => s.chatIdOnLaunch);
   const [repos, setRepos] = useState<RepoEntry[] | null>(getCachedRepos());
   const [qeCap, setQeCap] = useState(false);
@@ -163,6 +165,12 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
   const eligible = useMemo(() => userSeats(roster).filter((s) => s.enabled_for_council), [roster]);
   const seats = eligible.filter((s) => !seatOff(s.key, dropped, picked));
   const offerReduced = reducedCap && seats.length === 1;
+  // The Lead agent (DES-TEAMING-002 §8.1): offered when the daemon takes it and there is a choice to
+  // make; a pick whose helper was turned off reads as Random again (never a stale seat sent).
+  // Only a seat that can take work may lead: crew refuses a signed-out or benched lead by name.
+  const leadable = seats.filter((s) => s.signed_in !== false && seatCanCarry(s));
+  const offerLead = leadCap && leadable.length > 1;
+  const lead = launchLead(offerLead ? draft.lead : null, leadable, leadCap);
   const beforeOrd = COMPOSER_DEFAULT_GATE_POSTURE.beforeOrd;
   const autoDeliver = draft.confirmMode === 'none';
   const deliver: 'pr' | 'none' | null = deliverVisible ? (draft.deliverOn ? 'pr' : 'none') : null;
@@ -346,6 +354,7 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
         reducedAssurance: offerReduced && draft.reduced,
         skipQeReason: offerQe && !qeOff && draft.skipQe ? draft.skipQeReason : null,
         chatId,
+        primary: lead,
       });
       if (offerQe && force && (qeOff || !draft.skipQe)) body.forceQeAcceptance = true;
       forcedRef.current = body.forceQeAcceptance === true;
@@ -523,6 +532,21 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
                   )}
                 </fieldset>
               )}
+              {offerLead && !demoing && (
+                <label className="wk-launch-wizard-field">
+                  <span className="wk-field-label">Lead agent</span>
+                  <select
+                    data-testid="launch-wizard-lead"
+                    className="wk-field"
+                    value={lead ?? ''}
+                    onChange={(e) => update({ lead: e.target.value === '' ? null : e.target.value })}
+                  >
+                    <option value="">Random</option>
+                    {leadable.map((s) => <option key={s.key} value={s.key}>{seatLabel(s)}</option>)}
+                  </select>
+                  <span className="wk-field-note">Who leads the job and does every step not handed to another helper. The other helpers watch and check its work.</span>
+                </label>
+              )}
               {demoing ? (
                 <p className="wk-field-note" data-testid="launch-wizard-demo-gates">It stops for your yes twice: after the plan (the script and chapters, before anything records) and after the review.</p>
               ) : (
@@ -689,6 +713,7 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
               <div><dt>What</dt><dd className="wk-launch-wizard-review-intent">{draft.intent.trim()}</dd></div>
               <div><dt>Where</dt><dd>{repoName ?? 'No repository'}{projectName !== null ? ` · in ${projectName}` : ''}</dd></div>
               {seats.length > 0 && <div><dt>Helpers</dt><dd>{seats.map(seatLabel).join(', ')}</dd></div>}
+              {offerLead && <div data-testid="launch-wizard-review-lead"><dt>Lead agent</dt><dd>{lead === null ? 'Random (picked when it starts)' : seatLabel(leadable.find((s) => s.key === lead)!)}</dd></div>}
               <div><dt>Ask me</dt><dd>{gatePostureWord(draft.confirmMode, beforeOrd, deliver === 'pr' && deliverGateCap === true)}</dd></div>
               {deliverVisible && <div><dt>Delivery</dt><dd>{draft.deliverOn ? 'A pull request when done' : 'Stays on its branch'}</dd></div>}
               {offerReduced && draft.reduced && <div><dt>Checks</dt><dd>Reduced assurance (one helper builds and reviews)</dd></div>}
