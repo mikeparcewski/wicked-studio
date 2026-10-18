@@ -1,6 +1,6 @@
 {
   "name": "wicked-studio",
-  "version": "0.10.2",
+  "version": "0.11.0",
   "description": "Where you direct your coding agents: start a job with a chat, sign your agents in once, watch them work in sandboxes, and approve what matters with the evidence. The browser UI for wicked-crew.",
   "type": "module",
   "repository": {
@@ -72,7 +72,7 @@
     "typescript-eslint": "^8.63.0",
     "vite": "^6.4.3",
     "vitest": "^5.0.2",
-    "wicked-crew-api-types": "0.120.0"
+    "wicked-crew-api-types": "0.128.0"
   },
   "engines": {
     "node": ">=22.0.0"
