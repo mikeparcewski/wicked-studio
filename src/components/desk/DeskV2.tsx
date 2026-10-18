@@ -31,7 +31,7 @@ import { sessionIdOf, sessionPath } from '../../board/sessionModel.js';
 import { useDeskRecord, useDeskRecordByProject } from '../../hooks/useDeskRecord.js';
 import { useHistoryScroll } from '../../hooks/useHistoryState.js';
 import { useDisplayText } from '../../hooks/useHomePath.js';
-import { useSettledNeeds } from '../../hooks/useNeedsRows.js';
+import { ALL_NEEDS_SCOPE, useSettledNeeds } from '../../hooks/useNeedsRows.js';
 import { usePhone } from '../../hooks/usePhone.js';
 import type { Navigate } from '../../hooks/useRoute.js';
 import { useRoster } from '../../hooks/useRoster.js';
@@ -138,7 +138,8 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
   const roster = useRoster();
   const displayText = useDisplayText();
   const readState = deskReadState(runsLoaded, runsError);
-  const settled = useSettledNeeds(needRows, readState === 'known', readState === 'failed');
+  // studio#833: a project's Desk counts its own rows, so it settles on its own (never the rail's count).
+  const settled = useSettledNeeds(needRows, readState === 'known', readState === 'failed', projectId ?? ALL_NEEDS_SCOPE);
   const [rereading, setRereading] = useState(false);
   const rereadSources = useCallback((): void => { setRereading(true); void useNeedsSources.getState().load(0).finally(() => setRereading(false)); }, []);
   const runsShown = readState === 'known' || readState === 'stale';

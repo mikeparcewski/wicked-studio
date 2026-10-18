@@ -152,6 +152,9 @@ describe('the page', () => {
     expect(rows[0]?.querySelector('[data-testid="rules-row-line"]')?.getAttribute('data-sentence')).toBe('A Development rule for Kestrel — helpers are told about it when it applies; it never blocks.');
     // Short facts, not the sentence repeated under every rule: id, type, reach, origin.
     expect(rows[0]?.querySelector('[data-testid="rules-row-line"]')?.textContent).toBe('Proposed ruleDevelopmentKestrelFrom your words');
+    // studio#836: the reach is visible on every row — the project's name, or "Everywhere" (the Memory page's word).
+    expect(rows.map((r) => r.querySelector('[data-testid="rules-row-reach"]')?.textContent)).toStrictEqual(['Kestrel', 'Everywhere', 'Everywhere']);
+    expect(rows[1]?.querySelector('[data-testid="rules-row-reach"]')?.getAttribute('data-reach')).toBe('everywhere');
     const open = rows[0]?.querySelector('[data-testid="rules-row-open"]') as HTMLAnchorElement;
     expect(open.getAttribute('href')).toBe('/rules/proposal%3Apr-auto');
     fireEvent.click(open);

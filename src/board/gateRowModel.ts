@@ -184,6 +184,36 @@ export interface GateRowModel {
   qe?: QeGate;
   /** studio#639: a consent gate with no install plan — the engine's sentence on why no files are listed. */
   consentMissing?: string;
+  /** studio#835: the step's seat cannot work (out of quota, signed out, not installed) and the engine will not
+   *  send the step to it again — the row says so first; absent on every other gate. */
+  deadSeat?: DeadSeat;
+}
+
+/** studio#835: a dead-seat gate's seat, and why it cannot work, in the engine's cause token's terms. */
+export interface DeadSeat {
+  cli: string;
+  cause: 'quota' | 'signed_out' | 'not_installed' | 'unusable';
+}
+
+/**
+ * studio#835: the engine's dead-seat gate — "Unit 1 (copilot) failed on a dead seat: … Reassign the unit to a
+ * different CLI (sign one in first if needed) and approve to retry, or reject to stop the run". The seat is
+ * benched for the run and never sent the step again, so a plain approve (or approve with a note) only parks
+ * the run here again. The cause is the run's own `seatBenched` frame for that seat, else the prompt's words.
+ */
+export function deadSeatOf(prompt: string, events: readonly CoreEvent[] | null): DeadSeat | null {
+  const cli = /^\s*Unit\s+\d+\s+\(([^)]+)\)\s+failed on a dead seat\b/i.exec(prompt)?.[1]?.trim();
+  if (cli === undefined || cli === '') return null;
+  let said = prompt;
+  for (let i = (events ?? []).length - 1; i >= 0; i -= 1) {
+    const e = events![i] as unknown as Record<string, unknown>;
+    if (e['type'] === 'seatBenched' && e['cli'] === cli && typeof e['reason'] === 'string') { said = `${e['reason']} ${prompt}`; break; }
+  }
+  const cause: DeadSeat['cause'] = /quota|usage_limit|rate.?limit|429/i.test(said) ? 'quota'
+    : /not_logged_in|not logged in|signed out|unauthori[sz]ed|401/i.test(said) ? 'signed_out'
+      : /not_installed|not installed/i.test(said) ? 'not_installed'
+        : 'unusable';
+  return { cli, cause };
 }
 
 /** The choice set before the depth fields (`withDepth` adds them). */
@@ -313,6 +343,20 @@ export function isToolUnitGate(units: readonly WorkUnit[], gateOrd: number): boo
 
 /** studio#612: the floor fix's words — what an approve with a note does at a read-only phase's floor gate. */
 export const FLOOR_FIX_LABEL = 'Fix with a note';
+/**
+ * studio#832: on an escalation whose engine approve RETRIES the phase ("confirm to retry the phase",
+ * "Approve to retry the phase against the restored tree") an approve with a note runs the same step
+ * again with the note; the run does not move on. It was labelled "Approve and steer" (and, on a
+ * review gate, relabelled "Approve with a note for the next step"), and the operator who took it saw
+ * the same verify run again and fail the same way.
+ */
+export const RETRY_NOTE_LABEL = 'Retry this step with a note';
+export const RETRY_NOTE_TITLE = 'Run this step again with your note; the run does not move on. To have the builder change something, Send back.';
+/** Whether the engine's approve at this gate re-runs the phase (its prompt says so). */
+export function approveRetriesPhase(prompt: string): boolean {
+  return /\b(?:confirm|approve) to retry the phase\b/i.test(prompt);
+}
+
 export const FLOOR_FIX_TITLE = 'A seat other than this read-only phase makes this fix in the worktree, then only the floor re-runs; the phase does not run again and its verdict stands.';
 
 export interface SessionGateInput {
@@ -676,11 +720,15 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
     // Build core choices WITHOUT stop: send-back (or the denied unit's re-run), escalation arms, steer.
     // Stop is always the last inline choice, appended after the reassign slot.
     const coreWithoutStop: GateRowChoice[] = [];
-    if (deniedUnit) {
+    // studio#835: a dead seat is never sent the step again — an approve (with a note or not), or a send-back to
+    // the same seat, would only park the run here once more, so the row offers what can work: another helper
+    // in this job (Reassign), or Stop.
+    const deadSeat = deadSeatOf(gate.prompt, events);
+    if (deadSeat === null && deniedUnit) {
       coreWithoutStop.push({ key: 'approve', label: 'Approve', decision: { approve: true }, needsNote: false, title: 'Re-run the step from the start under the same policies; the captured output is not accepted.' });
-    } else if (qeNoVerdict) {
+    } else if (deadSeat === null && qeNoVerdict) {
       coreWithoutStop.push({ key: 'retry', label: QE_RETRY_LABEL, decision: { approve: true }, needsNote: false, title: QE_RETRY_TITLE });
-    } else if (sendBackAccepted(units, gate.ord)) {
+    } else if (deadSeat === null && sendBackAccepted(units, gate.ord)) {
       coreWithoutStop.push({ key: 'send-back', label: 'Send back', decision: { approve: false, action: 'request_changes' }, needsNote: true, title: 'Return to the creator with the reviewer\'s failing items.' });
     }
     // A QE FAIL keeps Send back first (the work is what failed), and offers the review again beside it.
@@ -708,20 +756,22 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
     // nothing is approved, so it is not called that. (The judge-unavailable QE gate keeps its
     // approve: there the operator's approve IS the judgment.)
     const qeRetryNote = qe !== undefined && qe !== null && qe.outcome !== 'unavailable';
-    coreWithoutStop.push(floorFix
+    if (deadSeat === null) coreWithoutStop.push(floorFix
       ? { key: 'steer', label: FLOOR_FIX_LABEL, decision: { approve: true }, needsNote: true, title: FLOOR_FIX_TITLE }
       : qeRetryNote
         ? { key: 'steer', label: QE_RETRY_NOTE_LABEL, decision: { approve: true }, needsNote: true, title: QE_RETRY_NOTE_TITLE }
-        : { key: 'steer', label: 'Approve and steer', decision: escalationScopeTarget !== null ? { approve: true, amendScope: 'creator' } : { approve: true }, needsNote: true, title: 'Approve and add a note to steer the next creator phase.' });
+        : approveRetriesPhase(gate.prompt)
+          ? { key: 'steer', label: RETRY_NOTE_LABEL, decision: escalationScopeTarget !== null ? { approve: true, amendScope: 'creator' } : { approve: true }, needsNote: true, title: RETRY_NOTE_TITLE }
+          : { key: 'steer', label: 'Approve and steer', decision: escalationScopeTarget !== null ? { approve: true, amendScope: 'creator' } : { approve: true }, needsNote: true, title: 'Approve and add a note to steer the next creator phase.' });
 
     // Cap at 3 (stop always occupies the 4th inline slot); excess goes to overflow.
     const escInline = coreWithoutStop.slice(0, 3);
     const overflow: GateRowChoice[] = coreWithoutStop.slice(3);
 
     // Reassign candidates
-    const failedCli = failedSeatOf(units, gate.ord);
+    const failedCli = failedSeatOf(units, gate.ord) ?? deadSeat?.cli;
     const reassignList: GateRowChoice[] = [];
-    if (!isToolUnitGate(units, gate.ord) && isSeatFailure(isEscalationGate(gate.prompt, verdict), failedCli)) {
+    if (!isToolUnitGate(units, gate.ord) && isSeatFailure(isEscalationGate(gate.prompt, verdict) || deadSeat !== null, failedCli)) {
       const candidates = reassignCandidates(pool, failedCli ?? null, roster, reassignRefusedOf(units, gate.ord));
       for (const c of candidates) {
         if (isOfferable(c)) {
@@ -767,7 +817,7 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
     if (!deniedUnit && !qeNoVerdict && recommended !== null && rec?.kind === 'retry-findings' && rec.prefill !== null) {
       noteDefault = rec.prefill;
     }
-    return { reason, question, choices: escInline, overflow, noteDefault, recommended, detailItems, ...(qe !== null ? { qe } : {}) };
+    return { reason, question, choices: escInline, overflow, noteDefault, recommended, detailItems, ...(qe !== null ? { qe } : {}), ...(deadSeat !== null ? { deadSeat } : {}) };
   }
 
   if (reason === 'retry') {

@@ -405,7 +405,8 @@ export function SteerSurface({ pathname, search, navigate: navigateRaw, runs = [
           <span className="wk-se-rule-meta" data-testid="rules-row-line" data-sentence={sentence} title={sentence}>
             <span className="wk-se-rule-id">{r.id.startsWith('proposal:') ? 'Proposed rule' : r.id}</span>
             <span>{STEERING_TYPE_LABELS[steeringTypeOf(r)]}</span>
-            {scoped && <span>{projectName(r.targets.project) ?? 'One project'}</span>}
+            {/* studio#836: the reach is on the row, scoped or not — "Everywhere", the Memory page's word for it. */}
+            <span data-testid="rules-row-reach" data-reach={scoped ? 'project' : 'everywhere'}>{scoped ? projectName(r.targets.project) ?? 'One project' : 'Everywhere'}</span>
             {r.effect === 'deny' ? <span>Blocks</span> : r.effect === 'warn' ? <span>Warns</span> : r.effect === 'allow_with_conditions' ? <span>Adds conditions</span> : r.effect === 'allow' ? <span>Allows</span> : null}
             {fromYourWords(r) && <span>From your words</span>}
             {st !== undefined && <span className="wk-se-evalst" data-eval={st}>{RULE_EVAL_WORDS[st]}</span>}

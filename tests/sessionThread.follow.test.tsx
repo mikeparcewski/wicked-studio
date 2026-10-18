@@ -194,7 +194,8 @@ describe('the thread follows its newest line only from the bottom', () => {
     await waitFor(() => expect(screen.queryAllByTestId('session-turn').length).toBe(2));
     await new Promise((r) => setTimeout(r, 5));
     expect(el.scrollTop).toBe(el.scrollHeight - 500); // following
-    // The operator scrolls up to read.
+    // The operator scrolls up to read (their own input: a wheel — studio#834).
+    fireEvent.wheel(el);
     el.scrollTop = 20;
     fireEvent.scroll(el);
     await new Promise((r) => setTimeout(r, 5));
@@ -204,5 +205,29 @@ describe('the thread follows its newest line only from the bottom', () => {
     await new Promise((r) => setTimeout(r, 5));
     expect(el.scrollTop).toBe(20);
     expect(useSessionDrafts.getState().scroll['chat-pay']).toBe(20);
+  });
+
+  // studio#834: a finished run opened 753 px above its final summary. The browser moved the thread on
+  // its own as the run's words filled in, and that scroll read as the operator's: following stopped,
+  // and the spot was saved as their place, so every later open came back short too.
+  it('a scroll the operator did not make (no wheel, touch, key or pointer) neither stops the follow nor saves a place', async () => {
+    transcript = [QUESTION];
+    render(<SessionPage sessionId="chat-pay" runs={[VIEW]} runsLoaded needRows={[]} navigate={() => {}} onAsk={() => {}} />);
+    await waitFor(() => expect(screen.queryAllByTestId('session-turn').length).toBe(1));
+    const el = screen.getByTestId('session-thread');
+    act(() => { useAskThreadStore.getState().ingest({ type: 'chatDelta', chat: 'chat-pay', cliKey: 'claude', text: 'The retry handler and the webhook both post the charge; the ledger shows two rows per order.', turn_id: 't1' } as never); });
+    await waitFor(() => expect(screen.queryAllByTestId('session-turn').length).toBe(2));
+    await new Promise((r) => setTimeout(r, 5));
+    expect(el.scrollTop).toBe(el.scrollHeight - 500);
+    // The browser shifts the thread (scroll anchoring as a step's words land above): no operator input.
+    el.scrollTop = 20;
+    fireEvent.scroll(el);
+    await new Promise((r) => setTimeout(r, 5));
+    expect(el.scrollTop).toBe(el.scrollHeight - 500); // back at the newest message
+    expect(useSessionDrafts.getState().scroll['chat-pay']).toBeUndefined();
+    act(() => { useAskThreadStore.getState().ingest({ type: 'chatDelta', chat: 'chat-pay', cliKey: 'claude', text: ' Each retry re-posts the same intent id, and the webhook posts it once more on confirmation.', turn_id: 't1' } as never); });
+    await screen.findByText(/once more on confirmation/);
+    await new Promise((r) => setTimeout(r, 5));
+    expect(el.scrollTop).toBe(el.scrollHeight - 500); // still following
   });
 });

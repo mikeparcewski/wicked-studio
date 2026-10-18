@@ -113,6 +113,15 @@ function pausedStepQuestion(p: string, gateKind: string | undefined): string | n
   if (/^\s*Unit\s+\d+\s+\([^)]*\)\s+refused its environment\b/i.test(p) || /^\s*Unit\s+\d+\s+failed again on attempt\s+\d+/i.test(p)) {
     return 'The step could not start — retry or stop?';
   }
+  // studio#835: the dead-seat gate names the helper and why it cannot work ("Copilot is out of quota").
+  const dead = /^\s*Unit\s+\d+\s+\(([^)#]+)(?:#[^)]*)?\)\s+failed on a dead seat\b/i.exec(p)?.[1]?.trim();
+  if (dead !== undefined && dead !== '') {
+    const name = dead.charAt(0).toUpperCase() + dead.slice(1);
+    const why = /quota|usage_limit|rate.?limit|429/i.test(p) ? 'is out of quota'
+      : /not_logged_in|not logged in|signed out/i.test(p) ? 'is signed out'
+        : /not_installed|not installed/i.test(p) ? 'is not installed' : 'cannot work right now';
+    return `${name} ${why} — move the step to another helper, or stop?`;
+  }
   if (gateKind === 'escalation') return 'The step was escalated — how should it go on?';
   return null;
 }

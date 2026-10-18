@@ -158,15 +158,34 @@ export const NEEDS_SETTLE_MS = 15_000;
 const NEEDS_SOURCE_NAMES: Readonly<Record<NeedsSource, string>> = {
   chats: 'conversations', proposals: 'proposals', repos: 'repositories', campaigns: 'test campaigns',
 };
-/** The last complete count, kept across refreshes so a re-read never flickers to a smaller number. */
-let lastComplete: number | null = null;
-/** The count the sources settled on, and since when it has held still (studio#723). */
-let candidate: { count: number; since: number } | null = null;
+/**
+ * Per counted scope (studio#833): the last complete count, kept across refreshes so a re-read never
+ * flickers to a smaller number, and the count the sources settled on with since when it has held
+ * still (studio#723). One record per scope, never one for the page: the rail counts every run and a
+ * project's Desk counts that project's, so a shared record had them reset each other's quiet clock on
+ * every render — an empty project's Needs you never left its skeleton — and either could show the
+ * other's number.
+ */
+interface SettledScope {
+  lastComplete: number | null;
+  candidate: { count: number; since: number } | null;
+}
+const settledScopes = new Map<string, SettledScope>();
+function settledScope(scope: string): SettledScope {
+  let rec = settledScopes.get(scope);
+  if (rec === undefined) {
+    rec = { lastComplete: null, candidate: null };
+    settledScopes.set(scope, rec);
+  }
+  return rec;
+}
+/** The scope of a count over every run (the rail, the phone badge, the home Desk). */
+export const ALL_NEEDS_SCOPE = 'all';
 /** How long a settled count must hold still before it is said (studio#723: a reload read 26, then 43,
  *  as gates, memberships and the slower sources landed one after another). */
 export const NEEDS_QUIET_MS = 1500;
 /** Test seam. */
-export function resetSettledNeedsForTest(): void { lastComplete = null; candidate = null; }
+export function resetSettledNeedsForTest(): void { settledScopes.clear(); }
 
 /**
  * HONEST COUNTS (design/UI-CONTRACT.md §5; studio#681 row 4): the needs count is shown only once
@@ -178,16 +197,19 @@ export function resetSettledNeedsForTest(): void { lastComplete = null; candidat
  *    (the Desk says "At least N"; the rail badge "N+").
  * After the first `complete`, a refresh keeps that number until the next `complete`, and a FAILED
  * runs read (`runsFailed`, studio#684) keeps it too: a read that failed never changes a count.
+ * `scope` names WHAT is counted (studio#833): every caller counting the same rows passes the same
+ * scope; a project's Desk passes its project id.
  */
-export function useSettledNeeds(needRows: readonly NeedRow[], runsKnown: boolean, runsFailed = false): { phase: 'loading' | 'complete' | 'partial'; count: number | null; missing: string[] } {
+export function useSettledNeeds(needRows: readonly NeedRow[], runsKnown: boolean, runsFailed = false, scope: string = ALL_NEEDS_SCOPE): { phase: 'loading' | 'complete' | 'partial'; count: number | null; missing: string[] } {
   const s = useNeedsSources();
+  const rec = settledScope(scope);
   const [since] = useState(() => Date.now());
   const [, tick] = useState(0);
   // Operator ruling 2026-10-12: the number counts decisions + failures; reviews are counted on their own.
   const count = attentionBadge(needRows as NeedRow[]);
   const now = Date.now();
   const held = (): { phase: 'loading' | 'complete'; count: number | null; missing: string[] } =>
-    lastComplete === null ? { phase: 'loading', count: null, missing: [] } : { phase: 'complete', count: lastComplete, missing: [] };
+    rec.lastComplete === null ? { phase: 'loading', count: null, missing: [] } : { phase: 'complete', count: rec.lastComplete, missing: [] };
   // Decide first (no early return before the effects): what to say, and when to look again.
   let out: { phase: 'loading' | 'complete' | 'partial'; count: number | null; missing: string[] };
   let wakeAt: number | null = null;
@@ -205,12 +227,12 @@ export function useSettledNeeds(needRows: readonly NeedRow[], runsKnown: boolean
     const valueOf = (k: NeedsSource): unknown => (k === 'campaigns' ? true : s[k]);
     const missing = sources.filter((k) => s.readAt[k] === undefined || valueOf(k) === null).map((k) => NEEDS_SOURCE_NAMES[k]);
     // Complete or partial alike, a number is said only once it has held still (codex r1 on studio#723).
-    if (candidate === null || candidate.count !== count) candidate = { count, since: now };
-    if (now - candidate.since < NEEDS_QUIET_MS) {
+    if (rec.candidate === null || rec.candidate.count !== count) rec.candidate = { count, since: now };
+    if (now - rec.candidate.since < NEEDS_QUIET_MS) {
       out = held();
-      wakeAt = candidate.since + NEEDS_QUIET_MS;
+      wakeAt = rec.candidate.since + NEEDS_QUIET_MS;
     } else if (missing.length === 0) {
-      lastComplete = count;
+      rec.lastComplete = count;
       out = { phase: 'complete', count, missing };
     } else {
       out = { phase: 'partial', count, missing };

@@ -332,6 +332,11 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          #   chat-7721 / r-7721-ask: a CLOSED ask (crew dropped the transcript) whose answer is the run's
          #     `answer-1` output (needs `ask_path` + `run_chat_id`).
          "e2e7721": False, "e2e7721_gate_kind": False, "e2e7721_reassign_409": False,
+         # e2e7721r2 — the defects the second :7721 E2E found (e2e/desk_e2e7721_r2_test.py; wicked-studio#832-#835):
+         #   r-7721b-verify: a verify unit's FAIL escalation ("confirm to retry the phase"), approve = re-run it.
+         #   r-7721b-dead: the run's only seat (copilot) benched for quota — the engine's dead-seat gate.
+         #   r-7721b-long: a finished run whose step words are read on demand, each answered ~0.4 s late.
+         "e2e7721r2": False,
          # retry_gate — r-retry paused on the RETRY kind (studio#557): the review unit on codex
          #   changed the tree under review, the engine restored the creator's tree (worktree_guard
          #   denial, `restored: true`), and the gate carries no escalation kind or spelling — so the
@@ -4205,6 +4210,86 @@ E7721_EVENTS = {
 }
 
 
+# ── e2e7721r2 (wicked-studio#832-#835, e2e/desk_e2e7721_r2_test.py) ────────────
+E7721B_T0 = NOW0 - 40 * MIN
+E7721B_VERIFY_PROMPT = ("Unit 2 verdict is NOT PASS (the evaluator's verdict is FAIL) — confirm to retry the phase, "
+                        "request changes to send the review back to the creator phase, or reject to cancel the run")
+E7721B_DEAD_PROMPT = ("Unit 1 (copilot) failed on a dead seat: dead seat: 'copilot' exhausted its quota on unit 1 "
+                      "(quota_exhausted) and no eligible seat remains — 1 of 1 seats benched. Reassign the unit to a "
+                      "different CLI (sign one in first if needed) and approve to retry, or reject to stop the run")
+E7721B_LONG_STEPS = ["scope", "research", "plan", "build", "test", "review", "verify", "deliver"]
+
+
+def e7721b_runs() -> list:
+    verify = session("r-7721b-verify", "awaiting_human", "Add a median() to tiny-math", "verify")
+    verify["session"].update(clis=["codex"], unit_ix=1, created_at=E7721B_T0 // 1000)
+    verify["units"] = [
+        _e7721_unit("r-7721b-verify", "build", 1, "build", "done", "codex", role="creator"),
+        _e7721_unit("r-7721b-verify", "verify", 2, "test", "rejected", "codex", role="evaluator"),
+    ]
+    dead = session("r-7721b-dead", "awaiting_human", "What does mean([2, 4]) return in tiny-math?", "answer-1")
+    dead["session"].update(clis=["copilot"], unit_ix=0, created_at=(E7721B_T0 + MIN) // 1000)
+    dead["units"] = [_e7721_unit("r-7721b-dead", "answer-1", 1, "recon", "rejected", "copilot")]
+    long = session("r-7721b-long", "completed", "Fix the off-by-one in sum() in tiny-math", "scope")
+    long["session"].update(clis=["codex"], unit_ix=len(E7721B_LONG_STEPS) - 1, created_at=(E7721B_T0 + 2 * MIN) // 1000,
+                           ended_at=(E7721B_T0 + 20 * MIN) // 1000)
+    long["units"] = [_e7721_unit("r-7721b-long", k, i + 1, "build", "done", "codex")
+                     for i, k in enumerate(E7721B_LONG_STEPS)]
+    return [verify, dead, long]
+
+
+def e7721b_output(key: str) -> str:
+    return (f"{key.upper()} — what this step did\n" + "\n".join(
+        f"- {key} note {i}: the loop in `sum()` starts at 1, so the first element is never added; "
+        "starting at 0 fixes it and the test passes." for i in range(1, 7)))
+
+
+E7721B_EVENTS = {
+    "r-7721b-verify": [
+        {"type": "sessionStarted", "session": "r-7721b-verify", "problem": "Add a median() to tiny-math",
+         "workflowId": "feature", "cliCount": 1, "governed": True, "entityMode": "shared", "ts": E7721B_T0, "seq": 1},
+        {"type": "unitDispatched", "session": "r-7721b-verify", "ord": 2, "cli": "codex", "attempt": 0,
+         "ts": E7721B_T0 + 5 * MIN, "seq": 2},
+        {"type": "gateEvaluated", "session": "r-7721b-verify", "ord": 2, "ts": E7721B_T0 + 6 * MIN, "seq": 3,
+         "criterion": "median() is tested", "hasDeterministicFloor": True, "deterministicPass": True,
+         "agentVerdict": None, "agentReasoning": None, "evaluatorPass": False, "evaluatorPolicies": [],
+         "evaluatorVerdict": "FAIL", "denialReason": "the evaluator's verdict is FAIL",
+         "denial": {"source": "evaluator_verdict", "reason": "the evaluator's verdict is FAIL", "claimId": None,
+                    "ruleIds": [], "deniedTool": None, "phase": "verify"},
+         "combined": False, "judgeCli": None, "judgeDistinct": None},
+        {"type": "gateEscalated", "session": "r-7721b-verify", "ord": 2, "ts": E7721B_T0 + 6 * MIN + 10, "seq": 4,
+         "attempt": 0, "condition": "verdict_not_pass", "denialSource": "evaluator_verdict"},
+        {"type": "awaitingHuman", "session": "r-7721b-verify", "ord": 2, "prompt": E7721B_VERIFY_PROMPT,
+         "reviewingOrd": 2, "gateKind": "escalation", "ts": E7721B_T0 + 6 * MIN + 20, "seq": 5},
+    ],
+    "r-7721b-dead": [
+        {"type": "sessionStarted", "session": "r-7721b-dead", "problem": "What does mean([2, 4]) return in tiny-math?",
+         "workflowId": "ask", "cliCount": 1, "governed": True, "entityMode": "shared", "ts": E7721B_T0 + MIN, "seq": 1},
+        {"type": "unitDispatched", "session": "r-7721b-dead", "ord": 1, "cli": "copilot", "attempt": 0,
+         "ts": E7721B_T0 + 2 * MIN, "seq": 2},
+        {"type": "seatBenched", "session": "r-7721b-dead", "ord": 1, "cli": "copilot",
+         "reason": "quota_exhausted (no success in the run)", "source": "worker", "ts": E7721B_T0 + 2 * MIN + SEC, "seq": 3},
+        {"type": "stepFailed", "session": "r-7721b-dead", "ord": 1, "failureKind": "workerError",
+         "detail": "dead seat: 'copilot' exhausted its quota on unit 1 (quota_exhausted) and no eligible seat remains",
+         "ts": E7721B_T0 + 2 * MIN + 2 * SEC, "seq": 4},
+        {"type": "gateEscalated", "session": "r-7721b-dead", "ord": 1, "ts": E7721B_T0 + 2 * MIN + 3 * SEC, "seq": 5,
+         "attempt": 0, "condition": "dead_seat", "denialSource": "dead_seat",
+         "verdictSummary": "seat 'copilot' exhausted its quota"},
+        {"type": "awaitingHuman", "session": "r-7721b-dead", "ord": 1, "prompt": E7721B_DEAD_PROMPT,
+         "reviewingOrd": None, "gateKind": "escalation", "ts": E7721B_T0 + 2 * MIN + 4 * SEC, "seq": 6},
+    ],
+    "r-7721b-long": [
+        {"type": "sessionStarted", "session": "r-7721b-long", "problem": "Fix the off-by-one in sum() in tiny-math",
+         "workflowId": "bug", "cliCount": 1, "governed": True, "entityMode": "shared", "ts": E7721B_T0 + 2 * MIN, "seq": 1},
+    ] + [ev for i, k in enumerate(E7721B_LONG_STEPS) for ev in (
+        {"type": "unitDispatched", "session": "r-7721b-long", "ord": i + 1, "cli": "codex", "attempt": 0,
+         "ts": E7721B_T0 + (3 + 2 * i) * MIN, "seq": 2 + 2 * i},
+        {"type": "unitOutputCaptured", "session": "r-7721b-long", "ord": i + 1, "attempt": 0, "outputBytes": 600,
+         "stepStatus": "ok", "governed": True, "ts": E7721B_T0 + (4 + 2 * i) * MIN, "seq": 3 + 2 * i},
+    )] + [{"type": "sessionCompleted", "session": "r-7721b-long", "ts": E7721B_T0 + 20 * MIN, "seq": 99}],
+}
+
+
 GOVERNANCE_BLOCKS = {
     "healthy": {
         "store": {"path": GOV_STORE, "source": "core-db-sidecar"},
@@ -4537,6 +4622,8 @@ def assemble_runs() -> list:
             runs = runs + [_seat_run()]
         if state["e2e7721"] and not state["no_runs"]:
             runs = runs + e7721_runs()
+        if state["e2e7721r2"] and not state["no_runs"]:
+            runs = runs + e7721b_runs()
         if state["retry_gate"] and not state["no_runs"]:
             runs = runs + [_retry_run()]
         if state["home_paths"] and not state["no_runs"]:
@@ -6474,7 +6561,7 @@ class W2Handler(SimpleHTTPRequestHandler):
                 walk_on = state["walkthrough"]
                 ask_on = state["ask_path"]
             with state_lock:
-                e7721_team = state["e2e7721"] and rid.startswith("r-7721-")
+                e7721_team = (state["e2e7721"] and rid.startswith("r-7721-")) or (state["e2e7721r2"] and rid.startswith("r-7721b-"))
             if e7721_team:
                 # crew's answer for a run that was never teamed (RunTeamResponse, teamed: false).
                 self._json(200, {"runId": rid, "streamFloor": None, "pending": None, "units": [], "rows": [],
@@ -6525,6 +6612,15 @@ class W2Handler(SimpleHTTPRequestHandler):
             with state_lock:
                 e7721_on = state["e2e7721"]
                 e7721_kind = state["e2e7721_gate_kind"]
+            with state_lock:
+                e7721b_on = state["e2e7721r2"]
+            if e7721b_on and rid in ("r-7721b-verify", "r-7721b-dead"):
+                verify = rid == "r-7721b-verify"
+                self._json(200, {"runId": rid, "ord": 2 if verify else 1, "lifecycle": "open",
+                                 "prompt": E7721B_VERIFY_PROMPT if verify else E7721B_DEAD_PROMPT,
+                                 "receivedAt": iso(E7721B_T0 + (6 * MIN + 20 if verify else 2 * MIN + 4 * SEC)),
+                                 "gateKind": "escalation"})
+                return True
             if e7721_on and rid == "r-7721-reassign":
                 self._json(200, {"runId": rid, "ord": 3, "lifecycle": "open", "prompt": E7721_REASSIGN_PROMPT,
                                  "receivedAt": iso(E7721_T0 + 6 * MIN + SEC),
@@ -6682,6 +6778,8 @@ class W2Handler(SimpleHTTPRequestHandler):
                     events = list(SEAT_EVENTS)
                 if state["e2e7721"] and rid in E7721_EVENTS:
                     events = list(E7721_EVENTS[rid])
+                if state["e2e7721r2"] and rid in E7721B_EVENTS:
+                    events = list(E7721B_EVENTS[rid])
                 if state["retry_gate"] and rid == "r-retry":
                     events = list(RETRY_EVENTS)
             with state_lock:
@@ -6761,6 +6859,13 @@ class W2Handler(SimpleHTTPRequestHandler):
                 e7721_on = state["e2e7721"]
             if e7721_on and rid == "r-7721-ask" and key == "answer-1":
                 self._json(200, {"output": E7721_ANSWER})
+                return True
+            with state_lock:
+                e7721b_long = state["e2e7721r2"] and rid == "r-7721b-long" and key in E7721B_LONG_STEPS
+            if e7721b_long:
+                # The step's words land after the page has opened (crew reads them on demand), as on :7721.
+                time.sleep(0.4)
+                self._json(200, {"output": e7721b_output(key)})
                 return True
             if gate_move_on and rid == "r-review" and key in GATE_MOVE_OUTPUTS:
                 self._json(200, GATE_MOVE_OUTPUTS[key])
