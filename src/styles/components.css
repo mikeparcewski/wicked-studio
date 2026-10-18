@@ -1859,6 +1859,36 @@ p.wk-run-tab-muted { margin: var(--space-1) 0; }
 .wk-run-tab-tech summary { cursor: pointer; }
 .wk-run-tab-ribbon { display: block; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-muted); font-size: var(--text-xs); }
 .wk-run-tab :is(button, select, summary):focus-visible, .wk-run-tab-ribbon:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-shadow: var(--focus-ring); }
+/* The run panel (src/board/runPanelModel.ts): six folding sections; an old sheet tab is a smaller fold inside one. */
+.wk-run-tab { gap: 0; }
+.wk-run-tab-pick { margin-bottom: var(--space-3); }
+.wk-run-tab-block { display: flex; flex-direction: column; min-width: 0; }
+.wk-run-tab-block + .wk-run-tab-block { margin-top: var(--space-3); }
+.wk-run-tab-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin-top: var(--space-3); }
+.wk-run-tab-actions:empty { display: none; }
+.wk-run-tab-actions > .wk-sheet-actions { display: contents; }
+.wk-run-tab-button--lead { align-self: flex-start; margin-top: var(--space-2); }
+.wk-run-tab-download { margin-top: var(--space-3); }
+.wk-rp-section { min-width: 0; border-top: 1px solid var(--border); }
+.wk-rp-section:first-of-type { border-top: 0; }
+.wk-rp-heading { margin: 0; }
+.wk-rp-toggle { display: flex; align-items: baseline; gap: var(--space-2); width: 100%; min-height: 40px; padding: var(--space-3) 0; border: 0; background: none; color: var(--ink-high); font: inherit; font-size: var(--text-sm); font-weight: var(--weight-semi); text-align: left; cursor: pointer; }
+.wk-rp-label { flex: 0 0 auto; }
+.wk-rp-summary { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-muted); font-weight: var(--weight-normal); text-align: right; }
+.wk-rp-section[data-quiet='true'][data-open='false'] .wk-rp-toggle { color: var(--ink-muted); font-weight: var(--weight-medium); }
+.wk-rp-chevron { flex: 0 0 auto; width: 0; height: 0; border-top: 4px solid transparent; border-bottom: 4px solid transparent; border-left: 5px solid currentColor; transform: translateY(-1px); transition: transform 120ms ease; }
+[aria-expanded='true'] > .wk-rp-chevron { transform: translateY(-1px) rotate(90deg); }
+.wk-rp-body { padding: 0 0 var(--space-4) var(--space-4); min-width: 0; }
+.wk-rp-body[hidden] { display: none; }
+.wk-rp-item { margin-top: var(--space-2); min-width: 0; }
+.wk-rp-item-toggle { display: flex; align-items: center; gap: var(--space-2); width: 100%; min-height: 32px; padding: var(--space-1) 0; border: 0; background: none; color: var(--ink-body); font: inherit; font-size: var(--text-sm); text-align: left; cursor: pointer; }
+.wk-rp-item-toggle:hover { color: var(--ink-high); }
+.wk-rp-item-body { padding: var(--space-1) 0 var(--space-2) var(--space-4); min-width: 0; overflow-wrap: anywhere; }
+.wk-rp-item-body[hidden] { display: none; }
+/* The run sections' bodies carry their wide rail's own padding and surface: inside a fold they sit flush. */
+.wk-rp-item-body > [data-testid='sheet-section'] > div { padding: 0 !important; background: none !important; }
+.wk-rp-toggle:focus-visible, .wk-rp-item-toggle:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-shadow: var(--focus-ring); }
+@media (prefers-reduced-motion: reduce) { .wk-rp-chevron { transition: none; } }
 /* H3: the run page is the chat — the thread beside the one host panel (option B), the ribbon below 1200 px. */
 .wk-session-frame { flex: 1 1 auto; display: flex; min-width: 0; min-height: 0; }
 .wk-session-frame > .wk-session { flex: 1 1 auto; }
@@ -1897,3 +1927,6 @@ button.wk-who-name:hover { text-decoration: underline; }
 /* H4: the deck review was a rail beside the morphing pane (absolutely placed in the artifact). As the
    host panel's Review tab it is ordinary flow inside the panel — never laid over the thread or the card's Full screen. */
 .wk-hpanel .wk-deck-review { position: static; inset: auto; width: auto; border-left: 0; padding: 12px 16px 24px; overflow: visible; z-index: auto; }
+/* The run panel's actions row: the run's own actions (Draft update, Archive) at the row's size, not a card's. */
+.wk-run-tab-actions .wk-prop-btn { min-height: var(--control-h-sm); padding: var(--space-1) var(--space-2); border-radius: var(--radius-sm); font-size: var(--text-sm); }
+.wk-rp-item-body .wk-sheet-section > button { align-self: flex-start; }

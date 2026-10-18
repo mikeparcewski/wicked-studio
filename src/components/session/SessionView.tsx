@@ -23,7 +23,7 @@ import { SinceYouLeft } from './SinceYouLeft.js';
 import { Composer, type ComposerSend, type ComposerSuggestion } from './Composer.js';
 import { quoteLabel } from '../../board/aboutChips.js';
 import { addAboutChip } from '../../store/composerChips.js';
-import { openSheet, stopRun, useSheets } from '../../store/sheets.js';
+import { claimSessionSheet, openSheet, stopRun, useSheets } from '../../store/sheets.js';
 import type { DecisionView } from '../../api/decisions.js';
 import { turnKey, useDecisionsStore } from '../../store/decisions.js';
 import { DecisionLine } from '../decisions/DecisionLine.js';
@@ -52,7 +52,9 @@ import { TurnWho } from './TurnWho.js';
 import { RunRibbon, RunTab } from './RunTab.js';
 import { useRunHostValue } from './RunHost.js';
 import { HostPanel, useNarrow } from '../editorHost/HostPanel.js';
-import { useHostPanel } from '../../editors/hostApi.js';
+import { RUN_TAB, useHostPanel } from '../../editors/hostApi.js';
+import { panelPlaceOf } from '../../board/runPanelModel.js';
+import { useRunPanel } from '../../store/runPanel.js';
 import { RunHostProvider } from '../editorHost/RunHostContext.js';
 import { RunBlock } from './RunConversation.js';
 import { stepWord } from '../../board/runConversation.js';
@@ -149,12 +151,6 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
 }): React.ReactElement {
   const ref = useMemo(() => parseSessionId(sessionId), [sessionId]);
   const runChatId = useCapabilities((s) => s.runChatId);
-  // S16a-2c: a run address with `#governance` (the MCP usage page's link) opens that run's ⋯ sheet
-  // on its Governance tab on arrival — the run page's rule, said on the session.
-  useEffect(() => {
-    if (ref.kind !== 'run' || window.location.hash !== GOVERNANCE_HASH) return;
-    openSheet({ kind: 'session', sessionId: `run:${ref.runId}` }, 'governance');
-  }, [ref]);
   // With C1, a run launched from a chat belongs to that chat's session: a `run:<id>` address for
   // it (followed while `/health` was still loading) is replaced by the chat's (Copilot).
   useEffect(() => {
@@ -726,6 +722,33 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
   }, []);
   // Open is the panel beside the chat (wide) or over it (below 1200 px): the toggle says which it is now.
   const panelNarrow = useNarrow();
+  // The run panel IS this session's look-underneath (src/board/runPanelModel.ts): while this page is up, a session
+  // sheet asked for it or one of its runs (⌘K, a sign-in line, `#governance`) opens the panel at the same content.
+  const claim = useRef({ mine, narrow: panelNarrow });
+  claim.current = { mine, narrow: panelNarrow };
+  useEffect(() => claimSessionSheet({
+    // A session with no run here has no panel to hold it: its sheet opens as before.
+    owns: (id) => claim.current.mine.length > 0 && (id === sessionId || claim.current.mine.some((v) => `run:${v.session.id}` === id)),
+    open: (id, tab) => {
+      const place = panelPlaceOf(tab);
+      const rp = useRunPanel.getState();
+      if (id.startsWith('run:') && claim.current.mine.length > 1) rp.pick(sessionId, id.slice(4));
+      rp.focusOn(place.section, place.item);
+      const hp = useHostPanel.getState();
+      hp.setTab(RUN_TAB);
+      if (claim.current.narrow) hp.setOverlay(true); else hp.setFolded(false);
+    },
+  }), [sessionId]);
+  // S16a-2c: a run address with `#governance` (the MCP usage page's link) opens that run's Governance on arrival — in
+  // the run panel, after its closed default above, once the run is here to hold it (until then it is the sheet's).
+  const governed = useRef<string | null>(null);
+  const runHere = ref.kind === 'run' && mine.some((v) => v.session.id === ref.runId);
+  useEffect(() => {
+    if (ref.kind !== 'run' || window.location.hash !== GOVERNANCE_HASH || governed.current === ref.runId) return;
+    if (!runHere && !runsLoaded) return;
+    governed.current = ref.runId;
+    openSheet({ kind: 'session', sessionId: `run:${ref.runId}` }, 'governance');
+  }, [ref, runHere, runsLoaded]);
   const detailsOpen = useHostPanel((s) => (panelNarrow ? s.overlay : !s.folded));
 
   // DES §7.4: the retired "Demo video" header button is an ordinary turn suggestion — a run here that made a deck or a
@@ -813,7 +836,6 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
             {badge > 0 && <> · <mark className="wk-desk-mark">{badge === 1 ? '1 needs you' : `${badge} need you`}</mark></>}
           </p>
         </div>
-        {/* S11: look underneath the session — goal, helpers, activity, sign-ins and the run's sections. */}
         {/* S16a-4e: a chat off the ask path promotes into Build from its own session (the retired chat page's door). */}
         {ref.kind === 'chat' && !askPathOn && conversation === 'live' && messages.some((m) => m.kind === 'user') && (
           <button type="button" data-testid="session-chat-promote" title="Open the Build composer prefilled with this conversation as context — editable before launch" onClick={() => { setRetryPrefill(chatPromotePrefill(ref.chatId, messages, mine[0] !== undefined && typeof mine[0].session.project_id === 'string' ? mine[0].session.project_id : null)); navigate('/runs/new'); }} className="wk-prop-btn wk-prop-btn--ghost">Continue in Build</button>
@@ -839,17 +861,16 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
             <button type="button" data-testid="session-stop-keep" onClick={() => setConfirmStop(false)} className="wk-btn wk-btn--quiet wk-btn--sm">Keep going</button>
           </span>
         )}
-        {/* DES-CHAT-NATIVE-RUN: the run's details (status, steps, agents, checks, spend) open beside the conversation
-            on demand — closed by default, never between you and the chat. */}
+        {/* DES-CHAT-NATIVE-RUN: the run's details open beside the conversation on demand — closed by default, never
+            between you and the chat. They are the run's ONE right panel: what the ⋯ sheet held lives in it too. */}
         {mine.length > 0 && (
           <button type="button" data-testid="session-details-toggle" aria-expanded={detailsOpen} aria-controls="run-details-panel"
-            title={detailsOpen ? 'Hide the details' : 'Show the run’s details: status, steps, agents, checks and spend'}
+            title={detailsOpen ? 'Hide the details' : 'Show the run’s details: status, plan and steps, changes, checks, agents and its record'}
             onClick={() => { const hp = useHostPanel.getState(); if (panelNarrow) hp.setOverlay(!hp.overlay); else hp.setFolded(!hp.folded); }}
             className={`wk-chat-details-toggle${detailsOpen ? ' wk-chat-details-toggle--on' : ''}`}>
             <span aria-hidden className="wk-chat-details-icon" /><span className="wk-chat-details-label">Details</span>
           </button>
         )}
-        <button type="button" data-testid="session-sheet-open" aria-label="Look underneath this session" title="Look underneath (⌘K for everything else)" onClick={() => openSheet({ kind: 'session', sessionId })} className="wk-sheet-open">⋯</button>
       </header>
 
       <div className="wk-session-body">
@@ -1004,7 +1025,7 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
       {/* The measure sits on a wrapper: the composer's own box (its `/` and `@` menus anchor to it) stays the input's width. */}
       <div className="wk-session-composer-wrap wk-measure wk-measure--thread"><Composer {...composerProps} className="wk-session-composer" /></div>
     </div>
-    <HostPanel toggledByPage runTab={<RunTab runs={mine} sessionId={sessionId} title={title} navigate={navigate} />} ribbon={<RunRibbon runs={mine} />} />
+    <HostPanel toggledByPage runTab={<RunTab runs={mine} allRuns={runs} sessionId={sessionId} title={title} navigate={navigate} />} ribbon={<RunRibbon runs={mine} />} />
     </div>
     </RunHostProvider>
     </ArtifactAddressProvider>

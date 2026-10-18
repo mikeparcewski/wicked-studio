@@ -34,7 +34,7 @@ import sys
 import time
 import urllib.request
 
-from uxfix_fixture import HIDE_GATE_TOASTS, REPO, ensure_build, set_fixture, start_server, OPEN_RUN_DETAILS
+from uxfix_fixture import HIDE_GATE_TOASTS, REPO, ensure_build, open_run_panel_item, set_fixture, start_server, OPEN_RUN_DETAILS
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4466"))
 W, H = 1440, 700
@@ -192,8 +192,7 @@ with sync_playwright() as p:
           thread=t2, posts=posts, help_detail=help_detail, thinking=thinking)
 
     # ── 3b. the Helpers sheet names the path's seats by role (ASK-S3) ─────────────
-    page.get_by_test_id("session-sheet-open").click()
-    page.locator('[data-testid="sheet-tab"]', has_text="Helpers").click()
+    open_run_panel_item(page, "helpers")
     try:
         page.wait_for_function("() => document.querySelectorAll('[data-testid=\"sheet-helper-role\"]').length >= 2", timeout=10000)
     except Exception:
@@ -205,7 +204,7 @@ with sync_playwright() as p:
           and roles[1][0] == "reviewer" and roles[1][1].startswith(f"{reviewer} reviewer")
           and "also answered a question" in roles[1][1],  # the reviewer answered the HELP: line too
           roles=roles)
-    page.keyboard.press("Escape")
+    page.get_by_test_id("session-details-toggle").click()
     page.wait_for_timeout(200)
 
     # ── 4. the turn gate draws nothing ────────────────────────────────────────────
@@ -285,12 +284,13 @@ with sync_playwright() as p:
           and t3["lines"][2]["text"] == f"Can’t build from here: only {pa} is signed in; sign in another helper so review can run. Sign in"
           and t3["lines"][2]["tone"] == "problem" and len(t3["helperBubbles"]) == 1, lines=t3["lines"])
     page.locator('[data-testid="ask-line"][data-kind="reviewer"] [data-testid="ask-line-signin"]').click()
+    # The chat's runs are on this page: Sign-ins open in its run panel (Agents and spend → Sign-ins), not a sheet over it.
     try:
-        page.wait_for_function("""() => (document.querySelector('[data-testid="sheet-body"]') || {}).dataset?.tab === 'signins'""", timeout=5000)
+        page.locator('[data-testid="host-panel"] [data-testid="run-panel-item"][data-item="signins"][data-open="true"] [data-testid="sheet-signins"]').wait_for(state="visible", timeout=5000)
     except Exception:
-        fail("sign-in-sheet", page.evaluate("() => (document.querySelector('[data-testid=\"sheet-body\"]') || {}).dataset?.tab || null"))
+        fail("sign-in-sheet", {"sheet": page.get_by_test_id("sheet").count(), "panel": page.get_by_test_id("host-panel").count()})
     page.screenshot(path=str(SHOTS / "desk-ask-team-signin.png"))
-    check("sign-in-opens-sheet", True)
+    check("sign-in-opens-sheet", page.get_by_test_id("sheet").count() == 0)
     page.close()
 
     # ── 6. an older daemon ────────────────────────────────────────────────────────

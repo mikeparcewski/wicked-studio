@@ -288,7 +288,7 @@ function HelperSheet({ r, tab, runs, navigate }: { r: Extract<ObjectRef, { kind:
 }
 
 /** Match only the injected pack, including storage that flattened its separator. */
-function GoalBrief({ problem }: { problem: string }): React.ReactElement {
+export function GoalBrief({ problem }: { problem: string }): React.ReactElement {
   const split = splitAskContext(problem);
   const flat = split.pack === null ? /\s+---\s+(?=\[studio context pack\b)/i.exec(problem) : null;
   const typed = (flat === null ? split.typed : problem.slice(0, flat.index)).trim();
@@ -362,7 +362,7 @@ function SessionSheet({ r, tab: asked, runs, navigate }: { r: Extract<ObjectRef,
   );
 }
 
-function RunSection({ id, view, runs, navigate }: { id: AccordionId; view: SessionView; runs: readonly SessionView[]; navigate: Navigate }): React.ReactElement {
+export function RunSection({ id, view, runs, navigate }: { id: AccordionId; view: SessionView; runs: readonly SessionView[]; navigate: Navigate }): React.ReactElement {
   const model = useRunModel(view.session.id, view);
   const provenance = useProvenanceStore((s) => s.byRun[view.session.id] ?? null);
   useEffect(() => { useProvenanceStore.getState().load(view.session.id); }, [view.session.id]);
@@ -396,7 +396,7 @@ function FinishedVerdict({ view }: { view: SessionView }): React.ReactElement | 
   return <div data-testid="sheet-verdict" className="wk-sheet-section"><VerdictDetail runId={runId} units={units} completed={view.session.status === 'completed'} /></div>;
 }
 
-function StepsList({ view }: { view: SessionView }): React.ReactElement {
+export function StepsList({ view }: { view: SessionView }): React.ReactElement {
   const live = executingOrd(view.session, view.units);
   const units = [...view.units].sort((a, b) => a.ord - b.ord);
   return (
@@ -424,7 +424,7 @@ function StepsList({ view }: { view: SessionView }): React.ReactElement {
 }
 
 /** S15d: the run's evidence bundle (`GET /runs/:id/evidence`) — what the old run page offered as a download. */
-function EvidenceTab({ runId }: { runId: string }): React.ReactElement {
+export function EvidenceTab({ runId }: { runId: string }): React.ReactElement {
   const [state, setState] = useState<'idle' | 'getting' | 'got' | 'failed'>('idle');
   const get = (): void => {
     setState('getting');
@@ -457,7 +457,7 @@ function useAskPath(sessionId: string | null): ChatPathView | null {
   return askOn && path?.id === sessionId ? path.path : null;
 }
 
-function HelpersList({ runs, sessionId = null, onSignIn, roster = null }: { runs: readonly SessionView[]; sessionId?: string | null; onSignIn?: () => void; roster?: RosterSeat[] | null }): React.ReactElement {
+export function HelpersList({ runs, sessionId = null, onSignIn, roster = null }: { runs: readonly SessionView[]; sessionId?: string | null; onSignIn?: () => void; roster?: RosterSeat[] | null }): React.ReactElement {
   const rows = runs.flatMap((v) => helpersOf(v).map((cli) => ({ v, cli })));
   // studio#724: each helper by its one name (the card's "Claude Code"), never the raw key.
   const nameOf = (cli: string): string => {
@@ -557,7 +557,7 @@ export function activityLine(e: CoreEvent, ctx: Parameters<typeof narrate>[1]): 
   return { line, detail: null };
 }
 
-function ActivityTail({ view }: { view: SessionView }): React.ReactElement {
+export function ActivityTail({ view }: { view: SessionView }): React.ReactElement {
   const ev = useRunRawEvents(view.session.id);
   // studio#618: a narrated line can quote a home path (a deliver gate's push target): `~/…` here.
   const showText = useDisplayText();
@@ -593,7 +593,7 @@ function ActivityTail({ view }: { view: SessionView }): React.ReactElement {
   );
 }
 
-function SignIns({ roster, navigate }: { roster: RosterSeat[] | null; navigate: Navigate }): React.ReactElement {
+export function SignIns({ roster, navigate }: { roster: RosterSeat[] | null; navigate: Navigate }): React.ReactElement {
   // Amendment 5, decision 5: a signed-out seat's row offers the one plain-words sign-in panel.
   const [signIn, setSignIn] = useState<RosterSeat | null>(null);
   if (roster === null) return <p className="wk-session-grey">Reading the roster…</p>;

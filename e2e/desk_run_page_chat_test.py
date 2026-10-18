@@ -69,7 +69,7 @@ PAGE = """() => {
       phases: [...tab.querySelectorAll('[data-testid="run-tab-phase"]')].map((p) => ({ label: txt(p), current: p.dataset.current === 'true' })),
       agents: [...tab.querySelectorAll('[data-testid="run-tab-agent"]')].map(txt),
       checks: txt(tab.querySelector('[data-testid="run-tab-checks"]')),
-      look: !!tab.querySelector('[data-testid="run-tab-look"]'), tech: !!tab.querySelector('[data-testid="run-tab-tech"]'),
+      sections: [...tab.querySelectorAll('[data-testid="run-panel-section"]')].map((s) => s.dataset.section), tech: !!tab.querySelector('[data-testid="run-tab-tech"]'),
     } : null,
     who: [...document.querySelectorAll('[data-testid="session-thread"] [data-testid="turn-who"]')].map((w) => ({ role: w.dataset.role, text: txt(w) })),
     gateInThread: !!document.querySelector('[data-testid="session-thread"] [data-testid="session-run"] [data-testid="session-gate-row"]'),
@@ -114,8 +114,8 @@ with sync_playwright() as p:
         rt = d["runTab"] or {}
         check(f"{theme}-panel-b", d["frame"] and d["panel"] is not None and d["panel"]["w"] == 400 and d["panel"]["r"] == W
               and d["thread"] is not None and d["thread"]["r"] <= d["panel"]["l"] and not d["hscroll"]
-              and bool(rt.get("workflow")) and len(rt.get("phases", [])) > 0 and rt.get("look") and rt.get("tech")
-              and (rt.get("checks") or "").startswith("Checks and spend"), page=d)
+              and bool(rt.get("workflow")) and len(rt.get("phases", [])) > 0 and rt.get("sections") == ["now", "plan", "changes", "checks", "agents", "record"] and rt.get("tech")
+              and rt.get("checks") is not None, page=d)
         check(f"{theme}-who-responded", len(d["who"]) > 0 and all(w["role"] in ("seat", "operator", "crew") for w in d["who"])
               and d["who"][0]["role"] in ("operator", "crew") and any(w["role"] == "crew" for w in d["who"]), who=d["who"])
         check(f"{theme}-gate-inline", d["gateInThread"] and not d["gateInPanel"], page={k: d[k] for k in ("gateInThread", "gateInPanel")})
@@ -126,14 +126,16 @@ with sync_playwright() as p:
         check(f"{theme}-demo-panel", d2["panel"] is not None and d2["thread"]["r"] <= d2["panel"]["l"] and not d2["hscroll"]
               and any(w["role"] == "seat" and "made" in (w["text"] or "") for w in d2["who"]), who=d2["who"], panel=d2["panel"])
 
-    # ── 4. Look underneath from the Run tab ───────────────────────────────────────────────────────
-    page.locator('[data-testid="host-panel"] [data-testid="run-tab-look"]').click()
+    # ── 4. Look underneath is the same panel: the Plan section's steps fold, no sheet over the page ──────────
+    plan = page.locator('[data-testid="host-panel"] [data-testid="run-panel-toggle"][data-section="plan"]')
+    if plan.get_attribute("aria-expanded") != "true":
+        plan.click()
+    page.locator('[data-testid="host-panel"] [data-testid="run-panel-item-toggle"][data-item="steps"]').click()
     try:
-        page.get_by_test_id("sheet").wait_for(state="visible", timeout=8000)
+        page.locator('[data-testid="host-panel"] [data-testid="sheet-step-row"]').first.wait_for(state="visible", timeout=8000)
     except Exception:
-        fail("look-underneath", {"why": "the Run tab's Look underneath opened no sheet"})
-    check("look-underneath", True)
-    page.keyboard.press("Escape")
+        fail("look-underneath", {"why": "the panel's steps fold showed no steps"})
+    check("look-underneath", page.get_by_test_id("sheet").count() == 0 and page.get_by_test_id("session-sheet-open").count() == 0)
 
     # ── 5. narrow: no ribbon line over the chat (DES-CHAT-NATIVE-RUN); Details opens the panel over the page ──
     page.set_viewport_size({"width": 1100, "height": H})

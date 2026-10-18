@@ -249,6 +249,41 @@ OPEN_RUN_DETAILS = (
     " new MutationObserver(open).observe(document, { childList: true, subtree: true }); })();"
 )
 
+# The run page's ONE right panel (src/board/runPanelModel.ts): what the ⋯ session sheet's tabs held is a fold
+# inside one of the panel's six sections. Item id = the old sheet tab id.
+RUN_PANEL_ITEMS = {
+    "goal": "now", "plan": "plan", "steps": "plan", "changes": "changes", "delivery": "changes", "files": "changes",
+    "evidence": "checks", "governance": "checks", "steering": "checks", "helpers": "agents", "signins": "agents",
+    "burn": "agents", "activity": "record", "decisions": "record", "assumptions": "record", "data": "record",
+    "whatwhere": "record",
+}
+
+
+def open_run_panel_item(page, item: str):
+    """Open the run page's Details panel, the section holding `item`, and the item's fold; returns the fold."""
+    toggle = page.get_by_test_id("session-details-toggle")
+    if toggle.get_attribute("aria-expanded") != "true":
+        toggle.click()
+    panel = page.locator('[data-testid="host-panel"]')
+    panel.get_by_test_id("run-tab").wait_for(state="visible", timeout=10000)
+    sec = panel.locator(f'[data-testid="run-panel-toggle"][data-section="{RUN_PANEL_ITEMS[item]}"]')
+    if sec.get_attribute("aria-expanded") != "true":
+        sec.click()
+    fold = panel.locator(f'[data-testid="run-panel-item"][data-item="{item}"]')
+    if fold.get_attribute("data-open") != "true":
+        fold.get_by_test_id("run-panel-item-toggle").click()
+    return fold
+
+
+def run_panel_item_ids(page) -> list:
+    """The run panel's folds (each an old session-sheet tab id), opening the panel when it is closed."""
+    toggle = page.get_by_test_id("session-details-toggle")
+    if toggle.get_attribute("aria-expanded") != "true":
+        toggle.click()
+    page.locator('[data-testid="host-panel"] [data-testid="run-tab"]').wait_for(state="visible", timeout=10000)
+    return page.locator('[data-testid="host-panel"] [data-testid="run-panel-item"]').evaluate_all("els => els.map(e => e.dataset.item)")
+
+
 # Studio wave 1 (dark when healthy): the home board's WORKING band collapses to a count line
 # by default, and its expansion rides the history entry (`home.workingOpen`). Rigs that assert
 # on the working CARDS (the W2 upload-endpoint card, its narration) open it before the app

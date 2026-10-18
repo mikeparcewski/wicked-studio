@@ -14,6 +14,14 @@ import { useRunAcceptanceStore } from '../src/store/runAcceptance.js';
 import { setCachedRoster } from '../src/store/rosterCache.js';
 import * as sheets from '../src/store/sheets.js';
 import { makeUnit, makeView } from './factories.js';
+import { resetRunPanel } from '../src/store/runPanel.js';
+import { RUN_PANEL_KEY } from '../src/board/runPanelModel.js';
+
+/** Open one of the panel's folding sections (only Now and the state's own section start open). */
+function openSection(id: string): void {
+  const toggle = screen.getAllByTestId('run-panel-toggle').find((t) => t.dataset['section'] === id)!;
+  if (toggle.getAttribute('aria-expanded') !== 'true') fireEvent.click(toggle);
+}
 
 vi.mock('../src/api/client.js', async (importOriginal) => {
   const original = await importOriginal<typeof import('../src/api/client.js')>();
@@ -24,6 +32,8 @@ vi.mock('../src/api/client.js', async (importOriginal) => {
 });
 
 beforeEach(() => {
+  localStorage.removeItem(RUN_PANEL_KEY);
+  resetRunPanel();
   sheets.useSheets.setState({ open: null, pointed: null, stopping: {} });
   useGateStore.setState({ gates: {}, approaching: {} });
   useTeamPlanStore.setState({ byRun: {}, refs: {} });
@@ -141,6 +151,7 @@ describe('RunTab', () => {
       makeUnit({ ord: 4, assigned_cli: '' }),
       makeUnit({ ord: 5, assigned_cli: ' ' }),
     ])]);
+    openSection('agents');
     const rows = screen.getAllByTestId('run-tab-agent');
     expect(rows).toHaveLength(3);
     expect(rows[0]).toHaveAttribute('data-cli', 'claude');
@@ -187,10 +198,15 @@ describe('RunTab', () => {
     expect(screen.getByTestId('run-tab-stranded')).toHaveAttribute('role', 'status');
   });
 
-  it('opens Look underneath on the run steps sheet', async () => {
-    await tab();
-    fireEvent.click(screen.getByTestId('run-tab-look'));
-    expect(sheets.useSheets.getState().open).toEqual({ ref: { kind: 'session', sessionId: 'run:run-1' }, tab: 'steps' });
+  it('holds what the ⋯ sheet held: its steps fold mounts on first open, in the panel (no sheet opens)', async () => {
+    await tab([phases()]);
+    expect(screen.queryByTestId('sheet-steps')).toBeNull();
+    const item = screen.getAllByTestId('run-panel-item-toggle').find((t) => t.dataset['item'] === 'steps')!;
+    expect(item).toHaveAttribute('aria-expanded', 'false');
+    fireEvent.click(item);
+    expect(item).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getAllByTestId('sheet-step-row')).toHaveLength(3);
+    expect(sheets.useSheets.getState().open).toBeNull();
   });
 
   it('keeps going without stopping, and calls stopRun only on confirmation', async () => {
@@ -230,6 +246,7 @@ describe('RunTab', () => {
       url: '/archive/run-1.zip', sha256: 'abc1234567890123', bytes: 1024, source: 'branch',
       tree: 'abc123', commit: 'abc123', created_at: 123, trigger: 'run_end',
     } })]);
+    openSection('changes');
     expect(screen.getByTestId('run-tab-tech').querySelector('summary')).toHaveTextContent('Tech details');
     expect([...screen.getByTestId('run-tab-tech').querySelectorAll('code')].map((code) => code.textContent)).toEqual(['run-1', 'abc123', 'claude, codex']);
     expect(within(screen.getByTestId('run-tab-download')).getByRole('link', { name: 'Download code (.zip)' })).toHaveAttribute('download', 'run-1-codebase.zip');

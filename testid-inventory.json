@@ -12,8 +12,8 @@
   "studioVersion": "0.10.2",
   "counts": {
     "files": 233,
-    "occurrences": 2942,
-    "static": 2552,
+    "occurrences": 2949,
+    "static": 2557,
     "dynamic": 69,
     "computed": 24
   },
@@ -5091,6 +5091,12 @@
       ]
     },
     {
+      "testId": "host-panel-heading",
+      "files": [
+        "src/components/editorHost/HostPanel.tsx"
+      ]
+    },
+    {
       "testId": "host-panel-hosttab",
       "files": [
         "src/components/editorHost/HostPanel.tsx"
@@ -10160,6 +10166,36 @@
       ]
     },
     {
+      "testId": "run-panel-item",
+      "files": [
+        "src/components/session/RunTab.tsx"
+      ]
+    },
+    {
+      "testId": "run-panel-item-toggle",
+      "files": [
+        "src/components/session/RunTab.tsx"
+      ]
+    },
+    {
+      "testId": "run-panel-section",
+      "files": [
+        "src/components/session/RunTab.tsx"
+      ]
+    },
+    {
+      "testId": "run-panel-summary",
+      "files": [
+        "src/components/session/RunTab.tsx"
+      ]
+    },
+    {
+      "testId": "run-panel-toggle",
+      "files": [
+        "src/components/session/RunTab.tsx"
+      ]
+    },
+    {
       "testId": "run-pool",
       "files": [
         "src/components/RunPoolNote.tsx"
@@ -10288,6 +10324,12 @@
       ]
     },
     {
+      "testId": "run-tab-changes-open",
+      "files": [
+        "src/components/session/RunTab.tsx"
+      ]
+    },
+    {
       "testId": "run-tab-checks",
       "files": [
         "src/components/session/RunTab.tsx"
@@ -10336,7 +10378,7 @@
       ]
     },
     {
-      "testId": "run-tab-look",
+      "testId": "run-tab-goto-question",
       "files": [
         "src/components/session/RunTab.tsx"
       ]
@@ -10355,12 +10397,6 @@
     },
     {
       "testId": "run-tab-phase",
-      "files": [
-        "src/components/session/RunTab.tsx"
-      ]
-    },
-    {
-      "testId": "run-tab-phase-count",
       "files": [
         "src/components/session/RunTab.tsx"
       ]
@@ -11385,12 +11421,6 @@
       ]
     },
     {
-      "testId": "session-sheet-open",
-      "files": [
-        "src/components/session/SessionView.tsx"
-      ]
-    },
-    {
       "testId": "session-source",
       "files": [
         "src/components/session/SourceChips.tsx"
@@ -11679,6 +11709,7 @@
     {
       "testId": "sheet-goal",
       "files": [
+        "src/components/session/RunTab.tsx",
         "src/components/sheets/ObjectSheet.tsx"
       ]
     },
@@ -11811,6 +11842,7 @@
     {
       "testId": "sheet-session-changes",
       "files": [
+        "src/components/session/RunTab.tsx",
         "src/components/sheets/ObjectSheet.tsx"
       ]
     },

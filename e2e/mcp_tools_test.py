@@ -448,14 +448,14 @@ with sync_playwright() as p:
         page.wait_for_function("() => location.pathname === '/s/run%3Ac1' && location.hash === '#governance'", timeout=8000)
     except Exception:
         fail("usage-run-link", page.url)
-    # The session opens the run's ⋯ sheet on its Governance tab on arrival.
-    gov = page.locator('[data-testid="sheet-section"][data-section="governance"]')
+    # The session opens the run panel at Checks and evidence → Governance on arrival (the page's one right panel).
+    fold = page.locator('[data-testid="host-panel"] [data-testid="run-panel-item"][data-item="governance"]')
     try:
-        gov.wait_for(state="visible", timeout=8000)
-        on = page.locator('[data-testid="sheet-tab"][data-tab="governance"]').get_attribute("aria-selected")
+        fold.locator('[data-testid="sheet-section"][data-section="governance"]').wait_for(state="visible", timeout=8000)
+        on = fold.get_attribute("data-open")
     except Exception:
         on = None
-    check("usage-run-opens-governance", on == "true", url=page.url, tab_selected=on)
+    check("usage-run-opens-governance", on == "true" and page.get_by_test_id("sheet").count() == 0, url=page.url, fold_open=on)
     browser.close()
 
 report["ok"] = True

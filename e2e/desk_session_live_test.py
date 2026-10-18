@@ -8,9 +8,9 @@ r-pay-2 a team run mid-build with live frames over /ws), it proves at `/s/chat-p
   1. NO RUN PAGE: no run block offers "Open the run page →"; each carries its own ⋯ (look underneath).
   2. THE STATUS SENTENCE REWRITES IN PLACE (rule 7): a `wicked.team.step.completed` frame for build
      changes r-pay-2's sentence — the SAME element, new words, the chain moved with it.
-  3. THE RUN'S DEPTH IS THE SHEET (S11): the block's ⋯ opens the session sheet on Steps — every step
-     in order with its state and helper, in plain words; a step row opens that step's sheet on "What it
-     did" (its transcript); the session sheet also offers Changes and Evidence.
+  3. THE RUN'S DEPTH IS THE RUN PANEL: the block's ⋯ opens the page's one panel at Plan and steps → Each step — every
+     step in order with its state and helper, in plain words; a step row opens that step's sheet on "What it did" (its
+     transcript); the panel also holds Changes, Evidence, Helpers and Activity.
   4. A FINISHED RUN READS THE SAME, SETTLED: r-pay-1's block shows its sentence and no run-page link.
   5. 0 page errors; no horizontal scroll.
 
@@ -28,27 +28,6 @@ W, H = 1440, 700
 SHOTS = REPO / "e2e" / "shots"
 
 report: dict = {"ok": False, "steps": {}}
-
-
-def sheet_tab_ids(page) -> list:
-    """Every tab of the open sheet: the tablist, then the ones behind "More" (UI-CONTRACT §4.4)."""
-    ids = page.locator('[data-testid="sheet"] [role="tab"]').evaluate_all("els => els.map(e => e.dataset.tab)")
-    more = page.get_by_test_id("sheet-tabs-more-button")
-    if more.count() > 0:
-        more.click()
-        ids += page.locator('[data-testid="sheet-tabs-more-list"] [data-item]').evaluate_all("els => els.map(e => e.dataset.item)")
-        more.click()
-    return ids
-
-
-def sheet_tab(page, tab: str) -> None:
-    """Open a sheet tab, through "More" when it is not in the visible tablist."""
-    loc = page.locator(f'[data-testid="sheet"] [role="tab"][data-tab="{tab}"]')
-    if loc.count() > 0:
-        loc.first.click()
-        return
-    page.get_by_test_id("sheet-tabs-more-button").click()
-    page.locator(f'[data-testid="sheet-tabs-more-list"] [data-item="{tab}"]').click()
 
 
 def fail(step: str, why) -> None:
@@ -141,11 +120,12 @@ with sync_playwright() as p:
           and dict(r1["r-pay-2"]["chain"]).get("build") == "done" and dict(r1["r-pay-2"]["chain"]).get("test") == "running",
           before=before, after=r1["r-pay-2"]["sentence"], chain=r1["r-pay-2"]["chain"])
 
-    # ── 3. the run's depth is the sheet ───────────────────────────────────────────
+    # ── 3. the run's depth is the run panel (its steps fold), a step's own sheet from there ───────────
     page.locator('[data-testid="session-run"][data-run-id="r-pay-2"] [data-testid="session-run-look"]').click()
-    page.get_by_test_id("sheet-body").wait_for(state="visible", timeout=5000)
+    page.locator('[data-testid="host-panel"] [data-testid="run-panel-item"][data-item="steps"][data-open="true"] [data-testid="sheet-step-row"]').first.wait_for(state="visible", timeout=8000)
     s0 = page.evaluate(SHEET)
-    s0["tabs"] = sheet_tab_ids(page)
+    s0["tabs"] = page.locator('[data-testid="host-panel"] [data-testid="run-panel-item"]').evaluate_all("els => els.map(e => e.dataset.item)")
+    s0["panelRun"] = page.locator('[data-testid="host-panel"] [data-testid="run-tab"]').get_attribute("data-run-id")
     page.screenshot(path=str(SHOTS / "desk-session-live-steps.png"))
     page.locator('[data-testid="sheet-step-row"]').nth(1).get_by_test_id("sheet-step-open").click()
     try:
@@ -155,12 +135,14 @@ with sync_playwright() as p:
     s1 = page.evaluate(SHEET)
     page.screenshot(path=str(SHOTS / "desk-session-live-step.png"))
     check("depth-is-the-sheet",
-          s0["open"] and s0["tab"] == "steps" and len(s0["steps"]) == 5
+          not s0["open"] and s0["panelRun"] == "r-pay-2" and len(s0["steps"]) == 5
           and s0["steps"][0].startswith("Research — done") and s0["steps"][1].split(" — ")[1] in ("working", "handed to a helper")
           and {"steps", "changes", "evidence", "helpers", "activity"} <= set(s0["tabs"])
           and s1["tab"] == "did" and s1["output"] is not None and not s1["hscroll"],
           sheet=s0, step_sheet={"tab": s1["tab"], "title": s1["title"], "output": (s1["output"] or "")[:80]})
     page.keyboard.press("Escape")
+    page.wait_for_timeout(300)
+    page.get_by_test_id("session-details-toggle").click()
     page.wait_for_timeout(300)
 
     # ── 4. a finished run reads the same, settled ────────────────────────────────

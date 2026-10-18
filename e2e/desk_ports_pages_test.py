@@ -26,7 +26,7 @@ import os
 import sys
 import urllib.parse
 
-from uxfix_fixture import DEFAULT_APPEARANCE, HIDE_GATE_TOASTS, REPO, ensure_build, set_fixture, start_server
+from uxfix_fixture import DEFAULT_APPEARANCE, HIDE_GATE_TOASTS, REPO, ensure_build, open_run_panel_item, set_fixture, start_server
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4398"))
 W, H = 1440, 700
@@ -212,18 +212,16 @@ with sync_playwright() as p:
     # ── 4. sheets: narrated Activity, the retry lineage, the observed spend ───────
     page.goto(f"{origin}/s/run:r-auth", wait_until="networkidle")
     page.get_by_test_id("session").wait_for(state="visible", timeout=15000)
-    page.get_by_test_id("session-sheet-open").click()
-    page.get_by_test_id("sheet").wait_for(state="visible", timeout=5000)
-    sheet_tab(page, "activity")
+    open_run_panel_item(page, "activity")
     page.get_by_test_id("sheet-activity-line").first.wait_for(state="visible", timeout=8000)
     lines = page.get_by_test_id("sheet-activity-line").evaluate_all(
         "els => els.map(e => ({ tone: e.dataset.tone, text: e.innerText }))")
     page.screenshot(path=str(SHOTS / "desk-ports-activity.png"))
-    sheet_tab(page, "whatwhere")
-    page.get_by_test_id("sheet-section").wait_for(state="visible", timeout=5000)
-    page.locator('[data-testid="sheet-section"] [data-testid="lineage-retried-as"]').first.wait_for(state="visible", timeout=8000)
-    retried = page.locator('[data-testid="sheet-section"] [data-testid="lineage-retried-as"]').all_inner_texts()
-    page.keyboard.press("Escape")
+    ww = open_run_panel_item(page, "whatwhere")
+    ww.get_by_test_id("sheet-section").wait_for(state="visible", timeout=5000)
+    ww.locator('[data-testid="sheet-section"] [data-testid="lineage-retried-as"]').first.wait_for(state="visible", timeout=8000)
+    retried = ww.locator('[data-testid="sheet-section"] [data-testid="lineage-retried-as"]').all_inner_texts()
+    page.get_by_test_id("session-details-toggle").click()
     check("activity", len(lines) >= 1 and all(l["tone"] in ("info", "work", "gate", "fail", "human") for l in lines)
           and not any("sessionStarted" in l["text"] or "sessionFailed" in l["text"] for l in lines)
           and any("Run failed" in l["text"] for l in lines), lines=lines)

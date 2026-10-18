@@ -36,7 +36,7 @@ import re
 import sys
 import urllib.parse
 
-from uxfix_fixture import FAKE_HOME, HIDE_GATE_TOASTS, REPO, ensure_build, set_fixture, start_server, OPEN_RUN_DETAILS
+from uxfix_fixture import open_run_panel_item, run_panel_item_ids, FAKE_HOME, HIDE_GATE_TOASTS, REPO, ensure_build, set_fixture, start_server, OPEN_RUN_DETAILS
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4356"))
 W, H = 1440, 700
@@ -46,24 +46,13 @@ report: dict = {"ok": False, "steps": {}}
 
 
 def sheet_tab_ids(page) -> list:
-    """Every tab of the open sheet: the tablist, then the ones behind "More" (UI-CONTRACT §4.4)."""
-    ids = page.locator('[data-testid="sheet"] [role="tab"]').evaluate_all("els => els.map(e => e.dataset.tab)")
-    more = page.get_by_test_id("sheet-tabs-more-button")
-    if more.count() > 0:
-        more.click()
-        ids += page.locator('[data-testid="sheet-tabs-more-list"] [data-item]').evaluate_all("els => els.map(e => e.dataset.item)")
-        more.click()
-    return ids
+    """The run's look-underneath tabs: on its page they are the run panel's folds (src/board/runPanelModel.ts)."""
+    return run_panel_item_ids(page)
 
 
 def sheet_tab(page, tab: str) -> None:
-    """Open a sheet tab, through "More" when it is not in the visible tablist."""
-    loc = page.locator(f'[data-testid="sheet"] [role="tab"][data-tab="{tab}"]')
-    if loc.count() > 0:
-        loc.first.click()
-        return
-    page.get_by_test_id("sheet-tabs-more-button").click()
-    page.locator(f'[data-testid="sheet-tabs-more-list"] [data-item="{tab}"]').click()
+    """Open one look-underneath tab: the run panel's fold of that id."""
+    open_run_panel_item(page, tab)
 
 
 def fail(step: str, why) -> None:

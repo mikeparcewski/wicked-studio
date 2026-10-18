@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { SessionView } from '../../api/types.js';
 import type { Navigate } from '../../hooks/useRoute.js';
 import type { ChainModel, ChainStep } from '../../board/chainModel.js';
@@ -21,6 +21,7 @@ import { CodebaseDownload, DeliverCredentialsNotice } from './CodebaseDownload.j
 import { AssuranceReceipt, DeliveryAssuranceLines } from './AssuranceReceipt.js';
 import { RunRecordLines, RunStory } from './RunRecord.js';
 import { RecoveryRow } from './RunConversation.js';
+import { SheetRunActions } from './RunActions.js';
 import { IDLE_GATE_ACTION, useGateActionStore } from '../../board/gateActions.js';
 import { outcomeLine, statusSentence } from '../../board/proposalCard.js';
 import { deliveryAssuranceOf, deliveryReceiptOf } from '../../board/assuranceModel.js';
@@ -31,6 +32,13 @@ import { ago } from '../AgeStamp.js';
 import { TechDetails } from '../ui/index.js';
 import { useHostPanel } from '../../editors/hostApi.js';
 import { useNarrow } from '../editorHost/HostPanel.js';
+import { isDeliverGate } from '../gateMoveModel.js';
+import { runSections } from '../RightPanel.js';
+import { useIsSystemWorkflow } from '../../store/workflowCache.js';
+import { FileViewer } from '../FileViewer.js';
+import { ActivityTail, EvidenceTab, GoalBrief, HelpersList, RunSection, SignIns, StepsList } from '../sheets/ObjectSheet.js';
+import { PANEL_SECTIONS, panelStateKind, quietSections, sectionOpen, type PanelSectionId } from '../../board/runPanelModel.js';
+import { useRunPanel } from '../../store/runPanel.js';
 
 function isTerminal(view: SessionView): boolean {
   return ['completed', 'cancelled', 'failed'].includes(view.session.status);
@@ -67,31 +75,41 @@ function startedMs(view: SessionView): number | null {
   return typeof c === 'number' && Number.isFinite(c) ? c * 1000 : null;
 }
 
-export function RunTab({ runs, sessionId, title, navigate }: {
+/** The question a run is waiting on, as the thread draws it (the plan, a step's question, the hand-over). */
+const ASKING = '[data-testid="chat-plan"][data-open="true"], [data-testid="chat-gate"], [data-testid="chat-final"][data-kind="deliver"]';
+
+/**
+ * THE RUN PANEL (src/board/runPanelModel.ts): the run page's one right panel — what the Details panel's Run tab and
+ * the ⋯ session sheet showed, in six folding sections. `allRuns` is the whole index (a run's retries can sit in
+ * another session: What and where names them).
+ */
+export function RunTab({ runs, allRuns = runs, sessionId, title, navigate }: {
   runs: SessionView[];
+  allRuns?: readonly SessionView[];
   sessionId: string;
   title: string;
   navigate?: Navigate;
 }): React.ReactElement {
-  const [picked, setPicked] = useState<{ sessionId: string; id: string } | null>(null);
-  const view = (picked?.sessionId === sessionId ? runs.find((run) => run.session.id === picked.id) : undefined)
-    ?? primaryRun(runs);
+  const picked = useRunPanel((s) => (s.picked?.sessionId === sessionId ? s.picked.runId : null));
+  const view = (picked !== null ? runs.find((run) => run.session.id === picked) : undefined) ?? primaryRun(runs);
   if (view === undefined) return <p data-testid="run-tab-empty" className="wk-run-tab-muted">No run in this session yet.</p>;
   return (
     <div data-testid="run-tab" data-run-id={view.session.id} className="wk-run-tab">
       {runs.length > 1 && (
         <select data-testid="run-tab-run-pick" aria-label="Which run" className="wk-run-tab-pick" value={view.session.id}
-          onChange={(e) => setPicked({ sessionId, id: e.target.value })}>
+          onChange={(e) => useRunPanel.getState().pick(sessionId, e.target.value)}>
           {runs.map((run) => <option key={run.session.id} value={run.session.id}>{jobTitle(run.session)}</option>)}
         </select>
       )}
       {/* A confirmation belongs to one run; changing the pick starts a fresh confirmation. */}
-      <RunTabDetails key={view.session.id} view={view} title={title} {...(navigate !== undefined ? { navigate } : {})} />
+      <RunTabDetails key={view.session.id} view={view} allRuns={allRuns} sessionId={sessionId} title={title} {...(navigate !== undefined ? { navigate } : {})} />
     </div>
   );
 }
 
-function RunTabDetails({ view, title, navigate }: { view: SessionView; title: string; navigate?: Navigate }): React.ReactElement {
+const NO_NAVIGATE: Navigate = () => {};
+
+function RunTabDetails({ view, allRuns, sessionId, title, navigate }: { view: SessionView; allRuns: readonly SessionView[]; sessionId: string; title: string; navigate?: Navigate }): React.ReactElement {
   const id = view.session.id;
   const { chain } = useRunChain(view);
   const gate = useGateStore((s) => s.gates[id]);
@@ -99,7 +117,6 @@ function RunTabDetails({ view, title, navigate }: { view: SessionView; title: st
   // The whole log (not only while executing): a finished run's delivery receipt reads it too.
   const { events } = useRunEvents(id);
   const action = useGateActionStore((s) => s.byGate[id] ?? IDLE_GATE_ACTION);
-  // DES-CHAT-NATIVE-RUN: everything the run's old in-thread summary said lives here now, grouped.
   const coverage = useRunCoverage(view);
   const delivery = deliveryOf(view);
   const recorded = deliveryAssuranceOf(view);
@@ -110,6 +127,8 @@ function RunTabDetails({ view, title, navigate }: { view: SessionView; title: st
   const summary = acceptance?.summary as unknown;
   const acceptanceLine = typeof summary === 'string' ? summary
     : summary !== null && typeof summary === 'object' && typeof (summary as { line?: unknown }).line === 'string' ? (summary as { line: string }).line : null;
+  const acceptancePassed = summary !== null && typeof summary === 'object' && typeof (summary as { satisfied?: unknown }).satisfied === 'boolean'
+    ? (summary as { satisfied: boolean }).satisfied : null;
   // The thread draws the run's story, recovery buttons and record lines too: the panel draws its copies only while it
   // is open, so a closed panel never doubles them (one live instance of each on the page you are reading).
   const narrow = useNarrow();
@@ -121,122 +140,252 @@ function RunTabDetails({ view, title, navigate }: { view: SessionView; title: st
   const current = currentStep(view, chain);
   const clis = assignedClis(view);
   const session = view.session;
+  const spend = spendWords(view);
+  const isSystem = useIsSystemWorkflow();
+  const extra = runSections(view, isSystem);
+  const planItem = extra.some((s) => s.id === 'plan');
+  const deliveryItem = extra.some((s) => s.id === 'delivery');
+  const go = navigate ?? NO_NAVIGATE;
+
+  // Which sections are open: the run's state picks the default, the operator's choice (per state) wins.
+  const kind = panelStateKind(view, gate === undefined ? undefined : { gateKind: isDeliverGate(id, view.units, gate.ord) ? 'deliver' : gate.gateKind, prompt: gate.prompt });
+  const quiet = quietSections(view);
+  const remembered = useRunPanel((s) => s.remembered);
+  const focus = useRunPanel((s) => s.focus);
+  const open = (s: PanelSectionId): boolean => sectionOpen(s, kind, remembered, quiet, focus?.section ?? null);
+  const fold = { kind, open, quiet };
+  const delivered = (delivery.state !== 'none' && delivery.state !== 'in-flight') || receipt !== null;
+
+  const goToQuestion = (): void => {
+    const block = [...document.querySelectorAll<HTMLElement>('[data-testid="session-run"]')].find((b) => b.dataset['runId'] === id);
+    const asking = block?.querySelector<HTMLElement>(ASKING) ?? block;
+    if (asking === undefined) return;
+    if (narrow) useHostPanel.getState().setOverlay(false);
+    asking.scrollIntoView?.({ block: 'start', behavior: 'smooth' });
+  };
+
   return (
     <>
-      <section data-testid="run-tab-now" className="wk-run-tab-section">
-        <h3 className="wk-run-tab-heading">Now</h3>
-        <p data-testid="run-tab-status" role="status" className="wk-run-tab-line">{statusSentence(view, chain, gate, action)}</p>
-        {(started !== null || ended !== null) && (
-          <p data-testid="run-tab-times" className="wk-run-tab-muted">
-            {started !== null && `Started ${ago(started)} ago`}{started !== null && ended !== null && ' · '}{ended !== null && `ended ${ago(ended)} ago`}
+      <Section id="now" {...fold} summary={chatStatusWord([view]).word}>
+        <div data-testid="run-tab-now" className="wk-run-tab-block">
+          <p data-testid="run-tab-status" role="status" className="wk-run-tab-line">{statusSentence(view, chain, gate, action)}</p>
+          {(started !== null || ended !== null) && (
+            <p data-testid="run-tab-times" className="wk-run-tab-muted">
+              {started !== null && `Started ${ago(started)} ago`}{started !== null && ended !== null && ' · '}{ended !== null && `ended ${ago(ended)} ago`}
+            </p>
+          )}
+          {gate !== undefined && session.status === 'awaiting_human' && (
+            <button type="button" data-testid="run-tab-goto-question" className="wk-run-tab-button wk-run-tab-button--lead" onClick={goToQuestion}>Go to the question</button>
+          )}
+        </div>
+        <div data-testid="run-tab-workflow" className="wk-run-tab-block">
+          <p className="wk-run-tab-line">{workflowLabel(session.workflow_id)}{' '}
+            <span className="wk-run-tab-pill">{chatStatusWord([view]).word}</span>
           </p>
+          {typeof session.repo_ref === 'string' && session.repo_ref.trim() !== '' && (
+            <p data-testid="run-tab-repo" className="wk-run-tab-line"><code>{session.repo_ref}</code></p>
+          )}
+        </div>
+        {panelShown && open('now') && (session.status === 'failed' || session.status === 'cancelled') && (
+          <div data-testid="run-tab-story" className="wk-run-tab-block">
+            <h4 className="wk-run-tab-heading">Why it stopped</h4>
+            <RunStory view={view} events={events ?? []} {...(navigate !== undefined ? { navigate } : {})} />
+            <RecoveryRow view={view} {...(navigate !== undefined ? { navigate } : {})} />
+          </div>
         )}
-      </section>
-      <section data-testid="run-tab-workflow" className="wk-run-tab-section">
-        <h3 className="wk-run-tab-heading">Workflow</h3>
-        <p className="wk-run-tab-line">{workflowLabel(session.workflow_id)}{' '}
-          <span className="wk-run-tab-pill">{chatStatusWord([view]).word}</span>
-        </p>
-        {typeof session.repo_ref === 'string' && session.repo_ref.trim() !== '' && (
-          <p data-testid="run-tab-repo" className="wk-run-tab-line"><code>{session.repo_ref}</code></p>
+        {orphanedOf(session.status, events ?? undefined) !== null && <p data-testid="run-tab-orphaned" role="status" className="wk-run-tab-warning">{ORPHANED_LINE}</p>}
+        {finishedDeliveryArm(view, gate) === 'stranded' && (
+          <p data-testid="run-tab-stranded" role="status" className="wk-run-tab-warning">Nobody has taken this work yet: its delivery card is in the thread.</p>
         )}
-      </section>
-      <section data-testid="run-tab-phases" className="wk-run-tab-section">
-        <h3 className="wk-run-tab-heading">Phases</h3>
-        {chain.steps.length > 0 && <p data-testid="run-tab-phase-count" className="wk-run-tab-muted">{doneSteps} of {chain.steps.length} done</p>}
-        {chain.transportLine !== null && <p data-testid="run-tab-transport" className="wk-run-tab-warning">{chain.transportLine}</p>}
-        {chain.steps.length === 0 ? <p className="wk-run-tab-muted">No phases yet.</p> : (
-          <ol className="wk-run-tab-list">
-            {chain.steps.map((step) => (
-              <li key={step.id} data-testid="run-tab-phase" data-state={step.state} data-current={step === current ? 'true' : 'false'} className="wk-run-tab-phase">
-                {(step.state === 'done' || step.state === 'checked') && <span aria-label="Done">✓ </span>}
-                {step.label}{step.state === 'checked' && <span className="wk-run-tab-pill">checked</span>}{step.state === 'failed' && <span className="wk-run-tab-pill">failed</span>}{step === current && <span className="wk-run-tab-pill">{view.session.status === 'awaiting_human' ? 'waiting on you' : 'now'}</span>}
-              </li>
-            ))}
-          </ol>
-        )}
-      </section>
-      <section data-testid="run-tab-agents" className="wk-run-tab-section">
-        <h3 className="wk-run-tab-heading">Agents</h3>
-        {clis.length === 0 ? <p className="wk-run-tab-muted">No agent has been assigned yet.</p> : (
-          <ul className="wk-run-tab-list">
-            {clis.map((cli) => {
-              const seat = roster?.find((entry) => entry.key === cli);
-              const reviews = view.units.some((unit) => unit.assigned_cli === cli && isReviewUnit(unit));
-              return (
-                <li key={cli} data-testid="run-tab-agent" data-cli={cli} className="wk-run-tab-agent">
-                  <button type="button" className="wk-run-tab-name" onClick={() => openSheet({ kind: 'helper', runId: id, cli })}>
-                    {seat === undefined ? cli : seatLabel(seat)}
-                  </button>{' '}<span className="wk-run-tab-muted">{reviews ? 'reviews' : 'builds'}</span>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </section>
-      <section data-testid="run-tab-checks" className="wk-run-tab-section">
-        <h3 className="wk-run-tab-heading">Checks and spend</h3>
-        <RunAssuranceLabel view={view} />
-        {/* crew's acceptance line (WT-W3 `summary.line`; a bare string from an older read). */}
-        {acceptanceLine !== null && <p data-testid="run-tab-acceptance" className="wk-run-tab-line">{acceptanceLine}</p>}
-        {coverage !== null && <p data-testid="run-tab-coverage" className="wk-run-tab-line">{coverage.line}</p>}
-        {coverage !== null && coverage.reasons.length > 0 && <TechDetails data-testid="run-tab-coverage-why" text={coverage.reasons} />}
-        <p data-testid="run-tab-spend" className="wk-run-tab-line">{spendWords(view) ?? 'Not reported'}</p>
-      </section>
-      {/* A run still going has nothing delivered to say ("in-flight" is only "it has a deliver step"). */}
-      {((delivery.state !== 'none' && delivery.state !== 'in-flight') || receipt !== null) && (
-        <section data-testid="run-tab-delivery" className="wk-run-tab-section">
-          <h3 className="wk-run-tab-heading">Delivery</h3>
-          <p data-testid="run-tab-delivery-outcome" className="wk-run-tab-line">{view.session.status === 'completed' ? outcomeLine(view) : 'Not delivered'}</p>
-          {delivery.url !== null && <p className="wk-run-tab-line"><a data-testid="run-tab-pr" href={delivery.url} target="_blank" rel="noreferrer">Pull request{prNumber !== null ? ` #${prNumber}` : ''} ↗</a></p>}
-          {delivery.pushed !== undefined && <p data-testid="run-tab-branch" className="wk-run-tab-line">Branch <code>{delivery.pushed.branch}</code></p>}
-          {delivery.reason !== null && delivery.state !== 'delivered' && <p data-testid="run-tab-delivery-reason" className="wk-run-tab-muted">{delivery.reason}</p>}
-          {receipt !== null && <AssuranceReceipt receipt={receipt} passed={recorded !== null && !recorded.verified ? null : true} testId="run-tab-assurance" />}
-          <DeliveryAssuranceLines recorded={recorded} testIdPrefix="run-tab" />
-          {panelShown && <DeliverCredentialsNotice view={view} />}
-        </section>
-      )}
-      {panelShown && (session.status === 'failed' || session.status === 'cancelled') && (
-        <section data-testid="run-tab-story" className="wk-run-tab-section">
-          <h3 className="wk-run-tab-heading">Why it stopped</h3>
-          <RunStory view={view} events={events ?? []} {...(navigate !== undefined ? { navigate } : {})} />
-          <RecoveryRow view={view} {...(navigate !== undefined ? { navigate } : {})} />
-        </section>
-      )}
-      {panelShown && (
-        <section data-testid="run-tab-record" className="wk-run-tab-section">
-          <h3 className="wk-run-tab-heading">Record</h3>
-          <RunRecordLines view={view} jumped={false} withStory={false} {...(navigate !== undefined ? { navigate } : {})} />
-        </section>
-      )}
-      {orphanedOf(session.status, events ?? undefined) !== null && <p data-testid="run-tab-orphaned" role="status" className="wk-run-tab-warning">{ORPHANED_LINE}</p>}
-      {finishedDeliveryArm(view, gate) === 'stranded' && (
-        <p data-testid="run-tab-stranded" role="status" className="wk-run-tab-warning">Nobody has taken this work yet: its delivery card is in the thread.</p>
-      )}
-      <section data-testid="run-tab-actions" className="wk-run-tab-section">
-        <h3 className="wk-run-tab-heading">Actions</h3>
-        <button type="button" data-testid="run-tab-look" className="wk-run-tab-button" onClick={() => openSheet({ kind: 'session', sessionId: `run:${id}` }, 'steps')}>Look underneath</button>
-        <div data-testid="run-tab-download" className="wk-run-tab-download"><CodebaseDownload view={view} /></div>
-        {!isTerminal(view) && (
-          <>
+        <div data-testid="run-tab-actions" className="wk-run-tab-actions">
+          {!isTerminal(view) && (
             <button type="button" data-testid="run-tab-stop" className="wk-run-tab-button" disabled={stopping} onClick={() => setConfirmStop(true)}>{stopping ? 'Stopping…' : 'Stop'}</button>
-            {confirmStop && (
-              <div data-testid="run-tab-stop-confirm-row" className="wk-run-tab-confirm">
-                <span>Stop this run?</span>
-                <button type="button" data-testid="run-tab-stop-confirm" className="wk-run-tab-button" disabled={stopping} onClick={() => { stopRun([id], `“${title}”`); setConfirmStop(false); }}>Stop this run</button>
-                <button type="button" data-testid="run-tab-stop-keep" className="wk-run-tab-button" onClick={() => setConfirmStop(false)}>Keep going</button>
-              </div>
-            )}
-          </>
+          )}
+          {panelShown && <SheetRunActions view={view} />}
+        </div>
+        {!isTerminal(view) && confirmStop && (
+          <div data-testid="run-tab-stop-confirm-row" className="wk-run-tab-confirm">
+            <span>Stop this run?</span>
+            <button type="button" data-testid="run-tab-stop-confirm" className="wk-run-tab-button" disabled={stopping} onClick={() => { stopRun([id], `“${title}”`); setConfirmStop(false); }}>Stop this run</button>
+            <button type="button" data-testid="run-tab-stop-keep" className="wk-run-tab-button" onClick={() => setConfirmStop(false)}>Keep going</button>
+          </div>
         )}
+        <Item section="now" id="goal">{() => <div data-testid="sheet-goal" className="wk-sheet-section"><GoalBrief problem={session.problem} /></div>}</Item>
+      </Section>
+
+      <Section id="plan" {...fold} summary={chain.steps.length === 0 ? 'No steps yet' : `${doneSteps} of ${chain.steps.length} done${current !== undefined ? ` · ${current.label}` : ''}`}>
+        <div data-testid="run-tab-phases" className="wk-run-tab-block">
+          {chain.transportLine !== null && <p data-testid="run-tab-transport" className="wk-run-tab-warning">{chain.transportLine}</p>}
+          {chain.steps.length === 0 ? <p className="wk-run-tab-muted">No phases yet.</p> : (
+            <ol className="wk-run-tab-list">
+              {chain.steps.map((step) => (
+                <li key={step.id} data-testid="run-tab-phase" data-state={step.state} data-current={step === current ? 'true' : 'false'} className="wk-run-tab-phase">
+                  {(step.state === 'done' || step.state === 'checked') && <span aria-label="Done">✓ </span>}
+                  {step.label}{step.state === 'checked' && <span className="wk-run-tab-pill">checked</span>}{step.state === 'failed' && <span className="wk-run-tab-pill">failed</span>}{step === current && <span className="wk-run-tab-pill">{view.session.status === 'awaiting_human' ? 'waiting on you' : 'now'}</span>}
+                </li>
+              ))}
+            </ol>
+          )}
+        </div>
+        {planItem && <Item section="plan" id="plan">{() => <RunSection id="plan" view={view} runs={allRuns} navigate={go} />}</Item>}
+        <Item section="plan" id="steps">{() => <StepsList view={view} />}</Item>
+      </Section>
+
+      <Section id="changes" {...fold} summary={prNumber !== null ? `Pull request #${prNumber}` : delivered ? (view.session.status === 'completed' ? 'Delivered' : 'Not delivered') : quiet.has('changes') ? 'Nothing changed yet' : 'Nothing delivered yet'}>
+        {/* A run still going has nothing delivered to say ("in-flight" is only "it has a deliver step"). */}
+        {delivered && (
+          <div data-testid="run-tab-delivery" className="wk-run-tab-block">
+            <p data-testid="run-tab-delivery-outcome" className="wk-run-tab-line">{view.session.status === 'completed' ? outcomeLine(view) : 'Not delivered'}</p>
+            {delivery.url !== null && <p className="wk-run-tab-line"><a data-testid="run-tab-pr" href={delivery.url} target="_blank" rel="noreferrer">Pull request{prNumber !== null ? ` #${prNumber}` : ''} ↗</a></p>}
+            {delivery.pushed !== undefined && <p data-testid="run-tab-branch" className="wk-run-tab-line">Branch <code>{delivery.pushed.branch}</code></p>}
+            {delivery.reason !== null && delivery.state !== 'delivered' && <p data-testid="run-tab-delivery-reason" className="wk-run-tab-muted">{delivery.reason}</p>}
+            {receipt !== null && <AssuranceReceipt receipt={receipt} passed={recorded !== null && !recorded.verified ? null : true} testId="run-tab-assurance" />}
+            <DeliveryAssuranceLines recorded={recorded} testIdPrefix="run-tab" />
+            {panelShown && <DeliverCredentialsNotice view={view} />}
+          </div>
+        )}
+        <div data-testid="run-tab-download" className="wk-run-tab-download"><CodebaseDownload view={view} /></div>
+        <Item section="changes" id="changes">{(close) => <ChangesItem runId={id} close={close} />}</Item>
+        {deliveryItem && <Item section="changes" id="delivery">{() => <RunSection id="delivery" view={view} runs={allRuns} navigate={go} />}</Item>}
+        <Item section="changes" id="files">{() => <RunSection id="files" view={view} runs={allRuns} navigate={go} />}</Item>
+      </Section>
+
+      <Section id="checks" {...fold} summary={quiet.has('checks') ? 'Nothing checked yet' : acceptancePassed === true ? 'Passed' : acceptancePassed === false ? 'Not passed' : ''}>
+        <div data-testid="run-tab-checks" className="wk-run-tab-block">
+          <RunAssuranceLabel view={view} />
+          {/* crew's acceptance line (WT-W3 `summary.line`; a bare string from an older read). */}
+          {acceptanceLine !== null && <p data-testid="run-tab-acceptance" className="wk-run-tab-line">{acceptanceLine}</p>}
+          {coverage !== null && <p data-testid="run-tab-coverage" className="wk-run-tab-line">{coverage.line}</p>}
+          {coverage !== null && coverage.reasons.length > 0 && <TechDetails data-testid="run-tab-coverage-why" text={coverage.reasons} />}
+          {acceptanceLine === null && coverage === null && <p className="wk-run-tab-muted">{quiet.has('checks') ? 'Nothing has been checked yet.' : 'No acceptance check recorded.'}</p>}
+        </div>
+        <Item section="checks" id="evidence">{() => <EvidenceTab runId={id} />}</Item>
+        <Item section="checks" id="governance">{() => <RunSection id="governance" view={view} runs={allRuns} navigate={go} />}</Item>
+        <Item section="checks" id="steering">{() => <RunSection id="steering" view={view} runs={allRuns} navigate={go} />}</Item>
+      </Section>
+
+      <Section id="agents" {...fold} summary={`${agentsWord(clis.length)}${spend !== null ? ` · ${spend}` : ''}`}>
+        <div data-testid="run-tab-agents" className="wk-run-tab-block">
+          {clis.length === 0 ? <p className="wk-run-tab-muted">No agent has been assigned yet.</p> : (
+            <ul className="wk-run-tab-list">
+              {clis.map((cli) => {
+                const seat = roster?.find((entry) => entry.key === cli);
+                const reviews = view.units.some((unit) => unit.assigned_cli === cli && isReviewUnit(unit));
+                return (
+                  <li key={cli} data-testid="run-tab-agent" data-cli={cli} className="wk-run-tab-agent">
+                    <button type="button" className="wk-run-tab-name" onClick={() => openSheet({ kind: 'helper', runId: id, cli })}>
+                      {seat === undefined ? cli : seatLabel(seat)}
+                    </button>{' '}<span className="wk-run-tab-muted">{reviews ? 'reviews' : 'builds'}</span>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+          <p data-testid="run-tab-spend" className="wk-run-tab-line">Spend: {spend ?? 'Not reported'}</p>
+        </div>
+        <Item section="agents" id="helpers">{() => <HelpersList runs={[view]} sessionId={sessionId} roster={roster} onSignIn={() => useRunPanel.getState().focusOn('agents', 'signins')} />}</Item>
+        <Item section="agents" id="signins">{() => <SignIns roster={roster} navigate={go} />}</Item>
+        <Item section="agents" id="burn">{() => <RunSection id="burn" view={view} runs={allRuns} navigate={go} />}</Item>
+      </Section>
+
+      <Section id="record" {...fold} summary="">
+        {panelShown && open('record') && (
+          <div data-testid="run-tab-record" className="wk-run-tab-block">
+            <RunRecordLines view={view} jumped={false} withStory={false} {...(navigate !== undefined ? { navigate } : {})} />
+          </div>
+        )}
+        <Item section="record" id="activity">{() => <ActivityTail view={view} />}</Item>
+        <Item section="record" id="decisions">{() => <RunSection id="decisions" view={view} runs={allRuns} navigate={go} />}</Item>
+        <Item section="record" id="assumptions">{() => <RunSection id="assumptions" view={view} runs={allRuns} navigate={go} />}</Item>
+        <Item section="record" id="data">{() => <RunSection id="data" view={view} runs={allRuns} navigate={go} />}</Item>
+        <Item section="record" id="whatwhere">{() => <RunSection id="whatwhere" view={view} runs={allRuns} navigate={go} />}</Item>
         <details data-testid="run-tab-tech" className="wk-run-tab-tech">
           <summary>Tech details</summary>
           <p className="wk-run-tab-line">Run: <code>{id}</code></p>
           {typeof session.base_commit === 'string' && <p className="wk-run-tab-line">Base commit: <code>{session.base_commit}</code></p>}
           <p className="wk-run-tab-line">Agents: <code>{session.clis.join(', ')}</code></p>
         </details>
-      </section>
+      </Section>
     </>
+  );
+}
+
+/**
+ * One folding section: its header is a button (aria-expanded) naming the section and a one-line summary. The body's
+ * light content stays mounted while closed (hidden); the heavier items inside mount on first open ({@link Item}).
+ */
+function Section({ id, kind, open, quiet, summary, children }: {
+  id: PanelSectionId;
+  kind: ReturnType<typeof panelStateKind>;
+  open: (s: PanelSectionId) => boolean;
+  quiet: ReadonlySet<PanelSectionId>;
+  summary: string;
+  children: React.ReactNode;
+}): React.ReactElement {
+  const label = PANEL_SECTIONS.find((s) => s.id === id)!.label;
+  const isOpen = open(id);
+  const body = `run-panel-${id}`;
+  const ref = useRef<HTMLElement | null>(null);
+  // A link that sent the operator here (⌘K, a sign-in line, `#governance`) brings the section into view.
+  const focus = useRunPanel((s) => s.focus);
+  useEffect(() => {
+    if (focus === null || focus.section !== id || focus.item !== null) return;
+    ref.current?.scrollIntoView?.({ block: 'start' });
+  }, [focus, id]);
+  return (
+    <section ref={ref} data-testid="run-panel-section" data-section={id} data-open={isOpen ? 'true' : 'false'} data-quiet={quiet.has(id) ? 'true' : 'false'} className="wk-rp-section">
+      <h3 className="wk-rp-heading">
+        <button type="button" data-testid="run-panel-toggle" data-section={id} aria-expanded={isOpen} aria-controls={body}
+          onClick={() => useRunPanel.getState().setOpen(kind, id, !isOpen)} className="wk-rp-toggle">
+          <span aria-hidden className="wk-rp-chevron" />
+          <span className="wk-rp-label">{label}</span>
+          {summary !== '' && <span data-testid="run-panel-summary" className="wk-rp-summary">{summary}</span>}
+        </button>
+      </h3>
+      <div id={body} role="region" aria-label={label} hidden={!isOpen} className="wk-rp-body">{children}</div>
+    </section>
+  );
+}
+
+/**
+ * One of the old sheet's tabs inside a section: a smaller fold, mounted on first open (its reads — the diff, the run
+ * model, the events — start only then). A link naming it (`openSheet(…, tab)`) opens it and brings it into view.
+ */
+function Item({ section, id, children }: { section: PanelSectionId; id: string; children: (close: () => void) => React.ReactNode }): React.ReactElement {
+  const label = PANEL_SECTIONS.find((s) => s.id === section)!.items.find((i) => i.id === id)!.label;
+  const focus = useRunPanel((s) => s.focus);
+  const sent = focus !== null && focus.section === section && focus.item === id;
+  const [open, setOpen] = useState(sent);
+  const [mounted, setMounted] = useState(sent);
+  const ref = useRef<HTMLDivElement | null>(null);
+  const uid = useId();
+  useEffect(() => {
+    if (!sent) return;
+    setOpen(true);
+    setMounted(true);
+    ref.current?.scrollIntoView?.({ block: 'start' });
+  }, [sent, focus?.seq]);
+  const toggle = (): void => { setOpen((o) => !o); setMounted(true); };
+  const body = useMemo(() => `${uid}-body`, [uid]);
+  return (
+    <div ref={ref} data-testid="run-panel-item" data-item={id} data-open={open ? 'true' : 'false'} className="wk-rp-item">
+      <button type="button" data-testid="run-panel-item-toggle" data-item={id} aria-expanded={open} aria-controls={body} onClick={toggle} className="wk-rp-item-toggle">
+        <span aria-hidden className="wk-rp-chevron" />{label}
+      </button>
+      <div id={body} hidden={!open} className="wk-rp-item-body">{mounted && children(() => setOpen(false))}</div>
+    </div>
+  );
+}
+
+/** The run's changes: the diff reads only on a click, in the viewer's own overlay (code needs more than 400 px). */
+function ChangesItem({ runId, close }: { runId: string; close: () => void }): React.ReactElement {
+  const [viewing, setViewing] = useState(false);
+  return (
+    <div data-testid="sheet-session-changes" className="wk-sheet-section">
+      <p className="wk-sheet-line">What this run changed, against where it started.</p>
+      <button type="button" data-testid="run-tab-changes-open" onClick={() => setViewing(true)} className="wk-run-tab-button">Show the changes</button>
+      {viewing && <FileViewer runId={runId} defaultTab="diff" base="merge-base" onClose={() => setViewing(false)} onUnsupported={() => { setViewing(false); close(); }} />}
+    </div>
   );
 }
 
