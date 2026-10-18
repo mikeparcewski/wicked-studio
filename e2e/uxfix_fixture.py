@@ -259,11 +259,25 @@ RUN_PANEL_ITEMS = {
 }
 
 
+def open_details(page) -> None:
+    """Open the run page's Details panel: open by default beside the chat (operator 2026-10-18); closed — remembered
+    in this browser, or below 1200 px — its right-edge handle opens it again."""
+    page.locator('[data-testid="host-panel"], [data-testid="run-details-handle"]').first.wait_for(state="visible", timeout=15000)
+    if page.locator('[data-testid="host-panel"]').count() == 0:
+        page.get_by_test_id("run-details-handle").click()
+    page.locator('[data-testid="host-panel"]').wait_for(state="visible", timeout=10000)
+
+
+def close_details(page) -> None:
+    """Close the run page's Details panel with its own close (it folds to the right-edge handle)."""
+    if page.locator('[data-testid="host-panel"]').count() > 0:
+        page.get_by_test_id("host-panel-fold").click()
+    page.get_by_test_id("run-details-handle").wait_for(state="visible", timeout=10000)
+
+
 def open_run_panel_item(page, item: str):
     """Open the run page's Details panel, the section holding `item`, and the item's fold; returns the fold."""
-    toggle = page.get_by_test_id("session-details-toggle")
-    if toggle.get_attribute("aria-expanded") != "true":
-        toggle.click()
+    open_details(page)
     panel = page.locator('[data-testid="host-panel"]')
     panel.get_by_test_id("run-tab").wait_for(state="visible", timeout=10000)
     sec = panel.locator(f'[data-testid="run-panel-toggle"][data-section="{RUN_PANEL_ITEMS[item]}"]')
@@ -277,9 +291,7 @@ def open_run_panel_item(page, item: str):
 
 def run_panel_item_ids(page) -> list:
     """The run panel's folds (each an old session-sheet tab id), opening the panel when it is closed."""
-    toggle = page.get_by_test_id("session-details-toggle")
-    if toggle.get_attribute("aria-expanded") != "true":
-        toggle.click()
+    open_details(page)
     page.locator('[data-testid="host-panel"] [data-testid="run-tab"]').wait_for(state="visible", timeout=10000)
     return page.locator('[data-testid="host-panel"] [data-testid="run-panel-item"]').evaluate_all("els => els.map(e => e.dataset.item)")
 

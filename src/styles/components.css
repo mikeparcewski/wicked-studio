@@ -924,13 +924,13 @@ select:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-
 .wk-desk-send:disabled { opacity: 0.5; cursor: default; }
 
 /* ── A SESSION (`/s/:id`, DES-STUDIO-REBUILD-001 slice S6a): the goal sentence, the thread, each
-   run's chain line, the since-you-left overlay and the composer. Tokens only. ── */
+   run's chain line and the composer. Tokens only. ── */
 .wk-session { flex: 1 1 auto; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
 .wk-session-head { flex-shrink: 0; display: flex; gap: 12px; align-items: baseline; padding-block: 16px 10px; border-bottom: 1px solid var(--border-subtle); }
 .wk-session-head-body { min-width: 0; }
 .wk-session-title { margin: 0; font-size: var(--text-xl); font-weight: var(--weight-bold); color: var(--ink-high); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .wk-session-status { margin: 2px 0 0; font-size: var(--text-sm); color: var(--ink-muted); }
-/* The frame the since-you-left card overlays: the card is absolute, the thread never moves. */
+/* The thread's frame: the jump-to-latest button floats at its foot. */
 .wk-session-body { position: relative; flex: 1 1 auto; min-height: 0; display: flex; }
 .wk-session-thread { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding-block: 12px 16px; display: flex; flex-direction: column; gap: 10px; }
 .wk-session-grey { margin: 0; font-size: var(--text-sm); color: var(--ink-muted); }
@@ -1119,22 +1119,12 @@ select:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-
 .wk-chain-sentence { margin: 4px 0 0; font-size: var(--text-xs); color: var(--ink-muted); }
 .wk-chain-transport { margin: 4px 0 0; font-size: var(--text-xs); color: var(--status-fail); }
 
-.wk-since {
-  position: absolute; top: 8px; left: 52px; right: 32px; z-index: 5;
-  background: var(--surface-overlay); border: 1px solid var(--border); border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-raised); padding: 8px 14px; font-size: var(--text-sm); color: var(--ink-body);
-}
-.wk-since-head { margin: 0; display: flex; align-items: baseline; gap: 10px; }
-.wk-since-summary { flex: 1 1 auto; color: var(--ink-muted); }
+/* The quiet inline text button (once the since-you-left card's toggle; the card is gone, the button style stays). */
 .wk-since-toggle { background: none; border: none; color: var(--ink-muted); cursor: pointer; font: inherit; }
 /* studio#468: the context Ask sent with a message — one quiet line under what the operator typed. */
 .wk-context-sent { display: block; margin-top: 6px; font-size: var(--text-xs); color: var(--ink-muted); }
 .wk-context-sent .wk-since-toggle { padding: 0; text-decoration: underline; }
 .wk-context-pack { display: block; margin-top: 6px; padding: 8px; max-height: 220px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--ink-muted); background: var(--surface-base); border: 1px solid var(--border); border-radius: var(--radius-sm); }
-.wk-since-cols { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 6px; }
-.wk-since-cols p { margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.wk-since-col { font-size: var(--text-xs); font-weight: var(--weight-semi); color: var(--ink-high); }
-.wk-since-none { color: var(--ink-dim); }
 [data-testid="session"] a:focus-visible, [data-testid="session"] button:focus-visible, .wk-session-composer .wk-desk-composer:focus-within {
   outline: 2px solid transparent; outline-offset: 2px; box-shadow: var(--focus-ring);
 }
@@ -1900,7 +1890,8 @@ p.wk-run-tab-muted { margin: var(--space-1) 0; }
 /* A slot artifact (walkthrough, demo video, plan) opened beside the thread takes the panel's place until it
    moves into the panel's options tabs (H6): the two never stack on the same strip of the page. */
 .wk-session-frame:has(> .wk-session--pane) > .wk-hpanel,
-.wk-session-frame:has(> .wk-session--pane) > [data-testid="host-panel-ribbon"] { display: none; }
+.wk-session-frame:has(> .wk-session--pane) > [data-testid="host-panel-ribbon"],
+.wk-session-frame:has(> .wk-session--pane) > [data-testid="run-details-handle"] { display: none; }
 .wk-session-frame > .wk-hpanel .wk-hpanel-body { overflow-y: auto; }
 @media (max-width: 1199px) {
   .wk-session-frame { flex-direction: column; }

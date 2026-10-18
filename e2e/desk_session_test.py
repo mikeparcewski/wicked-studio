@@ -20,8 +20,8 @@ transport, and r-old, launched from a chat the daemon reclaimed) and proves the 
   7. CLOSED: /s/chat-gone renders r-old under "The conversation before this was closed. …"; a
      FAILED chat read says so with a retry and never claims the conversation closed.
   8. R4: a draft and the thread's scroll survive switching to another session and back.
-  9. R2: opened 5 h after the last visit, the since-you-left card overlays the thread; collapsing
-     it moves nothing in the thread; the next visit shows no card.
+  9. NO "SINCE YOU LEFT" (operator 2026-10-18): a session opened after hours away shows no card over the thread —
+     the Details panel and the "needs you" banner already say what happened and what waits.
  10. LETTERS TYPE: a letter typed with the body focused lands in the session composer.
  11. CAPABILITY ABSENT: without runChatId every run is its own session (run:r-pay-1, run:r-pay-2).
  12. OLD PAGE RETIRED (X1): /runs/r-pay-2 shows the not-found page, the typed address kept.
@@ -33,7 +33,6 @@ Captures: e2e/shots/desk-session*.png. Env: FEEDBACK_PORT (default 4347).
 import json
 import os
 import sys
-import time
 
 from uxfix_fixture import HIDE_GATE_TOASTS, REPO, ensure_build, set_fixture, start_server, OPEN_RUN_DETAILS
 
@@ -285,34 +284,12 @@ with sync_playwright() as p:
         "() => !document.querySelector('[data-testid=\"chain-team-error\"]')", timeout=10000)
     check("team-read-failure", True)
 
-    # ── 9. R2: since you left ─────────────────────────────────────────────────────
-    five_h_ago = int(time.time() * 1000) - 5 * 3_600_000
-    page.evaluate("(t) => { const k = 'studio.sessionVisits'; const v = JSON.parse(localStorage.getItem(k) || '{}'); "
-                  "v['chat-pay'] = t; localStorage.setItem(k, JSON.stringify(v)); }", five_h_ago)
-    page.goto(f"{origin}/s/chat-pay", wait_until="networkidle")
-    try:
-        page.get_by_test_id("since-you-left").wait_for(state="visible", timeout=10000)
-    except Exception:
-        fail("since-shown", page.evaluate(THREAD))
-    page.wait_for_function(
-        "() => document.querySelectorAll('[data-testid=\"session-run\"]').length === 2", timeout=10000)
-    before = page.evaluate(THREAD)
-    head = page.get_by_test_id("since-you-left").inner_text()
-    page.screenshot(path=str(SHOTS / "desk-session-since.png"))
-    page.get_by_test_id("since-toggle").click()
-    after = page.evaluate(THREAD)
-    collapsed = page.get_by_test_id("since-you-left").get_attribute("data-collapsed")
-    check("since-overlays", "Since you left · 5 hours" in head and collapsed == "true"
-          and before["firstTop"] == after["firstTop"] and before["threadTop"] == after["threadTop"],
-          head=head.splitlines()[:2], before=[before["threadTop"], before["firstTop"]],
-          after=[after["threadTop"], after["firstTop"]])
+    # ── 9. no "since you left" card: nothing sits over the thread on a return ──────
     page.goto(f"{origin}/s/chat-pay", wait_until="networkidle")
     page.wait_for_function(
         "() => document.querySelectorAll('[data-testid=\"session-run\"]').length === 2", timeout=10000)
-    page.wait_for_function(
-        "() => !!document.querySelector('[data-testid=\"session-turn\"]')", timeout=10000)
     page.wait_for_timeout(300)
-    check("since-once", page.locator('[data-testid="since-you-left"]').count() == 0)
+    check("no-since-card", page.locator('[data-testid="since-you-left"], .wk-since').count() == 0)
 
     # ── 11. capability absent ─────────────────────────────────────────────────────
     set_fixture(origin, run_chat_id=False)

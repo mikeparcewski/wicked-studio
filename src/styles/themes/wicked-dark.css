@@ -43,6 +43,7 @@
   --status-gate-dim: #2a2140;
   --status-fail:     #f6837b;
   --status-fail-dim: #3a1d1e;
+  --status-fail-fg:  #0d1117;
   --status-run:      #56d364;
   --status-run-dim:  #15301c;
   --status-warn:     #f0a868;

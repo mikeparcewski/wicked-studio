@@ -164,59 +164,6 @@ export function conversationOf(
 
 export const CLOSED_LINE = 'The conversation before this was closed. The work is below.';
 
-// ── Since you left (R2) ─────────────────────────────────────────────────────────────────────
-
-/** A session opened after this long away shows the since-you-left card. */
-export const SINCE_IDLE_MS = 4 * 3_600_000;
-
-export interface SinceCard {
-  away: string;
-  finished: string[];
-  failed: string[];
-  needsYou: number;
-  summary: string;
-}
-
-function awayWords(ms: number): string {
-  const h = Math.floor(ms / 3_600_000);
-  if (h < 48) return h === 1 ? '1 hour' : `${h} hours`;
-  const d = Math.floor(h / 24);
-  const rest = h % 24;
-  return rest === 0 ? `${d} days` : `${d} days ${rest} h`;
-}
-
-/**
- * The card for a session last opened at `lastSeen`: `null` on a first visit or under 4 h. What
- * finished or stopped counts only runs whose end the daemon recorded after that visit.
- */
-export function sinceYouLeft(
-  lastSeen: number | null,
-  now: number,
-  runs: readonly SessionView[],
-  badges: Record<string, number>,
-): SinceCard | null {
-  if (lastSeen === null || now - lastSeen < SINCE_IDLE_MS) return null;
-  const after = runs.filter((v) => {
-    const e = endedAtMs(v);
-    return e !== null && e > lastSeen;
-  });
-  const finished = after.filter((v) => v.session.status === 'completed').map((v) => v.session.id);
-  const failed = after.filter((v) => v.session.status === 'failed').map((v) => v.session.id);
-  const needsYou = runs.reduce((n, v) => n + (badges[v.session.id] ?? 0), 0);
-  const parts = [
-    finished.length > 0 ? `${finished.length} finished` : null,
-    failed.length > 0 ? `${failed.length} stopped` : null,
-    needsYou > 0 ? `${needsYou} need${needsYou === 1 ? 's' : ''} you` : null,
-  ].filter((p): p is string => p !== null);
-  return {
-    away: awayWords(now - lastSeen),
-    finished,
-    failed,
-    needsYou,
-    summary: parts.length === 0 ? 'Nothing changed' : parts.join(' · '),
-  };
-}
-
 // ── studio#545: a run the daemon restart orphaned ───────────────────────────────────────────
 
 /** The row's one line: the engine's `runOrphaned` report — the daemon died mid-step and restored no

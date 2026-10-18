@@ -162,3 +162,24 @@ describe('wicked-light reads at AAA for copy on cards', () => {
     });
   }
 });
+
+// Operator 2026-10-18 ("Stopped should stand out — something red and dangerous"): the run page's Stop confirm and a
+// failed/stopped run's state badge are FILLED with status-fail, their text status-fail-fg — AA in every theme. The
+// outlined Stop (status-fail text on its fail-dim tint) is AA too.
+describe('the danger fill reads in every theme', () => {
+  const FAIL_HUE = 4; // tokens.css --_sf-h
+  const failColour = (v: string): RGB => {
+    if (v.startsWith('#')) return hex(v);
+    const m = /^hsl\(var\(--_sf-h\)\s+([\d.]+)%\s+([\d.]+)%\)$/.exec(v);
+    if (m === null) throw new Error(`unparsed fail colour ${v}`);
+    return hslRgb(FAIL_HUE, Number(m[1]), Number(m[2]));
+  };
+  for (const [theme, css] of THEMES) {
+    it(`${theme}: status-fail-fg on status-fail clears 4.5:1`, () => {
+      expect(ratio(color(decl(css, '--status-fail-fg')).rgb, failColour(decl(css, '--status-fail')))).toBeGreaterThanOrEqual(4.5);
+    });
+    it(`${theme}: status-fail on status-fail-dim clears 4.5:1`, () => {
+      expect(ratio(failColour(decl(css, '--status-fail')), failColour(decl(css, '--status-fail-dim')))).toBeGreaterThanOrEqual(4.5);
+    });
+  }
+});

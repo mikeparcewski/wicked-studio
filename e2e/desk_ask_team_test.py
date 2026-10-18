@@ -34,7 +34,7 @@ import sys
 import time
 import urllib.request
 
-from uxfix_fixture import HIDE_GATE_TOASTS, REPO, ensure_build, open_run_panel_item, set_fixture, start_server, OPEN_RUN_DETAILS
+from uxfix_fixture import HIDE_GATE_TOASTS, REPO, ensure_build, open_run_panel_item, set_fixture, start_server, OPEN_RUN_DETAILS, close_details
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4466"))
 W, H = 1440, 700
@@ -204,7 +204,7 @@ with sync_playwright() as p:
           and roles[1][0] == "reviewer" and roles[1][1].startswith(f"{reviewer} reviewer")
           and "also answered a question" in roles[1][1],  # the reviewer answered the HELP: line too
           roles=roles)
-    page.get_by_test_id("session-details-toggle").click()
+    close_details(page)
     page.wait_for_timeout(200)
 
     # ── 4. the turn gate draws nothing ────────────────────────────────────────────

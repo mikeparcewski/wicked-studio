@@ -343,9 +343,10 @@ export interface HostPanelProps {
   runTab?: ReactNode;
   /** The ribbon's one line below 1200 px ("Building · phase 3 of 5 · $1.20"); without a run, the open group's name. */
   ribbon?: ReactNode;
-  /** DES-CHAT-NATIVE-RUN: the page has its own toggle (the session header's Details), so a folded panel leaves
-   *  nothing behind — no side strip, no ribbon line above the conversation. */
-  toggledByPage?: boolean;
+  /** The run page (operator 2026-10-18): a closed panel leaves a slim right-edge handle with this accessible label
+   *  (no ribbon line above the conversation); the handle reopens it as the right panel, or over the page below
+   *  1200 px. */
+  edgeHandle?: string;
 }
 
 export interface FullShellProps {

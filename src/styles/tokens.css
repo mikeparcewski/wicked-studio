@@ -106,6 +106,7 @@
   --status-gate-dim:  hsl(var(--_sg-h) 40% 14%);
   --status-fail:      hsl(var(--_sf-h) 88% 62%);
   --status-fail-dim:  hsl(var(--_sf-h) 40% 14%);
+  --status-fail-fg:   #0d1117;                      /* text ON a filled fail (Stop run, a failed run's badge) */
   --status-run:       hsl(var(--_sr-h) 58% 58%);
   --status-run-dim:   hsl(var(--_sr-h) 40% 14%);
   --status-warn:      hsl(var(--_sw-h) 90% 58%);   /* 2.10:1 apart from gate amber; 5.25+ on raised */

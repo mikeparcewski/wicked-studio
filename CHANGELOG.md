@@ -12,6 +12,17 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+### Changed
+- **The run page's header is the title and one state badge.** The Details button is gone. A failed, stopped or cancelled run's badge is filled red. Stop reads "Stop run" in red, and its confirm is the filled red button. Text on the red clears WCAG AA in every theme (new token `--status-fail-fg`, checked in `tests/tokens.contrast.test.ts`).
+- **The Details panel is open by default beside the conversation.** Its own close folds it to a slim handle at the right edge, which has an accessible label, takes keyboard focus and opens the panel again. The browser remembers whether you left it open or closed (`studio.runDetailsOpen`). Below 1200 px the panel starts behind the handle and opens over the page; Esc closes it there.
+- **"Waiting on you" is a banner below the header.** It shows only while something on the page waits on you, and the thread moves down to make room. Hovering or focusing the yellow "N needs you" opens a short list of what is waiting: the kind, the step, the question and how long it has waited, each with Go to it, which scrolls to it in the thread.
+
+### Added
+- **Jump to latest.** When the thread is not scrolled to the newest message, a ↓ button above the composer goes back there. It shows how many messages arrived while you were reading, and after the jump new messages scroll into view again. With reduced motion it jumps instead of scrolling smoothly.
+
+### Removed
+- **The "since you left" card on the run page.** It covered the top of the thread, and the Details panel and the "needs you" banner already show what changed and what waits. It was used nowhere else, so the component, its model, its per-session visit clock (`studio.sessionVisits`) and its styles are deleted. The Desk's "While you were away" handover is a separate feature and is unchanged.
+
 ## [0.11.2] — 2026-10-18
 
 A patch release: a container sign-in reports crew's real ingest outcome (#854).

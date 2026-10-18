@@ -21,7 +21,7 @@ import json
 import os
 import sys
 
-from uxfix_fixture import HIDE_GATE_TOASTS, REPO, ensure_build, set_fixture, start_server, OPEN_RUN_DETAILS
+from uxfix_fixture import HIDE_GATE_TOASTS, REPO, ensure_build, set_fixture, start_server, OPEN_RUN_DETAILS, close_details
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4465"))
 W, H = 1440, 700
@@ -142,7 +142,7 @@ with sync_playwright() as p:
           sheet=s0, step_sheet={"tab": s1["tab"], "title": s1["title"], "output": (s1["output"] or "")[:80]})
     page.keyboard.press("Escape")
     page.wait_for_timeout(300)
-    page.get_by_test_id("session-details-toggle").click()
+    close_details(page)
     page.wait_for_timeout(300)
 
     # ── 4. a finished run reads the same, settled ────────────────────────────────

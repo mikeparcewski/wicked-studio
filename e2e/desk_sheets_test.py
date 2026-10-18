@@ -26,7 +26,7 @@ import os
 import sys
 import urllib.request
 
-from uxfix_fixture import HIDE_GATE_TOASTS, REPO, ensure_build, open_run_panel_item, set_fixture, start_server, OPEN_RUN_DETAILS
+from uxfix_fixture import HIDE_GATE_TOASTS, REPO, ensure_build, open_run_panel_item, set_fixture, start_server, OPEN_RUN_DETAILS, close_details
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4356"))
 W, H = 1440, 700
@@ -132,7 +132,7 @@ with sync_playwright() as p:
     check("session-sheet", all(t in s_items for t in ("goal", "helpers", "activity", "signins", "whatwhere", "governance", "steering"))
           and section == "governance" and helpers >= 1 and page.get_by_test_id("sheet").count() == 0,
           items=s_items, section=section, helpers=helpers)
-    page.get_by_test_id("session-details-toggle").click()
+    close_details(page)
 
     # ── 3. a step's sheet ──────────────────────────────────────────────────────────
     step = page.get_by_test_id("chain-step-open").first

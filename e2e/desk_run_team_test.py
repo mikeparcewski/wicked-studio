@@ -17,7 +17,7 @@ import json
 import os
 import sys
 
-from uxfix_fixture import DEFAULT_APPEARANCE, HIDE_GATE_TOASTS, REPO, ensure_build, set_fixture, start_server
+from uxfix_fixture import DEFAULT_APPEARANCE, HIDE_GATE_TOASTS, REPO, ensure_build, set_fixture, start_server, open_details
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4498"))
 SHOTS = REPO / "e2e" / "shots"
@@ -76,9 +76,7 @@ with sync_playwright() as p:
         page.locator('[data-testid="session-working"]').first.wait_for(state="visible", timeout=15000)
     except Exception:  # noqa: BLE001
         fail("open-run", "the running run never showed")
-    toggle = page.get_by_test_id("session-details-toggle")
-    if toggle.get_attribute("aria-expanded") != "true":
-        toggle.click()
+    open_details(page)
     agents = page.locator('[data-testid="host-panel"] [data-testid="run-panel-toggle"][data-section="agents"]')
     agents.wait_for(state="visible", timeout=10000)
     if agents.get_attribute("aria-expanded") != "true":

@@ -5,10 +5,10 @@ import { ApiError, api } from '../../api/client.js';
 import type { ChatPathView, SessionView as RunView } from '../../api/types.js';
 import { needsByRun } from '../../board/deskModel.js';
 import type { NeedRow } from '../../board/needsYou.js';
-import { CLOSED_LINE, composerScopeNote, conversationOf, parseSessionId, runChatIdOf, sessionPath, runState, sessionTitle, sinceYouLeft, type Conversation, type SessionState } from '../../board/sessionModel.js';
+import { CLOSED_LINE, composerScopeNote, conversationOf, parseSessionId, runChatIdOf, sessionPath, runState, sessionTitle, type Conversation, type SessionState } from '../../board/sessionModel.js';
 import type { Navigate } from '../../hooks/useRoute.js';
 import { useCapabilities } from '../../store/capabilities.js';
-import { readSessionVisit, useSessionDrafts, writeSessionVisit } from '../../store/sessionDrafts.js';
+import { useSessionDrafts } from '../../store/sessionDrafts.js';
 import { isChatScopeProblem, plainRunTitle } from '../../board/deskWords.js';
 import type { ChatCitations } from '../../api/chat-wire.js';
 import { useGateStore } from '../../store/gates.js';
@@ -19,7 +19,8 @@ import { chatPromotePrefill } from '../../board/chatPromote.js';
 import { setRetryPrefill } from '../../store/retryPrefill.js';
 import { ChatQuestions } from './ThreadQuestions.js';
 import { SourceChips } from './SourceChips.js';
-import { SinceYouLeft } from './SinceYouLeft.js';
+import { NeedsBanner } from './NeedsBanner.js';
+import { atEnd, headerBadge, jumpLabel, newEntries, readDetailsOpen, waitingItems, writeDetailsOpen, type WaitingItem } from '../../board/runHeader.js';
 import { Composer, type ComposerSend, type ComposerSuggestion } from './Composer.js';
 import { quoteLabel } from '../../board/aboutChips.js';
 import { addAboutChip } from '../../store/composerChips.js';
@@ -43,7 +44,6 @@ import { Skeleton, StateBanner, TechDetails } from '../ui/index.js';
 import { readErrorKind } from '../../api/errors.js';
 import { splitToolFailures } from '../../board/askThread.js';
 import { useRoster } from '../../hooks/useRoster.js';
-import { chatStatusWord } from '../../board/statusWords.js';
 import { isHeldRun } from '../../board/heldRuns.js';
 import { executingOrd } from '../../api/run-state.js';
 import { phaseLabel } from '../gateVerdictModel.js';
@@ -72,8 +72,9 @@ export const GOVERNANCE_HASH = '#governance';
  *  - A chat the daemon reclaimed renders its runs under one honest line (§5.3), never an empty
  *    thread that looks like nothing happened.
  *  - R4: the draft and the thread's scroll survive switching sessions and coming back.
- *  - R2: opened after 4 h away, the since-you-left card overlays the top of the thread; it
- *    collapses to one line and never pushes the thread down.
+ *  - The header is the title and one state badge, with Stop (a destructive control) while work is live. What waits on
+ *    the operator is a banner directly below it (operator 2026-10-18), and a thread scrolled up from its newest
+ *    message offers a jump back to it.
  *  - The composer (S7) hands the message to the Ask dock (as the Desk's does), led by its
  *    about-chips; its `/` adds a step to the newest live run as a plan draft, and a selection in
  *    the thread becomes an "about: “…”" chip.
@@ -110,11 +111,6 @@ type ThreadEntry =
   | { kind: 'proposal'; key: string; at: number; view: RunView; ask: AskProposal };
 
 
-/** DES-CHAT-NATIVE-RUN: the details panel's closed default is applied once per app load. */
-let detailsDefaulted = false;
-/** Test seam: the next session page is the app's first again (its details panel starts closed). */
-export function resetDetailsDefault(): void { detailsDefaulted = false; }
-
 /** How long a just-decided proposal keeps the run's block away while the daemon's status catches up. */
 const JUST_DECIDED_MS = 15_000;
 /** How long an open proposal with NO cached gate keeps the block away (the reconcile reads the gate back). */
@@ -132,6 +128,10 @@ function launchedMs(v: RunView): number {
 
 /** studio#834: how long after the operator's own input (a wheel, a touch, a key) a scroll is still theirs. */
 const OPERATOR_SCROLL_MS = 1000;
+/** How long a jump's smooth scroll is the thread's own (its scroll events are not the operator's). */
+const GLIDE_MS = 700;
+/** DES-CHAT-NATIVE-RUN: the message inside a run's conversation that asks the operator something. */
+const ASKING_SELECTOR = '[data-testid="chat-plan"][data-open="true"], [data-testid="chat-gate"], [data-testid="chat-final"][data-kind="deliver"]';
 
 export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onRetryRuns, needRows, navigate, onAsk, artifactKey = null, artifactSize = 'pane', artifactVersion = null }: {
   /** The runs read's failure (App's `useRuns`): said with Retry, never an endless skeleton. */
@@ -378,19 +378,13 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
   // The closed line above the entries is crew's: the first crew entry under it needs no second label.
   const leadWho: Responder | null = conversation === 'closed' && mine.length > 0 ? CREW : null;
   const badges = useMemo(() => needsByRun(needRows), [needRows]);
-  const badge = mine.reduce((n, v) => n + (badges[v.session.id] ?? 0), 0);
   const state: SessionState = mine.some((v) => runState(v) === 'waiting') ? 'waiting'
     : mine.some((v) => runState(v) === 'working') ? 'working'
       : mine.length > 0 ? runState(mine[mine.length - 1]!) : 'quiet';
-
-  // R2: the last visit, read once per session before this visit is stamped.
-  // (A memo runs during render, before the effect below stamps this visit; switching away stamps
-  // it again, so coming back minutes later shows no card.)
-  const lastSeen = useMemo(() => readSessionVisit(sessionId), [sessionId]);
-  useEffect(() => {
-    writeSessionVisit(sessionId, Date.now());
-    return () => writeSessionVisit(sessionId, Date.now());
-  }, [sessionId]);
+  const badge = mine.length > 0 ? headerBadge(mine, state) : null;
+  // The banner below the header: each thing here that waits on the operator (the Needs-you rows about these runs).
+  const gates = useGateStore((s) => s.gates);
+  const waiting = useMemo(() => waitingItems(needRows, mine, gates, Date.now()), [needRows, mine, gates]);
   useEffect(() => {
     if (ref.kind !== 'run' || !runsLoaded || runInIndex) { setDetail(null); return; }
     const id = ref.runId;
@@ -406,7 +400,6 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
       });
     return () => { cancelled = true; };
   }, [ref, runsLoaded, runInIndex, detailTry]);
-  const since = useMemo(() => sinceYouLeft(lastSeen, Date.now(), mine, badges), [lastSeen, mine, badges]);
 
   const entries = useMemo<ThreadEntry[]>(() => {
     const out: ThreadEntry[] = [];
@@ -566,6 +559,7 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
   // R4: scroll and draft per session.
   const scroller = useRef<HTMLDivElement | null>(null);
   const setScroll = useSessionDrafts((s) => s.setScroll);
+  const clearScroll = useSessionDrafts((s) => s.clearScroll);
   const draft = useSessionDrafts((s) => s.drafts[sessionId] ?? '');
   const setDraft = useSessionDrafts((s) => s.setDraft);
   // Not ready until `/health` answered too: before it, "no runs in this chat" could be false (Copilot).
@@ -594,7 +588,19 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
   // and saved that spot as their place (every later open came back 269 px short).
   const operatorUntil = useRef(0);
   const pointerHeld = useRef(false);
-  const operatorInput = (): void => { operatorUntil.current = Date.now() + OPERATOR_SCROLL_MS; };
+  // Jump to latest (operator 2026-10-18): away from the newest message the thread offers a way back, counting what
+  // arrived meanwhile. A jump glides there (no glide under reduced motion); while it glides the thread's own scroll
+  // events are not read as the operator's, and the operator's own input ends the glide's hold at once.
+  const [away, setAway] = useState(false);
+  const [unseen, setUnseen] = useState(0);
+  const glideUntil = useRef(0);
+  const glideSettle = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const syncEnd = (el: HTMLDivElement): void => {
+    const end = atEnd(el);
+    setAway(!end);
+    if (end) setUnseen(0);
+  };
+  const operatorInput = (): void => { operatorUntil.current = Date.now() + OPERATOR_SCROLL_MS; glideUntil.current = 0; };
   useEffect(() => {
     const release = (): void => {
       if (!pointerHeld.current) return;
@@ -609,6 +615,45 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
     const before = el.scrollTop;
     el.scrollTop = top;
     if (el.scrollTop !== before) programmatic.current = el.scrollTop;
+  };
+  const glide = (el: HTMLDivElement, top: number): void => {
+    const reduce = typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduce || typeof el.scrollTo !== 'function') { scrollThread(el, top); return; }
+    glideUntil.current = Date.now() + GLIDE_MS;
+    el.scrollTo({ top, behavior: 'smooth' });
+  };
+  useEffect(() => () => { if (glideSettle.current !== null) clearTimeout(glideSettle.current); }, []);
+  const jumpToLatest = (): void => {
+    const el = scroller.current;
+    if (el === null) return;
+    // Back at the newest message the thread follows again, and a later visit opens there (no saved place).
+    nearBottom.current = true;
+    restore.current.pending = false;
+    setUnseen(0);
+    clearScroll(sessionId);
+    glide(el, el.scrollHeight);
+    if (glideSettle.current !== null) clearTimeout(glideSettle.current);
+    // Words that landed while it glided: the end is wherever the thread ends now.
+    glideSettle.current = setTimeout(() => {
+      glideSettle.current = null;
+      if (nearBottom.current && scroller.current !== null) { scrollThread(scroller.current, scroller.current.scrollHeight); syncEnd(scroller.current); }
+    }, GLIDE_MS + 20);
+  };
+  // The banner's "Go to it": the waiting run's question (its plan card, a step's question, the hand-over) comes into
+  // view and takes the focus, and the thread stops following — the operator is reading there now.
+  const jumpToItem = (item: WaitingItem): void => {
+    const el = scroller.current;
+    if (el === null) return;
+    const block = [...el.querySelectorAll<HTMLElement>('[data-testid="session-run"], [data-testid="session-ask-proposal"]')].find((b) => b.dataset['runId'] === item.runId);
+    if (block === undefined) return;
+    const target = block.querySelector<HTMLElement>(ASKING_SELECTOR) ?? block.querySelector<HTMLElement>('[data-testid="chat-final"]') ?? block;
+    nearBottom.current = false;
+    restore.current.pending = false;
+    const top = Math.max(0, el.scrollTop + target.getBoundingClientRect().top - el.getBoundingClientRect().top - 8);
+    setScroll(sessionId, top);
+    glide(el, top);
+    if (!target.hasAttribute('tabindex')) target.setAttribute('tabindex', '-1');
+    target.focus({ preventScroll: true });
   };
   useLayoutEffect(() => {
     if (!ready) return;
@@ -661,6 +706,18 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
     for (const child of Array.from(el.children)) ro.observe(child);
     return () => ro.disconnect();
   }, [entries, ready]);
+  // What arrived while the operator reads above the newest message: the jump button counts it (a typing or working
+  // line is not a message).
+  const seenKeys = useRef<{ session: string; keys: Set<string> } | null>(null);
+  useEffect(() => {
+    const keys = entries.filter((e) => e.kind !== 'typing' && e.kind !== 'working').map((e) => e.key);
+    const prev = seenKeys.current;
+    seenKeys.current = { session: sessionId, keys: new Set(keys) };
+    if (!ready || prev === null || prev.session !== sessionId || prev.keys.size === 0 || nearBottom.current) return;
+    const n = newEntries(prev.keys, keys);
+    if (n > 0) setUnseen((u) => u + n);
+  }, [entries, ready, sessionId]);
+  useEffect(() => { setUnseen(0); setAway(false); }, [sessionId]);
 
   // Run clarity: the action first. On a first visit (no saved place — a saved place means they were
   // reading there) a run of this session with an open gate brings its block — the card leads it — into
@@ -680,7 +737,7 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
     restore.current.pending = false;
     // DES-CHAT-NATIVE-RUN: the question is a message inside the run's conversation (the plan, a step's question,
     // the hand-over) — that message is what comes into view, not the run's first message.
-    const asking = block.querySelector<HTMLElement>('[data-testid="chat-plan"][data-open="true"], [data-testid="chat-gate"], [data-testid="chat-final"][data-kind="deliver"]') ?? block;
+    const asking = block.querySelector<HTMLElement>(ASKING_SELECTOR) ?? block;
     const view = el.getBoundingClientRect();
     const at = asking.getBoundingClientRect().top;
     if (at >= view.top && at <= view.bottom - 160) return; // already in view
@@ -697,6 +754,7 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
   const liveRuns = useMemo(() => mine.filter((v) => !['completed', 'cancelled', 'failed'].includes(v.session.status)).map((v) => v.session.id), [mine]);
   const stopping = useSheets((s) => liveRuns.length > 0 && liveRuns.every((id) => s.stopping[id] !== undefined));
   const [confirmStop, setConfirmStop] = useState(false);
+  const stopWords = liveRuns.length > 1 ? `Stop ${liveRuns.length} runs` : 'Stop run';
   useEffect(() => { setConfirmStop(false); }, [sessionId]);
   // A runs read still pending after 15 s (host load) is said, with Retry — never a silent skeleton.
   const [slow, setSlow] = useState(false);
@@ -714,14 +772,21 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
   // Leaving the session leaves no Options group behind for the next page (codex h4-fix r1 P2: a Made-list card
   // would read it as its own).
   useEffect(() => () => { useHostPanel.getState().closeGroup(); }, [sessionId]);
-  // DES-CHAT-NATIVE-RUN: the details panel starts closed (once per app load); after that it is where you left it.
-  useEffect(() => {
-    if (detailsDefaulted) return;
-    detailsDefaulted = true;
-    if (useHostPanel.getState().group === null) useHostPanel.getState().setFolded(true);
-  }, []);
-  // Open is the panel beside the chat (wide) or over it (below 1200 px): the toggle says which it is now.
+  // Open is the panel beside the chat (wide) or over it (below 1200 px).
   const panelNarrow = useNarrow();
+  // Operator 2026-10-18: the details panel is open by default beside the chat; its own close folds it to a handle at
+  // the right edge, and this browser remembers which the operator left it. Below 1200 px it would cover the chat, so
+  // there it starts closed behind the handle (the overlay is HostPanel's, closed on every mount).
+  useEffect(() => {
+    if (useHostPanel.getState().group === null) useHostPanel.getState().setFolded(!readDetailsOpen());
+  }, []);
+  const folded = useHostPanel((s) => s.folded);
+  const foldSeen = useRef<boolean | null>(null);
+  useEffect(() => {
+    if (foldSeen.current === null || foldSeen.current === folded) { foldSeen.current = folded; return; }
+    foldSeen.current = folded;
+    if (!panelNarrow) writeDetailsOpen(!folded);
+  }, [folded, panelNarrow]);
   // The run panel IS this session's look-underneath (src/board/runPanelModel.ts): while this page is up, a session
   // sheet asked for it or one of its runs (⌘K, a sign-in line, `#governance`) opens the panel at the same content.
   const claim = useRef({ mine, narrow: panelNarrow });
@@ -749,7 +814,6 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
     governed.current = ref.runId;
     openSheet({ kind: 'session', sessionId: `run:${ref.runId}` }, 'governance');
   }, [ref, runHere, runsLoaded]);
-  const detailsOpen = useHostPanel((s) => (panelNarrow ? s.overlay : !s.folded));
 
   // DES §7.4: the retired "Demo video" header button is an ordinary turn suggestion — a run here that made a deck or a
   // document offers "Make a demo video of this", which opens the New job form's demo video in its project.
@@ -817,31 +881,35 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
         Run tab, a plugin's Options tabs added on demand; below 1200 px a one-line ribbon. */}
     <div data-testid="session-frame" className="wk-session-frame">
     <div data-testid="session" data-object={`session:${sessionId}`} data-session-id={sessionId} data-conversation={conversation} data-state={state} data-pane={pane} className={`wk-session${pane ? ' wk-session--pane' : ''}`}>
+      {/* Operator 2026-10-18: the header is the title and one state badge — Stop is its only action while work is live. */}
       <header className="wk-session-head wk-measure wk-measure--thread">
-        <span aria-hidden className={`wk-desk-dot wk-desk-dot--${state}`} />
         <div className="wk-session-head-body">
           {/* Audit row 62: until the session's reads settle, the title is a skeleton and no state word
               is said — never the placeholder "A session · Quiet · Loading…". */}
           {ready || mine.length > 0 || conversation === 'fresh'
             ? <h1 data-testid="session-title" className="wk-session-title">{title}</h1>
             : <div data-testid="session-title-loading" className="wk-session-title-skeleton"><Skeleton rows={1} variant="line" /></div>}
-          <p data-testid="session-status" className="wk-session-status">
-            {/* UI-CONTRACT §5: the one status vocabulary (never "Quiet" for a cancelled run). */}
-            {ready || mine.length > 0 ? (state === 'waiting' ? 'Waiting on you' : mine.length > 0 ? chatStatusWord(mine).word : null) : null}
-            {conversation === 'fresh' && mine.length === 0 && (
+          {/* UI-CONTRACT §5: the one status vocabulary (never "Quiet" for a cancelled run); a failed, stopped or cancelled
+              run reads red. "Waiting on you" is the banner's, below. */}
+          {badge !== null && (
+            <span data-testid="session-status" data-tone={badge.tone} className={`wk-state-badge wk-state-badge--${badge.tone}`}>
+              {badge.word}
+            </span>
+          )}
+          {conversation === 'fresh' && mine.length === 0 && (
+            <span data-testid="session-status" data-tone="quiet" className="wk-state-badge wk-state-badge--quiet">
               <span data-testid="session-fresh-status">{freshOpening || awaitingOpenRead || (fresh === null) ? 'Starting the chat…'
                 : fresh.projectId !== null ? `New · in ${freshProjectName ?? 'a project'}` : 'New · not in a project'}</span>
-            )}
-            {mine.length > 1 && ` · ${mine.length} runs`}
-            {badge > 0 && <> · <mark className="wk-desk-mark">{badge === 1 ? '1 needs you' : `${badge} need you`}</mark></>}
-          </p>
+            </span>
+          )}
         </div>
         {/* S16a-4e: a chat off the ask path promotes into Build from its own session (the retired chat page's door). */}
         {ref.kind === 'chat' && !askPathOn && conversation === 'live' && messages.some((m) => m.kind === 'user') && (
           <button type="button" data-testid="session-chat-promote" title="Open the Build composer prefilled with this conversation as context — editable before launch" onClick={() => { setRetryPrefill(chatPromotePrefill(ref.chatId, messages, mine[0] !== undefined && typeof mine[0].session.project_id === 'string' ? mine[0].session.project_id : null)); navigate('/runs/new'); }} className="wk-prop-btn wk-prop-btn--ghost">Continue in Build</button>
         )}
         {/* studio#631 (2) + rig 863167a2: ANY session with live work has its Stop — a run's session as
-            well as a chat's — the same 10 s-undo stop ⌘K offers, behind one confirm step. */}
+            well as a chat's — the same 10 s-undo stop ⌘K offers, behind one confirm step. A destructive control:
+            red, and it says what it stops. */}
         {liveRuns.length > 0 && !confirmStop && (
           <button
             type="button"
@@ -849,32 +917,23 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
             disabled={stopping}
             title={stopping ? 'Stopping — Undo is on the notice' : 'Stop this work — you confirm first, then 10 s to undo; what it did so far is kept'}
             onClick={() => setConfirmStop(true)}
-            className="wk-btn wk-btn--secondary"
+            className="wk-btn wk-btn--sm wk-stop-btn"
           >
-            {stopping ? 'Stopping…' : 'Stop'}
+            {stopping ? 'Stopping…' : stopWords}
           </button>
         )}
         {liveRuns.length > 0 && confirmStop && (
-          <span data-testid="session-stop-confirm-row" role="group" aria-label="Stop this work?" className="wk-session-stop-confirm">
-            <span className="wk-session-grey">Stop this work?</span>
-            <button type="button" data-testid="session-stop-confirm" autoFocus onClick={() => { setConfirmStop(false); stopRun(liveRuns, `“${title}”`); }} className="wk-btn wk-btn--danger wk-btn--sm">Stop</button>
+          <span data-testid="session-stop-confirm-row" role="group" aria-label={`${stopWords}?`} className="wk-session-stop-confirm">
+            <span className="wk-session-grey">{`${stopWords}?`}</span>
+            <button type="button" data-testid="session-stop-confirm" autoFocus onClick={() => { setConfirmStop(false); stopRun(liveRuns, `“${title}”`); }} className="wk-btn wk-btn--sm wk-stop-btn wk-stop-btn--confirm">{stopWords}</button>
             <button type="button" data-testid="session-stop-keep" onClick={() => setConfirmStop(false)} className="wk-btn wk-btn--quiet wk-btn--sm">Keep going</button>
           </span>
         )}
-        {/* DES-CHAT-NATIVE-RUN: the run's details open beside the conversation on demand — closed by default, never
-            between you and the chat. They are the run's ONE right panel: what the ⋯ sheet held lives in it too. */}
-        {mine.length > 0 && (
-          <button type="button" data-testid="session-details-toggle" aria-expanded={detailsOpen} aria-controls="run-details-panel"
-            title={detailsOpen ? 'Hide the details' : 'Show the run’s details: status, plan and steps, changes, checks, agents and its record'}
-            onClick={() => { const hp = useHostPanel.getState(); if (panelNarrow) hp.setOverlay(!hp.overlay); else hp.setFolded(!hp.folded); }}
-            className={`wk-chat-details-toggle${detailsOpen ? ' wk-chat-details-toggle--on' : ''}`}>
-            <span aria-hidden className="wk-chat-details-icon" /><span className="wk-chat-details-label">Details</span>
-          </button>
-        )}
       </header>
+      {/* Operator 2026-10-18: what waits on you is a banner below the header, in the page's flow (the thread reflows). */}
+      {ready && <NeedsBanner items={waiting} onJump={jumpToItem} />}
 
       <div className="wk-session-body">
-        {since !== null && ready && <SinceYouLeft key={sessionId} card={since} runs={mine} />}
         {/* S16a-4a: an address naming an artifact this session does not hold grows nothing and says so. */}
         {artifactMissing && <p data-testid="session-artifact-missing" className="wk-session-grey">That artifact is not in this session any more.</p>}
         <div
@@ -883,6 +942,9 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
           className="wk-session-thread wk-measure wk-measure--thread"
           onScroll={(e) => {
             const el = e.currentTarget;
+            syncEnd(el);
+            // A jump gliding to its place: the thread's own scroll, until it lands (or the operator takes over).
+            if (Date.now() < glideUntil.current) return;
             // The thread's own scroll (a restore, a follow) is not the operator's place.
             if (programmatic.current !== null && Math.abs(el.scrollTop - programmatic.current) < 2) return;
             // studio#834: a scroll the operator did not make is not their place; a thread that is following
@@ -1016,6 +1078,14 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
           {/* S16a-4g: the chat's own question and gate (keyed by the chat id) at the thread's foot. */}
           {ref.kind === 'chat' && <ChatQuestions chatId={ref.chatId} />}
         </div>
+        {/* Jump to latest: away from the newest message, a way back (with what arrived meanwhile). */}
+        {ready && away && entries.length > 0 && (
+          <button type="button" data-testid="session-jump-latest" data-unseen={unseen} aria-label={jumpLabel(unseen)} title={jumpLabel(unseen)}
+            onClick={jumpToLatest} className="wk-jump-latest">
+            <span aria-hidden>↓</span>
+            {unseen > 0 && <span data-testid="session-jump-unseen" aria-hidden className="wk-jump-latest-count">{unseen > 99 ? '99+' : unseen}</span>}
+          </button>
+        )}
       </div>
       {/* Rule 3: while the thread is the chain, the shape line names the path's steps for the operator. */}
       {askBlockHidden && askPath.shape.length > 0 && (
@@ -1025,7 +1095,7 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
       {/* The measure sits on a wrapper: the composer's own box (its `/` and `@` menus anchor to it) stays the input's width. */}
       <div className="wk-session-composer-wrap wk-measure wk-measure--thread"><Composer {...composerProps} className="wk-session-composer" /></div>
     </div>
-    <HostPanel toggledByPage runTab={<RunTab runs={mine} allRuns={runs} sessionId={sessionId} title={title} navigate={navigate} />} ribbon={<RunRibbon runs={mine} />} />
+    <HostPanel edgeHandle="Show the run’s details" runTab={<RunTab runs={mine} allRuns={runs} sessionId={sessionId} title={title} navigate={navigate} />} ribbon={<RunRibbon runs={mine} />} />
     </div>
     </RunHostProvider>
     </ArtifactAddressProvider>

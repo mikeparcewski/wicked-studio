@@ -894,8 +894,12 @@
     "search-corpus-label": "search-status",
     "search-why": "search-status",
     "search-why-popover": "search-status",
-    "session-sheet-open": "session-details-toggle",
+    "session-sheet-open": "run-details-handle",
     "run-tab-look": "run-panel-item-toggle",
-    "run-tab-phase-count": "run-panel-summary"
+    "run-tab-phase-count": "run-panel-summary",
+    "session-details-toggle": "run-details-handle",
+    "since-you-left": "session-needs-banner",
+    "since-summary": "session-needs-first",
+    "since-toggle": "session-needs-trigger"
   }
 }

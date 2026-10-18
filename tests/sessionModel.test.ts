@@ -7,11 +7,9 @@ import {
   ORPHANED_LINE,
   orphanedOf,
   parseSessionId,
-  SINCE_IDLE_MS,
   sessionIdOf,
   sessionPath,
   sessionTitle,
-  sinceYouLeft,
 } from '../src/board/sessionModel.js';
 
 /**
@@ -96,32 +94,6 @@ describe('the goal sentence and the conversation', () => {
     // No transcript at hand (the rail, a late join): the statement says what the chat is about.
     expect(sessionTitle([], [ask])).toBe('A conversation about wicked-platform');
     expect(sessionTitle([], [ask])).not.toMatch(/Chat scope/);
-  });
-});
-
-describe('since you left (R2: a session idle ≥ 4 h)', () => {
-  const now = 10 * SINCE_IDLE_MS;
-  const runs = [
-    run('a', 'completed', { created_at: 1, ended_at: (now - 3_600_000) / 1000 }),
-    run('b', 'failed', { created_at: 1, ended_at: (now - 1_800_000) / 1000 }),
-    run('c', 'awaiting_human', { created_at: 1 }),
-    run('d', 'completed', { created_at: 1, ended_at: (now - 9 * 3_600_000) / 1000 }),
-  ];
-  it('no card on a first visit, or when the last visit is under 4 h ago', () => {
-    expect(sinceYouLeft(null, now, runs, {})).toBeNull();
-    expect(sinceYouLeft(now - SINCE_IDLE_MS + 1, now, runs, {})).toBeNull();
-  });
-  it('after 4 h: what finished, what failed, what needs you — only since the last visit', () => {
-    const card = sinceYouLeft(now - 5 * 3_600_000, now, runs, { c: 1 })!;
-    expect(card.away).toBe('5 hours');
-    expect(card.finished).toEqual(['a']);
-    expect(card.failed).toEqual(['b']);
-    expect(card.needsYou).toBe(1);
-    expect(card.summary).toBe('1 finished · 1 stopped · 1 needs you');
-  });
-  it('nothing happened: still a card, saying so', () => {
-    const card = sinceYouLeft(now - 2 * SINCE_IDLE_MS, now, [runs[3]!], {})!;
-    expect(card.summary).toBe('Nothing changed');
   });
 });
 
