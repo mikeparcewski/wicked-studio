@@ -39,23 +39,30 @@ test.describe('install copy buttons', () => {
 });
 
 test.describe('honest boundaries', () => {
-  test('the page claims pure-client status, never governance ownership', async ({ page }) => {
+  test('studio is a pure client and grades nothing', async ({ page }) => {
     await page.goto('/');
 
-    // The seam section owns the honesty headline: zero crew source, one contract.
-    const pair = page.locator('.pair');
-    await bringIntoView(pair);
-    await expect(pair).toContainText('zero');
-    await expect(pair).toContainText('wicked-crew-api-types');
-    await expect(pair).toContainText('there is no back channel');
+    const get = page.locator('.get');
+    await bringIntoView(get);
+    await expect(get).toContainText('pure client');
+    await expect(get).toContainText('wicked-crew-api-types');
 
-    // The board credits governance to crew — the skin surfaces, never grades.
-    const board = page.locator('.board');
-    await bringIntoView(board);
-    await expect(board).toContainText('never grades');
-    await expect(board.getByRole('link', { name: 'crew’s' })).toHaveAttribute(
+    // Review is crew's: the skin surfaces it, never grades it.
+    const review = page.locator('.review');
+    await bringIntoView(review);
+    await expect(review).toContainText('never grades anything');
+    await expect(review.getByRole('link', { name: 'crew’s' })).toHaveAttribute('href', 'https://wc.wickedagile.com');
+    await expect(review).toContainText('reduced assurance');
+
+    // Knowledge is estate's.
+    await expect(page.locator('.steer').getByRole('link', { name: 'wicked-estate' })).toHaveAttribute(
       'href',
-      'https://wc.wickedagile.com'
+      'https://we.wickedagile.com',
     );
+  });
+
+  test('the demo says it is a demo', async ({ page }) => {
+    await page.goto('/');
+    await expect(page.locator('[data-demo-note]')).toContainText('scripted demo');
   });
 });

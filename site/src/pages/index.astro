@@ -2,55 +2,31 @@
 /**
  * index.astro — the wicked-studio landing page (ws.wickedagile.com).
  *
- * POSITIONING (four-plane era): wicked-studio is the CODER'S FRONT DOOR of the
- * wicked platform's EXPERIENCE plane — the Desk for governed agent
- * delivery. A Vite/React SPA that is a PURE HTTP/WS client of the wicked-crew
- * daemon: launch and steer governed runs, answer human gates, watch live
- * CoreEvent streams, drive terminals — everything the daemon exposes on
- * /api/v1 and /ws, and nothing else. It also SURFACES a foundation-plane
- * sibling, wicked-interactive — the API-only document engine (doc storage,
- * version lineage, HTML/PDF/PPTX rendering) that crew spawns and proxies. It is
- * NOT a skin and has no UI of its own; you depend on it, you don't visit it.
- * This surface is a pure client of the same control plane.
+ * POSITIONING: studio is the IDE for running a team of coding agents. The page leads with that and
+ * shows it: the hero IS a working miniature of the Desk (sessions on the left, a run as a chat in
+ * the middle, what changed on the right). Separate-agent review is a supporting proof further down,
+ * not the hook.
  *
- * HONEST BOUNDARIES honored on this page:
- *  - Studio imports ZERO crew source. The only artifact the two products share
- *    is the published wire contract, wicked-crew-api-types. Every capability
- *    shown here rides GET/POST /api/v1/… + the /ws CoreEvent stream — real
- *    routes from src/api/client.ts, never invented ones.
- *  - Two ship modes, both real: BUNDLED (crew's release build copies studio's
- *    built dist into the daemon's serving tree — `npx wicked-crew serve`,
- *    same-origin, one port) and STANDALONE (VITE_API_HOST baked at build time,
- *    dist/ served from any static server; the daemon's loopback CORS admits
- *    localhost origins). The standalone mode is proven by a scripted e2e
- *    (e2e/studio_standalone_test.py) that drives a real browser against a
- *    live daemon.
- *  - The Project model is SHIPPED in the control plane (/api/v1/projects,
- *    nine routes; a project's activity feed merges crew core events with
- *    wicked.interactive.* bus events carrying the same project_id). In studio
- *    a project is a SCOPE on the one Desk shell, not its own shell: the
- *    project shell, per-project dashboard and classic skins retired (S18d);
- *    "See everything" (`/everything?project=`) scopes to it, `/p/:id` opens
- *    its scoped Sessions list, `/projects/:id` is its edit/archive page. Never
- *    describe a project dashboard or a four-mode shell.
- *  - Governance vocabulary (deny-dominates, evaluator ≠ creator, gates) is
- *    crew's — studio SURFACES it, it does not own it. The skin never grades
- *    anything.
- *  - Panels named on the board are the Desk's real tabs (DESK_TABS in
- *    src/components/desk/DeskV2.tsx): Work, Runs, Repositories, Report,
- *    Understand, Steer, Memory, Agents, Evaluate. Steer (`/rules`) and Memory
- *    (`/memory`) are separate peers: rules are enforceable, with an explicit
- *    reach (all projects, one project, one repo); memory is what happened and
- *    what you told it. Memory is NOT inside Steering.
- *  - Public words (operator decisions 2026-10-17): job (the UI's "New job"),
- *    agent (not seat), sandbox (not floor/container in headlines), rules (not
- *    steering doctrine). A review on the builder's own agent is REFUSED unless
- *    the job is launched with reduced assurance (crew 0.9.0 EX-01), so never
- *    describe a "single runner" fallback.
- *  - Agents run in containers by default: Claude Code, Codex, Copilot,
- *    OpenCode and Pi have sandbox images; credentials stay in a broker and the
- *    sandbox sees only placeholders. Demo recordings are captioned screen
- *    recordings with no voice-over (wicked-interactive demo-cut.js renders -an).
+ * Shape: hook → the working demo → four short proofs (the Desk, review + receipt, rules / memory /
+ * knowledge, agents + projects) → the family map → get it. One voice: plain words, second person,
+ * no paragraph past ~3 lines.
+ *
+ * ACCURACY (studio 0.10.1 / crew 0.14.1). Every label in the demo is a real studio label:
+ *  - A run's page is a chat: your messages right-aligned, each agent's turn under its name, the
+ *    plan card's "Approve plan" / "Not now", one "Working on Build…" line, and the final message
+ *    "Done. Tests pass (38), and codex reviewed and approved it. Pull request #12 is open." with
+ *    the pull request, Changes and Evidence as chips (CHANGELOG 0.10.0).
+ *  - Gate choices: "Approve", "Approve with a note for the next step", "Send back"
+ *    (src/components/session/GateRow.tsx, gateMoveModel.ts).
+ *  - A question card names the agent that asked (0.9.3). "Needs you" is the inbox (0.10.0).
+ *  - Desk tabs = DESK_TABS in src/components/desk/DeskV2.tsx.
+ *  - Review on the builder's own agent is refused unless the job is launched with reduced
+ *    assurance, labelled on the run, every gate and the delivery (crew 0.9.0 / core-ts 0.7.46).
+ *  - The assurance receipt: required vs ran, who built / reviewed / judged, what was skipped.
+ *  - QE acceptance is required for feature / bug / migration / mcp-server runs.
+ *  - Studio grades nothing: the checks are crew's, the store is estate's. Studio is a pure client
+ *    of crew's /api/v1 + /ws; the wire contract wicked-crew-api-types is the only shared code.
+ * Never hardcode a version in prose: the install stamp is injected at build time (DT-7).
  */
 import Base from 'wicked-web/layouts/Base.astro';
 import Topbar from 'wicked-web/components/Topbar.astro';
@@ -58,533 +34,205 @@ import Footer from 'wicked-web/components/Footer.astro';
 import SameGarden from 'wicked-web/components/SameGarden.astro';
 import '../styles/studio.css';
 
-const title = 'wicked-studio — where you direct your coding agents';
-// Same attribution boundary as the on-page copy: the DAEMON drives the CLIs, studio is its
-// client. This string is what search results and social cards show, so it is read far more often
-// than the page — getting the boundary right on the page and wrong here would put the inaccurate
-// version in front of most people who ever see either.
+// The hook. Kept as two strings so the operator can swap a variant in one place.
+const HEADLINE = 'The IDE for running a team of coding agents.';
+const SUBLINE = 'Chat with them, watch the work happen, make the calls only you can make, and ship what they changed.';
+
+const title = 'wicked-studio — the IDE for running a team of coding agents';
+// What search results and social cards show. Same attribution boundary as the page: the crew
+// daemon runs the agents; studio is the screen you run them from.
 const description =
-  'Where you direct your coding agents. Start a job with a chat; it proposes a plan and nothing starts until you confirm it. Your own agents (Claude Code, Codex, Copilot, OpenCode, Pi), signed in once on the Agents tab, work in sandboxes run by the wicked-crew daemon on your machine. No agent can approve its own work: a different agent reviews it, and every decision that matters waits for you with the evidence.';
+  'The IDE for running a team of coding agents. Chat with Claude Code, Codex, Copilot, OpenCode and Pi, watch the work happen live, answer the gates that need you, and approve what changed. A different agent reviews every change, and the wicked-crew daemon on your machine runs each agent in a sandbox.';
 const repo = 'https://github.com/mikeparcewski/wicked-studio';
 
-// The SPA's real surfaces (src/App.tsx — the Desk is the one shell since the classic skins
-// retired), each fed by a real /api/v1 route (src/api/client.ts). The board auto-cycles; click to pin.
-const PANELS = [
-  { id: 'work',         api: 'GET /runs · WS /ws',             line: 'What needs you first (gates, questions, stalled agents), then what is in flight. Start a New job here, with a chat or a short brief.' },
-  { id: 'runs',         api: 'GET /runs/:id/events · WS /ws',  line: 'Every job as one thread: the live record, the gates you answer in place, and a composer to add a note mid-job.' },
-  { id: 'repositories', api: 'POST /repos',                    line: 'Your registered repos, their onboarding jobs, and code-graph summaries: the ground your agents stand on.' },
-  { id: 'report',       api: 'GET /runs',                      line: 'What your agents did over the last days: outcomes and spend, by project, with a one-click question to chat about it.' },
-  { id: 'understand',   api: 'POST /runs',                     line: 'Pick jobs, repos or agents and compare them side by side, then start an analysis job on the selection.' },
-  { id: 'steer',        api: 'GET /governance/rules',          line: 'Your rules, each with its reach: everywhere, one project, or one repo. Agents propose new ones; you approve or reject.' },
-  { id: 'memory',       api: 'GET /memory',                    line: 'What happened and what you told it, kept apart from the rules. Your own memories apply across projects; see, edit, or erase any one.' },
-  { id: 'agents',       api: 'POST /seats/:cli/container-login', line: 'Sign in each agent once (Claude Code, Codex, Copilot, OpenCode, Pi). Credentials stay in a broker; the sandboxes only see placeholders.' },
-  { id: 'evaluate',     api: 'POST /testing/evals/run',        line: 'Run your rules against your own dev-behavior examples. Each lands caught, gap, or false-positive, so a rule earns its keep before it checks a job.' },
+// The Desk's real tabs (DESK_TABS in src/components/desk/DeskV2.tsx), one plain line each.
+const TABS = [
+  { name: 'Work', line: 'What needs you first, then what is running. Start a new job here.' },
+  { name: 'Runs', line: 'Every job as one chat: the live record and the gates you answer.' },
+  { name: 'Repositories', line: 'Your repos, their onboarding and their code graphs.' },
+  { name: 'Report', line: 'What your agents did lately: outcomes and spend, by project.' },
+  { name: 'Understand', line: 'Compare jobs, repos or agents side by side.' },
+  { name: 'Steer', line: 'Your rules, each scoped to everywhere, one project or one repo.' },
+  { name: 'Memory', line: 'What happened and what you told it. Edit or erase any of it.' },
+  { name: 'Agents', line: 'Sign each agent in once. It runs in a sandbox.' },
+  { name: 'Evaluate', line: 'Test your rules against examples before they check real work.' },
 ];
 
-// The insight rail: the per-run panels fed by the CoreEvent stream.
-const RAIL = [
-  { id: 'Burn',        line: 'Tokens, cost, and rework per agent — live during the job, not on the invoice.' },
-  { id: 'Decisions',   line: 'Every human call on the record: who approved what, when, and why.' },
-  { id: 'Governance',  line: 'The audit view: which rules were checked, which verdicts held the job.' },
-  { id: 'Assumptions', line: 'External transforms recorded with honest confidence — needs-research is badged for you.' },
-  { id: 'Steering',    line: 'The timeline of gates raised and answered — approve, amend, reject.' },
-  { id: 'Files',       line: 'The diffs each step produced, straight from the working copy.' },
-  { id: 'Term',        line: 'A real terminal into the agent’s working copy.' },
-  { id: 'Cov',         line: 'Repo-scoped coverage, one click from the job that changed it.' },
-];
+const AGENTS = ['Claude Code', 'Codex', 'Copilot', 'OpenCode', 'Pi'];
 
-// Injected at build time from the repo's package.json via astro.config.mjs
-// (vite define). Never hardcode a version in this file — it re-stales. (DT-7)
+// Injected at build time from the repo's package.json via astro.config.mjs (DT-7).
 const studioVersion = __WICKED_STUDIO_VERSION__;
 ---
 
 <Base title={title} description={description} favicon="/favicon.svg">
   <Topbar pkg="wicked-studio" repo={repo} />
 
-  <!-- ── Hero: the console IS the product — launch, watch, steer ─────────── -->
-  <section class="hero">
+  <!-- ── Hook + the working demo ─────────────────────────────────────────── -->
+  <section class="hero" aria-labelledby="hero-h">
     <div class="amber-floor" aria-hidden="true"></div>
     <div class="wrap hero-head">
-      <div class="kicker kicker--plane">where you direct your coding agents</div>
-      <!-- No forced <br>. It used to sit after "work", which bought a THIRD line (the first
-           clause wrapped anyway) and — since a <br> contributes no text node — shipped the
-           textContent as "...own workinto your codebase.". A real space, and 66px cheaper. -->
-      <h1>No agent can approve its own work <span class="y">into your codebase.</span></h1>
-      <p class="lede">
-        Start a job with a <b>chat</b> and confirm its plan. The daemon behind it runs your own agents
-        in <b>sandboxes</b>; a change is done only when <b>automated checks pass</b>, and a <b>different
-        agent</b> reviews it — it <b>can reject, but never approves alone</b>.
-      </p>
-      <p class="fine">
-        With one agent signed in, the job stops — unless you launch it as <b>reduced assurance</b>,
-        labelled everywhere. Docs and demos share the project, <b>not that check</b>. Below is the
-        interface — drive it.
-      </p>
+      <h1 id="hero-h">{HEADLINE}</h1>
+      <p class="lede">{SUBLINE}</p>
     </div>
 
-    <div class="wrap hero-console-wrap">
-      <!-- A hands-on mirror of the real SPA (LaunchForm → the brief input,
-           LiveOutput → the feed, SteeringGate → the gate, AgentTerminal → the
-           term line, InsightRail → the chips). Auto-runs on scroll-in, then
-           hands you the wheel at the gate. Vocabulary = real /api/v1 routes. -->
-      <div class="console" data-console aria-label="wicked-studio — start a job, watch it, answer its gate">
-        <div class="mock-bar">
-          <span class="mock-dots"><i></i><i></i><i></i></span>
-          <span class="mock-url">127.0.0.1:7701 · served by your crew daemon · same-origin</span>
-        </div>
-        <div class="console-body">
-          <form class="console-launch" data-console-launch>
-            <label class="cl-k" for="console-brief">new job · start with chat</label>
-            <input id="console-brief" class="cl-input" data-console-input type="text"
-                   value="add rate-limiting to the public API" autocomplete="off" spellcheck="false"
-                   aria-label="What you want — start a job from plain text" />
-            <button type="submit" class="cl-go" data-console-go>Start ↵</button>
-          </form>
-          <div class="console-cols">
-            <div class="console-feed" data-console-feed role="log" aria-live="polite" aria-label="live CoreEvent feed">
-              <span class="cf-k">live events · ws /ws</span>
-            </div>
-            <div class="console-gate" data-console-gate hidden>
-              <!-- Verdict badge and panel label share the header row. Stacked, the raised gate
-                   measured 176px, and the gate — not the feed beside it — is what sets the height
-                   of the console row. A verdict badge belongs in a panel header anyway. -->
-              <div class="cg-head">
-                <span class="cg-stamp" data-cg-stamp>DENY</span>
-                <span class="cg-k">gate · waiting for your decision</span>
-              </div>
-              <span class="cg-t" data-cg-t>schema-drift · re-verified against the worktree</span>
-              <div class="cg-actions">
-                <button type="button" class="cg-btn cg-btn--ok" data-cg-action="approve">Approve</button>
-                <button type="button" class="cg-btn" data-cg-action="steer">Approve with a note</button>
-                <button type="button" class="cg-btn" data-cg-action="reject">Reject</button>
-              </div>
-            </div>
-          </div>
-          <div class="console-term">
-            <span class="ct-line" data-console-term><span class="ct-p">studio ›</span> term attach r-7c19 <span class="ct-c"># a real terminal into the job</span></span>
-          </div>
-          <!-- The insight rail — click a chip to read what that panel answers. -->
-          <div class="console-rail" data-rail aria-label="Insight rail panels">
-            <span class="cr-k">insight rail</span>
-            {RAIL.map((r, i) => (
-              <button type="button" class:list={['cr-chip', { 'is-active': i === 0 }]} data-rail-chip data-i={i}>{r.id}</button>
-            ))}
-          </div>
-          <p class="console-rail-line" data-rail-line aria-live="polite">{RAIL[0].line}</p>
-        </div>
-      </div>
-
-      <!-- Phone-native console: the live console is a desktop affordance. On a
-           phone we hide it and tell the same launch → watch → steer story as a
-           compact static list. -->
-      <div class="console-static">
-        <ol class="cs-steps">
-          <li><span class="cs-n">1</span><div><b>Start</b> a job with a chat: <code>add rate-limiting to the public API</code>, then confirm the plan it proposes</div></li>
-          <li><span class="cs-n">2</span><div><b>Watch</b> your sandboxed agents work live — phases, steps, spend, diffs</div></li>
-          <li><span class="cs-n">3</span><div><b>Decide</b> at the gate — approve, add a note, or reject. <span class="cs-chip">schema-drift · FAIL → held for you</span></div></li>
-        </ol>
-      </div>
-    </div>
-
-    <div class="wrap hero-foot">
-      <!-- Four tags, not six: with the CTAs these share one row (43px) instead of stacking into
-           two (85px). "the decision is yours" now lives on the gate itself, where it is doing
-           work, and "dark / light" was the least load-bearing claim on the page. -->
-      <div class="hero-tags" role="list">
-        <span role="listitem">start with chat</span>
-        <span role="listitem">sandboxed agents</span>
-        <span role="listitem">a different agent reviews</span>
-        <span role="listitem">evidence on every gate</span>
-      </div>
-    </div>
-  </section>
-
-  <!-- ── The Desk and its surfaces — every daemon surface, one shell ──────── -->
-  <section class="board" aria-labelledby="board-h">
     <div class="wrap">
-      <div class="sec-head sec-head--wide">
-        <div class="kicker">The Desk · its real tabs</div>
-        <h2 id="board-h">One Desk for everything your agents do.</h2>
-        <p class="sec-sub">
-          These are the Desk’s tabs, each fed by the same open API your own tools can call. Every gate
-          and delivery shows the job’s receipt: what was required, what ran, who built it, who checked
-          it, and what was skipped. So “passed automated checks, no second agent reviewed it” never reads
-          like “independently accepted”, and a job launched with reduced assurance says so everywhere.
-          The checks are <a href="https://wc.wickedagile.com">crew’s</a>; studio never grades anything.
-          The board auto-cycles — click a tab to pin it.
-        </p>
-      </div>
+      <!-- A working miniature of the Desk. Left: your sessions. Middle: the selected run as a chat.
+           Right: what changed, and the run's receipt. Scripted, not live: it never calls a daemon. -->
+      <div class="ide" data-ide aria-label="A working demo of wicked-studio: three jobs, one of them yours to drive">
+        <div class="ide-bar">
+          <span class="ide-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+          <nav class="ide-tabs" aria-label="Desk tabs (illustration)">
+            <span class="is-on">Work</span><span>Runs</span><span>Repositories</span><span>Steer</span><span>Memory</span><span>Agents</span>
+          </nav>
+          <span class="ide-url" data-demo-note>scripted demo · press Send, then make the calls</span>
+        </div>
 
-      <div class="board-layout">
-        <div class="board-list" data-board role="tablist" aria-label="Studio panels">
-          {PANELS.map((p, i) => (
-            <button type="button" role="tab" class:list={['board-item', { 'is-active': i === 0 }]} data-board-item data-i={i} aria-selected={i === 0 ? 'true' : 'false'}>
-              <span class="bi-dot" aria-hidden="true"></span>
-              <span class="bi-name">{p.id}</span>
-            </button>
-          ))}
-        </div>
-        <div class="board-stage" data-board-stage>
-          <div class="board-stage-bar">
-            <span class="bs-name" data-bs-name>{PANELS[0].id}</span>
-            <code class="bs-api" data-bs-api>{PANELS[0].api}</code>
+        <div class="ide-body">
+          <aside class="ide-rail" aria-label="Your jobs">
+            <button type="button" class="ide-new" data-act="restart">+ New job</button>
+            <p class="ide-rail-k">Needs you <span class="ide-count" data-needs>1</span></p>
+            <div class="ide-sessions" role="tablist" aria-label="Jobs" data-sessions></div>
+          </aside>
+
+          <div class="ide-main">
+            <div class="ide-head">
+              <span class="ide-title" data-title>Rate limits for the public API</span>
+              <ol class="ide-steps" data-steps aria-label="Steps"></ol>
+            </div>
+            <div class="ide-thread" data-thread role="log" aria-live="polite" aria-label="The job's conversation"></div>
+            <form class="ide-composer" data-composer>
+              <input type="text" data-input aria-label="Message your agents" placeholder="Message your agents…" autocomplete="off" spellcheck="false"
+                     value="Add rate limiting to the public API: 100 requests a minute per API key." />
+              <button type="submit" class="ide-send" data-send>Send</button>
+            </form>
           </div>
-          <p class="bs-line" data-bs-line>{PANELS[0].line}</p>
+
+          <aside class="ide-pane" aria-label="What changed">
+            <div class="ide-pane-tabs" role="tablist" aria-label="Side panel">
+              <button type="button" role="tab" class="is-on" aria-selected="true" data-pane-tab="changes">Changes <span class="ide-count ide-count--quiet" data-files>0</span></button>
+              <button type="button" role="tab" aria-selected="false" data-pane-tab="receipt">Receipt</button>
+            </div>
+            <div class="ide-pane-body" data-pane></div>
+          </aside>
         </div>
-      </div>
-      <div class="board-status">
-        <button type="button" class="board-status-btn is-playing" data-board-toggle aria-live="polite">
-          <span class="bs-ic" aria-hidden="true">▶</span>
-          <span class="bs-txt" data-board-status-txt>auto-cycling · click a panel to pin it</span>
-        </button>
       </div>
     </div>
   </section>
 
-  <!-- ── Rules, memory, knowledge — three peers, not one box (DES-memory-vs-knowledge) ── -->
+  <!-- ── Proof 1: the Desk ──────────────────────────────────────────────── -->
+  <section class="desk" aria-labelledby="desk-h">
+    <div class="wrap">
+      <div class="sec-head">
+        <h2 id="desk-h">One Desk for every agent and every repo.</h2>
+        <p class="sec-sub">Launch jobs across your projects and let them run. When one needs a decision, it comes to you.</p>
+      </div>
+      <ul class="tab-grid" role="list">
+        {TABS.map((t) => (
+          <li class="tab-tile"><b>{t.name}</b><span>{t.line}</span></li>
+        ))}
+      </ul>
+      <ul class="extras" role="list">
+        <li>⌘K command palette</li>
+        <li>Batch triage from the keyboard</li>
+        <li>Desktop alerts when a job needs you</li>
+        <li>Light and dark themes</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ── Proof 2: review on a different agent, and the receipt ─────────── -->
+  <section class="review" aria-labelledby="review-h">
+    <div class="wrap review-grid">
+      <div>
+        <div class="sec-head">
+          <h2 id="review-h">A different agent checks the work.</h2>
+          <p class="sec-sub">The agent that built a change never approves it. Every gate shows its receipt.</p>
+        </div>
+        <ol class="flow" aria-label="Who does what on a job">
+          <li><span class="flow-who">Builder</span><span class="flow-what">Claude Code writes the change in its sandbox</span></li>
+          <li><span class="flow-who">Reviewer</span><span class="flow-what">Codex checks it, and can send it back</span></li>
+          <li><span class="flow-who flow-who--you">You</span><span class="flow-what">approve, add a note, or send it back</span></li>
+        </ol>
+        <ul class="facts" role="list">
+          <li>Only one agent signed in? The job stops and says why, unless you launch it with <b>reduced assurance</b>, labelled everywhere.</li>
+          <li>Features, bug fixes and migrations need <b>QE acceptance</b> before they ship, unless the change scores as trivial. You can skip it, with a reason on the record.</li>
+          <li>The checks are <a href="https://wc.wickedagile.com">crew’s</a>. Studio shows them and never grades anything.</li>
+        </ul>
+      </div>
+      <figure class="receipt" aria-label="An example assurance receipt">
+        <figcaption>Receipt · job r-7c19 · build step</figcaption>
+        <table>
+          <tbody>
+            <tr><th scope="row">Required</th><td>tests pass, a different agent reviews, QE acceptance</td></tr>
+            <tr><th scope="row">Ran</th><td>tests (38 pass), review, QE acceptance</td></tr>
+            <tr><th scope="row">Built by</th><td>Claude Code</td></tr>
+            <tr><th scope="row">Reviewed by</th><td>Codex <span class="ok">separate agent</span></td></tr>
+            <tr><th scope="row">Skipped</th><td>nothing</td></tr>
+          </tbody>
+        </table>
+        <p class="receipt-foot">“Passed checks, nobody reviewed it” never reads like “independently accepted”.</p>
+      </figure>
+    </div>
+  </section>
+
+  <!-- ── Proof 3: rules, memory, knowledge ─────────────────────────────── -->
   <section class="steer" aria-labelledby="steer-h">
     <div class="wrap">
-      <div class="sec-head sec-head--wide">
-        <div class="kicker">Rules · memory · knowledge — three different things</div>
+      <div class="sec-head">
         <h2 id="steer-h">Rules you set. Memory you can edit. Knowledge it learned.</h2>
-        <p class="sec-sub">
-          A gate checks the work against <b>rules</b>. <b>Memory</b> is what happened and what you
-          told it. <b>Knowledge</b> is what was learned from your code and docs. They live apart, and
-          the agents that use them never write to them on their own — agents <b>suggest</b>, you
-          <b>approve</b>. The checks are <a href="https://wc.wickedagile.com">crew’s</a> and the store
-          is <a href="https://we.wickedagile.com">estate’s</a>; studio shows both and grades nothing.
-        </p>
+        <p class="sec-sub">Three different things, kept apart. Agents suggest; you approve.</p>
       </div>
-
-      <div class="gk-grid">
-        <div class="gk-card">
-          <span class="gk-k">rules · the Steer tab</span>
-          <p class="gk-p">
-            Rules across <b>architecture, development, security, testing, operations, compliance and
-            design/UX</b>, each with an explicit reach: <b>everywhere</b>, <b>one project</b>, or
-            <b>one repo</b>. Authored in git or here; a job’s gate cites the ones it checked.
-          </p>
+      <div class="trio">
+        <div class="trio-card">
+          <h3>Rules</h3>
+          <p>What a gate checks. Each rule reaches everywhere, one project or one repo.</p>
+          <span class="trio-where">Steer tab</span>
         </div>
-        <div class="gk-card">
-          <span class="gk-k">memory · its own tab</span>
-          <p class="gk-p">
-            What happened, and what you told it. Your own memories apply <b>across projects</b>. See,
-            edit or erase any one; a job’s suggested memory waits <code>pending</code>, with where it
-            came from, until you approve or reject it.
-          </p>
+        <div class="trio-card">
+          <h3>Memory</h3>
+          <p>What happened and what you told it. See, edit or erase any of it.</p>
+          <span class="trio-where">Memory tab</span>
         </div>
-        <div class="gk-card gk-card--limit">
-          <span class="gk-k">knowledge · learned from code and docs</span>
-          <p class="gk-p">
-            What estate learned by reading your repos and documents, cited back to the source. It is
-            acquired, not told, so it is kept apart from memory and from the rules.
-          </p>
+        <div class="trio-card">
+          <h3>Knowledge</h3>
+          <p>Learned from your code and docs, cited back to the source.</p>
+          <span class="trio-where">kept by <a href="https://we.wickedagile.com">wicked-estate</a></span>
         </div>
       </div>
-
-      <p class="gk-foot">
-        <b>Steer</b> opens <code>/rules</code> and <b>Memory</b> opens <code>/memory</code>: two tabs,
-        each with its own approve queue. Run your rules against your own dev-behavior examples under
-        <b>Evaluate</b>; each lands caught, gap or false-positive, so a rule earns its keep before it
-        ever checks a job.
-      </p>
     </div>
   </section>
 
-  <!-- ── One project, two views — the experience-plane story ─────────────── -->
-  <section class="proj" aria-labelledby="proj-h">
+  <!-- ── Proof 4: your agents, sandboxed; your repos, one context ───────── -->
+  <section class="reach" aria-labelledby="reach-h">
     <div class="wrap">
-      <div class="sec-head sec-head--wide">
-        <div class="kicker kicker--plane">The experience plane · one project model</div>
-        <h2 id="proj-h">One project, whichever kind of work you are doing.</h2>
-        <p class="sec-sub">
-          A project groups runs, chats and docs, and its activity feed <b>merges</b> crew’s durable
-          core events with the document engine’s bus events carrying the same <code>project_id</code>.
-          A job and the deck you write about it land in the <b>same room</b> — flip the lens
-          below to centre the same feed on the runs or on the document.
-        </p>
+      <div class="sec-head">
+        <h2 id="reach-h">Your agents, sandboxed. Your repos, one project.</h2>
       </div>
-
-      <div class="proj-card" data-proj data-skin="studio">
-        <div class="proj-bar">
-          <span class="proj-id">project · <b>payments-refresh</b></span>
-          <div class="proj-skins" role="tablist" aria-label="Which lens centres this project's feed">
-            <button type="button" role="tab" class="proj-skin is-active" data-proj-skin="studio" aria-selected="true">centred on the runs</button>
-            <button type="button" role="tab" class="proj-skin" data-proj-skin="interactive" aria-selected="false">centred on the document</button>
-          </div>
+      <div class="reach-grid">
+        <div class="reach-card">
+          <h3>Bring the agents you already use</h3>
+          <ul class="agent-chips" role="list">
+            {AGENTS.map((a) => <li>{a}</li>)}
+          </ul>
+          <p>Sign each one in once on the Agents tab. Jobs run them in containers; credentials stay in a broker, and the sandbox only sees placeholders.</p>
         </div>
-
-        <!-- The RUNS lens: the merged activity feed centred on the runs. -->
-        <ol class="proj-feed proj-feed--studio" aria-label="The project feed centred on the runs">
-          <li><span class="pf-src pf-src--crew">crew</span><code>job r-7c19</code><span class="pf-note">feature workflow · build → adversarial-review → test — held once, noted, landed</span></li>
-          <li><span class="pf-src pf-src--crew">crew</span><code>gate decision</code><span class="pf-note">schema-drift DENY → approved with steer · on the decisions ledger</span></li>
-          <li><span class="pf-src pf-src--int">interactive</span><code>doc payments-deck</code><span class="pf-note">the document engine’s deck, in this same feed — created, drafted, delivered</span></li>
-          <li><span class="pf-src pf-src--crew">crew</span><code>chat c-2214</code><span class="pf-note">three agents on one chat: “what breaks if we shard the ledger?” — each answered, citations checked</span></li>
-        </ol>
-
-        <!-- The DOCUMENT rendering: the same project centred on the document engine's work. -->
-        <ol class="proj-feed proj-feed--interactive" aria-label="The project as the document view renders it">
-          <li><span class="pf-src pf-src--int">interactive</span><code>wicked.interactive.doc.created</code><span class="pf-note">the deck asks for a first draft — over the bus, from the document engine crew proxies</span></li>
-          <li><span class="pf-src pf-src--crew">crew</span><code>a job answers</code><span class="pf-note">a crew job drafts it — heartbeats stream while it works</span></li>
-          <li><span class="pf-src pf-src--int">interactive</span><code>wicked.interactive.draft.completed</code><span class="pf-note">a real draft, idempotency-keyed — replays can’t double-deliver</span></li>
-          <li><span class="pf-src pf-src--crew">crew</span><code>job r-7c19 · evidence</code><span class="pf-note">the coder’s job sits in the document view too — same feed, one project</span></li>
-        </ol>
-
-        <div class="proj-foot">
-          <code class="proj-call">GET /api/v1/projects/payments-refresh/activity</code>
-          <span class="proj-same" data-proj-same>same project · same feed · centred on the <b data-proj-skin-label>runs</b></span>
-        </div>
-      </div>
-
-      <p class="honest-note">
-        <b>Where this stands:</b> the Project model is <b>shipped in the control plane</b> — nine
-        routes, the merged feed, durable gate prompts across member runs. In studio a project is a
-        <b>scope, not a separate shell</b>: “See everything” filters to it, its address opens its
-        scoped Sessions list, and its page edits or archives it — all riding that daemon.
-      </p>
-    </div>
-  </section>
-
-  <!-- ── Four kinds of product work; ONE of them carries the gate ─────────── -->
-  <section class="work" aria-labelledby="work-h">
-    <div class="wrap">
-      <div class="sec-head sec-head--wide">
-        <div class="kicker">One window · four kinds of work</div>
-        <h2 id="work-h">Where product work actually happens.</h2>
-        <p class="sec-sub">
-          A feature starts as a question, becomes a change, and ends as something you show someone.
-          All four share one project — <b>but only one carries the gate</b>.
-        </p>
-      </div>
-
-      <div class="work-grid">
-        <article class="work-card work-card--gated">
-          <span class="work-k">software · gated</span>
-          <h3>Code that clears twice</h3>
-          <p>
-            Start a job against your own repos, watch the agent’s raw output live, clear the gates
-            yourself. Automated checks and a different agent must both agree —
-            <b>either can stop it, neither can approve alone</b>.
-          </p>
-          <p class="work-n">the deepest surface here, by a wide margin</p>
-        </article>
-
-        <article class="work-card">
-          <span class="work-k">materials</span>
-          <h3>Decks and docs</h3>
-          <p>
-            Write in a document canvas, point at an element to leave a note for an agent, and teach
-            one document a brand. Three formats over one wire — self-contained HTML, PDF, PPTX — and
-            the document service does the rendering.
-          </p>
-          <p class="work-n">a brand you teach one document stays with that document</p>
-        </article>
-
-        <article class="work-card">
-          <span class="work-k">brainstorming</span>
-          <h3>Ask several models</h3>
-          <p>
-            Put one question to several agents in the same thread and see how many answered —
-            then turn the thread into a job the moment it becomes actual work.
-          </p>
-          <p class="work-n">“3 of 5 agents”, or “3 polled” when the count is unknown — never backfilled</p>
-        </article>
-
-        <article class="work-card">
-          <span class="work-k">demos</span>
-          <h3>A recorded walkthrough</h3>
-          <p>
-            A wizard authors the steps; the document service runs them in a real browser and hands
-            back a captioned screen recording of the click-through, with title cards and no voice-over.
-          </p>
-          <p class="work-n">the thinnest surface here — judge it last</p>
-        </article>
-      </div>
-
-      <p class="work-foot">
-        <b>The two-sided check covers code, and only code.</b> Documents do have human gates — an
-        agent asks in the thread, you answer there — but not the automated checks plus a different
-        agent’s review a code job carries. All four share the project; they do not share that verdict.
-        Docs, decks and demos also need wicked-garden and a reachable document service to open at
-        all — code runs and chat never gate on either.
-      </p>
-    </div>
-  </section>
-
-  <!-- ── A project is a CONTEXT: one graph over all its repos ─────────────────
-       No version numbers in this copy, deliberately. The family's other four sites carry zero
-       product versions in prose, and the reason showed up the day this was written: a carefully
-       researched sentence about crates.io serving estate 0.14.5 went false while the publish that
-       fixed it was still running. Versions belong where something re-checks them — the install
-       command, the registry badges, the README beside the code, and scripts/verify-ecosystem.sh,
-       which FAILS when a tag and a registry disagree. Prose is the one place nothing re-checks. -->
-  <section class="ctx" aria-labelledby="ctx-h">
-    <div class="wrap">
-      <div class="sec-head sec-head--wide">
-        <div class="kicker">Context · one graph, every repo in the project</div>
-        <h2 id="ctx-h">A project is a context, not a folder.</h2>
-        <p class="sec-sub">
-          Real work spans repos. A change in an engine lands in the daemon that embeds it and the
-          console that renders it — and an agent that can only see one of them answers
-          <b>“not found”</b> about the other two, confidently, because a per-repo graph has no way
-          to know it was asked about something outside itself. Attach repos to a project and crew
-          builds <b>one co-located code graph</b> over all of them
-          (<code>POST /api/v1/projects/:id/graph/refresh</code>). Jobs filed into that project are
-          <b>bound to it</b>.
-        </p>
-      </div>
-
-      <div class="ctx-grid">
-        <div class="ctx-card">
-          <span class="ctx-k">one query · three repos</span>
-          <p class="ctx-p">
-            <code>register</code> across a project holding studio + crew + core returns
-            <b>8 hits</b> — 4 in <code>wicked-core</code>, 3 in <code>wicked-crew</code>, 1 in
-            <code>wicked-studio</code> — each attributed to the repo it came from, spanning
-            <b>Rust and TypeScript</b> in one answer. Blast radius works the same way.
-          </p>
-        </div>
-        <div class="ctx-card">
-          <span class="ctx-k">the job says what it saw</span>
-          <p class="ctx-p">
-            The binding decision is recorded on <b>both</b> outcomes. “This job sees the project”
-            and “this job sees one repo, <b>because X</b>” are equally facts about what the job
-            could observe — and the second is the one you need when a worker reports that a sibling
-            repo does not exist.
-          </p>
-        </div>
-        <div class="ctx-card ctx-card--limit">
-          <span class="ctx-k">the limit, stated on the wire</span>
-          <p class="ctx-p">
-            <b>Co-located is not linked.</b> Each repo is indexed under its own label and edges do
-            <b>not</b> resolve across repos — <code>studio → api-types → crew</code> does not
-            traverse. What you get is per-repo results gathered into one answer with the repo named
-            on every hit. Every response carries <code>linkage: "co-located"</code> and a note
-            saying so, so a consumer cannot mistake it for a cross-repo trace.
-          </p>
-        </div>
-      </div>
-
-      <p class="ctx-foot">
-        A refresh is <code>wicked-estate index</code> per member, bounded at ten minutes
-        <b>each</b> — so it never happens implicitly at launch, and a missing or stale graph
-        degrades the job to its own repo’s graph and says so. It needs an estate that supports
-        <code>--repo</code> co-location, capability-probed before anything is indexed — an older
-        binary accepts the flag, <b>ignores it</b>, and exits 0.
-      </p>
-    </div>
-  </section>
-
-  <!-- ── The forward view — the requirements graph as the source of truth ──── -->
-  <section class="reqs" aria-labelledby="reqs-h">
-    <div class="wrap">
-      <div class="sec-head sec-head--wide">
-        <div class="kicker">The forward view · requirements as the record</div>
-        <h2 id="reqs-h">The code graph is what exists. The requirements graph is where it’s going.</h2>
-        <p class="sec-sub">
-          A job needs more than a picture of the code it’s about to change — it needs to know what
-          the code is <b>for</b>. Every registered repo carries a <b>requirements graph</b>:
-          requirements and their edges, browsable and searchable right here. It’s the forward edge of
-          the record — and it’s <b>becoming the source of truth</b> a job is measured against, not a
-          spec doc that rots in a folder. <code>GET /domain-graph</code> ·
-          per-repo <code>requirements_graph.json</code>.
-        </p>
-      </div>
-
-      <div class="gk-grid">
-        <div class="gk-card">
-          <span class="gk-k">requirements · per repo</span>
-          <p class="gk-p">
-            Browse and search a repo’s requirements and the graph that links them — tokenized
-            match, risk and domain filters, pagination.
-            <code>GET /repos/:id/requirements</code>.
-          </p>
-        </div>
-        <div class="gk-card">
-          <span class="gk-k">the forward view, not a snapshot</span>
-          <p class="gk-p">
-            The requirements graph is the intent a job answers to. <b>“Done” is re-derived
-            from evidence against it</b> — never asserted by the agent that wrote the code — so the
-            record leads the work instead of trailing it.
-          </p>
-        </div>
-        <div class="gk-card gk-card--limit">
-          <span class="gk-k">confidence + provenance on every node</span>
-          <p class="gk-p">
-            Each node carries how sure the record is and where it came from, so a heuristic reads as
-            a heuristic, never a fact. What the graph doesn’t know yet, it <b>says</b> it doesn’t
-            know — <code>graph</code> is honestly <code>null</code> until it’s generated.
-          </p>
-        </div>
-      </div>
-
-      <p class="gk-foot">
-        Elevated from one panel in the cycle to the point of the thing: the app’s intent, versioned
-        beside its code, that every job is answerable to. Where estate holds the record,
-        this is the part of it that points <b>forward</b>.
-      </p>
-    </div>
-  </section>
-
-  <!-- ── The client seam — a pure client, nothing privileged ─────────────── -->
-  <section class="pair" id="client" aria-labelledby="pair-h">
-    <div class="wrap">
-      <div class="sec-head sec-head--wide">
-        <div class="kicker">One API · zero private seams</div>
-        <h2 id="pair-h">If the skin can show it, the API serves it.</h2>
-        <p class="sec-sub">
-          Studio imports <b>zero</b> crew source. The only artifact the two products share is the
-          published wire contract — <code>wicked-crew-api-types</code>. Everything on this page rides
-          <code>/api/v1</code> and the <code>/ws</code> CoreEvent stream; there is no back channel.
-          How the SPA finds its daemon is one deliberate seam — flip it.
-        </p>
-      </div>
-
-      <div class="pair-panel" data-pair data-mode="bundled">
-        <div class="pair-modes" role="tablist" aria-label="How the SPA finds the daemon">
-          <button type="button" role="tab" class="pair-mode is-active" data-pair-mode="bundled" aria-selected="true">bundled · same-origin</button>
-          <button type="button" role="tab" class="pair-mode" data-pair-mode="standalone" aria-selected="false">standalone · VITE_API_HOST</button>
-        </div>
-
-        <div class="pair-stage pair-stage--bundled">
-          <pre class="pair-code"><code>$ npx wicked-crew serve            <span class="c"># UI + API · one port · same origin</span>
-
-apiBase() → window.location.origin + '/api/v1'
-wsBase()  → wss? + window.location.host          <span class="c"># /ws CoreEvents</span></code></pre>
-          <p class="pair-note">
-            Crew’s release build copies studio’s built <code>dist/</code> into the daemon’s serving
-            tree — one command, one port. No host is baked into the bundle:
-            <code>--port</code> / <code>CREW_PORT</code> just work.
-          </p>
-        </div>
-
-        <div class="pair-stage pair-stage--standalone">
-          <pre class="pair-code"><code>$ VITE_API_HOST=127.0.0.1:7701 npm run build
-$ npx serve dist                   <span class="c"># any static server · SPA fallback</span>
-
-apiBase() → http://127.0.0.1:7701/api/v1
-wsBase()  → ws://127.0.0.1:7701                  <span class="c"># same contract, other origin</span></code></pre>
-          <p class="pair-note">
-            The daemon’s loopback CORS admits any <code>localhost</code> origin, so a standalone
-            studio on its own port drives a local daemon out of the box — the daemon stays fully
-            functional headless either way.
-          </p>
-        </div>
-
-        <div class="pair-proof">
-          <span class="pair-proof-k">the carve, proven</span>
-          <span class="pair-proof-t"><code>e2e/studio_standalone_test.py</code> builds the SPA, serves <code>dist/</code> from a plain
-          static server, points it at a live daemon, and drives a real browser through a real flow —
-          list runs → open a run → approve a human gate → watch CoreEvents over WS.</span>
+        <div class="reach-card">
+          <h3>A project spans repos</h3>
+          <p>Attach repos to a project and its jobs search one code graph over all of them.</p>
+          <table class="hits" aria-label="One search across three repos">
+            <caption><code>register</code> across one project: 8 hits</caption>
+            <tbody>
+              <tr><th scope="row">wicked-core</th><td>4</td><td>Rust</td></tr>
+              <tr><th scope="row">wicked-crew</th><td>3</td><td>TypeScript</td></tr>
+              <tr><th scope="row">wicked-studio</th><td>1</td><td>TypeScript</td></tr>
+            </tbody>
+          </table>
+          <p class="reach-limit">Each hit names its repo. Calls between repos are not traced, and every answer says so.</p>
         </div>
       </div>
     </div>
   </section>
 
-  <!-- ── Where studio sits: THE four-plane map (shared chrome, canonical) ──
-       current="wicked-studio" renders this product's card as the
-       "you are here" marker — the map stays complete, the site never
-       promotes itself. -->
   <SameGarden current="wicked-studio" />
 
   <!-- ── Get it ───────────────────────────────────────────────────────────── -->
@@ -592,43 +240,37 @@ wsBase()  → ws://127.0.0.1:7701                  <span class="c"># same contra
     <section class="get" id="get">
       <div class="wrap get-grid">
         <div class="get-intro">
-          <div class="kicker">Get it</div>
-          <h2>One command. The studio is already in it.</h2>
+          <h2>One command. Studio comes with it.</h2>
           <p>
-            The studio ships <b>bundled inside wicked-crew</b>: <code>npx wicked-crew serve</code>
-            starts the daemon and serves studio on one port. You also need a <b>container
-            runtime</b> (Rancher Desktop, Docker, Podman, Colima or OrbStack), because agents run in
-            containers. Open the printed URL, sign in each agent once on the <b>Agents</b> tab, then
-            start a New job. Running studio <b>standalone</b> against any daemon is equally supported;
-            it’s the same build, pointed by one env var.
+            <code>npx wicked-crew serve</code> starts the daemon and serves studio on one port. Open the
+            URL it prints, sign in your agents, and start a job.
           </p>
-          <p class="get-alt">
-            Prefer the whole family? <code>npx wicked-installer</code> is the interactive,
-            cross-CLI installer for every wicked-* product — Claude Code, Antigravity, Codex,
-            OpenCode and Pi.
-          </p>
+          <ul class="needs" role="list">
+            <li>Node 22 or later</li>
+            <li>A container runtime: Docker, Podman, Rancher Desktop, Colima or OrbStack</li>
+            <li>The whole family instead? <code>npx wicked-installer</code></li>
+          </ul>
         </div>
         <div class="install-stack">
-          <div class="install install--primary" role="group" aria-label="Run the studio bundled with wicked-crew">
+          <div class="install install--primary" role="group" aria-label="Run studio bundled with wicked-crew">
             <div class="install__bar">
-              <span class="install__label"><span class="install__star" aria-hidden="true">★</span> Recommended · bundled with crew</span>
+              <span class="install__label"><span class="install__star" aria-hidden="true">★</span> Recommended</span>
               <button class="install__copy" type="button" aria-label="Copy the bundled serve command"
                 onclick="navigator.clipboard&&navigator.clipboard.writeText('npx wicked-crew serve').then(()=>{this.textContent='Copied';setTimeout(()=>{this.textContent='Copy';},1400);})">Copy</button>
             </div>
-            <pre class="install__code"><code>npx wicked-crew serve   <span class="c"># daemon + this studio · one port · same origin</span></code></pre>
-            <p class="install__note">Node ≥ 22 and a container runtime. Open the printed URL, sign in your agents on the Agents tab, and start a job. <span class="install__ver">wicked-studio npm v{studioVersion}</span></p>
+            <pre class="install__code"><code>npx wicked-crew serve</code></pre>
+            <p class="install__note">Daemon and studio, one port. <span class="install__ver">wicked-studio v{studioVersion}</span></p>
           </div>
-
-          <div class="install-or" aria-hidden="true"><span>or run studio standalone</span></div>
 
           <div class="install install--secondary" role="group" aria-label="Run wicked-studio standalone against a daemon">
             <div class="install__bar">
-              <span class="install__label">Standalone · your own daemon</span>
+              <span class="install__label">Or host studio yourself</span>
               <button class="install__copy" type="button" aria-label="Copy the standalone build commands"
                 onclick="navigator.clipboard&&navigator.clipboard.writeText('VITE_API_HOST=127.0.0.1:7701 npm run build\nnpx serve dist').then(()=>{this.textContent='Copied';setTimeout(()=>{this.textContent='Copy';},1400);})">Copy</button>
             </div>
             <pre class="install__code"><code>VITE_API_HOST=127.0.0.1:7701 npm run build
-npx serve dist          <span class="c"># any static server · SPA fallback to index.html</span></code></pre>
+npx serve dist</code></pre>
+            <p class="install__note">Studio is a pure client of crew’s <code>/api/v1</code> and <code>/ws</code>. It shares no code with crew beyond the published contract, <code>wicked-crew-api-types</code>.</p>
           </div>
         </div>
         <a class="gh-pill" href="https://github.com/mikeparcewski/wicked-studio#readme" target="_blank" rel="noopener" aria-label="View wicked-studio on GitHub">
@@ -641,356 +283,329 @@ npx serve dist          <span class="c"># any static server · SPA fallback to i
     <Footer repo={repo} />
   </div>
 
-  <!-- ── The console: launch → the feed streams → the gate is yours ──────── -->
+  <!-- ── The demo: three jobs, model-driven. Every render reads the model; timers only append. ── -->
   <script is:inline>
     (function () {
-      var root = document.querySelector('[data-console]');
+      var root = document.querySelector('[data-ide]');
       if (!root) return;
-      var feed = root.querySelector('[data-console-feed]');
-      var gate = root.querySelector('[data-console-gate]');
-      var stamp = root.querySelector('[data-cg-stamp]');
-      var gateT = root.querySelector('[data-cg-t]');
-      var termEl = root.querySelector('[data-console-term]');
-      var form = root.querySelector('[data-console-launch]');
-      var input = root.querySelector('[data-console-input]');
-      if (!feed || !gate || !stamp) return;
-
       var reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-      var STEP = 700;
-      var timer = null;
-      var resolved = false;
-      var runSeq = 0;      // guards a stale stream after a relaunch
-      var workerFlip = 0;  // cycles the dispatched worker on relaunch
+      var $ = function (s) { return root.querySelector(s); };
+      var threadEl = $('[data-thread]'), stepsEl = $('[data-steps]'), titleEl = $('[data-title]');
+      var sessionsEl = $('[data-sessions]'), paneEl = $('[data-pane]'), needsEl = $('[data-needs]');
+      var filesEl = $('[data-files]'), form = $('[data-composer]'), input = $('[data-input]');
+      var STEPS = ['Plan', 'Build', 'Review', 'Test', 'Deliver'];
+      var PROMPT = input.value;
 
-      function escapeHtml(s) {
-        return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-      }
-      function clearFeed() {
-        var rows = feed.querySelectorAll('.cf-row');
-        for (var i = 0; i < rows.length; i++) rows[i].parentNode.removeChild(rows[i]);
-      }
-      function addRow(html, cls) {
-        var row = document.createElement('span');
-        row.className = 'cf-row' + (cls ? ' ' + cls : '');
-        row.innerHTML = html;
-        feed.appendChild(row);
-        feed.scrollTop = feed.scrollHeight;
-        return row;
-      }
-      function setTerm(cmd, comment) {
-        if (!termEl) return;
-        termEl.innerHTML = '<span class="ct-p">studio ›</span> ' + cmd +
-          (comment ? ' <span class="ct-c"># ' + comment + '</span>' : '');
-      }
-      function setButtons(enabled) {
-        var btns = gate.querySelectorAll('[data-cg-action]');
-        for (var i = 0; i < btns.length; i++) btns[i].disabled = !enabled;
-      }
-      function hideCue() {
-        var cue = gate.querySelector('[data-cg-cue]');
-        if (cue) cue.parentNode.removeChild(cue);
-      }
-      function dropAmend() {
-        var amend = gate.querySelector('.cg-amend');
-        if (amend) amend.parentNode.removeChild(amend);
-      }
-      function hideGate() {
-        hideCue(); dropAmend();
-        gate.hidden = true;
-        gate.removeAttribute('data-verdict');
-        stamp.textContent = 'DENY';
-        if (gateT) gateT.textContent = 'schema-drift · re-verified against the worktree';
-        setButtons(true);
-        resolved = false;
-      }
-      function showGate() {
-        gate.hidden = false;
-        gate.setAttribute('data-verdict', 'deny');
-        stamp.textContent = 'DENY';
-        if (gateT) gateT.textContent = 'schema-drift · re-verified against the worktree';
-        setButtons(true);
-        resolved = false;
-        hideCue();
-        var cue = document.createElement('span');
-        cue.className = 'cg-cue';
-        cue.setAttribute('data-cg-cue', '');
-        cue.textContent = 'The decision is yours';
-        // Into the ACTIONS row, not the gate: a line of its own cost 33px of hero height, which
-        // pushed these very buttons below the fold on a 1440x700 laptop. Beside them it points at
-        // them by adjacency, so it also drops the ☝ it used to need.
-        (gate.querySelector('.cg-actions') || gate).appendChild(cue);
-      }
+      function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
 
-      // Feed steps in the daemon's real vocabulary: POST /runs launches, /ws
-      // streams CoreEvents, the gate holds until POST /runs/:id/gate answers it.
-      function steps(worker) {
-        return [
-          { h: 'job <b>r-7c19</b> started · plan confirmed · workflow <b>feature</b>' },
-          { h: 'live events streaming · phase ladder live' },
-          { h: 'step <b>2/6</b> build · <b>' + worker + '</b> in its sandbox · usage 38k in / 5k out' },
-          { h: 'diff captured · Files panel updated · Burn ticking per agent' },
-          { h: 'review goes to a <b>different agent</b> than the builder' },
-          { h: 'policy <b>schema-drift</b> · <b>FAIL</b> — migration ≠ checked-in schema', c: 'cf-row--gate' },
-          { h: 'gate raised · <b>held for your decision</b>', c: 'cf-row--gate' }
-        ];
+      // ── the model ───────────────────────────────────────────────────────
+      var FILES_V1 = [
+        { path: 'src/http/rateLimit.ts', add: 41, del: 0, diff: [
+          ['+', 'export function rateLimit(opts: { perMinute: number }) {'],
+          ['+', '  const buckets = new Map<string, Bucket>();'],
+          ['+', '  return (req, res, next) => {'],
+          ['+', '    const key = req.ip;'],
+          ['+', '    if (!take(buckets, key, opts.perMinute)) return res.status(429).end();'] ] },
+        { path: 'src/http/router.ts', add: 3, del: 1, diff: [
+          [' ', "import { publicRoutes } from './public';"],
+          ['-', "app.use('/v1', publicRoutes);"],
+          ['+', "app.use('/v1', rateLimit({ perMinute: 100 }), publicRoutes);"] ] },
+        { path: 'test/rateLimit.test.ts', add: 28, del: 0, diff: [
+          ['+', "it('returns 429 after 100 requests in a minute', async () => {"],
+          ['+', '  await hit(100);'],
+          ['+', '  expect((await hit(1)).status).toBe(429);'] ] }
+      ];
+      var FILES_V2 = FILES_V1.map(function (f) { return f; });
+      FILES_V2[0] = { path: 'src/http/rateLimit.ts', add: 44, del: 0, diff: [
+        ['+', 'export function rateLimit(opts: { perMinute: number }) {'],
+        ['+', '  const buckets = new Map<string, Bucket>();'],
+        ['+', '  return (req, res, next) => {'],
+        ['+', "    const key = req.header('x-api-key') ?? req.ip;"],
+        ['+', '    if (!take(buckets, key, opts.perMinute)) return res.status(429).end();'] ] };
+      FILES_V2[2] = { path: 'test/rateLimit.test.ts', add: 39, del: 0, diff: [
+        ['+', "it('limits each API key on its own', async () => {"],
+        ['+', "  await hit(100, { key: 'a' });"],
+        ['+', "  expect((await hit(1, { key: 'b' })).status).toBe(200);"] ] };
+
+      function fresh() {
+        return {
+          rate: { title: 'Rate limits for the public API', who: 'Claude Code', state: 'draft', steps: 0, msgs: [], files: [], openFile: 0, receipt: null },
+          flaky: { title: 'Fix the flaky checkout test', who: 'Codex', state: 'ask', steps: 1, msgs: [
+            { k: 'user', t: 'The checkout test fails about once a week. Find out why and fix it.' },
+            { k: 'agent', who: 'Codex', t: 'Found it: the test reads the real clock, so it fails whenever a run crosses midnight UTC.' },
+            { k: 'ask', who: 'Codex', q: 'Freeze the clock in the test, or pass a clock into the checkout service?', opts: ['Freeze it in the test', 'Pass a clock in'], ans: null }
+          ], files: [], openFile: 0, receipt: null },
+          node: { title: 'Move CI to Node 22', who: 'Copilot', state: 'done', steps: 5, msgs: [
+            { k: 'user', t: 'Move CI and the engines field to Node 22.' },
+            { k: 'agent', who: 'Copilot', t: 'Updated the CI matrix and the engines field. Nothing else needed changing.' },
+            { k: 'agent', who: 'Copilot', done: true, t: 'Done. Tests pass (212), and claude reviewed and approved it. Pull request #9 is open.', chips: ['Pull request #9', 'Changes', 'Evidence'] }
+          ], files: [
+            { path: '.github/workflows/ci.yml', add: 1, del: 1, diff: [['-', '        node: [20]'], ['+', '        node: [22]']] },
+            { path: 'package.json', add: 1, del: 1, diff: [['-', '    "node": ">=20"'], ['+', '    "node": ">=22"']] }
+          ], openFile: 0, receipt: { built: 'Copilot', reviewed: 'Claude Code', tests: '212 pass', decision: 'approved by the reviewer' } }
+        };
       }
-      function stream(worker) {
-        if (timer) { clearTimeout(timer); timer = null; }
-        runSeq++;
-        var seq = runSeq;
-        clearFeed();
-        hideGate();
-        setTerm('term attach r-7c19', 'a real terminal into the job');
-        var list = steps(worker);
-        if (reduced) {
-          for (var i = 0; i < list.length; i++) addRow(list[i].h, list[i].c);
-          showGate();
-          return;
+      var S = fresh();
+      var ORDER = ['rate', 'flaky', 'node'];
+      var cur = 'rate';
+      var pane = 'changes';
+      var timers = [];
+      var userTouched = false;
+
+      function later(ms, fn) { if (reduced) { fn(); return; } timers.push(setTimeout(fn, ms)); }
+      function clearTimers() { timers.forEach(clearTimeout); timers = []; }
+
+      // ── rendering ───────────────────────────────────────────────────────
+      function statusOf(s) {
+        if (s.state === 'draft') return { cls: 'idle', t: 'Not started' };
+        if (s.state === 'plan' || s.state === 'gate' || s.state === 'ask') return { cls: 'you', t: 'Waiting on you' };
+        if (s.state === 'done') return { cls: 'done', t: 'Done' };
+        return { cls: 'run', t: s.who + ' working' };
+      }
+      function renderRail() {
+        var needs = 0;
+        sessionsEl.innerHTML = ORDER.map(function (id) {
+          var s = S[id], st = statusOf(s);
+          if (st.cls === 'you') needs++;
+          return '<button type="button" role="tab" class="ide-sess' + (id === cur ? ' is-on' : '') + '" aria-selected="' + (id === cur) +
+            '" data-act="open" data-id="' + id + '"><span class="dot dot--' + st.cls + '" aria-hidden="true"></span>' +
+            '<span class="ide-sess-t">' + esc(s.title) + '</span><span class="ide-sess-s">' + esc(st.t) + '</span></button>';
+        }).join('');
+        needsEl.textContent = String(needs);
+      }
+      function renderSteps() {
+        var s = S[cur];
+        stepsEl.innerHTML = STEPS.map(function (name, i) {
+          var cls = i < s.steps ? 'done' : (i === s.steps && s.state !== 'draft' && s.state !== 'done' ? 'now' : '');
+          return '<li class="' + cls + '">' + name + '</li>';
+        }).join('');
+        titleEl.textContent = s.title;
+      }
+      function bubble(m) {
+        if (m.k === 'user') return '<div class="msg msg--user"><p>' + esc(m.t) + '</p></div>';
+        if (m.k === 'event') return '<p class="msg-event">' + m.t + '</p>';
+        if (m.k === 'working') return '<p class="msg-working" data-working><span class="pulse" aria-hidden="true"></span>' + esc(m.t) + '</p>';
+        var head = '<span class="msg-who">' + esc(m.who) + '</span>';
+        if (m.k === 'agent') {
+          var chips = m.chips ? '<div class="msg-chips">' + m.chips.map(function (c) {
+            var act = c === 'Changes' ? 'changes' : (c === 'Evidence' ? 'receipt' : '');
+            return act ? '<button type="button" class="chip" data-act="pane" data-pane="' + act + '">' + c + '</button>' : '<span class="chip chip--pr">' + c + '</span>';
+          }).join('') + '</div>' : '';
+          return '<div class="msg msg--agent' + (m.done ? ' msg--done' : '') + '">' + head + '<p>' + m.t + '</p>' + chips + '</div>';
         }
-        var idx = 0;
-        (function tick() {
-          if (seq !== runSeq) return;
-          if (idx >= list.length) { showGate(); return; }
-          addRow(list[idx].h, list[idx].c);
-          idx++;
-          timer = setTimeout(tick, STEP);
-        })();
-      }
-
-      // --- gate resolutions: the human takes the wheel (the skin never grades) ---
-      function resolveApprove() {
-        if (resolved) return;
-        resolved = true; setButtons(false); hideCue(); dropAmend();
-        addRow('you approved · override recorded on the decisions ledger', 'cf-row--ok');
-        addRow('transition <b>allowed</b> → ship', 'cf-row--ok');
-        gate.setAttribute('data-verdict', 'allow');
-        stamp.textContent = 'ALLOW';
-        if (gateT) gateT.textContent = 'your call · recorded on the job timeline';
-        setTerm('gate approve r-7c19', 'POST /api/v1/runs/r-7c19/gate');
-      }
-      function resolveReject() {
-        if (resolved) return;
-        resolved = true; setButtons(false); hideCue(); dropAmend();
-        addRow('job <b>rejected</b> · returned to build', 'cf-row--gate');
-        addRow('unit 2 reopened · awaiting a new diff');
-        gate.setAttribute('data-verdict', 'deny');
-        stamp.textContent = 'DENY';
-        if (gateT) gateT.textContent = 'gate stands · nothing shipped';
-        setTerm('gate reject r-7c19', 'held at build · nothing ships');
-      }
-      function resolveSteer(text) {
-        if (resolved) return;
-        resolved = true; setButtons(false); hideCue(); dropAmend();
-        addRow('amendment applied · <b>' + escapeHtml(text) + '</b>');
-        addRow('re-running build · the amendment rides the next prompt');
-        addRow('policy <b>schema-drift</b> · <b>PASS</b>', 'cf-row--ok');
-        addRow('gate <b>build → ship</b> · <b>PASS</b>', 'cf-row--ok');
-        gate.setAttribute('data-verdict', 'allow');
-        stamp.textContent = 'ALLOW';
-        if (gateT) gateT.textContent = 'steered · re-verified against the worktree · PASS';
-        setTerm('run resume r-7c19', 'POST /api/v1/runs/r-7c19/resume');
-      }
-      function openAmend() {
-        if (resolved) return;
-        var existing = gate.querySelector('.cg-amend input');
-        if (existing) { existing.focus(); existing.select(); return; }
-        hideCue();
-        var wrap = document.createElement('div');
-        wrap.className = 'cg-amend';
-        var amInput = document.createElement('input');
-        amInput.type = 'text';
-        amInput.value = 'add rollback migration + regen schema';
-        amInput.setAttribute('aria-label', 'Amendment to steer the next unit');
-        var apply = document.createElement('button');
-        apply.type = 'button';
-        apply.className = 'cg-btn cg-btn--ok';
-        apply.textContent = 'Apply ↵';
-        wrap.appendChild(amInput);
-        wrap.appendChild(apply);
-        gate.appendChild(wrap);
-        amInput.focus();
-        amInput.select();
-        function submit() {
-          var text = amInput.value.trim();
-          if (text) resolveSteer(text);
+        if (m.k === 'plan') {
+          var items = '<ol class="plan">' + m.items.map(function (x) { return '<li>' + x + '</li>'; }).join('') + '</ol>';
+          var acts = m.state === 'open'
+            ? '<div class="acts"><button type="button" class="btn-yes" data-act="plan-ok">Approve plan</button><button type="button" class="btn-q" data-act="plan-later">Not now</button></div>'
+            : '<p class="decided">' + (m.state === 'ok' ? 'You approved the plan.' : 'Parked. Nothing has started.') + '</p>' +
+              (m.state === 'later' ? '<div class="acts"><button type="button" class="btn-yes" data-act="plan-ok">Approve plan</button></div>' : '');
+          return '<div class="msg msg--agent msg--card">' + head + '<p>Here is my plan. Nothing starts until you approve it.</p>' + items + acts + '</div>';
         }
-        apply.addEventListener('click', submit);
-        amInput.addEventListener('keydown', function (e) {
-          if (e.key === 'Enter') { e.preventDefault(); submit(); }
-        });
+        if (m.k === 'gate') {
+          var body;
+          if (m.state === 'open') {
+            body = '<div class="acts"><button type="button" class="btn-yes" data-act="gate-ok">Approve</button>' +
+              '<button type="button" class="btn-q" data-act="gate-note">Approve with a note for the next step</button>' +
+              '<button type="button" class="btn-q" data-act="gate-back">Send back</button></div>';
+          } else if (m.state === 'noting') {
+            body = '<div class="note-row"><input type="text" data-note aria-label="Your note for the next step" value="Track per-key limits in a follow-up issue." />' +
+              '<button type="button" class="btn-yes" data-act="gate-note-send">Approve with note</button></div>';
+          } else {
+            body = '<p class="decided">' + esc(m.decided) + '</p>';
+          }
+          return '<div class="msg msg--agent msg--card msg--gate">' + head + '<p>' + m.t + '</p><p class="held">This step is held for you.</p>' + body + '</div>';
+        }
+        if (m.k === 'ask') {
+          var ans = m.ans === null
+            ? '<div class="acts">' + m.opts.map(function (o, i) { return '<button type="button" class="' + (i === 0 ? 'btn-yes' : 'btn-q') + '" data-act="answer" data-i="' + i + '">' + esc(o) + '</button>'; }).join('') + '</div>'
+            : '<p class="decided">You answered: ' + esc(m.opts[m.ans]) + '</p>';
+          return '<div class="msg msg--agent msg--card msg--ask"><span class="msg-who">' + esc(m.who) + ' · is asking</span><p>' + esc(m.q) + '</p>' + ans + '</div>';
+        }
+        return '';
       }
-
-      gate.addEventListener('click', function (e) {
-        var btn = e.target && e.target.closest ? e.target.closest('[data-cg-action]') : null;
-        if (!btn || btn.disabled) return;
-        var action = btn.getAttribute('data-cg-action');
-        if (action === 'approve') resolveApprove();
-        else if (action === 'reject') resolveReject();
-        else if (action === 'steer') openAmend();
-      });
-
-      // Relaunch from the brief — reset + re-stream a fresh run that ends again
-      // at the gate, so a visitor can drive their own problem in.
-      if (form) {
-        form.addEventListener('submit', function (e) {
-          e.preventDefault();
-          workerFlip = (workerFlip + 1) % 2;
-          stream(workerFlip === 0 ? 'codex' : 'claude');
-          if (input) input.blur();
-        });
-      }
-
-      // Auto-play the run when the console scrolls into view.
-      // Reduced-motion renders it fully, instantly.
-      var started = false;
-      function startOnce() {
-        if (started) return; started = true;
-        stream('claude');
-      }
-      if ('IntersectionObserver' in window) {
-        var io = new IntersectionObserver(function (entries) {
-          entries.forEach(function (en) {
-            if (en.isIntersecting) { startOnce(); io.disconnect(); }
-          });
-        }, { threshold: 0.3 });
-        io.observe(root);
-      } else {
-        startOnce();
-      }
-    })();
-  </script>
-
-  <!-- ── The insight rail chips: click a panel, read what it answers ─────── -->
-  <script is:inline define:vars={{ RAIL }}>
-    (function () {
-      var chips = Array.prototype.slice.call(document.querySelectorAll('[data-rail-chip]'));
-      var line = document.querySelector('[data-rail-line]');
-      if (!chips.length || !line) return;
-      var LINES = RAIL.map(function (r) { return r.line; });
-      chips.forEach(function (chip) {
-        chip.addEventListener('click', function () {
-          var i = parseInt(chip.getAttribute('data-i'), 10);
-          if (isNaN(i) || !LINES[i]) return;
-          chips.forEach(function (c) { c.classList.remove('is-active'); });
-          chip.classList.add('is-active');
-          line.textContent = LINES[i];
-        });
-      });
-    })();
-  </script>
-
-  <!-- ── The run board: auto-cycling panel switcher (click to pin) ───────── -->
-  <script is:inline define:vars={{ PANELS }}>
-    (function () {
-      var items = Array.prototype.slice.call(document.querySelectorAll('[data-board-item]'));
-      var stage = document.querySelector('[data-board-stage]');
-      var nameEl = document.querySelector('[data-bs-name]');
-      var apiEl = document.querySelector('[data-bs-api]');
-      var lineEl = document.querySelector('[data-bs-line]');
-      var toggle = document.querySelector('[data-board-toggle]');
-      var statusTxt = document.querySelector('[data-board-status-txt]');
-      if (!items.length || !stage || !nameEl || !apiEl || !lineEl) return;
-
-      var reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-      var current = 0;
-      var timer = null;
-      var pinned = false;
-
-      function render(i) {
-        current = i;
-        var p = PANELS[i];
-        nameEl.textContent = p.id;
-        apiEl.textContent = p.api;
-        lineEl.textContent = p.line;
-        items.forEach(function (it, j) {
-          it.classList.toggle('is-active', j === i);
-          it.setAttribute('aria-selected', j === i ? 'true' : 'false');
-        });
-      }
-      function play() {
-        if (timer || reduced) return;
-        timer = setInterval(function () { render((current + 1) % PANELS.length); }, 3000);
-        if (toggle) toggle.classList.add('is-playing');
-        if (statusTxt) statusTxt.textContent = 'auto-cycling · click a panel to pin it';
-      }
-      function pause(msg) {
-        if (timer) { clearInterval(timer); timer = null; }
-        if (toggle) toggle.classList.remove('is-playing');
-        if (statusTxt) statusTxt.textContent = msg || 'paused · click to resume';
-      }
-      items.forEach(function (it) {
-        it.addEventListener('click', function () {
-          var i = parseInt(it.getAttribute('data-i'), 10);
-          if (isNaN(i)) return;
-          pinned = true;
-          pause('pinned · ' + PANELS[i].id + ' — click ▶ to resume');
-          render(i);
-        });
-      });
-      if (toggle) {
-        toggle.addEventListener('click', function () {
-          if (timer) { pinned = true; pause(); }
-          else { pinned = false; play(); }
-        });
-      }
-      render(0);
-      if (!reduced) {
-        if ('IntersectionObserver' in window) {
-          var io = new IntersectionObserver(function (entries) {
-            entries.forEach(function (en) {
-              if (en.isIntersecting && !pinned) { play(); }
-              else if (!en.isIntersecting) { if (timer) { clearInterval(timer); timer = null; } }
-            });
-          }, { threshold: 0.3 });
-          io.observe(stage);
+      function renderThread(keepScroll) {
+        var s = S[cur];
+        if (!s.msgs.length) {
+          threadEl.innerHTML = '<div class="empty"><p><b>New job.</b> Say what you want in plain words. You get a plan to approve before anything starts.</p></div>';
         } else {
-          play();
+          threadEl.innerHTML = s.msgs.map(bubble).join('');
+        }
+        if (!keepScroll) threadEl.scrollTop = threadEl.scrollHeight;
+      }
+      function renderPane() {
+        var s = S[cur];
+        root.querySelectorAll('[data-pane-tab]').forEach(function (b) {
+          var on = b.getAttribute('data-pane-tab') === pane;
+          b.classList.toggle('is-on', on); b.setAttribute('aria-selected', on ? 'true' : 'false');
+        });
+        filesEl.textContent = String(s.files.length);
+        if (pane === 'changes') {
+          if (!s.files.length) {
+            paneEl.innerHTML = '<p class="pane-empty">Nothing changed yet. Files show up here as the agents write them.</p>';
+            return;
+          }
+          var f = s.files[Math.min(s.openFile, s.files.length - 1)];
+          paneEl.innerHTML = '<ul class="files">' + s.files.map(function (x, i) {
+            return '<li><button type="button" class="file' + (x === f ? ' is-on' : '') + '" data-act="file" data-i="' + i + '"><span>' + esc(x.path) + '</span>' +
+              '<span class="n"><i class="a">+' + x.add + '</i> <i class="d">−' + x.del + '</i></span></button></li>';
+          }).join('') + '</ul><pre class="diff" aria-label="Diff of ' + esc(f.path) + '">' + f.diff.map(function (l) {
+            return '<span class="dl dl--' + (l[0] === '+' ? 'a' : l[0] === '-' ? 'd' : 'c') + '">' + esc(l[0] + ' ' + l[1]) + '</span>';
+          }).join('') + '</pre>';
+        } else {
+          var r = s.receipt;
+          if (!r) { paneEl.innerHTML = '<p class="pane-empty">The receipt fills in as the job runs: what was required, what ran, and who checked it.</p>'; return; }
+          paneEl.innerHTML = '<table class="rc"><tbody>' +
+            '<tr><th>Required</th><td>tests pass, a different agent reviews</td></tr>' +
+            '<tr><th>Built by</th><td>' + esc(r.built) + '</td></tr>' +
+            '<tr><th>Reviewed by</th><td>' + esc(r.reviewed || 'pending') + (r.reviewed ? ' <span class="ok">separate agent</span>' : '') + '</td></tr>' +
+            '<tr><th>Tests</th><td>' + esc(r.tests || 'pending') + '</td></tr>' +
+            '<tr><th>Decision</th><td>' + esc(r.decision || 'pending') + '</td></tr>' +
+            '<tr><th>Skipped</th><td>nothing</td></tr></tbody></table>';
         }
       }
-    })();
-  </script>
+      function renderAll(keepScroll) { renderRail(); renderSteps(); renderThread(keepScroll); renderPane(); }
+      function refresh(id) { if (id === cur) renderAll(); else renderRail(); }
 
-  <!-- ── One project, one feed: flip which lens centres the same room ─────── -->
-  <script is:inline>
-    (function () {
-      var card = document.querySelector('[data-proj]');
-      if (!card) return;
-      var buttons = Array.prototype.slice.call(card.querySelectorAll('[data-proj-skin]'));
-      var label = card.querySelector('[data-proj-skin-label]');
-      buttons.forEach(function (btn) {
-        btn.addEventListener('click', function () {
-          var skin = btn.getAttribute('data-proj-skin');
-          if (!skin) return;
-          card.setAttribute('data-skin', skin);
-          buttons.forEach(function (b) {
-            var active = b === btn;
-            b.classList.toggle('is-active', active);
-            b.setAttribute('aria-selected', active ? 'true' : 'false');
-          });
-          if (label) label.textContent = skin === 'studio' ? 'runs' : 'document';
+      // ── the scripted run (job "rate") ───────────────────────────────────
+      function push(id, m) { var s = S[id]; s.msgs = s.msgs.filter(function (x) { return x.k !== 'working'; }); if (m) s.msgs.push(m); refresh(id); }
+      function work(id, text) { push(id, { k: 'working', t: text }); }
+
+      function start(text) {
+        var s = S.rate;
+        s.state = 'plan-wait';
+        push('rate', { k: 'user', t: text });
+        if (text !== PROMPT) push('rate', { k: 'event', t: 'This demo replays one recorded job: rate limits for the public API.' });
+        work('rate', 'Claude Code is planning…');
+        later(1100, function () {
+          s.state = 'plan';
+          push('rate', { k: 'plan', who: 'Claude Code', state: 'open', items: [
+            'Build: add a rate-limit middleware to the public routes',
+            'Review: <b>Codex</b> checks it, not me',
+            'Test: run the suite',
+            'Deliver: open a pull request'] });
         });
-      });
-    })();
-  </script>
-
-  <!-- ── The client seam: bundled ↔ standalone pairing modes ─────────────── -->
-  <script is:inline>
-    (function () {
-      var panel = document.querySelector('[data-pair]');
-      if (!panel) return;
-      var buttons = Array.prototype.slice.call(panel.querySelectorAll('[data-pair-mode]'));
-      buttons.forEach(function (btn) {
-        btn.addEventListener('click', function () {
-          var mode = btn.getAttribute('data-pair-mode');
-          if (!mode) return;
-          panel.setAttribute('data-mode', mode);
-          buttons.forEach(function (b) {
-            var active = b === btn;
-            b.classList.toggle('is-active', active);
-            b.setAttribute('aria-selected', active ? 'true' : 'false');
+      }
+      function planDecision(ok) {
+        var s = S.rate, plan = s.msgs.filter(function (m) { return m.k === 'plan'; })[0];
+        if (!plan) return;
+        plan.state = ok ? 'ok' : 'later';
+        if (!ok) { refresh('rate'); return; }
+        s.state = 'run'; s.steps = 1; s.receipt = { built: 'Claude Code' };
+        work('rate', 'Working on Build…');
+        later(1500, function () {
+          s.files = FILES_V1; s.openFile = 0;
+          push('rate', { k: 'agent', who: 'Claude Code', t: 'Build done. Added a rate-limit middleware and put it in front of the public routes, with a test. 3 files changed.', chips: ['Changes'] });
+          s.steps = 2;
+          work('rate', 'Codex is reviewing…');
+          later(1400, function () {
+            s.state = 'gate';
+            push('rate', { k: 'gate', who: 'Codex', state: 'open', t: 'One finding: the limit is keyed on the client IP, but you asked for a limit <b>per API key</b>. Clients behind one proxy would share a limit.' });
           });
         });
+      }
+      function finish(decision, finalText) {
+        var s = S.rate;
+        s.state = 'run'; s.steps = 3;
+        work('rate', 'Working on Test…');
+        later(1200, function () {
+          s.receipt.tests = '38 pass';
+          push('rate', { k: 'event', t: 'Tests pass (38).' });
+          s.steps = 4;
+          work('rate', 'Working on Deliver…');
+          later(900, function () {
+            s.state = 'done'; s.steps = 5; s.receipt.decision = decision;
+            push('rate', { k: 'agent', who: 'Claude Code', done: true, t: finalText, chips: ['Pull request #12', 'Changes', 'Evidence'] });
+          });
+        });
+      }
+      function gateDecision(kind, note) {
+        var s = S.rate, gate = s.msgs.filter(function (m) { return m.k === 'gate'; }).pop();
+        if (!gate || (gate.state !== 'open' && gate.state !== 'noting')) return;
+        if (kind === 'note-open') { gate.state = 'noting'; refresh('rate'); var n = threadEl.querySelector('[data-note]'); if (n) { n.focus(); n.select(); } return; }
+        s.receipt.reviewed = 'Codex';
+        if (kind === 'ok') {
+          gate.state = 'done'; gate.decided = 'You approved over the finding. That is on the record as your call.';
+          finish('approved by you over a review finding', 'Done. Tests pass (38). You approved over Codex’s finding, and the receipt says so. Pull request #12 is open.');
+        } else if (kind === 'note') {
+          gate.state = 'done'; gate.decided = 'You approved. Your note goes to the next step: “' + note + '”';
+          finish('approved by you, with a note', 'Done. Tests pass (38). You approved with a note, and it rides with the delivery. Pull request #12 is open.');
+        } else if (kind === 'back') {
+          gate.state = 'done'; gate.decided = 'You sent it back to Claude Code with the finding.';
+          s.state = 'run'; s.steps = 1;
+          work('rate', 'Working on Build…');
+          later(1400, function () {
+            s.files = FILES_V2;
+            push('rate', { k: 'agent', who: 'Claude Code', t: 'Fixed. The limit is now per API key, with the client IP only for requests that carry no key.', chips: ['Changes'] });
+            s.steps = 2;
+            work('rate', 'Codex is reviewing…');
+            later(1200, function () {
+              push('rate', { k: 'agent', who: 'Codex', t: 'Approved. Keyed on the API key now, and the new test covers two keys.' });
+              finish('approved by Codex after one send-back', 'Done. Tests pass (38), and codex reviewed and approved it. Pull request #12 is open.');
+            });
+          });
+        }
+      }
+      function answer(i) {
+        var s = S.flaky, ask = s.msgs.filter(function (m) { return m.k === 'ask'; })[0];
+        if (!ask || ask.ans !== null) return;
+        ask.ans = i; s.state = 'run'; s.receipt = { built: 'Codex' };
+        work('flaky', 'Working on Build…');
+        later(1400, function () {
+          s.files = [{ path: 'test/checkout.test.ts', add: 4, del: 1, diff: i === 0
+            ? [['-', '  const now = new Date();'], ['+', "  vi.setSystemTime(new Date('2026-01-01T23:59:30Z'));"], ['+', '  const now = new Date();']]
+            : [['-', '  const now = new Date();'], ['+', '  const now = clock.now();']] }];
+          s.steps = 2;
+          push('flaky', { k: 'agent', who: 'Codex', t: 'Build done. Claude Code reviews it next.', chips: ['Changes'] });
+          s.who = 'Claude Code';
+          work('flaky', 'Claude Code is reviewing…');
+        });
+      }
+
+      // ── input ───────────────────────────────────────────────────────────
+      root.addEventListener('click', function (e) {
+        var b = e.target.closest ? e.target.closest('[data-act], [data-pane-tab]') : null;
+        if (!b || b.disabled) return;
+        userTouched = true;
+        if (b.hasAttribute('data-pane-tab')) { pane = b.getAttribute('data-pane-tab'); renderPane(); return; }
+        var a = b.getAttribute('data-act');
+        if (a === 'open') { cur = b.getAttribute('data-id'); renderAll(); }
+        else if (a === 'restart') { clearTimers(); S.rate = fresh().rate; cur = 'rate'; pane = 'changes'; input.value = PROMPT; renderAll(); input.focus(); }
+        else if (a === 'plan-ok') planDecision(true);
+        else if (a === 'plan-later') planDecision(false);
+        else if (a === 'gate-ok') gateDecision('ok');
+        else if (a === 'gate-back') gateDecision('back');
+        else if (a === 'gate-note') gateDecision('note-open');
+        else if (a === 'gate-note-send') { var n = threadEl.querySelector('[data-note]'); gateDecision('note', (n && n.value.trim()) || 'no note'); }
+        else if (a === 'answer') answer(parseInt(b.getAttribute('data-i'), 10));
+        else if (a === 'pane') { pane = b.getAttribute('data-pane'); renderPane(); }
+        else if (a === 'file') { S[cur].openFile = parseInt(b.getAttribute('data-i'), 10); renderPane(); }
       });
+      threadEl.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' && e.target.matches && e.target.matches('[data-note]')) { e.preventDefault(); gateDecision('note', e.target.value.trim() || 'no note'); }
+      });
+      form.addEventListener('submit', function (e) {
+        e.preventDefault();
+        userTouched = true;
+        var text = input.value.trim();
+        if (!text) return;
+        var s = S[cur];
+        if (cur === 'rate' && s.state === 'draft') { input.value = ''; start(text); return; }
+        input.value = '';
+        push(cur, { k: 'user', t: text });
+        push(cur, { k: 'event', t: 'Note added. It goes to the agent with the next step.' });
+      });
+
+      renderAll();
+      // Start the job on its own once the demo is on screen, unless the visitor got there first.
+      // It always stops at the plan: nothing runs without a person approving it.
+      function autoStart() { if (!userTouched && S.rate.state === 'draft') { input.value = ''; start(PROMPT); } }
+      if (reduced) { autoStart(); return; }
+      if ('IntersectionObserver' in window) {
+        var io = new IntersectionObserver(function (es) {
+          if (es.some(function (x) { return x.isIntersecting; })) { io.disconnect(); setTimeout(autoStart, 900); }
+        }, { threshold: 0.4 });
+        io.observe(root);
+      } else { autoStart(); }
     })();
   </script>
 </Base>
