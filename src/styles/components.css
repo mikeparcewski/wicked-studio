@@ -1842,6 +1842,10 @@ html :is(input, textarea)::placeholder { color: var(--ink-placeholder); opacity:
 .wk-run-tab-heading { margin: 0 0 var(--space-2); color: var(--ink-high); font-size: var(--text-xs); font-weight: var(--weight-semi); }
 .wk-run-tab-line { margin: var(--space-1) 0; overflow-wrap: anywhere; }
 .wk-run-tab-muted { color: var(--ink-muted); }
+/* The run's team (Agents and spend): lead, watch count, each watcher; a watcher that could not open says why. */
+.wk-run-tab-team { margin-bottom: var(--space-2); }
+.wk-run-tab-member { margin: var(--space-1) 0; overflow-wrap: anywhere; }
+.wk-run-tab-member-error { display: block; font-size: var(--text-xs); color: var(--status-fail); }
 p.wk-run-tab-muted { margin: var(--space-1) 0; }
 .wk-run-tab-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-2); }
 .wk-run-tab-phase, .wk-run-tab-agent { display: flex; align-items: baseline; gap: var(--space-2); }

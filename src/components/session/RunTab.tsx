@@ -39,6 +39,7 @@ import { FileViewer } from '../FileViewer.js';
 import { ActivityTail, EvidenceTab, GoalBrief, HelpersList, RunSection, SignIns, StepsList } from '../sheets/ObjectSheet.js';
 import { PANEL_SECTIONS, panelStateKind, quietSections, sectionOpen, type PanelSectionId } from '../../board/runPanelModel.js';
 import { useRunPanel } from '../../store/runPanel.js';
+import { TeamRosterLines } from './TeamRosterLines.js';
 
 function isTerminal(view: SessionView): boolean {
   return ['completed', 'cancelled', 'failed'].includes(view.session.status);
@@ -266,6 +267,7 @@ function RunTabDetails({ view, allRuns, sessionId, title, navigate }: { view: Se
 
       <Section id="agents" {...fold} summary={`${agentsWord(clis.length)}${spend !== null ? ` · ${spend}` : ''}`}>
         <div data-testid="run-tab-agents" className="wk-run-tab-block">
+          <TeamRosterLines runId={id} roster={roster} />
           {clis.length === 0 ? <p className="wk-run-tab-muted">No agent has been assigned yet.</p> : (
             <ul className="wk-run-tab-list">
               {clis.map((cli) => {

@@ -20,6 +20,8 @@ export interface LaunchDraft {
   confirmMode: ConfirmMode;
   deliverOn: boolean;
   reduced: boolean;
+  /** The seat that leads the job (the primary agent); null = Random, the engine picks. */
+  lead: string | null;
   skipQe: boolean;
   skipQeReason: string;
   /** The composer that opened it (a chat's composer launches into its chat). */
@@ -77,6 +79,7 @@ export function freshDraft(init: OpenLaunchWizard): LaunchDraft {
     confirmMode: 'before',
     deliverOn: true,
     reduced: false,
+    lead: null,
     skipQe: false,
     skipQeReason: '',
     composerKey: init.composerKey ?? null,

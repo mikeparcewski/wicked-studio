@@ -88,6 +88,13 @@ export type SessionWithDelivery = Omit<AgentSession, 'delivery' | 'deliverUrl'> 
 export type LaunchBodyWithDeliver = Omit<LaunchRunBody, 'deliver'> & {
   deliver?: 'pr' | 'none';
   /**
+   * The seat that leads the run (DES-TEAMING-002 §8.1; crew#1077, api-types 0.128.0): a seat key
+   * from the launch roster; omitted, the engine picks at random. Sent only when
+   * `GET /health.capabilities.launchPrimary === true`. Hand-declared here like `deliver` — delete
+   * on the ≥0.128 api-types bump.
+   */
+  primary?: string;
+  /**
    * Ad-hoc campaign attach (wicked-studio#27; api-types 0.19.0): file this run onto an
    * EXISTING campaign's surface. Provenance only — the run executes byte-identically, never
    * becomes a DAG node. Validated at launch, loudly: unknown campaign = 404 (nothing

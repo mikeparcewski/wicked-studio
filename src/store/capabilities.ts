@@ -27,6 +27,10 @@ interface CapabilitiesStore {
    *  (`POST /runs {reducedAssurance: true}`). Absent or false (an older daemon): the opt-in is not
    *  offered and the key is never sent. */
   reducedAssurance: boolean;
+  /** `launchPrimary` (crew#1077, api-types 0.128.0) — a launch may name the seat that leads it
+   *  (`POST /runs {primary}`). Absent or false (an older daemon): the Lead agent picker is not
+   *  offered and the key is never sent (its strict schema 400s on it). */
+  launchPrimary: boolean;
   load: () => Promise<void>;
 }
 
@@ -40,6 +44,7 @@ export const useCapabilities = create<CapabilitiesStore>((set, get) => ({
   chatIdOnLaunch: false,
   deliverGate: false,
   reducedAssurance: false,
+  launchPrimary: false,
   load: () => {
     if (get().loaded) return Promise.resolve();
     // The HTTP client is reached lazily: the stores that read a capability (gates, the ask thread)
@@ -47,9 +52,9 @@ export const useCapabilities = create<CapabilitiesStore>((set, get) => ({
     inflight ??= import('../api/client.js').then(({ api }) => api.getHealth())
       .then((h) => {
         const caps = ((h as unknown as { capabilities?: Record<string, unknown> }).capabilities) ?? {};
-        set({ loaded: true, runChatId: caps['runChatId'] === true, walkthroughRoots: caps['walkthroughRoots'] === true, askPath: caps['askPath'] === true, chatIdOnLaunch: caps['chatIdOnLaunch'] === true, deliverGate: caps['deliverGate'] === true, reducedAssurance: caps['reducedAssurance'] === true });
+        set({ loaded: true, runChatId: caps['runChatId'] === true, walkthroughRoots: caps['walkthroughRoots'] === true, askPath: caps['askPath'] === true, chatIdOnLaunch: caps['chatIdOnLaunch'] === true, deliverGate: caps['deliverGate'] === true, reducedAssurance: caps['reducedAssurance'] === true, launchPrimary: caps['launchPrimary'] === true });
       })
-      .catch(() => { set({ loaded: true, runChatId: false, walkthroughRoots: false, askPath: false, chatIdOnLaunch: false, deliverGate: false, reducedAssurance: false }); })
+      .catch(() => { set({ loaded: true, runChatId: false, walkthroughRoots: false, askPath: false, chatIdOnLaunch: false, deliverGate: false, reducedAssurance: false, launchPrimary: false }); })
       .finally(() => { inflight = null; });
     return inflight;
   },
