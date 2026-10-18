@@ -12,6 +12,10 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+## [0.10.1] — 2026-10-17
+
+A patch release: the :7721 round-2 E2E defects (#837).
+
 ### Fixed
 - **A finished run's page opens at its newest message (#834).** The thread treated any scroll it did not make itself as the operator's. When the run's step words filled in after the page opened, the browser moved the thread, and that move stopped the follow and was saved as "their place": the page opened 753 px short, and every later open came back short too. A scroll now counts as the operator's only after their own wheel, touch, key or pointer input on the thread.
 - **"Approve with a note for the next step" no longer labels a retry (#832).** On an escalation whose approve re-runs the phase ("confirm to retry the phase", for example a verify FAIL), the approve-with-note arm now reads **Retry this step with a note**, and its title says the run does not move on.
@@ -2288,7 +2292,8 @@ The merged interactive layer: wicked-interactive's UI moved into this skin (DES-
   `git subtree split` (92 commits).
 - The SPA as a pure HTTP/WS client of the wicked-crew daemon: runs, gates, live CoreEvents.
 
-[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.10.0...HEAD
+[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.10.1...HEAD
+[0.10.1]: https://github.com/mikeparcewski/wicked-studio/compare/v0.10.0...v0.10.1
 [0.10.0]: https://github.com/mikeparcewski/wicked-studio/compare/v0.9.6...v0.10.0
 [0.9.6]: https://github.com/mikeparcewski/wicked-studio/compare/v0.9.5...v0.9.6
 [0.9.5]: https://github.com/mikeparcewski/wicked-studio/compare/v0.9.4...v0.9.5
