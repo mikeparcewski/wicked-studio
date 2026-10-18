@@ -99,6 +99,8 @@ interface Entry {
   action?: () => void;
   /** The row acts inside the modal (switch tab, load more, reuse a recent search): it stays open. */
   keepOpen?: boolean;
+  /** A hit from the previous query, shown while the next answer is on its way: it does not open. */
+  stale?: boolean;
   /** Group-internal rank: lower first (gates before active before terminal). */
   rank: number;
   /** A search hit: its type (the icon), its title spans and snippet. */
@@ -114,8 +116,10 @@ interface Row { en: Entry; m: FuzzyResult }
 interface SearchState {
   q: string;
   status: 'loading' | 'ok' | 'absent' | 'error';
-  /** The All answer (every type's best few, and the totals the tabs show). */
+  /** The All answer (every type's best few, and the totals the tabs show)… */
   all: SearchResponse | null;
+  /** …and the words it answers (the previous query's while a newer one is on its way). */
+  allQ: string | null;
   /** A type tab's own pages. */
   tabs: Partial<Record<SearchType, { hits: SearchHit[]; next: string | null; total: number; loading: boolean }>>;
   error: string | null;
@@ -333,7 +337,7 @@ export function CommandPalette({
     inflight.current = null;
     if (!searching) { setFound(null); return undefined; }
     const q = needle;
-    setFound((prev) => (prev !== null && prev.q === q ? prev : { q, status: 'loading', all: prev?.all ?? null, tabs: {}, error: null }));
+    setFound((prev) => (prev !== null && prev.q === q ? prev : { q, status: 'loading', all: prev?.all ?? null, allQ: prev?.allQ ?? null, tabs: {}, error: null }));
     let retries = 0;
     let timer: ReturnType<typeof setTimeout> | null = null;
     const ask = (): void => {
@@ -342,7 +346,7 @@ export function CommandPalette({
       api.search(q, { limit: ALL_LIMIT, signal: ac.signal })
         .then((res) => {
           if (ac.signal.aborted) return;
-          setFound((prev) => ({ q, status: 'ok', all: res, tabs: prev?.q === q ? prev.tabs : {}, error: null }));
+          setFound((prev) => ({ q, status: 'ok', all: res, allQ: q, tabs: prev?.q === q ? prev.tabs : {}, error: null }));
           if (Array.isArray(res.sources) && res.sources.some((s) => s.state === 'indexing') && retries < INDEXING_RETRIES) {
             retries += 1;
             timer = setTimeout(ask, INDEXING_RETRY_MS);
@@ -350,7 +354,7 @@ export function CommandPalette({
         })
         .catch((e: unknown) => {
           if (ac.signal.aborted) return;
-          setFound({ q, status: isRouteAbsent(e) ? 'absent' : 'error', all: null, tabs: {}, error: e instanceof Error ? e.message : String(e) });
+          setFound({ q, status: isRouteAbsent(e) ? 'absent' : 'error', all: null, allQ: null, tabs: {}, error: e instanceof Error ? e.message : String(e) });
         });
     };
     timer = setTimeout(ask, SEARCH_DEBOUNCE_MS);
@@ -364,7 +368,8 @@ export function CommandPalette({
   /** A type tab's page: the first one when the tab opens, the next on "Load more". */
   const foundRef = useRef(found);
   foundRef.current = found;
-  const tabAbort = useRef<AbortController | null>(null);
+  // One controller per type: opening another tab never cancels this one's page (it would stay "loading").
+  const tabAborts = useRef(new Map<SearchType, AbortController>());
   const loadTab = useCallback((type: SearchType, more: boolean): void => {
     const prev = foundRef.current;
     if (prev === null || prev.status !== 'ok') return;
@@ -374,9 +379,9 @@ export function CommandPalette({
     const settle = (next: { hits: SearchHit[]; next: string | null; total: number; loading: boolean }): void =>
       setFound((cur) => (cur === null || cur.q !== q ? cur : { ...cur, tabs: { ...cur.tabs, [type]: next } }));
     settle({ hits: page?.hits ?? [], next: page?.next ?? null, total: page?.total ?? 0, loading: true });
-    tabAbort.current?.abort();
+    tabAborts.current.get(type)?.abort();
     const ac = new AbortController();
-    tabAbort.current = ac;
+    tabAborts.current.set(type, ac);
     api.search(q, { types: [type], limit: TAB_LIMIT, ...(more && page !== undefined ? { cursor: page.next } : {}), signal: ac.signal })
       .then((res) => {
         if (ac.signal.aborted) return;
@@ -392,7 +397,14 @@ export function CommandPalette({
   useEffect(() => {
     if (tab !== 'all' && found !== null && found.q === needle && found.status === 'ok') loadTab(tab, false);
   }, [tab, found, needle, loadTab]);
-  useEffect(() => () => tabAbort.current?.abort(), []);
+  useEffect(() => {
+    if (open && searching) return undefined;
+    // Closing, or leaving search: every tab's request in flight is dropped.
+    for (const ac of tabAborts.current.values()) ac.abort();
+    tabAborts.current.clear();
+    return undefined;
+  }, [open, searching]);
+  useEffect(() => () => { for (const ac of tabAborts.current.values()) ac.abort(); }, []);
 
   const projectIdByRun = useMembershipStore((s) => s.projectIdByRun);
   // §7.5 (slice Y2): the attach clock for run rows — the mirror the board
@@ -414,6 +426,11 @@ export function CommandPalette({
   }), [projects, runs, projectIdByRun, liveChats, campaigns, runChatId]);
 
   const openAs = useCallback((hit: SearchHit): string => searchHitHref(hit, { runChatId, runs }), [runChatId, runs]);
+
+  // The daemon's All answer on screen, and whether it answers the words in the box now (a newer query
+  // is on its way: its hits stay up, dimmed, and Enter will not open them).
+  const daemonAnswers = searching && found !== null && found.all !== null && (found.status === 'ok' || found.status === 'loading');
+  const staleAnswer = daemonAnswers && found.allQ !== needle;
 
   const rows = useMemo((): Row[] => {
     const status = selectedRun?.session.status ?? '';
@@ -568,7 +585,7 @@ export function CommandPalette({
     goTargets.forEach((t, i) => {
       // Searching: an item's own pages (a project's documents, a run's events…) are the daemon's hits
       // now, one row per item; `go:` still lists every one.
-      if ((needle === '' || searching) && t.perItem) return;
+      if ((needle === '' || daemonAnswers) && t.perItem) return;
       entries.push({ id: `go-${t.href}`, group: 'go', label: t.label, context: t.href, href: t.href, rank: i });
     });
 
@@ -625,11 +642,9 @@ export function CommandPalette({
       capped.push(r);
     }
     const hitRow = (hit: SearchHit, i: number): Row => ({
-      en: { id: `hit-${hit.type}-${hit.id}`, group: `hit-${hit.type}`, label: hit.title, context: hitContext(hit, projectName), href: openAs(hit), rank: i, hit },
+      en: { id: `hit-${hit.type}-${hit.id}`, group: `hit-${hit.type}`, label: hit.title, context: hitContext(hit, projectName), href: openAs(hit), rank: i, hit, ...(staleAnswer && tab === 'all' ? { stale: true } : {}) },
       m: { score: 0, positions: [] },
     });
-    // While the next answer is on its way, the last one stays up (no flicker between keystrokes).
-    const daemonAnswers = found !== null && found.all !== null && (found.status === 'ok' || found.status === 'loading');
     if (tab !== 'all') {
       const page = found?.tabs[tab];
       const hits = page?.hits ?? [];
@@ -653,7 +668,7 @@ export function CommandPalette({
     // Before the daemon answers, or without its search: what studio already holds, matched here.
     const local = rank(entries.filter((en) => en.group === 'runs' || en.group === 'projects' || en.group === 'repos'));
     return [...capped, ...local];
-  }, [runs, projects, repos, gates, attachedAtByRun, goTargets, object, scope, needle, searching, recent, found, tab, runPath, navigate, projectId, selectedRun, onKill, onClose, projectName, openAs, loadTab]);
+  }, [runs, projects, repos, gates, attachedAtByRun, goTargets, object, scope, needle, searching, recent, found, tab, runPath, navigate, projectId, selectedRun, onKill, onClose, projectName, openAs, loadTab, daemonAnswers, staleAnswer]);
 
   // Clamp the selection whenever the row set changes.
   const selIx = Math.min(sel, Math.max(0, rows.length - 1));
@@ -665,7 +680,7 @@ export function CommandPalette({
   }, [selIx, rows]);
 
   const activate = (row: Row | undefined): void => {
-    if (row === undefined) return;
+    if (row === undefined || row.en.stale === true) return;
     if (row.en.keepOpen === true) {
       row.en.action?.();
       inputRef.current?.focus();
@@ -835,13 +850,16 @@ export function CommandPalette({
                   'data-testid': 'palette-row',
                   'data-group': row.en.group,
                   'data-selected': i === selIx ? 'true' : 'false',
+                  ...(row.en.stale === true ? { 'data-stale': 'true', 'aria-disabled': true } : {}),
                   role: 'option',
                   'aria-selected': i === selIx,
                   onClick: (e: React.MouseEvent) => {
                     e.preventDefault();
                     activate(row);
                   },
-                  onMouseEnter: () => setSel(i),
+                  // Movement, not enter: a list that re-renders under a still pointer must not steal the
+                  // keyboard's selection (Enter would open the row under the mouse).
+                  onMouseMove: () => { if (i !== selIx) setSel(i); },
                   className: `wk-palette-row block w-full px-4 py-1.5 text-left${row.en.group === 'more' ? ' wk-palette-row--more' : ''}`,
                   ...(isRun || hit !== undefined ? { title: row.en.label } : {}),
                 } as const;

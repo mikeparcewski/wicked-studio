@@ -178,6 +178,47 @@ describe('asking the daemon', () => {
   });
 });
 
+describe('races', () => {
+  it('Enter never opens a hit of the previous query while the new one is on its way', async () => {
+    let release: (v: SearchResponse) => void = () => {};
+    search.mockResolvedValueOnce(answer([{ type: 'rule', hits: [hit('rule', 'R1', 'qq rule')] }]))
+      .mockImplementationOnce(() => new Promise<SearchResponse>((r) => { release = r; }));
+    const { navigate } = renderModal();
+    type('qq');
+    await waitFor(() => expect(rows().some((r) => r.dataset.group === 'hit-rule')).toBe(true));
+    type('zzxw');
+    const stale = rows().find((r) => r.dataset.group === 'hit-rule')!;
+    expect(stale.dataset.stale).toBe('true');
+    fireEvent.click(stale);
+    for (let i = 0; i < rows().indexOf(stale); i += 1) key('ArrowDown');
+    key('Enter');
+    expect(navigate).not.toHaveBeenCalled();
+    expect(readRecentSearches()).toEqual([]);
+    await waitFor(() => expect(search).toHaveBeenCalledTimes(2));
+    act(() => release(answer([])));
+    await waitFor(() => expect(screen.getByTestId('search-empty')).toBeInTheDocument());
+  });
+
+  it('switching tabs while one is loading never strands it: going back asks again', async () => {
+    search.mockImplementation((_q: string, o: { types?: SearchType[]; signal?: AbortSignal }) => {
+      if (o.types === undefined) return Promise.resolve(answer([{ type: 'run', hits: [hit('run', 'r1', 'upload one')] }]));
+      if (o.types[0] === 'run' && search.mock.calls.filter((c) => (c[1] as { types?: SearchType[] }).types?.[0] === 'run').length === 1) return new Promise(() => {});
+      return Promise.resolve(answer([{ type: o.types[0]!, hits: [hit(o.types[0]!, `${o.types[0]}-1`, 'upload x')] }]));
+    });
+    renderModal();
+    type('upload');
+    await waitFor(() => expect(screen.getByTestId('search-tabs')).toBeInTheDocument());
+    const tab = (t: string): HTMLElement => screen.getAllByTestId('search-tab').find((x) => x.dataset.type === t)!;
+    fireEvent.click(tab('run'));
+    await waitFor(() => expect(search).toHaveBeenCalledWith('upload', expect.objectContaining({ types: ['run'] })));
+    fireEvent.click(tab('project'));
+    await waitFor(() => expect(rows().some((r) => r.dataset.group === 'hit-project')).toBe(true));
+    // The Runs page never answered; it is still its own request, not cancelled by the Projects tab.
+    const runSignal = (search.mock.calls.find((c) => (c[1] as { types?: SearchType[] }).types?.[0] === 'run')![1] as { signal: AbortSignal }).signal;
+    expect(runSignal.aborted).toBe(false);
+  });
+});
+
 describe('states', () => {
   it('nothing typed: recent searches lead, and choosing one searches it again', async () => {
     rememberSearch('auth tables');
