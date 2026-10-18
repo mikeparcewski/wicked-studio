@@ -12,7 +12,12 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+## [0.10.2] — 2026-10-18
+
+A patch release: each composer keeps its own helper choice, and a step's message never ends on an empty "Commands run" heading.
+
 ### Fixed
+- **The New job wizard keeps its own helper choice, and the Ask drawer gets the helpers row its refusal names (#843, #840).** Helpers turned off in the wizard stayed off for every later Desk Ask, because both read one saved choice. When nothing admitted was left, the drawer refused with "turn one on in the helpers row", a row it did not have. Each composer now keeps its own choice: a job's pick never changes who answers an Ask, and an Ask's pick never changes a job. The Ask drawer shows a helpers row above its input until the chat opens. When the helpers left on cannot answer (out of quota, benched, signed out), the refusal names them and the daemon's reason.
 - **A step's message no longer ends on an empty "Commands run" heading.** The run thread shows the first 14 lines of each step's report and cuts at the last blank line before that. In the governed-worker report, that blank line sits between `## Commands run` and its table, so every step showed the heading with nothing under it. A cut now drops any heading whose body it removed. **Show all** still opens the full report, table included.
 
 ## [0.10.1] — 2026-10-17
@@ -2295,7 +2300,8 @@ The merged interactive layer: wicked-interactive's UI moved into this skin (DES-
   `git subtree split` (92 commits).
 - The SPA as a pure HTTP/WS client of the wicked-crew daemon: runs, gates, live CoreEvents.
 
-[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.10.1...HEAD
+[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.10.2...HEAD
+[0.10.2]: https://github.com/mikeparcewski/wicked-studio/compare/v0.10.1...v0.10.2
 [0.10.1]: https://github.com/mikeparcewski/wicked-studio/compare/v0.10.0...v0.10.1
 [0.10.0]: https://github.com/mikeparcewski/wicked-studio/compare/v0.9.6...v0.10.0
 [0.9.6]: https://github.com/mikeparcewski/wicked-studio/compare/v0.9.5...v0.9.6
