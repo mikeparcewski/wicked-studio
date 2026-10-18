@@ -7,7 +7,7 @@ import { getCachedRoster } from '../../store/rosterCache.js';
 import { isShortcutsPaletteOpen } from '../../hooks/useGlobalShortcuts.js';
 import { useLayerStore } from '../../store/layers.js';
 import { Terminal } from '../Terminal.js';
-import { AgentLoginProvider } from './agentLogin.js';
+import { AgentLoginProvider, SignInNotCompleted } from './agentLogin.js';
 import { holdInert, useLoginCover } from './inertHold.js';
 
 /**
@@ -21,7 +21,8 @@ import { holdInert, useLoginCover } from './inertHold.js';
  *               socket drops, so either way the login is over and crew ingests it) or the user closes
  *               the window, studio waits, bounded, for crew's ingest (`GET /seats/:key/container-login`),
  *               then the hook resolves and the modal re-checks (`GET /roster?refresh=<key>`). It rejects
- *               only when the container could not be opened.
+ *               when the container could not be opened, and with crew's reason (SignInNotCompleted) when
+ *               the ingest refused the sign-in.
  *   Sign out  → `POST /seats/:key/container-logout`.
  *   Check now → studio's default re-check.
  * Agents without `sign_in: 'container'` keep the copy-the-command steps, so a daemon outside the
@@ -190,7 +191,13 @@ export function ContainerSignInProvider({ children }: { children: React.ReactNod
       // the POST answers. A refusal opened nothing; a terminal it did open is closed by the unmounted
       // Terminal itself, and crew's ingest of it is awaited like any other, so a retry never meets a 409.
       const settled = s.opened ? Promise.resolve(true) : (s.pending ?? Promise.reject(new Error('never sent'))).then(() => true, () => false);
-      void settled.then((o) => (o ? waitForOutcome(s.key) : null)).finally(() => s.resolve());
+      // Success only when crew's ingest says so: a refused ingest (nothing pasted, a bad token) rejects with crew's
+      // reason, so the modal shows it rather than a re-check that reads like the sign-in worked. No answer in time
+      // hands back to the re-check, which reads the broker either way.
+      void settled.then((o) => (o ? waitForOutcome(s.key) : null)).then((outcome) => {
+        if (outcome !== null && !outcome.ok) s.reject(new SignInNotCompleted(outcome.error ?? 'the sign-in did not finish'));
+        else s.resolve();
+      }, () => s.resolve());
     };
     const opened = (): void => {
       if (!mine()) return;

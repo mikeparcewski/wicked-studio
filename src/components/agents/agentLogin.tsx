@@ -25,8 +25,23 @@ export interface AgentCheckResult {
   outcome: 'probed' | 'timed_out' | 'not_probed' | null;
 }
 
+/**
+ * A sign-in that ran but did not sign the agent in: the login window closed and studio's service
+ * recorded why (its first line, never a credential). A `signIn` hook rejects with this so the modal
+ * shows that reason instead of re-checking as if the sign-in had worked.
+ */
+export class SignInNotCompleted extends Error {
+  constructor(readonly detail: string) {
+    super(detail);
+    this.name = 'SignInNotCompleted';
+  }
+}
+
 export interface AgentLoginHooks {
-  /** Open this agent's own sign-in (the login container). Absent: the copy-the-command step. A rejection says it failed. */
+  /**
+   * Open this agent's own sign-in (the login container). Absent: the copy-the-command step. A rejection says it
+   * failed: {@link SignInNotCompleted} when it ran and the daemon said why, anything else when it could not open.
+   */
   signIn?: (key: string) => void | Promise<void>;
   /** Sign this agent out. Absent: the copy-the-sign-out-command step. A promise holds Check now until it settles. */
   signOut?: (key: string) => void | Promise<void>;

@@ -12,6 +12,13 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+### Fixed
+- **A container sign-in that did not sign the agent in says so.** When the login window closed, studio waited for
+  crew's ingest outcome but threw away its result and re-checked as if the sign-in had worked. A refused ingest
+  (for example a `claude setup-token` token that was never pasted back) now shows on the agent's modal as "The
+  sign-in didn't finish: <agent> is not signed in." followed by crew's reason, and the agent is free to sign in
+  again. Success still comes only from the ingest plus the broker's fresh reading.
+
 ## [0.11.1] — 2026-10-18
 
 A patch release: the run panel's team lines, ⌘K ranking, and two follow-ups from 0.11.0 (#852).

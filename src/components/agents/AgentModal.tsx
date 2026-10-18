@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { AlertCircle, AlertTriangle, Info } from 'lucide-react';
 import { issueCopy, SEVERITY_WORD, type CopyCommand } from '../../board/agentsCopy.js';
 import { authOf, commandDisplay, countWords, rowForKey, type AgentIssue, type AgentRow } from '../../board/agentsModel.js';
-import { hookOffers, useAgentLogin, useAuthOps } from './agentLogin.js';
+import { hookOffers, SignInNotCompleted, useAgentLogin, useAuthOps } from './agentLogin.js';
 import { holdInert, useLoginCover } from './inertHold.js';
 import type { RosterSeat } from '../../api/types.js';
 import { getCachedRoster, setCachedRoster } from '../../store/rosterCache.js';
@@ -62,10 +62,11 @@ type Outcome =
   | { kind: 'not-rechecked' }
   | { kind: 'signout-failed' }
   | { kind: 'signin-failed' }
+  | { kind: 'signin-refused'; detail: string }
   | { kind: 'signing-in' }
   | { kind: 'out-done' };
 
-const OUTCOME_WORDS: Record<Exclude<Outcome['kind'], 'idle'>, (name: string) => { lead: string; tone: 'ok' | 'fail' | 'quiet'; line: string | null }> = {
+const OUTCOME_WORDS: Record<Exclude<Outcome['kind'], 'idle'>, (name: string, detail: string) => { lead: string; tone: 'ok' | 'fail' | 'quiet'; line: string | null }> = {
   checking: (n) => ({ lead: `Checking ${n}’s sign-in…`, tone: 'quiet', line: 'This can take up to 20 seconds.' }),
   in: (n) => ({ lead: `The sign-in worked, and ${n} answered a request.`, tone: 'ok', line: 'Its row is updated everywhere. You can close this.' }),
   free: (n) => ({ lead: `${n} needs no sign-in.`, tone: 'ok', line: null }),
@@ -78,6 +79,8 @@ const OUTCOME_WORDS: Record<Exclude<Outcome['kind'], 'idle'>, (name: string) => 
   'not-rechecked': () => ({ lead: 'Studio’s service is still checking.', tone: 'quiet', line: 'Your sign-in may still have worked; check again in a minute.' }),
   'signout-failed': (n) => ({ lead: `Couldn’t sign ${n} out.`, tone: 'fail', line: 'Nothing changed; try again.' }),
   'signin-failed': (n) => ({ lead: `Couldn’t open ${n}’s sign-in.`, tone: 'fail', line: 'Try again.' }),
+  // The login window closed but studio's service did not sign the agent in: its reason, as it said it.
+  'signin-refused': (n, detail) => ({ lead: `The sign-in didn’t finish: ${n} is not signed in.`, tone: 'fail', line: detail }),
   'out-done': (n) => ({ lead: `${n} is signed out.`, tone: 'ok', line: 'Sign it in again whenever you want it back.' }),
   'signing-in': (n) => ({ lead: `Finish signing in to ${n} in the window that opened.`, tone: 'quiet', line: 'Studio checks it as soon as that window closes.' }),
 };
@@ -269,7 +272,12 @@ export function AgentModal({ agentKey, onClose, intent }: {
         }, () => { if (current()) setOutcome({ kind: 'not-rechecked' }); })
         .finally(() => { clearTimeout(timer); end(); });
     };
-    Promise.resolve(pending).then(refresh, () => { end(); if (current()) setOutcome({ kind: kind === 'in' ? 'signin-failed' : 'signout-failed' }); });
+    Promise.resolve(pending).then(refresh, (err: unknown) => {
+      end();
+      if (!current()) return;
+      setOutcome(kind === 'in' && err instanceof SignInNotCompleted ? { kind: 'signin-refused', detail: err.detail }
+        : { kind: kind === 'in' ? 'signin-failed' : 'signout-failed' });
+    });
   };
 
   // The agent left the roster: close (and unmount, so the background stops being inert), codex PR r3 P1.
@@ -286,7 +294,7 @@ export function AgentModal({ agentKey, onClose, intent }: {
 
   if (row === undefined && rosterState === 'ok') return null; // the effect above closes it
   const name = row?.name ?? '';
-  const result = outcome.kind === 'idle' ? null : OUTCOME_WORDS[outcome.kind](name);
+  const result = outcome.kind === 'idle' ? null : OUTCOME_WORDS[outcome.kind](name, outcome.kind === 'signin-refused' ? outcome.detail : '');
   const resultLine = result === null ? null : (
     <div data-testid="agents-check-result" data-state={outcome.kind} role="status" className="wk-agents-result">
       <span className={`wk-agents-word wk-agents-word--${result.tone}`}>{result.lead}</span>
