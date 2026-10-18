@@ -10,7 +10,7 @@ import type { RosterSeat, WorkflowDef } from '../src/api/types.js';
 import { LaunchWizard } from '../src/components/launch/LaunchWizard.js';
 import { demoBlocker, demoUrlProblem } from '../src/board/demoLaunch.js';
 import { DEMO_VIDEO_ID, openLaunchWizard, resetLaunchWizard, useLaunchWizard } from '../src/store/launchWizard.js';
-import { resetComposerSeats, useComposerSeats } from '../src/store/composerSeats.js';
+import { resetComposerSeats, useLaunchSeats } from '../src/store/composerSeats.js';
 import { resetPlanCatalog } from '../src/store/planCatalog.js';
 import { clearRepoCache } from '../src/store/repoCache.js';
 import { clearCachedRoster, setCachedRoster } from '../src/store/rosterCache.js';
@@ -82,7 +82,7 @@ describe('the Demo video job (studio#664)', () => {
     expect(screen.queryByTestId('launch-wizard-gate')).toBeNull();
     expect(screen.queryByTestId('launch-wizard-deliver')).toBeNull();
     expect(screen.getByTestId('launch-wizard-demo-gates')).toHaveTextContent('after the plan');
-    act(() => { useComposerSeats.getState().toggle('codex'); });
+    act(() => { useLaunchSeats.getState().toggle('codex'); });
     next();
     expect(step()).toBe('review');
     const review = screen.getByTestId('launch-wizard-review');

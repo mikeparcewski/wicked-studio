@@ -255,6 +255,80 @@ describe('the chat-launch wire — the GroupChat seat machinery, one warm sessio
     }
   });
 
+  it('studio#840: helpers turned off in the New job wizard never change who answers an Ask', async () => {
+    const { useLaunchSeats, resetComposerSeats } = await import('../src/store/composerSeats.js');
+    resetComposerSeats();
+    useLaunchSeats.getState().toggle('claude');
+    useLaunchSeats.getState().toggle('pi');
+    try {
+      const user = userEvent.setup();
+      wireDiagnostics('present');
+      dock();
+      // The drawer's own helpers row shows both admitted seats on (codex is refused by the daemon).
+      const row = await screen.findByTestId('ask-helpers');
+      const pills = [...row.querySelectorAll('[data-testid="ask-helper"]')];
+      expect(pills.map((b) => [b.getAttribute('data-key'), b.getAttribute('aria-pressed')])).toEqual([['claude', 'true'], ['pi', 'true']]);
+      await user.type(screen.getByTestId('assist-input'), 'what is in the estate store?');
+      await user.click(screen.getByTestId('assist-send'));
+      await waitFor(() => expect(openChat).toHaveBeenCalledTimes(1));
+      expect((openChat.mock.calls[0]?.[0] as { clis?: string[] }).clis).toEqual(['claude', 'pi']);
+      expect(JSON.parse(localStorage.getItem('wicked_composer_dropped_seats') ?? '[]')).toEqual([]);
+    } finally {
+      resetComposerSeats();
+    }
+  });
+
+  it('studio#840: the Ask drawer has the helpers row its refusal points at — off there, the send refuses; back on, it sends', async () => {
+    const { resetComposerSeats } = await import('../src/store/composerSeats.js');
+    resetComposerSeats();
+    try {
+      const user = userEvent.setup();
+      wireDiagnostics('present');
+      dock();
+      const pill = async (key: string): Promise<HTMLElement> =>
+        (await screen.findAllByTestId('ask-helper')).find((b) => b.getAttribute('data-key') === key)!;
+      await user.click(await pill('claude'));
+      await user.click(await pill('pi'));
+      expect(await pill('claude')).toHaveAttribute('aria-pressed', 'false');
+      expect(screen.getByTestId('ask-helpers-none')).toHaveTextContent('Every helper is off');
+      await user.type(screen.getByTestId('assist-input'), 'what is in the estate store?');
+      await user.click(screen.getByTestId('assist-send'));
+      await waitFor(() => expect(screen.getAllByTestId('assist-note').some((n) => /No helper is picked for this send — turn one on in the helpers row/.test(n.textContent ?? ''))).toBe(true));
+      expect(openChat).not.toHaveBeenCalled();
+      await user.click(await pill('pi'));
+      expect(screen.queryByTestId('ask-helpers-none')).toBeNull();
+      await user.type(screen.getByTestId('assist-input'), 'what is in the estate store?');
+      await user.click(screen.getByTestId('assist-send'));
+      await waitFor(() => expect(openChat).toHaveBeenCalledTimes(1));
+      expect((openChat.mock.calls[0]?.[0] as { clis?: string[] }).clis).toEqual(['pi']);
+    } finally {
+      resetComposerSeats();
+    }
+  });
+
+  it('studio#840: when the helpers left on cannot answer, the refusal names them and why', async () => {
+    const { useComposerSeats, resetComposerSeats } = await import('../src/store/composerSeats.js');
+    resetComposerSeats();
+    const quota = { ok: false, reason: 'out of quota' };
+    setCachedRoster([
+      { key: 'claude', binary: 'claude', display_name: 'Claude Code', enabled_for_council: true, chat_admission: ADMITTED },
+      { key: 'copilot', binary: 'copilot', display_name: 'GitHub Copilot CLI', enabled_for_council: true, chat_admission: { unscoped: quota, scoped: quota } },
+    ] as unknown as RosterSeat[]);
+    useComposerSeats.getState().toggle('claude');
+    try {
+      const user = userEvent.setup();
+      wireDiagnostics('present');
+      dock();
+      await user.type(screen.getByTestId('assist-input'), 'hello');
+      await user.click(screen.getByTestId('assist-send'));
+      await waitFor(() => expect(screen.getAllByTestId('assist-note').some((n) =>
+        (n.textContent ?? '').includes('No helper can take this send — GitHub Copilot CLI (out of quota) is on but can’t answer right now. Turn another one on in the helpers row.'))).toBe(true));
+      expect(openChat).not.toHaveBeenCalled();
+    } finally {
+      resetComposerSeats();
+    }
+  });
+
   it('a second send REUSES the warm session and the pack rides the FIRST message only', async () => {
     const user = userEvent.setup();
     wireDiagnostics('present');

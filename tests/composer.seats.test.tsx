@@ -79,11 +79,10 @@ describe('studio#631: the composer helpers row', () => {
     expect(screen.getAllByTestId('composer-seat').every((b) => b.getAttribute('aria-pressed') === 'true')).toBe(true);
   });
 
-  it('a /workflow launch sends only the seats left on', async () => {
+  it('studio#840: a /workflow launch takes the wizard’s own helper choice — the row’s Ask choice never leaks either way', async () => {
     render(<Harness onSend={() => {}} />);
     type('x');
     fireEvent.click(seatButton('codex'));
-    fireEvent.click(seatButton('copilot'));
     expect(seatButton('codex').getAttribute('aria-pressed')).toBe('false');
     type('/workflow-mcp-server');
     key('Enter'); // opens the launch wizard on that workflow
@@ -91,13 +90,19 @@ describe('studio#631: the composer helpers row', () => {
     fireEvent.click(screen.getByTestId('launch-wizard-next'));
     await waitFor(() => expect((screen.getByTestId('launch-wizard-repo') as HTMLSelectElement).value).toBe('repo-1'));
     fireEvent.click(screen.getByTestId('launch-wizard-next'));
-    // The options step shows the same helpers, with the row's choice applied.
-    expect(screen.getAllByTestId('launch-wizard-seat').filter((b) => b.getAttribute('aria-pressed') === 'true').map((b) => b.dataset.key)).toEqual(['claude', 'pi']);
+    // The wizard starts from its own choice: the composer row's drop is not applied …
+    const pill = (k: string): HTMLElement => screen.getAllByTestId('launch-wizard-seat').find((b) => b.dataset.key === k)!;
+    expect(pill('codex').getAttribute('aria-pressed')).toBe('true');
+    // … and a helper turned off for this job stays out of the job only.
+    fireEvent.click(pill('copilot'));
     fireEvent.click(screen.getByTestId('launch-wizard-next'));
     fireEvent.click(screen.getByTestId('launch-wizard-launch'));
     await waitFor(() => expect(posts.some((p) => p.path === '/runs')).toBe(true));
     const seats = (JSON.parse(String(posts.find((p) => p.path === '/runs')!.body.clisJson)) as Array<{ key: string }>).map((s) => s.key);
-    expect(seats).toEqual(['claude', 'pi']);
+    expect(seats).toEqual(['claude', 'codex', 'pi']);
+    expect(useComposerSeats.getState().dropped).toEqual(['codex']);
+    expect(JSON.parse(localStorage.getItem('wicked_composer_dropped_seats') ?? '[]')).toEqual(['codex']);
+    expect(JSON.parse(localStorage.getItem('wicked_launch_dropped_seats') ?? '[]')).toEqual(['copilot']);
   });
 
   it('dropping every seat refuses the send and says why — never a silent fall back to all', () => {
