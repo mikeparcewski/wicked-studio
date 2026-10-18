@@ -16,6 +16,17 @@ export function TeamRosterLines({ runId, roster }: { runId: string; roster: read
   return <TeamRosterView team={team} roster={roster} />;
 }
 
+/**
+ * The watcher line counts like with like (wicked-studio#850): the plan's monitor count is PER STEP,
+ * the members are the distinct seats that watched across the run — never "2 of 1 monitor".
+ */
+export function watchLine(monitors: number, watched: number): string {
+  if (monitors === 0) return 'no monitor';
+  const perStep = `${monitors} ${monitors === 1 ? 'monitor' : 'monitors'} per step`;
+  const seats = watched === 0 ? 'no seat watched yet' : `${watched} ${watched === 1 ? 'seat' : 'seats'} watched`;
+  return `${perStep} · ${seats}`;
+}
+
 export function TeamRosterView({ team, roster }: { team: TeamRoster; roster: readonly RosterSeat[] | null | undefined }): React.ReactElement | null {
   const name = (key: string): string => {
     const seat = roster?.find((s) => s.key === key);
@@ -39,7 +50,7 @@ export function TeamRosterView({ team, roster }: { team: TeamRoster; roster: rea
       {team.watch !== null && (
         <p data-testid="run-tab-team-watch" data-monitors={team.watch.monitors} className="wk-run-tab-line">
           <strong>Watching:</strong>{' '}
-          {team.watch.monitors === 0 ? 'no monitor' : `${watching} of ${team.watch.monitors} ${team.watch.monitors === 1 ? 'monitor' : 'monitors'}`}{' '}
+          {watchLine(team.watch.monitors, watching)}{' '}
           <span className="wk-run-tab-muted">({team.watch.why})</span>
         </p>
       )}

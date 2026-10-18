@@ -1,56 +1,10 @@
 /**
- * Global search — crew's `GET /search` (wicked-crew-api-types 0.127.0).
- *
- * The wire block below mirrors the contract package's "Global search" block VERBATIM in shape: the
- * package version that carries it is not the one studio pins yet (0.120.0). When the pin reaches
- * 0.127.0, delete these declarations and re-export them from `./types.js` instead.
+ * Global search — crew's `GET /search`. The wire types come from the contract package
+ * (`wicked-crew-api-types` ≥ 0.127.0, re-exported through `./types.js`); this module adds studio's side.
  */
 
-// ── The wire (mirror of wicked-crew-api-types 0.127.0 "Global search") ───────────────────────────
-
-export type SearchType = 'run' | 'project' | 'repo' | 'transcript' | 'rule' | 'memory' | 'doc';
-export type SearchSpan = [number, number];
-export type SearchTarget =
-  | { kind: 'run'; run_id: string; chat_id: string | null }
-  | { kind: 'project'; project_id: string }
-  | { kind: 'repo'; repo_id: string }
-  | { kind: 'chat'; chat_id: string }
-  | { kind: 'unit'; run_id: string; ord: number; chat_id: string | null }
-  | { kind: 'rule'; rule_id: string; steering_type: string | null }
-  | { kind: 'memory'; memory_id: string; scope: string }
-  | { kind: 'doc'; project_id: string; doc: string };
-export interface SearchHit {
-  type: SearchType;
-  id: string;
-  title: string;
-  title_spans: SearchSpan[];
-  snippet: string | null;
-  snippet_spans: SearchSpan[];
-  score: number;
-  updated_at: number | null;
-  project_id: string | null;
-  status: string | null;
-  target: SearchTarget;
-}
-export interface SearchGroup {
-  type: SearchType;
-  total: number;
-  hits: SearchHit[];
-  next_cursor: string | null;
-}
-export interface SearchSourceState {
-  type: SearchType;
-  state: 'ready' | 'indexing' | 'unavailable';
-  indexed: number;
-  note: string | null;
-}
-export interface SearchResponse {
-  query: string;
-  groups: SearchGroup[];
-  sources: SearchSourceState[];
-  partial: boolean;
-  took_ms: number;
-}
+import type { SearchType } from './types.js';
+export type { SearchType, SearchSpan, SearchTarget, SearchHit, SearchGroup, SearchSourceState, SearchResponse } from './types.js';
 
 // ── Studio's side ───────────────────────────────────────────────────────────────────────────────
 

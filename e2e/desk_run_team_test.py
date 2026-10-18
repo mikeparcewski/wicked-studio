@@ -92,7 +92,7 @@ with sync_playwright() as p:
     d = page.evaluate(TEAM)
     page.screenshot(path=str(SHOTS / "desk-run-team-panel-1440.png"))
     check("team-lead", d["lead"] is not None and d["lead"].lower().startswith("leading: claude") and "you chose it" in d["lead"], team=d)
-    check("team-watch", d["watch"] == "Watching: 1 of 1 monitor (score 30 → 1 monitor)", team=d)
+    check("team-watch", d["watch"] == "Watching: 1 monitor per step · 1 seat watched (score 30 → 1 monitor)", team=d)
     failed = [m for m in d["members"] if m["status"] == "failed"]
     check("team-member-failed-disclosed", len(failed) == 1 and failed[0]["seat"] == "codex"
           and "could not watch" in failed[0]["text"] and "seat image is not built" in failed[0]["text"], team=d)

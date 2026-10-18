@@ -176,6 +176,56 @@ describe('asking the daemon', () => {
     key('Enter');
     expect(navigate).toHaveBeenCalledWith('/watch');
   });
+
+  // wicked-studio#851: `tiny` matches "Everything — every session" and "Desk › Agents — …" only as
+  // scattered letters; the tiny-math hits are what was meant, so Enter opens the first of them.
+  it('a scattered-letter command follows the real results: tiny + Enter opens the tiny-math hit', async () => {
+    search.mockResolvedValue(answer([
+      { type: 'run', hits: [hit('run', 'r-tiny', 'Fix sum() in tiny-math')] },
+      { type: 'repo', hits: [hit('repo', 'tiny-math', 'tiny-math')] },
+    ]));
+    const { navigate } = renderModal();
+    type('tiny');
+    await waitFor(() => expect(rows().some((r) => r.dataset.group === 'hit-run')).toBe(true));
+    const groups = rows().map((r) => r.dataset.group);
+    expect(groups[0]).toBe('hit-run');
+    const firstGo = groups.indexOf('go');
+    expect(firstGo).toBeGreaterThan(groups.lastIndexOf('hit-repo'));
+    expect(rows()[firstGo]!.textContent).toMatch(/Everything|Agents/);
+    key('Enter');
+    expect(navigate).toHaveBeenCalledWith('/s/run%3Ar-tiny');
+  });
+
+  it('a typed prefix keeps commands first: go: tiny lists the GO TO rows alone', async () => {
+    renderModal();
+    type('go: tiny');
+    await new Promise((r) => setTimeout(r, 250));
+    expect(search).not.toHaveBeenCalled();
+    expect(rows().length).toBeGreaterThan(0);
+    expect(rows().every((r) => r.dataset.group === 'go')).toBe(true);
+  });
+
+  it('without the daemon\'s search, a contiguous local match also leads a scattered-letter command', async () => {
+    search.mockRejectedValue(new ApiError(404, 'Not Found'));
+    renderModal({ runs: [makeView({ id: 'r-tiny', problem: 'tiny fix', status: 'executing' })] });
+    type('tiny');
+    await waitFor(() => expect(screen.getByTestId('search-status').textContent).toContain('can’t search everything yet'));
+    const texts = rows().map((r) => r.textContent ?? '');
+    expect(texts[0]).toContain('tiny fix');
+    const everything = texts.findIndex((t) => t.startsWith('Everything'));
+    expect(everything).toBeGreaterThan(rows().findIndex((r) => r.dataset.group === 'runs'));
+  });
+});
+
+describe('readsAsWritten', () => {
+  it('every typed word must appear as written; scattered letters do not count', async () => {
+    const { readsAsWritten } = await import('../src/components/CommandPalette.js');
+    expect(readsAsWritten('tiny', 'Everything — every session')).toBe(false);
+    expect(readsAsWritten('every', 'Everything — every session')).toBe(true);
+    expect(readsAsWritten('ever sess', 'Everything — every session')).toBe(true);
+    expect(readsAsWritten('WATCH', 'Watchtower')).toBe(true);
+    expect(readsAsWritten('  ', 'anything')).toBe(false);
+  });
 });
 
 describe('races', () => {

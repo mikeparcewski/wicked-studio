@@ -1,7 +1,7 @@
 // S16a-2c: a run's session address with #governance (the MCP usage page's link) opens that run's
 // Governance on arrival — in the run page's one panel (src/board/runPanelModel.ts), no sheet over it.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import * as client from '../src/api/client.js';
 import { SessionPage } from '../src/components/session/SessionView.js';
 import { useSheets } from '../src/store/sheets.js';
@@ -14,11 +14,15 @@ beforeEach(() => {
   useSheets.setState({ open: null });
   useRunEventStore.setState({ byRun: { r1: [] } });
   vi.spyOn(client.api, 'getWatch').mockRejectedValue(new Error('404'));
+  // The open Governance item loads the run's acceptance (and, without it, the claims): answer both
+  // here, and each test waits for that load, so nothing settles after jsdom's teardown.
+  vi.spyOn(client.api, 'getRunAcceptance').mockRejectedValue(new Error('404'));
+  vi.spyOn(client.api, 'listClaims').mockResolvedValue({ claims: [] } as never);
 });
 afterEach(() => { cleanup(); window.history.replaceState(null, '', '/'); vi.restoreAllMocks(); });
 
 describe('S16a-2c — #governance on a run session', () => {
-  it('opens the run panel on its Governance (Checks and evidence), even on the app’s first page', () => {
+  it('opens the run panel on its Governance (Checks and evidence), even on the app’s first page', async () => {
     resetDetailsDefault();
     resetRunPanel();
     window.history.replaceState(null, '', '/s/run%3Ar1#governance');
@@ -28,6 +32,9 @@ describe('S16a-2c — #governance on a run session', () => {
     expect(screen.getByTestId('session-details-toggle')).toHaveAttribute('aria-expanded', 'true');
     const item = screen.getAllByTestId('run-panel-item').find((i) => i.dataset['item'] === 'governance')!;
     expect(item).toHaveAttribute('data-open', 'true');
+    // GovernanceAudit's load settles inside the test (it used to land after teardown).
+    await waitFor(() => expect(client.api.listClaims).toHaveBeenCalled());
+    await waitFor(() => expect(screen.queryByText('Loading governance claims…')).toBeNull());
   });
 
   it('without the hash the sheet stays closed', () => {

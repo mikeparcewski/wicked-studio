@@ -9,11 +9,15 @@ import type { TeamRow } from '../api/teamPlan.js';
  *    after a failure); `selection` says whether the operator chose it or the engine picked at random.
  *  - The WATCH count comes from the score: `path.scored.plan.monitors` (the band's count: 0-19 → 0,
  *    20-39 → 1, 40-69 → 2, 70-100 → 3). The band only ratchets up, so the highest score read counts.
- *  - Each MEMBER is a `member.joined` row (one per seat per step attempt): its latest row says whether
- *    it is watching (`attached`) or could not open (`failed`, with the reason). A member that could
- *    not open is reported, never dropped. A row with no seat is the absent member (no distinct seat).
+ *  - Each MEMBER is one distinct seat across the run's `member.joined` rows (one row per seat per step
+ *    attempt): a seat that opened on any step is watching (`attached`); one that never opened could
+ *    not (`failed`, with its latest reason). A member that could not open is reported, never dropped.
+ *    A row with no seat is the absent member (no distinct seat). The monitor count is PER STEP, so
+ *    the members (the run's seats) are never counted against it (wicked-studio#850).
  *  - A STEP went to another helper when its `step.claimed.by` is not the lead: a non-evaluator step is
- *    work a member did, an evaluator step is a check on another seat (evaluator ≠ creator).
+ *    work a member did, an evaluator step is a check on another seat (evaluator ≠ creator). A TEAM
+ *    step (DES-TEAMING-002 §8.8) is claimed by its member and then re-claimed by the lead to review it
+ *    (`step.reviewed`): the member did it, so the lead's review claim does not take it over (#850).
  */
 
 export type LeadSelection = 'chosen' | 'random';
@@ -70,12 +74,34 @@ export function watchWhy(score: number, monitors: number): string {
   return `score ${score} → ${monitors} ${monitors === 1 ? 'monitor' : 'monitors'}`;
 }
 
+interface Claim { step: string; seat: string; role: string | null; attempt: number | null }
+/** A `step.reviewed` row: the attempt reviewed (`null` = the row does not say), and whether the lead
+ *  rejected it to itself (`to: 'pa'`) — then the lead redid the step, and the latest claim is the work. */
+interface Review { attempt: number | null; toLead: boolean }
+
+/**
+ * Who did a step, from its claims in order. The latest claim, unless the lead reviewed the step: then
+ * the reviewed attempt's claim (or, when the row does not name it, the latest claim by a seat other
+ * than the lead) — the lead's own claim on that step is its review, not the work.
+ */
+function doerOf(list: readonly Claim[], leadSeat: string, reviewed: ReadonlyMap<string, Review>): Claim {
+  const last = list[list.length - 1]!;
+  const review = reviewed.get(last.step);
+  if (review === undefined || review.toLead) return last;
+  const at = review.attempt;
+  const byAttempt = at === null ? undefined : list.find((c) => c.attempt === at);
+  if (byAttempt !== undefined) return byAttempt;
+  return [...list].reverse().find((c) => c.seat !== leadSeat) ?? last;
+}
+
 export function teamRosterOf(rows: readonly TeamRow[]): TeamRoster {
   const sorted = [...rows].sort((a, b) => a.event_id - b.event_id);
   let lead: TeamLead | null = null;
   let watch: TeamWatch | null = null;
   const members = new Map<string, TeamMember>();
-  const claims = new Map<number, { step: string; seat: string; role: string | null }>();
+  const claims = new Map<number, Claim[]>();
+  /** `step_id` → the lead's latest review of it. */
+  const reviewed = new Map<string, Review>();
   for (const r of sorted) {
     const p = r.payload;
     switch (kind(r)) {
@@ -114,6 +140,10 @@ export function teamRosterOf(rows: readonly TeamRow[]): TeamRoster {
       case 'member.joined': {
         const seat = str(p['seat']);
         const failed = p['status'] === 'failed';
+        const had = members.get(seat ?? '');
+        // Once a seat watched a step it stays "watching": a later refusal (a step it created) is
+        // not a seat that could not watch.
+        if (had?.status === 'watching' && failed) break;
         members.set(seat ?? '', { seat, status: failed ? 'failed' : 'watching', error: failed ? str(p['error']) : null });
         break;
       }
@@ -121,7 +151,14 @@ export function teamRosterOf(rows: readonly TeamRow[]): TeamRoster {
         const ord = num(p['ord']);
         const seat = str(p['by']);
         if (ord === null || seat === null || p['kind'] === 'tool') break;
-        claims.set(ord, { step: str(p['step_id']) ?? str(p['phase']) ?? `step ${ord}`, seat, role: str(p['role']) });
+        const list = claims.get(ord) ?? [];
+        list.push({ step: str(p['step_id']) ?? str(p['phase']) ?? `step ${ord}`, seat, role: str(p['role']), attempt: num(p['attempt']) });
+        claims.set(ord, list);
+        break;
+      }
+      case 'step.reviewed': {
+        const step = str(p['step_id']);
+        if (step !== null) reviewed.set(step, { attempt: num(p['reviewed_attempt']), toLead: p['verdict'] === 'rejected' && p['to'] === 'pa' });
         break;
       }
       default:
@@ -130,8 +167,10 @@ export function teamRosterOf(rows: readonly TeamRow[]): TeamRoster {
   }
   const steps: TeamStep[] = [];
   if (lead !== null) {
-    for (const [ord, c] of [...claims.entries()].sort((a, b) => a[0] - b[0])) {
-      if (c.seat === lead.seat) continue;
+    const leadSeat = lead.seat;
+    for (const [ord, list] of [...claims.entries()].sort((a, b) => a[0] - b[0])) {
+      const c = doerOf(list, leadSeat, reviewed);
+      if (c.seat === leadSeat) continue;
       steps.push({ ord, step: c.step, seat: c.seat, kind: c.role === 'evaluator' ? 'check' : 'work' });
     }
   }
