@@ -128,6 +128,9 @@ function launchedMs(v: RunView): number {
   return typeof c === 'number' && Number.isFinite(c) ? c * 1000 : 0;
 }
 
+/** studio#834: how long after the operator's own input (a wheel, a touch, a key) a scroll is still theirs. */
+const OPERATOR_SCROLL_MS = 1000;
+
 export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onRetryRuns, needRows, navigate, onAsk, artifactKey = null, artifactSize = 'pane', artifactVersion = null }: {
   /** The runs read's failure (App's `useRuns`): said with Retry, never an endless skeleton. */
   runsError?: string | null;
@@ -588,6 +591,24 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
   // then to an open gate's run), and a browser may fold several assignments into one event.
   const programmatic = useRef<number | null>(null);
   const restore = useRef<{ top: number; pending: boolean }>({ top: 0, pending: false });
+  // studio#834: a scroll is the operator's only when their own input made it — a wheel, a touch, a key, or the
+  // pointer held on the thread (its scrollbar). The browser scrolls the thread on its own too, as the run's words
+  // fill in (scroll anchoring keeps a line in place, a shrinking block clamps the position), and reading those as
+  // "they scrolled up to read" stopped the follow on a first visit (a finished run opened 753 px above its summary)
+  // and saved that spot as their place (every later open came back 269 px short).
+  const operatorUntil = useRef(0);
+  const pointerHeld = useRef(false);
+  const operatorInput = (): void => { operatorUntil.current = Date.now() + OPERATOR_SCROLL_MS; };
+  useEffect(() => {
+    const release = (): void => {
+      if (!pointerHeld.current) return;
+      pointerHeld.current = false;
+      operatorInput();
+    };
+    window.addEventListener('pointerup', release);
+    window.addEventListener('pointercancel', release);
+    return () => { window.removeEventListener('pointerup', release); window.removeEventListener('pointercancel', release); };
+  }, []);
   const scrollThread = (el: HTMLDivElement, top: number): void => {
     const before = el.scrollTop;
     el.scrollTop = top;
@@ -843,6 +864,12 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
             const el = e.currentTarget;
             // The thread's own scroll (a restore, a follow) is not the operator's place.
             if (programmatic.current !== null && Math.abs(el.scrollTop - programmatic.current) < 2) return;
+            // studio#834: a scroll the operator did not make is not their place; a thread that is following
+            // its newest message goes back to it.
+            if (!pointerHeld.current && Date.now() > operatorUntil.current) {
+              if (nearBottom.current && !restore.current.pending) scrollThread(el, el.scrollHeight);
+              return;
+            }
             programmatic.current = null;
             restore.current.pending = false;
             nearBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
@@ -850,6 +877,10 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
           }}
           // DESIGN-interaction rule 2: selecting a sentence in the work makes it the subject of the
           // next message — an "about: “…”" chip on the composer (never a button row).
+          onWheel={operatorInput}
+          onTouchMove={operatorInput}
+          onKeyDown={operatorInput}
+          onPointerDown={() => { pointerHeld.current = true; operatorInput(); }}
           onMouseUp={(e) => {
             const sel = window.getSelection();
             const node = sel?.anchorNode ?? null;

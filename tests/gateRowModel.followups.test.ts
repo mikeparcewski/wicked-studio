@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { CoreEvent, WorkUnit } from '../src/api/types.js';
 import type { OpenGate } from '../src/store/gates.js';
-import { FLOOR_FIX_LABEL, FLOOR_FIX_TITLE, isToolUnitGate, sessionGateChoices } from '../src/board/gateRowModel.js';
+import { approveRetriesPhase, FLOOR_FIX_LABEL, FLOOR_FIX_TITLE, isToolUnitGate, RETRY_NOTE_LABEL, RETRY_NOTE_TITLE, sessionGateChoices } from '../src/board/gateRowModel.js';
 import { classifyRowGate } from '../src/board/questionRow.js';
 import { recommendGateMove } from '../src/components/gateMoveModel.js';
 import { gateVerdictFor, isFloorFixGate } from '../src/components/gateVerdictModel.js';
@@ -74,6 +74,24 @@ function judgeEvents(evaluatorVerdict: string | null): CoreEvent[] {
     { type: 'awaitingHuman', session: JUDGE_RUN, ord: 2, ts: NOW - 800, seq: 4, prompt: JUDGE_PROMPT, reviewingOrd: 2, gateKind: 'escalation' },
   ] as unknown as CoreEvent[];
 }
+
+describe('studio#832 — a verify FAIL escalation\'s approve-with-note re-runs the step, and says so', () => {
+  const gate: OpenGate = { runId: JUDGE_RUN, ord: 2, prompt: 'Unit 2 verdict is NOT PASS (the evaluator\'s verdict is FAIL) — confirm to retry the phase, request changes to send the review back to the creator phase, or reject to cancel the run', lifecycle: 'open', receivedAt: NOW, gateKind: 'escalation' };
+
+  it('labels the steer arm "Retry this step with a note", never an approve that moves on', () => {
+    const model = sessionGateChoices({ runId: JUDGE_RUN, gate, units: JUDGE_UNITS, events: judgeEvents('FAIL'), pool: [], roster: null })!;
+    const steer = [...model.choices, ...model.overflow].find((c) => c.key === 'steer')!;
+    expect(steer).toMatchObject({ label: RETRY_NOTE_LABEL, title: RETRY_NOTE_TITLE, needsNote: true, decision: { approve: true } });
+    expect(steer.title).not.toMatch(/next step/);
+    expect(model.choices.map((c) => c.label)).toEqual(['Send back', RETRY_NOTE_LABEL, 'Stop']);
+  });
+
+  it('knows the engine\'s retry prompts and nothing else', () => {
+    expect(approveRetriesPhase(gate.prompt)).toBe(true);
+    expect(approveRetriesPhase('Unit 2 verdict is NOT PASS — … Approve to retry the phase against the restored tree, or reject to cancel the run')).toBe(true);
+    expect(approveRetriesPhase('Unit 3 escalated: the reviewer disagreed — approve to continue, or reject to cancel the run')).toBe(false);
+  });
+});
 
 describe('studio#601 — the preselected Send back follows the denial source', () => {
   const gate: OpenGate = { runId: JUDGE_RUN, ord: 2, prompt: JUDGE_PROMPT, lifecycle: 'open', receivedAt: NOW, gateKind: 'escalation' };
@@ -148,11 +166,11 @@ describe('studio#612 — "Fix with a note" on a read-only phase\'s floor gate', 
     expect([...model.choices, ...model.overflow].find((c) => c.key === 'steer')!.label).toBe(FLOOR_FIX_LABEL);
   });
 
-  it('keeps "Approve and steer" on a floor gate that is not a read-only phase\'s', () => {
+  it('a floor gate that is not a read-only phase\'s offers the plain retry with a note (studio#832: its approve re-runs the phase)', () => {
     const gate: OpenGate = { runId: FLOOR_RUN, ord: 2, prompt: FLOOR_PLAIN_PROMPT, lifecycle: 'open', receivedAt: NOW, gateKind: 'escalation' };
     const model = sessionGateChoices({ runId: FLOOR_RUN, gate, units: floorUnits(false), events: FLOOR_EVENTS, pool: [], roster: null })!;
     const steer = [...model.choices, ...model.overflow].find((c) => c.key === 'steer')!;
-    expect(steer.label).toBe('Approve and steer');
+    expect(steer.label).toBe(RETRY_NOTE_LABEL);
     expect(model.consequence ?? '').not.toMatch(/A seat other than/);
   });
 

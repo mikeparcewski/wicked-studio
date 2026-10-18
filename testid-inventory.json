@@ -12,8 +12,8 @@
   "studioVersion": "0.10.0",
   "counts": {
     "files": 232,
-    "occurrences": 2935,
-    "static": 2543,
+    "occurrences": 2939,
+    "static": 2546,
     "dynamic": 69,
     "computed": 24
   },
@@ -9944,6 +9944,12 @@
       ]
     },
     {
+      "testId": "rules-row-reach",
+      "files": [
+        "src/components/steer/SteerSurface.tsx"
+      ]
+    },
+    {
       "testId": "rules-sentence",
       "files": [
         "src/components/steer/SteerSurface.tsx"
@@ -10786,6 +10792,18 @@
     },
     {
       "testId": "session-gate-creator-seat-nocap",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
+      "testId": "session-gate-dead-seat",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
+      "testId": "session-gate-dead-seat-signin",
       "files": [
         "src/components/session/GateRow.tsx"
       ]

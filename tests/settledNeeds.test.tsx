@@ -53,4 +53,19 @@ describe('useSettledNeeds', () => {
     act(() => { vi.advanceTimersByTime(NEEDS_QUIET_MS + 100); });
     expect(result.current).toMatchObject({ phase: 'complete', count: 3 });
   });
+
+  // studio#833: an empty project's Needs you stayed on its skeleton forever. The rail counts every
+  // run (12) and the project's Desk counts its own (0); with one shared record each render reset the
+  // other's quiet clock, so neither held still long enough to be said.
+  it('a project Desk and the rail count different rows and both settle, each on its own number', () => {
+    const rail = renderHook(() => useSettledNeeds(rows(12), true));
+    const project = renderHook(() => useSettledNeeds(rows(0), true, false, 'proj-colors'));
+    for (let i = 0; i < 6; i += 1) {
+      act(() => { vi.advanceTimersByTime(NEEDS_QUIET_MS / 3); });
+      rail.rerender();
+      project.rerender();
+    }
+    expect(rail.result.current).toMatchObject({ phase: 'complete', count: 12 });
+    expect(project.result.current).toMatchObject({ phase: 'complete', count: 0 });
+  });
 });

@@ -12,6 +12,13 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+### Fixed
+- **A finished run's page opens at its newest message (#834).** The thread treated any scroll it did not make itself as the operator's. When the run's step words filled in after the page opened, the browser moved the thread, and that move stopped the follow and was saved as "their place": the page opened 753 px short, and every later open came back short too. A scroll now counts as the operator's only after their own wheel, touch, key or pointer input on the thread.
+- **"Approve with a note for the next step" no longer labels a retry (#832).** On an escalation whose approve re-runs the phase ("confirm to retry the phase", for example a verify FAIL), the approve-with-note arm now reads **Retry this step with a note**, and its title says the run does not move on.
+- **An empty project's Needs you settles (#833).** The settled count's hold-still clock and last count were shared across every caller. The rail counts every run and a project's Desk counts its own, so on an empty project each reset the other's clock and the card stayed on its skeleton. Each counted scope now settles on its own.
+- **A dead-seat gate says why, and offers what can work (#835).** When a run's seat cannot work (for example, out of quota), the gate reads "Copilot is out of quota — move the step to another helper, or stop?". It explains the cause on the card, with a link to sign another helper in. It no longer offers an approve, approve-with-note or send-back that only retries the benched seat; Reassign (when the job has another helper) and Stop remain.
+- **Steer shows every rule's reach on its row (#836).** A global rule reads **Everywhere** (the Memory page's word); before, only a project-scoped rule showed its reach, and "everywhere" was hover text only.
+
 ## [0.10.0] — 2026-10-17
 
 A minor release: the run page is a chat, Memory is its own Desk tab, and the UX round from the 2026-10-16 operator review.

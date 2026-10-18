@@ -194,7 +194,8 @@ with sync_playwright() as p:
     th = page.evaluate(THREAD)
     if not th["scrollable"]:
         fail("r4-scrollable", th)
-    page.get_by_test_id("session-thread").evaluate("el => { el.scrollTop = 180; }")
+    # The operator's own input (a wheel) makes the scroll theirs (studio#834).
+    page.get_by_test_id("session-thread").evaluate("el => { el.dispatchEvent(new WheelEvent('wheel', {bubbles: true, deltaY: -100})); el.scrollTop = 180; }")
     page.wait_for_timeout(200)
     kept_top = page.evaluate(THREAD)["scrollTop"]
 

@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { RosterSeat, SessionView as RunView } from '../../api/types.js';
 import { QeRefusalWarning } from '../QeRefusalWarning.js';
 import { GATE_HASH, IDLE_GATE_ACTION, commitGateDecision, commitGateReassign, useGateActionStore, type GateAnswer } from '../../board/gateActions.js';
-import { FLOOR_FIX_LABEL, sessionGateChoices, type GateRowChoice, type GateRowModel } from '../../board/gateRowModel.js';
+import { FLOOR_FIX_LABEL, sessionGateChoices, type DeadSeat, type GateRowChoice, type GateRowModel } from '../../board/gateRowModel.js';
 import { INITIAL_PICK, pickKey, type RowPick } from '../../board/questionRow.js';
 import { plainGateQuestion, repoNameOf } from '../../board/deskWords.js';
 import { api } from '../../api/client.js';
@@ -210,6 +210,14 @@ function RunGateRow({ view, gate, navigate }: { view: RunView; gate: OpenGate | 
   const seatRefusal = gate !== undefined && model !== null && !reduced && creatorSeatRefusal(events, gate.ord, gate.prompt);
   const assurance = model === null ? null : (
     <>
+      {model.deadSeat !== undefined && (
+        <DeadSeatLine
+          seat={model.deadSeat}
+          label={roster?.find((r) => r.key === model.deadSeat!.cli)?.display_name ?? null}
+          canReassign={[...model.choices, ...model.overflow].some((c) => c.reassignCli !== undefined)}
+          {...(navigate !== undefined ? { navigate } : {})}
+        />
+      )}
       {judgeWait && <JudgeWaitLine {...(navigate !== undefined ? { navigate } : {})} />}
       {seatRefusal && <CreatorSeatRefusal view={view} {...(navigate !== undefined ? { navigate } : {})} />}
       {receipt !== null
@@ -270,6 +278,46 @@ export function CreatorSeatRefusal({ view, navigate }: { view: RunView; navigate
  * The row says it is waiting for a judge seat and offers the one move that ends the wait: sign a
  * judge seat in (Settings › CLI seats), then Approve re-runs the phase with the judge.
  */
+const DEAD_SEAT_CAUSE: Record<DeadSeat['cause'], string> = {
+  quota: 'is out of quota',
+  signed_out: 'is signed out',
+  not_installed: 'is not installed',
+  unusable: 'cannot work right now',
+};
+
+/** The seat's name in the Desk's words: the roster's, else its key with a capital ("Copilot"). */
+function seatName(cli: string, label: string | null): string {
+  if (label !== null && label !== '') return label;
+  const base = cli.split('#')[0] ?? cli;
+  return base.charAt(0).toUpperCase() + base.slice(1);
+}
+
+/**
+ * studio#835: the dead-seat gate, said plainly — which helper cannot work and why, and what can still move the
+ * step. The engine benched the seat for this run and never sends it the step again, so the row offers no approve:
+ * Reassign to another helper in this job when there is one; otherwise sign another helper in and start the job
+ * again with it, or Stop.
+ */
+export function DeadSeatLine({ seat, label, canReassign, navigate }: { seat: DeadSeat; label: string | null; canReassign: boolean; navigate?: Navigate }): React.ReactElement {
+  const name = seatName(seat.cli, label);
+  return (
+    <p data-testid="session-gate-dead-seat" data-cause={seat.cause} role="status" className="wk-gate-consequence">
+      <b>{name} {DEAD_SEAT_CAUSE[seat.cause]}.</b>{' '}
+      {canReassign
+        ? <>This job will not send the step to {name} again. Reassign it to another helper in this job, or stop.</>
+        : <>No other helper is in this job, so the step cannot go on here. Sign another helper in and start the job again with it, or stop.</>}
+      {' '}
+      {navigate !== undefined
+        ? (
+          <button type="button" data-testid="session-gate-dead-seat-signin" onClick={() => navigate('/system')} className="wk-btn wk-btn--secondary">
+            Sign another helper in ›
+          </button>
+        )
+        : <span data-testid="session-gate-dead-seat-signin">Sign one in from Settings.</span>}
+    </p>
+  );
+}
+
 export function JudgeWaitLine({ navigate }: { navigate?: Navigate }): React.ReactElement {
   return (
     <p data-testid="session-gate-judge-wait" role="status" className="wk-gate-consequence">
