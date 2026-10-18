@@ -1,9 +1,11 @@
 import { isAskTurnRun } from '../board/askTurn.js';
 import { waitsOnYou } from '../board/attention.js';
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { Search } from 'lucide-react';
-import type { GovernanceClaim, InteractionRequest, RepoEntry, SessionView } from '../api/types.js';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Brain, FileText, Folder, GitBranch, History, MessageSquareText, Play, Search, ShieldCheck } from 'lucide-react';
+import type { RepoEntry, SessionView } from '../api/types.js';
 import { api } from '../api/client.js';
+import { isRouteAbsent } from '../api/errors.js';
+import { MIN_SEARCH_CHARS, SEARCH_TYPES, SEARCH_TYPE_WORDS, type SearchGroup, type SearchHit, type SearchResponse, type SearchSpan, type SearchType } from '../api/search.js';
 import { UNFILED_MOUNT } from '../api/interactive.js';
 import { fetchReposCached, getCachedRepos } from '../store/repoCache.js';
 import { fuzzyMatch, type FuzzyResult } from '../palette/fuzzy.js';
@@ -20,10 +22,12 @@ import { useGateStore } from '../store/gates.js';
 import { toggledTheme, useAppearanceStore } from '../theming/appearance.js';
 import { decideGate, GATE_HASH } from '../board/gateActions.js';
 import { statusWord } from '../board/statusWords.js';
+import { relTime } from '../board/relTime.js';
+import { readRecentSearches, rememberSearch, searchHitHref } from '../board/searchModel.js';
 import { NewProjectModal } from './NewProjectModal.js';
 import { PAGE_NAMES } from '../board/pageNames.js';
 import { Modal } from './Modal.js';
-import { humanTitle, runTitle, runWhenWord, WHEN_TITLE } from './runIdentity.js';
+import { runTitle, runWhenWord, WHEN_TITLE } from './runIdentity.js';
 import { Terminal } from './Terminal.js';
 import { everythingPath } from '../board/everythingModel.js';
 import { seedNewChat } from '../board/chatMoves.js';
@@ -31,36 +35,55 @@ import { DEMO_VIDEO_ID, openLaunchWizard } from '../store/launchWizard.js';
 import { pageComposerKey } from '../store/composerSeed.js';
 
 /**
- * The universal command palette (DES-FEEDBACK-002 §1, slice G): Cmd+K / Ctrl+K /
- * Ctrl+P open it; fuzzy search over projects (`p:`), runs & open gates (`run:`),
- * repositories (`repo:`) and quick verbs (`>`); selecting navigates (the board's
- * real-link contract) or executes the verb.
+ * THE search modal — one component, opened from the rail's Search, the phone top bar and ⌘K /
+ * Ctrl+K anywhere (there is no second implementation on the Desk).
  *
- * The corpus steals nothing (§1.4): projects and gates come from already-loaded
- * stores, runs from App's one `useRuns()`; only the repo list is fetched — once,
- * on the first OPEN (a user gesture, never a mount), then cached for the session.
+ * Two jobs in one box:
+ *  - SEARCH: two or more letters ask crew's `GET /search` (debounced, the superseded request
+ *    aborted) and the answer is tabbed — All · Runs · Projects · Repos · Transcripts · Rules ·
+ *    Memories · Docs. All shows each type's best few with "See all"; a tab pages its type.
+ *    A daemon without the route falls back to what studio already holds (runs, projects, repos),
+ *    and says so.
+ *  - COMMANDS: the verbs (`>`), the GO TO destinations (`go:`), the pointed object's actions, and
+ *    the scoped jumps (`p:` / `run:` / `repo:`) stay local and instant, and lead the list, so a
+ *    typed page name or verb is still one Enter away.
+ *
+ * Nothing is fetched on open except the repo list, once per session (§1.4); a search fetches only
+ * once something is typed.
  */
 
 const TERMINAL: ReadonlySet<string> = new Set(['completed', 'cancelled', 'failed']);
 const ACTIVE: ReadonlySet<string> = new Set(['planning', 'distributing', 'executing']);
+/** Keystrokes coalesce for this long before a search goes out. */
+const SEARCH_DEBOUNCE_MS = 150;
+/** A source still reading: ask again after this long, at most {@link INDEXING_RETRIES} times. */
+const INDEXING_RETRY_MS = 900;
+const INDEXING_RETRIES = 3;
+/** Hits per type on All; per page on a type's own tab. */
+const ALL_LIMIT = 5;
+const TAB_LIMIT = 20;
+/** Commands kept per group while searching (they lead; hits follow). */
+const COMMANDS_WHILE_SEARCHING = 4;
+
+type Tab = 'all' | SearchType;
 
 type Group =
-  | 'actions' | 'runs' | 'projects' | 'repos' | 'verbs' | 'go'
-  // §5.2 search mode's corpora — grouped exactly as the corpus label names them.
-  | 'search-runs' | 'search-gates' | 'search-decisions' | 'search-repos' | 'search-prompts';
+  | 'recent' | 'actions' | 'runs' | 'projects' | 'repos' | 'verbs' | 'go' | 'more'
+  | `hit-${SearchType}`;
 
-const GROUP_LABEL: Record<Group, string> = {
+const GROUP_LABEL: Record<Exclude<Group, `hit-${SearchType}`>, string> = {
+  recent: 'Recent searches',
   actions: 'Actions for this',
   runs: 'Runs & gates',
   projects: 'Projects',
   repos: 'Repositories',
-  verbs: 'Verbs',
+  verbs: 'Commands',
   go: 'Go to',
-  'search-runs': 'Runs',
-  'search-gates': 'Open gates',
-  'search-decisions': 'Decisions',
-  'search-repos': 'Repositories',
-  'search-prompts': 'Prompts: this project',
+  more: '',
+};
+
+const HIT_ICON: Record<SearchType, typeof Play> = {
+  run: Play, project: Folder, repo: GitBranch, transcript: MessageSquareText, rule: ShieldCheck, memory: Brain, doc: FileText,
 };
 
 interface Entry {
@@ -74,41 +97,33 @@ interface Entry {
   href?: string;
   /** Verb execution — runs instead of navigation. */
   action?: () => void;
+  /** The row acts inside the modal (switch tab, load more, reuse a recent search): it stays open. */
+  keepOpen?: boolean;
+  /** A hit from the previous query, shown while the next answer is on its way: it does not open. */
+  stale?: boolean;
   /** Group-internal rank: lower first (gates before active before terminal). */
   rank: number;
-  /** Search hits: a status dot (token) or glyph before the label. */
-  dot?: string;
-  glyph?: string;
-  /** Search hits: the snippet line (§5.3) + its matched positions. */
-  snippet?: string;
-  snippetPositions?: number[];
+  /** A search hit: its type (the icon), its title spans and snippet. */
+  hit?: SearchHit;
   /** Run rows only (§7.5, slice Y2): the attach-clock word — presence marks the
    *  row's label as the synthesized `run-title` (EC40). */
   when?: string;
 }
 
-/**
- * §5.2's prose matcher: a plain case-insensitive SUBSTRING pass for prose
- * fields (run problems, gate prompts, claim subjects) — subsequence matching
- * on prose produces false-positive noise; substring on prose + fuzzy on
- * identifiers is the honest pairing. Positions feed the same accent-render
- * seam the fuzzy scorer uses.
- */
-export function substringMatch(needle: string, haystack: string): FuzzyResult | null {
-  if (needle === '') return { score: 0, positions: [] };
-  const at = haystack.toLowerCase().indexOf(needle.toLowerCase());
-  if (at === -1) return null;
-  return { score: 1, positions: Array.from({ length: needle.length }, (_, i) => at + i) };
-}
+interface Row { en: Entry; m: FuzzyResult }
 
-/** Search-hit status dots — the board's status layer, read as tokens (EC15). */
-const SEARCH_DOT: Record<string, string> = {
-  awaiting_human: 'var(--status-gate)',
-  failed: 'var(--status-fail)',
-  planning: 'var(--status-run)',
-  distributing: 'var(--status-run)',
-  executing: 'var(--status-run)',
-};
+/** The modal's view of one query's answers. */
+interface SearchState {
+  q: string;
+  status: 'loading' | 'ok' | 'absent' | 'error';
+  /** The All answer (every type's best few, and the totals the tabs show)… */
+  all: SearchResponse | null;
+  /** …and the words it answers (the previous query's while a newer one is on its way). */
+  allQ: string | null;
+  /** A type tab's own pages. */
+  tabs: Partial<Record<SearchType, { hits: SearchHit[]; next: string | null; total: number; loading: boolean }>>;
+  error: string | null;
+}
 
 /** Session-scoped repo cache (§1.4) — SHARED with the rail's Repositories
  *  accordion since slice M (DES-FEEDBACK-003 §3.3): one gesture warms both. */
@@ -116,7 +131,7 @@ export { clearRepoCache as clearPaletteRepoCache } from '../store/repoCache.js';
 
 /**
  * The two global chords App registers (§1.2) — exported so the wiring the app
- * mounts is the wiring the unit tests exercise. Order matters: the palette
+ * mounts is the wiring the unit tests exercise. Order matters: the modal
  * toggle first (and it alone survives `paletteOpen`), the relocated kill-run
  * (Ctrl+Shift+K, same guards + silent-fail contract as the old `useKillShortcut`)
  * after it.
@@ -124,14 +139,14 @@ export { clearRepoCache as clearPaletteRepoCache } from '../store/repoCache.js';
 export function paletteShortcutEntries(opts: {
   isOpen: () => boolean;
   setOpen: (open: boolean) => void;
-  /** §5.2: open the palette in SEARCH mode (the `?` prefix pre-typed). */
+  /** Ctrl/⌘+Shift+F: open the modal ready to search (the same modal). */
   openSearch: () => void;
   killEligible: () => boolean;
   kill: () => void;
 }): ShortcutEntry[] {
   const toggle = (e: KeyboardEvent): void => {
-    // studio#473: the chords reach the palette from a focused field too (a modifier chord is never
-    // typed text). A field that handled the chord itself — the palette's own input closes on it, an
+    // studio#473: the chords reach the modal from a focused field too (a modifier chord is never
+    // typed text). A field that handled the chord itself — the modal's own input closes on it, an
     // editor may bind ⌘K — said so with preventDefault, and keeps it.
     if (e.defaultPrevented) return;
     e.preventDefault(); // Ctrl+P must suppress browser print
@@ -142,7 +157,7 @@ export function paletteShortcutEntries(opts: {
       id: 'palette-toggle-k',
       group: 'palette',
       chord: { key: 'k', ctrlOrMeta: true },
-      description: 'Open the command palette',
+      description: 'Search, or run a command',
       handler: toggle,
       allowWhilePaletteOpen: true,
       allowInTypingContext: true,
@@ -151,18 +166,16 @@ export function paletteShortcutEntries(opts: {
       id: 'palette-toggle-p',
       group: 'palette',
       chord: { key: 'p', ctrlOrMeta: true },
-      description: 'Open the command palette',
+      description: 'Search, or run a command',
       handler: toggle,
       allowWhilePaletteOpen: true,
       allowInTypingContext: true,
     },
     {
-      // §5.2: global search is the palette's DEEP MODE — Cmd+Shift+F opens the
-      // palette with the `?` prefix pre-typed (registered in the §1.2 table).
       id: 'palette-search',
       group: 'palette',
       chord: { key: 'f', ctrlOrMeta: true, shift: true },
-      description: 'Global search',
+      description: 'Search everything',
       handler: (e) => {
         if (e.defaultPrevented) return; // studio#473: a field that handled the chord keeps it
         e.preventDefault(); // suppress the browser's find-in-page variants
@@ -184,14 +197,19 @@ export function paletteShortcutEntries(opts: {
   ];
 }
 
-/** §5.3: snippet matches lift to `--ink-high` — the snippet line is muted mono,
- *  so the matched substring reads as the found thing, not as the accent. */
-function highlightSnippet(text: string, positions: number[]): React.ReactNode {
-  if (positions.length === 0) return text;
+/** The modal has the width for a longer title than a rail row (UX gate S1: WRAP). */
+const PALETTE_INTENT = 80;
+
+/** A run title's " · ab12cd · #2" tail (runTitle): searchable, not shown. */
+const RUN_ID_SUFFIX = / · [0-9a-z]{4,12} · #\d+$/u;
+
+/** Accent the fuzzy-matched characters (§1.5 — the row's only accent). */
+function highlight(label: string, positions: number[]): React.ReactNode {
+  if (positions.length === 0) return label;
   const set = new Set(positions);
-  return text.split('').map((ch, i) =>
+  return label.split('').map((ch, i) =>
     set.has(i) ? (
-      <span key={i} style={{ color: 'var(--ink-high)' }}>
+      <span key={i} className="wk-palette-match">
         {ch}
       </span>
     ) : (
@@ -200,25 +218,30 @@ function highlightSnippet(text: string, positions: number[]): React.ReactNode {
   );
 }
 
-/** Accent-highlight the fuzzy-matched characters (§1.5 — the row's only accent). */
-/** The palette has the width for a longer title than a rail row (UX gate S1: WRAP). */
-const PALETTE_INTENT = 80;
+/** Mark the daemon's matched ranges (`<mark>`, so the match is said, not only coloured). */
+function marked(text: string, spans: readonly SearchSpan[], cls: string): React.ReactNode {
+  if (spans.length === 0) return text;
+  const out: React.ReactNode[] = [];
+  let at = 0;
+  spans.forEach(([s, e], i) => {
+    if (s < at || e > text.length) return;
+    if (s > at) out.push(text.slice(at, s));
+    out.push(<mark key={i} className={cls}>{text.slice(s, e)}</mark>);
+    at = e;
+  });
+  if (at < text.length) out.push(text.slice(at));
+  return out;
+}
 
-/** A run title's " · ab12cd · #2" tail (runTitle): searchable, not shown. */
-const RUN_ID_SUFFIX = / · [0-9a-z]{4,12} · #\d+$/u;
-
-function highlight(label: string, positions: number[]): React.ReactNode {
-  if (positions.length === 0) return label;
-  const set = new Set(positions);
-  return label.split('').map((ch, i) =>
-    set.has(i) ? (
-      <span key={i} style={{ color: 'var(--accent)', fontWeight: 'var(--weight-semi)' }}>
-        {ch}
-      </span>
-    ) : (
-      ch
-    ),
-  );
+function hitContext(hit: SearchHit, projectName: (id: string) => string | null): string {
+  const parts: string[] = [];
+  if (hit.project_id !== null) {
+    const name = projectName(hit.project_id);
+    if (name !== null) parts.push(name);
+  }
+  if (hit.status !== null && hit.type !== 'project') parts.push(hit.status === 'awaiting_human' ? 'waiting on you' : hit.status.replace(/_/g, ' '));
+  if (hit.updated_at !== null) parts.push(relTime(hit.updated_at));
+  return parts.join(' · ');
 }
 
 interface Props {
@@ -230,7 +253,7 @@ interface Props {
   projectId: string | null;
   selectedRun: SessionView | null;
   onKill: (id: string) => void;
-  /** Pre-typed query on OPEN (§5.2: Cmd+Shift+F seeds `?` — search mode). */
+  /** Pre-typed query on OPEN (the rail's Search, a seeded search). */
   seed?: string;
   /** S11: the object ⌘K was pressed on (the open sheet's, else the pointed one) — its actions lead. */
   object?: { title: string; rows: Array<{ id: string; label: string; run: () => void; disabled: string | null }> } | null;
@@ -241,12 +264,16 @@ export function CommandPalette({
 }: Props): React.ReactElement | null {
   const [query, setQuery] = useState('');
   const [sel, setSel] = useState(0);
+  const [tab, setTab] = useState<Tab>('all');
   const [repos, setRepos] = useState<RepoEntry[]>(getCachedRepos() ?? []);
+  const [recent, setRecent] = useState<string[]>([]);
   const [showNewProject, setShowNewProject] = useState(false);
   const [showTerminal, setShowTerminal] = useState(false);
+  const [found, setFound] = useState<SearchState | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const restoreRef = useRef<HTMLElement | null>(null);
+  const inflight = useRef<AbortController | null>(null);
 
   const projects = useProjectsStore((s) => s.projects);
   const gates = useGateStore((s) => s.gates);
@@ -260,13 +287,17 @@ export function CommandPalette({
     if (!open) {
       setQuery('');
       setSel(0);
+      setTab('all');
+      setFound(null);
+      inflight.current?.abort();
+      inflight.current = null;
       return;
     }
     restoreRef.current = document.activeElement as HTMLElement | null;
     inputRef.current?.focus();
-    // §5.2: Cmd+Shift+F opens WITH the `?` prefix pre-typed — same overlay,
-    // deep mode. A plain toggle seeds '' and lands in the normal grammar.
-    if (seed !== '') setQuery(seed);
+    setRecent(readRecentSearches());
+    // `?` was the old search-mode prefix: searching is the default now, so a `?` seed is no seed.
+    if (seed !== '' && seed !== '?') setQuery(seed);
     fetchReposCached()
       .then(setRepos)
       .catch(() => {
@@ -283,56 +314,106 @@ export function CommandPalette({
     restoreRef.current?.focus?.({ preventScroll: true });
   };
 
-  // ── The corpus (§1.3/§1.4): stores + props only — zero fetching here ────────
+  // ── The grammar: a prefix scopes to one local group; plain words search ──────────────────────
   const { scope, needle } = useMemo(() => {
     const q = query.trimStart();
-    if (q.startsWith('?')) return { scope: 'search' as const, needle: q.slice(1).trim() };
     if (q.startsWith('>')) return { scope: 'verbs' as const, needle: q.slice(1).trim() };
     if (q.startsWith('p:')) return { scope: 'projects' as const, needle: q.slice(2).trim() };
     if (q.startsWith('run:')) return { scope: 'runs' as const, needle: q.slice(4).trim() };
     if (q.startsWith('repo:')) return { scope: 'repos' as const, needle: q.slice(5).trim() };
     if (q.startsWith('go:')) return { scope: 'go' as const, needle: q.slice(3).trim() };
-    return { scope: 'all' as const, needle: q.trim() };
+    // A leading `?` (the retired search-mode prefix, still in fingers) is just a search.
+    return { scope: 'all' as const, needle: q.replace(/^\?/u, '').trim() };
   }, [query]);
+  const searching = open && scope === 'all' && needle.length >= MIN_SEARCH_CHARS;
+  const searchingRef = useRef(searching);
+  searchingRef.current = searching;
+  // Leaving search (a prefix, a cleared box) returns to All.
+  useEffect(() => { if (!searching) setTab('all'); }, [searching]);
 
-  // ── §5.2 search mode: the gesture-fetched legs ──────────────────────────────
-  // ENTERING search mode fires at most two GETs (`/governance/claims`, plus
-  // `/repos` if the palette cache was cold — already handled by the open
-  // effect above), both cached for the session and refreshed on the next
-  // entry. Keystrokes fire nothing — filtering below is in-memory. Inside a
-  // project shell it ALSO queries the CURRENT project's prompt inbox (one
-  // request, labeled) — the per-project wire used the way it scales, never a
-  // cross-project fan-out.
-  const searchMode = open && scope === 'search';
-  const [claims, setClaims] = useState<GovernanceClaim[]>([]);
-  const [prompts, setPrompts] = useState<InteractionRequest[]>([]);
-  const [showWhy, setShowWhy] = useState(false);
-  const projectNameByRun = useMembershipStore((s) => s.projectNameByRun);
+  // ── The search: debounced, the superseded request aborted, a still-reading source asked again ─
+  useEffect(() => {
+    inflight.current?.abort();
+    inflight.current = null;
+    if (!searching) { setFound(null); return undefined; }
+    const q = needle;
+    setFound((prev) => (prev !== null && prev.q === q ? prev : { q, status: 'loading', all: prev?.all ?? null, allQ: prev?.allQ ?? null, tabs: {}, error: null }));
+    let retries = 0;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const ask = (): void => {
+      const ac = new AbortController();
+      inflight.current = ac;
+      api.search(q, { limit: ALL_LIMIT, signal: ac.signal })
+        .then((res) => {
+          if (ac.signal.aborted) return;
+          setFound((prev) => ({ q, status: 'ok', all: res, allQ: q, tabs: prev?.q === q ? prev.tabs : {}, error: null }));
+          if (Array.isArray(res.sources) && res.sources.some((s) => s.state === 'indexing') && retries < INDEXING_RETRIES) {
+            retries += 1;
+            timer = setTimeout(ask, INDEXING_RETRY_MS);
+          }
+        })
+        .catch((e: unknown) => {
+          if (ac.signal.aborted) return;
+          setFound({ q, status: isRouteAbsent(e) ? 'absent' : 'error', all: null, allQ: null, tabs: {}, error: e instanceof Error ? e.message : String(e) });
+        });
+    };
+    timer = setTimeout(ask, SEARCH_DEBOUNCE_MS);
+    return () => {
+      if (timer !== null) clearTimeout(timer);
+      inflight.current?.abort();
+      inflight.current = null;
+    };
+  }, [searching, needle]);
+
+  /** A type tab's page: the first one when the tab opens, the next on "Load more". */
+  const foundRef = useRef(found);
+  foundRef.current = found;
+  // One controller per type: opening another tab never cancels this one's page (it would stay "loading").
+  const tabAborts = useRef(new Map<SearchType, AbortController>());
+  const loadTab = useCallback((type: SearchType, more: boolean): void => {
+    const prev = foundRef.current;
+    if (prev === null || prev.status !== 'ok') return;
+    const page = prev.tabs[type];
+    if (page?.loading === true || (!more && page !== undefined) || (more && (page === undefined || page.next === null))) return;
+    const q = prev.q;
+    const settle = (next: { hits: SearchHit[]; next: string | null; total: number; loading: boolean }): void =>
+      setFound((cur) => (cur === null || cur.q !== q ? cur : { ...cur, tabs: { ...cur.tabs, [type]: next } }));
+    settle({ hits: page?.hits ?? [], next: page?.next ?? null, total: page?.total ?? 0, loading: true });
+    tabAborts.current.get(type)?.abort();
+    const ac = new AbortController();
+    tabAborts.current.set(type, ac);
+    api.search(q, { types: [type], limit: TAB_LIMIT, ...(more && page !== undefined ? { cursor: page.next } : {}), signal: ac.signal })
+      .then((res) => {
+        if (ac.signal.aborted) return;
+        const g: SearchGroup | undefined = (res.groups ?? []).find((x) => x.type === type);
+        const before = more ? page?.hits ?? [] : [];
+        settle({ hits: [...before, ...(g?.hits ?? [])], next: g?.next_cursor ?? null, total: g?.total ?? before.length, loading: false });
+      })
+      .catch(() => {
+        if (ac.signal.aborted) return;
+        settle({ hits: page?.hits ?? [], next: null, total: page?.total ?? 0, loading: false });
+      });
+  }, []);
+  useEffect(() => {
+    if (tab !== 'all' && found !== null && found.q === needle && found.status === 'ok') loadTab(tab, false);
+  }, [tab, found, needle, loadTab]);
+  useEffect(() => {
+    if (open && searching) return undefined;
+    // Closing, or leaving search: every tab's request in flight is dropped.
+    for (const ac of tabAborts.current.values()) ac.abort();
+    tabAborts.current.clear();
+    return undefined;
+  }, [open, searching]);
+  useEffect(() => () => { for (const ac of tabAborts.current.values()) ac.abort(); }, []);
+
+  const projectIdByRun = useMembershipStore((s) => s.projectIdByRun);
   // §7.5 (slice Y2): the attach clock for run rows — the mirror the board
   // model already writes; a store read, never a fetch (§1.4's budget holds).
   const attachedAtByRun = useMembershipStore((s) => s.attachedAtByRun);
-  const projectIdByRun = useMembershipStore((s) => s.projectIdByRun);
   const liveChats = useLiveChatsStore((s) => s.sessions);
   const campaigns = useCampaignsStore((s) => s.campaigns);
   const runChatId = useCapabilities((s) => s.runChatId);
-  useEffect(() => {
-    if (!searchMode) {
-      setShowWhy(false);
-      return;
-    }
-    let cancelled = false;
-    api.listClaims()
-      .then(({ claims: got }) => { if (!cancelled) setClaims(got); })
-      .catch(() => { /* no conformance store — the decisions group stays empty */ });
-    if (projectId !== null) {
-      api.listProjectPrompts(projectId)
-        .then(({ prompts: got }) => { if (!cancelled) setPrompts(got); })
-        .catch(() => { /* inbox unreadable — the prompts group stays empty */ });
-    } else {
-      setPrompts([]);
-    }
-    return () => { cancelled = true; };
-  }, [searchMode, projectId]);
+  const projectName = useCallback((id: string): string | null => projects.find((p) => p.id === id)?.name ?? null, [projects]);
 
   // GO TO's rows, rebuilt only when what they are made of changes — never per keystroke.
   const goTargets = useMemo(() => routeTargets({
@@ -344,134 +425,14 @@ export function CommandPalette({
     runChatId,
   }), [projects, runs, projectIdByRun, liveChats, campaigns, runChatId]);
 
-  const rows = useMemo(() => {
-    // ── §5.2 search mode: the honest v1 corpus, grouped as the label names it.
-    // Substring on prose (problems, prompts, claim subjects), fuzzy on names
-    // (repos) — and NOTHING is fetched from here: claims/prompts arrived on
-    // entry, runs/gates/repos are the already-held stores.
-    if (scope === 'search') {
-      const hits: Array<{ en: Entry; m: FuzzyResult }> = [];
-      // Runs — all non-archived (the default `GET /runs` listing; archived
-      // runs are named in the not-searched clause).
-      runs.forEach((v, i) => {
-        if (v.session.archived_at != null) return;
-        const m = substringMatch(needle, v.session.problem);
-        if (m === null) return;
-        const id = v.session.id;
-        // §7.5 (slice Y2): the row displays the SYNTHESIZED title while the
-        // match stays on the full problem (prose corpus, §5.2). Highlight
-        // positions survive only when they land inside the displayed intent
-        // fragment — a hit past the truncation is a real hit with no honest
-        // highlight, never a misplaced one. The fragment length comes from the
-        // ACTUAL clause humanTitle displays (a literal prefix of the problem),
-        // not the raw INTENT_MAX budget the clause may stop short of.
-        const shownIntent = humanTitle(v.session.problem, PALETTE_INTENT);
-        const intentLen = shownIntent.endsWith('…') ? shownIntent.length - 1 : shownIntent.length;
-        const w = runWhenWord(attachedAtByRun[id], Date.now(), v.session.created_at);
-        hits.push({
-          en: {
-            id: `s-run-${id}`,
-            group: 'search-runs',
-            label: runTitle(v.session, PALETTE_INTENT),
-            context: projectNameByRun[id] ?? statusWord(v).word,
-            href: runPath(id),
-            rank: i,
-            dot: SEARCH_DOT[v.session.status] ?? 'var(--ink-dim)',
-            ...(w !== 'time unknown' ? { when: w } : {}),
-          },
-          m: m.positions.every((p) => p < intentLen) ? m : { score: m.score, positions: [] },
-        });
-      });
-      // Open gates — the event-sourced `awaitingHuman` prompts (§5.1).
-      Object.values(gates).forEach((g, i) => {
-        const m = substringMatch(needle, g.prompt);
-        if (m === null) return;
-        hits.push({
-          en: {
-            id: `s-gate-${g.runId}`,
-            group: 'search-gates',
-            label: g.prompt,
-            context: projectNameByRun[g.runId] ?? 'gate',
-            href: `${runPath(g.runId)}${GATE_HASH}`,
-            rank: i,
-            glyph: '⏸',
-          },
-          m,
-        });
-      });
-      // Decisions — governance claims: substring on the subject (criteria),
-      // fuzzy on the policy ids (identifiers); the hit navigates to the run
-      // when the claim names one the client holds, else to /steering (the
-      // governance surface — the old /policies panel merged into it).
-      claims.forEach((c, i) => {
-        const subject = substringMatch(needle, c.criteria);
-        const ident = subject === null ? fuzzyMatch(needle, c.policy_ids.join(' ')) : null;
-        if (subject === null && ident === null) return;
-        const named = runs.find(
-          (v) => c.scope.includes(v.session.id) || c.evaluated_context_ref.includes(v.session.id),
-        );
-        hits.push({
-          en: {
-            id: `s-claim-${c.claim_id}`,
-            group: 'search-decisions',
-            label: `${c.policy_ids[0] ?? c.claim_id} · ${c.decision}`,
-            context: c.phase,
-            href: named !== undefined ? runPath(named.session.id) : '/steering',
-            rank: i,
-            glyph: '§',
-            snippet: c.criteria,
-            snippetPositions: subject?.positions ?? [],
-          },
-          m: subject ?? { score: ident?.score ?? 0, positions: [] },
-        });
-      });
-      // Repos — names are identifiers: the §1.5 fuzzy scorer.
-      repos.forEach((r) => {
-        const m = fuzzyMatch(needle, r.name);
-        if (m === null) return;
-        hits.push({
-          en: {
-            id: `s-repo-${r.id}`,
-            group: 'search-repos',
-            label: r.name,
-            context: r.default_branch,
-            href: `/repo-detail/${encodeURIComponent(r.id)}`,
-            rank: 0,
-            glyph: '⬡',
-          },
-          m,
-        });
-      });
-      // Prompts — THIS project only (the scoped wire, §5.2).
-      prompts.forEach((p, i) => {
-        if (p.status !== 'open') return;
-        const m = substringMatch(needle, p.prompt);
-        if (m === null) return;
-        hits.push({
-          en: {
-            id: `s-prompt-${p.id}`,
-            group: 'search-prompts',
-            label: p.prompt,
-            context: p.kind,
-            href: `${runPath(p.session_id)}${p.kind === 'gate' ? GATE_HASH : ''}`,
-            rank: i,
-            glyph: '✉',
-          },
-          m,
-        });
-      });
-      const searchOrder: Group[] = [
-        'search-runs', 'search-gates', 'search-decisions', 'search-repos', 'search-prompts',
-      ];
-      hits.sort((a, b) => {
-        const g = searchOrder.indexOf(a.en.group) - searchOrder.indexOf(b.en.group);
-        if (g !== 0) return g;
-        if (b.m.score !== a.m.score) return b.m.score - a.m.score;
-        return a.en.rank - b.en.rank;
-      });
-      return hits;
-    }
+  const openAs = useCallback((hit: SearchHit): string => searchHitHref(hit, { runChatId, runs }), [runChatId, runs]);
 
+  // The daemon's All answer on screen, and whether it answers the words in the box now (a newer query
+  // is on its way: its hits stay up, dimmed, and Enter will not open them).
+  const daemonAnswers = searching && found !== null && found.all !== null && (found.status === 'ok' || found.status === 'loading');
+  const staleAnswer = daemonAnswers && found.allQ !== needle;
+
+  const rows = useMemo((): Row[] => {
     const status = selectedRun?.session.status ?? '';
     const entries: Entry[] = [];
 
@@ -497,9 +458,7 @@ export function CommandPalette({
     }
 
     // Projects — the store the board/shell already loaded; the synthesized
-    // Unfiled bucket never renders (F5). Recency-ordered (`updated_at`): the
-    // store-reachable order — the board's decayed attention needs membership
-    // joins the palette must not fetch.
+    // Unfiled bucket never renders (F5). Recency-ordered (`updated_at`).
     const visible = projects.filter((p) => p.id !== 'default' && p.status === 'active');
     const byRecency = [...visible].sort((a, b) => b.updated_at - a.updated_at);
     byRecency.forEach((p, i) =>
@@ -553,10 +512,6 @@ export function CommandPalette({
           seedNewChat(projectId);
         },
       },
-      // The §3.4 fork's other two tines (DES-FEEDBACK-003 §8.4, slice N): the
-      // palette and Make's ＋ agree on what can be made. Inside a project shell
-      // the verb lands directly in the mode; outside, a doc cannot be Unfiled,
-      // so the same project-picker mechanism as the Make ＋ runs first.
       {
         // S16a-4d: the Made list with its "New document" door open, the ambient project preselected
         // (the door picks the project itself — no picker modal first).
@@ -568,8 +523,7 @@ export function CommandPalette({
       },
       {
         // studio#664: a demo video is its own job — the New job wizard opens on its form (the app's
-        // address, who it is for, what it shows), in the ambient project when there is one. The
-        // wizard's project choice replaces the picker stage this verb used to open first.
+        // address, who it is for, what it shows), in the ambient project when there is one.
         name: 'New Demo',
         action: () => {
           onClose();
@@ -622,48 +576,99 @@ export function CommandPalette({
     ];
     verbs.forEach((v, i) => {
       if (v.when === false) return;
-      entries.push({ id: `verb-${v.name}`, group: 'verbs', label: v.name, context: 'verb', action: v.action, rank: i });
+      entries.push({ id: `verb-${v.name}`, group: 'verbs', label: v.name, context: 'command', action: v.action, rank: i });
     });
 
-    // GO TO — every route the router serves, so each is reachable by ⌘K under every skin (the skin
-    // contract; COVERAGE.md finding 1). The destinations, then per held item for parametric ones.
-    // With nothing typed only the destinations list; the per-item rows (a run's events, a
-    // project's chronicle, …) are found by a word, so the open palette stays short (codex).
+    // GO TO — every route the router serves, so each is reachable by ⌘K (the skin contract;
+    // COVERAGE.md finding 1). With nothing typed only the destinations list; the per-item rows
+    // (a run's events, a project's chronicle, …) are found by a word, so the open list stays short.
     goTargets.forEach((t, i) => {
-      if (needle === '' && t.perItem) return;
+      // Searching: an item's own pages (a project's documents, a run's events…) are the daemon's hits
+      // now, one row per item; `go:` still lists every one.
+      if ((needle === '' || daemonAnswers) && t.perItem) return;
       entries.push({ id: `go-${t.href}`, group: 'go', label: t.label, context: t.href, href: t.href, rank: i });
     });
 
-    // Scope, fuzzy-rank, group (§1.3's group order; §1.5's scorer).
-    const scoped = scope === 'all' ? entries : entries.filter((en) => en.group === scope);
-    const matched = scoped
-      .map((en) => ({ en, m: fuzzyMatch(needle, en.label) }))
-      .filter((x): x is { en: Entry; m: { score: number; positions: number[] } } => x.m !== null);
     const order: Group[] = ['actions', 'runs', 'projects', 'repos', 'verbs', 'go'];
-    matched.sort((a, b) => {
-      const g = order.indexOf(a.en.group) - order.indexOf(b.en.group);
-      if (g !== 0) return g;
-      if (b.m.score !== a.m.score) return b.m.score - a.m.score;
-      return a.en.rank - b.en.rank;
-    });
-    // Wave 1 ("raw in one step"): `>events r1` / `>files <name>` — a raw target for ANY
-    // run, resolved by the palette model and listed ahead of the plain verbs.
-    if (scope === 'verbs') {
-      const targeted = runTargetHits(needle, runs).map((hit, i): { en: Entry; m: FuzzyResult } => ({
-        en: {
-          id: `target-${hit.target.key}-${hit.run.session.id}`,
-          group: 'verbs',
-          label: `${hit.target.name} · ${runTitle(hit.run.session)}`,
-          context: hit.run.session.status,
-          href: hit.href,
-          rank: i,
-        },
-        m: { score: 0, positions: [] },
-      }));
-      return [...targeted, ...matched];
+    const rank = (list: Entry[]): Row[] => list
+      .map((en) => ({ en, m: fuzzyMatch(needle, en.label) }))
+      .filter((x): x is Row => x.m !== null)
+      .sort((a, b) => {
+        const g = order.indexOf(a.en.group) - order.indexOf(b.en.group);
+        if (g !== 0) return g;
+        if (b.m.score !== a.m.score) return b.m.score - a.m.score;
+        return a.en.rank - b.en.rank;
+      });
+
+    // ── A scoped prefix: one local group, as before ──
+    if (scope !== 'all') {
+      const matched = rank(entries.filter((en) => en.group === scope));
+      // Wave 1 ("raw in one step"): `>events r1` / `>files <name>` — a raw target for ANY
+      // run, resolved by the palette model and listed ahead of the plain verbs.
+      if (scope === 'verbs') {
+        const targeted = runTargetHits(needle, runs).map((hit, i): Row => ({
+          en: {
+            id: `target-${hit.target.key}-${hit.run.session.id}`,
+            group: 'verbs',
+            label: `${hit.target.name} · ${runTitle(hit.run.session)}`,
+            context: hit.run.session.status,
+            href: hit.href,
+            rank: i,
+          },
+          m: { score: 0, positions: [] },
+        }));
+        return [...targeted, ...matched];
+      }
+      return matched;
     }
-    return matched;
-  }, [runs, projects, repos, gates, claims, prompts, projectNameByRun, attachedAtByRun, goTargets, object, scope, needle, runPath, navigate, projectId, selectedRun, onKill, onClose]);
+
+    // ── Nothing (or one letter) typed: recent searches, then the jump list ──
+    if (!searching) {
+      const lead: Row[] = needle === '' ? recent.map((r, i) => ({
+        en: { id: `recent-${r}`, group: 'recent', label: r, context: '', action: () => { setQuery(r); setSel(0); }, keepOpen: true, rank: i },
+        m: { score: 0, positions: [] },
+      })) : [];
+      return [...lead, ...rank(entries)];
+    }
+
+    // ── Searching ──
+    const commands = rank(entries.filter((en) => en.group === 'actions' || en.group === 'verbs' || en.group === 'go'));
+    const capped: Row[] = [];
+    const perGroup = new Map<Group, number>();
+    for (const r of commands) {
+      const n = perGroup.get(r.en.group) ?? 0;
+      if (r.en.group !== 'actions' && n >= COMMANDS_WHILE_SEARCHING) continue;
+      perGroup.set(r.en.group, n + 1);
+      capped.push(r);
+    }
+    const hitRow = (hit: SearchHit, i: number): Row => ({
+      en: { id: `hit-${hit.type}-${hit.id}`, group: `hit-${hit.type}`, label: hit.title, context: hitContext(hit, projectName), href: openAs(hit), rank: i, hit, ...(staleAnswer && tab === 'all' ? { stale: true } : {}) },
+      m: { score: 0, positions: [] },
+    });
+    if (tab !== 'all') {
+      const page = found?.tabs[tab];
+      const hits = page?.hits ?? [];
+      const out = hits.map(hitRow);
+      if (page !== undefined && page.next !== null) {
+        out.push({ en: { id: `more-${tab}`, group: 'more', label: page.loading ? 'Loading more…' : `Load more ${SEARCH_TYPE_WORDS[tab].tab.toLowerCase()}`, context: `${hits.length} of ${page.total}`, action: () => loadTab(tab, true), keepOpen: true, rank: 0 }, m: { score: 0, positions: [] } });
+      }
+      return out;
+    }
+    if (daemonAnswers) {
+      const out: Row[] = [...capped];
+      for (const g of found.all!.groups ?? []) {
+        g.hits.forEach((h, i) => out.push(hitRow(h, i)));
+        if (g.total > g.hits.length) {
+          const t = g.type;
+          out.push({ en: { id: `more-${t}`, group: 'more', label: `See all ${g.total} ${SEARCH_TYPE_WORDS[t].tab.toLowerCase()}`, context: '', action: () => { setTab(t); setSel(0); }, keepOpen: true, rank: 0 }, m: { score: 0, positions: [] } });
+        }
+      }
+      return out;
+    }
+    // Before the daemon answers, or without its search: what studio already holds, matched here.
+    const local = rank(entries.filter((en) => en.group === 'runs' || en.group === 'projects' || en.group === 'repos'));
+    return [...capped, ...local];
+  }, [runs, projects, repos, gates, attachedAtByRun, goTargets, object, scope, needle, searching, recent, found, tab, runPath, navigate, projectId, selectedRun, onKill, onClose, projectName, openAs, loadTab, daemonAnswers, staleAnswer]);
 
   // Clamp the selection whenever the row set changes.
   const selIx = Math.min(sel, Math.max(0, rows.length - 1));
@@ -671,17 +676,35 @@ export function CommandPalette({
   useEffect(() => {
     listRef.current
       ?.querySelector('[data-selected="true"]')
-      ?.scrollIntoView({ block: 'nearest' });
+      ?.scrollIntoView?.({ block: 'nearest' });
   }, [selIx, rows]);
 
-  const activate = (row: (typeof rows)[number] | undefined): void => {
-    if (row === undefined) return;
+  const activate = (row: Row | undefined): void => {
+    if (row === undefined || row.en.stale === true) return;
+    if (row.en.keepOpen === true) {
+      row.en.action?.();
+      inputRef.current?.focus();
+      return;
+    }
+    if (searchingRef.current) setRecent(rememberSearch(needle));
     close();
     if (row.en.action !== undefined) row.en.action();
     else if (row.en.href !== undefined) navigate(row.en.href);
   };
 
-  // §1.2 precedence: list-navigation keys are handled by the palette's focused
+  const tabs: Tab[] = ['all', ...SEARCH_TYPES];
+  const totalOf = (t: SearchType): number | null => {
+    if (found === null || found.status !== 'ok' || found.all === null) return null;
+    return (found.all.groups ?? []).find((g) => g.type === t)?.total ?? 0;
+  };
+  const moveTab = (dir: 1 | -1): void => {
+    const i = tabs.indexOf(tab);
+    setTab(tabs[(i + dir + tabs.length) % tabs.length]!);
+    setSel(0);
+  };
+  const tabsShown = searching && found !== null && found.status !== 'absent' && found.status !== 'error';
+
+  // §1.2 precedence: list-navigation keys are handled by the modal's focused
   // input — including the toggle chords, which the registry cannot see from
   // inside a typing context.
   const onKeyDown = (e: React.KeyboardEvent): void => {
@@ -703,42 +726,55 @@ export function CommandPalette({
       e.preventDefault();
       activate(rows[selIx]);
     } else if (e.key === 'Tab') {
-      // Cycle to the next group's first row (the hint row's "tab cycle groups").
       e.preventDefault();
+      // Searching: Tab / Shift+Tab move between the tabs. Otherwise: the next group's first row.
+      if (tabsShown) { moveTab(e.shiftKey ? -1 : 1); return; }
       const cur = rows[selIx]?.en.group;
       const next = rows.findIndex((r, i) => i > selIx && r.en.group !== cur);
       setSel(next >= 0 ? next : 0);
     }
   };
 
+  // The one status line under the tabs: what the search did, said plainly.
+  const statusLine = ((): { text: string; tone: 'quiet' | 'warn' } | null => {
+    if (!searching || found === null) return null;
+    if (found.status === 'absent') return { text: 'This daemon can’t search everything yet (it needs a newer wicked-crew), so this matches what studio already holds.', tone: 'warn' };
+    if (found.status === 'error') return { text: `Search didn’t answer (${found.error ?? 'unknown error'}), so this matches what studio already holds.`, tone: 'warn' };
+    if (found.status === 'loading' || found.all === null) return { text: 'Searching…', tone: 'quiet' };
+    const sources = found.all.sources ?? [];
+    const reading = sources.filter((s) => s.state === 'indexing').map((s) => SEARCH_TYPE_WORDS[s.type].tab.toLowerCase());
+    const down = sources.filter((s) => s.state === 'unavailable' && s.note !== 'This daemon has no source for it.');
+    const parts: string[] = [];
+    if (reading.length > 0) parts.push(`Still reading ${reading.join(', ')}: more may appear.`);
+    if (down.length > 0) parts.push(`Couldn’t search ${down.map((s) => SEARCH_TYPE_WORDS[s.type].tab.toLowerCase()).join(', ')}${down[0]!.note !== null ? ` (${down[0]!.note})` : ''}.`);
+    if (found.all.partial) parts.push('Took too long to look at everything: counts are at least these.');
+    return parts.length > 0 ? { text: parts.join(' '), tone: 'warn' } : null;
+  })();
+  const hitCount = rows.filter((r) => r.en.hit !== undefined).length;
+  const emptyText = searching && found !== null && found.status === 'ok' && found.all !== null && hitCount === 0
+    && (tab === 'all' || found.tabs[tab]?.loading === false)
+    ? tab === 'all' ? `Nothing matches “${needle}”.` : `No ${SEARCH_TYPE_WORDS[tab].tab.toLowerCase()} match “${needle}”.`
+    : null;
+
   return (
     <>
       {open && (
         <div
-          className="fixed inset-0 z-50 flex justify-center"
-          style={{ background: 'var(--scrim)', paddingTop: '15vh' }}
+          className="wk-palette-scrim fixed inset-0 z-50 flex justify-center"
           onMouseDown={(e) => {
             if (e.target === e.currentTarget) close();
           }}
         >
           <div
             data-testid="command-palette"
-            className="wk-palette-in flex flex-col self-start overflow-hidden"
-            style={{
-              // §5.2: search is the palette's deep mode — wider result rows.
-              width: searchMode ? 680 : 560,
-              maxHeight: 420,
-              background: 'var(--surface-overlay)',
-              boxShadow: 'var(--shadow-overlay)',
-              borderRadius: 'var(--radius-xl)',
-            }}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Search"
+            className="wk-palette wk-palette-in flex flex-col self-start overflow-hidden"
           >
             {/* input row */}
-            <div
-              className="flex items-center gap-2 px-4 py-3 shrink-0"
-              style={{ background: 'var(--surface-raised)' }}
-            >
-              <Search size={14} style={{ color: 'var(--ink-dim)' }} aria-hidden />
+            <div className="wk-palette-input-row flex items-center gap-2 px-4 py-3 shrink-0">
+              <Search size={16} className="wk-palette-input-icon" aria-hidden />
               <input
                 ref={inputRef}
                 data-testid="palette-input"
@@ -748,186 +784,127 @@ export function CommandPalette({
                   setSel(0);
                 }}
                 onKeyDown={onKeyDown}
-                placeholder="Search sessions, projects, pages…"
-                aria-label="Command palette search"
-                className="flex-1 bg-transparent outline-none"
-                style={{
-                  fontSize: 'var(--text-md)',
-                  fontFamily: 'var(--font-sans)',
-                  color: 'var(--ink-high)',
-                }}
+                placeholder="Search runs, projects, repos, transcripts, rules… or type > for commands"
+                aria-label="Search everything, or type > for commands"
+                aria-controls="palette-results"
+                aria-activedescendant={rows[selIx] !== undefined ? `palette-opt-${selIx}` : undefined}
+                role="combobox"
+                aria-expanded="true"
+                autoComplete="off"
+                spellCheck={false}
+                className="wk-palette-input flex-1 bg-transparent outline-none"
               />
-              <kbd
-                className="font-mono wk-palette-esc"
-                style={{ fontSize: 'var(--text-2xs)', color: 'var(--ink-muted)' }}
-              >
-                esc
-              </kbd>
+              <kbd className="font-mono wk-palette-esc">esc</kbd>
               {/* Phone: a visible way out (UX gate S1: AFF); desktop keeps the esc keycap. */}
               <button type="button" data-testid="palette-close" aria-label="Close" title="Close" onClick={close} className="wk-btn wk-btn--icon wk-btn--quiet wk-palette-close">✕</button>
             </div>
 
-            {/* §5.2/EC24: the corpus label is a first-class UI element, ALWAYS
-                visible in search mode — what IS and IS NOT searched, with the
-                wire truth one [why?] away. The not-searched clause earns the
-                attention color: an honesty marker. */}
-            {searchMode && (
-              <div
-                data-testid="search-corpus-label"
-                style={{
-                  padding: '6px 16px', flexShrink: 0,
-                  fontSize: 'var(--text-2xs)', fontFamily: 'var(--font-sans)',
-                  borderBottom: '1px solid var(--surface-raised)',
-                }}
-              >
-                <p style={{ margin: 0, color: 'var(--ink-dim)' }}>
-                  Searching: runs (all non-archived) · open gates · decisions (governance claims) · repos
-                  {projectId !== null ? ' · prompts: this project' : ''}
-                </p>
-                <p style={{ margin: 0, color: 'var(--status-gate)' }}>
-                  Not searched: archived runs, transcripts, historical events —{' '}
-                  <button
-                    type="button"
-                    data-testid="search-why"
-                    aria-expanded={showWhy}
-                    onClick={() => setShowWhy((v) => !v)}
-                    style={{
-                      background: 'transparent', border: 'none', padding: 0,
-                      color: 'var(--status-gate)', cursor: 'pointer',
-                      fontSize: 'var(--text-2xs)', fontFamily: 'var(--font-sans)',
-                      textDecoration: 'underline',
-                    }}
-                  >
-                    [why?]
-                  </button>
-                </p>
-                {showWhy && (
-                  <p
-                    data-testid="search-why-popover"
-                    style={{ margin: '4px 0 0', color: 'var(--ink-muted)' }}
-                  >
-                    The crew daemon has no search index yet; the studio searches what it holds.
-                  </p>
-                )}
+            {tabsShown && (
+              <div role="tablist" aria-label="What to search" data-testid="search-tabs" className="wk-palette-tabs">
+                {tabs.map((t) => {
+                  const n = t === 'all' ? null : totalOf(t);
+                  return (
+                    <button
+                      key={t}
+                      type="button"
+                      role="tab"
+                      tabIndex={-1}
+                      data-testid="search-tab"
+                      data-type={t}
+                      aria-selected={tab === t}
+                      className="wk-palette-tab"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => { setTab(t); setSel(0); inputRef.current?.focus(); }}
+                    >
+                      {t === 'all' ? 'All' : SEARCH_TYPE_WORDS[t].tab}
+                      {n !== null && <span className="wk-palette-tab-count" data-testid="search-tab-count">{n > 99 ? '99+' : n}</span>}
+                    </button>
+                  );
+                })}
               </div>
             )}
 
+            {statusLine !== null && (
+              <p data-testid="search-status" data-tone={statusLine.tone} className="wk-palette-status" aria-live="polite">{statusLine.text}</p>
+            )}
+
             {/* grouped results */}
-            <div ref={listRef} role="listbox" aria-label="Palette results" className="flex-1 overflow-y-auto py-1">
-              {rows.length === 0 && (
-                <p
-                  className="px-4 py-3"
-                  style={{ fontSize: 'var(--text-sm)', color: 'var(--ink-dim)' }}
-                >
-                  nothing matches
+            <div ref={listRef} id="palette-results" role="listbox" aria-label="Results" className="wk-palette-list flex-1 overflow-y-auto py-1">
+              {emptyText !== null && (
+                <div data-testid="search-empty" className="wk-palette-empty">
+                  <p className="wk-palette-empty-title">{emptyText}</p>
+                  <p className="wk-palette-empty-line">Try fewer or shorter words — every word has to match.</p>
+                </div>
+              )}
+              {rows.length === 0 && emptyText === null && (
+                <p className="wk-palette-empty-line px-4 py-3">
+                  {searching && found?.status === 'loading' ? 'Searching…' : 'nothing matches'}
                 </p>
               )}
               {rows.map((row, i) => {
                 const first = i === 0 || rows[i - 1]?.en.group !== row.en.group;
+                const hit = row.en.hit;
+                const isRun = row.en.group === 'runs';
                 const shared = {
+                  id: `palette-opt-${i}`,
                   'data-testid': 'palette-row',
                   'data-group': row.en.group,
                   'data-selected': i === selIx ? 'true' : 'false',
+                  ...(row.en.stale === true ? { 'data-stale': 'true', 'aria-disabled': true } : {}),
                   role: 'option',
                   'aria-selected': i === selIx,
                   onClick: (e: React.MouseEvent) => {
                     e.preventDefault();
                     activate(row);
                   },
-                  onMouseEnter: () => setSel(i),
-                  className: 'wk-palette-row block w-full px-4 py-1.5 text-left',
-                  ...(row.en.group === 'runs' || row.en.group === 'search-runs' ? { title: row.en.label } : {}),
-                  style: {
-                    background: i === selIx ? 'var(--accent-subtle)' : 'transparent',
-                    outline: i === selIx ? '2px solid var(--accent)' : 'none',
-                    outlineOffset: -2,
-                  } as React.CSSProperties,
+                  // Movement, not enter: a list that re-renders under a still pointer must not steal the
+                  // keyboard's selection (Enter would open the row under the mouse).
+                  onMouseMove: () => { if (i !== selIx) setSel(i); },
+                  className: `wk-palette-row block w-full px-4 py-1.5 text-left${row.en.group === 'more' ? ' wk-palette-row--more' : ''}`,
+                  ...(isRun || hit !== undefined ? { title: row.en.label } : {}),
                 } as const;
+                const Icon = hit !== undefined ? HIT_ICON[hit.type] : row.en.group === 'recent' ? History : null;
                 const body = (
                   <>
                     <span className="wk-palette-line flex w-full min-w-0 items-baseline gap-3">
-                      {/* §5.2 hit anatomy: a status dot for runs, a glyph for
-                          gates/decisions/repos/prompts — before the label. */}
-                      {row.en.dot !== undefined && (
-                        <span
-                          aria-hidden
-                          style={{
-                            width: '6px', height: '6px', flexShrink: 0,
-                            borderRadius: 'var(--radius-full)', alignSelf: 'center',
-                            background: row.en.dot,
-                          }}
-                        />
-                      )}
-                      {row.en.glyph !== undefined && (
-                        <span aria-hidden className="shrink-0" style={{ color: 'var(--ink-dim)' }}>
-                          {row.en.glyph}
-                        </span>
-                      )}
+                      {Icon !== null && <Icon size={14} aria-hidden className="wk-palette-row-icon shrink-0" />}
                       <span
                         {...(row.en.when !== undefined ? { 'data-testid': 'run-title' } : {})}
                         className="wk-palette-title min-w-0 flex-1 truncate"
-                        style={{
-                          fontSize: 'var(--text-sm)',
-                          fontFamily: 'var(--font-sans)',
-                          color: 'var(--ink-high)',
-                        }}
                       >
                         {row.en.group === 'verbs' ? '> ' : ''}
-                        {/* A run's short id and attempt stay searchable (the matched label) but the row
-                            shows the title in words (UX gate S1: JARGON); the id is the row's tooltip. */}
-                        {(() => {
-                          const shown = row.en.when !== undefined || row.en.group === 'runs' || row.en.group === 'search-runs'
-                            ? row.en.label.replace(RUN_ID_SUFFIX, '') : row.en.label;
-                          return highlight(shown, row.m.positions.filter((p) => p < shown.length));
-                        })()}
+                        {hit !== undefined
+                          ? marked(row.en.label, hit.title_spans, 'wk-palette-mark')
+                          : (() => {
+                            // A run's short id and attempt stay searchable (the matched label) but the row
+                            // shows the title in words (UX gate S1: JARGON); the id is the row's tooltip.
+                            const shown = row.en.when !== undefined || isRun ? row.en.label.replace(RUN_ID_SUFFIX, '') : row.en.label;
+                            return highlight(shown, row.m.positions.filter((p) => p < shown.length));
+                          })()}
                       </span>
                       {/* §7.5 (slice Y2): run rows carry the attach clock. */}
                       {row.en.when !== undefined && (
-                        <span
-                          data-testid="run-when"
-                          title={WHEN_TITLE}
-                          className="shrink-0 wk-palette-meta"
-                          style={{ fontSize: 'var(--text-xs)', color: 'var(--ink-muted)' }}
-                        >
+                        <span data-testid="run-when" title={WHEN_TITLE} className="shrink-0 wk-palette-meta">
                           {row.en.when}
                         </span>
                       )}
-                      <span
-                        className="shrink-0 wk-palette-meta"
-                        style={{ fontSize: 'var(--text-xs)', color: 'var(--ink-muted)' }}
-                      >
-                        {row.en.context}
-                      </span>
+                      {row.en.context !== '' && <span className="shrink-0 wk-palette-meta">{row.en.context}</span>}
                     </span>
-                    {/* §5.3: the snippet line — muted, matches in --ink-high. */}
-                    {row.en.snippet !== undefined && (
-                      <span
-                        data-testid="search-snippet"
-                        className="block w-full truncate"
-                        style={{
-                          fontSize: 'var(--text-xs)', fontFamily: 'var(--font-sans)',
-                          color: 'var(--ink-muted)',
-                        }}
-                      >
-                        {highlightSnippet(row.en.snippet, row.en.snippetPositions ?? [])}
+                    {/* The matched words in context — muted, the match marked. */}
+                    {hit !== undefined && hit.snippet !== null && (
+                      <span data-testid="search-snippet" className="wk-palette-snippet block w-full truncate">
+                        {marked(hit.snippet, hit.snippet_spans, 'wk-palette-snippet-mark')}
                       </span>
                     )}
                   </>
                 );
+                const heading = row.en.group === 'more' ? null
+                  : row.en.group.startsWith('hit-') ? (tab === 'all' ? SEARCH_TYPE_WORDS[row.en.group.slice(4) as SearchType].tab : null)
+                    : row.en.group === 'actions' && object !== null ? `Actions for ${object.title}`
+                      : GROUP_LABEL[row.en.group as Exclude<Group, `hit-${SearchType}`>];
                 return (
                   <div key={row.en.id}>
-                    {first && (
-                      <p
-                        className="px-4 pt-2 pb-1"
-                        style={{
-                          fontSize: 'var(--text-2xs)',
-                          fontWeight: 'var(--weight-medium)',
-                          color: 'var(--ink-dim)',
-                        }}
-                      >
-                        {row.en.group === 'actions' && object !== null ? `Actions for ${object.title}` : GROUP_LABEL[row.en.group]}
-                      </p>
-                    )}
+                    {first && heading !== null && <p className="wk-palette-group px-4 pt-2 pb-1">{heading}</p>}
                     {row.en.href !== undefined ? (
                       <a {...shared} href={row.en.href}>
                         {body}
@@ -943,15 +920,8 @@ export function CommandPalette({
             </div>
 
             {/* hint row */}
-            <p
-              className="wk-palette-hint px-4 py-2 shrink-0"
-              style={{
-                fontSize: 'var(--text-2xs)',
-                color: 'var(--ink-dim)',
-                borderTop: '1px solid var(--surface-raised)',
-              }}
-            >
-              ↑↓ navigate · ↵ open · tab cycle groups · esc close
+            <p className="wk-palette-hint px-4 py-2 shrink-0">
+              {tabsShown ? '↑↓ move · ↵ open · tab next tab · esc close' : '↑↓ move · ↵ open · > commands · esc close'}
             </p>
           </div>
         </div>

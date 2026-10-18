@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { ChevronDown, ChevronRight, ChevronUp, LayoutGrid, Plus } from 'lucide-react';
+import { ChevronDown, ChevronRight, ChevronUp, FolderPlus, LayoutGrid, MessageSquarePlus, Plus, Search } from 'lucide-react';
 import { useDeliveredNow } from '../../store/postHocDeliver.js';
 import type { SessionView } from '../../api/types.js';
 import { DESK_RAIL_LINKS, needsByRun, needTextByRun, needsYouWords, railGroups, railRowWords, type RailSession } from '../../board/deskModel.js';
@@ -16,6 +16,19 @@ import { useRailHealthDot } from '../../hooks/useRailHealthDot.js';
 import { PAGE_NAMES } from '../../board/pageNames.js';
 import { WatchPill } from './WatchPill.js';
 import { NewProjectModal } from '../NewProjectModal.js';
+import { openAskDock } from '../../store/askDock.js';
+import { openSearch } from '../../store/searchModal.js';
+import { pageComposerKey } from '../../store/composerSeed.js';
+import { useProjectsStore } from '../../store/projects.js';
+
+/** The modifier the shortcuts are said with (⌘ on a Mac, Ctrl elsewhere). */
+const MOD = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/u.test(navigator.platform || navigator.userAgent) ? '⌘' : 'Ctrl+';
+
+/** New job where you are: the launch wizard, in the project on screen (never the Unfiled bucket),
+ *  launching from the page's composer when it has one. The rail's and the phone top bar's New job. */
+export function startNewJob(ambientProject: string | null): void {
+  openLaunchWizard({ projectId: ambientProject !== null && ambientProject !== 'default' ? ambientProject : null, composerKey: pageComposerKey() ?? 'desk' });
+}
 
 /** Width of the desk shell's session rail (px) — fixed, so nothing moves when a pane opens. */
 export const SESSION_RAIL_PX = 236;
@@ -28,7 +41,10 @@ export const SESSION_RAIL_PX = 236;
  *    badge (the fold's `needCount`, the Desk sentence's number — one source, so they never disagree);
  *    its accessible name says it ("Desk, 2 need you"). Operator IA 2026-10-13: there is no separate
  *    "Desk" item.
- *  - "New project", where the Desk item was: the one New project modal.
+ *  - The action row, on every page (operator 2026-10-18: "search, new run and chat on every page"):
+ *    New job (the labelled primary — the launch wizard), then three icons: Search (the ONE search
+ *    modal, ⌘K), Chat (a new chat in the Ask dock) and New project (the one New project modal).
+ *    New job and Chat start in the project on screen (`ambientProject`), and say so in their names.
  *  - Sessions grouped by project (the board model's order), each with ONE status dot (four hues:
  *    waiting on you, working, failed, ended — its word in the row's hover title and accessible label)
  *    and the count of needs-you items that name it. A title is one line, cut with an ellipsis, its
@@ -51,7 +67,7 @@ export const SESSION_RAIL_PX = 236;
  *
  * Render only: the groups are `railGroups` (board/deskModel.ts) over `useBoardModel` + the fold.
  */
-export function SessionRail({ runs, needRows, navigate, pathname, runsKnown = true, runsFailed = false }: {
+export function SessionRail({ runs, needRows, navigate, pathname, runsKnown = true, runsFailed = false, ambientProject = null }: {
   runs: SessionView[];
   needRows: NeedRow[];
   navigate: Navigate;
@@ -60,6 +76,8 @@ export function SessionRail({ runs, needRows, navigate, pathname, runsKnown = tr
    *  the badge is the Desk's settled count — nothing while it moves, the last count while a read fails. */
   runsKnown?: boolean;
   runsFailed?: boolean;
+  /** The project on screen (its page, or a page carrying `?project=`): New job and Chat start there. */
+  ambientProject?: string | null;
 }): React.ReactElement {
   const { items, unfiled } = useMovableBoardModel(runs);
   const settled = useSettledNeeds(needRows, runsKnown, runsFailed);
@@ -78,6 +96,11 @@ export function SessionRail({ runs, needRows, navigate, pathname, runsKnown = tr
   );
   const { collapsed, toggle } = useRailCollapsed();
   const [newProjectOpen, setNewProjectOpen] = useState(false);
+  // The project New job and Chat start in: the one on screen, never the Unfiled bucket.
+  const projects = useProjectsStore((s) => s.projects);
+  const inProject = ambientProject !== null && ambientProject !== 'default'
+    ? { id: ambientProject, name: projects.find((p) => p.id === ambientProject)?.name ?? 'this project' }
+    : null;
   // "Show N more" is this page's choice only; folding is what persists.
   const [showAll, setShowAll] = useState<ReadonlySet<string>>(() => new Set());
   // A list that runs past the rail's fold fades out at its foot instead of slicing a row in half;
@@ -136,12 +159,25 @@ export function SessionRail({ runs, needRows, navigate, pathname, runsKnown = tr
         </span>
         {count > 0 && <span aria-hidden data-testid="desk-rail-badge" data-phase={settled.phase} className="wk-rail-badge">{badgeText}</span>}
       </a>
-      {/* Where the Desk item was: start a project (the one New project modal, portalled so the phone
-          drawer — which closes when a modal opens over it — never clips it). */}
-      <button type="button" data-testid="desk-rail-new-project" className="wk-rail-newproject" onClick={() => setNewProjectOpen(true)}>
-        <Plus size={14} aria-hidden />
-        <span>New project</span>
-      </button>
+      {/* The action row, on every page: New job, then Search · Chat · New project. The New project modal
+          is portalled so the phone drawer — which closes when a modal opens over it — never clips it. */}
+      <div className="wk-rail-actions" role="group" aria-label="Start or find work" data-testid="desk-rail-actions">
+        <button type="button" data-testid="desk-rail-new-job" className="wk-rail-newjob" aria-label={inProject !== null ? `New job in ${inProject.name}` : 'New job'} title={inProject !== null ? `New job in ${inProject.name}` : 'New job'}
+          onClick={() => startNewJob(ambientProject)}>
+          <Plus size={15} aria-hidden />
+          <span>New job</span>
+        </button>
+        <button type="button" data-testid="desk-rail-search" className="wk-rail-action" aria-label="Search" title={`Search (${MOD}K)`} aria-keyshortcuts="Meta+K Control+K" onClick={() => openSearch()}>
+          <Search size={16} aria-hidden />
+        </button>
+        <button type="button" data-testid="desk-rail-chat" className="wk-rail-action" aria-label={inProject !== null ? `New chat in ${inProject.name}` : 'New chat'} title={inProject !== null ? `New chat in ${inProject.name}` : 'New chat'}
+          onClick={() => openAskDock({ fresh: true, projectId: inProject?.id ?? null })}>
+          <MessageSquarePlus size={16} aria-hidden />
+        </button>
+        <button type="button" data-testid="desk-rail-new-project" className="wk-rail-action" aria-label="New project" title="New project" onClick={() => setNewProjectOpen(true)}>
+          <FolderPlus size={16} aria-hidden />
+        </button>
+      </div>
       {newProjectOpen && createPortal(<NewProjectModal deskMode navigate={navigate} onClose={() => setNewProjectOpen(false)} />, document.body)}
 
       <div ref={groupsRef} className="wk-rail-groups" data-more-below={moreBelow ? 'true' : 'false'}>

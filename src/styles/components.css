@@ -642,14 +642,20 @@ select:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-
 .wk-rail-brand-name { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 /* The wordmark: a yellow dot with a harbor ring (DESIGN-simple §1a). */
 .wk-rail-brand .wk-desk-dot, .wk-desk-avatar .wk-desk-dot { background: var(--spark); box-shadow: 0 0 0 1.5px var(--accent); }
-/* Operator IA 2026-10-13: "New project" takes the old Desk item's place — a quiet outlined action. */
-.wk-rail-newproject {
-  display: flex; align-items: center; gap: 8px; margin: 0 10px 8px; padding: 7px 10px; min-height: 34px;
-  border: 1px solid var(--border); border-radius: var(--radius-md); background: none; cursor: pointer;
-  color: var(--ink-high); font: inherit; font-weight: var(--weight-semi); text-align: left;
+/* The action row (operator 2026-10-18): New job, labelled, then Search · Chat · New project as icons. */
+.wk-rail-actions { display: flex; align-items: center; gap: 4px; margin: 0 10px 10px; }
+.wk-rail-newjob {
+  display: inline-flex; align-items: center; gap: 6px; flex: 1 1 auto; min-width: 0; padding: 6px 10px; min-height: 34px;
+  border: none; border-radius: var(--radius-md); background: var(--accent); color: var(--accent-fg); cursor: pointer;
+  font: inherit; font-size: var(--text-sm); font-weight: var(--weight-semi); white-space: nowrap;
 }
-.wk-rail-newproject:hover { background: var(--surface-card); box-shadow: var(--shadow-card); }
-.wk-rail-newproject svg { color: var(--ink-muted); flex-shrink: 0; }
+.wk-rail-newjob:hover { filter: brightness(1.08); }
+.wk-rail-action {
+  display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; flex-shrink: 0;
+  border: 1px solid var(--border); border-radius: var(--radius-md); background: none; color: var(--ink-muted); cursor: pointer;
+}
+.wk-rail-action:hover { background: var(--surface-card); color: var(--ink-high); box-shadow: var(--shadow-card); }
+.wk-rail-newjob:focus-visible, .wk-rail-action:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .wk-rail-badge {
   min-width: 20px; height: 20px; padding: 0 6px; border-radius: var(--radius-full); flex-shrink: 0;
   display: inline-flex; align-items: center; justify-content: center;
@@ -1776,6 +1782,7 @@ html :is(input, textarea)::placeholder { color: var(--ink-placeholder); opacity:
   .wk-topbar-brand b { color: var(--ink-high); }
   .wk-topbar-brand .wk-desk-dot { background: var(--spark); box-shadow: 0 0 0 1.5px var(--accent); }
   .wk-topbar-badge { flex-shrink: 0; padding-right: var(--space-2); }
+  .wk-topbar-search { width: var(--tap-min); height: var(--tap-min); min-width: var(--tap-min); color: var(--ink-high); }
   .wk-topbar-checking { color: var(--ink-muted); font-size: var(--text-xs); }
   .wk-rail-scrim { position: fixed; inset: 0; z-index: 80; background: var(--scrim); }
   .wk-rail-drawer { position: fixed; top: 0; bottom: 0; left: 0; z-index: 81; display: flex; transform: translateX(-100%); visibility: hidden; transition: transform var(--dur-base) var(--ease-out), visibility 0s linear var(--dur-base); box-shadow: var(--shadow-overlay); }

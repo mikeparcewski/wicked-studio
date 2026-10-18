@@ -215,7 +215,8 @@ with sync_playwright() as p:
 
     # ── 6. ⌘K reaches the Memory page ─────────────────────────────────────────────────
     page.goto(f"{origin}/", wait_until="networkidle")
-    page.get_by_test_id("desk-command").click()
+    page.get_by_test_id("desk-rail-search").click()
+    page.get_by_test_id("palette-input").wait_for(state="visible", timeout=5000)
     page.keyboard.type("go: memory")
     row = page.locator('[data-testid="palette-row"][href="/memory"]')
     try:

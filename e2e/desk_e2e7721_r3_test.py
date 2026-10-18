@@ -66,7 +66,7 @@ def note_open(req) -> None:
 def wizard_helpers(page, tag: str):
     """Desk → New job → the first ordinary job → its Helpers step; returns the helper pills."""
     page.goto(f"{origin}/", wait_until="networkidle")
-    page.get_by_test_id("desk-new-job").click()
+    page.get_by_test_id("desk-rail-new-job").click()
     page.get_by_test_id("launch-wizard").wait_for(state="visible", timeout=10000)
     if page.get_by_test_id("launch-wizard-cards").count() > 0:
         page.get_by_test_id("launch-wizard-workflow-bug").click()
@@ -93,8 +93,8 @@ def wizard_helpers(page, tag: str):
 
 def open_ask(page):
     page.goto(f"{origin}/", wait_until="networkidle")
-    page.get_by_test_id("desk-chat").wait_for(state="visible", timeout=15000)
-    page.get_by_test_id("desk-chat").click()
+    page.get_by_test_id("desk-rail-chat").wait_for(state="visible", timeout=15000)
+    page.get_by_test_id("desk-rail-chat").click()
     page.get_by_test_id("assist-input").wait_for(state="visible", timeout=10000)
     try:
         page.get_by_test_id("ask-helpers").wait_for(state="visible", timeout=8000)

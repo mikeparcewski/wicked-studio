@@ -146,7 +146,7 @@ with sync_playwright() as p:
 
     # ── 5. … and on the New job grid: the last tile, not a button ──────────────────────────────
     page.goto(f"{origin}/", wait_until="networkidle")
-    page.get_by_test_id("desk-new-job").click()
+    page.get_by_test_id("desk-rail-new-job").click()
     tile = page.get_by_test_id("launch-wizard-soon")
     tile.wait_for(state="visible", timeout=8000)
     tile.scroll_into_view_if_needed()

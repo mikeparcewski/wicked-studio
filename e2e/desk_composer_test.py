@@ -182,7 +182,7 @@ with sync_playwright() as p:
     # ── 6b. concept A (DES-frontdoor): the Desk has no composer — a new chat is the Ask dock, whose
     #        project scope is its own choice (tests/AskDock.scope.test.tsx), and a job is the wizard.
     page.goto(f"{origin}/", wait_until="networkidle")
-    page.get_by_test_id("desk-new-job").wait_for(state="visible", timeout=15000)
+    page.get_by_test_id("desk-rail-new-job").wait_for(state="visible", timeout=15000)
     gone = page.locator('[data-testid="composer"][data-composer="desk"]').count()
     overflow = page.evaluate("() => document.documentElement.scrollWidth > document.documentElement.clientWidth")
     check("desk-has-no-composer", gone == 0 and not overflow, composers=gone, overflow=overflow)

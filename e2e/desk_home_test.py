@@ -95,9 +95,9 @@ KEYS = """() => [...document.querySelectorAll('[data-testid="need-row"], [data-t
 
 HEADER = """() => ({
   composer: !!document.querySelector('[data-testid="composer"][data-composer="desk"]'),
-  command: !!document.querySelector('[data-testid="desk-command"]'),
-  chat: document.querySelector('[data-testid="desk-chat"]')?.innerText.trim() ?? null,
-  newJob: document.querySelector('[data-testid="desk-new-job"]')?.innerText.trim() ?? null,
+  command: !!document.querySelector('[data-testid="desk-rail-search"]'),
+  chat: document.querySelector('[data-testid="desk-rail-chat"]')?.getAttribute('aria-label') ?? null,
+  newJob: document.querySelector('[data-testid="desk-rail-new-job"]')?.innerText.trim() ?? null,
 })"""
 
 dist = ensure_build(fail)
@@ -174,9 +174,9 @@ with sync_playwright() as p:
           and not any(w in label.lower() for w in ("disk", "space", "storage")),
           chores=chores)
 
-    # ── 4. no composer: the ⌘K bar, Chat and New job in the header ─────────────────
+    # ── 4. no composer: Search, Chat and New job in the rail's action row ──────────
     head = page.evaluate(HEADER)
-    page.get_by_test_id("desk-command").click()
+    page.get_by_test_id("desk-rail-search").click()
     try:
         page.get_by_test_id("palette-input").wait_for(state="visible", timeout=4000)
         palette = True
@@ -184,7 +184,7 @@ with sync_playwright() as p:
         palette = False
     page.keyboard.press("Escape")
     page.wait_for_timeout(300)
-    check("no-composer-command-bar", not head["composer"] and head["command"] and head["chat"] == "Chat"
+    check("no-composer-command-bar", not head["composer"] and head["command"] and head["chat"] == "New chat"
           and head["newJob"] == "New job" and palette, palette=palette, **head)
 
     # ── 6. letters open the Ask dock with them; nothing is sent ──────────────────
@@ -203,7 +203,7 @@ with sync_playwright() as p:
 
     # ── 6b. Chat opens the dock; its Send sends ONCE ─────────────────────────────
     msgs = lambda: [x for x in posts if "/messages" in x]
-    page.get_by_test_id("desk-chat").click()
+    page.get_by_test_id("desk-rail-chat").click()
     page.get_by_test_id("ask-panel").wait_for(state="visible", timeout=10000)
     page.get_by_test_id("assist-input").fill("what changed in beta today?")
     page.get_by_test_id("assist-send").click()

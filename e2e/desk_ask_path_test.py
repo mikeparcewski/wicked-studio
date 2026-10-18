@@ -98,7 +98,7 @@ def ask_from_desk(page, origin: str, text: str, expect_posts: int, project: str 
     scope names it, so the chat is scoped to that project and its repo — the only kind of ask a
     creator proposal can be built from (§4.7; an `everything` ask is repo-less for building)."""
     page.goto(f"{origin}/", wait_until="networkidle")
-    page.get_by_test_id("desk-chat").click()
+    page.get_by_test_id("desk-rail-chat").click()
     box = page.get_by_test_id("assist-input")
     box.wait_for(state="visible", timeout=15000)
     if project is not None:

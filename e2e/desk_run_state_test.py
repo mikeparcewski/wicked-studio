@@ -90,7 +90,7 @@ with sync_playwright() as p:
 
     # ── 2. #473: ⌘K from a text field (concept A: the Desk has no composer — the Chat dock's box) ──
     page.goto(f"{origin}/", wait_until="networkidle")
-    page.get_by_test_id("desk-chat").click()
+    page.get_by_test_id("desk-rail-chat").click()
     page.get_by_test_id("assist-input").wait_for(state="visible", timeout=10000)
     page.get_by_test_id("assist-input").focus()
     focused = page.evaluate("() => document.activeElement.tagName.toLowerCase()")

@@ -89,8 +89,10 @@ describe('the project Desk', () => {
   it('keeps project actions, requirements and documents under Work without duplicate dashboard sections', async () => {
     render(<ProjectDesk {...props} />);
     await loaded();
-    expect(screen.getByTestId('project-new-job')).toHaveAccessibleName('New job in this project');
-    expect(screen.getByTestId('project-chat')).toBeInTheDocument();
+    // New job and Chat are the rail's (in this project); the header keeps only the project's own actions.
+    expect(screen.queryByTestId('project-new-job')).toBeNull();
+    expect(screen.queryByTestId('project-chat')).toBeNull();
+    expect(screen.getByTestId('project-documents')).toBeInTheDocument();
     expect(document.getElementById('requirements')).toBeInTheDocument();
     expect(document.getElementById('project-documents')).toBeInTheDocument();
     for (const id of ['project-band', 'project-jobs', 'project-feed', 'project-needs']) expect(screen.queryByTestId(id)).toBeNull();

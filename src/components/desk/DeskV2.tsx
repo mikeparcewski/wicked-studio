@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
-import { Activity, AlertTriangle, Bot, CheckCircle2, CircleAlert, Inbox, Info, MessageSquare, MoreHorizontal, Plus, Rocket, Search, Send, Wallet } from 'lucide-react';
+import { Activity, AlertTriangle, Bot, CheckCircle2, CircleAlert, Inbox, Info, MoreHorizontal, Rocket, Send, Wallet } from 'lucide-react';
 import { everythingPath } from '../../board/everythingModel.js';
 import type { DiagnosticsGovernance, RosterSeat, SessionView } from '../../api/types.js';
 import { getDiagnostics } from '../../api/diagnostics.js';
@@ -38,7 +38,6 @@ import { useRoster } from '../../hooks/useRoster.js';
 import { useStartClocks } from '../../hooks/useStartClocks.js';
 import { openAskDock } from '../../store/askDock.js';
 import { useCapabilities } from '../../store/capabilities.js';
-import { openLaunchWizard } from '../../store/launchWizard.js';
 import { useProjectsStore } from '../../store/projects.js';
 import { openSheet } from '../../store/sheets.js';
 import { CaptureDrop } from '../CaptureDrop.js';
@@ -75,7 +74,7 @@ import { DeskUnderstand } from './DeskUnderstand.js';
  *  4. One visual language: every widget is a `ChartCard`; every chart is the kit in
  *     `components/charts/Chart.tsx`; a helper has one colour everywhere.
  */
-export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRuns, needRows: rawNeedRows, now, navigate, onCommand, search = '', hosted, projectId, projectHead, workExtra, runActions }: {
+export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRuns, needRows: rawNeedRows, now, navigate, search = '', hosted, projectId, projectHead, workExtra, runActions }: {
   /** The Runs tab's per-row actions (a project's page: Remove from project). */
   runActions?: (runId: string, title: string) => readonly MenuItem[];
   /** Renders a hosted tab's page for an address (App owns those pages); `project` = the project page's id. */
@@ -98,7 +97,6 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
   needRows: NeedRow[];
   now: number;
   navigate: Navigate;
-  onCommand?: () => void;
 }): React.ReactElement {
   const clocked = useStartClocks(rawRuns);
   // On a project's page the caller passes the project's runs (its membership, plus member runs the
@@ -354,14 +352,9 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
         <h1 className="wk-desk-a-title" data-testid={projectHead !== undefined ? 'project-title' : undefined}>{projectHead?.title ?? 'Desk'}</h1>
         <p data-testid="desk-as-of" className="wk-desk-a-when">{projectHead?.meta ?? (readState === 'known' ? `As of ${asOf}` : readState === 'stale' ? 'As of the last read' : 'Reading…')}</p>
       </div>
-      <button type="button" data-testid="desk-command" className="wk-desk-cmd" onClick={onCommand} aria-label="Search, jump to anything, or start a job (Command K)">
-        <Search size={15} aria-hidden className="wk-desk-cmd-icon" />
-        <span className="wk-desk-cmd-text">Search, jump to anything, or start a job…</span>
-        <kbd className="wk-desk-cmd-kbd">⌘K</kbd>
-      </button>
+      {/* Search, New job and Chat live in the rail on every page (SessionRail's action row): the header
+          names the page and carries only what is this page's own. */}
       {projectHead !== undefined ? <div className="wk-desk2-actions">{projectHead.actions}</div> : <div className="wk-desk2-actions">
-        <button type="button" data-testid="desk-chat" className="wk-btn wk-btn--secondary" onClick={() => openAskDock({ fresh: true })}><MessageSquare size={14} aria-hidden />Chat</button>
-        <button type="button" data-testid="desk-new-job" className="wk-btn wk-btn--primary" onClick={() => openLaunchWizard({ composerKey: 'desk' })}><Plus size={14} aria-hidden />New job</button>
         <DeskMore runs={runs} needs={readState === 'known' ? needRows.length : null} />
       </div>}
     </header>

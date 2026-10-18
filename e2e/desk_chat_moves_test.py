@@ -88,7 +88,7 @@ with sync_playwright() as p:
     # ── 3. the first send opens one chat ───────────────────────────────────────────────
     page.goto(f"{origin}/", wait_until="networkidle")
     # Concept A: the Desk's Chat opens the Ask dock — the one chat surface — and its Send opens the chat.
-    page.get_by_test_id("desk-chat").click()
+    page.get_by_test_id("desk-rail-chat").click()
     composer = page.get_by_test_id("assist-input")
     composer.wait_for(timeout=15000)
     composer.fill("summarize the last 10 commits as release notes")

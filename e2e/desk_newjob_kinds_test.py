@@ -58,14 +58,14 @@ with sync_playwright() as p:
         return page.get_by_test_id(testid).input_value()
 
     page.goto(f"{origin}/", wait_until="networkidle")
-    page.get_by_test_id("desk-new-job").click()
+    page.get_by_test_id("desk-rail-new-job").click()
     page.get_by_test_id("launch-wizard-cards").wait_for(state="visible")
     page.get_by_test_id("launch-wizard-workflow-demo-video").click()
     page.get_by_test_id("launch-wizard-demo-show").fill(DEMO_WORDS)
     page.get_by_test_id("launch-wizard-close").click()
     page.get_by_test_id("launch-wizard").wait_for(state="hidden")
 
-    page.get_by_test_id("desk-new-job").click()
+    page.get_by_test_id("desk-rail-new-job").click()
     page.get_by_test_id("launch-wizard-demo-show").wait_for(state="visible")
     check("reopen-keeps-the-demo-words", val("launch-wizard-demo-show") == DEMO_WORDS, value=val("launch-wizard-demo-show"))
 

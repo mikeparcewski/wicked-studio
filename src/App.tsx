@@ -3,6 +3,8 @@ import { EditorHostPage } from './components/editors/EditorHostPage.js';
 import { useHostChrome } from './editors/hostApi.js';
 import { AskDock } from './components/AskDock.js';
 import { useAskDock, type AskRequest } from './store/askDock.js';
+import { useSearchModal } from './store/searchModal.js';
+import { usePhone } from './hooks/usePhone.js';
 import { useAskThreadStore } from './store/askThread.js';
 import { useChatFlow } from './store/chatFlow.js';
 import { AskLauncher } from './components/AskLauncher.js';
@@ -124,6 +126,7 @@ export function App(): React.ReactElement {
   const { panel, runId, repoId, projectId, artifactId, showLaunch, campaignId, testingPage, artifactKey, navigate, search, pathname } = useRoute();
   const { runs, refresh, loaded: runsLoaded, error: runsError } = useRuns();
   const navCollapsed = useHostChrome((s) => s.navCollapsed);
+  const phone = usePhone();
   const ingestGate = useGateStore((s) => s.ingest);
   const ingestCampaign = useCampaignsStore((s) => s.ingest);
   const ingestAnnotation = useAnnotationStore((s) => s.ingest);
@@ -336,6 +339,8 @@ export function App(): React.ReactElement {
   );
 
   const selected = runs.find((v) => v.session.id === runId) ?? null;
+  // The project on screen (its page, or a page carrying `?project=`): the rail's New job and Chat start there.
+  const ambientProject = projectId ?? ambientProjectId(pathname, search);
 
   // ── DES-FEEDBACK-002 §1.2 (slice G): shortcut registry + command palette ────
   // Cmd/Ctrl+K and Ctrl/Cmd+P open the palette (the unconditional, safe action
@@ -343,8 +348,7 @@ export function App(): React.ReactElement {
   // guards and silent-fail contract intact, and also rides the palette as the
   // `> Cancel run` verb. One listener, one guard — `useGlobalShortcuts`.
   const [paletteOpen, setPaletteOpen] = useState(false);
-  // §5.2 (slice J): Cmd+Shift+F opens the palette in SEARCH mode — the seed is
-  // the pre-typed `?` prefix; the plain toggles seed nothing.
+  // The seed a search request carries (the rail's Search seeds nothing; a seeded open pre-types it).
   const [paletteSeed, setPaletteSeed] = useState('');
   const [paletteObject, setPaletteObject] = useState<ObjectCommands | null>(null);
   const runsRef = useRef(runs);
@@ -404,8 +408,14 @@ export function App(): React.ReactElement {
   // §5.6 rule 4 (S2b): letters always type — into the open Ask dock, else the page's
   // composer, else the Ask dock opened with them (opening it only reads).
   useTypeToComposer(useCallback(() => setAskOpen(true), []));
-  // The Desk's ⌘K command bar (concept A) opens the plain palette.
-  const openPalette = useCallback(() => { setPaletteSeed(''); setPaletteObject(null); setPaletteOpen(true); }, []);
+  // THE search modal opens from the rail's Search and the phone top bar (`openSearch`), besides ⌘K.
+  const searchRequest = useSearchModal((s) => s.request);
+  useEffect(() => {
+    if (searchRequest === null) return;
+    setPaletteSeed(searchRequest.seed);
+    setPaletteObject(null);
+    setPaletteOpen(true);
+  }, [searchRequest]);
 
   const shortcutEntries = useMemo(
     () => [
@@ -420,7 +430,8 @@ export function App(): React.ReactElement {
           setPaletteOpen(next);
         },
         openSearch: () => {
-          setPaletteSeed('?');
+          setPaletteSeed('');
+          setPaletteObject(null);
           setPaletteOpen(true);
         },
         killEligible: () => {
@@ -571,7 +582,7 @@ export function App(): React.ReactElement {
     // still at `/runs`, which the `panel === 'runs'` fallback below keeps rendering.
     if (panel === 'home') {
       // The Desk (S4) — the one shell since the classic skins retired (S18d).
-      return <DeskV2 hosted={renderHosted} runs={shownRuns} runsLoaded={runsLoaded} runsError={runsError} onRetryRuns={refresh} needRows={needRows} now={needsNow} navigate={navigate} onCommand={openPalette} search={search} />;
+      return <DeskV2 hosted={renderHosted} runs={shownRuns} runsLoaded={runsLoaded} runsError={runsError} onRetryRuns={refresh} needRows={needRows} now={needsNow} navigate={navigate} search={search} />;
     }
     if (panel === 'workflows') {
       return (
@@ -701,7 +712,7 @@ export function App(): React.ReactElement {
     }
     // `/projects/:id` — the same Desk, filtered to this project.
     if (panel === 'project-detail' && projectId) {
-      return <ProjectDesk projectId={projectId} navigate={navigate} runs={shownRuns} needRows={needRows} now={needsNow} search={search} runsLoaded={runsLoaded} runsError={runsError} onRetryRuns={refresh} hosted={renderHosted} onCommand={openPalette} />;
+      return <ProjectDesk projectId={projectId} navigate={navigate} runs={shownRuns} needRows={needRows} now={needsNow} search={search} runsLoaded={runsLoaded} runsError={runsError} onRetryRuns={refresh} hosted={renderHosted} />;
     }
     if (panel === 'system') {
       return (
@@ -735,8 +746,8 @@ export function App(): React.ReactElement {
           jump to the main content instead of a page's top-right Refresh. */}
       <SkipLink />
       {/* UI-CONTRACT §3 (studio#680): the rail as before on desktop; a drawer behind a top bar on a phone. */}
-      <RailDrawer pathname={pathname} badge={<PhoneNeedsBadge needRows={needRows} runsKnown={runsLoaded} runsFailed={runsError !== null} />}>
-        <SessionRail runs={shownRuns} needRows={needRows} navigate={navigate} pathname={pathname} runsKnown={runsLoaded} runsFailed={runsError !== null} />
+      <RailDrawer pathname={pathname} ambientProject={ambientProject} badge={<PhoneNeedsBadge needRows={needRows} runsKnown={runsLoaded} runsFailed={runsError !== null} />}>
+        <SessionRail runs={shownRuns} needRows={needRows} navigate={navigate} pathname={pathname} runsKnown={runsLoaded} runsFailed={runsError !== null} ambientProject={ambientProject} />
       </RailDrawer>
 
       {/* studio#722: the gate notice is a strip IN the main column's flow, above the page — it pushes
@@ -764,8 +775,9 @@ export function App(): React.ReactElement {
         onToggle={() => setAskOpen((v) => !v)}
         rightOffsetPx={selected !== null ? RIGHT_PANEL_PX : 0}
         bottomOffsetPx={panel === 'session' ? DESK_COMPOSER_PX : 0}
-        // A session has its own composer in this corner, and the Desk its own Chat button: there the bubble stands down.
-        bubble={!(panel === 'home' || panel === 'session')}
+        // Chat is in the rail on every page; the bubble is the phone's way in (the rail is a drawer
+        // there), and stands down on a session, whose composer holds this corner.
+        bubble={phone && panel !== 'session'}
       >
         {askOpen && (
           <AskDock
@@ -807,7 +819,7 @@ export function App(): React.ReactElement {
         runPath={runPath}
         // codex on studio#664: the ONE ambient rule — a page outside the project shell that carries
         // `?project=` (Made › Videos) is standing in that project too.
-        projectId={projectId ?? ambientProjectId(pathname, search)}
+        projectId={ambientProject}
         selectedRun={selected}
         onKill={(id) => void onKill(id)}
         object={paletteObject}

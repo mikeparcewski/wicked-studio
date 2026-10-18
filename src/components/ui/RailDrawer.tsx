@@ -16,8 +16,10 @@ const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), selec
  *  - Escape or the scrim closes it (focus back to the menu button); a route change or growing past
  *    767 px closes it (focus to #main); a modal opened from it closes it (focus stays in the modal).
  */
-export function RailDrawer({ pathname, badge, children }: {
+export function RailDrawer({ pathname, badge, children, ambientProject = null }: {
   pathname: string; badge: React.ReactNode; children: React.ReactNode;
+  /** The project on screen (the top bar's New job starts there). */
+  ambientProject?: string | null;
 }): React.ReactElement {
   const phone = usePhone();
   const [open, setOpen] = useState(false);
@@ -81,7 +83,7 @@ export function RailDrawer({ pathname, badge, children }: {
   if (!phone) return <div className="wk-rail-slot">{children}</div>;
   return (
     <>
-      <TopBar menuOpen={open} onMenu={() => setOpen((o) => !o)} badge={badge} toggleRef={toggle} />
+      <TopBar menuOpen={open} onMenu={() => setOpen((o) => !o)} badge={badge} toggleRef={toggle} ambientProject={ambientProject} />
       {open && <div data-testid="rail-drawer-scrim" className="wk-rail-scrim" onClick={() => closeTo('toggle')} aria-hidden />}
       <div
         id="rail-drawer" ref={drawer} data-testid="rail-drawer" data-open={open ? 'true' : 'false'}

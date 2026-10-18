@@ -13,7 +13,7 @@
   "counts": {
     "files": 233,
     "occurrences": 2942,
-    "static": 2549,
+    "static": 2552,
     "dynamic": 69,
     "computed": 24
   },
@@ -2722,13 +2722,6 @@
       ]
     },
     {
-      "testId": "desk-chat",
-      "files": [
-        "src/components/desk/Desk.tsx",
-        "src/components/desk/DeskV2.tsx"
-      ]
-    },
-    {
       "testId": "desk-chore",
       "files": [
         "src/components/desk/Desk.tsx",
@@ -2765,13 +2758,6 @@
     },
     {
       "testId": "desk-chores",
-      "files": [
-        "src/components/desk/Desk.tsx",
-        "src/components/desk/DeskV2.tsx"
-      ]
-    },
-    {
-      "testId": "desk-command",
       "files": [
         "src/components/desk/Desk.tsx",
         "src/components/desk/DeskV2.tsx"
@@ -3020,13 +3006,6 @@
       ]
     },
     {
-      "testId": "desk-new-job",
-      "files": [
-        "src/components/desk/Desk.tsx",
-        "src/components/desk/DeskV2.tsx"
-      ]
-    },
-    {
       "testId": "desk-new-project",
       "files": [
         "src/components/desk/Desk.tsx"
@@ -3093,6 +3072,12 @@
       ]
     },
     {
+      "testId": "desk-rail-actions",
+      "files": [
+        "src/components/desk/SessionRail.tsx"
+      ]
+    },
+    {
       "testId": "desk-rail-badge",
       "files": [
         "src/board/objectActions.ts",
@@ -3101,6 +3086,12 @@
     },
     {
       "testId": "desk-rail-brand",
+      "files": [
+        "src/components/desk/SessionRail.tsx"
+      ]
+    },
+    {
+      "testId": "desk-rail-chat",
       "files": [
         "src/components/desk/SessionRail.tsx"
       ]
@@ -3136,6 +3127,12 @@
       ]
     },
     {
+      "testId": "desk-rail-new-job",
+      "files": [
+        "src/components/desk/SessionRail.tsx"
+      ]
+    },
+    {
       "testId": "desk-rail-new-project",
       "files": [
         "src/components/desk/SessionRail.tsx"
@@ -3151,6 +3148,12 @@
       "testId": "desk-rail-rules",
       "files": [
         "src/board/objectActions.ts"
+      ]
+    },
+    {
+      "testId": "desk-rail-search",
+      "files": [
+        "src/components/desk/SessionRail.tsx"
       ]
     },
     {
@@ -8408,12 +8411,6 @@
       ]
     },
     {
-      "testId": "project-chat",
-      "files": [
-        "src/components/desk/ProjectDesk.tsx"
-      ]
-    },
-    {
       "testId": "project-counts",
       "files": [
         "src/components/everything/ProjectsTab.tsx"
@@ -8655,12 +8652,6 @@
     },
     {
       "testId": "project-meta",
-      "files": [
-        "src/components/desk/ProjectDesk.tsx"
-      ]
-    },
-    {
-      "testId": "project-new-job",
       "files": [
         "src/components/desk/ProjectDesk.tsx"
       ]
@@ -10551,7 +10542,7 @@
       ]
     },
     {
-      "testId": "search-corpus-label",
+      "testId": "search-empty",
       "files": [
         "src/components/CommandPalette.tsx"
       ]
@@ -10563,13 +10554,25 @@
       ]
     },
     {
-      "testId": "search-why",
+      "testId": "search-status",
       "files": [
         "src/components/CommandPalette.tsx"
       ]
     },
     {
-      "testId": "search-why-popover",
+      "testId": "search-tab",
+      "files": [
+        "src/components/CommandPalette.tsx"
+      ]
+    },
+    {
+      "testId": "search-tab-count",
+      "files": [
+        "src/components/CommandPalette.tsx"
+      ]
+    },
+    {
+      "testId": "search-tabs",
       "files": [
         "src/components/CommandPalette.tsx"
       ]
@@ -14626,6 +14629,18 @@
       "testId": "toast-dismiss",
       "files": [
         "src/components/GateNotifications.tsx"
+      ]
+    },
+    {
+      "testId": "topbar-new-job",
+      "files": [
+        "src/components/ui/TopBar.tsx"
+      ]
+    },
+    {
+      "testId": "topbar-search",
+      "files": [
+        "src/components/ui/TopBar.tsx"
       ]
     },
     {

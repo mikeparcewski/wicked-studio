@@ -164,7 +164,7 @@ with sync_playwright() as p:
 
     # ── 4. the Ask dock + a chat-keyed gate answered on the chat's thread ─────────────
     page.goto(f"{origin}/watch", wait_until="networkidle")
-    page.get_by_test_id("ask-launcher").click()
+    page.get_by_test_id("desk-rail-chat").click()
     ask_in = page.get_by_test_id("assist-input")
     ask_in.wait_for(timeout=10000)
     ask_in.fill("which checks guard the deploy?")

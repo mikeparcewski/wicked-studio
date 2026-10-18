@@ -12,6 +12,13 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+### Added
+- **Global search, one modal.** The rail's Search, the phone top bar's Search, and ⌘K / Ctrl+K on any page open the same modal. Two or more letters ask crew's `GET /search` (wicked-crew-api-types 0.127.0). Requests are debounced by 150 ms, and a newer one aborts the one it replaces. Results are tabbed **All · Runs · Projects · Repos · Transcripts · Rules · Memories · Docs**, with a count on each tab. All shows each type's best five and a "See all" row; a tab pages its type with "Load more". Matches are marked in titles and in a snippet line. Enter opens the hit where studio shows it: a run or unit transcript opens its session (its chat when the daemon stamps one), a chat its session, a project its dashboard, a repo its page, a rule the Rules page, a memory the Memory tab filtered to its words (`?q=`), and a document the session that made it. Typed commands still come first, so a page name or `> New job` is one Enter away, and the `>`, `go:`, `p:`, `run:` and `repo:` prefixes work as before. With nothing typed, the modal lists your recent searches (this browser only). It says when nothing matches, when a source is still being read (and asks again), and when a source could not be searched. Against a daemon without `/search`, it matches what studio already holds and says so.
+- **The rail's action row, on every page:** **New job** (labelled), then **Search**, **Chat** and **New project** as icons, each with a name and a tooltip. New job and Chat start in the project on screen, and their names say which.
+
+### Changed
+- **Page headers name the page and keep only that page's own actions.** The Desk header loses its ⌘K bar, Chat and New job; a project's header loses New job and Chat and keeps Documents, Open repository and ⋯. Search, New job and Chat are in the rail on every page, including run pages and settings, which had none. The floating chat bubble is phone-only now (the rail is a drawer there). Testid successors: `desk-command` → `desk-rail-search`, `desk-new-job` / `project-new-job` → `desk-rail-new-job`, `desk-chat` / `project-chat` → `desk-rail-chat`, and the old search-mode label (`search-corpus-label`, `search-why`, `search-why-popover`) → `search-status`.
+
 ## [0.10.2] — 2026-10-18
 
 A patch release: each composer keeps its own helper choice, and a step's message never ends on an empty "Commands run" heading.
