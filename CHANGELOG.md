@@ -12,6 +12,10 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+## [0.11.0] — 2026-10-18
+
+A minor release: global search, New job's lead-agent picker, the run page's one right panel and its team view, and the rail's action row on every page (#842, #844, #847, #848). Contract: wicked-crew-api-types 0.128.0.
+
 ### Added
 - **Global search, one modal.** The rail's Search, the phone top bar's Search, and ⌘K / Ctrl+K on any page open the same modal. Two or more letters ask crew's `GET /search` (wicked-crew-api-types 0.127.0). Requests are debounced by 150 ms, and a newer one aborts the one it replaces. Results are tabbed **All · Runs · Projects · Repos · Transcripts · Rules · Memories · Docs**, with a count on each tab. All shows each type's best five and a "See all" row; a tab pages its type with "Load more". Matches are marked in titles and in a snippet line. Enter opens the hit where studio shows it: a run or unit transcript opens its session (its chat when the daemon stamps one), a chat its session, a project its dashboard, a repo its page, a rule the Rules page, a memory the Memory tab filtered to its words (`?q=`), and a document the session that made it. Typed commands still come first, so a page name or `> New job` is one Enter away, and the `>`, `go:`, `p:`, `run:` and `repo:` prefixes work as before. With nothing typed, the modal lists your recent searches (this browser only). It says when nothing matches, when a source is still being read (and asks again), and when a source could not be searched. Against a daemon without `/search`, it matches what studio already holds and says so.
 - **New job asks who leads.** The options step has a **Lead agent** picker: **Random** (the default; the engine picks when the job starts) or one of the helpers that is on and can take work. The lead does every step not handed to another helper; the others watch and check its work. The review step says who leads, and the launch sends `primary` only for a chosen seat, and only to a daemon that takes it (`GET /health.capabilities.launchPrimary`, crew#1077).
@@ -19,6 +23,7 @@ npm publish dates. Every version listed here exists on
 - **The rail's action row, on every page:** **New job** (labelled), then **Search**, **Chat** and **New project** as icons, each with a name and a tooltip. New job and Chat start in the project on screen, and their names say which.
 
 ### Changed
+- **The wire contract is wicked-crew-api-types 0.128.0 (was 0.120.0).** `LaunchRunBody.primary` (the lead agent, crew#1077) now comes from the contract; studio's own declaration of it is gone.
 - **The container sign-in window no longer says studio never sees your token.** claude's container sign-in now runs `claude setup-token` (wicked-core#1024), and its last step asks you to paste back the token claude prints. The paste goes from studio's terminal to the login container unechoed. The line under the terminal now says that studio never *shows* a password or token, rather than claiming studio never handles one.
 - **Page headers name the page and keep only that page's own actions.** The Desk header loses its ⌘K bar, Chat and New job; a project's header loses New job and Chat and keeps Documents, Open repository and ⋯. Search, New job and Chat are in the rail on every page, including run pages and settings, which had none. The floating chat bubble is phone-only now (the rail is a drawer there). Testid successors: `desk-command` → `desk-rail-search`, `desk-new-job` / `project-new-job` → `desk-rail-new-job`, `desk-chat` / `project-chat` → `desk-rail-chat`, and the old search-mode label (`search-corpus-label`, `search-why`, `search-why-popover`) → `search-status`.
 - **The run page has one right panel, in folding sections.** The Details panel (its one "Run" tab) and the ⋯ "Look underneath" sheet (17 tabs) were two right-side surfaces over the same run. They are one panel now, headed Details, with six sections: Now, Plan and steps, Changes and delivery, Checks and evidence, Agents and spend, and Record. Each old sheet tab is a smaller fold inside one section, and its reads start only when you open it. The section that matters for the run's state opens by default: Plan at a plan gate or while it runs, Changes when it finished or waits on a hand-over, Checks at any other gate, and Now alone (it says why) when it failed. A section with nothing in it yet is one closed line. What you open or close is remembered per run state in this browser. Headers are buttons with `aria-expanded`. The header's ⋯ is gone. A link that asked for a sheet tab (⌘K, a sign-in line, `#governance`) opens the panel at that fold. At a gate, Now has **Go to the question**. Step and helper sheets are unchanged.
@@ -2312,7 +2317,8 @@ The merged interactive layer: wicked-interactive's UI moved into this skin (DES-
   `git subtree split` (92 commits).
 - The SPA as a pure HTTP/WS client of the wicked-crew daemon: runs, gates, live CoreEvents.
 
-[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.10.2...HEAD
+[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.11.0...HEAD
+[0.11.0]: https://github.com/mikeparcewski/wicked-studio/compare/v0.10.2...v0.11.0
 [0.10.2]: https://github.com/mikeparcewski/wicked-studio/compare/v0.10.1...v0.10.2
 [0.10.1]: https://github.com/mikeparcewski/wicked-studio/compare/v0.10.0...v0.10.1
 [0.10.0]: https://github.com/mikeparcewski/wicked-studio/compare/v0.9.6...v0.10.0
