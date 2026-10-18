@@ -152,7 +152,7 @@ function LoginTerminal({ session, open, onOpenError, onClosed }: {
               : `Opening ${name}’s login container… The first sign-in can take a few minutes while it is prepared.`}
           </p>
           <Terminal cwd="." open={open} onOpenError={onOpenError} onExit={onClosed} />
-          <span className="wk-agents-safe">It runs in a disposable container. Studio never sees your password or token; studio’s service keeps the sign-in.</span>
+          <span className="wk-agents-safe">It runs in a disposable container, and studio’s service keeps the sign-in. Studio never shows your password or token: anything you paste here goes to the container unechoed (claude asks you to paste back the token it prints).</span>
         </div>
       </div>
     </div>,
