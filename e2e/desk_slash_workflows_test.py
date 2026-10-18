@@ -335,7 +335,7 @@ with sync_playwright() as p:
     page.evaluate("() => { try { sessionStorage.clear(); } catch (e) {} }")
     from_form = new_job()
     page.goto(f"{origin}/", wait_until="networkidle")
-    page.get_by_test_id("desk-new-job").wait_for(state="visible", timeout=15000)
+    page.get_by_test_id("desk-rail-new-job").wait_for(state="visible", timeout=15000)
     page.evaluate("() => document.activeElement && document.activeElement.blur()")
     from_desk = new_job()
     check("new-job-opens-the-wizard",

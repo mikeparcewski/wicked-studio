@@ -195,7 +195,7 @@ with sync_playwright() as p:
     # `/p/<pid>/chat` no longer redirect — they are dead addresses (not-found, nothing POSTed).
     posts.clear()
     page.goto(f"{ORIGIN}/")
-    page.get_by_test_id("desk-chat").wait_for(timeout=15000)
+    page.get_by_test_id("desk-rail-chat").wait_for(timeout=15000)
     page.wait_for_timeout(600)
     check("new_chat_starts_from_the_desk_chat", not [u for m, u in posts if "/api/v1/chats" in u and m == "POST"],
           posts=[u for m, u in posts if "/api/v1/chats" in u])

@@ -66,7 +66,7 @@ function whereWords(m: MemoryItem, projectName: (id: string) => string | null): 
 type Coverage = { kind: 'loading' } | { kind: 'ok'; value: MemoryCoverage } | { kind: 'unsupported' } | { kind: 'failed'; error: Failure };
 
 export function MemoryPage({ search, navigate, address = (p) => p, project = null }: {
-  /** The page's own query (`?view=proposals`). */
+  /** The page's own query (`?view=proposals`; `?q=` opens it filtered to those words — a search hit). */
   search: string;
   navigate: Navigate;
   /** Where a Memory address lives in the host (the Desk: `/?tab=memory&at=<address>`). */
@@ -82,8 +82,15 @@ export function MemoryPage({ search, navigate, address = (p) => p, project = nul
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Failure | null>(null);
   const [unsupported, setUnsupported] = useState(false);
-  const [query, setQuery] = useState('');
-  const [queryInput, setQueryInput] = useState('');
+  // A search hit (the search modal) opens the page filtered to the memory's words.
+  const [query, setQuery] = useState(() => (new URLSearchParams(search).get('q') ?? '').trim());
+  const [queryInput, setQueryInput] = useState(query);
+  const linkedQuery = (new URLSearchParams(search).get('q') ?? '').trim();
+  useEffect(() => {
+    if (linkedQuery === '') return;
+    setQuery(linkedQuery);
+    setQueryInput(linkedQuery);
+  }, [linkedQuery]);
   const loadGeneration = useRef(0);
   const load = useCallback(async (q: string): Promise<void> => {
     const generation = ++loadGeneration.current;

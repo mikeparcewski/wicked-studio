@@ -1,6 +1,6 @@
 import { scrollBehavior } from '../ui/motion.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { FileText, MessageSquare, Plus } from 'lucide-react';
+import { FileText } from 'lucide-react';
 import { api } from '../../api/client.js';
 import { readErrorKind } from '../../api/errors.js';
 import type { Project, ProjectDetail, ProjectMember, RepoEntry, SessionView } from '../../api/types.js';
@@ -78,7 +78,6 @@ interface Props {
   runsLoaded: boolean;
   runsError?: string | null;
   hosted?: (tab: HostedTab, at: string, project: string | null) => React.ReactNode;
-  onCommand?: () => void;
 }
 
 const NO_MEMBERS: ProjectMember[] = [];
@@ -90,7 +89,7 @@ const NO_MEMBERS: ProjectMember[] = [];
 const UNFILED_PROJECT: Project = { id: 'default', name: 'Not in a project', description: null, status: 'active', scope: '', created_at: 0, updated_at: 0 } as Project;
 
 /** A project's page is the shared Desk with its own runs, header and Work sections. */
-export function ProjectDesk({ projectId, navigate, runs, needRows, now, search, onRetryRuns, runsLoaded, runsError, hosted, onCommand }: Props): React.ReactElement {
+export function ProjectDesk({ projectId, navigate, runs, needRows, now, search, onRetryRuns, runsLoaded, runsError, hosted }: Props): React.ReactElement {
   const { updateProject } = useProjectsStore();
   const [detail, setDetail] = useState<ProjectDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -324,7 +323,7 @@ export function ProjectDesk({ projectId, navigate, runs, needRows, now, search, 
       projectId={projectId} runs={mine} needRows={needRows} now={now} navigate={navigate}
       runActions={(runId, runTitle) => { const m = members.find((x) => x.member_kind === RUN_KIND && x.member_ref === runId); return m === undefined ? [] : [{ id: 'detach', label: `Remove “${runTitle}” from this project`, danger: true, onSelect: () => handleDetach(m.id) }]; }}
       search={search} hosted={hostedForProject} runsLoaded={runsLoaded && membersRead} runsError={runsError ?? null}
-      {...(onRetryRuns !== undefined ? { onRetryRuns } : {})} {...(onCommand !== undefined ? { onCommand } : {})} workExtra={workExtra}
+      {...(onRetryRuns !== undefined ? { onRetryRuns } : {})} workExtra={workExtra}
       projectHead={{ title, meta: <>
         <span data-testid="project-meta">
           {project.status === 'archived' && <><span className="wk-tag">Archived</span>{' '}</>}
@@ -332,8 +331,6 @@ export function ProjectDesk({ projectId, navigate, runs, needRows, now, search, 
         </span>
         {project.description && <span data-testid="project-desc" className="wk-project-desk-desc" title={project.description}>{project.description}</span>}
       </>, actions: <div className="wk-proj-actions" data-testid="project-actions">
-        <button type="button" data-testid="project-new-job" className="wk-btn wk-btn--primary" aria-label="New job in this project" onClick={() => newJob()}><Plus size={14} aria-hidden />New job</button>
-        <button type="button" data-testid="project-chat" className="wk-btn wk-btn--secondary" aria-label="Chat in this project" onClick={chatHere}><MessageSquare size={14} aria-hidden />Chat</button>
         {attachedRepos.length > 0 && <OverflowMenu label="Open a repository this project uses" text="Open repository" tone="secondary" items={attachedRepos.map((u) => ({ id: u.ref, label: u.name, onSelect: () => navigate(`/repo-detail/${encodeURIComponent(u.repo!.id)}`) }))} data-testid="project-open-repo" />}
         <button type="button" data-testid="project-documents" className="wk-btn wk-btn--secondary" onClick={() => scrollTo('project-documents')}><FileText size={14} aria-hidden />Documents</button>
         {!isDefault && <OverflowMenu label={`More actions for ${title}`} items={[

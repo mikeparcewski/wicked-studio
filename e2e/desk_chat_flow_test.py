@@ -104,7 +104,7 @@ with sync_playwright() as p:
 
     # 1. New job offers "Start with chat" first, and it lands on a new chat's page — and an Ask panel
     #    left open (another conversation) closes (codex r1).
-    page.get_by_test_id("desk-chat").click()
+    page.get_by_test_id("desk-rail-chat").click()
     page.get_by_test_id("assist-input").wait_for(state="visible", timeout=8000)
     # The Ask panel covers the Desk's buttons: New job from ⌘K, as an operator in Ask would reach it.
     page.keyboard.press("ControlOrMeta+k")
@@ -160,7 +160,7 @@ with sync_playwright() as p:
 
     # 3. "Don't show this again" lands in the chat flow, now and after a reload.
     page.goto(f"{origin}/", wait_until="networkidle")
-    page.get_by_test_id("desk-new-job").click()
+    page.get_by_test_id("desk-rail-new-job").click()
     page.get_by_test_id("launch-wizard-skip-toggle").click()
     second = landed_on_new_chat(page, "ticked-lands-in-chat")
     stored = None
@@ -171,7 +171,7 @@ with sync_playwright() as p:
         page.wait_for_timeout(100)
     check("ticked-saved", isinstance(stored, dict) and stored.get("startInChat") is True and second != chat_id, stored=stored)
     page.goto(f"{origin}/", wait_until="networkidle")
-    page.get_by_test_id("desk-new-job").click()
+    page.get_by_test_id("desk-rail-new-job").click()
     third = landed_on_new_chat(page, "reload-new-job-is-chat")
     check("each-new-job-is-a-new-chat", third not in (chat_id, second))
     page.screenshot(path=str(SHOTS / "desk-chat-flow-after-reload.png"))
@@ -187,7 +187,7 @@ with sync_playwright() as p:
             break
         page.wait_for_timeout(100)
     page.goto(f"{origin}/", wait_until="networkidle")
-    page.get_by_test_id("desk-new-job").click()
+    page.get_by_test_id("desk-rail-new-job").click()
     page.get_by_test_id("launch-wizard-cards").wait_for(state="visible", timeout=8000)
     check("settings-restores-picker", True)
     ctx.close()
@@ -197,7 +197,7 @@ with sync_playwright() as p:
     page = ctx.new_page()
     page.on("pageerror", lambda e: errors.append(str(e)))
     page.goto(f"{origin}/", wait_until="networkidle")
-    page.get_by_test_id("desk-new-job").click()
+    page.get_by_test_id("topbar-new-job").click()  # the phone's rail is a drawer: New job is the top bar's
     page.get_by_test_id("launch-wizard-start-chat").wait_for(state="visible", timeout=8000)
     page.screenshot(path=str(SHOTS / "desk-chat-flow-newjob-phone.png"))
     page.get_by_test_id("launch-wizard-start-chat").click()

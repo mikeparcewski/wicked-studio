@@ -107,7 +107,8 @@ with sync_playwright() as p:
         page.route("**/api/v1/workflows", lambda r: r.fulfill(status=200, json=WORKFLOWS))
         page.route("**/api/v1/presets*", lambda r: r.fulfill(status=200, json={"presets": []}))
         page.goto(f"{origin}/", wait_until="networkidle")
-        page.get_by_test_id("desk-new-job").click()
+        # The phone's rail is a drawer: New job is the top bar's there.
+        page.get_by_test_id("topbar-new-job" if phone else "desk-rail-new-job").click()
         page.get_by_test_id("launch-wizard-cards").wait_for(state="visible", timeout=8000)
         page.wait_for_function(f"() => document.querySelectorAll('[data-testid^=\"launch-wizard-workflow-\"]').length >= {len(EXPECTED) - 1}", timeout=8000)  # the jobs; Start with chat is the other card
         page.wait_for_timeout(200)

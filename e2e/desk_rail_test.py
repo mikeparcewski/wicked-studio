@@ -74,6 +74,7 @@ RAIL = """() => {
     general: rail.querySelector('[data-testid="desk-rail-general"]')?.innerText ?? null,
     footLabel: rail.querySelector('[data-testid="rail-foot-label"]')?.textContent ?? null,
     healthState: rail.querySelector('[data-testid="rail-health-state"]')?.innerText ?? null,
+    actions: [...rail.querySelectorAll('[data-testid="desk-rail-actions"] button')].map(b => b.dataset.testid),
   };
 }"""
 
@@ -113,7 +114,8 @@ with sync_playwright() as p:
           # The wordmark link's name says the badge (the fixture has gates waiting).
           and badge is not None and r["homeName"] in (f"wicked studio — Desk, {badge} need you", f"wicked studio — Desk, {badge} needs you")
           and all(w not in r["text"] for w in ("Rules", "Everything else", "Product", "Steering", "Evals", "Repositories", "Agents", "General settings", "Configuration", "MCP tools"))
-          and "Skills" in r["text"] and "MCP" in r["text"] and "New project" in r["text"]
+          and "Skills" in r["text"] and "MCP" in r["text"] and "New job" in r["text"]
+          and r["actions"] == ["desk-rail-new-job", "desk-rail-search", "desk-rail-chat", "desk-rail-new-project"]
           and r["general"] == "General"
           and (r["healthState"] or "").strip() in ("· all good", "· needs attention", "· failing")
           and r["footLabel"] == "Workspace",

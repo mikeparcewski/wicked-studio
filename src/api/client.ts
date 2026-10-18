@@ -1,3 +1,4 @@
+import type { SearchResponse, SearchType } from './search.js';
 import type {
   ActivityPage,
   AttachMemberBody,
@@ -153,6 +154,16 @@ export async function downloadRunEvidence(runId: string): Promise<void> {
  * daemon endpoint backed by one core-ts method.
  */
 export const api = {
+  /** Global search (crew `GET /search`, api-types 0.127.0): grouped, ranked hits over every major
+   *  entity. A daemon without the route answers the bare 404 (`isRouteAbsent`). */
+  search: (q: string, opts: { types?: readonly SearchType[]; limit?: number; cursor?: string | null; signal?: AbortSignal } = {}) => {
+    const p = new URLSearchParams({ q });
+    if (opts.types !== undefined && opts.types.length > 0) p.set('types', opts.types.join(','));
+    if (opts.limit !== undefined) p.set('limit', String(opts.limit));
+    if (opts.cursor !== undefined && opts.cursor !== null) p.set('cursor', opts.cursor);
+    return apiFetch<SearchResponse>(`/search?${p.toString()}`, opts.signal !== undefined ? { signal: opts.signal } : undefined);
+  },
+
   /** Run list, actionable-first (daemon-sorted). Reconciles the daemon gate cache.
    *  Archived runs are excluded server-side by default (crew#265); pass `includeArchived`
    *  to get the complete history. */

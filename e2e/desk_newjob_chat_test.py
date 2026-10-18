@@ -67,7 +67,7 @@ with sync_playwright() as p:
 
     # 1. the picker offers it
     page.goto(f"{origin}/", wait_until="networkidle")
-    page.get_by_test_id("desk-new-job").click()
+    page.get_by_test_id("desk-rail-new-job").click()
     page.get_by_test_id("launch-wizard-cards").wait_for(state="visible", timeout=8000)
     skip = page.get_by_test_id("launch-wizard-skip")
     text = skip.inner_text()
@@ -87,7 +87,7 @@ with sync_playwright() as p:
 
     # 3. after a reload, New job is a chat
     page.goto(f"{origin}/", wait_until="networkidle")
-    page.get_by_test_id("desk-new-job").click()
+    page.get_by_test_id("desk-rail-new-job").click()
     try:
         page.get_by_test_id("session-fresh").wait_for(state="visible", timeout=8000)
     except Exception:
@@ -107,7 +107,7 @@ with sync_playwright() as p:
     check("settings-saved-off", isinstance(stored, dict) and stored.get("startInChat") is False
           and stored.get("deliverPr") is False, stored=stored)
     page.goto(f"{origin}/", wait_until="networkidle")
-    page.get_by_test_id("desk-new-job").click()
+    page.get_by_test_id("desk-rail-new-job").click()
     page.get_by_test_id("launch-wizard-cards").wait_for(state="visible", timeout=8000)
     page.screenshot(path=str(SHOTS / "desk-newjob-chat-restored.png"))
     check("settings-restores-picker", True)

@@ -31,14 +31,13 @@ import { DeskStateRows, useDeskStates } from './DeskStateRows.js';
 import { DeskRuleLine } from './DeskRuleLine.js';
 import { openSheet } from '../../store/sheets.js';
 import { NewProjectModal } from '../NewProjectModal.js';
-import { MessageSquare, Plus, Search } from 'lucide-react';
 import { readErrorKind } from '../../api/errors.js';
 import { useSettledNeeds } from '../../hooks/useNeedsRows.js';
 import { useNeedsSources } from '../../store/needsSources.js';
 import { useProjectsStore } from '../../store/projects.js';
 import { useCapabilities } from '../../store/capabilities.js';
+import { Plus } from 'lucide-react';
 import { openLaunchWizard } from '../../store/launchWizard.js';
-import { openAskDock } from '../../store/askDock.js';
 import { everythingPath } from '../../board/everythingModel.js';
 import { sessionIdOf, sessionPath } from '../../board/sessionModel.js';
 import { displaySeats, seatLabel } from '../../board/seatNames.js';
@@ -68,8 +67,8 @@ const STORIES_MAX = 7;
  * THE DESK — concept A, attention-first mission control, with concept B's one sentence as its intro
  * (DES-frontdoor; operator decisions 2026-10-12). The route `/`.
  *
- *  - Header: "Desk", when it was read, the ⌘K command bar, Chat (the Ask dock — a real chat, never a
- *    launch) and New job (the launch wizard). The bottom composer is gone.
+ *  - Header: "Desk" and when it was read. Search, New job and Chat are the rail's action row, on
+ *    every page (operator 2026-10-18). The bottom composer is gone.
  *  - One deterministic sentence (`deskStory`): what started, what waits on you, what runs, what failed.
  *  - The pulse band (`ui/StatTile`, a 7/30/90-day window): jobs started, waiting on you, failed,
  *    delivered, typical job, spend.
@@ -81,7 +80,7 @@ const STORIES_MAX = 7;
  * Render only: the numbers and sentences are `board/deskPulse.ts` over `GET /runs`, the needs fold,
  * and one spend read (`useWindowSpend`).
  */
-export function Desk({ runs: wireRuns, runsLoaded, runsError = null, onRetryRuns, needRows, now, navigate, onCommand }: {
+export function Desk({ runs: wireRuns, runsLoaded, runsError = null, onRetryRuns, needRows, now, navigate }: {
   runs: SessionView[];
   /** Whether the first `GET /runs` has answered (studio#459): before it, the Desk says it is still looking. */
   runsLoaded: boolean;
@@ -91,8 +90,6 @@ export function Desk({ runs: wireRuns, runsLoaded, runsError = null, onRetryRuns
   needRows: NeedRow[];
   now: number;
   navigate: Navigate;
-  /** Opens the ⌘K palette (the command bar is its door). */
-  onCommand?: () => void;
 }): React.ReactElement {
   const roster = useRoster();
   // The run list, with a start time read from the event log for any run the wire left undated.
@@ -252,19 +249,7 @@ export function Desk({ runs: wireRuns, runsLoaded, runsError = null, onRetryRuns
             <h1 className="wk-desk-a-title">Desk</h1>
             <p data-testid="desk-as-of" className="wk-desk-a-when">{readState === 'known' ? `As of ${asOf} · all projects` : readState === 'stale' ? 'As of the last read · all projects' : 'All projects'}</p>
           </div>
-          <button type="button" data-testid="desk-command" className="wk-desk-cmd" onClick={onCommand} aria-label="Search, jump to anything, or start a job (Command K)">
-            <Search size={15} aria-hidden className="wk-desk-cmd-icon" />
-            <span className="wk-desk-cmd-text">Search, jump to anything, or start a job…</span>
-            <kbd className="wk-desk-cmd-kbd">⌘K</kbd>
-          </button>
-          <div className="wk-desk-a-actions">
-            <button type="button" data-testid="desk-chat" className="wk-btn wk-btn--secondary" onClick={() => openAskDock({ fresh: true })}>
-              <MessageSquare size={14} aria-hidden />Chat
-            </button>
-            <button type="button" data-testid="desk-new-job" className="wk-btn wk-btn--primary" onClick={() => openLaunchWizard({ composerKey: 'desk' })}>
-              <Plus size={14} aria-hidden />New job
-            </button>
-          </div>
+          {/* Search, New job and Chat are the rail's action row, on every page. */}
           <div className="wk-desk-a-tools">
           <span className="wk-desk-orders">
             <StandingOrdersPanel />

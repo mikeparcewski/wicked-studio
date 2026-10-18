@@ -6066,6 +6066,22 @@ class W2Handler(SimpleHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(LOGO_TEST_SVG)
             return True
+        # Global search (crew GET /search): `fixture_search` over the fixture's own rows.
+        if path == "/api/v1/search":
+            qs = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            q = (qs.get("q", [""])[0]).strip()
+            if len(q) < 2:
+                self._json(400, {"error": "`q` needs at least 2 characters"})
+                return True
+            types = [t for t in (qs.get("types", [""])[0]).split(",") if t] or list(SEARCH_TYPES)
+            limit = int(qs.get("limit", ["5"])[0] or 5)
+            offset = int(qs.get("cursor", ["0"])[0] or 0)
+            with state_lock:
+                repo_on = state["repo"]
+                findings_on = state["repo_findings"]
+            repos = [repo_entry_wire(findings_on)] if repo_on else []
+            self._json(200, fixture_search(q, types, limit, offset, assemble_runs(), PROJECTS, repos))
+            return True
         if path == "/api/v1/runs":
             with state_lock:
                 runs_delay = state["runs_delay_ms"]
@@ -9536,6 +9552,95 @@ class W2Handler(SimpleHTTPRequestHandler):
                     chat_send_count.pop(chat_id, None)
             return self._json(200, {"ok": True})
         return self._json(404, {"error": f"w2 fixture: no such endpoint {path}"})
+
+
+# ── Global search (crew `GET /search`, api-types 0.127.0): a small, deterministic stand-in ──────────
+# Every word must match (case-insensitive) a title or body; title matches rank first; groups come in
+# the daemon's type order with per-type totals and a cursor. Runs, projects and repos are the
+# fixture's own; one unit transcript, one rule, one memory and one document stand in for the rest.
+SEARCH_TYPES = ["run", "project", "repo", "transcript", "rule", "memory", "doc"]
+SEARCH_EXTRAS = [
+    {"type": "transcript", "id": "unit:r-upload:0", "title": "Add rate-limiting to the upload endpoint · Build",
+     "body": "Added a token bucket limiter to upload.ts: 20 requests a minute per key, 429 past it.",
+     "project_id": "upload-endpoint", "status": "done", "updated_at": NOW0 - 30 * MIN,
+     "target": {"kind": "unit", "run_id": "r-upload", "ord": 0, "chat_id": None}},
+    {"type": "rule", "id": "POL-upload-limits", "title": "Every public upload endpoint is rate limited",
+     "body": "Every public upload endpoint is rate limited. security", "project_id": None, "status": "error",
+     "updated_at": NOW0 - 3 * DAY, "target": {"kind": "rule", "rule_id": "POL-upload-limits", "steering_type": "security"}},
+    {"type": "memory", "id": "mem-bucket", "title": "Uploads over 10 MB stream to the bucket, never the API host",
+     "body": "Uploads over 10 MB stream to the bucket, never the API host", "project_id": "upload-endpoint",
+     "status": "semantic", "updated_at": NOW0 - 2 * DAY, "target": {"kind": "memory", "memory_id": "mem-bucket", "scope": "project:upload-endpoint"}},
+    {"type": "doc", "id": "q3-review-deck/upload-limits-brief", "title": "upload-limits-brief",
+     "body": "upload limits brief doc", "project_id": "q3-review-deck", "status": "doc", "updated_at": NOW0 - DAY,
+     "target": {"kind": "doc", "project_id": "q3-review-deck", "doc": "upload-limits-brief"}},
+]
+
+
+def _spans(text: str, terms: list) -> list:
+    low = text.lower()
+    out = []
+    for t in terms:
+        i = low.find(t)
+        while i != -1:
+            out.append([i, i + len(t)])
+            i = low.find(t, i + len(t))
+    out.sort()
+    merged = []
+    for sp in out:
+        if merged and sp[0] <= merged[-1][1]:
+            merged[-1][1] = max(merged[-1][1], sp[1])
+        else:
+            merged.append(sp)
+    return merged
+
+
+def fixture_search(q: str, types: list, limit: int, offset: int, runs: list, projects: list, repos: list) -> dict:
+    terms = [t for t in q.lower().split() if t][:8]
+    docs = []
+    for v in runs:
+        sess = v["session"]
+        problem = sess.get("problem") or sess["id"]
+        docs.append({"type": "run", "id": sess["id"], "title": problem, "body": problem,
+                     "project_id": None, "status": sess.get("status"), "updated_at": None,
+                     "target": {"kind": "run", "run_id": sess["id"], "chat_id": None}})
+    for p in projects:
+        if p["id"] == "default":
+            continue
+        docs.append({"type": "project", "id": p["id"], "title": p["name"], "body": p.get("description") or "",
+                     "project_id": p["id"], "status": p.get("status"), "updated_at": p.get("updated_at"),
+                     "target": {"kind": "project", "project_id": p["id"]}})
+    for r in repos:
+        docs.append({"type": "repo", "id": r["id"], "title": r["name"], "body": r.get("root_path", ""),
+                     "project_id": None, "status": None, "updated_at": None, "target": {"kind": "repo", "repo_id": r["id"]}})
+    docs += SEARCH_EXTRAS
+    groups = []
+    for ty in SEARCH_TYPES:
+        if ty not in types:
+            continue
+        scored = []
+        for d in (x for x in docs if x["type"] == ty):
+            title, body = d["title"].lower(), d["body"].lower()
+            if not all(t in title or t in body for t in terms):
+                continue
+            score = sum(10 if t in title else 2 for t in terms)
+            scored.append((score, d))
+        scored.sort(key=lambda x: (-x[0], x[1]["id"]))
+        page = scored[offset:offset + limit]
+        if not scored:
+            continue
+        hits = []
+        for score, d in page:
+            snippet = d["body"] if d["body"] and d["body"] != d["title"] else None
+            hits.append({"type": ty, "id": d["id"], "title": d["title"], "title_spans": _spans(d["title"], terms),
+                         "snippet": snippet, "snippet_spans": _spans(snippet, terms) if snippet else [],
+                         "score": score, "updated_at": d["updated_at"], "project_id": d["project_id"],
+                         "status": d["status"], "target": d["target"]})
+        nxt = offset + len(page)
+        groups.append({"type": ty, "total": len(scored), "hits": hits,
+                       "next_cursor": str(nxt) if nxt < len(scored) else None})
+    return {"query": q, "groups": groups,
+            "sources": [{"type": t, "state": "ready", "indexed": 1, "note": None} for t in types],
+            "partial": False, "took_ms": 1}
 
 
 def ensure_build(fail) -> Path:

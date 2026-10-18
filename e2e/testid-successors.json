@@ -885,6 +885,14 @@
     "memory-facets": "memory-meta",
     "memory-retire-confirm-banner": "memory-retire-dialog",
     "memory-retire-one": "memory-actions",
-    "steer-memories": "desk-tab-*"
+    "steer-memories": "desk-tab-*",
+    "desk-chat": "desk-rail-chat",
+    "desk-command": "desk-rail-search",
+    "desk-new-job": "desk-rail-new-job",
+    "project-new-job": "desk-rail-new-job",
+    "project-chat": "desk-rail-chat",
+    "search-corpus-label": "search-status",
+    "search-why": "search-status",
+    "search-why-popover": "search-status"
   }
 }

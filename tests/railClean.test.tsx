@@ -36,6 +36,10 @@ function rail(): ReturnType<typeof render> {
   return render(<SessionRail runs={RUNS} needRows={NEED as never} navigate={() => {}} pathname="/" />);
 }
 const group = (): HTMLElement => screen.getByTestId('rail-group');
+const { useSearchModal } = await import('../src/store/searchModal.js');
+const { useAskDock } = await import('../src/store/askDock.js');
+const { resetLaunchWizard, useLaunchWizard } = await import('../src/store/launchWizard.js');
+const { useProjectsStore } = await import('../src/store/projects.js');
 
 beforeEach(() => { window.localStorage.clear(); settledPhase = 'complete'; });
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
@@ -132,15 +136,47 @@ describe('the top of the rail (operator IA 2026-10-13)', () => {
     expect(screen.queryByTestId('desk-rail-badge')).toBeNull();
   });
 
-  it('"New project" sits where the Desk item was and opens the New project modal outside the rail', () => {
+  it('the action row sits where the Desk item was: New job, Search, Chat, New project — each named', () => {
     rail();
+    const row = screen.getByTestId('desk-rail-actions');
+    expect(row.previousElementSibling).toBe(screen.getByTestId('desk-rail-home'));
+    const ids = [...row.querySelectorAll('button')].map((b) => b.dataset.testid);
+    expect(ids).toEqual(['desk-rail-new-job', 'desk-rail-search', 'desk-rail-chat', 'desk-rail-new-project']);
+    expect(screen.getByTestId('desk-rail-new-job')).toHaveAccessibleName('New job');
+    expect(screen.getByTestId('desk-rail-search')).toHaveAccessibleName('Search');
+    expect(screen.getByTestId('desk-rail-search').title).toMatch(/K\)$/);
+    expect(screen.getByTestId('desk-rail-chat')).toHaveAccessibleName('New chat');
     const btn = screen.getByTestId('desk-rail-new-project');
-    expect(btn.previousElementSibling).toBe(screen.getByTestId('desk-rail-home'));
     expect(btn).toHaveAccessibleName('New project');
     fireEvent.click(btn);
     const modal = screen.getByTestId('new-project-modal');
     expect(screen.getByTestId('session-rail').contains(modal)).toBe(false);
     fireEvent.click(screen.getByTestId('new-project-close'));
     expect(screen.queryByTestId('new-project-modal')).toBeNull();
+  });
+});
+
+describe('the action row works from any page, in the project on screen', () => {
+  it('Search opens the one search modal; New job and Chat start in the project on screen and say so', () => {
+    useProjectsStore.setState({ projects: [{ id: 'p-up', name: 'upload-endpoint', description: null, status: 'active', scope: 'project:p-up', created_at: 1, updated_at: 1 }] });
+    resetLaunchWizard();
+    render(<SessionRail runs={RUNS} needRows={NEED as never} navigate={() => {}} pathname="/projects/p-up" ambientProject="p-up" />);
+    const before = useSearchModal.getState().request?.nonce ?? 0;
+    fireEvent.click(screen.getByTestId('desk-rail-search'));
+    expect(useSearchModal.getState().request).toEqual({ nonce: before + 1, seed: '' });
+    expect(screen.getByTestId('desk-rail-new-job')).toHaveAccessibleName('New job in upload-endpoint');
+    fireEvent.click(screen.getByTestId('desk-rail-new-job'));
+    expect(useLaunchWizard.getState()).toMatchObject({ open: true, draft: { projectId: 'p-up', composerKey: 'desk' } });
+    expect(screen.getByTestId('desk-rail-chat')).toHaveAccessibleName('New chat in upload-endpoint');
+    fireEvent.click(screen.getByTestId('desk-rail-chat'));
+    expect(useAskDock.getState().request).toMatchObject({ projectId: 'p-up', fresh: true });
+  });
+
+  it('the Unfiled bucket is not a project to start in', () => {
+    resetLaunchWizard();
+    render(<SessionRail runs={RUNS} needRows={NEED as never} navigate={() => {}} pathname="/projects/default" ambientProject="default" />);
+    expect(screen.getByTestId('desk-rail-new-job')).toHaveAccessibleName('New job');
+    fireEvent.click(screen.getByTestId('desk-rail-new-job'));
+    expect(useLaunchWizard.getState()).toMatchObject({ open: true, draft: { projectId: null } });
   });
 });

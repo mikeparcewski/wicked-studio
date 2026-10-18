@@ -121,7 +121,7 @@ with sync_playwright() as p:
     page.unroute("**/api/v1/projects/legacy-spike")
     check("unfiled-is-a-project-dashboard", unfiled["desk"] and unfiled["title"] == "Not in a project" and not unfiled["notFound"]
           and unfiled["inbox"] and unfiled["blocks"] and unfiled["tabs"] == real["tabs"] and len(unfiled["tabs"]) >= 6
-          and {"project-new-job", "project-chat", "project-documents"} <= set(unfiled["actions"]), unfiled=unfiled, real=real)
+          and {"project-documents"} <= set(unfiled["actions"]), unfiled=unfiled, real=real)
     page.goto(f"{origin}/projects/default?tab=runs", wait_until="networkidle")
     page.wait_for_timeout(800)
     page.get_by_text("All time", exact=False).first.click()  # r-unfiled carries no start time
