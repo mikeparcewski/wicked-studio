@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '../api/client.js';
 import { useDisplayText } from '../hooks/useHomePath.js';
 import type {
@@ -356,7 +356,18 @@ export function GovernanceAudit({ model }: Props): React.ReactElement {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Each load's generation: an answer that lands after a newer load started, or after unmount, is
+  // dropped (no setState on an unmounted panel — under test load that ran after jsdom's teardown).
+  const gen = useRef(0);
+  const mounted = useRef(false);
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
+
   const load = useCallback(async () => {
+    const mine = ++gen.current;
+    const live = (): boolean => mounted.current && gen.current === mine;
     setLoading(true);
     setError(null);
     try {
@@ -372,9 +383,11 @@ export function GovernanceAudit({ model }: Props): React.ReactElement {
       } catch {
         view = null; // older daemon / transient — the fallback path answers
       }
+      if (!live()) return;
       setAcceptance(view);
       if (view === null) {
         const { claims: all } = await api.listClaims();
+        if (!live()) return;
         // Both scope spellings: the engine's run grammar (`wicked-agent/<id>/…`)
         // and the bare id older writers used.
         setClaims(
@@ -391,9 +404,9 @@ export function GovernanceAudit({ model }: Props): React.ReactElement {
         setClaims([]);
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      if (live()) setError(e instanceof Error ? e.message : String(e));
     } finally {
-      setLoading(false);
+      if (live()) setLoading(false);
     }
   }, [model.session.id]);
 

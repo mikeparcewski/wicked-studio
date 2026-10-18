@@ -45,8 +45,9 @@ import { pageComposerKey } from '../store/composerSeed.js';
  *    A daemon without the route falls back to what studio already holds (runs, projects, repos),
  *    and says so.
  *  - COMMANDS: the verbs (`>`), the GO TO destinations (`go:`), the pointed object's actions, and
- *    the scoped jumps (`p:` / `run:` / `repo:`) stay local and instant, and lead the list, so a
- *    typed page name or verb is still one Enter away.
+ *    the scoped jumps (`p:` / `run:` / `repo:`) stay local and instant. A command whose label holds
+ *    the typed words as written leads the list, so a typed page name or verb is still one Enter
+ *    away; one that matches only as scattered letters follows the real results (#851).
  *
  * Nothing is fetched on open except the repo list, once per session (§1.4); a search fetches only
  * once something is typed.
@@ -202,6 +203,16 @@ const PALETTE_INTENT = 80;
 
 /** A run title's " · ab12cd · #2" tail (runTitle): searchable, not shown. */
 const RUN_ID_SUFFIX = / · [0-9a-z]{4,12} · #\d+$/u;
+
+/**
+ * Whether every typed word reads in `label` as written — a substring, case-insensitive — rather
+ * than only as scattered letters (the fuzzy matcher's subsequence). Exported for the tests.
+ */
+export function readsAsWritten(needle: string, label: string): boolean {
+  const hay = label.toLowerCase();
+  const words = needle.toLowerCase().split(/\s+/).filter((w) => w !== '');
+  return words.length > 0 && words.every((w) => hay.includes(w));
+}
 
 /** Accent the fuzzy-matched characters (§1.5 — the row's only accent). */
 function highlight(label: string, positions: number[]): React.ReactNode {
@@ -632,14 +643,18 @@ export function CommandPalette({
     }
 
     // ── Searching ──
+    // A command leads only when the words read in its label as written (wicked-studio#851): typing
+    // `tiny` must open the tiny-math hit, not "Everything" (whose t…i…n…y only match as scattered
+    // letters). A scattered-letter command is still offered, after the real results.
     const commands = rank(entries.filter((en) => en.group === 'actions' || en.group === 'verbs' || en.group === 'go'));
     const capped: Row[] = [];
+    const scattered: Row[] = [];
     const perGroup = new Map<Group, number>();
     for (const r of commands) {
       const n = perGroup.get(r.en.group) ?? 0;
       if (r.en.group !== 'actions' && n >= COMMANDS_WHILE_SEARCHING) continue;
       perGroup.set(r.en.group, n + 1);
-      capped.push(r);
+      (readsAsWritten(needle, r.en.label) ? capped : scattered).push(r);
     }
     const hitRow = (hit: SearchHit, i: number): Row => ({
       en: { id: `hit-${hit.type}-${hit.id}`, group: `hit-${hit.type}`, label: hit.title, context: hitContext(hit, projectName), href: openAs(hit), rank: i, hit, ...(staleAnswer && tab === 'all' ? { stale: true } : {}) },
@@ -663,11 +678,14 @@ export function CommandPalette({
           out.push({ en: { id: `more-${t}`, group: 'more', label: `See all ${g.total} ${SEARCH_TYPE_WORDS[t].tab.toLowerCase()}`, context: '', action: () => { setTab(t); setSel(0); }, keepOpen: true, rank: 0 }, m: { score: 0, positions: [] } });
         }
       }
-      return out;
+      return [...out, ...scattered];
     }
-    // Before the daemon answers, or without its search: what studio already holds, matched here.
+    // Before the daemon answers, or without its search: what studio already holds, matched here —
+    // the same rule: a contiguous match leads a scattered-letter one.
     const local = rank(entries.filter((en) => en.group === 'runs' || en.group === 'projects' || en.group === 'repos'));
-    return [...capped, ...local];
+    const localAsWritten = local.filter((r) => readsAsWritten(needle, r.en.label));
+    const localScattered = local.filter((r) => !readsAsWritten(needle, r.en.label));
+    return [...capped, ...localAsWritten, ...scattered, ...localScattered];
   }, [runs, projects, repos, gates, attachedAtByRun, goTargets, object, scope, needle, searching, recent, found, tab, runPath, navigate, projectId, selectedRun, onKill, onClose, projectName, openAs, loadTab, daemonAnswers, staleAnswer]);
 
   // Clamp the selection whenever the row set changes.
