@@ -4,7 +4,7 @@ import { test, expect } from '@playwright/test';
  * Regression guard for two defects that shipped together on this page.
  *
  * 1. SKIPPED SECTIONS. `studio.css` gives snap points via a hardcoded selector list
- *    (`.hero, .board, .proj, .work, .ctx, .pair, .get`). A section added to index.astro but not
+ *    (`.hero, .desk, .review, .steer, .reach, .get`). A section added to index.astro but not
  *    to that list gets `scroll-snap-align: none`, and the browser scrolls straight past it. That
  *    is what happened to `.work` and `.ctx`, and it reads to a user as "the snap skips sections".
  *
@@ -145,7 +145,7 @@ test.describe('scroll-snap layout', () => {
       if (atEnd) break;
     }
 
-    for (const section of ['work', 'ctx']) {
+    for (const section of ['desk', 'review', 'steer', 'reach']) {
       expect(
         restedOn,
         `wheel scrolling never came to rest on .${section} — it was scrolled past`,

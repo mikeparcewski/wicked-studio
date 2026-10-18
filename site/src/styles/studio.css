@@ -1,24 +1,8 @@
-/* wicked-studio content styles (ws.wickedagile.com) — THE CODER'S FRONT DOOR.
-   Positioning: studio is the coder-facing skin of the wicked platform's
-   EXPERIENCE plane — the run board for governed agent delivery. Launch a run
-   from a plain-text brief, watch live CoreEvents stream over /ws, answer the
-   human gates that hold it, drive a real terminal into the worker's worktree.
-   A PURE HTTP/WS client of the wicked-crew daemon's /api/v1 — zero crew
-   source imported; the wire contract (wicked-crew-api-types) is the only
-   shared artifact.
-
-   Aesthetic: a coder's console. The site voice is the EXPERIENCE plane's
-   AMBER (--plane-experience in the shared tokens — the same plane its sibling
-   skin, wicked-interactive, fronts), while brand yellow (--accent) stays the
-   energy color: CTAs, ALLOW, the launch button. Signal green = ok rows,
-   terracotta = DENY/holds. Where interactive is a warm paper canvas, studio
-   is dark console panels and monospace-forward — two front doors, one plane.
-
-   The shared wicked-web chrome (Base/Topbar/Footer + tokens.css) owns theming
-   via [data-theme]; the family palette is inherited. Only studio-specific
-   rules live here. Each major section is viewport-sized and the document
-   scroll locks section-to-section (scroll-snap; mobile falls back to natural
-   scroll). */
+/* wicked-studio content styles (ws.wickedagile.com): the IDE for running a team of coding agents.
+   The page is a hook, a working miniature of the Desk (.ide), four short proofs and Get it.
+   Shared chrome (wicked-web Base/Topbar/Footer + tokens.css) owns theming via [data-theme]; only
+   studio rules live here. Amber (--plane-experience) is the plane voice; brand yellow (--accent)
+   marks the things you press. */
 
 body { padding-top: var(--topbar-h); }
 
@@ -45,16 +29,13 @@ body { padding-top: var(--topbar-h); }
    straight past — that is exactly what happened to .work and .ctx, which read as "the snap skips
    sections". Anything added below must join this selector. */
 html { scroll-snap-type: y proximity; scroll-padding-top: var(--topbar-h); }
-.hero, .board, .steer, .proj, .work, .ctx, .reqs, .pair, .get {
+.hero, .desk, .review, .steer, .reach, .get {
   min-height: calc(100svh - var(--topbar-h));
   scroll-snap-align: start;
   display: flex;
   flex-direction: column;
   justify-content: safe center;
 }
-/* Alternating section bands — translucent darkening so the background art
-   shows THROUGH instead of being painted over. */
-.board, .steer, .pair { background: color-mix(in oklab, #000 7%, transparent); }
 /* Reduced motion: snapping moves the viewport for you — the motion the preference asks us to
    suppress. The chrome (wicked-web tokens.css) carries the same rule, but this file re-declares
    `scroll-snap-type` on html at equal specificity later in the cascade, so the guard must live
@@ -64,7 +45,7 @@ html { scroll-snap-type: y proximity; scroll-padding-top: var(--topbar-h); }
 }
 @media (max-width: 768px) {
   html { scroll-snap-type: none; }
-  .hero, .board, .steer, .proj, .work, .ctx, .reqs, .pair, .get { min-height: 0; }
+  .hero, .desk, .review, .steer, .reach, .get { min-height: 0; }
 }
 
 /* ── Studio background — ITS OWN motif: the CODER'S FRONT DOOR ─────────────
@@ -172,259 +153,184 @@ code {
 .sec-sub b { color: var(--ink); }
 .sec-sub a { color: var(--link); }
 
-/* ── Hero ─────────────────────────────────────────────────────────────── */
-/* HEIGHT BUDGET. The hero has to hold a working console AND fit a laptop viewport. Measured at
-   1440x700 it was 970px idle and 999px once the steering gate raised — the gate buttons, which
-   are the whole point of the section, sat ~300px below the fold. The console is the argument
-   ("Below is not a mock — it is the interface"), so the height came out of the type, spacing and
-   copy around it, plus the gate's own stacking. Every vertical value in this block is part of
-   that budget; pinned by tests/e2e/hero-fits.spec.ts. */
-.hero { position: relative; overflow: hidden; padding: clamp(10px, 1.5svh, 26px) 0 clamp(8px, 1.2svh, 20px); }
+/* ── Hero: the hook, then the demo ─────────────────────────────────────── */
+/* HEIGHT BUDGET: the whole hero, demo included, fits a 1440x700 laptop window with slack
+   (tests/e2e/hero-fits.spec.ts). The demo's height is the variable that absorbs it. */
+.hero { position: relative; overflow: hidden; padding: clamp(10px, 1.8svh, 26px) 0 clamp(10px, 1.6svh, 24px); }
 .amber-floor {
   position: absolute; inset: 0; z-index: -1; pointer-events: none;
   background: radial-gradient(ellipse 60% 60% at 82% 8%, color-mix(in oklab, var(--amb) 15%, transparent), transparent 60%);
 }
 .hero-head { text-align: center; }
-/* The headline used to force its break with <br> after "work". The first clause still wrapped on
-   its own, so the hard break bought a THIRD line and left "into your codebase." short: 160px.
-   Dropping the <br> lets `text-wrap: balance` (h1 sets it above) pick the break — two even lines,
-   94px. The <br> also joined "work" and "into" in textContent, since a <br> contributes no text
-   node; a real space is both the correct string and 66px cheaper. */
-.hero-head h1 { font-size: clamp(2rem, 3.9vw, 3rem); margin: 6px 0 0; }
-/* The lede and the small print are both capped at two lines at 1440px. The measure is wider than
-   the 72ch body default on purpose: this is centred display prose, and a third line here costs
-   more than the extra measure does. */
-.lede { margin: 10px auto 0; font-size: clamp(0.94rem, 1.15vw, 1.02rem); line-height: 1.5; color: color-mix(in oklab, var(--ink) 80%, transparent); max-width: 94ch; }
-.lede b { color: var(--ink); font-weight: 700; }
-/* Small print under the lede. The hero has to state real caveats (single-runner fallback, what
-   documents do NOT share) without those caveats costing 200px of hero height. */
-.fine {
-  margin: 8px auto 0; max-width: 104ch;
-  font-size: 0.74rem; line-height: 1.45;
-  color: color-mix(in oklab, var(--ink) 58%, transparent);
-}
-.fine b { color: color-mix(in oklab, var(--ink) 82%, transparent); font-weight: 650; }
-/* Tags and CTAs share one row on a laptop rather than stacking into two — 36px, from 86px.
-   `flex-wrap` keeps the phone behaviour: the tag block shrinks to its chips and the buttons drop
-   to their own line. */
-.hero-foot {
-  margin-top: clamp(9px, 1.3svh, 18px);
-  display: flex; flex-wrap: wrap; align-items: center; justify-content: center;
-  gap: 10px 18px;
-}
-.hero-tags { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
-.hero-tags span {
-  font-family: var(--font-mono); font-size: 0.64rem; letter-spacing: 0.08em; text-transform: uppercase;
-  color: var(--muted); border: 1px solid var(--hairline-strong); border-radius: 999px; padding: 5px 12px;
-}
-/* Hero-only: the rest of the page has room for the full-size button. */
+.hero-head h1 { font-size: clamp(2rem, 3.6vw, 3rem); margin: 0 auto; max-width: 22ch; }
+.lede { margin: 12px auto 0; font-size: clamp(1rem, 1.3vw, 1.14rem); line-height: 1.5; color: color-mix(in oklab, var(--ink) 80%, transparent); max-width: 60ch; }
 
-/* ── The console (the hero visual IS the product) ─────────────────────── */
-.hero-console-wrap { margin-top: clamp(9px, 1.3svh, 18px); }
-.console {
-  border: 1px solid var(--hairline-strong); border-radius: 16px; overflow: hidden;
-  background: color-mix(in oklab, var(--surface-2) 82%, #000 6%);
-  box-shadow: 0 30px 60px -44px rgba(0,0,0,.7);
-}
-.mock-bar { display: flex; align-items: center; gap: 12px; padding: 5px 14px; border-bottom: 1px solid var(--hairline); background: color-mix(in oklab, var(--canvas) 45%, transparent); }
-.mock-dots { display: inline-flex; gap: 6px; flex-shrink: 0; }
-.mock-dots i { width: 10px; height: 10px; border-radius: 50%; background: color-mix(in oklab, var(--ink) 22%, transparent); }
-.mock-url { font-family: var(--font-mono); font-size: 0.66rem; color: color-mix(in oklab, var(--ink) 70%, transparent); border: 1px solid var(--hairline-strong); border-radius: 999px; padding: 3px 12px; background: color-mix(in oklab, var(--canvas) 40%, transparent); flex: 1; text-align: center; }
-
-.console-body { padding: 9px; display: flex; flex-direction: column; gap: 5px; }
-.console-launch { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; border: 1px solid var(--hairline-strong); border-radius: 10px; padding: 6px 14px; background: color-mix(in oklab, var(--canvas) 35%, transparent); }
-.console-launch:focus-within { border-color: color-mix(in oklab, var(--accent) 45%, var(--hairline-strong)); }
-.cl-k { font-family: var(--font-mono); font-size: 0.58rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
-.cl-input { flex: 1; min-width: 180px; font-family: var(--font-mono); font-size: 0.82rem; color: var(--ink); background: transparent; border: none; outline: none; }
-.cl-input::placeholder { color: var(--faint); }
-.cl-go { font-family: var(--font-mono); font-size: 0.72rem; font-weight: 700; color: var(--accent-ink); background: var(--accent); border: none; border-radius: 7px; padding: 6px 13px; cursor: pointer; transition: transform .2s var(--ease); }
-.cl-go:hover { transform: translateY(-1px); }
-
-.console-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; align-items: stretch; }
-.console-feed, .console-gate { display: flex; flex-direction: column; gap: 6px; border: 1px solid var(--hairline-strong); border-radius: 10px; padding: 8px 12px; background: color-mix(in oklab, var(--surface) 60%, transparent); }
-.cf-k, .cg-k { font-family: var(--font-mono); font-size: 0.58rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
-/* The GATE, not the feed, is what sets this row's height — it is the taller of the two once it
-   raises. Keep this clamp at or above the gate's own content height or the Approve/Reject buttons
-   end up inside a scroller, which is the one thing on this page that must never be hidden. */
-.console-feed { height: clamp(92px, 14svh, 128px); overflow-y: auto; }
-.console-gate { overflow-y: auto; }
-.cf-row { font-family: var(--font-mono); font-size: 0.72rem; color: color-mix(in oklab, var(--ink) 74%, transparent); animation: row-in .28s var(--ease) backwards; }
-.cf-row b { color: var(--ink); }
-.cf-row--gate { color: var(--deny); }
-.cf-row--gate b { color: var(--deny); }
-.cf-row--ok { color: var(--ok); }
-.cf-row--ok b { color: var(--ok); }
-@keyframes row-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
-
-/* Verdict badge and panel label on one line. Stacked, the raised gate measured 176px and it —
-   not the feed beside it — is what sets the height of the whole console row. It is 119px now. */
-.cg-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.cg-stamp { font-family: var(--font-mono); font-weight: 700; font-size: 0.8rem; letter-spacing: 0.12em; width: max-content; color: #fff; background: var(--deny); border-radius: 6px; padding: 4px 11px; }
-.console-gate[data-verdict="allow"] .cg-stamp { color: var(--accent-ink); background: var(--accent); }
-.cg-t { font-family: var(--font-mono); font-size: 0.7rem; color: color-mix(in oklab, var(--ink) 70%, transparent); }
-.cg-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; margin-top: 2px; }
-.cg-btn { font-family: var(--font-mono); font-size: 0.68rem; padding: 6px 12px; border-radius: 7px; border: 1px solid var(--hairline-strong); color: color-mix(in oklab, var(--ink) 78%, transparent); background: color-mix(in oklab, var(--surface) 70%, transparent); cursor: pointer; transition: border-color .2s var(--ease), color .2s var(--ease), background .2s var(--ease); }
-.cg-btn:hover { border-color: var(--accent); color: var(--accent); }
-.cg-btn--ok { color: var(--accent-ink); background: var(--accent); border-color: var(--accent); font-weight: 700; }
-.cg-btn--ok:hover { color: var(--accent-ink); background: color-mix(in oklab, var(--accent) 88%, #000 6%); border-color: var(--accent); }
-.cg-btn:disabled { opacity: 0.5; cursor: default; }
-.cg-amend { display: flex; gap: 8px; margin-top: 3px; }
-.cg-amend input {
-  flex: 1; min-width: 0; font-family: var(--font-mono); font-size: 0.72rem; color: var(--ink);
-  background: color-mix(in oklab, var(--canvas) 35%, transparent);
-  border: 1px solid var(--hairline-strong); border-radius: 7px; padding: 5px 10px; outline: none;
-}
-.cg-amend input:focus { border-color: var(--accent); }
-.cg-amend button { flex-shrink: 0; border: none; cursor: pointer; }
-/* The cue rides INSIDE the actions row (JS appends it to .cg-actions), not on a line of its own
-   below it — a row of its own cost 33px of hero height for six words. Sitting beside the buttons
-   it also points at them by adjacency, so it no longer needs the ☝ glyph it used to carry. */
-.cg-cue {
-  width: max-content;
-  font-family: var(--font-mono); font-size: 0.62rem; letter-spacing: 0.03em; font-weight: 700;
-  color: var(--accent-ink); background: var(--accent); border-radius: 999px; padding: 4px 11px;
-  animation: cue-pulse 1.7s var(--ease) infinite;
-}
-@keyframes cue-pulse { 50% { transform: translateX(2px); opacity: .85; } }
-
-.console-term { display: flex; flex-direction: column; gap: 5px; border: 1px solid var(--hairline); border-radius: 10px; padding: 8px 14px; background: color-mix(in oklab, var(--surface-2) 70%, #000 6%); }
-.ct-line { font-family: var(--font-mono); font-size: 0.74rem; color: var(--ink); white-space: nowrap; overflow-x: auto; }
-.ct-p { color: var(--accent); font-weight: 700; margin-right: 8px; }
-.ct-c { color: color-mix(in oklab, var(--ink) 46%, transparent); }
-
-/* the insight rail: interactive chips + one caption line */
-.console-rail {
-  display: flex; align-items: center; gap: 7px; flex-wrap: wrap;
-  border: 1px solid var(--hairline); border-radius: 10px; padding: 6px 14px;
-  background: color-mix(in oklab, var(--surface) 45%, transparent);
-}
-.cr-k { font-family: var(--font-mono); font-size: 0.56rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); margin-right: 3px; }
-.cr-chip {
-  font-family: var(--font-mono); font-size: 0.62rem; letter-spacing: 0.04em;
-  color: color-mix(in oklab, var(--ink) 72%, transparent);
-  border: 1px solid var(--hairline-strong); border-radius: 999px; padding: 3px 10px;
-  background: transparent; cursor: pointer;
-  transition: border-color .2s var(--ease), color .2s var(--ease), background .2s var(--ease);
-}
-.cr-chip:hover { border-color: var(--amb); color: var(--amb); }
-.cr-chip.is-active { color: var(--accent-ink); background: var(--amb); border-color: var(--amb); font-weight: 700; }
-.console-rail-line { margin: 0; padding: 0 4px; font-family: var(--font-mono); font-size: 0.68rem; line-height: 1.5; color: var(--muted); min-height: 1.5em; }
-
-/* ── The run board (panel switcher) ───────────────────────────────────── */
-.board { border-top: 1px solid var(--hairline); padding: clamp(40px, 6svh, 68px) 0; }
-/* Additive sections (steering + governed knowledge; the requirements-graph forward view).
-   They use the .gk-* namespace (duplicating the .ctx-* visuals) and .sec-head, so only the section shell is defined here —
-   and it MUST stay in the snap selector list above or the browser scrolls straight past it. */
-.steer, .reqs { border-top: 1px solid var(--hairline); padding: clamp(40px, 6svh, 68px) 0; }
-.board-layout { display: grid; grid-template-columns: minmax(200px, 280px) minmax(0, 1fr); gap: clamp(14px, 2vw, 26px); align-items: start; }
-.board-list { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.board-item {
-  display: flex; align-items: center; gap: 9px; padding: 11px 13px;
-  border: 1px solid var(--hairline-strong); border-radius: 10px;
-  background: color-mix(in oklab, var(--surface) 55%, transparent);
-  color: var(--ink); cursor: pointer; text-align: left;
-  transition: border-color .2s var(--ease), background .2s var(--ease), transform .2s var(--ease);
-}
-.board-item:hover { border-color: color-mix(in oklab, var(--amb) 55%, var(--hairline-strong)); transform: translateY(-1px); }
-.board-item.is-active { border-color: var(--amb); background: color-mix(in oklab, var(--amb) 12%, transparent); }
-.bi-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--hairline-strong); flex-shrink: 0; transition: background .2s var(--ease), box-shadow .2s var(--ease); }
-.board-item.is-active .bi-dot { background: var(--amb); box-shadow: 0 0 8px -1px var(--amb); }
-.bi-name { font-family: var(--font-mono); font-size: 0.78rem; font-weight: 700; letter-spacing: 0.02em; }
-.board-stage {
+/* ── The IDE demo ──────────────────────────────────────────────────────── */
+.ide {
+  --ide-h: clamp(340px, calc(100svh - 372px), 540px);
+  margin-top: clamp(14px, 2.2svh, 28px);
   border: 1px solid var(--hairline-strong); border-radius: 14px; overflow: hidden;
-  background: color-mix(in oklab, var(--surface-2) 78%, transparent);
-  min-height: 150px; display: flex; flex-direction: column;
+  background: color-mix(in oklab, var(--surface-2) 88%, #000 6%);
+  box-shadow: 0 40px 80px -50px rgba(0,0,0,.8);
+  text-align: left;
 }
-.board-stage-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px 14px; flex-wrap: wrap; padding: 12px 16px; border-bottom: 1px solid var(--hairline); background: color-mix(in oklab, var(--canvas) 45%, transparent); }
-.bs-name { font-family: var(--font-display); font-weight: 900; font-stretch: 110%; font-size: 1.2rem; letter-spacing: -0.01em; color: var(--ink); }
-.bs-api { font-size: 0.72rem; color: color-mix(in oklab, var(--amb) 80%, var(--ink)); background: color-mix(in oklab, var(--amb) 10%, transparent); border-color: color-mix(in oklab, var(--amb) 30%, var(--hairline)); }
-.bs-line { margin: 0; padding: 16px; font-size: 0.94rem; line-height: 1.6; color: color-mix(in oklab, var(--ink) 78%, transparent); }
-.board-status { margin-top: 14px; }
-.board-status-btn {
-  display: inline-flex; align-items: center; gap: 8px;
-  font-family: var(--font-mono); font-size: 0.66rem; letter-spacing: 0.04em;
-  color: var(--muted); background: transparent; border: 1px solid var(--hairline-strong);
-  border-radius: 999px; padding: 6px 14px; cursor: pointer;
-  transition: border-color .2s var(--ease), color .2s var(--ease);
-}
-.board-status-btn:hover { border-color: var(--amb); color: var(--amb); }
-.board-status-btn .bs-ic { font-size: 0.6rem; }
-.board-status-btn.is-playing .bs-ic { color: var(--amb); }
+.ide-bar { display: flex; align-items: center; gap: 16px; padding: 7px 14px; border-bottom: 1px solid var(--hairline); background: color-mix(in oklab, var(--canvas) 50%, transparent); }
+.ide-dots { display: inline-flex; gap: 6px; flex-shrink: 0; }
+.ide-dots i { width: 10px; height: 10px; border-radius: 50%; background: color-mix(in oklab, var(--ink) 22%, transparent); }
+.ide-tabs { display: flex; gap: 4px; flex: 1; min-width: 0; overflow: hidden; }
+.ide-tabs span { font-size: 0.74rem; color: var(--muted); padding: 3px 10px; border-radius: 6px; white-space: nowrap; }
+.ide-tabs span.is-on { color: var(--ink); background: color-mix(in oklab, var(--ink) 9%, transparent); }
+.ide-url { font-family: var(--font-mono); font-size: 0.66rem; color: var(--muted); white-space: nowrap; }
 
-/* ── One project, one feed, two lenses ───────────────────────────────────────────── */
-.proj { border-top: 1px solid var(--hairline); padding: clamp(40px, 6svh, 68px) 0; }
-.proj-card {
-  border: 1px solid var(--hairline-strong); border-radius: 16px; overflow: hidden;
-  background: color-mix(in oklab, var(--surface-2) 82%, #000 6%);
-  box-shadow: 0 30px 60px -44px rgba(0,0,0,.7);
-}
-.proj-bar { display: flex; align-items: center; justify-content: space-between; gap: 10px 16px; flex-wrap: wrap; padding: 12px 16px; border-bottom: 1px solid var(--hairline); background: color-mix(in oklab, var(--canvas) 45%, transparent); }
-.proj-id { font-family: var(--font-mono); font-size: 0.76rem; color: color-mix(in oklab, var(--ink) 74%, transparent); }
-.proj-id b { color: var(--ink); }
-.proj-skins { display: inline-flex; gap: 6px; }
-.proj-skin {
-  font-family: var(--font-mono); font-size: 0.66rem; letter-spacing: 0.03em;
-  color: color-mix(in oklab, var(--ink) 72%, transparent);
-  border: 1px solid var(--hairline-strong); border-radius: 999px; padding: 5px 13px;
-  background: transparent; cursor: pointer;
-  transition: border-color .2s var(--ease), color .2s var(--ease), background .2s var(--ease);
-}
-.proj-skin:hover { border-color: var(--amb); color: var(--amb); }
-.proj-skin.is-active { color: var(--accent-ink); background: var(--amb); border-color: var(--amb); font-weight: 700; }
-.proj-feed { list-style: none; margin: 0; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
-.proj-feed li { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; font-family: var(--font-mono); font-size: 0.74rem; }
-.pf-src { font-size: 0.56rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; border-radius: 999px; padding: 2px 9px; flex-shrink: 0; }
-.pf-src--crew { color: var(--plane-control, #d2a8ff); border: 1px solid color-mix(in oklab, var(--plane-control, #d2a8ff) 45%, transparent); }
-.pf-src--int { color: var(--amb); border: 1px solid color-mix(in oklab, var(--amb) 50%, transparent); }
-.proj-feed code { background: none; border: none; padding: 0; color: var(--ink); font-size: 0.74rem; }
-.pf-note { color: var(--muted); font-size: 0.7rem; }
-/* the lens toggle: both renderings are in the DOM; data-skin picks one */
-.proj-card[data-skin="studio"] .proj-feed--interactive { display: none; }
-.proj-card[data-skin="interactive"] .proj-feed--studio { display: none; }
-/* the two renderings carry their door's flavor */
-.proj-feed--studio { border-left: 3px solid color-mix(in oklab, var(--plane-control, #d2a8ff) 40%, transparent); margin: 12px 16px; padding: 4px 0 4px 14px; }
-.proj-feed--interactive { border-left: 3px solid color-mix(in oklab, var(--amb) 55%, transparent); margin: 12px 16px; padding: 4px 0 4px 14px; }
-.proj-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px 16px; flex-wrap: wrap; padding: 11px 16px; border-top: 1px solid var(--hairline); }
-.proj-call { font-size: 0.68rem; }
-.proj-same { font-family: var(--font-mono); font-size: 0.64rem; color: var(--muted); }
-.proj-same b { color: var(--amb); }
+.ide-body { display: grid; grid-template-columns: 236px minmax(0, 1fr) 300px; height: var(--ide-h); }
 
-.honest-note {
-  margin: clamp(20px, 3svh, 34px) 0 0; font-family: var(--font-mono); font-size: 0.72rem; line-height: 1.6;
-  color: color-mix(in oklab, var(--ink) 62%, transparent); max-width: 74ch;
-  border-left: 2px solid var(--hairline-strong); padding-left: 16px;
+/* rail: your jobs */
+.ide-rail { border-right: 1px solid var(--hairline); padding: 12px; display: flex; flex-direction: column; gap: 10px; min-height: 0; overflow-y: auto; }
+.ide-new { font: inherit; font-size: 0.8rem; font-weight: 700; color: var(--accent-ink); background: var(--accent); border: 0; border-radius: 8px; padding: 8px 12px; cursor: pointer; text-align: left; }
+.ide-rail-k { margin: 4px 2px 0; font-size: 0.72rem; color: var(--muted); display: flex; align-items: center; gap: 8px; }
+.ide-count { display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; font-size: 0.66rem; font-weight: 700; color: var(--accent-ink); background: var(--amb); }
+.ide-count--quiet { color: var(--ink); background: color-mix(in oklab, var(--ink) 14%, transparent); }
+.ide-sessions { display: flex; flex-direction: column; gap: 6px; }
+.ide-sess {
+  font: inherit; text-align: left; cursor: pointer; color: var(--ink);
+  display: grid; grid-template-columns: 10px minmax(0, 1fr); column-gap: 9px; row-gap: 2px; align-items: center;
+  padding: 9px 10px; border-radius: 9px; border: 1px solid transparent; background: transparent;
 }
-.honest-note b { color: var(--ink); }
+.ide-sess:hover { background: color-mix(in oklab, var(--ink) 5%, transparent); }
+.ide-sess.is-on { border-color: var(--hairline-strong); background: color-mix(in oklab, var(--ink) 7%, transparent); }
+.ide-sess-t { font-size: 0.8rem; font-weight: 600; line-height: 1.25; }
+.ide-sess-s { grid-column: 2; font-size: 0.7rem; color: var(--muted); }
+.dot { width: 9px; height: 9px; border-radius: 50%; background: var(--faint); }
+.dot--you { background: var(--amb); box-shadow: 0 0 0 3px color-mix(in oklab, var(--amb) 22%, transparent); }
+.dot--run { background: var(--link); }
+.dot--done { background: var(--ok); }
 
-/* ── The client seam (pairing modes) ──────────────────────────────────── */
-.pair { border-top: 1px solid var(--hairline); padding: clamp(40px, 6svh, 68px) 0; }
-.pair-panel {
-  border: 1px solid var(--hairline-strong); border-radius: 16px; overflow: hidden;
-  background: color-mix(in oklab, var(--surface-2) 82%, #000 6%);
-}
-.pair-modes { display: flex; gap: 6px; padding: 12px 16px; border-bottom: 1px solid var(--hairline); background: color-mix(in oklab, var(--canvas) 45%, transparent); flex-wrap: wrap; }
-.pair-mode {
-  font-family: var(--font-mono); font-size: 0.68rem; letter-spacing: 0.03em;
-  color: color-mix(in oklab, var(--ink) 72%, transparent);
-  border: 1px solid var(--hairline-strong); border-radius: 999px; padding: 6px 14px;
-  background: transparent; cursor: pointer;
-  transition: border-color .2s var(--ease), color .2s var(--ease), background .2s var(--ease);
-}
-.pair-mode:hover { border-color: var(--amb); color: var(--amb); }
-.pair-mode.is-active { color: var(--accent-ink); background: var(--amb); border-color: var(--amb); font-weight: 700; }
-.pair-stage { padding: 16px; }
-.pair-panel[data-mode="bundled"] .pair-stage--standalone { display: none; }
-.pair-panel[data-mode="standalone"] .pair-stage--bundled { display: none; }
-.pair-code { margin: 0; padding: 14px 16px; border: 1px solid var(--hairline); border-radius: 10px; background: color-mix(in oklab, var(--canvas) 40%, transparent); overflow-x: auto; }
-.pair-code code { display: block; background: none; border: none; padding: 0; font-family: var(--font-mono); font-size: 0.78rem; line-height: 1.75; color: var(--ink); white-space: pre; }
-.pair-code .c { color: var(--faint); }
-.pair-note { margin: 12px 0 0; font-size: 0.9rem; line-height: 1.6; color: color-mix(in oklab, var(--ink) 74%, transparent); max-width: 74ch; }
-.pair-proof {
-  display: flex; flex-direction: column; gap: 6px; margin: 0 16px 16px; padding: 13px 16px;
-  border: 1px dashed color-mix(in oklab, var(--amb) 40%, var(--hairline-strong)); border-radius: 10px;
-}
-.pair-proof-k { font-family: var(--font-mono); font-size: 0.58rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--amb); font-weight: 700; }
-.pair-proof-t { font-size: 0.84rem; line-height: 1.6; color: color-mix(in oklab, var(--ink) 74%, transparent); }
+/* main: the run as a chat */
+.ide-main { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.ide-head { display: flex; align-items: center; justify-content: space-between; gap: 8px 14px; flex-wrap: wrap; padding: 10px 16px; border-bottom: 1px solid var(--hairline); }
+.ide-title { font-size: 0.92rem; font-weight: 700; }
+.ide-steps { list-style: none; display: flex; gap: 4px; margin: 0; padding: 0; }
+.ide-steps li { font-size: 0.68rem; color: var(--faint); padding: 2px 8px; border-radius: 999px; border: 1px solid var(--hairline); }
+.ide-steps li.done { color: var(--ok); border-color: color-mix(in oklab, var(--ok) 40%, transparent); }
+.ide-steps li.now { color: var(--accent-ink); background: var(--amb); border-color: var(--amb); font-weight: 700; }
+.ide-thread { flex: 1; min-height: 0; overflow-y: auto; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; scroll-behavior: smooth; }
+.empty { margin: auto; max-width: 34ch; text-align: center; color: var(--muted); font-size: 0.86rem; }
+.empty b { color: var(--ink); }
+.msg { max-width: 86%; font-size: 0.86rem; line-height: 1.45; animation: msg-in .28s var(--ease) backwards; }
+.msg p { margin: 0; }
+.msg--user { align-self: flex-end; background: color-mix(in oklab, var(--accent) 16%, var(--surface)); border: 1px solid color-mix(in oklab, var(--accent) 30%, transparent); border-radius: 14px 14px 4px 14px; padding: 8px 12px; }
+.msg--agent { align-self: flex-start; background: var(--surface); border: 1px solid var(--hairline-strong); border-radius: 14px 14px 14px 4px; padding: 8px 12px; }
+.msg--card { max-width: 92%; }
+.msg--gate { border-color: color-mix(in oklab, var(--amb) 60%, transparent); }
+.msg--ask { border-color: color-mix(in oklab, var(--amb) 60%, transparent); }
+.msg--done { border-color: color-mix(in oklab, var(--ok) 50%, transparent); }
+.msg-who { display: block; font-size: 0.7rem; font-weight: 700; color: var(--amb); margin-bottom: 3px; }
+.msg b { color: var(--ink); }
+.plan { margin: 6px 0 0; padding-left: 20px; font-size: 0.82rem; color: color-mix(in oklab, var(--ink) 86%, transparent); }
+.plan li { margin: 1px 0; }
+.held { margin-top: 6px !important; font-size: 0.74rem; color: var(--amb); font-weight: 600; }
+.acts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.btn-yes, .btn-q { font: inherit; font-size: 0.76rem; border-radius: 7px; padding: 5px 11px; cursor: pointer; }
+.btn-yes { font-weight: 700; color: var(--accent-ink); background: var(--accent); border: 1px solid var(--accent); }
+.btn-q { color: var(--ink); background: transparent; border: 1px solid var(--hairline-strong); }
+.btn-q:hover { border-color: var(--accent); color: var(--accent); }
+.decided { margin-top: 6px !important; font-size: 0.76rem; color: var(--muted); font-style: italic; }
+.note-row { display: flex; gap: 6px; margin-top: 8px; }
+.note-row input { flex: 1; min-width: 0; font: inherit; font-size: 0.78rem; color: var(--ink); background: color-mix(in oklab, var(--canvas) 40%, transparent); border: 1px solid var(--hairline-strong); border-radius: 7px; padding: 5px 9px; }
+.msg-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 7px; }
+.chip { font: inherit; font-size: 0.72rem; color: var(--ink); border: 1px solid var(--hairline-strong); background: transparent; border-radius: 999px; padding: 2px 10px; cursor: pointer; }
+button.chip:hover { border-color: var(--amb); color: var(--amb); }
+.chip--pr { cursor: default; color: var(--ok); border-color: color-mix(in oklab, var(--ok) 45%, transparent); }
+.msg-event { margin: 0; align-self: center; font-size: 0.74rem; color: var(--muted); }
+.msg-working { margin: 0; align-self: flex-start; display: flex; align-items: center; gap: 8px; font-size: 0.78rem; color: var(--muted); }
+.pulse { width: 8px; height: 8px; border-radius: 50%; background: var(--link); animation: pulse 1.2s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: .3; } }
+@keyframes msg-in { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: none; } }
+.ide-composer { display: flex; gap: 8px; padding: 10px 12px; border-top: 1px solid var(--hairline); }
+.ide-composer input { flex: 1; min-width: 0; font: inherit; font-size: 0.84rem; color: var(--ink); background: color-mix(in oklab, var(--canvas) 40%, transparent); border: 1px solid var(--hairline-strong); border-radius: 9px; padding: 8px 12px; outline: none; }
+.ide-composer input:focus { border-color: color-mix(in oklab, var(--accent) 60%, var(--hairline-strong)); }
+.ide-send { font: inherit; font-size: 0.8rem; font-weight: 700; color: var(--accent-ink); background: var(--accent); border: 0; border-radius: 9px; padding: 0 16px; cursor: pointer; }
+
+/* pane: what changed + the receipt */
+.ide-pane { border-left: 1px solid var(--hairline); display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.ide-pane-tabs { display: flex; gap: 4px; padding: 8px 10px; border-bottom: 1px solid var(--hairline); }
+.ide-pane-tabs button { font: inherit; font-size: 0.78rem; color: var(--muted); background: transparent; border: 0; border-radius: 7px; padding: 5px 10px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+.ide-pane-tabs button.is-on { color: var(--ink); background: color-mix(in oklab, var(--ink) 9%, transparent); }
+.ide-pane-body { flex: 1; min-height: 0; overflow-y: auto; padding: 10px; }
+.pane-empty { margin: 8px 4px; font-size: 0.8rem; line-height: 1.5; color: var(--muted); }
+.files { list-style: none; margin: 0 0 8px; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.file { width: 100%; font: inherit; display: flex; justify-content: space-between; gap: 8px; text-align: left; font-family: var(--font-mono); font-size: 0.68rem; color: var(--ink); background: transparent; border: 1px solid transparent; border-radius: 6px; padding: 5px 7px; cursor: pointer; }
+.file span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.file.is-on { border-color: var(--hairline-strong); background: color-mix(in oklab, var(--ink) 6%, transparent); }
+.file .n i { font-style: normal; }
+.a { color: var(--ok); } .d { color: var(--deny); }
+.diff { margin: 0; padding: 8px 0; border: 1px solid var(--hairline); border-radius: 8px; background: color-mix(in oklab, var(--canvas) 50%, transparent); overflow-x: auto; font-family: var(--font-mono); font-size: 0.64rem; line-height: 1.6; }
+.dl { display: block; padding: 0 8px; white-space: pre; }
+.dl--a { color: var(--ok); background: color-mix(in oklab, var(--ok) 10%, transparent); }
+.dl--d { color: var(--deny); background: color-mix(in oklab, var(--deny) 10%, transparent); }
+.dl--c { color: var(--muted); }
+.rc { width: 100%; border-collapse: collapse; font-size: 0.78rem; }
+.rc th { text-align: left; font-weight: 500; color: var(--muted); padding: 6px 8px 6px 2px; white-space: nowrap; vertical-align: top; }
+.rc td { padding: 6px 2px; color: var(--ink); border-bottom: 1px solid var(--hairline); }
+.rc th { border-bottom: 1px solid var(--hairline); }
+.ok { display: inline-block; font-size: 0.66rem; color: var(--ok); border: 1px solid color-mix(in oklab, var(--ok) 40%, transparent); border-radius: 999px; padding: 0 7px; margin-left: 4px; }
+
+/* ── Proof sections: shared shell ──────────────────────────────────────── */
+.desk, .review, .steer, .reach { border-top: 1px solid var(--hairline); padding: clamp(44px, 7svh, 80px) 0; }
+.desk, .steer { background: color-mix(in oklab, #000 7%, transparent); }
+h3 { font-size: 1.05rem; line-height: 1.25; font-stretch: 110%; letter-spacing: -0.01em; }
+
+/* the Desk */
+.tab-grid { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.tab-tile { display: flex; flex-direction: column; gap: 4px; padding: 14px 16px; border: 1px solid var(--hairline-strong); border-radius: 12px; background: color-mix(in oklab, var(--surface-2) 70%, transparent); }
+.tab-tile b { font-size: 0.98rem; }
+.tab-tile span { font-size: 0.88rem; line-height: 1.45; color: color-mix(in oklab, var(--ink) 76%, transparent); }
+.extras { list-style: none; margin: 16px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.extras li { font-size: 0.8rem; color: var(--muted); border: 1px solid var(--hairline-strong); border-radius: 999px; padding: 4px 12px; }
+
+/* review + receipt */
+.review-grid { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: clamp(24px, 4vw, 56px); align-items: center; }
+.flow { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0; }
+.flow li { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 14px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--hairline); }
+.flow li:first-child { border-top: 1px solid var(--hairline); }
+.flow-who { font-size: 0.78rem; font-weight: 700; text-align: center; padding: 4px 0; border-radius: 999px; border: 1px solid var(--hairline-strong); }
+.flow-who--you { color: var(--accent-ink); background: var(--accent); border-color: var(--accent); }
+.flow-what { font-size: 0.94rem; color: color-mix(in oklab, var(--ink) 84%, transparent); }
+.facts { list-style: none; margin: 18px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.facts li { font-size: 0.88rem; line-height: 1.5; color: color-mix(in oklab, var(--ink) 72%, transparent); padding-left: 16px; position: relative; }
+.facts li::before { content: ''; position: absolute; left: 0; top: 0.6em; width: 6px; height: 6px; border-radius: 50%; background: var(--amb); }
+.facts b { color: var(--ink); }
+.receipt { margin: 0; border: 1px solid var(--hairline-strong); border-radius: 14px; overflow: hidden; background: color-mix(in oklab, var(--surface-2) 85%, #000 6%); }
+.receipt figcaption { font-family: var(--font-mono); font-size: 0.7rem; color: var(--muted); padding: 10px 16px; border-bottom: 1px solid var(--hairline); background: color-mix(in oklab, var(--canvas) 45%, transparent); }
+.receipt table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+.receipt th { text-align: left; font-weight: 500; color: var(--muted); padding: 10px 12px 10px 16px; white-space: nowrap; vertical-align: top; width: 1%; }
+.receipt td { padding: 10px 16px 10px 0; color: var(--ink); }
+.receipt tr + tr th, .receipt tr + tr td { border-top: 1px solid var(--hairline); }
+.receipt-foot { margin: 0; padding: 10px 16px 14px; font-size: 0.8rem; color: var(--muted); border-top: 1px solid var(--hairline); }
+
+/* rules / memory / knowledge */
+.trio { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.trio-card { display: flex; flex-direction: column; gap: 8px; padding: 18px; border: 1px solid var(--hairline-strong); border-radius: 12px; background: color-mix(in oklab, var(--surface-2) 70%, transparent); }
+.trio-card p { margin: 0; font-size: 0.92rem; line-height: 1.5; color: color-mix(in oklab, var(--ink) 80%, transparent); }
+.trio-where { margin-top: auto; font-size: 0.76rem; color: var(--amb); }
+
+/* agents + projects */
+.reach-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.reach-card { display: flex; flex-direction: column; gap: 12px; padding: 20px; border: 1px solid var(--hairline-strong); border-radius: 12px; background: color-mix(in oklab, var(--surface-2) 70%, transparent); }
+.reach-card p { margin: 0; font-size: 0.92rem; line-height: 1.5; color: color-mix(in oklab, var(--ink) 80%, transparent); }
+.agent-chips { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.agent-chips li { font-size: 0.84rem; font-weight: 600; padding: 5px 12px; border-radius: 999px; border: 1px solid color-mix(in oklab, var(--amb) 45%, var(--hairline-strong)); }
+.hits { border-collapse: collapse; font-size: 0.86rem; width: 100%; }
+.hits caption { text-align: left; font-size: 0.8rem; color: var(--muted); padding-bottom: 6px; }
+.hits th { text-align: left; font-weight: 600; font-family: var(--font-mono); font-size: 0.8rem; padding: 6px 0; }
+.hits td { padding: 6px 0 6px 12px; color: color-mix(in oklab, var(--ink) 76%, transparent); }
+.hits tr { border-top: 1px solid var(--hairline); }
+.reach-limit { font-size: 0.82rem !important; color: var(--muted) !important; }
+
+/* get it */
+.needs { list-style: none; margin: 16px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.needs li { font-size: 0.9rem; color: color-mix(in oklab, var(--ink) 74%, transparent); padding-left: 16px; position: relative; }
+.needs li::before { content: ''; position: absolute; left: 0; top: 0.6em; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
 
 /* ── Get it / finale ──────────────────────────────────────────────────── */
 .get { border-top: 1px solid var(--hairline); padding: clamp(40px, 6svh, 68px) 0; }
@@ -460,121 +366,42 @@ code {
 .gh-pill span { font-family: var(--font-mono); font-size: 0.82rem; letter-spacing: 0.04em; }
 
 /* ── Responsive ───────────────────────────────────────────────────────── */
+@media (max-width: 1100px) {
+  .ide-body { grid-template-columns: 200px minmax(0, 1fr) 250px; }
+  .ide-tabs span:nth-child(n+4) { display: none; }
+}
 @media (max-width: 940px) {
-  .get-grid { grid-template-columns: 1fr; }
-  .lede, .get-intro p { max-width: none; }
-  .console-cols { grid-template-columns: 1fr; }
-  .board-layout { grid-template-columns: 1fr; }
-  .board-list { grid-template-columns: repeat(4, 1fr); }
+  .get-grid, .review-grid, .reach-grid { grid-template-columns: 1fr; }
+  .tab-grid, .trio { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  /* The demo stacks: jobs become a row of tabs, the chat keeps a fixed height, and the side panel
+     drops below it. */
+  .ide-body { grid-template-columns: 1fr; height: auto; }
+  .ide-rail { border-right: 0; border-bottom: 1px solid var(--hairline); flex-direction: row; align-items: center; overflow-x: auto; overflow-y: hidden; padding: 8px 10px; }
+  .ide-new, .ide-rail-k { flex-shrink: 0; margin: 0; }
+  .ide-sessions { flex-direction: row; }
+  .ide-sess { flex-shrink: 0; width: 196px; }
+  .ide-main { height: 440px; }
+  .ide-pane { border-left: 0; border-top: 1px solid var(--hairline); max-height: 300px; }
+  .ide-tabs { display: none; }
+  .ide-bar { justify-content: space-between; }
 }
-@media (max-width: 640px) {
-  .board-list { grid-template-columns: repeat(2, 1fr); }
-}
-
-/* ── Phone DENSITY (<=600px) ──────────────────────────────────────────────
-   The live console is a desktop affordance — on a phone we hide it and show
-   the static launch → watch → steer story instead. Board tiles compress. */
 @media (max-width: 600px) {
-  .console { display: none; }
-  .console-static { display: block; }
-  .lede { max-width: none; }
-  .board-item { padding: 9px 11px; }
-  .bi-name { font-size: 0.7rem; }
-  .proj-feed li { font-size: 0.68rem; }
-  .pair-code code { font-size: 0.68rem; }
+  .tab-grid, .trio { grid-template-columns: 1fr; }
+  .ide-rail-k { display: none; }
+  .ide-url { white-space: normal; text-align: right; }
+  .ide-head { padding: 8px 12px; }
+  .ide-steps li { padding: 2px 6px; font-size: 0.62rem; }
+  .ide-thread { padding: 12px; }
+  .msg, .msg--card { max-width: 94%; }
+  .ide-main { height: 470px; }
 }
-/* Phone-native static console: hidden on desktop (min-width guard so the
-   ≤600px display:block above wins on phones). */
-@media (min-width: 601px) { .console-static { display: none; } }
 
-.console-static {
-  border: 1px solid var(--hairline-strong); border-radius: 14px; overflow: hidden;
-  background: color-mix(in oklab, var(--surface-2) 82%, #000 6%); padding: 16px;
-}
-.cs-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 14px; }
-.cs-steps li { display: flex; gap: 12px; align-items: flex-start; font-size: 0.88rem; line-height: 1.55; color: color-mix(in oklab, var(--ink) 78%, transparent); }
-.cs-steps b { color: var(--ink); }
-.cs-n {
-  flex-shrink: 0; width: 24px; height: 24px; display: grid; place-items: center;
-  font-family: var(--font-mono); font-size: 0.7rem; font-weight: 700;
-  color: var(--accent-ink); background: var(--amb); border-radius: 50%;
-}
-.cs-chip { display: inline-block; margin-top: 4px; font-family: var(--font-mono); font-size: 0.62rem; color: var(--deny); border: 1px solid color-mix(in oklab, var(--deny) 45%, transparent); border-radius: 999px; padding: 2px 9px; }
-
-/* ── Reduced motion: keep every state, drop the animation ─────────────── */
+/* ── Reduced motion: every state, no animation ────────────────────────── */
 @media (prefers-reduced-motion: reduce) {
-  .cf-row { animation: none; }
-  .cg-cue { animation: none; }
-  .btn, .cg-btn, .cl-go, .board-item, .gh-pill { transition: none; }
-  .btn-primary:hover, .cl-go:hover, .board-item:hover, .gh-pill:hover { transform: none; }
+  .msg { animation: none; }
+  .pulse { animation: none; }
+  .ide-thread { scroll-behavior: auto; }
+  .gh-pill { transition: none; }
+  .gh-pill:hover { transform: none; }
   html { scroll-behavior: auto; }
-}
-
-/* ── A project is a context: one graph over all its repos (crew 0.7.0) ───────
-   Same hairline-separated band as .proj / .pair, so the section reads as part
-   of the page rather than an appendix. Three cards, the last one carrying the
-   LIMIT — given the accent border because "co-located is not linked" is the
-   sentence a reader most needs to leave with, not a footnote. */
-.ctx {
-  border-top: 1px solid var(--hairline);
-  /* vh first, svh second: a browser without `svh` drops the SECOND declaration and keeps the
-     first, where a bare `svh` shorthand would be dropped entirely and collapse the band's
-     vertical rhythm. The rest of this file still uses `svh` bare (7 sites) — same latent issue,
-     tracked separately rather than swept into a docs PR. */
-  padding: clamp(40px, 6vh, 68px) 0;
-  padding: clamp(40px, 6svh, 68px) 0;
-}
-/* .gk-* is the shared card namespace for the additive sections (.steer, .reqs). It carries the
-   SAME visuals as .ctx-* but its own class names, so the e2e locators that target `.ctx-card--limit`
-   / `.ctx-foot` / `.work-*` globally never collide with these sections. */
-.ctx-grid, .gk-grid {
-  display: grid; gap: 14px; margin-top: 28px;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-}
-.ctx-card, .gk-card {
-  border: 1px solid var(--hairline-strong); border-radius: 14px; padding: 18px 18px 16px;
-  background: color-mix(in oklab, var(--surface-2) 82%, #000 6%);
-}
-.ctx-card--limit, .gk-card--limit { border-color: color-mix(in oklab, var(--accent) 42%, var(--hairline-strong)); }
-.ctx-k, .gk-k {
-  display: block; font-family: var(--font-mono); font-size: 0.7rem; letter-spacing: 0.04em;
-  text-transform: lowercase; color: var(--amb); margin-bottom: 8px;
-}
-.ctx-card--limit .ctx-k, .gk-card--limit .gk-k { color: var(--accent); }
-.ctx-p, .gk-p { margin: 0; font-size: 0.94rem; line-height: 1.62; color: color-mix(in oklab, var(--ink) 86%, transparent); }
-.ctx-p code, .ctx-foot code, .gk-p code, .gk-foot code { font-family: var(--font-mono); font-size: 0.86em; }
-.ctx-foot, .gk-foot {
-  margin: 22px 0 0; font-size: 0.88rem; line-height: 1.6;
-  color: color-mix(in oklab, var(--ink) 68%, transparent);
-}
-
-/* ── Four kinds of product work (one of them gated) ──────────────────────────
-   The gated card gets the accent border because the scope boundary is the most
-   load-bearing fact on the page: three of these four share the project, not the
-   check, and a reader who misses that leaves believing their deck was governed. */
-.work { border-top: 1px solid var(--hairline); padding: clamp(40px, 6vh, 68px) 0; padding: clamp(40px, 6svh, 68px) 0; }
-.work-grid {
-  display: grid; gap: 14px; margin-top: 28px;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-}
-.work-card {
-  border: 1px solid var(--hairline-strong); border-radius: 14px; padding: 18px;
-  background: color-mix(in oklab, var(--surface-2) 82%, #000 6%);
-  display: flex; flex-direction: column; gap: 8px;
-}
-.work-card--gated { border-color: color-mix(in oklab, var(--accent) 46%, var(--hairline-strong)); }
-.work-k {
-  font-family: var(--font-mono); font-size: 0.68rem; letter-spacing: 0.04em;
-  color: var(--amb); text-transform: lowercase;
-}
-.work-card--gated .work-k { color: var(--accent); }
-.work-card h3 { margin: 0; font-size: 1.02rem; line-height: 1.3; }
-.work-card p { margin: 0; font-size: 0.9rem; line-height: 1.58; color: color-mix(in oklab, var(--ink) 84%, transparent); }
-.work-n {
-  margin-top: auto !important; padding-top: 8px; font-family: var(--font-mono);
-  font-size: 0.68rem; color: color-mix(in oklab, var(--ink) 55%, transparent) !important;
-}
-.work-foot {
-  margin: 22px 0 0; font-size: 0.9rem; line-height: 1.62;
-  color: color-mix(in oklab, var(--ink) 74%, transparent);
 }

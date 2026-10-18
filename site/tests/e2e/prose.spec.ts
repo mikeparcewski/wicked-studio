@@ -20,22 +20,19 @@ test('prose does not fuse words into the following bold or code span', async ({ 
   const body = (await page.locator('body').innerText()).replace(/\s+/g, ' ');
 
   const mustRead = [
-    'returns 8 hits',
-    'project are bound to it',
-    'spanning Rust and TypeScript',
-    'edges do not resolve',
-    'bounded at ten minutes each',
-    // The W5 truth pass: a project is a scope on the one Desk shell, not its own shell
-    // ("In studio a project is a <b>scope, not a separate shell</b>: …").
-    'a project is a scope, not a separate shell',
+    'launch it with reduced assurance, labelled everywhere',
+    'need QE acceptance before they ship',
+    'Studio is a pure client of crew’s /api/v1 and /ws',
+    'the published contract, wicked-crew-api-types',
+    'kept by wicked-estate',
   ];
 
   for (const phrase of mustRead) {
     expect(body, `"${phrase}" lost the space before its inline span`).toContain(phrase);
   }
 
-  // And the specific fused forms must never appear.
-  for (const fused of ['returns8', 'arebound', 'spanningRust', 'donot', 'minuteseach']) {
+  // And the fused forms must never appear.
+  for (const fused of ['withreduced', 'needQE', 'crew’s/api', 'contract,wicked', 'bywicked']) {
     expect(body, `found the fused form "${fused}"`).not.toContain(fused);
   }
 });

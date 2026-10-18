@@ -2,39 +2,32 @@ import { test, expect } from '@playwright/test';
 import { bringIntoView } from './utils';
 
 /**
- * prefers-reduced-motion: the page must load with zero pageerror events and
- * every key section visible. The console renders its run fully and instantly
- * (no 700ms streaming), ending at the gate; the board does not auto-cycle.
+ * prefers-reduced-motion: no pageerror, every section visible, and the demo skips its timing:
+ * it reaches the plan at once and each decision lands its outcome at once.
  */
 test.use({ contextOptions: { reducedMotion: 'reduce' } });
 
 test.describe('reduced motion', () => {
-  test('page loads clean and every key section renders', async ({ page }) => {
+  test('page loads clean and the demo runs without waiting', async ({ page }) => {
     const errors: string[] = [];
     page.on('pageerror', (e) => errors.push(e.message));
 
     await page.goto('/');
     await expect(page.locator('.hero h1')).toBeVisible();
 
-    // The console's reduced path renders the whole run at once — all 7 rows
-    // and the gate, with no waiting on the stream.
-    const console_ = page.locator('[data-console]');
-    await bringIntoView(console_);
-    await expect(console_.locator('[data-console-gate]')).toBeVisible();
-    await expect(console_.locator('.cf-row')).toHaveCount(7);
+    const ide = page.locator('[data-ide]');
+    await expect(ide.getByRole('button', { name: 'Approve plan' })).toBeVisible();
+    await ide.getByRole('button', { name: 'Approve plan' }).click();
+    await ide.getByRole('button', { name: 'Send back' }).click();
+    // No timers under reduced motion: the outcome is already there.
+    await expect(ide.locator('.msg--done')).toContainText('Pull request #12 is open.', { timeout: 1_000 });
+    await expect(ide.locator('[data-working]')).toHaveCount(0);
 
-    // Every key section is present and visible.
-    for (const sel of ['[data-board]', '[data-proj]', '[data-pair]', '.same-garden', '.install--primary']) {
+    for (const sel of ['.desk', '.review', '.steer', '.reach', '.same-garden', '.install--primary']) {
       const loc = page.locator(sel);
       await bringIntoView(loc);
       await expect(loc).toBeVisible();
     }
-
-    // The board stays put (no auto-cycle under reduced motion): the stage
-    // still answers a click.
-    await page.locator('[data-board]').getByRole('tab', { name: 'repositories' }).click();
-    await expect(page.locator('[data-bs-name]')).toHaveText('repositories');
-
     expect(errors).toEqual([]);
   });
 });

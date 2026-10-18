@@ -2,9 +2,8 @@ import { test, expect, devices } from '@playwright/test';
 import { bringIntoView } from './utils';
 
 /**
- * Phone-native fallbacks (≤600px): the live console is a desktop affordance —
- * a phone gets the static launch → watch → steer story (.console-static)
- * instead, and the page never scrolls horizontally.
+ * Phones (390x844): the demo is the same working demo, stacked. Jobs become a row of tabs, the
+ * chat keeps its height, the side panel drops below it, and the page never scrolls sideways.
  */
 // iPhone 12 geometry/UA only — the full descriptor carries
 // defaultBrowserType: 'webkit', which would switch away from the cached Chromium.
@@ -18,17 +17,16 @@ test.use({
 });
 
 test.describe('mobile (390×844)', () => {
-  test('the static console fallback replaces the live console', async ({ page }) => {
+  test('the demo works on a phone', async ({ page }) => {
     await page.goto('/');
-
-    // Live console hidden, static launch → watch → steer story shown.
-    await expect(page.locator('[data-console]')).toBeHidden();
-    const staticConsole = page.locator('.console-static');
-    await expect(staticConsole).toBeVisible();
-    await expect(staticConsole.locator('.cs-steps li')).toHaveCount(3);
-    await expect(staticConsole).toContainText('Start');
-    await expect(staticConsole).toContainText('Decide');
-    await expect(staticConsole).toContainText('FAIL');
+    const ide = page.locator('[data-ide]');
+    await bringIntoView(ide);
+    await expect(ide).toBeVisible();
+    await ide.getByRole('button', { name: 'Approve plan' }).click({ timeout: 10_000 });
+    await ide.getByRole('button', { name: 'Send back' }).click({ timeout: 10_000 });
+    await expect(ide.locator('.msg--done')).toContainText('Pull request #12 is open.', { timeout: 15_000 });
+    await expect(ide.locator('.ide-pane')).toBeVisible();
+    await expect(ide.locator('.files .file')).toHaveCount(3);
   });
 
   test('no horizontal overflow anywhere on the page', async ({ page }) => {
@@ -39,27 +37,15 @@ test.describe('mobile (390×844)', () => {
     expect(overflow).toBeLessThanOrEqual(0);
   });
 
-  test('the projects card, seam panel, and four-plane map render on a phone', async ({ page }) => {
+  test('the proof sections and the four-plane map render on a phone', async ({ page }) => {
     await page.goto('/');
-
-    // One project, one feed: the lens toggle still works with touch targets.
-    const card = page.locator('[data-proj]');
-    await bringIntoView(card);
-    await expect(card).toBeVisible();
-    await card.getByRole('tab', { name: /centred on the document/ }).click();
-    await expect(card).toHaveAttribute('data-skin', 'interactive');
-
-    // The seam panel keeps both modes reachable.
-    const pair = page.locator('[data-pair]');
-    await bringIntoView(pair);
-    await expect(pair).toBeVisible();
-    await pair.getByRole('tab', { name: /standalone/ }).click();
-    await expect(pair).toHaveAttribute('data-mode', 'standalone');
-
-    // SameGarden is CSS-only and degrades — all four planes visible.
+    for (const sel of ['.tab-grid', '.receipt', '.trio', '.hits', '.install--primary']) {
+      const loc = page.locator(sel);
+      await bringIntoView(loc);
+      await expect(loc).toBeVisible();
+    }
     const map = page.locator('.same-garden');
     await bringIntoView(map);
-    await expect(map).toBeVisible();
     await expect(map.locator('.sg-plane')).toHaveCount(4);
     await expect(map.locator('.sg-card--here')).toBeVisible();
   });
