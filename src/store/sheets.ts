@@ -17,7 +17,27 @@ interface SheetsStore {
 
 export const useSheets = create<SheetsStore>(() => ({ open: null, pointed: null, stopping: {} }));
 
+/**
+ * The run page holds a session's look-underneath content in its one panel (src/board/runPanelModel.ts): while it is
+ * mounted, a session sheet asked for that session (or one of its runs) opens the panel at the same content instead.
+ */
+export interface SessionSheetHost {
+  owns: (sessionId: string) => boolean;
+  open: (sessionId: string, tab: string | undefined) => void;
+}
+let sessionHost: SessionSheetHost | null = null;
+
+/** Claim the session sheet's opens for a mounted page; the returned function releases the claim. */
+export function claimSessionSheet(host: SessionSheetHost): () => void {
+  sessionHost = host;
+  return () => { if (sessionHost === host) sessionHost = null; };
+}
+
 export function openSheet(ref: ObjectRef, tab?: string): void {
+  if (ref.kind === 'session' && sessionHost !== null && sessionHost.owns(ref.sessionId)) {
+    sessionHost.open(ref.sessionId, tab);
+    return;
+  }
   const tabs = SHEET_TABS[ref.kind];
   const t = tab !== undefined && tabs.some((x) => x.id === tab) ? tab : tabs[0]!.id;
   useSheets.setState({ open: { ref, tab: t } });

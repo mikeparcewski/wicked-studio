@@ -156,14 +156,15 @@ describe('HostPanel', () => {
   it('wide: Run, the plugin tabs dot-marked, and × removes the group', () => {
     wide(false);
     render(<HostPanel runTab={<p>run body</p>} ribbon={<span>ribbon</span>} />);
-    expect(screen.getAllByTestId('host-panel-tab').map((t) => t.dataset['tab'])).toEqual(['run']);
+    // The run's details alone are no choice of tabs: no strip until a plugin's options join them.
+    expect(screen.queryAllByTestId('host-panel-tab')).toHaveLength(0);
     act(() => { useHostPanel.getState().openGroup(group(SURF)); });
     const tabs = screen.getAllByTestId('host-panel-tab');
     expect(tabs.map((t) => `${t.dataset['group']}:${t.dataset['tab']}`)).toEqual(['run:run', 'plugin:parts', 'plugin:look']);
     // A v1 group mounts no options frame: its plugin tab says it opens full screen.
     expect(screen.getByTestId('host-panel-v1')).toBeTruthy();
     fireEvent.click(screen.getByTestId('host-panel-close'));
-    expect(screen.getAllByTestId('host-panel-tab')).toHaveLength(1);
+    expect(screen.queryAllByTestId('host-panel-tab')).toHaveLength(0);
     expect(screen.getByText('run body')).toBeTruthy();
   });
   it('a protocol-1 pane-only plugin (no full screen) gets its pane as the Options frame, not a dead end (codex fu r4)', () => {
@@ -227,11 +228,13 @@ describe('composer bridge (ev2-ports follow-ups)', () => {
     expect(chips).toContain('ch:d/c2');
     expect(chips).toContain('Enter the bill');
   });
-  it('the panel does not say Run twice: no heading without a plugin group', () => {
+  it('without a plugin group the panel is headed Details, with no one-tab strip (one name for one panel)', () => {
     wide(false);
     render(<HostPanel runTab={<p>run body</p>} ribbon={<span>r</span>} />);
-    expect(screen.getByTestId('host-panel').querySelector('.wk-hpanel-heading')).toBeNull();
-    expect(screen.getAllByTestId('host-panel-tab').map((t) => t.textContent)).toEqual(['Run']);
+    expect(screen.getByTestId('host-panel-heading')).toHaveTextContent('Details');
+    expect(screen.queryAllByTestId('host-panel-tab')).toHaveLength(0);
+    act(() => { useHostPanel.getState().openGroup(group(SURF)); });
+    expect(screen.getAllByTestId('host-panel-tab')[0]).toHaveTextContent('Details');
   });
 });
 

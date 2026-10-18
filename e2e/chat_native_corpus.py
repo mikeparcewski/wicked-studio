@@ -1,12 +1,13 @@
 """chat_native_corpus.py — the run-page-as-chat corpus (switch `chat_native`, e2e/desk_chat_native_test.py).
 
-Five sessions the chat-native run page is judged on, every field on the REAL crew wire:
+Six sessions the chat-native run page is judged on, every field on the REAL crew wire:
 
   r-cn-bug   a finished Bug run (bugfix: understand → build → test → review → deliver), PR #12 opened,
              QE acceptance PASS; each unit's captured output served on GET /runs/:id/units/:key/output.
   r-cn-plan  a run waiting at its plan approval (gateKind plan_approval; the PA's proposal on /team).
   r-cn-live  a run in progress: research done (its output served), build executing.
   chat-cn-qa a plain chat Q&A (a live transcript: two operator turns, two replies with markdown + code).
+  r-cn-fail  a run that failed: research done, its build step rejected (the run panel's failed state).
   r-cn-old   an old run opened fresh: finished 12 days ago, archived, launched from a chat crew has since
              reclaimed (`chat-cn-gone`: scope null, no messages) — its conversation is rebuilt from the run.
 
@@ -42,6 +43,8 @@ def _run(rid: str, status: str, problem: str, created_s: int, *, ended_s: int | 
 BUG_PROBLEM = "Checkout charges customers twice when they double-click Pay. Find the cause and fix it."
 PLAN_PROBLEM = "Add rate limiting to the public upload endpoint so one client can't flood it."
 LIVE_PROBLEM = "Add a CSV export button to the orders page."
+FAIL_PROBLEM = "Move the nightly report job off the old cron host."
+FAIL_DENIAL = "the build step could not reach the scheduler API: 403 from scheduler.internal (the run's token has no write scope)"
 OLD_PROBLEM = "Rename the invoice fields to match the new billing API (amount_due, due_on)."
 
 OUTPUTS = {
@@ -69,6 +72,9 @@ OUTPUTS = {
         "## What I found\n\nThe orders page already loads every row it shows through `useOrders()`, so the "
         "export can reuse that query. There is no CSV helper in the codebase yet; `papaparse` is already a "
         "dependency of the reports page.\n\nI'll add an **Export CSV** button beside the filters."),
+    ("r-cn-fail", "understand"): (
+        "The nightly report runs from `cron/report.sh` on the old host. The scheduler API can run it as a job; "
+        "the run needs a token with write scope to create one."),
     ("r-cn-old", "understand"): (
         "Found 14 uses of `total` and `due_date` across the invoice module and two report templates."),
     ("r-cn-old", "build"): (
@@ -121,6 +127,11 @@ def corpus(now0: int) -> dict:
         _unit("r-cn-live", "review", 3, "review", "evaluator", "pending", "codex", "review"),
         _unit("r-cn-live", "deliver", 4, "build", "neutral", "pending", None, "deliver"),
     ])
+    fail = _run("r-cn-fail", "failed", FAIL_PROBLEM, t - 50 * 60, ended_s=t - 38 * 60, unit_ix=2, units=[
+        _unit("r-cn-fail", "understand", 1, "recon", "neutral", "done", "claude", "understand — the report job"),
+        dict(_unit("r-cn-fail", "build", 2, "build", "creator", "rejected", "claude", "build — move the job"), denial_reason=FAIL_DENIAL),
+        _unit("r-cn-fail", "review", 3, "review", "evaluator", "pending", "codex", "review"),
+    ])
     old = _run("r-cn-old", "completed", OLD_PROBLEM, t - 12 * 86400, ended_s=t - 12 * 86400 + 1500, unit_ix=4,
                chat="chat-cn-gone", units=[
         _unit("r-cn-old", "understand", 1, "recon", "neutral", "done", "claude", "understand"),
@@ -129,7 +140,7 @@ def corpus(now0: int) -> dict:
         _unit("r-cn-old", "deliver", 4, "build", "neutral", "done", None, "deliver"),
     ], delivery="delivered", deliverUrl="https://github.com/acme/billing/pull/7", run_branch="wicked/r-cn-old",
         archived_at=t - 5 * 86400)
-    return {"runs": [bug, plan, live, old]}
+    return {"runs": [bug, plan, live, fail, old]}
 
 
 def _team(rid: str, rows: list, units: list | None = None) -> dict:
@@ -165,6 +176,15 @@ def _events(rid: str, now0: int) -> list:
             {"type": "unitDone", "session": rid, "ord": 3, "ts": t0 + 21 * MIN, "seq": 4},
             {"type": "unitDone", "session": rid, "ord": 4, "ts": t0 + 25 * MIN, "seq": 5},
             {"type": "sessionCompleted", "session": rid, "ts": t0 + 25 * MIN, "seq": 6},
+        ]
+    if rid == "r-cn-fail":
+        t0 = now0 - 50 * MIN
+        return [
+            {"type": "sessionStarted", "session": rid, "ts": t0, "seq": 1},
+            {"type": "unitDone", "session": rid, "ord": 1, "ts": t0 + 5 * MIN, "seq": 2},
+            {"type": "unitDispatched", "session": rid, "ord": 2, "attempt": 0, "cli": "claude", "ts": t0 + 5 * MIN + 2000, "seq": 3},
+            {"type": "stepFailed", "session": rid, "ord": 2, "attempt": 0, "detail": FAIL_DENIAL, "ts": t0 + 12 * MIN, "seq": 4},
+            {"type": "sessionFailed", "session": rid, "error": FAIL_DENIAL, "ts": t0 + 12 * MIN, "seq": 5},
         ]
     if rid == "r-cn-live":
         t0 = now0 - 9 * MIN

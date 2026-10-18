@@ -58,8 +58,9 @@ export function HostPanel({ runTab, ribbon, toggledByPage = false }: HostPanelPr
       )}
     <aside id="run-details-panel" data-testid={collapsed ? undefined : 'host-panel'} hidden={collapsed} data-narrow={narrow ? 'true' : 'false'} aria-label="Run and options" className={`wk-hpanel${narrow ? ' wk-hpanel--overlay' : ''}`}>
       <div className="wk-hpanel-head">
-        {/* Without a group the tab already says Run: no second "Run" above it. */}
-        {group !== null && <span className="wk-hpanel-heading">{`${group.editor.title} options`}</span>}
+        {/* Without a group the panel is the run's details alone: its heading says so, and there is no one-tab strip. */}
+        {group !== null ? <span className="wk-hpanel-heading">{`${group.editor.title} options`}</span>
+          : runTab !== undefined && <span data-testid="host-panel-heading" className="wk-hpanel-heading">Details</span>}
         <span className="wk-hpanel-gap" />
         {group !== null && (
           <button type="button" data-testid="host-panel-close" aria-label={`Close ${group.editor.title} options`} className="wk-host-btn" onClick={closeGroup}>×</button>
@@ -78,11 +79,13 @@ export function HostPanel({ runTab, ribbon, toggledByPage = false }: HostPanelPr
 }
 
 function PanelTabs({ group, tab, setTab, withRun }: { group: OptionsGroup | null; tab: PanelTab; setTab: (t: PanelTab) => void; withRun: boolean }): React.ReactElement {
-  const items: { tab: PanelTab; label: string; owner: string; id: string }[] = withRun ? [{ tab: RUN_TAB, label: 'Run', owner: 'run', id: 'run' }] : [];
+  const items: { tab: PanelTab; label: string; owner: string; id: string }[] = withRun ? [{ tab: RUN_TAB, label: 'Details', owner: 'run', id: 'run' }] : [];
   if (group !== null) {
     for (const t of group.surfaces.options?.tabs ?? []) items.push({ tab: { owner: 'plugin', id: t.id }, label: t.label, owner: 'plugin', id: t.id });
     for (const h of hostTabsFor(group.adapter)) items.push({ tab: { owner: 'host', id: h.id }, label: h.label, owner: 'host', id: h.id });
   }
+  // One tab is no choice: the strip shows only beside a plugin's options.
+  if (items.length < 2) return <></>;
   return (
     <div role="tablist" aria-label="Panel" className="wk-hpanel-tabs">
       {items.map((it) => {

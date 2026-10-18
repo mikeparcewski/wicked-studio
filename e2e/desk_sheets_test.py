@@ -26,7 +26,7 @@ import os
 import sys
 import urllib.request
 
-from uxfix_fixture import HIDE_GATE_TOASTS, REPO, ensure_build, set_fixture, start_server, OPEN_RUN_DETAILS
+from uxfix_fixture import HIDE_GATE_TOASTS, REPO, ensure_build, open_run_panel_item, set_fixture, start_server, OPEN_RUN_DETAILS
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4356"))
 W, H = 1440, 700
@@ -119,21 +119,20 @@ with sync_playwright() as p:
           and page.get_by_test_id("sheet").count() == 0 and studio.startswith("wicked-crew "),
           tabs=desk_tabs, primary=primary, studio=studio[:120])
 
-    # ── 2. a session's sheet: the run's sections as tabs ───────────────────────────
+    # ── 2. a session's look-underneath: on its own page, the run panel's folds (no sheet over the run) ─────
     page.goto(f"{origin}/s/run:a1", wait_until="networkidle")
     page.get_by_test_id("session").wait_for(state="visible", timeout=15000)
-    page.get_by_test_id("session-sheet-open").click()
-    page.get_by_test_id("sheet").wait_for(state="visible", timeout=5000)
-    s_tabs = tabs()
-    sheet_tab(page, "governance")
-    page.get_by_test_id("sheet-section").wait_for(state="visible", timeout=5000)
-    section = page.get_by_test_id("sheet-section").get_attribute("data-section")
-    sheet_tab(page, "helpers")
-    helpers = page.get_by_test_id("sheet-helper-open").count()
+    gov = open_run_panel_item(page, "governance")
+    gov.get_by_test_id("sheet-section").wait_for(state="visible", timeout=5000)
+    section = gov.get_by_test_id("sheet-section").get_attribute("data-section")
+    s_items = page.locator('[data-testid="host-panel"] [data-testid="run-panel-item"]').evaluate_all("els => els.map(e => e.dataset.item)")
+    helpers_fold = open_run_panel_item(page, "helpers")
+    helpers = helpers_fold.get_by_test_id("sheet-helper-open").count()
     page.screenshot(path=str(SHOTS / "desk-sheets-session.png"))
-    page.get_by_test_id("sheet-close").click()
-    check("session-sheet", all(t in s_tabs for t in ("goal", "helpers", "activity", "signins", "whatwhere", "governance", "steering"))
-          and section == "governance" and helpers >= 1, tabs=s_tabs, section=section, helpers=helpers)
+    check("session-sheet", all(t in s_items for t in ("goal", "helpers", "activity", "signins", "whatwhere", "governance", "steering"))
+          and section == "governance" and helpers >= 1 and page.get_by_test_id("sheet").count() == 0,
+          items=s_items, section=section, helpers=helpers)
+    page.get_by_test_id("session-details-toggle").click()
 
     # ── 3. a step's sheet ──────────────────────────────────────────────────────────
     step = page.get_by_test_id("chain-step-open").first

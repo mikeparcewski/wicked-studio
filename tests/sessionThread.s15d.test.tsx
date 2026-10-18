@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
@@ -20,6 +20,7 @@ const { RAW_CONTROLS, SHEET_TABS } = await import('../src/board/objectActions.js
 const { closeSheet, useSheets } = await import('../src/store/sheets.js');
 const { setCachedRoster } = await import('../src/store/rosterCache.js');
 const { useCapabilities } = await import('../src/store/capabilities.js');
+const { resetRunPanel, useRunPanel } = await import('../src/store/runPanel.js');
 const { makeUnit, makeView } = await import('./factories.js');
 
 const RUN = makeView({ id: 'r1', status: 'executing', problem: 'fix the double charge', unit_ix: 1, created_at: 1_700_000_000 } as never, [
@@ -38,6 +39,7 @@ const NEW = makeView({ id: 'r-new', status: 'executing', problem: 'fix the doubl
 ]);
 
 beforeEach(() => {
+  resetRunPanel();
   evidence.mockClear();
   useCapabilities.setState({ loaded: true, runChatId: true });
   useSheets.setState({ open: null, pointed: null, stopping: {} });
@@ -61,15 +63,15 @@ function page() {
 }
 
 describe('the run block stays in the thread', () => {
-  it('offers no run page; its ⋯ opens the session sheet on the steps', () => {
+  it('offers no run page; its ⋯ opens the run panel on the steps (the page’s one right panel, no sheet)', () => {
     page();
     expect(screen.queryByTestId('session-run-open')).toBeNull();
     expect(screen.queryByText(/Open the run page/)).toBeNull();
     fireEvent.click(screen.getByTestId('session-run-look'));
-    const open = useSheets.getState().open;
-    expect(open?.ref).toStrictEqual({ kind: 'session', sessionId: 'run:r1' });
-    expect(open?.tab).toBe('steps');
-    expect(screen.getByTestId('sheet-body').getAttribute('data-tab')).toBe('steps');
+    expect(useSheets.getState().open).toBeNull();
+    expect(useRunPanel.getState().focus).toMatchObject({ section: 'plan', item: 'steps' });
+    const panel = screen.getByTestId('host-panel');
+    expect(within(panel).getAllByTestId('sheet-step-row')).toHaveLength(3);
   });
 });
 
@@ -84,13 +86,13 @@ describe('in a chat with two runs, each block opens its own run', () => {
     const blocks = await screen.findAllByTestId('session-run');
     expect(blocks.map((b) => b.getAttribute('data-run-id'))).toStrictEqual(['r-old', 'r-new']);
     fireEvent.click(blocks[0]!.querySelector('[data-testid="session-run-look"]') as HTMLElement);
-    expect(useSheets.getState().open?.ref).toStrictEqual({ kind: 'session', sessionId: 'run:r-old' });
-    expect(screen.getByTestId('sheet-title').textContent).toBe('rename the invoice fields');
-    expect(screen.getAllByTestId('sheet-step-row').map((r) => r.textContent)).toStrictEqual(['Build — done · claude']);
-    act(() => closeSheet());
+    expect(useSheets.getState().open).toBeNull();
+    // The panel shows THAT run (its picker moves to it) at its steps.
+    expect(screen.getByTestId('run-tab')).toHaveAttribute('data-run-id', 'r-old');
+    expect(within(screen.getByTestId('host-panel')).getAllByTestId('sheet-step-row').map((r) => r.textContent)).toStrictEqual(['Build — done · claude']);
     fireEvent.click(blocks[1]!.querySelector('[data-testid="session-run-look"]') as HTMLElement);
-    expect(useSheets.getState().open?.ref).toStrictEqual({ kind: 'session', sessionId: 'run:r-new' });
-    expect(screen.getAllByTestId('sheet-step-row').map((r) => r.textContent)).toStrictEqual(['Research — working · codex', 'Build — not started']);
+    expect(screen.getByTestId('run-tab')).toHaveAttribute('data-run-id', 'r-new');
+    expect(within(screen.getByTestId('host-panel')).getAllByTestId('sheet-step-row').map((r) => r.textContent)).toStrictEqual(['Research — working · codex', 'Build — not started']);
   });
 });
 

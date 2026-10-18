@@ -18,6 +18,7 @@ const { useAskThreadStore } = await import('../src/store/askThread.js');
 const { useTeamPlanStore } = await import('../src/store/teamPlan.js');
 const { useGateStore } = await import('../src/store/gates.js');
 const { useSheets } = await import('../src/store/sheets.js');
+const { useRunPanel } = await import('../src/store/runPanel.js');
 const { makeUnit, makeView } = await import('./factories.js');
 const { setCachedRoster } = await import('../src/store/rosterCache.js');
 
@@ -141,7 +142,7 @@ describe('one thread, one voice', () => {
 });
 
 describe('the absent reviewer, a re-pick, the one-seat refusal, the end', () => {
-  it('no reviewer on a one-seat roster offers Sign in, which opens the session sheet on Sign-ins; a re-pick and a refusal read as problems; the end is said', async () => {
+  it('no reviewer on a one-seat roster offers Sign in, which opens the run panel on Sign-ins; a re-pick and a refusal read as problems; the end is said', async () => {
     const none = row('member.joined', { by: 'engine', ord: 1, attempt: 0, member_id: 'm1', open_seq: 1, seat: null, role: 'monitor', status: 'failed', reason: 'team plan monitors=1', error: 'no seat distinct from the PA' }, T0 + 300);
     const repicked = row('path.repicked', { from: 'claude', to: 'codex', reason: 'timed_out', selection: 'random', pick_seq: 1, ord: 1, attempt: 0 }, T0 + 700);
     const refused = row('plan.refused', { proposal_id: 'p-2', base_rev: 1, reason: 'NoEligibleSeat: no seat distinct from the creator seat' }, T0 + 1300);
@@ -158,7 +159,9 @@ describe('the absent reviewer, a re-pick, the one-seat refusal, the end', () => 
     ]);
     expect(screen.getAllByTestId('ask-line')[2]!.getAttribute('data-tone')).toBe('problem');
     fireEvent.click(screen.getAllByTestId('ask-line-signin')[0]!);
-    expect(useSheets.getState().open).toStrictEqual({ ref: { kind: 'session', sessionId: 'chat-ask' }, tab: 'signins' });
+    // The session's runs are on this page, so its Sign-ins open in the run panel (no sheet over it).
+    expect(useSheets.getState().open).toBeNull();
+    expect(useRunPanel.getState().focus).toMatchObject({ section: 'agents', item: 'signins' });
   });
 });
 

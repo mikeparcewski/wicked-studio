@@ -893,6 +893,9 @@
     "project-chat": "desk-rail-chat",
     "search-corpus-label": "search-status",
     "search-why": "search-status",
-    "search-why-popover": "search-status"
+    "search-why-popover": "search-status",
+    "session-sheet-open": "session-details-toggle",
+    "run-tab-look": "run-panel-item-toggle",
+    "run-tab-phase-count": "run-panel-summary"
   }
 }

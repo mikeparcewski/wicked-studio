@@ -15,6 +15,15 @@ import { setCachedRoster } from '../src/store/rosterCache.js';
 import { useHostPanel } from '../src/editors/hostApi.js';
 import { makeUnit, makeView } from './factories.js';
 import { SinceYouLeft } from '../src/components/session/SinceYouLeft.js';
+import { resetRunPanel, useRunPanel } from '../src/store/runPanel.js';
+import { openSheet } from '../src/store/sheets.js';
+import { RUN_PANEL_KEY } from '../src/board/runPanelModel.js';
+
+/** Open one of the run panel's sections (Now and the state's own section start open). */
+function openSection(id: string): void {
+  const t = within(screen.getByTestId('host-panel')).getAllByTestId('run-panel-toggle').find((x) => x.dataset['section'] === id)!;
+  if (t.getAttribute('aria-expanded') !== 'true') fireEvent.click(t);
+}
 
 const ROSTER = [
   { key: 'claude', display_name: 'Claude Code', binary: 'claude', enabled_for_council: true },
@@ -31,6 +40,8 @@ function live(status = 'awaiting_human', over: Record<string, unknown> = {}): Se
 const REVIEW_GATE: OpenGate = { runId: 'r1', ord: 1, prompt: 'Does the change hold?', lifecycle: 'open', receivedAt: 1, gateKind: 'review' };
 
 beforeEach(() => {
+  localStorage.removeItem(RUN_PANEL_KEY);
+  resetRunPanel();
   setCachedRoster(ROSTER as never);
   useSheets.setState({ open: null, stopping: {} } as never);
   useRunEventStore.setState({ byRun: { r1: [] } });
@@ -80,11 +91,18 @@ describe('where today’s features go (one row each)', () => {
     expect(useSheets.getState().stopping['r1']).toBeDefined();
   });
 
-  it('Look underneath (sheet) → the Run tab’s “Look underneath”; the header’s ⋯ stays', () => {
+  it('Look underneath (the ⋯ sheet) → the same panel: no ⋯ in the header, and a sheet asked for this session opens the panel there', () => {
     page([live()]);
-    expect(screen.getByTestId('session-sheet-open')).toBeTruthy();
-    fireEvent.click(within(panel()).getByTestId('run-tab-look'));
-    expect(useSheets.getState().open).toMatchObject({ ref: { kind: 'session', sessionId: 'run:r1' } });
+    expect(screen.queryByTestId('session-sheet-open')).toBeNull();
+    act(() => { openSheet({ kind: 'session', sessionId: 'run:r1' }, 'evidence'); });
+    expect(useSheets.getState().open).toBeNull();
+    expect(useRunPanel.getState().focus).toMatchObject({ section: 'checks', item: 'evidence' });
+    const checks = within(panel()).getAllByTestId('run-panel-section').find((s) => s.dataset['section'] === 'checks')!;
+    expect(checks).toHaveAttribute('data-open', 'true');
+    expect(within(checks).getByTestId('sheet-evidence')).toBeTruthy();
+    // Another session's sheet is still a sheet.
+    act(() => { openSheet({ kind: 'session', sessionId: 'run:elsewhere' }, 'steps'); });
+    expect(useSheets.getState().open).toMatchObject({ ref: { kind: 'session', sessionId: 'run:elsewhere' } });
   });
 
   it('ChainLine (phases) → the Run tab’s Phases; the per-step detail stays inline in the run’s block', () => {
@@ -133,10 +151,13 @@ describe('where today’s features go (one row each)', () => {
     expect(within(panel()).getByTestId('run-tab-orphaned')).toBeTruthy();
   });
 
-  it('RunAssuranceLabel, acceptance → the Run tab’s “Checks and spend”', () => {
+  it('RunAssuranceLabel, acceptance → “Checks and evidence”; spend → “Agents and spend” (its header says it closed)', () => {
     page([live('executing', { cost_usd: 1.39 })]);
-    const checks = within(panel()).getByTestId('run-tab-checks');
-    expect(within(checks).getByTestId('run-tab-spend')).toHaveTextContent('$1.39');
+    expect(within(panel()).getByTestId('run-tab-checks')).toBeTruthy();
+    const agents = within(panel()).getAllByTestId('run-panel-section').find((s) => s.dataset['section'] === 'agents')!;
+    expect(within(agents).getByTestId('run-panel-summary')).toHaveTextContent('$1.39');
+    openSection('agents');
+    expect(within(agents).getByTestId('run-tab-spend')).toHaveTextContent('$1.39');
   });
 
   it('RunQuestions → an inline question card from the asking seat', () => {

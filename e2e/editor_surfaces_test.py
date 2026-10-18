@@ -140,7 +140,8 @@ with sync_playwright() as p:
                 page.wait_for_timeout(400)
                 page.screenshot(path=str(SHOTS / f"editor-surfaces-{args.bundle}-options-{t['id']}-{theme}.png"))
             panel.get_by_test_id("host-panel-close").click()
-            check(f"{theme}-options-closed", panel.get_by_test_id("host-panel-tab").count() == 1)
+            # Back to the run's details alone: one panel, no one-tab strip.
+            check(f"{theme}-options-closed", panel.get_by_test_id("host-panel-tab").count() == 0)
 
         # ── full screen: the nav collapses, modes, the chat drawer, Esc returns ──
         if "full" in decl:
