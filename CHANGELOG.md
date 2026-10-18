@@ -12,6 +12,19 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+## [0.11.1] — 2026-10-18
+
+A patch release: the run panel's team lines, ⌘K ranking, and two follow-ups from 0.11.0 (#852).
+
+### Fixed
+- **The run panel's watcher line counts like with like (#850, #852).** It reads "1 monitor per step · 2 seats watched", never "2 of 1 monitor"; a seat that watched any step reads as watching even if it was refused on its own step.
+- **"Done by other helpers" credits a team step to the member that did it (#851, #852).** The lead's review re-claim no longer takes the step over.
+- **⌘K ranks a command by the words you typed (#852).** A command whose label holds the typed words as written still leads; one that matches only as scattered letters follows the real results, so "tiny" + Enter opens the tiny-math hit. The `>` and `go:` scopes are unchanged.
+- **The governance panel drops a load's answer after it closes (#852).** `GovernanceAudit` ignores a load that finishes after unmount or after a newer load. This was the teardown race behind the extra errors in the 0.11.0 release run.
+
+### Changed
+- **Search's wire types come from `wicked-crew-api-types` (#852).** `src/api/search.ts` re-exports them instead of keeping its own copy.
+
 ## [0.11.0] — 2026-10-18
 
 A minor release: global search, New job's lead-agent picker, the run page's one right panel and its team view, and the rail's action row on every page (#842, #844, #847, #848). Contract: wicked-crew-api-types 0.128.0.
@@ -2317,7 +2330,8 @@ The merged interactive layer: wicked-interactive's UI moved into this skin (DES-
   `git subtree split` (92 commits).
 - The SPA as a pure HTTP/WS client of the wicked-crew daemon: runs, gates, live CoreEvents.
 
-[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.11.0...HEAD
+[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.11.1...HEAD
+[0.11.1]: https://github.com/mikeparcewski/wicked-studio/compare/v0.11.0...v0.11.1
 [0.11.0]: https://github.com/mikeparcewski/wicked-studio/compare/v0.10.2...v0.11.0
 [0.10.2]: https://github.com/mikeparcewski/wicked-studio/compare/v0.10.1...v0.10.2
 [0.10.1]: https://github.com/mikeparcewski/wicked-studio/compare/v0.10.0...v0.10.1
