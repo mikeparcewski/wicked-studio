@@ -11,9 +11,9 @@
   "version": 1,
   "studioVersion": "0.10.1",
   "counts": {
-    "files": 232,
-    "occurrences": 2939,
-    "static": 2546,
+    "files": 233,
+    "occurrences": 2942,
+    "static": 2549,
     "dynamic": 69,
     "computed": 24
   },
@@ -685,6 +685,24 @@
       "testId": "artifact-versions",
       "files": [
         "src/components/session/ArtifactVersions.tsx"
+      ]
+    },
+    {
+      "testId": "ask-helper",
+      "files": [
+        "src/components/AskHelpers.tsx"
+      ]
+    },
+    {
+      "testId": "ask-helpers",
+      "files": [
+        "src/components/AskHelpers.tsx"
+      ]
+    },
+    {
+      "testId": "ask-helpers-none",
+      "files": [
+        "src/components/AskHelpers.tsx"
       ]
     },
     {

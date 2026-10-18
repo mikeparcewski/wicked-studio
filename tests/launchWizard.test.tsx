@@ -11,7 +11,7 @@ import { Composer } from '../src/components/session/Composer.js';
 import { LaunchWizard } from '../src/components/launch/LaunchWizard.js';
 import { openLaunchWizard, resetLaunchWizard, useLaunchWizard } from '../src/store/launchWizard.js';
 import { useComposerChips } from '../src/store/composerChips.js';
-import { resetComposerSeats, useComposerSeats } from '../src/store/composerSeats.js';
+import { resetComposerSeats, useLaunchSeats } from '../src/store/composerSeats.js';
 import { resetPlanCatalog } from '../src/store/planCatalog.js';
 import { clearRepoCache } from '../src/store/repoCache.js';
 import { clearCachedRoster, setCachedRoster } from '../src/store/rosterCache.js';
@@ -92,7 +92,7 @@ describe('launch wizard', () => {
 
   it('Launch sends the same body the strip sent for the same choices', async () => {
     render(<Harness />);
-    act(() => { useComposerSeats.getState().toggle('codex'); });
+    act(() => { useLaunchSeats.getState().toggle('codex'); });
     type('/workflow-mcp-server');
     key('Enter');
     await screen.findByTestId('launch-wizard');
@@ -167,8 +167,8 @@ describe('launch wizard', () => {
     expect(sent.map((x) => x.key)).not.toContain('opencode');
     // An explicit tick is the operator's choice: it is sent.
     expect(oc.getAttribute('aria-pressed')).toBe('false');
-    act(() => { useComposerSeats.getState().toggle('opencode'); });
-    expect(useComposerSeats.getState().picked).toContain('opencode');
+    act(() => { useLaunchSeats.getState().toggle('opencode'); });
+    expect(useLaunchSeats.getState().picked).toContain('opencode');
   });
 });
 

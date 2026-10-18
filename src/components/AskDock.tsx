@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { chatOpened, chatOpenFailed } from '../store/chatFlow.js';
 import { api } from '../api/client.js';
 import { getDiagnostics, isDiagnosticsUnsupported } from '../api/diagnostics.js';
-import type { ChatOpenBody, ChatScope, RepoEntry, SessionView } from '../api/types.js';
+import type { ChatOpenBody, ChatScope, RepoEntry, RosterSeat, SessionView } from '../api/types.js';
 import { needsYouRows } from '../board/needsYou.js';
 import { useFailureClocks } from '../store/failureClocks.js';
 import { forgetAskSession, readAskSession, writeAskSession } from '../store/askSession.js';
@@ -12,7 +12,9 @@ import { useMembershipStore } from '../store/membership.js';
 import { useProjectsStore } from '../store/projects.js';
 import { fetchReposCached, getCachedRepos } from '../store/repoCache.js';
 import { getCachedRoster, setCachedRoster } from '../store/rosterCache.js';
-import { chosenSeats, NO_SEAT_PICKED, useComposerSeats } from '../store/composerSeats.js';
+import { chosenSeats, noSeatPickedMessage, seatOff, useComposerSeats } from '../store/composerSeats.js';
+import { useRoster } from '../hooks/useRoster.js';
+import { AskHelpers } from './AskHelpers.js';
 import {
   askPrompts,
   buildContextPack,
@@ -30,13 +32,13 @@ import {
   describeResolvedScope,
   type AskScopeChoice,
 } from './ChatScopeSelect.js';
-import { defaultSelection, describeChatOpenRefusal } from '../board/chatOpen.js';
+import { chatAdmissionOf, defaultSelection, describeChatOpenRefusal } from '../board/chatOpen.js';
 import { ApiError, apiStatus, apiWire } from '../api/errors.js';
 import { ambientProjectId } from '../hooks/ambientProject.js';
 import { peekTypedSeed, takeTypedSeed } from '../hooks/useTypeToComposer.js';
 import { useAskThreadStore } from '../store/askThread.js';
 import { useCapabilities } from '../store/capabilities.js';
-import { isReviewerOnly } from '../board/seatNames.js';
+import { isReviewerOnly, seatLabel, userSeats } from '../board/seatNames.js';
 
 /**
  * ASK — the app-wide binding of the ASSIST DOCK (DES-ASSIST-DOCK §5: "the dock becomes
@@ -99,6 +101,12 @@ function plainSendRefusal(chatId: string): (e: unknown) => never {
     }
     throw e;
   };
+}
+
+/** The seats an Ask's first send may open its chat with in this scope mode: the daemon's admitted
+ *  seats (studio#713: never a reviewer-only one). The drawer's helpers row lists exactly these. */
+function askEligible(roster: readonly RosterSeat[], scoped: boolean): string[] {
+  return defaultSelection(roster.filter((s) => !isReviewerOnly(s)), scoped);
 }
 
 /** "the Desk" for Home: the place words the dock's header uses. */
@@ -312,9 +320,18 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
             const choice = scopeChoiceRef.current;
             // studio#631: the composer's helpers row decides — the admitted seats minus the ones turned off.
             // studio#713: never a reviewer-only seat ("Claude Code (judge)") — the composer's helper row rule.
-            const eligible = defaultSelection(roster.filter((s) => !isReviewerOnly(s)), askScopeIsScoped(choice));
-            const clis = chosenSeats(eligible, useComposerSeats.getState().dropped, useComposerSeats.getState().picked);
-            if (eligible.length > 0 && clis.length === 0) throw new Error(NO_SEAT_PICKED);
+            const scoped = askScopeIsScoped(choice);
+            const eligible = askEligible(roster, scoped);
+            const { dropped, picked } = useComposerSeats.getState();
+            const clis = chosenSeats(eligible, dropped, picked);
+            if (eligible.length > 0 && clis.length === 0) {
+              // studio#840: name the helpers that are ON but that the daemon will not seat (out of quota,
+              // benched, signed out) — "no helper is picked" was wrong when one was.
+              const unavailable = userSeats(roster)
+                .filter((s) => !eligible.includes(s.key) && !seatOff(s.key, dropped, picked))
+                .map((s) => ({ name: seatLabel(s), reason: chatAdmissionOf(s, scoped).reason }));
+              throw new Error(noSeatPickedMessage(unavailable));
+            }
             // A failed open keeps the page's id for the retry; only a chat the daemon opened spends it.
             id = openIdRef.current ?? crypto.randomUUID();
             const body: ChatOpenBody = { chatId: id, ...askScopeOpenFields(choice, ambientProjectId(packInputs.current.pathname)) };
@@ -391,6 +408,13 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
     [runs, gates, failedAt, attachedAt, projectIds, projects, repos],
   );
 
+  // studio#840: the helpers row the first send's refusal points at (before the chat opens).
+  const roster = useRoster();
+  const helpers = useMemo(
+    () => (roster === null ? [] : askEligible(roster, askScopeIsScoped(scopeChoice))),
+    [roster, scopeChoice],
+  );
+
   const place = `from ${placeWords(sectionLabel(pathname))}`;
   const resolvedScope = openedScope === undefined ? '' : describeResolvedScope(openedScope, { projects });
 
@@ -420,6 +444,8 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
               />
             </>
           ) : undefined,
+        // studio#840: the helpers the first send opens the chat with, until the chat is open.
+        composerControls: openedScope === undefined && helpers.length > 0 ? <AskHelpers roster={roster} eligible={helpers} /> : undefined,
       }}
       verbs={verbs}
       resumeChatId={resumed?.chatId ?? null}

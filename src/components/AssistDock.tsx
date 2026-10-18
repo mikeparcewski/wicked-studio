@@ -56,6 +56,10 @@ export interface AssistContext {
   /** Surface-owned controls for the EMPTY thread, beside the hint (Ask's scope select —
    *  studio#323 R4: decided before the first send, so shown only while nothing was sent). */
   controls?: React.ReactNode;
+  /** Surface-owned controls shown just above the input whatever the thread holds (Ask's helpers
+   *  row, studio#840: a refused first send leaves notes in the thread, and the row its refusal
+   *  points at must still be there). The surface decides when it applies. */
+  composerControls?: React.ReactNode;
 }
 
 export interface AssistPrompt {
@@ -858,6 +862,10 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
             </div>
           ))}
         </div>
+      )}
+
+      {context.composerControls !== undefined && context.composerControls !== null && (
+        <div className="shrink-0 px-3 pt-2">{context.composerControls}</div>
       )}
 
       {/* Composer — the ChatInput idioms: + attach, auto-resize textarea, Cmd/Ctrl+Enter. */}
