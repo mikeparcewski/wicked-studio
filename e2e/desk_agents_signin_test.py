@@ -16,7 +16,7 @@ goes to the fixture; any other write is aborted and must stay at zero.
      the row flips off "Not ready".
   4. SIGN OUT: the modal's "Sign claude out" → POST container-logout → "claude is signed out."
   5. SIGN IN (light): the same flow under the light theme (the terminal's colours are read when it opens).
-  6. CLOSE EARLY: closing the login window before finishing ingests nothing and the re-check says still signed out.
+  6. CLOSE EARLY: closing the login window before finishing ingests nothing; the modal shows crew's refusal reason, not a re-check.
   7. 0 page errors, 0 aborted writes.
 
 Captures: e2e/shots/desk-agents-signin-*.png. Env: FEEDBACK_PORT (default 4393).
@@ -180,17 +180,18 @@ with sync_playwright() as p:
     theme = page.evaluate("() => document.documentElement.getAttribute('data-theme')")
     check("signin-light", theme == "light" and f"{name} is signed in." in light["result"] and light["after"] not in (None, "Not ready"), **light, theme=theme)
 
-    # ── 6. close early: nothing ingested, still signed out ───────────────────────
+    # ── 6. close early: crew's ingest refused it, and the modal says why ─────────
     set_fixture(origin, roster_signed_in={"claude": False, "codex": False})
     open_modal(page, "claude")
     page.get_by_test_id("agents-modal").get_by_test_id("agents-signin").click()
     page.wait_for_function("() => document.querySelector('[data-testid=\"agents-login\"]')?.dataset.state === 'open'", timeout=10000)
     page.wait_for_function(f"() => ({TERM_TEXT})().includes('Press Enter')", timeout=10000)
     page.get_by_test_id("agents-login-close").click()
-    page.wait_for_function("() => document.querySelector('[data-testid=\"agents-check-result\"]')?.dataset.state === 'still'", timeout=25000)
+    page.wait_for_function("() => document.querySelector('[data-testid=\"agents-check-result\"]')?.dataset.state === 'signin-refused'", timeout=25000)
     early = {"result": page.get_by_test_id("agents-check-result").inner_text(), "ready": row_ready(page, "claude"),
              "focus_back": page.evaluate(FOCUS_IN_MODAL)}
-    check("close-early", "Still signed out." in early["result"] and early["ready"] == "Not ready" and early["focus_back"], **early)
+    check("close-early", f"The sign-in didn’t finish: {name} is not signed in." in early["result"]
+          and "no credential in the login volume" in early["result"] and early["ready"] == "Not ready" and early["focus_back"], **early)
 
     # ── 7. clean ─────────────────────────────────────────────────────────────────
     check("clean", errors == [] and blocked == [], errors=errors, blocked=blocked)
