@@ -136,7 +136,8 @@ export const CONCISE_CHARS = 1200;
 
 /**
  * A step's captured output as a chat message: ANSI and a leading verdict header out, then the first
- * {@link CONCISE_LINES} lines (cut at a paragraph boundary, never inside a code fence).
+ * {@link CONCISE_LINES} lines (cut at a paragraph boundary, never inside a code fence, never right after a
+ * heading whose body was cut).
  */
 export function conciseOutput(raw: string): ConciseOutput {
   let text = raw.replace(ANSI, '').replace(/\r\n?/g, '\n').trim();
@@ -162,8 +163,24 @@ export function conciseOutput(raw: string): ConciseOutput {
     if (i + 1 >= CONCISE_LINES || chars >= CONCISE_CHARS) { limit = i + 1; break; }
   }
   const end = fenceAt !== null ? fenceAt : lastBreak > 0 ? lastBreak : limit;
-  const shown = lines.slice(0, end > 0 ? end : limit).join('\n').trim();
+  // A heading is never the last thing shown: the cut lands on the blank line between a heading and
+  // its body (the governed-worker report's `## Commands run` + table, run b445c17e), which showed
+  // the heading over nothing — every step read "Commands run" with no commands under it.
+  const kept = withoutTrailingHeadings(lines, end > 0 ? end : limit);
+  const shown = lines.slice(0, kept > 0 ? kept : limit).join('\n').trim();
   return { text: shown, more: true, verdict };
+}
+
+/** A line that only names the section after it: an ATX heading (`## Commands run`) or a bold-only
+ *  label (`**Commands run:**`). */
+const SECTION_HEADING = /^ {0,3}(?:#{1,6}(?:\s|$)|(?:\*\*|__)[^*_]+(?:\*\*|__):?\s*$)/;
+
+/** The cut `end` moved back past trailing blank lines and section headings, so a heading whose body
+ *  was cut off is dropped with it. `0` when nothing but headings precedes the cut. */
+function withoutTrailingHeadings(lines: readonly string[], end: number): number {
+  let e = end;
+  while (e > 0 && (lines[e - 1]!.trim() === '' || SECTION_HEADING.test(lines[e - 1]!))) e -= 1;
+  return e;
 }
 
 export interface FinalWords {

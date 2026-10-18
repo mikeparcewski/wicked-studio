@@ -12,6 +12,9 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+### Fixed
+- **A step's message no longer ends on an empty "Commands run" heading.** The run thread shows the first 14 lines of each step's report and cuts at the last blank line before that. In the governed-worker report, that blank line sits between `## Commands run` and its table, so every step showed the heading with nothing under it. A cut now drops any heading whose body it removed. **Show all** still opens the full report, table included.
+
 ## [0.10.1] — 2026-10-17
 
 A patch release: the :7721 round-2 E2E defects (#837).

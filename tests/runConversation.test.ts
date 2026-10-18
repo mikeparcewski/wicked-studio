@@ -77,6 +77,27 @@ describe('the run as a conversation (DES-CHAT-NATIVE-RUN)', () => {
     expect(fenced.text).not.toContain('```');
   });
 
+  it('a cut never leaves a heading over nothing: the report\u2019s Commands run table is not shown as an empty section (run b445c17e)', () => {
+    // The governed-worker report shape every step writes: What I did, then Commands run + a table.
+    const report = [
+      '## What I did', '', '**Role:** Neutral (scope).', '', '**Files read (no writes):**', '- `README.md`', '- `src/math.js`',
+      '- `test/math.test.js`', '- `tmp/` (empty)', '', '## Commands run', '', '| Command | Exit |', '|---|---|',
+      '| `ls -la` | 0 |', '| `git log --oneline -5` | 0 |', '', '## Counts', '', 'derived 0 / submitted 0 / failed 0',
+    ].join('\n');
+    const c = conciseOutput(report);
+    expect(c.more).toBe(true);
+    expect(c.text).not.toMatch(/Commands run\s*$/);
+    expect(c.text).not.toContain('## Commands run');
+    expect(c.text.endsWith('- `tmp/` (empty)')).toBe(true);
+    // A bold-only label is a heading too.
+    const bold = conciseOutput(['Para one.', '', '**Commands run:**', '', ...Array.from({ length: 30 }, (_, i) => `| c${i} | 0 |`)].join('\n'));
+    expect(bold.text).toBe('Para one.');
+    // Output that is nothing but a heading before the cut still shows something: the limit cut.
+    const onlyHead = conciseOutput(['## Commands run', '', '| Command | Exit |', '|---|---|', ...Array.from({ length: 30 }, (_, i) => `| c${i} | 0 |`)].join('\n'));
+    expect(onlyHead.text.startsWith('## Commands run')).toBe(true);
+    expect(onlyHead.text).toContain('| c0 | 0 |');
+  });
+
   it('the final message is plain words: tests, the approving reviewer, the pull request', () => {
     const view = run('completed', [unit('review', 1, 'done', 'codex', 'review', 'evaluator'), unit('build', 0, 'done', 'claude')],
       { delivery: 'delivered', deliverUrl: 'https://github.com/acme/shop/pull/12' });
