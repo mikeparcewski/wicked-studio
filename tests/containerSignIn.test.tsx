@@ -39,6 +39,8 @@ interface Daemon {
   open: string | null;
   loginStatus: number;
   logoutStatus: number;
+  /** While set, `GET /roster?refresh=` waits for it (a re-check still in flight). */
+  refreshHold: Promise<void> | null;
   calls: { method: string; path: string; body: unknown }[];
 }
 let d: Daemon;
@@ -68,6 +70,7 @@ async function daemon(input: RequestInfo | URL, init?: RequestInit): Promise<Res
   d.calls.push({ method, path: path + url.search, body });
   if (method === 'GET' && path === '/roster') {
     const refresh = url.searchParams.get('refresh');
+    if (refresh !== null && d.refreshHold !== null) await d.refreshHold;
     return respond(200, { roster: [seat('claude', 'Claude Code'), seat('codex', 'Codex')], ...(refresh !== null ? { refresh: { key: refresh, outcome: 'probed' } } : {}) });
   }
   if (method === 'GET' && path === '/roster/record') return respond(200, { days: 7, since: 0, until: 0, runsRead: 0, truncated: false, seats: [] });
@@ -105,9 +108,9 @@ const renderTab = (search: string): ReturnType<typeof render> =>
   render(<ContainerSignInProvider><AgentsPage search={search} navigate={navigate} /></ContainerSignInProvider>);
 
 beforeEach(() => {
-  d = { signedIn: { claude: false, codex: true }, container: ['claude', 'codex'], ingestAfter: 2, outcome: {}, open: null, loginStatus: 201, logoutStatus: 200, calls: [] };
+  d = { signedIn: { claude: false, codex: true }, container: ['claude', 'codex'], ingestAfter: 2, outcome: {}, open: null, loginStatus: 201, logoutStatus: 200, refreshHold: null, calls: [] };
   vi.stubGlobal('fetch', vi.fn(daemon));
-  useAuthOps.setState({ pending: {} });
+  useAuthOps.setState({ pending: {}, checking: {} });
   resetAgentsReads();
   clearCachedRoster();
 });
@@ -178,12 +181,41 @@ describe('container sign-in hooks (crew#1006)', () => {
     expect(waiting).toHaveTextContent('This can take up to a minute. There is nothing more to type.');
     expect(within(waiting).getByTestId('agents-check-spinner')).toBeInTheDocument();
     expect(within(modal).getByTestId('agents-signin')).toBeDisabled();
-    // It holds through the 404s and the re-check after them (never the stale "finish signing in" line)...
+    // It holds through the 404s...
+    let release = (): void => {};
+    d.refreshHold = new Promise<void>((r) => { release = r; });
     await waitFor(() => expect(d.calls.filter((c) => c.path === '/seats/claude/container-login' && c.method === 'GET').length).toBeGreaterThanOrEqual(2));
     expect(within(modal).getByTestId('agents-check-result')).toHaveAttribute('data-state', 'signin-checking');
-    // ...until crew answers: then the existing success, and the spinner is gone.
+    // ...and through the re-check after crew's outcome (never the generic "Checking… 20 seconds" line in between)...
+    await waitFor(() => expect(d.calls.some((c) => c.path === '/roster?refresh=claude')).toBe(true), { timeout: 8000 });
+    expect(within(modal).getByTestId('agents-check-result')).toHaveAttribute('data-state', 'signin-checking');
+    expect(within(modal).getByTestId('agents-check-spinner')).toBeInTheDocument();
+    // ...until it answers: then the existing success, the spinner is gone and the agent is free.
+    release();
     await waitFor(() => expect(screen.getByTestId('agents-check-result')).toHaveAttribute('data-state', 'container-in'), { timeout: 8000 });
+    expect(useAuthOps.getState().pending).toEqual({});
+    expect(useAuthOps.getState().checking).toEqual({});
     expect(screen.queryByTestId('agents-check-spinner')).toBeNull();
+  }, 15_000);
+
+  it('a modal reopened while the sign-in is checked shows the waiting state too (codex PR r1)', async () => {
+    d.ingestAfter = 3;
+    const view = renderTab('?fix=claude');
+    fireEvent.click(within(await screen.findByRole('dialog', { name: 'Claude Code' })).getByTestId('agents-signin'));
+    await waitFor(() => expect(screen.getByTestId('agents-login')).toHaveAttribute('data-state', 'open'));
+    // Back, then Forward under the open login window: a new agent modal, not the one that started the sign-in.
+    view.rerender(<ContainerSignInProvider><AgentsPage search="" navigate={navigate} /></ContainerSignInProvider>);
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Claude Code' })).toBeNull());
+    view.rerender(<ContainerSignInProvider><AgentsPage search="?fix=claude" navigate={navigate} /></ContainerSignInProvider>);
+    const again = await screen.findByTestId('agents-modal');
+    finishSignIn('claude');
+    await waitFor(() => expect(screen.queryByTestId('agents-login')).toBeNull());
+    await waitFor(() => expect(within(again).getByTestId('agents-check-result')).toHaveAttribute('data-state', 'signin-checking'));
+    expect(within(again).getByTestId('agents-check-spinner')).toBeInTheDocument();
+    // The check lands: the shared state ends, so the reopened modal no longer says it is checking.
+    await waitFor(() => expect(useAuthOps.getState().pending).toEqual({}), { timeout: 10_000 });
+    expect(useAuthOps.getState().checking).toEqual({});
+    await waitFor(() => expect(within(again).queryByTestId('agents-check-spinner')).toBeNull());
   }, 15_000);
 
   it('a refused check ends the waiting state with crew’s reason', async () => {

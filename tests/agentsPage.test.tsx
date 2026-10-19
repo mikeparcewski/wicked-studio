@@ -39,7 +39,7 @@ const navigate = vi.fn();
 const renderPage = (search = ''): ReturnType<typeof render> => render(<AgentsPage search={search} navigate={navigate} />);
 
 beforeEach(() => {
-  useAuthOps.setState({ pending: {} });
+  useAuthOps.setState({ pending: {}, checking: {} });
   resetAgentsReads();
   clearCachedRoster();
   navigate.mockReset();

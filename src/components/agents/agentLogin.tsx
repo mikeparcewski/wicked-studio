@@ -92,16 +92,32 @@ export function useAgentLogin(): AgentLoginHooks {
  * THE PER-AGENT AUTH LOCK (codex S4 r9): one sign-in or sign-out per agent at a time, held across modal
  * closes and reopens until the hook itself settles, so a late sign-out can never undo a newer sign-in.
  */
-export const useAuthOps = create<{ pending: Record<string, 'in' | 'out'>; begin: (key: string, kind: 'in' | 'out') => boolean; end: (key: string) => void }>((set, get) => ({
+export const useAuthOps = create<{
+  pending: Record<string, 'in' | 'out'>;
+  /**
+   * A sign-in whose window closed and that studio's service is checking now: shared, so a modal reopened
+   * while it runs shows that state too (codex PR r1), not an idle modal whose controls are held.
+   */
+  checking: Record<string, true>;
+  begin: (key: string, kind: 'in' | 'out') => boolean;
+  markChecking: (key: string) => void;
+  end: (key: string) => void;
+}>((set, get) => ({
   pending: {},
+  checking: {},
   begin: (key, kind) => {
     if (get().pending[key] !== undefined) return false;
     set({ pending: { ...get().pending, [key]: kind } });
     return true;
   },
+  markChecking: (key) => {
+    if (get().pending[key] === 'in') set({ checking: { ...get().checking, [key]: true } });
+  },
   end: (key) => {
     const rest = { ...get().pending };
     delete rest[key];
-    set({ pending: rest });
+    const still = { ...get().checking };
+    delete still[key];
+    set({ pending: rest, checking: still });
   },
 }));

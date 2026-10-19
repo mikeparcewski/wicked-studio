@@ -154,7 +154,7 @@ export function AgentModal({ agentKey, onClose, intent }: {
   const titleId = useId();
   const { rows, rosterState } = useAgentRows();
   const row: AgentRow | undefined = rowForKey(rows, agentKey);
-  const [outcome, setOutcome] = useState<Outcome>({ kind: 'idle' });
+  const [ownOutcome, setOutcome] = useState<Outcome>({ kind: 'idle' });
   const live = useRef(true);
   const dialog = useRef<HTMLDivElement | null>(null);
   useModalEscape(onClose);
@@ -213,6 +213,9 @@ export function AgentModal({ agentKey, onClose, intent }: {
    * late sign-out could then undo a newer sign-in. The lock is per agent and outlives the modal (useAuthOps).
    */
   const busy = useAuthOps((o) => o.pending[agentKey] ?? null);
+  /** This agent's sign-in is being checked (its window closed): a modal opened meanwhile shows it too. */
+  const sharedChecking = useAuthOps((o) => o.checking[agentKey] === true);
+  const outcome: Outcome = ownOutcome.kind === 'idle' && sharedChecking ? { kind: 'signin-checking' } : ownOutcome;
   /** Bumped per auth operation and per agent: an answer from a retired one is ignored. */
   const outGen = useRef(0);
   useEffect(() => { gen.current += 1; outGen.current += 1; clearDeadline(); checking.current = false; setOutcome({ kind: 'idle' }); }, [agentKey]);
@@ -261,7 +264,11 @@ export function AgentModal({ agentKey, onClose, intent }: {
     setOutcome(kind === 'in' ? { kind: 'signing-in' } : { kind: 'idle' });
     /** The sign-in window closed and studio's service is checking it: that state holds until the answer. */
     let checkingIn = false;
-    const onChecking = (): void => { checkingIn = true; if (current()) { setFrom('card'); setOutcome({ kind: 'signin-checking' }); } };
+    const onChecking = (): void => {
+      checkingIn = true;
+      useAuthOps.getState().markChecking(key);
+      if (current()) { setFrom('card'); setOutcome({ kind: 'signin-checking' }); }
+    };
     let pending: void | Promise<void>;
     try { pending = kind === 'in' ? login.signIn?.(key, onChecking) : hook(key); } catch (e) { pending = Promise.reject(e); }
     const end = (): void => useAuthOps.getState().end(key);
