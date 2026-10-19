@@ -82,6 +82,8 @@ interface Session {
   watch: AbortController;
   /** The container-login POST, once sent (a window closed before it answered waits for it, codex r4). */
   pending: Promise<unknown> | null;
+  /** The modal's waiting state: the window closed and crew is checking the sign-in (its ingest). */
+  onChecking: (() => void) | undefined;
   resolve: () => void;
   reject: (err: unknown) => void;
 }
@@ -149,11 +151,11 @@ function LoginTerminal({ session, open, onOpenError, onClosed }: {
         <div className="wk-agents-modal-body">
           <p data-testid="agents-login-line" role="status">
             {opened
-              ? `Follow ${name}’s sign-in steps in this terminal. When it finishes, this closes and studio checks the sign-in.`
+              ? `Follow ${name}’s sign-in steps in this terminal. When it finishes, this closes and studio checks the sign-in (up to a minute).`
               : `Opening ${name}’s login container… The first sign-in can take a few minutes while it is prepared.`}
           </p>
           <Terminal cwd="." open={open} onOpenError={onOpenError} onExit={onClosed} />
-          <span className="wk-agents-safe">It runs in a disposable container, and studio’s service keeps the sign-in. Studio never shows your password or token: anything you paste here goes to the container unechoed (claude asks you to paste back the token it prints).</span>
+          <span className="wk-agents-safe">It runs in a disposable container, and studio’s service keeps the sign-in. Studio never shows your password or token. For Claude, paste only the code your browser shows into claude’s own prompt: the sign-in reads the token claude prints, and asks you to paste it (unechoed) only if it cannot.</span>
         </div>
       </div>
     </div>,
@@ -169,12 +171,12 @@ export function ContainerSignInProvider({ children }: { children: React.ReactNod
   const seq = useRef(0);
   const show = (s: Session | null): void => { live.current = s; setSession(s === null ? null : { ...s }); };
 
-  const signIn = useCallback((key: string): Promise<void> => {
+  const signIn = useCallback((key: string, onChecking?: () => void): Promise<void> => {
     // One login terminal at a time (crew holds one sign-in per seat; studio shows one window).
     if (live.current !== null) return Promise.reject(new Error(`finish the ${live.current.name} sign-in first`));
     const seat = getCachedRoster()?.find((s) => s.key === key);
     const name = seat !== undefined ? seatLabel(seat) : key;
-    return new Promise<void>((resolve, reject) => { show({ id: ++seq.current, key, name, opened: false, done: false, watch: new AbortController(), pending: null, resolve, reject }); });
+    return new Promise<void>((resolve, reject) => { show({ id: ++seq.current, key, name, opened: false, done: false, watch: new AbortController(), pending: null, onChecking, resolve, reject }); });
   }, []);
 
   const signOut = useCallback(async (key: string): Promise<void> => { await api.seatContainerLogout(key); }, []);
@@ -194,7 +196,8 @@ export function ContainerSignInProvider({ children }: { children: React.ReactNod
       // Success only when crew's ingest says so: a refused ingest (nothing pasted, a bad token) rejects with crew's
       // reason, so the modal shows it rather than a re-check that reads like the sign-in worked. No answer in time
       // hands back to the re-check, which reads the broker either way.
-      void settled.then((o) => (o ? waitForOutcome(s.key) : null)).then((outcome) => {
+      // While it waits, the modal says crew is checking the sign-in (the operator has nothing more to do).
+      void settled.then((o) => { if (!o) return null; s.onChecking?.(); return waitForOutcome(s.key); }).then((outcome) => {
         if (outcome !== null && !outcome.ok) s.reject(new SignInNotCompleted(outcome.error?.trim() || 'the sign-in did not finish'));
         else s.resolve();
       }, () => s.resolve());

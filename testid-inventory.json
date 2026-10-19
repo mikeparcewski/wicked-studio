@@ -12,8 +12,8 @@
   "studioVersion": "0.11.3",
   "counts": {
     "files": 234,
-    "occurrences": 2969,
-    "static": 2576,
+    "occurrences": 2970,
+    "static": 2577,
     "dynamic": 69,
     "computed": 24
   },
@@ -100,6 +100,12 @@
     },
     {
       "testId": "agents-check-result",
+      "files": [
+        "src/components/agents/AgentModal.tsx"
+      ]
+    },
+    {
+      "testId": "agents-check-spinner",
       "files": [
         "src/components/agents/AgentModal.tsx"
       ]
