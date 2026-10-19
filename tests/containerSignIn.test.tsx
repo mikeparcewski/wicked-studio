@@ -162,6 +162,33 @@ describe('container sign-in hooks (crew#1006)', () => {
     expect(row).not.toHaveTextContent('Looks signed in');
   }, 15_000);
 
+  it('a sign-in crew’s ingest refused shows crew’s reason, never a success (the setup-token paste that never landed)', async () => {
+    renderTab('?fix=claude');
+    const modal = await screen.findByRole('dialog', { name: 'Claude Code' });
+    fireEvent.click(within(modal).getByTestId('agents-signin'));
+    await waitFor(() => expect(screen.getByTestId('agents-login')).toHaveAttribute('data-state', 'open'));
+    // The login script exited without saving the token: the terminal closes, and crew records the ingest's error.
+    d.open = null;
+    const reason = 'wicked-core seat-login: claude: signed out; missing the `claude setup-token` token (it was never pasted back); sign claude in again and paste the token it prints';
+    d.outcome['claude'] = { cli: 'claude', ok: false, error: reason, at: new Date().toISOString() };
+    fireEvent.click(screen.getByTestId('terminal-stub-exit'));
+    await waitFor(() => expect(screen.queryByTestId('agents-login')).toBeNull());
+    const result = await waitFor(() => {
+      const r = within(modal).getByTestId('agents-check-result');
+      expect(r).toHaveAttribute('data-state', 'signin-refused');
+      return r;
+    }, { timeout: 8000 });
+    expect(result).toHaveTextContent('The Claude Code sign-in didn’t finish.');
+    expect(result).toHaveTextContent('it was never pasted back');
+    expect(result).not.toHaveTextContent('Claude Code is signed in.');
+    // No re-check dressed it up, the agent is free to sign in again, and the row still says signed out.
+    expect(d.calls.some((c) => c.path === '/roster?refresh=claude')).toBe(false);
+    expect(useAuthOps.getState().pending).toEqual({});
+    expect(within(modal).getByTestId('agents-signin')).not.toBeDisabled();
+    const row = screen.getAllByTestId('agents-row').find((r) => r.getAttribute('data-agent') === 'claude')!;
+    expect(row).not.toHaveTextContent('Signed in');
+  }, 15_000);
+
   it('a container that cannot be opened says so and frees the agent', async () => {
     d.loginStatus = 502;
     renderTab('?fix=claude');
@@ -201,7 +228,9 @@ describe('container sign-in hooks (crew#1006)', () => {
     fireEvent.click(screen.getByTestId('agents-login-close'));
     d.outcome['claude'] = { cli: 'claude', ok: false, error: 'no credential', at: new Date().toISOString() };
     await act(async () => { release[1]!(respond(201, { terminalId: 'login-claude-9', cli: 'claude', action: 'sign_in' })); await new Promise((r) => setTimeout(r, 20)); });
-    await waitFor(() => expect(within(modal).getByTestId('agents-check-result')).toHaveAttribute('data-state', 'still'), { timeout: 8000 });
+    // crew's ingest refused it: its reason is the result, not a re-check (the window was closed before signing in).
+    await waitFor(() => expect(within(modal).getByTestId('agents-check-result')).toHaveAttribute('data-state', 'signin-refused'), { timeout: 8000 });
+    expect(within(modal).getByTestId('agents-check-result')).toHaveTextContent('no credential');
     expect(d.calls.some((c) => c.method === 'GET' && c.path === '/seats/claude/container-login')).toBe(true);
     // The late open never reopens a window.
     expect(screen.queryByTestId('agents-login')).toBeNull();
