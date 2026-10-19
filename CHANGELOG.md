@@ -12,6 +12,13 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+## [0.11.4] — 2026-10-19
+
+A patch release: the agent sign-in modal says the sign-in is being checked once the login window closes (#862).
+
+### Fixed
+- **"Checking the sign-in…" once the claude login window closes (#862).** After the login terminal closed, the modal kept saying "Finish signing in to Claude Code in the window that opened" while crew ingested and checked the sign-in, so the operator kept pressing Enter and concluded it had failed. The container sign-in hook now tells the modal when the window has closed (a new optional `onChecking` argument to `signIn`), and the modal shows a spinner and "Checking the sign-in with Claude Code... This can take up to a minute. There is nothing more to type." until crew answers with the existing success or crew's refusal. The state lives in the per-agent auth lock, so a modal reopened mid-check shows it too. The login window's note no longer says claude asks for the token to be pasted back: the operator pastes only the browser code into claude's own prompt (wicked-core#1041). New test id `agents-check-spinner`.
+
 ## [0.11.3] — 2026-10-19
 
 A patch release: Option-drag selects in the terminal while a program has mouse reporting on (#860), the run page's header redesign (#855), and Dependabot lockfile bumps (js-yaml 4.3.2, http-cache-semantics 4.3.0; #859).
@@ -2360,7 +2367,8 @@ The merged interactive layer: wicked-interactive's UI moved into this skin (DES-
   `git subtree split` (92 commits).
 - The SPA as a pure HTTP/WS client of the wicked-crew daemon: runs, gates, live CoreEvents.
 
-[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.11.3...HEAD
+[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.11.4...HEAD
+[0.11.4]: https://github.com/mikeparcewski/wicked-studio/compare/v0.11.3...v0.11.4
 [0.11.3]: https://github.com/mikeparcewski/wicked-studio/compare/v0.11.2...v0.11.3
 [0.11.2]: https://github.com/mikeparcewski/wicked-studio/compare/v0.11.1...v0.11.2
 [0.11.1]: https://github.com/mikeparcewski/wicked-studio/compare/v0.11.0...v0.11.1
