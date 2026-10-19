@@ -178,7 +178,7 @@ describe('container sign-in hooks (crew#1006)', () => {
       expect(r).toHaveAttribute('data-state', 'signin-refused');
       return r;
     }, { timeout: 8000 });
-    expect(result).toHaveTextContent('The sign-in didn’t finish: Claude Code is not signed in.');
+    expect(result).toHaveTextContent('The Claude Code sign-in didn’t finish.');
     expect(result).toHaveTextContent('it was never pasted back');
     expect(result).not.toHaveTextContent('Claude Code is signed in.');
     // No re-check dressed it up, the agent is free to sign in again, and the row still says signed out.

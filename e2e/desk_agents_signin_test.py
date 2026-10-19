@@ -190,7 +190,7 @@ with sync_playwright() as p:
     page.wait_for_function("() => document.querySelector('[data-testid=\"agents-check-result\"]')?.dataset.state === 'signin-refused'", timeout=25000)
     early = {"result": page.get_by_test_id("agents-check-result").inner_text(), "ready": row_ready(page, "claude"),
              "focus_back": page.evaluate(FOCUS_IN_MODAL)}
-    check("close-early", f"The sign-in didn’t finish: {name} is not signed in." in early["result"]
+    check("close-early", f"The {name} sign-in didn’t finish." in early["result"]
           and "no credential in the login volume" in early["result"] and early["ready"] == "Not ready" and early["focus_back"], **early)
 
     # ── 7. clean ─────────────────────────────────────────────────────────────────

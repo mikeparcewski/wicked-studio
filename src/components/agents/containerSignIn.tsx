@@ -195,7 +195,7 @@ export function ContainerSignInProvider({ children }: { children: React.ReactNod
       // reason, so the modal shows it rather than a re-check that reads like the sign-in worked. No answer in time
       // hands back to the re-check, which reads the broker either way.
       void settled.then((o) => (o ? waitForOutcome(s.key) : null)).then((outcome) => {
-        if (outcome !== null && !outcome.ok) s.reject(new SignInNotCompleted(outcome.error ?? 'the sign-in did not finish'));
+        if (outcome !== null && !outcome.ok) s.reject(new SignInNotCompleted(outcome.error?.trim() || 'the sign-in did not finish'));
         else s.resolve();
       }, () => s.resolve());
     };

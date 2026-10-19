@@ -79,8 +79,9 @@ const OUTCOME_WORDS: Record<Exclude<Outcome['kind'], 'idle'>, (name: string, det
   'not-rechecked': () => ({ lead: 'Studio’s service is still checking.', tone: 'quiet', line: 'Your sign-in may still have worked; check again in a minute.' }),
   'signout-failed': (n) => ({ lead: `Couldn’t sign ${n} out.`, tone: 'fail', line: 'Nothing changed; try again.' }),
   'signin-failed': (n) => ({ lead: `Couldn’t open ${n}’s sign-in.`, tone: 'fail', line: 'Try again.' }),
-  // The login window closed but studio's service did not sign the agent in: its reason, as it said it.
-  'signin-refused': (n, detail) => ({ lead: `The sign-in didn’t finish: ${n} is not signed in.`, tone: 'fail', line: detail }),
+  // The login window closed but studio's service refused that sign-in: its reason, as it said it. The lead never
+  // asserts the agent's standing: a refused re-sign-in leaves an earlier working sign-in in place.
+  'signin-refused': (n, detail) => ({ lead: `The ${n} sign-in didn’t finish.`, tone: 'fail', line: detail }),
   'out-done': (n) => ({ lead: `${n} is signed out.`, tone: 'ok', line: 'Sign it in again whenever you want it back.' }),
   'signing-in': (n) => ({ lead: `Finish signing in to ${n} in the window that opened.`, tone: 'quiet', line: 'Studio checks it as soon as that window closes.' }),
 };
