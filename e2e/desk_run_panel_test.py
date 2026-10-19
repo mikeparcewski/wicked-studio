@@ -4,7 +4,7 @@ desk_run_panel_test.py — the run page's ONE right panel (src/board/runPanelMod
 have details and the run right panes, they should be one … group tabs with accordion-like displays so you don't need
 30 of them"). Against the `chat_native` corpus (e2e/chat_native_corpus.py), at 1440x700 and 390x844:
 
-  1. ONE PANEL: the header has Details and no ⋯; the panel is headed Details with no one-tab strip, 400 px beside the
+  1. ONE PANEL: the header has no Details button and no ⋯ (the panel is open by default); the panel is headed Details with no one-tab strip, 400 px beside the
      chat; it holds six folding sections (Now · Plan and steps · Changes and delivery · Checks and evidence · Agents
      and spend · Record), never a sheet over the run.
   2. THE STATE PICKS WHAT OPENS: a running run opens Now + Plan; a run at its plan gate opens Now + Plan, with "Go to
@@ -13,7 +13,7 @@ have details and the run right panes, they should be one … group tabs with acc
   3. KEYBOARD: a section header is a button with aria-expanded; Enter and Space fold it.
   4. REMEMBERED: closing Changes on a finished run survives a reload (this browser); a fresh browser has the default.
   5. A LINK LANDS: `#governance` on a run's address opens the panel at Checks and evidence → Governance.
-  6. PHONE: Details opens the panel over the page, the same sections, no horizontal scroll. 0 page errors.
+  6. PHONE: the right-edge handle opens the panel over the page, the same sections, no horizontal scroll. 0 page errors.
 
 Captures: e2e/shots/desk-run-panel-{running,gate,done,failed}-{1440,390}.png. Env: FEEDBACK_PORT (default 4497).
 """
@@ -22,7 +22,7 @@ import json
 import os
 import sys
 
-from uxfix_fixture import DEFAULT_APPEARANCE, HIDE_GATE_TOASTS, REPO, ensure_build, set_fixture, start_server
+from uxfix_fixture import DEFAULT_APPEARANCE, HIDE_GATE_TOASTS, REPO, ensure_build, set_fixture, start_server, open_details
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4497"))
 SHOTS = REPO / "e2e" / "shots"
@@ -91,9 +91,7 @@ def open_run(page, run_id: str, wait_for: str, hash_: str = "") -> dict:
         page.locator(wait_for).first.wait_for(state="visible", timeout=15000)
     except Exception:  # noqa: BLE001
         fail(f"open-{run_id}", {"why": f"{wait_for} never showed"})
-    toggle = page.get_by_test_id("session-details-toggle")
-    if toggle.get_attribute("aria-expanded") != "true":
-        toggle.click()
+    open_details(page)
     page.locator('[data-testid="host-panel"] [data-testid="run-tab"]').wait_for(state="visible", timeout=10000)
     page.wait_for_timeout(700)
     return page.evaluate(PANEL)

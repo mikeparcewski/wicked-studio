@@ -6,13 +6,15 @@ run page IS a chat. Against the `chat_native` corpus (e2e/chat_native_corpus.py)
 
   1. AN OLD RUN OPENS ON ITS CONVERSATION: /s/run:r-cn-old (archived, its chat reclaimed) lands on the chat's thread,
      opened at the newest message: a divider, your kickoff bubble, one assistant bubble per finished step with the
-     words crew recorded for it, and the final message — never the old summary card. The details panel is closed.
+     words crew recorded for it, and the final message — never the old summary card. The details panel is open
+     beside it (operator 2026-10-18: open by default).
   2. THE FINAL MESSAGE IS PLAIN WORDS: the finished Bug run ends "Done. Tests pass (38), and codex reviewed and
      approved it. Pull request #12 is open." with the pull request, Changes and Evidence as chips.
   3. THE PLAN IS APPROVED INLINE: r-cn-plan's plan message says its 5 steps with Approve plan / Edit / Not now; Edit
      opens the plan editor; Approve plan posts the gate once (after the undo window).
-  4. THE DETAILS TOGGLE: closed by default; Details opens the panel (status, phases, delivery) beside the
-     conversation and closes it again; on a phone it opens over the page.
+  4. THE DETAILS PANEL: open by default beside the conversation (status, phases, delivery); its own close folds it
+     to a handle at the right edge, which opens it again; on a phone it starts behind the handle and opens over the
+     page.
   5. WORK IN PROGRESS is one quiet "Working on Build…" line; a chat Q&A is bubbles both ways, its code block copyable.
   6. The column is the chat measure (≤ 768 px of text), no horizontal scroll, 0 page errors.
 
@@ -73,7 +75,7 @@ PAGE = """() => {
   return {
     url: location.pathname,
     panel: box(document.querySelector('[data-testid="host-panel"]')),
-    toggle: document.querySelector('[data-testid="session-details-toggle"]')?.getAttribute('aria-expanded') ?? null,
+    handle: !!document.querySelector('[data-testid="run-details-handle"]'),
     divider: txt(document.querySelector('[data-testid="session-closed-line"]')),
     you: [...document.querySelectorAll('[data-testid="session-turn"][data-who="you"]')].map(txt),
     youDecisions: [...document.querySelectorAll('[data-testid="chat-you-decision"]')].map(txt),
@@ -131,7 +133,7 @@ with sync_playwright() as p:
               and "Found 14 uses" in (d["steps"][0]["text"] or "") and "codex" in (d["steps"][2]["who"] or "")
               and (d["finalText"] or "").startswith("Done.") and "Pull request #7" in " ".join(d["chips"])
               and d["finalInView"] and not d["oldCard"] and d["details"] and not d["detailsOpen"]
-              and d["panel"] is None and d["toggle"] == "false", page=d)
+              and d["panel"] is not None and d["panel"]["r"] == W and not d["handle"], page=d)
         check(f"{theme}-chat-measure", d["measure"] is not None and 700 <= d["measure"] <= 768 and not d["hscroll"], measure=d["measure"])
         check(f"{theme}-agent-bubbles", d["stepBubble"] not in (None, d["pageBg"], "rgba(0, 0, 0, 0)"), bubble=d["stepBubble"], page_bg=d["pageBg"])
 
@@ -143,19 +145,22 @@ with sync_playwright() as p:
               and d["chips"][:3] == ["Pull request #12 ↗", "Changes", "Evidence"] and d["youDecisions"] == ["Approved the plan"]
               and len(d["steps"]) == 4 and d["codeCopy"] >= 1, final=d["finalText"], chips=d["chips"], decisions=d["youDecisions"])
 
-        # ── 4. the details toggle: closed by default, opens beside, closes ──────────────────────
-        page.get_by_test_id("session-details-toggle").click()
+        # ── 4. the details panel: open by default beside, its close leaves the handle, the handle reopens ─
         page.locator('[data-testid="host-panel"] [data-testid="run-tab-now"]').wait_for(state="visible", timeout=5000)
         page.wait_for_timeout(400)
         d2 = page.evaluate(PAGE)
         page.screenshot(path=str(SHOTS / f"desk-chat-native-bug-panel-{theme}.png"))
         status = page.get_by_test_id("run-tab-status").inner_text()
         delivery = page.get_by_test_id("run-tab-delivery").inner_text()
-        check(f"{theme}-details-opens", d2["toggle"] == "true" and d2["panel"] is not None and d2["panel"]["r"] == W and d2["panel"]["w"] == 400
+        check(f"{theme}-details-opens", not d2["handle"] and d2["panel"] is not None and d2["panel"]["r"] == W and d2["panel"]["w"] == 400
               and "Finished" in status and "Pull request #12" in delivery and not d2["hscroll"], status=status, delivery=delivery, panel=d2["panel"])
-        page.get_by_test_id("session-details-toggle").click()
+        page.get_by_test_id("host-panel-fold").click()
         page.wait_for_timeout(400)
-        check(f"{theme}-details-closes", page.evaluate(PAGE)["panel"] is None)
+        d3 = page.evaluate(PAGE)
+        check(f"{theme}-details-closes", d3["panel"] is None and d3["handle"], page=d3)
+        page.get_by_test_id("run-details-handle").click()
+        page.locator('[data-testid="host-panel"] [data-testid="run-tab-now"]').wait_for(state="visible", timeout=5000)
+        check(f"{theme}-handle-reopens", page.evaluate(PAGE)["panel"] is not None)
 
         # ── 3. the plan, approved inline ─────────────────────────────────────────────────────────
         d = open_session(page, "/s/run%3Ar-cn-plan", theme, '[data-testid="chat-plan"][data-open="true"]')
@@ -189,14 +194,14 @@ with sync_playwright() as p:
               and d["codeCopy"] == 1, you=d["you"], helper_bg=d["helperBubble"])
         ctx.close()
 
-    # ── phone: the same conversation; Details opens the panel over the page ──────────────────────
+    # ── phone: the same conversation; the edge handle opens the panel over the page ──────────────
     ctx = browser.new_context(viewport={"width": 390, "height": 844}, device_scale_factor=2)
     page = ctx.new_page()
     page.on("pageerror", lambda e: errors.append(str(e)))
     d = open_session(page, "/s/run%3Ar-cn-bug", "light", '[data-testid="chat-final"]')
     page.screenshot(path=str(SHOTS / "desk-chat-native-phone-bug.png"))
-    check("phone-conversation", d["finalText"] is not None and d["finalInView"] and not d["hscroll"] and d["panel"] is None, page=d)
-    page.get_by_test_id("session-details-toggle").click()
+    check("phone-conversation", d["finalText"] is not None and d["finalInView"] and not d["hscroll"] and d["panel"] is None and d["handle"], page=d)
+    page.get_by_test_id("run-details-handle").click()
     page.locator('[data-testid="host-panel"] [data-testid="run-tab-now"]').wait_for(state="visible", timeout=5000)
     page.screenshot(path=str(SHOTS / "desk-chat-native-phone-panel.png"))
     check("phone-details-overlay", page.evaluate(PAGE)["panel"] is not None)

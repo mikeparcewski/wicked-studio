@@ -26,7 +26,7 @@ import os
 import sys
 import urllib.parse
 
-from uxfix_fixture import DEFAULT_APPEARANCE, HIDE_GATE_TOASTS, REPO, ensure_build, open_run_panel_item, set_fixture, start_server
+from uxfix_fixture import DEFAULT_APPEARANCE, HIDE_GATE_TOASTS, REPO, ensure_build, open_run_panel_item, set_fixture, start_server, close_details
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4398"))
 W, H = 1440, 700
@@ -221,7 +221,7 @@ with sync_playwright() as p:
     ww.get_by_test_id("sheet-section").wait_for(state="visible", timeout=5000)
     ww.locator('[data-testid="sheet-section"] [data-testid="lineage-retried-as"]').first.wait_for(state="visible", timeout=8000)
     retried = ww.locator('[data-testid="sheet-section"] [data-testid="lineage-retried-as"]').all_inner_texts()
-    page.get_by_test_id("session-details-toggle").click()
+    close_details(page)
     check("activity", len(lines) >= 1 and all(l["tone"] in ("info", "work", "gate", "fail", "human") for l in lines)
           and not any("sessionStarted" in l["text"] or "sessionFailed" in l["text"] for l in lines)
           and any("Run failed" in l["text"] for l in lines), lines=lines)

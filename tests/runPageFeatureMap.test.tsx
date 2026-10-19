@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import * as client from '../src/api/client.js';
 import type { SessionView } from '../src/api/types.js';
-import { SessionPage, resetDetailsDefault } from '../src/components/session/SessionView.js';
+import { SessionPage } from '../src/components/session/SessionView.js';
 import { useSheets } from '../src/store/sheets.js';
 import { useRunEventStore } from '../src/store/events.js';
 import { useCapabilities } from '../src/store/capabilities.js';
@@ -14,7 +14,7 @@ import { useElicitationStore } from '../src/store/elicitations.js';
 import { setCachedRoster } from '../src/store/rosterCache.js';
 import { useHostPanel } from '../src/editors/hostApi.js';
 import { makeUnit, makeView } from './factories.js';
-import { SinceYouLeft } from '../src/components/session/SinceYouLeft.js';
+import { DETAILS_OPEN_KEY } from '../src/board/runHeader.js';
 import { resetRunPanel, useRunPanel } from '../src/store/runPanel.js';
 import { openSheet } from '../src/store/sheets.js';
 import { RUN_PANEL_KEY } from '../src/board/runPanelModel.js';
@@ -41,6 +41,7 @@ const REVIEW_GATE: OpenGate = { runId: 'r1', ord: 1, prompt: 'Does the change ho
 
 beforeEach(() => {
   localStorage.removeItem(RUN_PANEL_KEY);
+  localStorage.removeItem(DETAILS_OPEN_KEY);
   resetRunPanel();
   setCachedRoster(ROSTER as never);
   useSheets.setState({ open: null, stopping: {} } as never);
@@ -61,20 +62,43 @@ const panel = (): HTMLElement => screen.getByTestId('host-panel');
 const thread = (): HTMLElement => screen.getByTestId('session-thread');
 
 describe('run page B: the thread beside the one host panel', () => {
-  it('the page is the thread, with the panel (base tab: the run) closed until Details opens it (DES-CHAT-NATIVE-RUN)', () => {
-    resetDetailsDefault();
+  it('the page is the thread with the details panel open beside it; its close leaves an edge handle that reopens it (operator 2026-10-18)', () => {
     page([live()]);
     const frame = screen.getByTestId('session-frame');
     expect(within(frame).getByTestId('session')).toBeTruthy();
-    const toggle = screen.getByTestId('session-details-toggle');
-    expect(screen.queryByTestId('host-panel')).toBeNull();
-    expect(screen.queryByTestId('host-panel-ribbon')).toBeNull();
-    expect(toggle).toHaveAttribute('aria-expanded', 'false');
-    act(() => { fireEvent.click(toggle); });
-    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    // No Details button in the header: the panel is open by default, with its own close.
+    expect(screen.queryByTestId('session-details-toggle')).toBeNull();
     expect(within(panel()).getByTestId('run-tab')).toHaveAttribute('data-run-id', 'r1');
-    act(() => { fireEvent.click(toggle); });
+    expect(screen.queryByTestId('run-details-handle')).toBeNull();
+    expect(screen.queryByTestId('host-panel-ribbon')).toBeNull();
+    act(() => { fireEvent.click(within(panel()).getByTestId('host-panel-fold')); });
     expect(screen.queryByTestId('host-panel')).toBeNull();
+    const handle = screen.getByTestId('run-details-handle');
+    expect(handle).toHaveAccessibleName('Show the run’s details');
+    expect(handle).toHaveAttribute('aria-controls', 'run-details-panel');
+    expect(document.activeElement).toBe(handle);
+    expect(localStorage.getItem(DETAILS_OPEN_KEY)).toBe('false');
+    act(() => { fireEvent.click(handle); });
+    expect(panel()).toBeTruthy();
+    expect(document.activeElement).toBe(within(panel()).getByTestId('host-panel-fold'));
+    expect(localStorage.getItem(DETAILS_OPEN_KEY)).toBe('true');
+  });
+
+  it('a browser that closed the panel opens the next run page with it closed, behind the handle', () => {
+    localStorage.setItem(DETAILS_OPEN_KEY, 'false');
+    page([live()]);
+    expect(screen.queryByTestId('host-panel')).toBeNull();
+    expect(screen.getByTestId('run-details-handle')).toBeTruthy();
+  });
+
+  it('storage that throws: the panel opens by default and closing it is no error', () => {
+    const get = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('blocked'); });
+    const set = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('blocked'); });
+    page([live()]);
+    expect(panel()).toBeTruthy();
+    act(() => { fireEvent.click(within(panel()).getByTestId('host-panel-fold')); });
+    expect(screen.getByTestId('run-details-handle')).toBeTruthy();
+    get.mockRestore(); set.mockRestore();
   });
 });
 
@@ -82,8 +106,12 @@ describe('where today’s features go (one row each)', () => {
   it('title, status, Stop with confirm → the chat header; Stop also in the Run tab', () => {
     page([live('executing')]);
     expect(screen.getByTestId('session-title')).toBeTruthy();
-    expect(screen.getByTestId('session-status')).toBeTruthy();
+    expect(screen.getByTestId('session-status')).toHaveTextContent('Working');
+    // Stop is a destructive control: red, and it says what it stops.
+    expect(screen.getByTestId('session-stop')).toHaveTextContent('Stop run');
+    expect(screen.getByTestId('session-stop')).toHaveClass('wk-stop-btn');
     fireEvent.click(screen.getByTestId('session-stop'));
+    expect(screen.getByTestId('session-stop-confirm')).toHaveClass('wk-stop-btn--confirm');
     expect(screen.getByTestId('session-stop-confirm-row')).toBeTruthy();
     fireEvent.click(screen.getByTestId('session-stop-keep'));
     fireEvent.click(within(panel()).getByTestId('run-tab-stop'));
@@ -193,12 +221,10 @@ describe('where today’s features go (one row each)', () => {
     expect(screen.getByTestId('session').querySelector('.wk-session-composer')).not.toBeNull();
   });
 
-  it('SinceYouLeft → the first card in the thread on return, from crew, still one line collapsed', () => {
-    render(<SinceYouLeft card={{ away: '5 h', summary: '1 finished', finished: ['r1'], failed: [], needsYou: 0 } as never} runs={[live('completed')]} />);
-    const card = screen.getByTestId('since-you-left');
-    const who = within(card).getByTestId('turn-who');
-    expect(who).toHaveAttribute('data-role', 'crew');
-    expect(who.tagName).toBe('SPAN');
-    expect(who.closest('.wk-since-head')).not.toBeNull();
+  it('a failed run’s state badge is the danger tone; no "since you left" card on the run page any more', () => {
+    page([live('failed')]);
+    expect(screen.getByTestId('session-status')).toHaveTextContent('Failed');
+    expect(screen.getByTestId('session-status')).toHaveAttribute('data-tone', 'danger');
+    expect(screen.queryByTestId('since-you-left')).toBeNull();
   });
 });

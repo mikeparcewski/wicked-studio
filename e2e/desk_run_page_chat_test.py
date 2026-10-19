@@ -25,7 +25,7 @@ import json
 import os
 import sys
 
-from uxfix_fixture import DEFAULT_APPEARANCE, HIDE_GATE_TOASTS, REPO, ensure_build, set_fixture, start_server
+from uxfix_fixture import DEFAULT_APPEARANCE, HIDE_GATE_TOASTS, REPO, ensure_build, set_fixture, start_server, open_details
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4481"))
 W, H = 1440, 700
@@ -88,9 +88,8 @@ def open_run(page, run_id: str, theme: str) -> dict:
     page.goto(f"{origin}/s/run%3A{run_id}", wait_until="networkidle")
     try:
         page.get_by_test_id("session-run").first.wait_for(state="visible", timeout=15000)
-        # DES-CHAT-NATIVE-RUN: the panel is closed until the header's Details opens it (its place is remembered).
-        if page.get_by_test_id("session-details-toggle").get_attribute("aria-expanded") != "true":
-            page.get_by_test_id("session-details-toggle").click()
+        # Operator 2026-10-18: the panel is open by default; closed (remembered), its edge handle opens it.
+        open_details(page)
         page.locator('[data-testid="host-panel"] [data-testid="run-tab"]').wait_for(state="visible", timeout=10000)
     except Exception:
         page.screenshot(path=str(SHOTS / f"desk-run-page-chat-{run_id}-missing.png"))
@@ -141,17 +140,17 @@ with sync_playwright() as p:
     page.set_viewport_size({"width": 1100, "height": H})
     set_fixture(origin, gate_move=True, walkthrough=False, sessions=False, run_chat_id=False, appearance={**DEFAULT_APPEARANCE, "theme": "light"})
     page.goto(f"{origin}/s/run%3Ar-review", wait_until="networkidle")
-    page.get_by_test_id("session-details-toggle").wait_for(state="visible", timeout=15000)
+    page.get_by_test_id("run-details-handle").wait_for(state="visible", timeout=15000)
     page.wait_for_timeout(500)
     d3 = page.evaluate(PAGE)
     page.screenshot(path=str(SHOTS / "desk-run-page-chat-narrow-light.png"))
+    # Below 1200 px the panel starts behind its right-edge handle (it would cover the chat), never a ribbon line.
     check("narrow-no-ribbon", d3["panel"] is None and d3["ribbon"] is None and not d3["hscroll"]
-          and page.get_by_test_id("session-details-toggle").get_attribute("aria-expanded") == "false", page=d3)
-    page.get_by_test_id("session-details-toggle").click()
+          and page.get_by_test_id("run-details-handle").get_attribute("aria-expanded") == "false", page=d3)
+    page.get_by_test_id("run-details-handle").click()
     page.locator('[data-testid="host-panel"] [data-testid="run-tab"]').wait_for(state="visible", timeout=5000)
     page.screenshot(path=str(SHOTS / "desk-run-page-chat-narrow-open-light.png"))
-    check("narrow-opens", page.evaluate(PAGE)["panel"] is not None
-          and page.get_by_test_id("session-details-toggle").get_attribute("aria-expanded") == "true")
+    check("narrow-opens", page.evaluate(PAGE)["panel"] is not None and page.get_by_test_id("run-details-handle").count() == 0)
 
     check("no-page-errors", errors == [], errors=errors)
     browser.close()

@@ -200,14 +200,14 @@ function RunTabDetails({ view, allRuns, sessionId, title, navigate }: { view: Se
         )}
         <div data-testid="run-tab-actions" className="wk-run-tab-actions">
           {!isTerminal(view) && (
-            <button type="button" data-testid="run-tab-stop" className="wk-run-tab-button" disabled={stopping} onClick={() => setConfirmStop(true)}>{stopping ? 'Stopping…' : 'Stop'}</button>
+            <button type="button" data-testid="run-tab-stop" className="wk-run-tab-button wk-stop-btn" disabled={stopping} onClick={() => setConfirmStop(true)}>{stopping ? 'Stopping…' : 'Stop'}</button>
           )}
           {panelShown && <SheetRunActions view={view} />}
         </div>
         {!isTerminal(view) && confirmStop && (
           <div data-testid="run-tab-stop-confirm-row" className="wk-run-tab-confirm">
             <span>Stop this run?</span>
-            <button type="button" data-testid="run-tab-stop-confirm" className="wk-run-tab-button" disabled={stopping} onClick={() => { stopRun([id], `“${title}”`); setConfirmStop(false); }}>Stop this run</button>
+            <button type="button" data-testid="run-tab-stop-confirm" className="wk-run-tab-button wk-stop-btn wk-stop-btn--confirm" disabled={stopping} onClick={() => { stopRun([id], `“${title}”`); setConfirmStop(false); }}>Stop this run</button>
             <button type="button" data-testid="run-tab-stop-keep" className="wk-run-tab-button" onClick={() => setConfirmStop(false)}>Keep going</button>
           </div>
         )}

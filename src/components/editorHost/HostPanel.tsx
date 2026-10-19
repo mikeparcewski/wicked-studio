@@ -30,7 +30,7 @@ export function useNarrow(): boolean {
   return narrow;
 }
 
-export function HostPanel({ runTab, ribbon, toggledByPage = false }: HostPanelProps): React.ReactElement {
+export function HostPanel({ runTab, ribbon, edgeHandle, onToggle }: HostPanelProps): React.ReactElement {
   const { group, tab, folded, setTab, closeGroup, setFolded } = useHostPanel();
   const narrow = useNarrow();
   // The overlay (below 1200 px) is the store's, so a page's own toggle (the session's Details) reads and sets it too.
@@ -47,16 +47,36 @@ export function HostPanel({ runTab, ribbon, toggledByPage = false }: HostPanelPr
   // Folded or narrow, the panel is the ribbon — but its subtree stays mounted (hidden), so the group's options
   // instance and its confirmed values live as long as the group (codex h2b-r1 P2).
   const collapsed = narrow ? !overlay : folded;
+  // The edge handle and the panel's close hand the keyboard focus to each other, so it never drops to the page.
+  const handleRef = useRef<HTMLButtonElement | null>(null);
+  const foldRef = useRef<HTMLButtonElement | null>(null);
+  const moveFocus = useRef(false);
+  useEffect(() => {
+    if (!moveFocus.current) return;
+    moveFocus.current = false;
+    (collapsed ? handleRef.current : foldRef.current)?.focus();
+  }, [collapsed]);
   return (
     <>
-      {collapsed && !toggledByPage && (
+      {collapsed && edgeHandle !== undefined && (
+        <button ref={handleRef} type="button" data-testid="run-details-handle" aria-label={edgeHandle} title={edgeHandle}
+          aria-controls="run-details-panel" aria-expanded={false} data-narrow={narrow ? 'true' : 'false'}
+          className={`wk-hpanel-handle${narrow ? ' wk-hpanel-handle--overlay' : ''}`}
+          onClick={() => { moveFocus.current = true; if (narrow) setOverlay(true); else { setFolded(false); onToggle?.(true); } }}>
+          <span aria-hidden className="wk-hpanel-handle-icon">⟨</span>
+          <span aria-hidden className="wk-hpanel-handle-label">Details</span>
+        </button>
+      )}
+      {collapsed && edgeHandle === undefined && (
         <button type="button" data-testid="host-panel-ribbon" data-folded={narrow ? 'false' : 'true'}
           className={narrow ? 'wk-hpanel-ribbon' : 'wk-hpanel-ribbon wk-hpanel-ribbon--side'}
           onClick={() => { if (narrow) setOverlay(true); else setFolded(false); }} aria-label="Show the panel">
           {ribbon ?? (group !== null ? `${group.editor.title} options` : 'Options')}
         </button>
       )}
-    <aside id="run-details-panel" data-testid={collapsed ? undefined : 'host-panel'} hidden={collapsed} data-narrow={narrow ? 'true' : 'false'} aria-label="Run and options" className={`wk-hpanel${narrow ? ' wk-hpanel--overlay' : ''}`}>
+    <aside id="run-details-panel" data-testid={collapsed ? undefined : 'host-panel'} hidden={collapsed} data-narrow={narrow ? 'true' : 'false'} aria-label="Run and options" className={`wk-hpanel${narrow ? ' wk-hpanel--overlay' : ''}`}
+      // Over the page (below 1200 px), Esc closes the run page's panel back to its handle.
+      onKeyDown={(e) => { if (narrow && edgeHandle !== undefined && e.key === 'Escape' && !e.defaultPrevented) { moveFocus.current = true; setOverlay(false); } }}>
       <div className="wk-hpanel-head">
         {/* Without a group the panel is the run's details alone: its heading says so, and there is no one-tab strip. */}
         {group !== null ? <span className="wk-hpanel-heading">{`${group.editor.title} options`}</span>
@@ -65,8 +85,9 @@ export function HostPanel({ runTab, ribbon, toggledByPage = false }: HostPanelPr
         {group !== null && (
           <button type="button" data-testid="host-panel-close" aria-label={`Close ${group.editor.title} options`} className="wk-host-btn" onClick={closeGroup}>×</button>
         )}
-        <button type="button" data-testid="host-panel-fold" aria-label="Hide the panel" className="wk-host-btn"
-          onClick={() => { if (narrow) setOverlay(false); else setFolded(true); }}>⟩</button>
+        <button ref={foldRef} type="button" data-testid="host-panel-fold" aria-label={edgeHandle !== undefined && group === null ? 'Close the details' : 'Hide the panel'}
+          title={edgeHandle !== undefined && group === null ? 'Close the details — the handle at the right edge opens them again' : undefined} className="wk-host-btn"
+          onClick={() => { moveFocus.current = edgeHandle !== undefined; if (narrow) setOverlay(false); else { setFolded(true); onToggle?.(false); } }}>⟩</button>
       </div>
       <PanelTabs group={group} tab={tab} setTab={setTab} withRun={runTab !== undefined} />
       <div className="wk-hpanel-body">

@@ -12,8 +12,8 @@
   "studioVersion": "0.11.2",
   "counts": {
     "files": 234,
-    "occurrences": 2959,
-    "static": 2567,
+    "occurrences": 2969,
+    "static": 2576,
     "dynamic": 69,
     "computed": 24
   },
@@ -10116,6 +10116,12 @@
       ]
     },
     {
+      "testId": "run-details-handle",
+      "files": [
+        "src/components/editorHost/HostPanel.tsx"
+      ]
+    },
+    {
       "testId": "run-draft-update-row",
       "files": [
         "src/components/FinishedRunRow.tsx"
@@ -10776,12 +10782,6 @@
       ]
     },
     {
-      "testId": "session-details-toggle",
-      "files": [
-        "src/components/session/SessionView.tsx"
-      ]
-    },
-    {
       "testId": "session-failed-resume",
       "files": [
         "src/components/session/RunConversation.tsx"
@@ -11106,6 +11106,18 @@
       ]
     },
     {
+      "testId": "session-jump-latest",
+      "files": [
+        "src/components/session/SessionView.tsx"
+      ]
+    },
+    {
+      "testId": "session-jump-unseen",
+      "files": [
+        "src/components/session/SessionView.tsx"
+      ]
+    },
+    {
       "testId": "session-kickoff-toggle",
       "files": [
         "src/components/session/SessionView.tsx"
@@ -11133,6 +11145,66 @@
       "testId": "session-move-picker",
       "files": [
         "src/components/desk/MoveToProject.tsx"
+      ]
+    },
+    {
+      "testId": "session-needs-age",
+      "files": [
+        "src/components/session/NeedsBanner.tsx"
+      ]
+    },
+    {
+      "testId": "session-needs-banner",
+      "files": [
+        "src/components/session/NeedsBanner.tsx"
+      ]
+    },
+    {
+      "testId": "session-needs-first",
+      "files": [
+        "src/components/session/NeedsBanner.tsx"
+      ]
+    },
+    {
+      "testId": "session-needs-item",
+      "files": [
+        "src/components/session/NeedsBanner.tsx"
+      ]
+    },
+    {
+      "testId": "session-needs-jump",
+      "files": [
+        "src/components/session/NeedsBanner.tsx"
+      ]
+    },
+    {
+      "testId": "session-needs-kind",
+      "files": [
+        "src/components/session/NeedsBanner.tsx"
+      ]
+    },
+    {
+      "testId": "session-needs-overview",
+      "files": [
+        "src/components/session/NeedsBanner.tsx"
+      ]
+    },
+    {
+      "testId": "session-needs-question",
+      "files": [
+        "src/components/session/NeedsBanner.tsx"
+      ]
+    },
+    {
+      "testId": "session-needs-step",
+      "files": [
+        "src/components/session/NeedsBanner.tsx"
+      ]
+    },
+    {
+      "testId": "session-needs-trigger",
+      "files": [
+        "src/components/session/NeedsBanner.tsx"
       ]
     },
     {
@@ -12037,24 +12109,6 @@
       "testId": "signin-warning-fix",
       "files": [
         "src/components/ChatInput.tsx"
-      ]
-    },
-    {
-      "testId": "since-summary",
-      "files": [
-        "src/components/session/SinceYouLeft.tsx"
-      ]
-    },
-    {
-      "testId": "since-toggle",
-      "files": [
-        "src/components/session/SinceYouLeft.tsx"
-      ]
-    },
-    {
-      "testId": "since-you-left",
-      "files": [
-        "src/components/session/SinceYouLeft.tsx"
       ]
     },
     {

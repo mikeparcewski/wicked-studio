@@ -49,6 +49,7 @@
   --status-gate-dim: hsl(var(--_sg-h) 85% 90%);
   --status-fail:     hsl(var(--_sf-h) 74% 44%);
   --status-fail-dim: hsl(var(--_sf-h) 80% 94%);
+  --status-fail-fg:  #ffffff;
   --status-run:      hsl(var(--_sr-h) 70% 26%);
   --status-run-dim:  hsl(var(--_sr-h) 50% 90%);
   --status-warn:     hsl(var(--_sw-h) 90% 34%);

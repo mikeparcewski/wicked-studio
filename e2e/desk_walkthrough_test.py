@@ -165,6 +165,9 @@ with sync_playwright() as p:
     browser = p.chromium.launch()
     page = browser.new_page(viewport={"width": W, "height": H}, device_scale_factor=1)
     page.add_init_script(OPEN_RUN_DETAILS)  # the run's record is in its Details fold (DES-CHAT-NATIVE-RUN)
+    # The walkthrough card's fit at 1440x700 is measured in the thread's full column: a viewer who closed the run
+    # page's Details panel (open by default since 2026-10-18; this browser remembers it closed).
+    page.add_init_script("try { localStorage.setItem('studio.runDetailsOpen', 'false'); } catch (e) {}")
     page.on("pageerror", lambda e: errors.append(str(e)))
     page.add_init_script(
         "document.addEventListener('DOMContentLoaded', () => { const s = document.createElement('style'); "
