@@ -192,6 +192,10 @@
   position: fixed; right: 0; top: 50%; transform: translateY(-50%); z-index: 20; width: 28px; padding: 12px 0;
   border: 1px solid var(--border-strong); border-right: 0; border-radius: var(--radius-md) 0 0 var(--radius-md); box-shadow: var(--shadow-raised);
 }
+/* A phone's thread gutter (16 px) is narrower than the tab: the thread makes room on its right while the tab shows. */
+@media (max-width: 767px) {
+  .wk-session-frame:has(> .wk-hpanel-handle--overlay) .wk-session-thread { padding-right: calc(28px + var(--space-2)); }
+}
 @media (prefers-reduced-motion: reduce) { .wk-jump-latest { transition: none; } }
 
 @media (max-width: 767px) {

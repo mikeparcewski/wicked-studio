@@ -111,10 +111,11 @@ export function atEnd(el: { scrollHeight: number; scrollTop: number; clientHeigh
   return el.scrollHeight - el.scrollTop - el.clientHeight < AT_END_PX;
 }
 
-/** How many entries arrived: the keys in `next` that `prev` did not hold. */
-export function newEntries(prev: ReadonlySet<string>, next: readonly string[]): number {
+/** How many entries arrived: those in `next` that `prev` did not hold, dated at or after `since` (older history that
+ *  lands late — a transcript read, the team rows — is not new). */
+export function newEntries(prev: ReadonlySet<string>, next: readonly { key: string; at: number }[], since: number): number {
   let n = 0;
-  for (const k of next) if (!prev.has(k)) n += 1;
+  for (const e of next) if (!prev.has(e.key) && e.at >= since) n += 1;
   return n;
 }
 
@@ -128,7 +129,8 @@ export function jumpLabel(unseen: number): string {
 
 export const DETAILS_OPEN_KEY = 'studio.runDetailsOpen';
 
-/** Open unless this browser remembers it closed (storage unreadable = the default, open). */
+/** Open unless this browser remembers it closed (storage unreadable = the default, open). Written only by the
+ *  operator's own close and handle (a link, ⌘K or a card's Options opening the panel is not their choice). */
 export function readDetailsOpen(): boolean {
   try {
     return window.localStorage.getItem(DETAILS_OPEN_KEY) !== 'false';

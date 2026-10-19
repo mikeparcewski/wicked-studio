@@ -30,7 +30,7 @@ export function useNarrow(): boolean {
   return narrow;
 }
 
-export function HostPanel({ runTab, ribbon, edgeHandle }: HostPanelProps): React.ReactElement {
+export function HostPanel({ runTab, ribbon, edgeHandle, onToggle }: HostPanelProps): React.ReactElement {
   const { group, tab, folded, setTab, closeGroup, setFolded } = useHostPanel();
   const narrow = useNarrow();
   // The overlay (below 1200 px) is the store's, so a page's own toggle (the session's Details) reads and sets it too.
@@ -62,7 +62,7 @@ export function HostPanel({ runTab, ribbon, edgeHandle }: HostPanelProps): React
         <button ref={handleRef} type="button" data-testid="run-details-handle" aria-label={edgeHandle} title={edgeHandle}
           aria-controls="run-details-panel" aria-expanded={false} data-narrow={narrow ? 'true' : 'false'}
           className={`wk-hpanel-handle${narrow ? ' wk-hpanel-handle--overlay' : ''}`}
-          onClick={() => { moveFocus.current = true; if (narrow) setOverlay(true); else setFolded(false); }}>
+          onClick={() => { moveFocus.current = true; if (narrow) setOverlay(true); else { setFolded(false); onToggle?.(true); } }}>
           <span aria-hidden className="wk-hpanel-handle-icon">⟨</span>
           <span aria-hidden className="wk-hpanel-handle-label">Details</span>
         </button>
@@ -87,7 +87,7 @@ export function HostPanel({ runTab, ribbon, edgeHandle }: HostPanelProps): React
         )}
         <button ref={foldRef} type="button" data-testid="host-panel-fold" aria-label={edgeHandle !== undefined && group === null ? 'Close the details' : 'Hide the panel'}
           title={edgeHandle !== undefined && group === null ? 'Close the details — the handle at the right edge opens them again' : undefined} className="wk-host-btn"
-          onClick={() => { moveFocus.current = edgeHandle !== undefined; if (narrow) setOverlay(false); else setFolded(true); }}>⟩</button>
+          onClick={() => { moveFocus.current = edgeHandle !== undefined; if (narrow) setOverlay(false); else { setFolded(true); onToggle?.(false); } }}>⟩</button>
       </div>
       <PanelTabs group={group} tab={tab} setTab={setTab} withRun={runTab !== undefined} />
       <div className="wk-hpanel-body">

@@ -75,9 +75,10 @@ describe('jump to latest — pure', () => {
     expect(atEnd({ scrollHeight: 2000, clientHeight: 500, scrollTop: 1500 - AT_END_PX + 1 })).toBe(true);
     expect(atEnd({ scrollHeight: 2000, clientHeight: 500, scrollTop: 1000 })).toBe(false);
   });
-  it('counts the entries that arrived, and says so', () => {
-    expect(newEntries(new Set(['a', 'b']), ['a', 'b', 'c', 'd'])).toBe(2);
-    expect(newEntries(new Set(['a']), ['a'])).toBe(0);
+  it('counts the entries that arrived since the page opened (late history is not new), and says so', () => {
+    const at = (key: string, t: number): { key: string; at: number } => ({ key, at: t });
+    expect(newEntries(new Set(['a', 'b']), [at('a', 1), at('b', 2), at('c', 100), at('d', 101)], 50)).toBe(2);
+    expect(newEntries(new Set(['a']), [at('a', 1), at('old', 10)], 50)).toBe(0);
     expect(jumpLabel(0)).toBe('Jump to the latest');
     expect(jumpLabel(1)).toBe('1 new message — jump to the latest');
     expect(jumpLabel(4)).toBe('4 new messages — jump to the latest');

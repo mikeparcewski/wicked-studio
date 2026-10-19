@@ -31,6 +31,8 @@ describe('S16a-2c — #governance on a run session', () => {
     // The panel this browser remembered closed opens for the link.
     expect(screen.getByTestId('host-panel')).toBeTruthy();
     expect(screen.queryByTestId('run-details-handle')).toBeNull();
+    // A link opening it is not the operator's choice: the remembered close stands.
+    expect(localStorage.getItem('studio.runDetailsOpen')).toBe('false');
     const item = screen.getAllByTestId('run-panel-item').find((i) => i.dataset['item'] === 'governance')!;
     expect(item).toHaveAttribute('data-open', 'true');
     // GovernanceAudit's load settles inside the test (it used to land after teardown).

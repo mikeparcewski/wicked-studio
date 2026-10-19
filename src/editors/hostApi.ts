@@ -347,6 +347,8 @@ export interface HostPanelProps {
    *  (no ribbon line above the conversation); the handle reopens it as the right panel, or over the page below
    *  1200 px. */
   edgeHandle?: string;
+  /** The operator's own toggle on a wide screen (the panel's close, the edge handle): what the page remembers. */
+  onToggle?: (open: boolean) => void;
 }
 
 export interface FullShellProps {

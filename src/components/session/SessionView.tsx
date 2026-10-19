@@ -595,10 +595,16 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
   const [unseen, setUnseen] = useState(0);
   const glideUntil = useRef(0);
   const glideSettle = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Called from layout effects that run on every thread change: it sets state only when the answer changed, so it can
+  // never feed a render loop.
+  const awayNow = useRef(false);
+  const unseenNow = useRef(0);
+  awayNow.current = away;
+  unseenNow.current = unseen;
   const syncEnd = (el: HTMLDivElement): void => {
     const end = atEnd(el);
-    setAway(!end);
-    if (end) setUnseen(0);
+    if (awayNow.current === end) { awayNow.current = !end; setAway(!end); }
+    if (end && unseenNow.current !== 0) { unseenNow.current = 0; setUnseen(0); }
   };
   const operatorInput = (): void => { operatorUntil.current = Date.now() + OPERATOR_SCROLL_MS; glideUntil.current = 0; };
   useEffect(() => {
@@ -685,6 +691,8 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
       return;
     }
     if (grew && nearBottom.current) scrollThread(el, el.scrollHeight);
+    // Growth below a thread that is not following fires no scroll event: the jump button is decided here too.
+    syncEnd(el);
   }, [entries, ready]);
   // DES-CHAT-NATIVE-RUN: a run's messages fill in after their entry lands (each step's words are read on demand),
   // so growth INSIDE an entry follows too while the operator is at the newest message.
@@ -702,19 +710,23 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
         return;
       }
       if (nearBottom.current) scrollThread(el, el.scrollHeight);
+      syncEnd(el);
     });
     for (const child of Array.from(el.children)) ro.observe(child);
     return () => ro.disconnect();
   }, [entries, ready]);
   // What arrived while the operator reads above the newest message: the jump button counts it (a typing or working
   // line is not a message).
-  const seenKeys = useRef<{ session: string; keys: Set<string> } | null>(null);
+  // History that lands after the page is ready (the transcript, the team rows, a restored place's thread) is not new:
+  // only entries dated after this session was opened count.
+  const seenKeys = useRef<{ session: string; opened: number; keys: Set<string> } | null>(null);
   useEffect(() => {
-    const keys = entries.filter((e) => e.kind !== 'typing' && e.kind !== 'working').map((e) => e.key);
+    const now = entries.filter((e) => e.kind !== 'typing' && e.kind !== 'working');
     const prev = seenKeys.current;
-    seenKeys.current = { session: sessionId, keys: new Set(keys) };
-    if (!ready || prev === null || prev.session !== sessionId || prev.keys.size === 0 || nearBottom.current) return;
-    const n = newEntries(prev.keys, keys);
+    const opened = prev !== null && prev.session === sessionId ? prev.opened : Date.now();
+    seenKeys.current = { session: sessionId, opened, keys: new Set(now.map((e) => e.key)) };
+    if (!ready || prev === null || prev.session !== sessionId || nearBottom.current || restore.current.pending) return;
+    const n = newEntries(prev.keys, now, opened);
     if (n > 0) setUnseen((u) => u + n);
   }, [entries, ready, sessionId]);
   useEffect(() => { setUnseen(0); setAway(false); }, [sessionId]);
@@ -740,8 +752,8 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
     const asking = block.querySelector<HTMLElement>(ASKING_SELECTOR) ?? block;
     const view = el.getBoundingClientRect();
     const at = asking.getBoundingClientRect().top;
-    if (at >= view.top && at <= view.bottom - 160) return; // already in view
-    scrollThread(el, Math.max(0, el.scrollTop + at - view.top - 8));
+    if (at < view.top || at > view.bottom - 160) scrollThread(el, Math.max(0, el.scrollTop + at - view.top - 8));
+    syncEnd(el);
   }, [ready, gatedRunId, sessionId, entries]);
 
   // Where a source's passage can be read from: the session's runs with a worktree, newest first.
@@ -780,13 +792,6 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
   useEffect(() => {
     if (useHostPanel.getState().group === null) useHostPanel.getState().setFolded(!readDetailsOpen());
   }, []);
-  const folded = useHostPanel((s) => s.folded);
-  const foldSeen = useRef<boolean | null>(null);
-  useEffect(() => {
-    if (foldSeen.current === null || foldSeen.current === folded) { foldSeen.current = folded; return; }
-    foldSeen.current = folded;
-    if (!panelNarrow) writeDetailsOpen(!folded);
-  }, [folded, panelNarrow]);
   // The run panel IS this session's look-underneath (src/board/runPanelModel.ts): while this page is up, a session
   // sheet asked for it or one of its runs (⌘K, a sign-in line, `#governance`) opens the panel at the same content.
   const claim = useRef({ mine, narrow: panelNarrow });
@@ -1095,7 +1100,7 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
       {/* The measure sits on a wrapper: the composer's own box (its `/` and `@` menus anchor to it) stays the input's width. */}
       <div className="wk-session-composer-wrap wk-measure wk-measure--thread"><Composer {...composerProps} className="wk-session-composer" /></div>
     </div>
-    <HostPanel edgeHandle="Show the run’s details" runTab={<RunTab runs={mine} allRuns={runs} sessionId={sessionId} title={title} navigate={navigate} />} ribbon={<RunRibbon runs={mine} />} />
+    <HostPanel edgeHandle="Show the run’s details" onToggle={writeDetailsOpen} runTab={<RunTab runs={mine} allRuns={runs} sessionId={sessionId} title={title} navigate={navigate} />} ribbon={<RunRibbon runs={mine} />} />
     </div>
     </RunHostProvider>
     </ArtifactAddressProvider>
