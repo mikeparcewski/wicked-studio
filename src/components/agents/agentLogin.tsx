@@ -41,8 +41,10 @@ export interface AgentLoginHooks {
   /**
    * Open this agent's own sign-in (the login container). Absent: the copy-the-command step. A rejection says it
    * failed: {@link SignInNotCompleted} when it ran and the daemon said why, anything else when it could not open.
+   * `onChecking` is called once the sign-in window has closed and the daemon is checking what it left (the hook
+   * then settles when that check answers), so the modal can say it is waiting rather than ask for more.
    */
-  signIn?: (key: string) => void | Promise<void>;
+  signIn?: (key: string, onChecking?: () => void) => void | Promise<void>;
   /** Sign this agent out. Absent: the copy-the-sign-out-command step. A promise holds Check now until it settles. */
   signOut?: (key: string) => void | Promise<void>;
   /** Re-check this agent's sign-in now and answer with the fresh roster. */

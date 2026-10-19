@@ -162,6 +162,44 @@ describe('container sign-in hooks (crew#1006)', () => {
     expect(row).not.toHaveTextContent('Looks signed in');
   }, 15_000);
 
+  it('while crew checks the sign-in (the window closed, no outcome yet) the modal says so with a spinner, until the answer', async () => {
+    d.ingestAfter = 3;
+    renderTab('?fix=claude');
+    const modal = await screen.findByRole('dialog', { name: 'Claude Code' });
+    fireEvent.click(within(modal).getByTestId('agents-signin'));
+    await waitFor(() => expect(screen.getByTestId('agents-login')).toHaveAttribute('data-state', 'open'));
+    expect(within(modal).queryByTestId('agents-check-spinner')).toBeNull();
+    // The login script saved the token and exited: the window closes, and crew's ingest has not answered yet.
+    finishSignIn('claude');
+    await waitFor(() => expect(screen.queryByTestId('agents-login')).toBeNull());
+    const waiting = within(modal).getByTestId('agents-check-result');
+    expect(waiting).toHaveAttribute('data-state', 'signin-checking');
+    expect(waiting).toHaveTextContent('Checking the sign-in with Claude Code…');
+    expect(waiting).toHaveTextContent('This can take up to a minute. There is nothing more to type.');
+    expect(within(waiting).getByTestId('agents-check-spinner')).toBeInTheDocument();
+    expect(within(modal).getByTestId('agents-signin')).toBeDisabled();
+    // It holds through the 404s and the re-check after them (never the stale "finish signing in" line)...
+    await waitFor(() => expect(d.calls.filter((c) => c.path === '/seats/claude/container-login' && c.method === 'GET').length).toBeGreaterThanOrEqual(2));
+    expect(within(modal).getByTestId('agents-check-result')).toHaveAttribute('data-state', 'signin-checking');
+    // ...until crew answers: then the existing success, and the spinner is gone.
+    await waitFor(() => expect(screen.getByTestId('agents-check-result')).toHaveAttribute('data-state', 'container-in'), { timeout: 8000 });
+    expect(screen.queryByTestId('agents-check-spinner')).toBeNull();
+  }, 15_000);
+
+  it('a refused check ends the waiting state with crew’s reason', async () => {
+    renderTab('?fix=claude');
+    const modal = await screen.findByRole('dialog', { name: 'Claude Code' });
+    fireEvent.click(within(modal).getByTestId('agents-signin'));
+    await waitFor(() => expect(screen.getByTestId('agents-login')).toHaveAttribute('data-state', 'open'));
+    d.open = null;
+    d.outcome['claude'] = { cli: 'claude', ok: false, error: 'claude: the paste does not contain an sk-ant-oat… token', at: new Date().toISOString() };
+    fireEvent.click(screen.getByTestId('terminal-stub-exit'));
+    await waitFor(() => expect(within(modal).getByTestId('agents-check-result')).toHaveAttribute('data-state', 'signin-checking'));
+    await waitFor(() => expect(within(modal).getByTestId('agents-check-result')).toHaveAttribute('data-state', 'signin-refused'), { timeout: 8000 });
+    expect(within(modal).queryByTestId('agents-check-spinner')).toBeNull();
+    expect(within(modal).getByTestId('agents-check-result')).toHaveTextContent('does not contain an sk-ant-oat');
+  }, 15_000);
+
   it('a sign-in crew’s ingest refused shows crew’s reason, never a success (the setup-token paste that never landed)', async () => {
     renderTab('?fix=claude');
     const modal = await screen.findByRole('dialog', { name: 'Claude Code' });

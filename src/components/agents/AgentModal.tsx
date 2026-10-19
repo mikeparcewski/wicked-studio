@@ -64,6 +64,7 @@ type Outcome =
   | { kind: 'signin-failed' }
   | { kind: 'signin-refused'; detail: string }
   | { kind: 'signing-in' }
+  | { kind: 'signin-checking' }
   | { kind: 'out-done' };
 
 const OUTCOME_WORDS: Record<Exclude<Outcome['kind'], 'idle'>, (name: string, detail: string) => { lead: string; tone: 'ok' | 'fail' | 'quiet'; line: string | null }> = {
@@ -84,6 +85,8 @@ const OUTCOME_WORDS: Record<Exclude<Outcome['kind'], 'idle'>, (name: string, det
   'signin-refused': (n, detail) => ({ lead: `The ${n} sign-in didn’t finish.`, tone: 'fail', line: detail }),
   'out-done': (n) => ({ lead: `${n} is signed out.`, tone: 'ok', line: 'Sign it in again whenever you want it back.' }),
   'signing-in': (n) => ({ lead: `Finish signing in to ${n} in the window that opened.`, tone: 'quiet', line: 'Studio checks it as soon as that window closes.' }),
+  // The window closed and studio's service is checking what it left (its ingest, then the re-check): nothing to type.
+  'signin-checking': (n) => ({ lead: `Checking the sign-in with ${n}…`, tone: 'quiet', line: 'This can take up to a minute. There is nothing more to type.' }),
 };
 
 /** What one fresh reading of the agent says, as the modal's result line (one mapping for every check). */
@@ -256,14 +259,17 @@ export function AgentModal({ agentKey, onClose, intent }: {
     const current = (): boolean => live.current && outGen.current === mine;
     setFrom(kind === 'in' ? 'card' : 'foot');
     setOutcome(kind === 'in' ? { kind: 'signing-in' } : { kind: 'idle' });
+    /** The sign-in window closed and studio's service is checking it: that state holds until the answer. */
+    let checkingIn = false;
+    const onChecking = (): void => { checkingIn = true; if (current()) { setFrom('card'); setOutcome({ kind: 'signin-checking' }); } };
     let pending: void | Promise<void>;
-    try { pending = hook(key); } catch (e) { pending = Promise.reject(e); }
+    try { pending = kind === 'in' ? login.signIn?.(key, onChecking) : hook(key); } catch (e) { pending = Promise.reject(e); }
     const end = (): void => useAuthOps.getState().end(key);
     // After the hook: ONE bounded re-check of the agent that deposits its row whether or not this modal is
     // still open, with the agent's lock held until it lands, so nothing newer can be overwritten by it and
     // no surface keeps the old sign-in (codex S4 r8, r10, r11, r14). The result line only if still current.
     const refresh = (): void => {
-      if (current()) { setFrom(kind === 'in' ? 'card' : 'foot'); setOutcome({ kind: 'checking' }); }
+      if (current() && !checkingIn) { setFrom(kind === 'in' ? 'card' : 'foot'); setOutcome({ kind: 'checking' }); }
       let timer: ReturnType<typeof setTimeout> | undefined;
       const late = new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error('deadline')), CHECK_DEADLINE_MS); });
       Promise.race([Promise.resolve().then(() => login.checkNow(key)), late])
@@ -298,7 +304,10 @@ export function AgentModal({ agentKey, onClose, intent }: {
   const result = outcome.kind === 'idle' ? null : OUTCOME_WORDS[outcome.kind](name, outcome.kind === 'signin-refused' ? outcome.detail : '');
   const resultLine = result === null ? null : (
     <div data-testid="agents-check-result" data-state={outcome.kind} role="status" className="wk-agents-result">
-      <span className={`wk-agents-word wk-agents-word--${result.tone}`}>{result.lead}</span>
+      <span className={`wk-agents-word wk-agents-word--${result.tone}`}>
+        {outcome.kind === 'signin-checking' && <span className="wk-agents-spinner" data-testid="agents-check-spinner" aria-hidden="true" />}
+        {result.lead}
+      </span>
       {result.line !== null && <span>{result.line}</span>}
     </div>
   );

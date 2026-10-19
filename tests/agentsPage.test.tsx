@@ -208,7 +208,7 @@ describe('the sign-in hooks (login containers, option A)', () => {
     const checkNow = vi.fn().mockResolvedValue({ roster: [claude({ auth: 'signed_in', login_check: 'live', council_eligible: true }), codex, pi], outcome: 'probed' });
     const { unmount } = render(<AgentLoginProvider hooks={{ signIn, signOut, checkNow }}><AgentsPage search="?fix=claude" navigate={navigate} /></AgentLoginProvider>);
     fireEvent.click(await screen.findByTestId('agents-signin'));
-    expect(signIn).toHaveBeenCalledWith('claude');
+    expect(signIn).toHaveBeenCalledWith('claude', expect.any(Function)); // its waiting-state callback
     // The container sign-in replaces the terminal step: no command to copy on the signed-out card.
     expect(screen.queryByTestId('agents-command')).toBeNull();
     fireEvent.click(screen.getByTestId('agents-check'));
@@ -256,7 +256,7 @@ describe('the sign-in hooks (login containers, option A)', () => {
     const signIn = vi.fn(() => { throw new Error('no container runtime'); });
     render(<AgentLoginProvider hooks={{ signIn }}><AgentsPage search="?fix=claude" navigate={navigate} /></AgentLoginProvider>);
     fireEvent.click(await screen.findByTestId('agents-signin'));
-    expect(signIn).toHaveBeenCalledWith('claude');
+    expect(signIn).toHaveBeenCalledWith('claude', expect.any(Function));
     await waitFor(() => expect(screen.getByTestId('agents-check-result')).toHaveAttribute('data-state', 'signin-failed'));
   });
 
