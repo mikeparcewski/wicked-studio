@@ -60,6 +60,9 @@ function gateKindWord(gate: OpenGate | undefined, question: string): string {
   return 'Approval';
 }
 
+/** The kinds whose answer is the run's question card (a step's question; a stalled step handed to the operator). */
+export const QUESTION_KINDS: ReadonlySet<string> = new Set([KIND_WORDS['elicitation']!, KIND_WORDS['stalled-run']!]);
+
 const FAILED_UNIT = new Set(['rejected', 'failed', 'denied']);
 
 /** The step a row waits at: an open gate's step, else the step that failed. */
@@ -109,6 +112,16 @@ export const AT_END_PX = 80;
 
 export function atEnd(el: { scrollHeight: number; scrollTop: number; clientHeight: number }): boolean {
   return el.scrollHeight - el.scrollTop - el.clientHeight < AT_END_PX;
+}
+
+/** What the jump button counts a thread entry as: a turn by its turn and seat (the live reply and the transcript's
+ *  record of it are one message), a line by its own time (a finding placed under an older reply is still new),
+ *  anything else by its key. */
+export function arrival(e: { kind: string; key: string; at: number; turnId?: string | null; who?: string; line?: { at: number } }): { key: string; at: number } {
+  return {
+    key: e.kind === 'turn' && typeof e.turnId === 'string' ? `turn:${e.turnId}:${e.who ?? ''}` : e.key,
+    at: e.kind === 'line' && e.line !== undefined ? e.line.at : e.at,
+  };
 }
 
 /** How many entries arrived: those in `next` that `prev` did not hold, dated at or after `since` (older history that

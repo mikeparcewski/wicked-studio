@@ -6,7 +6,7 @@ import * as client from '../src/api/client.js';
 import type { SessionView } from '../src/api/types.js';
 import type { NeedRow } from '../src/board/needsYou.js';
 import {
-  AT_END_PX, DETAILS_OPEN_KEY, atEnd, headerBadge, jumpLabel, needsWords, newEntries, readDetailsOpen, waitingItems, writeDetailsOpen,
+  AT_END_PX, DETAILS_OPEN_KEY, QUESTION_KINDS, arrival, atEnd, headerBadge, jumpLabel, needsWords, newEntries, readDetailsOpen, waitingItems, writeDetailsOpen,
   type WaitingItem,
 } from '../src/board/runHeader.js';
 import { NeedsBanner } from '../src/components/session/NeedsBanner.js';
@@ -82,6 +82,21 @@ describe('jump to latest — pure', () => {
     expect(jumpLabel(0)).toBe('Jump to the latest');
     expect(jumpLabel(1)).toBe('1 new message — jump to the latest');
     expect(jumpLabel(4)).toBe('4 new messages — jump to the latest');
+  });
+});
+
+describe('arrival — what the jump button counts an entry as', () => {
+  it('a live reply and the transcript record of it are one message; a line dates by its own time', () => {
+    const live = arrival({ kind: 'turn', key: 'live:t1:claude', at: 100, turnId: 't1', who: 'claude' });
+    const rec = arrival({ kind: 'turn', key: 'm7', at: 101, turnId: 't1', who: 'claude' });
+    expect(live.key).toBe(rec.key);
+    expect(newEntries(new Set([live.key]), [rec], 50)).toBe(0);
+    expect(arrival({ kind: 'turn', key: 'answer:r:2', at: 5, turnId: null, who: 'pa' })).toEqual({ key: 'answer:r:2', at: 5 });
+    expect(arrival({ kind: 'line', key: 'a:9', at: 10.5, line: { at: 200 } })).toEqual({ key: 'a:9', at: 200 });
+    expect(arrival({ kind: 'run', key: 'r:x', at: 3 })).toEqual({ key: 'r:x', at: 3 });
+  });
+  it('a step question and a stalled hand-off are answered in the question card', () => {
+    expect([...QUESTION_KINDS].sort()).toEqual(['Question', 'Stalled']);
   });
 });
 

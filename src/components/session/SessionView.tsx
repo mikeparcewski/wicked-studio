@@ -20,7 +20,7 @@ import { setRetryPrefill } from '../../store/retryPrefill.js';
 import { ChatQuestions } from './ThreadQuestions.js';
 import { SourceChips } from './SourceChips.js';
 import { NeedsBanner } from './NeedsBanner.js';
-import { atEnd, headerBadge, jumpLabel, newEntries, readDetailsOpen, waitingItems, writeDetailsOpen, type WaitingItem } from '../../board/runHeader.js';
+import { arrival, atEnd, headerBadge, jumpLabel, newEntries, QUESTION_KINDS, readDetailsOpen, waitingItems, writeDetailsOpen, type WaitingItem } from '../../board/runHeader.js';
 import { Composer, type ComposerSend, type ComposerSuggestion } from './Composer.js';
 import { quoteLabel } from '../../board/aboutChips.js';
 import { addAboutChip } from '../../store/composerChips.js';
@@ -652,7 +652,9 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
     if (el === null) return;
     const block = [...el.querySelectorAll<HTMLElement>('[data-testid="session-run"], [data-testid="session-ask-proposal"]')].find((b) => b.dataset['runId'] === item.runId);
     if (block === undefined) return;
-    const target = block.querySelector<HTMLElement>(ASKING_SELECTOR) ?? block.querySelector<HTMLElement>('[data-testid="chat-final"]') ?? block;
+    // A step's question (or a stalled step handed to you) is answered in the run's question card, not its plan or final.
+    const question = QUESTION_KINDS.has(item.kind) ? block.querySelector<HTMLElement>('[data-testid="session-run-questions"]') : null;
+    const target = question ?? block.querySelector<HTMLElement>(ASKING_SELECTOR) ?? block.querySelector<HTMLElement>('[data-testid="chat-final"]') ?? block;
     nearBottom.current = false;
     restore.current.pending = false;
     const top = Math.max(0, el.scrollTop + target.getBoundingClientRect().top - el.getBoundingClientRect().top - 8);
@@ -721,8 +723,7 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
   // only entries dated after this session was opened count.
   const seenKeys = useRef<{ session: string; opened: number; keys: Set<string> } | null>(null);
   useEffect(() => {
-    // A line's own time, not its place in the thread (a finding placed under an older reply is still new).
-    const now = entries.filter((e) => e.kind !== 'typing' && e.kind !== 'working').map((e) => ({ key: e.key, at: e.kind === 'line' ? e.line.at : e.at }));
+    const now = entries.filter((e) => e.kind !== 'typing' && e.kind !== 'working').map(arrival);
     const prev = seenKeys.current;
     const opened = prev !== null && prev.session === sessionId ? prev.opened : Date.now();
     seenKeys.current = { session: sessionId, opened, keys: new Set(now.map((e) => e.key)) };
