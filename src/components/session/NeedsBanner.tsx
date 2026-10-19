@@ -9,7 +9,7 @@ const LEAVE_MS = 200;
  * on the operator. It is in the page's flow, so the thread reflows under it and nothing is covered. Hovering the
  * yellow words, or focusing them, shows the quick overview: each waiting item (what kind, the step, the one-line
  * question, how long it has waited) with a button that brings it into view in the thread. A click pins it open
- * (touch); Esc closes it.
+ * (touch); Esc or a tap outside closes it.
  */
 export function NeedsBanner({ items, onJump }: { items: readonly WaitingItem[]; onJump: (item: WaitingItem) => void }): React.ReactElement | null {
   const [open, setOpen] = useState(false);
@@ -22,6 +22,15 @@ export function NeedsBanner({ items, onJump }: { items: readonly WaitingItem[]; 
   useEffect(() => () => { if (leave.current !== null) clearTimeout(leave.current); }, []);
   // Nothing waits any more: the overview goes with the banner.
   useEffect(() => { if (items.length === 0) { setOpen(false); setPinned(false); } }, [items.length]);
+  // Pinned open by a tap: a tap anywhere else closes it (a touch screen has no pointer to leave with).
+  useEffect(() => {
+    if (!pinned) return undefined;
+    const outside = (e: PointerEvent): void => {
+      if (box.current !== null && !box.current.contains(e.target as Node | null)) { setOpen(false); setPinned(false); }
+    };
+    document.addEventListener('pointerdown', outside);
+    return () => document.removeEventListener('pointerdown', outside);
+  }, [pinned]);
   if (items.length === 0) return null;
   const show = (): void => {
     if (leave.current !== null) { clearTimeout(leave.current); leave.current = null; }

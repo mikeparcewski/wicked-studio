@@ -167,6 +167,17 @@ describe('NeedsBanner — shown only while something waits; hover or focus gives
     expect(screen.getByTestId('session-needs-overview')).not.toBeVisible();
     vi.useRealTimers();
   });
+  it('a tap pins it open; a tap inside keeps it, a tap outside closes it', () => {
+    render(<div><p data-testid="elsewhere">thread</p><NeedsBanner items={items} onJump={() => {}} /></div>);
+    const trigger = screen.getByTestId('session-needs-trigger');
+    fireEvent.click(trigger);
+    expect(screen.getByTestId('session-needs-overview')).toBeVisible();
+    fireEvent.pointerDown(screen.getByTestId('session-needs-overview'));
+    expect(screen.getByTestId('session-needs-overview')).toBeVisible();
+    fireEvent.pointerDown(screen.getByTestId('elsewhere'));
+    expect(screen.getByTestId('session-needs-overview')).not.toBeVisible();
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+  });
 });
 
 describe('the run page: banner below the header, jump to latest', () => {
