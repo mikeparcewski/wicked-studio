@@ -75,6 +75,10 @@ export function Terminal({ cwd, cmd, governed = true, initialInput, concealHome,
     const term = new XTerm({
       convertEol: false,
       cursorBlink: true,
+      // A program can leave mouse reporting on (claude's setup-token does): a drag is then sent
+      // to it, not selected. Option-drag always selects, and right-click keeps that selection.
+      macOptionClickForcesSelection: true,
+      rightClickSelectsWord: false,
       fontSize: 12,
       fontFamily: '"JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
       // xterm parses concrete colors (no var() support) — resolve the tokens
