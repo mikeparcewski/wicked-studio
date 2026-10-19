@@ -721,7 +721,8 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
   // only entries dated after this session was opened count.
   const seenKeys = useRef<{ session: string; opened: number; keys: Set<string> } | null>(null);
   useEffect(() => {
-    const now = entries.filter((e) => e.kind !== 'typing' && e.kind !== 'working');
+    // A line's own time, not its place in the thread (a finding placed under an older reply is still new).
+    const now = entries.filter((e) => e.kind !== 'typing' && e.kind !== 'working').map((e) => ({ key: e.key, at: e.kind === 'line' ? e.line.at : e.at }));
     const prev = seenKeys.current;
     const opened = prev !== null && prev.session === sessionId ? prev.opened : Date.now();
     seenKeys.current = { session: sessionId, opened, keys: new Set(now.map((e) => e.key)) };
@@ -729,7 +730,7 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
     const n = newEntries(prev.keys, now, opened);
     if (n > 0) setUnseen((u) => u + n);
   }, [entries, ready, sessionId]);
-  useEffect(() => { setUnseen(0); setAway(false); }, [sessionId]);
+  useEffect(() => { awayNow.current = false; unseenNow.current = 0; setUnseen(0); setAway(false); }, [sessionId]);
 
   // Run clarity: the action first. On a first visit (no saved place — a saved place means they were
   // reading there) a run of this session with an open gate brings its block — the card leads it — into
