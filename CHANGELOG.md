@@ -12,6 +12,9 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+### Fixed
+- **Copying from the terminal while a program has mouse reporting on.** claude's `setup-token` sign-in leaves mouse reporting on, so a drag in the terminal went to the program as clicks and selected nothing: the token could not be copied. Option-drag now always selects (`macOptionClickForcesSelection`), and right-click no longer replaces the selection with the word under the pointer (`rightClickSelectsWord: false`), so the whole selected token stays selected for Copy.
+
 ### Changed
 - **The run page's header is the title and one state badge.** The Details button is gone. A failed, stopped or cancelled run's badge is filled red. Stop reads "Stop run" in red, and its confirm is the filled red button. Text on the red clears WCAG AA in every theme (new token `--status-fail-fg`, checked in `tests/tokens.contrast.test.ts`).
 - **The Details panel is open by default beside the conversation.** Its own close folds it to a slim handle at the right edge, which has an accessible label, takes keyboard focus and opens the panel again. The browser remembers whether you left it open or closed (`studio.runDetailsOpen`). Below 1200 px the panel starts behind the handle and opens over the page; Esc closes it there.

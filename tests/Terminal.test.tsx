@@ -8,6 +8,7 @@ import * as client from '../src/api/client.js';
 // drive its `onData` callback, and inspect `write`.
 const h = vi.hoisted(() => ({
   terminals: [] as Array<{
+    options: Record<string, unknown>;
     cols: number;
     rows: number;
     write: ReturnType<typeof vi.fn>;
@@ -33,7 +34,7 @@ vi.mock('@xterm/xterm', () => {
     emitData(d: string): void {
       for (const cb of this.dataCbs) cb(d);
     }
-    constructor() {
+    constructor(public options: Record<string, unknown> = {}) {
       h.terminals.push(this);
     }
   }
@@ -108,6 +109,15 @@ describe('Terminal (DES-TERMINAL-001 §6 — the web bridge)', () => {
     await waitFor(() => expect(FakeWebSocket.last).toBeTruthy());
     expect(FakeWebSocket.last?.url).toContain('/ws/terminals/term-xyz');
     expect(FakeWebSocket.last?.binaryType).toBe('arraybuffer');
+  });
+
+  it('Option-drag selects even while the program has mouse reporting on, and right-click keeps the selection', async () => {
+    render(<Terminal cwd="/work" />);
+    await waitFor(() => expect(h.terminals).toHaveLength(1));
+    expect(h.terminals[0]!.options).toMatchObject({
+      macOptionClickForcesSelection: true,
+      rightClickSelectsWord: false,
+    });
   });
 
   it('forwards cmd + the ungoverned opt-in through to openTerminal', async () => {
