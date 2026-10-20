@@ -652,9 +652,28 @@ export function escalationFor(events: readonly CoreEvent[] | null, ord: number |
  * prompt ("could not be judged — no eligible judge seat remained").
  */
 export function waitsForJudge(events: readonly CoreEvent[] | null, ord: number | null | undefined, prompt: string | undefined): boolean {
-  const esc = escalationFor(events, ord);
+  // Only THIS attempt's escalation counts: one from before the unit's newest dispatch is an earlier
+  // attempt's (a send-back after a judge hold, then a worker failure, opens a gate with no escalation).
+  const esc = escalationSinceDispatch(events, ord);
   if (esc !== null) return esc.condition === 'judge_unavailable' || esc.denialSource === 'judge_unavailable';
   return /could not be judged\b.*no eligible judge seat/i.test(prompt ?? '');
+}
+
+/** {@link escalationFor}, but `null` when the unit was dispatched again after its newest escalation. */
+function escalationSinceDispatch(events: readonly CoreEvent[] | null, ord: number | null | undefined): { condition: string; denialSource: string } | null {
+  if (typeof ord !== 'number') return null;
+  const log = events ?? [];
+  for (let i = log.length - 1; i >= 0; i--) {
+    const e = log[i]! as Record<string, unknown>;
+    if (e['ord'] !== ord) continue;
+    if (e['type'] === 'unitDispatched') return null;
+    if (e['type'] !== 'gateEscalated') continue;
+    return {
+      condition: typeof e['condition'] === 'string' ? e['condition'] : '',
+      denialSource: typeof e['denialSource'] === 'string' ? e['denialSource'] : '',
+    };
+  }
+  return null;
 }
 
 // ── The reduced-assurance opt-in (EX-01) ──────────────────────────────────────────────────────

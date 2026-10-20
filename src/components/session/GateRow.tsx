@@ -42,10 +42,15 @@ export function useRejudgeOffer(runId: string, ord: number | undefined, on: bool
   useEffect(() => {
     if (!on) return;
     let live = true;
+    // Only the NEWEST read may set the offer: a slow earlier answer (a seat that has since signed
+    // out) must not overwrite a newer one.
+    let seq = 0;
     const read = (): void => {
+      const mine = ++seq;
+      const latest = (): boolean => live && mine === seq;
       api.getGate(runId).then(
-        (info) => { if (live) setOffer({ key, offer: (info as { ord?: unknown }).ord === ord ? rejudgeOfferOf(info) : null }); },
-        () => { if (live) setOffer({ key, offer: null }); },
+        (info) => { if (latest()) setOffer({ key, offer: (info as { ord?: unknown }).ord === ord ? rejudgeOfferOf(info) : null }); },
+        () => { if (latest()) setOffer({ key, offer: null }); },
       );
     };
     read();

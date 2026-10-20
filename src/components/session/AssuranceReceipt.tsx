@@ -22,6 +22,7 @@ export function AssuranceReceipt({ receipt, passed = null, testId = 'assurance-r
 }): React.ReactElement {
   const w = receiptWords(receipt, passed);
   const judgedBy = [...new Set((receipt.operatorJudges ?? []).map((j) => j.by))];
+  const judgedGates = receipt.operatorJudges?.length ?? 0;
   const lead = w.kind === 'floor-only' ? 'Only automatic checks ran'
     : w.kind === 'same-seat' ? 'The helper checked its own work'
       : w.kind === 'unchecked' ? 'Nothing was verified'
@@ -35,7 +36,7 @@ export function AssuranceReceipt({ receipt, passed = null, testId = 'assurance-r
       </p>
       {judgedBy.length > 0 && (
         <p data-testid="assurance-operator-judged-line" className="wk-assurance-line">
-          No helper could check this work, so {judgedBy.join(', ')} judged it as it stood; no independent check ran.
+          {judgedGates === 1 ? 'At one gate' : `At ${judgedGates} gates`} no helper could check the work, so {judgedBy.join(', ')} judged it as it stood; no independent check ran there.
         </p>
       )}
       {receipt.skipped.length > 0 && <p className="wk-assurance-line">{receipt.skipped.length} {receipt.skipped.length === 1 ? "check didn't" : "checks didn't"} run on this step.</p>}

@@ -6,7 +6,7 @@
  * operator judged say "Judged by operator".
  */
 
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, render, renderHook, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as client from '../src/api/client.js';
 import type { CoreEvent, WorkUnit } from '../src/api/types.js';
@@ -14,7 +14,7 @@ import { useGateActionStore } from '../src/board/gateActions.js';
 import { deliveryReceiptOf, gateReceiptFor, receiptOf, receiptWords } from '../src/board/assuranceModel.js';
 import { sessionGateChoices } from '../src/board/gateRowModel.js';
 import { OPERATOR_JUDGMENT_LABEL, REJUDGE_LABEL, rejudgeOfferOf, type RejudgeOffer } from '../src/board/rejudge.js';
-import { GateRow } from '../src/components/session/GateRow.js';
+import { GateRow, useRejudgeOffer } from '../src/components/session/GateRow.js';
 import { AssuranceReceipt as ReceiptView } from '../src/components/session/AssuranceReceipt.js';
 import { useRunEventStore } from '../src/store/events.js';
 import { useGateStore, type OpenGate } from '../src/store/gates.js';
@@ -90,6 +90,17 @@ describe('the judge-unavailable gate model', () => {
     expect(m.choices.some((c) => c.label === OPERATOR_JUDGMENT_LABEL)).toBe(false);
   });
 
+  it('an EARLIER attempt\'s judge hold does not relabel a later attempt\'s gate (sent back, then a worker failure)', () => {
+    const later = [
+      ...EVENTS,
+      { type: 'unitDispatched', session: RUN, ord: 4, attempt: 3 },
+      { type: 'awaitingHuman', session: RUN, ord: 4, prompt: 'Unit 4 failed: the worker exited 1 — confirm to retry the phase, request changes to send the review back to the creator phase, or reject to cancel the run', gateKind: 'escalation' },
+    ] as unknown as CoreEvent[];
+    const gate = { ...GATE, prompt: 'Unit 4 failed: the worker exited 1 — confirm to retry the phase, request changes to send the review back to the creator phase, or reject to cancel the run' };
+    const m = sessionGateChoices({ runId: RUN, gate, units: UNITS, events: later, pool: [], roster: null, rerun: null, fullVerdict: null, rejudge: AVAILABLE })!;
+    expect(m.choices.some((c) => c.label === OPERATOR_JUDGMENT_LABEL || c.key === 'rejudge')).toBe(false);
+  });
+
   it('reads the offer off the gate read null-safely', () => {
     expect(rejudgeOfferOf({ ord: 4 })).toBeNull();
     expect(rejudgeOfferOf({ rejudge: { available: 'yes' } })).toBeNull();
@@ -149,6 +160,26 @@ describe('the judge-unavailable gate row', () => {
   });
 });
 
+describe('the offer poll', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  it('only the newest read sets the offer: a slow earlier answer never overwrites a newer one', async () => {
+    vi.useFakeTimers();
+    const pending: Array<(v: unknown) => void> = [];
+    vi.spyOn(client.api, 'getGate').mockImplementation(() => new Promise((resolve) => { pending.push(resolve); }) as never);
+    const { result } = renderHook(() => useRejudgeOffer(RUN, 4, true));
+    await act(async () => { vi.advanceTimersByTime(20_000); });
+    expect(pending).toHaveLength(2);
+    // The newer read (a seat signed out since) answers first; the older one (still eligible) last.
+    await act(async () => { pending[1]!({ ord: 4, rejudge: NONE }); });
+    await act(async () => { pending[0]!({ ord: 4, rejudge: AVAILABLE }); });
+    expect(result.current).toEqual(NONE);
+  });
+});
+
 describe('judged by operator, on the gate and the delivery', () => {
   afterEach(() => cleanup());
   const judged = wire({
@@ -179,6 +210,7 @@ describe('judged by operator, on the gate and the delivery', () => {
     expect(delivery.operatorJudges?.map((j) => j.by)).toEqual(['mikep (user)']);
     render(<ReceiptView passed receipt={delivery} testId="delivery-receipt" />);
     expect(screen.getByTestId('assurance-operator-judged').textContent).toBe('Judged by operator');
+    expect(screen.getByTestId('assurance-operator-judged-line').textContent).toMatch(/^At one gate no helper could check the work/);
     // A unit record from another attempt is not this evaluation's judgment.
     const other = [UNITS[0]!, { ...UNITS[1]!, assurance: { ...judged, attempt: 1 } }] as unknown as WorkUnit[];
     expect(gateReceiptFor(EVENTS, other, 4)!.operatorJudges).toBeUndefined();

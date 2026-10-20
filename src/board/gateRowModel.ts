@@ -735,7 +735,7 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
     const deadSeat = deadSeatOf(gate.prompt, events);
     const rejudgeOffered = deadSeat === null && judgeWait && input.rejudge?.available === true;
     if (rejudgeOffered) {
-      coreWithoutStop.push({ key: 'rejudge', label: REJUDGE_LABEL, decision: { approve: true, action: REJUDGE_ACTION } as unknown as GateAnswer, needsNote: false, title: rejudgeTitle(input.rejudge!) });
+      coreWithoutStop.push({ key: 'rejudge', label: REJUDGE_LABEL, decision: { approve: true, action: REJUDGE_ACTION } as unknown as GateAnswer, needsNote: false, title: rejudgeTitle(input.rejudge!, (k) => input.roster?.find((r) => r.key === k)?.display_name ?? k) });
     }
     if (deadSeat === null && deniedUnit) {
       coreWithoutStop.push({ key: 'approve', label: 'Approve', decision: { approve: true }, needsNote: false, title: 'Re-run the step from the start under the same policies; the captured output is not accepted.' });
