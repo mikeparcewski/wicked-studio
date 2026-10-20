@@ -12,6 +12,9 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+### Fixed
+- **A container agent's "Its sign-in didn't answer a request" warning shows again (wicked-crew#1095).** Studio hid every `live_check_failed` on a container seat, because crew used to raise it for all of them although the container floor sends no live request (crew#1006). Crew now treats the seat's own last step on that floor, within 30 minutes, as its live check, and warns only when that step timed out or its CLI failed. So the warning is real, and studio no longer drops it. A container agent's card and modal show it the same way as a host agent's. The card's words now hold on both floors: "reads as signed in, but the last request studio's service sent it got no answer", "its next step may fail", and "a request it answers clears this". Crew's own line, which names the check that failed, is in Technical details, and the Sign in button stays for container agents. A container agent no step has run on yet shows no warning, because only the credential broker answered.
+
 ## [0.11.4] — 2026-10-19
 
 A patch release: the agent sign-in modal says the sign-in is being checked once the login window closes (#862).
