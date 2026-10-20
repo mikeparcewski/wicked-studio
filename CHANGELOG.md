@@ -12,6 +12,10 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+## [0.11.6] — 2026-10-20
+
+A patch release: a gate no judge could rule on offers "Re-run the judge", operator judgments are labelled "Judged by operator", and the judge-unavailable gate stops promising that approving re-runs the check (#866, for wicked-crew#1098 and wicked-core#1054).
+
 ### Added
 - **A gate no judge could rule on offers "Re-run the judge" when a judge seat can rule now (crew api-types 0.134.0, wicked-core `rejudge`).** The card reads crew's gate read (`GET /runs/:id/gate`, `rejudge`) when it opens and every 20 seconds while it waits. With an eligible seat it offers "Re-run the judge" first, as the suggested move: a helper checks the same work, and the step does not run again. With none, the line names each missing seat and why (for example "Pi (benched for this run: quota_exhausted)"). An older crew sends no offer, and the card then promises no re-run.
 - **A gate and a delivery the operator judged say "Judged by operator".** The receipt reads `operatorJudges`: the label sits beside its lead, the line under it names who judged the work, and the seats line says "judged by operator (<who>)", never a judge seat. The gate's receipt and the delivery's carry the judgment the engine writes on the unit after its evaluation.
@@ -2381,7 +2385,8 @@ The merged interactive layer: wicked-interactive's UI moved into this skin (DES-
   `git subtree split` (92 commits).
 - The SPA as a pure HTTP/WS client of the wicked-crew daemon: runs, gates, live CoreEvents.
 
-[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.11.5...HEAD
+[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.11.6...HEAD
+[0.11.6]: https://github.com/mikeparcewski/wicked-studio/compare/v0.11.5...v0.11.6
 [0.11.5]: https://github.com/mikeparcewski/wicked-studio/compare/v0.11.4...v0.11.5
 [0.11.4]: https://github.com/mikeparcewski/wicked-studio/compare/v0.11.3...v0.11.4
 [0.11.3]: https://github.com/mikeparcewski/wicked-studio/compare/v0.11.2...v0.11.3
