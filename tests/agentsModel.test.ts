@@ -61,11 +61,40 @@ const codes = (r: AgentRow): string[] => r.issues.map((i) => i.code);
 const find = (r: AgentRow, code: string): AgentIssue => r.issues.find((i) => i.code === code)!;
 
 describe('container seats (crew#1006)', () => {
-  const signedIn = { auth: 'signed_in', login_check: 'status', council_eligible: true, issues: [issue('live_check_failed', 'warning')] };
-  it('a container seat reads Signed in, and crew’s live_check_failed for its broker reading is dropped', () => {
-    const r = by({ ...base, roster: over('claude', { ...signedIn, sign_in: 'container' }) });
+  // crew#1095: on the container floor the live check is the seat's own last step there (30 minutes); crew
+  // codes live_check_failed only when that step timed out or its CLI failed, with a line naming the floor.
+  const CONTAINER_LINE = 'Claude Code’s credential broker says signed in, but its last step on the container floor did not answer';
+  const HOST_LINE = 'Claude Code’s status command says signed in, but its one live request did not answer';
+  const failed = (message: string): SeatIssue => ({ ...issue('live_check_failed', 'warning', { checked_at: ago(5) }), message });
+  const signedIn = { auth: 'signed_in', login_check: 'status', probed_at: ago(5), council_eligible: true };
+  it('a container seat with crew’s live_check_failed shows it, with crew’s line in Technical details (crew#1095)', () => {
+    const r = by({ ...base, roster: over('claude', { ...signedIn, sign_in: 'container', issues: [failed(CONTAINER_LINE)] }) });
     expect(r.claude!.sign).toMatchObject({ word: 'Signed in', tone: 'ok' });
-    expect(codes(r.claude!)).not.toContain('live_check_failed');
+    expect(codes(r.claude!)).toEqual(['live_check_failed']);
+    const card = issueCopy(find(r.claude!, 'live_check_failed'), r.claude!, agentRows(base), NOW, true);
+    expect(card.title).toBe('Its sign-in didn’t answer a request');
+    expect(card.what).toBe('Claude Code reads as signed in, but the last request studio’s service sent it got no answer (5 minutes ago).');
+    expect(card.tech).toContain(CONTAINER_LINE);
+    expect(card.fix[0]).toMatchObject({ lead: 'Check again now.', check: true });
+    expect(card.fix[1]).toMatchObject({ lead: 'If it keeps failing, sign in again here.', signIn: true, commands: [] });
+  });
+  it('a container seat without one shows nothing (no step ran yet, or its last step answered)', () => {
+    for (const extra of [{ login_check: 'status', login_note: 'login unverified — only the credential broker answered (signed in)' }, { login_check: 'live' }]) {
+      const r = by({ ...base, roster: over('claude', { ...signedIn, ...extra, sign_in: 'container', issues: [] }) });
+      expect(r.claude!.sign).toMatchObject({ word: 'Signed in', tone: 'ok' });
+      expect(r.claude!.issues).toEqual([]);
+    }
+  });
+  it('the container card reads as the host card does: same words, crew’s own line, and only the sign-in step differs', () => {
+    const container = by({ ...base, roster: over('claude', { ...signedIn, sign_in: 'container', issues: [failed(CONTAINER_LINE)] }) }).claude!;
+    const host = by({ ...base, roster: over('claude', { ...signedIn, issues: [failed(HOST_LINE)] }) }).claude!;
+    expect(codes(host)).toEqual(['live_check_failed']);
+    const c = issueCopy(find(container, 'live_check_failed'), container, agentRows(base), NOW, true);
+    const h = issueCopy(find(host, 'live_check_failed'), host, agentRows(base), NOW, false);
+    expect({ title: c.title, what: c.what, why: c.why, check: c.fix[0] }).toEqual({ title: h.title, what: h.what, why: h.why, check: h.fix[0] });
+    expect(h.tech).toContain(HOST_LINE);
+    expect(h.tech).not.toContain(CONTAINER_LINE);
+    expect(h.fix[1]!.commands.length).toBe(1); // the host agent keeps its own sign-in command
   });
   it('every "sign in again" step of a container agent is the Sign in button, never a host command (codex r7)', () => {
     const r = by({ ...base, roster: over('claude', { auth: 'signed_in', login_check: 'status', council_eligible: false, sign_in: 'container', issues: [] }) });
@@ -76,12 +105,11 @@ describe('container seats (crew#1006)', () => {
     const host = issueCopy(find(r.claude!, 'not_admitted'), r.claude!, agentRows(base), NOW, false);
     expect(host.fix.find((f) => f.lead.startsWith('If it keeps happening'))!.commands.length).toBe(1);
   });
-  it('a host seat keeps its real live_check_failed, even folded under a container seat (per seat, codex r3)', () => {
-    const roster = over('claude', { ...signedIn, sign_in: 'container' }).map((s) => (s.key === 'claude-eval' ? ({ ...s, ...signedIn } as RosterSeat) : s));
+  it('a folded seat’s live_check_failed shows on its row, whichever floor (per seat, codex r3)', () => {
+    const roster = over('claude', { ...signedIn, sign_in: 'container', issues: [] }).map((s) => (s.key === 'claude-eval' ? ({ ...s, ...signedIn, issues: [failed(HOST_LINE)] } as RosterSeat) : s));
     const r = by({ ...base, roster });
     expect(r.claude!.keys).toEqual(['claude', 'claude-eval']);
     expect(codes(r.claude!)).toContain('live_check_failed');
-    expect(codes(by({ ...base, roster: over('claude', signedIn) }).claude!)).toContain('live_check_failed');
   });
 });
 

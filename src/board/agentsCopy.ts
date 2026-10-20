@@ -272,13 +272,15 @@ export function issueCopy(issue: AgentIssue, row: AgentRow, rows: readonly Agent
     case 'live_check_failed':
       return {
         title: 'Its sign-in didn’t answer a request',
-        what: `${name}’s own check says it is signed in, but the one short request studio’s service sent to confirm it got no answer${probed !== null ? ` (${probed})` : ''}.`,
-        why: 'Its first step may fail and move to another agent.',
+        // One reading for both floors (crew#1095): on the host, the live request studio's service sends; in a
+        // container, the agent's own last step there. Crew's line names which, in Technical details.
+        what: `${name} reads as signed in, but the last request studio’s service sent it got no answer${probed !== null ? ` (${probed})` : ''}.`,
+        why: 'Its next step may fail and move to another agent.',
         fix: [
-          { ...step('Check again now.', 'An answer that comes back clears this.'), check: true },
+          { ...step('Check again now.', 'A request it answers clears this.'), check: true },
           ...(containerSignIn || row.login !== null ? [again('If it keeps failing, sign in again:')] : []),
         ],
-        tech: row.tech.evidence,
+        tech: [typeof issue.message === 'string' && issue.message !== '' ? issue.message : null, row.tech.evidence].filter((x): x is string => x !== null).join('\n') || null,
       };
     case 'opt_in':
       return {

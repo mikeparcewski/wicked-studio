@@ -33,6 +33,8 @@ const { clearCachedRoster } = await import('../src/store/rosterCache.js');
 interface Daemon {
   signedIn: Record<string, boolean>;
   container: string[];
+  /** Signed-in seats whose last step on the container floor did not answer (crew#1095 codes live_check_failed). */
+  noAnswer: string[];
   /** GETs of the outcome that answer 404 before the ingest "lands". */
   ingestAfter: number;
   outcome: Record<string, { cli: string; ok: boolean; at: string; files?: string[]; expires_at?: number | null; error?: string }>;
@@ -51,9 +53,12 @@ const seat = (key: string, name: string): RosterSeat => {
     key, display_name: name, binary: key, enabled_for_council: true, auth: on ? 'signed_in' : 'signed_out', signed_in: on,
     login_check: 'status', probed_at: new Date().toISOString(), council_eligible: on,
     login_invocation: `${key} login`, logout_invocation: `${key} logout`,
-    // Like crew#1006: a signed-in seat whose check is `status` (every container seat) carries live_check_failed.
-    issues: on ? [{ code: 'live_check_failed', severity: 'warning', params: {}, message: `${name}'s one live request did not answer` }]
-      : [{ code: 'signed_out', severity: 'problem', params: {}, message: `${name} is signed out` }],
+    // Like crew#1095: a signed-in container seat warns only when its own last step there did not answer;
+    // before any step only the broker answered, and that is no warning.
+    login_note: on ? 'login unverified — only the credential broker answered (signed in)' : undefined,
+    issues: !on ? [{ code: 'signed_out', severity: 'problem', params: {}, message: `${name} is signed out` }]
+      : d.noAnswer.includes(key) ? [{ code: 'live_check_failed', severity: 'warning', params: {}, message: `${name}'s credential broker says signed in, but its last step on the container floor did not answer` }]
+        : [],
     ...(d.container.includes(key) ? { sign_in: 'container' } : {}),
   } as RosterSeat;
 };
@@ -108,7 +113,7 @@ const renderTab = (search: string): ReturnType<typeof render> =>
   render(<ContainerSignInProvider><AgentsPage search={search} navigate={navigate} /></ContainerSignInProvider>);
 
 beforeEach(() => {
-  d = { signedIn: { claude: false, codex: true }, container: ['claude', 'codex'], ingestAfter: 2, outcome: {}, open: null, loginStatus: 201, logoutStatus: 200, refreshHold: null, calls: [] };
+  d = { signedIn: { claude: false, codex: true }, container: ['claude', 'codex'], noAnswer: [], ingestAfter: 2, outcome: {}, open: null, loginStatus: 201, logoutStatus: 200, refreshHold: null, calls: [] };
   vi.stubGlobal('fetch', vi.fn(daemon));
   useAuthOps.setState({ pending: {}, checking: {} });
   resetAgentsReads();
@@ -158,7 +163,7 @@ describe('container sign-in hooks (crew#1006)', () => {
     expect(useAuthOps.getState().pending).toEqual({});
     // Signed in now: the footer's Sign out is the container button.
     expect(screen.getByTestId('agents-signout')).toHaveTextContent('Sign Claude Code out');
-    // The broker's reading is no failed request (crew#1006 codes one): no such card, and the row says Signed in.
+    // No step has run on it yet, so only the broker answered: no such card (crew#1095), and the row says Signed in.
     expect(screen.queryAllByTestId('agents-issue').map((c) => c.getAttribute('data-code'))).not.toContain('live_check_failed');
     const row = screen.getAllByTestId('agents-row').find((r) => r.getAttribute('data-agent') === 'claude')!;
     expect(row).toHaveTextContent('Signed in');
@@ -403,6 +408,21 @@ describe('container sign-in hooks (crew#1006)', () => {
     expect(card).not.toHaveTextContent('Run this');
     expect(card).not.toHaveTextContent('terminal');
     expect(card).toHaveTextContent('reads Claude Code’s sign-in from studio’s service');
+  });
+
+  it('a container seat whose last step did not answer shows crew’s live-check warning, with crew’s line (crew#1095)', async () => {
+    d.noAnswer = ['codex'];
+    renderTab('?fix=codex');
+    const modal = await screen.findByRole('dialog', { name: 'Codex' });
+    const card = within(modal).getAllByTestId('agents-issue').find((c) => c.getAttribute('data-code') === 'live_check_failed')!;
+    expect(card).toHaveAttribute('data-severity', 'warning');
+    expect(card).toHaveTextContent('Its sign-in didn’t answer a request');
+    expect(card).toHaveTextContent('Codex reads as signed in, but the last request studio’s service sent it got no answer');
+    expect(within(card).getByTestId('agents-tech')).toHaveTextContent('Codex\'s credential broker says signed in, but its last step on the container floor did not answer');
+    expect(within(card).getByTestId('agents-signin')).toBeInTheDocument();
+    expect(card).not.toHaveTextContent('Run this');
+    const row = screen.getAllByTestId('agents-row').find((r) => r.getAttribute('data-agent') === 'codex')!;
+    expect(row).toHaveTextContent('Signed in');
   });
 
   it('Sign out calls the container sign-out and the re-check reads it signed out', async () => {

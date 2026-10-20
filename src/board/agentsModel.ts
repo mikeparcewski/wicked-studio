@@ -52,7 +52,8 @@ export interface AgentIssue {
   safety: boolean;
   /** Crew's facts for the code (names, versions, counts, ISO times), when crew sent the issue. */
   params?: Record<string, string | number>;
-  /** Crew's one line: shown (in Technical details) only for a code studio has no words for. */
+  /** Crew's one line, as sent. Its words appear only in Technical details: for a code studio has no words for, and
+   *  where a code's card says so (live_check_failed: crew's line names the floor's check). */
   message?: string;
   /** Crew's code as sent (an `unknown` issue keeps it for Technical details). */
   wire?: string;
@@ -171,12 +172,12 @@ export function wireIssuesOf(seat: RosterSeat): SeatIssue[] {
 const KNOWN: ReadonlySet<string> = new Set(['signed_out', 'qe_blocked', 'quota', 'usage_limit', 'benched', 'codex_worktree', 'version_unproven', 'fence_scoped', 'live_check_failed', 'opt_in', 'no_qe', 'unverified']);
 const SAFETY: ReadonlySet<IssueCode> = new Set(['no_host_boundary', 'ungoverned', 'version_unproven', 'fence_scoped']);
 
-/** One crew issue in studio's codes: `unchecked` splits by `params.why`; an unknown code keeps crew's line. */
+/** One crew issue in studio's codes: `unchecked` splits by `params.why`; an unknown code keeps crew's code. Crew's line rides along. */
 function fromWire(i: SeatIssue): AgentIssue {
   let code: IssueCode;
   if (i.code === 'unchecked') code = i.params?.['why'] === 'no_host_boundary' ? 'no_host_boundary' : 'ungoverned';
   else code = KNOWN.has(i.code) ? (i.code as IssueCode) : 'unknown';
-  return { code, severity: i.severity, safety: SAFETY.has(code), params: i.params ?? {}, ...(code === 'unknown' ? { message: i.message, wire: i.code } : {}) };
+  return { code, severity: i.severity, safety: SAFETY.has(code), params: i.params ?? {}, message: i.message, ...(code === 'unknown' ? { wire: i.code } : {}) };
 }
 
 /** Whether crew says this computer has no sandbox tool for the agent's repository boundary. */
@@ -470,11 +471,7 @@ function rowOf(seat: RosterSeat, alsoReviews: boolean, keys: string[], inp: Agen
 
   // Issues: crew's codes (its own and a folded reviewer's, once per code), then studio's GAPS.
   const issues: AgentIssue[] = [];
-  // NOT A GAP, A MISREAD (crew#1006): crew codes live_check_failed for every signed-in seat whose check is
-  // `status`, and a container seat's check is always the broker's `status`, so no request ever failed. Read
-  // per seat (codex r3: a folded host reviewer keeps its own real one). Delete once crew stops coding it.
-  const misread = (x: RosterSeat, code: string): boolean => code === 'live_check_failed' && x.sign_in === 'container';
-  for (const i of [seat, ...folded].flatMap((x) => wireIssuesOf(x).filter((w) => !misread(x, w.code)).map((w) => ({ ...fromWire(w), bench: benchOf(x) })))) {
+  for (const i of [seat, ...folded].flatMap((x) => wireIssuesOf(x).map((w) => ({ ...fromWire(w), bench: benchOf(x) })))) {
     const at = issues.findIndex((x) => x.code === i.code && x.wire === i.wire);
     if (at < 0) issues.push(i);
     // The same code from a folded seat keeps the more severe reading (codex S4 r1).
