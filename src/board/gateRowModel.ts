@@ -37,6 +37,8 @@ import type { ReassignCandidate } from '../components/gateVerdictModel.js';
 import type { GateAnswer } from './gateActions.js';
 import type { RerunOffer } from '../components/rerunModel.js';
 import { qeGateOf, QE_RETRY_LABEL, QE_RETRY_NOTE_LABEL, QE_RETRY_NOTE_TITLE, QE_RETRY_TITLE, type QeGate } from './qeEscalation.js';
+import { waitsForJudge } from './assuranceModel.js';
+import { OPERATOR_JUDGMENT_LABEL, OPERATOR_JUDGMENT_TITLE, REJUDGE_ACTION, REJUDGE_LABEL, rejudgeTitle, type RejudgeOffer } from './rejudge.js';
 
 /**
  * SESSION GATE ROW MODEL (S15e): pure classification and choice set for the session thread's
@@ -373,6 +375,9 @@ export interface SessionGateInput {
   /** S16a-2a (studio#430): the reviewed unit's WHOLE output when the engine kept only a head-cut
    *  4 KB tail of a failing verdict (`useFullVerdict`); null/absent = the tail stands. */
   fullVerdict?: string | null;
+  /** (crew api-types 0.134.0) A judge-unavailable gate's re-judge offer off `GET /runs/:id/gate`;
+   *  null/absent = none read (another gate, an older daemon, not loaded yet). */
+  rejudge?: RejudgeOffer | null;
 }
 
 const HEAD_CUT = /^\s*(…|\.\.\.)/;
@@ -716,6 +721,10 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
     const qe = qeGateOf(events, units, gate.ord);
     const qeNoVerdict = qe?.outcome === 'no-verdict';
     if (qeNoVerdict) noteDefault = '';
+    // A gate no judge could rule on (`judge_unavailable`): its approve is the OPERATOR's judgment
+    // of the work as it stands, said so on the button; the re-run of the judge is its own choice,
+    // offered only when crew's gate read says a judge seat can rule now.
+    const judgeWait = waitsForJudge(events, gate.ord, gate.prompt);
 
     // Build core choices WITHOUT stop: send-back (or the denied unit's re-run), escalation arms, steer.
     // Stop is always the last inline choice, appended after the reassign slot.
@@ -724,6 +733,10 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
     // the same seat, would only park the run here once more, so the row offers what can work: another helper
     // in this job (Reassign), or Stop.
     const deadSeat = deadSeatOf(gate.prompt, events);
+    const rejudgeOffered = deadSeat === null && judgeWait && input.rejudge?.available === true;
+    if (rejudgeOffered) {
+      coreWithoutStop.push({ key: 'rejudge', label: REJUDGE_LABEL, decision: { approve: true, action: REJUDGE_ACTION } as unknown as GateAnswer, needsNote: false, title: rejudgeTitle(input.rejudge!) });
+    }
     if (deadSeat === null && deniedUnit) {
       coreWithoutStop.push({ key: 'approve', label: 'Approve', decision: { approve: true }, needsNote: false, title: 'Re-run the step from the start under the same policies; the captured output is not accepted.' });
     } else if (deadSeat === null && qeNoVerdict) {
@@ -760,7 +773,9 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
       ? { key: 'steer', label: FLOOR_FIX_LABEL, decision: { approve: true }, needsNote: true, title: FLOOR_FIX_TITLE }
       : qeRetryNote
         ? { key: 'steer', label: QE_RETRY_NOTE_LABEL, decision: { approve: true }, needsNote: true, title: QE_RETRY_NOTE_TITLE }
-        : approveRetriesPhase(gate.prompt)
+        : judgeWait
+          ? { key: 'steer', label: OPERATOR_JUDGMENT_LABEL, decision: { approve: true }, needsNote: true, title: OPERATOR_JUDGMENT_TITLE }
+          : approveRetriesPhase(gate.prompt)
           ? { key: 'steer', label: RETRY_NOTE_LABEL, decision: escalationScopeTarget !== null ? { approve: true, amendScope: 'creator' } : { approve: true }, needsNote: true, title: RETRY_NOTE_TITLE }
           : { key: 'steer', label: 'Approve and steer', decision: escalationScopeTarget !== null ? { approve: true, amendScope: 'creator' } : { approve: true }, needsNote: true, title: 'Approve and add a note to steer the next creator phase.' });
 
@@ -811,10 +826,11 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
     // retry with findings, or approve — on the inline choice that IS that move.
     const recommended = deniedUnit ? (deniedUnitJudgedOk(verdict) ? 0 : null)
       : qeNoVerdict ? 0
-        : recommendedChoiceIndex(escInline, rec);
+        : rejudgeOffered ? 0
+          : recommendedChoiceIndex(escInline, rec);
     // A retry with findings is taken with ITS note (a validator's failing checks are not "the
     // reviewer's"), so the note field opens on the move's own prefill.
-    if (!deniedUnit && !qeNoVerdict && recommended !== null && rec?.kind === 'retry-findings' && rec.prefill !== null) {
+    if (!deniedUnit && !qeNoVerdict && !rejudgeOffered && recommended !== null && rec?.kind === 'retry-findings' && rec.prefill !== null) {
       noteDefault = rec.prefill;
     }
     return { reason, question, choices: escInline, overflow, noteDefault, recommended, detailItems, ...(qe !== null ? { qe } : {}), ...(deadSeat !== null ? { deadSeat } : {}) };
