@@ -258,6 +258,7 @@ function RunGateRow({ view, gate, navigate }: { view: RunView; gate: OpenGate | 
       {judgeWait && (
         <JudgeWaitLine
           offer={rejudge}
+          operatorJudgment={model.operatorJudgment !== false}
           name={(cli) => seatName(cli, roster?.find((r) => r.key === cli)?.display_name ?? null)}
           {...(navigate !== undefined ? { navigate } : {})}
         />
@@ -368,8 +369,10 @@ export function DeadSeatLine({ seat, label, canReassign, navigate }: { seat: Dea
  * judgment ("judged by operator"); it never re-runs the check. `offer`: crew's re-judge read, `null`
  * when none was read (an older daemon, or not loaded yet).
  */
-export function JudgeWaitLine({ offer, name = (s) => s, navigate }: {
+export function JudgeWaitLine({ offer, operatorJudgment = true, name = (s) => s, navigate }: {
   offer?: RejudgeOffer | null;
+  /** `false` on a team member's step: its approve re-runs the step with the check, never a judgment. */
+  operatorJudgment?: boolean;
   name?: (seat: string) => string;
   navigate?: Navigate;
 }): React.ReactElement {
@@ -380,6 +383,15 @@ export function JudgeWaitLine({ offer, name = (s) => s, navigate }: {
       </button>
     )
     : <span data-testid="session-gate-judge-signin">Sign one in from Settings.</span>;
+  if (!operatorJudgment) {
+    return (
+      <p data-testid="session-gate-judge-wait" data-rejudge="member-step" role="status" className="wk-gate-consequence">
+        <b>Waiting for an independent check.</b> No helper other than the ones that worked on this step
+        could check it. Sign another helper in, then approve to re-run the step with that check.{' '}
+        {signIn}
+      </p>
+    );
+  }
   const own = 'Approve as your own judgment only if you checked the work yourself: the gate and the delivery will say "judged by operator", and no helper checks it.';
   if (offer?.available === true) {
     const who = offer.eligible.map(name).join(', ');

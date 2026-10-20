@@ -101,6 +101,15 @@ describe('the judge-unavailable gate model', () => {
     expect(m.choices.some((c) => c.label === OPERATOR_JUDGMENT_LABEL || c.key === 'rejudge')).toBe(false);
   });
 
+  it('a team member\'s step keeps its retry: approve re-runs the step there, never a judgment, and no Re-run is offered', () => {
+    const memberPrompt = 'Unit 4 could not be judged — no eligible judge seat remained: pi (no_seat_image). The work was not rejected. Sign a judge seat in (or reassign), then approve to re-run the phase, or reject to cancel the run';
+    const gate = { ...GATE, prompt: memberPrompt };
+    const m = sessionGateChoices({ runId: RUN, gate, units: UNITS, events: EVENTS, pool: [], roster: null, rerun: null, fullVerdict: null, rejudge: AVAILABLE })!;
+    expect(m.operatorJudgment).toBe(false);
+    expect(m.choices.some((c) => c.label === OPERATOR_JUDGMENT_LABEL || c.key === 'rejudge')).toBe(false);
+    expect(choices(AVAILABLE).operatorJudgment).toBe(true);
+  });
+
   it('reads the offer off the gate read null-safely', () => {
     expect(rejudgeOfferOf({ ord: 4 })).toBeNull();
     expect(rejudgeOfferOf({ rejudge: { available: 'yes' } })).toBeNull();
@@ -197,7 +206,7 @@ describe('judged by operator, on the gate and the delivery', () => {
     expect(w.ran).toBe('ran: pinned validator, repo checks, operator judgment');
     render(<ReceiptView passed receipt={r} />);
     expect(screen.getByTestId('assurance-operator-judged').textContent).toBe('Judged by operator');
-    expect(screen.getByTestId('assurance-operator-judged-line').textContent).toMatch(/mikep \(user\) judged it as it stood; no independent check ran/);
+    expect(screen.getByTestId('assurance-operator-judged-line').textContent).toMatch(/the judge could not rule, so mikep \(user\) judged the work as it stood; that approval ran no further check/);
   });
 
   it('the gate receipt and the delivery carry the judgment written on the unit after its evaluation', () => {
@@ -210,7 +219,13 @@ describe('judged by operator, on the gate and the delivery', () => {
     expect(delivery.operatorJudges?.map((j) => j.by)).toEqual(['mikep (user)']);
     render(<ReceiptView passed receipt={delivery} testId="delivery-receipt" />);
     expect(screen.getByTestId('assurance-operator-judged').textContent).toBe('Judged by operator');
-    expect(screen.getByTestId('assurance-operator-judged-line').textContent).toMatch(/^At one gate no helper could check the work/);
+    expect(screen.getByTestId('assurance-operator-judged-line').textContent).toMatch(/^At one gate the judge could not rule/);
+    // A gate whose independent evaluator ran before its judge could not rule keeps saying so.
+    cleanup();
+    const mixed = receiptOf({ ...judged, ran: ['distinct_evaluator', 'operator_judge'], evaluator: 'codex' })!;
+    render(<ReceiptView passed receipt={mixed} />);
+    expect(screen.getByTestId('assurance-operator-judged-line').textContent).not.toMatch(/no independent check ran/);
+    expect(receiptWords(mixed, true).who).toBe('built by claude · evaluated by codex · judged by operator (mikep (user)) (separate seats)');
     // A unit record from another attempt is not this evaluation's judgment.
     const other = [UNITS[0]!, { ...UNITS[1]!, assurance: { ...judged, attempt: 1 } }] as unknown as WorkUnit[];
     expect(gateReceiptFor(EVENTS, other, 4)!.operatorJudges).toBeUndefined();

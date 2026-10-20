@@ -189,6 +189,10 @@ export interface GateRowModel {
   /** studio#835: the step's seat cannot work (out of quota, signed out, not installed) and the engine will not
    *  send the step to it again — the row says so first; absent on every other gate. */
   deadSeat?: DeadSeat;
+  /** A gate no judge could rule on: `true` when its approve records the OPERATOR's judgment (the
+   *  engine's `judge_by_operator`), `false` on a team member's step, whose approve re-runs the step;
+   *  absent on every other gate. */
+  operatorJudgment?: boolean;
 }
 
 /** studio#835: a dead-seat gate's seat, and why it cannot work, in the engine's cause token's terms. */
@@ -725,6 +729,9 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
     // of the work as it stands, said so on the button; the re-run of the judge is its own choice,
     // offered only when crew's gate read says a judge seat can rule now.
     const judgeWait = waitsForJudge(events, gate.ord, gate.prompt);
+    // A team member's step is the exception: the engine re-runs it on approve ("approve to re-run the
+    // phase"), so neither the judgment label nor the re-judge applies there.
+    const operatorJudgment = judgeWait && !/\bapprove to re-run the phase\b/i.test(gate.prompt);
 
     // Build core choices WITHOUT stop: send-back (or the denied unit's re-run), escalation arms, steer.
     // Stop is always the last inline choice, appended after the reassign slot.
@@ -733,7 +740,7 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
     // the same seat, would only park the run here once more, so the row offers what can work: another helper
     // in this job (Reassign), or Stop.
     const deadSeat = deadSeatOf(gate.prompt, events);
-    const rejudgeOffered = deadSeat === null && judgeWait && input.rejudge?.available === true;
+    const rejudgeOffered = deadSeat === null && operatorJudgment && input.rejudge?.available === true;
     if (rejudgeOffered) {
       coreWithoutStop.push({ key: 'rejudge', label: REJUDGE_LABEL, decision: { approve: true, action: REJUDGE_ACTION } as unknown as GateAnswer, needsNote: false, title: rejudgeTitle(input.rejudge!, (k) => input.roster?.find((r) => r.key === k)?.display_name ?? k) });
     }
@@ -773,7 +780,7 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
       ? { key: 'steer', label: FLOOR_FIX_LABEL, decision: { approve: true }, needsNote: true, title: FLOOR_FIX_TITLE }
       : qeRetryNote
         ? { key: 'steer', label: QE_RETRY_NOTE_LABEL, decision: { approve: true }, needsNote: true, title: QE_RETRY_NOTE_TITLE }
-        : judgeWait
+        : operatorJudgment
           ? { key: 'steer', label: OPERATOR_JUDGMENT_LABEL, decision: { approve: true }, needsNote: true, title: OPERATOR_JUDGMENT_TITLE }
           : approveRetriesPhase(gate.prompt)
           ? { key: 'steer', label: RETRY_NOTE_LABEL, decision: escalationScopeTarget !== null ? { approve: true, amendScope: 'creator' } : { approve: true }, needsNote: true, title: RETRY_NOTE_TITLE }
@@ -833,7 +840,7 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
     if (!deniedUnit && !qeNoVerdict && !rejudgeOffered && recommended !== null && rec?.kind === 'retry-findings' && rec.prefill !== null) {
       noteDefault = rec.prefill;
     }
-    return { reason, question, choices: escInline, overflow, noteDefault, recommended, detailItems, ...(qe !== null ? { qe } : {}), ...(deadSeat !== null ? { deadSeat } : {}) };
+    return { reason, question, choices: escInline, overflow, noteDefault, recommended, detailItems, ...(qe !== null ? { qe } : {}), ...(deadSeat !== null ? { deadSeat } : {}), ...(judgeWait ? { operatorJudgment } : {}) };
   }
 
   if (reason === 'retry') {
