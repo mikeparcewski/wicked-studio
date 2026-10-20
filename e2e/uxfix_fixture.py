@@ -4515,7 +4515,9 @@ def crew_issues(s):
     out = []
     if auth == "signed_out":
         out.append({"code": "signed_out", "severity": "problem", "params": {}, "message": f"{name} is signed out, so it takes no work until it is signed in", **({"commands": sign} if sign else {})})
-    if auth == "signed_in" and s.get("login_check") == "status":
+    # crew#1095: a container seat's live check is its own last step on that floor, and no step runs on
+    # this fixture's seats, so only the broker answered: crew codes no live_check_failed for it.
+    if auth == "signed_in" and s.get("login_check") == "status" and s.get("sign_in") != "container":
         out.append({"code": "live_check_failed", "severity": "warning", "params": {}, "message": f"{name}'s status command says signed in, but its one live request did not answer", **({"commands": sign} if sign else {})})
     if s.get("optIn"):
         out.append({"code": "opt_in", "severity": "note", "params": {}, "message": f"{name} is opt-in: it is left out of new work unless you pick it"})
@@ -6384,7 +6386,8 @@ class W2Handler(SimpleHTTPRequestHandler):
                 now_iso = iso(int(time.time() * 1000))
                 roster = [{**s, "probed_at": now_iso, "login_check": "live" if s.get("auth") == "signed_in" or s.get("signed_in") is True else "status"}
                           if s["key"] in probed else s for s in roster]
-                # crew#1006: a container seat says so, and its check is the broker's reading ("status").
+                # crew#1006: a container seat says so, and its check is the broker's reading ("status"; crew#1095
+                # raises no live-check warning for it until one of its steps does not answer).
                 with state_lock:
                     boxed = list(state["container_login"])
                 roster = [{**s, "sign_in": "container", **({"login_check": "status"} if "login_check" in s else {})}
