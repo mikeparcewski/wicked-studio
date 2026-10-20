@@ -12,6 +12,10 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+## [0.11.5] — 2026-10-20
+
+A patch release: a container agent's live-check warning shows again (#864, for wicked-crew#1095).
+
 ### Fixed
 - **A container agent's "Its sign-in didn't answer a request" warning shows again (wicked-crew#1095).** Studio hid every `live_check_failed` on a container seat, because crew used to raise it for all of them although the container floor sends no live request (crew#1006). Crew now treats the seat's own last step on that floor, within 30 minutes, as its live check, and warns only when that step timed out or its CLI failed. So the warning is real, and studio no longer drops it. A container agent's card and modal show it the same way as a host agent's. The card's words now hold on both floors: "reads as signed in, but the last request studio's service sent it got no answer", "its next step may fail", and "a request it answers clears this". Crew's own line, which names the check that failed, is in Technical details, and the Sign in button stays for container agents. A container agent no step has run on yet shows no warning, because only the credential broker answered.
 
@@ -2370,7 +2374,8 @@ The merged interactive layer: wicked-interactive's UI moved into this skin (DES-
   `git subtree split` (92 commits).
 - The SPA as a pure HTTP/WS client of the wicked-crew daemon: runs, gates, live CoreEvents.
 
-[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.11.4...HEAD
+[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.11.5...HEAD
+[0.11.5]: https://github.com/mikeparcewski/wicked-studio/compare/v0.11.4...v0.11.5
 [0.11.4]: https://github.com/mikeparcewski/wicked-studio/compare/v0.11.3...v0.11.4
 [0.11.3]: https://github.com/mikeparcewski/wicked-studio/compare/v0.11.2...v0.11.3
 [0.11.2]: https://github.com/mikeparcewski/wicked-studio/compare/v0.11.1...v0.11.2
