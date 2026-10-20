@@ -21,6 +21,8 @@ export function AssuranceReceipt({ receipt, passed = null, testId = 'assurance-r
   tech?: 'own' | 'host';
 }): React.ReactElement {
   const w = receiptWords(receipt, passed);
+  const judgedBy = [...new Set((receipt.operatorJudges ?? []).map((j) => j.by))];
+  const judgedGates = receipt.operatorJudges?.length ?? 0;
   const lead = w.kind === 'floor-only' ? 'Only automatic checks ran'
     : w.kind === 'same-seat' ? 'The helper checked its own work'
       : w.kind === 'unchecked' ? 'Nothing was verified'
@@ -30,7 +32,13 @@ export function AssuranceReceipt({ receipt, passed = null, testId = 'assurance-r
       <p className="wk-assurance-lead">
         <span className={`wk-assurance-kind wk-assurance-kind--${w.kind}`}>{lead}</span>
         {w.reduced && <ReducedAssuranceLabel />}
+        {judgedBy.length > 0 && <OperatorJudgedLabel />}
       </p>
+      {judgedBy.length > 0 && (
+        <p data-testid="assurance-operator-judged-line" className="wk-assurance-line">
+          {judgedGates === 1 ? 'At one gate' : `At ${judgedGates} gates`} the judge could not rule, so {judgedBy.join(', ')} judged the work as it stood; that approval ran no further check.
+        </p>
+      )}
       {receipt.skipped.length > 0 && <p className="wk-assurance-line">{receipt.skipped.length} {receipt.skipped.length === 1 ? "check didn't" : "checks didn't"} run on this step.</p>}
       {receipt.qe !== undefined && <p className="wk-assurance-line"><QeAcceptanceLabel qe={receipt.qe} testId="assurance-qe" /></p>}
       {tech === 'own' && (
@@ -63,6 +71,20 @@ export function AssuranceReceiptTech({ receipt, passed = null, testId }: { recei
       )}
       {w.skippedDetail.length > 0 && <TechDetails summary="Why these checks did not run" text={w.skippedDetail} />}
     </div>
+  );
+}
+
+/** The one spelling of the operator-judged label (gate, delivery): the operator, not a helper, judged the work. */
+export const OPERATOR_JUDGED_LABEL = 'Judged by operator';
+export function OperatorJudgedLabel({ testId = 'assurance-operator-judged' }: { testId?: string }): React.ReactElement {
+  return (
+    <span
+      data-testid={testId}
+      className="wk-assurance-reduced wk-assurance-operator"
+      title="Where the required judge could not rule, the operator judged the work as it stood; that approval ran no further check."
+    >
+      {OPERATOR_JUDGED_LABEL}
+    </span>
   );
 }
 

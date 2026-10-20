@@ -25,6 +25,40 @@ import { setRetryPrefill } from '../../store/retryPrefill.js';
 import { useCapabilities } from '../../store/capabilities.js';
 import type { Navigate } from '../../hooks/useRoute.js';
 import { AssuranceReceipt, AssuranceReceiptTech, QeAcceptanceLabel, ReducedAssuranceLabel } from './AssuranceReceipt.js';
+import { missingSeatsLine, rejudgeOfferOf, type RejudgeOffer } from '../../board/rejudge.js';
+
+/** How often a judge-unavailable gate re-reads whether a judge seat can rule now (a seat signed in
+ *  elsewhere, an image built): the offer follows without a reload. */
+const REJUDGE_POLL_MS = 20_000;
+
+/**
+ * (crew api-types 0.134.0) A judge-unavailable gate's re-judge offer, read from `GET /runs/:id/gate`
+ * while `on` and every {@link REJUDGE_POLL_MS} after. `null` until read, on a failed read, and from a
+ * daemon that does not send one.
+ */
+export function useRejudgeOffer(runId: string, ord: number | undefined, on: boolean): RejudgeOffer | null {
+  const [offer, setOffer] = useState<{ key: string; offer: RejudgeOffer | null } | null>(null);
+  const key = `${runId}:${ord ?? ''}`;
+  useEffect(() => {
+    if (!on) return;
+    let live = true;
+    // Only the NEWEST read may set the offer: a slow earlier answer (a seat that has since signed
+    // out) must not overwrite a newer one.
+    let seq = 0;
+    const read = (): void => {
+      const mine = ++seq;
+      const latest = (): boolean => live && mine === seq;
+      api.getGate(runId).then(
+        (info) => { if (latest()) setOffer({ key, offer: (info as { ord?: unknown }).ord === ord ? rejudgeOfferOf(info) : null }); },
+        () => { if (latest()) setOffer({ key, offer: null }); },
+      );
+    };
+    read();
+    const t = setInterval(read, REJUDGE_POLL_MS);
+    return () => { live = false; clearInterval(t); };
+  }, [runId, ord, on, key]);
+  return on && offer?.key === key ? offer.offer : null;
+}
 
 /**
  * EVERY GATE KIND ANSWERABLE IN THE SESSION THREAD (S15e): an answerable row rendered inside
@@ -150,9 +184,12 @@ function RunGateRow({ view, gate, navigate }: { view: RunView; gate: OpenGate | 
   // S16a-2a (studio#430): the whole verdict when the engine head-cut it, so the send-back carries
   // the first findings too.
   const fullVerdict = useFullVerdict(runId, view.units, events, gate);
+  // A gate no judge could rule on: whether its judge can be re-run now (crew's gate read).
+  const waitingForJudge = gate !== undefined && events !== null && waitsForJudge(events, gate.ord, gate.prompt);
+  const rejudge = useRejudgeOffer(runId, gate?.ord, waitingForJudge);
   const model = useMemo<GateRowModel | null>(() => {
     if (gate === undefined || events === null) return null;
-    const result = sessionGateChoices({ runId, gate: gateWithLogChoices(gate, events), units: view.units, events, pool, roster, rerun: rerunOffer, fullVerdict });
+    const result = sessionGateChoices({ runId, gate: gateWithLogChoices(gate, events), units: view.units, events, pool, roster, rerun: rerunOffer, fullVerdict, rejudge });
     if (result === null) return null;
     const toBuilder = steerReachesBuilder(view.units, gate.ord);
     // Label each arm by its effect: the denied-step approve re-runs the step; a steer on a review gate
@@ -164,7 +201,7 @@ function RunGateRow({ view, gate, navigate }: { view: RunView; gate: OpenGate | 
         ? { ...choice, label: 'Approve with a note for the next step', title: 'Approve, and your note goes to the next step — not to the builder. To have the builder change something, Send back.' }
         : choice;
     return { ...result, choices: result.choices.map(effectLabel), overflow: result.overflow.map(effectLabel) };
-  }, [runId, gate, view.units, events, pool, roster, rerunOffer, fullVerdict]);
+  }, [runId, gate, view.units, events, pool, roster, rerunOffer, fullVerdict, rejudge]);
   // S16a-1b: the creator seat's record on Approve and the standing-order offer (review gates).
   const seat = useSeatTrust(view, gate, {
     isPlanGate: false, isDeliverGate: gate?.gateKind === 'deliver',
@@ -218,7 +255,14 @@ function RunGateRow({ view, gate, navigate }: { view: RunView; gate: OpenGate | 
           {...(navigate !== undefined ? { navigate } : {})}
         />
       )}
-      {judgeWait && <JudgeWaitLine {...(navigate !== undefined ? { navigate } : {})} />}
+      {judgeWait && (
+        <JudgeWaitLine
+          offer={rejudge}
+          operatorJudgment={model.operatorJudgment !== false}
+          name={(cli) => seatName(cli, roster?.find((r) => r.key === cli)?.display_name ?? null)}
+          {...(navigate !== undefined ? { navigate } : {})}
+        />
+      )}
       {seatRefusal && <CreatorSeatRefusal view={view} {...(navigate !== undefined ? { navigate } : {})} />}
       {receipt !== null
         ? <AssuranceReceipt receipt={receipt} passed={gatePassedFor(events, receiptOrd)} testId="session-gate-assurance" tech="host" />
@@ -318,18 +362,65 @@ export function DeadSeatLine({ seat, label, canReassign, navigate }: { seat: Dea
   );
 }
 
-export function JudgeWaitLine({ navigate }: { navigate?: Navigate }): React.ReactElement {
+/**
+ * A gate no judge could rule on, said plainly: what is missing and the two ways forward that are NOT
+ * alike. Re-run the judge (offered on the row when a judge seat can rule now) has a helper check the
+ * same work — the step does not run again. Approve as your own judgment records the operator's
+ * judgment ("judged by operator"); it never re-runs the check. `offer`: crew's re-judge read, `null`
+ * when none was read (an older daemon, or not loaded yet).
+ */
+export function JudgeWaitLine({ offer, operatorJudgment = true, name = (s) => s, navigate }: {
+  offer?: RejudgeOffer | null;
+  /** `false` on a team member's step: its approve re-runs the step with the check, never a judgment. */
+  operatorJudgment?: boolean;
+  name?: (seat: string) => string;
+  navigate?: Navigate;
+}): React.ReactElement {
+  const signIn = navigate !== undefined
+    ? (
+      <button type="button" data-testid="session-gate-judge-signin" onClick={() => navigate('/system')} className="wk-btn wk-btn--secondary">
+        Sign another helper in ›
+      </button>
+    )
+    : <span data-testid="session-gate-judge-signin">Sign one in from Settings.</span>;
+  if (!operatorJudgment) {
+    return (
+      <p data-testid="session-gate-judge-wait" data-rejudge="member-step" role="status" className="wk-gate-consequence">
+        <b>Waiting for an independent check.</b> No helper other than the ones that worked on this step
+        could check it. Sign another helper in, then approve to re-run the step with that check.{' '}
+        {signIn}
+      </p>
+    );
+  }
+  const own = 'Approve as your own judgment only if you checked the work yourself: the gate and the delivery will say "judged by operator", and no helper checks it.';
+  if (offer?.available === true) {
+    const who = offer.eligible.map(name).join(', ');
+    return (
+      <p data-testid="session-gate-judge-wait" data-rejudge="available" role="status" className="wk-gate-consequence">
+        <b>Waiting for an independent check.</b> The check could not run before, and {who} can run it now.
+        Re-run the judge to have the work checked as it stands; the step does not run again. {own}
+      </p>
+    );
+  }
+  if (offer === null || offer === undefined) {
+    // No re-judge read (an older daemon, or not loaded yet): promise nothing it may not offer.
+    return (
+      <p data-testid="session-gate-judge-wait" data-rejudge="unknown" role="status" className="wk-gate-consequence">
+        <b>Waiting for an independent check.</b> No helper other than the ones that worked on this step
+        could check it. {own}{' '}
+        {signIn}
+      </p>
+    );
+  }
+  const missing = offer.missing.length > 0 ? missingSeatsLine(offer, name) : null;
   return (
-    <p data-testid="session-gate-judge-wait" role="status" className="wk-gate-consequence">
-      <b>Waiting for an independent check.</b> No helper other than the one that built the work could
-      check it. Sign another helper in, then approve to re-run the step with that check.{' '}
-      {navigate !== undefined
-        ? (
-          <button type="button" data-testid="session-gate-judge-signin" onClick={() => navigate('/system')} className="wk-btn wk-btn--secondary">
-            Sign another helper in ›
-          </button>
-        )
-        : <span data-testid="session-gate-judge-signin">Sign one in from Settings.</span>}
+    <p data-testid="session-gate-judge-wait" data-rejudge="unavailable" role="status" className="wk-gate-consequence">
+      <b>Waiting for an independent check.</b>{' '}
+      {missing !== null
+        ? <>No helper can check this work right now: <span data-testid="session-gate-judge-missing">{missing}</span>.</>
+        : <>No helper other than the ones that worked on this step can check it.</>}
+      {' '}Sign another helper in, or fix the one that failed; then Re-run the judge appears here. {own}{' '}
+      {signIn}
     </p>
   );
 }

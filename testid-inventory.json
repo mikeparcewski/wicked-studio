@@ -12,8 +12,8 @@
   "studioVersion": "0.11.5",
   "counts": {
     "files": 234,
-    "occurrences": 2970,
-    "static": 2577,
+    "occurrences": 2977,
+    "static": 2580,
     "dynamic": 69,
     "computed": 24
   },
@@ -917,6 +917,18 @@
     },
     {
       "testId": "assurance-kind",
+      "files": [
+        "src/components/session/AssuranceReceipt.tsx"
+      ]
+    },
+    {
+      "testId": "assurance-operator-judged",
+      "files": [
+        "src/components/session/AssuranceReceipt.tsx"
+      ]
+    },
+    {
+      "testId": "assurance-operator-judged-line",
       "files": [
         "src/components/session/AssuranceReceipt.tsx"
       ]
@@ -10957,6 +10969,12 @@
     },
     {
       "testId": "session-gate-events-retry",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
+      "testId": "session-gate-judge-missing",
       "files": [
         "src/components/session/GateRow.tsx"
       ]

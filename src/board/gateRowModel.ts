@@ -37,6 +37,8 @@ import type { ReassignCandidate } from '../components/gateVerdictModel.js';
 import type { GateAnswer } from './gateActions.js';
 import type { RerunOffer } from '../components/rerunModel.js';
 import { qeGateOf, QE_RETRY_LABEL, QE_RETRY_NOTE_LABEL, QE_RETRY_NOTE_TITLE, QE_RETRY_TITLE, type QeGate } from './qeEscalation.js';
+import { waitsForJudge } from './assuranceModel.js';
+import { OPERATOR_JUDGMENT_LABEL, OPERATOR_JUDGMENT_TITLE, REJUDGE_ACTION, REJUDGE_LABEL, rejudgeTitle, type RejudgeOffer } from './rejudge.js';
 
 /**
  * SESSION GATE ROW MODEL (S15e): pure classification and choice set for the session thread's
@@ -187,6 +189,10 @@ export interface GateRowModel {
   /** studio#835: the step's seat cannot work (out of quota, signed out, not installed) and the engine will not
    *  send the step to it again — the row says so first; absent on every other gate. */
   deadSeat?: DeadSeat;
+  /** A gate no judge could rule on: `true` when its approve records the OPERATOR's judgment (the
+   *  engine's `judge_by_operator`), `false` on a team member's step, whose approve re-runs the step;
+   *  absent on every other gate. */
+  operatorJudgment?: boolean;
 }
 
 /** studio#835: a dead-seat gate's seat, and why it cannot work, in the engine's cause token's terms. */
@@ -354,7 +360,8 @@ export const RETRY_NOTE_LABEL = 'Retry this step with a note';
 export const RETRY_NOTE_TITLE = 'Run this step again with your note; the run does not move on. To have the builder change something, Send back.';
 /** Whether the engine's approve at this gate re-runs the phase (its prompt says so). */
 export function approveRetriesPhase(prompt: string): boolean {
-  return /\b(?:confirm|approve) to retry the phase\b/i.test(prompt);
+  // "approve to re-run the phase": a team member's judge-unavailable step, whose approve re-runs it.
+  return /\b(?:confirm|approve) to (?:retry|re-run) the phase\b/i.test(prompt);
 }
 
 export const FLOOR_FIX_TITLE = 'A seat other than this read-only phase makes this fix in the worktree, then only the floor re-runs; the phase does not run again and its verdict stands.';
@@ -373,6 +380,9 @@ export interface SessionGateInput {
   /** S16a-2a (studio#430): the reviewed unit's WHOLE output when the engine kept only a head-cut
    *  4 KB tail of a failing verdict (`useFullVerdict`); null/absent = the tail stands. */
   fullVerdict?: string | null;
+  /** (crew api-types 0.134.0) A judge-unavailable gate's re-judge offer off `GET /runs/:id/gate`;
+   *  null/absent = none read (another gate, an older daemon, not loaded yet). */
+  rejudge?: RejudgeOffer | null;
 }
 
 const HEAD_CUT = /^\s*(…|\.\.\.)/;
@@ -716,6 +726,13 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
     const qe = qeGateOf(events, units, gate.ord);
     const qeNoVerdict = qe?.outcome === 'no-verdict';
     if (qeNoVerdict) noteDefault = '';
+    // A gate no judge could rule on (`judge_unavailable`): its approve is the OPERATOR's judgment
+    // of the work as it stands, said so on the button; the re-run of the judge is its own choice,
+    // offered only when crew's gate read says a judge seat can rule now.
+    const judgeWait = waitsForJudge(events, gate.ord, gate.prompt);
+    // A team member's step is the exception: the engine re-runs it on approve ("approve to re-run the
+    // phase"), so neither the judgment label nor the re-judge applies there.
+    const operatorJudgment = judgeWait && !/\bapprove to re-run the phase\b/i.test(gate.prompt);
 
     // Build core choices WITHOUT stop: send-back (or the denied unit's re-run), escalation arms, steer.
     // Stop is always the last inline choice, appended after the reassign slot.
@@ -724,6 +741,10 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
     // the same seat, would only park the run here once more, so the row offers what can work: another helper
     // in this job (Reassign), or Stop.
     const deadSeat = deadSeatOf(gate.prompt, events);
+    const rejudgeOffered = deadSeat === null && operatorJudgment && input.rejudge?.available === true;
+    if (rejudgeOffered) {
+      coreWithoutStop.push({ key: 'rejudge', label: REJUDGE_LABEL, decision: { approve: true, action: REJUDGE_ACTION } as unknown as GateAnswer, needsNote: false, title: rejudgeTitle(input.rejudge!, (k) => input.roster?.find((r) => r.key === k)?.display_name ?? k) });
+    }
     if (deadSeat === null && deniedUnit) {
       coreWithoutStop.push({ key: 'approve', label: 'Approve', decision: { approve: true }, needsNote: false, title: 'Re-run the step from the start under the same policies; the captured output is not accepted.' });
     } else if (deadSeat === null && qeNoVerdict) {
@@ -760,7 +781,9 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
       ? { key: 'steer', label: FLOOR_FIX_LABEL, decision: { approve: true }, needsNote: true, title: FLOOR_FIX_TITLE }
       : qeRetryNote
         ? { key: 'steer', label: QE_RETRY_NOTE_LABEL, decision: { approve: true }, needsNote: true, title: QE_RETRY_NOTE_TITLE }
-        : approveRetriesPhase(gate.prompt)
+        : operatorJudgment
+          ? { key: 'steer', label: OPERATOR_JUDGMENT_LABEL, decision: { approve: true }, needsNote: true, title: OPERATOR_JUDGMENT_TITLE }
+          : approveRetriesPhase(gate.prompt)
           ? { key: 'steer', label: RETRY_NOTE_LABEL, decision: escalationScopeTarget !== null ? { approve: true, amendScope: 'creator' } : { approve: true }, needsNote: true, title: RETRY_NOTE_TITLE }
           : { key: 'steer', label: 'Approve and steer', decision: escalationScopeTarget !== null ? { approve: true, amendScope: 'creator' } : { approve: true }, needsNote: true, title: 'Approve and add a note to steer the next creator phase.' });
 
@@ -811,13 +834,14 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
     // retry with findings, or approve — on the inline choice that IS that move.
     const recommended = deniedUnit ? (deniedUnitJudgedOk(verdict) ? 0 : null)
       : qeNoVerdict ? 0
-        : recommendedChoiceIndex(escInline, rec);
+        : rejudgeOffered ? 0
+          : recommendedChoiceIndex(escInline, rec);
     // A retry with findings is taken with ITS note (a validator's failing checks are not "the
     // reviewer's"), so the note field opens on the move's own prefill.
-    if (!deniedUnit && !qeNoVerdict && recommended !== null && rec?.kind === 'retry-findings' && rec.prefill !== null) {
+    if (!deniedUnit && !qeNoVerdict && !rejudgeOffered && recommended !== null && rec?.kind === 'retry-findings' && rec.prefill !== null) {
       noteDefault = rec.prefill;
     }
-    return { reason, question, choices: escInline, overflow, noteDefault, recommended, detailItems, ...(qe !== null ? { qe } : {}), ...(deadSeat !== null ? { deadSeat } : {}) };
+    return { reason, question, choices: escInline, overflow, noteDefault, recommended, detailItems, ...(qe !== null ? { qe } : {}), ...(deadSeat !== null ? { deadSeat } : {}), ...(judgeWait ? { operatorJudgment } : {}) };
   }
 
   if (reason === 'retry') {

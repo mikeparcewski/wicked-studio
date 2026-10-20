@@ -12,6 +12,13 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+### Added
+- **A gate no judge could rule on offers "Re-run the judge" when a judge seat can rule now (crew api-types 0.134.0, wicked-core `rejudge`).** The card reads crew's gate read (`GET /runs/:id/gate`, `rejudge`) when it opens and every 20 seconds while it waits. With an eligible seat it offers "Re-run the judge" first, as the suggested move: a helper checks the same work, and the step does not run again. With none, the line names each missing seat and why (for example "Pi (benched for this run: quota_exhausted)"). An older crew sends no offer, and the card then promises no re-run.
+- **A gate and a delivery the operator judged say "Judged by operator".** The receipt reads `operatorJudges`: the label sits beside its lead, the line under it names who judged the work, and the seats line says "judged by operator (<who>)", never a judge seat. The gate's receipt and the delivery's carry the judgment the engine writes on the unit after its evaluation.
+
+### Fixed
+- **The judge-unavailable gate no longer promises that approving re-runs the check.** Its line said "Sign another helper in, then approve to re-run the step with that check", and its button read "Approve and steer". An approve there is the operator's own judgment of the work as it stands, so the button now reads "Approve as your own judgment" and its hover says the gate and the delivery are labelled "judged by operator" and no independent check runs. The line says when to use it. A team member's step is the exception: its approve re-runs the step, so it keeps its retry wording and gets no Re-run. Only this attempt's escalation counts: an earlier attempt's judge hold does not relabel a later gate.
+
 ## [0.11.5] — 2026-10-20
 
 A patch release: a container agent's live-check warning shows again (#864, for wicked-crew#1095).

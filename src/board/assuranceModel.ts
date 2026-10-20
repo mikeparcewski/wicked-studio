@@ -156,12 +156,30 @@ export interface AssuranceReceipt extends RunAssurance {
    *  FALLBACK for a benched or unavailable preferred judge (`judgeFallbacks[].label`, shown as-is:
    *  `judge: agy (fallback; codex benched: …)`); absent when every judge was the run's own. */
   judgeFallbacks?: string[];
+  /** (crew api-types 0.110.0, operator ruling 2026-10-11) Every gate the OPERATOR judged at a gate no judge
+   *  could rule on ("judged by operator": who, when, their note); absent when none. A delivery lists the run's. */
+  operatorJudges?: OperatorJudgmentView[];
   /** Studio's mark on a DELIVERY receipt (every gate's instruments, unioned): its kind, decided per
    *  gate before the union. Its seat names are the gates' names joined for display only. */
   aggregateKind?: AssuranceKind;
 }
 
+/** One "judged by operator" record (`AssuranceReceipt.operatorJudges[]`). */
+export interface OperatorJudgmentView {
+  by: string;
+  at: number;
+  note: string | null;
+}
+
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
+
+function operatorJudgesOf(v: unknown): OperatorJudgmentView[] {
+  return Array.isArray(v)
+    ? v.flatMap((j) => (isRecord(j) && typeof j['by'] === 'string' && j['by'] !== ''
+      ? [{ by: j['by'], at: typeof j['at'] === 'number' ? j['at'] : 0, note: str(j['note']) }]
+      : []))
+    : [];
+}
 const str = (v: unknown): string | null => (typeof v === 'string' && v !== '' ? v : null);
 const strings = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string' && x !== '') : []);
 
@@ -188,9 +206,11 @@ export function receiptOf(raw: unknown): AssuranceReceipt | null {
       return label === null ? [] : [label];
     })
     : [];
+  const judged = operatorJudgesOf(raw['operatorJudges']);
   return {
     ...run,
     ...(fallbacks.length > 0 ? { judgeFallbacks: fallbacks } : {}),
+    ...(judged.length > 0 ? { operatorJudges: judged } : {}),
     ran: strings(raw['ran']),
     skipped,
     creator: str(raw['creator']),
@@ -260,12 +280,30 @@ export function gateReceiptFor(events: readonly CoreEvent[] | null, units: reado
     // A re-dispatch after the newest evaluation: that receipt is the previous attempt's, not this one's.
     if (e.type === 'unitDispatched' && e.ord === ord) return null;
     if (e.type !== 'gateEvaluated' || e.ord !== ord) continue;
-    return receiptOf((e as Record<string, unknown>)['assurance']);
+    const r = receiptOf((e as Record<string, unknown>)['assurance']);
+    return r === null ? null : withOperatorJudgment(r, (units ?? []).find((u) => u.ord === ord));
   }
   // No log in hand (a session read before its events): the unit record's persisted receipt.
   if (log.length > 0) return null;
   const unit = (units ?? []).find((u) => u.ord === ord);
   return receiptOf((unit as unknown as { assurance?: unknown } | undefined)?.assurance);
+}
+
+/**
+ * The operator's judgment of a gate is written on the unit's persisted receipt AFTER the gate's evaluation
+ * (the operator approved a gate no judge could rule on; no new `gateEvaluated` is emitted), so the log's
+ * receipt for that attempt lacks it. Carried over from the unit record when it judged the same attempt.
+ */
+function withOperatorJudgment(r: AssuranceReceipt, unit: WorkUnit | undefined): AssuranceReceipt {
+  if (r.operatorJudges !== undefined) return r;
+  const own = receiptOf((unit as unknown as { assurance?: unknown } | undefined)?.assurance);
+  if (own?.operatorJudges === undefined || own.attempt !== r.attempt) return r;
+  return {
+    ...r,
+    operatorJudges: own.operatorJudges,
+    ran: r.ran.includes('operator_judge') ? r.ran : [...r.ran, 'operator_judge'],
+    judge: r.judge ?? own.judge,
+  };
 }
 
 /**
@@ -301,7 +339,8 @@ export function deliveryReceiptOf(
   if (lifted !== null || recorded !== null) {
     const r = lifted !== null ? lifted.r : recorded!;
     const fb = fallbacksOf([r, ...gates]);
-    return { ...r, ...(fb.length > 0 ? { judgeFallbacks: fb } : {}), creator: r.creator ?? who.creator, evaluator: r.evaluator ?? who.evaluator, judge: r.judge ?? who.judge, aggregateKind: deliveryKind(r, gates) };
+    const oj = judgmentsOf([r, ...gates]);
+    return { ...r, ...(fb.length > 0 ? { judgeFallbacks: fb } : {}), ...(oj.length > 0 ? { operatorJudges: oj } : {}), creator: r.creator ?? who.creator, evaluator: r.evaluator ?? who.evaluator, judge: r.judge ?? who.judge, aggregateKind: deliveryKind(r, gates) };
   }
   if (gates.length === 0) return null;
   const run = sessionAssurance(view, log) ?? { mode: gates[0]!.mode, required: gates[0]!.required };
@@ -311,7 +350,15 @@ export function deliveryReceiptOf(
     for (const s of g.skipped) if (!out.skipped.some((k) => k.instrument === s.instrument)) out.skipped.push(s);
   }
   const fb = fallbacksOf(gates);
-  return { ...out, ...(fb.length > 0 ? { judgeFallbacks: fb } : {}), aggregateKind: deliveryKind(out, gates) };
+  const oj = judgmentsOf(gates);
+  return { ...out, ...(fb.length > 0 ? { judgeFallbacks: fb } : {}), ...(oj.length > 0 ? { operatorJudges: oj } : {}), aggregateKind: deliveryKind(out, gates) };
+}
+
+/** Every "judged by operator" record the receipts carry, once each (by who and when), in first-seen order. */
+function judgmentsOf(receipts: readonly AssuranceReceipt[]): OperatorJudgmentView[] {
+  const out: OperatorJudgmentView[] = [];
+  for (const r of receipts) for (const j of r.operatorJudges ?? []) if (!out.some((o) => o.by === j.by && o.at === j.at)) out.push(j);
+  return out;
 }
 
 /** Every fallback-judge line the receipts carry, once each, in first-seen order. */
@@ -352,7 +399,8 @@ function gateReceipts(view: SessionView | null | undefined, log: readonly CoreEv
       if (e.type === 'unitDispatched') byOrd.delete(e.ord);
       if (e.type !== 'gateEvaluated') continue;
       const r = receiptOf((e as Record<string, unknown>)['assurance']);
-      if (r !== null) byOrd.set(e.ord, r); else byOrd.delete(e.ord);
+      const ord = e.ord;
+      if (r !== null) byOrd.set(ord, withOperatorJudgment(r, view?.units?.find((u) => u.ord === ord))); else byOrd.delete(ord);
     }
   } else {
     for (const u of view?.units ?? []) {
@@ -440,6 +488,7 @@ const INSTRUMENT_WORD: Record<string, string> = {
   pinned_validator: 'pinned validator',
   repo_checks: 'repo checks',
   evaluator_pass: 'evaluator pass',
+  operator_judge: 'operator judgment',
 };
 
 const REASON_WORD: Record<string, string> = {
@@ -511,6 +560,8 @@ export function separationWords(r: AssuranceReceipt): string | null {
   if (r.ran.includes('distinct_evaluator')) return 'separate seats';
   const same = r.skipped.find((s) => s.instrument === 'distinct_evaluator');
   if (same !== undefined) return same.reason === 'reduced_assurance' ? 'same seat, reduced assurance' : 'same seat';
+  // The operator's own judgment is no seat's: the who line says "judged by operator" instead.
+  if ((r.operatorJudges?.length ?? 0) > 0) return null;
   if (r.judge !== null && r.creator !== null) return r.judge === r.creator ? 'judged on the creator\'s seat' : 'judged on a separate seat';
   return null;
 }
@@ -548,8 +599,11 @@ export function receiptWords(r: AssuranceReceipt, passed: boolean | null = null)
     const m = /^judge: (\S+) \(fallback/.exec(l);
     return m !== null ? [m[1]!] : [];
   });
-  const ownJudges = (r.judge ?? '').split(', ').filter((j) => j !== '' && !fallbackSeats.includes(j));
+  // The operator's judgment (`judge: "operator:<who>"`) is said as such, never as a seat that judged.
+  const ownJudges = (r.judge ?? '').split(', ').filter((j) => j !== '' && !fallbackSeats.includes(j) && !j.startsWith('operator:'));
   if (ownJudges.length > 0) seats.push(`judged by ${ownJudges.join(', ')}`);
+  const operators = [...new Set((r.operatorJudges ?? []).map((j) => j.by))];
+  if (operators.length > 0) seats.push(`judged by operator (${operators.join(', ')})`);
   const sep = separationWords(r);
   const named = seats.length === 0 ? null : `${seats.join(' · ')}${sep !== null ? ` (${sep})` : ''}`;
   const who = fallbacks.length === 0 ? named : [named, ...fallbacks].filter((x): x is string => x !== null).join(' · ');
@@ -598,9 +652,28 @@ export function escalationFor(events: readonly CoreEvent[] | null, ord: number |
  * prompt ("could not be judged — no eligible judge seat remained").
  */
 export function waitsForJudge(events: readonly CoreEvent[] | null, ord: number | null | undefined, prompt: string | undefined): boolean {
-  const esc = escalationFor(events, ord);
+  // Only THIS attempt's escalation counts: one from before the unit's newest dispatch is an earlier
+  // attempt's (a send-back after a judge hold, then a worker failure, opens a gate with no escalation).
+  const esc = escalationSinceDispatch(events, ord);
   if (esc !== null) return esc.condition === 'judge_unavailable' || esc.denialSource === 'judge_unavailable';
   return /could not be judged\b.*no eligible judge seat/i.test(prompt ?? '');
+}
+
+/** {@link escalationFor}, but `null` when the unit was dispatched again after its newest escalation. */
+function escalationSinceDispatch(events: readonly CoreEvent[] | null, ord: number | null | undefined): { condition: string; denialSource: string } | null {
+  if (typeof ord !== 'number') return null;
+  const log = events ?? [];
+  for (let i = log.length - 1; i >= 0; i--) {
+    const e = log[i]! as Record<string, unknown>;
+    if (e['ord'] !== ord) continue;
+    if (e['type'] === 'unitDispatched') return null;
+    if (e['type'] !== 'gateEscalated') continue;
+    return {
+      condition: typeof e['condition'] === 'string' ? e['condition'] : '',
+      denialSource: typeof e['denialSource'] === 'string' ? e['denialSource'] : '',
+    };
+  }
+  return null;
 }
 
 // ── The reduced-assurance opt-in (EX-01) ──────────────────────────────────────────────────────
