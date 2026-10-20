@@ -360,7 +360,8 @@ export const RETRY_NOTE_LABEL = 'Retry this step with a note';
 export const RETRY_NOTE_TITLE = 'Run this step again with your note; the run does not move on. To have the builder change something, Send back.';
 /** Whether the engine's approve at this gate re-runs the phase (its prompt says so). */
 export function approveRetriesPhase(prompt: string): boolean {
-  return /\b(?:confirm|approve) to retry the phase\b/i.test(prompt);
+  // "approve to re-run the phase": a team member's judge-unavailable step, whose approve re-runs it.
+  return /\b(?:confirm|approve) to (?:retry|re-run) the phase\b/i.test(prompt);
 }
 
 export const FLOOR_FIX_TITLE = 'A seat other than this read-only phase makes this fix in the worktree, then only the floor re-runs; the phase does not run again and its verdict stands.';

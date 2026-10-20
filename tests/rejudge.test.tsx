@@ -12,7 +12,7 @@ import * as client from '../src/api/client.js';
 import type { CoreEvent, WorkUnit } from '../src/api/types.js';
 import { useGateActionStore } from '../src/board/gateActions.js';
 import { deliveryReceiptOf, gateReceiptFor, receiptOf, receiptWords } from '../src/board/assuranceModel.js';
-import { sessionGateChoices } from '../src/board/gateRowModel.js';
+import { RETRY_NOTE_LABEL, RETRY_NOTE_TITLE, sessionGateChoices } from '../src/board/gateRowModel.js';
 import { OPERATOR_JUDGMENT_LABEL, REJUDGE_LABEL, rejudgeOfferOf, type RejudgeOffer } from '../src/board/rejudge.js';
 import { GateRow, useRejudgeOffer } from '../src/components/session/GateRow.js';
 import { AssuranceReceipt as ReceiptView } from '../src/components/session/AssuranceReceipt.js';
@@ -107,6 +107,11 @@ describe('the judge-unavailable gate model', () => {
     const m = sessionGateChoices({ runId: RUN, gate, units: UNITS, events: EVENTS, pool: [], roster: null, rerun: null, fullVerdict: null, rejudge: AVAILABLE })!;
     expect(m.operatorJudgment).toBe(false);
     expect(m.choices.some((c) => c.label === OPERATOR_JUDGMENT_LABEL || c.key === 'rejudge')).toBe(false);
+    // Its approve is the step's retry, and says so.
+    const retry = m.choices.find((c) => c.key === 'steer')!;
+    expect(retry.label).toBe(RETRY_NOTE_LABEL);
+    expect(retry.title).toBe(RETRY_NOTE_TITLE);
+    expect(retry.decision).toEqual({ approve: true });
     expect(choices(AVAILABLE).operatorJudgment).toBe(true);
   });
 
@@ -225,6 +230,7 @@ describe('judged by operator, on the gate and the delivery', () => {
     const mixed = receiptOf({ ...judged, ran: ['distinct_evaluator', 'operator_judge'], evaluator: 'codex' })!;
     render(<ReceiptView passed receipt={mixed} />);
     expect(screen.getByTestId('assurance-operator-judged-line').textContent).not.toMatch(/no independent check ran/);
+    expect(screen.getByTestId('assurance-operator-judged').getAttribute('title')).not.toMatch(/no independent check ran|No helper could check/);
     expect(receiptWords(mixed, true).who).toBe('built by claude · evaluated by codex · judged by operator (mikep (user)) (separate seats)');
     // A unit record from another attempt is not this evaluation's judgment.
     const other = [UNITS[0]!, { ...UNITS[1]!, assurance: { ...judged, attempt: 1 } }] as unknown as WorkUnit[];

@@ -81,7 +81,7 @@ export function OperatorJudgedLabel({ testId = 'assurance-operator-judged' }: { 
     <span
       data-testid={testId}
       className="wk-assurance-reduced wk-assurance-operator"
-      title="No helper could check this work. The operator approved it as their own judgment; no independent check ran."
+      title="Where the required judge could not rule, the operator judged the work as it stood; that approval ran no further check."
     >
       {OPERATOR_JUDGED_LABEL}
     </span>
