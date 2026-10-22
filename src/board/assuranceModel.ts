@@ -344,7 +344,7 @@ export function deliveryReceiptOf(
   if (lifted !== null || recorded !== null) {
     const r = lifted !== null ? lifted.r : recorded!;
     const fb = fallbacksOf([r, ...gates]);
-    const oj = judgmentsOf([r, ...gates]);
+    const oj = judgmentsOf([r, ...gates], durableFloorOverrides(view));
     return { ...r, ...(fb.length > 0 ? { judgeFallbacks: fb } : {}), ...(oj.length > 0 ? { operatorJudges: oj } : {}), creator: r.creator ?? who.creator, evaluator: r.evaluator ?? who.evaluator, judge: r.judge ?? who.judge, aggregateKind: deliveryKind(r, gates) };
   }
   if (gates.length === 0) return null;
@@ -355,15 +355,25 @@ export function deliveryReceiptOf(
     for (const s of g.skipped) if (!out.skipped.some((k) => k.instrument === s.instrument)) out.skipped.push(s);
   }
   const fb = fallbacksOf(gates);
-  const oj = judgmentsOf(gates);
+  const oj = judgmentsOf(gates, durableFloorOverrides(view));
   return { ...out, ...(fb.length > 0 ? { judgeFallbacks: fb } : {}), ...(oj.length > 0 ? { operatorJudges: oj } : {}), aggregateKind: deliveryKind(out, gates) };
 }
 
-/** Every "judged by operator" record the receipts carry, once each (by who and when), in first-seen order. */
-function judgmentsOf(receipts: readonly AssuranceReceipt[]): OperatorJudgmentView[] {
+/** Every "judged by operator" record the receipts carry, once each (by who and when), in first-seen
+ *  order, plus the run's durable floor overrides (`session.assurance.floorOverrides`, wicked-core
+ *  RunAssurance): a rework after an override gives that unit a fresh receipt without the judgment,
+ *  and the delivery must still disclose it (studio#869 review). */
+function judgmentsOf(receipts: readonly AssuranceReceipt[], durable: readonly OperatorJudgmentView[] = []): OperatorJudgmentView[] {
   const out: OperatorJudgmentView[] = [];
   for (const r of receipts) for (const j of r.operatorJudges ?? []) if (!out.some((o) => o.by === j.by && o.at === j.at)) out.push(j);
+  for (const j of durable) if (!out.some((o) => o.by === j.by && o.at === j.at)) out.push(j);
   return out;
+}
+
+/** The session record's durable floor overrides, null-safe (studio pins api-types older than 0.135.0). */
+function durableFloorOverrides(view: SessionView | null | undefined): OperatorJudgmentView[] {
+  const a = (view?.session as unknown as { assurance?: unknown } | undefined)?.assurance;
+  return isRecord(a) ? operatorJudgesOf(a['floorOverrides']).filter((j) => j.floorOverride !== undefined) : [];
 }
 
 /** Every fallback-judge line the receipts carry, once each, in first-seen order. */

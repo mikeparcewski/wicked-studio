@@ -790,7 +790,7 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
     // (crew api-types 0.135.0) A failed repo-checks floor: the operator's own judgment, with a
     // required rationale — offered where the engine's prompt names the arm. Inline (it is the way
     // on when retries loop on flakes); a reassign then rides the ⋯.
-    if (deadSeat === null && offersFloorOverride(gate.prompt)) {
+    if (deadSeat === null && offersFloorOverride(gate.prompt, verdict, gate.ord)) {
       coreWithoutStop.push({ key: FLOOR_OVERRIDE_KEY, label: OPERATOR_JUDGMENT_LABEL, decision: { approve: true, action: FLOOR_OVERRIDE_ACTION } as unknown as GateAnswer, needsNote: true, title: FLOOR_OVERRIDE_TITLE });
     }
 

@@ -35,9 +35,26 @@ export const FLOOR_OVERRIDDEN_LABEL = 'Floor overridden by operator';
  *  (e.g. a triage error naming an unsupported action), and that is no offer. */
 const FLOOR_OVERRIDE_OFFER = /judge it yourself with a written rationale when the evidence shows the failures are\s+not the work's \(action `operator_judgment`: it overrides the failed floor/;
 
-/** Whether the engine offers the override at this gate: its prompt carries the engine's offer clause. */
-export function offersFloorOverride(prompt: string | undefined): boolean {
-  return prompt !== undefined && FLOOR_OVERRIDE_OFFER.test(prompt);
+/** What the offer is corroborated by: the gate's own verdict (`gateVerdictFor`), null-safe. */
+export interface FloorOverrideEvidence {
+  ord?: number | null;
+  outcome?: string;
+  denial?: { source?: string | null; reason?: string | null } | null;
+}
+
+/** Whether the engine offers the override at THIS gate. Both must hold:
+ *  - the gate's own verdict is a failed repo-checks floor for this gate's ord (the only gate the
+ *    engine takes the arm at), and
+ *  - the engine's offer clause is in the prompt OUTSIDE the quoted denial text, which can carry any
+ *    string a check printed (studio#869 review: an input_governance denial quoting the clause). */
+export function offersFloorOverride(prompt: string | undefined, verdict?: FloorOverrideEvidence | null, gateOrd?: number): boolean {
+  if (prompt === undefined) return false;
+  if (verdict === undefined || verdict === null || typeof gateOrd !== 'number' || verdict.ord !== gateOrd || verdict.outcome !== 'fail') return false;
+  const source = verdict.denial?.source;
+  if (source !== 'repo_checks' && source !== 'repo_checks_timeout') return false;
+  const reason = verdict.denial?.reason ?? '';
+  const own = reason !== '' ? prompt.split(reason).join(' ') : prompt;
+  return FLOOR_OVERRIDE_OFFER.test(own);
 }
 
 /** `OperatorJudgment.floorOverride` off the wire (api-types 0.135.0), or `null`. */

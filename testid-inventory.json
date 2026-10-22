@@ -12,8 +12,8 @@
   "studioVersion": "0.11.6",
   "counts": {
     "files": 234,
-    "occurrences": 2977,
-    "static": 2580,
+    "occurrences": 2984,
+    "static": 2586,
     "dynamic": 69,
     "computed": 24
   },
@@ -913,6 +913,30 @@
       "testId": "assumptions",
       "files": [
         "src/components/AssumptionsPanel.tsx"
+      ]
+    },
+    {
+      "testId": "assurance-floor-overridden",
+      "files": [
+        "src/components/session/AssuranceReceipt.tsx"
+      ]
+    },
+    {
+      "testId": "assurance-floor-overridden-line",
+      "files": [
+        "src/components/session/AssuranceReceipt.tsx"
+      ]
+    },
+    {
+      "testId": "assurance-floor-override",
+      "files": [
+        "src/components/session/AssuranceReceipt.tsx"
+      ]
+    },
+    {
+      "testId": "assurance-floor-overrides",
+      "files": [
+        "src/components/session/AssuranceReceipt.tsx"
       ]
     },
     {
@@ -10969,6 +10993,18 @@
     },
     {
       "testId": "session-gate-events-retry",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
+      "testId": "session-gate-floor-override-consequence",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
+      "testId": "session-gate-floor-override-label",
       "files": [
         "src/components/session/GateRow.tsx"
       ]

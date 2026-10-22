@@ -111,6 +111,18 @@ describe('the receipt model', () => {
     expect(deliveryReceiptOf(makeView({ id: RUN } as never, UNITS), [])).toBeNull();
   });
 
+  it('a floor override survives a later rework: the session\'s durable floorOverrides join the delivery receipt (studio#869 review)', () => {
+    const over = { by: 'an-operator (user)', at: 5, note: 'load flakes in untouched files',
+      floorOverride: { layer: 'repo_checks', resultId: `${RUN}:unit-1:attempt-3:repo_checks`, label: 'floor overridden by operator' } };
+    const view = makeView({ id: RUN, status: 'awaiting_human', assurance: { mode: 'full', required: ['judge'], floorOverrides: [over] } } as never, UNITS);
+    // the reworked unit's fresh gate receipt carries no judgment
+    const gates = [{ type: 'gateEvaluated', ord: 1, assurance: wire({ mode: 'full', ran: ['repo_checks', 'judge'], judge: 'codex' }) }] as unknown as CoreEvent[];
+    const agg = deliveryReceiptOf(view, gates)!;
+    expect(agg.operatorJudges?.map((j) => [j.by, j.note, j.floorOverride?.resultId])).toEqual([['an-operator (user)', 'load flakes in untouched files', `${RUN}:unit-1:attempt-3:repo_checks`]]);
+    const lifted = deliveryReceiptOf(view, [...gates, { type: 'deliverLiftEvaluated', ord: 2, assurance: wire({ mode: 'full', ran: ['repo_checks'], tree: 'abc', attempt: 1 }) }] as unknown as CoreEvent[])!;
+    expect(lifted.operatorJudges?.length).toBe(1);
+  });
+
   it('codex r1: a delivery is independent only when each gate was (the names are display only)', () => {
     const view = makeView({ id: RUN, status: 'awaiting_human' } as never, UNITS);
     // One gate judged on its creator's own seat, another floor-only: joined names must not read as separate seats.

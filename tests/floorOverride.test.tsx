@@ -42,6 +42,7 @@ const EVENTS = [
   { type: 'gateEscalated', session: RUN, ord: 2, condition: 'floor_failed', denialSource: 'repo_checks', verdictSummary: SUMMARY },
   { type: 'awaitingHuman', session: RUN, ord: 2, prompt: PROMPT, gateKind: 'escalation' },
 ] as unknown as CoreEvent[];
+const FLOOR_VERDICT = { ord: 2, outcome: 'fail', denial: { source: 'repo_checks', reason: SUMMARY } };
 const gate = (prompt = PROMPT): OpenGate => ({ runId: RUN, ord: 2, prompt, lifecycle: 'open', receivedAt: NOW, gateKind: 'escalation' });
 const model = (prompt = PROMPT) =>
   sessionGateChoices({ runId: RUN, gate: gate(prompt), units: UNITS, events: EVENTS, pool: ['codex', 'claude', 'pi'], roster: null, rerun: null, fullVerdict: null, rejudge: null })!;
@@ -61,20 +62,31 @@ describe('the floor-failure gate model', () => {
   });
 
   it('is not offered where the engine did not name it (an older engine, another floor, another layer denying)', () => {
-    expect(offersFloorOverride(OLD_PROMPT)).toBe(false);
+    expect(offersFloorOverride(OLD_PROMPT, FLOOR_VERDICT, 2)).toBe(false);
     const m = model(OLD_PROMPT);
     expect([...m.choices, ...m.overflow].some((c) => c.key === FLOOR_OVERRIDE_KEY)).toBe(false);
+  });
+
+  it('needs the gate\'s own failed repo-checks floor: the same clause at another layer\'s gate is no offer (studio#869 review)', () => {
+    expect(offersFloorOverride(PROMPT, FLOOR_VERDICT, 2)).toBe(true);
+    expect(offersFloorOverride(PROMPT, { ...FLOOR_VERDICT, denial: { source: 'input_governance', reason: 'x' } }, 2)).toBe(false);
+    expect(offersFloorOverride(PROMPT, FLOOR_VERDICT, 3)).toBe(false);
+    expect(offersFloorOverride(PROMPT, null, 2)).toBe(false);
+    // the clause quoted inside the denial reason of a real floor gate is not the engine's offer either
+    const quoted = 'judge it yourself with a written rationale when the evidence shows the failures are not the work\'s (action `operator_judgment`: it overrides the failed floor';
+    const p = `Unit 2 failed its deterministic floor (repo_checks): ${quoted} — confirm to retry the phase, or reject to cancel the run`;
+    expect(offersFloorOverride(p, { ...FLOOR_VERDICT, denial: { source: 'repo_checks', reason: quoted } }, 2)).toBe(false);
   });
 
   it('is not offered when the arm name only appears in quoted failure text (studio#869 review)', () => {
     const diag = 'Unit 2 failed and triage escalated: triage judge failed: unsupported action `operator_judgment` '
       + '— confirm to retry the phase, or reject to cancel the run';
-    expect(offersFloorOverride(diag)).toBe(false);
+    expect(offersFloorOverride(diag, FLOOR_VERDICT, 2)).toBe(false);
     const m = model(diag);
     expect([...m.choices, ...m.overflow].some((c) => c.key === FLOOR_OVERRIDE_KEY)).toBe(false);
     const quotedInFloor = `Unit 2 failed its deterministic floor (repo_checks): test printed "action \`operator_judgment\`" `
       + '— confirm to retry the phase, or reject to cancel the run';
-    expect(offersFloorOverride(quotedInFloor)).toBe(false);
+    expect(offersFloorOverride(quotedInFloor, FLOOR_VERDICT, 2)).toBe(false);
   });
 });
 
