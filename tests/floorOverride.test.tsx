@@ -65,6 +65,17 @@ describe('the floor-failure gate model', () => {
     const m = model(OLD_PROMPT);
     expect([...m.choices, ...m.overflow].some((c) => c.key === FLOOR_OVERRIDE_KEY)).toBe(false);
   });
+
+  it('is not offered when the arm name only appears in quoted failure text (studio#869 review)', () => {
+    const diag = 'Unit 2 failed and triage escalated: triage judge failed: unsupported action `operator_judgment` '
+      + '— confirm to retry the phase, or reject to cancel the run';
+    expect(offersFloorOverride(diag)).toBe(false);
+    const m = model(diag);
+    expect([...m.choices, ...m.overflow].some((c) => c.key === FLOOR_OVERRIDE_KEY)).toBe(false);
+    const quotedInFloor = `Unit 2 failed its deterministic floor (repo_checks): test printed "action \`operator_judgment\`" `
+      + '— confirm to retry the phase, or reject to cancel the run';
+    expect(offersFloorOverride(quotedInFloor)).toBe(false);
+  });
 });
 
 describe('the floor-failure gate row', () => {
@@ -139,5 +150,22 @@ describe('floor overridden by operator, on the gate and the delivery', () => {
     expect(screen.getByTestId('assurance-floor-overridden').textContent).toBe('Floor overridden by operator');
     expect(screen.queryByTestId('assurance-operator-judged')).toBeNull();
     expect(screen.getByTestId('assurance-floor-overridden-line').textContent).toMatch(/repository checks failed and an-operator \(user\) overrode them: load flakes in untouched files\. Every other check still applied, and QE acceptance is still required\./);
+  });
+
+  it('two overrides on one delivery show each rationale, not just the count (studio#869 review)', () => {
+    const two = {
+      ...overridden,
+      operatorJudges: [
+        overridden.operatorJudges[0],
+        { ...overridden.operatorJudges[0], by: 'second-operator (user)', note: 'fails on base too',
+          floorOverride: { ...overridden.operatorJudges[0]!.floorOverride, resultId: 'r-floor:unit-4:attempt-2:repo_checks', ord: 4, attempt: 2 } },
+      ],
+    };
+    render(<ReceiptView passed receipt={receiptOf(two)!} />);
+    expect(screen.getByTestId('assurance-floor-overridden-line').textContent).toMatch(/At 2 gates/);
+    const rows = screen.getAllByTestId('assurance-floor-override').map((li) => li.textContent);
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toMatch(/an-operator \(user\) at r-floor:unit-2:attempt-7:repo_checks: load flakes in untouched files/);
+    expect(rows[1]).toMatch(/second-operator \(user\) at r-floor:unit-4:attempt-2:repo_checks: fails on base too/);
   });
 });

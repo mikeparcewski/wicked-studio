@@ -30,9 +30,14 @@ export const FLOOR_OVERRIDE_SEND = 'Approve with this rationale';
 /** The engine's label, as every surface shows it. */
 export const FLOOR_OVERRIDDEN_LABEL = 'Floor overridden by operator';
 
-/** Whether the engine offers the override at this gate: its prompt names the arm. */
+/** The engine's offer clause (wicked-core `floor_override_offer`), written only where it would take the
+ *  answer. Matched whole: a bare "action `operator_judgment`" also turns up in quoted failure text
+ *  (e.g. a triage error naming an unsupported action), and that is no offer. */
+const FLOOR_OVERRIDE_OFFER = /judge it yourself with a written rationale when the evidence shows the failures are\s+not the work's \(action `operator_judgment`: it overrides the failed floor/;
+
+/** Whether the engine offers the override at this gate: its prompt carries the engine's offer clause. */
 export function offersFloorOverride(prompt: string | undefined): boolean {
-  return prompt !== undefined && /\baction `operator_judgment`/.test(prompt);
+  return prompt !== undefined && FLOOR_OVERRIDE_OFFER.test(prompt);
 }
 
 /** `OperatorJudgment.floorOverride` off the wire (api-types 0.135.0), or `null`. */

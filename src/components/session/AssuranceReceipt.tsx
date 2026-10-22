@@ -45,6 +45,16 @@ export function AssuranceReceipt({ receipt, passed = null, testId = 'assurance-r
           {overrides.length === 1 && overrides[0]!.note !== null ? <>: <q>{overrides[0]!.note}</q></> : null}. Every other check still applied, and QE acceptance is still required.
         </p>
       )}
+      {overrides.length > 1 && (
+        <ul data-testid="assurance-floor-overrides" className="wk-assurance-list">
+          {overrides.map((o, i) => (
+            <li key={`${o.floorOverride?.resultId ?? ''}-${i}`} data-testid="assurance-floor-override">
+              {o.by}{o.floorOverride?.resultId ? <> at <code>{o.floorOverride.resultId}</code></> : null}
+              {o.note !== null ? <>: <q>{o.note}</q></> : ' (no rationale recorded)'}
+            </li>
+          ))}
+        </ul>
+      )}
       {judgedBy.length > 0 && (
         <p data-testid="assurance-operator-judged-line" className="wk-assurance-line">
           {judgedGates === 1 ? 'At one gate' : `At ${judgedGates} gates`} the judge could not rule, so {judgedBy.join(', ')} judged the work as it stood; that approval ran no further check.
