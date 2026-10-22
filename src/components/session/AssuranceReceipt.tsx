@@ -3,6 +3,7 @@ import { QE_FORCE_DISCLOSURE, QE_FORCE_LABEL, QE_SKIP_DISCLOSURE, QE_SKIP_LABEL,
 import { useRunEvents } from '../../hooks/useRunEvents.js';
 import { useDisplayText } from '../../hooks/useHomePath.js';
 import { TechDetails } from '../ui/index.js';
+import { FLOOR_OVERRIDDEN_LABEL } from '../../board/floorOverride.js';
 
 /**
  * The assurance receipt, compact (wicked-core#850): one lead line — how the decision was assured
@@ -21,8 +22,11 @@ export function AssuranceReceipt({ receipt, passed = null, testId = 'assurance-r
   tech?: 'own' | 'host';
 }): React.ReactElement {
   const w = receiptWords(receipt, passed);
-  const judgedBy = [...new Set((receipt.operatorJudges ?? []).map((j) => j.by))];
-  const judgedGates = receipt.operatorJudges?.length ?? 0;
+  const judged = (receipt.operatorJudges ?? []).filter((j) => j.floorOverride === undefined);
+  const overrides = (receipt.operatorJudges ?? []).filter((j) => j.floorOverride !== undefined);
+  const judgedBy = [...new Set(judged.map((j) => j.by))];
+  const judgedGates = judged.length;
+  const overriddenBy = [...new Set(overrides.map((j) => j.by))];
   const lead = w.kind === 'floor-only' ? 'Only automatic checks ran'
     : w.kind === 'same-seat' ? 'The helper checked its own work'
       : w.kind === 'unchecked' ? 'Nothing was verified'
@@ -33,7 +37,14 @@ export function AssuranceReceipt({ receipt, passed = null, testId = 'assurance-r
         <span className={`wk-assurance-kind wk-assurance-kind--${w.kind}`}>{lead}</span>
         {w.reduced && <ReducedAssuranceLabel />}
         {judgedBy.length > 0 && <OperatorJudgedLabel />}
+        {overriddenBy.length > 0 && <FloorOverriddenLabel />}
       </p>
+      {overriddenBy.length > 0 && (
+        <p data-testid="assurance-floor-overridden-line" className="wk-assurance-line">
+          {overrides.length === 1 ? 'At one gate' : `At ${overrides.length} gates`} the repository checks failed and {overriddenBy.join(', ')} overrode them
+          {overrides.length === 1 && overrides[0]!.note !== null ? <>: <q>{overrides[0]!.note}</q></> : null}. Every other check still applied, and QE acceptance is still required.
+        </p>
+      )}
       {judgedBy.length > 0 && (
         <p data-testid="assurance-operator-judged-line" className="wk-assurance-line">
           {judgedGates === 1 ? 'At one gate' : `At ${judgedGates} gates`} the judge could not rule, so {judgedBy.join(', ')} judged the work as it stood; that approval ran no further check.
@@ -71,6 +82,19 @@ export function AssuranceReceiptTech({ receipt, passed = null, testId }: { recei
       )}
       {w.skippedDetail.length > 0 && <TechDetails summary="Why these checks did not run" text={w.skippedDetail} />}
     </div>
+  );
+}
+
+/** The one spelling of the floor-override label (gate, delivery): the operator overrode a failed floor. */
+export function FloorOverriddenLabel({ testId = 'assurance-floor-overridden' }: { testId?: string }): React.ReactElement {
+  return (
+    <span
+      data-testid={testId}
+      className="wk-assurance-reduced wk-assurance-operator"
+      title="The repository checks failed at this gate and the operator overrode them with a written rationale. Every other check still applied; QE acceptance is still required."
+    >
+      {FLOOR_OVERRIDDEN_LABEL}
+    </span>
   );
 }
 

@@ -12,6 +12,9 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+### Added
+- **A failed floor's gate offers "Approve as your own judgment" (crew api-types 0.135.0, wicked-core `operator_judgment`).** When a step's repository checks fail on load flakes or reds the floor misread, Send back and Retry only loop. The card now offers the operator's judgment inline, where the engine's prompt names the arm (a repo-checks floor on an agent step, no other layer of the gate denying). The consequence comes first, on the hover and above the box: "Overrides the failed floor; recorded on the run and delivery; QE acceptance still required." The rationale box opens empty, is required, and "Approve with this rationale" stays off while it is blank. The answer is `{approve: true, action: 'operator_judgment', amend}`. A gate and a delivery whose floor was overridden say "Floor overridden by operator", with who and why, never "judged by operator". The crew-api-types pin is unchanged: the new fields are read null-safe.
+
 ## [0.11.6] — 2026-10-20
 
 A patch release: a gate no judge could rule on offers "Re-run the judge", operator judgments are labelled "Judged by operator", and the judge-unavailable gate stops promising that approving re-runs the check (#866, for wicked-crew#1098 and wicked-core#1054).

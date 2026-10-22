@@ -1,4 +1,5 @@
 import type { CoreEvent, SessionView, WorkUnit } from '../api/types.js';
+import { floorOverrideOf, type FloorOverrideView } from './floorOverride.js';
 import { PAGE_NAMES } from './pageNames.js';
 
 /**
@@ -169,15 +170,19 @@ export interface OperatorJudgmentView {
   by: string;
   at: number;
   note: string | null;
+  /** (crew api-types 0.135.0) Set when this judgment overrode a failed repo-checks floor; absent otherwise. */
+  floorOverride?: FloorOverrideView;
 }
 
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 
 function operatorJudgesOf(v: unknown): OperatorJudgmentView[] {
   return Array.isArray(v)
-    ? v.flatMap((j) => (isRecord(j) && typeof j['by'] === 'string' && j['by'] !== ''
-      ? [{ by: j['by'], at: typeof j['at'] === 'number' ? j['at'] : 0, note: str(j['note']) }]
-      : []))
+    ? v.flatMap((j) => {
+      if (!isRecord(j) || typeof j['by'] !== 'string' || j['by'] === '') return [];
+      const over = floorOverrideOf(j['floorOverride']);
+      return [{ by: j['by'], at: typeof j['at'] === 'number' ? j['at'] : 0, note: str(j['note']), ...(over !== null ? { floorOverride: over } : {}) }];
+    })
     : [];
 }
 const str = (v: unknown): string | null => (typeof v === 'string' && v !== '' ? v : null);
@@ -602,7 +607,10 @@ export function receiptWords(r: AssuranceReceipt, passed: boolean | null = null)
   // The operator's judgment (`judge: "operator:<who>"`) is said as such, never as a seat that judged.
   const ownJudges = (r.judge ?? '').split(', ').filter((j) => j !== '' && !fallbackSeats.includes(j) && !j.startsWith('operator:'));
   if (ownJudges.length > 0) seats.push(`judged by ${ownJudges.join(', ')}`);
-  const operators = [...new Set((r.operatorJudges ?? []).map((j) => j.by))];
+  // (api-types 0.135.0) A floor the operator overrode is said as such — the engine's label — never as a judge.
+  const overriders = [...new Set((r.operatorJudges ?? []).filter((j) => j.floorOverride !== undefined).map((j) => j.by))];
+  const operators = [...new Set((r.operatorJudges ?? []).filter((j) => j.floorOverride === undefined).map((j) => j.by))];
+  if (overriders.length > 0) seats.push(`floor overridden by operator (${overriders.join(', ')})`);
   if (operators.length > 0) seats.push(`judged by operator (${operators.join(', ')})`);
   const sep = separationWords(r);
   const named = seats.length === 0 ? null : `${seats.join(' · ')}${sep !== null ? ` (${sep})` : ''}`;
