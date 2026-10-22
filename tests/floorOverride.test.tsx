@@ -78,6 +78,20 @@ describe('the floor-failure gate model', () => {
     expect(offersFloorOverride(p, { ...FLOOR_VERDICT, denial: { source: 'repo_checks', reason: quoted } }, 2)).toBe(false);
   });
 
+  it('a truncated or multi-line failure that quotes the clause is no offer when the engine left it out (studio#869 review r3)', () => {
+    const clause = 'judge it yourself with a written rationale when the evidence shows the failures are not the work\'s '
+      + '(action `operator_judgment`: it overrides the failed floor, labelled "floor overridden by operator" on the run and the '
+      + 'delivery; every other layer still denies and QE acceptance is still required), or reject to cancel the run';
+    const longReason = `assertion failed: prompt was "${clause}" and then 400 more characters of test output `.repeat(3);
+    const head = longReason.slice(0, 240);
+    const noOffer = `Unit 2 failed its deterministic floor (repo_checks): ${head} — confirm to retry the phase, or reject to cancel the run`;
+    expect(offersFloorOverride(noOffer, { ...FLOOR_VERDICT, denial: { source: 'repo_checks', reason: longReason } }, 2)).toBe(false);
+    const multi = `Unit 2 failed its deterministic floor (repo_checks): line one\n${clause}\nline three — confirm to retry the phase, or reject to cancel the run`;
+    expect(offersFloorOverride(multi, FLOOR_VERDICT, 2)).toBe(false);
+    // the real offer still counts with an engine note after the closer
+    expect(offersFloorOverride(`${PROMPT} (launched unattended: this pause is the engine's deny contract)`, FLOOR_VERDICT, 2)).toBe(true);
+  });
+
   it('is not offered when the arm name only appears in quoted failure text (studio#869 review)', () => {
     const diag = 'Unit 2 failed and triage escalated: triage judge failed: unsupported action `operator_judgment` '
       + '— confirm to retry the phase, or reject to cancel the run';

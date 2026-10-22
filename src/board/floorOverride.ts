@@ -30,10 +30,16 @@ export const FLOOR_OVERRIDE_SEND = 'Approve with this rationale';
 /** The engine's label, as every surface shows it. */
 export const FLOOR_OVERRIDDEN_LABEL = 'Floor overridden by operator';
 
-/** The engine's offer clause (wicked-core `floor_override_offer`), written only where it would take the
- *  answer. Matched whole: a bare "action `operator_judgment`" also turns up in quoted failure text
- *  (e.g. a triage error naming an unsupported action), and that is no offer. */
-const FLOOR_OVERRIDE_OFFER = /judge it yourself with a written rationale when the evidence shows the failures are\s+not the work's \(action `operator_judgment`: it overrides the failed floor/;
+/** The engine's offer clause (wicked-core `floor_override_offer`), verbatim. */
+const OFFER_CLAUSE = 'judge it yourself with a written rationale when the evidence shows the failures are not the work\'s '
+  + '(action `operator_judgment`: it overrides the failed floor, labelled "floor overridden by operator" on the run and the '
+  + 'delivery; every other layer still denies and QE acceptance is still required),';
+/** The engine's closing option: every escalation prompt ends its options with it, AFTER the quoted
+ *  failure text (`reason_head`), so its LAST occurrence is the engine's own. */
+const CLOSER = 'or reject to cancel the run';
+const ws = (t: string): string => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/ /g, '\\s+');
+/** The offer only counts as the engine's options, immediately before the engine's own closer. */
+const OFFER_AT_CLOSER = new RegExp(`${ws(OFFER_CLAUSE)}\\s*${ws(CLOSER)}$`);
 
 /** What the offer is corroborated by: the gate's own verdict (`gateVerdictFor`), null-safe. */
 export interface FloorOverrideEvidence {
@@ -45,16 +51,16 @@ export interface FloorOverrideEvidence {
 /** Whether the engine offers the override at THIS gate. Both must hold:
  *  - the gate's own verdict is a failed repo-checks floor for this gate's ord (the only gate the
  *    engine takes the arm at), and
- *  - the engine's offer clause is in the prompt OUTSIDE the quoted denial text, which can carry any
- *    string a check printed (studio#869 review: an input_governance denial quoting the clause). */
+ *  - the engine's clause sits right before the engine's LAST "or reject to cancel the run": the quoted
+ *    failure text comes before the engine's options and is cut to its first line (240 chars), so text
+ *    stripping cannot isolate it, but position can (studio#869 reviews). */
 export function offersFloorOverride(prompt: string | undefined, verdict?: FloorOverrideEvidence | null, gateOrd?: number): boolean {
   if (prompt === undefined) return false;
   if (verdict === undefined || verdict === null || typeof gateOrd !== 'number' || verdict.ord !== gateOrd || verdict.outcome !== 'fail') return false;
   const source = verdict.denial?.source;
   if (source !== 'repo_checks' && source !== 'repo_checks_timeout') return false;
-  const reason = verdict.denial?.reason ?? '';
-  const own = reason !== '' ? prompt.split(reason).join(' ') : prompt;
-  return FLOOR_OVERRIDE_OFFER.test(own);
+  const last = prompt.lastIndexOf(CLOSER);
+  return last >= 0 && OFFER_AT_CLOSER.test(prompt.slice(0, last + CLOSER.length));
 }
 
 /** `OperatorJudgment.floorOverride` off the wire (api-types 0.135.0), or `null`. */

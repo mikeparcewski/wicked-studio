@@ -365,9 +365,19 @@ export function deliveryReceiptOf(
  *  and the delivery must still disclose it (studio#869 review). */
 function judgmentsOf(receipts: readonly AssuranceReceipt[], durable: readonly OperatorJudgmentView[] = []): OperatorJudgmentView[] {
   const out: OperatorJudgmentView[] = [];
-  for (const r of receipts) for (const j of r.operatorJudges ?? []) if (!out.some((o) => o.by === j.by && o.at === j.at)) out.push(j);
-  for (const j of durable) if (!out.some((o) => o.by === j.by && o.at === j.at)) out.push(j);
+  for (const r of receipts) for (const j of r.operatorJudges ?? []) if (!out.some((o) => sameJudgment(o, j))) out.push(j);
+  for (const j of durable) if (!out.some((o) => sameJudgment(o, j))) out.push(j);
   return out;
+}
+
+/** One judgment seen twice: a floor override is keyed by its floor result id (one operator may override
+ *  several floors at the same instant), and is never the same record as a judge-unavailable judgment. */
+function sameJudgment(a: OperatorJudgmentView, b: OperatorJudgmentView): boolean {
+  if ((a.floorOverride !== undefined) !== (b.floorOverride !== undefined)) return false;
+  if (a.floorOverride !== undefined && b.floorOverride !== undefined && (a.floorOverride.resultId !== '' || b.floorOverride.resultId !== '')) {
+    return a.floorOverride.resultId === b.floorOverride.resultId;
+  }
+  return a.by === b.by && a.at === b.at && a.note === b.note;
 }
 
 /** The session record's durable floor overrides, null-safe (studio pins api-types older than 0.135.0). */

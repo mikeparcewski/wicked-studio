@@ -123,6 +123,16 @@ describe('the receipt model', () => {
     expect(lifted.operatorJudges?.length).toBe(1);
   });
 
+  it('two floor overrides by one operator at the same instant are two records; a floor override is never a judge-unavailable one (studio#869 review r3)', () => {
+    const fo = (unit: number) => ({ by: 'op', at: 7, note: `unit ${unit} flakes`,
+      floorOverride: { layer: 'repo_checks', resultId: `${RUN}:unit-${unit}:attempt-1:repo_checks`, label: 'floor overridden by operator' } });
+    const view = makeView({ id: RUN, status: 'awaiting_human', assurance: { mode: 'full', required: ['judge'], floorOverrides: [fo(1), fo(2)] } } as never, UNITS);
+    const judgeUnavailable = { by: 'op', at: 7, note: 'judged it myself' };
+    const gates = [{ type: 'gateEvaluated', ord: 1, assurance: wire({ mode: 'full', ran: ['repo_checks'], operatorJudges: [judgeUnavailable] }) }] as unknown as CoreEvent[];
+    const agg = deliveryReceiptOf(view, gates)!;
+    expect(agg.operatorJudges?.map((j) => j.note)).toEqual(['judged it myself', 'unit 1 flakes', 'unit 2 flakes']);
+  });
+
   it('codex r1: a delivery is independent only when each gate was (the names are display only)', () => {
     const view = makeView({ id: RUN, status: 'awaiting_human' } as never, UNITS);
     // One gate judged on its creator's own seat, another floor-only: joined names must not read as separate seats.
