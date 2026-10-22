@@ -12,6 +12,10 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+## [0.11.7] — 2026-10-22
+
+A patch release: a failed floor's gate offers "Approve as your own judgment" with a required rationale, and a gate or delivery whose floor was overridden says "Floor overridden by operator" (#869, for wicked-crew#1104 and wicked-core#1061).
+
 ### Added
 - **A failed floor's gate offers "Approve as your own judgment" (crew api-types 0.135.0, wicked-core `operator_judgment`).** When a step's repository checks fail on load flakes or reds the floor misread, Send back and Retry only loop. The card now offers the operator's judgment inline, where the engine's prompt names the arm (a repo-checks floor on an agent step, no other layer of the gate denying). The consequence comes first, on the hover and above the box: "Overrides the failed floor; recorded on the run and delivery; QE acceptance still required." The rationale box opens empty, is required, and "Approve with this rationale" stays off while it is blank. The answer is `{approve: true, action: 'operator_judgment', amend}`. A gate and a delivery whose floor was overridden say "Floor overridden by operator", with who and why, never "judged by operator". The crew-api-types pin is unchanged: the new fields are read null-safe.
 
@@ -2388,7 +2392,8 @@ The merged interactive layer: wicked-interactive's UI moved into this skin (DES-
   `git subtree split` (92 commits).
 - The SPA as a pure HTTP/WS client of the wicked-crew daemon: runs, gates, live CoreEvents.
 
-[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.11.6...HEAD
+[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.11.7...HEAD
+[0.11.7]: https://github.com/mikeparcewski/wicked-studio/compare/v0.11.6...v0.11.7
 [0.11.6]: https://github.com/mikeparcewski/wicked-studio/compare/v0.11.5...v0.11.6
 [0.11.5]: https://github.com/mikeparcewski/wicked-studio/compare/v0.11.4...v0.11.5
 [0.11.4]: https://github.com/mikeparcewski/wicked-studio/compare/v0.11.3...v0.11.4
