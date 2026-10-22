@@ -1,4 +1,5 @@
 import type { CoreEvent, SessionView, WorkUnit } from '../api/types.js';
+import { floorOverrideOf, type FloorOverrideView } from './floorOverride.js';
 import { PAGE_NAMES } from './pageNames.js';
 
 /**
@@ -169,15 +170,19 @@ export interface OperatorJudgmentView {
   by: string;
   at: number;
   note: string | null;
+  /** (crew api-types 0.135.0) Set when this judgment overrode a failed repo-checks floor; absent otherwise. */
+  floorOverride?: FloorOverrideView;
 }
 
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 
 function operatorJudgesOf(v: unknown): OperatorJudgmentView[] {
   return Array.isArray(v)
-    ? v.flatMap((j) => (isRecord(j) && typeof j['by'] === 'string' && j['by'] !== ''
-      ? [{ by: j['by'], at: typeof j['at'] === 'number' ? j['at'] : 0, note: str(j['note']) }]
-      : []))
+    ? v.flatMap((j) => {
+      if (!isRecord(j) || typeof j['by'] !== 'string' || j['by'] === '') return [];
+      const over = floorOverrideOf(j['floorOverride']);
+      return [{ by: j['by'], at: typeof j['at'] === 'number' ? j['at'] : 0, note: str(j['note']), ...(over !== null ? { floorOverride: over } : {}) }];
+    })
     : [];
 }
 const str = (v: unknown): string | null => (typeof v === 'string' && v !== '' ? v : null);
@@ -339,7 +344,7 @@ export function deliveryReceiptOf(
   if (lifted !== null || recorded !== null) {
     const r = lifted !== null ? lifted.r : recorded!;
     const fb = fallbacksOf([r, ...gates]);
-    const oj = judgmentsOf([r, ...gates]);
+    const oj = judgmentsOf([r, ...gates], durableFloorOverrides(view));
     return { ...r, ...(fb.length > 0 ? { judgeFallbacks: fb } : {}), ...(oj.length > 0 ? { operatorJudges: oj } : {}), creator: r.creator ?? who.creator, evaluator: r.evaluator ?? who.evaluator, judge: r.judge ?? who.judge, aggregateKind: deliveryKind(r, gates) };
   }
   if (gates.length === 0) return null;
@@ -350,15 +355,35 @@ export function deliveryReceiptOf(
     for (const s of g.skipped) if (!out.skipped.some((k) => k.instrument === s.instrument)) out.skipped.push(s);
   }
   const fb = fallbacksOf(gates);
-  const oj = judgmentsOf(gates);
+  const oj = judgmentsOf(gates, durableFloorOverrides(view));
   return { ...out, ...(fb.length > 0 ? { judgeFallbacks: fb } : {}), ...(oj.length > 0 ? { operatorJudges: oj } : {}), aggregateKind: deliveryKind(out, gates) };
 }
 
-/** Every "judged by operator" record the receipts carry, once each (by who and when), in first-seen order. */
-function judgmentsOf(receipts: readonly AssuranceReceipt[]): OperatorJudgmentView[] {
+/** Every "judged by operator" record the receipts carry, once each (by who and when), in first-seen
+ *  order, plus the run's durable floor overrides (`session.assurance.floorOverrides`, wicked-core
+ *  RunAssurance): a rework after an override gives that unit a fresh receipt without the judgment,
+ *  and the delivery must still disclose it (studio#869 review). */
+function judgmentsOf(receipts: readonly AssuranceReceipt[], durable: readonly OperatorJudgmentView[] = []): OperatorJudgmentView[] {
   const out: OperatorJudgmentView[] = [];
-  for (const r of receipts) for (const j of r.operatorJudges ?? []) if (!out.some((o) => o.by === j.by && o.at === j.at)) out.push(j);
+  for (const r of receipts) for (const j of r.operatorJudges ?? []) if (!out.some((o) => sameJudgment(o, j))) out.push(j);
+  for (const j of durable) if (!out.some((o) => sameJudgment(o, j))) out.push(j);
   return out;
+}
+
+/** One judgment seen twice: a floor override is keyed by its floor result id (one operator may override
+ *  several floors at the same instant), and is never the same record as a judge-unavailable judgment. */
+function sameJudgment(a: OperatorJudgmentView, b: OperatorJudgmentView): boolean {
+  if ((a.floorOverride !== undefined) !== (b.floorOverride !== undefined)) return false;
+  if (a.floorOverride !== undefined && b.floorOverride !== undefined && (a.floorOverride.resultId !== '' || b.floorOverride.resultId !== '')) {
+    return a.floorOverride.resultId === b.floorOverride.resultId;
+  }
+  return a.by === b.by && a.at === b.at && a.note === b.note;
+}
+
+/** The session record's durable floor overrides, null-safe (studio pins api-types older than 0.135.0). */
+function durableFloorOverrides(view: SessionView | null | undefined): OperatorJudgmentView[] {
+  const a = (view?.session as unknown as { assurance?: unknown } | undefined)?.assurance;
+  return isRecord(a) ? operatorJudgesOf(a['floorOverrides']).filter((j) => j.floorOverride !== undefined) : [];
 }
 
 /** Every fallback-judge line the receipts carry, once each, in first-seen order. */
@@ -602,7 +627,10 @@ export function receiptWords(r: AssuranceReceipt, passed: boolean | null = null)
   // The operator's judgment (`judge: "operator:<who>"`) is said as such, never as a seat that judged.
   const ownJudges = (r.judge ?? '').split(', ').filter((j) => j !== '' && !fallbackSeats.includes(j) && !j.startsWith('operator:'));
   if (ownJudges.length > 0) seats.push(`judged by ${ownJudges.join(', ')}`);
-  const operators = [...new Set((r.operatorJudges ?? []).map((j) => j.by))];
+  // (api-types 0.135.0) A floor the operator overrode is said as such — the engine's label — never as a judge.
+  const overriders = [...new Set((r.operatorJudges ?? []).filter((j) => j.floorOverride !== undefined).map((j) => j.by))];
+  const operators = [...new Set((r.operatorJudges ?? []).filter((j) => j.floorOverride === undefined).map((j) => j.by))];
+  if (overriders.length > 0) seats.push(`floor overridden by operator (${overriders.join(', ')})`);
   if (operators.length > 0) seats.push(`judged by operator (${operators.join(', ')})`);
   const sep = separationWords(r);
   const named = seats.length === 0 ? null : `${seats.join(' · ')}${sep !== null ? ` (${sep})` : ''}`;

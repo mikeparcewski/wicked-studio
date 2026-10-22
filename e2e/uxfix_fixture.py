@@ -816,6 +816,10 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          #   r-prerun (a run-level pre-run gate: the phase under review, the steer scope picker) —
          #   with their events, gates and the reviewed phase's transcript.
          "escalation_arms": False,
+         # floor_override — (crew api-types 0.135.0) e2e/floor_override_test.py: r-floor, a build step
+         #   whose repo-checks floor failed on load flakes (attempt 8, as run 2ebd9da2 parked), with
+         #   the engine's prompt naming the `operator_judgment` arm; its events and gate are served.
+         "floor_override": False,
          # seat_week — brainstorm-actionable idea 9 (e2e/agent_1on1_test.py): GET /roster/record
          #   serves SEAT_WEEK (crew#690's shape) and pi carries a sign-in line; POST
          #   /governance/rules is recorded (GET /__fixture/rule-posts). Off: /roster/record answers
@@ -2423,6 +2427,49 @@ ESC_EVENTS["r-qe-noverdict"] = [
      "outputCaptured": True, "restored": False, "suggestionRef": None, "verdictSummary": ESC_QE_SUMMARY},
     {"type": "awaitingHuman", "session": "r-qe-noverdict", "ord": 4, "ts": ESC_T0 + 11 * MIN + SEC, "seq": 8,
      "prompt": ESC_QE_PROMPT, "reviewingOrd": 4, "gateKind": "escalation"},
+]
+
+# (crew api-types 0.135.0, operator ruling 2026-10-21) A build step whose repo-checks floor failed on load
+# flakes in untouched files after its retries (the shape run 2ebd9da2 parked in): the engine's prompt names
+# the `operator_judgment` arm, offered because no other layer of the gate denied. Switch `floor_override`.
+FLOOR_OVR_PROMPT = ("Unit 2 failed its deterministic floor (repo_checks): Repository checks failed: test (21 failing, "
+                "head-only: terminal::tmux_live_tests::input_resize_and_close_escalation, …) — confirm to retry the "
+                "phase, judge it yourself with a written rationale when the evidence shows the failures are not "
+                "the work's (action `operator_judgment`: it overrides the failed floor, labelled \"floor overridden "
+                "by operator\" on the run and the delivery; every other layer still denies and QE acceptance is "
+                "still required), or reject to cancel the run")
+FLOOR_OVR_SUMMARY = "Repository checks failed: test (21 failing, head-only)"
+FLOOR_OVR_RUN = _esc_run("r-floor-ovr", 1, [_esc_unit("r-floor-ovr", "clarify", 1, "recon", "neutral", "done", "pi"),
+                                    _esc_unit("r-floor-ovr", "build", 2, "build", "creator", "rejected", "codex"),
+                                    _esc_unit("r-floor-ovr", "review", 3, "review", "evaluator", "pending", "claude"),
+                                    _esc_unit("r-floor-ovr", "test", 4, "test", "evaluator", "pending", "claude"),
+                                    _esc_unit("r-floor-ovr", "deliver", 5, "build", "neutral", "pending", None)])
+FLOOR_OVR_RUN["session"]["problem"] = "Host seats, phase 1 of the DES-HOST-SEATS"
+FLOOR_OVR_RUN["session"]["clis"] = ["codex", "claude", "pi"]
+FLOOR_OVR_EVENTS = [
+    {"type": "unitDispatched", "session": "r-floor-ovr", "ord": 2, "attempt": 7, "ts": ESC_T0, "seq": 1},
+    {"type": "repoChecksEvaluated", "session": "r-floor-ovr", "ord": 2, "attempt": 7, "ts": ESC_T0 + 12 * MIN,
+     "seq": 2, "passed": False, "criterion": "repository checks pass on the head", "skipped": [], "outcome": "failed",
+     "floor": "creator",
+     "checks": [
+         {"name": "fmt", "argv": ["cargo", "fmt", "--check"], "source": "detected", "exitCode": 0,
+          "timedOut": False, "spawnError": None, "durationMs": 4100},
+         {"name": "clippy", "argv": ["cargo", "clippy"], "source": "detected", "exitCode": 0,
+          "timedOut": False, "spawnError": None, "durationMs": 210400},
+         {"name": "test", "argv": ["cargo", "test", "--workspace"], "source": "detected", "exitCode": 101,
+          "timedOut": False, "spawnError": None, "durationMs": 1810000}]},
+    {"type": "gateEvaluated", "session": "r-floor-ovr", "ord": 2, "ts": ESC_T0 + 12 * MIN, "seq": 3,
+     "criterion": "repository checks pass on the head", "hasDeterministicFloor": True, "deterministicPass": False,
+     "agentVerdict": "pass", "agentReasoning": "PASS — the change implements the plan.", "evaluatorPass": True,
+     "evaluatorPolicies": [], "denialReason": FLOOR_OVR_SUMMARY,
+     "denial": {"source": "repo_checks", "reason": FLOOR_OVR_SUMMARY, "claimId": None, "ruleIds": [], "deniedTool": None,
+                "phase": "build"},
+     "combined": False, "judgeCli": "claude", "judgeDistinct": True},
+    {"type": "gateEscalated", "session": "r-floor-ovr", "ord": 2, "ts": ESC_T0 + 12 * MIN, "seq": 4, "attempt": 7,
+     "condition": "floor_failed", "defGate": False, "denialSource": "repo_checks", "discarded": [],
+     "outputCaptured": True, "restored": False, "suggestionRef": None, "verdictSummary": FLOOR_OVR_SUMMARY},
+    {"type": "awaitingHuman", "session": "r-floor-ovr", "ord": 2, "ts": ESC_T0 + 12 * MIN + SEC, "seq": 5,
+     "prompt": FLOOR_OVR_PROMPT, "reviewingOrd": 2, "gateKind": "escalation"},
 ]
 
 ESC_OUTPUTS = {("r-prerun", "recon"): {"output": "Recon: the importer reads with split('\\n') and drops a trailing "
@@ -4657,6 +4704,8 @@ def assemble_runs() -> list:
             runs = runs + [json.loads(json.dumps(GATE_MOVE_RUN))]
         if state["escalation_arms"] and not state["no_runs"]:
             runs = runs + json.loads(json.dumps(ESC_RUNS))
+        if state["floor_override"] and not state["no_runs"]:
+            runs = runs + [json.loads(json.dumps(FLOOR_OVR_RUN))]
         if state["trust_rules"] and not state["no_runs"]:
             runs = runs + json.loads(json.dumps(TRUST_RUNS))
         if state["run_page"] and not state["no_runs"]:
@@ -6728,6 +6777,12 @@ class W2Handler(SimpleHTTPRequestHandler):
                                  "receivedAt": iso(GATE_MOVE_T0 + 9 * MIN + SEC), "options": None})
                 return True
             with state_lock:
+                floor_on = state["floor_override"]
+            if floor_on and rid == "r-floor-ovr":
+                self._json(200, {"runId": rid, "ord": 2, "lifecycle": "open", "prompt": FLOOR_OVR_PROMPT,
+                                 "receivedAt": iso(ESC_T0 + 12 * MIN + SEC)})
+                return True
+            with state_lock:
                 esc_on = state["escalation_arms"]
             if esc_on and rid in ESC_GATES:
                 g_ord, g_prompt = ESC_GATES[rid]
@@ -6895,6 +6950,8 @@ class W2Handler(SimpleHTTPRequestHandler):
                         events = [_tail_cut(e) for e in json.loads(json.dumps(events))]
                 if state["escalation_arms"] and rid in ESC_EVENTS:
                     events = list(ESC_EVENTS[rid])
+                if state["floor_override"] and rid == "r-floor-ovr":
+                    events = list(FLOOR_OVR_EVENTS)
                 if state["trust_rules"] and rid in TRUST_GATES:
                     events = _trust_events(rid)
                 if state["run_page"] and rid in ("r-rerun", "r-rerun-done"):

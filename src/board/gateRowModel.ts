@@ -39,6 +39,7 @@ import type { RerunOffer } from '../components/rerunModel.js';
 import { qeGateOf, QE_RETRY_LABEL, QE_RETRY_NOTE_LABEL, QE_RETRY_NOTE_TITLE, QE_RETRY_TITLE, type QeGate } from './qeEscalation.js';
 import { waitsForJudge } from './assuranceModel.js';
 import { OPERATOR_JUDGMENT_LABEL, OPERATOR_JUDGMENT_TITLE, REJUDGE_ACTION, REJUDGE_LABEL, rejudgeTitle, type RejudgeOffer } from './rejudge.js';
+import { FLOOR_OVERRIDE_ACTION, FLOOR_OVERRIDE_KEY, FLOOR_OVERRIDE_TITLE, offersFloorOverride } from './floorOverride.js';
 
 /**
  * SESSION GATE ROW MODEL (S15e): pure classification and choice set for the session thread's
@@ -786,6 +787,12 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
           : approveRetriesPhase(gate.prompt)
           ? { key: 'steer', label: RETRY_NOTE_LABEL, decision: escalationScopeTarget !== null ? { approve: true, amendScope: 'creator' } : { approve: true }, needsNote: true, title: RETRY_NOTE_TITLE }
           : { key: 'steer', label: 'Approve and steer', decision: escalationScopeTarget !== null ? { approve: true, amendScope: 'creator' } : { approve: true }, needsNote: true, title: 'Approve and add a note to steer the next creator phase.' });
+    // (crew api-types 0.135.0) A failed repo-checks floor: the operator's own judgment, with a
+    // required rationale — offered where the engine's prompt names the arm. Inline (it is the way
+    // on when retries loop on flakes); a reassign then rides the ⋯.
+    if (deadSeat === null && offersFloorOverride(gate.prompt, verdict, gate.ord)) {
+      coreWithoutStop.push({ key: FLOOR_OVERRIDE_KEY, label: OPERATOR_JUDGMENT_LABEL, decision: { approve: true, action: FLOOR_OVERRIDE_ACTION } as unknown as GateAnswer, needsNote: true, title: FLOOR_OVERRIDE_TITLE });
+    }
 
     // Cap at 3 (stop always occupies the 4th inline slot); excess goes to overflow.
     const escInline = coreWithoutStop.slice(0, 3);

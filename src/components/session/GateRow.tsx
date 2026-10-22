@@ -26,6 +26,7 @@ import { useCapabilities } from '../../store/capabilities.js';
 import type { Navigate } from '../../hooks/useRoute.js';
 import { AssuranceReceipt, AssuranceReceiptTech, QeAcceptanceLabel, ReducedAssuranceLabel } from './AssuranceReceipt.js';
 import { missingSeatsLine, rejudgeOfferOf, type RejudgeOffer } from '../../board/rejudge.js';
+import { FLOOR_OVERRIDE_CONSEQUENCE, FLOOR_OVERRIDE_KEY, FLOOR_OVERRIDE_PLACEHOLDER, FLOOR_OVERRIDE_SEND } from '../../board/floorOverride.js';
 
 /** How often a judge-unavailable gate re-reads whether a judge seat can rule now (a seat signed in
  *  elsewhere, an image built): the offer follows without a reload. */
@@ -638,7 +639,10 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
     if (choice.key === 'rerun' && !confirmRerun) { setConfirmRerun(true); return; }
     if (choice.needsNote) {
       setNoteOpen(choice.key);
-      setNoteText((prev) => prev || model.noteDefault);
+      // The floor override's rationale is the operator's own words: never pre-filled (a prefill
+      // would make the required box look answered), and never another choice's draft.
+      if (choice.key === FLOOR_OVERRIDE_KEY) setNoteText('');
+      else setNoteText((prev) => prev || model.noteDefault);
       return;
     }
     if (choice.decision === null) return;
@@ -687,8 +691,11 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
     rowRef.current?.focus();
   };
 
+  const floorOverrideNote = noteChoice?.key === FLOOR_OVERRIDE_KEY;
   // studio#612: the floor fix's note is the fixing seat's whole task, not a steer.
-  const notePlaceholder = noteChoice?.key === 'steer' && noteChoice.label === FLOOR_FIX_LABEL
+  const notePlaceholder = floorOverrideNote
+    ? FLOOR_OVERRIDE_PLACEHOLDER
+    : noteChoice?.key === 'steer' && noteChoice.label === FLOOR_FIX_LABEL
     ? 'What should the fixing helper change…'
     : noteChoice?.key === 'steer'
     ? 'Steer the next step…'
@@ -874,12 +881,21 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
       {noteChoice !== null && (
         <details data-testid="session-gate-detail" open className="wk-session-gate-detail">
           <summary className="wk-session-gate-detail-summary">{noteChoice.label}</summary>
+          {/* The floor override says what it does FIRST, then asks why (the rationale is required). */}
+          {floorOverrideNote && <>
+            <p data-testid="session-gate-floor-override-consequence" className="wk-gate-consequence">{FLOOR_OVERRIDE_CONSEQUENCE}</p>
+            <label htmlFor={`session-gate-note-${runId}`} data-testid="session-gate-floor-override-label" className="wk-session-gate-detail-item">
+              Your rationale (required)
+            </label>
+          </>}
           <textarea
             data-testid="session-gate-note"
             ref={noteRef}
+            id={`session-gate-note-${runId}`}
             className="wk-session-gate-note"
             value={noteText}
             placeholder={notePlaceholder}
+            {...(floorOverrideNote ? { 'aria-required': true, required: true } : {})}
             rows={4}
             onChange={(e) => setNoteText(e.target.value)}
             onKeyDown={(e) => {
@@ -891,7 +907,7 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
           />
           <div className="wk-session-gate-note-actions">
             <button type="button" data-testid="session-gate-send" onClick={sendNote} disabled={action.busy || !noteText.trim()} className="wk-btn wk-btn--primary">
-              Send
+              {floorOverrideNote ? FLOOR_OVERRIDE_SEND : 'Send'}
             </button>
             <button type="button" onClick={cancelNote} className="wk-btn wk-btn--quiet">
               Cancel
