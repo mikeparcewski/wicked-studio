@@ -3,7 +3,7 @@
 floor_override_test.py — (crew api-types 0.135.0, wicked-core `operator_judgment`, operator ruling
 2026-10-21) "Approve as your own judgment" at a failed repo-checks floor, at 1440x700.
 
-  r-floor  a build step whose repo-checks floor failed on load flakes after its retries (the shape
+  r-floor-ovr  a build step whose repo-checks floor failed on load flakes after its retries (the shape
            run 2ebd9da2 parked in at attempt 8). The engine's prompt names the `operator_judgment`
            arm, so the row offers "Approve as your own judgment" inline beside Send back, Retry this
            step with a note and Stop. Its hover says the consequence first. Taking it opens an EMPTY
@@ -28,7 +28,7 @@ from uxfix_fixture import (DEFAULT_APPEARANCE, HIDE_GATE_TOASTS, REPO, ensure_bu
 PORT = int(os.environ.get("FEEDBACK_PORT", "4473"))
 W, H = 1440, 700
 SHOTS = REPO / "e2e" / "shots"
-RID = "r-floor"
+RID = "r-floor-ovr"
 CONSEQUENCE = "Overrides the failed floor; recorded on the run and delivery; QE acceptance still required."
 RATIONALE = "21 head-only failures are load flakes in files this change never touched; each passes alone on this tree."
 report: dict = {"ok": False, "steps": {}}
