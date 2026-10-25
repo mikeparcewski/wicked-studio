@@ -39,7 +39,7 @@ import type { RerunOffer } from '../components/rerunModel.js';
 import { qeGateOf, QE_RETRY_LABEL, QE_RETRY_NOTE_LABEL, QE_RETRY_NOTE_TITLE, QE_RETRY_TITLE, type QeGate } from './qeEscalation.js';
 import { waitsForJudge } from './assuranceModel.js';
 import { OPERATOR_JUDGMENT_LABEL, OPERATOR_JUDGMENT_TITLE, REJUDGE_ACTION, REJUDGE_LABEL, rejudgeTitle, type RejudgeOffer } from './rejudge.js';
-import { FLOOR_OVERRIDE_ACTION, FLOOR_OVERRIDE_KEY, FLOOR_OVERRIDE_TITLE, offersFloorOverride } from './floorOverride.js';
+import { FLOOR_OVERRIDE_ACTION, FLOOR_OVERRIDE_KEY, FLOOR_OVERRIDE_TITLE, offersDeliverFloorOverride, offersFloorOverride } from './floorOverride.js';
 
 /**
  * SESSION GATE ROW MODEL (S15e): pure classification and choice set for the session thread's
@@ -526,6 +526,11 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
       question: gate.prompt,
       choices: [
         { key: 'retry', label: 'Deliver again', decision: { approve: true }, needsNote: false, title: 'Re-run the deliver phase: it re-checks the work and pushes again.' },
+        // wicked-core: the deliver phase's own re-verify failed (a lift moved the tree onto a red base);
+        // the operator's judgment over exactly that result, then the deliver phase re-runs on it.
+        ...(offersDeliverFloorOverride(gate.prompt)
+          ? [{ key: FLOOR_OVERRIDE_KEY, label: OPERATOR_JUDGMENT_LABEL, decision: { approve: true, action: FLOOR_OVERRIDE_ACTION } as unknown as GateAnswer, needsNote: true, title: FLOOR_OVERRIDE_TITLE }]
+          : []),
         { key: 'stop', label: 'Stop', decision: { approve: false }, needsNote: false, title: 'Cancel the run and keep the worktree; nothing is pushed.' },
       ],
       overflow: [],

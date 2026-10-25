@@ -12,6 +12,13 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+- **A refused hand-over whose re-verify failed offers "Approve as your own judgment" (wicked-core#1115).** When
+  the deliver phase's own re-verify fails on the tree it would ship (a lift onto a red tip), the engine now
+  offers the operator's judgment over exactly that result. The refused hand-over row hardcoded "Deliver
+  again" and "Stop", so it never showed the offer. It now shows the choice between them when the engine's
+  verbatim clause sits in its own deliver options (never when the clause is only quoted inside the
+  refusal). The rationale is required, and it sends `{approve: true, action: 'operator_judgment', amend}`.
+
 ## [0.11.7] — 2026-10-22
 
 A patch release: a failed floor's gate offers "Approve as your own judgment" with a required rationale, and a gate or delivery whose floor was overridden says "Floor overridden by operator" (#869, for wicked-crew#1104 and wicked-core#1061).
