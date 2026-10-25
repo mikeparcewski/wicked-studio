@@ -63,6 +63,28 @@ export function offersFloorOverride(prompt: string | undefined, verdict?: FloorO
   return last >= 0 && OFFER_AT_CLOSER.test(prompt.slice(0, last + CLOSER.length));
 }
 
+/** The engine's words when a red base cannot be told apart from the change (wicked-core `base_red_unseparated`):
+ *  retrying or fixing loops on failures the change did not cause, so the override is the way through. */
+const OVERRIDE_IS_THE_PATH = "the operator's floor override is the path through";
+
+/** Whether the engine names the override as THE way through this failed floor: a check it classed
+ *  `base_red_unseparated`, or its own words saying so. The card then suggests the override, never a retry
+ *  or a fix (rig 0.15.8: "Retry this step with a note" was marked suggested over exactly that).
+ *  A floor that also holds a known regression is never suggested away — the override would override the
+ *  regression too (pr-xreview on studio#899). */
+export function engineNamesFloorOverride(
+  verdict: { floor?: { checks: readonly { classification: string | null; regressions: readonly string[]; exitCode: number | null }[] } | null; denial?: { reason?: string | null } | null } | null | undefined,
+  summary?: string | null,
+): boolean {
+  const floor = verdict?.floor;
+  if (floor !== null && floor !== undefined && floor.checks.length > 0) {
+    if (floor.checks.some((c) => c.classification === 'regression' || c.regressions.length > 0)) return false;
+    return floor.checks.some((c) => c.classification === 'base_red_unseparated');
+  }
+  // No floor record in hand: the engine's own words, unless they also name a regression.
+  return [summary, verdict?.denial?.reason].some((t) => typeof t === 'string' && t.includes(OVERRIDE_IS_THE_PATH) && !/\[regression\b/.test(t));
+}
+
 /** The engine's deliver refusal options (wicked-core `deliver_refusal_prompt`). They follow the quoted
  *  refusal, so their LAST occurrence is the engine's own. */
 const DELIVER_OPTIONS = 'Approve to re-run the deliver phase now (the engine re-lifts and re-verifies first; no second deliver gate),';
@@ -84,6 +106,10 @@ export interface FloorOverrideView {
   layer: string;
   resultId: string;
   label: string;
+  /** The unit and attempt whose failed floor was overridden (the wire's `ord` / `attempt`, else read off
+   *  `resultId` — `<run>:unit-<ord>:attempt-<n>:<layer>`); `null` when neither says. */
+  ord: number | null;
+  attempt: number | null;
 }
 
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -91,9 +117,15 @@ const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'obj
 export function floorOverrideOf(v: unknown): FloorOverrideView | null {
   if (!isRecord(v)) return null;
   const label = typeof v['label'] === 'string' && v['label'].trim() !== '' ? v['label'].trim() : 'floor overridden by operator';
+  const resultId = typeof v['resultId'] === 'string' ? v['resultId'] : '';
+  const at = /:unit-(\d+):attempt-(\d+):/.exec(resultId);
+  const int = (x: unknown, fallback: string | undefined): number | null =>
+    typeof x === 'number' && Number.isInteger(x) ? x : fallback !== undefined ? Number(fallback) : null;
   return {
     layer: typeof v['layer'] === 'string' ? v['layer'] : 'repo_checks',
-    resultId: typeof v['resultId'] === 'string' ? v['resultId'] : '',
+    resultId,
     label,
+    ord: int(v['ord'], at?.[1]),
+    attempt: int(v['attempt'], at?.[2]),
   };
 }

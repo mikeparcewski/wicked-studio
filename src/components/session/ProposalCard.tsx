@@ -10,6 +10,7 @@ import { useDisplayText } from '../../hooks/useHomePath.js';
 import { repoNameOf } from '../../board/deskWords.js';
 import type { AskProposal } from '../../board/askThread.js';
 import { deliverAcceptance, ownEvidenceOf } from '../../board/checkState.js';
+import { overriddenFloorsOf } from '../../board/failingChecks.js';
 import type { RunAcceptanceSummary } from '../../api/types.js';
 import { useGateStore } from '../../store/gates.js';
 import { useRunEvents } from '../../hooks/useRunEvents.js';
@@ -74,8 +75,6 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
   // Fetch events for deliver cards — fallback file count from repoChecksEvaluated.changed.
   // studio#558: the session page's one run-event read (shared with GateRow / OrphanedRow).
   const eventsRaw = useRunEvents(runId).events ?? undefined;
-  // studio#577: the acceptance line, with the run's own evidence when crew's gate has no verdict.
-  const accept = deliverAcceptance(acceptance, ownEvidenceOf(eventsRaw ?? []), sessionQe(view, eventsRaw ?? null)?.status === 'required');
   // core#850: the delivery's assurance receipt — what the run required, what its gates ran and
   // skipped, who built and checked it, the tree delivered.
   // EX-03 / EX-04: crew's record of the hand-over (unverified post-hoc, the QE check).
@@ -83,6 +82,10 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
   const recordedDelivery = deliveryAssuranceOf(view, postHocNow?.phase === 'delivered' ? { raw: postHocNow.assurance, delivered: true } : undefined);
   const unverified = recordedDelivery !== null && !recordedDelivery.verified;
   const deliveryReceipt = deliveryReceiptOf(view, eventsRaw ?? null, recordedDelivery);
+  // studio#577: the acceptance line, with the run's own evidence when crew's gate has no verdict; a floor
+  // the operator overrode is said as that, never as green "passed" (rig 0.15.8).
+  const accept = deliverAcceptance(acceptance, ownEvidenceOf(eventsRaw ?? []), sessionQe(view, eventsRaw ?? null)?.status === 'required',
+    overriddenFloorsOf(deliveryReceipt, eventsRaw ?? null, view));
   // Fetch the diff for deliver cards — primary diffstat source (GET /runs/:id/diff?base=merge-base).
   // Keyed by runId so a run change re-fetches and stale responses are discarded.
   const [runDiffState, setRunDiffState] = useState<{ runId: string; data: RunDiff } | null>(null);

@@ -381,7 +381,7 @@ function sameJudgment(a: OperatorJudgmentView, b: OperatorJudgmentView): boolean
 }
 
 /** The session record's durable floor overrides, null-safe (studio pins api-types older than 0.135.0). */
-function durableFloorOverrides(view: SessionView | null | undefined): OperatorJudgmentView[] {
+export function durableFloorOverrides(view: SessionView | null | undefined): OperatorJudgmentView[] {
   const a = (view?.session as unknown as { assurance?: unknown } | undefined)?.assurance;
   return isRecord(a) ? operatorJudgesOf(a['floorOverrides']).filter((j) => j.floorOverride !== undefined) : [];
 }

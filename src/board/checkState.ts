@@ -2,6 +2,7 @@ import type { CoreEvent, RunAcceptanceSummary, WalkthroughStepState } from '../a
 import { attemptBefore, gateVerdict } from '../components/gateVerdictModel.js';
 import { fmtTime } from './walkthroughModel.js';
 import type { ChainModel, ChainStep } from './chainModel.js';
+import { overriddenLine, type OverriddenFloors } from './failingChecks.js';
 
 /**
  * "Checked" (DES-WALKTHROUGH-PROOF-001 §3 scenes 21, 22, 28; §4.9; slice WT-U2, placed by rebuild S13):
@@ -114,7 +115,7 @@ export function checkedSentence(c: ChainModel): string | null {
   return `${c.done} of ${c.total} done · ${c.checked} checked`;
 }
 
-export type AcceptanceTone = 'ok' | 'bad' | 'quiet';
+export type AcceptanceTone = 'ok' | 'bad' | 'quiet' | 'overridden';
 
 /** The run's OWN evidence for a hand-over (studio#577), read off its event log: the latest floor
  *  result per unit, and how many of the units the engine evaluated passed their gate. */
@@ -186,27 +187,37 @@ export function deliverAcceptance(
   /** The run's QE acceptance decision is `required` (crew 0.9.0 / core#850: delivery is then refused
    *  unless acceptance PASSED). */
   qeRequired = false,
+  /** The failed floors the operator overrode on the way here (`overriddenFloorsOf`), or `null`. */
+  overridden: OverriddenFloors | null = null,
 ): { text: string; tone: AcceptanceTone; blocksDeliver?: true; detail?: string } | null {
-  if (summary === null || summary === undefined || typeof summary.line !== 'string' || summary.line === '') return null;
+  const hasLine = summary !== null && summary !== undefined && typeof summary.line === 'string' && summary.line !== '';
+  // rig 0.15.8: a check FAILED and the operator overrode it — the hand-over never reads green "passed"
+  // over that. Said in the overridden style; crew's own line stays behind Technical details. An
+  // acceptance that is required and not satisfied still leads: it is what stands now (pr-xreview #899).
+  if (overridden !== null && !(hasLine && summary!.required && !summary!.satisfied)) {
+    return { text: overriddenLine(overridden), tone: 'overridden', ...(hasLine ? { detail: summary!.line } : {}) };
+  }
+  if (!hasLine) return null;
+  const acc = summary!;
   // A run that requires QE acceptance and has not passed it: crew refuses the delivery, so the card
   // says so plainly instead of offering a Deliver that will be refused (reel 7d8c9c98, studio 0.7.10).
-  if (qeRequired && summary.required && !summary.satisfied) {
+  if (qeRequired && acc.required && !acc.satisfied) {
     // "failed" only for a recorded failure; anything else (no verdict, an unreadable ledger, an unsealed
     // walkthrough) is "hasn't passed". Crew's own line stays readable behind Technical details.
-    const failed = (summary.walkthrough?.failed ?? 0) > 0;
+    const failed = (acc.walkthrough?.failed ?? 0) > 0;
     return failed
-      ? { text: 'QE acceptance failed — fix and re-run, or skip with a reason.', tone: 'bad', blocksDeliver: true, detail: summary.line }
-      : { text: 'QE acceptance hasn’t passed yet — fix and re-run, or skip with a reason. Delivery is refused until it passes.', tone: 'bad', blocksDeliver: true, detail: summary.line };
+      ? { text: 'QE acceptance failed — fix and re-run, or skip with a reason.', tone: 'bad', blocksDeliver: true, detail: acc.line }
+      : { text: 'QE acceptance hasn’t passed yet — fix and re-run, or skip with a reason. Delivery is refused until it passes.', tone: 'bad', blocksDeliver: true, detail: acc.line };
   }
-  if (summary.required && !summary.satisfied && NO_VERDICT_RECORDED.test(summary.line)) {
+  if (acc.required && !acc.satisfied && NO_VERDICT_RECORDED.test(acc.line)) {
     const words = ownEvidenceWords(own);
     return {
       text: `No QE verdict is recorded for this run, and Deliver doesn’t consult the QE gate — this hand-over rests on the run’s own evidence${words === null ? '' : `: ${words}`}.`,
       tone: 'quiet',
     };
   }
-  const tone: AcceptanceTone = !summary.required ? 'quiet' : summary.satisfied ? 'ok' : 'bad';
-  return { text: summary.line, tone };
+  const tone: AcceptanceTone = !acc.required ? 'quiet' : acc.satisfied ? 'ok' : 'bad';
+  return { text: acc.line, tone };
 }
 
 /** The run's accepted plan carries an override that removed the walkthrough pair (WT §4.9, the

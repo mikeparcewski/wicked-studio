@@ -183,6 +183,27 @@ describe('RunTab', () => {
     expect(screen.getByTestId('run-tab-acceptance')).toHaveTextContent('Checked');
   });
 
+  it('rig 0.15.8: a floor the operator overrode reads "Overridden by you", never "Passed" — the deliver card\'s words', async () => {
+    const view = makeView({ status: 'awaiting_human' }, [makeUnit({ ord: 2, stage: 'build', status: 'done', assigned_cli: 'claude' })]);
+    Object.assign(view.session, { assurance: { mode: 'full', required: ['qe_acceptance'], floorOverrides: [{ at: 1, by: 'local (human)', note: 'base red',
+      floorOverride: { layer: 'repo_checks', resultId: 'run-1:unit-2:attempt-0:repo_checks', ord: 2, attempt: 0, label: 'floor overridden by operator' } }] } });
+    useRunEventStore.setState({ byRun: { 'run-1': [{ type: 'repoChecksEvaluated', session: 'run-1', ord: 2, attempt: 0, passed: false, criterion: '', skipped: [],
+      checks: [{ name: 'test', argv: [], source: '', exitCode: 1, timedOut: false, spawnError: null, durationMs: 1, stdoutTail: '', stderrTail: '', classification: 'base_red_unseparated', preExisting: [], regressions: [], failureIds: [] }] }] } });
+    useRunAcceptanceStore.setState({ byRun: { 'run-1': { runId: 'run-1', summary: { required: true, satisfied: true, line: 'Accepted: the checks this run had to pass have passed.', walkthrough: null } } as unknown as RunAcceptanceView } });
+    await tab([view]);
+    openSection('checks');
+    const checks = screen.getAllByTestId('run-panel-section').find((s) => s.dataset['section'] === 'checks')!;
+    expect(within(checks).getByTestId('run-panel-summary')).toHaveTextContent('Overridden by you');
+    expect(within(checks).getByTestId('run-tab-overridden')).toHaveTextContent('Overridden by you: test failed on this change and its base.');
+    expect(within(checks).queryByTestId('run-tab-acceptance')).toBeNull();
+    expect(within(checks).getByTestId('run-panel-summary').textContent).not.toBe('Passed');
+    // a required acceptance that has not passed leads over the override (pr-xreview #899)
+    act(() => useRunAcceptanceStore.setState({ byRun: { 'run-1': { runId: 'run-1', summary: { required: true, satisfied: false, line: 'Not accepted yet: QE FAIL.', walkthrough: null } } as unknown as RunAcceptanceView } }));
+    expect(within(checks).getByTestId('run-panel-summary')).toHaveTextContent('Not passed');
+    expect(within(checks).getByTestId('run-tab-acceptance')).toHaveTextContent('Not accepted yet: QE FAIL.');
+    expect(within(checks).getByTestId('run-tab-overridden')).toBeTruthy();
+  });
+
   it('shows the exported orphan warning only while the event trail says it is orphaned', async () => {
     useRunEventStore.setState({ byRun: { 'run-1': [{ type: 'runOrphaned', session: 'run-1', ord: 1, ts: 123 }] } });
     await tab();

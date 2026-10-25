@@ -13,6 +13,7 @@ import { useRoster } from '../../hooks/useRoster.js';
 import { isReviewUnit } from '../../board/responder.js';
 import { useRunAcceptance } from '../../hooks/useRunAcceptance.js';
 import { useRunEvents } from '../../hooks/useRunEvents.js';
+import { overriddenFloorsOf, overriddenLine } from '../../board/failingChecks.js';
 import { useGateStore } from '../../store/gates.js';
 import { openSheet, stopRun, useSheets } from '../../store/sheets.js';
 import { useRunChain } from './ChainLine.js';
@@ -121,7 +122,10 @@ function RunTabDetails({ view, allRuns, sessionId, title, navigate }: { view: Se
   const coverage = useRunCoverage(view);
   const delivery = deliveryOf(view);
   const recorded = deliveryAssuranceOf(view);
-  const receipt = view.session.status === 'completed' ? deliveryReceiptOf(view, events ?? null, recorded) : null;
+  const runReceipt = deliveryReceiptOf(view, events ?? null, recorded);
+  const receipt = view.session.status === 'completed' ? runReceipt : null;
+  // rig 0.15.8: a failed floor the operator overrode is said as that — the deliver card's words — never "Passed".
+  const overridden = overriddenFloorsOf(runReceipt, events ?? null, view);
   const started = startedMs(view);
   const ended = isTerminal(view) ? (endedAtMs(view) ?? finishedAtMs(view)) : null;
   const doneSteps = chain.steps.filter((s) => s.state === 'done' || s.state === 'checked').length;
@@ -251,14 +255,17 @@ function RunTabDetails({ view, allRuns, sessionId, title, navigate }: { view: Se
         <Item section="changes" id="files">{() => <RunSection id="files" view={view} runs={allRuns} navigate={go} />}</Item>
       </Section>
 
-      <Section id="checks" {...fold} summary={quiet.has('checks') ? 'Nothing checked yet' : acceptancePassed === true ? 'Passed' : acceptancePassed === false ? 'Not passed' : ''}>
+      <Section id="checks" {...fold} summary={quiet.has('checks') ? 'Nothing checked yet' : acceptancePassed === false ? 'Not passed' : overridden !== null ? 'Overridden by you' : acceptancePassed === true ? 'Passed' : ''}>
         <div data-testid="run-tab-checks" className="wk-run-tab-block">
           <RunAssuranceLabel view={view} />
-          {/* crew's acceptance line (WT-W3 `summary.line`; a bare string from an older read). */}
-          {acceptanceLine !== null && <p data-testid="run-tab-acceptance" className="wk-run-tab-line">{acceptanceLine}</p>}
+          {/* crew's acceptance line (WT-W3 `summary.line`; a bare string from an older read). An acceptance not passed leads;
+              a passed one under an override is QE acceptance's word only, so it goes behind Technical details. */}
+          {acceptanceLine !== null && (overridden === null || acceptancePassed === false) && <p data-testid="run-tab-acceptance" className="wk-run-tab-line">{acceptanceLine}</p>}
+          {overridden !== null && <p data-testid="run-tab-overridden" className="wk-run-tab-line wk-prop-accept--overridden">{overriddenLine(overridden)}</p>}
+          {acceptanceLine !== null && overridden !== null && acceptancePassed !== false && <TechDetails data-testid="run-tab-acceptance-detail" summary="What QE acceptance recorded" text={acceptanceLine} />}
           {coverage !== null && <p data-testid="run-tab-coverage" className="wk-run-tab-line">{coverage.line}</p>}
           {coverage !== null && coverage.reasons.length > 0 && <TechDetails data-testid="run-tab-coverage-why" text={coverage.reasons} />}
-          {acceptanceLine === null && coverage === null && <p className="wk-run-tab-muted">{quiet.has('checks') ? 'Nothing has been checked yet.' : 'No acceptance check recorded.'}</p>}
+          {acceptanceLine === null && coverage === null && overridden === null && <p className="wk-run-tab-muted">{quiet.has('checks') ? 'Nothing has been checked yet.' : 'No acceptance check recorded.'}</p>}
         </div>
         <Item section="checks" id="evidence">{() => <EvidenceTab runId={id} />}</Item>
         <Item section="checks" id="governance">{() => <RunSection id="governance" view={view} runs={allRuns} navigate={go} />}</Item>

@@ -78,6 +78,12 @@ export interface GateFloorCheck {
   /** Failure ids present on head AND base / on head only (`RepoCheckRun.preExisting` / `.regressions`). */
   preExisting: string[];
   regressions: string[];
+  /** The failing tests the engine read off the runner's output (`RepoCheckRun.failureIds`); `[]` when the
+   *  runner's format is not one it knows, or the check passed. */
+  failureIds?: string[];
+  /** The same check on the run base (`RepoCheckRun.base.run`) failed too: `true`, passed: `false`, `null`
+   *  when the base was not run (or could not be). */
+  baseFailed?: boolean | null;
 }
 
 /** The F-039 floor as `repoChecksEvaluated` reported it. */
@@ -234,7 +240,18 @@ function checkOf(raw: unknown): GateFloorCheck | null {
     classification: str(c.classification),
     preExisting: strings(c.preExisting),
     regressions: strings(c.regressions),
+    failureIds: strings(c.failureIds),
+    baseFailed: baseFailedOf(c.base),
   };
+}
+
+/** Whether the check's run on the base failed (`base.run` — an open object on the pinned api-types). */
+function baseFailedOf(base: unknown): boolean | null {
+  const run = isRecord(base) ? (base as Record<string, unknown>)['run'] : null;
+  if (!isRecord(run)) return null;
+  const r = run as Record<string, unknown>;
+  if (r['timedOut'] === true || (typeof r['spawnError'] === 'string' && r['spawnError'] !== '')) return true;
+  return typeof r['exitCode'] === 'number' ? r['exitCode'] !== 0 : null;
 }
 
 /** The F-039 floor off a `repoChecksEvaluated` frame — shared with the deliver re-verify

@@ -720,6 +720,13 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
       }}
     >
       <p data-testid="session-gate-question" className="wk-session-gate-question">{question}</p>
+      {/* rig 0.15.8: what failed, on the face — never only under Technical details. */}
+      {model.failingTests !== undefined && (
+        <p data-testid="session-gate-failing" className="wk-session-gate-detail-item wk-gate-failing">
+          Failing: {model.failingTests.names.map((n, i) => <span key={`${i}:${n}`}>{i > 0 ? ', ' : ''}<code>{n}</code></span>)}
+          {model.failingTests.more > 0 && <span data-testid="session-gate-failing-more"> +{model.failingTests.more} more</span>}
+        </p>
+      )}
       {model.qe !== undefined && (
         <p data-testid="session-gate-qe-why" data-qe-outcome={model.qe.outcome} className="wk-session-gate-detail-item">{model.qe.why}</p>
       )}
