@@ -12,6 +12,11 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+## [0.11.8] — 2026-10-25
+
+A patch release: a refused hand-over whose re-verify failed offers "Approve as your own judgment" when the engine offers it (#895, for wicked-core#1115).
+
+### Fixed
 - **A refused hand-over whose re-verify failed offers "Approve as your own judgment" (wicked-core#1115).** When
   the deliver phase's own re-verify fails on the tree it would ship (a lift onto a red tip), the engine now
   offers the operator's judgment over exactly that result. The refused hand-over row hardcoded "Deliver
@@ -2399,7 +2404,8 @@ The merged interactive layer: wicked-interactive's UI moved into this skin (DES-
   `git subtree split` (92 commits).
 - The SPA as a pure HTTP/WS client of the wicked-crew daemon: runs, gates, live CoreEvents.
 
-[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.11.7...HEAD
+[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.11.8...HEAD
+[0.11.8]: https://github.com/mikeparcewski/wicked-studio/compare/v0.11.7...v0.11.8
 [0.11.7]: https://github.com/mikeparcewski/wicked-studio/compare/v0.11.6...v0.11.7
 [0.11.6]: https://github.com/mikeparcewski/wicked-studio/compare/v0.11.5...v0.11.6
 [0.11.5]: https://github.com/mikeparcewski/wicked-studio/compare/v0.11.4...v0.11.5
