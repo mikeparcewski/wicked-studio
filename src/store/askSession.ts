@@ -1,4 +1,5 @@
 import type { ChatScope } from '../api/types.js';
+import type { ScopeChip } from '../board/chatScopes.js';
 
 /**
  * The Ask dock's ACTIVE chat session, persisted for the tab (studio#323 R3).
@@ -24,6 +25,10 @@ export interface AskSession {
    *  select. `null`/absent = not stated (a daemon predating scope, or a session saved before this
    *  field). */
   scope?: ChatScope | null;
+  /** The system chat's scope chips at open (DES-SYSTEM-CHAT §6) — a reopened chat shows them. */
+  chips?: ScopeChip[];
+  /** The CLI that answers this chat (DES-SYSTEM-CHAT §5). */
+  cli?: string;
 }
 
 export const ASK_SESSION_KEY = 'wicked.ask.session';
@@ -39,6 +44,8 @@ export function readAskSession(): AskSession | null {
       title: typeof parsed.title === 'string' ? parsed.title : '',
       seeded: parsed.seeded === true,
       scope: isChatScope(parsed.scope) ? parsed.scope : null,
+      ...(Array.isArray(parsed.chips) ? { chips: parsed.chips.filter(isChip) } : {}),
+      ...(typeof parsed.cli === 'string' && parsed.cli !== '' ? { cli: parsed.cli } : {}),
     };
   } catch {
     return null;
@@ -68,4 +75,10 @@ function isChatScope(v: unknown): v is ChatScope {
   return v !== null && typeof v === 'object'
     && typeof (v as { kind?: unknown }).kind === 'string'
     && Array.isArray((v as { repos?: unknown }).repos);
+}
+
+function isChip(v: unknown): v is ScopeChip {
+  const c = v as Partial<ScopeChip> | null;
+  return c !== null && typeof c === 'object' && typeof c.key === 'string' && typeof c.kind === 'string'
+    && typeof c.label === 'string' && typeof c.on === 'boolean';
 }

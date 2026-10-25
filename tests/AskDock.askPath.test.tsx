@@ -75,12 +75,13 @@ async function ask(text: string): Promise<void> {
 }
 
 describe('an ask starts a path', () => {
-  it('opens the chat over the eligible roster without naming a primary, sends once, and deposits the 202’s turn, run and step', async () => {
+  it('opens the chat over the eligible roster with the picked CLI as its primary, sends once, and deposits the 202’s turn, run and step', async () => {
     render(<AskDock runs={[]} pathname="/" onClose={() => undefined} />);
     await ask('why does greet() not trim?');
     await waitFor(() => expect(sendChatMessage).toHaveBeenCalledTimes(1));
+    // DES-SYSTEM-CHAT §5: ONE CLI answers — the picker's default (the first that can) leads.
     expect(lastBody().clis).toStrictEqual(['claude', 'codex']);
-    expect(lastBody().primary).toBeUndefined();
+    expect(lastBody().primary).toBe('claude');
     const chatId = lastBody().chatId!;
     const turns = useAskThreadStore.getState().turns[chatId]!;
     expect(turns).toHaveLength(1);
@@ -95,10 +96,11 @@ describe('an ask starts a path', () => {
     expect(lastBody().primary).toBe('codex');
   });
 
-  it('a named helper the roster does not offer is not sent as primary', async () => {
+  it('a named helper the roster does not offer is not sent: the picker’s default answers instead', async () => {
     render(<AskDock runs={[]} pathname="/" onClose={() => undefined} sendText="hello" sendPrimary="pi" />);
     await waitFor(() => expect(sendChatMessage).toHaveBeenCalledTimes(1));
-    expect(lastBody().primary).toBeUndefined();
+    expect(lastBody().primary).toBe('claude');
+    expect(lastBody().clis).not.toContain('pi');
   });
 
   it('without the capability nothing names a primary and the turn still lands (no run)', async () => {
@@ -106,7 +108,9 @@ describe('an ask starts a path', () => {
     sendChatMessage.mockResolvedValue({ seats: ['claude', 'codex'], turnId: 't-1' });
     render(<AskDock runs={[]} pathname="/" onClose={() => undefined} sendText="hello" sendPrimary="codex" />);
     await waitFor(() => expect(sendChatMessage).toHaveBeenCalledTimes(1));
+    // Without the team path every seat sent answers: only the named one is sent, and no primary.
     expect(lastBody().primary).toBeUndefined();
+    expect(lastBody().clis).toStrictEqual(['codex']);
     const turns = useAskThreadStore.getState().turns[lastBody().chatId!]!;
     expect(turns[0]).toMatchObject({ turnId: 't-1', who: 'you', text: 'hello' });
     expect(turns[0]!.runId).toBeUndefined();

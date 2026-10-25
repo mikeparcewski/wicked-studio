@@ -1,39 +1,10 @@
-import type { ChatOpenBody, ChatScope, Project, RepoEntry } from '../api/types.js';
+import type { ChatScope, Project } from '../api/types.js';
 
 /**
- * The Ask dock's scope control (studio#323 R4) — the same vocabulary as the retired chat page's chips:
- * `system` (the platform itself: no repository), `everything` (every registered repo), a
- * `project:<id>`, or a `repo:<id>`. The scope is decided at OPEN, so the control is shown only
- * before the first send; afterwards the dock states the scope the daemon resolved.
+ * The words for a chat's RESOLVED scope (studio#323 R4, studio#789) — what the system chat's header
+ * states once the chat is open. The scope CHOICE is the scope chips now (DES-SYSTEM-CHAT §6,
+ * `board/chatScopes.ts`); the dropdown that lived here is gone.
  */
-export type AskScopeChoice = 'system' | 'everything' | `project:${string}` | `repo:${string}`;
-
-/** The default: the project the route is in, else everything. */
-export function defaultAskScope(routeProjectId: string | null): AskScopeChoice {
-  return routeProjectId !== null ? `project:${routeProjectId}` : 'everything';
-}
-
-/**
- * The open-body fields a choice puts on `POST /chats`. `system` / `everything` NAME their kind
- * (`scopeKind`, api-types 0.39.0); a project or repo keeps the legacy body (`projectId` /
- * `repoRefs`) every scoped daemon already accepts and resolves the same way. `filingProjectId` —
- * the project route Ask was opened on — FILES the chat there whatever its scope, as the retired chat page does
- * (crew accepts system/everything + projectId and repoRefs + projectId; codex on #327).
- */
-export function askScopeOpenFields(
-  choice: AskScopeChoice,
-  filingProjectId: string | null = null,
-): Pick<ChatOpenBody, 'scopeKind' | 'projectId' | 'repoRefs'> {
-  const filing = filingProjectId !== null ? { projectId: filingProjectId } : {};
-  if (choice === 'system' || choice === 'everything') return { scopeKind: choice, ...filing };
-  if (choice.startsWith('project:')) return { projectId: choice.slice('project:'.length) };
-  return { repoRefs: [choice.slice('repo:'.length)], ...filing };
-}
-
-/** Is the chat SCOPED (held to read-only repository roots)? Only `system` reads none. */
-export function askScopeIsScoped(choice: AskScopeChoice): boolean {
-  return choice !== 'system';
-}
 
 /**
  * One line for a resolved scope — what the dock header states in plain words once the chat is
@@ -64,39 +35,4 @@ export function describeResolvedScope(
     default:
       return 'no repositories';
   }
-}
-
-export function ChatScopeSelect({ value, onChange, projects, repos }: {
-  value: AskScopeChoice;
-  onChange: (next: AskScopeChoice) => void;
-  projects: readonly Pick<Project, 'id' | 'name'>[];
-  repos: readonly Pick<RepoEntry, 'id' | 'name'>[];
-}): React.ReactElement {
-  // A default project the store has not loaded (or does not list) is still offered by id, so the
-  // select never shows a value it has no option for.
-  const valueProject = value.startsWith('project:') ? value.slice('project:'.length) : null;
-  const listed = valueProject === null || projects.some((p) => p.id === valueProject);
-  return (
-    <label className="flex items-center gap-1.5 text-[11px]" style={{ color: 'var(--ink-muted)' }}>
-      <span>What it can read</span>
-      <select
-        data-testid="ask-scope"
-        aria-label="What the agents can read"
-        value={value}
-        onChange={(e) => onChange(e.target.value as AskScopeChoice)}
-        className="wk-field text-[11px]"
-        style={{ padding: '2px 8px' }}
-      >
-        <option value="system">System — the platform itself</option>
-        <option value="everything">Everything — every registered repo</option>
-        {!listed && <option value={value}>{`Project · ${valueProject}`}</option>}
-        {projects.filter((p) => p.id !== 'default').map((p) => (
-          <option key={`p-${p.id}`} value={`project:${p.id}`}>{`Project · ${p.name}`}</option>
-        ))}
-        {repos.map((r) => (
-          <option key={`r-${r.id}`} value={`repo:${r.id}`}>{`Repo · ${r.name}`}</option>
-        ))}
-      </select>
-    </label>
-  );
 }

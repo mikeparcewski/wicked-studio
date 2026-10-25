@@ -642,20 +642,127 @@ select:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-
 .wk-rail-brand-name { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 /* The wordmark: a yellow dot with a harbor ring (DESIGN-simple §1a). */
 .wk-rail-brand .wk-desk-dot, .wk-desk-avatar .wk-desk-dot { background: var(--spark); box-shadow: 0 0 0 1.5px var(--accent); }
-/* The action row (operator 2026-10-18): New job, labelled, then Search · Chat · New project as icons. */
-.wk-rail-actions { display: flex; align-items: center; gap: 4px; margin: 0 10px 10px; }
-.wk-rail-newjob {
-  display: inline-flex; align-items: center; gap: 6px; flex: 1 1 auto; min-width: 0; padding: 6px 10px; min-height: 34px;
-  border: none; border-radius: var(--radius-md); background: var(--accent); color: var(--accent-fg); cursor: pointer;
-  font: inherit; font-size: var(--text-sm); font-weight: var(--weight-semi); white-space: nowrap;
-}
-.wk-rail-newjob:hover { filter: brightness(1.08); }
+/* The action row (DES-SYSTEM-CHAT §1): four equal icon buttons — New project · New job · Chat · Search. */
+.wk-rail-actions { display: flex; align-items: center; gap: 6px; margin: 0 10px 10px; }
 .wk-rail-action {
   display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; flex-shrink: 0;
   border: 1px solid var(--border); border-radius: var(--radius-md); background: none; color: var(--ink-muted); cursor: pointer;
 }
+.wk-rail-actions--icons .wk-rail-action { flex: 1 1 0; width: auto; min-width: 0; height: 36px; }
 .wk-rail-action:hover { background: var(--surface-card); color: var(--ink-high); box-shadow: var(--shadow-card); }
-.wk-rail-newjob:focus-visible, .wk-rail-action:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.wk-rail-action:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.wk-rail-action[data-chat-mode="minimized"] { color: var(--accent); border-color: var(--accent); }
+
+/* ── The system chat window (DES-SYSTEM-CHAT §2–3) ─────────────────────────────────────────── */
+.wk-chatwin {
+  z-index: 40; flex-direction: column; overflow: hidden;
+  border-radius: var(--radius-lg); border: 1px solid var(--surface-overlay);
+  background: var(--surface-rail); box-shadow: var(--shadow-overlay);
+}
+/* clip, not hidden: a focused field in a popover must never scroll the dock's body sideways. */
+.wk-chatwin > [data-testid="assist-dock"] { overflow: clip; }
+.wk-chatwin--full { border-radius: 0; border-width: 0 0 0 1px; box-shadow: none; }
+.wk-chatwin--phone { border-radius: 0; border: 0; box-shadow: none; }
+.wk-chatwin [data-drag-handle="true"] { cursor: move; touch-action: none; }
+.wk-chatwin-controls { display: inline-flex; align-items: center; gap: 2px; }
+.wk-chatwin-btn {
+  display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px;
+  border: none; border-radius: var(--radius-sm); background: none; color: var(--ink-muted); cursor: pointer;
+}
+.wk-chatwin-btn:hover { background: var(--surface-raised); color: var(--ink-high); }
+.wk-chatwin-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.wk-chatwin-resize {
+  position: absolute; right: 0; bottom: 0; width: 16px; height: 16px; padding: 0; border: none; cursor: nwse-resize;
+  background: linear-gradient(135deg, transparent 50%, var(--border-strong) 50%, var(--border-strong) 60%, transparent 60%, transparent 72%, var(--border-strong) 72%, var(--border-strong) 82%, transparent 82%);
+  touch-action: none;
+}
+.wk-chatwin-resize:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.wk-assist-notice { margin: 0; padding: 0 12px 8px; font-size: var(--text-xs); color: var(--ink-dim); }
+.wk-assist-answer-foot { margin: 4px 0 0; font-size: var(--text-2xs); color: var(--ink-dim); }
+
+/* The tray: the minimized chat, bottom right by default, draggable. */
+.wk-chattray {
+  z-index: 40; display: flex; align-items: center; gap: 8px; padding: 0 8px 0 12px; box-sizing: border-box;
+  border-radius: var(--radius-lg); border: 1px solid var(--border-strong);
+  background: var(--surface-overlay); color: var(--ink-high);
+  box-shadow: var(--shadow-overlay); cursor: move; touch-action: none; user-select: none;
+}
+/* A dark tray on the light themes too (DES-SYSTEM-CHAT §3): the inverse of the page. */
+[data-theme="light"] .wk-chattray, [data-theme="wicked-light"] .wk-chattray { background: var(--ink-high); color: var(--surface-base); border-color: transparent; }
+.wk-chattray-dot { width: 8px; height: 8px; border-radius: var(--radius-full); background: var(--status-ok); flex-shrink: 0; }
+.wk-chattray-dot--thinking { background: var(--status-run); animation: wk-chattray-pulse 1.4s ease-in-out infinite; }
+.wk-chattray-dot--answered { background: var(--spark); }
+@keyframes wk-chattray-pulse { 50% { opacity: 0.35; } }
+@media (prefers-reduced-motion: reduce) { .wk-chattray-dot--thinking { animation: none; } }
+.wk-chattray-words { display: flex; flex-direction: column; min-width: 0; flex: 1 1 auto; line-height: 1.2; }
+.wk-chattray-cli { font-size: var(--text-sm); font-weight: var(--weight-semi); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.wk-chattray-status { font-size: var(--text-xs); opacity: 0.8; }
+.wk-chattray-btn {
+  border: 1px solid currentColor; border-radius: var(--radius-md); background: none; color: inherit; cursor: pointer;
+  font: inherit; font-size: var(--text-xs); padding: 4px 10px; flex-shrink: 0;
+}
+.wk-chattray-btn--icon { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; padding: 0; border-color: transparent; }
+.wk-chattray-btn:hover { background: color-mix(in srgb, currentColor 14%, transparent); }
+.wk-chattray-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* The CLI picker. */
+.wk-chatcli { position: relative; }
+.wk-chatcli-btn {
+  display: inline-flex; align-items: center; gap: 4px; max-width: 160px; height: 26px; padding: 0 8px;
+  border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface-card);
+  color: var(--ink-high); font: inherit; font-size: var(--text-xs); cursor: pointer;
+}
+.wk-chatcli-btn:disabled { cursor: default; background: none; }
+.wk-chatcli-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.wk-chatcli-name { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.wk-chatcli-menu {
+  position: absolute; right: 0; top: calc(100% + 4px); z-index: 2; width: min(300px, calc(100vw - 24px)); max-height: 320px; overflow-y: auto; padding: 4px;
+  border: 1px solid var(--surface-overlay); border-radius: var(--radius-md); background: var(--surface-card); box-shadow: var(--shadow-overlay);
+}
+.wk-chatcli-row { display: flex; align-items: center; gap: 6px; }
+.wk-chatcli-option {
+  display: grid; grid-template-columns: 14px 1fr; column-gap: 6px; align-items: baseline; flex: 1 1 auto; min-width: 0;
+  padding: 6px 8px; border: none; border-radius: var(--radius-sm); background: none; color: var(--ink-high);
+  font: inherit; font-size: var(--text-sm); text-align: left; cursor: pointer;
+}
+.wk-chatcli-option:hover:not(:disabled) { background: var(--surface-raised); }
+.wk-chatcli-option:disabled { color: var(--ink-dim); cursor: not-allowed; }
+.wk-chatcli-option:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.wk-chatcli-check { color: var(--accent); }
+.wk-chatcli-why { grid-column: 2; font-size: var(--text-xs); color: var(--ink-dim); overflow-wrap: anywhere; }
+.wk-chatcli-row .wk-chatcli-signin { flex-shrink: 0; font-size: var(--text-xs); padding: 0 8px 0 4px; }
+
+/* "What the chat can see": the scope chips. */
+.wk-chatscope { position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; }
+.wk-chatscope-label { font-size: var(--text-xs); color: var(--ink-dim); margin-right: 2px; }
+.wk-chatscope-chip {
+  display: inline-flex; align-items: center; gap: 4px; max-width: 220px; min-height: 24px; padding: 2px 9px;
+  border: 1px solid var(--border); border-radius: var(--radius-full); background: none; color: var(--ink-muted);
+  font: inherit; font-size: var(--text-xs); cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.wk-chatscope-chip--on { border-color: var(--accent); background: var(--accent-subtle); color: var(--ink-high); }
+.wk-chatscope-chip:disabled { cursor: default; opacity: 0.75; }
+.wk-chatscope-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.wk-chatscope-chip--add { border-style: dashed; color: var(--accent); }
+.wk-chatscope-kind { font-size: var(--text-2xs); text-transform: uppercase; letter-spacing: 0.04em; color: var(--ink-dim); }
+.wk-chatscope-x { color: var(--ink-dim); }
+/* The search opens over the chips row, inside the window whatever the row's width. */
+.wk-chatscope-pop {
+  position: absolute; left: 0; bottom: calc(100% + 6px); z-index: 2; width: min(360px, 100%); box-sizing: border-box; padding: 6px;
+  border: 1px solid var(--surface-overlay); border-radius: var(--radius-md); background: var(--surface-card); box-shadow: var(--shadow-overlay);
+}
+.wk-chatscope-q { width: 100%; box-sizing: border-box; font-size: var(--text-sm); }
+.wk-chatscope-list { list-style: none; margin: 6px 0 0; padding: 0; max-height: 240px; overflow-y: auto; }
+.wk-chatscope-result {
+  display: grid; grid-template-columns: auto 1fr; column-gap: 8px; align-items: baseline; width: 100%;
+  padding: 5px 6px; border: none; border-radius: var(--radius-sm); background: none; color: var(--ink-high);
+  font: inherit; font-size: var(--text-sm); text-align: left; cursor: pointer;
+}
+.wk-chatscope-result:hover, .wk-chatscope-result:focus-visible { background: var(--surface-raised); outline: none; }
+.wk-chatscope-result-name { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.wk-chatscope-result-detail { grid-column: 2; font-size: var(--text-xs); color: var(--ink-dim); }
+.wk-chatscope-none { padding: 6px; font-size: var(--text-xs); color: var(--ink-dim); }
+
 .wk-rail-badge {
   min-width: 20px; height: 20px; padding: 0 6px; border-radius: var(--radius-full); flex-shrink: 0;
   display: inline-flex; align-items: center; justify-content: center;

@@ -1,4 +1,6 @@
 import { create } from 'zustand';
+import { forgetAskSession } from './askSession.js';
+import { useChatWindow } from './chatWindow.js';
 
 /**
  * Opening the Ask dock from anywhere (DES-frontdoor concept A: the Desk's composer is gone, so
@@ -32,4 +34,35 @@ export const useAskDock = create<AskDockStore>((set, get) => ({
 /** Open the Ask dock (a real chat); nothing is sent. */
 export function openAskDock(opts?: { projectId?: string | null; seedText?: string; fresh?: boolean }): void {
   useAskDock.getState().open(opts);
+}
+
+// ── The system chat's lifecycle (DES-SYSTEM-CHAT §3) ──────────────────────────────────────────
+
+let endEpoch = 0;
+/** Bumped by every {@link endSystemChat}: a send that settles after its chat was ended must not
+ *  re-persist the ended session (AskDock compares the epoch it mounted with). */
+export function systemChatEpoch(): number {
+  return endEpoch;
+}
+
+/**
+ * The rail's Chat icon: a minimized chat comes back, an open one stays as it is, and a closed one
+ * starts a NEW chat in the project on screen.
+ */
+export function openSystemChat(projectId: string | null): void {
+  const win = useChatWindow.getState();
+  if (win.mode === 'minimized') { win.restore(); return; }
+  if (win.mode === 'floating' || win.mode === 'full') return;
+  openAskDock({ fresh: true, projectId });
+}
+
+/**
+ * Close: END the chat. The stored session is forgotten, so nothing resumes it — the next Chat starts a
+ * new one — and the window closes. The conversation itself is not deleted: it stays on its session page
+ * (and, on a crew with the chat list, in past chats).
+ */
+export function endSystemChat(): void {
+  endEpoch += 1;
+  forgetAskSession();
+  useChatWindow.getState().close();
 }

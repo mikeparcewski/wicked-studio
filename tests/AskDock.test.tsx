@@ -171,29 +171,30 @@ describe('the context pack — diagnostics presence-gated, both fixtures', () =>
 });
 
 describe('nothing launches without the user sending', () => {
-  it('mount + chip click fire NO chat wires — the chip only PREFILLS the composer', async () => {
+  it('mount fires NO chat wires; a suggested prompt SENDS only when the user clicks it (DES-SYSTEM-CHAT §7)', async () => {
     const user = userEvent.setup();
     wireDiagnostics('present');
-    dock([makeView({ id: 'run-dead-1', status: 'failed', problem: 'ship the parser' })]);
+    dock([makeView({ id: 'run-dead-1', status: 'failed', problem: 'ship the parser' })], '/');
 
     await waitFor(() => expect(screen.getByTestId('assist-prompts')).toBeInTheDocument());
     const chips = screen.getAllByTestId('assist-prompt');
-    // The failed-run chip prefills with THAT run's identity.
+    // The failed-run prompt names THAT run.
     const failChip = chips.find((c) => c.getAttribute('data-prompt')?.startsWith('Why did'));
-    expect(failChip).toBeDefined();
     expect(failChip).toHaveAttribute('data-prompt', 'Why did “ship the parser” fail?');
-    await user.click(failChip!);
-    const input = screen.getByTestId('assist-input');
-    expect((input as HTMLTextAreaElement).value).toContain('run-dead-1');
-    expect((input as HTMLTextAreaElement).value).toContain('ship the parser');
-
-    // The always-on diagnostics chips exist too.
+    // The always-on health prompt exists too.
     expect(chips.some((c) => c.getAttribute('data-prompt') === 'Is studio healthy?')).toBe(true);
-    expect(chips.some((c) => c.getAttribute('data-prompt') === 'Are the helpers working well?')).toBe(true);
 
-    // NOTHING was sent by any of that.
+    // NOTHING was sent by opening it.
     expect(openChat).not.toHaveBeenCalled();
     expect(sendChatMessage).not.toHaveBeenCalled();
+
+    // The click is the user's own send: the prompt's words, with that run's identity, go out once.
+    await user.click(failChip!);
+    await waitFor(() => expect(sendChatMessage).toHaveBeenCalledTimes(1));
+    const sent = sendChatMessage.mock.calls[0]?.[1] as string;
+    expect(sent).toContain('run-dead-1');
+    expect(sent).toContain('ship the parser');
+    expect(openChat).toHaveBeenCalledTimes(1);
   });
 
   it('the failed-run chip seeds the NEWEST failure by the home queue’s own fold — never list order (E1)', async () => {
@@ -207,7 +208,7 @@ describe('nothing launches without the user sending', () => {
     dock([
       makeView({ id: 'stale-run-fail', status: 'failed', problem: 'ancient breakage' }),
       makeView({ id: 'fresh-run-fail', status: 'failed', problem: 'fresh breakage' }),
-    ]);
+    ], '/');
 
     await waitFor(() => expect(screen.getByTestId('assist-prompts')).toBeInTheDocument());
     const chips = screen.getAllByTestId('assist-prompt');
@@ -219,7 +220,7 @@ describe('nothing launches without the user sending', () => {
 });
 
 describe('the chat-launch wire — the GroupChat seat machinery, one warm session', () => {
-  it('first send opens the chat with the seats the DAEMON would seat, and fans the seeded question out', async () => {
+  it('first send opens the chat with the ONE CLI the picker chose (DES-SYSTEM-CHAT §5), and sends the seeded question', async () => {
     const user = userEvent.setup();
     wireDiagnostics('present');
     dock();
@@ -230,7 +231,10 @@ describe('the chat-launch wire — the GroupChat seat machinery, one warm sessio
     await waitFor(() => expect(openChat).toHaveBeenCalledTimes(1));
     const body = openChat.mock.calls[0]?.[0] as { chatId: string; clis?: string[] };
     expect(body.chatId).toMatch(/^[0-9a-f-]{36}$/);
-    expect(body.clis).toEqual(['claude', 'pi']); // the seats the DAEMON would seat — codex is refused
+    // Without the team path every seat sent would answer, so only the picked CLI is sent: the first
+    // the daemon would seat (codex is refused).
+    expect(body.clis).toEqual(['claude']);
+    expect(screen.getByTestId('chat-cli')).toHaveAttribute('data-key', 'claude');
     await waitFor(() => expect(sendChatMessage).toHaveBeenCalledWith(body.chatId, expect.stringContaining('what is in the estate store?')));
 
     // The chat block mounts for the session and the live-chats store knows it (rail row).
@@ -255,7 +259,7 @@ describe('the chat-launch wire — the GroupChat seat machinery, one warm sessio
     }
   });
 
-  it('studio#840: helpers turned off in the New job wizard never change who answers an Ask', async () => {
+  it('studio#840: helpers turned off in the New job wizard never change who answers a chat', async () => {
     const { useLaunchSeats, resetComposerSeats } = await import('../src/store/composerSeats.js');
     resetComposerSeats();
     useLaunchSeats.getState().toggle('claude');
@@ -264,69 +268,55 @@ describe('the chat-launch wire — the GroupChat seat machinery, one warm sessio
       const user = userEvent.setup();
       wireDiagnostics('present');
       dock();
-      // The drawer's own helpers row shows both admitted seats on (codex is refused by the daemon).
-      const row = await screen.findByTestId('ask-helpers');
-      const pills = [...row.querySelectorAll('[data-testid="ask-helper"]')];
-      expect(pills.map((b) => [b.getAttribute('data-key'), b.getAttribute('aria-pressed')])).toEqual([['claude', 'true'], ['pi', 'true']]);
+      expect(screen.getByTestId('chat-cli')).toHaveAttribute('data-key', 'claude');
       await user.type(screen.getByTestId('assist-input'), 'what is in the estate store?');
       await user.click(screen.getByTestId('assist-send'));
       await waitFor(() => expect(openChat).toHaveBeenCalledTimes(1));
-      expect((openChat.mock.calls[0]?.[0] as { clis?: string[] }).clis).toEqual(['claude', 'pi']);
+      expect((openChat.mock.calls[0]?.[0] as { clis?: string[] }).clis).toEqual(['claude']);
       expect(JSON.parse(localStorage.getItem('wicked_composer_dropped_seats') ?? '[]')).toEqual([]);
     } finally {
       resetComposerSeats();
     }
   });
 
-  it('studio#840: the Ask drawer has the helpers row its refusal points at — off there, the send refuses; back on, it sends', async () => {
-    const { resetComposerSeats } = await import('../src/store/composerSeats.js');
-    resetComposerSeats();
-    try {
-      const user = userEvent.setup();
-      wireDiagnostics('present');
-      dock();
-      const pill = async (key: string): Promise<HTMLElement> =>
-        (await screen.findAllByTestId('ask-helper')).find((b) => b.getAttribute('data-key') === key)!;
-      await user.click(await pill('claude'));
-      await user.click(await pill('pi'));
-      expect(await pill('claude')).toHaveAttribute('aria-pressed', 'false');
-      expect(screen.getByTestId('ask-helpers-none')).toHaveTextContent('Every helper is off');
-      await user.type(screen.getByTestId('assist-input'), 'what is in the estate store?');
-      await user.click(screen.getByTestId('assist-send'));
-      await waitFor(() => expect(screen.getAllByTestId('assist-note').some((n) => /No helper is picked for this send — turn one on in the helpers row/.test(n.textContent ?? ''))).toBe(true));
-      expect(openChat).not.toHaveBeenCalled();
-      await user.click(await pill('pi'));
-      expect(screen.queryByTestId('ask-helpers-none')).toBeNull();
-      await user.type(screen.getByTestId('assist-input'), 'what is in the estate store?');
-      await user.click(screen.getByTestId('assist-send'));
-      await waitFor(() => expect(openChat).toHaveBeenCalledTimes(1));
-      expect((openChat.mock.calls[0]?.[0] as { clis?: string[] }).clis).toEqual(['pi']);
-    } finally {
-      resetComposerSeats();
-    }
+  it('the CLI picker: a picked CLI answers, and the pick is remembered for the next chat', async () => {
+    const user = userEvent.setup();
+    wireDiagnostics('present');
+    dock();
+    await user.click(screen.getByTestId('chat-cli'));
+    const options = screen.getAllByTestId('chat-cli-option');
+    // codex is refused by the daemon: listed, disabled, with its reason.
+    const codex = options.find((o) => o.getAttribute('data-key') === 'codex')!;
+    expect(codex).toBeDisabled();
+    expect(codex).toHaveTextContent('no ACP adapter registered');
+    await user.click(options.find((o) => o.getAttribute('data-key') === 'pi')!);
+    expect(screen.getByTestId('chat-cli')).toHaveAttribute('data-key', 'pi');
+    expect(JSON.parse(localStorage.getItem('wicked.chat.cli') ?? 'null')).toBe('pi');
+    await user.type(screen.getByTestId('assist-input'), 'hello');
+    await user.click(screen.getByTestId('assist-send'));
+    await waitFor(() => expect(openChat).toHaveBeenCalledTimes(1));
+    expect((openChat.mock.calls[0]?.[0] as { clis?: string[] }).clis).toEqual(['pi']);
+    // Once the chat is open its CLI is fixed.
+    await waitFor(() => expect(screen.getByTestId('chat-cli')).toBeDisabled());
   });
 
-  it('studio#840: when the helpers left on cannot answer, the refusal names them and why', async () => {
-    const { useComposerSeats, resetComposerSeats } = await import('../src/store/composerSeats.js');
-    resetComposerSeats();
+  it('when no CLI can answer, the send refuses and names each one and why; a signed-out one offers Sign in', async () => {
     const quota = { ok: false, reason: 'out of quota' };
     setCachedRoster([
-      { key: 'claude', binary: 'claude', display_name: 'Claude Code', enabled_for_council: true, chat_admission: ADMITTED },
+      { key: 'claude', binary: 'claude', display_name: 'Claude Code', enabled_for_council: true, auth: 'signed_out', signed_in: false, chat_admission: { unscoped: { ok: false, reason: 'signed out' }, scoped: { ok: false, reason: 'signed out' } } },
       { key: 'copilot', binary: 'copilot', display_name: 'GitHub Copilot CLI', enabled_for_council: true, chat_admission: { unscoped: quota, scoped: quota } },
     ] as unknown as RosterSeat[]);
-    useComposerSeats.getState().toggle('claude');
-    try {
-      const user = userEvent.setup();
-      wireDiagnostics('present');
-      dock();
-      await user.type(screen.getByTestId('assist-input'), 'hello');
-      await user.click(screen.getByTestId('assist-send'));
-      await waitFor(() => expect(screen.getAllByTestId('assist-note').some((n) =>
-        (n.textContent ?? '').includes('No helper can take this send — GitHub Copilot CLI (out of quota) is on but can’t answer right now. Turn another one on in the helpers row.'))).toBe(true));
-      expect(openChat).not.toHaveBeenCalled();
-    } finally {
-      resetComposerSeats();
-    }
+    const user = userEvent.setup();
+    wireDiagnostics('present');
+    dock();
+    await user.click(screen.getByTestId('chat-cli'));
+    expect(screen.getAllByTestId('chat-cli-option').every((o) => (o as HTMLButtonElement).disabled)).toBe(true);
+    expect(screen.getByTestId('chat-cli-signin')).toHaveAttribute('href', '/agents?fix=claude');
+    await user.type(screen.getByTestId('assist-input'), 'hello');
+    await user.click(screen.getByTestId('assist-send'));
+    await waitFor(() => expect(screen.getAllByTestId('assist-note').some((n) =>
+      (n.textContent ?? '').includes('No CLI can answer right now — Claude Code (signed out), GitHub Copilot CLI (out of quota). Sign one in on the Agents page.'))).toBe(true));
+    expect(openChat).not.toHaveBeenCalled();
   });
 
   it('a second send REUSES the warm session and the pack rides the FIRST message only', async () => {
@@ -455,7 +445,7 @@ describe('the Ask session survives close/reopen, and promotes into the full chat
     expect(failNote).toHaveTextContent('daemon hiccup');
     expect(getChat).toHaveBeenCalledWith(FIXED_ID); // the gone-probe ran
     expect(openChat).toHaveBeenCalledTimes(1); // no fresh session minted
-    expect(JSON.parse(sessionStorage.getItem('wicked.ask.session') ?? 'null')).toEqual({ chatId: FIXED_ID, title: 'first', seeded: true });
+    expect(JSON.parse(sessionStorage.getItem('wicked.ask.session') ?? 'null')).toEqual(expect.objectContaining({ chatId: FIXED_ID, title: 'first', seeded: true, cli: 'claude' }));
   });
 
   it('a first send that FAILED leaves the session unseeded: after reopen the next question still carries the context pack', async () => {
@@ -526,7 +516,7 @@ describe('the Ask session survives close/reopen, and promotes into the full chat
     const failNote = screen.getAllByTestId('assist-note').find((n) => n.getAttribute('data-tone') === 'fail');
     expect(failNote).toHaveTextContent('daemon hiccup');
     expect(screen.getByTestId('assist-chat')).toHaveAttribute('data-chat-id', FIXED_ID);
-    expect(JSON.parse(sessionStorage.getItem('wicked.ask.session') ?? 'null')).toEqual({ chatId: FIXED_ID, title: 'first', seeded: true });
+    expect(JSON.parse(sessionStorage.getItem('wicked.ask.session') ?? 'null')).toEqual(expect.objectContaining({ chatId: FIXED_ID, title: 'first', seeded: true, cli: 'claude' }));
   });
 
   it('"Open in full chat" navigates to the dock session\'s own thread (/s/:id, S16a-4e) and closes the dock', async () => {

@@ -275,14 +275,20 @@ function replayDockTranscript(records: readonly unknown[]): DockChatMsg[] {
 /** What a RESUMED block's one `GET /chats/:id` probe proved (studio#328). */
 type ResumeProbe = { kind: 'gone' } | { kind: 'error'; message: string };
 
-function DockChat({ chatId, resumed = false, onResumeProbe }: {
+function DockChat({ chatId, resumed = false, onResumeProbe, onStatus, answerFooter }: {
   chatId: string;
   resumed?: boolean;
   /** Resumed blocks only: the probe found the session reclaimed, or could not tell. */
   onResumeProbe?: ((outcome: ResumeProbe) => void) | undefined;
+  /** A reply started streaming (`thinking`) or landed (`answered`) — the system chat's tray says so. */
+  onStatus?: ((status: 'thinking' | 'answered') => void) | undefined;
+  /** The footer under a landed answer ("Answered by Claude Code · saw 3 sources"); absent = none. */
+  answerFooter?: ((cliKey: string) => string | null) | undefined;
 }): React.ReactElement {
   const onResumeProbeRef = useRef(onResumeProbe);
   onResumeProbeRef.current = onResumeProbe;
+  const onStatusRef = useRef(onStatus);
+  onStatusRef.current = onStatus;
   const [seats, setSeats] = useState<Record<string, DockSeatState>>({});
   const [msgs, setMsgs] = useState<DockChatMsg[]>([]);
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -381,10 +387,16 @@ function DockChat({ chatId, resumed = false, onResumeProbe }: {
         if (frame.cliKey !== undefined) setSeats((s) => ({ ...s, [frame.cliKey!]: 'failed' }));
         break;
       case 'chatDelta':
-        if (frame.cliKey !== undefined && frame.text !== undefined && frame.text !== '') append(frame.cliKey, frame.text);
+        if (frame.cliKey !== undefined && frame.text !== undefined && frame.text !== '') {
+          append(frame.cliKey, frame.text);
+          onStatusRef.current?.('thinking');
+        }
         break;
       case 'chatReply':
-        if (frame.cliKey !== undefined) finalize(frame.cliKey, frame.text ?? '', frame.ok ?? false);
+        if (frame.cliKey !== undefined) {
+          finalize(frame.cliKey, frame.text ?? '', frame.ok ?? false);
+          onStatusRef.current?.('answered');
+        }
         break;
       default:
         break;
@@ -455,6 +467,10 @@ function DockChat({ chatId, resumed = false, onResumeProbe }: {
                   {m.pending && <span aria-hidden className="animate-pulse"> …</span>}
                 </div>
               )}
+              {!m.pending && m.ok && m.cliKey !== 'you' && answerFooter !== undefined && (() => {
+                const foot = answerFooter(m.cliKey);
+                return foot === null ? null : <p data-testid="assist-answer-footer" className="wk-assist-answer-foot">{foot}</p>;
+              })()}
             </div>
           ))
         )}
@@ -467,7 +483,7 @@ function DockChat({ chatId, resumed = false, onResumeProbe }: {
 
 const RESUMED_NOTE = 'Resumed your earlier session — its agents are still on the line.';
 
-export function AssistDock({ context, verbs, importable, open, onOpenChange, onError, resumeChatId = null, onExpandChat, onResumeGone, fill = false, typeTarget, initialText = '', sendOnOpen = false }: {
+export function AssistDock({ context, verbs, importable, open, onOpenChange, onError, resumeChatId = null, onExpandChat, onResumeGone, fill = false, typeTarget, initialText = '', sendOnOpen = false, headerProps, headerStart, headerExtra, headerEnd, onStatus, allowAttach = true, answerFooter, promptsSend = false, notice }: {
   context: AssistContext;
   verbs: AssistVerbs;
   /** Which attachments offer the Import-directly fork. Absent ⇒ everything is analysis-only. */
@@ -496,6 +512,24 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
   /** `initialText` was already sent by the operator from another composer (the Desk's): send it
    *  once on mount. Only ever set from an explicit send — typed letters never send. */
   sendOnOpen?: boolean;
+  /** Spread onto the header (the system chat window's drag handle). */
+  headerProps?: React.HTMLAttributes<HTMLDivElement> | undefined;
+  /** Before the title (the system chat's past-chats toggle). */
+  headerStart?: React.ReactNode;
+  /** Before the header's Close (the system chat's CLI picker). */
+  headerExtra?: React.ReactNode;
+  /** Replaces the header's own Close (the system chat window's controls). */
+  headerEnd?: React.ReactNode;
+  /** The conversation is thinking, or an answer landed (the system chat's tray). */
+  onStatus?: ((status: 'ready' | 'thinking' | 'answered') => void) | undefined;
+  /** Offer attachments (paperclip, drop). A surface whose send cannot carry files turns it off. */
+  allowAttach?: boolean;
+  /** The footer under each landed answer. */
+  answerFooter?: ((cliKey: string) => string | null) | undefined;
+  /** A suggested prompt SENDS when clicked (the system chat, DES-SYSTEM-CHAT §7); otherwise it prefills. */
+  promptsSend?: boolean;
+  /** One line under the composer (an older crew's "past chats and uploads need…"). */
+  notice?: React.ReactNode;
 }): React.ReactElement {
   const [items, setItems] = useState<ThreadItem[]>(() =>
     resumeChatId !== null
@@ -597,11 +631,12 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
 
   // Re-entry guard: `sending` is state, so two calls in one tick would both read it as false.
   const inFlight = useRef(false);
-  const send = async (): Promise<void> => {
-    const body = text.trim();
+  const send = async (override?: string): Promise<void> => {
+    const body = (override ?? text).trim();
     if (body === '' || sending || inFlight.current) return;
     inFlight.current = true;
     setSending(true);
+    onStatus?.('thinking');
     // An attachment still sitting at the fork when the operator hits send rides as analysis —
     // they attached it and asked; silently dropping it would run a different request.
     const documents = attachments.map((a) => ({ name: a.name, content: a.content }));
@@ -625,6 +660,7 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
       const msg = e instanceof Error ? e.message : String(e);
       push({ kind: 'user', text: body, files: documents.map((d) => d.name) });
       note('fail', msg);
+      onStatus?.('ready');
       onError?.(msg);
     } finally {
       inFlight.current = false;
@@ -699,16 +735,17 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
         borderLeft: `1px solid ${dragOver ? 'var(--accent)' : 'var(--surface-raised)'}`,
         background: 'var(--surface-rail)',
       }}
-      onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-      onDragLeave={() => setDragOver(false)}
-      onDrop={(e) => {
+      onDragOver={allowAttach ? (e) => { e.preventDefault(); setDragOver(true); } : undefined}
+      onDragLeave={allowAttach ? () => setDragOver(false) : undefined}
+      onDrop={allowAttach ? (e) => {
         e.preventDefault();
         setDragOver(false);
         onFiles(Array.from(e.dataTransfer.files));
-      }}
+      } : undefined}
     >
       {/* Header */}
-      <div className="flex shrink-0 items-center gap-2 px-3 py-2" style={{ borderBottom: '1px solid var(--surface-raised)' }}>
+      <div {...headerProps} data-testid="assist-header" className="wk-assist-header flex shrink-0 items-center gap-2 px-3 py-2" style={{ borderBottom: '1px solid var(--surface-raised)' }}>
+        {headerStart}
         <span className="text-[11px] font-semibold" style={{ color: 'var(--ink-high)' }}>{context.title}</span>
         <span
           data-testid="assist-context"
@@ -732,17 +769,24 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
             Open in full chat ↗
           </button>
         )}
-        <button
-          type="button"
-          data-testid="assist-dock-toggle"
-          aria-label={`Close ${context.title}`}
-          aria-expanded
-          title="Close (your conversation is kept)"
-          onClick={() => onOpenChange(false)}
-          className={`${onExpandChat !== undefined && latestChatId !== null ? '' : 'ml-auto '}wk-btn wk-btn--quiet wk-btn--sm`}
-        >
-          Close
-        </button>
+        {headerExtra !== undefined && (
+          <span className={`${onExpandChat !== undefined && latestChatId !== null ? '' : 'ml-auto '}flex shrink-0 items-center`}>{headerExtra}</span>
+        )}
+        {headerEnd !== undefined ? (
+          <span className={`${(onExpandChat !== undefined && latestChatId !== null) || headerExtra !== undefined ? '' : 'ml-auto '}flex shrink-0 items-center gap-1`}>{headerEnd}</span>
+        ) : (
+          <button
+            type="button"
+            data-testid="assist-dock-toggle"
+            aria-label={`Close ${context.title}`}
+            aria-expanded
+            title="Close (your conversation is kept)"
+            onClick={() => onOpenChange(false)}
+            className={`${(onExpandChat !== undefined && latestChatId !== null) || headerExtra !== undefined ? '' : 'ml-auto '}wk-btn wk-btn--quiet wk-btn--sm`}
+          >
+            Close
+          </button>
+        )}
       </div>
 
       {/* Thread — the ONE scrolling region (run blocks scroll inside themselves). */}
@@ -761,8 +805,13 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
                     type="button"
                     data-testid="assist-prompt"
                     data-prompt={p.label}
-                    title="Prefills the composer — nothing sends until you do"
+                    title={promptsSend ? 'Asks this now' : 'Prefills the composer — nothing sends until you do'}
                     onClick={() => {
+                      if (promptsSend) {
+                        setText(p.text);
+                        void send(p.text);
+                        return;
+                      }
                       setText(p.text);
                       textareaRef.current?.focus();
                     }}
@@ -803,6 +852,8 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
                 chatId={item.chatId}
                 resumed={item.resumed === true}
                 onResumeProbe={item.resumed === true ? (outcome) => onResumeProbe(item.chatId, outcome) : undefined}
+                onStatus={onStatus}
+                answerFooter={answerFooter}
               />
             );
           }
@@ -870,6 +921,7 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
 
       {/* Composer — the ChatInput idioms: + attach, auto-resize textarea, Cmd/Ctrl+Enter. */}
       <div className="flex shrink-0 items-end gap-2 px-3 py-3">
+        {allowAttach && <>
         <input
           ref={fileInput}
           data-testid="assist-attach"
@@ -892,6 +944,7 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
         >
           <Paperclip size={15} aria-hidden />
         </button>
+        </>}
         <div className="flex min-w-0 flex-1 items-end gap-2 rounded-2xl px-3 py-2" style={{ background: 'var(--surface-card)', border: '1px solid var(--surface-raised)' }}>
           <textarea
             ref={textareaRef}
@@ -925,6 +978,9 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
           </button>
         </div>
       </div>
+      {notice !== undefined && notice !== null && (
+        <p data-testid="assist-notice" className="wk-assist-notice">{notice}</p>
+      )}
     </aside>
   );
 }

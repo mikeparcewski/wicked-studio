@@ -11,9 +11,9 @@
   "version": 1,
   "studioVersion": "0.11.8",
   "counts": {
-    "files": 234,
-    "occurrences": 2990,
-    "static": 2592,
+    "files": 235,
+    "occurrences": 3009,
+    "static": 2610,
     "dynamic": 69,
     "computed": 24
   },
@@ -694,24 +694,6 @@
       ]
     },
     {
-      "testId": "ask-helper",
-      "files": [
-        "src/components/AskHelpers.tsx"
-      ]
-    },
-    {
-      "testId": "ask-helpers",
-      "files": [
-        "src/components/AskHelpers.tsx"
-      ]
-    },
-    {
-      "testId": "ask-helpers-none",
-      "files": [
-        "src/components/AskHelpers.tsx"
-      ]
-    },
-    {
       "testId": "ask-launcher",
       "files": [
         "src/components/AskLauncher.tsx"
@@ -750,13 +732,8 @@
     {
       "testId": "ask-panel",
       "files": [
-        "src/components/AskLauncher.tsx"
-      ]
-    },
-    {
-      "testId": "ask-scope",
-      "files": [
-        "src/components/ChatScopeSelect.tsx"
+        "src/components/AskLauncher.tsx",
+        "src/components/chat/ChatWindow.tsx"
       ]
     },
     {
@@ -767,6 +744,12 @@
     },
     {
       "testId": "assist-analyze",
+      "files": [
+        "src/components/AssistDock.tsx"
+      ]
+    },
+    {
+      "testId": "assist-answer-footer",
       "files": [
         "src/components/AssistDock.tsx"
       ]
@@ -844,6 +827,12 @@
       ]
     },
     {
+      "testId": "assist-header",
+      "files": [
+        "src/components/AssistDock.tsx"
+      ]
+    },
+    {
       "testId": "assist-import-now",
       "files": [
         "src/components/AssistDock.tsx"
@@ -857,6 +846,12 @@
     },
     {
       "testId": "assist-note",
+      "files": [
+        "src/components/AssistDock.tsx"
+      ]
+    },
+    {
+      "testId": "assist-notice",
       "files": [
         "src/components/AssistDock.tsx"
       ]
@@ -1552,6 +1547,42 @@
       ]
     },
     {
+      "testId": "chat-cli",
+      "files": [
+        "src/components/chat/ChatCliPicker.tsx"
+      ]
+    },
+    {
+      "testId": "chat-cli-menu",
+      "files": [
+        "src/components/chat/ChatCliPicker.tsx"
+      ]
+    },
+    {
+      "testId": "chat-cli-option",
+      "files": [
+        "src/components/chat/ChatCliPicker.tsx"
+      ]
+    },
+    {
+      "testId": "chat-cli-signin",
+      "files": [
+        "src/components/chat/ChatCliPicker.tsx"
+      ]
+    },
+    {
+      "testId": "chat-cli-why",
+      "files": [
+        "src/components/chat/ChatCliPicker.tsx"
+      ]
+    },
+    {
+      "testId": "chat-close",
+      "files": [
+        "src/components/chat/ChatWindow.tsx"
+      ]
+    },
+    {
       "testId": "chat-final",
       "files": [
         "src/components/session/RunConversation.tsx"
@@ -1588,9 +1619,21 @@
       ]
     },
     {
+      "testId": "chat-fullsize",
+      "files": [
+        "src/components/chat/ChatWindow.tsx"
+      ]
+    },
+    {
       "testId": "chat-gate",
       "files": [
         "src/components/session/RunConversation.tsx"
+      ]
+    },
+    {
+      "testId": "chat-minimize",
+      "files": [
+        "src/components/chat/ChatWindow.tsx"
       ]
     },
     {
@@ -1618,6 +1661,12 @@
       ]
     },
     {
+      "testId": "chat-resize",
+      "files": [
+        "src/components/chat/ChatWindow.tsx"
+      ]
+    },
+    {
       "testId": "chat-round",
       "files": [
         "src/components/ChatThread.tsx"
@@ -1639,6 +1688,42 @@
       "testId": "chat-run-title",
       "files": [
         "src/components/session/RunConversation.tsx"
+      ]
+    },
+    {
+      "testId": "chat-scope",
+      "files": [
+        "src/components/chat/ChatScopeChips.tsx"
+      ]
+    },
+    {
+      "testId": "chat-scope-add",
+      "files": [
+        "src/components/chat/ChatScopeChips.tsx"
+      ]
+    },
+    {
+      "testId": "chat-scope-chip",
+      "files": [
+        "src/components/chat/ChatScopeChips.tsx"
+      ]
+    },
+    {
+      "testId": "chat-scope-query",
+      "files": [
+        "src/components/chat/ChatScopeChips.tsx"
+      ]
+    },
+    {
+      "testId": "chat-scope-result",
+      "files": [
+        "src/components/chat/ChatScopeChips.tsx"
+      ]
+    },
+    {
+      "testId": "chat-scope-search",
+      "files": [
+        "src/components/chat/ChatScopeChips.tsx"
       ]
     },
     {
@@ -1675,6 +1760,30 @@
       "testId": "chat-step-verdict",
       "files": [
         "src/components/session/RunConversation.tsx"
+      ]
+    },
+    {
+      "testId": "chat-tray",
+      "files": [
+        "src/components/chat/ChatWindow.tsx"
+      ]
+    },
+    {
+      "testId": "chat-tray-close",
+      "files": [
+        "src/components/chat/ChatWindow.tsx"
+      ]
+    },
+    {
+      "testId": "chat-tray-restore",
+      "files": [
+        "src/components/chat/ChatWindow.tsx"
+      ]
+    },
+    {
+      "testId": "chat-tray-status",
+      "files": [
+        "src/components/chat/ChatWindow.tsx"
       ]
     },
     {

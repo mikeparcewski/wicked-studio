@@ -31,6 +31,13 @@ interface CapabilitiesStore {
    *  (`POST /runs {primary}`). Absent or false (an older daemon): the Lead agent picker is not
    *  offered and the key is never sent (its strict schema 400s on it). */
   launchPrimary: boolean;
+  /** `chatList` (DES-SYSTEM-CHAT, crew) — `GET /chats` lists the user's past system chats and a chat
+   *  can be closed without losing its history. Absent or false (an older daemon): the system chat's
+   *  past-chats rail is hidden behind a one-line note. */
+  chatList: boolean;
+  /** `chatAttachments` (DES-SYSTEM-CHAT, crew) — `POST /chats/:id/attachments` carries files the seat
+   *  can read. Absent or false: the system chat offers no upload (the same one-line note). */
+  chatAttachments: boolean;
   load: () => Promise<void>;
 }
 
@@ -45,6 +52,8 @@ export const useCapabilities = create<CapabilitiesStore>((set, get) => ({
   deliverGate: false,
   reducedAssurance: false,
   launchPrimary: false,
+  chatList: false,
+  chatAttachments: false,
   load: () => {
     if (get().loaded) return Promise.resolve();
     // The HTTP client is reached lazily: the stores that read a capability (gates, the ask thread)
@@ -52,9 +61,9 @@ export const useCapabilities = create<CapabilitiesStore>((set, get) => ({
     inflight ??= import('../api/client.js').then(({ api }) => api.getHealth())
       .then((h) => {
         const caps = ((h as unknown as { capabilities?: Record<string, unknown> }).capabilities) ?? {};
-        set({ loaded: true, runChatId: caps['runChatId'] === true, walkthroughRoots: caps['walkthroughRoots'] === true, askPath: caps['askPath'] === true, chatIdOnLaunch: caps['chatIdOnLaunch'] === true, deliverGate: caps['deliverGate'] === true, reducedAssurance: caps['reducedAssurance'] === true, launchPrimary: caps['launchPrimary'] === true });
+        set({ loaded: true, runChatId: caps['runChatId'] === true, walkthroughRoots: caps['walkthroughRoots'] === true, askPath: caps['askPath'] === true, chatIdOnLaunch: caps['chatIdOnLaunch'] === true, deliverGate: caps['deliverGate'] === true, reducedAssurance: caps['reducedAssurance'] === true, launchPrimary: caps['launchPrimary'] === true, chatList: caps['chatList'] === true, chatAttachments: caps['chatAttachments'] === true });
       })
-      .catch(() => { set({ loaded: true, runChatId: false, walkthroughRoots: false, askPath: false, chatIdOnLaunch: false, deliverGate: false, reducedAssurance: false, launchPrimary: false }); })
+      .catch(() => { set({ loaded: true, runChatId: false, walkthroughRoots: false, askPath: false, chatIdOnLaunch: false, deliverGate: false, reducedAssurance: false, launchPrimary: false, chatList: false, chatAttachments: false }); })
       .finally(() => { inflight = null; });
     return inflight;
   },

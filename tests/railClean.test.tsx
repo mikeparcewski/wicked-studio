@@ -136,12 +136,14 @@ describe('the top of the rail (operator IA 2026-10-13)', () => {
     expect(screen.queryByTestId('desk-rail-badge')).toBeNull();
   });
 
-  it('the action row sits where the Desk item was: New job, Search, Chat, New project — each named', () => {
+  it('the action row sits where the Desk item was: four equal icons, New project · New job · Chat · Search — each named (DES-SYSTEM-CHAT §1)', () => {
     rail();
     const row = screen.getByTestId('desk-rail-actions');
     expect(row.previousElementSibling).toBe(screen.getByTestId('desk-rail-home'));
-    const ids = [...row.querySelectorAll('button')].map((b) => b.dataset.testid);
-    expect(ids).toEqual(['desk-rail-new-job', 'desk-rail-search', 'desk-rail-chat', 'desk-rail-new-project']);
+    const buttons = [...row.querySelectorAll('button')];
+    expect(buttons.map((b) => b.dataset.testid)).toEqual(['desk-rail-new-project', 'desk-rail-new-job', 'desk-rail-chat', 'desk-rail-search']);
+    // Icons only: no visible words, every one the same class (equal width), each with a tooltip.
+    expect(buttons.every((b) => b.className === 'wk-rail-action' && (b.textContent ?? '').trim() === '' && b.title !== '')).toBe(true);
     expect(screen.getByTestId('desk-rail-new-job')).toHaveAccessibleName('New job');
     expect(screen.getByTestId('desk-rail-search')).toHaveAccessibleName('Search');
     expect(screen.getByTestId('desk-rail-search').title).toMatch(/K\)$/);
@@ -170,6 +172,25 @@ describe('the action row works from any page, in the project on screen', () => {
     expect(screen.getByTestId('desk-rail-chat')).toHaveAccessibleName('New chat in upload-endpoint');
     fireEvent.click(screen.getByTestId('desk-rail-chat'));
     expect(useAskDock.getState().request).toMatchObject({ projectId: 'p-up', fresh: true });
+  });
+
+  it('Chat restores a minimized chat and leaves an open one as it is; only a closed chat starts a new one', async () => {
+    const { useChatWindow, resetChatWindow } = await import('../src/store/chatWindow.js');
+    resetChatWindow();
+    render(<SessionRail runs={RUNS} needRows={NEED as never} navigate={() => {}} pathname="/" />);
+    const before = useAskDock.getState().request?.nonce ?? 0;
+    act(() => { useChatWindow.setState({ mode: 'minimized', restoreTo: 'full' }); });
+    expect(screen.getByTestId('desk-rail-chat')).toHaveAccessibleName('Show the chat');
+    fireEvent.click(screen.getByTestId('desk-rail-chat'));
+    expect(useChatWindow.getState().mode).toBe('full');
+    expect(screen.getByTestId('desk-rail-chat')).toHaveAccessibleName('Chat');
+    fireEvent.click(screen.getByTestId('desk-rail-chat'));
+    expect(useChatWindow.getState().mode).toBe('full');
+    expect(useAskDock.getState().request?.nonce ?? 0).toBe(before);
+    act(() => { useChatWindow.getState().close(); });
+    fireEvent.click(screen.getByTestId('desk-rail-chat'));
+    expect(useAskDock.getState().request).toMatchObject({ nonce: before + 1, fresh: true });
+    resetChatWindow();
   });
 
   it('the Unfiled bucket is not a project to start in', () => {
