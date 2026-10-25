@@ -205,6 +205,9 @@ export interface FinalChecks {
   nothing: boolean;
   /** The seats whose review step finished (an accepted review), in run order. */
   reviewers: readonly string[];
+  /** rig 0.15.8: the operator overrode a failed floor on the way here — the sentence that says so
+   *  (`overriddenLine`), said instead of "The checks passed"; absent/null when nothing was overridden. */
+  overridden?: string | null;
 }
 
 /** The test count in crew's acceptance words ("the repo's checks passed (38 tests)"), or null. */
@@ -245,8 +248,11 @@ export function finalWords(view: SessionView, steps: { done: number; total: numb
   const branch = d.pushed?.branch ?? null;
   const sentences: string[] = [];
   if (s !== 'completed' && steps.total > 0) sentences.push(`It stopped after ${steps.done} of ${steps.total} steps.`);
-  const tested = checks.passed === true ? (checks.tests !== null ? `Tests pass (${checks.tests})` : 'The checks passed')
-    : checks.passed === false ? 'The checks did not pass' : null;
+  const overridden = checks.overridden ?? null;
+  if (overridden !== null) sentences.push(overridden);
+  const tested = overridden !== null ? null
+    : checks.passed === true ? (checks.tests !== null ? `Tests pass (${checks.tests})` : 'The checks passed')
+      : checks.passed === false ? 'The checks did not pass' : null;
   const reviewed = checks.reviewers.length > 0 ? andList(checks.reviewers) : null;
   if (tested !== null && reviewed !== null) sentences.push(`${tested}, and ${reviewed} reviewed and approved it.`);
   else if (tested !== null) sentences.push(`${tested}.`);

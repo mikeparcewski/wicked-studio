@@ -12,8 +12,8 @@
   "studioVersion": "0.11.8",
   "counts": {
     "files": 234,
-    "occurrences": 2984,
-    "static": 2586,
+    "occurrences": 2988,
+    "static": 2590,
     "dynamic": 69,
     "computed": 24
   },
@@ -10354,6 +10354,12 @@
       ]
     },
     {
+      "testId": "run-tab-acceptance-detail",
+      "files": [
+        "src/components/session/RunTab.tsx"
+      ]
+    },
+    {
       "testId": "run-tab-actions",
       "files": [
         "src/components/session/RunTab.tsx"
@@ -10451,6 +10457,12 @@
     },
     {
       "testId": "run-tab-orphaned",
+      "files": [
+        "src/components/session/RunTab.tsx"
+      ]
+    },
+    {
+      "testId": "run-tab-overridden",
       "files": [
         "src/components/session/RunTab.tsx"
       ]
@@ -10993,6 +11005,18 @@
     },
     {
       "testId": "session-gate-events-retry",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
+      "testId": "session-gate-failing",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
+      "testId": "session-gate-failing-more",
       "files": [
         "src/components/session/GateRow.tsx"
       ]

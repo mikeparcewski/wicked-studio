@@ -1027,6 +1027,7 @@ select:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-
 .wk-session-gate-choice:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-shadow: var(--focus-ring); }
 .wk-session-gate-choice:disabled, .wk-session-gate-choice--disabled { opacity: 0.5; cursor: default; }
 .wk-session-gate-choice:disabled:hover { border-color: var(--border); }
+.wk-gate-failing code { overflow-wrap: anywhere; }
 .wk-session-gate-suggested { padding: 0 6px; border: 1px solid var(--border); border-radius: var(--radius-full); background: var(--accent-wash); font-size: var(--text-2xs); color: var(--ink-muted); }
 /* S16a-1b: the creator seat's record on Approve (neutral, never a tone) and the rule offer. */
 /* S16a-2a: the peeked choice's consequence — one line under the row's choices (never moves a button). */
@@ -1551,6 +1552,8 @@ button.wk-walk-chapter-btn:hover .wk-walk-chapter-title { text-decoration: under
 .wk-prop-accept--ok { color: var(--status-ok); }
 .wk-prop-accept--bad { color: var(--status-fail); }
 .wk-prop-accept--quiet { color: var(--ink-dim); }
+/* A failed floor the operator overrode: the overridden style (the "Floor overridden by operator" label's), never green. */
+.wk-prop-accept--overridden { color: var(--status-warn); font-weight: var(--weight-semi); }
 /* S10: the ordered plan editor in the run's artifact slot — a numbered list; fixed steps carry one
    word and their reason in the title; a movable step has its two arrows; the line under it says what
    the card will send (or that a running plan's order is set); "Add a step" offers the catalog. */

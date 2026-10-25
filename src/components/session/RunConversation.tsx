@@ -10,6 +10,8 @@ import { isCliSeat, seatLabel } from '../../board/seatNames.js';
 import { jobTitle } from '../../board/deskWords.js';
 import { ORPHANED_LINE, orphanedOf, runState } from '../../board/sessionModel.js';
 import { applyCheckState } from '../../board/checkState.js';
+import { deliveryReceiptOf } from '../../board/assuranceModel.js';
+import { overriddenFloorsOf, overriddenLine } from '../../board/failingChecks.js';
 import { wordOf } from '../../board/planDraft.js';
 import { undoDecision } from '../../board/undoQueue.js';
 import type { Navigate } from '../../hooks/useRoute.js';
@@ -260,11 +262,18 @@ export function RunBlock({ view, badge, sessionId, navigate, solo = null }: {
   const gateVerdict = acceptance?.gate;
   const passed = gateVerdict === undefined || gateVerdict === null || gateVerdict.required !== true ? null
     : gateVerdict.satisfied === true ? true : gateVerdict.verdict === null || gateVerdict.verdict === undefined ? null : false;
+  // rig 0.15.8: a failed floor the operator overrode is said as that, never as "The checks passed".
+  const finalOverridden = useMemo(() => {
+    if (!isTerminal) return null;
+    const o = overriddenFloorsOf(deliveryReceiptOf(view, runEvents ?? null), runEvents ?? null, view);
+    return o === null ? null : overriddenLine(o);
+  }, [isTerminal, view, runEvents]);
   const words = isTerminal ? finalWords(view, { done: chain.total > 0 ? chain.done : doneCount, total: totalCount }, {
     passed,
     tests: testCountOf(acceptance?.summary?.line, gateVerdict?.reason),
     nothing: noEvidenceSummary?.nothing === true,
     reviewers: approvingReviewers(view, isReviewUnit, (ord) => reviewVerdicts.get(ord) ?? null),
+    overridden: finalOverridden,
   }) : null;
   const askingWho = gateResponder(view, gate, roster);
   const checkOf = (s: StepMessage): string | null => {

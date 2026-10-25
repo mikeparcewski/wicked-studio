@@ -39,7 +39,8 @@ import type { RerunOffer } from '../components/rerunModel.js';
 import { qeGateOf, QE_RETRY_LABEL, QE_RETRY_NOTE_LABEL, QE_RETRY_NOTE_TITLE, QE_RETRY_TITLE, type QeGate } from './qeEscalation.js';
 import { waitsForJudge } from './assuranceModel.js';
 import { OPERATOR_JUDGMENT_LABEL, OPERATOR_JUDGMENT_TITLE, REJUDGE_ACTION, REJUDGE_LABEL, rejudgeTitle, type RejudgeOffer } from './rejudge.js';
-import { FLOOR_OVERRIDE_ACTION, FLOOR_OVERRIDE_KEY, FLOOR_OVERRIDE_TITLE, offersDeliverFloorOverride, offersFloorOverride } from './floorOverride.js';
+import { engineNamesFloorOverride, FLOOR_OVERRIDE_ACTION, FLOOR_OVERRIDE_CONSEQUENCE, FLOOR_OVERRIDE_KEY, FLOOR_OVERRIDE_TITLE, offersDeliverFloorOverride, offersFloorOverride } from './floorOverride.js';
+import { failingOnFace, type FailingOnFace } from './failingChecks.js';
 
 /**
  * SESSION GATE ROW MODEL (S15e): pure classification and choice set for the session thread's
@@ -194,6 +195,9 @@ export interface GateRowModel {
    *  engine's `judge_by_operator`), `false` on a team member's step, whose approve re-runs the step;
    *  absent on every other gate. */
   operatorJudgment?: boolean;
+  /** rig 0.15.8: the failing checks / tests of THIS gate's failed floor, named on the face (up to five,
+   *  "+N more"); absent when the gate's own floor did not fail. */
+  failingTests?: FailingOnFace;
 }
 
 /** studio#835: a dead-seat gate's seat, and why it cannot work, in the engine's cause token's terms. */
@@ -461,8 +465,11 @@ function withDepth(base: BaseRowModel, input: SessionGateInput): GateRowModel {
   // studio#761: a QE review that recorded no verdict judged nothing — the retry's consequence is its
   // own, and there are no failing criteria to list beside the creator's claims.
   const qeNoVerdict = base.qe?.outcome === 'no-verdict';
+  const overrideSuggested = base.recommended !== null && base.choices[base.recommended]?.key === FLOOR_OVERRIDE_KEY;
   const consequence = qeNoVerdict
     ? 'Only the QE check and its review run again; the earlier steps are kept'
+    : overrideSuggested
+    ? FLOOR_OVERRIDE_CONSEQUENCE
     : floorFix
     ? `A seat other than this phase makes the fix from the ${rec!.items.length > 0 ? `${rec!.items.length} failing check${rec!.items.length === 1 ? '' : 's'}` : 'note'}; only the floor re-runs`
     : suggested && rec!.consequence !== '' ? rec!.consequence : null;
@@ -478,10 +485,14 @@ function withDepth(base: BaseRowModel, input: SessionGateInput): GateRowModel {
       title: offer.consequence,
     });
   }
+  // rig 0.15.8: the failing tests on the face — this gate's own failed floor only (an earlier unit's
+  // floor is not what this gate asks about).
+  const failingTests = raw !== null && raw.ord === gate.ord && raw.outcome === 'fail' ? failingOnFace(raw.floor) : null;
   return {
     ...base, overflow, consequence, source,
     failing: qeNoVerdict ? [] : rec?.items ?? [],
     reviewedOrd: verdict?.ord ?? null,
+    ...(failingTests !== null ? { failingTests } : {}),
   };
 }
 
@@ -844,13 +855,18 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
     // The denied unit's suggested arm is the re-run (index 0) when its other layers passed.
     // studio#556: otherwise the row suggests whatever recommendGateMove recommends — send back,
     // retry with findings, or approve — on the inline choice that IS that move.
+    // rig 0.15.8: when the engine names the operator's override as the way through (a red base it cannot
+    // separate from the change), that is the suggestion — a retry or a fix would loop on the base's failures.
+    const overrideAt = escInline.findIndex((c) => c.key === FLOOR_OVERRIDE_KEY);
+    const overridePath = overrideAt >= 0 && engineNamesFloorOverride(verdict, summary ?? null);
     const recommended = deniedUnit ? (deniedUnitJudgedOk(verdict) ? 0 : null)
       : qeNoVerdict ? 0
         : rejudgeOffered ? 0
-          : recommendedChoiceIndex(escInline, rec);
+          : overridePath ? overrideAt
+            : recommendedChoiceIndex(escInline, rec);
     // A retry with findings is taken with ITS note (a validator's failing checks are not "the
     // reviewer's"), so the note field opens on the move's own prefill.
-    if (!deniedUnit && !qeNoVerdict && !rejudgeOffered && recommended !== null && rec?.kind === 'retry-findings' && rec.prefill !== null) {
+    if (!deniedUnit && !qeNoVerdict && !rejudgeOffered && !overridePath && recommended !== null && rec?.kind === 'retry-findings' && rec.prefill !== null) {
       noteDefault = rec.prefill;
     }
     return { reason, question, choices: escInline, overflow, noteDefault, recommended, detailItems, ...(qe !== null ? { qe } : {}), ...(deadSeat !== null ? { deadSeat } : {}), ...(judgeWait ? { operatorJudgment } : {}) };
