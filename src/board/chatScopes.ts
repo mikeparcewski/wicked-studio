@@ -90,10 +90,11 @@ export function chipWords(c: ScopeChip): string {
 /**
  * The `POST /chats` scope fields for the chips that are on (the existing wire, unchanged):
  *  - All repos → `scopeKind: 'everything'`;
- *  - Repo chips → `repoRefs` (with the Project chip's id, its graph grounds them);
+ *  - Repo chips → `repoRefs` (with the Project chip's id only when that chip is on: its graph grounds them);
  *  - a Project chip alone → `projectId` (the project's repositories);
  *  - none of them → `scopeKind: 'system'`: no repository at all.
- * `filingProjectId` (the project page the chat was started on) files a chat that names no project.
+ * `filingProjectId` (the project page the chat was started on) files a System or All-repos chat that
+ * names no project (there `projectId` only files; it reads nothing).
  */
 export function chipsOpenFields(
   chips: readonly ScopeChip[],
@@ -105,7 +106,9 @@ export function chipsOpenFields(
   const filed = project ?? filingProjectId;
   const filing = filed !== null ? { projectId: filed } : {};
   if (on.some((c) => c.kind === 'all-repos')) return { scopeKind: 'everything', ...filing };
-  if (repos.length > 0) return { repoRefs: repos, ...filing };
+  // With repos, a `projectId` is not just filing: the PROJECT's graph grounds them. So it rides only
+  // when the Project chip is on — a chat the user held to one repo never reads its project's graph.
+  if (repos.length > 0) return { repoRefs: repos, ...(project !== null ? { projectId: project } : {}) };
   if (project !== null) return { projectId: project };
   return { scopeKind: 'system', ...filing };
 }

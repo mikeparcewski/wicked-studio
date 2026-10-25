@@ -29,6 +29,11 @@ export interface AskSession {
   chips?: ScopeChip[];
   /** The CLI that answers this chat (DES-SYSTEM-CHAT §5). */
   cli?: string;
+  /** What the last pack that LANDED carried (its chips and page); absent = unknown, so the next
+   *  message carries a fresh one. */
+  packSig?: string;
+  /** The diagnostics have ridden a pack that landed (they ride the first one carrying This page). */
+  diagSent?: boolean;
 }
 
 export const ASK_SESSION_KEY = 'wicked.ask.session';
@@ -46,6 +51,8 @@ export function readAskSession(): AskSession | null {
       scope: isChatScope(parsed.scope) ? parsed.scope : null,
       ...(Array.isArray(parsed.chips) ? { chips: parsed.chips.filter(isChip) } : {}),
       ...(typeof parsed.cli === 'string' && parsed.cli !== '' ? { cli: parsed.cli } : {}),
+      ...(typeof parsed.packSig === 'string' ? { packSig: parsed.packSig } : {}),
+      ...(parsed.diagSent === true ? { diagSent: true } : {}),
     };
   } catch {
     return null;

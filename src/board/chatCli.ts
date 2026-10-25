@@ -65,7 +65,11 @@ function refusal(seat: RosterSeat, scoped: boolean): { reason: string; signIn: b
     || (!admission.ok && /signed out|sign(?:ed)? in|not logged in|log in/i.test(admission.reason ?? ''));
   if (signedOut) return { reason: admission.reason ?? 'signed out', signIn: true };
   if (!admission.ok) return { reason: admission.reason ?? 'the service will not seat it in this chat', signIn: false };
-  if (standing.kind === 'ineligible') return { reason: `benched: ${standing.detail.replace(/^not picked for checks — /, '')}`, signIn: false };
+  // Left out of COUNCILS is not left out of chat (the chat admission above decides that); only a spent
+  // usage limit the daemon names there is a bench for chat too.
+  const councilWhy = typeof seat['council_ineligible_reason'] === 'string' ? seat['council_ineligible_reason'] as string : '';
+  const councilLimit = standing.kind === 'ineligible' ? usageLimitWord(councilWhy) : null;
+  if (councilLimit !== null) return { reason: `benched: ${councilLimit}`, signIn: false };
   if (health?.status === 'inactive') return { reason: `benched${health.message ? `: ${health.message}` : ''}`, signIn: false };
   return null;
 }

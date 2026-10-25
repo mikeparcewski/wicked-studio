@@ -218,9 +218,10 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
 
   // DES-SYSTEM-CHAT §7: the page the chat is seeing — its words, its project and repo (the chips'
   // defaults) and the run on screen.
+  const search = typeof window === 'undefined' ? '' : window.location.search;
   const ctx = useMemo(
-    () => pageContext({ pathname, search: typeof window === 'undefined' ? '' : window.location.search, runs, projects, repos }),
-    [pathname, runs, projects, repos],
+    () => pageContext({ pathname, search, runs, projects, repos }),
+    [pathname, search, runs, projects, repos],
   );
 
   // The send verb closes over LIVE state via refs — the pack is assembled AT SEND TIME,
@@ -270,12 +271,14 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
   // screen (Ask stays mounted across navigation); a click makes them the user's, and they survive
   // navigation. Once the chat opens they are frozen with it (its read roots cannot change) and
   // persisted with the session, so a reopened chat shows what it was opened with.
+  // A chat started in the project on screen (the rail's Chat) simply follows the page; one started in a
+  // project from elsewhere (⌘K "Chat in this project") is held to that project, with the page's repo.
   const startProject = sendProjectId ?? startProjectId;
   const [chipEdits, setChipEdits] = useState<ScopeChip[] | null>(() => {
     if (resumed?.chips !== undefined && resumed.chips.length > 0) return resumed.chips;
-    if (startProject === undefined) return null;
+    if (startProject === undefined || startProject === ctx.project?.id) return null;
     const name = useProjectsStore.getState().projects.find((p) => p.id === startProject)?.name ?? startProject;
-    return defaultScopeChips({ project: { id: startProject, name }, repo: null });
+    return defaultScopeChips({ project: { id: startProject, name }, repo: ctx.repo });
   });
   const chips = useMemo(() => chipEdits ?? defaultScopeChips(ctx), [chipEdits, ctx]);
   const chipsRef = useRef(chips);
@@ -286,7 +289,11 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
   const scopeRef = useRef<ChatScope | null>(resumed?.scope ?? null);
   /** What the last message's pack carried (the chips that were on, and the page): a later message
    *  carries a pack again only when that changed. */
-  const lastPackRef = useRef<string | null>(resumed?.seeded === true ? `${chipsSignature(chips)}@${pathname}` : null);
+  // A resumed chat restores what its last delivered pack carried; unknown (an older session) means the
+  // next message carries a fresh one — never a page the chat was not told about.
+  const lastPackRef = useRef<string | null>(resumed?.packSig ?? null);
+  /** The diagnostics ride the first pack that carries This page — not merely the first message. */
+  const diagSentRef = useRef(resumed?.diagSent === true || (resumed?.seeded === true && resumed.packSig === undefined));
 
   // DES-SYSTEM-CHAT §5 — the ONE answering CLI: the user's pick, else the default rule. Fixed once
   // the chat is open (a resumed chat keeps the CLI it was opened with).
@@ -316,23 +323,51 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
     if (m !== null && decodeURIComponent(m[1]!) === chatId) onCloseRef.current();
   }, []);
 
-  /** The message as sent: what was typed, plus the pack when it is owed — the full one (diagnostics
-   *  included) on the first message, a fresh one later only when the chips or the page changed. */
-  const withPack = useCallback((text: string): string => {
-    const sig = `${chipsSignature(chipsRef.current)}@${packInputs.current.pathname}`;
-    if (seededRef.current && lastPackRef.current === sig) return text;
-    const pack = buildContextPack({ ...packInputs.current, chips: chipsRef.current, omitDiagnostics: seededRef.current });
-    return `${text}${PACK_JOIN}${pack}`;
-  }, []);
-  /** A message landed: its pack is what the chat has seen. */
-  const packLanded = useCallback((id: string) => {
-    lastPackRef.current = `${chipsSignature(chipsRef.current)}@${packInputs.current.pathname}`;
-    if (!seededRef.current) {
-      seededRef.current = true;
-      if (!ended()) writeAskSession({ chatId: id, title: titleRef.current, seeded: true, ...scopeField(scopeRef.current), chips: chipsRef.current, ...(cliRef.current !== null ? { cli: cliRef.current } : {}) });
-    }
+  /** How many chosen sources the latest message was sent with (a resumed chat: the chips it shows). */
+  const sentSourcesRef = useRef(chosenChips(chips).length);
+
+  /** Persist the open chat: its current chips (the user's choices now) apart from the signature of
+   *  the last pack that LANDED (what the chat has actually been told). Never after Close ended it. */
+  const persist = useCallback((id: string) => {
+    if (ended()) return;
+    writeAskSession({
+      chatId: id, title: titleRef.current, seeded: seededRef.current, ...scopeField(scopeRef.current),
+      chips: chipsRef.current,
+      ...(cliRef.current !== null ? { cli: cliRef.current } : {}),
+      ...(lastPackRef.current !== null ? { packSig: lastPackRef.current } : {}),
+      ...(diagSentRef.current ? { diagSent: true } : {}),
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `ended` reads the module epoch
   }, []);
+
+  /** The message as sent: what was typed, plus the pack when it is owed — the full one (diagnostics
+   *  included) on the first message, a fresh one later only when the chips or the page changed. The
+   *  chips and page are SNAPSHOT here, so the acknowledgement records exactly what this message carried
+   *  (a chip changed while it is in flight is still owed to the next one). */
+  const withPack = useCallback((text: string): { message: string; sig: string; diag: boolean } => {
+    const chipsNow = chipsRef.current;
+    // What this turn's answer will say it saw: the chips on when it was sent.
+    sentSourcesRef.current = chosenChips(chipsNow).length;
+    const sig = `${chipsSignature(chipsNow)}@${packInputs.current.pathname}`;
+    if (seededRef.current && lastPackRef.current === sig) return { message: text, sig, diag: false };
+    const diag = !diagSentRef.current && chipsNow.some((c) => c.kind === 'page' && c.on);
+    const pack = buildContextPack({ ...packInputs.current, chips: chipsNow, omitDiagnostics: !diag });
+    return { message: `${text}${PACK_JOIN}${pack}`, sig, diag };
+  }, []);
+  /** A message landed: the pack it carried is what the chat has seen. */
+  const packLanded = useCallback((id: string, out: { sig: string; diag: boolean }) => {
+    lastPackRef.current = out.sig;
+    if (out.diag) diagSentRef.current = true;
+    seededRef.current = true;
+    persist(id);
+  }, [persist]);
+
+  // The user's chip choices for an OPEN chat are persisted as they change, so a resumed chat shows (and
+  // its next pack carries) what the user chose last — not what it was opened with.
+  useEffect(() => {
+    if (openedScope === undefined || chatIdRef.current === null) return;
+    persist(chatIdRef.current);
+  }, [chips, openedScope, persist]);
 
   const verbs: AssistVerbs = useMemo(
     () => ({
@@ -340,8 +375,9 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
         let id = chatIdRef.current;
         if (id !== null && resumed !== null && id === resumed.chatId) {
           try {
-            deposit(id, text, await api.sendChatMessage(id, withPack(text)).catch(plainSendRefusal(id)));
-            packLanded(id);
+            const out = withPack(text);
+            deposit(id, text, await api.sendChatMessage(id, out.message).catch(plainSendRefusal(id)));
+            packLanded(id, out);
             stepAside(id);
             return { chatId: id };
           } catch (sendErr) {
@@ -361,6 +397,7 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
             chatIdRef.current = null;
             seededRef.current = false;
             lastPackRef.current = null;
+            diagSentRef.current = false;
             id = null;
             // The fresh session below opens with the scope chosen now (the one on record stands
             // for the reclaimed chat only).
@@ -434,8 +471,9 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
             throw openErr;
           }
         }
-        deposit(id, text, await api.sendChatMessage(id, withPack(text)).catch(plainSendRefusal(id)));
-        packLanded(id);
+        const out = withPack(text);
+        deposit(id, text, await api.sendChatMessage(id, out.message).catch(plainSendRefusal(id)));
+        packLanded(id, out);
         stepAside(id);
         return { chatId: id };
       },
@@ -469,10 +507,7 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
   }, [projects, repos, runs, docsByProject]);
 
   const locked = openedScope !== undefined;
-  const sources = chosenChips(chips).length;
-  const sourcesRef = useRef(sources);
-  sourcesRef.current = sources;
-  const answerFooter = useCallback((key: string) => answerFooterWords(cliName(key, getCachedRoster()), sourcesRef.current), []);
+  const answerFooter = useCallback((key: string) => answerFooterWords(cliName(key, getCachedRoster()), sentSourcesRef.current), []);
   const onStatus = useCallback((s: 'ready' | 'thinking' | 'answered') => { useChatWindow.getState().setStatus(s); }, []);
 
   const resolvedScope = openedScope === undefined ? '' : describeResolvedScope(openedScope, { projects });
@@ -531,6 +566,7 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
           chatIdRef.current = null;
           seededRef.current = false;
           lastPackRef.current = null;
+          diagSentRef.current = false;
           // No chat is open any more: the next send opens a fresh one, so the scope is a choice again.
           scopeRef.current = null;
           setOpenedScope(undefined);

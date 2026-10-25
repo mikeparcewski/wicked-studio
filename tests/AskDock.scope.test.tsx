@@ -264,6 +264,87 @@ describe('the scope chips (DES-SYSTEM-CHAT §6)', () => {
     expect(openChat).toHaveBeenCalledTimes(1);
   });
 
+  it('a chip turned off while a message is in flight is still owed to the next message (codex r1 #1)', async () => {
+    const user = userEvent.setup();
+    let release: (v: unknown) => void = () => undefined;
+    dock('/steering');
+    await user.click(chip('memory'));
+    sendChatMessage.mockImplementationOnce(() => new Promise((r) => { release = r; }));
+    await ask('first');
+    await waitFor(() => expect(sendChatMessage).toHaveBeenCalledTimes(1));
+    expect(lastMessage()).toContain('memory: you may recall');
+    // Memory off while the first message is still in flight.
+    await user.click(chip('memory'));
+    release({ seats: ['claude'] });
+    await waitFor(() => expect(screen.getByTestId('assist-input')).toBeEnabled());
+    await user.type(screen.getByTestId('assist-input'), 'second');
+    await user.click(screen.getByTestId('assist-send'));
+    await waitFor(() => expect(sendChatMessage).toHaveBeenCalledTimes(2));
+    expect(lastMessage()).toContain('not chosen — do not consult: Memory');
+    expect(lastMessage()).not.toContain('memory: you may recall');
+  });
+
+  it('a chip changed on a later turn is persisted, and a resumed chat neither forgets it nor re-sends what landed (codex r1 #2)', async () => {
+    const user = userEvent.setup();
+    dock('/steering');
+    await ask('first');
+    await waitFor(() => expect(sendChatMessage).toHaveBeenCalledTimes(1));
+    await user.click(chip('memory'));
+    const stored = (): { chips?: Array<{ key: string; on: boolean }>; packSig?: string } => JSON.parse(sessionStorage.getItem('wicked.ask.session') ?? 'null');
+    await waitFor(() => expect(stored().chips?.find((c) => c.key === 'memory')?.on).toBe(true));
+    await user.type(screen.getByTestId('assist-input'), 'second');
+    await user.click(screen.getByTestId('assist-send'));
+    await waitFor(() => expect(sendChatMessage).toHaveBeenCalledTimes(2));
+    expect(lastMessage()).toContain('memory: you may recall');
+    await waitFor(() => expect(stored().packSig).toContain('memory'));
+    cleanup();
+    // Reopened (a reload resumes it): Memory is still on, and the same page sends the words only.
+    dock('/steering');
+    expect(chip('memory')).toHaveAttribute('aria-pressed', 'true');
+    await user.type(screen.getByTestId('assist-input'), 'third');
+    await user.click(screen.getByTestId('assist-send'));
+    await waitFor(() => expect(sendChatMessage).toHaveBeenCalledTimes(3));
+    expect(lastMessage()).toBe('third');
+  });
+
+  it('the diagnostics ride the first pack that carries This page, not merely the first message (agy r1 #1)', async () => {
+    const user = userEvent.setup();
+    dock('/steering');
+    await user.click(chip('page'));
+    await ask('first');
+    await waitFor(() => expect(sendChatMessage).toHaveBeenCalledTimes(1));
+    expect(lastMessage()).not.toContain('diagnostics');
+    await user.click(chip('page'));
+    await user.type(screen.getByTestId('assist-input'), 'second');
+    await user.click(screen.getByTestId('assist-send'));
+    await waitFor(() => expect(sendChatMessage).toHaveBeenCalledTimes(2));
+    expect(lastMessage()).toContain('where: Steering (/steering)');
+    expect(lastMessage()).toContain('diagnostics');
+  });
+
+  it('the rail\'s Chat on a project page follows the page: its chips are the page\'s and move with it (agy r1 #2)', async () => {
+    const view = render(<AskDock runs={[]} pathname="/projects/api-migration" onClose={() => undefined} startProjectId="api-migration" startFresh />);
+    expect(chip('project:api-migration')).toHaveAttribute('aria-pressed', 'true');
+    view.rerender(<AskDock runs={[]} pathname="/steering" onClose={() => undefined} startProjectId="api-migration" startFresh />);
+    expect(chip('all-repos')).toHaveAttribute('aria-pressed', 'true');
+    await ask();
+    expect(lastBody().scopeKind).toBe('everything');
+    expect('projectId' in lastBody()).toBe(false);
+  });
+
+  it('a resumed chat whose last delivered pack is unknown carries a fresh one (codex r1 #3)', async () => {
+    const user = userEvent.setup();
+    sessionStorage.setItem('wicked.ask.session', JSON.stringify({ chatId: 'c0ffee00-0000-4000-8000-000000000003', title: 'earlier', seeded: true }));
+    getChat.mockResolvedValue({ chatId: 'c0ffee00-0000-4000-8000-000000000003', seats: ['claude'] });
+    dock('/workflows');
+    await user.type(screen.getByTestId('assist-input'), 'and now?');
+    await user.click(screen.getByTestId('assist-send'));
+    await waitFor(() => expect(sendChatMessage).toHaveBeenCalledTimes(1));
+    expect(lastMessage()).toContain('where: Workflows (/workflows)');
+    expect(lastMessage()).not.toContain('diagnostics');
+    expect(openChat).not.toHaveBeenCalled();
+  });
+
   it('once open, the header states the scope the DAEMON resolved and the read-root chips lock', async () => {
     openChat.mockImplementation((body: ChatOpenBody) =>
       Promise.resolve({ chatId: body.chatId, seats: [{ cliKey: 'claude', ok: true }], scope: scopeOf('system') }),

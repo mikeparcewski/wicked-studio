@@ -64,7 +64,7 @@ import { useProjectVisits } from './hooks/useProjectVisits.js';
 import { usePeekJump } from './hooks/usePeekJump.js';
 import { usePlacePanel } from './hooks/usePlacePanel.js';
 import { altChord, setShortcutsPaletteOpen, useGlobalShortcuts } from './hooks/useGlobalShortcuts.js';
-import { useTypeToComposer } from './hooks/useTypeToComposer.js';
+import { takeTypedSeed, typeInto, typeTarget, useTypeToComposer } from './hooks/useTypeToComposer.js';
 import { legacySteeringTarget, useRetiredSettingsRedirect, useTestingRedirect } from './hooks/useLegacyRedirect.js';
 import { EverythingPage } from './components/everything/EverythingPage.js';
 import { productRedirectPath, useRoute } from './hooks/useRoute.js';
@@ -413,7 +413,19 @@ export function App(): React.ReactElement {
   }, [chatFlow, navigate]);
   // §5.6 rule 4 (S2b): letters always type — into the open Ask dock, else the page's
   // composer, else the Ask dock opened with them (opening it only reads).
-  useTypeToComposer(useCallback(() => setAskOpen(true), []));
+  useTypeToComposer(useCallback(() => {
+    // A minimized chat is already mounted, so it never takes the seed at mount: once it is back on
+    // screen, the letters that brought it back go into its box.
+    const wasMinimized = useChatWindow.getState().mode === 'minimized';
+    setAskOpen(true);
+    if (wasMinimized) {
+      requestAnimationFrame(() => {
+        const letters = takeTypedSeed();
+        const target = typeTarget();
+        if (letters !== '' && target !== null && target !== 'busy') typeInto(target.into, letters);
+      });
+    }
+  }, []));
   // THE search modal opens from the rail's Search and the phone top bar (`openSearch`), besides ⌘K.
   const searchRequest = useSearchModal((s) => s.request);
   useEffect(() => {

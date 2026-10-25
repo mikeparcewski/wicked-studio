@@ -27,6 +27,8 @@ describe('scope chips → the existing scope wire', () => {
 
   it('maps exactly the chips that are on', () => {
     expect(chipsOpenFields(page)).toEqual({ repoRefs: ['r1'], projectId: 'p1' });
+    // Project off: the repo alone — never the project's graph through a filing id.
+    expect(chipsOpenFields(clickChip(page, 'project:p1'), 'p1')).toEqual({ repoRefs: ['r1'] });
     const noRepo = clickChip(page, 'repo:r1');
     expect(chipsOpenFields(noRepo)).toEqual({ projectId: 'p1' });
     const nothing = clickChip(noRepo, 'project:p1');
@@ -76,6 +78,12 @@ describe('the CLI picker', () => {
     expect(by['agy']).toMatchObject({ ok: false, reason: 'its ACP adapter asks no permissions' });
     expect(by['opencode']).toMatchObject({ ok: true, optIn: true });
     expect(by['pi']).toMatchObject({ ok: true, reason: null });
+    // Left out of councils is not left out of chat: the chat admission decides (codex r1 #4).
+    const councilOnly = cliOptions([{ key: 'gem', display_name: 'Gem', binary: 'gem', enabled_for_council: false, council_eligible: false, council_ineligible_reason: 'not enabled for council', chat_admission: { scoped: { ok: true }, unscoped: { ok: true } } }] as unknown as RosterSeat[], true);
+    expect(councilOnly[0]).toMatchObject({ ok: true, reason: null });
+    // …unless what the daemon names there is a spent usage limit.
+    const spent = cliOptions([{ key: 'gem', display_name: 'Gem', binary: 'gem', enabled_for_council: true, council_eligible: false, council_ineligible_reason: 'quota (429) exhausted' }] as unknown as RosterSeat[], true);
+    expect(spent[0]).toMatchObject({ ok: false, reason: 'benched: usage limit reached' });
     // Unscoped, agy's admission is ok.
     expect(cliOptions(ROSTER, false).find((o) => o.key === 'agy')?.ok).toBe(true);
   });
@@ -139,6 +147,13 @@ describe('page-aware prompts from live data', () => {
     expect(ctx).toMatchObject({ kind: 'repo', label: 'billing', repo: { id: 'r-bill', name: 'billing' } });
     const labels = pagePrompts({ ...base, ctx, runs }).map((p) => p.label);
     expect(labels).toEqual(['Why did “fix the invoice total” fail?', 'What changed in billing recently?', 'Where is billing riskiest to change?']);
+  });
+
+  it('a project named in the address\'s query is the page\'s project; the Unfiled bucket is not a project page (agy r1 #5)', () => {
+    expect(pageContext({ pathname: '/steering?project=p-up', runs: [], projects, repos }).project).toEqual({ id: 'p-up', name: 'upload-endpoint' });
+    const unfiled = pageContext({ pathname: '/p/default/build', runs: [], projects, repos });
+    expect(unfiled).toMatchObject({ kind: 'other', project: null });
+    expect(pagePrompts({ ...base, ctx: unfiled, runs: [] }).map((p) => p.label)).toContain('Is studio healthy?');
   });
 
   it('prompts differ per page type', () => {

@@ -245,6 +245,8 @@ interface DockChatMsg {
   text: string;
   pending: boolean;
   ok: boolean;
+  /** The footer, fixed when the answer landed (later chip changes never rewrite an earlier answer's). */
+  foot?: string | null;
 }
 
 /**
@@ -289,6 +291,8 @@ function DockChat({ chatId, resumed = false, onResumeProbe, onStatus, answerFoot
   onResumeProbeRef.current = onResumeProbe;
   const onStatusRef = useRef(onStatus);
   onStatusRef.current = onStatus;
+  const footRef = useRef(answerFooter);
+  footRef.current = answerFooter;
   const [seats, setSeats] = useState<Record<string, DockSeatState>>({});
   const [msgs, setMsgs] = useState<DockChatMsg[]>([]);
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -320,7 +324,7 @@ function DockChat({ chatId, resumed = false, onResumeProbe, onStatus, answerFoot
         // those frames will also deliver would double it.
         const messages = (detail as { messages?: unknown }).messages;
         if (resumed && Array.isArray(messages)) {
-          const replayed = replayDockTranscript(messages);
+          const replayed = replayDockTranscript(messages).map((m) => (m.cliKey !== 'you' && m.ok ? { ...m, foot: footRef.current?.(m.cliKey) ?? null } : m));
           setMsgs((prev) => (prev.length > 0 ? prev : replayed));
         }
       })
@@ -367,11 +371,11 @@ function DockChat({ chatId, resumed = false, onResumeProbe, onStatus, answerFoot
           // ASK-S1 (codex #9): on a path the relay's `chatReply` IS the canonical answer — the stored
           // output with the control lines stripped, so SHORTER than the deltas by design; it replaces
           // them. The retain rule stays for the pool-era fan-out (no capability).
-          next[i] = { ...m, text: useCapabilities.getState().askPath ? text : retainOnFinalize(m.text, text), pending: false, ok };
+          next[i] = { ...m, text: useCapabilities.getState().askPath ? text : retainOnFinalize(m.text, text), pending: false, ok, foot: ok ? footRef.current?.(cliKey) ?? null : null };
           return next;
         }
       }
-      next.push({ cliKey, text, pending: false, ok });
+      next.push({ cliKey, text, pending: false, ok, foot: ok ? footRef.current?.(cliKey) ?? null : null });
       return next;
     });
   };
@@ -385,6 +389,7 @@ function DockChat({ chatId, resumed = false, onResumeProbe, onStatus, answerFoot
         break;
       case 'chatSessionFailed':
         if (frame.cliKey !== undefined) setSeats((s) => ({ ...s, [frame.cliKey!]: 'failed' }));
+        onStatusRef.current?.('ready');
         break;
       case 'chatDelta':
         if (frame.cliKey !== undefined && frame.text !== undefined && frame.text !== '') {
@@ -395,7 +400,8 @@ function DockChat({ chatId, resumed = false, onResumeProbe, onStatus, answerFoot
       case 'chatReply':
         if (frame.cliKey !== undefined) {
           finalize(frame.cliKey, frame.text ?? '', frame.ok ?? false);
-          onStatusRef.current?.('answered');
+          // A failed turn is not an answer: the tray goes back to "ready", never "answer ready".
+          onStatusRef.current?.(frame.ok === true ? 'answered' : 'ready');
         }
         break;
       default:
@@ -467,10 +473,9 @@ function DockChat({ chatId, resumed = false, onResumeProbe, onStatus, answerFoot
                   {m.pending && <span aria-hidden className="animate-pulse"> …</span>}
                 </div>
               )}
-              {!m.pending && m.ok && m.cliKey !== 'you' && answerFooter !== undefined && (() => {
-                const foot = answerFooter(m.cliKey);
-                return foot === null ? null : <p data-testid="assist-answer-footer" className="wk-assist-answer-foot">{foot}</p>;
-              })()}
+              {!m.pending && m.ok && m.cliKey !== 'you' && m.foot !== undefined && m.foot !== null && (
+                <p data-testid="assist-answer-footer" className="wk-assist-answer-foot">{m.foot}</p>
+              )}
             </div>
           ))
         )}

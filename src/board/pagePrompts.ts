@@ -63,7 +63,8 @@ function repoNamed(ref: string | null | undefined, repos: PageInputs['repos']): 
 export function pageContext({ pathname, search = '', runs, projects, repos }: PageInputs): PageContext {
   const path = pathname.split('?')[0] ?? pathname;
   const [, first = '', second = ''] = path.split('/');
-  const queryProject = new URLSearchParams(search).get('project');
+  const query = search !== '' ? search : pathname.includes('?') ? pathname.slice(pathname.indexOf('?')) : '';
+  const queryProject = new URLSearchParams(query).get('project');
   const base = { project: projectNamed(queryProject, projects), repo: null, run: null };
   if (first === '') return { ...base, kind: 'home', label: 'the Desk' };
   // Nerve Center (DES-SYSTEM-VIEW) lands on /watch, and /health folds into it.
@@ -76,7 +77,9 @@ export function pageContext({ pathname, search = '', runs, projects, repos }: Pa
   }
   if ((first === 'projects' || first === 'p') && second !== '') {
     const project = projectNamed(decode(second), projects);
-    return { ...base, kind: 'project', label: project?.name ?? 'this project', project };
+    // The Unfiled bucket (`default`) is not a project: its page gets the Desk's prompts.
+    if (project === null) return { ...base, kind: 'other', label: 'work not in a project' };
+    return { ...base, kind: 'project', label: project.name, project };
   }
   if (first === 's' && second !== '') {
     const run = runOfSession(decode(second), runs);
