@@ -283,7 +283,7 @@ function DockChat({ chatId, resumed = false, onResumeProbe, onStatus, answerFoot
   /** Resumed blocks only: the probe found the session reclaimed, or could not tell. */
   onResumeProbe?: ((outcome: ResumeProbe) => void) | undefined;
   /** A reply started streaming (`thinking`) or landed (`answered`) — the system chat's tray says so. */
-  onStatus?: ((status: 'thinking' | 'answered') => void) | undefined;
+  onStatus?: ((status: 'ready' | 'thinking' | 'answered') => void) | undefined;
   /** The footer under a landed answer ("Answered by Claude Code · saw 3 sources"); absent = none. */
   answerFooter?: ((cliKey: string) => string | null) | undefined;
 }): React.ReactElement {
