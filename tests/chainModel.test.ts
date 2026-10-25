@@ -297,6 +297,31 @@ describe('one vocabulary for a run’s steps (studio#440, #442, #445)', () => {
     expect(chainSentence(c)).toBe('7 of 8 done');
   });
 
+  it('rig 0.15.8: the bus says a step completed while the engine still runs its checks — the chain keeps it in hand, the same step the thread names', () => {
+    const steps = [...TEAM_STEPS, { catalog: 'deliver', id: 'deliver' }];
+    const rows: TeamRow[] = [row('wicked.team.plan.accepted', { plan_rev: 2, steps }, 700)];
+    let id = 701;
+    for (const s of TEAM_STEPS) { // every step's worker finished, Review (the 7th) included
+      rows.push(row('wicked.team.step.claimed', { step_id: s.id }, id++));
+      rows.push(row('wicked.team.step.completed', { step_id: s.id, status: 'ok' }, id++));
+    }
+    const f = hydrateFold(EMPTY_FOLD, team(rows));
+    // unit 7 (review) is under the cursor and not done: its checks are running
+    const executing = chainOf(liveView('executing', (o) => (o < 7 ? 'done' : 'distributed'), 6), f);
+    expect(executing.steps.map((s) => s.state)).toEqual(['done', 'done', 'done', 'done', 'done', 'done', 'running', 'todo']);
+    expect(chainSentence(executing)).toBe('6 of 8 done');
+    // and while it waits at that unit's gate
+    const gated = chainOf(liveView('awaiting_human', (o) => (o < 7 ? 'done' : 'distributed'), 6), f);
+    expect(gated.steps.find((s) => s.id === 'review')?.state).toBe('running');
+    // once the unit is done, the step is done — and the deliver step, which never reaches the bus, is the one running
+    const after = chainOf(liveView('executing', (o) => (o < 8 ? 'done' : 'distributed'), 7), f);
+    expect(after.steps.find((s) => s.id === 'review')?.state).toBe('done');
+    expect(after.steps.find((s) => s.id === 'deliver')?.state).toBe('running');
+    // at a gate before a unit has run (a plan or deliver gate), its todo step is not called running
+    const before = chainOf(liveView('awaiting_human', (o) => (o < 8 ? 'done' : 'distributed'), 7), f);
+    expect(before.steps.find((s) => s.id === 'deliver')?.state).toBe('todo');
+  });
+
   it('#442: a newer proposal than the accepted plan is the chain’s pending plan, in the same words', () => {
     const f = hydrateFold(EMPTY_FOLD, team([
       row('wicked.team.plan.accepted', { plan_rev: 1, steps: [{ catalog: 'understand', id: 'pa-scope' }] }, 600),

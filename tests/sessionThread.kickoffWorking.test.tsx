@@ -117,7 +117,33 @@ describe('the thread shows work in progress', () => {
     const thread = screen.getByTestId('session-thread');
     const all = [...thread.querySelectorAll('[data-testid]')];
     expect(all.slice(all.indexOf(line) + 1).filter((n) => !line.contains(n))).toHaveLength(0);
-    expect(line).toHaveAttribute('aria-live', 'polite');
+    expect(line.querySelector('[aria-live="polite"]')).toHaveTextContent('Working on Build…');
+  });
+  it('rig 0.15.8: the working step is named in the chain\'s word — "Check", never "Verify" beside it', () => {
+    const verify = makeView({ id: 'r1', status: 'executing', problem: PROBLEM, unit_ix: 0, created_at: 1_700_000_000 } as never, [
+      makeUnit({ id: 'r1:verify', session_id: 'r1', ord: 0, status: 'distributed', assigned_cli: 'codex', stage: 'test', description: 'verify — check it' }),
+    ]);
+    page([verify]);
+    expect(screen.getByTestId('session-working')).toHaveTextContent('Working on Check…');
+  });
+  it('a repeated step\'s unit key (`#2`) never shows in its name (pr-xreview #902)', () => {
+    const again = makeView({ id: 'r1', status: 'executing', problem: PROBLEM, unit_ix: 0, created_at: 1_700_000_000 } as never, [
+      makeUnit({ id: 'r1:walkthrough_review#2', session_id: 'r1', ord: 0, status: 'distributed', assigned_cli: 'codex', stage: 'review', description: 'walkthrough_review — again' }),
+    ]);
+    page([again]);
+    expect(screen.getByTestId('session-working-text')).toHaveTextContent('Working on Walkthrough…');
+    expect(screen.getByTestId('session-working-text').textContent).not.toContain('#2');
+  });
+  it('rig 0.15.8: the composer names a working step\'s ⋯ — the row has it, and "Message this step" opens its message box', () => {
+    page([run('executing')]);
+    const line = screen.getByTestId('session-working');
+    expect(line).toHaveAttribute('data-object', 'step:r1:0');
+    fireEvent.click(screen.getByTestId('session-working-menu-button'));
+    const item = screen.getByRole('menuitem', { name: 'Message this step' });
+    fireEvent.click(item);
+    const open = useSheets.getState().open;
+    expect(open?.ref).toEqual({ kind: 'step', runId: 'r1', ord: 0 });
+    expect(open?.compose).toEqual(expect.any(Number));
   });
   it('a finished run, or one Needs you holds, shows no working line', () => {
     page([run('completed', 'done')]);

@@ -166,6 +166,19 @@ describe('the sheets', () => {
     act(() => closeSheet());
   });
 
+  it('rig 0.15.8: "Message this step" opens the step\'s sheet with its message box out', () => {
+    render(<ObjectSheet runs={[RUN]} navigate={() => {}} needCount={0} />);
+    act(() => openSheet({ kind: 'step', runId: 'r1', ord: 1 }));
+    expect(screen.queryByTestId('sheet-message-input')).toBeNull();
+    act(() => openSheet({ kind: 'step', runId: 'r1', ord: 1 }, undefined, { compose: true }));
+    expect(screen.getByTestId('sheet-message-input')).toBeTruthy();
+    // opened plainly again, the step's sheet does not inherit the open box
+    act(() => closeSheet());
+    act(() => openSheet({ kind: 'step', runId: 'r1', ord: 1 }));
+    expect(screen.queryByTestId('sheet-message-input')).toBeNull();
+    act(() => closeSheet());
+  });
+
   it('a helper’s terminal is read-only until you turn typing on', () => {
     render(<ObjectSheet runs={[RUN]} navigate={() => {}} needCount={0} />);
     act(() => openSheet({ kind: 'helper', runId: 'r1', cli: 'codex' }, 'terminal'));

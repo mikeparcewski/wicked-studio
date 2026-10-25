@@ -351,18 +351,42 @@ export function stepAtOrd(c: ChainModel, units: readonly SessionView['units'][nu
   return phase === null ? undefined : c.steps.find((s) => s.id === phase);
 }
 
+/** The unit the run is on — under the cursor while it executes or waits at that unit's gate — when that
+ *  unit has not finished; `null` otherwise. The thread's "Working on …" line reads the same cursor
+ *  (`executingOrd`), so the chain and the thread name the same step. */
+export function cursorUnit(view: Pick<SessionView, 'session' | 'units'>): SessionView['units'][number] | null {
+  const status = view.session.status;
+  if (status !== 'executing' && status !== 'awaiting_human') return null;
+  const ordered = [...view.units].sort((a, b) => a.ord - b.ord);
+  const u = ordered[view.session.unit_ix];
+  return u === undefined || u.status === 'done' ? null : u;
+}
+
 /** studio#445: a team step whose unit the run reports `done` is done, whether or not a
- *  `step.completed` row reached the bus (the deliver Tool unit emits none). Matched by phase id. */
-function withUnitStates(c: ChainModel, units: SessionView['units']): ChainModel {
+ *  `step.completed` row reached the bus (the deliver Tool unit emits none). Matched by phase id.
+ *  And the other way (rig 0.15.8): the bus says a step completed as soon as its worker finishes, but the
+ *  engine then runs the step's checks — the unit is still under the cursor, not done. That step is the
+ *  one in hand, never "done" with the next step "now" (the thread said "Working on Verify" meanwhile). */
+function withUnitStates(c: ChainModel, view: Pick<SessionView, 'session' | 'units'>): ChainModel {
   if (c.proposed) return c;
   const done = new Set<string>();
-  for (const u of units) {
+  for (const u of view.units) {
     const phase = unitPhaseId(u);
     if (u.status === 'done' && phase !== null) done.add(phase);
   }
-  if (done.size === 0) return c;
+  const cursor = cursorUnit(view);
+  const inHand = cursor === null ? null : unitPhaseId(cursor);
+  if (done.size === 0 && inHand === null) return c;
   let changed = false;
+  const executing = view.session.status === 'executing';
   const steps = c.steps.map((s) => {
+    // The step in hand is never done (another unit of the same phase finishing does not make it so), and
+    // while the run executes it is the one running even when the bus has not said "claimed" (a Tool unit
+    // such as deliver never does). At a gate the unit may not have started: a todo step stays todo there.
+    if (s.id === inHand) {
+      if (s.state === 'done' || s.state === 'checked' || (executing && s.state === 'todo')) { changed = true; return { ...s, state: 'running' as const }; }
+      return s;
+    }
     if ((s.state === 'todo' || s.state === 'running') && done.has(s.id)) { changed = true; return { ...s, state: 'done' as const }; }
     return s;
   });
@@ -374,9 +398,9 @@ export function chainOf(view: SessionView, fold: TeamFold | null, opts: ChainOpt
   if (fold !== null && fold.snapshot !== null && fold.snapshot.teamed) {
     const c = chainFromTeam(fold, opts);
     // A team run whose plan has not reached the bus yet still shows its units, never an empty line.
-    return c.steps.length === 0 && c.transportLine === null && view.units.length > 0 ? chainFromUnits(view, opts) : withUnitStates(c, view.units);
+    return c.steps.length === 0 && c.transportLine === null && view.units.length > 0 ? chainFromUnits(view, opts) : withUnitStates(c, view);
   }
-  if (fold !== null && fold.snapshot === null && fold.rows.length > 0) return withUnitStates(chainFromTeam(fold, opts), view.units);
+  if (fold !== null && fold.snapshot === null && fold.rows.length > 0) return withUnitStates(chainFromTeam(fold, opts), view);
   return chainFromUnits(view, opts);
 }
 
