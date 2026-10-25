@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { forgetAskSession, readAskSession, writeAskSession } from './askSession.js';
+import { chatChoices, forgetAskSession, readAskSession, writeAskSession } from './askSession.js';
 import { useCapabilities } from './capabilities.js';
 import { useChatWindow } from './chatWindow.js';
 
@@ -80,6 +80,24 @@ export function endSystemChat(): void {
  * the dock remounts to resume it; it replays from the kept history, an ended chat read-only.
  */
 export function reopenSystemChat(entry: { id: string; title: string; cli: string | null }): void {
-  writeAskSession({ chatId: entry.id, title: entry.title, seeded: true, ...(entry.cli !== null ? { cli: entry.cli } : {}) });
+  // What this browser remembers of the chat's choices comes back with it; with no record, nothing is
+  // claimed as chosen (the dock starts every chip off) and the next message carries a fresh pack.
+  const known = chatChoices(entry.id);
+  writeAskSession({
+    chatId: entry.id, title: entry.title, seeded: true,
+    ...(entry.cli !== null ? { cli: entry.cli } : {}),
+    ...(known !== null ? known : { chipsUnknown: true as const }),
+  });
   useAskDock.getState().open({});
+}
+
+/**
+ * End a live chat for good from a list (Everything › live chats' End): the close route first, which
+ * keeps its history; DELETE only where that route does not exist (404 — an older crew, where DELETE is
+ * the only end there is). Never decided on a capability read that has not answered.
+ */
+export async function endChatKeepingHistory(chatId: string): Promise<void> {
+  const { api } = await import('../api/client.js');
+  const { apiStatus } = await import('../api/errors.js');
+  await api.endChat(chatId).catch((e: unknown) => (apiStatus(e) === 404 ? api.closeChat(chatId) : Promise.reject(e)));
 }

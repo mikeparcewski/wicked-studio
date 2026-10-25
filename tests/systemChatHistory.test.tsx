@@ -45,6 +45,7 @@ const { useProjectsStore } = await import('../src/store/projects.js');
 const { endSystemChat, useAskDock } = await import('../src/store/askDock.js');
 const { readAskSession, writeAskSession } = await import('../src/store/askSession.js');
 const { resetChatWindow, useChatWindow } = await import('../src/store/chatWindow.js');
+const { ApiError } = await import('../src/api/errors.js');
 
 const ROSTER = [{ key: 'claude', display_name: 'Claude Code', binary: 'claude', enabled_for_council: true }] as unknown as RosterSeat[];
 const ENTRY = (id: string, status: 'open' | 'closed', title = 'why is it held?') => ({
@@ -194,7 +195,7 @@ describe('upload (chatAttachments)', () => {
   it('a pasted screenshot and a dropped file attach too', async () => {
     dock();
     const input = screen.getByTestId('assist-input');
-    fireEvent.paste(input, { clipboardData: { files: [file('image.png', 'image/png')] } });
+    fireEvent.paste(input, { clipboardData: { files: [file('image.png', 'image/png')], getData: () => '' } });
     expect(screen.getAllByTestId('assist-file-chip')[0]).toHaveTextContent(/pasted-\d{6}\.png/);
     fireEvent.drop(screen.getByTestId('assist-dock'), { dataTransfer: { files: [file('trace.pdf', 'application/pdf')] } });
     expect(screen.getAllByTestId('assist-file-chip').map((c) => c.textContent)).toEqual([expect.stringMatching(/pasted-/), '📎 trace.pdf×']);
@@ -209,5 +210,129 @@ describe('upload (chatAttachments)', () => {
     await waitFor(() => expect(screen.getAllByTestId('assist-note').some((n) => /huge\.png is 11 MB; one file can be at most 10 MB/.test(n.textContent ?? ''))).toBe(true));
     expect(openChat).not.toHaveBeenCalled();
     expect(uploadChatAttachments).not.toHaveBeenCalled();
+  });
+});
+
+describe('review round 1 (codex, agy) on part 2', () => {
+  const file = (name: string, type: string, body = 'x'): File => new File([body], name, { type });
+
+  it('Everything\'s End keeps history: the close route first, DELETE only where it does not exist (codex #1)', async () => {
+    const { endChatKeepingHistory } = await import('../src/store/askDock.js');
+    endChat.mockResolvedValueOnce({ ok: true });
+    await endChatKeepingHistory('c-1');
+    expect(closeChat).not.toHaveBeenCalled();
+    endChat.mockRejectedValueOnce(new ApiError(404, 'Not Found'));
+    closeChat.mockResolvedValueOnce({ ok: true });
+    await endChatKeepingHistory('c-2');
+    expect(closeChat).toHaveBeenCalledWith('c-2');
+    endChat.mockRejectedValueOnce(new ApiError(500, 'boom'));
+    await expect(endChatKeepingHistory('c-3')).rejects.toThrow('boom');
+    expect(closeChat).toHaveBeenCalledTimes(1);
+  });
+
+  it('a past chat reopened in this browser gets its own chips back; one never seen here claims nothing (codex #2)', async () => {
+    const { reopenSystemChat } = await import('../src/store/askDock.js');
+    const user = userEvent.setup();
+    // A chat opened here with This page and All repos OFF and Memory on.
+    dock('/');
+    await user.click(screen.getAllByTestId('chat-scope-chip').find((c) => c.getAttribute('data-key') === 'page')!);
+    await user.click(screen.getAllByTestId('chat-scope-chip').find((c) => c.getAttribute('data-key') === 'all-repos')!);
+    await user.click(screen.getAllByTestId('chat-scope-chip').find((c) => c.getAttribute('data-key') === 'memory')!);
+    await user.type(screen.getByTestId('assist-input'), 'first');
+    await user.click(screen.getByTestId('assist-send'));
+    await waitFor(() => expect(sendChatMessage).toHaveBeenCalledTimes(1));
+    const id = (openChat.mock.calls[0]![0] as ChatOpenBody).chatId!;
+    cleanup();
+    sessionStorage.clear();
+    reopenSystemChat({ id, title: 'first', cli: 'claude' });
+    getChatMessages.mockResolvedValue({ chat: ENTRY(id, 'open'), messages: [], attachments: [] });
+    dock('/');
+    const on = (): string[] => screen.getAllByTestId('chat-scope-chip').filter((c) => c.getAttribute('aria-pressed') === 'true').map((c) => c.getAttribute('data-key')!);
+    expect(on()).toEqual(['memory']);
+    cleanup();
+    // Never seen in this browser: every chip off, and the next message claims nothing as chosen.
+    reopenSystemChat({ id: 'elsewhere-1', title: 'from another browser', cli: 'claude' });
+    getChatMessages.mockResolvedValue({ chat: ENTRY('elsewhere-1', 'open'), messages: [], attachments: [] });
+    dock('/');
+    expect(on()).toEqual([]);
+    await user.type(screen.getByTestId('assist-input'), 'and?');
+    await user.click(screen.getByTestId('assist-send'));
+    await waitFor(() => expect(sendChatMessage).toHaveBeenCalledTimes(2));
+    expect(sendChatMessage.mock.calls[1]![0]).toBe('elsewhere-1');
+    expect(sendChatMessage.mock.calls[1]![1]).toContain('can see (chosen by the user): nothing beyond this message');
+    expect(sendChatMessage.mock.calls[1]![1]).not.toContain('where:');
+  });
+
+  it('Close while the first open is in flight ends that chat and sends nothing into it (codex #3)', async () => {
+    let release: (v: unknown) => void = () => undefined;
+    openChat.mockImplementationOnce((body: ChatOpenBody) => new Promise((r) => { release = () => r({ chatId: body.chatId, seats: [{ cliKey: 'claude', ok: true }] }); }));
+    const user = userEvent.setup();
+    dock();
+    await user.type(screen.getByTestId('assist-input'), 'hi');
+    await user.click(screen.getByTestId('assist-send'));
+    await waitFor(() => expect(openChat).toHaveBeenCalledTimes(1));
+    endSystemChat();
+    await act(async () => { release(undefined); await Promise.resolve(); });
+    const id = (openChat.mock.calls[0]![0] as ChatOpenBody).chatId!;
+    await waitFor(() => expect(endChat).toHaveBeenCalledWith(id));
+    expect(sendChatMessage).not.toHaveBeenCalled();
+    expect(uploadChatAttachments).not.toHaveBeenCalled();
+    expect(readAskSession()).toBeNull();
+  });
+
+  it('a file attached while a send is in flight stays for the next one; two files with one name and size are both kept (codex #4, #5)', async () => {
+    let release: (v: unknown) => void = () => undefined;
+    sendChatMessage.mockImplementationOnce(() => new Promise((r) => { release = r; }));
+    uploadChatAttachments.mockResolvedValue({ attachments: [{ id: 'att-1', name: 'a.txt' }], limits: {} });
+    const user = userEvent.setup({ applyAccept: false });
+    dock();
+    await user.upload(screen.getByTestId('assist-attach'), [file('notes.txt', 'text/plain', 'AAAA')]);
+    await user.upload(screen.getByTestId('assist-attach'), [file('notes.txt', 'text/plain', 'BBBB')]);
+    expect(screen.getAllByTestId('assist-file-chip').map((c) => c.textContent)).toEqual(['📎 notes.txt×', '📎 notes-2.txt×']);
+    await user.type(screen.getByTestId('assist-input'), 'read these');
+    await user.click(screen.getByTestId('assist-send'));
+    await waitFor(() => expect(sendChatMessage).toHaveBeenCalledTimes(1));
+    expect((uploadChatAttachments.mock.calls[0]![1] as File[]).length).toBe(2);
+    fireEvent.drop(screen.getByTestId('assist-dock'), { dataTransfer: { files: [file('later.pdf', 'application/pdf')] } });
+    await act(async () => { release({ seats: ['claude'] }); await Promise.resolve(); });
+    await waitFor(() => expect(screen.getAllByTestId('assist-file-chip').map((c) => c.textContent)).toEqual(['📎 later.pdf×']));
+  });
+
+  it('pasted words with a preview image still type; a pasted screenshot alone attaches (agy #3)', () => {
+    dock();
+    const input = screen.getByTestId('assist-input');
+    fireEvent.paste(input, { clipboardData: { files: [file('image.png', 'image/png')], getData: (t: string) => (t === 'text/plain' ? 'Q3 revenue' : '') } });
+    expect(screen.queryByTestId('assist-file-chip')).toBeNull();
+    fireEvent.paste(input, { clipboardData: { files: [file('image.png', 'image/png')], getData: () => '' } });
+    expect(screen.getAllByTestId('assist-file-chip')).toHaveLength(1);
+  });
+
+  it('a past chat whose history replays but whose seats are gone has ENDED: the transcript stays (agy #1)', async () => {
+    writeAskSession({ chatId: 'c-7', title: 'q', seeded: true });
+    getChatMessages.mockResolvedValue({ chat: ENTRY('c-7', 'open'), messages: [{ at: 1, turnId: 't', kind: 'user', text: 'q', seats: [] }], attachments: [] });
+    getChat.mockResolvedValue({ chatId: 'c-7', seats: [] });
+    dock();
+    await waitFor(() => expect(screen.getAllByTestId('assist-note').some((n) => /This chat has ended/.test(n.textContent ?? ''))).toBe(true));
+    expect(screen.getAllByTestId('assist-chat-msg')).toHaveLength(1);
+  });
+
+  it('a history read that fails (not 404) says it could not tell and keeps the session (agy #1)', async () => {
+    writeAskSession({ chatId: 'c-8', title: 'q', seeded: true });
+    getChatMessages.mockRejectedValue(new ApiError(503, 'store busy'));
+    dock();
+    await waitFor(() => expect(screen.getAllByTestId('assist-note').some((n) => /Could not check your earlier session/.test(n.textContent ?? ''))).toBe(true));
+    expect(getChat).not.toHaveBeenCalled();
+    expect(readAskSession()?.chatId).toBe('c-8');
+  });
+
+  it('a crew refusal of an upload reads in crew\'s own words (agy #6)', async () => {
+    uploadChatAttachments.mockRejectedValue(new ApiError(415, 'unsupported media type', { error: 'trace.bin is not an image, UTF-8 text or a pdf', code: 'attachment_type' }));
+    const user = userEvent.setup({ applyAccept: false });
+    dock();
+    await user.upload(screen.getByTestId('assist-attach'), [file('trace.txt', 'text/plain')]);
+    await user.type(screen.getByTestId('assist-input'), 'look');
+    await user.click(screen.getByTestId('assist-send'));
+    await waitFor(() => expect(screen.getAllByTestId('assist-note').some((n) => (n.textContent ?? '').includes('The upload was refused — trace.bin is not an image, UTF-8 text or a pdf'))).toBe(true));
+    expect(sendChatMessage).not.toHaveBeenCalled();
   });
 });

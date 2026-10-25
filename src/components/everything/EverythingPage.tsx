@@ -16,6 +16,7 @@ import { useBoardModel } from '../../hooks/useBoardModel.js';
 import { projectDetailPath, type Navigate } from '../../hooks/useRoute.js';
 import { projectTestsPath as testsPath } from '../../api/testing.js';
 import { useCapabilities } from '../../store/capabilities.js';
+import { endChatKeepingHistory } from '../../store/askDock.js';
 import { useDocsCache } from '../../store/docsCache.js';
 import { useNeedsSources } from '../../store/needsSources.js';
 import { useLiveChatsStore } from '../../store/liveChats.js';
@@ -657,9 +658,8 @@ function LiveChats({ known, go }: { known: ReadonlySet<string>; go: Go }): React
   const live = useLiveChatsStore((s) => s.sessions);
   const retired = useLiveChatsStore((s) => s.retired);
   const end = (id: string): void => {
-    // On a crew that keeps chat history (`chatList`), DELETE also deletes it: End uses the close route,
-    // so an ended chat stays in the system chat's past chats.
-    void (useCapabilities.getState().chatList ? api.endChat(id) : api.closeChat(id))
+    // On a crew that keeps chat history, DELETE also deletes it: End keeps it (`endChatKeepingHistory`).
+    void endChatKeepingHistory(id)
       .then(() => {
         const cur = useNeedsSources.getState().chats;
         if (cur !== null) useNeedsSources.getState().depositChats(cur.filter((c) => c.chatId !== id));

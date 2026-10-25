@@ -5,7 +5,7 @@ import { getDiagnostics, isDiagnosticsUnsupported } from '../api/diagnostics.js'
 import type { ChatOpenBody, ChatScope, RepoEntry, RosterSeat, SessionView } from '../api/types.js';
 import { needsYouRows } from '../board/needsYou.js';
 import { useFailureClocks } from '../store/failureClocks.js';
-import { forgetAskSession, readAskSession, writeAskSession, type AskSession } from '../store/askSession.js';
+import { forgetAskSession, readAskSession, rememberChatChoices, writeAskSession, type AskSession } from '../store/askSession.js';
 import { useGateStore } from '../store/gates.js';
 import { useLiveChatsStore } from '../store/liveChats.js';
 import { useMembershipStore } from '../store/membership.js';
@@ -125,7 +125,8 @@ export const OLDER_CREW_NOTE = 'Past chats and file uploads need a newer wicked-
  *  seat cannot read (images, UTF-8 text and pdfs). The daemon still decides. */
 export function checkUpload(files: readonly File[], limits = CHAT_ATTACHMENT_LIMITS): void {
   if (files.length > limits.maxFiles) throw new Error(`Attach at most ${limits.maxFiles} files to one message (${files.length} attached).`);
-  const mb = (n: number): string => `${Math.round((n / (1024 * 1024)) * 10) / 10} MB`;
+  // Rounded UP, so a file just over a limit never reads as exactly the limit.
+  const mb = (n: number): string => `${Math.ceil((n / (1024 * 1024)) * 10) / 10} MB`;
   const big = files.find((f) => f.size > limits.maxFileBytes);
   if (big !== undefined) throw new Error(`${big.name} is ${mb(big.size)}; one file can be at most ${mb(limits.maxFileBytes)}.`);
   const total = files.reduce((n, f) => n + f.size, 0);
@@ -303,6 +304,9 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
   const startProject = sendProjectId ?? startProjectId;
   const [chipEdits, setChipEdits] = useState<ScopeChip[] | null>(() => {
     if (resumed?.chips !== undefined && resumed.chips.length > 0) return resumed.chips;
+    // A past chat reopened from history whose choices this browser never saw: nothing is claimed as
+    // chosen — every chip starts off, and the user turns on what the chat may see now.
+    if (resumed?.chipsUnknown === true) return defaultScopeChips(ctx).map((c) => ({ ...c, on: false }));
     if (startProject === undefined || startProject === ctx.project?.id) return null;
     const name = useProjectsStore.getState().projects.find((p) => p.id === startProject)?.name ?? startProject;
     return defaultScopeChips({ project: { id: startProject, name }, repo: ctx.repo });
@@ -357,6 +361,12 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
    *  the last pack that LANDED (what the chat has actually been told). Never after Close ended it. */
   const persist = useCallback((id: string) => {
     if (ended()) return;
+    rememberChatChoices(id, {
+      chips: chipsRef.current, ...scopeField(scopeRef.current),
+      ...(cliRef.current !== null ? { cli: cliRef.current } : {}),
+      ...(lastPackRef.current !== null ? { packSig: lastPackRef.current } : {}),
+      ...(diagSentRef.current ? { diagSent: true } : {}),
+    });
     writeAskSession({
       chatId: id, title: titleRef.current, seeded: seededRef.current, ...scopeField(scopeRef.current),
       chips: chipsRef.current,
@@ -406,6 +416,7 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
           try {
             const out = withPack(text);
             const ids = await upload(id, files);
+            if (ended()) throw new Error('This chat was closed; nothing was sent.');
             deposit(id, text, await (ids === undefined ? api.sendChatMessage(id, out.message) : api.sendChatMessage(id, out.message, undefined, ids)).catch(plainSendRefusal(id)));
             packLanded(id, out);
             stepAside(id);
@@ -474,6 +485,12 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
             const { seats: warmed, scope } = await api.openChat(body).catch((e: unknown) => {
               throw new Error(describeChatOpenRefusal(apiStatus(e), apiWire(e), e instanceof Error ? e.message : String(e)));
             });
+            // Closed while the open was in flight: end the chat it opened (keeping its history) and send
+            // nothing into it.
+            if (ended()) {
+              if (useCapabilities.getState().chatList) void api.endChat(id).catch(() => undefined);
+              throw new Error('This chat was closed before it opened; nothing was sent.');
+            }
             const ready = warmed.filter((s) => s.ok).map((s) => s.cliKey);
             if (ready.length === 0) {
               const detail =
@@ -505,6 +522,7 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
         }
         const out = withPack(text);
         const ids = await upload(id, files);
+        if (ended()) throw new Error('This chat was closed; nothing was sent.');
         deposit(id, text, await (ids === undefined ? api.sendChatMessage(id, out.message) : api.sendChatMessage(id, out.message, undefined, ids)).catch(plainSendRefusal(id)));
         packLanded(id, out);
         stepAside(id);

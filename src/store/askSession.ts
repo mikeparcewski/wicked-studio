@@ -34,6 +34,8 @@ export interface AskSession {
   packSig?: string;
   /** The diagnostics have ridden a pack that landed (they ride the first one carrying This page). */
   diagSent?: boolean;
+  /** Reopened from past chats with no record of its choices in this browser: no chip is claimed. */
+  chipsUnknown?: true;
 }
 
 export const ASK_SESSION_KEY = 'wicked.ask.session';
@@ -53,6 +55,7 @@ export function readAskSession(): AskSession | null {
       ...(typeof parsed.cli === 'string' && parsed.cli !== '' ? { cli: parsed.cli } : {}),
       ...(typeof parsed.packSig === 'string' ? { packSig: parsed.packSig } : {}),
       ...(parsed.diagSent === true ? { diagSent: true } : {}),
+      ...(parsed.chipsUnknown === true ? { chipsUnknown: true as const } : {}),
     };
   } catch {
     return null;
@@ -88,4 +91,48 @@ function isChip(v: unknown): v is ScopeChip {
   const c = v as Partial<ScopeChip> | null;
   return c !== null && typeof c === 'object' && typeof c.key === 'string' && typeof c.kind === 'string'
     && typeof c.label === 'string' && typeof c.on === 'boolean';
+}
+
+// ── Per-chat choices (DES-SYSTEM-CHAT §4): a past chat reopened in this browser gets back what the user
+// chose for it — its chips, resolved scope, CLI and what its last pack carried — not today's defaults.
+
+export const CHAT_CHOICES_KEY = 'wicked.chat.choices.v1';
+const CHOICES_CAP = 50;
+
+export type ChatChoices = Pick<AskSession, 'chips' | 'scope' | 'cli' | 'packSig' | 'diagSent'>;
+
+function readChoices(): Record<string, ChatChoices & { at: number }> {
+  try {
+    const raw = localStorage.getItem(CHAT_CHOICES_KEY);
+    const parsed: unknown = raw ? JSON.parse(raw) : {};
+    return parsed !== null && typeof parsed === 'object' ? parsed as Record<string, ChatChoices & { at: number }> : {};
+  } catch {
+    return {};
+  }
+}
+
+/** Remember one chat's choices (the newest 50 chats are kept). */
+export function rememberChatChoices(chatId: string, choices: ChatChoices): void {
+  try {
+    const all = readChoices();
+    all[chatId] = { ...choices, at: Date.now() };
+    const keep = Object.entries(all).sort((a, b) => (b[1].at ?? 0) - (a[1].at ?? 0)).slice(0, CHOICES_CAP);
+    localStorage.setItem(CHAT_CHOICES_KEY, JSON.stringify(Object.fromEntries(keep)));
+  } catch {
+    /* storage unavailable: a reopened chat starts with nothing claimed */
+  }
+}
+
+/** One chat's remembered choices, or `null` when this browser never saw them. */
+export function chatChoices(chatId: string): ChatChoices | null {
+  const hit = readChoices()[chatId];
+  if (hit === undefined) return null;
+  const chips = Array.isArray(hit.chips) ? hit.chips.filter(isChip) : undefined;
+  return {
+    ...(chips !== undefined ? { chips } : {}),
+    ...(isChatScope(hit.scope) ? { scope: hit.scope } : {}),
+    ...(typeof hit.cli === 'string' ? { cli: hit.cli } : {}),
+    ...(typeof hit.packSig === 'string' ? { packSig: hit.packSig } : {}),
+    ...(hit.diagSent === true ? { diagSent: true } : {}),
+  };
 }

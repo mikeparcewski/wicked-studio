@@ -1,6 +1,7 @@
 import { ExternalLink, Paperclip } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client.js';
+import { apiStatus } from '../api/errors.js';
 import { executingOrd } from '../api/run-state.js';
 import type { CoreEvent, SessionView } from '../api/types.js';
 import { useEventStream } from '../hooks/useEventStream.js';
@@ -320,8 +321,9 @@ function DockChat({ chatId, resumed = false, onResumeProbe, onStatus, answerFoot
     let cancelled = false;
     const footed = (records: readonly unknown[]): DockChatMsg[] =>
       replayDockTranscript(records).map((m) => (m.cliKey !== 'you' && m.ok ? { ...m, foot: footRef.current?.(m.cliKey, true) ?? null } : m));
+    // No history for the id (404) falls back to the live probe; any other failure is "could not tell".
     const history = resumed && loadHistoryRef.current !== undefined
-      ? loadHistoryRef.current(chatId).catch(() => null)
+      ? loadHistoryRef.current(chatId).catch((e: unknown) => (apiStatus(e) === 404 ? null : Promise.reject(e)))
       : Promise.resolve(null);
     let replayedFromHistory = false;
     void history
@@ -342,7 +344,9 @@ function DockChat({ chatId, resumed = false, onResumeProbe, onStatus, answerFoot
         // the retired chat page's rejoin rule: ONLY a 200 with no seats means reclaimed — a resumed
         // block must not keep presenting a session the daemon no longer holds.
         if (resumed && warm.length === 0) {
-          onResumeProbeRef.current?.({ kind: 'gone' });
+          // A chat replayed from its kept history that no longer holds seats has ENDED: its transcript
+          // stays on screen, read-only — never wiped as if it were gone.
+          onResumeProbeRef.current?.({ kind: replayedFromHistory ? 'ended' : 'gone' });
           return;
         }
         setSeats((prev) => ({
@@ -586,8 +590,10 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
   );
   const [text, setText] = useState(initialText);
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
-  /** File mode: the files the next send uploads (removable chips above the input). */
-  const [files, setFiles] = useState<File[]>([]);
+  /** File mode: the files the next send uploads (removable chips above the input). Each has its own id:
+   *  two different files may share a name and a size. */
+  const [files, setFiles] = useState<Array<{ id: number; file: File }>>([]);
+  const fileSeq = useRef(0);
   const [sending, setSending] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -654,7 +660,17 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
       const named = picked.map((f, i) => (/^image\.(png|jpe?g|gif|webp)$/i.test(f.name)
         ? new File([f], `pasted-${new Date().toISOString().slice(11, 19).replace(/:/g, '')}${picked.length > 1 ? `-${i + 1}` : ''}.${f.name.split('.').pop()}`, { type: f.type })
         : f));
-      setFiles((cur) => [...cur, ...named.filter((f) => !cur.some((c) => c.name === f.name && c.size === f.size))]);
+      setFiles((cur) => {
+        // Two pastes in one second must not read the same: a clash gets the next free "-2", "-3"…
+        const taken = new Set(cur.map((c) => c.file.name));
+        const fresh = named.map((file) => {
+          let name = file.name;
+          for (let n = 2; taken.has(name); n += 1) name = file.name.replace(/(\.[^.]+)?$/, `-${n}$1`);
+          taken.add(name);
+          return { id: (fileSeq.current += 1), file: name === file.name ? file : new File([file], name, { type: file.type }) };
+        });
+        return [...cur, ...fresh];
+      });
       return;
     }
     for (const f of picked) {
@@ -695,7 +711,9 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
     // An attachment still sitting at the fork when the operator hits send rides as analysis —
     // they attached it and asked; silently dropping it would run a different request.
     const documents = attachments.map((a) => ({ name: a.name, content: a.content }));
-    const sentFiles = files;
+    // Snapshot what this send carries: a file attached while it is in flight waits for the next one.
+    const sentEntries = files;
+    const sentFiles = sentEntries.map((f) => f.file);
     const fileNames = [...documents.map((d) => d.name), ...sentFiles.map((f) => f.name)];
     try {
       // Files ride only in file mode (the system chat); every other surface keeps its two-argument send.
@@ -714,7 +732,7 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
       }
       setText('');
       setAttachments([]);
-      setFiles([]);
+      setFiles((cur) => cur.filter((f) => !sentEntries.includes(f)));
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       push({ kind: 'user', text: body, files: fileNames });
@@ -986,10 +1004,10 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
 
       {fileMode && files.length > 0 && (
         <div data-testid="assist-files" className="flex shrink-0 flex-wrap gap-1.5 px-3 pt-2">
-          {files.map((f) => (
-            <span key={`${f.name}-${f.size}`} data-testid="assist-file-chip" className="wk-chatscope-chip wk-chatscope-chip--on" title={`${f.name} · ${Math.max(1, Math.round(f.size / 1024))} KB`}>
+          {files.map(({ id, file: f }) => (
+            <span key={id} data-testid="assist-file-chip" className="wk-chatscope-chip wk-chatscope-chip--on" title={`${f.name} · ${Math.max(1, Math.round(f.size / 1024))} KB`}>
               📎 <span className="wk-assist-file-name">{f.name}</span>
-              <button type="button" aria-label={`Remove ${f.name}`} data-testid="assist-file-remove" className="wk-assist-file-x" onClick={() => setFiles((cur) => cur.filter((x) => x !== f))}>×</button>
+              <button type="button" aria-label={`Remove ${f.name}`} data-testid="assist-file-remove" className="wk-assist-file-x" onClick={() => setFiles((cur) => cur.filter((x) => x.id !== id))}>×</button>
             </span>
           ))}
         </div>
@@ -1039,10 +1057,11 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
             rows={1}
             disabled={sending}
             onChange={(e) => setText(e.target.value)}
-            onPaste={allowAttach ? (e) => {
-              // A pasted screenshot (or any file) attaches; pasted words still type.
+            onPaste={allowAttach && fileMode ? (e) => {
+              // A pasted screenshot (or any file) attaches. Pasted WORDS always type: rich text from an
+              // office app carries a preview image too, and that image is not what the user pasted.
               const pasted = Array.from(e.clipboardData?.files ?? []);
-              if (pasted.length === 0) return;
+              if (pasted.length === 0 || (e.clipboardData?.getData('text/plain') ?? '') !== '') return;
               e.preventDefault();
               onFiles(pasted);
             } : undefined}
