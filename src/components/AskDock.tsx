@@ -33,12 +33,15 @@ import { addChip, chipsOpenFields, chipsScoped, chipsSignature, chosenChips, cli
 import { cliOptions, defaultChatCli, saveChatCli } from '../board/chatCli.js';
 import { cliName, pageContext, pagePlaceholder, pagePrompts } from '../board/pagePrompts.js';
 import { jobTitle } from '../board/deskWords.js';
-import { systemChatEpoch } from '../store/askDock.js';
+import { reopenSystemChat, systemChatEpoch } from '../store/askDock.js';
 import { useChatWindow } from '../store/chatWindow.js';
 import { useDocsCache } from '../store/docsCache.js';
 import { useChatChrome } from './chat/ChatWindow.js';
 import { ChatCliPicker } from './chat/ChatCliPicker.js';
 import { ChatScopeChips, type ScopeCandidate } from './chat/ChatScopeChips.js';
+import { ChatHistoryRail } from './chat/ChatHistoryRail.js';
+import { History } from 'lucide-react';
+import { CHAT_ATTACHMENT_LIMITS, type ChatAttachmentError, type ChatStartedOn } from '../api/chatHistory-wire.js';
 
 /**
  * ASK — the app-wide binding of the ASSIST DOCK (DES-ASSIST-DOCK §5: "the dock becomes
@@ -117,6 +120,30 @@ const RUN_WORDS: Record<string, string> = {
 
 /** The one line an older crew gets in place of past chats and uploads (DES-SYSTEM-CHAT §9). */
 export const OLDER_CREW_NOTE = 'Past chats and file uploads need a newer wicked-crew.';
+
+/** Refuse an upload crew would refuse, before anything is opened: too many, too big, or a type the
+ *  seat cannot read (images, UTF-8 text and pdfs). The daemon still decides. */
+export function checkUpload(files: readonly File[], limits = CHAT_ATTACHMENT_LIMITS): void {
+  if (files.length > limits.maxFiles) throw new Error(`Attach at most ${limits.maxFiles} files to one message (${files.length} attached).`);
+  const mb = (n: number): string => `${Math.round((n / (1024 * 1024)) * 10) / 10} MB`;
+  const big = files.find((f) => f.size > limits.maxFileBytes);
+  if (big !== undefined) throw new Error(`${big.name} is ${mb(big.size)}; one file can be at most ${mb(limits.maxFileBytes)}.`);
+  const total = files.reduce((n, f) => n + f.size, 0);
+  if (total > limits.maxMessageBytes) throw new Error(`These files come to ${mb(total)}; one message can carry at most ${mb(limits.maxMessageBytes)}.`);
+  const readable = (t: string): boolean => /^image\/(png|jpeg|gif|webp)$/.test(t) || t.startsWith('text/') || t === 'application/pdf';
+  const odd = files.find((f) => f.type !== '' && !readable(f.type));
+  if (odd !== undefined) throw new Error(`${odd.name} can't be read by the chat: attach an image, a text file or a pdf.`);
+}
+
+/** Upload a message's files to its chat; their ids ride the send. A refusal reads in crew's words. */
+async function upload(chatId: string, files: readonly File[]): Promise<string[] | undefined> {
+  if (files.length === 0) return undefined;
+  const res = await api.uploadChatAttachments(chatId, files).catch((e: unknown) => {
+    const body = e instanceof ApiError && typeof e.body === 'object' && e.body !== null ? (e.body as Partial<ChatAttachmentError>) : null;
+    throw new Error(typeof body?.error === 'string' && body.error !== '' ? `The upload was refused — ${body.error}` : `The upload failed — ${e instanceof Error ? e.message : String(e)}`);
+  });
+  return res.attachments.map((a) => a.id);
+}
 
 /** The footer under a landed answer: who answered and how many chosen sources it could see. */
 export function answerFooterWords(cli: string, sources: number): string {
@@ -371,12 +398,15 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
 
   const verbs: AssistVerbs = useMemo(
     () => ({
-      send: async (text) => {
+      send: async (text, _documents, files = []) => {
+        // Uploads (DES-SYSTEM-CHAT §8) are checked against crew's caps before anything is opened.
+        if (files.length > 0) checkUpload(files);
         let id = chatIdRef.current;
         if (id !== null && resumed !== null && id === resumed.chatId) {
           try {
             const out = withPack(text);
-            deposit(id, text, await api.sendChatMessage(id, out.message).catch(plainSendRefusal(id)));
+            const ids = await upload(id, files);
+            deposit(id, text, await (ids === undefined ? api.sendChatMessage(id, out.message) : api.sendChatMessage(id, out.message, undefined, ids)).catch(plainSendRefusal(id)));
             packLanded(id, out);
             stepAside(id);
             return { chatId: id };
@@ -435,7 +465,9 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
             const seats = askPath ? [pick, ...chosenSeats(eligible, dropped, picked).filter((k) => k !== pick)] : [pick];
             // A failed open keeps the page's id for the retry; only a chat the daemon opened spends it.
             id = openIdRef.current ?? crypto.randomUUID();
-            const body: ChatOpenBody = { chatId: id, ...chipsOpenFields(chosen, ambientProjectId(packInputs.current.pathname)), clis: seats };
+            const body: ChatOpenBody & { startedOn?: ChatStartedOn } = { chatId: id, ...chipsOpenFields(chosen, ambientProjectId(packInputs.current.pathname)), clis: seats };
+            // The page it started on, for past chats (`chatList` only: an older crew's strict schema refuses it).
+            if (useCapabilities.getState().chatList) body.startedOn = { route: packInputs.current.pathname, label: packInputs.current.pageLabel };
             if (askPath) body.primary = pick;
             // A refused open reads as the retired chat page's does (codex on #327): a pre-0.39.0 daemon's
             // "unknown field `scopeKind`" names the upgrade, never the raw wire.
@@ -472,7 +504,8 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
           }
         }
         const out = withPack(text);
-        deposit(id, text, await api.sendChatMessage(id, out.message).catch(plainSendRefusal(id)));
+        const ids = await upload(id, files);
+        deposit(id, text, await (ids === undefined ? api.sendChatMessage(id, out.message) : api.sendChatMessage(id, out.message, undefined, ids)).catch(plainSendRefusal(id)));
         packLanded(id, out);
         stepAside(id);
         return { chatId: id };
@@ -507,11 +540,21 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
   }, [projects, repos, runs, docsByProject]);
 
   const locked = openedScope !== undefined;
-  const answerFooter = useCallback((key: string) => answerFooterWords(cliName(key, getCachedRoster()), sentSourcesRef.current), []);
+  // A replayed answer says who answered; how much it saw is not on record, so it is not claimed.
+  const answerFooter = useCallback((key: string, replayed?: boolean) => (replayed === true
+    ? `Answered by ${cliName(key, getCachedRoster())}`
+    : answerFooterWords(cliName(key, getCachedRoster()), sentSourcesRef.current)), []);
   const onStatus = useCallback((s: 'ready' | 'thinking' | 'answered') => { useChatWindow.getState().setStatus(s); }, []);
 
   const resolvedScope = openedScope === undefined ? '' : describeResolvedScope(openedScope, { projects });
-  const olderCrew = capsLoaded && (!chatList || !chatAttachments);
+  const notice = !capsLoaded ? undefined
+    : !chatList && !chatAttachments ? OLDER_CREW_NOTE
+      : !chatList ? 'Past chats need a newer wicked-crew.'
+        : !chatAttachments ? 'File uploads need a newer wicked-crew.' : undefined;
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const loadHistory = useMemo(() => (chatList
+    ? (id: string) => api.getChatMessages(id).then((r) => ({ records: r.messages, closed: r.chat.status === 'closed' }))
+    : undefined), [chatList]);
 
   const picker = (
     <ChatCliPicker
@@ -524,84 +567,108 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
   );
 
   return (
-    <AssistDock
-      context={{
-        surface: 'ask',
-        title: 'Chat',
-        contextLabel: resolvedScope === '' ? `Seeing: ${ctx.label}` : `Seeing: ${ctx.label} · ${resolvedScope}`,
-        placeholder: pagePlaceholder(ctx),
-        hint:
-          'Ask about what you are looking at. The answer comes from your code, your jobs and studio’s own records, ' +
-          'within what the chat can see. Nothing changes until you say so.',
-        prompts,
-        controls:
-          openedScope === undefined ? (
-            /* Behaviour 8: or drop notes / a photo instead — the proposals land in Home's Needs You. */
-            <CaptureDrop
-              runs={runs}
-              pathname={pathname}
-              inline
-              onReview={navigate === undefined ? undefined : () => { navigate('/'); onClose(); }}
+    <div data-testid="system-chat" className="wk-syschat">
+      {chatList && historyOpen && (
+        <ChatHistoryRail
+          currentId={chatIdRef.current}
+          onOpen={(entry) => { setHistoryOpen(false); reopenSystemChat(entry); }}
+          onClose={() => setHistoryOpen(false)}
+        />
+      )}
+      <AssistDock
+        context={{
+          surface: 'ask',
+          title: 'Chat',
+          contextLabel: resolvedScope === '' ? `Seeing: ${ctx.label}` : `Seeing: ${ctx.label} · ${resolvedScope}`,
+          placeholder: pagePlaceholder(ctx),
+          hint:
+            'Ask about what you are looking at. The answer comes from your code, your jobs and studio’s own records, ' +
+            'within what the chat can see. Nothing changes until you say so.',
+          prompts,
+          controls:
+            openedScope === undefined ? (
+              /* Behaviour 8: or drop notes / a photo instead — the proposals land in Home's Needs You. */
+              <CaptureDrop
+                runs={runs}
+                pathname={pathname}
+                inline
+                onReview={navigate === undefined ? undefined : () => { navigate('/'); onClose(); }}
+              />
+            ) : undefined,
+          composerControls: (
+            <ChatScopeChips
+              chips={chips}
+              locked={locked}
+              candidates={candidates}
+              onSearchOpen={() => { void useDocsCache.getState().loadIndex(); }}
+              onClick={(key) => setChipEdits(clickChip(chips, key))}
+              onAdd={(c) => setChipEdits(addChip(chips, { key: c.key, kind: c.kind, label: c.label, ref: c.ref, ...(c.projectId !== undefined ? { projectId: c.projectId } : {}) }))}
             />
-          ) : undefined,
-        composerControls: (
-          <ChatScopeChips
-            chips={chips}
-            locked={locked}
-            candidates={candidates}
-            onSearchOpen={() => { void useDocsCache.getState().loadIndex(); }}
-            onClick={(key) => setChipEdits(clickChip(chips, key))}
-            onAdd={(c) => setChipEdits(addChip(chips, { key: c.key, kind: c.kind, label: c.label, ref: c.ref, ...(c.projectId !== undefined ? { projectId: c.projectId } : {}) }))}
-          />
-        ),
-      }}
-      verbs={verbs}
-      resumeChatId={resumed?.chatId ?? null}
-      onResumeGone={(chatId) => {
-        // studio#328: the daemon reclaimed it — forget the stored id so no reopen
-        // repeats the dead session, and the next send opens a fresh one.
-        forgetAskSession(chatId);
-        useLiveChatsStore.getState().remove(chatId);
-        if (chatIdRef.current === chatId) {
-          chatIdRef.current = null;
-          seededRef.current = false;
-          lastPackRef.current = null;
-          diagSentRef.current = false;
-          // No chat is open any more: the next send opens a fresh one, so the scope is a choice again.
-          scopeRef.current = null;
-          setOpenedScope(undefined);
+          ),
+        }}
+        verbs={verbs}
+        resumeChatId={resumed?.chatId ?? null}
+        onResumeGone={(chatId) => {
+          // studio#328: the daemon reclaimed it — forget the stored id so no reopen
+          // repeats the dead session, and the next send opens a fresh one.
+          forgetAskSession(chatId);
+          useLiveChatsStore.getState().remove(chatId);
+          if (chatIdRef.current === chatId) {
+            chatIdRef.current = null;
+            seededRef.current = false;
+            lastPackRef.current = null;
+            diagSentRef.current = false;
+            // No chat is open any more: the next send opens a fresh one, so the scope is a choice again.
+            scopeRef.current = null;
+            setOpenedScope(undefined);
+          }
+        }}
+        fill
+        typeTarget="ask"
+        initialText={handoff ?? (typedSeed !== '' ? typedSeed : startText ?? '')}
+        sendOnOpen={handoff !== undefined && handoff.trim() !== ''}
+        onExpandChat={
+          navigate === undefined
+            ? undefined
+            : (chatId) => {
+                // ASK-S1 (codex #8): under the capability the chat IS a path and its thread is the session;
+                // the legacy fan-out surface (`/chat/:id`) would draw a pending bubble per eligible seat.
+                // S16a-4e: a chat is its session — the promote door is always `/s/<id>`.
+                navigate(`/s/${encodeURIComponent(chatId)}`);
+                onClose();
+              }
         }
-      }}
-      fill
-      typeTarget="ask"
-      initialText={handoff ?? (typedSeed !== '' ? typedSeed : startText ?? '')}
-      sendOnOpen={handoff !== undefined && handoff.trim() !== ''}
-      onExpandChat={
-        navigate === undefined
-          ? undefined
-          : (chatId) => {
-              // ASK-S1 (codex #8): under the capability the chat IS a path and its thread is the session;
-              // the legacy fan-out surface (`/chat/:id`) would draw a pending bubble per eligible seat.
-              // S16a-4e: a chat is its session — the promote door is always `/s/<id>`.
-              navigate(`/s/${encodeURIComponent(chatId)}`);
-              onClose();
-            }
-      }
-      open
-      onOpenChange={(next) => {
-        if (!next) onClose();
-      }}
-      headerProps={chrome?.dragProps}
-      headerExtra={picker}
-      compactHeader
-      headerEnd={chrome?.controls}
-      onStatus={onStatus}
-      // Uploads ride crew's attachments route (the next slice); until then the paperclip stays away
-      // rather than attach a file the send would drop.
-      allowAttach={false}
-      answerFooter={answerFooter}
-      promptsSend
-      notice={olderCrew ? OLDER_CREW_NOTE : undefined}
-    />
+        open
+        onOpenChange={(next) => {
+          if (!next) onClose();
+        }}
+        headerProps={chrome?.dragProps}
+        headerExtra={picker}
+        compactHeader
+        headerEnd={chrome?.controls}
+        onStatus={onStatus}
+        // Uploads ride crew's attachments route; without it the paperclip stays away rather than attach a
+        // file the send would drop.
+        allowAttach={chatAttachments}
+        fileMode={chatAttachments}
+        loadHistory={loadHistory}
+        headerStart={chatList ? (
+          <button
+            type="button"
+            data-testid="chat-history-toggle"
+            className="wk-chatwin-btn"
+            aria-pressed={historyOpen}
+            aria-label={historyOpen ? 'Hide past chats' : 'Past chats'}
+            title={historyOpen ? 'Hide past chats' : 'Past chats'}
+            onClick={() => setHistoryOpen((v) => !v)}
+          >
+            <History size={15} aria-hidden />
+          </button>
+        ) : undefined}
+        answerFooter={answerFooter}
+        promptsSend
+        notice={notice}
+      />
+    </div>
   );
 }

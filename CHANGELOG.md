@@ -30,6 +30,14 @@ npm publish dates. Every version listed here exists on
   Project, Repo and All repos ride the existing `POST /chats` scope fields, and the others ride the message's
   context pack, which also names what was not chosen. A later message carries the pack again only when the
   chips or the page changed.
+- **Past chats inside the chat window** (the clock in its header), from crew's chat history: each says its
+  title, the page it started on and its age, and clicking one reopens it with its messages; an ended chat
+  is shown read-only and the next question starts a new one. A new chat records the page it started on.
+  **Close ends the chat and keeps its history** (`POST /chats/:id/close`).
+- **Upload by paperclip, drag-and-drop or paste.** Images, text and pdfs show as removable chips above the
+  input and are uploaded to the chat with the message (`POST /chats/:id/attachments`); the message names
+  them, so the seat can read them. Too many, too big or an unreadable type is refused before anything is
+  sent, in plain words.
 - **Suggested prompts follow the page** and use its live data: a held run asks "Why is this run held, and what
   should I do?" with its gate, Nerve Center asks "What's stopping work right now?" and names a CLI that is out,
   and a repository, project, steering, workflows and the Desk each get their own. Clicking a prompt sends it.
@@ -39,9 +47,11 @@ npm publish dates. Every version listed here exists on
 - **The rail's start row is four equal icon buttons:** New project · New job · Chat · Search (⌘K), each named
   with a tooltip. The wide labelled New job button is gone. Chat restores a minimized chat, or starts a new
   one when the chat is closed.
-- **Past chats and uploads wait for crew.** They need crew's chat list and attachments; against a crew
-  without the `chatList` / `chatAttachments` capabilities the chat says so in one line, and the paperclip is
-  not offered (it used to accept a file the send then dropped).
+- **Past chats and uploads need crew's chat list and attachments** (`chatList` / `chatAttachments`, crew's
+  api-types 0.137.0). Against a crew without them the chat says so in one line, and the paperclip is not
+  offered (it used to accept a file the send then dropped).
+- **Everything › live chats' End keeps the chat's history** on a crew with `chatList` (it uses the close
+  route; DELETE there also deletes the history).
 
 ## [0.11.8] — 2026-10-25
 

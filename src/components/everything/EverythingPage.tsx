@@ -657,7 +657,9 @@ function LiveChats({ known, go }: { known: ReadonlySet<string>; go: Go }): React
   const live = useLiveChatsStore((s) => s.sessions);
   const retired = useLiveChatsStore((s) => s.retired);
   const end = (id: string): void => {
-    void api.closeChat(id)
+    // On a crew that keeps chat history (`chatList`), DELETE also deletes it: End uses the close route,
+    // so an ended chat stays in the system chat's past chats.
+    void (useCapabilities.getState().chatList ? api.endChat(id) : api.closeChat(id))
       .then(() => {
         const cur = useNeedsSources.getState().chats;
         if (cur !== null) useNeedsSources.getState().depositChats(cur.filter((c) => c.chatId !== id));
