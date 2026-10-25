@@ -698,7 +698,8 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
     const sentFiles = files;
     const fileNames = [...documents.map((d) => d.name), ...sentFiles.map((f) => f.name)];
     try {
-      const launched = await verbs.send(body, documents, sentFiles);
+      // Files ride only in file mode (the system chat); every other surface keeps its two-argument send.
+      const launched = await (fileMode ? verbs.send(body, documents, sentFiles) : verbs.send(body, documents));
       push({ kind: 'user', text: body, files: fileNames });
       if ('chatId' in launched) {
         // One chat block per SESSION: a later send into the same warm session streams
