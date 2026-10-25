@@ -102,7 +102,11 @@ def ask_from_desk(page, origin: str, text: str, expect_posts: int, project: str 
     box = page.get_by_test_id("assist-input")
     box.wait_for(state="visible", timeout=15000)
     if project is not None:
-        page.get_by_test_id("ask-scope").select_option(f"project:{project}")
+        # DES-SYSTEM-CHAT §6: the scope chips — All repos off, the project added with + Add.
+        page.locator('[data-testid="chat-scope-chip"][data-key="all-repos"]').click()
+        page.get_by_test_id("chat-scope-add").click()
+        page.get_by_test_id("chat-scope-query").fill(project)
+        page.locator(f'[data-testid="chat-scope-result"][data-key="project:{project}"]').click()
     box.fill(text)
     page.get_by_test_id("assist-send").click()
     for _ in range(60):

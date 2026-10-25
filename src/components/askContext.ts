@@ -1,9 +1,9 @@
-import type { Project, RepoEntry, SessionView } from '../api/types.js';
+import type { SessionView } from '../api/types.js';
 import type { Diagnostics } from '../api/diagnostics.js';
-import { newestFailedRun, type NeedRow } from '../board/needsYou.js';
 import { statusCounts } from '../board/windowStats.js';
 import { jobTitle } from '../board/deskWords.js';
 import { PACK_OPENING } from '../board/askPack.js';
+import { scopePackLines, type ScopeChip } from '../board/chatScopes.js';
 
 /**
  * The ASK context pack (the app-wide Ask feature) — pure derivations, pinned by unit test.
@@ -211,68 +211,48 @@ export function buildContextPack(args: {
   liveChatCount: number;
   diagnostics: DiagnosticsState;
   now?: number;
+  /** The system chat's scope chips (DES-SYSTEM-CHAT §6): when given, the pack carries EXACTLY what
+   *  they choose — the page (where, live chats, diagnostics) only with This page on, the run counts
+   *  only with Recent runs on — plus their scope lines. */
+  chips?: readonly ScopeChip[];
+  /** The page in words ("the Desk", a run's title) for the `where` line. */
+  pageLabel?: string;
+  /** A later message's pack: the diagnostics already rode the first one. */
+  omitDiagnostics?: boolean;
 }): string {
   const { pathname, runs, liveChatCount, diagnostics } = args;
   const at = new Date(args.now ?? Date.now()).toISOString();
   const c = statusCounts(runs);
+  const runsLine = `runs (the studio's live list): ${c.total} total — ${c.active} active, ${c.gates} awaiting a human, ${c.failed} failed, ${c.done} done, ${c.cancelled} cancelled`;
+  if (args.chips !== undefined) {
+    const chips = args.chips;
+    const page = chips.some((x) => x.kind === 'page' && x.on);
+    const recent = chips.some((x) => x.kind === 'runs' && x.on);
+    const newest = [...runs]
+      .sort((a, b) => Number((b.session as { created_at?: number }).created_at ?? 0) - Number((a.session as { created_at?: number }).created_at ?? 0))
+      .slice(0, 5)
+      .map((v) => ({ id: v.session.id, title: jobTitle(v.session), status: v.session.status }));
+    return [
+      `${PACK_OPENING}${at}]`,
+      ...(page ? [
+        `where: ${args.pageLabel ?? sectionLabel(pathname)} (${pathname})`,
+        `live chat sessions this client knows about: ${liveChatCount}`,
+        ...(args.omitDiagnostics === true ? [] : diagnosticsSection(diagnostics)),
+      ] : []),
+      ...(recent ? [runsLine] : []),
+      ...scopePackLines(chips, recent ? newest : []),
+      'Answer from what you can actually read (the estate/garden tooling reaches the code graph,',
+      'stores, and run record) within what the user chose above; when a fact is not reachable, say so instead of guessing.',
+    ].join('\n');
+  }
   const lines: string[] = [
     `${PACK_OPENING}${at}]`,
     `where: ${sectionLabel(pathname)} (${pathname})`,
-    `runs (the studio's live list): ${c.total} total — ${c.active} active, ${c.gates} awaiting a human, ${c.failed} failed, ${c.done} done, ${c.cancelled} cancelled`,
+    runsLine,
     `live chat sessions this client knows about: ${liveChatCount}`,
     ...diagnosticsSection(diagnostics),
     'Answer from what you can actually read (the estate/garden tooling reaches the code graph,',
     'stores, and run record); when a fact is not reachable, say so instead of guessing.',
   ];
   return lines.join('\n');
-}
-
-// ── Quick prompts (prefill-only chips — nothing sends without the user) ──────────────────────
-
-export interface AskPromptSeed {
-  runs: SessionView[];
-  /** THE home-queue fold's rows (`needsYouRows` — the caller computes it from
-   *  the stores the app already holds). The failed-run chip seeds from its
-   *  first failed-run row via {@link newestFailedRun} — the queue's own
-   *  newest-first ordering, never a second recency derivation (E1). */
-  needRows: readonly NeedRow[];
-  projects: Project[];
-  repos: RepoEntry[];
-}
-
-/** The quick-prompt chips. Chips whose referent the app does not hold are OMITTED, never
- *  fabricated (no failed run ⇒ no "why did it fail" chip). */
-export function askPrompts({ runs, needRows, projects, repos }: AskPromptSeed): { label: string; text: string }[] {
-  const prompts: { label: string; text: string }[] = [];
-  const failed = newestFailedRun(needRows, runs);
-  if (failed !== undefined) {
-    const title = jobTitle(failed.session);
-    prompts.push({
-      label: `Why did “${title}” fail?`,
-      text: `Why did the job “${title}” (${failed.session.id}) fail? Walk its record and its evidence.`,
-    });
-  }
-  const project = projects.find((p) => p.id !== 'default');
-  if (project !== undefined) {
-    prompts.push({
-      label: `What’s in ${project.name}?`,
-      text: `What’s in the project “${project.name}”: its jobs, documents and repositories, and how healthy is it?`,
-    });
-  }
-  const repo = repos[0];
-  if (repo !== undefined) {
-    prompts.push({
-      label: `What changed in ${repo.name}?`,
-      text: `What changed in the repository “${repo.name}” recently? Use its code and its job history.`,
-    });
-  }
-  prompts.push({
-    label: 'Is studio healthy?',
-    text: 'Is this studio healthy: the app, its service and what they depend on? Flag anything that is not.',
-  });
-  prompts.push({
-    label: 'Are the helpers working well?',
-    text: 'Are the helpers working well? Compare how often each one started its sessions against how often it fell back, and flag any that are getting worse.',
-  });
-  return prompts;
 }

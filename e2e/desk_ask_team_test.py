@@ -10,7 +10,7 @@ answer, a HELP: exchange), it proves:
   1. ONE VOICE: a question typed on the Desk opens a chat whose seats are the eligible roster (nothing
      warm) and sends ONE message; the session `/s/<chat>` shows the operator's turn, "<pa> is thinking",
      then the PA's reply as the ONLY bubble on the agent side — no second helper answers.
-  2. THE QUIET LINES, in time order: "claude answers · picked at random" (expands to the pick, the
+  2. THE QUIET LINES, in time order: "claude answers · your pick" (the chat's CLI picker names it) (expands to the pick, the
      score and the shape), "<reviewer> is reviewing", "reviewer · 1 finding: …" (expands to the evidence
      and suggestion); the ask run has NO block and NO chain line (the thread is the chain); the shape
      line under the thread names the steps.
@@ -139,8 +139,9 @@ with sync_playwright() as p:
           and t1["typing"] is None and not t1["hscroll"], thread=t1)
     pa = t1["lines"][0]["text"].split(" answers")[0]
     reviewer = t1["lines"][1]["text"].split(" is reviewing")[0]
+    # DES-SYSTEM-CHAT §5: the chat's CLI picker always names the one that answers, so it is "your pick".
     check("quiet-lines",
-          t1["lines"][0]["text"] == f"{pa} answers"
+          t1["lines"][0]["text"] == f"{pa} answers · your pick"
           and t1["lines"][1]["text"] == f"{reviewer} is reviewing"
           and t1["lines"][2]["text"].startswith("reviewer · 1 finding: the cited line is the signature")
           and t1["shape"] == f"{pa} answers · {reviewer} checks it", lines=t1["lines"], shape=t1["shape"])
@@ -152,7 +153,7 @@ with sync_playwright() as p:
     page.screenshot(path=str(SHOTS / "desk-ask-team-underneath.png"))
     check("look-underneath",
           len(details) == 2
-          and details[0][0].startswith(f"Picked {pa} at random from ")
+          and details[0][0].startswith(f"You picked {pa} from ")
           and details[0][1] == "Steps: answer."
           and details[1] == ["Evidence: greet.js:2 is the template literal; the signature is line 1", "Suggestion: cite greet.js:2 as the body"],
           details=details)
@@ -200,7 +201,7 @@ with sync_playwright() as p:
     roles = page.evaluate("() => [...document.querySelectorAll('[data-testid=\"sheet-helper-role\"]')].map((n) => [n.dataset.role, n.innerText.replace(/\\s+/g, ' ').trim()])")
     page.screenshot(path=str(SHOTS / "desk-ask-team-helpers.png"))
     check("helpers-sheet",
-          roles[0] == ["pa", f"{pa} primary helper · picked at random"]
+          roles[0] == ["pa", f"{pa} primary helper · your pick"]
           and roles[1][0] == "reviewer" and roles[1][1].startswith(f"{reviewer} reviewer")
           and "also answered a question" in roles[1][1],  # the reviewer answered the HELP: line too
           roles=roles)

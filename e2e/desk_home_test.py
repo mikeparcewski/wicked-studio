@@ -97,7 +97,7 @@ HEADER = """() => ({
   composer: !!document.querySelector('[data-testid="composer"][data-composer="desk"]'),
   command: !!document.querySelector('[data-testid="desk-rail-search"]'),
   chat: document.querySelector('[data-testid="desk-rail-chat"]')?.getAttribute('aria-label') ?? null,
-  newJob: document.querySelector('[data-testid="desk-rail-new-job"]')?.innerText.trim() ?? null,
+  newJob: document.querySelector('[data-testid="desk-rail-new-job"]')?.getAttribute('aria-label') ?? null,
 })"""
 
 dist = ensure_build(fail)

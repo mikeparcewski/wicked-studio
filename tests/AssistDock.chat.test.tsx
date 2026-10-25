@@ -175,3 +175,37 @@ describe('AssistDock — the chat block', () => {
     expect(msg.textContent).toContain(streamed); // every streamed byte retained
   });
 });
+
+describe('AssistDock — the system chat\'s footer and status (DES-SYSTEM-CHAT §3, §5)', () => {
+  it('an answer is footed with who answered and what it saw, fixed when it landed; a failed turn is not "answered"', async () => {
+    const user = userEvent.setup();
+    const statuses: string[] = [];
+    let sources = 2;
+    render(
+      <AssistDock
+        context={{ surface: 'ask', title: 'Chat', contextLabel: 'Seeing: the Desk', placeholder: 'Ask…' }}
+        verbs={{ send: vi.fn().mockResolvedValue({ chatId: 'chat-1' }) }}
+        open
+        onOpenChange={() => undefined}
+        onStatus={(s) => statuses.push(s)}
+        answerFooter={(key) => `Answered by ${key} · saw ${sources} sources`}
+      />,
+    );
+    await user.type(screen.getByTestId('assist-input'), 'hi');
+    await user.click(screen.getByTestId('assist-send'));
+    await screen.findByTestId('assist-chat');
+    expect(statuses).toEqual(['thinking']);
+    act(() => emit!(frame({ type: 'chatDelta', chat: 'chat-1', cliKey: 'claude', text: 'hel' })));
+    act(() => emit!(frame({ type: 'chatReply', chat: 'chat-1', cliKey: 'claude', text: 'hello', ok: true })));
+    expect(statuses.at(-1)).toBe('answered');
+    expect(screen.getByTestId('assist-answer-footer')).toHaveTextContent('Answered by claude · saw 2 sources');
+    // Later chip changes never rewrite an earlier answer's footer.
+    sources = 5;
+    act(() => emit!(frame({ type: 'chatDelta', chat: 'chat-1', cliKey: 'pi', text: 'x' })));
+    expect(screen.getAllByTestId('assist-answer-footer')[0]).toHaveTextContent('saw 2 sources');
+    // A failed turn: back to ready, and no footer.
+    act(() => emit!(frame({ type: 'chatReply', chat: 'chat-1', cliKey: 'pi', text: 'quota', ok: false })));
+    expect(statuses.at(-1)).toBe('ready');
+    expect(screen.getAllByTestId('assist-answer-footer')).toHaveLength(1);
+  });
+});

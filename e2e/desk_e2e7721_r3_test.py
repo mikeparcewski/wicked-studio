@@ -6,10 +6,10 @@ the operator's own path at 1440x700.
 studio#840: helpers turned off in the New job wizard stayed off for every later Desk Ask (both used one saved
 choice), and the Ask drawer then refused with "turn one on in the helpers row" — a row it did not have.
   1. Desk → New job → a job → its Helpers step: turn every helper but one off, close the wizard.
-  2. Desk → Chat (the Ask drawer): it shows a helpers row, every helper on; Send opens the chat with all of
-     them (POST /chats `clis`), not the wizard's one.
-  3. In the drawer's row, turn every helper off: the row says so, Send refuses by pointing at the row that is
-     on screen, and no chat opens. Turn one back on: Send opens the chat with that one.
+  2. Desk → Chat (the system chat, DES-SYSTEM-CHAT §5): its CLI picker names ONE CLI; Send opens the chat
+     with that CLI as the primary and every eligible helper as the chat's seats (POST /chats `clis`), never
+     the wizard's one.
+  3. In the picker, choose another CLI: a fresh chat's Send opens with that one as the primary.
   4. The wizard kept its own choice: reopening its Helpers step shows the one helper still on.
   5. 0 page errors; no horizontal scroll.
 
@@ -97,14 +97,14 @@ def open_ask(page):
     page.get_by_test_id("desk-rail-chat").click()
     page.get_by_test_id("assist-input").wait_for(state="visible", timeout=10000)
     try:
-        page.get_by_test_id("ask-helpers").wait_for(state="visible", timeout=8000)
+        page.wait_for_function("() => (document.querySelector('[data-testid=\"chat-cli\"]')?.dataset.key ?? '') !== ''", timeout=8000)
     except Exception:
-        page.screenshot(path=str(SHOTS / "desk-e2e7721r3-ask-no-row.png"))
-        fail("ask-has-a-helpers-row", page.evaluate("() => document.body.innerText.slice(0, 1200)"))
+        page.screenshot(path=str(SHOTS / "desk-e2e7721r3-ask-no-cli.png"))
+        fail("ask-has-a-cli", page.evaluate("() => document.body.innerText.slice(0, 1200)"))
+    return page.get_by_test_id("chat-cli").get_attribute("data-key")
 
 
-def ask_pill(page, key: str):
-    return page.locator(f'[data-testid="ask-helper"][data-key="{key}"]')
+OPTIONS = """() => [...document.querySelectorAll('[data-testid="chat-cli-option"]')].map((b) => [b.dataset.key, !b.disabled])"""
 
 
 with sync_playwright() as p:
@@ -137,43 +137,35 @@ with sync_playwright() as p:
     page.get_by_test_id("launch-wizard-close").click()
     page.get_by_test_id("launch-wizard").wait_for(state="hidden", timeout=5000)
 
-    # ── 2. the Ask drawer: its own row, every helper on, and the send uses them all ────
-    open_ask(page)
-    row = page.evaluate(PILLS, '[data-testid="ask-helper"]')
-    page.screenshot(path=str(SHOTS / "desk-e2e7721r3-2-ask-row.png"))
-    check("ask-row-all-on", len(row) >= 1 and all(on == "true" for _, on in row), row=row)
-    ask_keys = [k for k, _ in row]
+    # ── 2. the system chat: ONE CLI picked; the wizard's choice never narrows who the chat can seat ────
+    pick = open_ask(page)
+    page.screenshot(path=str(SHOTS / "desk-e2e7721r3-2-ask-cli.png"))
     page.get_by_test_id("assist-input").fill("what does greet() do with spaces?")
     page.get_by_test_id("assist-send").click()
     for _ in range(40):
         if opens:
             break
         page.wait_for_timeout(250)
-    check("ask-opens-with-every-helper", len(opens) == 1 and opens[0].get("clis") == ask_keys,
-          opens=opens, row=ask_keys)
+    check("ask-opens-with-the-picked-cli", len(opens) == 1 and opens[0].get("primary") == pick
+          and pick in (opens[0].get("clis") or []) and len(opens[0].get("clis") or []) > 1, opens=opens, pick=pick)
 
-    # ── 3. every Ask helper off: the refusal points at the row on screen; one back on sends ──
+    # ── 3. pick another CLI: a fresh chat opens with it ────────────────────────────────────────────────
     page.evaluate("() => { try { sessionStorage.clear(); } catch (e) {} }")
     open_ask(page)
-    for k in ask_keys:
-        ask_pill(page, k).click()
-    page.get_by_test_id("ask-helpers-none").wait_for(state="visible", timeout=5000)
+    page.get_by_test_id("chat-cli").click()
+    options = page.evaluate(OPTIONS)
+    page.screenshot(path=str(SHOTS / "desk-e2e7721r3-3-cli-menu.png"))
+    other = next((k for k, ok in options if ok and k != pick), None)
+    check("picker-offers-another", other is not None, options=options, pick=pick)
+    page.locator(f'[data-testid="chat-cli-option"][data-key="{other}"]').click()
     page.get_by_test_id("assist-input").fill("and with tabs?")
     page.get_by_test_id("assist-send").click()
-    page.wait_for_timeout(800)
-    notes = page.evaluate("() => [...document.querySelectorAll('[data-testid=\"assist-note\"]')].map((n) => n.innerText)")
-    page.screenshot(path=str(SHOTS / "desk-e2e7721r3-3-ask-all-off.png"))
-    check("refusal-points-at-the-row", any("turn one on in the helpers row" in n for n in notes)
-          and page.get_by_test_id("ask-helpers").is_visible(), notes=notes)
-    check("refused-send-opens-nothing", len(opens) == 1, opens=opens)
-    ask_pill(page, ask_keys[-1]).click()
-    page.get_by_test_id("assist-input").fill("and with tabs?")
-    page.get_by_test_id("assist-send").click()
-    page.wait_for_timeout(1500)
-    page.screenshot(path=str(SHOTS / "desk-e2e7721r3-3-ask-one-on.png"))
-    check("one-back-on-sends", len(opens) == 2 and opens[1].get("clis") == [ask_keys[-1]], opens=opens)
-    # Put the Ask choice back for any later journey sharing this browser profile.
-    page.evaluate("() => { try { localStorage.removeItem('wicked_composer_dropped_seats'); } catch (e) {} }")
+    for _ in range(40):
+        if len(opens) >= 2:
+            break
+        page.wait_for_timeout(250)
+    check("another-cli-answers", len(opens) == 2 and opens[1].get("primary") == other, opens=opens)
+    page.evaluate("() => { try { localStorage.removeItem('wicked.chat.cli'); } catch (e) {} }")
 
     # ── 4. the wizard kept its own choice ─────────────────────────────────────────────
     page.keyboard.press("Escape")

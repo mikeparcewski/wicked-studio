@@ -900,6 +900,10 @@
     "session-details-toggle": "run-details-handle",
     "since-you-left": "session-needs-banner",
     "since-summary": "session-needs-first",
-    "since-toggle": "session-needs-trigger"
+    "since-toggle": "session-needs-trigger",
+    "ask-scope": "chat-scope",
+    "ask-helpers": "chat-cli",
+    "ask-helper": "chat-cli-option",
+    "ask-helpers-none": "chat-cli"
   }
 }

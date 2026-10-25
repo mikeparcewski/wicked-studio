@@ -182,8 +182,9 @@
   /* The Ask dock's own controls on a phone: 44 px targets (UX gate S3: PHONE). */
   [data-testid="assist-dock"] select, [data-testid="assist-send"], [data-testid="assist-dock"] button { min-height: var(--tap-min); }
   [data-testid="assist-empty"], .wk-assist-prompt { font-size: var(--text-sm) !important; }
-  /* The Ask dock on a phone is a full-height sheet under the top bar, never a box over half the page. */
-  [data-testid="ask-panel"] { inset: var(--topbar-h) 0 0 0 !important; width: auto !important; height: auto !important; border-radius: 0 !important; }
+  /* The system chat on a phone is the whole screen (DES-SYSTEM-CHAT §10), never a box over half the page. */
+  [data-testid="ask-panel"] { inset: 0 !important; width: auto !important; height: auto !important; border-radius: 0 !important; z-index: 60 !important; }
+  .wk-chattray { left: auto !important; right: 12px !important; width: calc(100vw - 24px) !important; }
   .wk-assist-prompt { min-height: var(--tap-min); }
   /* Standing instructions on their own row; Capture and ⋯ share the next (UX gate S3: SPACE). */
   .wk-desk--a .wk-desk-a-tools .wk-desk-orders { flex-basis: 100%; }

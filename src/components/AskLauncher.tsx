@@ -96,7 +96,7 @@ export function AskLauncher({ open, onToggle, rightOffsetPx = 0, bottomOffsetPx 
   const panelHeight = Math.max(0, Math.min(ASK_PANEL_HEIGHT_PX, vh - panelBottom - ASK_GUTTER_PX));
   return (
     <>
-      {open && (
+      {open && children !== undefined && (
         <div
           data-testid="ask-panel"
           role="dialog"

@@ -12,6 +12,37 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+### Added
+- **The system chat is a floating, page-aware window (DES-SYSTEM-CHAT).** The Ask dock opens as a window about
+  600 × 700, dragged by its header and resized from its corner (min 420 × 420). It always stays inside the
+  viewport, and its size and position are remembered in this browser. **Full size** fills the content area
+  beside the rail; restore returns to the last floating size. **Minimize** turns it into a small tray (bottom
+  right by default, draggable) that names the CLI and says "ready", "thinking…" or "answer ready"; the
+  conversation keeps running behind it. Only **Close** ends the chat. Ctrl/⌘+Shift+A minimizes and restores
+  it. On a phone the chat is the whole screen.
+- **One answering CLI, picked in the chat's header.** The default is your last pick, else your saved default
+  seat, else the first CLI that can answer. A signed-out or benched CLI is listed but greyed out with the
+  service's reason ("benched: access returns …", "signed out"), and Sign in when signing in is the fix. Each
+  answer is footed "Answered by <CLI> · saw N sources".
+- **"What the chat can see": scope chips** replace the "What it can read" dropdown. This page, the page's
+  Project and Repo (else All repos) are on by default; Memory, Steering and Recent runs are off. **+ Add** finds
+  any repo, run, project or document and adds it as a chip. The request carries exactly the chips that are on:
+  Project, Repo and All repos ride the existing `POST /chats` scope fields, and the others ride the message's
+  context pack, which also names what was not chosen. A later message carries the pack again only when the
+  chips or the page changed.
+- **Suggested prompts follow the page** and use its live data: a held run asks "Why is this run held, and what
+  should I do?" with its gate, Nerve Center asks "What's stopping work right now?" and names a CLI that is out,
+  and a repository, project, steering, workflows and the Desk each get their own. Clicking a prompt sends it.
+  The input says "Ask about <page>…" and the header says "Seeing: <page>".
+
+### Changed
+- **The rail's start row is four equal icon buttons:** New project · New job · Chat · Search (⌘K), each named
+  with a tooltip. The wide labelled New job button is gone. Chat restores a minimized chat, or starts a new
+  one when the chat is closed.
+- **Past chats and uploads wait for crew.** They need crew's chat list and attachments; against a crew
+  without the `chatList` / `chatAttachments` capabilities the chat says so in one line, and the paperclip is
+  not offered (it used to accept a file the send then dropped).
+
 ## [0.11.8] — 2026-10-25
 
 A patch release: a refused hand-over whose re-verify failed offers "Approve as your own judgment" when the engine offers it (#895, for wicked-core#1115).

@@ -2,12 +2,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { EditorHostPage } from './components/editors/EditorHostPage.js';
 import { useHostChrome } from './editors/hostApi.js';
 import { AskDock } from './components/AskDock.js';
-import { useAskDock, type AskRequest } from './store/askDock.js';
+import { endSystemChat, useAskDock, type AskRequest } from './store/askDock.js';
 import { useSearchModal } from './store/searchModal.js';
 import { usePhone } from './hooks/usePhone.js';
 import { useAskThreadStore } from './store/askThread.js';
 import { useChatFlow } from './store/chatFlow.js';
 import { AskLauncher } from './components/AskLauncher.js';
+import { ChatWindow } from './components/chat/ChatWindow.js';
+import { setSystemChatOpen as setAskOpen, toggleSystemChat, useChatWindow } from './store/chatWindow.js';
 import { CommandPalette, paletteShortcutEntries } from './components/CommandPalette.js';
 import { GateNotifications } from './components/GateNotifications.js';
 import { NotFoundPage } from './components/NotFoundPage.js';
@@ -43,7 +45,7 @@ import { HealthPage } from './components/HealthPage.js';
 import { parseRoute, projectDetailPath } from './hooks/useRoute.js';
 import { DeskV2, deskTabPath, type HostedTab } from './components/desk/DeskV2.js';
 import { useDeskStream } from './store/deskStream.js';
-import { SessionRail } from './components/desk/SessionRail.js';
+import { SESSION_RAIL_PX, SessionRail } from './components/desk/SessionRail.js';
 import { RailDrawer } from './components/ui/RailDrawer.js';
 import { PhoneNeedsBadge } from './components/ui/PhoneNeedsBadge.js';
 import { SessionPage } from './components/session/SessionView.js';
@@ -62,7 +64,7 @@ import { useProjectVisits } from './hooks/useProjectVisits.js';
 import { usePeekJump } from './hooks/usePeekJump.js';
 import { usePlacePanel } from './hooks/usePlacePanel.js';
 import { altChord, setShortcutsPaletteOpen, useGlobalShortcuts } from './hooks/useGlobalShortcuts.js';
-import { useTypeToComposer } from './hooks/useTypeToComposer.js';
+import { takeTypedSeed, typeInto, typeTarget, useTypeToComposer } from './hooks/useTypeToComposer.js';
 import { legacySteeringTarget, useRetiredSettingsRedirect, useTestingRedirect } from './hooks/useLegacyRedirect.js';
 import { EverythingPage } from './components/everything/EverythingPage.js';
 import { productRedirectPath, useRoute } from './hooks/useRoute.js';
@@ -362,7 +364,11 @@ export function App(): React.ReactElement {
 
   // ASK — the app-wide assist dock (AskDock): opened from the floating launcher
   // bubble (AskLauncher) or Ctrl/⌘+Shift+A; collapsing the dock closes it entirely.
-  const [askOpen, setAskOpen] = useState(false);
+  // DES-SYSTEM-CHAT: the dock sits in the floating chat window (`useChatWindow`); it stays mounted
+  // while minimized, so the conversation keeps running behind the tray.
+  const chatMode = useChatWindow((s) => s.mode);
+  const askOpen = chatMode !== 'closed';
+
   // The Desk composer's send (skin `desk`, S4): the message rides to the Ask dock, which sends it
   // as the operator's own question. `askKey` remounts the dock for each handoff; the text is spent
   // the moment the dock takes it (`onHandoffTaken`), and again whenever the dock closes, so no
@@ -407,7 +413,19 @@ export function App(): React.ReactElement {
   }, [chatFlow, navigate]);
   // §5.6 rule 4 (S2b): letters always type — into the open Ask dock, else the page's
   // composer, else the Ask dock opened with them (opening it only reads).
-  useTypeToComposer(useCallback(() => setAskOpen(true), []));
+  useTypeToComposer(useCallback(() => {
+    // A minimized chat is already mounted, so it never takes the seed at mount: once it is back on
+    // screen, the letters that brought it back go into its box.
+    const wasMinimized = useChatWindow.getState().mode === 'minimized';
+    setAskOpen(true);
+    if (wasMinimized) {
+      requestAnimationFrame(() => {
+        const letters = takeTypedSeed();
+        const target = typeTarget();
+        if (letters !== '' && target !== null && target !== 'busy') typeInto(target.into, letters);
+      });
+    }
+  }, []));
   // THE search modal opens from the rail's Search and the phone top bar (`openSearch`), besides ⌘K.
   const searchRequest = useSearchModal((s) => s.request);
   useEffect(() => {
@@ -451,7 +469,7 @@ export function App(): React.ReactElement {
         description: 'Ask — governed answers about your projects, repos, and this studio',
         handler: (e: KeyboardEvent) => {
           e.preventDefault();
-          setAskOpen((v) => !v);
+          toggleSystemChat();
         },
       },
       // ⌥W — the Watchtower's full feed (S14, DESIGN-interaction rule 10), from anywhere.
@@ -771,14 +789,15 @@ export function App(): React.ReactElement {
           layout column. The dock renders only while open; NOTHING launches until the
           user sends. Its session persists across close/reopen (AskDock, R3). */}
       <AskLauncher
-        open={askOpen}
-        onToggle={() => setAskOpen((v) => !v)}
+        open={chatMode === 'floating' || chatMode === 'full'}
+        onToggle={toggleSystemChat}
         rightOffsetPx={selected !== null ? RIGHT_PANEL_PX : 0}
         bottomOffsetPx={panel === 'session' ? DESK_COMPOSER_PX : 0}
         // Chat is in the rail on every page; the bubble is the phone's way in (the rail is a drawer
         // there), and stands down on a session, whose composer holds this corner.
-        bubble={phone && panel !== 'session'}
-      >
+        bubble={phone && panel !== 'session' && chatMode !== 'minimized'}
+      />
+      <ChatWindow phone={phone} railPx={SESSION_RAIL_PX} onEnd={endSystemChat}>
         {askOpen && (
           <AskDock
             key={askKey}
@@ -802,7 +821,7 @@ export function App(): React.ReactElement {
             } : {})}
           />
         )}
-      </AskLauncher>
+      </ChatWindow>
 
       {/* S11: the open "look underneath" sheet (a step, a helper, a session, the Desk). */}
       <ObjectSheet runs={shownRuns} navigate={navigate} needCount={attentionBadge(needRows)} />

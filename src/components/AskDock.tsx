@@ -5,40 +5,40 @@ import { getDiagnostics, isDiagnosticsUnsupported } from '../api/diagnostics.js'
 import type { ChatOpenBody, ChatScope, RepoEntry, RosterSeat, SessionView } from '../api/types.js';
 import { needsYouRows } from '../board/needsYou.js';
 import { useFailureClocks } from '../store/failureClocks.js';
-import { forgetAskSession, readAskSession, writeAskSession } from '../store/askSession.js';
+import { forgetAskSession, readAskSession, writeAskSession, type AskSession } from '../store/askSession.js';
 import { useGateStore } from '../store/gates.js';
 import { useLiveChatsStore } from '../store/liveChats.js';
 import { useMembershipStore } from '../store/membership.js';
 import { useProjectsStore } from '../store/projects.js';
 import { fetchReposCached, getCachedRepos } from '../store/repoCache.js';
 import { getCachedRoster, setCachedRoster } from '../store/rosterCache.js';
-import { chosenSeats, noSeatPickedMessage, seatOff, useComposerSeats } from '../store/composerSeats.js';
+import { chosenSeats, useComposerSeats } from '../store/composerSeats.js';
 import { useRoster } from '../hooks/useRoster.js';
-import { AskHelpers } from './AskHelpers.js';
 import {
-  askPrompts,
   buildContextPack,
   PACK_JOIN,
-  sectionLabel,
   type DiagnosticsState,
 } from './askContext.js';
 import { AssistDock, type AssistVerbs } from './AssistDock.js';
 import { CaptureDrop } from './CaptureDrop.js';
-import {
-  askScopeIsScoped,
-  askScopeOpenFields,
-  ChatScopeSelect,
-  defaultAskScope,
-  describeResolvedScope,
-  type AskScopeChoice,
-} from './ChatScopeSelect.js';
-import { chatAdmissionOf, defaultSelection, describeChatOpenRefusal } from '../board/chatOpen.js';
+import { describeResolvedScope } from './ChatScopeSelect.js';
+import { defaultSelection, describeChatOpenRefusal } from '../board/chatOpen.js';
 import { ApiError, apiStatus, apiWire } from '../api/errors.js';
 import { ambientProjectId } from '../hooks/ambientProject.js';
 import { peekTypedSeed, takeTypedSeed } from '../hooks/useTypeToComposer.js';
 import { useAskThreadStore } from '../store/askThread.js';
 import { useCapabilities } from '../store/capabilities.js';
-import { isReviewerOnly, seatLabel, userSeats } from '../board/seatNames.js';
+import { isReviewerOnly } from '../board/seatNames.js';
+import { addChip, chipsOpenFields, chipsScoped, chipsSignature, chosenChips, clickChip, defaultScopeChips, type ScopeChip } from '../board/chatScopes.js';
+import { cliOptions, defaultChatCli, saveChatCli } from '../board/chatCli.js';
+import { cliName, pageContext, pagePlaceholder, pagePrompts } from '../board/pagePrompts.js';
+import { jobTitle } from '../board/deskWords.js';
+import { systemChatEpoch } from '../store/askDock.js';
+import { useChatWindow } from '../store/chatWindow.js';
+import { useDocsCache } from '../store/docsCache.js';
+import { useChatChrome } from './chat/ChatWindow.js';
+import { ChatCliPicker } from './chat/ChatCliPicker.js';
+import { ChatScopeChips, type ScopeCandidate } from './chat/ChatScopeChips.js';
 
 /**
  * ASK — the app-wide binding of the ASSIST DOCK (DES-ASSIST-DOCK §5: "the dock becomes
@@ -109,9 +109,18 @@ function askEligible(roster: readonly RosterSeat[], scoped: boolean): string[] {
   return defaultSelection(roster.filter((s) => !isReviewerOnly(s)), scoped);
 }
 
-/** "the Desk" for Home: the place words the dock's header uses. */
-function placeWords(label: string): string {
-  return label === 'Home' ? 'the Desk' : label;
+/** A run's state in + Add's list, in plain words. */
+const RUN_WORDS: Record<string, string> = {
+  planning: 'starting', distributing: 'starting', executing: 'working', awaiting_human: 'waiting on you',
+  completed: 'done', cancelled: 'stopped', failed: 'failed',
+};
+
+/** The one line an older crew gets in place of past chats and uploads (DES-SYSTEM-CHAT §9). */
+export const OLDER_CREW_NOTE = 'Past chats and file uploads need a newer wicked-crew.';
+
+/** The footer under a landed answer: who answered and how many chosen sources it could see. */
+export function answerFooterWords(cli: string, sources: number): string {
+  return `Answered by ${cli} · saw ${sources} source${sources === 1 ? '' : 's'}`;
 }
 
 export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoffTaken, sendProjectId, sendFresh = false, sendPrimary, sendChatId, sendOpenChatId, startProjectId, startText, startFresh = false }: {
@@ -167,6 +176,16 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
   const failedAt = useFailureClocks((s) => s.failedAtByRun);
   const attachedAt = useMembershipStore((s) => s.attachedAtByRun);
   const projectIds = useMembershipStore((s) => s.projectIdByRun);
+  const docsByProject = useDocsCache((s) => s.byProject);
+  // DES-SYSTEM-CHAT §9: past chats and uploads need crew's chat list and attachments.
+  const chatList = useCapabilities((s) => s.chatList);
+  const chatAttachments = useCapabilities((s) => s.chatAttachments);
+  const capsLoaded = useCapabilities((s) => s.loaded);
+  // The floating window's chrome (drag handle, minimize / full size / close) — absent in a bare render.
+  const chrome = useChatChrome();
+  // A send that settles after Close ended this chat must not re-persist it.
+  const [epoch] = useState(systemChatEpoch);
+  const ended = (): boolean => systemChatEpoch() !== epoch;
 
   // The diagnostics read — presence-gated: absence is an ANSWER (older crew), never an error.
   useEffect(() => {
@@ -197,14 +216,23 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
     if (useProjectsStore.getState().projects.length === 0) void useProjectsStore.getState().load();
   }, []);
 
+  // DES-SYSTEM-CHAT §7: the page the chat is seeing — its words, its project and repo (the chips'
+  // defaults) and the run on screen.
+  const search = typeof window === 'undefined' ? '' : window.location.search;
+  const ctx = useMemo(
+    () => pageContext({ pathname, search, runs, projects, repos }),
+    [pathname, search, runs, projects, repos],
+  );
+
   // The send verb closes over LIVE state via refs — the pack is assembled AT SEND TIME,
   // so it cites what the app knows at that moment (not at mount).
-  const packInputs = useRef({ pathname, runs, liveChatCount: 0, diagnostics: diag as DiagnosticsState });
+  const packInputs = useRef({ pathname, runs, liveChatCount: 0, diagnostics: diag as DiagnosticsState, pageLabel: ctx.label });
   packInputs.current = {
     pathname,
     runs,
     liveChatCount: Object.keys(liveChats).length,
     diagnostics: diag,
+    pageLabel: ctx.label,
   };
 
   /** The session this dock RESUMES (studio#323 R3): the dock unmounts on close, so the
@@ -222,7 +250,7 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
       const stored = readAskSession();
       if (stored !== null && stored.chatId === sendChatId) return stored;
       // The chat on screen, opened elsewhere: its context pack rode its own first send.
-      const session = { chatId: sendChatId, title: '', seeded: true, scope: null };
+      const session: AskSession = { chatId: sendChatId, title: '', seeded: true, scope: null };
       writeAskSession(session);
       return session;
     }
@@ -239,22 +267,47 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
   /** The session's first question — its /chats handle, re-persisted with the flag. */
   const titleRef = useRef(resumed?.title ?? '');
 
-  // studio#323 R4 — the chat's scope, chosen before the first send: the route's project, else
-  // everything, until the user picks. Once open, the header states what the daemon RESOLVED —
-  // persisted with the session, so a reopened dock never offers a scope select for a chat that is
-  // already open (a resumed session from before the field reads "not stated", never a choice).
-  // Ask stays mounted across navigation (codex round 3 on #327): an UNTOUCHED choice is derived
-  // from the CURRENT route each render; only a manual pick is state, and it survives navigation.
-  // `ambientProjectId` is the one project-from-route rule (`/p/default` = Unfiled = none).
-  const [manualScope, setManualScope] = useState<AskScopeChoice | null>(() =>
-    (sendProjectId !== undefined ? `project:${sendProjectId}` : startProjectId !== undefined ? `project:${startProjectId}` : null));
-  const scopeChoice: AskScopeChoice = manualScope ?? defaultAskScope(ambientProjectId(pathname));
-  const scopeChoiceRef = useRef(scopeChoice);
-  scopeChoiceRef.current = scopeChoice;
-  /** `undefined` = no chat open yet (the select shows); `null` = open, scope not stated. */
+  // DES-SYSTEM-CHAT §6 — "What the chat can see": the scope chips. Untouched, they follow the page on
+  // screen (Ask stays mounted across navigation); a click makes them the user's, and they survive
+  // navigation. Once the chat opens they are frozen with it (its read roots cannot change) and
+  // persisted with the session, so a reopened chat shows what it was opened with.
+  // A chat started in the project on screen (the rail's Chat) simply follows the page; one started in a
+  // project from elsewhere (⌘K "Chat in this project") is held to that project, with the page's repo.
+  const startProject = sendProjectId ?? startProjectId;
+  const [chipEdits, setChipEdits] = useState<ScopeChip[] | null>(() => {
+    if (resumed?.chips !== undefined && resumed.chips.length > 0) return resumed.chips;
+    if (startProject === undefined || startProject === ctx.project?.id) return null;
+    const name = useProjectsStore.getState().projects.find((p) => p.id === startProject)?.name ?? startProject;
+    return defaultScopeChips({ project: { id: startProject, name }, repo: ctx.repo });
+  });
+  const chips = useMemo(() => chipEdits ?? defaultScopeChips(ctx), [chipEdits, ctx]);
+  const chipsRef = useRef(chips);
+  chipsRef.current = chips;
+  /** `undefined` = no chat open yet (the chips are a choice); `null` = open, scope not stated. */
   const [openedScope, setOpenedScope] = useState<ChatScope | null | undefined>(() =>
     resumed === null ? undefined : (resumed.scope ?? null));
   const scopeRef = useRef<ChatScope | null>(resumed?.scope ?? null);
+  /** What the last message's pack carried (the chips that were on, and the page): a later message
+   *  carries a pack again only when that changed. */
+  // A resumed chat restores what its last delivered pack carried; unknown (an older session) means the
+  // next message carries a fresh one — never a page the chat was not told about.
+  const lastPackRef = useRef<string | null>(resumed?.packSig ?? null);
+  /** The diagnostics ride the first pack that carries This page — not merely the first message. */
+  const diagSentRef = useRef(resumed?.diagSent === true || (resumed?.seeded === true && resumed.packSig === undefined));
+
+  // DES-SYSTEM-CHAT §5 — the ONE answering CLI: the user's pick, else the default rule. Fixed once
+  // the chat is open (a resumed chat keeps the CLI it was opened with).
+  const roster = useRoster();
+  const scoped = chipsScoped(chips);
+  const clis = useMemo(() => cliOptions(roster, scoped), [roster, scoped]);
+  const [cliPick, setCliPick] = useState<string | null>(() => sendPrimary ?? resumed?.cli ?? null);
+  const cli = openedScope !== undefined
+    ? cliPick
+    : cliPick !== null && clis.some((o) => o.key === cliPick && o.ok) ? cliPick : defaultChatCli(clis);
+  const cliRef = useRef(cli);
+  cliRef.current = cli;
+  const cliLabel = cli === null ? null : cliName(cli, roster);
+  useEffect(() => { useChatWindow.getState().setCli(cliLabel); }, [cliLabel]);
 
   // ASK-S1 (Amendment 6 decision 5: studio renders ONE thread): on the chat's own session page the
   // session thread shows every turn as it happens, so once a send is accepted the dock steps aside
@@ -270,18 +323,61 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
     if (m !== null && decodeURIComponent(m[1]!) === chatId) onCloseRef.current();
   }, []);
 
+  /** How many chosen sources the latest message was sent with (a resumed chat: the chips it shows). */
+  const sentSourcesRef = useRef(chosenChips(chips).length);
+
+  /** Persist the open chat: its current chips (the user's choices now) apart from the signature of
+   *  the last pack that LANDED (what the chat has actually been told). Never after Close ended it. */
+  const persist = useCallback((id: string) => {
+    if (ended()) return;
+    writeAskSession({
+      chatId: id, title: titleRef.current, seeded: seededRef.current, ...scopeField(scopeRef.current),
+      chips: chipsRef.current,
+      ...(cliRef.current !== null ? { cli: cliRef.current } : {}),
+      ...(lastPackRef.current !== null ? { packSig: lastPackRef.current } : {}),
+      ...(diagSentRef.current ? { diagSent: true } : {}),
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `ended` reads the module epoch
+  }, []);
+
+  /** The message as sent: what was typed, plus the pack when it is owed — the full one (diagnostics
+   *  included) on the first message, a fresh one later only when the chips or the page changed. The
+   *  chips and page are SNAPSHOT here, so the acknowledgement records exactly what this message carried
+   *  (a chip changed while it is in flight is still owed to the next one). */
+  const withPack = useCallback((text: string): { message: string; sig: string; diag: boolean } => {
+    const chipsNow = chipsRef.current;
+    // What this turn's answer will say it saw: the chips on when it was sent.
+    sentSourcesRef.current = chosenChips(chipsNow).length;
+    const sig = `${chipsSignature(chipsNow)}@${packInputs.current.pathname}`;
+    if (seededRef.current && lastPackRef.current === sig) return { message: text, sig, diag: false };
+    const diag = !diagSentRef.current && chipsNow.some((c) => c.kind === 'page' && c.on);
+    const pack = buildContextPack({ ...packInputs.current, chips: chipsNow, omitDiagnostics: !diag });
+    return { message: `${text}${PACK_JOIN}${pack}`, sig, diag };
+  }, []);
+  /** A message landed: the pack it carried is what the chat has seen. */
+  const packLanded = useCallback((id: string, out: { sig: string; diag: boolean }) => {
+    lastPackRef.current = out.sig;
+    if (out.diag) diagSentRef.current = true;
+    seededRef.current = true;
+    persist(id);
+  }, [persist]);
+
+  // The user's chip choices for an OPEN chat are persisted as they change, so a resumed chat shows (and
+  // its next pack carries) what the user chose last — not what it was opened with.
+  useEffect(() => {
+    if (openedScope === undefined || chatIdRef.current === null) return;
+    persist(chatIdRef.current);
+  }, [chips, openedScope, persist]);
+
   const verbs: AssistVerbs = useMemo(
     () => ({
       send: async (text) => {
         let id = chatIdRef.current;
         if (id !== null && resumed !== null && id === resumed.chatId) {
-          const message = seededRef.current ? text : `${text}${PACK_JOIN}${buildContextPack(packInputs.current)}`;
           try {
-            deposit(id, text, await api.sendChatMessage(id, message).catch(plainSendRefusal(id)));
-            if (!seededRef.current) {
-              seededRef.current = true;
-              writeAskSession({ chatId: id, title: titleRef.current, seeded: true, ...scopeField(scopeRef.current) });
-            }
+            const out = withPack(text);
+            deposit(id, text, await api.sendChatMessage(id, out.message).catch(plainSendRefusal(id)));
+            packLanded(id, out);
             stepAside(id);
             return { chatId: id };
           } catch (sendErr) {
@@ -300,13 +396,15 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
             forgetAskSession(id);
             chatIdRef.current = null;
             seededRef.current = false;
+            lastPackRef.current = null;
+            diagSentRef.current = false;
             id = null;
             // The fresh session below opens with the scope chosen now (the one on record stands
             // for the reclaimed chat only).
           }
         }
         if (id === null) {
-          // codex r1: a fresh chat page's open that fails anywhere here (no seat picked, the roster, the
+          // codex r1: a fresh chat page's open that fails anywhere here (no CLI, the roster, the
           // open itself, no helper able to answer) frees the page's Send; the panel says why.
           try {
             // The chat-capable roster (EC44's derivation, reused verbatim) — cached when any
@@ -317,39 +415,40 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
               setCachedRoster(fetched);
               roster = fetched;
             }
-            const choice = scopeChoiceRef.current;
-            // studio#631: the composer's helpers row decides — the admitted seats minus the ones turned off.
-            // studio#713: never a reviewer-only seat ("Claude Code (judge)") — the composer's helper row rule.
-            const scoped = askScopeIsScoped(choice);
+            const chosen = chipsRef.current;
+            const scoped = chipsScoped(chosen);
+            // DES-SYSTEM-CHAT §5: ONE CLI answers — the picker's. A CLI that cannot answer is never
+            // sent; when none can, the refusal says why (the daemon's own words per CLI).
+            const options = cliOptions(roster, scoped);
+            const pick = cliRef.current !== null && options.some((o) => o.key === cliRef.current && o.ok) ? cliRef.current : defaultChatCli(options);
+            if (pick === null) {
+              const why = options.filter((o) => !o.ok).map((o) => `${o.label} (${o.reason ?? 'unavailable'})`).join(', ');
+              throw new Error(options.length === 0
+                ? 'No CLI is set up to answer — add one on the Agents page.'
+                : `No CLI can answer right now — ${why}. Sign one in on the Agents page.`);
+            }
+            // Under the team path the chat records the eligible seats (studio#631's composer choice) and
+            // the picked CLI is its primary; without it every seat sent answers, so only the pick is sent.
+            const askPath = useCapabilities.getState().askPath;
             const eligible = askEligible(roster, scoped);
             const { dropped, picked } = useComposerSeats.getState();
-            const clis = chosenSeats(eligible, dropped, picked);
-            if (eligible.length > 0 && clis.length === 0) {
-              // studio#840: name the helpers that are ON but that the daemon will not seat (out of quota,
-              // benched, signed out) — "no helper is picked" was wrong when one was.
-              const unavailable = userSeats(roster)
-                .filter((s) => !eligible.includes(s.key) && !seatOff(s.key, dropped, picked))
-                .map((s) => ({ name: seatLabel(s), reason: chatAdmissionOf(s, scoped).reason }));
-              throw new Error(noSeatPickedMessage(unavailable));
-            }
+            const seats = askPath ? [pick, ...chosenSeats(eligible, dropped, picked).filter((k) => k !== pick)] : [pick];
             // A failed open keeps the page's id for the retry; only a chat the daemon opened spends it.
             id = openIdRef.current ?? crypto.randomUUID();
-            const body: ChatOpenBody = { chatId: id, ...askScopeOpenFields(choice, ambientProjectId(packInputs.current.pathname)) };
-            if (clis.length > 0) body.clis = clis;
-            // ASK-S1: the helper named with `@` answers (`selection: chosen`); unnamed, the engine picks at random.
-            if (sendPrimary !== undefined && useCapabilities.getState().askPath && (clis.length === 0 || clis.includes(sendPrimary))) body.primary = sendPrimary;
+            const body: ChatOpenBody = { chatId: id, ...chipsOpenFields(chosen, ambientProjectId(packInputs.current.pathname)), clis: seats };
+            if (askPath) body.primary = pick;
             // A refused open reads as the retired chat page's does (codex on #327): a pre-0.39.0 daemon's
             // "unknown field `scopeKind`" names the upgrade, never the raw wire.
-            const { seats, scope } = await api.openChat(body).catch((e: unknown) => {
+            const { seats: warmed, scope } = await api.openChat(body).catch((e: unknown) => {
               throw new Error(describeChatOpenRefusal(apiStatus(e), apiWire(e), e instanceof Error ? e.message : String(e)));
             });
-            const ready = seats.filter((s) => s.ok).map((s) => s.cliKey);
+            const ready = warmed.filter((s) => s.ok).map((s) => s.cliKey);
             if (ready.length === 0) {
               const detail =
-                seats.length > 0
-                  ? seats.map((s) => `${s.cliKey}: ${s.error ?? 'failed'}`).join('; ')
-                  : useCapabilities.getState().askPath ? 'no signed-in helper is eligible to answer' : 'the daemon warmed no seats';
-              throw new Error(`${useCapabilities.getState().askPath ? 'No helper can answer' : 'No agent seat came up'} — ${detail}`);
+                warmed.length > 0
+                  ? warmed.map((s) => `${s.cliKey}: ${s.error ?? 'failed'}`).join('; ')
+                  : askPath ? 'no signed-in helper is eligible to answer' : 'the daemon warmed no seats';
+              throw new Error(`${askPath ? 'No helper can answer' : 'No agent seat came up'} — ${detail}`);
             }
             chatIdRef.current = id;
             // The chat flow: a fresh chat page's chat is open on the daemon now — an ordinary chat from here.
@@ -357,9 +456,13 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
             chatOpened(id);
             scopeRef.current = scope ?? null;
             setOpenedScope(scope ?? null);
+            // The chips and the CLI are this chat's now: frozen, whatever the page does next.
+            setChipEdits(chosen);
+            setCliPick(pick);
+            cliRef.current = pick;
             // Persist for the tab — a close/reopen (or reload) resumes THIS session.
             titleRef.current = text;
-            writeAskSession({ chatId: id, title: text, seeded: false, ...scopeField(scopeRef.current) });
+            if (!ended()) writeAskSession({ chatId: id, title: text, seeded: false, ...scopeField(scopeRef.current), chips: chosen, cli: pick });
             // The session is live — make it findable on the rail (the J4 live row) and on
             // /chats, labelled with where it came from and what was asked (studio#323 R2).
             useLiveChatsStore.getState().upsert(id, ready, { origin: 'ask', title: text });
@@ -368,84 +471,89 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
             throw openErr;
           }
         }
-        const message = seededRef.current ? text : `${text}${PACK_JOIN}${buildContextPack(packInputs.current)}`;
-        deposit(id, text, await api.sendChatMessage(id, message).catch(plainSendRefusal(id)));
-        if (!seededRef.current) {
-          seededRef.current = true;
-          writeAskSession({ chatId: id, title: titleRef.current, seeded: true, ...scopeField(scopeRef.current) });
-        }
+        const out = withPack(text);
+        deposit(id, text, await api.sendChatMessage(id, out.message).catch(plainSendRefusal(id)));
+        packLanded(id, out);
         stepAside(id);
         return { chatId: id };
       },
     }),
-    [resumed, sendPrimary, stepAside],
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `ended` reads the module epoch
+    [resumed, stepAside, withPack, packLanded],
   );
 
-  const prompts = useMemo(
+  const needRows = useMemo(
     () =>
-      askPrompts({
-        runs,
-        // THE home-queue fold (needsYouRows — DES-HOME-COMMAND-CENTER §3), so
-        // the failed-run chip seeds the SAME newest failed run the queue shows
-        // (E1) — never a second recency derivation. Chats/campaigns ride empty
-        // here: absence adds no rows, and the failed-run pick reads none of
-        // them. `now` feeds only the (absent) stalled-chat rows — the fold
-        // stays effectively pure in this memo's deps.
-        needRows: needsYouRows({
-          runs,
-          gates,
-          failedAt,
-          attachedAt,
-          projectIds,
-          chats: [],
-          repos,
-          campaigns: [],
-          now: Date.now(),
-        }),
-        projects: [...projects].sort((a, b) => b.updated_at - a.updated_at),
-        repos,
-      }),
-    [runs, gates, failedAt, attachedAt, projectIds, projects, repos],
+      // THE home-queue fold (needsYouRows — DES-HOME-COMMAND-CENTER §3), so the failed-run prompt
+      // seeds the SAME newest failed run the queue shows (E1) — never a second recency derivation.
+      needsYouRows({ runs, gates, failedAt, attachedAt, projectIds, chats: [], repos, campaigns: [], now: Date.now() }),
+    [runs, gates, failedAt, attachedAt, projectIds, repos],
+  );
+  const prompts = useMemo(
+    () => pagePrompts({ ctx, runs, needRows, gates, clis, roster, projects, repos }),
+    [ctx, runs, needRows, gates, clis, roster, projects, repos],
   );
 
-  // studio#840: the helpers row the first send's refusal points at (before the chat opens).
-  const roster = useRoster();
-  const helpers = useMemo(
-    () => (roster === null ? [] : askEligible(roster, askScopeIsScoped(scopeChoice))),
-    [roster, scopeChoice],
-  );
+  // + Add's corpus: every repo, project, run and document the app already holds (no request per key).
+  const candidates = useMemo<ScopeCandidate[]>(() => {
+    const out: ScopeCandidate[] = [];
+    for (const p of projects) if (p.id !== 'default') out.push({ key: `project:${p.id}`, kind: 'project', label: p.name, ref: p.id });
+    for (const r of repos) out.push({ key: `repo:${r.id}`, kind: 'repo', label: r.name, ref: r.id });
+    for (const v of runs.slice(0, 200)) out.push({ key: `run:${v.session.id}`, kind: 'run', label: jobTitle(v.session), ref: v.session.id, detail: RUN_WORDS[v.session.status] ?? v.session.status });
+    for (const [pid, docs] of Object.entries(docsByProject)) {
+      for (const d of docs) out.push({ key: `doc:${pid}/${d.name}`, kind: 'doc', label: d.name, ref: d.name, projectId: pid, detail: projects.find((p) => p.id === pid)?.name ?? pid });
+    }
+    return out;
+  }, [projects, repos, runs, docsByProject]);
 
-  const place = `from ${placeWords(sectionLabel(pathname))}`;
+  const locked = openedScope !== undefined;
+  const answerFooter = useCallback((key: string) => answerFooterWords(cliName(key, getCachedRoster()), sentSourcesRef.current), []);
+  const onStatus = useCallback((s: 'ready' | 'thinking' | 'answered') => { useChatWindow.getState().setStatus(s); }, []);
+
   const resolvedScope = openedScope === undefined ? '' : describeResolvedScope(openedScope, { projects });
+  const olderCrew = capsLoaded && (!chatList || !chatAttachments);
+
+  const picker = (
+    <ChatCliPicker
+      options={clis}
+      value={cli}
+      locked={locked}
+      onChange={(k) => { setCliPick(k); saveChatCli(k); }}
+      {...(navigate !== undefined ? { onSignIn: (path: string) => navigate(path) } : {})}
+    />
+  );
 
   return (
     <AssistDock
       context={{
         surface: 'ask',
-        title: 'Ask',
-        // Concept A (DES-frontdoor): the Desk's Chat lands here, so the default layer speaks plainly;
-        // what the question carries stays in the context pack, never in this line.
-        contextLabel: resolvedScope === '' ? place : `${place} · ${resolvedScope}`,
-        placeholder: 'Ask about your projects, repositories and jobs, or studio itself…',
+        title: 'Chat',
+        contextLabel: resolvedScope === '' ? `Seeing: ${ctx.label}` : `Seeing: ${ctx.label} · ${resolvedScope}`,
+        placeholder: pagePlaceholder(ctx),
         hint:
-          'Ask a question and helpers answer it from your code, your jobs and studio’s own records. ' +
-          'Nothing changes until you say so.',
+          'Ask about what you are looking at. The answer comes from your code, your jobs and studio’s own records, ' +
+          'within what the chat can see. Nothing changes until you say so.',
         prompts,
         controls:
           openedScope === undefined ? (
-            <>
-              <ChatScopeSelect value={scopeChoice} onChange={setManualScope} projects={projects} repos={repos} />
-              {/* Behaviour 8: or drop notes / a photo instead — the proposals land in Home's Needs You. */}
-              <CaptureDrop
-                runs={runs}
-                pathname={pathname}
-                inline
-                onReview={navigate === undefined ? undefined : () => { navigate('/'); onClose(); }}
-              />
-            </>
+            /* Behaviour 8: or drop notes / a photo instead — the proposals land in Home's Needs You. */
+            <CaptureDrop
+              runs={runs}
+              pathname={pathname}
+              inline
+              onReview={navigate === undefined ? undefined : () => { navigate('/'); onClose(); }}
+            />
           ) : undefined,
-        // studio#840: the helpers the first send opens the chat with, until the chat is open.
-        composerControls: openedScope === undefined && helpers.length > 0 ? <AskHelpers roster={roster} eligible={helpers} /> : undefined,
+        composerControls: (
+          <ChatScopeChips
+            chips={chips}
+            locked={locked}
+            candidates={candidates}
+            onSearchOpen={() => { void useDocsCache.getState().loadIndex(); }}
+            onClick={(key) => setChipEdits(clickChip(chips, key))}
+            onAdd={(c) => setChipEdits(addChip(chips, { key: c.key, kind: c.kind, label: c.label, ref: c.ref, ...(c.projectId !== undefined ? { projectId: c.projectId } : {}) }))}
+          />
+        ),
       }}
       verbs={verbs}
       resumeChatId={resumed?.chatId ?? null}
@@ -457,6 +565,8 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
         if (chatIdRef.current === chatId) {
           chatIdRef.current = null;
           seededRef.current = false;
+          lastPackRef.current = null;
+          diagSentRef.current = false;
           // No chat is open any more: the next send opens a fresh one, so the scope is a choice again.
           scopeRef.current = null;
           setOpenedScope(undefined);
@@ -481,6 +591,17 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
       onOpenChange={(next) => {
         if (!next) onClose();
       }}
+      headerProps={chrome?.dragProps}
+      headerExtra={picker}
+      compactHeader
+      headerEnd={chrome?.controls}
+      onStatus={onStatus}
+      // Uploads ride crew's attachments route (the next slice); until then the paperclip stays away
+      // rather than attach a file the send would drop.
+      allowAttach={false}
+      answerFooter={answerFooter}
+      promptsSend
+      notice={olderCrew ? OLDER_CREW_NOTE : undefined}
     />
   );
 }
