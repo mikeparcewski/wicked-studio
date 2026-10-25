@@ -13,10 +13,16 @@ import { wireDelivery } from '../../board/windowStats.js';
 import { readWatch, useWatchFeed } from '../../hooks/useWatchFeed.js';
 import type { Navigate } from '../../hooks/useRoute.js';
 import { jumpPath, orphanedRuns, runPath, useWatchStore, type WatchRow } from '../../store/watch.js';
-import { liveCount } from '../desk/WatchPill.js';
+import { deskLiveCounts } from '../../board/statusWords.js';
 import { plainWatchLine } from '../../board/watchLine.js';
 import { useDisplayText } from '../../hooks/useHomePath.js';
 import { StateBanner, TechDetails } from '../ui/index.js';
+
+/** The runs moving right now: the Desk's own count (statusWord via deskLiveCounts), so a gate, a paused
+ *  run, an idle chat and a run Needs you holds are not "running" here either (studio#805). */
+export function liveCount(runs: readonly SessionView[]): number {
+  return deskLiveCounts(runs).working;
+}
 
 /** The feed's kinds, in the words the page uses (TR §4.10's five). */
 type FilterKind = WatchKind | GateAnswer;
@@ -125,8 +131,11 @@ export function ago(at: number, now: number): string {
  * still shows what studio folds itself; a failed read says it failed, with Try again, and is never
  * read as an empty feed.
  */
-export function WatchtowerPage({ runs, runsLoaded = true, runsError = null, onRetryRuns, navigate, now, search = window.location.search }: {
+export function WatchtowerPage({ runs, runsLoaded = true, runsError = null, onRetryRuns, navigate, now, search = window.location.search, embedded = false }: {
   count: number;
+  /** Inside Nerve Center (DES-SYSTEM-VIEW): the feed under the panels — its heading is a section's,
+   *  and the dashboard's scroller scrolls it (no scroller of its own, no page measure). */
+  embedded?: boolean;
   runs: SessionView[];
   /** Whether a `GET /runs` has answered (App's `useRuns`). */
   runsLoaded?: boolean;
@@ -199,9 +208,9 @@ export function WatchtowerPage({ runs, runsLoaded = true, runsError = null, onRe
   };
 
   return (
-    <div data-testid="watchtower" data-registry={registry} className="wk-watchtower">
-      <header className="wk-watchtower-head wk-measure">
-        <h1 className="wk-session-title">Watchtower</h1>
+    <div data-testid="watchtower" data-registry={registry} className={`wk-watchtower${embedded ? ' wk-watchtower--embedded' : ''}`}>
+      <header className={`wk-watchtower-head${embedded ? '' : ' wk-measure'}`}>
+        {embedded ? <h2 className="wk-nc-panel-title">Feed</h2> : <h1 className="wk-session-title">Watchtower</h1>}
         {/* No verdict over a feed that could not be read (the banner below says so). */}
         {!(feedError !== null && all.length === 0) && (
           <p data-testid="watchtower-sentence" data-count={openCount} className="wk-session-status">{sentence}</p>
@@ -212,7 +221,7 @@ export function WatchtowerPage({ runs, runsLoaded = true, runsError = null, onRe
           </p>
         )}
       </header>
-      <div className="wk-watchtower-body wk-measure">
+      <div className={`wk-watchtower-body${embedded ? '' : ' wk-measure'}`}>
         <div role="group" aria-label="Show" className="wk-watchtower-kinds">
           {KINDS.map((k) => (
             <button

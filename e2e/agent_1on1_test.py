@@ -75,7 +75,7 @@ with sync_playwright() as p:
 
     def open_health() -> None:
         page.goto(f"{origin}/", wait_until="networkidle")
-        link = page.get_by_test_id("desk-rail-health")
+        link = page.get_by_test_id("desk-rail-nerve")
         link.wait_for(state="visible", timeout=15000)
         link.click()
         page.get_by_test_id("rail-seat-week-window").wait_for(state="visible", timeout=15000)

@@ -7,7 +7,8 @@
 export const PAGE_NAMES = {
   home: 'Desk',
   agents: 'Agents',
-  watch: 'Watchtower',
+  /** `/watch` — the system dashboard (DES-SYSTEM-VIEW); `/health` redirects there. */
+  watch: 'Nerve Center',
   skills: 'Skills',
   mcp: 'MCP',
   mcpInspect: 'MCP inspector',
@@ -17,7 +18,6 @@ export const PAGE_NAMES = {
   testing: 'Testing',
   evals: 'Evals',
   learn: 'Learn',
-  health: 'Health',
   system: 'General',
   repos: 'Repositories',
   workflows: 'Workflows',
@@ -36,7 +36,7 @@ const BY_PATH: ReadonlyArray<[string, string]> = [
   ['/rules', PAGE_NAMES.steering],
   ['/memory', PAGE_NAMES.memory],
   ['/learn', PAGE_NAMES.learn],
-  ['/health', PAGE_NAMES.health],
+  ['/health', PAGE_NAMES.watch],
   ['/system', PAGE_NAMES.system],
   ['/repos', PAGE_NAMES.repos],
   ['/workflows', PAGE_NAMES.workflows],

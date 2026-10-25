@@ -5,15 +5,16 @@ desk_watchtower_test.py — S14 (DES-STUDIO-REBUILD-001 §5.4, §11 S14): the Wa
 
 Against the in-process fixture (wave-1 corpus, b1 waiting at a gate, `watch_feed` on):
 
-  1. ONE COUNT: the Desk sentence's count and the rail pill's count are the same number; the
-     Watchtower's sentence counts the open items its own feed shows (UX audit row 55).
+  1. ONE COUNT: the Desk sentence's count is the count Nerve Center's "waits on you" item says (this
+     fixture crew has no system snapshot, so the tile folds it from the needs-you count); the
+     Watchtower feed's sentence counts the open items its own feed shows (UX audit row 55).
   2. THE FEED: /watch lists TR's rows newest first — the open claim finding with "Jump in", the
      fixed older one, finished runs — and never the gate-attached finding (that is a line on the
      gate card). The kind chips filter it (Problems → the problem rows only).
   3. JUMP IN: the claim finding's "Jump in" lands on b1's run page at its moment.
   4. ⌥W: from the Desk, ⌥W opens /watch.
-  5. THE PILL: its card is hidden at rest, shows on hover (the sentence + the newest open row),
-     and the pill opens /watch.
+  5. THE TILE: the rail's Nerve Center tile (DES-SYSTEM-VIEW, which replaced the pill) says the
+     waiting work in words and opens /watch, where the feed sits under the dashboard's panels.
   6. NO REGISTRY: with the registry off the page says so and still shows studio's own fold.
   7. EMPTY KINDS: every kind with no rows says why (never "Nothing of this kind yet.") and offers
      Show everything, which lands on Everything (DEST); at 390x844 that button is a 44 px tap target
@@ -24,6 +25,7 @@ Captures: e2e/shots/desk-watchtower*.png. Env: FEEDBACK_PORT (default 4352).
 """
 
 import json
+import re
 import os
 import sys
 
@@ -75,24 +77,27 @@ with sync_playwright() as p:
     page.get_by_test_id("desk").wait_for(state="visible", timeout=15000)
     page.wait_for_timeout(800)
     desk = int(page.get_by_test_id("desk-inbox-count").get_attribute("data-count") or "-1")
-    pill = int(page.get_by_test_id("watch-pill").get_attribute("data-count") or "-2")
-    card_hidden = not page.get_by_test_id("watch-pill-card").is_visible()
-
-    # ── 5. the pill's card: hidden at rest, shown on hover ─────────────────────────
-    page.get_by_test_id("watch-pill").hover()
-    page.get_by_test_id("watch-pill-card").wait_for(state="visible", timeout=5000)
-    card = page.get_by_test_id("watch-pill-card").inner_text()
-    card_rows = page.get_by_test_id("watch-pill-row").all_inner_texts()
-    page.screenshot(path=str(SHOTS / "desk-watchtower-pill.png"))
-    check("pill-card", card_hidden and "need" in card and len(card_rows) >= 1, card=card, rows=card_rows)
-
-    page.get_by_test_id("watch-pill").click()
+    # ── 5. the tile: the waiting work in words, and it opens /watch ────────────────
+    tile = page.get_by_test_id("desk-rail-nerve")
+    page.wait_for_function("() => document.querySelector('[data-testid=\"desk-rail-nerve\"]')?.dataset.read === 'fresh'", timeout=10000)
+    tile_words = page.get_by_test_id("nerve-center-words").inner_text()
+    tile_tone = tile.get_attribute("data-tone")
+    page.screenshot(path=str(SHOTS / "desk-watchtower-tile.png"))
+    tile.click()
+    page.get_by_test_id("nerve-center-page").wait_for(state="visible", timeout=8000)
     page.get_by_test_id("watchtower").wait_for(state="visible", timeout=8000)
+    waits = page.locator('[data-testid="nc-attention-item"][data-id="waiting-on-you"]')
+    waits.wait_for(state="visible", timeout=8000)
+    waits_text = waits.inner_text()
+    said = re.search(r"(\d+) things? waits? on you", waits_text)
+    pill = int(said.group(1)) if said else -2
+    check("tile", tile_tone in ("yellow", "red") and tile_words.strip() != "" and "wait" in waits_text,
+          words=tile_words, tone=tile_tone, waits=waits_text)
     sentence_count = int(page.get_by_test_id("watchtower-sentence").get_attribute("data-count") or "-3")
     page.locator('[data-testid="watchtower-row"]').first.wait_for(state="visible", timeout=8000)
     open_rows = page.locator('[data-testid="watchtower-row"][data-state="open"]').count()
-    # UX audit row 55: the Watchtower's header counts what its feed shows (open items); the Desk and
-    # the pill keep the one needs-you count.
+    # UX audit row 55: the feed's header counts what its feed shows (open items); the Desk and
+    # Nerve Center keep the one needs-you count.
     check("one-count", desk == pill and desk >= 1 and sentence_count == open_rows and page.url.endswith("/watch"),
           desk=desk, pill=pill, watchtower=sentence_count, open_rows=open_rows, url=page.url)
 

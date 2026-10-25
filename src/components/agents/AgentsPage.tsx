@@ -249,7 +249,7 @@ export function AgentsPanel({ search, navigate, basePath = AGENTS_PATH }: {
         <>
           <StateBanner kind="error" what="agents" error={v.rosterError instanceof Error ? v.rosterError.message : null} onRetry={retry} retrying={retrying} data-testid="agents-banner" />
           <p className="wk-agents-sub">If it keeps failing, Health shows whether studio’s service is working.</p>
-          <div><a href="/health" className="wk-btn wk-btn--secondary wk-agents-door" data-testid="agents-health-link" onClick={(e) => { if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return; e.preventDefault(); navigate('/health'); }}>Open Health</a></div>
+          <div><a href="/watch" className="wk-btn wk-btn--secondary wk-agents-door" data-testid="agents-health-link" onClick={(e) => { if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return; e.preventDefault(); navigate('/watch'); }}>Open Nerve Center</a></div>
         </>
       );
   } else if (!v.hasRoster) {

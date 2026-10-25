@@ -6,20 +6,21 @@ at 1440x700 on the Desk.
 Against the in-process fixture (wave-1 + wave-2b corpus):
 
   1. ORDER (operator IA 2026-10-13): top to bottom — the wordmark (ONE link to the Desk, its name
-     saying the needs-you badge) · New project · the sessions list · then the Workspace: Watchtower ·
-     Skills · MCP · Plugins · Workflows · Theme · General · Health (set apart, last); no separate Desk
+     saying the needs-you badge) · New project · the sessions list · then the Workspace: Skills · MCP ·
+     Plugins · Workflows · Theme · General, and the Nerve Center tile pinned last (DES-SYSTEM-VIEW: one
+     tile, larger than every other item, filled by its state, the worst item in words); no separate Desk
      item, no Product, no Testing, none of the Desk tabs (Repositories, Steering, Evals, Agents), no
      "General settings"; no Notifications entry (no bell, no "notifications" nav-dest).
   2. NEW PROJECT: the button opens the New project modal; Escape closes it.
   3. RETIRED /settings: the address REPLACES itself with /system, the page titled "General"; General
      no longer links to Testing.
   4. NAVIGATES: Skills, MCP, Plugins, Workflows, Theme and General open their pages and are marked
-     current; Watchtower opens /watch; the wordmark opens the Desk.
-  5. HEALTH: the rail's Health link says its state word, opens /health and is marked current there.
+     current; Nerve Center opens /watch; the wordmark opens the Desk.
+  5. NERVE CENTER: /health REPLACES itself with /watch (the dashboard), and the tile is marked current.
   6. 0 page errors.
 
 Captures: e2e/shots/desk-rail.png, desk-rail-general.png (/settings landing on General), and the
-rail-polish evidence set rail-polish-{rail,general,health}-{1440x700,390x844}-{light,dark}.png (dark =
+rail-polish evidence set rail-polish-{rail,general,nerve}-{1440x700,390x844}-{light,dark}.png (dark =
 no data-theme). Env: FEEDBACK_PORT (default 4366).
 """
 
@@ -52,8 +53,8 @@ def check(step: str, ok: bool, **detail) -> None:
 
 RAIL = """() => {
   const rail = document.querySelector('[data-testid="session-rail"]');
-  const ids = ['desk-rail-home', 'desk-rail-new-project', 'rail-group', 'desk-rail-watch', 'desk-rail-skills', 'desk-rail-mcp',
-               'desk-rail-plugins', 'desk-rail-workflows', 'desk-rail-theme', 'desk-rail-general', 'desk-rail-health',
+  const ids = ['desk-rail-home', 'desk-rail-new-project', 'rail-group', 'desk-rail-skills', 'desk-rail-mcp',
+               'desk-rail-plugins', 'desk-rail-workflows', 'desk-rail-theme', 'desk-rail-general', 'desk-rail-nerve',
                'desk-rail-steering', 'desk-rail-evals', 'desk-rail-repos', 'desk-rail-more', 'desk-rail-product', 'desk-rail-testing'];
   const seen = [];
   for (const el of rail.querySelectorAll('[data-testid]')) {
@@ -70,10 +71,11 @@ RAIL = """() => {
     homeLinks: rail.querySelectorAll('a[href="/"]').length,
     homeName: home?.getAttribute('aria-label') ?? null,
     badge: badge && home?.contains(badge) ? badge.innerText.trim() : null,
-    watchInFoot: !!rail.querySelector('.wk-rail-foot [data-testid="desk-rail-watch"]'),
+    nerveLast: !!rail.lastElementChild?.querySelector('[data-testid="desk-rail-nerve"]'),
     general: rail.querySelector('[data-testid="desk-rail-general"]')?.innerText ?? null,
     footLabel: rail.querySelector('[data-testid="rail-foot-label"]')?.textContent ?? null,
-    healthState: rail.querySelector('[data-testid="rail-health-state"]')?.innerText ?? null,
+    nerveWords: rail.querySelector('[data-testid="nerve-center-words"]')?.innerText ?? null,
+    nerveTone: rail.querySelector('[data-testid="desk-rail-nerve"]')?.dataset.tone ?? null,
     actions: [...rail.querySelectorAll('[data-testid="desk-rail-actions"] button')].map(b => b.dataset.testid),
   };
 }"""
@@ -104,13 +106,13 @@ with sync_playwright() as p:
     # The badge is said once the needs-you count has settled (useSettledNeeds).
     page.get_by_test_id("desk-rail-badge").wait_for(state="visible", timeout=15000)
     r = page.evaluate(RAIL)
-    want = ['desk-rail-home', 'desk-rail-new-project', 'rail-group', 'desk-rail-watch', 'desk-rail-skills', 'desk-rail-mcp',
-            'desk-rail-plugins', 'desk-rail-workflows', 'desk-rail-theme', 'desk-rail-general', 'desk-rail-health']
+    want = ['desk-rail-home', 'desk-rail-new-project', 'rail-group', 'desk-rail-skills', 'desk-rail-mcp',
+            'desk-rail-plugins', 'desk-rail-workflows', 'desk-rail-theme', 'desk-rail-general', 'desk-rail-nerve']
     badge = r["badge"]
     check("order",
           r["order"] == want
-          and r["dests"] == ["watch", "section:skills", "section:mcp", "section:plugins", "section:workflows", "section:theme", "section:general", "health"]
-          and not r["bell"] and r["homeLinks"] == 1 and r["watchInFoot"]
+          and r["dests"] == ["section:skills", "section:mcp", "section:plugins", "section:workflows", "section:theme", "section:general", "watch"]
+          and not r["bell"] and r["homeLinks"] == 1 and r["nerveLast"]
           # The wordmark link's name says the badge (the fixture has gates waiting).
           and badge is not None and r["homeName"] in (f"wicked studio — Desk, {badge} need you", f"wicked studio — Desk, {badge} needs you")
           and all(w not in r["text"] for w in ("Rules", "Everything else", "Product", "Steering", "Evals", "Repositories", "Agents", "General settings", "Configuration", "MCP tools"))
@@ -118,7 +120,7 @@ with sync_playwright() as p:
           # DES-SYSTEM-CHAT §1: four equal icon buttons (no words), New project · New job · Chat · Search.
           and r["actions"] == ["desk-rail-new-project", "desk-rail-new-job", "desk-rail-chat", "desk-rail-search"]
           and r["general"] == "General"
-          and (r["healthState"] or "").strip() in ("· all good", "· needs attention", "· failing")
+          and (r["nerveWords"] or "").strip() != "" and r["nerveTone"] in ("green", "yellow", "red")
           and r["footLabel"] == "Workspace",
           **{k: v for k, v in r.items() if k != "text"})
 
@@ -137,7 +139,7 @@ with sync_playwright() as p:
       const foot = [...document.querySelectorAll('[data-testid="session-rail"] .wk-rail-foot .wk-rail-link')].filter((e) => e.getAttribute('aria-current') !== 'page');
       const label = document.querySelector('[data-testid="rail-foot-label"]');
       return { desk: px(document.querySelector('[data-testid="desk-rail-new-project"]')),
-               watch: px(document.querySelector('[data-testid="watch-pill"]')),
+               nerve: px(document.querySelector('[data-testid="desk-rail-nerve"] .wk-nc-name')),
                session: px(document.querySelector('[data-testid="rail-session"] .wk-rail-session-title')),
                workspace: foot.map(px), contrast: Math.min(...foot.map(contrast)), ink: foot[0] ? getComputedStyle(foot[0]).color : null, bg: foot[0] ? bgOf(foot[0]).join(',') : null, theme: document.documentElement.dataset.theme ?? null,
                label: px(label), labelTransform: label ? getComputedStyle(label).textTransform : null, labelSpacing: label ? parseFloat(getComputedStyle(label).letterSpacing) || 0 : null };
@@ -147,7 +149,9 @@ with sync_playwright() as p:
     check("workspace-tier-measured", len(ws) >= 6 and None not in ws and sizes["desk"] == 13 and sizes["session"] == 13
           and max(ws) <= 11 and max(ws) <= 0.85 * sizes["session"] and max(ws) < sizes["desk"]
           and sizes["contrast"] >= 4.5 and sizes["labelTransform"] == "uppercase"
-          and sizes["label"] is not None and sizes["label"] <= 11 and (sizes["labelSpacing"] or 0) > 0, **sizes)
+          and sizes["label"] is not None and sizes["label"] <= 11 and (sizes["labelSpacing"] or 0) > 0
+          # DES-SYSTEM-VIEW: Nerve Center is larger than every other rail item.
+          and sizes["nerve"] is not None and sizes["nerve"] > max(sizes["session"], sizes["desk"], max(ws)), **sizes)
 
     # ── 2. New project opens the one New project modal; Escape closes it ──────────
     page.get_by_test_id("desk-rail-new-project").click()
@@ -178,7 +182,7 @@ with sync_playwright() as p:
         page.wait_for_function(f"() => window.location.pathname === '{path}'", timeout=5000)
         went[tid] = {"path": page.evaluate("() => window.location.pathname"),
                      "current": page.get_by_test_id(tid).get_attribute("aria-current")}
-    page.get_by_test_id("watch-pill").click()
+    page.get_by_test_id("desk-rail-nerve").click()
     page.wait_for_function("() => window.location.pathname === '/watch'", timeout=5000)
     went["watch"] = page.evaluate("() => window.location.pathname")
     check("navigates", all(v["current"] == "page" for k, v in went.items() if k != "watch") and went["watch"] == "/watch", **went)
@@ -231,12 +235,13 @@ with sync_playwright() as p:
     page.wait_for_function("() => window.location.pathname === '/system'", timeout=5000)
     shots("general")
 
-    page.get_by_test_id("desk-rail-health").click()
-    page.wait_for_function("() => window.location.pathname === '/health'", timeout=5000)
-    page.get_by_test_id("health-page").wait_for(state="visible", timeout=5000)
-    check("health", page.get_by_test_id("desk-rail-health").get_attribute("aria-current") == "page",
-          current=page.get_by_test_id("desk-rail-health").get_attribute("aria-current"))
-    shots("health")
+    # The old Health address lands on Nerve Center (replace), and the tile is current there.
+    page.goto(f"{origin}/health", wait_until="networkidle")
+    page.wait_for_function("() => window.location.pathname === '/watch'", timeout=5000)
+    page.get_by_test_id("nerve-center-page").wait_for(state="visible", timeout=5000)
+    check("nerve-center", page.get_by_test_id("desk-rail-nerve").get_attribute("aria-current") == "page",
+          current=page.get_by_test_id("desk-rail-nerve").get_attribute("aria-current"))
+    shots("nerve")
 
     check("no-errors", not errors, errors=errors[:5])
     browser.close()

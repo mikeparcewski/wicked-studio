@@ -116,6 +116,20 @@
   --status-done:      var(--_ink-faint);
   --status-done-dim:  transparent;
 
+  /* ── Nerve Center fills (DES-SYSTEM-VIEW) — the rail tile's WHOLE background takes its state:
+     a soft green when all clear, solid amber when something needs a look, solid red when work is
+     blocked. Each -fg clears WCAG AA on its own fill (tests/nerveCenterContrast.test.ts pins it):
+     ok 8.4:1, warn 9.8:1, fail 5.3:1. -edge outlines the soft fill so it reads on the rail. */
+  --nc-ok-bg:     #1e4a31;
+  --nc-ok-fg:     #c8f5d6;
+  --nc-ok-edge:   #2f7a4c;
+  --nc-warn-bg:   #f2b234;
+  --nc-warn-fg:   #1a1300;
+  --nc-warn-edge: #f2b234;
+  --nc-fail-bg:   #c9302a;
+  --nc-fail-fg:   #ffffff;
+  --nc-fail-edge: #c9302a;
+
   /* ── Section-identity accents (§2.6b) — the landing's section doors + rail glyphs. Distinct
      from the ONE customizable accent and from the status hues: fixed section colors so Execute /
      Test / Vibe / Demo / Evals / Steering read apart at a glance. Mid-lightness, legible on both

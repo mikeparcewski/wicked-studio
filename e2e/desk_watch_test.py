@@ -10,7 +10,7 @@ Against the in-process fixture (wave-1 corpus, b1 waiting at a gate, `watch_feed
      the registry absent (404) the card carries no line at all.
   2. COVERAGE: b1's thread says "1 check didn’t run on this run." (the reason behind Technical details); a run
      whose entries were all checked shows no line (never "all clear").
-  3. JUMP IN: /s/run%3A<id>?jump=<ord>:1:<at> says "You jumped in from the Watchtower" and marks that
+  3. JUMP IN: /s/run%3A<id>?jump=<ord>:1:<at> says "You jumped in from Nerve Center" and marks that
      unit's step in the chain (nothing when the run has no such unit).
   4. LIVE: a `watchEvent` frame clearing the gate finding removes the gate line without a reload.
   5. NEEDS-YOU UNCHANGED: the Desk count is the same with the registry on and off.

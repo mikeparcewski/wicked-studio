@@ -54,4 +54,16 @@
   --status-run-dim:  hsl(var(--_sr-h) 50% 90%);
   --status-warn:     hsl(var(--_sw-h) 90% 34%);
   --status-warn-dim: hsl(var(--_sw-h) 90% 92%);
+
+  /* Nerve Center fills on paper (AA pinned in tests/nerveCenterContrast.test.ts): ok 8.1:1,
+     warn 9.9:1, fail 5.7:1; the soft green carries an edge so it reads against the rail. */
+  --nc-ok-bg:     #c4ecd1;
+  --nc-ok-fg:     #0e4a28;
+  --nc-ok-edge:   #2f8a52;
+  --nc-warn-bg:   #f4b52c;
+  --nc-warn-fg:   #1f1500;
+  --nc-warn-edge: #c98a00;
+  --nc-fail-bg:   #c0302a;
+  --nc-fail-fg:   #ffffff;
+  --nc-fail-edge: #c0302a;
 }

@@ -22,7 +22,9 @@ vi.mock('../src/api/client.js', () => ({
   apiFetch: () => Promise.resolve({}),
 }));
 
-const { HealthPage } = await import('../src/components/HealthPage.js');
+// The old /health page's cards now live in Nerve Center's panels (DES-SYSTEM-VIEW); these suites pin them there.
+const { NerveCenterPage: HealthPage } = await import('../src/components/nerve/NerveCenterPage.js');
+const { resetSystemStore } = await import('../src/store/systemSnapshot.js');
 
 const openSignIn = async (): Promise<void> => {
   render(<HealthPage />);
@@ -33,6 +35,7 @@ const openSignIn = async (): Promise<void> => {
 const shown = (): string => (screen.getByTestId('agents-command').textContent ?? '');
 
 beforeEach(() => {
+  resetSystemStore();
   useConnectionStore.setState({ status: 'connected' });
   useViewPrefsStore.setState((s) => ({ prefs: { ...s.prefs, technical_details: false } }));
 });

@@ -28,9 +28,12 @@ vi.mock('../src/components/Terminal.js', () => ({
   Terminal: ({ initialInput }: { initialInput?: string }) => <pre data-testid="fake-terminal">{initialInput}</pre>,
 }));
 
-const { HealthPage } = await import('../src/components/HealthPage.js');
+// The old /health page's cards now live in Nerve Center's panels (DES-SYSTEM-VIEW); these suites pin them there.
+const { NerveCenterPage: HealthPage } = await import('../src/components/nerve/NerveCenterPage.js');
+const { resetSystemStore } = await import('../src/store/systemSnapshot.js');
 
 beforeEach(() => {
+  resetSystemStore();
   getSeatRecord.mockClear();
   upsertConformanceRule.mockClear();
   recordAnswer = () => Promise.resolve(WEEK);

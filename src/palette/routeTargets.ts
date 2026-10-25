@@ -74,7 +74,7 @@ const DESTINATIONS: ReadonlyArray<{ shape: string; label: string; href: string }
   // Desk v2: the Desk's tabs (Steer, Agents and Evaluate host the pages that used to be Workspace links).
   { shape: 'home', label: 'Desk › Report — charts, spend and outcomes', href: '/?tab=report' },
   { shape: 'home', label: 'Desk › Understand — compare and analyze', href: '/?tab=understand' },
-  { shape: 'watch', label: 'Watchtower — the full feed', href: '/watch' },
+  { shape: 'watch', label: `${PAGE_NAMES.watch} — health of CLIs, runs, infra and governance, and the Watchtower feed`, href: '/watch' },
   { shape: 'agents', label: 'Desk › Agents — sign-in, safety checks and fixes', href: '/agents' },
   { shape: 'rules', label: `Desk › Steer — ${PAGE_NAMES.steering.toLowerCase()}: what agents are told`, href: '/rules' },
   { shape: 'everything', label: 'Everything — every session', href: everythingPath({ tab: 'sessions' }) },
@@ -90,7 +90,6 @@ const DESTINATIONS: ReadonlyArray<{ shape: string; label: string; href: string }
   { shape: 'repos-new', label: 'Register a repository', href: '/repos/new' },
   { shape: 'runs-new', label: 'Start a run', href: '/runs/new' },
   { shape: 'workflows', label: 'Workflows', href: '/workflows' },
-  { shape: 'health', label: "Health — the studio's checks", href: '/health' },
   { shape: 'skills', label: 'Skills', href: '/skills' },
   { shape: 'mcp', label: `${PAGE_NAMES.mcp} — the tools helpers can call`, href: '/mcp' },
   { shape: 'mcp-inspect', label: `${PAGE_NAMES.mcpInspect} — test and debug an MCP server`, href: '/mcp/inspect' },
@@ -167,5 +166,6 @@ export const REACHED_BY_OTHER_GROUPS: readonly string[] = ['repo-detail'];
 /** Shapes with no ⌘K entry on purpose: `/editors/conformance` is the conformance host the CI harness
  *  drives (e2e/editor_conformance_test.py; operators reach editors from Plugins, X3), and the two
  *  redirect-only addresses (operator 2026-10-12): `/product` lands on a project dashboard and
- *  `/testing/campaigns` opens the launch wizard on the test-writing workflow. */
-export const NOT_IN_PALETTE: readonly string[] = ['editors-conformance', 'product', 'testing-campaigns'];
+ *  `/testing/campaigns` opens the launch wizard on the test-writing workflow; and `/health`, which lands
+ *  on Nerve Center (`/watch`, DES-SYSTEM-VIEW) — its ⌘K entry says "health". */
+export const NOT_IN_PALETTE: readonly string[] = ['editors-conformance', 'product', 'testing-campaigns', 'health'];

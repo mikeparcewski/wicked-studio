@@ -433,7 +433,7 @@ export function setupChores(agents: { known: boolean; usable: readonly { name: s
       key: 'memory-down', tone: 'fail',
       title: 'Memory isn’t reachable — helpers answer without your project’s history',
       line: memory.reason,
-      action: { label: 'See why', path: '/health' },
+      action: { label: 'See why', path: '/watch' },
     });
   }
   return out;

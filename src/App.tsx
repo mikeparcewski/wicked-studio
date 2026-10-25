@@ -41,7 +41,8 @@ import { LaunchWizard } from './components/launch/LaunchWizard.js';
 import { ConnectionStatus } from './components/ConnectionStatus.js';
 import { SystemSettings } from './components/SystemSettings.js';
 import { ThemePage } from './components/ThemePage.js';
-import { HealthPage } from './components/HealthPage.js';
+import { NerveCenterPage } from './components/nerve/NerveCenterPage.js';
+import { NERVE_CENTER_PATH } from './components/desk/NerveCenterTile.js';
 import { parseRoute, projectDetailPath } from './hooks/useRoute.js';
 import { DeskV2, deskTabPath, type HostedTab } from './components/desk/DeskV2.js';
 import { useDeskStream } from './store/deskStream.js';
@@ -472,12 +473,12 @@ export function App(): React.ReactElement {
           toggleSystemChat();
         },
       },
-      // ⌥W — the Watchtower's full feed (S14, DESIGN-interaction rule 10), from anywhere.
+      // ⌥W — Nerve Center (the dashboard and the Watchtower feed, S14), from anywhere.
       {
         id: 'open-watchtower',
         chord: altChord('w'),
         group: 'navigate' as const,
-        description: 'Open the Watchtower (the full feed)',
+        description: 'Open Nerve Center (what is stopping work, and the feed)',
         handler: (e: KeyboardEvent) => {
           e.preventDefault();
           navigate('/watch');
@@ -630,12 +631,15 @@ export function App(): React.ReactElement {
         </div>
       );
     }
-    // `/watch` — the Watchtower (S14): TR's feed under every skin; its sentence is the needs-you count.
+    // `/watch` — Nerve Center (DES-SYSTEM-VIEW): one dashboard (attention, CLIs, runs, infra,
+    // governance) with the Watchtower feed (S14) under its panels. `/health` redirects here.
     if (panel === 'watch') {
       return (
-        <div className="flex flex-1 overflow-hidden">
-          <WatchtowerPage count={attentionBadge(needRows)} runs={shownRuns} runsLoaded={runsLoaded} runsError={runsError} onRetryRuns={refresh} navigate={navigate} now={needsNow} search={search} />
-        </div>
+        <NerveCenterPage
+          navigate={navigate}
+          needCount={attentionBadge(needRows)}
+          feed={<WatchtowerPage embedded count={attentionBadge(needRows)} runs={shownRuns} runsLoaded={runsLoaded} runsError={runsError} onRetryRuns={refresh} navigate={navigate} now={needsNow} search={search} />}
+        />
       );
     }
     // `/mcp` — MCP tools (DES-MCP-TOOLS-001 §7): the registered servers, their tools, the policy
@@ -709,11 +713,10 @@ export function App(): React.ReactElement {
         </div>
       );
     }
-    // `/health` — the studio's own checks (studio#421): the socket + API server, every council
-    // seat and its weekly 1:1, and where governance evidence lands. The page owns its scroller
-    // (`.wk-desk-scroll`) — no clipping wrapper, like the Desk and Everything.
+    // `/health` — folded into Nerve Center (DES-SYSTEM-VIEW): its cards live in the dashboard's
+    // panels, and the address redirects (replace) so old links and bookmarks land there.
     if (panel === 'health') {
-      return <HealthPage />;
+      return <RouteRedirect to={NERVE_CENTER_PATH} navigate={navigate} />;
     }
     // `/product[?project=]` — the Product page retired (operator 2026-10-12): the address only redirects,
     // to that project's dashboard (its Requirements section) or to the projects list.

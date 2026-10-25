@@ -81,13 +81,3 @@
   background: linear-gradient(to bottom, transparent, var(--surface-rail));
 }
 
-/* In the phone drawer the Watchtower card would open past the drawer's edge (it opens beside the rail):
-   there the pill is a plain link to the feed. */
-@media (max-width: 767px) { .wk-rail-drawer .wk-rail-watch .wk-watch-card { display: none !important; } }
-
-/* Health keeps its state tint when it is the current page; a hairline ring and the bold label say
-   "you are here" (the tint alone read the same on every page). */
-.wk-rail-foot .wk-rail-health[aria-current="page"][data-health="healthy"] { background: var(--status-ok-dim); }
-.wk-rail-foot .wk-rail-health[aria-current="page"][data-health="degraded"] { background: var(--status-warn-dim); }
-.wk-rail-foot .wk-rail-health[aria-current="page"][data-health="unhealthy"] { background: var(--status-fail-dim); }
-.wk-rail-foot .wk-rail-health[aria-current="page"] { box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--ink-muted) 55%, transparent); }

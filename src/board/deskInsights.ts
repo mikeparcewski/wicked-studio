@@ -479,7 +479,7 @@ export function callouts(input: {
         : quota ? 'Its plan quota ran out; it rejoins when the quota resets or the plan is raised.'
           : timedOut ? 'It kept timing out in reviews; check that it answers quickly on this machine.'
             : 'Open its record to see each time it sat out.',
-      evidence: { label: 'Agent record', path: '/health' },
+      evidence: { label: 'Agent record', path: '/watch' },
     });
   }
   for (const [cli, f] of Object.entries(input.workflow != null ? {} : input.acp ?? {})) {
@@ -494,7 +494,7 @@ export function callouts(input: {
       title: `${name} ran without its governed connection ${n} ${n === 1 ? 'time' : 'times'} across all recorded runs${input.scoped ? ' (studio-wide)' : ''}`,
       why: `Its governed session could not start (${causes.length > 0 ? causes.map(plainFallback).join(', ') : 'no reason recorded'}), so the step ran on the plain fallback. These diagnostics cover all recorded runs across studio.`,
       fix: 'Reinstall or update its connector so its tool calls are checked again.',
-      evidence: { label: 'Health', path: '/health' },
+      evidence: { label: 'Nerve Center', path: '/watch' },
     });
   }
   if (input.openFailures > 0) {
@@ -527,7 +527,7 @@ export function callouts(input: {
       title: `${a.label} passes its checks first time on ${pct(a.firstPassRate)} of steps`,
       why: `${a.gated - Math.round(a.firstPassRate * a.gated)} of ${a.gated} checked steps needed another go ${win}.`,
       fix: 'Give it the steps it passes first time, or tighten the instructions on the others.',
-      evidence: { label: 'Agent record', path: '/health' },
+      evidence: { label: 'Agent record', path: '/watch' },
     });
   }
   return out;

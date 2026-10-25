@@ -169,7 +169,9 @@ with sync_playwright() as p:
     # ── 2a. no rail link (operator 2026-10-13: Agents is a Desk tab, hosted by studio-desk-v2) ──
     page.goto(f"{origin}/", wait_until="networkidle")
     page.get_by_test_id("desk").wait_for(state="visible", timeout=15000)
-    rail = page.evaluate("""() => ({ link: !!document.querySelector('[data-testid="desk-rail-agents"]'), health: document.querySelector('[data-testid="desk-rail-health"]').dataset.health })""")
+    # Nerve Center's tile settles on its first fresh read before its state is compared (it reads on a poll).
+    page.wait_for_function("() => document.querySelector('[data-testid=\"desk-rail-nerve\"]')?.dataset.read === 'fresh'", timeout=15000)
+    rail = page.evaluate("""() => ({ link: !!document.querySelector('[data-testid="desk-rail-agents"]'), health: document.querySelector('[data-testid="desk-rail-nerve"]').dataset.tone })""")
     page.goto(f"{origin}/agents", wait_until="networkidle")
     page.get_by_test_id("agents-table").wait_for(state="visible", timeout=10000)
     check("rail", not rail["link"] and page.get_by_test_id("agents-panel").count() == 1, **rail)
@@ -308,9 +310,10 @@ with sync_playwright() as p:
     wire(page2)
     page2.goto(f"{origin}/agents", wait_until="networkidle")
     page2.get_by_test_id("agents-banner").wait_for(state="visible", timeout=10000)
+    page2.wait_for_function("() => document.querySelector('[data-testid=\"desk-rail-nerve\"]')?.dataset.read === 'fresh'", timeout=15000)
     st = page2.evaluate("""() => ({ banner: document.querySelector('[data-testid="agents-banner"]').innerText,
       count: !!document.querySelector('[data-testid="agents-tiles"]'), action: !!document.querySelector('[data-testid="agents-check-all"]'),
-      health: document.querySelector('[data-testid="desk-rail-health"]').dataset.health })""")
+      health: document.querySelector('[data-testid="desk-rail-nerve"]').dataset.tone })""")
     page2.screenshot(path=str(SHOTS / "desk-agents-error.png"))
     check("error", "Couldn’t load agents." in st["banner"] and not st["count"] and not st["action"] and st["health"] == healthy_before, **st)
     page2.close()

@@ -904,6 +904,15 @@
     "ask-scope": "chat-scope",
     "ask-helpers": "chat-cli",
     "ask-helper": "chat-cli-option",
-    "ask-helpers-none": "chat-cli"
+    "ask-helpers-none": "chat-cli",
+    "desk-rail-health": "desk-rail-nerve",
+    "desk-rail-watch": "desk-rail-nerve",
+    "health-page": "nerve-center-page",
+    "rail-health-heart": "nerve-center-light",
+    "rail-health-state": "nerve-center-words",
+    "watch-pill": "desk-rail-nerve",
+    "watch-pill-card": "nc-attention",
+    "watch-pill-row": "nc-attention-item",
+    "watch-pill-wrap": "desk-rail-nerve"
   }
 }

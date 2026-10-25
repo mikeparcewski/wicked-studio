@@ -593,12 +593,6 @@ select:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-
   .wk-btn:active:not(:disabled), .wk-need-act:active:not(:disabled) { transform: none; }
 }
 
-/* The rail's Health LINK carries its state as a filled DOT (studio#421) — the heart glyph's mark
-   (the `!`/`?` suffix) is gone with the flyout: state is the dot's hue alone (`wk-rail-health-dot`
-   sets size, the hook paints `background`). */
-.wk-rail-health-dot { width: 8px; height: 8px; border-radius: var(--radius-full); flex-shrink: 0; }
-/* studio#421 r3 (change 16): when not healthy, the link names its state beside the label, muted. */
-.wk-rail-health-state { color: var(--ink-muted); font-weight: var(--weight-normal); }
 
 /* Compact rail: the glyph's name, shown on hover and keyboard focus from its existing
    aria-label (council S9) — the icon is the only visible label in this mode. */
@@ -845,8 +839,6 @@ select:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-
   .wk-desk-move-trigger { opacity: 1; min-width: var(--tap-min, 44px); min-height: var(--tap-min, 44px); }
   .wk-desk-move-picker .wk-btn { min-height: var(--tap-min, 44px); }
 }
-.wk-rail-watch { position: relative; z-index: 30; }
-.wk-rail-watch .wk-watch-pill { width: 100%; }
 /* studio#421 change 4: the foot's top border is the separator — the Product/support links sit above it,
    the run levers below. A dim-ink line on the rail surface, not the faint --border (nothing else). */
 .wk-rail-foot { position: relative; border-top: 1px solid color-mix(in oklab, var(--ink-dim) 50%, transparent); padding: 8px 10px; display: flex; flex-direction: column; gap: 2px; }
@@ -863,19 +855,6 @@ select:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-
   text-decoration: none; font: inherit; cursor: pointer; text-align: left;
 }
 .wk-rail-link:hover { background: var(--surface-card); }
-/* studio#421 r4 (image-review rows 1-2): the Health link keeps its label + state words together on
-   the LEFT (no spread — the dot's `auto` margin parks it at the right edge), and the foot's
-   Workspace label sits flush with the links: the same 20px inset the foot links and project group
-   labels use (foot padding 10 + link/label padding 10). */
-.wk-rail-health { justify-content: flex-start; }
-/* Health apart at the foot (operator 2026-10-12): a hairline above it and a muted tint of its state. */
-.wk-rail-foot .wk-rail-health { margin-top: 6px; position: relative; }
-.wk-rail-foot .wk-rail-health::before { content: ''; position: absolute; left: 10px; right: 10px; top: -4px; border-top: 1px solid color-mix(in oklab, var(--ink-dim) 35%, transparent); }
-.wk-rail-health[data-health="healthy"] { background: var(--status-ok-dim); }
-.wk-rail-health[data-health="degraded"] { background: var(--status-warn-dim); }
-.wk-rail-health[data-health="unhealthy"] { background: var(--status-fail-dim); }
-.wk-rail-health[data-health] .wk-rail-health-state { color: var(--ink-body); }
-.wk-rail-health .wk-rail-health-dot { margin-left: auto; }
 /* studio#421 change 2: "Additional settings" reads as a control, not another link — a bordered, filled
    button (same height as the links: 4px + a 1px border = the links' 5px), label left, chevron right.
    Hover raises the border to --ink-dim. Same in light and dark (theme tokens, never the skin). */
@@ -1406,16 +1385,6 @@ select:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-
 .wk-rules-statement { color: var(--ink-high); font-size: var(--text-sm); text-decoration: none; overflow-wrap: anywhere; }
 .wk-rules-statement:hover, .wk-rules-statement:focus-visible { text-decoration: underline; }
 .wk-rules-line { color: var(--ink-muted); font-size: var(--text-xs); }
-.wk-watch-pill-wrap { position: relative; }
-.wk-watch-card {
-  display: none; position: absolute; left: calc(100% + 8px); bottom: 0; z-index: 40; width: 300px;
-  padding: 10px 12px; border-radius: 10px; background: var(--surface-card); border: 1px solid var(--surface-raised);
-  box-shadow: var(--shadow-raised);
-}
-.wk-watch-pill-wrap:hover .wk-watch-card, .wk-watch-pill-wrap:has(:focus-visible) .wk-watch-card, .wk-watch-pill-wrap--open .wk-watch-card { display: block; }
-.wk-watch-card-sentence { margin: 0 0 6px; font-size: var(--text-sm); font-weight: var(--weight-semi); color: var(--ink-high); }
-.wk-watch-card-row { margin: 0 0 4px; font-size: var(--text-xs); color: var(--ink-body); }
-.wk-watch-card-foot { margin: 6px 0 0; font-size: var(--text-2xs); color: var(--ink-dim); }
 
 /* ── The desk's standing states and the rail's controls (coverage finding 2) ──────────────── */
 .wk-rail-controls { display: flex; flex-direction: column; gap: 8px; padding: 8px 10px 4px; margin-top: 6px; border-top: 1px solid var(--border-subtle); }

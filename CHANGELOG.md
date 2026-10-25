@@ -42,6 +42,30 @@ npm publish dates. Every version listed here exists on
   should I do?" with its gate, Nerve Center asks "What's stopping work right now?" and names a CLI that is out,
   and a repository, project, steering, workflows and the Desk each get their own. Clicking a prompt sends it.
   The input says "Ask about <page>…" and the header says "Seeing: <page>".
+- **Nerve Center: one dashboard for anything stopping work, and one rail tile that says it (DES-SYSTEM-VIEW).**
+  `/watch` is now Nerve Center. It has a Needs attention strip (shown only when something needs you,
+  worst first, each item with why, a fix and its one existing action), then four panels: CLIs, Runs,
+  Infra and Governance. The panels stack on a phone. The Watchtower feed sits under them. Against a crew
+  that serves `GET /api/v1/system` (`capabilities.system`), each panel reads that snapshot:
+  - CLIs: one card per CLI with its 7-day units, pass %, median time, 429s, fallbacks and a per-day
+    sparkline, plus its version pin, governance mode, sandbox and last error. A signed-out CLI offers
+    Sign in.
+  - Runs: unfinished runs worst first. A stalled run says `stalled`, never "Working", and a run at a gate
+    links straight to the gate.
+  - Infra: each component's state, reason, fix and raw probe, with Re-check. A probe that hung says
+    `unknown` with its timeout.
+  - Governance: cards for judges, floor outcomes, QE pass rate, gates answered by you vs judges, dead
+    letters and steering rules.
+
+  Against an older crew without the capability, the page shows today's Health cards plus the feed, with
+  an upgrade note.
+- **The rail's Nerve Center tile.** It is one larger label pinned at the bottom of the rail, and it
+  replaces the Watchtower pill and the Health link. The whole tile fills soft green when all is clear,
+  solid amber when something needs a look, and solid red when work is blocked. Red pulses once. The worst
+  item is said beside the name ("Nerve Center · gateway down"). The colours are theme tokens for light
+  and dark, with AA text on each fill. It re-reads on a bounded 30-second poll (and on focus, reconnect
+  and Re-check), and it is green only over a fresh, successful read. A failed, pending or stale read
+  shows yellow "can't reach crew" or "checking crew".
 
 ### Changed
 - **The rail's start row is four equal icon buttons:** New project · New job · Chat · Search (⌘K), each named
@@ -52,6 +76,9 @@ npm publish dates. Every version listed here exists on
   offered (it used to accept a file the send then dropped).
 - **Everything › live chats' End keeps the chat's history** on a crew with `chatList` (it uses the close
   route; DELETE there also deletes the history).
+- **`/health` redirects to Nerve Center.** Its four cards (Connection, Helpers, This week, Governance)
+  live in Nerve Center's panels, so nothing the page showed is lost. Links that pointed at Health or the
+  Watchtower now say Nerve Center. The ⌘K entry keeps "health" and "Watchtower" in its words.
 
 ## [0.11.8] — 2026-10-25
 

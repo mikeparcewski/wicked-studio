@@ -35,13 +35,16 @@ vi.mock('../src/api/client.js', () => ({
   apiFetch: (path: string) => apiFetch(path),
 }));
 
-const { HealthPage } = await import('../src/components/HealthPage.js');
+// The old /health page's cards now live in Nerve Center's panels (DES-SYSTEM-VIEW); these suites pin them there.
+const { NerveCenterPage: HealthPage } = await import('../src/components/nerve/NerveCenterPage.js');
+const { resetSystemStore } = await import('../src/store/systemSnapshot.js');
 
 function withGovernance(g: DiagnosticsGovernance): void {
   diagnosticsAnswer = () => Promise.resolve({ components: {}, daemon: {}, stores: [], recentErrors: [], acp: { byCli: {} }, governance: g });
 }
 
 beforeEach(() => {
+  resetSystemStore();
   apiFetch.mockClear();
   useConnectionStore.setState({ status: 'connected' });
 });

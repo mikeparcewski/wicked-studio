@@ -12,8 +12,8 @@
   "studioVersion": "0.11.8",
   "counts": {
     "files": 237,
-    "occurrences": 3020,
-    "static": 2621,
+    "occurrences": 3062,
+    "static": 2664,
     "dynamic": 69,
     "computed": 24
   },
@@ -3314,12 +3314,6 @@
       ]
     },
     {
-      "testId": "desk-rail-health",
-      "files": [
-        "src/components/desk/SessionRail.tsx"
-      ]
-    },
-    {
       "testId": "desk-rail-home",
       "files": [
         "src/components/desk/SessionRail.tsx"
@@ -3335,6 +3329,12 @@
       "testId": "desk-rail-mcp",
       "files": [
         "src/board/deskModel.ts"
+      ]
+    },
+    {
+      "testId": "desk-rail-nerve",
+      "files": [
+        "src/components/desk/NerveCenterTile.tsx"
       ]
     },
     {
@@ -3377,12 +3377,6 @@
       "testId": "desk-rail-theme",
       "files": [
         "src/board/deskModel.ts"
-      ]
-    },
-    {
-      "testId": "desk-rail-watch",
-      "files": [
-        "src/components/desk/SessionRail.tsx"
       ]
     },
     {
@@ -5220,37 +5214,31 @@
     {
       "testId": "health-card-connection",
       "files": [
-        "src/components/HealthPage.tsx"
+        "src/components/nerve/NerveCenterPage.tsx"
       ]
     },
     {
       "testId": "health-card-governance",
       "files": [
-        "src/components/HealthPage.tsx"
+        "src/components/nerve/NerveCenterPage.tsx"
       ]
     },
     {
       "testId": "health-card-seats",
       "files": [
-        "src/components/HealthPage.tsx"
+        "src/components/nerve/NerveCenterPage.tsx"
       ]
     },
     {
       "testId": "health-card-week",
       "files": [
-        "src/components/HealthPage.tsx"
-      ]
-    },
-    {
-      "testId": "health-page",
-      "files": [
-        "src/components/HealthPage.tsx"
+        "src/components/nerve/NerveCenterPage.tsx"
       ]
     },
     {
       "testId": "health-upgrade-note",
       "files": [
-        "src/components/HealthPage.tsx"
+        "src/components/nerve/NerveCenterPage.tsx"
       ]
     },
     {
@@ -7462,6 +7450,288 @@
       ]
     },
     {
+      "testId": "nc-attention",
+      "files": [
+        "src/components/nerve/NerveCenterPage.tsx"
+      ]
+    },
+    {
+      "testId": "nc-attention-action",
+      "files": [
+        "src/components/nerve/NerveCenterPage.tsx"
+      ]
+    },
+    {
+      "testId": "nc-attention-item",
+      "files": [
+        "src/components/nerve/NerveCenterPage.tsx"
+      ]
+    },
+    {
+      "testId": "nc-attention-remedy",
+      "files": [
+        "src/components/nerve/NerveCenterPage.tsx"
+      ]
+    },
+    {
+      "testId": "nc-checked",
+      "files": [
+        "src/components/nerve/NerveCenterPage.tsx"
+      ]
+    },
+    {
+      "testId": "nc-cli",
+      "files": [
+        "src/components/nerve/NerveCenterPage.tsx"
+      ]
+    },
+    {
+      "testId": "nc-cli-429",
+      "files": [
+        "src/components/nerve/NerveCenterPage.tsx"
+      ]
+    },
+    {
+      "testId": "nc-cli-error",
+      "files": [
+        "src/components/nerve/NerveCenterPage.tsx"
+      ]
+    },
+    {
+      "testId": "nc-cli-fallbacks",
+      "files": [
+        "src/components/nerve/NerveCenterPage.tsx"
+      ]
+    },
+    {
+      "testId": "nc-cli-gov",
+      "files": [
+        "src/components/nerve/NerveCenterPage.tsx"
+      ]
+    },
+    {
+      "testId": "nc-cli-median",
+      "files": [
+        "src/components/nerve/NerveCenterPage.tsx"
+      ]
+    },
+    {
+      "testId": "nc-cli-pass",
+      "files": [
+        "src/components/nerve/NerveCenterPage.tsx"
+      ]
+    },
+    {
+      "testId": "nc-cli-pin",
+      "files": [
+        "src/components/nerve/NerveCenterPage.tsx"
+      ]
+    },
+    {
+      "testId": "nc-cli-reason",
+      "files": [
+        "src/components/nerve/NerveCenterPage.tsx"
+      ]
+    },
+    {
+      "testId": "nc-cli-sandbox",
+      "files": [
+        "src/components/nerve/NerveCenterPage.tsx"
+      ]
+    },
+    {
+      "testId": "nc-cli-signin",
+      "files": [
+        "src/components/nerve/NerveCenterPage.tsx"
+      ]
+    },
+    {
+      "testId": "nc-cli-spark",
+      "files": [
+        "src/components/nerve/NerveCenterPage.tsx"
+      ]
+    },
+    {
+      "testId": "nc-cli-state",
+      "files": [
+        "src/components/nerve/NerveCenterPage.tsx"
+      ]
+    },
+    {
+      "testId": "nc-cli-statsnote",
+      "files": [
+        "src/components/nerve/NerveCenterPage.tsx"
+      ]
+    },
+    {
+      "testId": "nc-cli-tokens",
+      "files": [
+        "src/components/nerve/NerveCenterPage.tsx"
+      ]
+    },
+    {
+      "testId": "nc-cli-units",
+      "files": [
+        "src/components/nerve/NerveCenterPage.tsx"
+      ]
+    },
+    {
+      "testId": "nc-cli-version",
+      "files": [
+        "src/components/nerve/NerveCenterPage.tsx"
+      ]
+    },
+    {
+      "testId": "nc-feed",
+      "files": [
+        "src/components/nerve/NerveCenterPage.tsx"
+      ]
+    },
+    {
+      "testId": "nc-gov",
+      "files": [
+        "src/components/nerve/NerveCenterPage.tsx"
+      ]
+    },
+    {
+      "testId": "nc-gov-breakdown",
+      "files": [
+        "src/components/nerve/NerveCenterPage.tsx"
+      ]
+    },
+    {
+      "testId": "nc-headline",
+      "files": [
+        "src/components/nerve/NerveCenterPage.tsx"
+      ]
+    },
+    {
+      "testId": "nc-infra",
+      "files": [
+        "src/components/nerve/NerveCenterPage.tsx"
+      ]
+    },
+    {
+      "testId": "nc-infra-detail",
+      "files": [
+        "src/components/nerve/NerveCenterPage.tsx"
+      ]
+    },
+    {
+      "testId": "nc-infra-recheck",
+      "files": [
+        "src/components/nerve/NerveCenterPage.tsx"
+      ]
+    },
+    {
+      "testId": "nc-infra-remedy",
+      "files": [
+        "src/components/nerve/NerveCenterPage.tsx"
+      ]
+    },
+    {
+      "testId": "nc-infra-state",
+      "files": [
+        "src/components/nerve/NerveCenterPage.tsx"
+      ]
+    },
+    {
+      "testId": "nc-panel-clis",
+      "files": [
+        "src/components/nerve/NerveCenterPage.tsx"
+      ]
+    },
+    {
+      "testId": "nc-panel-governance",
+      "files": [
+        "src/components/nerve/NerveCenterPage.tsx"
+      ]
+    },
+    {
+      "testId": "nc-panel-helpers",
+      "files": [
+        "src/components/nerve/NerveCenterPage.tsx"
+      ]
+    },
+    {
+      "testId": "nc-panel-infra",
+      "files": [
+        "src/components/nerve/NerveCenterPage.tsx"
+      ]
+    },
+    {
+      "testId": "nc-panel-runs",
+      "files": [
+        "src/components/nerve/NerveCenterPage.tsx"
+      ]
+    },
+    {
+      "testId": "nc-recheck",
+      "files": [
+        "src/components/nerve/NerveCenterPage.tsx"
+      ]
+    },
+    {
+      "testId": "nc-run",
+      "files": [
+        "src/components/nerve/NerveCenterPage.tsx"
+      ]
+    },
+    {
+      "testId": "nc-run-gate",
+      "files": [
+        "src/components/nerve/NerveCenterPage.tsx"
+      ]
+    },
+    {
+      "testId": "nc-run-last",
+      "files": [
+        "src/components/nerve/NerveCenterPage.tsx"
+      ]
+    },
+    {
+      "testId": "nc-run-liveness",
+      "files": [
+        "src/components/nerve/NerveCenterPage.tsx"
+      ]
+    },
+    {
+      "testId": "nc-run-open",
+      "files": [
+        "src/components/nerve/NerveCenterPage.tsx"
+      ]
+    },
+    {
+      "testId": "nc-runs-empty",
+      "files": [
+        "src/components/nerve/NerveCenterPage.tsx"
+      ]
+    },
+    {
+      "testId": "nc-runs-fallback",
+      "files": [
+        "src/components/nerve/NerveCenterPage.tsx"
+      ]
+    },
+    {
+      "testId": "nc-runs-pending",
+      "files": [
+        "src/components/nerve/NerveCenterPage.tsx"
+      ]
+    },
+    {
+      "testId": "nc-upgrade-note",
+      "files": [
+        "src/components/nerve/NerveCenterPage.tsx"
+      ]
+    },
+    {
+      "testId": "nc-verdict",
+      "files": [
+        "src/components/nerve/NerveCenterPage.tsx"
+      ]
+    },
+    {
       "testId": "need-accept-act",
       "files": [
         "src/components/NeedsYouQueue.tsx"
@@ -7779,6 +8049,24 @@
       "testId": "needs-you-reassign",
       "files": [
         "src/components/NeedsYouCard.tsx"
+      ]
+    },
+    {
+      "testId": "nerve-center-light",
+      "files": [
+        "src/components/desk/NerveCenterTile.tsx"
+      ]
+    },
+    {
+      "testId": "nerve-center-page",
+      "files": [
+        "src/components/nerve/NerveCenterPage.tsx"
+      ]
+    },
+    {
+      "testId": "nerve-center-words",
+      "files": [
+        "src/components/desk/NerveCenterTile.tsx"
       ]
     },
     {
@@ -9432,19 +9720,13 @@
       ]
     },
     {
-      "testId": "rail-health-heart",
-      "files": [
-        "src/components/desk/SessionRail.tsx"
-      ]
-    },
-    {
       "testId": "rail-health-recheck",
       "files": [
         "src/components/HealthRailSection.tsx"
       ]
     },
     {
-      "testId": "rail-health-state",
+      "testId": "rail-nerve-dock",
       "files": [
         "src/components/desk/SessionRail.tsx"
       ]
@@ -15594,30 +15876,6 @@
       "testId": "watch-jumped",
       "files": [
         "src/components/WatchLines.tsx"
-      ]
-    },
-    {
-      "testId": "watch-pill",
-      "files": [
-        "src/components/desk/WatchPill.tsx"
-      ]
-    },
-    {
-      "testId": "watch-pill-card",
-      "files": [
-        "src/components/desk/WatchPill.tsx"
-      ]
-    },
-    {
-      "testId": "watch-pill-row",
-      "files": [
-        "src/components/desk/WatchPill.tsx"
-      ]
-    },
-    {
-      "testId": "watch-pill-wrap",
-      "files": [
-        "src/components/desk/WatchPill.tsx"
       ]
     },
     {
