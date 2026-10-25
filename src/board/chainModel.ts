@@ -474,7 +474,11 @@ export function withGatePlan(c: ChainModel, prompt: string | undefined, opts: Ch
     const at = prev === undefined ? 0 : steps.findIndex((s) => s.id === prev) + 1;
     steps.splice(at, 0, planned[i]!);
   });
-  return { ...c, steps, pending: planned, ...counts(steps) };
+  // rig 0.15.8: every step of the gate's plan goes by the gate plan's word, so the line, the proposal card and
+  // the plan editor name it alike ("Reproduce", never "Plan" in the line beside "Reproduce" on the card).
+  const word = new Map(planned.map((p) => [p.id, p.label] as const));
+  const named = steps.map((s) => (word.has(s.id) && word.get(s.id) !== s.label ? { ...s, label: word.get(s.id)! } : s));
+  return { ...c, steps: named, pending: planned, ...counts(named) };
 }
 
 /** A gate plan's step labels, in the chain's words (the proposal card's list). */

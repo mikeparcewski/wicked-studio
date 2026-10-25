@@ -47,12 +47,14 @@ const landed: Record<string, number> = {};
 
 /** Re-read a run's team state for its open plan gate. */
 export async function loadPlanGate(runId: string): Promise<void> {
-  const key = instanceOf(useGateStore.getState().gates[runId]);
+  const open = useGateStore.getState().gates[runId];
+  const key = instanceOf(open);
   const n = (asked[runId] ?? 0) + 1;
   asked[runId] = n;
   let view: PlanGateView | null = null;
   try {
-    view = planGateOf(await teamPlanApi.team(runId));
+    // The open gate's prompt names the plan Approve releases, floor steps included (rig 0.15.8).
+    view = planGateOf(await teamPlanApi.team(runId), open?.prompt);
   } catch {
     view = null;
   }
