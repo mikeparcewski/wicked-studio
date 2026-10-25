@@ -9,6 +9,7 @@
  *  - a mid-run edit's answer → what happened (`editOutcome`).
  */
 
+import { gatePlanOf } from './chainModel.js';
 import type {
   CatalogEntry,
   EditPlanResponse,
@@ -322,7 +323,11 @@ const SHA40 = /\b([0-9a-f]{7})[0-9a-f]{33}\b/g;
  * The OPEN plan gate of a run: the newest `gate.opened{kind:"plan_approval"}` no `gate.decided`
  * answered. `null` when the run is not waiting on its plan (a unit gate, or nothing open).
  */
-export function planGateOf(team: RunTeamResponse): PlanGateView | null {
+export function planGateOf(
+  team: RunTeamResponse,
+  /** The open gate's prompt (`Approve plan rev N before unit K runs (…): a → b (floor) → …`), when in hand. */
+  prompt?: string,
+): PlanGateView | null {
   const all: TeamRow[] = [...(team.rows ?? []), ...(team.units ?? []).flatMap((u) => u.rows ?? [])]
     .sort((a, b) => a.event_id - b.event_id);
   const decided = new Set(
@@ -341,9 +346,14 @@ export function planGateOf(team: RunTeamResponse): PlanGateView | null {
   const reasons = Array.isArray(scored?.payload['reasons'])
     ? (scored.payload['reasons'] as unknown[]).filter((x): x is string => typeof x === 'string')
     : [];
-  const steps = Array.isArray(proposed?.payload['steps'])
+  const proposedSteps = Array.isArray(proposed?.payload['steps'])
     ? (proposed.payload['steps'] as Array<{ catalog?: unknown; id?: unknown; pool?: unknown }>)
     : [];
+  const floorAdded = Array.isArray(diff?.added) ? diff.added.filter((x): x is string => typeof x === 'string') : [];
+  // rig 0.15.8: the PA's proposal predates the floor fill, so it lacks the steps the floor added — the
+  // editor listed 6 steps under a card proposing 8. The gate's own plan (its prompt, for this rev) is
+  // what Approve releases: the same steps, the proposal's catalogs, a floor step's catalog its own id.
+  const steps = gateHeldSteps(proposedSteps, floorAdded, prompt, typeof p['plan_rev'] === 'number' ? p['plan_rev'] : null);
   const authored = steps.filter((st) => st.id !== PA_SCOPE_STEP && st.catalog !== DELIVER_STEP && typeof st.catalog === 'string');
   return {
     gateId: str(p['gate_id']) ?? '',
@@ -354,7 +364,7 @@ export function planGateOf(team: RunTeamResponse): PlanGateView | null {
     reason: str(p['reason']) ?? '',
     score: typeof scored?.payload['score'] === 'number' ? scored.payload['score'] : null,
     reasons: reasons.map((r) => r.replace(SHA40, '$1')),
-    floorAdded: Array.isArray(diff?.added) ? diff.added.filter((x): x is string => typeof x === 'string') : [],
+    floorAdded,
     editSeed: authored.map((st) => st.catalog as string),
     editPools: authored.map((st) => (typeof st.pool === 'number' && Number.isInteger(st.pool) && st.pool >= 1 ? st.pool : null)),
     // Nothing stripped, nothing renamed, NOTHING DROPPED: a step the payload could not name stays
@@ -362,6 +372,39 @@ export function planGateOf(team: RunTeamResponse): PlanGateView | null {
     // again — which is the whole defect (codex review of the F4 PR, LOW).
     planSteps: steps.map((st) => ({ id: nonEmpty(st.id) ?? nonEmpty(st.catalog), catalog: nonEmpty(st.catalog) })),
   };
+}
+
+/** The plan a plan gate holds: the gate prompt's steps for THIS rev (floor steps in place), each with the
+ *  proposal's catalog (and pool) by id; a floor step's catalog is its own id when that id is a catalog the
+ *  floor added. The proposal as it stands when there is no prompt, it names another rev, or the prompt's list
+ *  cannot be matched to it with certainty. */
+function gateHeldSteps(
+  proposed: Array<{ catalog?: unknown; id?: unknown; pool?: unknown }>,
+  floorAdded: readonly string[],
+  prompt: string | undefined,
+  rev: number | null,
+): Array<{ catalog?: unknown; id?: unknown; pool?: unknown }> {
+  const plan = gatePlanOf(prompt);
+  const promptRev = /^\s*Approve plan rev (\d+)\b/i.exec(prompt ?? '')?.[1];
+  if (plan === null || promptRev === undefined || (rev !== null && Number(promptRev) !== rev)) return proposed;
+  const byId = new Map<string, { catalog?: unknown; id?: unknown; pool?: unknown }>();
+  for (const st of proposed) {
+    const id = nonEmpty(st.id) ?? nonEmpty(st.catalog);
+    if (id !== null && !byId.has(id)) byId.set(id, st);
+  }
+  // Only a reconstruction that is certain replaces the proposal (pr-xreview #903): every id once, every
+  // proposed step present, and a step the proposal lacks only when it IS a catalog the floor added (the
+  // engine names a floor step `<catalog>-floor` when its natural id is taken — no catalog to read there).
+  if (new Set(plan.ids).size !== plan.ids.length) return proposed;
+  if ([...byId.keys()].some((id) => !plan.ids.includes(id))) return proposed;
+  const out: Array<{ catalog?: unknown; id?: unknown; pool?: unknown }> = [];
+  for (const id of plan.ids) {
+    const had = byId.get(id);
+    if (had !== undefined) out.push(had);
+    else if (floorAdded.includes(id)) out.push({ id, catalog: id });
+    else return proposed;
+  }
+  return out;
 }
 
 /** Why the plan gate stopped the run, in words (the gate's `reason`, with its band). */
