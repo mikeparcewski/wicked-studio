@@ -765,7 +765,7 @@ export function App(): React.ReactElement {
           jump to the main content instead of a page's top-right Refresh. */}
       <SkipLink />
       {/* UI-CONTRACT §3 (studio#680): the rail as before on desktop; a drawer behind a top bar on a phone. */}
-      <RailDrawer pathname={pathname} ambientProject={ambientProject} badge={<PhoneNeedsBadge needRows={needRows} runsKnown={runsLoaded} runsFailed={runsError !== null} />}>
+      <RailDrawer pathname={pathname} search={search} ambientProject={ambientProject} badge={<PhoneNeedsBadge needRows={needRows} runsKnown={runsLoaded} runsFailed={runsError !== null} />}>
         <SessionRail runs={shownRuns} needRows={needRows} navigate={navigate} pathname={pathname} runsKnown={runsLoaded} runsFailed={runsError !== null} ambientProject={ambientProject} />
       </RailDrawer>
 

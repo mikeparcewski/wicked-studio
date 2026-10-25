@@ -62,6 +62,8 @@ PAGES = [
     ("desk-rail-plugins", ".wk-page", "#main", 1120),
     ("desk-rail-workflows", ".wk-page", "#main", 1120),
     ("desk-rail-general", ".wk-page", "#main", 832),
+    # studio-settings-tabs: the Theme tab of the same Settings page (picked from its tab row).
+    ("settings-tab-theme", ".wk-page", "#main", 832),
     # Nerve Center (DES-SYSTEM-VIEW): the dashboard on /watch, the Watchtower feed under its panels.
     ("desk-rail-nerve", "[data-testid='nerve-center-page']", "#main", 1120 - 64),
 ]
@@ -78,7 +80,11 @@ with sync_playwright() as p:
             f"s.textContent = {json.dumps(HIDE_GATE_TOASTS)}; document.head.appendChild(s); }});")
         page.goto(f"{origin}/", wait_until="networkidle")
         for rail, sel, ref, measure in PAGES:
-            page.get_by_test_id(rail).click()
+            if rail == "settings-tab-theme":
+                page.locator('[data-testid="settings-tab"][data-tab="theme"]').click()
+                page.wait_for_function("() => window.location.search === '?tab=theme'", timeout=5000)
+            else:
+                page.get_by_test_id(rail).click()
             page.wait_for_selector(sel, state="visible", timeout=8000)
             page.wait_for_timeout(250)
             # Nerve Center measures its scroller's CONTENT box (padding is the gutter).
