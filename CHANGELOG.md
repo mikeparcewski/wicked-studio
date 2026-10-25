@@ -12,6 +12,10 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+## [0.12.0] — 2026-10-25
+
+A minor release: Nerve Center (#901), a floating, page-aware system chat with past chats and upload (#900, #904), Settings as one page with General and Theme tabs (#905), and gate, session and plan cards that say what the engine recorded (#899, #902, #903). Past chats and uploads need crew 0.16.0 (`chatList` / `chatAttachments`); Nerve Center reads crew's `GET /api/v1/system` (`capabilities.system`) and falls back to the Health cards on an older crew.
+
 ### Added
 - **The system chat is a floating, page-aware window (DES-SYSTEM-CHAT).** The Ask dock opens as a window about
   600 × 700, dragged by its header and resized from its corner (min 420 × 420). It always stays inside the
@@ -86,6 +90,18 @@ npm publish dates. Every version listed here exists on
 - **`/health` redirects to Nerve Center.** Its four cards (Connection, Helpers, This week, Governance)
   live in Nerve Center's panels, so nothing the page showed is lost. Links that pointed at Health or the
   Watchtower now say Nerve Center. The ⌘K entry keeps "health" and "Watchtower" in its words.
+
+### Fixed
+- **A floor the operator overrode no longer reads "passed" (#899).** The deliver card, the side panel's Checks section and
+  the finished run's message said the checks passed beside a failed check the operator had overridden. Every surface now
+  says "Overridden by you: <check> failed on this change", adding "and its base" only when the engine's record says the
+  failure was also on the base. The gate card suggests the override the engine names, and names the failing tests.
+- **The thread and the side panel agree on the step in hand (#902).** Both read the run's cursor, so while a step's
+  repository checks run the thread says "Working on Check…" and the panel marks Check "now", in the chain's own word.
+  The working step gets its ⋯ menu (Message this step).
+- **The plan editor and the step line show the steps the plan card proposes (#903).** All three read the plan the gate
+  holds (its prompt's steps, floor steps included), falling back to the proposal only when the prompt cannot be matched
+  to it with certainty.
 
 ## [0.11.8] — 2026-10-25
 
@@ -2479,7 +2495,8 @@ The merged interactive layer: wicked-interactive's UI moved into this skin (DES-
   `git subtree split` (92 commits).
 - The SPA as a pure HTTP/WS client of the wicked-crew daemon: runs, gates, live CoreEvents.
 
-[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.11.8...HEAD
+[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.12.0...HEAD
+[0.12.0]: https://github.com/mikeparcewski/wicked-studio/compare/v0.11.8...v0.12.0
 [0.11.8]: https://github.com/mikeparcewski/wicked-studio/compare/v0.11.7...v0.11.8
 [0.11.7]: https://github.com/mikeparcewski/wicked-studio/compare/v0.11.6...v0.11.7
 [0.11.6]: https://github.com/mikeparcewski/wicked-studio/compare/v0.11.5...v0.11.6
