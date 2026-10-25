@@ -3,14 +3,14 @@ import { api } from '../api/client.js';
 import type { BaseSkillPosture, SystemSettings as Settings } from '../api/types.js';
 import { getDiagnostics } from '../api/diagnostics.js';
 import { readErrorKind } from '../api/errors.js';
-import { PageFrame, SectionTitle } from './ui/PageFrame.js';
+import { SectionTitle } from './ui/PageFrame.js';
+import { SETTINGS_THEME_PATH } from '../board/settingsTabs.js';
 import { StateBanner, Skeleton } from './ui/StateBanner.js';
 import { Switch } from './ui/Switch.js';
 import { TechDetails } from './ui/TechDetails.js';
 import { useComposerPrefsStore } from '../store/composerPrefs.js';
 import { useViewPrefsStore } from '../store/viewPrefs.js';
 import { NotificationSettings } from './NotificationSettings.js';
-import { PAGE_NAMES } from '../board/pageNames.js';
 import { Segmented } from './ui/Segmented.js';
 import { scrollBehavior } from './ui/motion.js';
 import { QE_SETTING_ANCHOR } from '../board/qeRefusal.js';
@@ -181,8 +181,9 @@ export function SystemSettings({ navigate = (p) => { history.pushState(null, '',
   const deliverIdentityInvalid = deliverIdentity !== '' && !isGitHubLoginLike(deliverIdentity.trim());
 
   return (
-    <PageFrame width="narrow" title={PAGE_NAMES.system} intro="Choose how Studio displays your work and uses your helpers.">
-      <div className="wk-pg-set-content">
+    // The General tab of the Settings page (`SettingsPage`, studio-settings-tabs): its frame, title and
+    // intro are the page's; this is the tab's content, unchanged.
+    <div className="wk-pg-set-content">
       {error && <StateBanner kind={readErrorKind(errorSource ?? error)} what="system settings" error={error} onRetry={load} />}
       {settings === null && error === null && <Skeleton rows={3} variant="card" />}
       <TechDetails data-testid="settings-path" summary="Settings file" text={settingsPath ?? "Studio's service does not report its settings file location."} />
@@ -191,7 +192,7 @@ export function SystemSettings({ navigate = (p) => { history.pushState(null, '',
       <section className="wk-card">
         <SectionTitle>Theme</SectionTitle>
         <p>Choose your workspace colors, logo, and branding.</p>
-        <a href="/theme" data-testid="theme-page-link" className="wk-link" onClick={(e) => { e.preventDefault(); navigate('/theme'); }}>Open Theme</a>
+        <a href={SETTINGS_THEME_PATH} data-testid="theme-page-link" className="wk-link" onClick={(e) => { e.preventDefault(); navigate(SETTINGS_THEME_PATH); }}>Open Theme</a>
       </section>
 
       {/* Notification section: owned by NotificationSettings. */}
@@ -293,7 +294,6 @@ export function SystemSettings({ navigate = (p) => { history.pushState(null, '',
       </div>
 
       {/* Editor plugins moved to their own Plugins page (`/plugins`, operator ruling 2026-10-12). */}
-      </div>
-    </PageFrame>
+    </div>
   );
 }

@@ -128,11 +128,11 @@ describe('the rail redesign', () => {
     expect(screen.queryByTestId('desk-rail-additional')).toBeNull();
   });
 
-  it('the foot order: the Workspace links ending Workflows · Theme · General, then the Nerve Center tile last', () => {
+  it('the foot order: the Workspace links ending Workflows · General, then the Nerve Center tile last', () => {
     render(<SessionRail runs={[]} needRows={[]} navigate={() => {}} pathname="/" />);
     const rail = screen.getByTestId('session-rail');
     const ids = [...rail.querySelectorAll('.wk-rail-foot [data-testid], .wk-nc-dock [data-testid]')].map((e) => e.getAttribute('data-testid') ?? '').filter((id) => id.startsWith('desk-rail-'));
-    expect(ids).toEqual(['desk-rail-skills', 'desk-rail-mcp', 'desk-rail-plugins', 'desk-rail-workflows', 'desk-rail-theme', 'desk-rail-general', 'desk-rail-nerve']);
+    expect(ids).toEqual(['desk-rail-skills', 'desk-rail-mcp', 'desk-rail-plugins', 'desk-rail-workflows', 'desk-rail-general', 'desk-rail-nerve']);
     for (const id of ['desk-rail-skills', 'desk-rail-general']) expect(screen.getByTestId(id)).toHaveClass('wk-rail-link--secondary');
     // Its own tier: the one large tile, not a secondary link (DES-SYSTEM-VIEW).
     expect(screen.getByTestId('desk-rail-nerve')).toHaveClass('wk-nc-tile');

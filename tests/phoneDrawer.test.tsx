@@ -65,6 +65,22 @@ describe('phone rail drawer', () => {
     );
     expect(screen.getByTestId('rail-drawer').getAttribute('data-open')).toBe('false');
   });
+  it('a route change in the query alone closes it too (Settings: Theme tab → General, review on #905)', () => {
+    const tree = (search: string): React.ReactElement => (
+      <div data-shell="desk">
+        <RailDrawer pathname="/system" search={search} badge={null}><nav data-testid="session-rail"><a href="/system">General</a></nav></RailDrawer>
+        <div id="main" tabIndex={-1} />
+      </div>
+    );
+    const r = render(tree('?tab=theme'));
+    fireEvent.click(screen.getByTestId('rail-drawer-toggle'));
+    expect(screen.getByTestId('rail-drawer').getAttribute('data-open')).toBe('true');
+    expect(document.getElementById('main')!.hasAttribute('inert')).toBe(true);
+    r.rerender(tree(''));
+    expect(screen.getByTestId('rail-drawer').getAttribute('data-open')).toBe('false');
+    expect(document.getElementById('main')!.hasAttribute('inert')).toBe(false);
+    expect(document.activeElement).toBe(document.getElementById('main'));
+  });
   it('a modal opened from the drawer (New project) closes it and leaves focus to that modal', () => {
     shell();
     const t = screen.getByTestId('rail-drawer-toggle');

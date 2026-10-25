@@ -16,8 +16,11 @@ const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), selec
  *  - Escape or the scrim closes it (focus back to the menu button); a route change or growing past
  *    767 px closes it (focus to #main); a modal opened from it closes it (focus stays in the modal).
  */
-export function RailDrawer({ pathname, badge, children, ambientProject = null }: {
+export function RailDrawer({ pathname, search = '', badge, children, ambientProject = null }: {
   pathname: string; badge: React.ReactNode; children: React.ReactNode;
+  /** The address's query: a destination that differs only in it (Settings' General tab after its
+   *  Theme tab, `/system?tab=theme` → `/system`) is a route change too, and closes the drawer. */
+  search?: string;
   /** The project on screen (the top bar's New job starts there). */
   ambientProject?: string | null;
 }): React.ReactElement {
@@ -31,12 +34,13 @@ export function RailDrawer({ pathname, badge, children, ambientProject = null }:
   const closeTo = (to: 'toggle' | 'main'): void => { focusAfter.current = to; setOpen(false); };
 
   // Close on a route change and when the window leaves phone width.
-  const lastPath = useRef(pathname);
+  const address = pathname + search;
+  const lastPath = useRef(address);
   useEffect(() => {
-    if (lastPath.current === pathname) return;
-    lastPath.current = pathname;
+    if (lastPath.current === address) return;
+    lastPath.current = address;
     if (open) closeTo('main');
-  }, [pathname, open]);
+  }, [address, open]);
   useEffect(() => {
     if (!phone && open) closeTo('main');
   }, [phone, open]);

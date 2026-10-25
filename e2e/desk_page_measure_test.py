@@ -2,12 +2,12 @@
 they should be centered and constrained" and "run pages - like the workspace ones should be centered and
 constrained".
 
-The operator's path: open each Workspace page from the rail (Skills, MCP, Plugins, Workflows, Theme,
-General), then Nerve Center, then a run's page and a chat's page. On each, at 1440x700 and at 1920x1000:
+The operator's path: open each Workspace page from the rail (Skills, MCP, Plugins, Workflows,
+General — the Settings page, whose Theme tab is checked by address), then Nerve Center, then a run's page and a chat's page. On each, at 1440x700 and at 1920x1000:
 
   1. the page's content sits centred in the main column: its left and right gaps differ by at most 2 px;
   2. it is constrained: never wider than the measure (1120 px for a page and Nerve Center, 832 px for
-     General / Theme, 896 px for a session's thread), so at 1920 there is room on both sides;
+     Settings (General and Theme tabs), 896 px for a session's thread), so at 1920 there is room on both sides;
   3. the session's header, thread and composer share one left edge and one right edge;
   4. at 1920 the composer's `/` menu opens under its input, and with an artifact open beside the thread
      the head, thread and composer centre in the room left (the composer keeps a usable width);
@@ -61,8 +61,9 @@ PAGES = [
     ("desk-rail-mcp", ".wk-page", "#main", 1120),
     ("desk-rail-plugins", ".wk-page", "#main", 1120),
     ("desk-rail-workflows", ".wk-page", "#main", 1120),
-    ("desk-rail-theme", ".wk-page", "#main", 832),
     ("desk-rail-general", ".wk-page", "#main", 832),
+    # studio-settings-tabs: the Theme tab of the same Settings page (picked from its tab row).
+    ("settings-tab-theme", ".wk-page", "#main", 832),
     # Nerve Center (DES-SYSTEM-VIEW): the dashboard on /watch, the Watchtower feed under its panels.
     ("desk-rail-nerve", "[data-testid='nerve-center-page']", "#main", 1120 - 64),
 ]
@@ -79,7 +80,11 @@ with sync_playwright() as p:
             f"s.textContent = {json.dumps(HIDE_GATE_TOASTS)}; document.head.appendChild(s); }});")
         page.goto(f"{origin}/", wait_until="networkidle")
         for rail, sel, ref, measure in PAGES:
-            page.get_by_test_id(rail).click()
+            if rail == "settings-tab-theme":
+                page.locator('[data-testid="settings-tab"][data-tab="theme"]').click()
+                page.wait_for_function("() => window.location.search === '?tab=theme'", timeout=5000)
+            else:
+                page.get_by_test_id(rail).click()
             page.wait_for_selector(sel, state="visible", timeout=8000)
             page.wait_for_timeout(250)
             # Nerve Center measures its scroller's CONTENT box (padding is the gutter).

@@ -14,7 +14,7 @@ with the stored appearance set to wicked-light + the harbor accent, and proves:
      to a monospace font-family while "Show technical details" is off. With it on, a technical
      handle ([data-tech]) keeps the mono face.
   3. EVERYTHING ELSE FITS (studio#421; rail restructure 2026-10-13): at 1440x900 the sessions and
-     every Workspace link — ending Workflows · Theme · General, then Health — are on screen, and a
+     every Workspace link — ending Workflows · General, then Nerve Center — are on screen, and a
      settings link still navigates.
   4. 0 page errors, no horizontal scroll.
 
@@ -180,7 +180,7 @@ with sync_playwright() as p:
                            timeout=10000)
 
     # ── 3. Everything fits (rail restructure 2026-10-13): the settings pages are Workspace links —
-    #       Workflows · Theme · General at the group's end — every one on screen with Nerve Center (last) and
+    #       Workflows · General at the group's end — every one on screen with Nerve Center (last) and
     #       the sessions; a settings link still navigates.
     rail = page.evaluate("""(h) => {
       const shown = (el) => { const b = el.getBoundingClientRect(); return b.height > 0 && b.bottom <= h + 0.5 && b.top >= -0.5; };
@@ -192,10 +192,10 @@ with sync_playwright() as p:
     }""", H)
     page.screenshot(path=str(SHOTS / "desk-look-everything.png"))
     check("everything-else-fits", rail["healthShown"] and rail["sessions"] >= 6 and rail["sessionsShown"] >= 6
-          and rail["links"][-4:] == ["section:workflows", "section:theme", "section:general", "watch"] and rail["linksShown"], rail=rail)
-    page.get_by_test_id("desk-rail-theme").click()
-    page.wait_for_function("() => window.location.pathname === '/theme'", timeout=5000)
-    check("everything-else-navigates", page.evaluate("() => window.location.pathname") == "/theme")
+          and rail["links"][-3:] == ["section:workflows", "section:general", "watch"] and rail["linksShown"], rail=rail)
+    page.get_by_test_id("desk-rail-general").click()
+    page.wait_for_function("() => window.location.pathname === '/system'", timeout=5000)
+    check("everything-else-navigates", page.evaluate("() => window.location.pathname") == "/system")
 
     hs = page.evaluate("() => document.documentElement.scrollWidth > document.documentElement.clientWidth")
     check("no-errors-no-hscroll", not errors and not hs, errors=errors)

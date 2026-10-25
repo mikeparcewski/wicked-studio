@@ -76,6 +76,13 @@ npm publish dates. Every version listed here exists on
   offered (it used to accept a file the send then dropped).
 - **Everything › live chats' End keeps the chat's history** on a crew with `chatList` (it uses the close
   route; DELETE there also deletes the history).
+- **General and Theme are one Settings page with two tabs (studio-settings-tabs).** The rail has one
+  settings item, General, where it had General and Theme. It opens the Settings page on the General tab
+  (today's General content, unchanged). The Theme tab has today's theme controls, unchanged, and a theme
+  chosen there still applies and persists. The tab is in the address (`/system?tab=theme`), and `/theme`
+  redirects to the Theme tab, so old links and bookmarks still work. General's "Open Theme" link and the
+  ⌘K Theme row open the tab. The tabs are the app's `Tabs`: the arrow keys move between them, Enter or
+  Space opens one, and `aria-selected` marks the open one.
 - **`/health` redirects to Nerve Center.** Its four cards (Connection, Helpers, This week, Governance)
   live in Nerve Center's panels, so nothing the page showed is lost. Links that pointed at Health or the
   Watchtower now say Nerve Center. The ⌘K entry keeps "health" and "Watchtower" in its words.

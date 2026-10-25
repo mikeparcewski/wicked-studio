@@ -39,8 +39,8 @@ import { PeekCard } from './components/PeekCard.js';
 import { UndoToasts } from './components/UndoToasts.js';
 import { LaunchWizard } from './components/launch/LaunchWizard.js';
 import { ConnectionStatus } from './components/ConnectionStatus.js';
-import { SystemSettings } from './components/SystemSettings.js';
-import { ThemePage } from './components/ThemePage.js';
+import { SettingsPage } from './components/SettingsPage.js';
+import { SETTINGS_THEME_PATH } from './board/settingsTabs.js';
 import { NerveCenterPage } from './components/nerve/NerveCenterPage.js';
 import { NERVE_CENTER_PATH } from './components/desk/NerveCenterTile.js';
 import { parseRoute, projectDetailPath } from './hooks/useRoute.js';
@@ -735,19 +735,17 @@ export function App(): React.ReactElement {
     if (panel === 'project-detail' && projectId) {
       return <ProjectDesk projectId={projectId} navigate={navigate} runs={shownRuns} needRows={needRows} now={needsNow} search={search} runsLoaded={runsLoaded} runsError={runsError} onRetryRuns={refresh} hosted={renderHosted} />;
     }
+    // `/system` — Settings (studio-settings-tabs): the General tab (default) and the Theme tab
+    // (`?tab=theme`). The retired `/theme` address redirects (replace) to the Theme tab.
     if (panel === 'system') {
       return (
         <div className="flex-1 overflow-y-auto">
-          <SystemSettings navigate={navigate} />
+          <SettingsPage navigate={navigate} search={search} />
         </div>
       );
     }
     if (panel === 'theme') {
-      return (
-        <div className="flex-1 overflow-y-auto">
-          <ThemePage />
-        </div>
-      );
+      return <RouteRedirect to={SETTINGS_THEME_PATH} navigate={navigate} />;
     }
     // The launch form; anything else with no surface of its own is a dead address (S16a-4h: the
     // project shell's Build dashboard is gone) — the honest not-found view, never a silent swap.
@@ -767,7 +765,7 @@ export function App(): React.ReactElement {
           jump to the main content instead of a page's top-right Refresh. */}
       <SkipLink />
       {/* UI-CONTRACT §3 (studio#680): the rail as before on desktop; a drawer behind a top bar on a phone. */}
-      <RailDrawer pathname={pathname} ambientProject={ambientProject} badge={<PhoneNeedsBadge needRows={needRows} runsKnown={runsLoaded} runsFailed={runsError !== null} />}>
+      <RailDrawer pathname={pathname} search={search} ambientProject={ambientProject} badge={<PhoneNeedsBadge needRows={needRows} runsKnown={runsLoaded} runsFailed={runsError !== null} />}>
         <SessionRail runs={shownRuns} needRows={needRows} navigate={navigate} pathname={pathname} runsKnown={runsLoaded} runsFailed={runsError !== null} ambientProject={ambientProject} />
       </RailDrawer>
 

@@ -126,7 +126,7 @@ with sync_playwright() as p:
     FIXED = {"/", "/watch", "/rules", "/everything?tab=sessions", "/everything?tab=made", "/agents",
              "/everything?tab=handed", "/everything?tab=projects", "/steering/proposals",
              "/steering/policies", "/memory", "/memory?view=proposals", "/testing/evals", "/repos", "/repos/new",
-             "/runs/new", "/workflows", "/skills", "/mcp", "/plugins", "/learn", "/system", "/theme", "/editors/dev"}
+             "/runs/new", "/workflows", "/skills", "/mcp", "/plugins", "/learn", "/system", "/system?tab=theme", "/editors/dev"}
     open_palette("go:")
     fixed = page.get_by_test_id("palette-row").evaluate_all(
         "els => els.map(e => ({ href: e.getAttribute('href'), label: e.innerText.split('\\n')[0] }))")

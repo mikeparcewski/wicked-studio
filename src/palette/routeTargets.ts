@@ -4,6 +4,7 @@ import { humanTitle } from '../components/runIdentity.js';
 import { everythingPath } from '../board/everythingModel.js';
 import { projectDetailPath, projectRequirementsPath, runEventsPath, runFilesPath, type Route } from '../hooks/useRoute.js';
 import { PAGE_NAMES } from '../board/pageNames.js';
+import { SETTINGS_THEME_PATH } from '../board/settingsTabs.js';
 
 /**
  * EVERY ROUTE IN ⌘K (the skin contract, DES-STUDIO-REBUILD-001 §10 / §14 Q2: "every route is
@@ -96,7 +97,8 @@ const DESTINATIONS: ReadonlyArray<{ shape: string; label: string; href: string }
   { shape: 'plugins', label: `${PAGE_NAMES.plugins} — editor plugins, and making one`, href: '/plugins' },
   { shape: 'learn', label: 'Learn', href: '/learn' },
   { shape: 'system', label: `${PAGE_NAMES.system} — settings for helpers and notifications`, href: '/system' },
-  { shape: 'theme', label: `${PAGE_NAMES.theme} — light or dark, logo, site name`, href: '/theme' },
+  // studio-settings-tabs: Theme is a tab of the Settings page (`/theme` only redirects there).
+  { shape: 'system', label: `${PAGE_NAMES.theme} — light or dark, logo, site name`, href: SETTINGS_THEME_PATH },
   { shape: 'editors-dev', label: 'Editor test page — try an editor plugin', href: '/editors/dev' },
 ];
 
@@ -167,5 +169,6 @@ export const REACHED_BY_OTHER_GROUPS: readonly string[] = ['repo-detail'];
  *  drives (e2e/editor_conformance_test.py; operators reach editors from Plugins, X3), and the two
  *  redirect-only addresses (operator 2026-10-12): `/product` lands on a project dashboard and
  *  `/testing/campaigns` opens the launch wizard on the test-writing workflow; and `/health`, which lands
- *  on Nerve Center (`/watch`, DES-SYSTEM-VIEW) — its ⌘K entry says "health". */
-export const NOT_IN_PALETTE: readonly string[] = ['editors-conformance', 'product', 'testing-campaigns', 'health'];
+ *  on Nerve Center (`/watch`, DES-SYSTEM-VIEW) — its ⌘K entry says "health"; and `/theme`, which lands
+ *  on the Settings page's Theme tab (its ⌘K row opens that tab). */
+export const NOT_IN_PALETTE: readonly string[] = ['editors-conformance', 'product', 'testing-campaigns', 'health', 'theme'];

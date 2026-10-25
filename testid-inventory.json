@@ -11,9 +11,9 @@
   "version": 1,
   "studioVersion": "0.11.8",
   "counts": {
-    "files": 237,
-    "occurrences": 3062,
-    "static": 2664,
+    "files": 238,
+    "occurrences": 3064,
+    "static": 2666,
     "dynamic": 69,
     "computed": 24
   },
@@ -3369,12 +3369,6 @@
     },
     {
       "testId": "desk-rail-skills",
-      "files": [
-        "src/board/deskModel.ts"
-      ]
-    },
-    {
-      "testId": "desk-rail-theme",
       "files": [
         "src/board/deskModel.ts"
       ]
@@ -12258,9 +12252,27 @@
       ]
     },
     {
+      "testId": "settings-page",
+      "files": [
+        "src/components/SettingsPage.tsx"
+      ]
+    },
+    {
+      "testId": "settings-panel",
+      "files": [
+        "src/components/SettingsPage.tsx"
+      ]
+    },
+    {
       "testId": "settings-path",
       "files": [
         "src/components/SystemSettings.tsx"
+      ]
+    },
+    {
+      "testId": "settings-tabs",
+      "files": [
+        "src/components/SettingsPage.tsx"
       ]
     },
     {

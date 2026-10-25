@@ -196,9 +196,9 @@ describe('chores for whoever runs studio', () => {
 });
 
 describe('the rail destinations', () => {
-  it('the Workspace group (operator IA 2026-10-13): Skills · MCP · Plugins · Workflows · Theme · General; no Desk-tab pages', () => {
+  it('the Workspace group (operator IA 2026-10-13; studio-settings-tabs): Skills · MCP · Plugins · Workflows · General; no Desk-tab pages', () => {
     expect(DESK_RAIL_LINKS.map((l) => [l.label, l.path])).toEqual([
-      ['Skills', '/skills'], ['MCP', '/mcp'], ['Plugins', '/plugins'], ['Workflows', '/workflows'], ['Theme', '/theme'], ['General', '/system'],
+      ['Skills', '/skills'], ['MCP', '/mcp'], ['Plugins', '/plugins'], ['Workflows', '/workflows'], ['General', '/system'],
     ]);
     // Repositories, Steering, Evals and Agents are Desk tabs; the retired overview is not linked.
     for (const d of DESK_RAIL_LINKS) {

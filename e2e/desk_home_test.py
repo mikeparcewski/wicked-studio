@@ -21,7 +21,7 @@ proves the S4 acceptance:
      no composer) and sends nothing. Chat opens the same dock; its Send sends the message exactly
      once — closing and reopening the dock sends nothing.
   7. THE RAIL (operator IA 2026-10-13): the wordmark (the Desk link) · New project · sessions ·
-     Skills · MCP · Plugins · Workflows · Theme · General · Nerve Center, in that order, no
+     Skills · MCP · Plugins · Workflows · General · Nerve Center, in that order, no
      Notifications entry; a destination navigates.
   8. 0 page errors, no horizontal scroll.
 
@@ -226,12 +226,12 @@ with sync_playwright() as p:
     page.wait_for_function("() => !document.querySelector('[data-testid=\"ask-panel\"]')", timeout=5000)
 
     # ── 7. the rail (operator IA 2026-10-13): the wordmark (the Desk link) · New project · sessions ·
-    #       Skills · MCP · Plugins · Workflows · Theme · General · Nerve Center (last); no Notifications entry.
+    #       Skills · MCP · Plugins · Workflows · General · Nerve Center (last); no Notifications entry.
     dests = page.evaluate("""() => [...document.querySelectorAll(
       '[data-testid="session-rail"] [data-nav-dest]')].map(e => e.dataset.navDest)""")
-    expected = ["section:skills", "section:mcp", "section:plugins", "section:workflows", "section:theme", "section:general", "watch"]
-    page.get_by_test_id("desk-rail-theme").click()
-    page.wait_for_function("() => window.location.pathname === '/theme'", timeout=5000)
+    expected = ["section:skills", "section:mcp", "section:plugins", "section:workflows", "section:general", "watch"]
+    page.get_by_test_id("desk-rail-general").click()
+    page.wait_for_function("() => window.location.pathname === '/system'", timeout=5000)
     check("every-destination", dests == expected, dests=dests, expected=expected)
 
     # ── 5. while you were away ────────────────────────────────────────────────────

@@ -4,7 +4,7 @@ import { cleanup, render, screen } from '@testing-library/react';
 /**
  * THE DESK RAIL after the operator's IA change (2026-10-13; first Amendment 5, S15c): top to bottom —
  * the wordmark (one link to the Desk, carrying its needs-you badge) · New project · the sessions list ·
- * the "Workspace" foot: Skills · MCP · Plugins · Workflows · Theme · General, then the Nerve Center tile. No
+ * the "Workspace" foot: Skills · MCP · Plugins · Workflows · General (Settings; Theme is its tab), then the Nerve Center tile. No
  * Desk item, no Notifications entry (the Desk is the notification surface), no "General settings"
  * overview, and none of the Desk tabs (Repositories, Steering, Evals, Agents). Navigation only.
  */
@@ -27,10 +27,10 @@ function rail(pathname = '/'): ReturnType<typeof render> {
 }
 
 describe('the rail, top to bottom', () => {
-  it('Desk (the wordmark) · New project · sessions · Skills · MCP · Plugins · Workflows · Theme · General · Nerve Center (DES-SYSTEM-VIEW)', () => {
+  it('Desk (the wordmark) · New project · sessions · Skills · MCP · Plugins · Workflows · General · Nerve Center (DES-SYSTEM-VIEW)', () => {
     rail();
     const nav = screen.getByTestId('session-rail');
-    const ids = ['desk-rail-home', 'desk-rail-new-project', 'desk-rail-skills', 'desk-rail-mcp', 'desk-rail-plugins', 'desk-rail-workflows', 'desk-rail-theme', 'desk-rail-general', 'desk-rail-nerve'];
+    const ids = ['desk-rail-home', 'desk-rail-new-project', 'desk-rail-skills', 'desk-rail-mcp', 'desk-rail-plugins', 'desk-rail-workflows', 'desk-rail-general', 'desk-rail-nerve'];
     const order = [...nav.querySelectorAll('[data-testid]')].map((e) => e.getAttribute('data-testid') ?? '').filter((id) => ids.includes(id));
     expect(order).toEqual(ids);
     expect(nav.querySelector('[data-nav-dest="notifications"]')).toBeNull();
@@ -45,7 +45,8 @@ describe('the rail, top to bottom', () => {
     expect(screen.getByTestId('desk-rail-mcp')).toHaveTextContent(/^MCP$/);
     expect(screen.getByTestId('desk-rail-plugins')).toHaveAttribute('href', '/plugins');
     expect(screen.getByTestId('desk-rail-workflows')).toHaveAttribute('href', '/workflows');
-    expect(screen.getByTestId('desk-rail-theme')).toHaveAttribute('href', '/theme');
+    // studio-settings-tabs: one settings item; Theme is a tab of the page General opens.
+    expect(screen.queryByTestId('desk-rail-theme')).toBeNull();
     expect(screen.getByTestId('desk-rail-general')).toHaveAttribute('href', '/system');
     expect(screen.getByTestId('desk-rail-general')).toHaveTextContent(/^General$/);
   });
@@ -53,7 +54,7 @@ describe('the rail, top to bottom', () => {
   it('the rail entries carry the skin contract\'s nav-dest marks', () => {
     rail();
     const dests = [...screen.getByTestId('session-rail').querySelectorAll('[data-nav-dest]')].map((e) => e.getAttribute('data-nav-dest'));
-    expect(dests).toEqual(['section:skills', 'section:mcp', 'section:plugins', 'section:workflows', 'section:theme', 'section:general', 'watch']);
+    expect(dests).toEqual(['section:skills', 'section:mcp', 'section:plugins', 'section:workflows', 'section:general', 'watch']);
   });
 
   it('the current entry is marked', () => {
