@@ -63,6 +63,22 @@ export function offersFloorOverride(prompt: string | undefined, verdict?: FloorO
   return last >= 0 && OFFER_AT_CLOSER.test(prompt.slice(0, last + CLOSER.length));
 }
 
+/** The engine's deliver refusal options (wicked-core `deliver_refusal_prompt`). They follow the quoted
+ *  refusal, so their LAST occurrence is the engine's own. */
+const DELIVER_OPTIONS = 'Approve to re-run the deliver phase now (the engine re-lifts and re-verifies first; no second deliver gate),';
+const DELIVER_OFFER = new RegExp(`^${ws(DELIVER_OPTIONS)}\\s*${ws(OFFER_CLAUSE)}\\s*${ws(CLOSER)}`);
+
+/** Whether the engine offers the override at a REFUSED HAND-OVER (wicked-core: the deliver phase's own
+ *  re-verify failed on the tree it would ship). There is no repo-checks gate verdict there (the
+ *  deliver unit's denial is `deliver_refusal`), so position corroborates: the engine's clause sits
+ *  right after the engine's last deliver options and right before its closer, never inside the quoted
+ *  refusal. The engine refuses an answer it does not take (409, gate left open). */
+export function offersDeliverFloorOverride(prompt: string | undefined): boolean {
+  if (prompt === undefined) return false;
+  const at = prompt.lastIndexOf('Approve to re-run the deliver phase now');
+  return at >= 0 && DELIVER_OFFER.test(prompt.slice(at));
+}
+
 /** `OperatorJudgment.floorOverride` off the wire (api-types 0.135.0), or `null`. */
 export interface FloorOverrideView {
   layer: string;
