@@ -1,4 +1,4 @@
-import { Paperclip } from 'lucide-react';
+import { ExternalLink, Paperclip } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client.js';
 import { executingOrd } from '../api/run-state.js';
@@ -488,7 +488,7 @@ function DockChat({ chatId, resumed = false, onResumeProbe, onStatus, answerFoot
 
 const RESUMED_NOTE = 'Resumed your earlier session — its agents are still on the line.';
 
-export function AssistDock({ context, verbs, importable, open, onOpenChange, onError, resumeChatId = null, onExpandChat, onResumeGone, fill = false, typeTarget, initialText = '', sendOnOpen = false, headerProps, headerStart, headerExtra, headerEnd, onStatus, allowAttach = true, answerFooter, promptsSend = false, notice }: {
+export function AssistDock({ context, verbs, importable, open, onOpenChange, onError, resumeChatId = null, onExpandChat, onResumeGone, fill = false, typeTarget, initialText = '', sendOnOpen = false, headerProps, headerStart, headerExtra, headerEnd, compactHeader = false, onStatus, allowAttach = true, answerFooter, promptsSend = false, notice }: {
   context: AssistContext;
   verbs: AssistVerbs;
   /** Which attachments offer the Import-directly fork. Absent ⇒ everything is analysis-only. */
@@ -525,6 +525,8 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
   headerExtra?: React.ReactNode;
   /** Replaces the header's own Close (the system chat window's controls). */
   headerEnd?: React.ReactNode;
+  /** A crowded header (the system chat's picker and window controls): "Open in full chat" is an icon. */
+  compactHeader?: boolean;
   /** The conversation is thinking, or an answer landed (the system chat's tray). */
   onStatus?: ((status: 'ready' | 'thinking' | 'answered') => void) | undefined;
   /** Offer attachments (paperclip, drop). A surface whose send cannot carry files turns it off. */
@@ -768,10 +770,10 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
             aria-label="Open in full chat"
             title="Open this conversation in the full chat interface"
             onClick={() => onExpandChat(latestChatId)}
-            className="ml-auto shrink-0 rounded px-1.5 py-0.5 font-mono text-[10px] focus:outline-none focus-visible:ring-1"
-            style={{ color: 'var(--accent)', border: '1px solid var(--surface-overlay)' }}
+            className={compactHeader ? 'ml-auto wk-chatwin-btn' : 'ml-auto shrink-0 rounded px-1.5 py-0.5 font-mono text-[10px] focus:outline-none focus-visible:ring-1'}
+            style={compactHeader ? undefined : { color: 'var(--accent)', border: '1px solid var(--surface-overlay)' }}
           >
-            Open in full chat ↗
+            {compactHeader ? <ExternalLink size={14} aria-hidden /> : 'Open in full chat ↗'}
           </button>
         )}
         {headerExtra !== undefined && (

@@ -593,6 +593,7 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
       }}
       headerProps={chrome?.dragProps}
       headerExtra={picker}
+      compactHeader
       headerEnd={chrome?.controls}
       onStatus={onStatus}
       // Uploads ride crew's attachments route (the next slice); until then the paperclip stays away

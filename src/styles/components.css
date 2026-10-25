@@ -659,6 +659,10 @@ select:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-
   border-radius: var(--radius-lg); border: 1px solid var(--surface-overlay);
   background: var(--surface-rail); box-shadow: var(--shadow-overlay);
 }
+/* A narrow chat (a phone): the header keeps its controls; "Seeing: <page>" steps aside (the input's
+   "Ask about <page>…" and the scope chips still say it) rather than squeeze into a column of letters. */
+.wk-chatwin { container-type: inline-size; }
+@container (max-width: 480px) { .wk-chatwin [data-testid="assist-context"] { display: none; } }
 /* clip, not hidden: a focused field in a popover must never scroll the dock's body sideways. */
 .wk-chatwin > [data-testid="assist-dock"] { overflow: clip; }
 .wk-chatwin--full { border-radius: 0; border-width: 0 0 0 1px; box-shadow: none; }
