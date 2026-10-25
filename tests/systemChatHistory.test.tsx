@@ -1,4 +1,6 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ChatOpenBody, RosterSeat } from '../src/api/types.js';
@@ -37,7 +39,8 @@ vi.mock('../src/api/client.js', () => ({
 }));
 vi.mock('../src/hooks/useEventStream.js', () => ({ useEventStream: () => undefined }));
 
-const { AskDock } = await import('../src/components/AskDock.js');
+const { AskDock, PAST_CHATS_COLUMN_MIN_PX } = await import('../src/components/AskDock.js');
+const { ChatChromeContext } = await import('../src/components/chat/ChatWindow.js');
 const { setCachedRoster, clearCachedRoster } = await import('../src/store/rosterCache.js');
 const { useCapabilities } = await import('../src/store/capabilities.js');
 const { useLiveChatsStore } = await import('../src/store/liveChats.js');
@@ -167,6 +170,86 @@ describe('past chats (chatList)', () => {
     await waitFor(() => expect(endChat).toHaveBeenCalledWith(body.chatId));
     expect(closeChat).not.toHaveBeenCalled();
     expect(readAskSession()).toBeNull();
+  });
+});
+
+describe('past chats beside the conversation (the approved mockup)', () => {
+  const css = readFileSync(resolve(__dirname, '../src/styles/components.css'), 'utf8');
+  /** The chat window's inner width, as the dock measures it (jsdom has no layout). */
+  const atWidth = (px: number): void => { vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(px); };
+  const phoneDock = (): ReturnType<typeof render> => render(
+    <ChatChromeContext.Provider value={{ dragProps: {}, controls: null, phone: true }}>
+      <AskDock runs={[]} pathname="/" onClose={() => undefined} />
+    </ChatChromeContext.Provider>,
+  );
+  beforeEach(() => { getChatMessages.mockResolvedValue({ chat: ENTRY('c-1', 'closed'), messages: [], attachments: [] }); });
+  afterEach(() => { vi.restoreAllMocks(); });
+
+  it('in a wide window the column starts open and the conversation stays on screen beside it', async () => {
+    listChatHistory.mockResolvedValue({ chats: [], items: [ENTRY('c-1', 'closed'), ENTRY('c-2', 'open', 'what changed?')], nextCursor: null });
+    atWidth(600);
+    const user = userEvent.setup();
+    dock();
+    // Open without a click, as a column (not lying over the chat), with the conversation still there.
+    expect(await screen.findAllByTestId('chat-history-entry')).toHaveLength(2);
+    expect(screen.getByTestId('system-chat')).toHaveAttribute('data-past-chats', 'column');
+    expect(screen.getByTestId('chat-history-toggle')).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByTestId('assist-dock')).toBeVisible();
+    expect(screen.getByTestId('assist-input')).toBeVisible();
+    // The column sits before the conversation (on its left) inside the chat's body.
+    const body = screen.getByTestId('system-chat');
+    expect(body.firstElementChild).toBe(screen.getByTestId('chat-history'));
+    expect(screen.getByTestId('chat-history').nextElementSibling).toBe(screen.getByTestId('assist-dock'));
+    // Picking a past chat keeps the column; the conversation is still there to show it.
+    await user.click(screen.getAllByTestId('chat-history-entry')[0]!);
+    expect(readAskSession()).toMatchObject({ chatId: 'c-1' });
+    expect(screen.getByTestId('chat-history')).toBeInTheDocument();
+    expect(screen.getAllByTestId('chat-history-entry').map((r) => r.getAttribute('aria-current'))).toEqual(['true', null]);
+    expect(screen.getByTestId('assist-input')).toBeVisible();
+    // The clock hides it, and a dock that remounts (a reopened chat) remembers that.
+    await user.click(screen.getByTestId('chat-history-toggle'));
+    expect(screen.queryByTestId('chat-history')).toBeNull();
+    expect(useChatWindow.getState().pastChats).toBe(false);
+    cleanup();
+    dock();
+    expect(screen.queryByTestId('chat-history')).toBeNull();
+    expect(screen.getByTestId('chat-history-toggle')).toHaveAttribute('aria-pressed', 'false');
+    // Shown again, the chat on screen (an ENDED one, replayed from its history) is still the one marked.
+    await waitFor(() => expect(getChatMessages).toHaveBeenCalledWith('c-1'));
+    await user.click(screen.getByTestId('chat-history-toggle'));
+    await waitFor(() => expect(screen.getAllByTestId('chat-history-entry')[0]).toHaveAttribute('aria-current', 'true'));
+  });
+
+  it('in a narrow window (or on a phone) it starts closed, lies over the chat, and steps aside once a chat is picked', async () => {
+    listChatHistory.mockResolvedValue({ chats: [], items: [ENTRY('c-1', 'closed')], nextCursor: null });
+    atWidth(PAST_CHATS_COLUMN_MIN_PX - 1);
+    const user = userEvent.setup();
+    dock();
+    expect(screen.queryByTestId('chat-history')).toBeNull();
+    await user.click(screen.getByTestId('chat-history-toggle'));
+    expect(screen.getByTestId('system-chat')).toHaveAttribute('data-past-chats', 'overlay');
+    await user.click(await screen.findByTestId('chat-history-entry'));
+    expect(screen.queryByTestId('chat-history')).toBeNull();
+    // An overlay toggle is not a column preference.
+    expect(useChatWindow.getState().pastChats).toBeNull();
+    cleanup();
+    atWidth(1200);
+    phoneDock();
+    expect(screen.queryByTestId('chat-history')).toBeNull();
+    await user.click(screen.getByTestId('chat-history-toggle'));
+    expect(screen.getByTestId('system-chat')).toHaveAttribute('data-past-chats', 'overlay');
+  });
+
+  it('the stylesheet agrees: a 186px column, an overlay only below the column width and on a phone', () => {
+    expect(PAST_CHATS_COLUMN_MIN_PX).toBe(520);
+    const base = /\n\.wk-chathist \{([^}]*)\}/.exec(css)?.[1] ?? '';
+    expect(base).toContain('width: 186px');
+    expect(base).not.toContain('position: absolute');
+    const narrow = /@container \(max-width: ([\d.]+)px\) \{\s*\.wk-chathist \{([^}]*)\}/.exec(css);
+    expect(Number(narrow?.[1])).toBeLessThan(PAST_CHATS_COLUMN_MIN_PX);
+    expect(Number(narrow?.[1])).toBeGreaterThan(PAST_CHATS_COLUMN_MIN_PX - 1);
+    expect(narrow?.[2]).toContain('position: absolute');
+    expect(css).toMatch(/\.wk-chatwin--phone \.wk-chathist \{[^}]*position: absolute/);
   });
 });
 

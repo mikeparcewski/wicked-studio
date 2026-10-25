@@ -102,6 +102,8 @@ interface ChatWindowStore {
   status: ChatStatus;
   /** The answering CLI's name, for the tray. */
   cli: string | null;
+  /** Past chats as a column, as last toggled in a wide window; `null` = never toggled (open). This page only. */
+  pastChats: boolean | null;
   /** Show the window: a closed chat opens floating, a minimized one restores; an open one stays. */
   open: () => void;
   minimize: () => void;
@@ -115,6 +117,7 @@ interface ChatWindowStore {
   setTray: (p: ChatPoint) => void;
   setStatus: (s: ChatStatus) => void;
   setCli: (label: string | null) => void;
+  setPastChats: (open: boolean) => void;
 }
 
 const initial = loadChatWindow();
@@ -126,6 +129,7 @@ export const useChatWindow = create<ChatWindowStore>((set, get) => ({
   tray: initial.tray,
   status: 'ready',
   cli: null,
+  pastChats: null,
   open: () => {
     const { mode } = get();
     if (mode === 'closed') set({ mode: 'floating', status: 'ready' });
@@ -164,12 +168,13 @@ export const useChatWindow = create<ChatWindowStore>((set, get) => ({
     set({ status });
   },
   setCli: (cli) => set({ cli }),
+  setPastChats: (pastChats) => set({ pastChats }),
 }));
 
 /** Test hook: back to a closed chat with nothing remembered. */
 export function resetChatWindow(): void {
   try { globalThis.localStorage?.removeItem(CHAT_WINDOW_KEY); } catch { /* stubbed */ }
-  useChatWindow.setState({ mode: 'closed', restoreTo: 'floating', geometry: null, tray: null, status: 'ready', cli: null });
+  useChatWindow.setState({ mode: 'closed', restoreTo: 'floating', geometry: null, tray: null, status: 'ready', cli: null, pastChats: null });
 }
 
 /** Ctrl/⌘+Shift+A and the phone's chat bubble: an open chat minimizes (it keeps running), a minimized

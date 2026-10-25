@@ -678,11 +678,12 @@ select:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-
 .wk-assist-notice { margin: 0; padding: 0 12px 8px; font-size: var(--text-xs); color: var(--ink-dim); }
 .wk-assist-answer-foot { margin: 4px 0 0; font-size: var(--text-2xs); color: var(--ink-dim); }
 
-/* The system chat's body: past chats (when open) beside the dock. */
+/* The system chat's body: past chats (when open) a column on its left, the conversation narrowing beside
+   it. The dock is its own container, so its header answers to its own width, not the window's. */
 .wk-syschat { display: flex; flex: 1 1 auto; min-width: 0; min-height: 0; height: 100%; position: relative; container-type: inline-size; }
-.wk-syschat > [data-testid="assist-dock"] { flex: 1 1 auto; min-width: 0; }
+.wk-syschat > [data-testid="assist-dock"] { flex: 1 1 auto; min-width: 0; container-type: inline-size; }
 .wk-chathist {
-  display: flex; flex-direction: column; width: 220px; flex-shrink: 0; min-height: 0; overflow-y: auto;
+  display: flex; flex-direction: column; width: 186px; flex-shrink: 0; min-height: 0; overflow-y: auto; box-sizing: border-box;
   border-right: 1px solid var(--surface-raised); background: var(--surface-base); padding: 8px 6px;
 }
 .wk-chathist-headrow { display: flex; align-items: center; justify-content: space-between; margin: 0 2px 4px 6px; }
@@ -694,17 +695,23 @@ select:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-
   background: none; color: var(--ink-high); font: inherit; text-align: left; cursor: pointer;
 }
 .wk-chathist-entry:hover, .wk-chathist-entry:focus-visible { background: var(--surface-raised); outline: none; }
-.wk-chathist-entry[aria-current="true"] { background: var(--accent-subtle); }
+/* The chat on screen: tinted, with an accent edge so it reads as selected at a glance. */
+.wk-chathist-entry[aria-current="true"] { background: var(--accent-subtle); box-shadow: inset 2px 0 0 var(--accent); }
 .wk-chathist-title { font-size: var(--text-sm); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.wk-chathist-meta { font-size: var(--text-2xs); color: var(--ink-dim); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.wk-chathist-meta { display: flex; min-width: 0; font-size: var(--text-2xs); color: var(--ink-dim); white-space: pre; }
+.wk-chathist-page { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.wk-chathist-age { flex-shrink: 0; }
 .wk-chathist-entry[data-status="closed"] .wk-chathist-title { color: var(--ink-muted); }
+.wk-chathist-entry[aria-current="true"] .wk-chathist-title { color: var(--ink-high); }
 .wk-chathist-more { margin: 6px; padding: 4px 8px; border: 1px solid var(--border); border-radius: var(--radius-md); background: none; color: var(--accent); font: inherit; font-size: var(--text-xs); cursor: pointer; }
 .wk-assist-file-name { max-width: 160px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .wk-assist-file-x { border: none; background: none; color: var(--ink-dim); cursor: pointer; padding: 0 0 0 2px; font: inherit; }
-/* A narrow window (or a phone): the rail lies over the chat instead of squeezing it. */
-@container (max-width: 640px) {
+/* A narrow window (below PAST_CHATS_COLUMN_MIN_PX) or a phone: the rail lies over the chat instead of
+   squeezing it. */
+@container (max-width: 519.98px) {
   .wk-chathist { position: absolute; inset: 0 auto 0 0; z-index: 3; width: min(280px, 85%); box-shadow: var(--shadow-overlay); }
 }
+.wk-chatwin--phone .wk-chathist { position: absolute; inset: 0 auto 0 0; z-index: 3; width: min(280px, 85%); box-shadow: var(--shadow-overlay); }
 
 /* The tray: the minimized chat, bottom right by default, draggable. */
 .wk-chattray {

@@ -24,7 +24,8 @@ export function ChatHistoryRail({ currentId, onOpen, onClose }: {
   /** The chat on screen (marked, and clicking it does nothing). */
   currentId: string | null;
   onOpen: (entry: ChatHistoryEntry) => void;
-  /** Hide the rail (in a narrow window it lies over the chat, header included). */
+  /** Hide the rail: a column beside the chat in a wide window; in a narrow one (or a phone) it lies over
+   *  the chat, header included. */
   onClose: () => void;
 }): React.ReactElement {
   const [items, setItems] = useState<ChatHistoryEntry[] | null>(null);
@@ -68,8 +69,10 @@ export function ChatHistoryRail({ currentId, onOpen, onClose }: {
               onClick={() => { if (c.id !== currentId) onOpen(c); }}
             >
               <span className="wk-chathist-title">{c.title}</span>
+              {/* The page gives way (ellipsis) so the age always shows, even in the narrow column. */}
               <span className="wk-chathist-meta">
-                {c.startedOn !== null ? `${c.startedOn.label} · ` : ''}{ageWords(c.updatedAt)}{c.status === 'closed' ? ' · ended' : ''}
+                {c.startedOn !== null && <span className="wk-chathist-page">{c.startedOn.label}</span>}
+                <span className="wk-chathist-age">{c.startedOn !== null ? ' · ' : ''}{ageWords(c.updatedAt)}{c.status === 'closed' ? ' · ended' : ''}</span>
               </span>
             </button>
           </li>

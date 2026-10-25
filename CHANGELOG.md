@@ -12,6 +12,14 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+### Changed
+- **Past chats are a column inside the chat window, beside the conversation.** In a chat window at least
+  520 px wide, past chats sit on the window's left as a 186 px column and the conversation narrows beside it,
+  still in view; the column starts open, and the clock in the chat header hides or shows it (the choice holds
+  for this page). The chat on screen is marked in the list, an ended one included. Each entry keeps its title
+  on one line, and its age stays visible when the page it started on is cut short. In a narrower window and
+  on a phone the list still lies over the chat, and picking a chat closes it.
+
 ## [0.12.0] — 2026-10-25
 
 A minor release: Nerve Center (#901), a floating, page-aware system chat with past chats and upload (#900, #904), Settings as one page with General and Theme tabs (#905), and gate, session and plan cards that say what the engine recorded (#899, #902, #903). Past chats and uploads need crew 0.16.0 (`chatList` / `chatAttachments`); Nerve Center reads crew's `GET /api/v1/system` (`capabilities.system`) and falls back to the Health cards on an older crew.
