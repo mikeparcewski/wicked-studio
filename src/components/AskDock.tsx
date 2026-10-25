@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { chatOpened, chatOpenFailed } from '../store/chatFlow.js';
 import { api } from '../api/client.js';
 import { getDiagnostics, isDiagnosticsUnsupported } from '../api/diagnostics.js';
@@ -120,6 +120,10 @@ const RUN_WORDS: Record<string, string> = {
 
 /** The one line an older crew gets in place of past chats and uploads (DES-SYSTEM-CHAT §9). */
 export const OLDER_CREW_NOTE = 'Past chats and file uploads need a newer wicked-crew.';
+
+/** Past chats sit beside the conversation as a column from this chat-window width; below it (and on a
+ *  phone) they lie over it, as `.wk-chathist`'s container query does. */
+export const PAST_CHATS_COLUMN_MIN_PX = 520;
 
 /** Refuse an upload crew would refuse, before anything is opened: too many, too big, or a type the
  *  seat cannot read (images, UTF-8 text and pdfs). The daemon still decides. */
@@ -286,6 +290,9 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
   });
   /** The live chat session this dock opened — later sends reuse its warm seats. */
   const chatIdRef = useRef<string | null>(resumed?.chatId ?? null);
+  /** The chat on screen, for past chats' highlight: the live one, or an ended one shown from its history
+   *  (which `chatIdRef` lets go of, since the next question starts a new chat). */
+  const [shownId, setShownId] = useState<string | null>(resumed?.chatId ?? null);
   /** A fresh chat page's own id (the chat flow), used once: the first open takes it. */
   const openIdRef = useRef<string | null>(sendText !== undefined && sendFresh ? sendOpenChatId ?? null : null);
   /** True once the context pack LANDED with a message — it seeds the first successful
@@ -500,6 +507,7 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
               throw new Error(`${askPath ? 'No helper can answer' : 'No agent seat came up'} — ${detail}`);
             }
             chatIdRef.current = id;
+            setShownId(id);
             // The chat flow: a fresh chat page's chat is open on the daemon now — an ordinary chat from here.
             openIdRef.current = null;
             chatOpened(id);
@@ -570,6 +578,35 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
       : !chatList ? 'Past chats need a newer wicked-crew.'
         : !chatAttachments ? 'File uploads need a newer wicked-crew.' : undefined;
   const [historyOpen, setHistoryOpen] = useState(false);
+  // Wide enough for the column? Measured on the chat's body (the window's inner width) and kept current as
+  // the window is resized, minimized or made full size. A phone always overlays.
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const phone = chrome?.phone === true;
+  const [wide, setWide] = useState(false);
+  useLayoutEffect(() => {
+    const el = bodyRef.current;
+    if (el === null) return undefined;
+    const measure = (): void => setWide(!phone && el.clientWidth >= PAST_CHATS_COLUMN_MIN_PX);
+    measure();
+    if (typeof ResizeObserver === 'undefined') return undefined;
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [phone]);
+  // The column starts open in a wide window (or as last toggled there); an overlay starts closed. A layout
+  // effect, so a window that opens wide never paints a frame without its column.
+  useLayoutEffect(() => {
+    if (chatList) setHistoryOpen(wide ? (useChatWindow.getState().pastChats ?? true) : false);
+  }, [chatList, wide]);
+  const toggleHistory = (): void => {
+    const next = !historyOpen;
+    setHistoryOpen(next);
+    if (wide) useChatWindow.getState().setPastChats(next);
+  };
+  const closeHistory = (): void => {
+    setHistoryOpen(false);
+    if (wide) useChatWindow.getState().setPastChats(false);
+  };
   const loadHistory = useMemo(() => (chatList
     ? (id: string) => api.getChatMessages(id).then((r) => ({ records: r.messages, closed: r.chat.status === 'closed' }))
     : undefined), [chatList]);
@@ -585,12 +622,13 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
   );
 
   return (
-    <div data-testid="system-chat" className="wk-syschat">
+    <div ref={bodyRef} data-testid="system-chat" data-past-chats={chatList && historyOpen ? (wide ? 'column' : 'overlay') : undefined} className="wk-syschat">
       {chatList && historyOpen && (
         <ChatHistoryRail
-          currentId={chatIdRef.current}
-          onOpen={(entry) => { setHistoryOpen(false); reopenSystemChat(entry); }}
-          onClose={() => setHistoryOpen(false)}
+          currentId={shownId}
+          // A column stays beside the reopened chat; an overlay steps aside to show it.
+          onOpen={(entry) => { setShownId(entry.id); if (!wide) setHistoryOpen(false); reopenSystemChat(entry); }}
+          onClose={closeHistory}
         />
       )}
       <AssistDock
@@ -678,7 +716,7 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
             aria-pressed={historyOpen}
             aria-label={historyOpen ? 'Hide past chats' : 'Past chats'}
             title={historyOpen ? 'Hide past chats' : 'Past chats'}
-            onClick={() => setHistoryOpen((v) => !v)}
+            onClick={toggleHistory}
           >
             <History size={15} aria-hidden />
           </button>

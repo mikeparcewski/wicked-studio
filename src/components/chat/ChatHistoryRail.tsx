@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '../../api/client.js';
 import type { ChatHistoryEntry } from '../../api/chatHistory-wire.js';
 
@@ -24,7 +24,8 @@ export function ChatHistoryRail({ currentId, onOpen, onClose }: {
   /** The chat on screen (marked, and clicking it does nothing). */
   currentId: string | null;
   onOpen: (entry: ChatHistoryEntry) => void;
-  /** Hide the rail (in a narrow window it lies over the chat, header included). */
+  /** Hide the rail: a column beside the chat in a wide window; in a narrow one (or a phone) it lies over
+   *  the chat, header included. */
   onClose: () => void;
 }): React.ReactElement {
   const [items, setItems] = useState<ChatHistoryEntry[] | null>(null);
@@ -44,6 +45,15 @@ export function ChatHistoryRail({ currentId, onOpen, onClose }: {
       .finally(() => setLoading(false));
   }, []);
   useEffect(() => { load(null); }, [load]);
+  // A column stays open while a new chat starts beside it: once the chat on screen is missing from the
+  // list, the first page is read again (once per chat), so the new chat shows up, marked.
+  const refreshedFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (currentId === null || items === null || loading || refreshedFor.current === currentId) return;
+    if (items.some((c) => c.id === currentId)) return;
+    refreshedFor.current = currentId;
+    load(null);
+  }, [currentId, items, loading, load]);
 
   return (
     <nav data-testid="chat-history" aria-label="Past chats" className="wk-chathist">
@@ -68,8 +78,10 @@ export function ChatHistoryRail({ currentId, onOpen, onClose }: {
               onClick={() => { if (c.id !== currentId) onOpen(c); }}
             >
               <span className="wk-chathist-title">{c.title}</span>
+              {/* The page gives way (ellipsis) so the age always shows, even in the narrow column. */}
               <span className="wk-chathist-meta">
-                {c.startedOn !== null ? `${c.startedOn.label} · ` : ''}{ageWords(c.updatedAt)}{c.status === 'closed' ? ' · ended' : ''}
+                {c.startedOn !== null && <span className="wk-chathist-page">{c.startedOn.label}</span>}
+                <span className="wk-chathist-age">{c.startedOn !== null ? ' · ' : ''}{ageWords(c.updatedAt)}{c.status === 'closed' ? ' · ended' : ''}</span>
               </span>
             </button>
           </li>
