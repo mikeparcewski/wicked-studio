@@ -913,6 +913,7 @@
     "watch-pill": "desk-rail-nerve",
     "watch-pill-card": "nc-attention",
     "watch-pill-row": "nc-attention-item",
-    "watch-pill-wrap": "desk-rail-nerve"
+    "watch-pill-wrap": "desk-rail-nerve",
+    "desk-rail-theme": "settings-tabs"
   }
 }

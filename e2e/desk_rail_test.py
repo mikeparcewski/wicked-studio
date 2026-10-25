@@ -7,14 +7,15 @@ Against the in-process fixture (wave-1 + wave-2b corpus):
 
   1. ORDER (operator IA 2026-10-13): top to bottom — the wordmark (ONE link to the Desk, its name
      saying the needs-you badge) · New project · the sessions list · then the Workspace: Skills · MCP ·
-     Plugins · Workflows · Theme · General, and the Nerve Center tile pinned last (DES-SYSTEM-VIEW: one
+     Plugins · Workflows · General (Settings, with Theme as its tab), and the Nerve Center tile pinned last (DES-SYSTEM-VIEW: one
      tile, larger than every other item, filled by its state, the worst item in words); no separate Desk
      item, no Product, no Testing, none of the Desk tabs (Repositories, Steering, Evals, Agents), no
      "General settings"; no Notifications entry (no bell, no "notifications" nav-dest).
   2. NEW PROJECT: the button opens the New project modal; Escape closes it.
-  3. RETIRED /settings: the address REPLACES itself with /system, the page titled "General"; General
-     no longer links to Testing.
-  4. NAVIGATES: Skills, MCP, Plugins, Workflows, Theme and General open their pages and are marked
+  3. RETIRED /settings: the address REPLACES itself with /system, the Settings page on its General
+     tab; General no longer links to Testing. /theme REPLACES itself with /system?tab=theme.
+  4. NAVIGATES: Skills, MCP, Plugins, Workflows and General open their pages; /theme lands on the
+     Settings page's Theme tab; and are marked
      current; Nerve Center opens /watch; the wordmark opens the Desk.
   5. NERVE CENTER: /health REPLACES itself with /watch (the dashboard), and the tile is marked current.
   6. 0 page errors.
@@ -107,11 +108,11 @@ with sync_playwright() as p:
     page.get_by_test_id("desk-rail-badge").wait_for(state="visible", timeout=15000)
     r = page.evaluate(RAIL)
     want = ['desk-rail-home', 'desk-rail-new-project', 'rail-group', 'desk-rail-skills', 'desk-rail-mcp',
-            'desk-rail-plugins', 'desk-rail-workflows', 'desk-rail-theme', 'desk-rail-general', 'desk-rail-nerve']
+            'desk-rail-plugins', 'desk-rail-workflows', 'desk-rail-general', 'desk-rail-nerve']
     badge = r["badge"]
     check("order",
           r["order"] == want
-          and r["dests"] == ["section:skills", "section:mcp", "section:plugins", "section:workflows", "section:theme", "section:general", "watch"]
+          and r["dests"] == ["section:skills", "section:mcp", "section:plugins", "section:workflows", "section:general", "watch"]
           and not r["bell"] and r["homeLinks"] == 1 and r["nerveLast"]
           # The wordmark link's name says the badge (the fixture has gates waiting).
           and badge is not None and r["homeName"] in (f"wicked studio — Desk, {badge} need you", f"wicked studio — Desk, {badge} needs you")
@@ -146,7 +147,7 @@ with sync_playwright() as p:
     }""")
     ws = sizes["workspace"]
     # Operator 23:40Z: unmistakably smaller — ≤ 11px AND ≤ 0.85× the session rows, still ≥ 4.5:1.
-    check("workspace-tier-measured", len(ws) >= 6 and None not in ws and sizes["desk"] == 13 and sizes["session"] == 13
+    check("workspace-tier-measured", len(ws) >= 5 and None not in ws and sizes["desk"] == 13 and sizes["session"] == 13
           and max(ws) <= 11 and max(ws) <= 0.85 * sizes["session"] and max(ws) < sizes["desk"]
           and sizes["contrast"] >= 4.5 and sizes["labelTransform"] == "uppercase"
           and sizes["label"] is not None and sizes["label"] <= 11 and (sizes["labelSpacing"] or 0) > 0
@@ -165,19 +166,33 @@ with sync_playwright() as p:
     # ── 3. the retired "General settings" overview: /settings REPLACES itself with General ──
     page.goto(f"{origin}/settings", wait_until="networkidle")
     page.wait_for_function("() => window.location.pathname === '/system'", timeout=5000)
-    page.get_by_role("heading", name="General", exact=True).first.wait_for(state="visible", timeout=8000)
+    page.get_by_role("heading", name="Settings", exact=True).first.wait_for(state="visible", timeout=8000)
     page.wait_for_timeout(200)
     page.screenshot(path=str(SHOTS / "desk-rail-general.png"))
+    general_tab = page.locator('[data-testid="settings-tab"][data-tab="general"]').get_attribute("aria-selected")
     cfg = page.evaluate("""() => ({ testing: !!document.querySelector('[data-testid="settings-testing-link"]'),
       developer: !!document.querySelector('[data-testid="developer-settings"]'),
       overview: !!document.querySelector('[data-testid="settings-overview"]'),
       current: document.querySelector('[data-testid="desk-rail-general"]')?.getAttribute('aria-current') ?? null })""")
-    check("general", not cfg["testing"] and not cfg["developer"] and not cfg["overview"] and cfg["current"] == "page", **cfg)
+    check("general", not cfg["testing"] and not cfg["developer"] and not cfg["overview"] and cfg["current"] == "page"
+          and general_tab == "true", general_tab=general_tab, **cfg)
+
+    # ── 3a. studio-settings-tabs: the retired /theme REPLACES itself with the Settings page's Theme tab ──
+    page.goto(f"{origin}/theme", wait_until="networkidle")
+    page.wait_for_function("() => window.location.pathname === '/system' && window.location.search === '?tab=theme'", timeout=5000)
+    page.get_by_role("radiogroup", name="Theme").wait_for(state="visible", timeout=8000)
+    tabs = page.evaluate("""() => ({ selected: [...document.querySelectorAll('[data-testid="settings-tab"]')].map(t => [t.dataset.tab, t.getAttribute('aria-selected')]),
+      panel: document.querySelector('[data-testid="settings-panel"]')?.dataset.tab ?? null,
+      current: document.querySelector('[data-testid="desk-rail-general"]')?.getAttribute('aria-current') ?? null,
+      themeLink: !!document.querySelector('[data-testid="desk-rail-theme"]') })""")
+    page.screenshot(path=str(SHOTS / "desk-rail-theme-tab.png"))
+    check("theme-tab", tabs["selected"] == [["general", "false"], ["theme", "true"]] and tabs["panel"] == "theme"
+          and tabs["current"] == "page" and not tabs["themeLink"], **tabs)
 
     # ── 3. the rail entries navigate and mark the current one ────────────────────
     went = {}
     for tid, path in (("desk-rail-skills", "/skills"), ("desk-rail-mcp", "/mcp"), ("desk-rail-plugins", "/plugins"),
-                      ("desk-rail-workflows", "/workflows"), ("desk-rail-theme", "/theme"), ("desk-rail-general", "/system")):
+                      ("desk-rail-workflows", "/workflows"), ("desk-rail-general", "/system")):
         page.get_by_test_id(tid).click()
         page.wait_for_function(f"() => window.location.pathname === '{path}'", timeout=5000)
         went[tid] = {"path": page.evaluate("() => window.location.pathname"),

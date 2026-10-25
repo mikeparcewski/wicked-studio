@@ -463,10 +463,9 @@ export function lapsedSeatChores(roster: readonly RosterSeat[] | null): DeskChor
 // ── Where the rail reaches ───────────────────────────────────────────────────
 
 /**
- * THE RAIL'S WORKSPACE GROUP (operator IA 2026-10-13), top to bottom, after the Watchtower pill that
- * heads it: Skills · MCP · Plugins, then the pages the retired "General settings" overview listed —
- * Workflows · Theme · General (the `/system` page, renamed from Configuration). Health sits apart at the
- * foot. Repositories, Steering, Evals and Agents are not rail links: they are Desk tabs, and ⌘K still
+ * THE RAIL'S WORKSPACE GROUP (operator IA 2026-10-13), top to bottom: Skills · MCP · Plugins, then
+ * Workflows · General (the `/system` Settings page, renamed from Configuration; its Theme tab is the
+ * retired Theme page, studio-settings-tabs). The Nerve Center tile sits apart at the foot. Repositories, Steering, Evals and Agents are not rail links: they are Desk tabs, and ⌘K still
  * goes to each. Navigation only: the orders/away and delivery-freeze controls are the Desk's.
  */
 export const DESK_RAIL_LINKS: readonly { dest: string; label: string; path: string; testId: string }[] = [
@@ -474,7 +473,6 @@ export const DESK_RAIL_LINKS: readonly { dest: string; label: string; path: stri
   { dest: 'section:mcp', label: PAGE_NAMES.mcp, path: mcpPath(), testId: 'desk-rail-mcp' },
   { dest: 'section:plugins', label: PAGE_NAMES.plugins, path: '/plugins', testId: 'desk-rail-plugins' },
   { dest: 'section:workflows', label: PAGE_NAMES.workflows, path: '/workflows', testId: 'desk-rail-workflows' },
-  { dest: 'section:theme', label: PAGE_NAMES.theme, path: '/theme', testId: 'desk-rail-theme' },
   { dest: 'section:general', label: PAGE_NAMES.system, path: '/system', testId: 'desk-rail-general' },
 ];
 

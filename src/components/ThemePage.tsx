@@ -1,11 +1,9 @@
 import { AppearanceSettings } from './AppearanceSettings.js';
 import { BrandLearn } from './BrandLearn.js';
-import { PageFrame } from './ui/PageFrame.js';
 
 /**
- * The dedicated Theme page (/theme) — a first-class home for the appearance
- * customization surface (DES-VISION-001 §3), moved off the system/settings
- * page so theming gets the room it deserves.
+ * The Theme tab of the Settings page (`SettingsPage`, `/system?tab=theme`; `/theme` redirects there) —
+ * the appearance customization surface (DES-VISION-001 §3). Its frame and title are the page's.
  *
  * Two sections, two authorities:
  *   - AppearanceSettings: the manual accent/logo/theme controls (untouched —
@@ -16,13 +14,11 @@ import { PageFrame } from './ui/PageFrame.js';
  *     GET /d/:docId/api/theme/learned). It renders inert: no learn-related
  *     request leaves the page until the user acts.
  */
-export function ThemePage(): React.ReactElement {
+export function ThemeSettings(): React.ReactElement {
   return (
-    <PageFrame width="narrow" title="Theme" intro="Choose the colors and branding for your workspace.">
-      <div className="wk-pg-set-content">
+    <div className="wk-pg-set-content">
       <AppearanceSettings />
       <BrandLearn />
-      </div>
-    </PageFrame>
+    </div>
   );
 }
