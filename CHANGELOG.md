@@ -12,8 +12,12 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+## [0.12.1] — 2026-10-25
+
+A patch release: past chats sit as a column beside the conversation in a wide chat window (#907).
+
 ### Changed
-- **Past chats are a column inside the chat window, beside the conversation.** In a chat window at least
+- **Past chats are a column inside the chat window, beside the conversation (#907).** In a chat window at least
   520 px wide, past chats sit on the window's left as a 186 px column and the conversation narrows beside it,
   still in view; the column starts open, and the clock in the chat header hides or shows it (the choice holds
   for this page). The chat on screen is marked in the list, an ended one included. Each entry keeps its title
@@ -2503,7 +2507,8 @@ The merged interactive layer: wicked-interactive's UI moved into this skin (DES-
   `git subtree split` (92 commits).
 - The SPA as a pure HTTP/WS client of the wicked-crew daemon: runs, gates, live CoreEvents.
 
-[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.12.0...HEAD
+[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.12.1...HEAD
+[0.12.1]: https://github.com/mikeparcewski/wicked-studio/compare/v0.12.0...v0.12.1
 [0.12.0]: https://github.com/mikeparcewski/wicked-studio/compare/v0.11.8...v0.12.0
 [0.11.8]: https://github.com/mikeparcewski/wicked-studio/compare/v0.11.7...v0.11.8
 [0.11.7]: https://github.com/mikeparcewski/wicked-studio/compare/v0.11.6...v0.11.7
