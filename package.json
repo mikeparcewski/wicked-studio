@@ -1,6 +1,6 @@
 {
   "name": "wicked-studio",
-  "version": "0.12.0",
+  "version": "0.12.1",
   "description": "Where you direct your coding agents: start a job with a chat, sign your agents in once, watch them work in sandboxes, and approve what matters with the evidence. The browser UI for wicked-crew.",
   "type": "module",
   "repository": {
