@@ -39,6 +39,7 @@ import type {
 
 import { ApiError, apiStatus } from './errors.js';
 import type { GuidanceUpdate } from './guidance.js';
+import type { ChatAttachmentUploadResponse, ChatCloseResponse, ChatHistoryPage, ChatMessagesResponse } from './chatHistory-wire.js';
 
 export type * from './types.js';
 export { sessionGuidance, type GuidanceUpdate } from './guidance.js';
@@ -88,8 +89,9 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
   // Only advertise a JSON body when we actually send one — Fastify v5 rejects
   // an empty body with Content-Type: application/json (FST_ERR_CTP_EMPTY_JSON_BODY),
   // which would 400 every bodyless POST (cancel / resume). This bit us before.
+  // A multipart body (FormData) sets its own Content-Type, boundary included.
   const headers =
-    init?.body !== undefined && init?.body !== null
+    init?.body !== undefined && init?.body !== null && !(typeof FormData !== 'undefined' && init.body instanceof FormData)
       ? { 'Content-Type': 'application/json', ...init?.headers }
       : { ...init?.headers };
   const res = await fetch(`${apiBase()}${path}`, { ...init, headers });
@@ -305,11 +307,13 @@ export const api = {
   // `chatDelta` / `chatReply` / `chatCitations` frame that answers it is stamped with it, so a
   // verdict can be matched to the reply it belongs to rather than to the newest one. Absent on a
   // daemon predating the turn index.
-  sendChatMessage: (chatId: string, text: string, targets?: string[]) =>
+  // `attachments` (api-types 0.137.0, `capabilities.chatAttachments`): ids from `uploadChatAttachments`;
+  // never sent to a daemon without the capability (the caller holds the gate).
+  sendChatMessage: (chatId: string, text: string, targets?: string[], attachments?: string[]) =>
     apiFetch<ChatMessageResponse>(`/chats/${encodeURIComponent(chatId)}/messages`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(targets === undefined ? { text } : { text, targets }),
+      body: JSON.stringify({ text, ...(targets !== undefined ? { targets } : {}), ...(attachments !== undefined && attachments.length > 0 ? { attachments } : {}) }),
     }),
   /** F-W1-005: re-seat NAMED seats on a LIVE chat — the engine's per-seat `chat_ensure` with the
    *  scope recorded at open, same pool key (crew ≥ 0.7.36 `POST /chats/:id/seats`; api-types 0.39.0
@@ -327,6 +331,24 @@ export const api = {
     apiFetch<ChatDetailResponse>(`/chats/${encodeURIComponent(chatId)}`),
   /** Every live chat (FINDING-027). `idleSecs` is `number | null` — see the route's adapter. */
   listChats: () => apiFetch<ChatListResponse>(`/chats`),
+  // ── The system chat's history, Close and attachments (DES-SYSTEM-CHAT; api-types 0.137.0) ──────
+  /** The past and open system chats, newest first (`capabilities.chatList`). */
+  listChatHistory: (opts: { limit?: number; cursor?: string | null; status?: 'all' | 'open' | 'closed' } = {}) => {
+    const q = new URLSearchParams({ limit: String(opts.limit ?? 20), status: opts.status ?? 'all' });
+    if (opts.cursor !== undefined && opts.cursor !== null && opts.cursor !== '') q.set('cursor', opts.cursor);
+    return apiFetch<ChatListResponse & ChatHistoryPage>(`/chats?${q.toString()}`);
+  },
+  /** A chat's messages, open or closed (`capabilities.chatList`); 404 for an id with no history. */
+  getChatMessages: (chatId: string) => apiFetch<ChatMessagesResponse>(`/chats/${encodeURIComponent(chatId)}/messages`),
+  /** End a chat and KEEP its history (`capabilities.chatList`) — unlike `closeChat` (DELETE), which
+   *  on that daemon also deletes it. Idempotent. */
+  endChat: (chatId: string) => apiFetch<ChatCloseResponse>(`/chats/${encodeURIComponent(chatId)}/close`, { method: 'POST' }),
+  /** Upload files to a chat (`capabilities.chatAttachments`); a message references the ids. */
+  uploadChatAttachments: (chatId: string, files: readonly File[]) => {
+    const form = new FormData();
+    for (const f of files) form.append('file', f, f.name);
+    return apiFetch<ChatAttachmentUploadResponse>(`/chats/${encodeURIComponent(chatId)}/attachments`, { method: 'POST', body: form });
+  },
 
   /**
    * A unit's stored transcript.

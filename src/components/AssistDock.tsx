@@ -1,6 +1,7 @@
 import { ExternalLink, Paperclip } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client.js';
+import { apiStatus } from '../api/errors.js';
 import { executingOrd } from '../api/run-state.js';
 import type { CoreEvent, SessionView } from '../api/types.js';
 import { useEventStream } from '../hooks/useEventStream.js';
@@ -85,7 +86,7 @@ export type AssistLaunch = { runId: string } | { chatId: string };
 export interface AssistVerbs {
   /** A typed message: launch a governed run OR chat session, return its id —
    *  the dock narrates/streams it inline. */
-  send: (text: string, documents: AssistDocument[]) => Promise<AssistLaunch>;
+  send: (text: string, documents: AssistDocument[], files?: File[]) => Promise<AssistLaunch>;
   /** The direct-import fork for rule-shaped attachments; returns notes to echo. Absent ⇒ no fork. */
   importDirect?: (doc: AssistDocument) => Promise<AssistNote[]>;
   /** Fired when the active run's gate clears from the gate store — the surface reloads its data. */
@@ -247,6 +248,8 @@ interface DockChatMsg {
   ok: boolean;
   /** The footer, fixed when the answer landed (later chip changes never rewrite an earlier answer's). */
   foot?: string | null;
+  /** An operator turn's attached files, by name (a replayed transcript's `attachments`). */
+  files?: string[];
 }
 
 /**
@@ -266,7 +269,9 @@ function replayDockTranscript(records: readonly unknown[]): DockChatMsg[] {
     const rec = r as { kind?: string; cliKey?: string; text?: string; ok?: boolean };
     if (typeof rec.text !== 'string') continue;
     if (rec.kind === 'user') {
-      out.push({ cliKey: 'you', text: splitAskContext(rec.text).typed, pending: false, ok: true });
+      const files = (r as { attachments?: Array<{ name?: unknown }> }).attachments;
+      const names = Array.isArray(files) ? files.map((f) => (typeof f?.name === 'string' ? f.name : '')).filter((n) => n !== '') : [];
+      out.push({ cliKey: 'you', text: splitAskContext(rec.text).typed, pending: false, ok: true, ...(names.length > 0 ? { files: names } : {}) });
     } else if (typeof rec.cliKey === 'string') {
       out.push({ cliKey: rec.cliKey, text: rec.text, pending: false, ok: rec.ok ?? true });
     }
@@ -275,9 +280,13 @@ function replayDockTranscript(records: readonly unknown[]): DockChatMsg[] {
 }
 
 /** What a RESUMED block's one `GET /chats/:id` probe proved (studio#328). */
-type ResumeProbe = { kind: 'gone' } | { kind: 'error'; message: string };
+/** `ended`: the chat was closed but its history is kept (`capabilities.chatList`) — shown, read-only. */
+type ResumeProbe = { kind: 'gone' } | { kind: 'ended' } | { kind: 'error'; message: string };
 
-function DockChat({ chatId, resumed = false, onResumeProbe, onStatus, answerFooter }: {
+/** A chat's kept history (the system chat's past chats): its records, and whether it has ended. */
+export type ChatHistoryLoader = (chatId: string) => Promise<{ records: readonly unknown[]; closed: boolean }>;
+
+function DockChat({ chatId, resumed = false, onResumeProbe, onStatus, answerFooter, loadHistory }: {
   chatId: string;
   resumed?: boolean;
   /** Resumed blocks only: the probe found the session reclaimed, or could not tell. */
@@ -285,7 +294,10 @@ function DockChat({ chatId, resumed = false, onResumeProbe, onStatus, answerFoot
   /** A reply started streaming (`thinking`) or landed (`answered`) — the system chat's tray says so. */
   onStatus?: ((status: 'ready' | 'thinking' | 'answered') => void) | undefined;
   /** The footer under a landed answer ("Answered by Claude Code · saw 3 sources"); absent = none. */
-  answerFooter?: ((cliKey: string) => string | null) | undefined;
+  answerFooter?: ((cliKey: string, replayed?: boolean) => string | null) | undefined;
+  /** A resumed block replays the chat's KEPT history from here (open or ended) instead of the live
+   *  transcript; an ended chat is shown read-only. */
+  loadHistory?: ChatHistoryLoader | undefined;
 }): React.ReactElement {
   const onResumeProbeRef = useRef(onResumeProbe);
   onResumeProbeRef.current = onResumeProbe;
@@ -301,18 +313,40 @@ function DockChat({ chatId, resumed = false, onResumeProbe, onStatus, answerFoot
   // run-list reconcile (a chat id is never in GET /runs) — pin for the block's lifetime.
   useEffect(() => pinAwaiting(chatId), [chatId]);
 
-  // The seats snapshot — one GET; an empty answer means the daemon no longer holds it.
+  // The seats snapshot — one GET; an empty answer means the daemon no longer holds it. A resumed block
+  // on a daemon that keeps history reads that first: an ended chat is shown from it, read-only.
+  const loadHistoryRef = useRef(loadHistory);
+  loadHistoryRef.current = loadHistory;
   useEffect(() => {
     let cancelled = false;
-    void api
-      .getChat(chatId)
+    const footed = (records: readonly unknown[]): DockChatMsg[] =>
+      replayDockTranscript(records).map((m) => (m.cliKey !== 'you' && m.ok ? { ...m, foot: footRef.current?.(m.cliKey, true) ?? null } : m));
+    // No history for the id (404) falls back to the live probe; any other failure is "could not tell".
+    const history = resumed && loadHistoryRef.current !== undefined
+      ? loadHistoryRef.current(chatId).catch((e: unknown) => (apiStatus(e) === 404 ? null : Promise.reject(e)))
+      : Promise.resolve(null);
+    let replayedFromHistory = false;
+    void history
+      .then((h) => {
+        if (cancelled || h === null) return 'live' as const;
+        replayedFromHistory = true;
+        setMsgs((prev) => (prev.length > 0 ? prev : footed(h.records)));
+        if (h.closed) {
+          onResumeProbeRef.current?.({ kind: 'ended' });
+          return 'ended' as const;
+        }
+        return 'live' as const;
+      })
+      .then((state) => (state === 'ended' || cancelled ? null : api.getChat(chatId)))
       .then((detail) => {
-        if (cancelled) return;
+        if (cancelled || detail === null) return;
         const warm = detail.seats;
         // the retired chat page's rejoin rule: ONLY a 200 with no seats means reclaimed — a resumed
         // block must not keep presenting a session the daemon no longer holds.
         if (resumed && warm.length === 0) {
-          onResumeProbeRef.current?.({ kind: 'gone' });
+          // A chat replayed from its kept history that no longer holds seats has ENDED: its transcript
+          // stays on screen, read-only — never wiped as if it were gone.
+          onResumeProbeRef.current?.({ kind: replayedFromHistory ? 'ended' : 'gone' });
           return;
         }
         setSeats((prev) => ({
@@ -323,8 +357,8 @@ function DockChat({ chatId, resumed = false, onResumeProbe, onStatus, answerFoot
         // only then: a fresh block streams its own frames, and replaying a reply
         // those frames will also deliver would double it.
         const messages = (detail as { messages?: unknown }).messages;
-        if (resumed && Array.isArray(messages)) {
-          const replayed = replayDockTranscript(messages).map((m) => (m.cliKey !== 'you' && m.ok ? { ...m, foot: footRef.current?.(m.cliKey) ?? null } : m));
+        if (resumed && !replayedFromHistory && Array.isArray(messages)) {
+          const replayed = footed(messages);
           setMsgs((prev) => (prev.length > 0 ? prev : replayed));
         }
       })
@@ -476,6 +510,9 @@ function DockChat({ chatId, resumed = false, onResumeProbe, onStatus, answerFoot
               {!m.pending && m.ok && m.cliKey !== 'you' && m.foot !== undefined && m.foot !== null && (
                 <p data-testid="assist-answer-footer" className="wk-assist-answer-foot">{m.foot}</p>
               )}
+              {m.files !== undefined && m.files.length > 0 && (
+                <p data-testid="assist-chat-msg-files" className="mt-1 font-mono text-[10px]" style={{ color: 'var(--ink-muted)' }}>📎 {m.files.join(' · ')}</p>
+              )}
             </div>
           ))
         )}
@@ -488,7 +525,7 @@ function DockChat({ chatId, resumed = false, onResumeProbe, onStatus, answerFoot
 
 const RESUMED_NOTE = 'Resumed your earlier session — its agents are still on the line.';
 
-export function AssistDock({ context, verbs, importable, open, onOpenChange, onError, resumeChatId = null, onExpandChat, onResumeGone, fill = false, typeTarget, initialText = '', sendOnOpen = false, headerProps, headerStart, headerExtra, headerEnd, compactHeader = false, onStatus, allowAttach = true, answerFooter, promptsSend = false, notice }: {
+export function AssistDock({ context, verbs, importable, open, onOpenChange, onError, resumeChatId = null, onExpandChat, onResumeGone, fill = false, typeTarget, initialText = '', sendOnOpen = false, headerProps, headerStart, headerExtra, headerEnd, compactHeader = false, onStatus, allowAttach = true, answerFooter, promptsSend = false, notice, fileMode = false, loadHistory }: {
   context: AssistContext;
   verbs: AssistVerbs;
   /** Which attachments offer the Import-directly fork. Absent ⇒ everything is analysis-only. */
@@ -531,12 +568,17 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
   onStatus?: ((status: 'ready' | 'thinking' | 'answered') => void) | undefined;
   /** Offer attachments (paperclip, drop). A surface whose send cannot carry files turns it off. */
   allowAttach?: boolean;
-  /** The footer under each landed answer. */
-  answerFooter?: ((cliKey: string) => string | null) | undefined;
+  /** The footer under each landed answer (`replayed`: an answer from a kept transcript). */
+  answerFooter?: ((cliKey: string, replayed?: boolean) => string | null) | undefined;
   /** A suggested prompt SENDS when clicked (the system chat, DES-SYSTEM-CHAT §7); otherwise it prefills. */
   promptsSend?: boolean;
   /** One line under the composer (an older crew's "past chats and uploads need…"). */
   notice?: React.ReactNode;
+  /** Attachments are FILES the send uploads as they are (the system chat on a crew with
+   *  `chatAttachments`): images, text and pdfs by paperclip, drop or paste — never read as text here. */
+  fileMode?: boolean;
+  /** A resumed chat's kept history (the system chat's past chats). */
+  loadHistory?: ChatHistoryLoader | undefined;
 }): React.ReactElement {
   const [items, setItems] = useState<ThreadItem[]>(() =>
     resumeChatId !== null
@@ -548,6 +590,10 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
   );
   const [text, setText] = useState(initialText);
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
+  /** File mode: the files the next send uploads (removable chips above the input). Each has its own id:
+   *  two different files may share a name and a size. */
+  const [files, setFiles] = useState<Array<{ id: number; file: File }>>([]);
+  const fileSeq = useRef(0);
   const [sending, setSending] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -608,8 +654,26 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
   const push = (item: ThreadItem): void => setItems((cur) => [...cur, item]);
   const note = (tone: NarrationTone, textLine: string): void => push({ kind: 'note', tone, text: textLine });
 
-  const onFiles = (files: File[]): void => {
-    for (const f of files) {
+  const onFiles = (picked: File[]): void => {
+    if (fileMode) {
+      // Pasted screenshots all arrive as "image.png": give each its own name so the chips tell them apart.
+      const named = picked.map((f, i) => (/^image\.(png|jpe?g|gif|webp)$/i.test(f.name)
+        ? new File([f], `pasted-${new Date().toISOString().slice(11, 19).replace(/:/g, '')}${picked.length > 1 ? `-${i + 1}` : ''}.${f.name.split('.').pop()}`, { type: f.type })
+        : f));
+      setFiles((cur) => {
+        // Two pastes in one second must not read the same: a clash gets the next free "-2", "-3"…
+        const taken = new Set(cur.map((c) => c.file.name));
+        const fresh = named.map((file) => {
+          let name = file.name;
+          for (let n = 2; taken.has(name); n += 1) name = file.name.replace(/(\.[^.]+)?$/, `-${n}$1`);
+          taken.add(name);
+          return { id: (fileSeq.current += 1), file: name === file.name ? file : new File([file], name, { type: file.type }) };
+        });
+        return [...cur, ...fresh];
+      });
+      return;
+    }
+    for (const f of picked) {
       void readFileText(f)
         .then((content) => {
           const forkable = importable !== undefined && verbs.importDirect !== undefined && importable(f.name);
@@ -647,9 +711,14 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
     // An attachment still sitting at the fork when the operator hits send rides as analysis —
     // they attached it and asked; silently dropping it would run a different request.
     const documents = attachments.map((a) => ({ name: a.name, content: a.content }));
+    // Snapshot what this send carries: a file attached while it is in flight waits for the next one.
+    const sentEntries = files;
+    const sentFiles = sentEntries.map((f) => f.file);
+    const fileNames = [...documents.map((d) => d.name), ...sentFiles.map((f) => f.name)];
     try {
-      const launched = await verbs.send(body, documents);
-      push({ kind: 'user', text: body, files: documents.map((d) => d.name) });
+      // Files ride only in file mode (the system chat); every other surface keeps its two-argument send.
+      const launched = await (fileMode ? verbs.send(body, documents, sentFiles) : verbs.send(body, documents));
+      push({ kind: 'user', text: body, files: fileNames });
       if ('chatId' in launched) {
         // One chat block per SESSION: a later send into the same warm session streams
         // into the block that already exists — never a duplicate block per message.
@@ -663,9 +732,10 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
       }
       setText('');
       setAttachments([]);
+      setFiles((cur) => cur.filter((f) => !sentEntries.includes(f)));
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      push({ kind: 'user', text: body, files: documents.map((d) => d.name) });
+      push({ kind: 'user', text: body, files: fileNames });
       note('fail', msg);
       onStatus?.('ready');
       onError?.(msg);
@@ -688,6 +758,15 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
    *  (and its "still on the line" note), say so, and let the surface forget it; could
    *  not tell → keep it and show the transient error. */
   const onResumeProbe = (chatId: string, outcome: ResumeProbe): void => {
+    if (outcome.kind === 'ended') {
+      // Closed with its history kept: the block stays (read-only), and the next question starts anew.
+      setItems((cur) => [
+        ...cur.filter((it) => !(it.kind === 'note' && it.text === RESUMED_NOTE)),
+        { kind: 'note', tone: 'info', text: 'This chat has ended — shown from its history. Your next question starts a new chat.' },
+      ]);
+      onResumeGone?.(chatId);
+      return;
+    }
     if (outcome.kind === 'gone') {
       setItems((cur) => [
         ...cur.filter(
@@ -861,6 +940,7 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
                 onResumeProbe={item.resumed === true ? (outcome) => onResumeProbe(item.chatId, outcome) : undefined}
                 onStatus={onStatus}
                 answerFooter={answerFooter}
+                loadHistory={loadHistory}
               />
             );
           }
@@ -922,6 +1002,17 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
         </div>
       )}
 
+      {fileMode && files.length > 0 && (
+        <div data-testid="assist-files" className="flex shrink-0 flex-wrap gap-1.5 px-3 pt-2">
+          {files.map(({ id, file: f }) => (
+            <span key={id} data-testid="assist-file-chip" className="wk-chatscope-chip wk-chatscope-chip--on" title={`${f.name} · ${Math.max(1, Math.round(f.size / 1024))} KB`}>
+              📎 <span className="wk-assist-file-name">{f.name}</span>
+              <button type="button" aria-label={`Remove ${f.name}`} data-testid="assist-file-remove" className="wk-assist-file-x" onClick={() => setFiles((cur) => cur.filter((x) => x.id !== id))}>×</button>
+            </span>
+          ))}
+        </div>
+      )}
+
       {context.composerControls !== undefined && context.composerControls !== null && (
         <div className="shrink-0 px-3 pt-2">{context.composerControls}</div>
       )}
@@ -934,6 +1025,7 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
           data-testid="assist-attach"
           type="file"
           multiple
+          {...(fileMode ? { accept: 'image/png,image/jpeg,image/gif,image/webp,text/*,application/pdf,.txt,.md,.log,.csv' } : {})}
           aria-label="Attach files"
           className="hidden"
           onChange={(e) => {
@@ -965,6 +1057,14 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
             rows={1}
             disabled={sending}
             onChange={(e) => setText(e.target.value)}
+            onPaste={allowAttach && fileMode ? (e) => {
+              // A pasted screenshot (or any file) attaches. Pasted WORDS always type: rich text from an
+              // office app carries a preview image too, and that image is not what the user pasted.
+              const pasted = Array.from(e.clipboardData?.files ?? []);
+              if (pasted.length === 0 || (e.clipboardData?.getData('text/plain') ?? '') !== '') return;
+              e.preventDefault();
+              onFiles(pasted);
+            } : undefined}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
                 e.preventDefault();

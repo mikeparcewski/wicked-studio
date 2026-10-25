@@ -1,5 +1,6 @@
 import { create } from 'zustand';
-import { forgetAskSession } from './askSession.js';
+import { chatChoices, forgetAskSession, readAskSession, writeAskSession } from './askSession.js';
+import { useCapabilities } from './capabilities.js';
 import { useChatWindow } from './chatWindow.js';
 
 /**
@@ -63,6 +64,40 @@ export function openSystemChat(projectId: string | null): void {
  */
 export function endSystemChat(): void {
   endEpoch += 1;
+  const ending = readAskSession()?.chatId ?? null;
   forgetAskSession();
   useChatWindow.getState().close();
+  // On a crew that keeps history (`chatList`), Close ENDS the chat there too — its seats released, its
+  // history kept (`POST /chats/:id/close`, never DELETE, which also deletes it). An older crew is sent
+  // nothing: its idle reaper ends the chat, and its session page keeps the conversation.
+  if (ending !== null && useCapabilities.getState().chatList) {
+    void import('../api/client.js').then(({ api }) => api.endChat(ending)).catch(() => undefined);
+  }
+}
+
+/**
+ * Past chats: reopen one. Its id becomes the stored session (seeded — its context already rode), and
+ * the dock remounts to resume it; it replays from the kept history, an ended chat read-only.
+ */
+export function reopenSystemChat(entry: { id: string; title: string; cli: string | null }): void {
+  // What this browser remembers of the chat's choices comes back with it; with no record, nothing is
+  // claimed as chosen (the dock starts every chip off) and the next message carries a fresh pack.
+  const known = chatChoices(entry.id);
+  writeAskSession({
+    chatId: entry.id, title: entry.title, seeded: true,
+    ...(entry.cli !== null ? { cli: entry.cli } : {}),
+    ...(known !== null ? known : { chipsUnknown: true as const }),
+  });
+  useAskDock.getState().open({});
+}
+
+/**
+ * End a live chat for good from a list (Everything › live chats' End): the close route first, which
+ * keeps its history; DELETE only where that route does not exist (404 — an older crew, where DELETE is
+ * the only end there is). Never decided on a capability read that has not answered.
+ */
+export async function endChatKeepingHistory(chatId: string): Promise<void> {
+  const { api } = await import('../api/client.js');
+  const { apiStatus } = await import('../api/errors.js');
+  await api.endChat(chatId).catch((e: unknown) => (apiStatus(e) === 404 ? api.closeChat(chatId) : Promise.reject(e)));
 }

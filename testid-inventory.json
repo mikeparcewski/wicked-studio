@@ -11,9 +11,9 @@
   "version": 1,
   "studioVersion": "0.11.8",
   "counts": {
-    "files": 235,
-    "occurrences": 3009,
-    "static": 2610,
+    "files": 237,
+    "occurrences": 3020,
+    "static": 2621,
     "dynamic": 69,
     "computed": 24
   },
@@ -779,6 +779,12 @@
       ]
     },
     {
+      "testId": "assist-chat-msg-files",
+      "files": [
+        "src/components/AssistDock.tsx"
+      ]
+    },
+    {
       "testId": "assist-chat-seat",
       "files": [
         "src/components/AssistDock.tsx"
@@ -822,6 +828,24 @@
     },
     {
       "testId": "assist-empty",
+      "files": [
+        "src/components/AssistDock.tsx"
+      ]
+    },
+    {
+      "testId": "assist-file-chip",
+      "files": [
+        "src/components/AssistDock.tsx"
+      ]
+    },
+    {
+      "testId": "assist-file-remove",
+      "files": [
+        "src/components/AssistDock.tsx"
+      ]
+    },
+    {
+      "testId": "assist-files",
       "files": [
         "src/components/AssistDock.tsx"
       ]
@@ -1628,6 +1652,42 @@
       "testId": "chat-gate",
       "files": [
         "src/components/session/RunConversation.tsx"
+      ]
+    },
+    {
+      "testId": "chat-history",
+      "files": [
+        "src/components/chat/ChatHistoryRail.tsx"
+      ]
+    },
+    {
+      "testId": "chat-history-close",
+      "files": [
+        "src/components/chat/ChatHistoryRail.tsx"
+      ]
+    },
+    {
+      "testId": "chat-history-entry",
+      "files": [
+        "src/components/chat/ChatHistoryRail.tsx"
+      ]
+    },
+    {
+      "testId": "chat-history-error",
+      "files": [
+        "src/components/chat/ChatHistoryRail.tsx"
+      ]
+    },
+    {
+      "testId": "chat-history-more",
+      "files": [
+        "src/components/chat/ChatHistoryRail.tsx"
+      ]
+    },
+    {
+      "testId": "chat-history-toggle",
+      "files": [
+        "src/components/AskDock.tsx"
       ]
     },
     {
@@ -14445,6 +14505,12 @@
       "testId": "system-base-skill-fix",
       "files": [
         "src/components/SystemSettings.tsx"
+      ]
+    },
+    {
+      "testId": "system-chat",
+      "files": [
+        "src/components/AskDock.tsx"
       ]
     },
     {
