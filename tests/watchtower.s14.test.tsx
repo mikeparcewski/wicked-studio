@@ -1,13 +1,11 @@
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { markHeld } from '../src/board/heldRuns.js';
-import { liveCount, selfOpens, SELF_OPEN_MS, WatchPill, watchSentence } from '../src/components/desk/WatchPill.js';
-import { ago, foldAlike, plainWatchLine, WatchtowerPage } from '../src/components/watch/WatchtowerPage.js';
+import { ago, foldAlike, liveCount, plainWatchLine, WatchtowerPage } from '../src/components/watch/WatchtowerPage.js';
 import { absTime } from '../src/board/relTime.js';
 import { foldFeed, EMPTY_WATCH, useWatchStore } from '../src/store/watch.js';
 import { parseRoute } from '../src/hooks/useRoute.js';
 import { makeView } from './factories.js';
-import type { NeedRow } from '../src/board/needsYou.js';
 
 /** S14 (DES-STUDIO-REBUILD-001 §11): the Watchtower placed — `/watch` and the pill. */
 
@@ -27,45 +25,24 @@ describe('the route', () => {
   });
 });
 
-const need = (key: string, at: number | null): NeedRow => ({ key, at, kind: 'gate' } as unknown as NeedRow);
-
-describe('the pill opens itself only for something new that needs you', () => {
-  it('a new row raised after the page opened opens it; a row that was already waiting does not', () => {
-    expect(selfOpens(new Set(), [need('a', 100)], 50)).toBe(true);
-    expect(selfOpens(new Set(), [need('a', 10)], 50)).toBe(false); // hydrated late, but old
-    expect(selfOpens(new Set(['a']), [need('a', 100)], 50)).toBe(false);
-    expect(selfOpens(new Set(), [need('a', null)], 50)).toBe(false); // no honest clock: not news
-    expect(selfOpens(new Set(['g']), [{ ...need('g', 100), members: [need('m', 100)] } as NeedRow], 50)).toBe(true);
-  });
-
-  it('opens for SELF_OPEN_MS on a new need, and a watch finding alone never opens it', () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(NOW);
-    const runs = [makeView({ id: 'r1', status: 'executing' })];
-    const { rerender } = render(<WatchPill needRows={[need('old', NOW - 60_000)]} runs={runs} navigate={() => {}} />);
-    expect(screen.getByTestId('watch-pill-wrap').getAttribute('data-open')).toBe('false');
-    act(() => useWatchStore.getState().hydrate({ findings: [finding('w1')] } as never));
-    expect(screen.getByTestId('watch-pill-wrap').getAttribute('data-open')).toBe('false');
-    rerender(<WatchPill needRows={[need('old', NOW - 60_000), need('new', NOW + 1000)]} runs={runs} navigate={() => {}} />);
-    expect(screen.getByTestId('watch-pill-wrap').getAttribute('data-open')).toBe('true');
-    expect(screen.getByTestId('watch-pill').getAttribute('data-count')).toBe('2');
-    expect(screen.getByTestId('watch-pill-row').textContent).toBe('sentence w1');
-    act(() => { vi.advanceTimersByTime(SELF_OPEN_MS + 1); });
-    expect(screen.getByTestId('watch-pill-wrap').getAttribute('data-open')).toBe('false');
-  });
-
-  it('the pill counts needs while the page counts open feed items', () => {
+describe('the feed counts open items; the running count is the Desk\'s', () => {
+  it('the page counts open feed items, and a run a Needs-you row holds is not running', () => {
     const navigate = vi.fn();
     const runs = [makeView({ id: 'r1', status: 'executing' }), makeView({ id: 'r2', status: 'awaiting_human' })];
-    render(<><WatchPill needRows={[need('a', 1), need('b', 2)]} runs={runs} navigate={navigate} /><WatchtowerPage count={2} runs={runs} navigate={navigate} now={NOW} /></>);
-    expect(screen.getByTestId('watch-pill').getAttribute('data-count')).toBe('2');
+    render(<WatchtowerPage count={2} runs={runs} navigate={navigate} now={NOW} />);
     expect(screen.getByTestId('watchtower-sentence').getAttribute('data-count')).toBe('0');
     expect(screen.getByTestId('watchtower-sentence').textContent).toBe('Nothing open — 1 thing is running.');
-    expect(watchSentence(2, liveCount(runs))).toBe('2 things need you — 1 thing is running.');
     // studio#805: a run a Needs-you row holds is not running.
     expect(liveCount(markHeld(runs, new Set(['r1'])))).toBe(0);
-    fireEvent.click(screen.getByTestId('watch-pill'));
-    expect(navigate).toHaveBeenCalledWith('/watch');
+  });
+
+  it('embedded in Nerve Center, the feed is a section: an h2, no page measure', () => {
+    render(<WatchtowerPage embedded count={0} runs={[]} navigate={() => {}} now={NOW} />);
+    const feed = screen.getByTestId('watchtower');
+    expect(feed).toHaveClass('wk-watchtower--embedded');
+    expect(within(feed).getByRole('heading', { level: 2 }).textContent).toBe('Feed');
+    expect(within(feed).queryByRole('heading', { level: 1 })).toBeNull();
+    expect(feed.querySelector('.wk-measure')).toBeNull();
   });
 });
 
@@ -155,13 +132,6 @@ describe('codex on S14', () => {
     render(<WatchtowerPage count={0} runs={[]} navigate={() => {}} now={NOW} />);
     expect(screen.getByTestId('watchtower-error')).toBeTruthy();
     expect(screen.queryByTestId('watchtower-empty')).toBeNull();
-  });
-
-  it('rows present on the first render never open the card, whatever their clock says', () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(NOW);
-    render(<WatchPill needRows={[need('skewed', NOW + 5_000)]} runs={[]} navigate={() => {}} />);
-    expect(screen.getByTestId('watch-pill-wrap').getAttribute('data-open')).toBe('false');
   });
 });
 

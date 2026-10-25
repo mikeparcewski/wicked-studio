@@ -197,9 +197,6 @@
   .wk-desk--a [data-testid="desk-stat-failed"], .wk-desk--a [data-testid="desk-stat-delivered"] { display: none; }
 }
 
-/* studio#660: the Watchtower pill's card is a preview with no controls of its own; when it opens
-   itself over the page it must never swallow the first click on the gate it announces. */
-.wk-watch-card { pointer-events: none; }
 .wk-watchtower-body { padding-bottom: calc(var(--fab-clear) + 120px); }
 
 /* ── The ⌘K palette (rows 34, 78; UX gate S1) ── */

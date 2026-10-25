@@ -14,7 +14,7 @@ vi.mock('../src/hooks/useHandover.js', () => ({ useHandover: () => ({ since: nul
 vi.mock('../src/components/StandingOrdersPanel.js', () => ({ StandingOrdersPanel: () => null }));
 vi.mock('../src/components/DeliveryFreezeSwitch.js', () => ({ DeliveryFreezeSwitch: () => null }));
 vi.mock('../src/components/HealthRailSection.js', () => ({ HealthRailSection: () => null }));
-vi.mock('../src/components/desk/WatchPill.js', () => ({ WatchPill: () => null }));
+vi.mock('../src/components/desk/NerveCenterTile.js', () => ({ NerveCenterTile: () => null, NERVE_CENTER_PATH: '/watch' }));
 vi.mock('../src/components/desk/DeskRuleLine.js', () => ({ DeskRuleLine: () => null }));
 vi.mock('../src/components/desk/DeskStateRows.js', () => ({ DeskStateRows: () => null, useDeskStates: () => ({ frozen: false, away: false }) }));
 vi.mock('../src/components/NeedsYouQueue.js', () => ({ FocusLockToggle: () => null, NeedsQueueSurface: () => null }));

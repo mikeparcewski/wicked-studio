@@ -12,9 +12,8 @@ import { useCapabilities } from '../../store/capabilities.js';
 import { projectDetailPath, type Navigate } from '../../hooks/useRoute.js';
 import { useAppearanceStore } from '../../theming/appearance.js';
 import { openLaunchWizard } from '../../store/launchWizard.js';
-import { useRailHealthDot } from '../../hooks/useRailHealthDot.js';
 import { PAGE_NAMES } from '../../board/pageNames.js';
-import { WatchPill } from './WatchPill.js';
+import { NerveCenterTile } from './NerveCenterTile.js';
 import { NewProjectModal } from '../NewProjectModal.js';
 import { openSystemChat } from '../../store/askDock.js';
 import { useChatWindow } from '../../store/chatWindow.js';
@@ -57,14 +56,15 @@ export const SESSION_RAIL_PX = 236;
  *    unfiled group ("Not in a project") carries only the open icon, to its own dashboard — the same
  *    project dashboard every project has (`/projects/default`, operator 2026-10-16). A session is a chat and its runs when the
  *    daemon stamps `chat_id` (C1), else one run; each opens `/s/:id` (S6a).
- *  - the "Workspace" group (operator IA 2026-10-13): Watchtower — the quiet pill (rule 10); there is no
- *    Notifications entry, the Desk is the notification surface and Watchtower the full feed — then
- *    Skills · MCP · Plugins · Workflows · Theme · General (`DESK_RAIL_LINKS`; General is the `/system`
- *    page, and `/settings` redirects there). Repositories, Steering, Evals and Agents are Desk tabs, not
- *    rail links. The foot's top border separates the sessions above it from the Workspace below; its
- *    label is styled like the project groups and its links are the rail's secondary tier. LAST, set
- *    apart, the Health link to `/health` (`desk-rail-health`): a muted tint for its state, the state
- *    word always said, its dot the rail heartbeat (`useRailHealthDot`).
+ *  - the "Workspace" group (operator IA 2026-10-13): Skills · MCP · Plugins · Workflows · Theme ·
+ *    General (`DESK_RAIL_LINKS`; General is the `/system` page, and `/settings` redirects there).
+ *    Repositories, Steering, Evals and Agents are Desk tabs, not rail links. The foot's top border
+ *    separates the sessions above it from the Workspace below; its label is styled like the project
+ *    groups and its links are the rail's secondary tier.
+ *  - LAST, pinned to the bottom, the Nerve Center tile (DES-SYSTEM-VIEW, `NerveCenterTile`): one label,
+ *    larger than every other item, filled green / amber / red by the system's state with the worst
+ *    item in words. It replaced the Watchtower pill and the Health link; `/watch` and `/health` land
+ *    on its dashboard.
  *
  * Render only: the groups are `railGroups` (board/deskModel.ts) over `useBoardModel` + the fold.
  */
@@ -127,7 +127,6 @@ export function SessionRail({ runs, needRows, navigate, pathname, runsKnown = tr
     if (next.has(key)) next.delete(key); else next.add(key);
     return next;
   });
-  const dot = useRailHealthDot();
   const go = (path: string) => (e: React.MouseEvent): void => { e.preventDefault(); navigate(path); };
   const current = (path: string): 'page' | undefined => (pathname === path || pathname.startsWith(`${path}/`) ? 'page' : undefined);
   const siteName = useAppearanceStore((s) => s.appearance.site_name?.trim() || null);
@@ -305,30 +304,16 @@ export function SessionRail({ runs, needRows, navigate, pathname, runsKnown = tr
         {/* studio#421 r3 (change 18): the foot's group label, under the separator, styled like the
             project groups — the links below are the "Workspace". */}
         <p className="wk-rail-group" data-testid="rail-foot-label">Workspace</p>
-        {/* Watchtower heads the Workspace group (operator IA 2026-10-13); its card opens beside the rail. */}
-        <div className="wk-rail-watch" data-testid="desk-rail-watch" data-nav-dest="watch">
-          <WatchPill needRows={needRows} runs={runs} navigate={navigate} onFeed={pathname === '/watch'} secondary />
-        </div>
         {DESK_RAIL_LINKS.map((l) => (
           <a key={l.dest} href={l.path} onClick={go(l.path)} data-testid={l.testId} data-nav-dest={l.dest} aria-current={current(l.path)} className="wk-rail-link wk-rail-link--secondary">
             {l.label}
           </a>
         ))}
-        <a
-          href="/health"
-          onClick={go('/health')}
-          data-testid="desk-rail-health"
-          data-nav-dest="health"
-          aria-current={current('/health')}
-          aria-label={dot.heartState === 'healthy' ? 'Health, all good' : `Health, ${dot.heartState === 'unhealthy' ? 'a check is failing' : 'a check needs attention'}`}
-          data-health={dot.heartState}
-          className="wk-rail-link wk-rail-link--secondary wk-rail-health"
-        >
-          {/* Operator 2026-10-12: Health sits apart with a muted tint for its state (green / yellow / red),
-              and the state word is always said — colour is never the only signal. */}
-          <span>Health<span data-testid="rail-health-state" className="wk-rail-health-state"> · {dot.heartState === 'healthy' ? 'all good' : dot.heartState === 'degraded' ? 'needs attention' : 'failing'}</span></span>
-          <span aria-hidden data-testid="rail-health-heart" data-health={dot.heartState} className="wk-rail-health-dot" style={{ background: dot.heartColor }} />
-        </a>
+      </div>
+      {/* DES-SYSTEM-VIEW: Nerve Center, pinned last — the one way to the system dashboard. Its own dock
+          so it stays on screen at the bottom of the phone drawer, which scrolls as one. */}
+      <div className="wk-nc-dock" data-testid="rail-nerve-dock">
+        <NerveCenterTile navigate={navigate} pathname={pathname} waitingOnYou={count} />
       </div>
     </nav>
   );

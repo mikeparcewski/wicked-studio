@@ -2,12 +2,12 @@
 they should be centered and constrained" and "run pages - like the workspace ones should be centered and
 constrained".
 
-The operator's path: open each Workspace page from the rail (Watchtower, Skills, MCP, Plugins, Workflows,
-Theme, General), then Health, then a run's page and a chat's page. On each, at 1440x700 and at 1920x1000:
+The operator's path: open each Workspace page from the rail (Skills, MCP, Plugins, Workflows, Theme,
+General), then Nerve Center, then a run's page and a chat's page. On each, at 1440x700 and at 1920x1000:
 
   1. the page's content sits centred in the main column: its left and right gaps differ by at most 2 px;
-  2. it is constrained: never wider than the measure (1120 px for a page, 832 px for General / Theme /
-     Health, 896 px for a session's thread), so at 1920 there is room on both sides;
+  2. it is constrained: never wider than the measure (1120 px for a page and Nerve Center, 832 px for
+     General / Theme, 896 px for a session's thread), so at 1920 there is room on both sides;
   3. the session's header, thread and composer share one left edge and one right edge;
   4. at 1920 the composer's `/` menu opens under its input, and with an artifact open beside the thread
      the head, thread and composer centre in the room left (the composer keeps a usable width);
@@ -57,14 +57,14 @@ BOX = """([sel, ref]) => {
 
 # (rail test id or path, the page's content element, the column it is centred in, its measure)
 PAGES = [
-    ("watch-pill", ".wk-watchtower-body", "#main", 1120 - 64),
     ("desk-rail-skills", ".wk-page", "#main", 1120),
     ("desk-rail-mcp", ".wk-page", "#main", 1120),
     ("desk-rail-plugins", ".wk-page", "#main", 1120),
     ("desk-rail-workflows", ".wk-page", "#main", 1120),
     ("desk-rail-theme", ".wk-page", "#main", 832),
     ("desk-rail-general", ".wk-page", "#main", 832),
-    ("desk-rail-health", "[data-testid='health-page']", "#main", 832 - 64),
+    # Nerve Center (DES-SYSTEM-VIEW): the dashboard on /watch, the Watchtower feed under its panels.
+    ("desk-rail-nerve", "[data-testid='nerve-center-page']", "#main", 1120 - 64),
 ]
 SESSION = [("/s/run%3Ar-solo", "run"), ("/s/chat-pay", "chat")]
 
@@ -82,7 +82,7 @@ with sync_playwright() as p:
             page.get_by_test_id(rail).click()
             page.wait_for_selector(sel, state="visible", timeout=8000)
             page.wait_for_timeout(250)
-            # The Watchtower and Health measure their scroller's CONTENT box (padding is the gutter).
+            # Nerve Center measures its scroller's CONTENT box (padding is the gutter).
             box = page.evaluate(BOX, [sel, ref])
             if sel == ".wk-page":
                 # A PageFrame is itself the box: its border box is the measure, its padding the page's own.

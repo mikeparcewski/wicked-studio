@@ -113,7 +113,7 @@ EVERYTHING = """(h) => {
     return !!hit && (hit === el || el.contains(hit));
   };
   const list = document.querySelector('[data-testid="desk-rail-additional"]');
-  const health = document.querySelector('[data-testid="desk-rail-health"]');
+  const health = document.querySelector('[data-testid="desk-rail-nerve"]');
   const sessions = [...document.querySelectorAll('[data-testid="rail-session"]')];
   const unreachable = [];
   for (const a of list.querySelectorAll('a[data-nav-dest]')) {
@@ -180,19 +180,19 @@ with sync_playwright() as p:
                            timeout=10000)
 
     # ── 3. Everything fits (rail restructure 2026-10-13): the settings pages are Workspace links —
-    #       Workflows · Theme · General at the group's end — every one on screen with Health (last) and
+    #       Workflows · Theme · General at the group's end — every one on screen with Nerve Center (last) and
     #       the sessions; a settings link still navigates.
     rail = page.evaluate("""(h) => {
       const shown = (el) => { const b = el.getBoundingClientRect(); return b.height > 0 && b.bottom <= h + 0.5 && b.top >= -0.5; };
-      const health = document.querySelector('[data-testid="desk-rail-health"]');
+      const health = document.querySelector('[data-testid="desk-rail-nerve"]');
       const sessions = [...document.querySelectorAll('[data-testid="rail-session"]')];
-      const links = [...document.querySelectorAll('[data-testid="session-rail"] .wk-rail-foot [data-nav-dest]')];
+      const links = [...document.querySelectorAll('[data-testid="session-rail"] .wk-rail-foot [data-nav-dest], [data-testid="session-rail"] .wk-nc-dock [data-nav-dest]')];
       return { healthShown: !!health && shown(health), sessionsShown: sessions.filter(shown).length, sessions: sessions.length,
                links: links.map((e) => e.dataset.navDest), linksShown: links.every(shown) };
     }""", H)
     page.screenshot(path=str(SHOTS / "desk-look-everything.png"))
     check("everything-else-fits", rail["healthShown"] and rail["sessions"] >= 6 and rail["sessionsShown"] >= 6
-          and rail["links"][-4:] == ["section:workflows", "section:theme", "section:general", "health"] and rail["linksShown"], rail=rail)
+          and rail["links"][-4:] == ["section:workflows", "section:theme", "section:general", "watch"] and rail["linksShown"], rail=rail)
     page.get_by_test_id("desk-rail-theme").click()
     page.wait_for_function("() => window.location.pathname === '/theme'", timeout=5000)
     check("everything-else-navigates", page.evaluate("() => window.location.pathname") == "/theme")

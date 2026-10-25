@@ -33,7 +33,9 @@ vi.mock('../src/api/client.js', () => ({
 }));
 
 const { PROBE_DEADLINE_MS, probeOverdueWord } = await import('../src/components/HealthRailSection.js');
-const { HealthPage } = await import('../src/components/HealthPage.js');
+// The old /health page's cards now live in Nerve Center's panels (DES-SYSTEM-VIEW); these suites pin them there.
+const { NerveCenterPage: HealthPage } = await import('../src/components/nerve/NerveCenterPage.js');
+const { resetSystemStore } = await import('../src/store/systemSnapshot.js');
 const { clearCachedRoster, getCachedRoster } = await import('../src/store/rosterCache.js');
 
 const LONG_MESSAGE =
@@ -50,6 +52,7 @@ const SEATS: RosterSeat[] = [
 ];
 
 beforeEach(() => {
+  resetSystemStore();
   rosterAnswer = SEATS;
   getHealth.mockClear();
   getRoster.mockClear();
@@ -60,14 +63,16 @@ beforeEach(() => {
 afterEach(() => cleanup());
 
 describe('the page is the fetch gesture (EC30, §6.3)', () => {
-  it('mounts active: one GET /health + one GET /roster, settled (no timer), and the roster lands in the session cache', async () => {
+  it('mounts active: the registry reads /health + /roster once (the snapshot poll reads /health on its own bounded clock), and the roster lands in the session cache', async () => {
     render(<HealthPage />);
     await screen.findAllByTestId('rail-seat-row');
-    expect(getHealth).toHaveBeenCalledTimes(1);
+    // One read by the Health cards' registry, one by Nerve Center's shared snapshot poll (DES-SYSTEM-VIEW).
+    await waitFor(() => expect(getHealth).toHaveBeenCalledTimes(2));
     expect(getRoster).toHaveBeenCalledTimes(1);
     // Settled: no timer, no re-fetch — one mount, one answer.
     await new Promise((r) => setTimeout(r, 50));
     expect(getRoster).toHaveBeenCalledTimes(1);
+    expect(getHealth).toHaveBeenCalledTimes(2);
     // The landed roster deposits into the session cache (its contract: every call site deposits).
     expect(getCachedRoster()?.map((s) => s.key)).toEqual(['claude', 'codex', 'pi']);
   });

@@ -389,7 +389,7 @@ export function Desk({ runs: wireRuns, runsLoaded, runsError = null, onRetryRuns
             <section aria-labelledby="desk-feed-title" data-testid="desk-feed" className="wk-card wk-desk-a-card">
               <div className="wk-desk-card-head">
                 <h2 id="desk-feed-title" className="wk-desk-section-title">What happened</h2>
-                <a href="/watch" onClick={go('/watch')} className="wk-link wk-desk-card-link">Watchtower</a>
+                <a href="/watch" onClick={go('/watch')} className="wk-link wk-desk-card-link">Nerve Center</a>
               </div>
               {feed.length === 0
                 ? <p className="wk-desk-card-note">Nothing has happened yet.</p>

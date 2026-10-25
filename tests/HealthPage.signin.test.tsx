@@ -31,7 +31,9 @@ vi.mock('../src/api/client.js', () => ({
 }));
 
 const { SIGNED_OUT_DETAIL, SIGNED_OUT_TITLE, seatStandingWord } = await import('../src/components/HealthRailSection.js');
-const { HealthPage } = await import('../src/components/HealthPage.js');
+// The old /health page's cards now live in Nerve Center's panels (DES-SYSTEM-VIEW); these suites pin them there.
+const { NerveCenterPage: HealthPage } = await import('../src/components/nerve/NerveCenterPage.js');
+const { resetSystemStore } = await import('../src/store/systemSnapshot.js');
 const { clearCachedRoster } = await import('../src/store/rosterCache.js');
 
 const SINCE = '2026-09-11T05:00:00Z';
@@ -43,6 +45,7 @@ const SEATS: RosterSeat[] = [
 ];
 
 beforeEach(() => {
+  resetSystemStore();
   rosterAnswer = SEATS;
   clearCachedRoster();
   useConnectionStore.setState({ status: 'connected' });

@@ -276,7 +276,7 @@ with sync_playwright() as p:
     # ── 6. #467: the agent modal's sign-in command ──────────────────────────────────────────
     set_fixture(origin, seat_week=True)
     page.goto(f"{origin}/", wait_until="networkidle")
-    link = page.get_by_test_id("desk-rail-health")
+    link = page.get_by_test_id("desk-rail-nerve")
     link.wait_for(state="visible", timeout=15000)
     link.click()
     pi_move = page.locator('[data-testid="rail-seat-move"][data-seat="pi"] [data-testid="rail-seat-move-button"]')

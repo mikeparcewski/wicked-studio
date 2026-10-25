@@ -75,8 +75,9 @@ test('the /health page clips at default 5-seat roster and must be scrollable to 
   await page.route('**/api/v1/diagnostics', r => r.fulfill({ json: DIAGNOSTICS }));
 
   await page.goto('/');
-  await page.getByTestId('desk-rail-health').click();
-  await expect(page.getByTestId('health-page')).toBeVisible();
+  // The Health page folded into Nerve Center (DES-SYSTEM-VIEW): the rail tile opens it.
+  await page.getByTestId('desk-rail-nerve').click();
+  await expect(page.getByTestId('nerve-center-page')).toBeVisible();
   await expect(page.getByTestId('rail-seat-row')).toHaveCount(ROSTER.roster.length);
   // Each row renders as a healthy, keyed seat: a fixture that drifts from the wire contract
   // fails here instead of passing on a count of broken rows.
@@ -86,14 +87,14 @@ test('the /health page clips at default 5-seat roster and must be scrollable to 
 
   // The page root is the scroll container (`.wk-desk-scroll`); target it by testid so the
   // assertion is independent of class names.
-  const scroller = page.getByTestId('health-page');
+  const scroller = page.getByTestId('nerve-center-page');
 
   // 1. The scroller must overflow — i.e. content is taller than the visible box.
   await expect
     .poll(() => scroller.evaluate((el: HTMLElement) => el.scrollHeight > el.clientHeight))
     .toBe(true);
 
-  // 2. Scrolling to the bottom must bring the last governance finding into view.
-  await scroller.evaluate((el: HTMLElement) => { el.scrollTop = el.scrollHeight; });
+  // 2. Scrolling the page brings the last governance finding into view (never clipped).
+  await page.getByTestId('rail-governance-finding').last().scrollIntoViewIfNeeded();
   await expect(page.getByTestId('rail-governance-finding').last()).toBeInViewport();
 });

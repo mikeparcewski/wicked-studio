@@ -145,10 +145,10 @@ describe('S16a-1c — the record lines', () => {
     expect(screen.queryByTestId('failure-banner')).toBeNull();
   });
 
-  it('"You jumped in from the Watchtower" with Back (history back)', async () => {
+  it('"You jumped in from Nerve Center" with Back (history back)', async () => {
     const back = vi.spyOn(window.history, 'back').mockImplementation(() => {});
     render(<RunRecordLines view={makeView({ id: RUN, status: 'executing' })} jumped />);
-    expect(screen.getByTestId('watch-jumped')).toHaveTextContent('You jumped in from the Watchtower.');
+    expect(screen.getByTestId('watch-jumped')).toHaveTextContent('You jumped in from Nerve Center.');
     await userEvent.click(screen.getByTestId('watch-jump-back'));
     expect(back).toHaveBeenCalledTimes(1);
   });

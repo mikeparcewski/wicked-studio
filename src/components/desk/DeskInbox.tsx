@@ -159,7 +159,7 @@ export function DeskInbox({ rows, runs, navigate, now, settled, agentName, extra
       )}
       <footer className="wk-inbox-foot">
         <a href="/watch?filter=decision" onClick={(e) => { e.preventDefault(); navigate('/watch?filter=decision'); }} className="wk-link" data-testid="desk-inbox-all">
-          {settled === 'loading' ? 'See all in Watchtower' : `See all in Watchtower (${needCount(rows)})`}
+          {settled === 'loading' ? 'See all in Nerve Center' : `See all in Nerve Center (${needCount(rows)})`}
         </a>
       </footer>
     </section>

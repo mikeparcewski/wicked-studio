@@ -62,9 +62,9 @@ export function WatchRunLines({ runId, jumped, onBack, isTerminal, endedMs }: {
     <div className="wk-watch-run-lines">
       {jumped && (
         <p data-testid="watch-jumped" className="wk-watch-jumped">
-          You jumped in from the Watchtower.
+          You jumped in from Nerve Center.
           {onBack !== undefined && (
-            <button type="button" data-testid="watch-jump-back" onClick={onBack} className="wk-since-toggle">Back to the Watchtower</button>
+            <button type="button" data-testid="watch-jump-back" onClick={onBack} className="wk-since-toggle">Back to Nerve Center</button>
           )}
         </p>
       )}

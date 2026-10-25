@@ -143,10 +143,10 @@ with sync_playwright() as p:
           page.locator(TID("repo-card-findings")).count() == 0)
     set_fixture(ORIGIN, repo_findings=True)
 
-    # ── 3. #246 — the /health page renders diagnostics.governance ────────────────────
+    # ── 3. #246 — Nerve Center's Governance panel renders diagnostics.governance ─────────
     page.goto(f"{ORIGIN}/")
-    page.locator(TID("desk-rail-health")).wait_for(timeout=15000)
-    page.locator(TID("desk-rail-health")).click()
+    page.locator(TID("desk-rail-nerve")).wait_for(timeout=15000)
+    page.locator(TID("desk-rail-nerve")).click()
     gov = page.locator(TID("rail-governance"))
     gov.wait_for(timeout=10000)
     gov_text = gov.inner_text()
@@ -166,15 +166,18 @@ with sync_playwright() as p:
           and finding.get_attribute("data-severity") == "error"
           and "wicked-crew governance replay" in detail and finding.inner_text().startswith("Problem:"),
           state=gov.get_attribute("data-state"), deadletters=gov.get_attribute("data-deadletters"))
-    check("governance_heart_unhealthy",
-          page.locator(TID("rail-health-heart")).get_attribute("data-health") == "unhealthy")  # (codex is inactive on this roster too)
+    # Nerve Center (DES-SYSTEM-VIEW): an older crew's error finding blocks work — the tile is red.
+    page.wait_for_function("() => document.querySelector('[data-testid=\"desk-rail-nerve\"]')?.dataset.read === 'fresh'", timeout=10000)
+    check("governance_tile_red",
+          page.locator(TID("desk-rail-nerve")).get_attribute("data-tone") == "red",
+          tone=page.locator(TID("desk-rail-nerve")).get_attribute("data-tone"))
     page.screenshot(path=str(VSHOTS / "wave2-governance.png"))
 
     # An older daemon: no /diagnostics route at all → the plain-words sentence, heart healthy.
     set_fixture(ORIGIN, governance=None)
     page.goto(f"{ORIGIN}/")
-    page.locator(TID("desk-rail-health")).wait_for(timeout=15000)
-    page.locator(TID("desk-rail-health")).click()
+    page.locator(TID("desk-rail-nerve")).wait_for(timeout=15000)
+    page.locator(TID("desk-rail-nerve")).click()
     gov = page.locator(TID("rail-governance"))
     gov.wait_for(timeout=10000)
     # (The rail heart's colour is not asserted here: the shared W2 roster carries an

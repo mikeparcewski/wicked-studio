@@ -4,17 +4,19 @@ import type { BoardModel } from '../src/hooks/useBoardModel.js';
 import { resetLaunchWizard, useLaunchWizard } from '../src/store/launchWizard.js';
 import { useConnectionStore } from '../src/store/connection.js';
 import { clearCachedRoster } from '../src/store/rosterCache.js';
+import { resetSystemStore } from '../src/store/systemSnapshot.js';
 import { ROSTER, WEEK } from './fixtures/seatWeek.js';
 import { makeView } from './factories.js';
 
 /**
  * THE SLICK-DESIGN RAIL POLISH (studio's left-nav redesign): (1) the "+ Start something" row is
  * gone — the composer is the start; (2) "Additional settings" is a real control with a lucide
- * chevron (text first); (3) Health is a rail LINK with a live dot (fetched on mount) and a real
- * `/health` registry page; (4) the foot's own top border is the separator above Product, not a
+ * chevron (text first); (3) Nerve Center (DES-SYSTEM-VIEW) is ONE tile pinned last in the rail,
+ * filled by its state, replacing the Health link and the Watchtower pill — its dashboard carries the
+ * old `/health` cards; (4) the foot's own top border is the separator above Product, not a
  * spacer element; (5) projects get quick icons — new-session and open-project — on their rail
- * groups and Desk cards; (6) the Health link names its state — visible muted text AND for screen
- * readers — when it is not healthy; (7) the "Additional settings" menu is navigation only (the
+ * groups and Desk cards; (6) the tile names its state — visible words AND for screen
+ * readers; (7) the "Additional settings" menu is navigation only (the
  * orders/freeze controls are the Desk sheet's); (8) the foot carries a "Workspace" group label.
  */
 
@@ -69,7 +71,7 @@ vi.mock('../src/hooks/useRoster.js', () => ({ useRoster: () => [] }));
 
 const { SessionRail } = await import('../src/components/desk/SessionRail.js');
 const { Desk } = await import('../src/components/desk/Desk.js');
-const { HealthPage } = await import('../src/components/HealthPage.js');
+const { NerveCenterPage: HealthPage } = await import('../src/components/nerve/NerveCenterPage.js');
 
 /** One project in the board model — enough for a rail group and a Desk card. */
 const KESTREL: BoardModel['items'][number] = {
@@ -96,6 +98,7 @@ function cleanModel(): void {
 
 beforeEach(() => {
   cleanModel();
+  resetSystemStore();
   getHealth.mockClear();
   getRoster.mockClear();
   getSeatRecord.mockClear();
@@ -125,82 +128,81 @@ describe('the rail redesign', () => {
     expect(screen.queryByTestId('desk-rail-additional')).toBeNull();
   });
 
-  it('the foot order: Watchtower, the Workspace links ending Workflows · Theme · General, then Health last; all the secondary tier', () => {
+  it('the foot order: the Workspace links ending Workflows · Theme · General, then the Nerve Center tile last', () => {
     render(<SessionRail runs={[]} needRows={[]} navigate={() => {}} pathname="/" />);
-    const foot = screen.getByTestId('session-rail').querySelector('.wk-rail-foot')!;
-    const ids = [...foot.querySelectorAll('[data-testid]')].map((e) => e.getAttribute('data-testid') ?? '').filter((id) => id.startsWith('desk-rail-'));
-    expect(ids).toEqual(['desk-rail-watch', 'desk-rail-skills', 'desk-rail-mcp', 'desk-rail-plugins', 'desk-rail-workflows', 'desk-rail-theme', 'desk-rail-general', 'desk-rail-health']);
-    for (const id of ['watch-pill', 'desk-rail-skills', 'desk-rail-general', 'desk-rail-health']) expect(screen.getByTestId(id)).toHaveClass('wk-rail-link--secondary');
+    const rail = screen.getByTestId('session-rail');
+    const ids = [...rail.querySelectorAll('.wk-rail-foot [data-testid], .wk-nc-dock [data-testid]')].map((e) => e.getAttribute('data-testid') ?? '').filter((id) => id.startsWith('desk-rail-'));
+    expect(ids).toEqual(['desk-rail-skills', 'desk-rail-mcp', 'desk-rail-plugins', 'desk-rail-workflows', 'desk-rail-theme', 'desk-rail-general', 'desk-rail-nerve']);
+    for (const id of ['desk-rail-skills', 'desk-rail-general']) expect(screen.getByTestId(id)).toHaveClass('wk-rail-link--secondary');
+    // Its own tier: the one large tile, not a secondary link (DES-SYSTEM-VIEW).
+    expect(screen.getByTestId('desk-rail-nerve')).toHaveClass('wk-nc-tile');
+    expect(screen.getByTestId('desk-rail-nerve')).not.toHaveClass('wk-rail-link--secondary');
+    // The separate Watchtower pill and Health link are gone: the tile replaced both.
+    expect(screen.queryByTestId('watch-pill')).toBeNull();
+    expect(screen.queryByTestId('desk-rail-health')).toBeNull();
   });
 
-  it('Health is a rail LINK with a live dot (fetched on mount), below General', async () => {
-    const navigate = vi.fn();
-    render(<SessionRail runs={[]} needRows={[]} navigate={navigate} pathname="/" />);
-    const nav = screen.getByTestId('session-rail');
-    const order = [...nav.querySelectorAll('[data-testid]')]
-      .map((e) => e.getAttribute('data-testid') ?? '')
-      .filter((id) => ['desk-rail-skills', 'desk-rail-health', 'desk-rail-general'].includes(id));
-    expect(order).toEqual(['desk-rail-skills', 'desk-rail-general', 'desk-rail-health']);
-    const health = screen.getByTestId('desk-rail-health');
-    expect(health.tagName).toBe('A');
-    expect(health).toHaveAttribute('href', '/health');
-    expect(health).toHaveAttribute('data-nav-dest', 'health');
-    expect(health).toHaveTextContent('Health');
-    // The OLD section chrome is gone (the chrome heart + its toggle).
-    expect(screen.queryByTestId('rail-health-section')).toBeNull();
-    expect(screen.queryByTestId('rail-health-toggle')).toBeNull();
-    // The dot answers from the mount reads — no expand gesture left to fetch them.
-    const heart = screen.getByTestId('rail-health-heart');
-    await waitFor(() => expect(heart).toHaveAttribute('data-health', 'healthy'));
-    expect(screen.queryByTestId('rail-health-summary-dot')).toBeNull();
-    // Operator 2026-10-12: the state is always said in words (colour is never the only signal), and
-    // the link wears its state's muted tint.
-    expect(health).toHaveAttribute('aria-label', 'Health, all good');
-    expect(screen.getByTestId('rail-health-state')).toHaveTextContent('· all good');
-    expect(health).toHaveAttribute('data-health', 'healthy');
-  });
-
-  it('the Health link names the state — visible muted text AND for screen readers — when it is not healthy', async () => {
-    getHealth.mockRejectedValueOnce(new Error('down'));
+  it('Nerve Center is ONE tile to /watch, green and "all clear" only after a fresh successful read', async () => {
     render(<SessionRail runs={[]} needRows={[]} navigate={() => {}} pathname="/" />);
-    const health = screen.getByTestId('desk-rail-health');
-    await waitFor(() => expect(screen.getByTestId('rail-health-heart')).toHaveAttribute('data-health', 'degraded'));
-    expect(health).toHaveAttribute('aria-label', 'Health, a check needs attention');
-    expect(health).toHaveTextContent('Health');
-    // A degraded dot (yellow tint) says "needs attention"; only an unhealthy one (red) says "failing".
-    expect(screen.getByTestId('rail-health-state')).toHaveTextContent('· needs attention');
-    expect(health).toHaveAttribute('data-health', 'degraded');
+    const tile = screen.getByTestId('desk-rail-nerve');
+    expect(tile.tagName).toBe('A');
+    expect(tile).toHaveAttribute('href', '/watch');
+    expect(tile).toHaveAttribute('data-nav-dest', 'watch');
+    expect(tile).toHaveTextContent('Nerve Center');
+    // Before any answer it is never green.
+    expect(tile).not.toHaveAttribute('data-tone', 'green');
+    await waitFor(() => expect(tile).toHaveAttribute('data-tone', 'green'));
+    expect(tile).toHaveAttribute('data-read', 'fresh');
+    // Colour is never the only signal: the words and the accessible name say it.
+    expect(screen.getByTestId('nerve-center-words')).toHaveTextContent('all clear');
+    expect(tile.textContent).toBe('Nerve Center · all clear');
+    expect(tile).toHaveAttribute('aria-label', 'Nerve Center: all clear — nothing needs you');
   });
 
-  it('the Health link says "failing" in words when a check is unhealthy', async () => {
-    // Connection plus evidence only (DES-seats-page §2.1): a dropped socket is unhealthy; agent standing is the Agents page's.
+  it('a failed read is yellow "can\'t reach crew", never green', async () => {
+    getHealth.mockRejectedValue(new Error('down'));
+    render(<SessionRail runs={[]} needRows={[]} navigate={() => {}} pathname="/" />);
+    const tile = screen.getByTestId('desk-rail-nerve');
+    await waitFor(() => expect(tile).toHaveAttribute('data-read', 'failed'));
+    expect(tile).toHaveAttribute('data-tone', 'yellow');
+    expect(screen.getByTestId('nerve-center-words')).toHaveTextContent("can't reach crew");
+    expect(tile).toHaveAttribute('aria-label', "Nerve Center: can't reach crew — needs a look");
+    getHealth.mockImplementation(() => Promise.resolve({ status: 'ok', version: '0.6.0', ping: 'pong' }));
+  });
+
+  it('a dropped socket says so in words (yellow: work still flows, the pages stop updating)', async () => {
     useConnectionStore.setState({ status: 'disconnected' });
     render(<SessionRail runs={[]} needRows={[]} navigate={() => {}} pathname="/" />);
-    const health = screen.getByTestId('desk-rail-health');
-    await waitFor(() => expect(screen.getByTestId('rail-health-heart')).toHaveAttribute('data-health', 'unhealthy'));
-    expect(screen.getByTestId('rail-health-state')).toHaveTextContent('· failing');
-    expect(health).toHaveAttribute('aria-label', 'Health, a check is failing');
+    const tile = screen.getByTestId('desk-rail-nerve');
+    await waitFor(() => expect(screen.getByTestId('nerve-center-words')).toHaveTextContent('live updates paused'));
+    expect(tile).toHaveAttribute('data-tone', 'yellow');
   });
 
-  it('the Health link marks itself current on /health and sends the desk there', () => {
+  it('the tile marks itself current on /watch and on /health, and sends the desk to /watch', () => {
     const navigate = vi.fn();
-    render(<SessionRail runs={[]} needRows={[]} navigate={navigate} pathname="/health" />);
-    expect(screen.getByTestId('desk-rail-health')).toHaveAttribute('aria-current', 'page');
+    const { unmount } = render(<SessionRail runs={[]} needRows={[]} navigate={navigate} pathname="/watch" />);
+    expect(screen.getByTestId('desk-rail-nerve')).toHaveAttribute('aria-current', 'page');
     expect(screen.getByTestId('desk-rail-home')).not.toHaveAttribute('aria-current');
-    fireEvent.click(screen.getByTestId('desk-rail-health'));
-    expect(navigate).toHaveBeenCalledWith('/health');
+    fireEvent.click(screen.getByTestId('desk-rail-nerve'));
+    expect(navigate).toHaveBeenCalledWith('/watch');
+    unmount();
+    render(<SessionRail runs={[]} needRows={[]} navigate={navigate} pathname="/health" />);
+    expect(screen.getByTestId('desk-rail-nerve')).toHaveAttribute('aria-current', 'page');
   });
 
   it("the separator above the Workspace group is the foot's own top border — no spacer element", () => {
     render(<SessionRail runs={[]} needRows={[]} navigate={() => {}} pathname="/" />);
     const rail = screen.getByTestId('session-rail');
     expect(rail.querySelector('.wk-rail-spacer')).toBeNull();
-    const first = screen.getByTestId('desk-rail-watch');
+    const first = screen.getByTestId('desk-rail-skills');
     // The group sits in the foot — the foot's border-top (components.css) is the separator.
     expect(first.closest('.wk-rail-foot')).not.toBeNull();
-    // Change 18: the foot's group label leads the links; Watchtower is the first (operator IA 2026-10-13).
+    // Change 18: the foot's group label leads the links.
     expect((first.previousElementSibling as HTMLElement).getAttribute('data-testid')).toBe('rail-foot-label');
     expect(screen.getByTestId('rail-foot-label')).toHaveTextContent('Workspace');
+    // Nerve Center is pinned last: its own dock, the rail's last child (sticky in the phone drawer).
+    expect(rail.lastElementChild).toBe(screen.getByTestId('rail-nerve-dock'));
+    expect(screen.getByTestId('rail-nerve-dock')).toContainElement(screen.getByTestId('desk-rail-nerve'));
   });
 });
 
@@ -248,11 +250,11 @@ describe('Not in a project has an open icon too', () => {
   });
 });
 
-describe('the /health page', () => {
-  it('is its own page with FOUR registry cards — Connection · Seats · This week · Governance', async () => {
+describe("the old /health page's cards, folded into Nerve Center", () => {
+  it('Connection · Helpers · This week · Governance all render inside the dashboard panels', async () => {
     render(<HealthPage />);
-    const page = await screen.findByTestId('health-page');
-    expect(within(page).getByRole('heading', { level: 1, name: 'Health' })).toBeInTheDocument();
+    const page = await screen.findByTestId('nerve-center-page');
+    expect(within(page).getByRole('heading', { level: 1, name: 'Nerve Center' })).toBeInTheDocument();
     for (const id of ['health-card-connection', 'health-card-seats', 'health-card-week', 'health-card-governance']) {
       expect(within(page).getByTestId(id)).toBeInTheDocument();
     }

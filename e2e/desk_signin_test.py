@@ -146,7 +146,7 @@ with sync_playwright() as p:
     set_fixture(origin, roster_signed_in={}, seat_week=True, roster_login_lines={"codex": LINE, "pi": 'PI_CONFIG_DIR="/Users/reel-operator/.wicked-worker/pi" pi login'})
     page.goto(f"{origin}/", wait_until="networkidle")
     page.get_by_test_id("desk").wait_for(state="visible", timeout=15000)
-    page.get_by_test_id("desk-rail-health").click()
+    page.get_by_test_id("desk-rail-nerve").click()
     page.wait_for_function("() => document.querySelectorAll('[data-testid=\"rail-seat-move\"]').length >= 1", timeout=10000)
     move = page.locator('[data-testid="rail-seat-move"][data-kind="sign-in"]').first
     move.get_by_test_id("rail-seat-move-button").click()

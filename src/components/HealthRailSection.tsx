@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { seatLabel, seatRoleWord } from '../board/seatNames.js';
 import { api } from '../api/client.js';
 import { getDiagnostics, isDiagnosticsUnsupported } from '../api/diagnostics.js';
-import { HEALTH_RECHECKED } from '../hooks/useRailHealthDot.js';
+import { HEALTH_RECHECKED } from '../store/systemSnapshot.js';
 import type { SeatRecord } from '../api/seatRecord.js';
 import type { DiagnosticsGovernance, DiagnosticsGovernanceFinding, RosterSeat } from '../api/types.js';
 import { coachSeat, phaseWords, recordsByCli, seatWeekLine, type CoachMove } from '../board/seatCoaching.js';
@@ -19,10 +19,11 @@ import { signInLapsed } from '../board/deskModel.js';
  * `GET /roster` (`display_name`, `health: SeatHealth`, `signed_in` —
  * routes.ts:308, crew#274) and the week + governance groups.
  *
- * The `/health` page (`HealthPage`) mounts this engine active for its whole life:
- * the page IS the fetch gesture (EC30), carded. The rail's own Health LINK reads a
- * lighter dot (`useRailHealthDot` — the mount read alone, EC30-strict); this
- * registry is what does the full week + governance reads the page shows.
+ * Nerve Center (`NerveCenterPage`, `/watch`; `/health` redirects there) mounts this engine
+ * active for its whole life: the page IS the fetch gesture (EC30), its cards folded into the
+ * dashboard's panels. The rail's Nerve Center tile reads the shared snapshot poll
+ * (`store/systemSnapshot`); this registry is what does the full roster, week and governance
+ * reads the panels show.
  *
  * Fetch discipline (EC30): `GET /health`, `GET /roster` and the week read fire
  * when the registry turns active — never on a timer. Re-activating refetches
@@ -43,8 +44,8 @@ import { signInLapsed } from '../board/deskModel.js';
  * from this version of crew…"), a daemon
  * reporting `store: null` is NOT shown as governed. The engine still derives the
  * heart verdicts from these findings (an error finding or a null store reads
- * unhealthy, a warning degraded); the rail link's dot reads its own overlap
- * (`useRailHealthDot`), and the page renders the rows alone.
+ * unhealthy, a warning degraded); the rail's Nerve Center tile reads its own overlap
+ * (`board/nerveCenter`), and the page renders the rows alone.
  */
 
 interface HealthInfo {
@@ -465,7 +466,7 @@ export function plainFinding(message: string): string {
   return /[.!?]$/u.test(text) ? text : `${text}.`;
 }
 
-/** The whole registry's live answer — the engine behind the /health page. */
+/** The whole registry's live answer — the engine behind Nerve Center's Health cards. */
 export interface HealthRegistry {
   wsStatus: 'connecting' | 'connected' | 'disconnected';
   health: HealthInfo | null;
@@ -491,11 +492,14 @@ export interface HealthRegistry {
   heartState: 'healthy' | 'degraded' | 'unhealthy';
   heartColor: string;
   reprobeNow: () => void;
+  /** Re-run the probes quietly (no `HEALTH_RECHECKED`): Nerve Center keeps its cards in step with the
+   *  shared poll when crew comes back or goes away. */
+  reread: () => void;
   probeDeadlineMs: number;
 }
 
 /**
- * The health registry engine behind the `/health` page (`active` = mounted). All probe
+ * The health registry engine behind Nerve Center's Health cards (`active` = mounted). All probe
  * effects, the generation guard (a completion from an earlier activation must not overwrite
  * a later one) and the derived heart verdicts live here once.
  */
@@ -636,11 +640,12 @@ export function useHealthRegistry(
     heartState,
     heartColor,
     reprobeNow,
+    reread: () => setReprobe((n) => n + 1),
     probeDeadlineMs,
   };
 }
 
-/** The connection rows (WebSocket + API server) on the /health page's Connection card. */
+/** The connection rows (WebSocket + API server) in Nerve Center's Infra panel. */
 export function ConnectionRegistry({ registry }: { registry: HealthRegistry }): React.ReactElement {
   const { wsStatus, health, healthError, healthCheckedAt, overdue, healthFresh, probeDeadlineMs, reprobeNow } = registry;
   const pillLabel = wsStatus === 'connected' ? 'Connected' : wsStatus === 'connecting' ? 'Connecting' : 'Disconnected';
