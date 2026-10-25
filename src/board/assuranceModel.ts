@@ -172,8 +172,6 @@ export interface OperatorJudgmentView {
   note: string | null;
   /** (crew api-types 0.135.0) Set when this judgment overrode a failed repo-checks floor; absent otherwise. */
   floorOverride?: FloorOverrideView;
-  /** The engine's reason for the gate the operator answered (the failed floor's summary); absent when none. */
-  reason?: string;
 }
 
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -183,8 +181,7 @@ function operatorJudgesOf(v: unknown): OperatorJudgmentView[] {
     ? v.flatMap((j) => {
       if (!isRecord(j) || typeof j['by'] !== 'string' || j['by'] === '') return [];
       const over = floorOverrideOf(j['floorOverride']);
-      const reason = str(j['reason']);
-      return [{ by: j['by'], at: typeof j['at'] === 'number' ? j['at'] : 0, note: str(j['note']), ...(over !== null ? { floorOverride: over } : {}), ...(reason !== null ? { reason } : {}) }];
+      return [{ by: j['by'], at: typeof j['at'] === 'number' ? j['at'] : 0, note: str(j['note']), ...(over !== null ? { floorOverride: over } : {}) }];
     })
     : [];
 }

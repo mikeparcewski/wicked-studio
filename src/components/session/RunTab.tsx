@@ -255,14 +255,14 @@ function RunTabDetails({ view, allRuns, sessionId, title, navigate }: { view: Se
         <Item section="changes" id="files">{() => <RunSection id="files" view={view} runs={allRuns} navigate={go} />}</Item>
       </Section>
 
-      <Section id="checks" {...fold} summary={quiet.has('checks') ? 'Nothing checked yet' : overridden !== null ? 'Overridden by you' : acceptancePassed === true ? 'Passed' : acceptancePassed === false ? 'Not passed' : ''}>
+      <Section id="checks" {...fold} summary={quiet.has('checks') ? 'Nothing checked yet' : acceptancePassed === false ? 'Not passed' : overridden !== null ? 'Overridden by you' : acceptancePassed === true ? 'Passed' : ''}>
         <div data-testid="run-tab-checks" className="wk-run-tab-block">
           <RunAssuranceLabel view={view} />
+          {/* crew's acceptance line (WT-W3 `summary.line`; a bare string from an older read). An acceptance not passed leads;
+              a passed one under an override is QE acceptance's word only, so it goes behind Technical details. */}
+          {acceptanceLine !== null && (overridden === null || acceptancePassed === false) && <p data-testid="run-tab-acceptance" className="wk-run-tab-line">{acceptanceLine}</p>}
           {overridden !== null && <p data-testid="run-tab-overridden" className="wk-run-tab-line wk-prop-accept--overridden">{overriddenLine(overridden)}</p>}
-          {/* crew's acceptance line (WT-W3 `summary.line`; a bare string from an older read) — under an override it is
-              QE acceptance's word only, so it goes behind Technical details. */}
-          {acceptanceLine !== null && overridden === null && <p data-testid="run-tab-acceptance" className="wk-run-tab-line">{acceptanceLine}</p>}
-          {acceptanceLine !== null && overridden !== null && <TechDetails data-testid="run-tab-acceptance-detail" summary="What QE acceptance recorded" text={acceptanceLine} />}
+          {acceptanceLine !== null && overridden !== null && acceptancePassed !== false && <TechDetails data-testid="run-tab-acceptance-detail" summary="What QE acceptance recorded" text={acceptanceLine} />}
           {coverage !== null && <p data-testid="run-tab-coverage" className="wk-run-tab-line">{coverage.line}</p>}
           {coverage !== null && coverage.reasons.length > 0 && <TechDetails data-testid="run-tab-coverage-why" text={coverage.reasons} />}
           {acceptanceLine === null && coverage === null && overridden === null && <p className="wk-run-tab-muted">{quiet.has('checks') ? 'Nothing has been checked yet.' : 'No acceptance check recorded.'}</p>}

@@ -26,6 +26,8 @@ import { ProposalCard } from '../src/components/session/ProposalCard.js';
 import { useRunEventStore } from '../src/store/events.js';
 import { useGateStore, type OpenGate } from '../src/store/gates.js';
 import { makeUnit, makeView } from './factories.js';
+import { DELIVER_REVERIFY_FAILED_TAIL, REFUSAL_REVERIFY_FAILED } from './fixtures/wire433.js';
+import { GATE_RUN } from './fixtures/gateEvidence.js';
 
 const RUN = 'r-rig0158';
 const NOW = 1_700_000_000_000;
@@ -68,6 +70,8 @@ describe('3. the failing tests, on the face', () => {
   it('names the tests without the runner\'s status word or message', () => {
     expect(failureName(IDS[0]!)).toBe('tests/core/test_inventory_report_codebook.py::test_its_frontmatter_parses_strictly');
     expect(failureName('FAIL src/a.test.ts > adds')).toBe('src/a.test.ts > adds');
+    // a " - " inside another runner's test name is part of the name (pr-xreview #899)
+    expect(failureName('FAIL src/gate.test.ts > GateRow - red base > names tests')).toBe('src/gate.test.ts > GateRow - red base > names tests');
   });
   it('names up to five, then "+N more"; a check whose runner named none is named itself', () => {
     const f = failingOnFace(floorOf(floorEvent(2, 0) as unknown as CoreEvent))!;
@@ -102,9 +106,22 @@ describe('2. the suggested action is the one the engine names', () => {
     expect(m.consequence).toBe(FLOOR_OVERRIDE_CONSEQUENCE);
     expect(m.choices.map((c) => c.label)).toContain('Retry this step with a note');
   });
-  it('the engine\'s own words name it even when the floor record is not in hand', () => {
+  it('the engine\'s own words name it even when the floor record is not in hand — unless they name a regression too', () => {
     expect(engineNamesFloorOverride({ floor: null, denial: { reason: SUMMARY } })).toBe(true);
-    expect(engineNamesFloorOverride({ floor: { checks: [{ classification: 'regression' }] }, denial: { reason: 'test: exit 1' } })).toBe(false);
+    expect(engineNamesFloorOverride({ floor: null, denial: { reason: `lint: exit 1 [regression] — ${SUMMARY}` } })).toBe(false);
+    expect(engineNamesFloorOverride({ floor: { checks: [{ classification: 'regression', regressions: ['x'], exitCode: 1 }] }, denial: { reason: 'test: exit 1' } })).toBe(false);
+  });
+  it('a floor that also holds a regression is never suggested away (pr-xreview #899)', () => {
+    const mixed = GATE_EVENTS.map((e) => {
+      const r = e as unknown as Record<string, unknown>;
+      if (r['type'] !== 'repoChecksEvaluated') return e;
+      const f = floorEvent(2, 3) as unknown as { checks: unknown[] };
+      return { ...f, checks: [...f.checks, { ...testCheck({ name: 'lint', classification: 'regression', regressions: ['src/a.ts: no-explicit-any'], failureIds: [] }) }] } as unknown as CoreEvent;
+    });
+    const m = model(mixed);
+    expect(m.choices.some((c) => c.key === FLOOR_OVERRIDE_KEY)).toBe(true);
+    expect(m.recommended === null ? null : m.choices[m.recommended]!.key).not.toBe(FLOOR_OVERRIDE_KEY);
+    expect(m.consequence).not.toBe(FLOOR_OVERRIDE_CONSEQUENCE);
   });
   it('a regression is not suggested away: the override is offered, never suggested', () => {
     const plain = 'repo checks floor failed: test: exit 1 [regression]';
@@ -123,6 +140,16 @@ describe('2. the suggested action is the one the engine names', () => {
   });
   it('the model names the gate\'s failing tests', () => {
     expect(model().failingTests).toEqual({ names: IDS.slice(0, 5).map(failureName), more: 3 });
+  });
+  it('a refused hand-over names what its own re-verify failed (no gate verdict there; pr-xreview #899)', () => {
+    const units: WorkUnit[] = [
+      makeUnit({ id: `${GATE_RUN}:build`, session_id: GATE_RUN, ord: 4, role: 'creator', status: 'done', stage: 'build' }),
+      makeUnit({ id: `${GATE_RUN}:deliver`, session_id: GATE_RUN, ord: 5, description: 'deliver', stage: 'build', phase_ref: 'deliver', status: 'rejected' }),
+    ];
+    const g: OpenGate = { runId: GATE_RUN, ord: 5, prompt: `The deliver phase refused: ${REFUSAL_REVERIFY_FAILED}. Approve to re-run the deliver phase now (the engine re-lifts and re-verifies first; no second deliver gate), reject to cancel the run and keep the worktree.`, lifecycle: 'open', receivedAt: NOW, gateKind: 'escalation' };
+    const m = sessionGateChoices({ runId: GATE_RUN, gate: g, units, events: DELIVER_REVERIFY_FAILED_TAIL, pool: [], roster: null })!;
+    expect(m.refusal).toBeDefined();
+    expect(m.failingTests).toEqual({ names: ['the lint check'], more: 0 });
   });
 });
 
@@ -177,8 +204,8 @@ describe('1. a floor the operator overrode is never "passed"', () => {
     // a regression the operator overrode is the change's own: no "and its base"
     const reg = [DELIVER_EVENTS[0]!, floorEvent(2, 3, testCheck({ classification: 'regression', regressions: ['x'], base: { run: { exitCode: 0 } } })) as unknown as CoreEvent];
     expect(overriddenLine(overriddenFloorsOf(r, reg)!)).toBe('Overridden by you: test failed on this change.');
-    // no floor record in hand: the engine's recorded reason still says the base was red
-    expect(overriddenLine(overriddenFloorsOf(receiptOf({ mode: 'full', required: [], operatorJudges: [OVERRIDE] }), [])!)).toBe('Overridden by you: the repository checks failed on this change and its base.');
+    // no floor record in hand: the override is said, and nothing is claimed about the base
+    expect(overriddenLine(overriddenFloorsOf(receiptOf({ mode: 'full', required: [], operatorJudges: [OVERRIDE] }), [])!)).toBe('Overridden by you: the repository checks failed on this change.');
   });
   it('the override\'s unit and attempt come off the wire, else its result id', () => {
     expect(floorOverrideOf({ resultId: 'r:unit-7:attempt-0:repo_checks' })).toMatchObject({ ord: 7, attempt: 0 });
@@ -191,6 +218,9 @@ describe('1. a floor the operator overrode is never "passed"', () => {
     });
     // QE acceptance not passed yet still leads: crew refuses the delivery then
     expect(deliverAcceptance({ ...SATISFIED, satisfied: false, line: 'Not accepted yet' }, null, true, { checks: ['test'], onBase: true })?.blocksDeliver).toBe(true);
+    // ... and so does any required acceptance not satisfied, required by the run or not (pr-xreview #899)
+    expect(deliverAcceptance({ ...SATISFIED, satisfied: false, line: 'Not accepted yet: the walkthrough failed in chapter 4.' }, null, false, { checks: ['test'], onBase: true }))
+      .toEqual({ text: 'Not accepted yet: the walkthrough failed in chapter 4.', tone: 'bad' });
     // no override: crew's line as before
     expect(deliverAcceptance(SATISFIED, null, true, null)).toEqual({ text: ACCEPTED, tone: 'ok' });
   });
@@ -199,6 +229,9 @@ describe('1. a floor the operator overrode is never "passed"', () => {
     const w = finalWords(v, { done: 3, total: 3 }, { passed: true, tests: null, nothing: false, reviewers: ['Codex'], overridden: 'Overridden by you: test failed on this change and its base.' });
     expect(w.line).toBe('Overridden by you: test failed on this change and its base. Reviewed and approved by Codex. Pull request #7 is open.');
     expect(w.line).not.toContain('The checks passed');
+    // an override never hides checks that did not pass
+    const failed = finalWords(v, { done: 3, total: 3 }, { passed: false, tests: null, nothing: false, reviewers: [], overridden: 'Overridden by you: test failed on this change and its base.' });
+    expect(failed.line).toBe('Overridden by you: test failed on this change and its base. The checks did not pass. Pull request #7 is open.');
   });
 });
 

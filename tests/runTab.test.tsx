@@ -197,6 +197,11 @@ describe('RunTab', () => {
     expect(within(checks).getByTestId('run-tab-overridden')).toHaveTextContent('Overridden by you: test failed on this change and its base.');
     expect(within(checks).queryByTestId('run-tab-acceptance')).toBeNull();
     expect(within(checks).getByTestId('run-panel-summary').textContent).not.toBe('Passed');
+    // a required acceptance that has not passed leads over the override (pr-xreview #899)
+    act(() => useRunAcceptanceStore.setState({ byRun: { 'run-1': { runId: 'run-1', summary: { required: true, satisfied: false, line: 'Not accepted yet: QE FAIL.', walkthrough: null } } as unknown as RunAcceptanceView } }));
+    expect(within(checks).getByTestId('run-panel-summary')).toHaveTextContent('Not passed');
+    expect(within(checks).getByTestId('run-tab-acceptance')).toHaveTextContent('Not accepted yet: QE FAIL.');
+    expect(within(checks).getByTestId('run-tab-overridden')).toBeTruthy();
   });
 
   it('shows the exported orphan warning only while the event trail says it is orphaned', async () => {

@@ -192,9 +192,9 @@ export function deliverAcceptance(
 ): { text: string; tone: AcceptanceTone; blocksDeliver?: true; detail?: string } | null {
   const hasLine = summary !== null && summary !== undefined && typeof summary.line === 'string' && summary.line !== '';
   // rig 0.15.8: a check FAILED and the operator overrode it — the hand-over never reads green "passed"
-  // over that. Said in the overridden style; crew's own line stays behind Technical details. A QE
-  // acceptance that has not passed still leads (crew refuses the delivery then).
-  if (overridden !== null && !(hasLine && qeRequired && summary!.required && !summary!.satisfied)) {
+  // over that. Said in the overridden style; crew's own line stays behind Technical details. An
+  // acceptance that is required and not satisfied still leads: it is what stands now (pr-xreview #899).
+  if (overridden !== null && !(hasLine && summary!.required && !summary!.satisfied)) {
     return { text: overriddenLine(overridden), tone: 'overridden', ...(hasLine ? { detail: summary!.line } : {}) };
   }
   if (!hasLine) return null;

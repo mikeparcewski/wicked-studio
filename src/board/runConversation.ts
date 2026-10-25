@@ -248,11 +248,11 @@ export function finalWords(view: SessionView, steps: { done: number; total: numb
   const branch = d.pushed?.branch ?? null;
   const sentences: string[] = [];
   if (s !== 'completed' && steps.total > 0) sentences.push(`It stopped after ${steps.done} of ${steps.total} steps.`);
+  // An override replaces only "passed": checks that did not pass are still said (pr-xreview on studio#899).
   const overridden = checks.overridden ?? null;
   if (overridden !== null) sentences.push(overridden);
-  const tested = overridden !== null ? null
-    : checks.passed === true ? (checks.tests !== null ? `Tests pass (${checks.tests})` : 'The checks passed')
-      : checks.passed === false ? 'The checks did not pass' : null;
+  const tested = checks.passed === true ? (overridden !== null ? null : checks.tests !== null ? `Tests pass (${checks.tests})` : 'The checks passed')
+    : checks.passed === false ? 'The checks did not pass' : null;
   const reviewed = checks.reviewers.length > 0 ? andList(checks.reviewers) : null;
   if (tested !== null && reviewed !== null) sentences.push(`${tested}, and ${reviewed} reviewed and approved it.`);
   else if (tested !== null) sentences.push(`${tested}.`);

@@ -69,10 +69,20 @@ const OVERRIDE_IS_THE_PATH = "the operator's floor override is the path through"
 
 /** Whether the engine names the override as THE way through this failed floor: a check it classed
  *  `base_red_unseparated`, or its own words saying so. The card then suggests the override, never a retry
- *  or a fix (rig 0.15.8: "Retry this step with a note" was marked suggested over exactly that). */
-export function engineNamesFloorOverride(verdict: { floor?: { checks: readonly { classification: string | null }[] } | null; denial?: { reason?: string | null } | null } | null | undefined, summary?: string | null): boolean {
-  if (verdict?.floor?.checks.some((c) => c.classification === 'base_red_unseparated') === true) return true;
-  return [summary, verdict?.denial?.reason].some((t) => typeof t === 'string' && t.includes(OVERRIDE_IS_THE_PATH));
+ *  or a fix (rig 0.15.8: "Retry this step with a note" was marked suggested over exactly that).
+ *  A floor that also holds a known regression is never suggested away — the override would override the
+ *  regression too (pr-xreview on studio#899). */
+export function engineNamesFloorOverride(
+  verdict: { floor?: { checks: readonly { classification: string | null; regressions: readonly string[]; exitCode: number | null }[] } | null; denial?: { reason?: string | null } | null } | null | undefined,
+  summary?: string | null,
+): boolean {
+  const floor = verdict?.floor;
+  if (floor !== null && floor !== undefined && floor.checks.length > 0) {
+    if (floor.checks.some((c) => c.classification === 'regression' || c.regressions.length > 0)) return false;
+    return floor.checks.some((c) => c.classification === 'base_red_unseparated');
+  }
+  // No floor record in hand: the engine's own words, unless they also name a regression.
+  return [summary, verdict?.denial?.reason].some((t) => typeof t === 'string' && t.includes(OVERRIDE_IS_THE_PATH) && !/\[regression\b/.test(t));
 }
 
 /** The engine's deliver refusal options (wicked-core `deliver_refusal_prompt`). They follow the quoted

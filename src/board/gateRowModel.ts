@@ -41,6 +41,7 @@ import { waitsForJudge } from './assuranceModel.js';
 import { OPERATOR_JUDGMENT_LABEL, OPERATOR_JUDGMENT_TITLE, REJUDGE_ACTION, REJUDGE_LABEL, rejudgeTitle, type RejudgeOffer } from './rejudge.js';
 import { engineNamesFloorOverride, FLOOR_OVERRIDE_ACTION, FLOOR_OVERRIDE_CONSEQUENCE, FLOOR_OVERRIDE_KEY, FLOOR_OVERRIDE_TITLE, offersDeliverFloorOverride, offersFloorOverride } from './floorOverride.js';
 import { failingOnFace, type FailingOnFace } from './failingChecks.js';
+import { deliverLift } from '../components/deliverLiftModel.js';
 
 /**
  * SESSION GATE ROW MODEL (S15e): pure classification and choice set for the session thread's
@@ -487,7 +488,11 @@ function withDepth(base: BaseRowModel, input: SessionGateInput): GateRowModel {
   }
   // rig 0.15.8: the failing tests on the face — this gate's own failed floor only (an earlier unit's
   // floor is not what this gate asks about).
-  const failingTests = raw !== null && raw.ord === gate.ord && raw.outcome === 'fail' ? failingOnFace(raw.floor) : null;
+  // A refused hand-over's failure is the deliver phase's own re-verify, which emits no gate verdict
+  // (pr-xreview on studio#899): read it off the lift story for this gate's ord.
+  const failingTests = base.refusal !== undefined
+    ? failingOnFace(deliverLift(events, gate.ord)?.reverify ?? null)
+    : raw !== null && raw.ord === gate.ord && raw.outcome === 'fail' ? failingOnFace(raw.floor) : null;
   return {
     ...base, overflow, consequence, source,
     failing: qeNoVerdict ? [] : rec?.items ?? [],

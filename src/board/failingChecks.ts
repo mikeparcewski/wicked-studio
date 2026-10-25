@@ -16,10 +16,12 @@ export const FACE_MAX = 5;
 /** The classifications that say the check failed on the run's base as well (wicked-core#469 and on). */
 const ON_BASE = new Set(['pre_existing_in_sandbox', 'floor_env_mismatch', 'base_red_unseparated', 'unclassified_red_base']);
 
-/** A failure id as the runner printed it, without its status word or trailing message:
- *  `FAILED tests/a.py::t - AssertionError` → `tests/a.py::t`. */
+/** A failure id as the runner printed it, without its status word or pytest's trailing message:
+ *  `FAILED tests/a.py::t - AssertionError` → `tests/a.py::t`. Only a pytest id (`path::test`) has its
+ *  ` - <message>` cut: a ` - ` inside another runner's test name is part of the name. */
 export function failureName(id: string): string {
-  return id.trim().replace(/^(?:FAILED|FAIL|ERROR|✗|×)\s+/, '').replace(/\s+-\s+.*$/, '').trim();
+  const bare = id.trim().replace(/^(?:FAILED|FAIL|ERROR|✗|×)\s+/, '');
+  return bare.replace(/^(\S*::.*?)\s+-\s+.*$/, '$1').trim();
 }
 
 export interface FailingOnFace {
@@ -99,8 +101,8 @@ export function overriddenFloorsOf(
     const floor = at.ord === null ? null : floorAt(events ?? [], at.ord, at.attempt);
     const failed = failedChecks(floor);
     if (failed.length === 0) {
-      // No floor record in hand: the engine's own reason for the override still says whether the base was red.
-      if (!baseRedReason(o)) onBase = false;
+      // No floor record in hand: nothing says the base failed too, so nothing claims it.
+      onBase = false;
       continue;
     }
     for (const c of failed) {
@@ -109,13 +111,6 @@ export function overriddenFloorsOf(
     }
   }
   return { checks, onBase };
-}
-
-/** The engine's recorded reason for the overridden floor names a red base (`[base_red_unseparated …]`,
- *  "the run base … fails this check too"). */
-function baseRedReason(o: NonNullable<AssuranceReceipt['operatorJudges']>[number]): boolean {
-  const reason = o.reason;
-  return typeof reason === 'string' && /\b(?:base_red_unseparated|unclassified_red_base|pre_existing_in_sandbox)\b|\bfails this check too\b/.test(reason);
 }
 
 function andList(items: readonly string[]): string {
