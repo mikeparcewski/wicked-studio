@@ -593,8 +593,9 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
     ro.observe(el);
     return () => ro.disconnect();
   }, [phone]);
-  // The column starts open in a wide window (or as last toggled there); an overlay starts closed.
-  useEffect(() => {
+  // The column starts open in a wide window (or as last toggled there); an overlay starts closed. A layout
+  // effect, so a window that opens wide never paints a frame without its column.
+  useLayoutEffect(() => {
     if (chatList) setHistoryOpen(wide ? (useChatWindow.getState().pastChats ?? true) : false);
   }, [chatList, wide]);
   const toggleHistory = (): void => {

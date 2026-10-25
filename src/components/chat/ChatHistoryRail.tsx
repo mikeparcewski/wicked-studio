@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '../../api/client.js';
 import type { ChatHistoryEntry } from '../../api/chatHistory-wire.js';
 
@@ -45,6 +45,15 @@ export function ChatHistoryRail({ currentId, onOpen, onClose }: {
       .finally(() => setLoading(false));
   }, []);
   useEffect(() => { load(null); }, [load]);
+  // A column stays open while a new chat starts beside it: once the chat on screen is missing from the
+  // list, the first page is read again (once per chat), so the new chat shows up, marked.
+  const refreshedFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (currentId === null || items === null || loading || refreshedFor.current === currentId) return;
+    if (items.some((c) => c.id === currentId)) return;
+    refreshedFor.current = currentId;
+    load(null);
+  }, [currentId, items, loading, load]);
 
   return (
     <nav data-testid="chat-history" aria-label="Past chats" className="wk-chathist">

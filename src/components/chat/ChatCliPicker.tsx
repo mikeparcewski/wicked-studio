@@ -1,7 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { ChevronDown } from 'lucide-react';
 import type { CliOption } from '../../board/chatCli.js';
 import { OPT_IN_NOTE } from '../../store/composerSeats.js';
+
+/** The menu's width (as the stylesheet's `.wk-chatcli-menu`) and the gap it keeps from the dock's edge. */
+const MENU_W = 300;
+const MENU_EDGE_PX = 8;
 
 /**
  * The system chat's CLI picker (DES-SYSTEM-CHAT §5): one answering CLI. The menu lists every CLI; one
@@ -18,6 +22,17 @@ export function ChatCliPicker({ options, value, onChange, locked, onSignIn }: {
 }): React.ReactElement {
   const [open, setOpen] = useState(false);
   const boxRef = useRef<HTMLDivElement>(null);
+  // The menu opens leftward from the picker. Beside past chats the dock is narrower than the menu, so it
+  // takes only the room up to the dock's left edge (the dock clips anything that runs past it).
+  const [menuW, setMenuW] = useState<number | null>(null);
+  useLayoutEffect(() => {
+    if (!open) return;
+    const box = boxRef.current;
+    const dock = box?.closest('[data-testid="assist-dock"]') ?? null;
+    if (box === null || dock === null) { setMenuW(null); return; }
+    const room = Math.floor(box.getBoundingClientRect().right - dock.getBoundingClientRect().left - MENU_EDGE_PX);
+    setMenuW(room > 0 && room < MENU_W ? room : null);
+  }, [open]);
   useEffect(() => {
     if (!open) return undefined;
     const away = (e: MouseEvent): void => { if (boxRef.current !== null && !boxRef.current.contains(e.target as Node)) setOpen(false); };
@@ -47,7 +62,7 @@ export function ChatCliPicker({ options, value, onChange, locked, onSignIn }: {
         {!locked && <ChevronDown size={12} aria-hidden />}
       </button>
       {open && (
-        <div role="menu" aria-label="Answering CLI" data-testid="chat-cli-menu" className="wk-chatcli-menu">
+        <div role="menu" aria-label="Answering CLI" data-testid="chat-cli-menu" className="wk-chatcli-menu" style={menuW !== null ? { width: menuW } : undefined}>
           {options.map((o) => (
             <div key={o.key} className="wk-chatcli-row" data-ok={o.ok ? 'true' : 'false'}>
               <button

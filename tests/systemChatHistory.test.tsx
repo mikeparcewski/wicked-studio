@@ -41,6 +41,7 @@ vi.mock('../src/hooks/useEventStream.js', () => ({ useEventStream: () => undefin
 
 const { AskDock, PAST_CHATS_COLUMN_MIN_PX } = await import('../src/components/AskDock.js');
 const { ChatChromeContext } = await import('../src/components/chat/ChatWindow.js');
+const { ChatCliPicker } = await import('../src/components/chat/ChatCliPicker.js');
 const { setCachedRoster, clearCachedRoster } = await import('../src/store/rosterCache.js');
 const { useCapabilities } = await import('../src/store/capabilities.js');
 const { useLiveChatsStore } = await import('../src/store/liveChats.js');
@@ -238,6 +239,48 @@ describe('past chats beside the conversation (the approved mockup)', () => {
     expect(screen.queryByTestId('chat-history')).toBeNull();
     await user.click(screen.getByTestId('chat-history-toggle'));
     expect(screen.getByTestId('system-chat')).toHaveAttribute('data-past-chats', 'overlay');
+  });
+
+  it('a chat started beside the open column shows up in it, marked (review: agy P3)', async () => {
+    let opened: string | null = null;
+    listChatHistory.mockImplementation(() => Promise.resolve({
+      chats: [], nextCursor: null,
+      items: [...(opened !== null ? [ENTRY(opened, 'open', 'what is stopping work?')] : []), ENTRY('c-1', 'closed')],
+    }));
+    openChat.mockImplementation((body: ChatOpenBody) => { opened = body.chatId ?? null; return Promise.resolve({ chatId: body.chatId, seats: [{ cliKey: 'claude', ok: true }] }); });
+    atWidth(600);
+    const user = userEvent.setup();
+    dock();
+    expect(await screen.findAllByTestId('chat-history-entry')).toHaveLength(1);
+    await user.type(screen.getByTestId('assist-input'), 'what is stopping work?');
+    await user.click(screen.getByTestId('assist-send'));
+    await waitFor(() => expect(screen.getAllByTestId('chat-history-entry')).toHaveLength(2));
+    const rows = screen.getAllByTestId('chat-history-entry');
+    expect(rows[0]).toHaveAttribute('data-chat-id', opened!);
+    expect(rows[0]).toHaveAttribute('aria-current', 'true');
+    // Read again once for that chat, not on every render.
+    expect(listChatHistory).toHaveBeenCalledTimes(2);
+  });
+
+  it('the CLI menu keeps inside a conversation narrowed by the column (review: codex P2)', async () => {
+    const opts = [{ key: 'claude', label: 'Claude Code', ok: true, reason: null, signInPath: null, optIn: false }];
+    // A 522px window: the dock starts 187px in, and the picker ends 413px in.
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+      const x = this.dataset['testid'] === 'assist-dock' ? 187 : this.classList.contains('wk-chatcli') ? 313 : 0;
+      const w = this.dataset['testid'] === 'assist-dock' ? 334 : this.classList.contains('wk-chatcli') ? 100 : 0;
+      return { x, y: 0, left: x, top: 0, right: x + w, bottom: 26, width: w, height: 26, toJSON: () => ({}) } as DOMRect;
+    });
+    const user = userEvent.setup();
+    const { unmount } = render(<div data-testid="assist-dock"><ChatCliPicker options={opts} value="claude" onChange={() => undefined} locked={false} /></div>);
+    await user.click(screen.getByTestId('chat-cli'));
+    // 413 - 187 - 8: the menu ends at the picker and starts 8px inside the dock.
+    expect(screen.getByTestId('chat-cli-menu').style.width).toBe('218px');
+    unmount();
+    // With room for the whole menu it keeps the stylesheet's width.
+    vi.restoreAllMocks();
+    render(<div data-testid="assist-dock"><ChatCliPicker options={opts} value="claude" onChange={() => undefined} locked={false} /></div>);
+    await user.click(screen.getByTestId('chat-cli'));
+    expect(screen.getByTestId('chat-cli-menu').style.width).toBe('');
   });
 
   it('the stylesheet agrees: a 186px column, an overlay only below the column width and on a phone', () => {
