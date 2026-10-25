@@ -8,7 +8,8 @@ import { queueDecision, reportDecision } from '../board/undoQueue.js';
  * on. One sheet at a time; Esc or the close button shuts it; opening another object replaces it.
  */
 interface SheetsStore {
-  open: { ref: ObjectRef; tab: string } | null;
+  /** `compose`: the sheet opens with its message box out (a "Message this step" choice); a new value each ask. */
+  open: { ref: ObjectRef; tab: string; compose?: number } | null;
   /** The object last pointed at (hover or focus), for ⌘K; null when nothing is. */
   pointed: ObjectRef | null;
   /** Runs whose Stop is waiting in its undo window. */
@@ -33,14 +34,16 @@ export function claimSessionSheet(host: SessionSheetHost): () => void {
   return () => { if (sessionHost === host) sessionHost = null; };
 }
 
-export function openSheet(ref: ObjectRef, tab?: string): void {
+let composeAsks = 0;
+
+export function openSheet(ref: ObjectRef, tab?: string, opts: { compose?: boolean } = {}): void {
   if (ref.kind === 'session' && sessionHost !== null && sessionHost.owns(ref.sessionId)) {
     sessionHost.open(ref.sessionId, tab);
     return;
   }
   const tabs = SHEET_TABS[ref.kind];
   const t = tab !== undefined && tabs.some((x) => x.id === tab) ? tab : tabs[0]!.id;
-  useSheets.setState({ open: { ref, tab: t } });
+  useSheets.setState({ open: { ref, tab: t, ...(opts.compose === true ? { compose: ++composeAsks } : {}) } });
 }
 
 export function closeSheet(): void {

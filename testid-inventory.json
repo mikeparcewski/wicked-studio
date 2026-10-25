@@ -12,8 +12,8 @@
   "studioVersion": "0.11.8",
   "counts": {
     "files": 234,
-    "occurrences": 2988,
-    "static": 2590,
+    "occurrences": 2990,
+    "static": 2592,
     "dynamic": 69,
     "computed": 24
   },
@@ -11784,6 +11784,18 @@
     },
     {
       "testId": "session-working",
+      "files": [
+        "src/components/session/SessionView.tsx"
+      ]
+    },
+    {
+      "testId": "session-working-menu",
+      "files": [
+        "src/components/session/SessionView.tsx"
+      ]
+    },
+    {
+      "testId": "session-working-text",
       "files": [
         "src/components/session/SessionView.tsx"
       ]

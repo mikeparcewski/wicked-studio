@@ -5,7 +5,7 @@ import { ApiError, api } from '../../api/client.js';
 import type { ChatPathView, SessionView as RunView } from '../../api/types.js';
 import { needsByRun } from '../../board/deskModel.js';
 import type { NeedRow } from '../../board/needsYou.js';
-import { CLOSED_LINE, composerScopeNote, conversationOf, parseSessionId, runChatIdOf, sessionPath, runState, sessionTitle, type Conversation, type SessionState } from '../../board/sessionModel.js';
+import { CLOSED_LINE, MESSAGE_STEP_LABEL, composerScopeNote, conversationOf, parseSessionId, runChatIdOf, sessionPath, runState, sessionTitle, type Conversation, type SessionState } from '../../board/sessionModel.js';
 import type { Navigate } from '../../hooks/useRoute.js';
 import { useCapabilities } from '../../store/capabilities.js';
 import { useSessionDrafts } from '../../store/sessionDrafts.js';
@@ -25,6 +25,14 @@ import { Composer, type ComposerSend, type ComposerSuggestion } from './Composer
 import { quoteLabel } from '../../board/aboutChips.js';
 import { addAboutChip } from '../../store/composerChips.js';
 import { claimSessionSheet, openSheet, stopRun, useSheets } from '../../store/sheets.js';
+import { stepLabelOf } from '../../board/chainModel.js';
+import { OverflowMenu } from '../ui/OverflowMenu.js';
+
+/** The working step in the chain's own word (`walkthrough_review#2` → its step word: a repeat's `#n` is the unit
+ *  key's, never the step's name). */
+function workingStepWord(key: string): string {
+  return stepLabelOf(key.replace(/#\d+$/, ''));
+}
 import type { DecisionView } from '../../api/decisions.js';
 import { turnKey, useDecisionsStore } from '../../store/decisions.js';
 import { DecisionLine } from '../decisions/DecisionLine.js';
@@ -57,7 +65,6 @@ import { panelPlaceOf } from '../../board/runPanelModel.js';
 import { useRunPanel } from '../../store/runPanel.js';
 import { RunHostProvider } from '../editorHost/RunHostContext.js';
 import { RunBlock } from './RunConversation.js';
-import { stepWord } from '../../board/runConversation.js';
 
 /** S16a-2c: the hash that lands a run's session on its sheet's Governance tab. */
 export const GOVERNANCE_HASH = '#governance';
@@ -107,7 +114,7 @@ type ThreadEntry =
   | { kind: 'line'; key: string; at: number; line: AskLine }
   | { kind: 'typing'; key: string; at: number; who: string }
   /** A run's step is executing: the helper on it is working now (studio: the thread shows it). */
-  | { kind: 'working'; key: string; at: number; who: string; runId: string; step: string }
+  | { kind: 'working'; key: string; at: number; who: string; runId: string; ord: number; step: string }
   | { kind: 'proposal'; key: string; at: number; view: RunView; ask: AskProposal };
 
 
@@ -520,7 +527,7 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
         const unit = v.units.find((u) => u.ord === ord);
         out.push({
           kind: 'working', key: `working:${v.session.id}`, at: Number.MAX_SAFE_INTEGER,
-          who: unit?.assigned_cli ?? 'helper', runId: v.session.id, step: phaseLabel(v.session.id, v.units, ord),
+          who: unit?.assigned_cli ?? 'helper', runId: v.session.id, ord, step: phaseLabel(v.session.id, v.units, ord),
         });
       }
     }
@@ -1037,10 +1044,14 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
               ? <AskTyping key={e.key} who={e.who} />
               : e.kind === 'working'
               ? (
-                <p key={e.key} data-testid="session-working" data-run-id={e.runId} className="wk-chat-working" aria-live="polite">
+                <div key={e.key} data-testid="session-working" data-run-id={e.runId} data-object={`step:${e.runId}:${e.ord}`} className="wk-chat-working">
                   <span aria-hidden className="wk-chat-working-dots"><i /><i /><i /></span>
-                  <span className="wk-chat-working-who">{who.role === 'crew' ? 'studio' : who.name}</span> Working on {stepWord(e.step)}…
-                </p>
+                  {/* rig 0.15.8: the step in the chain's own word ("Check", never "Verify" beside it). */}
+                  <span data-testid="session-working-text" aria-live="polite"><span className="wk-chat-working-who">{who.role === 'crew' ? 'studio' : who.name}</span> Working on {workingStepWord(e.step)}…</span>
+                  {/* rig 0.15.8: the composer says "message a working step from its ⋯" — this is that ⋯. */}
+                  <OverflowMenu label={`More for ${workingStepWord(e.step)}`} data-testid="session-working-menu"
+                    items={[{ id: 'message', label: MESSAGE_STEP_LABEL, onSelect: () => openSheet({ kind: 'step', runId: e.runId, ord: e.ord }, undefined, { compose: true }) }]} />
+                </div>
               )
               : e.kind === 'proposal'
                 ? <AskProposalBlock key={e.key} view={e.view} ask={e.ask} onBringBack={() => setDraft(sessionId, 'Go ahead with the plan you proposed.')} />

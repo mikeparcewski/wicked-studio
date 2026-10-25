@@ -170,6 +170,9 @@ function StepSheet({ r, tab, runs, navigate }: { r: Extract<ObjectRef, { kind: '
   const can = view === null ? "This run is not available from Studio's service."
     : !MESSAGEABLE.has(view.session.status) ? 'It is not working right now, so it cannot read a message.' : null;
   const [messaging, setMessaging] = useState(false);
+  // "Message this step" (the thread's working line ⋯) opens the sheet with the box out.
+  const compose = useSheets((s) => s.open?.compose);
+  useEffect(() => { if (compose !== undefined) setMessaging(true); }, [compose]);
   const p = primaryAction('step');
   return (
     <Sheet

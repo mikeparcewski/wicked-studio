@@ -87,7 +87,8 @@ PAGE = """() => {
     oldCard: !!document.querySelector('[data-testid="session-thread"] [data-testid="session-proposal"][data-variant="card"]'),
     details: !!document.querySelector('[data-testid="chat-run-details"]'),
     detailsOpen: !!document.querySelector('[data-testid="chat-run-details"][open]'),
-    working: [...document.querySelectorAll('[data-testid="session-working"]')].map(txt),
+    working: [...document.querySelectorAll('[data-testid="session-working"]')].map((n) => txt(n.querySelector('[data-testid="session-working-text"]') ?? n)),
+    workingMenu: document.querySelectorAll('[data-testid="session-working"] [data-testid="session-working-menu-button"]').length,
     helperBubble: bodyBg('[data-testid="session-turn"][data-who="helper"] > .wk-session-text'),
     stepBubble: bodyBg('[data-testid="chat-step"] .wk-chat-body'),
     pageBg: getComputedStyle(document.body).backgroundColor,
@@ -188,6 +189,7 @@ with sync_playwright() as p:
         page.screenshot(path=str(SHOTS / f"desk-chat-native-live-{theme}.png"))
         check(f"{theme}-one-working-line", len(d["working"]) == 1 and d["working"][0].endswith("Working on Build…")
               and [s["key"] for s in d["steps"]] == ["understand"] and d["finalText"] is None, working=d["working"])
+        check(f"{theme}-working-step-menu", d["workingMenu"] == 1, menus=d["workingMenu"])
         d = open_session(page, "/s/chat-cn-qa", theme, '[data-testid="session-turn"][data-who="helper"]')
         page.screenshot(path=str(SHOTS / f"desk-chat-native-qa-{theme}.png"))
         check(f"{theme}-qa-bubbles", len(d["you"]) == 2 and d["helperBubble"] not in (None, d["pageBg"], "rgba(0, 0, 0, 0)")
