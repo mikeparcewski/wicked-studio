@@ -117,20 +117,24 @@ with sync_playwright() as p:
     tab.click()
     page.get_by_test_id("desk-tab-memory").wait_for(state="visible", timeout=8000)
     settled(page)
-    page.wait_for_function("() => /2/.test(document.querySelector('[data-testid=\"memory-stat-total\"]')?.textContent ?? '')", timeout=10000)
+    # The calm page (2026-10-26): one sentence with the store's total, and ONE action that reviews what waits.
+    page.wait_for_function("() => /remember 2 things/.test(document.querySelector('[data-testid=\"memory-sentence\"]')?.textContent ?? '')", timeout=10000)
+    page.wait_for_function("() => /Review 1 proposal/.test(document.querySelector('[data-testid=\"memory-view-proposals\"]')?.textContent ?? '')", timeout=10000)
     first = rows(page)
-    total = page.get_by_test_id("memory-stat-total").inner_text()
-    review = page.get_by_test_id("memory-stat-review").inner_text()
+    total = page.get_by_test_id("memory-sentence").inner_text()
+    review = page.get_by_test_id("memory-view-proposals").inner_text()
     page.wait_for_timeout(300)
     page.screenshot(path=str(SHOTS / "desk-memory-light.png"))
     check("browse", tabs.index("Memory") == tabs.index("Steer") + 1
           and [r["id"] for r in first] == ["mem-ops", "mem-mac"]
-          and "1 semantic · 1 episodic" in total and "1" in review
+          and "remember 2 things" in total and "1 proposal is waiting" in total and review == "Review 1 proposal"
           and page.evaluate(ADDR)["tab"] == "memory" and no_hscroll(page),
           tabs=tabs, rows=first, total=total, review=review)
-    page.locator('[data-testid="memory-kind"][data-tier="episodic"]').click()
+    # The kind and tag filters sit with the quiet search.
+    page.get_by_test_id("memories-search-open").click()
+    page.get_by_test_id("memory-kind").select_option("episodic")
     by_kind = [r["id"] for r in rows(page)]
-    page.locator('[data-testid="memory-kind"][data-tier="all"]').click()
+    page.get_by_test_id("memory-kind").select_option("all")
     page.get_by_test_id("memories-search").fill("codesigned")
     page.get_by_test_id("memories-search-go").click()
     page.wait_for_function("() => document.querySelectorAll('[data-testid=\"memory-row\"]').length === 1", timeout=10000)
@@ -190,12 +194,12 @@ with sync_playwright() as p:
     page.get_by_test_id("desk-tabs-more").click()
     page.get_by_test_id("desk-more-tab-steer").click()
     page.get_by_test_id("steer-surface").wait_for(state="visible", timeout=15000)
-    page.wait_for_function("() => /\\d/.test(document.querySelector('[data-testid=\"steer-stat-review\"]')?.textContent ?? '')", timeout=10000)
-    steer_review = page.get_by_test_id("steer-stat-review").inner_text()
+    page.wait_for_function("() => /\\d/.test(document.querySelector('[data-testid=\"steer-view-proposals\"]')?.textContent ?? '')", timeout=10000)
+    steer_review = page.get_by_test_id("steer-view-proposals").inner_text()
     memory_link = page.get_by_test_id("steer-memories").count()
     page.wait_for_timeout(300)
     page.screenshot(path=str(SHOTS / "desk-memory-steer-light.png"))
-    page.get_by_test_id("steer-stat-review-open").click()
+    page.get_by_test_id("steer-view-proposals").click()
     page.locator('[data-testid="proposals-section"][data-kind="policy"] [data-testid="proposal-card"]').first.wait_for(state="visible", timeout=10000)
     page.wait_for_timeout(300)
     page.screenshot(path=str(SHOTS / "desk-memory-steer-proposals.png"))

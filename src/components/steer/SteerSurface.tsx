@@ -345,7 +345,7 @@ export function SteerSurface({ pathname, search, navigate: navigateRaw, runs = [
   const action = (
     <CalmAction label="Add a rule" testId="steer-add-rule" icon={<Plus size={16} aria-hidden />} onClick={addRule} disabled={read.kind !== 'ok'}
       title={read.kind === 'ok' ? undefined : 'Available once the rules have loaded (a new id must not collide with one in force)'}
-      menu={moreMoves} menuLabel="More ways to add and manage rules" menuTestId="steer-more" />
+      menu={moreMoves} menuLabel="More ways to add and manage rules" menuTestId={/* testid */ 'steer-more'} />
   );
 
   // The seven steering types are sub-pages of one layout: a quiet picker stands in for the list's label.
@@ -385,8 +385,8 @@ export function SteerSurface({ pathname, search, navigate: navigateRaw, runs = [
           </span>
         )}
         meta={r.retired === true ? 'Retired' : fires === null ? null : <span data-testid="rules-row-fires" data-fires={n ?? 0}>{firesWord(n)}</span>}
-        href={at(openPath(r.id))} onOpen={() => navigate(openPath(r.id))} openTestId="rules-row-open" openLabel={`${title}: open the rule`}
-        menuLabel={`More for ${title}`} menuTestId="steer-row-more"
+        href={at(openPath(r.id))} onOpen={() => navigate(openPath(r.id))} openTestId={/* testid */ 'rules-row-open'} openLabel={`${title}: open the rule`}
+        menuLabel={`More for ${title}`} menuTestId={/* testid */ 'steer-row-more'}
         menu={[
           { id: 'open', label: 'Open details', onSelect: () => navigate(openPath(r.id)) },
           ...(r.retired !== true ? [{ id: 'retire', label: 'Retire…', danger: true, testId: 'steer-retire', onSelect: () => setRetiring({ rule: r, token: ++opened.current }) }] : []),
@@ -424,7 +424,7 @@ export function SteerSurface({ pathname, search, navigate: navigateRaw, runs = [
   const tools = (
     <>
       {view !== 'proposals' && (
-        <CalmSearch value={q} onChange={setQ} placeholder="Search rules" label="Search rules" testId="steer-search" buttonTestId="steer-search-open"
+        <CalmSearch value={q} onChange={setQ} placeholder="Search rules" label="Search rules" testId="steer-search" buttonTestId={/* testid */ 'steer-search-open'}
           startOpen={facet !== null}
           extra={facetPairs.length > 0 ? <FacetAutocomplete testId="steer-facet" options={facetPairs} value={facet} onChange={setFacet} label="Filter rules by tags" placeholder="Filter by tag" /> : undefined} />
       )}
@@ -504,7 +504,7 @@ export function SteerSurface({ pathname, search, navigate: navigateRaw, runs = [
     <div className="wk-se wk-se--calm" data-testid="steer-surface" data-steering-type={type ?? 'all'}>
       <div className="wk-se-scroll wk-calm" ref={scrollRef}>
         <div className="wk-calm-col">
-          <CalmHead title={title ?? 'Steering'} sentence={sentence} sentenceTestId="steer-sentence" action={action} />
+          <CalmHead title={title ?? 'Steering'} sentence={sentence} sentenceTestId={/* testid */ 'steer-sentence'} action={action} />
           {list}
           {health}
         </div>

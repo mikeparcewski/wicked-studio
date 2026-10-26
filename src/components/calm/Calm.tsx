@@ -170,7 +170,7 @@ export function CalmSearch({ value, onChange, onSubmit, placeholder, label, test
  * button). `menu` puts a ⋯ at the end; `details` gives the row a disclosure whose contents open under it.
  */
 export function CalmRow({ tone, title, sub, meta, metaTone = 'quiet', href, onOpen, menu, menuLabel, menuTestId, details, detailsLabel, trailing,
-  'data-testid': testId, openTestId, titleAttr, data, openLabel }: {
+  'data-testid': testId, openTestId, titleAttr, data, openData, openLabel }: {
   tone: CalmTone;
   title: React.ReactNode;
   sub?: React.ReactNode | undefined;
@@ -192,11 +192,16 @@ export function CalmRow({ tone, title, sub, meta, metaTone = 'quiet', href, onOp
   openTestId?: string | undefined;
   titleAttr?: string | undefined;
   data?: Record<string, string | number | boolean | undefined> | undefined;
+  /** Data attributes for the main target too (a journey selects it by them). */
+  openData?: Record<string, string | undefined> | undefined;
   openLabel?: string | undefined;
 }): React.ReactElement {
   const [open, setOpen] = useState(false);
   const id = useId();
-  const dataAttrs = Object.fromEntries(Object.entries(data ?? {}).filter(([, v]) => v !== undefined).map(([k, v]) => [`data-${k}`, String(v)]));
+  const attrs = (d: Record<string, string | number | boolean | undefined> | undefined): Record<string, string> =>
+    Object.fromEntries(Object.entries(d ?? {}).filter(([, v]) => v !== undefined).map(([k, v]) => [`data-${k}`, String(v)]));
+  const dataAttrs = attrs(data);
+  const mainAttrs = attrs(openData);
   const body = (
     <>
       <span aria-hidden className="wk-calm-dot" data-tone={tone} />
@@ -209,12 +214,12 @@ export function CalmRow({ tone, title, sub, meta, metaTone = 'quiet', href, onOp
   );
   // The main target: a link (opens somewhere), a button that opens the details, or a button with its own move.
   const main = href !== undefined
-    ? <a href={href} className="wk-calm-row-main" data-testid={openTestId} aria-label={openLabel}
+    ? <a href={href} className="wk-calm-row-main" data-testid={openTestId} aria-label={openLabel} {...mainAttrs}
         onClick={(e) => { if (onOpen === undefined || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return; e.preventDefault(); onOpen(); }}>{body}</a>
     : onOpen !== undefined
-      ? <button type="button" className="wk-calm-row-main" data-testid={openTestId} aria-label={openLabel} onClick={onOpen}>{body}</button>
+      ? <button type="button" className="wk-calm-row-main" data-testid={openTestId} aria-label={openLabel} onClick={onOpen} {...mainAttrs}>{body}</button>
       : details !== undefined
-        ? <button type="button" className="wk-calm-row-main" data-testid={openTestId} aria-expanded={open} aria-controls={`${id}-details`} aria-label={openLabel}
+        ? <button type="button" className="wk-calm-row-main" data-testid={openTestId} aria-expanded={open} aria-controls={`${id}-details`} aria-label={openLabel} {...mainAttrs}
             onClick={() => setOpen((o) => !o)}>{body}</button>
         : <span className="wk-calm-row-main wk-calm-row-main--static">{body}</span>;
   // With a link or a move as the main target, the details get their own small disclosure.
@@ -234,8 +239,9 @@ export function CalmRow({ tone, title, sub, meta, metaTone = 'quiet', href, onOp
           <span className="wk-calm-row-menu"><OverflowMenu label={menuLabel ?? 'More'} items={menu} {...(menuTestId !== undefined ? { 'data-testid': menuTestId } : {})} /></span>
         )}
       </div>
-      {details !== undefined && open && (
-        <div id={`${id}-details`} className="wk-calm-row-details">{details}</div>
+      {/* Rendered closed too (hidden), so what the row knows stays in the page for find-in-page off and for tests. */}
+      {details !== undefined && (
+        <div id={`${id}-details`} className="wk-calm-row-details" hidden={!open}>{details}</div>
       )}
     </li>
   );

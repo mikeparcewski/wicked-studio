@@ -34,8 +34,9 @@ export const UNKNOWN_REREADS = 8;
 
 const TONE: Record<Cell['tone'], CalmTone> = { ok: 'ok', gate: 'gate', fail: 'fail', quiet: 'quiet' };
 
-function cellWords(c: Cell): string {
-  return `${c.word}${c.sub !== null ? ` · ${c.sub}` : ''}`;
+/** A cell's word (the testid's text, as the old table had it) and its muted sub. */
+function CellWords({ c, testId }: { c: Cell; testId: string }): React.ReactElement {
+  return <><span data-testid={testId} className={`wk-agents-word wk-agents-word--${c.tone}`}>{c.word}</span>{c.sub !== null && <span className="wk-calm-sub-inline">{` · ${c.sub}`}</span>}</>;
 }
 
 /** The name's second line when there is no week to tell: the account kind, opt-in or left out of new work. */
@@ -56,7 +57,7 @@ function AgentLine({ r, open }: { r: AgentRow; open: (key: string) => void }): R
       tone={status.move === 'signin' ? 'quiet' : TONE[status.tone]} title={r.name}
       sub={sub}
       meta={status.move === 'signin' ? undefined : <span data-testid="agents-status">{status.word}</span>} metaTone={TONE[status.tone]}
-      onOpen={() => open(r.key)} openTestId="agents-open" openLabel={`Open ${r.name}: new work, sign-in and sign-out`}
+      onOpen={() => open(r.key)} openTestId={/* testid */ 'agents-open'} openData={{ agent: r.key }} openLabel={`Open ${r.name}: new work, sign-in and sign-out`}
       trailing={status.move === 'signin'
         ? <button type="button" data-testid="agents-fix" data-agent={r.key} data-tone={fix?.tone ?? 'fail'} className="wk-calm-btn wk-calm-btn--link"
             aria-label={`Sign in to ${r.name}`} onClick={() => open(r.key)}>Sign in</button>
@@ -69,10 +70,10 @@ function AgentLine({ r, open }: { r: AgentRow; open: (key: string) => void }): R
       details={(
         <>
           <CalmFacts data-testid="agents-details" facts={[
-            { k: 'Ready for work', v: cellWords(r.ready), testId: 'agents-ready' },
-            { k: 'Sign-in', v: cellWords(r.sign), testId: 'agents-sign' },
-            { k: 'How it’s governed', v: cellWords(r.governed), testId: 'agents-governed' },
-            { k: 'Version', v: cellWords(r.version), testId: 'agents-version' },
+            { k: 'Ready for work', v: <CellWords c={r.ready} testId="agents-ready" /> },
+            { k: 'Sign-in', v: <CellWords c={r.sign} testId="agents-sign" /> },
+            { k: 'How it’s governed', v: <CellWords c={r.governed} testId="agents-governed" /> },
+            { k: 'Version', v: <CellWords c={r.version} testId="agents-version" /> },
             ...(r.account !== null ? [{ k: 'Account', v: r.account }] : []),
             { k: 'New work', v: r.optIn ? 'Only when you pick it' : r.picked ? 'Used for new work' : 'Not used for new work' },
             { k: 'Reviews', v: r.reviews ? (r.alsoReviews ? 'Also reviews work' : 'Can review work') : 'Doesn’t review right now' },
@@ -231,7 +232,7 @@ export function AgentsPanel({ search, navigate, basePath = AGENTS_PATH }: {
 
   return (
     <div data-testid="agents-panel" className="wk-agents-panel wk-calm-col">
-      <CalmHead title="Agents" sentence={sentence} sentenceTestId="agents-sentence" action={v.hasRoster && v.rows.length > 0 ? undefined : null} />
+      <CalmHead title="Agents" sentence={sentence} sentenceTestId={/* testid */ 'agents-sentence'} action={v.hasRoster && v.rows.length > 0 ? undefined : null} />
       {body}
       {fix !== null && known && <AgentModal agentKey={fix} onClose={close} />}
     </div>

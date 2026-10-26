@@ -210,7 +210,8 @@ with sync_playwright() as p:
     page.keyboard.press("Escape")
 
     # ── 7b. S12: the Rules page under the drawer — the frame, the sentence, the rows grouped ──────
-    sentence = page.get_by_test_id("rules-sentence").inner_text()
+    # The breakdown line sits in the page's quiet "Rule health" disclosure (closed): read its text.
+    sentence = page.get_by_test_id("rules-sentence").text_content()
     rows = page.get_by_test_id("rules-row").evaluate_all("els => els.map(e => [e.dataset.ruleId, e.dataset.group])")
     check("rules-page", sentence == "3 rules in force · 1 from your words · 1 testing rule"
           and rows == [["proposal:pr-auto", "words"], ["TST-1002", "testing"], ["PAT-100", "other"]]
@@ -231,6 +232,8 @@ with sync_playwright() as p:
     check("rules-close", page.get_by_test_id("steering-rule-drawer").count() == 0 and page.get_by_test_id("rules-row").count() == 3,
           drawers=page.get_by_test_id("steering-rule-drawer").count(), rows=page.get_by_test_id("rules-row").count())
     # "Edit as a table" reaches the steering grid (DES-steer-eval §2.2); Back returns to the Steer surface.
+    # Behind Add a rule's menu since the calm page (2026-10-26).
+    page.get_by_test_id("steer-more-button").click()
     page.get_by_test_id("steer-table").click()
     page.wait_for_function("() => " + ADDR + ".pathname === '/steering/policies' && " + ADDR + ".searchParams.get('view') === 'table'", timeout=8000)
     try:
@@ -241,7 +244,7 @@ with sync_playwright() as p:
     page.go_back()
     # Back remounts the page in its loading state: wait for the rows the read restores, not just the address.
     page.wait_for_function("() => " + ADDR + ".pathname === '/rules' && document.querySelectorAll('[data-testid=\"rules-row\"]').length === 3", timeout=15000)
-    check("rules-all", page.get_by_test_id("steer-surface").count() == 1 and page.get_by_test_id("rules-sentence").inner_text() == "3 rules in force · 1 from your words · 1 testing rule")
+    check("rules-all", page.get_by_test_id("steer-surface").count() == 1 and page.get_by_test_id("rules-sentence").text_content() == "3 rules in force · 1 from your words · 1 testing rule")
 
     check("no-followed", "Followed" not in page.evaluate("() => document.body.innerText"))
 

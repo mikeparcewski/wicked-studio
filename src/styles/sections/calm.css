@@ -189,7 +189,12 @@ select.wk-calm-pick:not([multiple]):not([size]):hover { background-color: color-
   .wk-calm-actions, .wk-calm-action { width: 100%; }
   .wk-calm-action > .wk-calm-btn--primary { flex: 1 1 auto; }
   .wk-calm-row { margin: 0 -12px; }
-  .wk-calm-row-main { gap: 14px; padding: 14px 4px 14px 12px; }
+  /* The meta word moves under the words, so the title keeps the width (and may take two lines). */
+  .wk-calm-row-main { display: grid; grid-template-columns: 10px minmax(0, 1fr); column-gap: 14px; row-gap: 4px; padding: 14px 4px 14px 12px; }
+  .wk-calm-dot { align-self: start; margin-top: 6px; }
+  .wk-calm-row-meta { grid-column: 2; text-align: left; white-space: normal; }
+  .wk-calm-row-title { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  .wk-calm-row-sub { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
   .wk-calm-row-line { padding-right: 4px; }
   .wk-calm-row-details { padding: 0 12px 16px 36px; }
   .wk-calm-row-meta { font-size: 13px; }
@@ -211,3 +216,10 @@ select.wk-calm-pick--field:not([multiple]):not([size]) {
 .wk-calm-btn--link.wk-agents-fixlink--gate:hover { background: color-mix(in oklab, var(--status-gate) 20%, transparent); color: var(--ink-high); }
 .wk-calm-typepick { display: inline-flex; }
 .wk-calm-proposals { display: flex; flex-direction: column; gap: 12px; }
+.wk-calm-sub-inline { color: var(--ink-muted); }
+
+/* A phone: every control on a row is a full tap target. */
+@media (max-width: 767px) {
+  .wk-calm-btn--link, .wk-calm-icon-btn, .wk-calm .wk-menu-wrap > .wk-btn, .wk-calm-quiet-btn { min-height: 44px; min-width: 44px; }
+  .wk-calm-seg-btn { height: 40px; }
+}

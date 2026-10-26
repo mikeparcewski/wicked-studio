@@ -180,10 +180,10 @@ export function MemoryPage({ search, navigate, address = (p) => p, project = nul
   // One action: review what is waiting when something is; otherwise add a memory. The rest sit in its menu.
   const action = waiting > 0 && view !== 'proposals'
     ? <CalmAction label={`Review ${waiting} ${waiting === 1 ? 'proposal' : 'proposals'}`} testId="memory-view-proposals" onClick={() => go('proposals')}
-        menuLabel="More for memory" menuTestId="memory-more"
+        menuLabel="More for memory" menuTestId={/* testid */ 'memory-more'}
         menu={[{ id: 'add', label: 'Add a memory…', testId: 'memory-add', onSelect: addIt }, { id: 'refresh', label: 'Refresh', testId: 'memories-refresh', onSelect: refresh }]} />
     : <CalmAction label="Add a memory" testId="memory-add" icon={<Plus size={16} aria-hidden />} onClick={addIt}
-        menuLabel="More for memory" menuTestId="memory-more"
+        menuLabel="More for memory" menuTestId={/* testid */ 'memory-more'}
         menu={[
           ...(view === 'proposals' ? [] : [{ id: 'proposals', label: pending === 'unsupported' ? 'Proposals (not available here)' : 'Show proposals', testId: 'memory-view-proposals', onSelect: () => go('proposals'), disabled: pending === 'unsupported' ? 'This crew has no proposal review' : null }]),
           { id: 'refresh', label: 'Refresh', testId: 'memories-refresh', onSelect: refresh },
@@ -199,8 +199,8 @@ export function MemoryPage({ search, navigate, address = (p) => p, project = nul
         tone="accent" title={<span data-testid="memory-content">{m.content}</span>} titleAttr={m.content}
         sub={<span data-testid="memory-meta">{origin === 'told' ? 'Told by you' : origin === 'session' ? 'Learned in a session' : tierWord(m.tier)} · <span data-testid="memory-where">{where}</span></span>}
         meta={added ?? undefined}
-        openTestId="memory-open" openLabel={`${shortContent(m.content)}: show details`}
-        menuLabel={`More for ${shortContent(m.content)}`} menuTestId="memory-actions"
+        openTestId={/* testid */ 'memory-open'} openLabel={`${shortContent(m.content)}: show details`}
+        menuLabel={`More for ${shortContent(m.content)}`} menuTestId={/* testid */ 'memory-actions'}
         menu={[
           { id: 'edit', label: 'Edit…', testId: 'memory-edit', onSelect: () => setEditing({ memory: m, token: ++opened.current }) },
           { id: 'retire', label: 'Retire', danger: true, testId: 'memory-retire', onSelect: () => setRetiring({ memory: m, width: 'item', token: ++opened.current }) },
@@ -231,7 +231,7 @@ export function MemoryPage({ search, navigate, address = (p) => p, project = nul
   ) : null;
   const searchTools = view === 'memories' ? (
     <CalmSearch value={queryInput} onChange={setQueryInput} onSubmit={applyQuery} placeholder="Search what was learned" label="Search memories"
-      testId="memories-search" buttonTestId="memories-search-open" startOpen={filtered}
+      testId="memories-search" buttonTestId={/* testid */ 'memories-search-open'} startOpen={filtered}
       extra={<>
         <button type="button" className="wk-calm-btn wk-calm-btn--link" data-testid="memories-search-go" onClick={applyQuery}>Search</button>
         {kindPick}
@@ -263,9 +263,9 @@ export function MemoryPage({ search, navigate, address = (p) => p, project = nul
         <CalmEmpty data-testid="memories-empty"
           title={filtered ? (memories.length > 0 ? 'No memory matches these filters.' : `No memory matches “${query}”.`)
             // The store's own total says otherwise (#406): never call a non-empty store empty.
-            : total !== null && total > 0 ? `The store holds ${total} ${total === 1 ? 'memory' : 'memories'}, but none were listed.`
+            : total !== null && total > 0 ? `The store holds ${total} ${total === 1 ? 'memory' : 'memories'}, but none were listed. Try a search.`
             : 'Your agents haven’t learned anything yet.'}
-          body={filtered ? undefined : total !== null && total > 0 ? <p>Try a search.</p>
+          body={filtered || (total !== null && total > 0) ? undefined
             : <p>When an agent learns something in a session, or you tell it something, it shows up here. Agents propose what to keep; you approve it.</p>}
           action={filtered
             ? <CalmButton onClick={clearFilters} testId="memories-clear">Clear filters</CalmButton>
@@ -288,7 +288,7 @@ export function MemoryPage({ search, navigate, address = (p) => p, project = nul
     <div className="wk-se wk-mem wk-se--calm" data-testid="memory-page" data-view={view}>
       <div className="wk-se-scroll wk-calm" ref={scrollRef}>
         <div className="wk-calm-col">
-          <CalmHead title="Memory" sentence={<span data-testid="memory-intro">{sentence}</span>} sentenceTestId="memory-sentence" action={action} />
+          <CalmHead title="Memory" sentence={<span data-testid="memory-intro">{sentence}</span>} sentenceTestId={/* testid */ 'memory-sentence'} action={action} />
           {list}
         </div>
       </div>

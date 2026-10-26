@@ -70,7 +70,7 @@ describe('one count for "ready"', () => {
     cleanup();
 
     render(<AgentsPage search="" navigate={vi.fn()} />);
-    await waitFor(() => expect(screen.getByTestId('agents-tile-ready')).toHaveTextContent('Ready for work2 / 51 more with limits · 1 can’t tell · 1 signed out'));
+    await waitFor(() => expect(screen.getByTestId('agents-tile-ready')).toHaveTextContent('2 / 5 · 1 more with limits · 1 can’t tell · 1 signed out'));
   });
 });
 
@@ -115,7 +115,7 @@ describe('the Desk tile in every reading state, and with reviewer-only seats', (
     expect(tile().querySelector('.wk-stat-note')).toHaveTextContent(readyNote(t));
     cleanup();
     render(<AgentsPage search="" navigate={vi.fn()} />);
-    await waitFor(() => expect(screen.getByTestId('agents-tile-ready')).toHaveTextContent(`Ready for work${t.ready} / 6${readyNote(t)}`));
+    await waitFor(() => expect(screen.getByTestId('agents-tile-ready')).toHaveTextContent(`${t.ready} / 6 · ${readyNote(t)}`));
   });
 });
 
