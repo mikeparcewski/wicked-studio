@@ -8,6 +8,8 @@ designed list, not boxes in boxes:
   1. the folders are one segmented control: the selected folder is a raised pill, each count a badge;
   2. every item has a round kind mark (an icon; decision / failure each in its own tone), the unread
      ones a dot on it; items have no border box of their own and are divided by hairlines;
+  (the inbox itself is defined from the page: an outline, or since 2026-10-26 a raised shadow a step
+     above a plain card's);
   3. section labels carry their counts ("Decisions · 2");
   4. an item's moves are quiet (no border) at the end of its job line;
   5. the reading pane is a raised panel (its own surface, no side rule) with a kind tag ("Decision",
@@ -73,7 +75,9 @@ LOOK = r"""() => {
         subj: contrast(q('[data-testid="need-line"]', r)), sender: contrast(q('.wk-inbox-sender', r)) }; }),
     sections: qa('[data-testid="need-section"]', inbox).map((s) => s.innerText),
     identity: { icon: !!q('.wk-inbox-icon svg', inbox), subtitle: q('[data-testid="desk-inbox-subtitle"]', inbox)?.innerText ?? null,
-      border: parseFloat(getComputedStyle(inbox).borderTopWidth), count: q('[data-testid="desk-inbox-count"]', inbox)?.innerText ?? null },
+      border: parseFloat(getComputedStyle(inbox).borderTopWidth), count: q('[data-testid="desk-inbox-count"]', inbox)?.innerText ?? null,
+      // Defined by elevation (2026-10-26): the lead card's shadow is a step above a plain card's (Happening now).
+      shadow: getComputedStyle(inbox).boxShadow, cardShadow: q('[data-testid="desk-happening"]') === null ? null : getComputedStyle(q('[data-testid="desk-happening"]')).boxShadow },
     pane: pane === null ? null : { bg: getComputedStyle(pane).backgroundColor, card: getComputedStyle(inbox).backgroundColor,
       ruleLeft: parseFloat(getComputedStyle(pane).borderLeftWidth), kind: q('[data-testid="desk-inbox-kind"]', pane)?.innerText ?? null },
     hscroll: document.documentElement.scrollWidth > document.documentElement.clientWidth,
@@ -94,7 +98,7 @@ def look_ok(tag: str, m: dict, kind: str) -> None:
     check(f"{tag}-moves-are-buttons", all(all(r["acts"]) for r in rows), rows=[r["acts"] for r in rows])
     check(f"{tag}-each-item-says-its-kind", all((r["chip"] or "").strip() != "" for r in rows), chips=[r["chip"] for r in rows])
     i = m["identity"]
-    check(f"{tag}-reads-as-the-inbox", i["icon"] and "waiting on you" in (i["subtitle"] or "") and i["border"] >= 1 and "waiting" in (i["count"] or ""), identity=i)
+    check(f"{tag}-reads-as-the-inbox", i["icon"] and "waiting on you" in (i["subtitle"] or "") and (i["border"] >= 1 or (i["shadow"] not in (None, "", "none") and i["shadow"] != i["cardShadow"])) and "waiting" in (i["count"] or ""), identity=i)
     p = m["pane"]
     check(f"{tag}-pane-raised-with-kind", p is not None and p["bg"] != p["card"] and p["ruleLeft"] == 0 and p["kind"] == kind, pane=p)
     check(f"{tag}-readable", all(r["subj"] >= 4.5 and r["sender"] >= 4.5 for r in rows), contrast=[(r["subj"], r["sender"]) for r in rows])
