@@ -38,7 +38,7 @@ const RUNS = [
 
 const listRepos = vi.fn(() => Promise.resolve({ repos: REPOS }));
 const listRuns = vi.fn(() => Promise.resolve({ runs: RUNS }));
-const getRepoGraph = vi.fn((_id?: unknown) => Promise.resolve({ graph: null as unknown }));
+const getRepoGraph = vi.fn((...args: unknown[]) => { void args; return Promise.resolve({ graph: null as unknown }); });
 const rerunOnboarding = vi.fn(() => Promise.resolve({ runId: 'r-new' }));
 
 vi.mock('../src/api/client.js', () => ({

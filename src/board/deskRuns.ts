@@ -228,10 +228,10 @@ export function jobsSentence(stats: RunsView['stats'] | null, window: string, an
     stats.decision > 0 ? `${said(stats.decision)} ${stats.decision === 1 ? 'needs' : 'need'} a decision` : null,
   ].filter((x): x is string => x !== null);
   const first = live.length === 0 ? 'Nothing is running.' : `${cap(live.join(', '))}.`;
-  if (stats.ended === 0) return `${first} None ended in ${window}.`;
+  if (stats.finished + stats.failed === 0) return `${first} None finished in ${window}.`;
   const done = stats.finished > 0 ? `${said(stats.finished, true)} finished in ${window}` : `None finished in ${window}`;
-  const bad = [stats.failed > 0 ? `${said(stats.failed)} failed` : null, stats.stopped > 0 ? `${said(stats.stopped)} stopped` : null].filter((x): x is string => x !== null);
-  return `${first} ${done}${bad.length > 0 ? `, ${bad.join(', ')}` : ''}.`;
+  // Failures are said; stopped jobs (withdrawn by a person) are not news, so they wait under Finished.
+  return `${first} ${done}${stats.failed > 0 ? `, ${said(stats.failed)} failed` : ''}.`;
 }
 
 function cap(s: string): string { return s.charAt(0).toUpperCase() + s.slice(1); }

@@ -140,7 +140,9 @@ describe('jobsSentence', () => {
     expect(jobsSentence(s({ active: 2, working: 1, waiting: 1, finished: 12, ended: 12 }), 'the last 30 days', true)).toBe('One running, one waiting on you. Twelve finished in the last 30 days.');
     expect(jobsSentence(s({ active: 1, decision: 1, finished: 3, failed: 2, ended: 5 }), 'the last 7 days', true)).toBe('One needs a decision. Three finished in the last 7 days, two failed.');
     expect(jobsSentence(s({ finished: 0, failed: 1, ended: 1 }), 'the last 7 days', true)).toBe('Nothing is running. None finished in the last 7 days, one failed.');
-    expect(jobsSentence(s({}), 'the last 30 days', true)).toBe('Nothing is running. None ended in the last 30 days.');
+    expect(jobsSentence(s({}), 'the last 30 days', true)).toBe('Nothing is running. None finished in the last 30 days.');
+    // Stopped jobs are not news: they wait under Finished, out of the sentence.
+    expect(jobsSentence(s({ finished: 2, stopped: 5, ended: 7 }), 'the last 7 days', true)).toBe('Nothing is running. Two finished in the last 7 days.');
   });
   it('never claims a zero before the run list is read, and greets an empty studio', () => {
     expect(jobsSentence(null, 'the last 30 days', false)).toBe('Reading your jobs…');

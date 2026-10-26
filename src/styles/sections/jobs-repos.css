@@ -7,7 +7,15 @@
  *  - every hover is an accent tint a person can see (rest -> hover dE_OK >= 0.08, measured in the
  *    browser in all four themes) and every control wears the keyboard focus ring. */
 
-.wk-jr { display: flex; justify-content: center; padding: 48px 0 80px; min-width: 0; }
+.wk-jr {
+  display: flex; justify-content: center; padding: 48px 0 80px; min-width: 0;
+  /* Hover and link colours lean toward the text colour, so a dark accent (the rig's harbour teal) still
+     reads on a dark page and a light accent on a light one (dE_OK >= 0.08, text >= 4.5:1, every theme). */
+  --jr-tint: color-mix(in oklab, var(--accent) 40%, var(--ink-high));
+  --jr-link: color-mix(in oklab, var(--accent) 55%, var(--ink-high));
+  /* The focus ring in the same readable colour (the shared ring is the bare accent). */
+  --focus-ring: 0 0 0 2px var(--focus-gap), 0 0 0 4px var(--jr-link);
+}
 .wk-jr--page { padding: 56px 40px 80px; }
 .wk-jr-col { width: 100%; max-width: 840px; display: flex; flex-direction: column; gap: 40px; min-width: 0; }
 
@@ -26,20 +34,30 @@
 .wk-jr-btn:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-shadow: var(--focus-ring); }
 .wk-jr-btn:disabled { cursor: default; opacity: 0.6; }
 .wk-jr-btn--primary { border: 0; background: var(--accent); color: var(--accent-fg); }
-.wk-jr-btn--primary:hover:not(:disabled) { background: color-mix(in oklab, var(--accent) 72%, var(--ink-high)); color: var(--accent-fg); transform: translateY(-1px); }
-.wk-jr-btn--primary:active:not(:disabled) { background: color-mix(in oklab, var(--accent) 60%, var(--ink-high)); transform: none; }
+/* Primary hover moves AWAY from its own text (darker under light words, lighter under dark ones), so
+   the words keep their contrast; the first line is the fallback where relative colours are unknown. */
+.wk-jr-btn--primary:hover:not(:disabled) {
+  background: color-mix(in oklab, var(--accent) 58%, var(--ink-high));
+  background: color-mix(in oklab, var(--accent) 60%, hsl(from var(--accent-fg) h 0% calc(100 - l)));
+  color: var(--accent-fg); transform: translateY(-1px);
+}
+.wk-jr-btn--primary:active:not(:disabled) {
+  background: color-mix(in oklab, var(--accent) 46%, var(--ink-high));
+  background: color-mix(in oklab, var(--accent) 48%, hsl(from var(--accent-fg) h 0% calc(100 - l)));
+  transform: none;
+}
 .wk-jr-btn--secondary { border: 1px solid var(--border-strong); background: transparent; color: var(--ink-high); font-weight: 500; }
-.wk-jr-btn--secondary:hover:not(:disabled) { background: color-mix(in oklab, var(--accent) 22%, transparent); border-color: color-mix(in oklab, var(--accent) 70%, var(--ink-high)); }
-.wk-jr-btn--secondary:active:not(:disabled) { background: color-mix(in oklab, var(--accent) 32%, transparent); }
+.wk-jr-btn--secondary:hover:not(:disabled) { background: color-mix(in oklab, var(--jr-tint) 18%, transparent); border-color: color-mix(in oklab, var(--jr-tint) 70%, transparent); }
+.wk-jr-btn--secondary:active:not(:disabled) { background: color-mix(in oklab, var(--jr-tint) 28%, transparent); }
 .wk-jr-btn--sm { min-height: 36px; padding: 0 14px; font-size: 14px; }
 
 /* A quiet text link-button (Show more, Clear, Re-index). */
 .wk-jr-link {
   display: inline-flex; align-items: center; min-height: 32px; padding: 0 8px; margin: 0 -8px; border: 0; border-radius: var(--radius-md);
-  background: transparent; color: var(--accent); font-family: inherit; font-size: 15px; font-weight: 500; cursor: pointer;
+  background: transparent; color: var(--jr-link); font-family: inherit; font-size: 15px; font-weight: 500; cursor: pointer;
   text-decoration: none; white-space: nowrap; transition: background-color 0.14s, color 0.14s;
 }
-.wk-jr-link:hover:not(:disabled) { background: color-mix(in oklab, var(--accent) 18%, transparent); color: var(--ink-high); }
+.wk-jr-link:hover:not(:disabled) { background: color-mix(in oklab, var(--jr-tint) 16%, transparent); color: var(--ink-high); }
 .wk-jr-link:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-shadow: var(--focus-ring); }
 .wk-jr-link:disabled { cursor: default; opacity: 0.6; }
 
@@ -55,9 +73,9 @@
   height: 34px; padding: 0 16px; border: 0; border-radius: 9px; background: transparent; color: var(--ink-muted);
   font-family: inherit; font-size: 14px; font-weight: 500; cursor: pointer; transition: background-color 0.14s, color 0.14s;
 }
-.wk-jr-seg-opt:hover { background: color-mix(in oklab, var(--accent) 20%, transparent); color: var(--ink-high); }
+.wk-jr-seg-opt:hover { background: color-mix(in oklab, var(--jr-tint) 20%, transparent); color: var(--ink-high); }
 .wk-jr-seg-opt[aria-checked="true"] { background: color-mix(in oklab, var(--ink-high) 14%, transparent); color: var(--ink-high); }
-.wk-jr-seg-opt[aria-checked="true"]:hover { background: color-mix(in oklab, var(--accent) 28%, transparent); }
+.wk-jr-seg-opt[aria-checked="true"]:hover { background: color-mix(in oklab, var(--jr-tint) 26%, transparent); }
 .wk-jr-seg-opt:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-shadow: var(--focus-ring); }
 
 /* The secondary-tools button (Search and filter, ⋯): an icon a person can see hover on. */
@@ -66,10 +84,10 @@
   border: 1px solid transparent; background: transparent; color: var(--ink-muted); cursor: pointer;
   transition: background-color 0.14s, border-color 0.14s, color 0.14s;
 }
-.wk-jr-icon-btn:hover { background: color-mix(in oklab, var(--accent) 20%, transparent); border-color: color-mix(in oklab, var(--accent) 50%, transparent); color: var(--ink-high); }
-.wk-jr-icon-btn[aria-expanded="true"] { background: color-mix(in oklab, var(--accent) 16%, transparent); color: var(--ink-high); }
+.wk-jr-icon-btn:hover { background: color-mix(in oklab, var(--jr-tint) 18%, transparent); border-color: color-mix(in oklab, var(--jr-tint) 50%, transparent); color: var(--ink-high); }
+.wk-jr-icon-btn[aria-expanded="true"] { background: color-mix(in oklab, var(--jr-tint) 12%, transparent); border-color: color-mix(in oklab, var(--jr-tint) 35%, transparent); color: var(--ink-high); }
 .wk-jr-icon-btn:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-shadow: var(--focus-ring); }
-.wk-jr .wk-menu-wrap > .wk-btn--icon:hover { background: color-mix(in oklab, var(--accent) 20%, transparent); border-color: color-mix(in oklab, var(--accent) 50%, transparent); color: var(--ink-high); }
+.wk-jr .wk-menu-wrap > .wk-btn--icon:hover { background: color-mix(in oklab, var(--jr-tint) 18%, transparent); border-color: color-mix(in oklab, var(--jr-tint) 50%, transparent); color: var(--ink-high); }
 
 /* Search and filter, open: one quiet panel under the label. */
 .wk-jr-refine {
@@ -89,9 +107,9 @@
 /* THE ROW: roomy, no chrome; the whole row is the door and tints on hover. */
 .wk-jr-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
 .wk-jr-item { display: flex; flex-direction: column; margin: 0 -20px; border-radius: 14px; transition: background-color 0.14s; min-width: 0; }
-.wk-jr-item:hover { background: color-mix(in oklab, var(--accent) 16%, transparent); }
-.wk-jr-item[data-open="true"] { background: color-mix(in oklab, var(--ink-high) 5%, transparent); }
-.wk-jr-item[data-open="true"]:hover { background: color-mix(in oklab, var(--accent) 12%, transparent); }
+.wk-jr-item:hover { background: color-mix(in oklab, var(--jr-tint) 15%, transparent); }
+.wk-jr-item[data-open="true"] { background: color-mix(in oklab, var(--jr-tint) 7%, transparent); }
+.wk-jr-item[data-open="true"]:hover { background: color-mix(in oklab, var(--jr-tint) 16%, transparent); }
 .wk-jr-row-wrap { display: flex; align-items: center; gap: 8px; min-width: 0; padding-right: 12px; }
 .wk-jr-row {
   flex: 1 1 auto; display: flex; align-items: center; gap: 20px; min-width: 0; min-height: 72px; padding: 14px 8px 14px 20px;
@@ -116,6 +134,13 @@
 .wk-jr-word[data-tone="fail"] { color: var(--status-fail); }
 .wk-jr-word[data-tone="ok"], .wk-jr-word[data-tone="quiet"] { color: var(--ink-muted); }
 .wk-jr-row-side { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+/* A next-step link on a row's right sits where the status word would: same edge, same size. */
+.wk-jr-row-wrap > .wk-jr-link { margin: 0; font-size: 14px; flex-shrink: 0; }
+/* A next step (Re-index, Index) reads as a link in every theme, whatever the accent. */
+.wk-jr-row-wrap > .wk-jr-link--step {
+  text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 3px;
+  text-decoration-color: color-mix(in oklab, currentColor 50%, transparent);
+}
 
 /* A row's details, open under it. */
 .wk-jr-details { display: flex; flex-direction: column; gap: 14px; padding: 4px 20px 22px 50px; min-width: 0; }
@@ -163,11 +188,18 @@
   .wk-jr-sentence { font-size: 16px; }
   .wk-jr-head { flex-direction: column; align-items: stretch; gap: 18px; }
   .wk-jr-head .wk-jr-btn { align-self: flex-start; }
-  .wk-jr-item { margin: 0 -12px; }
-  .wk-jr-row { gap: 14px; padding: 12px 4px 12px 12px; min-height: 68px; }
-  .wk-jr-row-wrap { padding-right: 4px; }
+  .wk-jr-item { margin: 0 -8px; }
+  .wk-jr-row { gap: 12px; padding: 12px 8px; min-height: 68px; align-items: flex-start; }
+  .wk-jr-row .wk-jr-dot { margin-top: 6px; }
+  .wk-jr-row-wrap { padding-right: 8px; align-items: flex-start; }
+  .wk-jr-row-wrap > .wk-jr-link { margin-top: 8px; }
   .wk-jr-row-title { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
-  .wk-jr-word { font-size: 13px; }
+  .wk-jr-row-sub { white-space: normal; }
+  .wk-jr-word { font-size: 13px; padding-top: 1px; }
+  /* A job's word moves under its lines, so the title has the whole width. */
+  .wk-jr-list--jobs .wk-jr-row { flex-wrap: wrap; row-gap: 6px; }
+  .wk-jr-list--jobs .wk-jr-text { flex-basis: calc(100% - 22px); }
+  .wk-jr-list--jobs .wk-jr-word { order: 3; flex-basis: 100%; padding: 0 0 0 22px; text-align: left; }
   .wk-jr-details { padding: 0 12px 18px 36px; }
   .wk-jr-refine { padding: 16px; }
 }

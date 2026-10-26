@@ -34,7 +34,15 @@ SHOTS = REPO / "e2e" / "shots"
 MIN_DE = 0.08
 MAX_COL = 860
 MIN_ROW = 64
-THEMES = [("wicked-dark", "wicked-dark"), ("wicked-light", "wicked-light"), ("dark", None), ("light", "light")]
+# Each theme with the accent it writes (the rail hover journey's presets: HARBOR for the wicked themes, IRIS for
+# the others), then each theme again with the rig's own accent (HARBOR, a dark teal) to catch an accent-tinted
+# hover or link that only reads under one accent. `paired` = the accent that theme writes when chosen.
+HARBOR = {"accent_h": 200, "accent_s": 47, "accent_l": 25}
+IRIS = {"accent_h": 230, "accent_s": 74, "accent_l": 68}
+CASES = [("wicked-dark", "wicked-dark", HARBOR, True), ("wicked-light", "wicked-light", HARBOR, True),
+         ("dark", None, IRIS, True), ("light", "light", IRIS, True),
+         ("dark-harbor", None, HARBOR, False), ("light-harbor", "light", HARBOR, False)]
+MIN_TEXT = 4.5
 FACE_IDS = re.compile(r"run:|[0-9a-f]{8}-[0-9a-f]{4}-|(?:^|\s)/\w+/\w+")  # a run id, a uuid, an absolute path
 
 report: dict = {"ok": False, "steps": {}}
@@ -72,12 +80,18 @@ def de(a, b) -> float:
     return round(math.dist(oklab(a), oklab(b)), 4)
 
 
-# The first opaque background under an element (its ancestors'), then each fill composited over it in a 1x1 canvas.
-GROUND = """e => { for (let a = e.parentElement; a; a = a.parentElement) { const c = getComputedStyle(a).backgroundColor;
-  if (c && c !== 'rgba(0, 0, 0, 0)' && c !== 'transparent') return c; } return getComputedStyle(document.body).backgroundColor; }"""
-PAINT = """([under, fills]) => { const c = document.createElement('canvas'); c.width = c.height = 1;
+# Every background under an element, from the nearest opaque ancestor down to its parent (a translucent track
+# or a hovered row counts), then each fill composited over that stack in a 1x1 canvas.
+STACK = """e => { const k = document.createElement('canvas'); k.width = k.height = 1; const x = k.getContext('2d', { willReadFrequently: true });
+  const alpha = (c) => { x.clearRect(0, 0, 1, 1); x.fillStyle = c; x.fillRect(0, 0, 1, 1); return x.getImageData(0, 0, 1, 1).data[3]; };
+  const out = []; for (let a = e.parentElement; a; a = a.parentElement) { const c = getComputedStyle(a).backgroundColor;
+    if (!c || alpha(c) === 0) continue; out.unshift(c); if (alpha(c) === 255) break; }
+  if (out.length === 0 || alpha(out[0]) !== 255) out.unshift(getComputedStyle(document.documentElement).backgroundColor || '#fff');
+  return out; }"""
+PAINT = """([stack, fills]) => { const c = document.createElement('canvas'); c.width = c.height = 1;
   const x = c.getContext('2d', { willReadFrequently: true });
-  return fills.map(f => { x.clearRect(0, 0, 1, 1); x.fillStyle = under; x.fillRect(0, 0, 1, 1);
+  return fills.map(f => { x.clearRect(0, 0, 1, 1); x.fillStyle = '#000'; x.fillRect(0, 0, 1, 1);
+    for (const g of stack) { x.fillStyle = g; x.fillRect(0, 0, 1, 1); }
     x.fillStyle = f; x.fillRect(0, 0, 1, 1); return Array.from(x.getImageData(0, 0, 1, 1).data).slice(0, 3); }); }"""
 BG = "e => getComputedStyle(e).backgroundColor"
 
@@ -91,19 +105,45 @@ errors: list[str] = []
 PARK = (W - 40, H - 40)
 
 
-def hover_de(page, el, target=None) -> float:
-    """rest -> hover distance of `target`'s fill (default: el) while the pointer is on `el`."""
+def lum(c) -> float:
+    r, g, b = (lin(v) for v in c)
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b
+
+
+def ratio(a, b) -> float:
+    hi, lo = sorted([lum(a), lum(b)], reverse=True)
+    return round((hi + 0.05) / (lo + 0.05), 2)
+
+
+def hover_de(page, el, target=None, words=None) -> tuple:
+    """rest -> hover distance of `target`'s fill (default: el) while the pointer is on `el`, and the contrast of
+    `words` (default: target) on that hovered fill."""
     target = target or el
+    words = words or target
     page.mouse.move(*PARK)
     page.wait_for_timeout(260)
-    ground = target.evaluate(GROUND)
+    ground = target.evaluate(STACK)
     rest = target.evaluate(BG)
     el.hover()
-    page.wait_for_timeout(260)
+    page.wait_for_timeout(300)
     hov = target.evaluate(BG)
+    ink = words.evaluate("e => getComputedStyle(e).color")
     page.mouse.move(*PARK)
     a, b = page.evaluate(PAINT, [ground, [rest, hov]])
-    return de(a, b)
+    under = "rgb(%d, %d, %d)" % tuple(b)
+    text = page.evaluate(PAINT, [[under], [ink]])[0]
+    return de(a, b), ratio(text, b)
+
+
+def rest_contrast(page, el) -> float:
+    """The words of `el` at rest on what is under them."""
+    page.mouse.move(*PARK)
+    page.wait_for_timeout(200)
+    ground = el.evaluate(STACK)
+    a = page.evaluate(PAINT, [ground, [el.evaluate(BG)]])[0]
+    under = "rgb(%d, %d, %d)" % tuple(a)
+    text = page.evaluate(PAINT, [[under], [el.evaluate("e => getComputedStyle(e).color")]])[0]
+    return ratio(text, a)
 
 
 def shape(page, root: str, title: str) -> dict:
@@ -136,14 +176,14 @@ def overflow(page) -> int:
 
 with sync_playwright() as p:
     browser = p.chromium.launch()
-    for theme, want in THEMES:
+    for theme, want, accent, paired in CASES:
         ctx = browser.new_context(viewport={"width": W, "height": H}, device_scale_factor=1)
         page = ctx.new_page()
         page.on("pageerror", lambda e: errors.append(str(e)))
         page.add_init_script(
             "document.addEventListener('DOMContentLoaded', () => { const s = document.createElement('style'); "
             f"s.textContent = {json.dumps(HIDE_GATE_TOASTS)}; document.head.appendChild(s); }});")
-        set_fixture(origin, wave1=True, repo=True, repo_refs=True, appearance={**DEFAULT_APPEARANCE, "theme": theme})
+        set_fixture(origin, wave1=True, repo=True, repo_refs=True, appearance={**DEFAULT_APPEARANCE, **accent, "theme": want or "dark"})
 
         # ── Jobs ──
         page.goto(f"{origin}/?tab=runs", wait_until="networkidle")
@@ -165,13 +205,22 @@ with sync_playwright() as p:
         row = page.get_by_test_id("desk-runs-row").first
         href = row.get_by_test_id("desk-runs-open").get_attribute("href") or ""
         other = page.locator('[data-testid="desk-runs-group"] [aria-checked="false"]').first
-        de_rows = hover_de(page, row)
-        de_new = hover_de(page, page.get_by_test_id("desk-runs-new"))
-        de_seg = hover_de(page, other)
-        de_tools = hover_de(page, page.get_by_test_id("desk-runs-tools"))
+        h_row = hover_de(page, row, words=row.locator(".wk-jr-row-title"))
+        h_new = hover_de(page, page.get_by_test_id("desk-runs-new"))
+        h_seg = hover_de(page, other)
+        h_tools = hover_de(page, page.get_by_test_id("desk-runs-tools"))
         ring = focus_ring(page, '[data-testid="desk-runs-open"]')
-        check(f"{theme}:jobs-hover-focus", min(de_rows, de_new, de_seg, de_tools) >= MIN_DE and ring not in ("none", "not focus-visible")
-              and "/s" in href, row=de_rows, new_job=de_new, filter=de_seg, tools=de_tools, ring=ring, href=href)
+        moves = {"row": h_row, "filter": h_seg, "tools": h_tools, **({"new_job": h_new} if paired else {})}
+        check(f"{theme}:jobs-hover-focus", all(d >= MIN_DE for d, _ in moves.values()) and h_new[1] >= MIN_TEXT
+              and h_row[1] >= MIN_TEXT and ring not in ("none", "not focus-visible") and "/s" in href,
+              **{k: {"dE": d, "text": t} for k, (d, t) in moves.items()}, new_job_text=h_new[1], ring=ring, href=href)
+        # A link's words read at rest (Show finished jobs, at the list's foot when there are ended jobs).
+        foot = page.get_by_test_id("desk-runs-show-finished")
+        if foot.count() > 0:
+            foot.scroll_into_view_if_needed()
+            link = hover_de(page, foot)
+            check(f"{theme}:jobs-link", rest_contrast(page, foot) >= MIN_TEXT and link[0] >= MIN_DE and link[1] >= MIN_TEXT,
+                  rest=rest_contrast(page, foot), hover={"dE": link[0], "text": link[1]})
         page.mouse.move(*PARK)
         page.evaluate("() => document.activeElement && document.activeElement.blur()")
         page.screenshot(path=str(SHOTS / f"jobs-repos-jobs-{theme}.png"))
@@ -186,18 +235,29 @@ with sync_playwright() as p:
               shape=s, rows=rows[:3])
         check(f"{theme}:repos-no-ids", not any(FACE_IDS.search(r["text"]) for r in rows), faces=[r["text"] for r in rows][:6])
         card = page.get_by_test_id("repo-card").first
-        de_row = hover_de(page, card.get_by_test_id("repo-row"), card)
-        de_add = hover_de(page, page.get_by_test_id("repos-add"))
+        h_row = hover_de(page, card.get_by_test_id("repo-row"), card, card.locator(".wk-jr-row-title"))
+        h_add = hover_de(page, page.get_by_test_id("repos-add"))
         ring = focus_ring(page, '[data-testid="repo-row"]')
+        # A next step on a row's right (Re-index / Index) is a link that reads in every theme.
+        step = page.locator('[data-testid="repo-row-reindex"], [data-testid="repo-row-index"]').first
+        steps = {}
+        if step.count() > 0:
+            steps = {"rest": rest_contrast(page, step), "hover": hover_de(page, step)}
         page.mouse.move(*PARK)
         card.get_by_test_id("repo-row").click()
         details = card.get_by_test_id("repo-details")
         details.wait_for(state="visible", timeout=3000)
         acts = details.locator("button").all_inner_texts()
-        check(f"{theme}:repos-hover-focus-details", min(de_row, de_add) >= MIN_DE and ring not in ("none", "not focus-visible")
+        sec = details.get_by_test_id("repo-open")
+        h_sec = hover_de(page, sec)
+        check(f"{theme}:repos-hover-focus-details", h_row[0] >= MIN_DE and h_row[1] >= MIN_TEXT and (h_add[0] >= MIN_DE or not paired)
+              and h_add[1] >= MIN_TEXT and h_sec[0] >= MIN_DE and h_sec[1] >= MIN_TEXT
+              and (not steps or (steps["rest"] >= MIN_TEXT and steps["hover"][0] >= MIN_DE and steps["hover"][1] >= MIN_TEXT))
+              and ring not in ("none", "not focus-visible")
               and card.get_by_test_id("repo-row").get_attribute("aria-expanded") == "true"
               and any(a.startswith("Open ") for a in acts) and any("Capture learnings" in a for a in acts)
-              and any(a in ("Re-index…", "Onboard") for a in acts), row=de_row, add=de_add, ring=ring, actions=acts)
+              and any(a in ("Re-index…", "Onboard") for a in acts),
+              row=h_row, add=h_add, secondary=h_sec, next_step=steps, ring=ring, actions=acts)
         card.get_by_test_id("repo-row").click()
         page.evaluate("() => document.activeElement && document.activeElement.blur()")
         page.screenshot(path=str(SHOTS / f"jobs-repos-repos-{theme}.png"))
@@ -207,7 +267,7 @@ with sync_playwright() as p:
     ctx = browser.new_context(viewport={"width": 390, "height": 844}, device_scale_factor=1, is_mobile=True, has_touch=True)
     page = ctx.new_page()
     page.on("pageerror", lambda e: errors.append(str(e)))
-    set_fixture(origin, wave1=True, repo=True, repo_refs=True, appearance={**DEFAULT_APPEARANCE, "theme": "wicked-dark"})
+    set_fixture(origin, wave1=True, repo=True, repo_refs=True, appearance={**DEFAULT_APPEARANCE, **HARBOR, "theme": "wicked-dark"})
     page.goto(f"{origin}/?tab=runs", wait_until="networkidle")
     page.get_by_test_id("desk-runs").wait_for(state="visible", timeout=15000)
     page.wait_for_timeout(500)

@@ -14,7 +14,7 @@ function props() {
   };
 }
 const rowIds = (): string[] => screen.queryAllByTestId('desk-runs-row').map((r) => r.getAttribute('data-run-id') ?? '');
-const SENTENCE = 'One running, one waiting on you. Two finished in the last 30 days, one failed, one stopped.';
+const SENTENCE = 'One running, one waiting on you. Two finished in the last 30 days, one failed.';
 
 describe('Jobs page', () => {
   it('opens on Active: a title, one sentence of live state and New job; Finished is the one filter', () => {

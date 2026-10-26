@@ -15,7 +15,7 @@ import { setRetryPrefill } from '../store/retryPrefill.js';
 import { readErrorKind } from '../api/errors.js';
 import { Segmented, StateBanner, StatLine, TechDetails } from './ui/index.js';
 import { QuietEmpty, QuietHead, QuietLoading } from './ui/QuietPage.js';
-import { lastActivity, readinessWords, repoReadiness, repoSide, repoTone, reposSentence } from '../board/repoRows.js';
+import { indexedAt, lastActivity, readinessWords, repoReadiness, repoSide, repoTone, reposSentence } from '../board/repoRows.js';
 import { useRepoLanguages } from '../hooks/useRepoLanguages.js';
 import { NewProjectModal } from './NewProjectModal.js';
 import { ago } from './AgeStamp.js';
@@ -84,7 +84,8 @@ function graphState(m: RepoFleetModel): OnboardState | 'missing' {
 function graphStateWord(m: RepoFleetModel, attachedAt: Record<string, number>, now: number): string {
   const { run } = m.onboard;
   const state = graphState(m);
-  const clock = run === null ? undefined : attachedAt[run.session.id];
+  // The attach clock when the membership mirror has it, else the onboard run's own end.
+  const clock = run === null ? undefined : attachedAt[run.session.id] ?? indexedAt(m) ?? undefined;
   const when = clock === undefined ? '' : ` ${ago(clock, now)} ago`;
   if (state === 'missing') {
     return m.graphGap?.kind === 'no-graph-root'
@@ -610,7 +611,7 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
             <QuietEmpty
               data-testid="repos-empty"
               title="No repositories yet"
-              body="Add a repository on this computer or from a URL, and studio maps its code so your agents can find their way around it."
+              body="Add one from a folder on this computer or from a URL. Indexing it takes a few minutes, as a job you can watch."
               actions={!showRegister ? (
                 <button type="button" className="wk-jr-btn wk-jr-btn--primary wk-jr-btn--sm" onClick={toggleRegister}>Add repository</button>
               ) : undefined}
@@ -743,7 +744,7 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
                             </button>
                           )}
                           {side.kind === 'reindex' && (
-                            <button type="button" data-testid="repo-row-reindex" data-repo-id={repo.id} className="wk-jr-link"
+                            <button type="button" data-testid="repo-row-reindex" data-repo-id={repo.id} className="wk-jr-link wk-jr-link--step"
                               disabled={isRerunning || isCapturing}
                               title={m.onboard.run !== null ? 'Opens a new job with this repository’s indexing filled in; nothing starts until you send it' : 'Starts indexing this repository'}
                               onClick={redo}>
@@ -751,7 +752,7 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
                             </button>
                           )}
                           {side.kind === 'index' && (
-                            <button type="button" data-testid="repo-row-index" data-repo-id={repo.id} className="wk-jr-link"
+                            <button type="button" data-testid="repo-row-index" data-repo-id={repo.id} className="wk-jr-link wk-jr-link--step"
                               disabled={isRerunning || isCapturing} title="Starts indexing this repository, as a job you can watch"
                               onClick={() => void rerunOnboarding(repo.id)}>
                               {isRerunning ? 'Starting…' : side.label}

@@ -136,7 +136,7 @@ export function DeskRuns({ runs, runsShown, refine, refineBar, now, navigate, pa
             <JobsEmpty group={group} stats={s} narrowed={narrowed.length > 0} any={runs.length > 0} win={win}
               onClear={clear} onFinished={() => pickGroup('finished')} onNewJob={onNewJob} />
           ) : (
-            <ul className="wk-jr-list" aria-label={`${listLabel} jobs`}>
+            <ul className="wk-jr-list wk-jr-list--jobs" aria-label={`${listLabel} jobs`}>
               {rows.map((r) => {
                 const path = pathOf(r.id);
                 const open = r.group === 'active';

@@ -113,7 +113,7 @@ export function reposSentence(read: 'loading' | 'failed' | 'known', readiness: r
   if (read === 'loading') return 'Reading your repositories…';
   if (read === 'failed') return 'Your repositories could not be read just now.';
   const n = readiness.length;
-  if (n === 0) return 'No repositories yet. Add one and studio maps its code for your agents.';
+  if (n === 0) return 'Studio maps each repository you add, so your agents can find their way around it.';
   const of = (r: RepoReadiness): number => readiness.filter((x) => x === r).length;
   const repos = `${said(n)} ${n === 1 ? 'repository' : 'repositories'}`;
   const ready = of('ready');
