@@ -1,6 +1,6 @@
 import { executingOrd } from '../api/run-state.js';
 import type { CoreEvent, SessionView, WorkUnit } from '../api/types.js';
-import { deliverUnit, deliveryOf, resolveDelivery } from '../components/delivery.js';
+import { deliverUnit, deliveryOf, hasDeliveredRef, resolveDelivery } from '../components/delivery.js';
 import { deliverRefusalOf, deliverTargetOf, isDeliverGate } from '../components/gateMoveModel.js';
 import type { OpenGate } from '../store/gates.js';
 import type { GateActionState } from './gateActions.js';
@@ -148,7 +148,8 @@ export function statusSentence(view: SessionView, chain: ChainModel, gate: OpenG
 export function outcomeLine(view: SessionView): string {
   const d = deliveryOf(view);
   switch (d.state) {
-    case 'delivered': return 'Finished · delivered';
+    // J4: "delivered" only over a recorded pull request or pushed branch, never a finished unit alone.
+    case 'delivered': return hasDeliveredRef(view) ? 'Finished · delivered' : 'Finished · no pull request or pushed branch is recorded';
     case 'pushed': return 'Finished · branch pushed';
     case 'stranded':
       return deliverUnit(view) === null
@@ -157,6 +158,26 @@ export function outcomeLine(view: SessionView): string {
     case 'nothing-to-deliver': return 'Finished · nothing to deliver';
     case 'failed': return 'Finished, but delivery failed';
     default: return 'Finished';
+  }
+}
+
+/**
+ * The "Changes and delivery" section's one-word summary (J4, rig run f3d30829: it said "Delivered"
+ * over a stranded run whose body said nothing was pushed). "Delivered" only over a recorded ref;
+ * every other outcome says what happened. `null` = the run has no delivery to speak of yet.
+ */
+export function deliverySummary(view: SessionView): string | null {
+  const d = deliveryOf(view);
+  const pr = d.url === null ? null : (/\/pull\/(\d+)/.exec(d.url)?.[1] ?? null);
+  if (pr !== null) return `Pull request #${pr}`;
+  if (d.state === 'none' || d.state === 'in-flight') return null;
+  if (view.session.status !== 'completed') return 'Not delivered';
+  switch (d.state) {
+    case 'delivered': return hasDeliveredRef(view) ? 'Delivered' : 'No pushed ref recorded';
+    case 'pushed': return 'Branch pushed';
+    case 'stranded': return 'Not pushed yet';
+    case 'nothing-to-deliver': return 'Nothing to deliver';
+    case 'failed': return 'Delivery failed';
   }
 }
 

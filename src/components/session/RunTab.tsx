@@ -24,7 +24,7 @@ import { RunRecordLines, RunStory } from './RunRecord.js';
 import { RecoveryRow } from './RunConversation.js';
 import { SheetRunActions } from './RunActions.js';
 import { IDLE_GATE_ACTION, useGateActionStore } from '../../board/gateActions.js';
-import { outcomeLine, statusSentence } from '../../board/proposalCard.js';
+import { deliverySummary, outcomeLine, statusSentence } from '../../board/proposalCard.js';
 import { deliveryAssuranceOf, deliveryReceiptOf } from '../../board/assuranceModel.js';
 import { deliveryOf } from '../delivery.js';
 import { useRunCoverage } from '../../hooks/useRunCoverage.js';
@@ -236,7 +236,7 @@ function RunTabDetails({ view, allRuns, sessionId, title, navigate }: { view: Se
         <Item section="plan" id="steps">{() => <StepsList view={view} />}</Item>
       </Section>
 
-      <Section id="changes" {...fold} summary={prNumber !== null ? `Pull request #${prNumber}` : delivered ? (view.session.status === 'completed' ? 'Delivered' : 'Not delivered') : quiet.has('changes') ? 'Nothing changed yet' : 'Nothing delivered yet'}>
+      <Section id="changes" {...fold} summary={deliverySummary(view) ?? (delivered ? 'Nothing pushed' : quiet.has('changes') ? 'Nothing changed yet' : 'Nothing delivered yet')}>
         {/* A run still going has nothing delivered to say ("in-flight" is only "it has a deliver step"). */}
         {delivered && (
           <div data-testid="run-tab-delivery" className="wk-run-tab-block">

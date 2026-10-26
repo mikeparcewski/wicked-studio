@@ -10,7 +10,7 @@ import { isCliSeat, seatLabel } from '../../board/seatNames.js';
 import { jobTitle } from '../../board/deskWords.js';
 import { ORPHANED_LINE, orphanedOf, runState } from '../../board/sessionModel.js';
 import { applyCheckState } from '../../board/checkState.js';
-import { deliveryReceiptOf } from '../../board/assuranceModel.js';
+import { deliveryAssuranceOf, deliveryReceiptOf } from '../../board/assuranceModel.js';
 import { overriddenFloorsOf, overriddenLine } from '../../board/failingChecks.js';
 import { wordOf } from '../../board/planDraft.js';
 import { undoDecision } from '../../board/undoQueue.js';
@@ -21,6 +21,7 @@ import { useRunAcceptance } from '../../hooks/useRunAcceptance.js';
 import { useRunEvents } from '../../hooks/useRunEvents.js';
 import { useRunCoverage } from '../../hooks/useRunCoverage.js';
 import { useGateStore } from '../../store/gates.js';
+import { usePostHocDeliverStore } from '../../store/postHocDeliver.js';
 import { useRunEventStore } from '../../store/events.js';
 import { usePlanDrafts } from '../../store/planDrafts.js';
 import { momentOfRecording, useRecordingsStore } from '../../store/recordings.js';
@@ -268,12 +269,16 @@ export function RunBlock({ view, badge, sessionId, navigate, solo = null }: {
     const o = overriddenFloorsOf(deliveryReceiptOf(view, runEvents ?? null), runEvents ?? null, view);
     return o === null ? null : overriddenLine(o);
   }, [isTerminal, view, runEvents]);
+  // J4: what assured the tree that shipped — crew's record, or this browser's post-hoc hand-over answer.
+  const postHoc = usePostHocDeliverStore((st) => st.byRun[id]);
+  const deliveryVerified = deliveryAssuranceOf(view, postHoc?.phase === 'delivered' ? { raw: postHoc.assurance, delivered: true } : undefined)?.verified ?? null;
   const words = isTerminal ? finalWords(view, { done: chain.total > 0 ? chain.done : doneCount, total: totalCount }, {
     passed,
     tests: testCountOf(acceptance?.summary?.line, gateVerdict?.reason),
     nothing: noEvidenceSummary?.nothing === true,
     reviewers: approvingReviewers(view, isReviewUnit, (ord) => reviewVerdicts.get(ord) ?? null),
     overridden: finalOverridden,
+    deliveryVerified,
   }) : null;
   const askingWho = gateResponder(view, gate, roster);
   const checkOf = (s: StepMessage): string | null => {
