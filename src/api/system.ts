@@ -117,6 +117,8 @@ export interface SystemCli {
   tokens: number | null;
   /** Units per day, oldest first. */
   perDay: number[];
+  /** The window the stats cover, in days (crew counts 7), or null with no stats. */
+  statsDays: number | null;
   /** Why there are no stats (no event-log binding, the fold ran out of time). */
   statsNote: string | null;
   versionPin: { pinned: string | null; observed: string | null; matched: boolean | null } | null;
@@ -163,6 +165,10 @@ export interface SystemGovernanceCard {
   remedy: string | null;
   /** The counts behind it, in words ("pass 18 · fail 3"). */
   breakdown: string | null;
+  /** The same counts as numbers (the Report draws them), or null when the wire carries none. */
+  counts: Record<string, number> | null;
+  /** The start of the window crew counted over (unix millis), when it says. */
+  since: number | null;
 }
 
 export interface SystemSnapshot {
@@ -259,6 +265,7 @@ export function normalizeSnapshot(input: unknown): SystemSnapshot {
         fallbacks: s === null ? null : num(s['fallbacks']),
         tokens: tok === null || (num(tok['input']) === null && num(tok['output']) === null) ? null : (num(tok['input']) ?? 0) + (num(tok['output']) ?? 0),
         perDay: s === null ? [] : list(s['perDay']).map((n) => num(n) ?? 0),
+        statsDays: s === null ? null : num(s['days']),
         statsNote: str(c['statsNote']),
         versionPin: pin === null ? null : {
           pinned: str(pin['pinned']),
@@ -314,6 +321,8 @@ export function normalizeSnapshot(input: unknown): SystemSnapshot {
         detail: str(g['reason']),
         remedy: str(g['remedy']),
         breakdown: br.length === 0 ? null : br.map(([k, n]) => `${k.replace(/_/g, ' ')} ${String(n)}`).join(' · '),
+        counts: br.length === 0 ? null : Object.fromEntries(br) as Record<string, number>,
+        since: when(g['since']),
       };
     }),
   };

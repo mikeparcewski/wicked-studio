@@ -11,10 +11,10 @@
   "version": 1,
   "studioVersion": "0.12.3",
   "counts": {
-    "files": 239,
-    "occurrences": 3115,
-    "static": 2696,
-    "dynamic": 70,
+    "files": 240,
+    "occurrences": 3137,
+    "static": 2714,
+    "dynamic": 73,
     "computed": 24
   },
   "static": [
@@ -2897,42 +2897,6 @@
       ]
     },
     {
-      "testId": "desk-callout",
-      "files": [
-        "src/components/desk/DeskV2.tsx"
-      ]
-    },
-    {
-      "testId": "desk-callout-evidence",
-      "files": [
-        "src/components/desk/DeskV2.tsx"
-      ]
-    },
-    {
-      "testId": "desk-callouts",
-      "files": [
-        "src/components/desk/DeskV2.tsx"
-      ]
-    },
-    {
-      "testId": "desk-callouts-more",
-      "files": [
-        "src/components/desk/DeskV2.tsx"
-      ]
-    },
-    {
-      "testId": "desk-callouts-none",
-      "files": [
-        "src/components/desk/DeskV2.tsx"
-      ]
-    },
-    {
-      "testId": "desk-callouts-partial",
-      "files": [
-        "src/components/desk/DeskV2.tsx"
-      ]
-    },
-    {
       "testId": "desk-card",
       "files": [
         "src/components/desk/DeskHome.tsx"
@@ -2972,18 +2936,6 @@
       "testId": "desk-chart",
       "files": [
         "src/components/desk/Desk.tsx"
-      ]
-    },
-    {
-      "testId": "desk-chart-jobs",
-      "files": [
-        "src/components/desk/DeskV2.tsx"
-      ]
-    },
-    {
-      "testId": "desk-chart-spend",
-      "files": [
-        "src/components/desk/DeskV2.tsx"
       ]
     },
     {
@@ -3177,12 +3129,6 @@
       "testId": "desk-inbox-subtitle",
       "files": [
         "src/components/desk/DeskInbox.tsx"
-      ]
-    },
-    {
-      "testId": "desk-insights",
-      "files": [
-        "src/components/desk/DeskV2.tsx"
       ]
     },
     {
@@ -3528,12 +3474,6 @@
       ]
     },
     {
-      "testId": "desk-reports",
-      "files": [
-        "src/components/desk/DeskV2.tsx"
-      ]
-    },
-    {
       "testId": "desk-rule-line",
       "files": [
         "src/components/desk/DeskRuleLine.tsx"
@@ -3729,8 +3669,7 @@
     {
       "testId": "desk-stat-delivered",
       "files": [
-        "src/components/desk/Desk.tsx",
-        "src/components/desk/DeskV2.tsx"
+        "src/components/desk/Desk.tsx"
       ]
     },
     {
@@ -3740,29 +3679,15 @@
       ]
     },
     {
-      "testId": "desk-stat-quality",
-      "files": [
-        "src/components/desk/DeskV2.tsx"
-      ]
-    },
-    {
       "testId": "desk-stat-spend",
       "files": [
-        "src/components/desk/Desk.tsx",
-        "src/components/desk/DeskV2.tsx"
+        "src/components/desk/Desk.tsx"
       ]
     },
     {
       "testId": "desk-stat-started",
       "files": [
-        "src/components/desk/Desk.tsx",
-        "src/components/desk/DeskV2.tsx"
-      ]
-    },
-    {
-      "testId": "desk-stat-success",
-      "files": [
-        "src/components/desk/DeskV2.tsx"
+        "src/components/desk/Desk.tsx"
       ]
     },
     {
@@ -3793,12 +3718,6 @@
       "testId": "desk-state-line",
       "files": [
         "src/components/desk/DeskStateRows.tsx"
-      ]
-    },
-    {
-      "testId": "desk-stats",
-      "files": [
-        "src/components/desk/DeskV2.tsx"
       ]
     },
     {
@@ -3938,24 +3857,6 @@
       "testId": "desk-unread",
       "files": [
         "src/components/desk/Desk.tsx"
-      ]
-    },
-    {
-      "testId": "desk-viz-jobs",
-      "files": [
-        "src/components/desk/DeskV2.tsx"
-      ]
-    },
-    {
-      "testId": "desk-viz-outcomes",
-      "files": [
-        "src/components/desk/DeskV2.tsx"
-      ]
-    },
-    {
-      "testId": "desk-viz-spend",
-      "files": [
-        "src/components/desk/DeskV2.tsx"
       ]
     },
     {
@@ -10292,6 +10193,210 @@
       ]
     },
     {
+      "testId": "report-agents",
+      "files": [
+        "src/components/report/ReportPage.tsx"
+      ]
+    },
+    {
+      "testId": "report-agents-table",
+      "files": [
+        "src/components/report/ReportPage.tsx"
+      ]
+    },
+    {
+      "testId": "report-cost",
+      "files": [
+        "src/components/report/ReportPage.tsx"
+      ]
+    },
+    {
+      "testId": "report-custom",
+      "files": [
+        "src/components/report/ReportPage.tsx"
+      ]
+    },
+    {
+      "testId": "report-custom-from",
+      "files": [
+        "src/components/report/ReportPage.tsx"
+      ]
+    },
+    {
+      "testId": "report-custom-note",
+      "files": [
+        "src/components/report/ReportPage.tsx"
+      ]
+    },
+    {
+      "testId": "report-custom-to",
+      "files": [
+        "src/components/report/ReportPage.tsx"
+      ]
+    },
+    {
+      "testId": "report-floors",
+      "files": [
+        "src/components/report/ReportPage.tsx"
+      ]
+    },
+    {
+      "testId": "report-gates",
+      "files": [
+        "src/components/report/ReportPage.tsx"
+      ]
+    },
+    {
+      "testId": "report-headline",
+      "files": [
+        "src/components/report/ReportPage.tsx"
+      ]
+    },
+    {
+      "testId": "report-lede",
+      "files": [
+        "src/components/report/ReportPage.tsx"
+      ]
+    },
+    {
+      "testId": "report-not-tracked",
+      "files": [
+        "src/components/report/ReportPage.tsx"
+      ]
+    },
+    {
+      "testId": "report-page",
+      "files": [
+        "src/components/report/ReportPage.tsx"
+      ]
+    },
+    {
+      "testId": "report-period",
+      "files": [
+        "src/components/report/ReportPage.tsx"
+      ]
+    },
+    {
+      "testId": "report-period-30",
+      "files": [
+        "src/components/report/ReportPage.tsx"
+      ]
+    },
+    {
+      "testId": "report-period-7",
+      "files": [
+        "src/components/report/ReportPage.tsx"
+      ]
+    },
+    {
+      "testId": "report-period-custom",
+      "files": [
+        "src/components/report/ReportPage.tsx"
+      ]
+    },
+    {
+      "testId": "report-qe",
+      "files": [
+        "src/components/report/ReportPage.tsx"
+      ]
+    },
+    {
+      "testId": "report-quality",
+      "files": [
+        "src/components/report/ReportPage.tsx"
+      ]
+    },
+    {
+      "testId": "report-repos",
+      "files": [
+        "src/components/report/ReportPage.tsx"
+      ]
+    },
+    {
+      "testId": "report-repos-table",
+      "files": [
+        "src/components/report/ReportPage.tsx"
+      ]
+    },
+    {
+      "testId": "report-shipped",
+      "files": [
+        "src/components/report/ReportPage.tsx"
+      ]
+    },
+    {
+      "testId": "report-shipped-pr",
+      "files": [
+        "src/components/report/ReportPage.tsx"
+      ]
+    },
+    {
+      "testId": "report-shipped-row",
+      "files": [
+        "src/components/report/ReportPage.tsx"
+      ]
+    },
+    {
+      "testId": "report-spend-agents",
+      "files": [
+        "src/components/report/ReportPage.tsx"
+      ]
+    },
+    {
+      "testId": "report-spend-chart",
+      "files": [
+        "src/components/report/ReportPage.tsx"
+      ]
+    },
+    {
+      "testId": "report-spend-repos",
+      "files": [
+        "src/components/report/ReportPage.tsx"
+      ]
+    },
+    {
+      "testId": "report-spend-unknown",
+      "files": [
+        "src/components/report/ReportPage.tsx"
+      ]
+    },
+    {
+      "testId": "report-throughput",
+      "files": [
+        "src/components/report/ReportPage.tsx"
+      ]
+    },
+    {
+      "testId": "report-throughput-chart",
+      "files": [
+        "src/components/report/ReportPage.tsx"
+      ]
+    },
+    {
+      "testId": "report-tile-finished",
+      "files": [
+        "src/components/report/ReportPage.tsx"
+      ]
+    },
+    {
+      "testId": "report-tile-firstpass",
+      "files": [
+        "src/components/report/ReportPage.tsx"
+      ]
+    },
+    {
+      "testId": "report-tile-spend",
+      "files": [
+        "src/components/report/ReportPage.tsx"
+      ]
+    },
+    {
+      "testId": "report-tile-ttp",
+      "files": [
+        "src/components/report/ReportPage.tsx"
+      ]
+    },
+    {
       "testId": "repos-add",
       "files": [
         "src/components/RepositoriesPanel.tsx"
@@ -16280,6 +16385,12 @@
       ]
     },
     {
+      "pattern": "*-change",
+      "files": [
+        "src/components/report/ReportPage.tsx"
+      ]
+    },
+    {
       "pattern": "*-chip",
       "files": [
         "src/components/SteeringRuleForm.tsx",
@@ -16448,6 +16559,18 @@
       "pattern": "*-skip-reason",
       "files": [
         "src/components/session/AssuranceReceipt.tsx"
+      ]
+    },
+    {
+      "pattern": "*-sort-*",
+      "files": [
+        "src/components/report/ReportPage.tsx"
+      ]
+    },
+    {
+      "pattern": "*-table-toggle",
+      "files": [
+        "src/components/report/ReportPage.tsx"
       ]
     },
     {
@@ -16758,6 +16881,7 @@
         "src/components/everything/FinishedRunMenu.tsx",
         "src/components/memory/MemoryPage.tsx",
         "src/components/product/RequirementsBrowser.tsx",
+        "src/components/report/ReportPage.tsx",
         "src/components/session/AssuranceReceipt.tsx",
         "src/components/session/CodebaseDownload.tsx",
         "src/components/session/RunConversation.tsx",

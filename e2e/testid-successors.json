@@ -914,6 +914,22 @@
     "watch-pill-card": "nc-attention",
     "watch-pill-row": "nc-attention-item",
     "watch-pill-wrap": "desk-rail-nerve",
-    "desk-rail-theme": "settings-tabs"
+    "desk-rail-theme": "settings-tabs",
+    "desk-callout": "report-agents",
+    "desk-callout-evidence": "report-agents",
+    "desk-callouts": "report-agents",
+    "desk-callouts-more": "report-agents",
+    "desk-callouts-none": "report-agents",
+    "desk-callouts-partial": "report-agents",
+    "desk-insights": "desk-insights-generate",
+    "desk-chart-jobs": "report-throughput-chart",
+    "desk-viz-jobs": "report-throughput",
+    "desk-viz-outcomes": "report-throughput",
+    "desk-chart-spend": "report-spend-chart",
+    "desk-viz-spend": "report-cost",
+    "desk-reports": "report-page",
+    "desk-stat-quality": "report-qe",
+    "desk-stat-success": "report-tile-firstpass",
+    "desk-stats": "report-headline"
   }
 }
