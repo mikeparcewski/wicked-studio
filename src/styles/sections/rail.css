@@ -115,10 +115,14 @@
 .wk-rail .wk-rail-action[data-chat-mode="minimized"]:hover { color: var(--accent); border-color: var(--accent); }
 .wk-rail :is(.wk-rail-home, .wk-rail-session, .wk-rail-link)[aria-current="page"]:active { background: var(--rail-press-bg); box-shadow: none; }
 .wk-rail :is(.wk-rail-session, .wk-rail-link)[aria-current="page"]:active { box-shadow: inset 3px 0 0 var(--accent); }
-/* The Nerve Center tile keeps its state fill: hover only brightens it and lifts it; pressed dims it. */
-.wk-rail .wk-nc-tile:hover { filter: brightness(1.08) saturate(1.06); box-shadow: var(--shadow-card); }
-.wk-rail .wk-nc-tile[aria-current="page"]:hover { box-shadow: inset 0 0 0 2px var(--nc-fg), var(--shadow-card); }
-.wk-rail .wk-nc-tile:active { filter: brightness(0.96); box-shadow: none; }
+/* The Nerve Center tile keeps its state fill: hover lifts it and rings it in a soft halo of its own
+   state colour. Only the tones with dark ink brighten — brightening the red tile's fill would take its
+   white words under 4.5:1 (filters multiply every sRGB channel, the white ink is already at the top;
+   tests/railInteractionStates.test.ts checks every tone in both themes). Pressed dims it. */
+.wk-rail .wk-nc-tile:hover { box-shadow: 0 0 0 3px color-mix(in oklab, var(--nc-edge) 35%, transparent), var(--shadow-card); }
+.wk-rail .wk-nc-tile:not([data-tone="red"]):hover { filter: brightness(1.06); }
+.wk-rail .wk-nc-tile[aria-current="page"]:hover { box-shadow: inset 0 0 0 2px var(--nc-fg), 0 0 0 3px color-mix(in oklab, var(--nc-edge) 35%, transparent), var(--shadow-card); }
+.wk-rail .wk-nc-tile[data-tone]:active, .wk-rail .wk-nc-tile:active { filter: brightness(0.96); box-shadow: none; }
 .wk-rail .wk-nc-tile[aria-current="page"]:active { box-shadow: inset 0 0 0 2px var(--nc-fg); }
 /* Focus (after hover/pressed/current, so a hovered or current item still shows it). */
 .wk-rail :is(.wk-rail-home, .wk-rail-action, .wk-rail-link, .wk-nc-tile):focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-shadow: var(--focus-ring); }

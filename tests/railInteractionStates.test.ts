@@ -90,3 +90,50 @@ describe('motion', () => {
     expect(reduce.every((r) => /transition-property:/u.test(r.body) && !r.body.includes('transform'))).toBe(true);
   });
 });
+
+/**
+ * The Nerve Center tile's hover/pressed filters keep its words at AA (4.5:1) on every tone, in dark
+ * (tokens.css, also wicked-dark) and light (themes/light.css, also wicked-light). Chromium applies
+ * `brightness(k)` to the whole tile as a per-channel sRGB multiply, clamped — ink and fill alike
+ * (measured: #c9302a under brightness(1.08) paints rgb(217, 52, 45)).
+ */
+describe('the Nerve Center tile stays AA under its hover and pressed filters', () => {
+  const TONES = { green: 'ok', yellow: 'warn', red: 'fail' } as const;
+  const tokens = (file: string): Record<string, string> => {
+    const text = readFileSync(join(__dirname, '..', 'src', 'styles', file), 'utf8');
+    return Object.fromEntries([...text.matchAll(/(--nc-[a-z]+-[a-z]+):\s*(#[0-9a-fA-F]{6})\s*;/gu)].map((m) => [m[1]!, m[2]!]));
+  };
+  const rgb = (hex: string): number[] => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+  const lum = (c: number[]): number => {
+    const l = c.map((v) => v / 255).map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
+    return 0.2126 * l[0]! + 0.7152 * l[1]! + 0.0722 * l[2]!;
+  };
+  const ratio = (a: number[], b: number[]): number => { const [hi, lo] = [lum(a), lum(b)].sort((x, y) => y - x) as [number, number]; return (hi + 0.05) / (lo + 0.05); };
+  // The filter a tone gets in a state: the last matching rule wins (rail.css only — nerve.css's own
+  // `.wk-nc-tile:hover` is lower specificity than every `.wk-rail .wk-nc-tile` rule).
+  const filterFor = (tone: string, state: ':hover' | ':active'): string => {
+    let out = 'none';
+    for (const r of all) for (const sel of expand(r.selector)) {
+      if (!sel.startsWith('.wk-rail .wk-nc-tile') || !sel.endsWith(state) || sel.includes('[aria-current')) continue;
+      const only = /\[data-tone="([a-z]+)"\]/u.exec(sel.replace(/:not\([^)]*\)/gu, ''));
+      const not = /:not\(\[data-tone="([a-z]+)"\]\)/u.exec(sel);
+      if ((only !== null && only[1] !== tone) || (not !== null && not[1] === tone)) continue;
+      const f = /filter:\s*([^;]+);/u.exec(r.body);
+      if (f !== null) out = f[1]!.trim();
+    }
+    return out;
+  };
+  for (const [theme, file] of [['dark', 'tokens.css'], ['light', 'themes/light.css']] as const) {
+    const t = tokens(file);
+    for (const [tone, key] of Object.entries(TONES)) for (const state of [':hover', ':active'] as const) {
+      it(`${theme} ${tone} ${state}`, () => {
+        const f = filterFor(tone, state);
+        // Only brightness() is modelled; any other filter function must be added here first.
+        expect(f === 'none' || /^brightness\([\d.]+\)$/u.test(f)).toBe(true);
+        const k = f === 'none' ? 1 : Number(/[\d.]+/u.exec(f)![0]);
+        const paint = (hex: string): number[] => rgb(hex).map((v) => Math.min(255, Math.round(v * k)));
+        expect(ratio(paint(t[`--nc-${key}-fg`]!), paint(t[`--nc-${key}-bg`]!))).toBeGreaterThanOrEqual(4.5);
+      });
+    }
+  }
+});
