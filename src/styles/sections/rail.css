@@ -119,7 +119,7 @@
    state colour. Only the tones with dark ink brighten — brightening the red tile's fill would take its
    white words under 4.5:1 (filters multiply every sRGB channel, the white ink is already at the top;
    tests/railInteractionStates.test.ts checks every tone in both themes). Pressed dims it. */
-.wk-rail .wk-nc-tile:hover { box-shadow: 0 0 0 3px color-mix(in oklab, var(--nc-edge) 35%, transparent), var(--shadow-card); }
+.wk-rail .wk-nc-tile:hover { filter: none; box-shadow: 0 0 0 3px color-mix(in oklab, var(--nc-edge) 35%, transparent), var(--shadow-card); }
 .wk-rail .wk-nc-tile:not([data-tone="red"]):hover { filter: brightness(1.06); }
 .wk-rail .wk-nc-tile[aria-current="page"]:hover { box-shadow: inset 0 0 0 2px var(--nc-fg), 0 0 0 3px color-mix(in oklab, var(--nc-edge) 35%, transparent), var(--shadow-card); }
 .wk-rail .wk-nc-tile[data-tone]:active, .wk-rail .wk-nc-tile:active { filter: brightness(0.96); box-shadow: none; }

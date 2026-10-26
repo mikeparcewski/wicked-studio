@@ -109,10 +109,13 @@ describe('the Nerve Center tile stays AA under its hover and pressed filters', (
     return 0.2126 * l[0]! + 0.7152 * l[1]! + 0.0722 * l[2]!;
   };
   const ratio = (a: number[], b: number[]): number => { const [hi, lo] = [lum(a), lum(b)].sort((x, y) => y - x) as [number, number]; return (hi + 0.05) / (lo + 0.05); };
-  // The filter a tone gets in a state: the last matching rule wins (rail.css only — nerve.css's own
-  // `.wk-nc-tile:hover` is lower specificity than every `.wk-rail .wk-nc-tile` rule).
+  // The filter a tone gets in a state: nerve.css's own `.wk-nc-tile:hover` / `:active` first (it still
+  // applies wherever no rail rule sets a filter), then the last matching rail.css rule wins (every
+  // `.wk-rail .wk-nc-tile` rule out-ranks it).
+  const nerve = rules(readFileSync(join(__dirname, '..', 'src', 'styles', 'sections', 'nerve.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//gu, ''));
   const filterFor = (tone: string, state: ':hover' | ':active'): string => {
     let out = 'none';
+    for (const r of nerve) if (expand(r.selector).includes(`.wk-nc-tile${state}`)) { const f = /filter:\s*([^;]+);/u.exec(r.body); if (f !== null) out = f[1]!.trim(); }
     for (const r of all) for (const sel of expand(r.selector)) {
       if (!sel.startsWith('.wk-rail .wk-nc-tile') || !sel.endsWith(state) || sel.includes('[aria-current')) continue;
       const only = /\[data-tone="([a-z]+)"\]/u.exec(sel.replace(/:not\([^)]*\)/gu, ''));
@@ -123,6 +126,10 @@ describe('the Nerve Center tile stays AA under its hover and pressed filters', (
     }
     return out;
   };
+  it('the white-ink red tile does not brighten on hover (only the dark-ink tones do)', () => {
+    expect(filterFor('red', ':hover')).toBe('none');
+    expect(filterFor('yellow', ':hover')).toMatch(/^brightness\(1\.0\d\)$/u);
+  });
   for (const [theme, file] of [['dark', 'tokens.css'], ['light', 'themes/light.css']] as const) {
     const t = tokens(file);
     for (const [tone, key] of Object.entries(TONES)) for (const state of [':hover', ':active'] as const) {
