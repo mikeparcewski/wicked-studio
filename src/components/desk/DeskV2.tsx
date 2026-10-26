@@ -376,7 +376,14 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
     <div role="tabpanel" id={panelId('work')} aria-labelledby={tabId('work')} data-testid="desk-work" className="wk-work">
       {/* The handover is studio-wide (the audit trail and its dismissal are global): the Desk only, never a project page. */}
       {projectId === undefined && handover.since !== null && <HandoverPanel handover={handover} navigate={navigate} now={now} runs={runs} />}
-      {/* At a glance: four quiet numbers on one surface, above the band (each opens its list). */}
+      {/* The band: Needs you (the lead) beside Happening now, the same height, each scrolling inside. */}
+      <div className="wk-work-top">
+        <DeskInbox rows={needRows} runs={runs} navigate={navigate} now={now} settled={readState === 'known' ? settled.phase : 'loading'} agentName={agentName} extra={projectId === undefined ? choresBlock : null} setupCount={setup.length}
+          missing={settled.missing} onRetry={rereadSources} retrying={rereading} />
+        <DeskHappening runs={runs} runsShown={runsShown} navigate={navigate} now={now} title={(v) => jobTitle(v.session)} pathOf={pathOfRun} agentName={agentName}
+          scope={projectRunIds} scopeKey={projectId ?? 'desk'} {...(projectId !== undefined ? { seeAllPath: everythingPath({ tab: 'sessions', project: projectId }) } : {})} />
+      </div>
+      {/* At a glance: four quiet numbers on one surface, under the band: Needs you leads, above the fold (each opens its list). */}
       <ul className="wk-work-blocks" aria-label="At a glance" data-testid="desk-blocks">
         <DeskStat icon={Activity} tone="run" label="Running now" testId="desk-block-running" href={runningPath} navigate={navigate}
           value={runsShown ? String(allRunning) : null} note={allRunning === 0 ? 'nothing running' : 'working now'} />
@@ -391,13 +398,6 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
           value={projectId === 'default' ? '—' : workSpend.phase === 'loading' ? null : workSpend.current === null ? '—' : `${workSpend.truncated || workSpend.partial ? 'at least ' : ''}${moneyWords(workSpend.current)}`}
           note={projectId === 'default' ? 'Spend is counted per project' : workSpend.truncated ? 'Partial: last 30 days · newest jobs only; older ones were not read' : workSpend.current !== null && workSpend.previous !== null ? deltaWords(workSpend.current, workSpend.previous, (d) => moneyWords(Math.abs(d)), 30) : workSpend.partial ? 'last 30 days · priced usage only' : 'last 30 days'} />
       </ul>
-      {/* The band: Needs you (the lead) beside Happening now, the same height, each scrolling inside. */}
-      <div className="wk-work-top">
-        <DeskInbox rows={needRows} runs={runs} navigate={navigate} now={now} settled={readState === 'known' ? settled.phase : 'loading'} agentName={agentName} extra={projectId === undefined ? choresBlock : null} setupCount={setup.length}
-          missing={settled.missing} onRetry={rereadSources} retrying={rereading} />
-        <DeskHappening runs={runs} runsShown={runsShown} navigate={navigate} now={now} title={(v) => jobTitle(v.session)} pathOf={pathOfRun} agentName={agentName}
-          scope={projectRunIds} scopeKey={projectId ?? 'desk'} {...(projectId !== undefined ? { seeAllPath: everythingPath({ tab: 'sessions', project: projectId }) } : {})} />
-      </div>
       {/* B9: the one sentence about a rule remembered since the last visit (null when there is none). */}
       {projectId === undefined && <DeskRuleLine navigate={navigate} />}
       {workExtra}
