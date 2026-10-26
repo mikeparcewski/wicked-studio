@@ -109,13 +109,13 @@ export function DeskRuns({ runs, runsShown, refine, refineBar, now, navigate, pa
                   const took = r.endedAt === null && !open ? null : durationWords(r, now);
                   return (
                     <tr key={r.id} data-testid="desk-runs-row" data-run-id={r.id} data-outcome={r.outcome}>
-                      <td><span className="wk-dr-status"><i aria-hidden className="wk-chart-swatch wk-chart-swatch--dot" style={{ background: outcomeColor(r.outcome) }} />{r.outcome}</span></td>
+                      <td className="wk-dr-c-status"><span className="wk-dr-status"><i aria-hidden className="wk-chart-swatch wk-chart-swatch--dot" style={{ background: outcomeColor(r.outcome) }} />{r.outcome}</span></td>
                       <td className="wk-dr-title">
                         <a href={path} onClick={go(path)} data-testid="desk-runs-open" title={r.title}>{r.title}</a>
                         <span className="wk-dr-sub">{r.workflow}</span>
                       </td>
-                      {showProject && <td className="wk-dr-project" title={projectName(r.project)}>{projectName(r.project)}</td>}
-                      <td>
+                      {showProject && <td className="wk-dr-project" data-none={r.project === 'default' ? 'true' : undefined} title={projectName(r.project)}>{projectName(r.project)}</td>}
+                      <td className="wk-dr-c-agents">
                         <span className="wk-dr-agents">
                           {r.agents.length === 0 ? <span className="wk-dr-sub">none yet</span> : r.agents.slice(0, 3).map((a) => (
                             <span key={a} className="wk-dr-agent"><i aria-hidden className="wk-chart-swatch wk-chart-swatch--dot" style={{ background: agentColor(a) }} />{agentName(a)}</span>
@@ -127,8 +127,8 @@ export function DeskRuns({ runs, runsShown, refine, refineBar, now, navigate, pa
                         <Progress value={r.stepsDone} total={r.steps} tone={r.outcome === 'Failed' ? 'fail' : r.outcome === 'Working' ? 'run' : 'ok'} label={`${r.stepsDone} of ${r.steps} steps`} data-testid="desk-runs-progress" />
                         <span className="wk-dr-sub">{r.steps === 0 ? 'no steps yet' : `${r.stepsDone} of ${r.steps}`}</span>
                       </td>
-                      <td className="wk-num" title={r.startedAt === null ? undefined : new Date(r.startedAt).toLocaleString()}>{r.startedAt === null ? '—' : relTime(r.startedAt, now)}</td>
-                      <td className="wk-num">{took ?? '—'}{open && r.endedAt === null && took !== null ? <span className="wk-dr-sub"> so far</span> : null}</td>
+                      <td className="wk-num wk-dr-c-started" title={r.startedAt === null ? undefined : new Date(r.startedAt).toLocaleString()}>{r.startedAt === null ? '—' : relTime(r.startedAt, now)}</td>
+                      <td className="wk-num wk-dr-c-took">{took ?? '—'}{open && r.endedAt === null && took !== null ? <span className="wk-dr-sub"> so far</span> : null}</td>
                       {rowActions !== undefined && <td className="wk-dr-acts">{(() => { const acts = rowActions(r.id, r.title); return acts.length === 0 ? null : <OverflowMenu label={`More actions for ${r.title}`} items={acts} data-testid="desk-runs-row-menu" />; })()}</td>}
                     </tr>
                   );
