@@ -47,7 +47,8 @@ errors: list[str] = []
 DASH = """() => ({
   desk: !!document.querySelector('[data-testid="project-desk"]'),
   title: document.querySelector('[data-testid="project-title"]')?.innerText ?? null,
-  tabs: [...document.querySelectorAll('[data-testid^="desk-tab-"]')].map((t) => t.dataset.testid),
+  // The tab bar's tabs plus the views under its More (2026-10-26): one set of Desk views.
+  tabs: [...document.querySelectorAll('[data-testid^="desk-tab-"], [data-testid^="desk-more-tab-"]')].map((t) => t.dataset.testid),
   inbox: !!document.querySelector('[data-testid="desk-inbox"]'),
   blocks: !!document.querySelector('[data-testid="desk-blocks"]'),
   actions: [...document.querySelectorAll('[data-testid="project-actions"] [data-testid]')].map((a) => a.dataset.testid).filter((t) => t.startsWith('project-')),

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Plus, RefreshCw, Sparkles, X } from 'lucide-react';
+import { Columns3, Plus, RefreshCw, Sparkles, X } from 'lucide-react';
 import { api, apiBase } from '../../api/client.js';
 import type { SessionView } from '../../api/types.js';
 import { ANALYZE_WORKFLOW, analysisIntent, analysisLaunchBody, isAnalysisRun, type AnalyzeKind } from '../../board/deskAnalyze.js';
@@ -222,7 +222,12 @@ export function DeskUnderstand({ runsShown = true, agents, agentsRead = 'done', 
         <div className="wk-und-main">
           {kind === 'agents' && !agentsUnavailable && agentsTruncated && <p className="wk-viz-note">{PARTIAL_RECORD_NOTE}</p>}
           {!runsShown ? (
-            <section className="wk-card wk-und-empty" data-testid="desk-und-reading" aria-busy="true"><Skeleton rows={3} variant="line" /></section>
+            <section className="wk-card wk-und-empty" data-testid="desk-und-reading" aria-busy="true">
+              {/* A designed wait: it says what is coming, never a blank box. */}
+              <h3 className="wk-desk2-title">Reading your jobs…</h3>
+              <p className="wk-viz-note">The comparison cards appear once the run list answers.</p>
+              <Skeleton rows={3} variant="line" />
+            </section>
           ) : agentsUnavailable ? (
             <section className="wk-card wk-und-empty" data-testid="desk-und-agents-unread">
               <p className="wk-viz-state">{AGENT_WORKFLOW_NOTE}</p>
@@ -237,6 +242,7 @@ export function DeskUnderstand({ runsShown = true, agents, agentsRead = 'done', 
             </section>
           ) : view.cards.length === 0 ? (
             <section className="wk-card wk-und-empty" data-testid="desk-und-empty">
+              <span aria-hidden className="wk-und-empty-mark"><Columns3 size={18} /></span>
               <h3 className="wk-desk2-title">Nothing picked yet</h3>
               <p className="wk-viz-note">{options.length === 0 ? `No ${kind} in the last ${days} days. Try a longer window, or one of these:` : 'Start from one of these, or use Add above:'}</p>
               <ul className="wk-und-suggest">

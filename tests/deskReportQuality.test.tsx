@@ -160,3 +160,59 @@ describe('Report quality checks', () => {
     }
   });
 });
+
+describe('Desk tabs, grouped (2026-10-26: nine tabs at one level read as a mainframe menu bar)', () => {
+  const props = (navigate = vi.fn()) => ({ runs: [], runsLoaded: true, needRows: [], now: NOW, navigate, projectId: 'p1' });
+
+  it('the four daily views are tabs; the rest sit under More, each with what it is for, and every view stays one click away', () => {
+    const navigate = vi.fn();
+    render(<DeskV2 {...props(navigate)} search="" />);
+    const tabs = within(screen.getByTestId('desk-tabs')).getAllByRole('tab').map((t) => t.textContent);
+    expect(tabs).toEqual(['Work', 'Runs', 'Repositories', 'Report']);
+    const more = screen.getByTestId('desk-tabs-more');
+    const panel = screen.getByTestId('desk-tabs-more-panel');
+    expect(more).toHaveAttribute('aria-expanded', 'false');
+    expect(more).toHaveAttribute('aria-controls', panel.id);
+    expect(panel).not.toBeVisible();
+    fireEvent.click(more);
+    expect(more).toHaveAttribute('aria-expanded', 'true');
+    expect(panel).toBeVisible();
+    // Every Desk view is either a tab or a More item — none is lost.
+    const items = DESK_TABS.filter((t) => t.group === 'more');
+    expect(items.map((t) => t.id)).toEqual(['understand', 'steer', 'memory', 'agents', 'evaluate']);
+    for (const t of DESK_TABS) {
+      const el = t.group === 'primary' ? screen.getByTestId(`desk-tab-${t.id}`) : screen.getByTestId(`desk-more-tab-${t.id}`);
+      expect(el).toHaveTextContent(t.label);
+      if (t.group === 'more') expect(el).toHaveTextContent(t.hint!);
+    }
+    fireEvent.click(screen.getByTestId('desk-more-tab-steer'));
+    expect(navigate).toHaveBeenLastCalledWith('/projects/p1?tab=steer');
+    expect(more).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('Escape closes More and gives the button its focus back', () => {
+    render(<DeskV2 {...props()} search="" />);
+    const more = screen.getByTestId('desk-tabs-more');
+    fireEvent.click(more);
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(more).toHaveAttribute('aria-expanded', 'false');
+    expect(more).toHaveFocus();
+  });
+
+  it('picking the view already open from More gives its tab the focus (xreview r1)', () => {
+    render(<DeskV2 {...props()} search="?tab=understand" />);
+    fireEvent.click(screen.getByTestId('desk-tabs-more'));
+    fireEvent.click(screen.getByTestId('desk-more-tab-understand'));
+    expect(screen.getByTestId('desk-tab-understand')).toHaveFocus();
+    expect(screen.getByTestId('desk-tabs-more')).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('a view opened from More shows as a selected tab of its own, and More marks it current', () => {
+    render(<DeskV2 {...props()} search="?tab=memory" />);
+    const tabs = within(screen.getByTestId('desk-tabs')).getAllByRole('tab');
+    expect(tabs.map((t) => t.textContent)).toEqual(['Work', 'Runs', 'Repositories', 'Report', 'Memory']);
+    expect(screen.getByTestId('desk-tab-memory')).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByTestId('desk-more-tab-memory')).toHaveAttribute('aria-current', 'page');
+    expect(screen.getByTestId('desk-tabs-more')).toHaveAttribute('data-current', 'true');
+  });
+});

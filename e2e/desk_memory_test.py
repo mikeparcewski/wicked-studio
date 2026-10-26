@@ -103,14 +103,19 @@ with sync_playwright() as p:
 
     # ── 1. Desk → Memory tab: totals, the list, a kind card, a search ─────────────────
     page.goto(f"{origin}/", wait_until="networkidle")
-    tab = page.get_by_test_id("desk-tab-memory")
+    # Since 2026-10-26 Memory sits under the tab bar's More (with Understand, Steer, Agents, Evaluate).
+    more = page.get_by_test_id("desk-tabs-more")
     try:
-        tab.wait_for(state="visible", timeout=15000)
+        more.wait_for(state="visible", timeout=15000)
+        more.click()
+        tab = page.get_by_test_id("desk-more-tab-memory")
+        tab.wait_for(state="visible", timeout=5000)
     except Exception as e:  # noqa: BLE001
         page.screenshot(path=str(SHOTS / "desk-memory-missing.png"))
-        fail("tab", f"no Memory tab on the Desk: {e}")
-    tabs = page.get_by_test_id("desk-tabs").locator('[role="tab"]').all_inner_texts()
+        fail("tab", f"no Memory view under the Desk's More: {e}")
+    tabs = [t.split("\n")[0] for t in page.get_by_test_id("desk-tabs-more-panel").locator("a").all_inner_texts()]
     tab.click()
+    page.get_by_test_id("desk-tab-memory").wait_for(state="visible", timeout=8000)
     settled(page)
     page.wait_for_function("() => /2/.test(document.querySelector('[data-testid=\"memory-stat-total\"]')?.textContent ?? '')", timeout=10000)
     first = rows(page)
@@ -182,7 +187,8 @@ with sync_playwright() as p:
     check("retire", retired_note.startswith("Retired: ") and added["id"] not in left and len(left) == 3, note=retired_note, left=left)
 
     # ── 4. Steer: rules and policy proposals only ─────────────────────────────────────
-    page.get_by_test_id("desk-tab-steer").click()
+    page.get_by_test_id("desk-tabs-more").click()
+    page.get_by_test_id("desk-more-tab-steer").click()
     page.get_by_test_id("steer-surface").wait_for(state="visible", timeout=15000)
     page.wait_for_function("() => /\\d/.test(document.querySelector('[data-testid=\"steer-stat-review\"]')?.textContent ?? '')", timeout=10000)
     steer_review = page.get_by_test_id("steer-stat-review").inner_text()
