@@ -871,13 +871,25 @@
 }
 @media (prefers-reduced-motion: reduce) { .wk-inbox-list div.wk-inbox-row { transition: none; } }
 
-/* Report: the big number is each tile's hero. */
-.wk-understand .wk-stats .wk-stat, .wk-dr .wk-stats .wk-stat { grid-template-columns: auto minmax(0, 1fr); row-gap: var(--space-1); padding: var(--space-5, 20px); }
-.wk-understand .wk-stats .wk-stat-label, .wk-dr .wk-stats .wk-stat-label { align-self: center; font-size: var(--text-sm); }
-.wk-understand .wk-stats .wk-stat-icon, .wk-dr .wk-stats .wk-stat-icon { grid-row: 1; }
-.wk-understand .wk-stats .wk-stat-value, .wk-dr .wk-stats .wk-stat-value { grid-column: 1 / -1; margin-top: var(--space-3); font-size: clamp(40px, 3.2vw, 56px); font-weight: 700; letter-spacing: -0.03em; line-height: 1; }
+/* Runs and Report stat rows (2026-10-26): one quiet strip on one surface, like the Work tab's glance — the
+   label, a mark at the right, the number at one size (28 px, not 56), the note. No five boxes. */
+.wk-understand .wk-stats, .wk-dr .wk-stats { gap: var(--space-1); padding: var(--space-1); border-radius: var(--radius-xl); background: var(--surface-card); box-shadow: var(--shadow-card); }
+.wk-desk2 .wk-understand .wk-stats .wk-stat, .wk-desk2 .wk-dr .wk-stats .wk-stat {
+  grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: auto auto auto; column-gap: var(--space-2); row-gap: var(--space-1);
+  padding: var(--space-4) var(--space-5, 20px); border-radius: var(--radius-lg); background: transparent; box-shadow: none;
+}
+.wk-understand .wk-stats .wk-stat-label, .wk-dr .wk-stats .wk-stat-label { grid-column: 1; grid-row: 1; align-self: center; font-size: var(--text-sm); color: var(--ink-muted); }
+.wk-understand .wk-stats .wk-stat-icon, .wk-dr .wk-stats .wk-stat-icon { grid-column: 2; grid-row: 1; width: 28px; height: 28px; margin: 0; }
+.wk-understand .wk-stats .wk-stat-value, .wk-dr .wk-stats .wk-stat-value { grid-column: 1 / -1; grid-row: 2; margin: 0; font-size: var(--text-2xl); font-weight: 650; letter-spacing: -0.015em; line-height: var(--leading-tight); }
+.wk-understand .wk-stats .wk-stat-foot, .wk-dr .wk-stats .wk-stat-foot { grid-column: 1 / -1; grid-row: 3; margin-top: 0; }
+.wk-understand .wk-stats .wk-stat-note, .wk-dr .wk-stats .wk-stat-note { font-size: var(--text-xs); color: var(--ink-muted); white-space: normal; overflow: visible; display: block; }
+@media (min-width: 1280px) {
+  .wk-understand .wk-stats .wk-stat + .wk-stat::before, .wk-dr .wk-stats .wk-stat + .wk-stat::before { content: ''; position: absolute; left: calc(-1 * var(--space-1) / 2); top: var(--space-4); bottom: var(--space-4); width: 1px; background: var(--border-subtle); }
+}
+.wk-understand .wk-stats .wk-stat .wk-spark, .wk-dr .wk-stats .wk-stat .wk-spark { position: static; margin-left: auto; }
 @media (max-width: 767px) {
-  .wk-understand .wk-stats .wk-stat-value, .wk-dr .wk-stats .wk-stat-value { font-size: 34px; }
+  .wk-desk2 .wk-understand .wk-stats .wk-stat, .wk-desk2 .wk-dr .wk-stats .wk-stat { padding: var(--space-3); }
+  .wk-understand .wk-stats .wk-stat-value, .wk-dr .wk-stats .wk-stat-value { font-size: var(--text-xl); }
 }
 
 .wk-und-intro { margin: 0; max-width: 92ch; font-size: var(--text-sm); color: var(--ink-muted); line-height: var(--leading-body); }
@@ -941,7 +953,15 @@
 .wk-dr-table tbody tr:hover { background: var(--accent-wash); }
 .wk-dr-table .wk-num { text-align: right; font-variant-numeric: tabular-nums; }
 .wk-dr-status, .wk-dr-agent { display: inline-flex; align-items: center; gap: var(--space-2); }
-.wk-dr-agents { display: inline-flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; white-space: normal; }
+/* An agent is a dot and its name on ONE line (they wrapped into a stack, doubling every row's height); a
+   third agent goes to the next line, never a name split in two. */
+.wk-dr-agents { display: inline-flex; align-items: center; gap: var(--space-1) var(--space-3); flex-wrap: wrap; white-space: normal; }
+.wk-dr-agent { white-space: nowrap; }
+.wk-dr-table .wk-dr-c-agents { min-width: 11rem; }
+.wk-dr-table td { padding-block: var(--space-3); }
+.wk-dr-c-status .wk-dr-status { white-space: nowrap; color: var(--ink-body); }
+/* "Not in a project" is the absence of one: said quietly, so the projects that exist stand out. */
+.wk-dr-project[data-none="true"] { color: var(--ink-muted); }
 .wk-dr-title { max-width: 0; width: 46%; }
 .wk-dr-title a { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-high); font-weight: var(--weight-semi); text-decoration: none; }
 .wk-dr-title a:hover { color: var(--accent); text-decoration: underline; }
@@ -954,6 +974,43 @@
 @media (max-width: 1279px) { .wk-dr .wk-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @media (max-width: 767px) {
   .wk-dr .wk-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .wk-dr-search { margin-left: 0; flex: 1 1 100%; }
+  .wk-dr-search { margin-left: 0; flex: 1 1 100%; min-width: 0; }
+  /* Phone: the table becomes a list of runs — the title first (two lines), then its state, agents, steps and
+     times, each in a place of its own; the column heads stay for a screen reader only. */
+  .wk-dr-table, .wk-dr-table tbody { display: block; }
+  .wk-dr-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .wk-dr-table tbody tr {
+    display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: var(--space-3); row-gap: var(--space-2);
+    grid-template-areas: "title title" "status started" "agents took" "steps steps";
+    padding: var(--space-3) 0; border-bottom: 1px solid var(--border-subtle);
+  }
+  /* The project line only where a row has one (a project's own page shows none); a row with its own ⋯ (a
+     project's page) keeps it beside the title. */
+  .wk-dr-table tbody tr:has(> .wk-dr-project) { grid-template-areas: "title title" "status started" "agents took" "steps steps" "project project"; }
+  .wk-dr-table tbody tr:has(> .wk-dr-acts:not(:empty)) { grid-template-areas: "title acts" "status started" "agents took" "steps steps"; }
+  .wk-dr-table tbody tr:has(> .wk-dr-project):has(> .wk-dr-acts:not(:empty)) { grid-template-areas: "title acts" "status started" "agents took" "steps steps" "project project"; }
+  .wk-dr-table .wk-dr-acts:empty { display: none; }
+  .wk-dr-table tbody tr:last-child { border-bottom: 0; }
+  .wk-dr-table td { display: block; padding: 0; border: 0; white-space: normal; min-width: 0; }
+  .wk-dr-table .wk-dr-title { grid-area: title; width: auto; max-width: none; }
+  .wk-dr-title a { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  .wk-dr-table .wk-dr-c-status { grid-area: status; font-size: var(--text-sm); }
+  .wk-dr-table .wk-dr-c-started { grid-area: started; font-size: var(--text-xs); color: var(--ink-muted); }
+  .wk-dr-table .wk-dr-c-agents { grid-area: agents; min-width: 0; font-size: var(--text-sm); }
+  .wk-dr-table .wk-dr-c-took { grid-area: took; font-size: var(--text-xs); color: var(--ink-muted); }
+  .wk-dr-table .wk-dr-steps { grid-area: steps; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; column-gap: var(--space-3); }
+  .wk-dr-table .wk-dr-steps .wk-progress-field { margin: 0; }
+  .wk-dr-table .wk-dr-project { grid-area: project; max-width: none; font-size: var(--text-xs); }
+  .wk-dr-table .wk-dr-acts { grid-area: acts; width: auto; }
+  .wk-dr-table tbody tr:hover { background: transparent; }
+  /* With the heads hidden, the two times say which is which (a screen reader keeps the column heads). */
+  .wk-dr-table .wk-dr-c-started::before { content: 'Started '; }
+  .wk-dr-table .wk-dr-c-took::before { content: 'Took '; }
+}
+/* Phone: a segmented control (status, range, group by) keeps one line and scrolls sideways, never a wrapped blob. */
+@media (max-width: 767px) {
+  .wk-desk2 .wk-segmented { flex-wrap: nowrap; max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+  .wk-desk2 .wk-segmented::-webkit-scrollbar { display: none; }
+  .wk-desk2 .wk-segmented-option { flex-shrink: 0; white-space: nowrap; }
 }
 .wk-dr-acts { width: 1%; text-align: right; }

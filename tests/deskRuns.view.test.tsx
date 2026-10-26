@@ -30,6 +30,24 @@ describe('Desk Runs view', () => {
     expectStats();
   });
 
+  it('every cell carries its place (the phone lays the row out as a list by these), and no-project reads as absence', () => {
+    const base = props();
+    render(<DeskRuns {...base} runs={[...base.runs, deskRun('loose', { project_id: '' })]} projectName={(id) => (id === 'default' ? 'Not in a project' : base.projectName(id))} />);
+    for (const row of screen.getAllByTestId('desk-runs-row')) {
+      for (const cls of ['wk-dr-c-status', 'wk-dr-title', 'wk-dr-project', 'wk-dr-c-agents', 'wk-dr-steps', 'wk-dr-c-started', 'wk-dr-c-took']) {
+        expect(row.querySelectorAll(`td.${cls}`)).toHaveLength(1);
+      }
+      // Explicit roles keep the table a table for a screen reader when the phone lays its rows out as a grid.
+      expect(row).toHaveAttribute('role', 'row');
+      expect([...row.querySelectorAll('td')].every((td) => td.getAttribute('role') === 'cell')).toBe(true);
+      const project = row.querySelector('td.wk-dr-project') as HTMLElement;
+      // The words stay on the face (nothing moved behind a tooltip); only the run with no project is marked quiet.
+      const loose = row.dataset.runId === 'loose';
+      expect(project).toHaveTextContent(loose ? 'Not in a project' : 'Studio Desk');
+      expect(project.dataset.none).toBe(loose ? 'true' : undefined);
+    }
+  });
+
   it('filters typed search and shows the empty state when no row matches', () => {
     render(<DeskRuns {...props()} />);
     fireEvent.change(screen.getByTestId('desk-runs-search'), { target: { value: 'FINISHED studio sonnet' } });
