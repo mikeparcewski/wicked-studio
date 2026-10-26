@@ -12,6 +12,10 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+### Fixed
+
+- **Seat choices offer only helpers that can work (PRODUCT-WORKS J4).** On the test rig, after a container-runtime blip, the dead-seat card offered only "Reassign to GitHub Copilot CLI". That seat was out of quota and failed at once. A reassign now offers only helpers that are signed in and not benched. It reads the roster's active bench (`recent_bench` / `benchedUntil`, crew#1138), crew's `work_eligible`, and the run's own `benched_seats` with their lift times (wicked-core#1118). The other helpers are shown greyed out with their reason and lift time, beside a Sign in link. A card with no usable helper says who is back first and when ("wait until then and reassign the step to it, or sign another helper in"). The New job wizard preselects only helpers that can take work; a signed-out or benched one is shown greyed out with why and joins the job only when you tick it. The live feed says "Waiting for the container runtime…" while the engine waits out a runtime blip (`containerRuntimeWait`, wicked-core#1129).
+
 ## [0.12.3] — 2026-10-26
 
 A patch release finishing the Desk redesign: the Work tab (#910) and the Desk's tabs grouped as four daily views and More (#913).

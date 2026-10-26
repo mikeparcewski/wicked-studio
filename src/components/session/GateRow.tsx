@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { RosterSeat, SessionView as RunView } from '../../api/types.js';
 import { QeRefusalWarning } from '../QeRefusalWarning.js';
 import { GATE_HASH, IDLE_GATE_ACTION, commitGateDecision, commitGateReassign, useGateActionStore, type GateAnswer } from '../../board/gateActions.js';
-import { FLOOR_FIX_LABEL, sessionGateChoices, type DeadSeat, type GateRowChoice, type GateRowModel } from '../../board/gateRowModel.js';
+import { FLOOR_FIX_LABEL, sessionGateChoices, soonestBack, type DeadSeat, type GateRowChoice, type GateRowModel } from '../../board/gateRowModel.js';
 import { INITIAL_PICK, pickKey, type RowPick } from '../../board/questionRow.js';
 import { plainGateQuestion, repoNameOf } from '../../board/deskWords.js';
 import { api } from '../../api/client.js';
@@ -14,7 +14,7 @@ import { useRunEvents } from '../../hooks/useRunEvents.js';
 import { getCachedRoster, subscribeRoster } from '../../store/rosterCache.js';
 import { choicesOf, type OpenGate } from '../../store/gates.js';
 import type { CoreEvent, WorkUnit } from '../../api/types.js';
-import { steerScopeTarget } from '../gateVerdictModel.js';
+import { liftClock, runBenchesOf, steerScopeTarget, type ReassignCandidate } from '../gateVerdictModel.js';
 import { useRerunFromHere } from '../../hooks/useRerunFromHere.js';
 import type { RerunOffer } from '../rerunModel.js';
 import { GateDepthDetails, RuleOfferBlock, useFullVerdict, useSeatTrust, type SeatTrust } from './GateDepth.js';
@@ -188,9 +188,11 @@ function RunGateRow({ view, gate, navigate }: { view: RunView; gate: OpenGate | 
   // A gate no judge could rule on: whether its judge can be re-run now (crew's gate read).
   const waitingForJudge = gate !== undefined && events !== null && waitsForJudge(events, gate.ord, gate.prompt);
   const rejudge = useRejudgeOffer(runId, gate?.ord, waitingForJudge);
+  // (PRODUCT-WORKS J4) The seats this run benched: a reassign never offers one while its bench holds.
+  const benched = useMemo(() => runBenchesOf(view.session), [view.session]);
   const model = useMemo<GateRowModel | null>(() => {
     if (gate === undefined || events === null) return null;
-    const result = sessionGateChoices({ runId, gate: gateWithLogChoices(gate, events), units: view.units, events, pool, roster, rerun: rerunOffer, fullVerdict, rejudge });
+    const result = sessionGateChoices({ runId, gate: gateWithLogChoices(gate, events), units: view.units, events, pool, roster, benched, rerun: rerunOffer, fullVerdict, rejudge });
     if (result === null) return null;
     const toBuilder = steerReachesBuilder(view.units, gate.ord);
     // Label each arm by its effect: the denied-step approve re-runs the step; a steer on a review gate
@@ -202,7 +204,7 @@ function RunGateRow({ view, gate, navigate }: { view: RunView; gate: OpenGate | 
         ? { ...choice, label: 'Approve with a note for the next step', title: 'Approve, and your note goes to the next step — not to the builder. To have the builder change something, Send back.' }
         : choice;
     return { ...result, choices: result.choices.map(effectLabel), overflow: result.overflow.map(effectLabel) };
-  }, [runId, gate, view.units, events, pool, roster, rerunOffer, fullVerdict, rejudge]);
+  }, [runId, gate, view.units, events, pool, roster, benched, rerunOffer, fullVerdict, rejudge]);
   // S16a-1b: the creator seat's record on Approve and the standing-order offer (review gates).
   const seat = useSeatTrust(view, gate, {
     isPlanGate: false, isDeliverGate: gate?.gateKind === 'deliver',
@@ -253,8 +255,12 @@ function RunGateRow({ view, gate, navigate }: { view: RunView; gate: OpenGate | 
           seat={model.deadSeat}
           label={roster?.find((r) => r.key === model.deadSeat!.cli)?.display_name ?? null}
           canReassign={[...model.choices, ...model.overflow].some((c) => c.reassignCli !== undefined)}
+          {...(model.withheldSeats !== undefined ? { withheld: model.withheldSeats } : {})}
           {...(navigate !== undefined ? { navigate } : {})}
         />
+      )}
+      {model.withheldSeats !== undefined && (
+        <WithheldSeats seats={model.withheldSeats} {...(navigate !== undefined ? { navigate } : {})} />
       )}
       {judgeWait && (
         <JudgeWaitLine
@@ -343,14 +349,21 @@ function seatName(cli: string, label: string | null): string {
  * Reassign to another helper in this job when there is one; otherwise sign another helper in and start the job
  * again with it, or Stop.
  */
-export function DeadSeatLine({ seat, label, canReassign, navigate }: { seat: DeadSeat; label: string | null; canReassign: boolean; navigate?: Navigate }): React.ReactElement {
+export function DeadSeatLine({ seat, label, canReassign, withheld, navigate }: { seat: DeadSeat; label: string | null; canReassign: boolean; withheld?: readonly ReassignCandidate[]; navigate?: Navigate }): React.ReactElement {
   const name = seatName(seat.cli, label);
+  // (PRODUCT-WORKS J4) Other helpers ARE in this job but none can work now: say who is back first, and when.
+  const back = canReassign ? null : soonestBack(withheld);
+  const backAt = back?.until !== undefined ? liftClock(back.until) : null;
   return (
     <p data-testid="session-gate-dead-seat" data-cause={seat.cause} role="status" className="wk-gate-consequence">
       <b>{name} {DEAD_SEAT_CAUSE[seat.cause]}.</b>{' '}
       {canReassign
         ? <>This job will not send the step to {name} again. Reassign it to another helper in this job, or stop.</>
-        : <>No other helper is in this job, so the step cannot go on here. Sign another helper in and start the job again with it, or stop.</>}
+        : back !== null && backAt !== null
+          ? <span data-testid="session-gate-dead-seat-wait">No helper in this job can take the step right now. {seatName(back.cli, back.label)} is back by {backAt}: wait until then and reassign the step to it, or sign another helper in.</span>
+          : (withheld ?? []).length > 0
+            ? <>No helper in this job can take the step right now. Sign another helper in, or stop.</>
+            : <>No other helper is in this job, so the step cannot go on here. Sign another helper in and start the job again with it, or stop.</>}
       {' '}
       {navigate !== undefined
         ? (
@@ -360,6 +373,41 @@ export function DeadSeatLine({ seat, label, canReassign, navigate }: { seat: Dea
         )
         : <span data-testid="session-gate-dead-seat-signin">Sign one in from Settings.</span>}
     </p>
+  );
+}
+
+/**
+ * (PRODUCT-WORKS J4) The job's other helpers a reassign does not offer, greyed out with why — benched
+ * (and when it lifts), signed out, not eligible — and the way to fix it: sign a helper in. On the rig the
+ * dead-seat card offered only quota-benched Copilot; a seat that cannot work is shown, never offered.
+ */
+export function WithheldSeats({ seats, navigate }: { seats: readonly ReassignCandidate[]; navigate?: Navigate }): React.ReactElement {
+  return (
+    <div data-testid="session-gate-withheld" className="wk-gate-withheld">
+      {seats.map((c) => (
+        <button
+          key={c.cli}
+          type="button"
+          disabled
+          aria-disabled="true"
+          data-testid="session-gate-withheld-seat"
+          data-key={c.cli}
+          data-state={c.state}
+          className="wk-btn wk-btn--secondary"
+          title={`${seatName(c.cli, c.label)} cannot take the step now${c.note !== '' ? `: ${c.note}` : ''}.`}
+        >
+          Reassign to {seatName(c.cli, c.label)}
+          {c.note !== '' && <span className="wk-gate-withheld-why"> — {c.note}</span>}
+        </button>
+      ))}
+      {navigate !== undefined
+        ? (
+          <button type="button" data-testid="session-gate-withheld-signin" onClick={() => navigate('/system')} className="wk-btn wk-btn--secondary">
+            Sign in ›
+          </button>
+        )
+        : <span data-testid="session-gate-withheld-signin">Sign in from Settings.</span>}
+    </div>
   );
 }
 

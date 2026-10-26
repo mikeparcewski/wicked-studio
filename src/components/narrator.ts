@@ -215,6 +215,24 @@ export function narrate(event: CoreEvent, ctx: NarratorContext): NarrationLine |
   const phase = ctx.phaseOf(ord);
   const line = (text: string, tone: NarrationTone): NarrationLine => ({ text, tone, ord, event });
 
+  // (PRODUCT-WORKS J4, wicked-core#1129) The host's container runtime stopped answering: an
+  // infrastructure wait, never the helper's failure. A newer frame than the pinned api-types union.
+  if ((event as { type: string }).type === 'containerRuntimeWait') {
+    const e = event as unknown as Record<string, unknown>;
+    const waited = num(e['waitedSecs']);
+    const windowSecs = num(e['windowSecs']);
+    switch (str(e['phase'])) {
+      case 'waiting':
+        return line(`Waiting for the container runtime on ${phase}${waited !== null && windowSecs !== null ? ` (${waited}s of ${windowSecs}s)` : ''} — it is not answering; the helper is fine`, 'gate');
+      case 'recovered':
+        return line(`The container runtime is back — re-running ${phase} on the same helper`, 'work');
+      case 'unavailable':
+        return line(`Container runtime unavailable${waited !== null ? ` for ${waited}s` : ''} — ${phase} stopped; start the container runtime, then retry`, 'fail');
+      default:
+        return null;
+    }
+  }
+
   switch (event.type) {
     case 'sessionStarted':
       return line('Run started', 'work');
