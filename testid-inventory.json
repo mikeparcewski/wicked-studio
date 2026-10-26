@@ -11,11 +11,11 @@
   "version": 1,
   "studioVersion": "0.12.3",
   "counts": {
-    "files": 239,
-    "occurrences": 3115,
-    "static": 2696,
+    "files": 240,
+    "occurrences": 3142,
+    "static": 2716,
     "dynamic": 70,
-    "computed": 24
+    "computed": 25
   },
   "static": [
     {
@@ -4428,7 +4428,13 @@
       ]
     },
     {
-      "testId": "evaluate-all-gaps",
+      "testId": "evaluate-all-behaviours",
+      "files": [
+        "src/components/steer/EvaluateSurface.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-back",
       "files": [
         "src/components/steer/EvaluateSurface.tsx"
       ]
@@ -4440,13 +4446,7 @@
       ]
     },
     {
-      "testId": "evaluate-coverage",
-      "files": [
-        "src/components/steer/EvaluateSurface.tsx"
-      ]
-    },
-    {
-      "testId": "evaluate-coverage-chart",
+      "testId": "evaluate-detail",
       "files": [
         "src/components/steer/EvaluateSurface.tsx"
       ]
@@ -4482,6 +4482,12 @@
       ]
     },
     {
+      "testId": "evaluate-history",
+      "files": [
+        "src/components/steer/EvaluateSurface.tsx"
+      ]
+    },
+    {
       "testId": "evaluate-import",
       "files": [
         "src/components/steer/EvaluateSurface.tsx"
@@ -4506,12 +4512,6 @@
       ]
     },
     {
-      "testId": "evaluate-options-toggle",
-      "files": [
-        "src/components/steer/EvaluateSurface.tsx"
-      ]
-    },
-    {
       "testId": "evaluate-read-error",
       "files": [
         "src/components/steer/EvaluateSurface.tsx"
@@ -4524,7 +4524,19 @@
       ]
     },
     {
-      "testId": "evaluate-run",
+      "testId": "evaluate-results",
+      "files": [
+        "src/components/steer/EvaluateSurface.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-results-empty",
+      "files": [
+        "src/components/steer/EvaluateSurface.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-results-loading",
       "files": [
         "src/components/steer/EvaluateSurface.tsx"
       ]
@@ -4555,6 +4567,18 @@
     },
     {
       "testId": "evaluate-tiles",
+      "files": [
+        "src/components/steer/EvaluateSurface.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-type-row",
+      "files": [
+        "src/components/steer/EvaluateSurface.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-type-words",
       "files": [
         "src/components/steer/EvaluateSurface.tsx"
       ]
@@ -15597,6 +15621,102 @@
       ]
     },
     {
+      "testId": "understand-answer",
+      "files": [
+        "src/components/desk/UnderstandPage.tsx"
+      ]
+    },
+    {
+      "testId": "understand-answer-sub",
+      "files": [
+        "src/components/desk/UnderstandPage.tsx"
+      ]
+    },
+    {
+      "testId": "understand-ask",
+      "files": [
+        "src/components/desk/UnderstandPage.tsx"
+      ]
+    },
+    {
+      "testId": "understand-ask-input",
+      "files": [
+        "src/components/desk/UnderstandPage.tsx"
+      ]
+    },
+    {
+      "testId": "understand-ask-send",
+      "files": [
+        "src/components/desk/UnderstandPage.tsx"
+      ]
+    },
+    {
+      "testId": "understand-compare",
+      "files": [
+        "src/components/desk/UnderstandPage.tsx"
+      ]
+    },
+    {
+      "testId": "understand-coverage",
+      "files": [
+        "src/components/desk/UnderstandPage.tsx"
+      ]
+    },
+    {
+      "testId": "understand-coverage-toggle",
+      "files": [
+        "src/components/desk/UnderstandPage.tsx"
+      ]
+    },
+    {
+      "testId": "understand-graph",
+      "files": [
+        "src/components/desk/UnderstandPage.tsx"
+      ]
+    },
+    {
+      "testId": "understand-graph-empty",
+      "files": [
+        "src/components/desk/UnderstandPage.tsx"
+      ]
+    },
+    {
+      "testId": "understand-graph-open",
+      "files": [
+        "src/components/desk/UnderstandPage.tsx"
+      ]
+    },
+    {
+      "testId": "understand-graph-repo",
+      "files": [
+        "src/components/desk/UnderstandPage.tsx"
+      ]
+    },
+    {
+      "testId": "understand-page",
+      "files": [
+        "src/components/desk/UnderstandPage.tsx"
+      ]
+    },
+    {
+      "testId": "understand-recent",
+      "files": [
+        "src/components/desk/UnderstandPage.tsx"
+      ]
+    },
+    {
+      "testId": "understand-recent-empty",
+      "files": [
+        "src/components/desk/UnderstandPage.tsx"
+      ]
+    },
+    {
+      "testId": "understand-suggest",
+      "files": [
+        "src/components/desk/UnderstandPage.tsx"
+      ]
+    },
+    {
       "testId": "undo-button",
       "files": [
         "src/components/UndoToasts.tsx"
@@ -16755,12 +16875,14 @@
         "src/components/dashboardKit.tsx",
         "src/components/desk/DeskHome.tsx",
         "src/components/desk/DeskParts.tsx",
+        "src/components/desk/UnderstandPage.tsx",
         "src/components/everything/FinishedRunMenu.tsx",
         "src/components/memory/MemoryPage.tsx",
         "src/components/product/RequirementsBrowser.tsx",
         "src/components/session/AssuranceReceipt.tsx",
         "src/components/session/CodebaseDownload.tsx",
         "src/components/session/RunConversation.tsx",
+        "src/components/steer/EvaluateSurface.tsx",
         "src/components/steer/SeStat.tsx",
         "src/components/ui/Combobox.tsx",
         "src/components/ui/DayBars.tsx",
@@ -16886,6 +17008,13 @@
         "src/components/SteeringRuleDrawer.tsx",
         "src/components/SteeringRuleForm.tsx",
         "src/components/session/DeckReview.tsx"
+      ]
+    },
+    {
+      "expression": "toggleId",
+      "files": [
+        "src/components/desk/UnderstandPage.tsx",
+        "src/components/steer/EvaluateSurface.tsx"
       ]
     },
     {

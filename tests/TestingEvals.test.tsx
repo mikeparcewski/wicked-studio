@@ -107,6 +107,8 @@ describe('Evals — the run', () => {
 
     expect(await screen.findByTestId('testing-evals-summary')).toHaveTextContent('3 samples');
     expect(runBody).toEqual({ type: 'security', corpus: 'evals:dev-behaviors' });
+    // The run's behaviours live behind "See every behaviour" (the page leads with one row per type).
+    await user.click(screen.getByTestId('evaluate-all-behaviours'));
 
     // The qe finding: "caught" split into its two honest halves (S-1 is a bad
     // sample the rules BLOCKED; no good sample was caught here), and the gap
@@ -155,6 +157,7 @@ describe('Evals — the run', () => {
     page();
 
     await user.click(screen.getByTestId('testing-evals-run'));
+    await user.click(await screen.findByTestId('evaluate-all-behaviours'));
     await screen.findByTestId('testing-evals-table');
 
     // Exactly one toggle — the one gap row's.
@@ -183,6 +186,7 @@ describe('Evals — the run', () => {
     render(<TestingPage page="evals" campaignId={null} runs={[]} navigate={navigate} />);
 
     await user.click(screen.getByTestId('testing-evals-run'));
+    await user.click(await screen.findByTestId('evaluate-all-behaviours'));
     await screen.findByTestId('testing-evals-table');
     await user.click(screen.getByTestId('testing-evals-gap-toggle'));
 
@@ -204,6 +208,7 @@ describe('Evals — the run', () => {
     page();
 
     await user.click(screen.getByTestId('testing-evals-run'));
+    await user.click(await screen.findByTestId('evaluate-all-behaviours'));
     await user.click(await screen.findByTestId('testing-evals-gap-toggle'));
     expect(await screen.findByTestId('testing-evals-nearest-empty')).toHaveTextContent(/No nearby rules/);
   });
@@ -249,7 +254,7 @@ describe('Evals — the run', () => {
     page();
 
     await user.click(screen.getByTestId('testing-evals-run'));
-    expect(await screen.findByTestId('testing-evals-empty')).toHaveTextContent(/served no samples/);
+    expect(await screen.findByTestId('testing-evals-empty')).toHaveTextContent(/no behaviours to replay/);
     expect(screen.queryByTestId('testing-evals-busy')).toBeNull();
     expect(screen.queryByTestId('testing-evals-table')).toBeNull();
   });

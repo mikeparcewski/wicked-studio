@@ -914,6 +914,11 @@
     "watch-pill-card": "nc-attention",
     "watch-pill-row": "nc-attention-item",
     "watch-pill-wrap": "desk-rail-nerve",
-    "desk-rail-theme": "settings-tabs"
+    "desk-rail-theme": "settings-tabs",
+    "evaluate-all-gaps": "evaluate-all-behaviours",
+    "evaluate-coverage": "evaluate-results",
+    "evaluate-coverage-chart": "evaluate-type-row",
+    "evaluate-run": "testing-evals-run",
+    "evaluate-options-toggle": "evaluate-options"
   }
 }

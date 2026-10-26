@@ -60,6 +60,7 @@ import { DeskInbox } from './DeskInbox.js';
 import { FocusLockToggle } from '../NeedsYouQueue.js';
 import { useNeedsSources } from '../../store/needsSources.js';
 import { DeskUnderstand } from './DeskUnderstand.js';
+import { UnderstandPage } from './UnderstandPage.js';
 import { DeskHome } from './DeskHome.js';
 
 /**
@@ -536,12 +537,13 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
 
   const understand = (
     <div role="tabpanel" id={panelId('understand')} aria-labelledby={tabId('understand')} data-testid="desk-understand" className="wk-understand">
-      <DeskUnderstand runsShown={runsShown} agents={agents} agentsRead={record.phase} agentsTruncated={record.truncated}
+      {/* The calm page: one question box and Recent answers; the comparison is folded away under it. */}
+      <UnderstandPage project={projectId ?? null} navigate={navigate} now={now} compare={<DeskUnderstand runsShown={runsShown} agents={agents} agentsRead={record.phase} agentsTruncated={record.truncated}
         filterAgent={refine.agent} filterWorkflow={refine.workflow}
         filters={[refine.agent !== null ? `agent ${agentName(refine.agent)}` : null, refine.workflow !== null ? `workflow ${workflowLabel(refine.workflow)}` : null].filter((x): x is string => x !== null).join(', ') || null}
         workflows={flows} kept={kept} allRuns={runs} days={refine.days} onDays={(d) => set('days', d)} project={scope}
         projectLabel={scope === null ? null : projectName(scope)} projectName={projectName} agentName={agentName} governance={governance}
-        navigate={navigate} pathOf={pathOfRun} now={now} />
+        navigate={navigate} pathOf={pathOfRun} now={now} />} />
     </div>
   );
 
@@ -590,7 +592,7 @@ export const DESK_TABS: readonly { id: DeskTab; label: string; group: 'primary' 
   { id: 'runs', label: 'Runs', group: 'primary' },
   { id: 'repositories', label: 'Repositories', group: 'primary' },
   { id: 'report', label: 'Report', group: 'primary' },
-  { id: 'understand', label: 'Understand', group: 'more', hint: 'Compare agents, workflows and jobs side by side' },
+  { id: 'understand', label: 'Understand', group: 'more', hint: 'Ask how your code fits together' },
   { id: 'steer', label: 'Steer', group: 'more', hint: 'The rules agents are held to' },
   { id: 'memory', label: 'Memory', group: 'more', hint: 'What agents remember and recall' },
   { id: 'agents', label: 'Agents', group: 'more', hint: 'Sign-in, safety checks and fixes per agent' },

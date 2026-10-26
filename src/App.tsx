@@ -391,11 +391,18 @@ export function App(): React.ReactElement {
   const [askStart, setAskStart] = useState<AskRequest | null>(null);
   useEffect(() => {
     if (askRequest === null) return;
+    // Understand's ask box (`askInChat`): the operator's own question, sent as the first message of a
+    // new chat under the id the page minted (the same handoff the Desk composer's send takes).
+    if (askRequest.send !== undefined) {
+      setAskStart(null);
+      handToAsk(askRequest.seedText, { fresh: true, openChatId: askRequest.send.chatId, ...(askRequest.projectId !== null ? { projectId: askRequest.projectId } : {}) });
+      return;
+    }
     setAskKey((k) => k + 1);
     setAskHandoff(null);
     setAskStart(askRequest);
     setAskOpen(true);
-  }, [askRequest]);
+  }, [askRequest, handToAsk]);
   useEffect(() => {
     if (!askOpen) setAskStart(null);
   }, [askOpen]);
