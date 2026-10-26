@@ -27,7 +27,7 @@ const { NerveCenterPage: HealthPage } = await import('../src/components/nerve/Ne
 const { resetSystemStore } = await import('../src/store/systemSnapshot.js');
 
 const openSignIn = async (): Promise<void> => {
-  render(<HealthPage />);
+  render(<HealthPage search="?tab=clis" />);
   const moves = await screen.findAllByTestId('rail-seat-move');
   fireEvent.click(within(moves.find((m) => m.getAttribute('data-seat') === 'pi')!).getByTestId('rail-seat-move-button'));
   await screen.findByTestId('agents-command');

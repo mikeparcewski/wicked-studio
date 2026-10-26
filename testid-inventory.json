@@ -12,8 +12,8 @@
   "studioVersion": "0.12.1",
   "counts": {
     "files": 238,
-    "occurrences": 3064,
-    "static": 2666,
+    "occurrences": 3072,
+    "static": 2674,
     "dynamic": 69,
     "computed": 24
   },
@@ -7456,6 +7456,24 @@
       ]
     },
     {
+      "testId": "nc-attention-checking",
+      "files": [
+        "src/components/nerve/NerveCenterPage.tsx"
+      ]
+    },
+    {
+      "testId": "nc-attention-empty",
+      "files": [
+        "src/components/nerve/NerveCenterPage.tsx"
+      ]
+    },
+    {
+      "testId": "nc-attention-goto",
+      "files": [
+        "src/components/nerve/NerveCenterPage.tsx"
+      ]
+    },
+    {
       "testId": "nc-attention-item",
       "files": [
         "src/components/nerve/NerveCenterPage.tsx"
@@ -7469,6 +7487,24 @@
     },
     {
       "testId": "nc-checked",
+      "files": [
+        "src/components/nerve/NerveCenterPage.tsx"
+      ]
+    },
+    {
+      "testId": "nc-chip",
+      "files": [
+        "src/components/nerve/NerveCenterPage.tsx"
+      ]
+    },
+    {
+      "testId": "nc-chip-words",
+      "files": [
+        "src/components/nerve/NerveCenterPage.tsx"
+      ]
+    },
+    {
+      "testId": "nc-chips",
       "files": [
         "src/components/nerve/NerveCenterPage.tsx"
       ]
@@ -7709,6 +7745,18 @@
     },
     {
       "testId": "nc-runs-pending",
+      "files": [
+        "src/components/nerve/NerveCenterPage.tsx"
+      ]
+    },
+    {
+      "testId": "nc-tabpanel",
+      "files": [
+        "src/components/nerve/NerveCenterPage.tsx"
+      ]
+    },
+    {
+      "testId": "nc-tabs",
       "files": [
         "src/components/nerve/NerveCenterPage.tsx"
       ]

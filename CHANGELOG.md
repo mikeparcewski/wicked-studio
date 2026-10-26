@@ -12,6 +12,21 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+### Changed
+- **Nerve Center is a compact header over five tabs, not one long page.** `/watch` opens on a header that
+  stays put: the verdict pill and its one sentence, when crew last answered, Re-check, and a row of five
+  summary chips (Attention 3 · CLIs 3/5 signed in · Runs 1 waiting · Infra 1 down · Governance ok), each
+  coloured by its area's worst state and opening its tab. Under it are tabs for Attention (each item as a card
+  with its reason, its fix, its action and a link to its area, or a calm "All clear"), CLIs (the cards, then
+  sign-in and this week), Runs (unfinished runs, then the feed), Infra (studio to crew, then each component
+  with its state, reason, fix and Re-check) and Governance (the cards, then the evidence store). Each tab
+  label carries a state dot, and Attention carries its count. The tab is in the address (`?tab=`), so links,
+  Back and Forward, and a reload open the same tab. With no `?tab=`, the page opens on Attention when anything
+  needs attention and on CLIs when nothing does. That choice is made once, on crew's first answer, so the page
+  never switches tabs while you read. A feed link (`?filter=`) opens Runs. On a phone the tabs scroll sideways.
+  Nothing #901 showed is gone, and a crew without the snapshot still gets the Health cards in their tabs. No
+  chip or tab dot is green when the read is checking, failed or stale.
+
 ## [0.12.1] — 2026-10-25
 
 A patch release: past chats sit as a column beside the conversation in a wide chat window (#907).

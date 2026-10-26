@@ -6,7 +6,7 @@ its trail ends on the engine's `runOrphaned` report (crew#830): no worker, nothi
 
   1. THE DESK COUNTS IT: the needs-you queue carries the run with the orphan line and a `Resume ›` act —
      never under running work alone.
-  2. THE WATCHTOWER SAYS IT: /watch carries "1 run was orphaned by a restart — nothing is working on it."
+  2. THE WATCHTOWER SAYS IT: /watch (its Runs tab, where the feed is) carries "1 run was orphaned by a restart — nothing is working on it."
   3. THE SESSION THREAD SAYS IT: /s/run:r-orphan shows the row "The daemon restarted while this step was
      running; nothing is working on it." with one action, Resume.
   4. RESUME WORKS: Resume → POST /runs/r-orphan/resume (GET /__fixture/resume-posts records it); the
@@ -83,7 +83,7 @@ with sync_playwright() as p:
     check("desk-counts-the-orphan", need.count() == 1 and "Resume" in desk, rows=need.count())
 
     # ── 2. The Watchtower says it ────────────────────────────────────────────────
-    page.goto(f"{origin}/watch", wait_until="networkidle")
+    page.goto(f"{origin}/watch?tab=runs", wait_until="networkidle")
     try:
         page.get_by_test_id("watchtower-orphaned").wait_for(state="visible", timeout=15000)
     except Exception:

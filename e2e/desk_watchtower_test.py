@@ -14,7 +14,8 @@ Against the in-process fixture (wave-1 corpus, b1 waiting at a gate, `watch_feed
   3. JUMP IN: the claim finding's "Jump in" lands on b1's run page at its moment.
   4. ⌥W: from the Desk, ⌥W opens /watch.
   5. THE TILE: the rail's Nerve Center tile (DES-SYSTEM-VIEW, which replaced the pill) says the
-     waiting work in words and opens /watch, where the feed sits under the dashboard's panels.
+     waiting work in words and opens /watch, which lands on its Attention tab; the feed is in the
+     Runs tab (`/watch?tab=runs`).
   6. NO REGISTRY: with the registry off the page says so and still shows studio's own fold.
   7. EMPTY KINDS: every kind with no rows says why (never "Nothing of this kind yet.") and offers
      Show everything, which lands on Everything (DEST); at 390x844 that button is a 44 px tap target
@@ -85,20 +86,23 @@ with sync_playwright() as p:
     page.screenshot(path=str(SHOTS / "desk-watchtower-tile.png"))
     tile.click()
     page.get_by_test_id("nerve-center-page").wait_for(state="visible", timeout=8000)
-    page.get_by_test_id("watchtower").wait_for(state="visible", timeout=8000)
     waits = page.locator('[data-testid="nc-attention-item"][data-id="waiting-on-you"]')
     waits.wait_for(state="visible", timeout=8000)
     waits_text = waits.inner_text()
+    landed = page.get_by_test_id("nerve-center-page").get_attribute("data-tab")
+    # The feed is the Runs tab's (Nerve Center's tabs): one click away.
+    page.locator('[data-testid="nc-tab"][data-tab="runs"]').click()
+    page.get_by_test_id("watchtower").wait_for(state="visible", timeout=8000)
     said = re.search(r"(\d+) things? waits? on you", waits_text)
     pill = int(said.group(1)) if said else -2
-    check("tile", tile_tone in ("yellow", "red") and tile_words.strip() != "" and "wait" in waits_text,
-          words=tile_words, tone=tile_tone, waits=waits_text)
+    check("tile", tile_tone in ("yellow", "red") and tile_words.strip() != "" and "wait" in waits_text and landed == "attention",
+          words=tile_words, tone=tile_tone, waits=waits_text, landed=landed)
     sentence_count = int(page.get_by_test_id("watchtower-sentence").get_attribute("data-count") or "-3")
     page.locator('[data-testid="watchtower-row"]').first.wait_for(state="visible", timeout=8000)
     open_rows = page.locator('[data-testid="watchtower-row"][data-state="open"]').count()
     # UX audit row 55: the feed's header counts what its feed shows (open items); the Desk and
     # Nerve Center keep the one needs-you count.
-    check("one-count", desk == pill and desk >= 1 and sentence_count == open_rows and page.url.endswith("/watch"),
+    check("one-count", desk == pill and desk >= 1 and sentence_count == open_rows and page.url.endswith("/watch?tab=runs"),
           desk=desk, pill=pill, watchtower=sentence_count, open_rows=open_rows, url=page.url)
 
     # ── 2. the feed ────────────────────────────────────────────────────────────────
@@ -126,7 +130,7 @@ with sync_playwright() as p:
     page.locator("body").click(position={"x": 700, "y": 20})
     page.keyboard.press("Alt+KeyW")
     try:
-        page.get_by_test_id("watchtower").wait_for(state="visible", timeout=5000)
+        page.get_by_test_id("nerve-center-page").wait_for(state="visible", timeout=5000)
         via_key = page.url.endswith("/watch")
     except Exception:  # noqa: BLE001
         via_key = False
@@ -134,7 +138,7 @@ with sync_playwright() as p:
 
     # ── 6. no registry ─────────────────────────────────────────────────────────────
     set_fixture(origin, watch_feed=False)
-    page.goto(f"{origin}/watch", wait_until="networkidle")
+    page.goto(f"{origin}/watch?tab=runs", wait_until="networkidle")
     page.get_by_test_id("watchtower").wait_for(state="visible", timeout=15000)
     try:
         page.get_by_test_id("watchtower-no-registry").wait_for(state="visible", timeout=8000)
@@ -151,7 +155,7 @@ with sync_playwright() as p:
     empties: dict = {}
     for vw, vh in ((W, H), (390, 844)):
         page.set_viewport_size({"width": vw, "height": vh})
-        page.goto(f"{origin}/watch", wait_until="networkidle")
+        page.goto(f"{origin}/watch?tab=runs", wait_until="networkidle")
         page.get_by_test_id("watchtower").wait_for(state="visible", timeout=15000)
         page.wait_for_timeout(500)
         for kind in ("problem", "decision", "approved", "rejected", "quiet", "done", "delivery"):

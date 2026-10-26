@@ -53,7 +53,7 @@ afterEach(() => cleanup());
 describe('the healthy store', () => {
   it('names the store path + source, the record counts, zero dead letters, no findings', async () => {
     withGovernance(GOVERNANCE_HEALTHY);
-    render(<HealthPage />);
+    render(<HealthPage search="?tab=governance" />);
     const gov = await screen.findByTestId('rail-governance');
     expect(gov).toHaveAttribute('data-state', 'ok');
     expect(gov).toHaveAttribute('data-store', 'core-db-sidecar');
@@ -71,7 +71,7 @@ describe('the healthy store', () => {
 describe('the F-022 signal — dead letters', () => {
   it('renders the count as a floor, the by-type / by-reason tallies, the range, the outbox, and the error finding with its replay recipe', async () => {
     withGovernance(GOVERNANCE_DEADLETTERS);
-    render(<HealthPage />);
+    render(<HealthPage search="?tab=governance" />);
     const gov = await screen.findByTestId('rail-governance');
     expect(gov).toHaveAttribute('data-state', 'error');
     expect(gov).toHaveAttribute('data-deadletters', '128');
@@ -94,7 +94,7 @@ describe('the F-022 signal — dead letters', () => {
 describe('a boot that resolved NO store', () => {
   it('is never shown as governed: the store row fails, records read "engine cannot count", the governance.store error renders', async () => {
     withGovernance(GOVERNANCE_NO_STORE);
-    render(<HealthPage />);
+    render(<HealthPage search="?tab=governance" />);
     const gov = await screen.findByTestId('rail-governance');
     expect(gov).toHaveAttribute('data-state', 'error');
     expect(gov).toHaveAttribute('data-store', 'none');
@@ -108,7 +108,7 @@ describe('a boot that resolved NO store', () => {
 describe('records — the two counts state themselves independently', () => {
   it('an uncountable total beside a counted sinceBoot shows both facts', async () => {
     withGovernance({ ...GOVERNANCE_HEALTHY, records: { total: null, sinceBoot: 5 } });
-    render(<HealthPage />);
+    render(<HealthPage search="?tab=governance" />);
     const gov = await screen.findByTestId('rail-governance');
     expect(gov.textContent).toContain('not counted · 5 since the service started');
     expect(within(gov).getByTestId('rail-governance-detail').textContent).toContain('records total: engine cannot count');
@@ -118,7 +118,7 @@ describe('records — the two counts state themselves independently', () => {
 describe('the pre-fix HOME outbox', () => {
   it('renders the legacy outbox path + bytes and the warning finding', async () => {
     withGovernance(GOVERNANCE_LEGACY_OUTBOX);
-    render(<HealthPage />);
+    render(<HealthPage search="?tab=governance" />);
     const gov = await screen.findByTestId('rail-governance');
     expect(gov).toHaveAttribute('data-state', 'warning');
     expect(within(gov).getByTestId('rail-governance-legacy').textContent).toContain('(47 KB)');
@@ -138,7 +138,7 @@ describe('studio#651: finding text', () => {
       ...GOVERNANCE_LEGACY_OUTBOX,
       findings: [{ ...GOVERNANCE_LEGACY_OUTBOX.findings[0]!, message: 'a pre-fix dead-letter outbox exists at /Users/reel-operator/.something-wicked/wicked-apps/emit-outbox.ndjson (its state home is /Users/reel-operator/Projects/wicked/.wicked-crew)' }],
     });
-    render(<HealthPage />);
+    render(<HealthPage search="?tab=governance" />);
     const gov = await screen.findByTestId('rail-governance');
     expect(within(gov).getByTestId('rail-governance-legacy')).toHaveTextContent('An older holding file');
     const detail = within(gov).getByTestId('rail-governance-detail');
@@ -151,7 +151,7 @@ describe('studio#651: finding text', () => {
       ...GOVERNANCE_DEADLETTERS,
       deadletters: { ...GOVERNANCE_DEADLETTERS.deadletters!, byReason: { 'EACCES: permission denied, open /Users/reel-operator/.wicked-crew/governance.db': 3 } },
     });
-    render(<HealthPage />);
+    render(<HealthPage search="?tab=governance" />);
     const gov = await screen.findByTestId('rail-governance');
     const line = within(gov).getByTestId('rail-governance-detail');
     expect(line).toHaveTextContent('open ~/.wicked-crew/governance.db');
@@ -162,7 +162,7 @@ describe('studio#651: finding text', () => {
 describe('older daemons — null-safe by construction', () => {
   it('a /diagnostics WITHOUT a governance block says the plain-words sentence and does not degrade', async () => {
     diagnosticsAnswer = () => Promise.resolve({ components: {}, daemon: {}, stores: [], recentErrors: [], acp: { byCli: {} } });
-    render(<HealthPage />);
+    render(<HealthPage search="?tab=governance" />);
     const gov = await screen.findByTestId('rail-governance');
     expect(gov).toHaveAttribute('data-state', 'absent');
     expect(gov).toHaveAttribute('data-why', 'no-block');
@@ -172,7 +172,7 @@ describe('older daemons — null-safe by construction', () => {
 
   it('a daemon with NO /diagnostics route (unknown-route 404) says the same plain words — the route name stays off the page', async () => {
     diagnosticsAnswer = () => Promise.reject(new ApiError(404, 'not found'));
-    render(<HealthPage />);
+    render(<HealthPage search="?tab=governance" />);
     const gov = await screen.findByTestId('rail-governance');
     expect(gov).toHaveAttribute('data-why', 'no-route');
     expect(gov.textContent).toContain('Not available yet');
@@ -182,7 +182,7 @@ describe('older daemons — null-safe by construction', () => {
 
   it('a diagnostics read that FAILS (5xx) renders the unreachable row WITH its reason — never a guessed store', async () => {
     diagnosticsAnswer = () => Promise.reject(new ApiError(500, 'governance fold crashed: ENOSPC'));
-    render(<HealthPage />);
+    render(<HealthPage search="?tab=governance" />);
     const gov = await screen.findByTestId('rail-governance');
     expect(gov).toHaveAttribute('data-state', 'error');
     expect(gov.textContent).toContain("couldn't be read");
@@ -194,7 +194,7 @@ describe('older daemons — null-safe by construction', () => {
 describe('no paths or raw log lines in the default layer (reel UX gate ch56)', () => {
   it('a finding keeps its words through "(s)" — only a spaced aside or a path ends the plain line', async () => {
     withGovernance(GOVERNANCE_DEADLETTERS);
-    render(<HealthPage />);
+    render(<HealthPage search="?tab=governance" />);
     const finding = await screen.findByTestId('rail-governance-finding');
     expect(finding.textContent).toMatch(/^Problem: \d+ governance event\(s\) dead-lettered/);
   });
@@ -208,7 +208,7 @@ describe('no paths or raw log lines in the default layer (reel UX gate ch56)', (
   for (const [name, g] of [['healthy', GOVERNANCE_HEALTHY], ['dead letters', GOVERNANCE_DEADLETTERS], ['legacy outbox', GOVERNANCE_LEGACY_OUTBOX], ['no store', GOVERNANCE_NO_STORE]] as const) {
     it(`${name}: plain words; paths and the raw finding line only behind Technical details`, async () => {
       withGovernance(g);
-      render(<HealthPage />);
+      render(<HealthPage search="?tab=governance" />);
       const gov = await screen.findByTestId('rail-governance');
       // One closed disclosure holds the internals; nothing raw is open by default.
       expect(gov.querySelectorAll('details')).toHaveLength(1);

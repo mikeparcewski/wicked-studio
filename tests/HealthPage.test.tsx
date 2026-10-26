@@ -64,7 +64,7 @@ afterEach(() => cleanup());
 
 describe('the page is the fetch gesture (EC30, §6.3)', () => {
   it('mounts active: the registry reads /health + /roster once (the snapshot poll reads /health on its own bounded clock), and the roster lands in the session cache', async () => {
-    render(<HealthPage />);
+    render(<HealthPage search="?tab=clis" />);
     await screen.findAllByTestId('rail-seat-row');
     // One read by the Health cards' registry, one by Nerve Center's shared snapshot poll (DES-SYSTEM-VIEW).
     await waitFor(() => expect(getHealth).toHaveBeenCalledTimes(2));
@@ -80,7 +80,8 @@ describe('the page is the fetch gesture (EC30, §6.3)', () => {
 
 describe('the registry rows (§6.2 anatomy)', () => {
   it('renders a row per seat with glyph/name/status, plus the connection check rows', async () => {
-    render(<HealthPage />);
+    // Nerve Center's tabs: the seat rows are in CLIs, the connection rows in Infra.
+    const { rerender } = render(<HealthPage search="?tab=clis" />);
     const rows = await screen.findAllByTestId('rail-seat-row');
     expect(rows.map((r) => r.getAttribute('data-seat'))).toEqual(['claude', 'codex', 'pi']);
     // Active + signed in: ✓ in the run token, the quiet suffix.
@@ -89,13 +90,14 @@ describe('the registry rows (§6.2 anatomy)', () => {
     expect(claude.textContent).toContain('✓');
     expect(claude.textContent).toContain('active · signed in');
     // The WebSocket/API check rows moved from the retired popover verbatim.
+    rerender(<HealthPage search="?tab=infra" />);
     expect(screen.getByText('WebSocket')).toBeInTheDocument();
     expect(screen.getByText('API server')).toBeInTheDocument();
     await screen.findByText('ok · 0.6.0');
   });
 
   it('an inactive seat shows ✗ + the FULL message wrapped (never an excerpt), action on its own line — and a quota failure withholds Sign in', async () => {
-    render(<HealthPage />);
+    render(<HealthPage search="?tab=clis" />);
     const rows = await screen.findAllByTestId('rail-seat-row');
     const codex = rows[1]!;
     expect(codex).toHaveAttribute('data-health', 'inactive');
@@ -113,7 +115,7 @@ describe('the registry rows (§6.2 anatomy)', () => {
   });
 
   it('an ABSENT health renders the dim · glyph and "no answer yet" — never a fabricated "active"', async () => {
-    render(<HealthPage />);
+    render(<HealthPage search="?tab=clis" />);
     const rows = await screen.findAllByTestId('rail-seat-row');
     const pi = rows[2]!;
     expect(pi).toHaveAttribute('data-health', 'unknown');
@@ -132,9 +134,11 @@ describe('the registry rows (§6.2 anatomy)', () => {
 describe('the probes settle (studio#280 item 2)', () => {
   it('once /health has answered, NO row reads "checking…" and the answer carries its clock', async () => {
     const before = Date.now();
-    render(<HealthPage />);
-    await screen.findByText('ok · 0.6.0');
+    const { rerender } = render(<HealthPage search="?tab=clis" />);
     await screen.findAllByTestId('rail-seat-row');
+    await waitFor(() => expect(screen.queryAllByText(/checking…/)).toHaveLength(0));
+    rerender(<HealthPage search="?tab=infra" />);
+    await screen.findByText('ok · 0.6.0');
     await waitFor(() => expect(screen.queryAllByText(/checking…/)).toHaveLength(0));
     const api = screen.getByTestId('rail-api-server');
     expect(api).toHaveAttribute('data-state', 'answered');
@@ -147,7 +151,7 @@ describe('the probes settle (studio#280 item 2)', () => {
   it('a REJECTED /health shows the error with its sentence (and its clock) — never a bare "unreachable", never "checking…"', async () => {
     rosterAnswer = [SEATS[0]!];
     getHealth.mockImplementationOnce(() => Promise.reject(new Error('ECONNREFUSED 127.0.0.1:7701')));
-    render(<HealthPage />);
+    render(<HealthPage search="?tab=infra" />);
     const api = await screen.findByTestId('rail-api-server');
     await waitFor(() => expect(api).toHaveAttribute('data-state', 'error'));
     expect(api.textContent).toContain('unreachable — ECONNREFUSED 127.0.0.1:7701');
