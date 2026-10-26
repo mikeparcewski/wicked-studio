@@ -12,6 +12,28 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+## [0.12.3] — 2026-10-26
+
+A patch release finishing the Desk redesign: the Work tab (#910) and the Desk's tabs grouped as four daily views and More (#913).
+
+### Changed
+- **The Desk's Work tab reads as structured activity, not a log (#910).** Each Happening now row is one item: a mark
+  in the row's tone (problem, decision, done, working, quiet; screen readers hear its name), the job title as
+  the one action, a relative time, and one line with the newest event in plain words and the agent's dot; a
+  run of events on one job keeps every event, newest first, behind a disclosure on that line. The four stat
+  tiles became one quiet At a glance strip (Running now, Failed, Agents ready, Spend; each still opens its
+  list; a 2x2 grid on a phone whose long values wrap). Needs you, Happening now and the strip sit above the
+  fold at 1440x700. Needs you is set apart by elevation instead of boxes in boxes, its folders are one bar that
+  scrolls sideways on a phone, the chores callout is quieter, the reading pane scrolls instead of clipping a
+  decision's moves, and Approve and Reject stay equal, with Reject with reason as a quiet text move.
+- **The Desk's tabs are four daily views and More (#913).** Work, Runs, Repositories and Report are tabs; More
+  holds Understand, Steer, Memory, Agents and Evaluate, each with one line saying what it is for. A view opened
+  from More shows in the bar as a selected tab and More marks it current; on a narrow bar the open tab scrolls
+  into view. Agents no longer repeats its own name as a heading, and Understand's wait says "Reading your
+  jobs…". Every `?tab=` address, redirect and deep link is unchanged. More is a disclosure (button plus list,
+  `aria-expanded`, Escape returns focus, 44 px targets on a phone), and the tablist keeps its arrow, Home and
+  End keys.
+
 ## [0.12.2] — 2026-10-26
 
 A patch release: Nerve Center as a compact header over five tabs (#911); the rail's New job first with one set of hover, pressed, current and focus states on every item (#909); and the Desk's run lists and stat rows redesigned (#912).
@@ -2539,7 +2561,8 @@ The merged interactive layer: wicked-interactive's UI moved into this skin (DES-
   `git subtree split` (92 commits).
 - The SPA as a pure HTTP/WS client of the wicked-crew daemon: runs, gates, live CoreEvents.
 
-[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.12.2...HEAD
+[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.12.3...HEAD
+[0.12.3]: https://github.com/mikeparcewski/wicked-studio/compare/v0.12.2...v0.12.3
 [0.12.2]: https://github.com/mikeparcewski/wicked-studio/compare/v0.12.1...v0.12.2
 [0.12.1]: https://github.com/mikeparcewski/wicked-studio/compare/v0.12.0...v0.12.1
 [0.12.0]: https://github.com/mikeparcewski/wicked-studio/compare/v0.11.8...v0.12.0
