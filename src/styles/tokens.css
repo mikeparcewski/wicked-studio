@@ -129,6 +129,15 @@
   --nc-fail-bg:   #c9302a;
   --nc-fail-fg:   #ffffff;
   --nc-fail-edge: #c9302a;
+  /* Hover and pressed fills: the state colour moved 16% / 24% (OKLab) toward its own ink — toward
+     black for the white-ink red, so its words only gain contrast. Visible on hover (dE_OK ≈ 0.09)
+     and still AA for the words (pinned in tests/nerveCenterContrast.test.ts; e2e/desk_rail_hover). */
+  --nc-ok-hover:   #386349;
+  --nc-ok-press:   #457055;
+  --nc-warn-hover: #cb9529;
+  --nc-warn-press: #b88824;
+  --nc-fail-hover: #9f241f;
+  --nc-fail-press: #8b1e1a;
 
   /* ── Section-identity accents (§2.6b) — the landing's section doors + rail glyphs. Distinct
      from the ONE customizable accent and from the status hues: fixed section colors so Execute /
