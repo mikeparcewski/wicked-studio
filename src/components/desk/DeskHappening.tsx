@@ -120,7 +120,9 @@ export function DeskHappening({ runs, runsShown, navigate, now, title, pathOf, a
             const v = byId.get(it.runId);
             const said = sayEvent(it, v, agentName);
             const folded = g.length > 1;
-            const worst = g.map((x) => sayEvent(x, v, agentName).tone).find((t) => t === 'fail') ?? said.tone;
+            // The row's mark is its worst event: a problem, else a decision, else the newest event's tone.
+            const tones = g.map((x) => sayEvent(x, v, agentName).tone);
+            const worst = tones.find((t) => t === 'fail') ?? tones.find((t) => t === 'gate') ?? said.tone;
             const Mark = TONE_MARK[worst];
             const markLabel = worst === 'fail' ? 'Problem' : worst === 'gate' ? 'Needs a decision' : undefined;
             const age = relTime(it.at, Math.max(now, clock));

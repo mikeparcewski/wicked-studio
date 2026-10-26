@@ -70,6 +70,22 @@ describe('Happening now rows', () => {
     expect(within(item).getByRole('img', { name: 'Needs a decision' })).toBeInTheDocument();
   });
 
+  it('a decision behind a newer, calmer event still marks the row as a decision (xreview r1)', async () => {
+    act(() => {
+      useDeskStream.getState().backfill([
+        ev({ type: 'gateEscalated', ord: 2, seq: 1, ts: T0 }),
+        ev({ type: 'unitDone', ord: 3, seq: 2, ts: T0 + 1000 }),
+      ]);
+    });
+    mount([run('a', 'Parallel steps')]);
+    const item = (await screen.findAllByTestId('desk-stream-item'))[0]!;
+    expect(item.dataset.tone).toBe('gate');
+    expect(within(item).getByRole('img', { name: 'Needs a decision' })).toBeInTheDocument();
+    // The line still says the newest event; the decision is in the disclosure.
+    expect(within(item).getByTestId('desk-stream-expand')).toHaveTextContent('An agent finished step 3');
+    expect(item).toHaveTextContent('Step 2 needs a person to decide');
+  });
+
   it('a job no longer listed says so and has no link', async () => {
     act(() => { useDeskStream.getState().backfill([ev({ session: 'gone', type: 'sessionCompleted', seq: 1, ts: T0 })]); });
     mount([run('a', 'Other')]);
