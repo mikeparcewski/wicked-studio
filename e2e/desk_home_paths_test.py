@@ -279,6 +279,7 @@ with sync_playwright() as p:
     link = page.get_by_test_id("desk-rail-nerve")
     link.wait_for(state="visible", timeout=15000)
     link.click()
+    page.locator('[data-testid="nc-tab"][data-tab="clis"]').click()  # Nerve Center's tabs: the seat rows are in CLIs
     pi_move = page.locator('[data-testid="rail-seat-move"][data-seat="pi"] [data-testid="rail-seat-move-button"]')
     pi_move.wait_for(state="visible", timeout=15000)
     pi_move.click()
