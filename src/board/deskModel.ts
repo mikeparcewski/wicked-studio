@@ -40,7 +40,7 @@ export function deskReadState(runsLoaded: boolean, runsError: string | null): De
 export function deskGreeting(now: number): { hello: string; date: string } {
   const d = new Date(now);
   const h = d.getHours();
-  const hello = h < 12 ? 'Good morning.' : h < 18 ? 'Good afternoon.' : 'Good evening.';
+  const hello = h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening';
   const date = d.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
   return { hello, date };
 }

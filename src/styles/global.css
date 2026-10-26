@@ -17,6 +17,7 @@
 @import './deck.css';
 @import './components.css';
 @import './sections/desk.css';
+@import './sections/home.css';
 @import './sections/session.css';
 @import './sections/chat-native.css';
 @import './sections/composer.css';

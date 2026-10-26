@@ -11,9 +11,9 @@
   "version": 1,
   "studioVersion": "0.12.3",
   "counts": {
-    "files": 238,
-    "occurrences": 3076,
-    "static": 2677,
+    "files": 239,
+    "occurrences": 3115,
+    "static": 2696,
     "dynamic": 70,
     "computed": 24
   },
@@ -2849,6 +2849,24 @@
       ]
     },
     {
+      "testId": "desk-ask",
+      "files": [
+        "src/components/desk/DeskHome.tsx"
+      ]
+    },
+    {
+      "testId": "desk-ask-input",
+      "files": [
+        "src/components/desk/DeskHome.tsx"
+      ]
+    },
+    {
+      "testId": "desk-ask-start",
+      "files": [
+        "src/components/desk/DeskHome.tsx"
+      ]
+    },
+    {
       "testId": "desk-block-agents",
       "files": [
         "src/components/desk/DeskV2.tsx"
@@ -2915,6 +2933,42 @@
       ]
     },
     {
+      "testId": "desk-card",
+      "files": [
+        "src/components/desk/DeskHome.tsx"
+      ]
+    },
+    {
+      "testId": "desk-card-body",
+      "files": [
+        "src/components/desk/DeskHome.tsx"
+      ]
+    },
+    {
+      "testId": "desk-card-context",
+      "files": [
+        "src/components/desk/DeskHome.tsx"
+      ]
+    },
+    {
+      "testId": "desk-card-failure",
+      "files": [
+        "src/components/desk/DeskHome.tsx"
+      ]
+    },
+    {
+      "testId": "desk-card-failure-qe",
+      "files": [
+        "src/components/desk/DeskHome.tsx"
+      ]
+    },
+    {
+      "testId": "desk-card-title",
+      "files": [
+        "src/components/desk/DeskHome.tsx"
+      ]
+    },
+    {
       "testId": "desk-chart",
       "files": [
         "src/components/desk/Desk.tsx"
@@ -2964,6 +3018,7 @@
       "testId": "desk-chore-signin",
       "files": [
         "src/components/desk/Desk.tsx",
+        "src/components/desk/DeskHome.tsx",
         "src/components/desk/DeskV2.tsx"
       ]
     },
@@ -3008,6 +3063,12 @@
       "testId": "desk-feed",
       "files": [
         "src/components/desk/Desk.tsx"
+      ]
+    },
+    {
+      "testId": "desk-greeting",
+      "files": [
+        "src/components/desk/DeskHome.tsx"
       ]
     },
     {
@@ -3182,6 +3243,7 @@
       "testId": "desk-loading",
       "files": [
         "src/components/desk/Desk.tsx",
+        "src/components/desk/DeskHome.tsx",
         "src/components/desk/DeskInbox.tsx"
       ]
     },
@@ -3200,13 +3262,33 @@
     {
       "testId": "desk-needs",
       "files": [
-        "src/components/desk/Desk.tsx"
+        "src/components/desk/Desk.tsx",
+        "src/components/desk/DeskHome.tsx"
+      ]
+    },
+    {
+      "testId": "desk-needs-calm",
+      "files": [
+        "src/components/desk/DeskHome.tsx"
+      ]
+    },
+    {
+      "testId": "desk-needs-more",
+      "files": [
+        "src/components/desk/DeskHome.tsx"
+      ]
+    },
+    {
+      "testId": "desk-needs-others",
+      "files": [
+        "src/components/desk/DeskHome.tsx"
       ]
     },
     {
       "testId": "desk-needs-partial",
       "files": [
         "src/components/desk/Desk.tsx",
+        "src/components/desk/DeskHome.tsx",
         "src/components/desk/DeskInbox.tsx"
       ]
     },
@@ -3250,6 +3332,30 @@
       "testId": "desk-pick-menu",
       "files": [
         "src/components/desk/DeskUnderstand.tsx"
+      ]
+    },
+    {
+      "testId": "desk-progress",
+      "files": [
+        "src/components/desk/DeskHome.tsx"
+      ]
+    },
+    {
+      "testId": "desk-progress-more",
+      "files": [
+        "src/components/desk/DeskHome.tsx"
+      ]
+    },
+    {
+      "testId": "desk-progress-quiet",
+      "files": [
+        "src/components/desk/DeskHome.tsx"
+      ]
+    },
+    {
+      "testId": "desk-progress-row",
+      "files": [
+        "src/components/desk/DeskHome.tsx"
       ]
     },
     {
@@ -3565,7 +3671,8 @@
       "files": [
         "src/board/objectActions.ts",
         "src/components/desk/Desk.tsx",
-        "src/components/desk/DeskHappening.tsx"
+        "src/components/desk/DeskHappening.tsx",
+        "src/components/desk/DeskHome.tsx"
       ]
     },
     {
@@ -3577,6 +3684,7 @@
     {
       "testId": "desk-setup-act",
       "files": [
+        "src/components/desk/DeskHome.tsx",
         "src/components/desk/DeskV2.tsx"
       ]
     },
@@ -3591,6 +3699,18 @@
       "files": [
         "src/components/desk/Desk.tsx",
         "src/components/desk/DeskV2.tsx"
+      ]
+    },
+    {
+      "testId": "desk-shipped",
+      "files": [
+        "src/components/desk/DeskHome.tsx"
+      ]
+    },
+    {
+      "testId": "desk-shipped-report",
+      "files": [
+        "src/components/desk/DeskHome.tsx"
       ]
     },
     {
@@ -3684,7 +3804,8 @@
     {
       "testId": "desk-story",
       "files": [
-        "src/components/desk/Desk.tsx"
+        "src/components/desk/Desk.tsx",
+        "src/components/desk/DeskHome.tsx"
       ]
     },
     {
@@ -3846,6 +3967,7 @@
     {
       "testId": "desk-work",
       "files": [
+        "src/components/desk/DeskHome.tsx",
         "src/components/desk/DeskV2.tsx"
       ]
     },
@@ -16631,6 +16753,7 @@
         "src/components/charts/CategoryBars.tsx",
         "src/components/charts/Chart.tsx",
         "src/components/dashboardKit.tsx",
+        "src/components/desk/DeskHome.tsx",
         "src/components/desk/DeskParts.tsx",
         "src/components/everything/FinishedRunMenu.tsx",
         "src/components/memory/MemoryPage.tsx",

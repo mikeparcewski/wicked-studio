@@ -60,6 +60,7 @@ import { DeskInbox } from './DeskInbox.js';
 import { FocusLockToggle } from '../NeedsYouQueue.js';
 import { useNeedsSources } from '../../store/needsSources.js';
 import { DeskUnderstand } from './DeskUnderstand.js';
+import { DeskHome } from './DeskHome.js';
 
 /**
  * THE DESK, v2 (design/DES-desk-v2.md) — the route `/`.
@@ -424,6 +425,18 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
     </div>
   );
 
+  // THE LANDING: the Desk's own Work view (`/`) is home v2; a project's page keeps its inbox and stream.
+  const home = projectId === undefined;
+  const homeView = (
+    <DeskHome runs={runs} runsShown={runsShown} read={readState === 'failed' ? 'failed' : readState === 'checking' ? 'checking' : 'known'}
+      needRows={needRows} settled={readState === 'known' || readState === 'stale' ? settled.phase : 'loading'} missing={settled.missing}
+      onRetryNeeds={rereadSources} retryingNeeds={rereading} navigate={navigate} now={now} agentName={agentName} pathOfRun={pathOfRun}
+      setup={setup} chores={chores} onSignIn={setSignIn} reportPath={tabPath('report')}
+      more={<DeskMore runs={runs} needs={readState === 'known' ? needRows.length : null} />}
+      handover={handover.since !== null ? <HandoverPanel handover={handover} navigate={navigate} now={now} runs={runs} /> : null}
+      panelId={panelId('work')} labelledBy={tabId('work')} />
+  );
+
   const reportScope = [`the last ${refine.days} days`, scope !== null ? `project ${projectName(scope)}` : null,
     refine.agent !== null ? `agent ${agentName(refine.agent)}` : null, refine.workflow !== null ? `workflow ${workflowLabel(refine.workflow)}` : null].filter((x): x is string => x !== null).join(', ');
   const ask = (q: string): void => openAskDock({ fresh: true, projectId: scope !== null && scope !== 'default' ? scope : null, seedText: `${q} (Look at ${reportScope}; answer from the run record and cite the jobs.)${refine.workflow !== null ? ` ${AGENT_WORKFLOW_NOTE} Do not treat agent-record totals as workflow-scoped numbers.` : ''}` });
@@ -553,9 +566,10 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
         {(readState === 'failed' || readState === 'stale') && runsError !== null && (
           <StateBanner data-testid="desk-runs-failed" kind={readState === 'stale' ? 'stale' : readErrorKind(runsError)} what="your work" error={displayText(runsError)} {...(onRetryRuns !== undefined ? { onRetry: onRetryRuns } : {})} />
         )}
-        {header}
+        {/* The landing (`/`, Work): home v2 carries its own greeting where the Desk's title was, under the same tabs. */}
+        {!home && header}
         {tabs}
-        {tab === 'work' ? work : tab === 'runs' ? runsTab : tab === 'report' ? report : understand}
+        {tab === 'work' ? (home ? homeView : work) : tab === 'runs' ? runsTab : tab === 'report' ? report : understand}
       </div>
       {signIn !== null && <AgentModal agentKey={signIn.key} onClose={() => setSignIn(null)} />}
     </div>

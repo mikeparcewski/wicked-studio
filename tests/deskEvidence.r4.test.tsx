@@ -33,8 +33,8 @@ function seat(cli: string, costUsd: number | null, units = 2): SeatRecord {
 function record(...seats: SeatRecord[]): SeatRecordResponse {
   return { days: 30, since: NOW - 30 * DAY, until: NOW, runsRead: 1, truncated: false, seats };
 }
-async function mount(search = '?tab=report'): Promise<void> {
-  await act(async () => { render(<DeskV2 runs={[deskRun('studio'), deskRun('crew', { project_id: 'crew' })]} runsLoaded needRows={[]} now={NOW} navigate={vi.fn()} search={search} />); });
+async function mount(search = '?tab=report', projectId?: string): Promise<void> {
+  await act(async () => { render(<DeskV2 runs={[deskRun('studio'), deskRun('crew', { project_id: 'crew' })]} runsLoaded needRows={[]} now={NOW} navigate={vi.fn()} search={search} {...(projectId === undefined ? {} : { projectId })} />); });
 }
 
 beforeEach(() => {
@@ -100,12 +100,13 @@ describe('Desk r4 spend availability', () => {
     expect(screen.getByTestId('desk-stat-spend').querySelector('.wk-stat-value')?.textContent).toBe('$0.00');
   });
 
+  // The Work tiles live on a project's page (the landing has none since home v2).
   it('never shows $0 for all-unknown Work spend and qualifies partial Work spend', async () => {
-    await mount('');
+    await mount('', 'studio');
     expect(screen.getByTestId('desk-block-spend').querySelector('.wk-stat-value')?.textContent).toBe('—');
     cleanup();
     mocks.reads = [record(seat('claude', 12), seat('codex', null))];
-    await mount('');
+    await mount('', 'studio');
     expect(screen.getByTestId('desk-block-spend')).toHaveTextContent('at least $12.00');
     expect(screen.getByTestId('desk-block-spend')).toHaveTextContent('priced usage only');
   });

@@ -49,7 +49,19 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
 describe('Desk r3 evidence on screen', () => {
-  it.each([undefined, 'studio'])('labels truncated Work spend as a floor on Desk/project %s', async (projectId) => {
+  // The landing (`/`) carries no stat tiles since home v2; a project's Work view keeps them.
+  it('the landing has no Work tiles; a project page keeps them', async () => {
+    await act(async () => { render(<DeskV2 runs={[]} runsLoaded needRows={[]} now={NOW} navigate={vi.fn()} />); });
+    expect(screen.getByTestId('desk-work')).toHaveAttribute('data-home', 'v2');
+    expect(screen.queryByTestId('desk-blocks')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('desk-inbox')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('desk-happening')).not.toBeInTheDocument();
+    cleanup();
+    await act(async () => { render(<DeskV2 runs={[]} runsLoaded needRows={[]} now={NOW} navigate={vi.fn()} projectId="studio" />); });
+    expect(screen.getByTestId('desk-blocks')).toBeInTheDocument();
+  });
+
+  it.each(['studio'])('labels truncated Work spend as a floor on project %s', async (projectId) => {
     mocks.spend.truncated = true;
     // Even if a prior amount is present, truncation must take precedence over a delta.
     mocks.spend.previous = 5;

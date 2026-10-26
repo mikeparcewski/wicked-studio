@@ -41,9 +41,9 @@ function need(key: string, kind = 'gate', extra: Partial<NeedRow> = {}): NeedRow
 
 describe('the greeting and the one sentence', () => {
   it('greets by the local hour and says the date in words', () => {
-    expect(deskGreeting(new Date(2026, 8, 30, 9, 0).getTime()).hello).toBe('Good morning.');
-    expect(deskGreeting(new Date(2026, 8, 30, 14, 0).getTime()).hello).toBe('Good afternoon.');
-    expect(deskGreeting(new Date(2026, 8, 30, 20, 0).getTime()).hello).toBe('Good evening.');
+    expect(deskGreeting(new Date(2026, 8, 30, 9, 0).getTime()).hello).toBe('Good morning');
+    expect(deskGreeting(new Date(2026, 8, 30, 14, 0).getTime()).hello).toBe('Good afternoon');
+    expect(deskGreeting(new Date(2026, 8, 30, 20, 0).getTime()).hello).toBe('Good evening');
     expect(deskGreeting(new Date(2026, 8, 30, 9, 0).getTime()).date).toBe('Wednesday, Sep 30');
   });
 

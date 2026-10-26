@@ -1,0 +1,113 @@
+/* ── THE LANDING, home v2 (components/desk/DeskHome.tsx; the operator-approved mockup, 2026-10-26) ──
+ * "Needs more whitespace, has to be easy to scan; think humans, we get overwhelmed easy."
+ *  - one centred column, about 760 px; 56 px between sections;
+ *  - three sizes carry the page (34 greeting / 22 card title / 16-17 reading text); 13-14 px is only
+ *    for muted labels and meta lines; secondary words are muted ink;
+ *  - one surface per thing: the card is the only filled box, jobs are rows with no chrome;
+ *  - every hover is an accent tint a person can see (rest -> hover dE_OK >= 0.08, measured in the
+ *    browser), and every control has the keyboard focus ring. */
+
+.wk-home { display: flex; justify-content: center; padding: var(--space-8, 32px) 0 var(--space-16, 64px); }
+.wk-home-col { width: 100%; max-width: 760px; display: flex; flex-direction: column; gap: 56px; min-width: 0; }
+
+.wk-home-head { display: flex; flex-direction: column; gap: 24px; }
+.wk-home-hello { display: flex; flex-direction: column; gap: 10px; }
+.wk-home-hello-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); }
+.wk-home-title { margin: 0; font-size: 34px; line-height: 1.15; font-weight: 700; letter-spacing: -0.02em; color: var(--ink-high); }
+.wk-home-state { margin: 0; font-size: 17px; line-height: 1.5; color: var(--ink-muted); }
+
+/* The ask box: one roomy field and Start, on the card surface (no border: the fill is the edge). */
+.wk-home-ask {
+  display: flex; align-items: center; gap: 10px; padding: 8px 8px 8px 20px; border-radius: var(--radius-xl);
+  background: var(--surface-card); box-shadow: inset 0 0 0 1px var(--border-subtle);
+  transition: box-shadow 0.14s;
+}
+.wk-home-ask:focus-within { box-shadow: inset 0 0 0 1px var(--accent), 0 0 0 3px color-mix(in oklab, var(--accent) 28%, transparent); }
+.wk-home-ask-input {
+  flex: 1 1 auto; min-width: 0; height: 44px; border: 0; background: transparent; color: var(--ink-high);
+  font-family: inherit; font-size: 16px; outline: none;
+}
+.wk-home-ask-input::placeholder { color: var(--ink-placeholder); }
+
+/* Buttons: 44 px tall, 16 px words; hover moves the fill toward the ink (lighter on dark, darker on light). */
+.wk-home-btn {
+  display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 0 20px;
+  border-radius: var(--radius-lg); font-family: inherit; font-size: 16px; font-weight: 600; line-height: 1.2;
+  text-decoration: none; cursor: pointer; white-space: nowrap;
+  transition: background-color 0.14s, border-color 0.14s, color 0.14s, transform 0.14s;
+}
+.wk-home-btn:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-shadow: var(--focus-ring); }
+.wk-home-btn:disabled { cursor: default; opacity: 0.6; }
+.wk-home-btn--primary { border: 0; background: var(--accent); color: var(--accent-fg); }
+.wk-home-btn--primary:hover:not(:disabled) { background: color-mix(in oklab, var(--accent) 72%, var(--ink-high)); color: var(--accent-fg); transform: translateY(-1px); }
+.wk-home-btn--primary:active:not(:disabled) { background: color-mix(in oklab, var(--accent) 60%, var(--ink-high)); transform: none; }
+.wk-home-btn--secondary { border: 1px solid var(--border-strong); background: transparent; color: var(--ink-high); font-weight: 500; }
+.wk-home-btn--secondary:hover:not(:disabled) {
+  background: color-mix(in oklab, var(--accent) 22%, transparent); border-color: color-mix(in oklab, var(--accent) 70%, var(--ink-high));
+  color: var(--ink-high);
+}
+.wk-home-btn--secondary:active:not(:disabled) { background: color-mix(in oklab, var(--accent) 32%, transparent); }
+
+/* Sections: a quiet label, then the thing itself. */
+.wk-home-sec { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+.wk-home-sec--jobs { gap: 8px; }
+.wk-home-sec-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-4); margin-bottom: 6px; }
+.wk-home-label { margin: 0; font-size: 13px; font-weight: 600; letter-spacing: 0.09em; text-transform: uppercase; color: var(--ink-muted); }
+
+.wk-home-link, .wk-home-more {
+  color: var(--accent); text-decoration: none; border-radius: var(--radius-sm); font-size: 15px;
+  transition: color 0.14s, background-color 0.14s;
+}
+.wk-home-link:hover, .wk-home-more:hover { text-decoration: underline; text-underline-offset: 3px; }
+.wk-home-link:focus-visible, .wk-home-more:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-shadow: var(--focus-ring); }
+.wk-home-more { align-self: flex-start; padding: 2px 4px; }
+
+/* THE card: the one filled surface on the page. */
+.wk-home-card { background: var(--surface-card); border-radius: 20px; padding: 32px; display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.wk-home-card--loading { gap: 12px; }
+.wk-home-card-context { margin: 0; font-size: 14px; color: var(--ink-muted); }
+.wk-home-card-title { margin: 0; font-size: 22px; line-height: 1.35; font-weight: 600; color: var(--ink-high); overflow-wrap: anywhere; }
+.wk-home-card-body { margin: 0; font-size: 16px; line-height: 1.6; color: var(--ink-body); overflow-wrap: anywhere; }
+.wk-home-card-acts { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 8px; }
+.wk-home-card-fail { margin: 0; font-size: 14px; color: var(--status-fail); }
+.wk-home-card { --focus-gap: var(--surface-card); }
+
+.wk-home-calm, .wk-home-quiet { margin: 0; font-size: 17px; line-height: 1.5; color: var(--ink-muted); }
+
+/* In progress: rows, no card chrome; the whole row is the link and tints on hover. */
+.wk-home-jobs { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.wk-home-job {
+  display: flex; flex-direction: column; gap: 10px; padding: 18px 20px; margin: 0 -20px; border-radius: 14px;
+  color: inherit; text-decoration: none; transition: background-color 0.14s;
+}
+.wk-home-job:hover { background: color-mix(in oklab, var(--accent) 16%, transparent); }
+.wk-home-job:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-shadow: var(--focus-ring); }
+.wk-home-job-top { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; min-width: 0; }
+.wk-home-job-title { font-size: 17px; font-weight: 500; color: var(--ink-high); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wk-home-job-word { flex-shrink: 0; font-size: 14px; font-weight: 500; }
+.wk-home-job-word[data-tone="run"] { color: var(--status-run); }
+.wk-home-job-word[data-tone="gate"] { color: var(--status-gate); }
+.wk-home-job-line { font-size: 14px; color: var(--ink-muted); }
+.wk-home-bar { display: block; height: 4px; border-radius: 999px; background: var(--border); overflow: hidden; }
+.wk-home-bar-fill { display: block; height: 100%; border-radius: 999px; min-width: 4px; }
+.wk-home-bar-fill[data-tone="run"] { background: var(--status-run); }
+.wk-home-bar-fill[data-tone="gate"] { background: var(--status-gate); }
+
+.wk-home-close { margin: 0; font-size: 15px; text-align: center; color: var(--ink-muted); }
+
+@media (prefers-reduced-motion: reduce) {
+  .wk-home-btn, .wk-home-job, .wk-home-ask { transition: none; }
+  .wk-home-btn--primary:hover:not(:disabled) { transform: none; }
+}
+
+/* A phone: the same column, stacked; the ask box full width with Start under the words. */
+@media (max-width: 767px) {
+  .wk-home { padding: var(--space-4, 16px) 0 var(--space-10, 40px); }
+  .wk-home-col { gap: 40px; }
+  .wk-home-title { font-size: 30px; }
+  .wk-home-ask { flex-direction: column; align-items: stretch; padding: 8px; }
+  .wk-home-ask-input { padding: 0 12px; }
+  .wk-home-card { padding: 22px; border-radius: 16px; }
+  .wk-home-card-acts .wk-home-btn { flex: 1 1 auto; }
+  .wk-home-job { margin: 0 -12px; padding: 14px 12px; }
+}
