@@ -167,9 +167,12 @@
 .wk-rail .wk-rail-nav-item:hover {
   background: var(--rail-hover-bg, color-mix(in oklab, var(--accent) 18%, var(--surface-rail))); color: var(--ink-high); box-shadow: none;
 }
-.wk-rail .wk-rail-nav-item[aria-current="page"] { font-weight: var(--weight-semi); color: var(--ink-high); }
+/* The current page reads stronger than a hovered one (mockup: hover 14%, current 18% of the accent). */
+.wk-rail .wk-rail-nav-item[aria-current="page"] {
+  background: color-mix(in oklab, var(--accent) 22%, var(--surface-rail)); font-weight: var(--weight-semi); color: var(--ink-high);
+}
 .wk-rail .wk-rail-nav-item[aria-current="page"]:hover {
-  background: var(--rail-hover-current-bg, color-mix(in oklab, var(--accent) 26%, var(--surface-rail))); box-shadow: inset 3px 0 0 var(--accent);
+  background: color-mix(in oklab, var(--accent) 30%, var(--surface-rail)); box-shadow: inset 3px 0 0 var(--accent);
 }
 /* Home's needs-you count is the spark (one yellow mark per viewport), as the wordmark's was. */
 .wk-rail-badge.wk-rail-badge--home { background: var(--spark); color: var(--spark-ink); }
@@ -184,7 +187,7 @@
 .wk-rail .wk-rail-sec-toggle:hover { background: var(--rail-hover-bg, color-mix(in oklab, var(--accent) 18%, var(--surface-rail))); color: var(--ink-high); }
 .wk-rail .wk-rail-sec-toggle:hover .wk-rail-fold-chevron { color: var(--ink-high); }
 .wk-rail .wk-rail-sec-toggle:focus-visible { outline: 2px solid transparent; outline-offset: -2px; box-shadow: inset 0 0 0 2px var(--accent); }
-.wk-rail-recent .wk-rail-groups > div:first-of-type .wk-rail-group-row, #rail-recent-list > div:first-child .wk-rail-group-row { margin-top: 4px; }
+#rail-recent-list > div:first-child .wk-rail-group-row { margin-top: 4px; }
 /* All jobs: the old "Show N more" look, inset to the titles. */
 .wk-rail-showmore.wk-rail-alljobs { margin-top: 6px; text-decoration: none; }
 @media (max-width: 767px) {

@@ -284,9 +284,17 @@ with sync_playwright() as p:
         .map(e => e.getAttribute('data-nav-dest'))""")
     nav = {"dests": dests}
     order = dests
-    want = ["section:skills", "section:mcp", "section:plugins"]
-    idx = [order.index(x) if x in order else -1 for x in want]
-    check("nav-after-skills", -1 not in idx and idx[1] == idx[0] + 1 and idx[2] == idx[1] + 1, nav=nav)
+    # The ui-v2 nav regroup: MCP is on Build & settings, right after Skills, with Plugins after it.
+    want = ["page:build", "watch"]
+    rail_ok = order[-2:] == want
+    page.get_by_test_id("desk-rail-build").click()
+    page.get_by_test_id("build-page").wait_for(state="visible", timeout=8000)
+    links = page.evaluate("""() => [...document.querySelectorAll('[data-testid^="build-link-"]')].map(e => e.dataset.testid)""")
+    nav["build"] = links
+    idx = [links.index(x) if x in links else -1 for x in ("build-link-skills", "build-link-mcp", "build-link-plugins")]
+    check("nav-after-skills", rail_ok and -1 not in idx and idx[1] == idx[0] + 1 and idx[2] == idx[1] + 1, nav=nav)
+    page.get_by_test_id("build-link-mcp").click()
+    page.get_by_test_id("mcp-tools-page").wait_for(state="visible", timeout=8000)
 
     # ── 1. paste → preview ────────────────────────────────────────────────────────
     page.get_by_test_id("mcp-add-open").click()

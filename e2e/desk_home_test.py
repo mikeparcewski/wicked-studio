@@ -229,8 +229,10 @@ with sync_playwright() as p:
     #       Skills · MCP · Plugins · Workflows · General · Nerve Center (last); no Notifications entry.
     dests = page.evaluate("""() => [...document.querySelectorAll(
       '[data-testid="session-rail"] [data-nav-dest]')].map(e => e.dataset.navDest)""")
-    expected = ["section:skills", "section:mcp", "section:plugins", "section:workflows", "section:general", "watch"]
-    page.get_by_test_id("desk-rail-general").click()
+    expected = ["page:home", "page:jobs", "page:repos", "page:report", "page:understand", "page:evaluate",
+                "page:steering", "page:memory", "page:agents", "page:build", "watch"]
+    page.get_by_test_id("desk-rail-build").click()
+    page.get_by_test_id("build-link-settings").click()
     page.wait_for_function("() => window.location.pathname === '/system'", timeout=5000)
     check("every-destination", dests == expected, dests=dests, expected=expected)
 

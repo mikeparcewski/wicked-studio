@@ -179,9 +179,8 @@ with sync_playwright() as p:
     page.wait_for_function("() => document.querySelectorAll('[data-testid=\"rail-session\"]').length >= 6",
                            timeout=10000)
 
-    # ── 3. Everything fits (rail restructure 2026-10-13): the settings pages are Workspace links —
-    #       Workflows · General at the group's end — every one on screen with Nerve Center (last) and
-    #       the sessions; a settings link still navigates.
+    # ── 3. Everything fits: the foot (Build & settings, then Nerve Center last) is on screen, and
+    #       Settings is one step through Build & settings.
     rail = page.evaluate("""(h) => {
       const shown = (el) => { const b = el.getBoundingClientRect(); return b.height > 0 && b.bottom <= h + 0.5 && b.top >= -0.5; };
       const health = document.querySelector('[data-testid="desk-rail-nerve"]');
@@ -191,9 +190,12 @@ with sync_playwright() as p:
                links: links.map((e) => e.dataset.navDest), linksShown: links.every(shown) };
     }""", H)
     page.screenshot(path=str(SHOTS / "desk-look-everything.png"))
-    check("everything-else-fits", rail["healthShown"] and rail["sessions"] >= 6 and rail["sessionsShown"] >= 6
-          and rail["links"][-3:] == ["section:workflows", "section:general", "watch"] and rail["linksShown"], rail=rail)
-    page.get_by_test_id("desk-rail-general").click()
+    # The ui-v2 nav regroup: the foot is Build & settings then Nerve Center; Recent shows at most five
+    # sessions (the rail scrolls under the page groups at 700 px, so they need not all be on screen).
+    check("everything-else-fits", rail["healthShown"] and 1 <= rail["sessions"] <= 5
+          and rail["links"] == ["page:build", "watch"] and rail["linksShown"], rail=rail)
+    page.get_by_test_id("desk-rail-build").click()
+    page.get_by_test_id("build-link-settings").click()
     page.wait_for_function("() => window.location.pathname === '/system'", timeout=5000)
     check("everything-else-navigates", page.evaluate("() => window.location.pathname") == "/system")
 

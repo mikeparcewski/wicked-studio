@@ -73,7 +73,9 @@ origin = start_server(PORT, dist)
 
 from playwright.sync_api import sync_playwright  # noqa: E402
 
-ADDR = "(() => { const u = new URL(location.href); const a = u.searchParams.get('at'); return { tab: u.searchParams.get('tab'), at: a }; })()"
+# Where the page is: the sidebar's current page (ui-v2 nav regroup: Memory and Steering are pages) and the address.
+ADDR = """(() => ({ tab: document.querySelector('[data-testid="session-rail"] .wk-rail-nav-item[aria-current="page"]')?.dataset.navDest?.replace('page:', '') ?? null,
+  at: location.pathname + location.search }))()"""
 SHOTS.mkdir(parents=True, exist_ok=True)
 errors: list[str] = []
 
@@ -103,19 +105,16 @@ with sync_playwright() as p:
 
     # ── 1. Desk → Memory tab: totals, the list, a kind card, a search ─────────────────
     page.goto(f"{origin}/", wait_until="networkidle")
-    # Since 2026-10-26 Memory sits under the tab bar's More (with Understand, Steer, Agents, Evaluate).
-    more = page.get_by_test_id("desk-tabs-more")
+    # The ui-v2 nav regroup: Memory is a page in the sidebar's GOVERN group (Steering · Memory · Agents).
+    tab = page.get_by_test_id("nav-memory")
     try:
-        more.wait_for(state="visible", timeout=15000)
-        more.click()
-        tab = page.get_by_test_id("desk-more-tab-memory")
-        tab.wait_for(state="visible", timeout=5000)
+        tab.wait_for(state="visible", timeout=15000)
     except Exception as e:  # noqa: BLE001
         page.screenshot(path=str(SHOTS / "desk-memory-missing.png"))
-        fail("tab", f"no Memory view under the Desk's More: {e}")
-    tabs = [t.split("\n")[0] for t in page.get_by_test_id("desk-tabs-more-panel").locator("a").all_inner_texts()]
+        fail("tab", f"no Memory page in the sidebar: {e}")
+    tabs = page.get_by_test_id("rail-nav-govern").locator("a").all_inner_texts()
     tab.click()
-    page.get_by_test_id("desk-tab-memory").wait_for(state="visible", timeout=8000)
+    page.wait_for_function("() => location.pathname === '/memory'", timeout=8000)
     settled(page)
     page.wait_for_function("() => /2/.test(document.querySelector('[data-testid=\"memory-stat-total\"]')?.textContent ?? '')", timeout=10000)
     first = rows(page)
@@ -123,7 +122,7 @@ with sync_playwright() as p:
     review = page.get_by_test_id("memory-stat-review").inner_text()
     page.wait_for_timeout(300)
     page.screenshot(path=str(SHOTS / "desk-memory-light.png"))
-    check("browse", tabs.index("Memory") == tabs.index("Steer") + 1
+    check("browse", tabs.index("Memory") == tabs.index("Steering") + 1
           and [r["id"] for r in first] == ["mem-ops", "mem-mac"]
           and "1 semantic · 1 episodic" in total and "1" in review
           and page.evaluate(ADDR)["tab"] == "memory" and no_hscroll(page),
@@ -187,8 +186,7 @@ with sync_playwright() as p:
     check("retire", retired_note.startswith("Retired: ") and added["id"] not in left and len(left) == 3, note=retired_note, left=left)
 
     # ── 4. Steer: rules and policy proposals only ─────────────────────────────────────
-    page.get_by_test_id("desk-tabs-more").click()
-    page.get_by_test_id("desk-more-tab-steer").click()
+    page.get_by_test_id("nav-steering").click()
     page.get_by_test_id("steer-surface").wait_for(state="visible", timeout=15000)
     page.wait_for_function("() => /\\d/.test(document.querySelector('[data-testid=\"steer-stat-review\"]')?.textContent ?? '')", timeout=10000)
     steer_review = page.get_by_test_id("steer-stat-review").inner_text()
@@ -209,7 +207,7 @@ with sync_playwright() as p:
     landed = {}
     for old, want_tab, want_test in (("/steering/memories", "memory", "memory-page"),
                                      ("/proposals?type=memory", "memory", "memory-proposals"),
-                                     ("/steering/dashboard", "steer", "steer-surface")):
+                                     ("/steering/dashboard", "steering", "steer-surface")):
         page.goto(f"{origin}{old}", wait_until="networkidle")
         page.get_by_test_id(want_test).wait_for(state="visible", timeout=15000)
         landed[old] = page.evaluate(ADDR)
