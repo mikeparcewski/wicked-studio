@@ -253,7 +253,8 @@ export function MemoryPage({ search, navigate, address = (p) => p, project = nul
         <div className="wk-se-proposals wk-calm-proposals" data-testid="memory-proposals">
           <ProposalsSection kind="memory" heading="Memory proposals" editable revision={proposalsRev} onDecision={() => { setReviewTick((t) => t + 1); reread(); }} />
         </div>
-      ) : loading ? (
+      ) : loading && memories.length === 0 ? (
+        // A re-read after a write keeps the rows on screen (no flash to the loading shape); the first read shows it.
         <CalmLoading data-testid="memories-loading" rows={4} label="Reading what your agents learned" />
       ) : unsupported ? (
         <CalmEmpty data-testid="memories-unsupported" title="This crew can’t browse its memories yet." body={<p>Memory proposals still show under Review.</p>} />

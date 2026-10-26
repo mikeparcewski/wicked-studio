@@ -15,7 +15,7 @@
   --calm-primary-hover: color-mix(in oklab, var(--accent) 58%, var(--ink-high));
   --calm-primary-press: color-mix(in oklab, var(--accent) 46%, var(--ink-high));
   /* Link words: the accent pulled toward the ink, so they read at AA on every theme's ground (the classic dark accent alone is ~2:1). */
-  --calm-link: color-mix(in oklab, var(--accent) 65%, var(--ink-high));
+  --calm-link: color-mix(in oklab, var(--accent) 50%, var(--ink-high));
 }
 /* The classic light theme's accent is nearly its ink (white words at ~19:1): there the hover lifts the fill toward the
    page instead, which a person can see and which keeps the words well past AA. */
@@ -135,7 +135,7 @@ select.wk-calm-pick:not([multiple]):not([size]):hover { background-color: var(--
 .wk-calm-dot[data-tone="run"] { background: var(--status-run); }
 .wk-calm-dot[data-tone="gate"] { background: var(--status-gate); }
 .wk-calm-dot[data-tone="fail"] { background: var(--status-fail); }
-.wk-calm-dot[data-tone="accent"] { background: var(--accent); }
+.wk-calm-dot[data-tone="accent"] { background: var(--calm-link); }
 .wk-calm-row-text { display: flex; flex-direction: column; gap: 4px; flex: 1 1 auto; min-width: 0; }
 .wk-calm-row-title { font-size: 16px; line-height: 1.4; font-weight: 500; color: var(--ink-high); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .wk-calm-row-sub { font-size: 14px; line-height: 1.4; color: var(--ink-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -245,3 +245,8 @@ select.wk-calm-pick--field:not([multiple]):not([size]) {
 /* The picker is as wide as its words (Chromium 123+; older engines keep the widest option's width). */
 select.wk-calm-pick { field-sizing: content; }
 .wk-calm-btn--link:hover:not(:disabled) { text-decoration: underline; text-underline-offset: 3px; }
+
+/* Links inside the calm pages (filter notes, the health line, the seed runbook) read like the page's own links:
+   the rig's dark-teal accent alone is ~1.5:1 on the classic dark ground. */
+.wk-calm .wk-link { color: var(--calm-link); }
+.wk-calm .wk-link:hover { color: var(--ink-high); text-decoration: underline; text-underline-offset: 3px; }
