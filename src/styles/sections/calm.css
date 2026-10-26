@@ -4,6 +4,25 @@
  * chrome. Every hover is an accent tint a person can see (rest -> hover dE_OK >= 0.08, measured in the
  * browser in all four themes) and every control wears the keyboard focus ring. */
 
+.wk-calm {
+  /* Hover = a tint of the accent mixed with the theme's own ink, so it shows on every ground and with any
+     accent the picker holds (the rail's language, fix/rail-hover-visible): rows 14%, controls 20%. */
+  --calm-tint: color-mix(in oklab, var(--accent) 50%, var(--ink-high));
+  --calm-hover-row: color-mix(in oklab, var(--calm-tint) 14%, transparent);
+  --calm-hover-ctl: color-mix(in oklab, var(--calm-tint) 20%, transparent);
+  --calm-press-ctl: color-mix(in oklab, var(--calm-tint) 28%, transparent);
+  --calm-hover-edge: color-mix(in oklab, var(--calm-tint) 60%, transparent);
+  --calm-primary-hover: color-mix(in oklab, var(--accent) 58%, var(--ink-high));
+  --calm-primary-press: color-mix(in oklab, var(--accent) 46%, var(--ink-high));
+  /* Link words: the accent pulled toward the ink, so they read at AA on every theme's ground (the classic dark accent alone is ~2:1). */
+  --calm-link: color-mix(in oklab, var(--accent) 65%, var(--ink-high));
+}
+/* The classic light theme's accent is nearly its ink (white words at ~19:1): there the hover lifts the fill toward the
+   page instead, which a person can see and which keeps the words well past AA. */
+/* The classic dark theme (no data-theme) carries light words on a mid accent: toward the ink would wash them out, so
+   its hover deepens the fill toward the page instead. */
+:root:not([data-theme]) .wk-calm { --calm-primary-hover: color-mix(in oklab, var(--accent) 60%, var(--surface-base)); --calm-primary-press: color-mix(in oklab, var(--accent) 50%, var(--surface-base)); }
+[data-theme="light"] .wk-calm { --calm-primary-hover: color-mix(in oklab, var(--accent) 74%, var(--surface-base)); --calm-primary-press: color-mix(in oklab, var(--accent) 64%, var(--surface-base)); }
 .wk-calm { flex: 1 1 auto; min-height: 0; min-width: 0; overflow-y: auto; display: flex; flex-direction: row; align-items: flex-start; justify-content: center; padding: 56px 40px 80px; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 .wk-calm-col { width: 100%; max-width: 840px; display: flex; flex-direction: column; gap: 40px; min-width: 0; }
@@ -25,17 +44,17 @@
 .wk-calm-btn:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-shadow: var(--focus-ring); }
 .wk-calm-btn:disabled { cursor: default; opacity: 0.6; }
 .wk-calm-btn--primary { border: 0; background: var(--accent); color: var(--accent-fg); }
-.wk-calm-btn--primary:hover:not(:disabled) { background: color-mix(in oklab, var(--accent) 72%, var(--ink-high)); color: var(--accent-fg); transform: translateY(-1px); }
-.wk-calm-btn--primary:active:not(:disabled) { background: color-mix(in oklab, var(--accent) 60%, var(--ink-high)); transform: none; }
+.wk-calm-btn--primary:hover:not(:disabled) { background: var(--calm-primary-hover); color: var(--accent-fg); transform: translateY(-1px); }
+.wk-calm-btn--primary:active:not(:disabled) { background: var(--calm-primary-press); transform: none; }
 .wk-calm-btn--secondary { border: 1px solid var(--border-strong); background: transparent; color: var(--ink-high); font-weight: 500; }
 .wk-calm-btn--secondary:hover:not(:disabled) {
-  background: color-mix(in oklab, var(--accent) 22%, transparent); border-color: color-mix(in oklab, var(--accent) 70%, var(--ink-high));
+  background: var(--calm-hover-ctl); border-color: var(--calm-hover-edge);
 }
-.wk-calm-btn--secondary:active:not(:disabled) { background: color-mix(in oklab, var(--accent) 32%, transparent); }
+.wk-calm-btn--secondary:active:not(:disabled) { background: var(--calm-press-ctl); }
 .wk-calm-btn--link {
-  min-height: 36px; padding: 0 12px; border: 0; background: transparent; color: var(--accent); font-weight: 500; font-size: 15px;
+  min-height: 36px; padding: 0 12px; border: 0; background: transparent; color: var(--calm-link); font-weight: 500; font-size: 15px;
 }
-.wk-calm-btn--link:hover:not(:disabled) { background: color-mix(in oklab, var(--accent) 18%, transparent); color: var(--ink-high); }
+.wk-calm-btn--link:hover:not(:disabled) { background: var(--calm-hover-ctl); color: var(--ink-high); }
 
 /* The ⋯ menu buttons and small icon buttons on these pages: a visible tint, a visible edge. */
 .wk-calm .wk-menu-wrap > .wk-btn, .wk-calm-icon-btn, .wk-calm-quiet-btn {
@@ -46,7 +65,7 @@
 .wk-calm-actions .wk-menu-wrap > .wk-btn { min-height: 44px; min-width: 44px; border-color: var(--border-strong); color: var(--ink-high); font-size: 18px; }
 .wk-calm .wk-menu-wrap > .wk-btn:hover, .wk-calm-icon-btn:hover, .wk-calm-quiet-btn:hover,
 .wk-calm .wk-menu-wrap > .wk-btn[aria-expanded="true"] {
-  background: color-mix(in oklab, var(--accent) 22%, transparent); border-color: color-mix(in oklab, var(--accent) 60%, transparent); color: var(--ink-high);
+  background: var(--calm-hover-ctl); border-color: var(--calm-hover-edge); color: var(--ink-high);
 }
 .wk-calm .wk-menu-wrap > .wk-btn:focus-visible, .wk-calm-icon-btn:focus-visible, .wk-calm-quiet-btn:focus-visible {
   outline: 2px solid transparent; outline-offset: 2px; box-shadow: var(--focus-ring);
@@ -55,7 +74,7 @@
 .wk-calm-quiet-btn { display: inline-flex; align-items: center; gap: 6px; padding: 0 12px; font-family: inherit; font-size: 14px; font-weight: 500; }
 .wk-calm .wk-menu { min-width: 220px; padding: 6px; border-radius: var(--radius-lg); }
 .wk-calm .wk-menu-item { padding: 10px 12px; font-size: 15px; border-radius: var(--radius-md); }
-.wk-calm .wk-menu-item:hover, .wk-calm .wk-menu-item:focus-visible { background: color-mix(in oklab, var(--accent) 24%, transparent); color: var(--ink-high); }
+.wk-calm .wk-menu-item:hover, .wk-calm .wk-menu-item:focus-visible { background: var(--calm-hover-ctl); color: var(--ink-high); }
 .wk-calm .wk-menu-item--danger:hover, .wk-calm .wk-menu-item--danger:focus-visible { background: color-mix(in oklab, var(--status-fail) 20%, transparent); color: var(--status-fail); }
 .wk-calm-chev { transition: transform 0.14s; }
 .wk-calm-row.is-open .wk-calm-chev, [aria-expanded="true"] > .wk-calm-chev { transform: rotate(180deg); }
@@ -74,7 +93,7 @@
   font-family: inherit; font-size: 13px; font-weight: 600; letter-spacing: 0.09em; text-transform: uppercase; cursor: pointer;
   transition: background-color 0.14s, border-color 0.14s, color 0.14s;
 }
-select.wk-calm-pick:not([multiple]):not([size]):hover { background-color: color-mix(in oklab, var(--accent) 22%, transparent); border-color: color-mix(in oklab, var(--accent) 60%, transparent) !important; color: var(--ink-high); }
+select.wk-calm-pick:not([multiple]):not([size]):hover { background-color: var(--calm-hover-ctl); border-color: var(--calm-hover-edge) !important; color: var(--ink-high); }
 .wk-calm-pick:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-shadow: var(--focus-ring); }
 .wk-calm-pick option { text-transform: none; letter-spacing: 0; color: var(--ink-high); background: var(--surface-overlay); }
 
@@ -84,7 +103,7 @@ select.wk-calm-pick:not([multiple]):not([size]):hover { background-color: color-
   font-family: inherit; font-size: 14px; font-weight: 500; cursor: pointer; white-space: nowrap;
   transition: background-color 0.14s, color 0.14s;
 }
-.wk-calm-seg-btn:hover:not(.is-on) { background: color-mix(in oklab, var(--accent) 22%, transparent); color: var(--ink-high); }
+.wk-calm-seg-btn:hover:not(.is-on) { background: var(--calm-hover-ctl); color: var(--ink-high); }
 .wk-calm-seg-btn.is-on { background: color-mix(in oklab, var(--ink-high) 12%, transparent); color: var(--ink-high); }
 .wk-calm-seg-btn:focus-visible { outline: 2px solid transparent; outline-offset: 1px; box-shadow: var(--focus-ring); }
 
@@ -101,9 +120,9 @@ select.wk-calm-pick:not([multiple]):not([size]):hover { background-color: color-
 /* Rows: no card chrome; the whole main area is the target and tints on hover. */
 .wk-calm-rows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
 .wk-calm-row { margin: 0 -20px; border-radius: 14px; transition: background-color 0.14s; }
-.wk-calm-row:hover, .wk-calm-row:focus-within { background: color-mix(in oklab, var(--accent) 16%, transparent); }
+.wk-calm-row:hover, .wk-calm-row:focus-within { background: var(--calm-hover-row); }
 .wk-calm-row.is-open { background: color-mix(in oklab, var(--ink-high) 4%, transparent); }
-.wk-calm-row.is-open:hover { background: color-mix(in oklab, var(--accent) 16%, transparent); }
+.wk-calm-row.is-open:hover { background: var(--calm-hover-row); }
 .wk-calm-row-line { display: flex; align-items: center; gap: 8px; padding-right: 12px; min-width: 0; }
 .wk-calm-row-main {
   flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 20px; padding: 18px 8px 18px 20px; border: 0; border-radius: 14px;
@@ -138,9 +157,9 @@ select.wk-calm-pick:not([multiple]):not([size]):hover { background-color: color-
 
 .wk-calm-more {
   align-self: flex-start; margin-top: 8px; padding: 6px 8px; margin-left: -8px; border: 0; border-radius: var(--radius-sm); background: transparent;
-  color: var(--accent); font-family: inherit; font-size: 15px; cursor: pointer; text-decoration: none; transition: background-color 0.14s, color 0.14s;
+  color: var(--calm-link); font-family: inherit; font-size: 15px; cursor: pointer; text-decoration: none; transition: background-color 0.14s, color 0.14s;
 }
-.wk-calm-more:hover { background: color-mix(in oklab, var(--accent) 18%, transparent); color: var(--ink-high); }
+.wk-calm-more:hover { background: var(--calm-hover-ctl); color: var(--ink-high); }
 .wk-calm-more:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-shadow: var(--focus-ring); }
 
 .wk-calm-note { margin: 0 0 8px; font-size: 14px; line-height: 1.5; color: var(--ink-muted); }
@@ -169,7 +188,7 @@ select.wk-calm-pick:not([multiple]):not([size]):hover { background-color: color-
   list-style: none; cursor: pointer; font-size: 15px; color: var(--ink-muted); transition: background-color 0.14s, color 0.14s;
 }
 .wk-calm-disclose > summary::-webkit-details-marker { display: none; }
-.wk-calm-disclose > summary:hover { background: color-mix(in oklab, var(--accent) 18%, transparent); color: var(--ink-high); }
+.wk-calm-disclose > summary:hover { background: var(--calm-hover-ctl); color: var(--ink-high); }
 .wk-calm-disclose > summary:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-shadow: var(--focus-ring); }
 .wk-calm-disclose[open] > summary .wk-calm-chev { transform: rotate(180deg); }
 .wk-calm-disclose-body { display: flex; flex-direction: column; gap: 16px; padding: 16px 0 0; font-size: 15px; color: var(--ink-body); }
@@ -223,3 +242,6 @@ select.wk-calm-pick--field:not([multiple]):not([size]) {
   .wk-calm-btn--link, .wk-calm-icon-btn, .wk-calm .wk-menu-wrap > .wk-btn, .wk-calm-quiet-btn { min-height: 44px; min-width: 44px; }
   .wk-calm-seg-btn { height: 40px; }
 }
+/* The picker is as wide as its words (Chromium 123+; older engines keep the widest option's width). */
+select.wk-calm-pick { field-sizing: content; }
+.wk-calm-btn--link:hover:not(:disabled) { text-decoration: underline; text-underline-offset: 3px; }

@@ -183,7 +183,7 @@ describe('MemoryPage — the store, read honestly', () => {
     page();
     const empty = await screen.findByTestId('memories-empty');
     await waitFor(() => expect(empty).toHaveTextContent('The store holds 3 memories, but none were listed. Try a search.'));
-    expect(empty).not.toHaveTextContent('haven’t learned anything yet');
+    expect(empty).not.toHaveTextContent('When your agents learn something');
   });
 
   it('a daemon that predates the memory routes gets the honest unsupported state', async () => {
@@ -214,9 +214,9 @@ describe('MemoryPage — the store, read honestly', () => {
     const user = userEvent.setup();
     await openRowMenu((await screen.findAllByTestId('memory-row'))[0]!, 'Retire');
     await user.click(await screen.findByTestId('memory-retire-confirm'));
-    await waitFor(() => expect(screen.getByTestId('memory-sentence')).toHaveTextContent('Your agents haven’t learned anything yet.'));
+    await waitFor(() => expect(screen.getByTestId('memory-sentence')).toHaveTextContent('Nothing learned yet.'));
     await act(async () => { releaseFirst!(); await Promise.resolve(); });
-    expect(screen.getByTestId('memory-sentence')).toHaveTextContent('Your agents haven’t learned anything yet.');
+    expect(screen.getByTestId('memory-sentence')).toHaveTextContent('Nothing learned yet.');
   });
 });
 

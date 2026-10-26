@@ -76,7 +76,7 @@ describe('memory words', () => {
   });
   it('says the totals and what is waiting', () => {
     expect(memorySentence({ total: 333, pending: 2, coverage: 'ok' })).toBe('Your agents remember 333 things, and where each came from. 2 proposals are waiting for you.');
-    expect(memorySentence({ total: 0, pending: 0, coverage: 'ok' })).toBe('Your agents haven’t learned anything yet.');
+    expect(memorySentence({ total: 0, pending: 0, coverage: 'ok' })).toBe('Nothing learned yet.');
     expect(memorySentence({ total: null, pending: null, coverage: 'loading' })).toBe('Reading what your agents have learned…');
     expect(memorySentence({ total: null, pending: 'unsupported', coverage: 'unsupported' })).toBe('What your agents have learned, and where it came from.');
   });

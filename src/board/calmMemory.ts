@@ -32,7 +32,7 @@ export function memorySentence({ total, pending, coverage }: {
   total: number | null; pending: number | null | 'unsupported'; coverage: 'loading' | 'ok' | 'unsupported' | 'failed';
 }): string {
   const kept = total !== null
-    ? total === 0 ? 'Your agents haven’t learned anything yet.' : `Your agents remember ${total} ${total === 1 ? 'thing' : 'things'}, and where each came from.`
+    ? total === 0 ? 'Nothing learned yet.' : `Your agents remember ${total} ${total === 1 ? 'thing' : 'things'}, and where each came from.`
     : coverage === 'loading' ? 'Reading what your agents have learned…' : 'What your agents have learned, and where it came from.';
   const waiting = typeof pending !== 'number' || pending === 0 ? '' : ` ${pending} ${pending === 1 ? 'proposal is' : 'proposals are'} waiting for you.`;
   return `${kept}${waiting}`;

@@ -264,9 +264,9 @@ export function MemoryPage({ search, navigate, address = (p) => p, project = nul
           title={filtered ? (memories.length > 0 ? 'No memory matches these filters.' : `No memory matches “${query}”.`)
             // The store's own total says otherwise (#406): never call a non-empty store empty.
             : total !== null && total > 0 ? `The store holds ${total} ${total === 1 ? 'memory' : 'memories'}, but none were listed. Try a search.`
-            : 'Your agents haven’t learned anything yet.'}
+            : 'When your agents learn something, it shows up here.'}
           body={filtered || (total !== null && total > 0) ? undefined
-            : <p>When an agent learns something in a session, or you tell it something, it shows up here. Agents propose what to keep; you approve it.</p>}
+            : <p>It may come from a session, or from something you tell them. Agents propose what to keep; you approve it.</p>}
           action={filtered
             ? <CalmButton onClick={clearFilters} testId="memories-clear">Clear filters</CalmButton>
             : <CalmButton onClick={addIt}>Tell your agents something</CalmButton>} />
