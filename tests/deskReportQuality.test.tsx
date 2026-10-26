@@ -199,6 +199,14 @@ describe('Desk tabs, grouped (2026-10-26: nine tabs at one level read as a mainf
     expect(more).toHaveFocus();
   });
 
+  it('picking the view already open from More gives its tab the focus (xreview r1)', () => {
+    render(<DeskV2 {...props()} search="?tab=understand" />);
+    fireEvent.click(screen.getByTestId('desk-tabs-more'));
+    fireEvent.click(screen.getByTestId('desk-more-tab-understand'));
+    expect(screen.getByTestId('desk-tab-understand')).toHaveFocus();
+    expect(screen.getByTestId('desk-tabs-more')).toHaveAttribute('aria-expanded', 'false');
+  });
+
   it('a view opened from More shows as a selected tab of its own, and More marks it current', () => {
     render(<DeskV2 {...props()} search="?tab=memory" />);
     const tabs = within(screen.getByTestId('desk-tabs')).getAllByRole('tab');

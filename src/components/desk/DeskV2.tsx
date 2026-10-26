@@ -383,7 +383,11 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
             onClick={(e) => { e.preventDefault(); goTab(t.id); }}>{t.label}</a>
         ))}
       </div>
-      <DeskTabsMore current={tab} pathOf={tabPath} go={(t) => { keyboardFocus.current = tabId(t); goTab(t); }} />
+      <DeskTabsMore current={tab} pathOf={tabPath} go={(t) => {
+        // A new view focuses its tab once it is drawn; the view already open has its tab now, so it takes focus now.
+        if (t === tab) { goTab(t); document.getElementById(tabId(t))?.focus(); return; }
+        keyboardFocus.current = tabId(t); goTab(t);
+      }} />
     </div>
   );
 
@@ -678,6 +682,9 @@ function DeskTabsMore({ current, pathOf, go }: { current: DeskTab; pathOf: (t: D
   const inMore = items.some((t) => t.id === current);
   useEffect(() => {
     if (!open) return undefined;
+    // Never past the screen's foot: on a short screen (a phone on its side) the list scrolls inside.
+    const panel = root.current?.querySelector<HTMLElement>('.wk-desk2-tabmore-panel');
+    if (panel != null) panel.style.maxHeight = `${Math.max(160, window.innerHeight - panel.getBoundingClientRect().top - 12)}px`;
     root.current?.querySelector<HTMLElement>('a')?.focus();
     const onDown = (e: MouseEvent): void => { if (root.current !== null && !root.current.contains(e.target as Node)) setOpen(false); };
     const onKey = (e: KeyboardEvent): void => { if (e.key === 'Escape') { setOpen(false); btn.current?.focus(); } };
