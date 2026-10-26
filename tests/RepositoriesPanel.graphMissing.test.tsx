@@ -86,7 +86,13 @@ describe('the /repos surface', () => {
     // The finding row with its action still rides the card (studio#253).
     expect(within(studio).getByTestId('repo-card-findings-reonboard')).toBeInTheDocument();
 
+    // The row's face says it too, and offers the next step: Re-index (a prefill of the recorded onboard).
+    expect(within(studio).getByTestId('repo-row-line')).toHaveTextContent('no code map');
+    expect(within(studio).getByTestId('repo-row-reindex')).toHaveTextContent('Re-index');
+    expect(studio).toHaveAttribute('data-ready', 'missing');
+
     const orphan = cards.find((c) => c.getAttribute('data-repo-id') === 'orphan')!;
+    expect(within(orphan).getByTestId('repo-row-line')).toHaveTextContent('no place to keep a code map');
     expect(within(orphan).getByTestId('repo-graph-state').textContent).toContain('No code map: Studio’s service has nowhere to keep one');
 
     const billing = cards.find((c) => c.getAttribute('data-repo-id') === 'billing')!;

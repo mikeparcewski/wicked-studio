@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { SlidersHorizontal } from 'lucide-react';
 import { api } from '../api/client.js';
 import type { Project, RepoEntry, SessionView } from '../api/types.js';
 import { everythingPath } from '../board/everythingModel.js';
@@ -12,7 +13,10 @@ import { useMembershipStore } from '../store/membership.js';
 import { useProvenanceStore } from '../store/provenance.js';
 import { setRetryPrefill } from '../store/retryPrefill.js';
 import { readErrorKind } from '../api/errors.js';
-import { EmptyState, PageFrame, Segmented, Skeleton, StateBanner, StatLine, TechDetails } from './ui/index.js';
+import { Segmented, StateBanner, StatLine, TechDetails } from './ui/index.js';
+import { QuietEmpty, QuietHead, QuietLoading } from './ui/QuietPage.js';
+import { lastActivity, readinessWords, repoReadiness, repoSide, repoTone, reposSentence } from '../board/repoRows.js';
+import { useRepoLanguages } from '../hooks/useRepoLanguages.js';
 import { NewProjectModal } from './NewProjectModal.js';
 import { ago } from './AgeStamp.js';
 import { ProjectSwitcher } from './ProjectSwitcher.js';
@@ -432,386 +436,424 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
     ? (sourceMode === 'remote' ? 'Enter the repository URL and a name to continue.' : 'Enter the repository folder and a name to continue.')
     : sourceMode === 'remote' ? 'Enter the repository URL to continue.' : 'Enter the repository folder to continue.';
 
+  // ── The calm rows (v2): readiness, the language, the one word on the right ──
+  const readiness = useMemo(() => new Map(fleet.map((m) => [m.repo.id, repoReadiness(m, now)])), [fleet, now]);
+  const languages = useRepoLanguages(useMemo(
+    () => fleet.filter((m) => m.onboard.run !== null && m.graphGap === null && m.onboard.state !== 'never').map((m) => m.repo.id),
+    [fleet],
+  ));
+  const waitingN = fleet.reduce((a, m) => a + m.waiting.length, 0);
+  const sentence = reposSentence(loading ? 'loading' : error !== null ? 'failed' : 'known', fleet.map((m) => readiness.get(m.repo.id) ?? 'never'), waitingN);
+  const [openId, setOpenId] = useState<string | null>(null);
+  const [tools, setTools] = useState(false);
+  const narrowed = chip !== 'all' || q !== '';
+
   return (
     <div className="h-full overflow-y-auto">
-      <PageFrame
-        data-testid="repos-page"
-        title="Repositories"
-        intro="The code your helpers work on. Studio maps each repository so work can find its way around it."
-        actions={(
-          <button
-            type="button"
-            data-testid="repos-add"
-            onClick={toggleRegister}
-            // studio#684 row 59: no write while the service is unreachable — the banner below says so and offers Retry.
-            disabled={!showRegister && offline}
-            title={!showRegister && offline ? 'Studio can’t reach its service right now. Retry first.' : undefined}
-            className={showRegister ? 'wk-btn wk-btn--quiet' : 'wk-btn wk-btn--primary'}
-          >
-            {showRegister ? 'Cancel' : 'Add repository'}
-          </button>
-        )}
-      >
-        {!loading && error !== null && (
-          <StateBanner data-testid="repos-error" kind={readErrorKind(error)} what="repositories" error={errorText(error)} onRetry={load} retrying={loading} />
-        )}
+      <div data-testid="repos-page" className="wk-jr wk-jr--page">
+        <div className="wk-jr-col">
+          <QuietHead
+            title="Repositories"
+            sentence={sentence}
+            sentenceTestId="repos-sentence"
+            action={(
+              <button
+                type="button"
+                data-testid="repos-add"
+                onClick={toggleRegister}
+                // studio#684 row 59: no write while the service is unreachable — the banner below says so and offers Retry.
+                disabled={!showRegister && offline}
+                title={!showRegister && offline ? 'Studio can’t reach its service right now. Retry first.' : undefined}
+                className={showRegister ? 'wk-jr-btn wk-jr-btn--secondary' : 'wk-jr-btn wk-jr-btn--primary'}
+              >
+                {showRegister ? 'Cancel' : 'Add repository'}
+              </button>
+            )}
+          />
 
+          {!loading && error !== null && (
+            <StateBanner data-testid="repos-error" kind={readErrorKind(error)} what="repositories" error={errorText(error)} onRetry={load} retrying={loading} />
+          )}
 
-        {/* ── Registration form (/repos/new; the slice-B flow) ── */}
-        {showRegister && (
-          <section className="wk-card wk-pg-repo-register" data-testid="repo-register" aria-labelledby="repo-register-title">
-            <h2 id="repo-register-title" className="wk-section-title">Add a repository</h2>
-            {/* §5.2: the project field is the FIRST field — Unfiled by default;
-                a selected project binds the repo at creation via membership. */}
-            <div className="wk-pg-repo-field" data-testid="repo-project-row">
-              <span className="wk-pg-repo-label">Project</span>
-              <ProjectSwitcher
-                current={
-                  projects.find((p) => p.id === selectedProjectId)
-                  // Locked-but-still-resolving: show the id rather than a false
-                  // "Unfiled" while the one name-resolving read is in flight.
-                  ?? (locked && selectedProjectId !== null
-                    ? { id: selectedProjectId, name: selectedProjectId, description: null, status: 'active', scope: '', created_at: 0, updated_at: 0 }
-                    : null)
-                }
-                projects={projects}
-                onSelect={setSelectedProjectId}
-                onNewProject={() => setShowNewProject(true)}
-                onOpen={loadProjects}
-                locked={locked}
-              />
-            </div>
-
-            <div className="wk-pg-repo-field">
-              <span className="wk-pg-repo-label" id="repo-source-label">Where is it?</span>
-              <Segmented
-                label="Repository source"
-                value={sourceMode}
-                options={[{ value: 'local', label: 'On this computer' }, { value: 'remote', label: 'From a URL' }]}
-                onChange={setSourceMode}
-                data-testid="repo-source"
-              />
-            </div>
-
-            {sourceMode === 'local' ? (
-              <label className="wk-pg-repo-field">
-                <span className="wk-pg-repo-label">Folder</span>
-                <input
-                  className="wk-field"
-                  data-testid="repo-path"
-                  placeholder="The repository’s folder, e.g. ~/code/my-app"
-                  value={newPath}
-                  onChange={(e) => {
-                    setNewPath(e.target.value);
-                    deriveName(e.target.value);
-                  }}
+          {/* ── Registration form (/repos/new; the slice-B flow) ── */}
+          {showRegister && (
+            <section className="wk-jr-form wk-pg-repo-register" data-testid="repo-register" aria-labelledby="repo-register-title">
+              <h2 id="repo-register-title" className="wk-section-title">Add a repository</h2>
+              {/* §5.2: the project field is the FIRST field — Unfiled by default;
+                  a selected project binds the repo at creation via membership. */}
+              <div className="wk-pg-repo-field" data-testid="repo-project-row">
+                <span className="wk-pg-repo-label">Project</span>
+                <ProjectSwitcher
+                  current={
+                    projects.find((p) => p.id === selectedProjectId)
+                    // Locked-but-still-resolving: show the id rather than a false
+                    // "Unfiled" while the one name-resolving read is in flight.
+                    ?? (locked && selectedProjectId !== null
+                      ? { id: selectedProjectId, name: selectedProjectId, description: null, status: 'active', scope: '', created_at: 0, updated_at: 0 }
+                      : null)
+                  }
+                  projects={projects}
+                  onSelect={setSelectedProjectId}
+                  onNewProject={() => setShowNewProject(true)}
+                  onOpen={loadProjects}
+                  locked={locked}
                 />
-              </label>
-            ) : (
-              <>
+              </div>
+
+              <div className="wk-pg-repo-field">
+                <span className="wk-pg-repo-label" id="repo-source-label">Where is it?</span>
+                <Segmented
+                  label="Repository source"
+                  value={sourceMode}
+                  options={[{ value: 'local', label: 'On this computer' }, { value: 'remote', label: 'From a URL' }]}
+                  onChange={setSourceMode}
+                  data-testid="repo-source"
+                />
+              </div>
+
+              {sourceMode === 'local' ? (
                 <label className="wk-pg-repo-field">
-                  <span className="wk-pg-repo-label">Repository URL</span>
+                  <span className="wk-pg-repo-label">Folder</span>
                   <input
                     className="wk-field"
-                    data-testid="repo-git-url"
-                    placeholder="https://github.com/org/repo"
-                    value={newGitUrl}
+                    data-testid="repo-path"
+                    placeholder="The repository’s folder, e.g. ~/code/my-app"
+                    value={newPath}
                     onChange={(e) => {
-                      setNewGitUrl(e.target.value);
+                      setNewPath(e.target.value);
                       deriveName(e.target.value);
                     }}
                   />
                 </label>
-                <label className="wk-pg-repo-field">
-                  <span className="wk-pg-repo-label">Clone to (optional)</span>
-                  <input
-                    className="wk-field"
-                    data-testid="repo-checkout-path"
-                    placeholder={`~/.wicked/repos/${newName || '<name>'}`}
-                    value={checkoutPath}
-                    onChange={(e) => setCheckoutPath(e.target.value)}
-                  />
-                </label>
-              </>
-            )}
-
-            <label className="wk-pg-repo-field">
-              <span className="wk-pg-repo-label">Name</span>
-              <input
-                className="wk-field"
-                data-testid="repo-name"
-                placeholder="A short name, e.g. my-app"
-                value={newName}
-                onChange={(e) => {
-                  setNewName(e.target.value);
-                  nameEditedRef.current = Boolean(e.target.value.trim());
-                }}
-              />
-            </label>
-
-            {/* §7.8 (slice AC, EC43): the named action previews what it does,
-                what it writes, and roughly how long it takes. The onboarding workflow is TWO tool
-                units — index, then annotate (FINDING-068); don't re-add a third here. */}
-            <p data-testid="action-preview" className="wk-field-note">
-              {sourceMode === 'remote'
-                ? `Studio clones it to ${checkoutPath.trim() || `~/.wicked/repos/${newName || '<name>'}`}, then maps the code so work can find its way around. It runs as a tracked step you can watch and usually takes a few minutes.`
-                : 'Studio maps the code so work can find its way around. It runs as a tracked step you can watch and usually takes a few minutes.'}
-            </p>
-
-            {registerError !== null && (
-              <StateBanner data-testid="repo-register-error" kind={readErrorKind(registerError)} what="the repository" error={errorText(registerError)} />
-            )}
-
-            <div className="wk-pg-repo-submit">
-              <button
-                type="button"
-                data-testid="repo-register-submit"
-                onClick={() => void registerRepo()}
-                disabled={registering || !canSubmit}
-                aria-describedby={!canSubmit ? 'repo-register-why' : undefined}
-                className="wk-btn wk-btn--primary"
-              >
-                {registering
-                  ? sourceMode === 'remote' ? 'Cloning…' : 'Registering…'
-                  : sourceMode === 'remote' ? 'Clone and onboard' : 'Register and onboard'}
-              </button>
-              {!canSubmit && !registering && (
-                <p id="repo-register-why" data-testid="repo-register-why" className="wk-field-note">{offline ? 'Studio can’t reach its service right now. Retry above, then add it.' : missingReason}</p>
+              ) : (
+                <>
+                  <label className="wk-pg-repo-field">
+                    <span className="wk-pg-repo-label">Repository URL</span>
+                    <input
+                      className="wk-field"
+                      data-testid="repo-git-url"
+                      placeholder="https://github.com/org/repo"
+                      value={newGitUrl}
+                      onChange={(e) => {
+                        setNewGitUrl(e.target.value);
+                        deriveName(e.target.value);
+                      }}
+                    />
+                  </label>
+                  <label className="wk-pg-repo-field">
+                    <span className="wk-pg-repo-label">Clone to (optional)</span>
+                    <input
+                      className="wk-field"
+                      data-testid="repo-checkout-path"
+                      placeholder={`~/.wicked/repos/${newName || '<name>'}`}
+                      value={checkoutPath}
+                      onChange={(e) => setCheckoutPath(e.target.value)}
+                    />
+                  </label>
+                </>
               )}
-            </div>
-          </section>
-        )}
 
-        {!loading && error === null && repos.length > 0 && (
-          <div className="wk-pg-repo-facts">
-            <StatLine data-testid="repos-kpis" items={statItems} />
-            <a
-              className="wk-link"
-              data-testid="repos-runs-link"
-              href={everythingPath({ tab: 'sessions' })}
-              onClick={(e) => { e.preventDefault(); navigate(everythingPath({ tab: 'sessions' })); }}
-            >
-              See all sessions
-            </a>
-          </div>
-        )}
+              <label className="wk-pg-repo-field">
+                <span className="wk-pg-repo-label">Name</span>
+                <input
+                  className="wk-field"
+                  data-testid="repo-name"
+                  placeholder="A short name, e.g. my-app"
+                  value={newName}
+                  onChange={(e) => {
+                    setNewName(e.target.value);
+                    nameEditedRef.current = Boolean(e.target.value.trim());
+                  }}
+                />
+              </label>
 
-        {showNewProject && (
-          <NewProjectModal navigate={navigate} onClose={() => setShowNewProject(false)} />
-        )}
+              {/* §7.8 (slice AC, EC43): the named action previews what it does,
+                  what it writes, and roughly how long it takes. The onboarding workflow is TWO tool
+                  units — index, then annotate (FINDING-068); don't re-add a third here. */}
+              <p data-testid="action-preview" className="wk-field-note">
+                {sourceMode === 'remote'
+                  ? `Studio clones it to ${checkoutPath.trim() || `~/.wicked/repos/${newName || '<name>'}`}, then maps the code so work can find its way around. It runs as a tracked step you can watch and usually takes a few minutes.`
+                  : 'Studio maps the code so work can find its way around. It runs as a tracked step you can watch and usually takes a few minutes.'}
+              </p>
 
-        {/* ── Filters ── */}
-        {!loading && error === null && repos.length > 0 && (
-          <div data-testid="repos-filter" data-filter={chip} role="group" aria-label="Filters" className="wk-pg-repo-filters">
-            <input
-              type="search"
-              className="wk-field wk-pg-repo-search"
-              data-testid="repos-filter-search"
-              aria-label="Search repositories"
-              placeholder="Search repositories"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-            <div className="wk-pg-repo-chips">
-              {chips.map((c) => (
+              {registerError !== null && (
+                <StateBanner data-testid="repo-register-error" kind={readErrorKind(registerError)} what="the repository" error={errorText(registerError)} />
+              )}
+
+              <div className="wk-pg-repo-submit">
                 <button
-                  key={c.id}
                   type="button"
-                  className="wk-chip"
-                  data-testid="repos-filter-chip"
-                  data-chip={c.id}
-                  aria-pressed={chip === c.id}
-                  onClick={() => setChip(c.id as RepoChip)}
+                  data-testid="repo-register-submit"
+                  onClick={() => void registerRepo()}
+                  disabled={registering || !canSubmit}
+                  aria-describedby={!canSubmit ? 'repo-register-why' : undefined}
+                  className="wk-btn wk-btn--primary"
                 >
-                  {c.label} <span className="wk-num">{c.count}</span>
+                  {registering
+                    ? sourceMode === 'remote' ? 'Cloning…' : 'Registering…'
+                    : sourceMode === 'remote' ? 'Clone and onboard' : 'Register and onboard'}
                 </button>
-              ))}
-            </div>
-            <label className="wk-pg-repo-range">
-              <span className="wk-pg-repo-range-label">Runs from</span>
-              <select className="wk-field" data-testid="repos-range" value={range} onChange={(e) => setRange(e.target.value as TimeRange)}>
-                {TIME_RANGE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.value === 'all' ? 'all time' : `the ${o.label}`}</option>)}
-              </select>
-            </label>
-          </div>
-        )}
+                {!canSubmit && !registering && (
+                  <p id="repo-register-why" data-testid="repo-register-why" className="wk-field-note">{offline ? 'Studio can’t reach its service right now. Retry above, then add it.' : missingReason}</p>
+                )}
+              </div>
+            </section>
+          )}
 
-        {/* ── Content area ── */}
-        {loading ? (
-          <Skeleton variant="card" rows={3} data-testid="repos-loading" />
-        ) : error !== null ? null : repos.length === 0 ? (
-          <div data-testid="repos-empty">
-            <EmptyState
+          {showNewProject && (
+            <NewProjectModal navigate={navigate} onClose={() => setShowNewProject(false)} />
+          )}
+
+          {loading ? (
+            <QuietLoading rows={4} label="Reading your repositories" data-testid="repos-loading" />
+          ) : error !== null ? null : repos.length === 0 ? (
+            <QuietEmpty
+              data-testid="repos-empty"
               title="No repositories yet"
-              body="Add a repository on this computer or from a URL, and Studio maps its code for your helpers."
-              action={!showRegister ? (
-                <button type="button" className="wk-btn wk-btn--primary" onClick={toggleRegister}>Add repository</button>
+              body="Add a repository on this computer or from a URL, and studio maps its code so your agents can find their way around it."
+              actions={!showRegister ? (
+                <button type="button" className="wk-jr-btn wk-jr-btn--primary wk-jr-btn--sm" onClick={toggleRegister}>Add repository</button>
               ) : undefined}
             />
-          </div>
-        ) : visible.length === 0 ? (
-          <p data-testid="repos-empty-filter" className="wk-pg-repo-none">
-            No repositories match these filters.{' '}
-            <button
-              type="button"
-              data-testid="repos-clear-filters"
-              className="wk-link"
-              onClick={() => { setChip('all'); setSearch(''); }}
-            >
-              Clear filters
-            </button>
-          </p>
-        ) : (
-          /* ── The fleet grid — one card per repo ── */
-          <div data-testid="repos-list" className="wk-pg-repo-grid">
-            {visible.map((m) => {
-              const { repo, counts, waiting } = m;
-              const health = healthOf(counts.done, counts.terminal);
-              const isRerunning = rerunning[repo.id] ?? false;
-              const isCapturing = capturing[repo.id] ?? false;
-              const runErr = rerunError[repo.id];
-              const firstGate = waiting[0]?.session.id;
-              const activeCount = m.windowed.filter((v) => !['completed', 'cancelled', 'failed', 'awaiting_human'].includes(v.session.status)).length;
-              const state = graphState(m);
-              const open = (): void => navigate('/repo-detail/' + encodeURIComponent(repo.id));
-              return (
-                <div
-                  key={repo.id}
-                  data-testid="repo-card"
-                  data-repo-id={repo.id}
-                  data-state={m.onboard.state}
-                  data-captured={m.capture.state}
-                  data-gates={waiting.length}
-                  data-runs={counts.total}
-                  role="link"
-                  aria-label={`Open ${repo.name}`}
-                  tabIndex={0}
-                  onClick={open}
-                  onKeyDown={(e) => {
-                    if (e.target !== e.currentTarget) return;
-                    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); }
-                  }}
-                  className="wk-card wk-pg-repo-card"
-                >
-                  <div className="wk-pg-repo-card-head">
-                    <h3 className="wk-pg-repo-card-name">{repo.name}</h3>
-                    <span className="wk-tag" title="Default branch">{repo.default_branch}</span>
-                  </div>
-                  {/* Reel ch59 (studio 0.7.8): the card names the repo; where its checkout lives is detail. */}
-                  {/* Opening the detail must not open the repo (the card itself is a door). */}
-                  <div onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
-                    <TechDetails data-testid="repo-card-path" summary="Where it is" text={repo.root_path} />
-                  </div>
-
-                  {/* Attention routing beats navigation: the gate jump, straight to the waiting run. */}
-                  {waiting.length > 0 && firstGate !== undefined && (
-                    <button
-                      type="button"
-                      data-testid="repo-needs-you"
-                      data-run-id={firstGate}
-                      className="wk-link wk-pg-repo-needs"
-                      onClick={(e) => { e.stopPropagation(); navigate(gateJump(firstGate)); }}
-                    >
-                      {waiting.length === 1 ? '1 thing waits on you' : `${waiting.length} things wait on you`} →
-                    </button>
-                  )}
-
-                  {/* The graph state — the run history, corrected by the engine's findings (F-2R2-003). */}
-                  <p
-                    data-testid="repo-graph-state"
-                    data-state={state}
-                    className={`wk-pg-repo-line wk-pg-repo-line--${GRAPH_TONE[state] ?? 'quiet'}`}
-                  >
-                    <span aria-hidden className="wk-pg-repo-dot" />
-                    {graphStateWord(m, attachedAt, now)}
-                  </p>
-
-                  {/* studio#251: the engine's checkout findings, compact; "Re-run onboarding" rides the
-                      card's EXISTING onboard wire. A gap the graph line already states is not said twice. */}
-                  <RepoFindings
-                    compact
-                    gapStated
-                    findings={repo.findings}
-                    onRerunOnboarding={() => void rerunOnboarding(repo.id)}
-                    rerunning={isRerunning}
-                    disabled={isCapturing}
-                    testId="repo-card-findings"
-                  />
-
-                  {/* The captured-learnings state (studio#294 b). */}
-                  <p
-                    data-testid="repo-capture-state"
-                    data-state={m.capture.state}
-                    className={`wk-pg-repo-line wk-pg-repo-line--${CAPTURE_TONE[m.capture.state] ?? 'quiet'}`}
-                  >
-                    <span aria-hidden className="wk-pg-repo-dot" />
-                    {captureStateWord(m, attachedAt, now)}
-                  </p>
-
-                  <p className="wk-pg-repo-card-meta">
-                    <span data-testid="repo-card-runs">{counts.total} {counts.total === 1 ? 'run' : 'runs'} ({rangeWord(range)})</span>
-                    {activeCount > 0 && <span> · {activeCount} working</span>}
-                    {counts.terminal > 0 && (
-                      <span data-testid="repo-card-split" data-health={health}> · {counts.done} finished{counts.failed > 0 ? `, ${counts.failed} failed` : ''}</span>
-                    )}
-                    <span> · {m.lastAt !== null ? `active ${ago(m.lastAt, now)} ago` : relativeTime(repo.registered_at)}</span>
-                  </p>
-
-                  {runErr && (
-                    <div data-testid="repo-card-error" className="wk-pg-repo-card-error" onClick={(e) => e.stopPropagation()} role="presentation">
-                      <p className="wk-field-note wk-field-note--bad">Couldn’t start that. Try again in a moment.</p>
-                      <TechDetails text={runErr} />
-                    </div>
-                  )}
-
-                  {/* Footer — stop click propagation so buttons don't also navigate */}
-                  <div
-                    className="wk-pg-repo-card-actions"
-                    onClick={(e) => e.stopPropagation()}
-                    onKeyDown={(e) => e.stopPropagation()}
-                    role="presentation"
-                  >
-                    {/* Capture learnings — a REAL governed run (launchRun), not a prefill. */}
-                    <button
-                      type="button"
-                      data-testid="repo-capture-learnings"
-                      data-repo-id={repo.id}
-                      disabled={isCapturing || isRerunning}
-                      title={`Start a tracked run that saves what this repository’s history teaches${ambientProject !== null ? ', filed under this project' : ''}`}
-                      onClick={() => void captureLearnings(repo.id, repo.name)}
-                      className="wk-btn wk-btn--secondary wk-btn--sm"
-                    >
-                      {isCapturing ? 'Starting…' : m.capture.state === 'captured' ? 'Capture learnings again' : 'Capture learnings'}
-                    </button>
-                    {m.onboard.run !== null ? (
-                      <button
-                        type="button"
-                        data-testid="repo-reindex"
-                        data-repo-id={repo.id}
-                        title="Open the composer with this repository’s onboarding filled in; nothing starts until you send it"
-                        onClick={() => reindexAsPrefill(m)}
-                        className="wk-btn wk-btn--secondary wk-btn--sm"
-                      >
-                        Re-index…
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        data-testid="repo-onboard"
-                        disabled={isRerunning || isCapturing}
-                        onClick={() => void rerunOnboarding(repo.id)}
-                        className="wk-btn wk-btn--secondary wk-btn--sm"
-                      >
-                        {isRerunning ? 'Starting…' : 'Onboard'}
-                      </button>
-                    )}
-                  </div>
+          ) : (
+            <section className="wk-jr-sec" aria-labelledby="repos-list-title">
+              <div className="wk-jr-sec-head">
+                <h2 id="repos-list-title" className="wk-jr-label">Your repositories</h2>
+                <div className="wk-jr-tools">
+                  <button type="button" className="wk-jr-icon-btn" data-testid="repos-tools" aria-expanded={tools} aria-controls="repos-tools-panel"
+                    aria-label="Search, filter and numbers" title="Search, filter and numbers" onClick={() => setTools((v) => !v)}>
+                    <SlidersHorizontal size={17} aria-hidden />
+                  </button>
                 </div>
-              );
-            })}
-          </div>
-        )}
-      </PageFrame>
+              </div>
+
+              {/* ── Search, filters and the fleet's numbers: behind the one tools button ── */}
+              <div id="repos-tools-panel" className="wk-jr-refine" hidden={!tools}>
+                <div data-testid="repos-filter" data-filter={chip} role="group" aria-label="Filters" className="wk-pg-repo-filters">
+                  <input
+                    type="search"
+                    className="wk-field wk-pg-repo-search"
+                    data-testid="repos-filter-search"
+                    aria-label="Search repositories"
+                    placeholder="Search repositories"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                  />
+                  <div className="wk-pg-repo-chips">
+                    {chips.map((c) => (
+                      <button
+                        key={c.id}
+                        type="button"
+                        className="wk-chip"
+                        data-testid="repos-filter-chip"
+                        data-chip={c.id}
+                        aria-pressed={chip === c.id}
+                        onClick={() => setChip(c.id as RepoChip)}
+                      >
+                        {c.label} <span className="wk-num">{c.count}</span>
+                      </button>
+                    ))}
+                  </div>
+                  <label className="wk-pg-repo-range">
+                    <span className="wk-pg-repo-range-label">Runs from</span>
+                    <select className="wk-field" data-testid="repos-range" value={range} onChange={(e) => setRange(e.target.value as TimeRange)}>
+                      {TIME_RANGE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.value === 'all' ? 'all time' : `the ${o.label}`}</option>)}
+                    </select>
+                  </label>
+                </div>
+                <div className="wk-jr-refine-row">
+                  <StatLine data-testid="repos-kpis" items={statItems} />
+                  <a
+                    className="wk-jr-link"
+                    data-testid="repos-runs-link"
+                    href={everythingPath({ tab: 'sessions' })}
+                    onClick={(e) => { e.preventDefault(); navigate(everythingPath({ tab: 'sessions' })); }}
+                  >
+                    See all jobs
+                  </a>
+                </div>
+              </div>
+
+              {!tools && narrowed && (
+                <p className="wk-jr-filtered" data-testid="repos-filtered">
+                  <span>Showing only {[q !== '' ? `“${search.trim()}”` : null, chip !== 'all' ? chips.find((c) => c.id === chip)?.label ?? null : null].filter((x): x is string => x !== null).join(' · ')}</span>
+                  <button type="button" className="wk-jr-link" onClick={() => { setChip('all'); setSearch(''); }}>Clear</button>
+                </p>
+              )}
+
+              {visible.length === 0 ? (
+                <p data-testid="repos-empty-filter" className="wk-jr-note">
+                  No repositories match these filters.{' '}
+                  <button type="button" data-testid="repos-clear-filters" className="wk-jr-link" onClick={() => { setChip('all'); setSearch(''); }}>
+                    Clear filters
+                  </button>
+                </p>
+              ) : (
+                /* ── One roomy row per repo; details open under it ── */
+                <ul data-testid="repos-list" className="wk-jr-list" aria-label="Your repositories">
+                  {visible.map((m) => {
+                    const { repo, counts, waiting } = m;
+                    const health = healthOf(counts.done, counts.terminal);
+                    const isRerunning = rerunning[repo.id] ?? false;
+                    const isCapturing = capturing[repo.id] ?? false;
+                    const runErr = rerunError[repo.id];
+                    const activeCount = m.windowed.filter((v) => !['completed', 'cancelled', 'failed', 'awaiting_human'].includes(v.session.status)).length;
+                    const state = graphState(m);
+                    const ready = readiness.get(repo.id) ?? 'never';
+                    const last = lastActivity(repo.id, repoRuns);
+                    const side = repoSide(m, ready, last, now);
+                    const lang = languages.get(repo.id) ?? null;
+                    const open = openId === repo.id;
+                    const detailsId = `repo-details-${repo.id}`;
+                    const openDetail = (): void => navigate('/repo-detail/' + encodeURIComponent(repo.id));
+                    const redo = (): void => { if (m.onboard.run !== null) reindexAsPrefill(m); else void rerunOnboarding(repo.id); };
+                    return (
+                      <li
+                        key={repo.id}
+                        data-testid="repo-card"
+                        data-repo-id={repo.id}
+                        data-state={m.onboard.state}
+                        data-ready={ready}
+                        data-captured={m.capture.state}
+                        data-gates={waiting.length}
+                        data-runs={counts.total}
+                        data-open={open ? 'true' : undefined}
+                        className="wk-jr-item"
+                      >
+                        <div className="wk-jr-row-wrap">
+                          <button
+                            type="button"
+                            className="wk-jr-row"
+                            data-testid="repo-row"
+                            aria-expanded={open}
+                            aria-controls={detailsId}
+                            onClick={() => setOpenId(open ? null : repo.id)}
+                          >
+                            <span aria-hidden className="wk-jr-dot" data-tone={repoTone(m, ready)} />
+                            <span className="wk-jr-text">
+                              <span className="wk-jr-row-title">{repo.name}</span>
+                              <span className="wk-jr-row-sub" data-testid="repo-row-line">{[lang, readinessWords(ready, m, now)].filter((x): x is string => x !== null).join(' · ')}</span>
+                            </span>
+                            {side.kind === 'word' && <span className="wk-jr-word" data-tone={side.tone} data-testid="repo-row-word">{side.label}</span>}
+                          </button>
+                          {side.kind === 'needs' && (
+                            <button type="button" data-testid="repo-needs-you" data-run-id={side.runId} className="wk-jr-link wk-jr-word" data-tone="gate"
+                              onClick={() => navigate(gateJump(side.runId))}>
+                              {side.label}
+                            </button>
+                          )}
+                          {side.kind === 'reindex' && (
+                            <button type="button" data-testid="repo-row-reindex" data-repo-id={repo.id} className="wk-jr-link"
+                              disabled={isRerunning || isCapturing}
+                              title={m.onboard.run !== null ? 'Opens a new job with this repository’s indexing filled in; nothing starts until you send it' : 'Starts indexing this repository'}
+                              onClick={redo}>
+                              {isRerunning ? 'Starting…' : side.label}
+                            </button>
+                          )}
+                          {side.kind === 'index' && (
+                            <button type="button" data-testid="repo-row-index" data-repo-id={repo.id} className="wk-jr-link"
+                              disabled={isRerunning || isCapturing} title="Starts indexing this repository, as a job you can watch"
+                              onClick={() => void rerunOnboarding(repo.id)}>
+                              {isRerunning ? 'Starting…' : side.label}
+                            </button>
+                          )}
+                        </div>
+
+                        <div id={detailsId} className="wk-jr-details" data-testid="repo-details" hidden={!open}>
+                          <ul className="wk-jr-facts">
+                            {/* The graph state — the run history, corrected by the engine's findings (F-2R2-003). */}
+                            <li data-testid="repo-graph-state" data-state={state} data-tone={GRAPH_TONE[state] ?? 'quiet'} className="wk-jr-fact">
+                              <span aria-hidden className="wk-jr-fact-dot" />{graphStateWord(m, attachedAt, now)}
+                            </li>
+                            {/* The captured-learnings state (studio#294 b). */}
+                            <li data-testid="repo-capture-state" data-state={m.capture.state} data-tone={CAPTURE_TONE[m.capture.state] ?? 'quiet'} className="wk-jr-fact">
+                              <span aria-hidden className="wk-jr-fact-dot" />{captureStateWord(m, attachedAt, now)}
+                            </li>
+                            <li className="wk-jr-fact">
+                              <span aria-hidden className="wk-jr-fact-dot" />
+                              <span>
+                                <span data-testid="repo-card-runs">{counts.total} {counts.total === 1 ? 'run' : 'runs'} ({rangeWord(range)})</span>
+                                {activeCount > 0 && <span> · {activeCount} working</span>}
+                                {counts.terminal > 0 && (
+                                  <span data-testid="repo-card-split" data-health={health}> · {counts.done} finished{counts.failed > 0 ? `, ${counts.failed} failed` : ''}</span>
+                                )}
+                                <span> · {m.lastAt !== null ? `active ${ago(m.lastAt, now)} ago` : relativeTime(repo.registered_at)}</span>
+                              </span>
+                            </li>
+                            <li className="wk-jr-fact"><span aria-hidden className="wk-jr-fact-dot" />Default branch {repo.default_branch}</li>
+                          </ul>
+
+                          {/* studio#251: the engine's checkout findings, compact; "Re-run onboarding" rides the
+                              EXISTING onboard wire. A gap the graph line already states is not said twice. */}
+                          <RepoFindings
+                            compact
+                            gapStated
+                            findings={repo.findings}
+                            onRerunOnboarding={() => void rerunOnboarding(repo.id)}
+                            rerunning={isRerunning}
+                            disabled={isCapturing}
+                            testId="repo-card-findings"
+                          />
+
+                          {/* Reel ch59 (studio 0.7.8): the row names the repo; where its checkout lives is detail. */}
+                          <TechDetails data-testid="repo-card-path" summary="Where it is" text={repo.root_path} />
+
+                          {runErr && (
+                            <div data-testid="repo-card-error" className="wk-pg-repo-card-error">
+                              <p className="wk-jr-note wk-jr-note--bad">Couldn’t start that. Try again in a moment.</p>
+                              <TechDetails text={runErr} />
+                            </div>
+                          )}
+
+                          <div className="wk-jr-acts">
+                            <button type="button" data-testid="repo-open" className="wk-jr-btn wk-jr-btn--secondary wk-jr-btn--sm" onClick={openDetail}>
+                              Open {repo.name}
+                            </button>
+                            {/* Capture learnings — a REAL governed run (launchRun), not a prefill. */}
+                            <button
+                              type="button"
+                              data-testid="repo-capture-learnings"
+                              data-repo-id={repo.id}
+                              disabled={isCapturing || isRerunning}
+                              title={`Start a tracked run that saves what this repository’s history teaches${ambientProject !== null ? ', filed under this project' : ''}`}
+                              onClick={() => void captureLearnings(repo.id, repo.name)}
+                              className="wk-jr-btn wk-jr-btn--secondary wk-jr-btn--sm"
+                            >
+                              {isCapturing ? 'Starting…' : m.capture.state === 'captured' ? 'Capture learnings again' : 'Capture learnings'}
+                            </button>
+                            {m.onboard.run !== null ? (
+                              <button
+                                type="button"
+                                data-testid="repo-reindex"
+                                data-repo-id={repo.id}
+                                title="Open the composer with this repository’s onboarding filled in; nothing starts until you send it"
+                                onClick={() => reindexAsPrefill(m)}
+                                className="wk-jr-btn wk-jr-btn--secondary wk-jr-btn--sm"
+                              >
+                                Re-index…
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                data-testid="repo-onboard"
+                                disabled={isRerunning || isCapturing}
+                                onClick={() => void rerunOnboarding(repo.id)}
+                                className="wk-jr-btn wk-jr-btn--secondary wk-jr-btn--sm"
+                              >
+                                {isRerunning ? 'Starting…' : 'Onboard'}
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </section>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

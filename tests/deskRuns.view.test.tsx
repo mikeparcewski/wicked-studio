@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DeskRuns } from '../src/components/desk/DeskRuns.js';
 import { DEFAULT_REFINE } from '../src/board/deskInsights.js';
@@ -10,58 +10,86 @@ function props() {
   return {
     runs: outcomeRuns(), runsShown: true, refine: DEFAULT_REFINE, refineBar: <span>Refine</span>,
     now: NOW, navigate: vi.fn(), pathOf, agentName: names.agent, projectName: names.project, title, showProject: true,
+    onNewJob: vi.fn(), onClearRefine: vi.fn(),
   };
 }
-function expectStats(): void {
-  for (const [key, value] of Object.entries({ running: 1, waiting: 1, finished: 2, failed: 1, window: 6 })) {
-    expect(screen.getByTestId(`desk-runs-stat-${key}`).querySelector('.wk-stat-value')).toHaveTextContent(new RegExp(`^${value}$`));
-  }
-}
+const rowIds = (): string[] => screen.queryAllByTestId('desk-runs-row').map((r) => r.getAttribute('data-run-id') ?? '');
+const SENTENCE = 'One running, one waiting on you. Two finished in the last 30 days, one failed, one stopped.';
 
-describe('Desk Runs view', () => {
-  it('shows stat counts and only failed rows after choosing Failed, with stable stats', () => {
+describe('Jobs page', () => {
+  it('opens on Active: a title, one sentence of live state and New job; Finished is the one filter', () => {
+    const p = props();
+    render(<DeskRuns {...p} />);
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Jobs');
+    expect(screen.getByTestId('desk-runs-sentence')).toHaveTextContent(SENTENCE);
+    fireEvent.click(screen.getByTestId('desk-runs-new'));
+    expect(p.onNewJob).toHaveBeenCalledOnce();
+    expect(rowIds()).toEqual(['working', 'waiting']);
+    expect(screen.getByTestId('desk-runs-group-active')).toHaveAttribute('aria-checked', 'true');
+    fireEvent.click(screen.getByTestId('desk-runs-group-finished'));
+    expect(rowIds()).toEqual(['finished', 'answered', 'failed', 'stopped']);
+    // The search and the finer filters wait behind Search and filter.
+    expect(screen.getByTestId('desk-runs-refine')).not.toBeVisible();
+  });
+
+  it('narrows Finished to Failed behind Search and filter, says so when closed, and the sentence never moves', () => {
     render(<DeskRuns {...props()} />);
-    expectStats();
-    expect(screen.getAllByTestId('desk-runs-row')).toHaveLength(6);
+    fireEvent.click(screen.getByTestId('desk-runs-group-finished'));
+    fireEvent.click(screen.getByTestId('desk-runs-tools'));
+    expect(screen.getByTestId('desk-runs-refine')).toBeVisible();
     fireEvent.click(screen.getByTestId('desk-runs-status-failed'));
-    const rows = screen.getAllByTestId('desk-runs-row');
-    expect(rows).toHaveLength(1);
-    expect(rows[0]).toHaveAttribute('data-outcome', 'Failed');
-    expectStats();
+    expect(rowIds()).toEqual(['failed']);
+    expect(screen.getByTestId('desk-runs-row')).toHaveAttribute('data-outcome', 'Failed');
+    expect(screen.getByTestId('desk-runs-sentence')).toHaveTextContent(SENTENCE);
+    fireEvent.click(screen.getByTestId('desk-runs-tools'));
+    expect(screen.getByTestId('desk-runs-filtered')).toHaveTextContent('Showing only Failed');
+    fireEvent.click(screen.getByTestId('desk-runs-clear'));
+    expect(rowIds()).toHaveLength(4);
   });
 
-  it('every cell carries its place (the phone lays the row out as a list by these), and no-project reads as absence', () => {
+  it('every row is a dot, the title, one muted line and one status word, with no id on its face', () => {
     const base = props();
-    render(<DeskRuns {...base} runs={[...base.runs, deskRun('loose', { project_id: '' })]} projectName={(id) => (id === 'default' ? 'Not in a project' : base.projectName(id))} />);
+    render(<DeskRuns {...base} runs={[...base.runs, deskRun('loose', { project_id: '', status: 'executing', repo_ref: 'wicked-core' })]} />);
     for (const row of screen.getAllByTestId('desk-runs-row')) {
-      for (const cls of ['wk-dr-c-status', 'wk-dr-title', 'wk-dr-project', 'wk-dr-c-agents', 'wk-dr-steps', 'wk-dr-c-started', 'wk-dr-c-took']) {
-        expect(row.querySelectorAll(`td.${cls}`)).toHaveLength(1);
-      }
-      // Explicit roles keep the table a table for a screen reader when the phone lays its rows out as a grid.
-      expect(row).toHaveAttribute('role', 'row');
-      expect([...row.querySelectorAll('td')].every((td) => td.getAttribute('role') === 'cell')).toBe(true);
-      const project = row.querySelector('td.wk-dr-project') as HTMLElement;
-      // The words stay on the face (nothing moved behind a tooltip); only the run with no project is marked quiet.
-      const loose = row.dataset.runId === 'loose';
-      expect(project).toHaveTextContent(loose ? 'Not in a project' : 'Studio Desk');
-      expect(project.dataset.none).toBe(loose ? 'true' : undefined);
+      const id = row.getAttribute('data-run-id')!;
+      expect(row.querySelectorAll('.wk-jr-dot')).toHaveLength(1);
+      expect(within(row).getByTestId('desk-runs-line')).toBeInTheDocument();
+      expect(within(row).getByTestId('desk-runs-word').textContent).toMatch(/^(Working|Waiting on you|Needs a decision)$/);
+      expect(row.textContent).not.toContain(id === 'loose' ? 'run:' : `run:${id}`);
     }
+    const loose = screen.getAllByTestId('desk-runs-row').find((r) => r.dataset.runId === 'loose')!;
+    expect(within(loose).getByTestId('desk-runs-line')).toHaveTextContent('wicked-core · Codex · step 2 of 2');
+    expect(within(loose).getByTestId('desk-runs-word')).toHaveTextContent('Working');
   });
 
-  it('filters typed search and shows the empty state when no row matches', () => {
+  it('says Needs a decision for a job Needs you holds for one', () => {
+    render(<DeskRuns {...props()} holds={new Map([['waiting', 'decision']])} />);
+    const row = screen.getAllByTestId('desk-runs-row').find((r) => r.dataset.runId === 'waiting')!;
+    expect(within(row).getByTestId('desk-runs-word')).toHaveTextContent('Needs a decision');
+    expect(screen.getByTestId('desk-runs-sentence')).toHaveTextContent(/^One running, one needs a decision\./);
+  });
+
+  it('filters typed search and shows the designed empty state when no row matches', () => {
     render(<DeskRuns {...props()} />);
+    fireEvent.click(screen.getByTestId('desk-runs-group-finished'));
     fireEvent.change(screen.getByTestId('desk-runs-search'), { target: { value: 'FINISHED studio sonnet' } });
-    expect(screen.getAllByTestId('desk-runs-row')).toHaveLength(1);
-    expect(screen.getByTestId('desk-runs-row')).toHaveAttribute('data-run-id', 'finished');
+    expect(rowIds()).toEqual(['finished']);
     fireEvent.change(screen.getByTestId('desk-runs-search'), { target: { value: 'missing run' } });
-    expect(screen.getByTestId('desk-runs-empty')).toHaveTextContent('No run matches');
+    expect(screen.getByTestId('desk-runs-empty')).toHaveTextContent('No job matches');
     expect(screen.queryByTestId('desk-runs-row')).not.toBeInTheDocument();
-    expectStats();
+    expect(screen.getByTestId('desk-runs-sentence')).toHaveTextContent(SENTENCE);
+  });
+
+  it('an empty Active list says nothing is running and offers the finished jobs', () => {
+    render(<DeskRuns {...props()} runs={[deskRun('done')]} />);
+    expect(screen.getByTestId('desk-runs-empty')).toHaveTextContent('Nothing is running right now.');
+    fireEvent.click(within(screen.getByTestId('desk-runs-empty')).getByRole('button', { name: 'Show finished jobs' }));
+    expect(rowIds()).toEqual(['done']);
   });
 
   it('navigates to pathOf on a plain click and preserves meta-click', () => {
     const p = props();
-    render(<DeskRuns {...p} runs={[deskRun('chosen')]} />);
+    render(<DeskRuns {...p} runs={[deskRun('chosen', { status: 'executing' })]} />);
     const link = screen.getByTestId('desk-runs-open');
     expect(link).toHaveAttribute('href', pathOf('chosen'));
     fireEvent.click(link);
@@ -74,6 +102,7 @@ describe('Desk Runs view', () => {
   it('shows 40 rows at a time and expands to the next page', () => {
     const runs = Array.from({ length: 85 }, (_, i) => deskRun(`r${i}`, { created_at: (NOW - 100_000 + i * 1000) / 1000 }));
     render(<DeskRuns {...props()} runs={runs} />);
+    fireEvent.click(screen.getByTestId('desk-runs-group-finished'));
     expect(screen.getAllByTestId('desk-runs-row')).toHaveLength(40);
     expect(screen.getByTestId('desk-runs-count')).toHaveTextContent('40 of 85');
     fireEvent.click(screen.getByTestId('desk-runs-more'));
@@ -84,15 +113,11 @@ describe('Desk Runs view', () => {
     expect(screen.queryByTestId('desk-runs-more')).not.toBeInTheDocument();
   });
 
-  it('shows a skeleton and unknown values while runs have not been read', () => {
+  it('shows the rows’ shape while runs have not been read, and never a zero', () => {
     render(<DeskRuns {...props()} runs={[]} runsShown={false} />);
     expect(screen.getByTestId('skeleton')).toHaveAttribute('aria-busy', 'true');
-    for (const key of ['running', 'waiting', 'finished', 'failed', 'window']) {
-      const value = screen.getByTestId(`desk-runs-stat-${key}`).querySelector('.wk-stat-value');
-      expect(value).toHaveAttribute('aria-busy', 'true');
-      expect(value).toHaveTextContent('…');
-      expect(value).not.toHaveTextContent('0');
-    }
+    expect(screen.getByTestId('desk-runs-sentence')).toHaveTextContent('Reading your jobs…');
+    expect(screen.getByTestId('desk-runs-sentence').textContent).not.toMatch(/\d|No |None/);
     expect(screen.queryByTestId('desk-runs-row')).not.toBeInTheDocument();
     expect(screen.queryByTestId('desk-runs-empty')).not.toBeInTheDocument();
   });

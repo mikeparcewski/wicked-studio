@@ -53,6 +53,8 @@ import { DeskHappening } from './DeskHappening.js';
 import { DeskStat, RefineSelect } from './DeskParts.js';
 import { DeskRuleLine } from './DeskRuleLine.js';
 import { DeskRuns } from './DeskRuns.js';
+import { needHolds } from '../../board/deskRuns.js';
+import { startNewJob } from './SessionRail.js';
 import { scrollBehavior } from '../ui/motion.js';
 import type { MenuItem } from '../ui/index.js';
 import { projectDetailPath } from '../../hooks/useRoute.js';
@@ -270,6 +272,7 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
         : spendTotal === 0 ? { kind: 'empty', text: `No priced usage in the last ${refine.days} days${refined(refine) ? ' in this view' : ''}.` } : { kind: 'ready' };
   const money = (v: number): string => (v === 0 ? '$0' : v < 1 ? `$${v.toFixed(2)}` : `$${Math.round(v)}`);
 
+  const runHolds = useMemo(() => needHolds(needRows), [needRows]);
   const heldByNeeds = useMemo(() => new Set(needRows.map(needRunId).filter((id): id is string => id !== null)), [needRows]);
   const finishedN = kept.filter((v) => { const o = outcomeOf(v); return o === 'Finished' || o === 'Answered'; }).length;
   const endedN = kept.filter((v) => ['Finished', 'Answered', 'Failed', 'Stopped'].includes(outcomeOf(v) ?? '')).length;
@@ -528,6 +531,8 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
 
   const runsTab = (
     <DeskRuns {...(runActions !== undefined ? { rowActions: runActions } : {})} runs={runs} runsShown={runsShown} refine={refine} refineBar={refineBarOf(false)} now={now} navigate={navigate} pathOf={pathOfRun}
+      holds={runHolds} onNewJob={() => startNewJob(projectId ?? null)}
+      onClearRefine={() => setRefine((r) => ({ ...DEFAULT_REFINE, days: r.days, groupBy: r.groupBy }))}
       panelId={panelId('runs')} labelledBy={tabId('runs')}
       agentName={agentName} projectName={projectName} title={jobTitleOf} showProject={projectId === undefined} />
   );

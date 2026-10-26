@@ -60,12 +60,22 @@ async function loaded(): Promise<void> {
   expect(await screen.findByRole('heading', { level: 1, name: 'Shop' })).toBeInTheDocument();
 }
 
+/** The Jobs view shows Active or Finished: every row the project holds is both lists together. */
+const rowIds = (): string[] => screen.queryAllByTestId('desk-runs-row').map((r) => r.getAttribute('data-run-id') ?? '');
+function allRows(): string[] {
+  fireEvent.click(screen.getByTestId('desk-runs-group-active'));
+  const active = rowIds();
+  fireEvent.click(screen.getByTestId('desk-runs-group-finished'));
+  const finished = rowIds();
+  fireEvent.click(screen.getByTestId('desk-runs-group-active'));
+  return [...active, ...finished].sort();
+}
+
 describe('the project Desk', () => {
   it('shares the Runs tab and includes both project_id and membership, excluding other projects', async () => {
     render(<ProjectDesk {...props} search="?tab=runs" />);
     await loaded();
-    await waitFor(() => expect(screen.getAllByTestId('desk-runs-row')).toHaveLength(2));
-    expect(screen.getAllByTestId('desk-runs-row').map((row) => row.getAttribute('data-run-id')).sort()).toEqual(['filed', 'member']);
+    await waitFor(() => expect(allRows()).toEqual(['filed', 'member']));
     expect(screen.getByRole('tab', { name: 'Repositories' })).toHaveAttribute('href', '/projects/p1?tab=repositories');
     expect(getRun).not.toHaveBeenCalled();
     expect(fetch).not.toHaveBeenCalled();
@@ -75,15 +85,17 @@ describe('the project Desk', () => {
     detach.mockResolvedValue({});
     render(<ProjectDesk {...props} search="?tab=runs" />);
     await loaded();
-    await waitFor(() => expect(screen.getAllByTestId('desk-runs-row')).toHaveLength(2));
+    await waitFor(() => expect(allRows()).toEqual(['filed', 'member']));
     const rowOf = (id: string): HTMLElement => screen.getAllByTestId('desk-runs-row').find((r) => r.getAttribute('data-run-id') === id)!;
+    fireEvent.click(screen.getByTestId('desk-runs-group-finished'));
     expect(within(rowOf('filed')).queryByTestId('desk-runs-row-menu-button')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('desk-runs-group-active'));
     fireEvent.click(within(rowOf('member')).getByTestId('desk-runs-row-menu-button'));
     const item = within(rowOf('member')).getByRole('menuitem', { name: /Remove .Improve cart. from this project/ });
     fireEvent.click(item);
     expect(detach).toHaveBeenCalledExactlyOnceWith('p1', 'crew.run:member');
     // The membership is gone, so the run leaves the project's list.
-    await waitFor(() => expect(screen.getAllByTestId('desk-runs-row').map((r) => r.getAttribute('data-run-id'))).toEqual(['filed']));
+    await waitFor(() => expect(allRows()).toEqual(['filed']));
   });
 
   it('keeps project actions, requirements and documents under Work without duplicate dashboard sections', async () => {
@@ -118,9 +130,9 @@ describe('the project Desk', () => {
     await waitFor(() => expect(getRun).toHaveBeenCalledWith('member'));
     // While the member read is out, the Runs tab is still reading (no partial list, no counts).
     expect(screen.queryAllByTestId('desk-runs-row')).toHaveLength(0);
-    expect(screen.getByTestId('desk-runs-stat-window').querySelector('.wk-stat-value')?.textContent ?? '').not.toMatch(/\d/);
+    expect(screen.getByTestId('desk-runs-sentence')).toHaveTextContent('Reading your jobs…');
     answer({ run: runs.find((v) => v.session.id === 'member') });
-    await waitFor(() => expect(screen.getAllByTestId('desk-runs-row').map((r) => r.getAttribute('data-run-id')).sort()).toEqual(['filed', 'member']));
+    await waitFor(() => expect(allRows()).toEqual(['filed', 'member']));
   });
 
   it('names default honestly and offers no requirements, repositories, edit or archive', async () => {
@@ -140,8 +152,9 @@ describe('the project Desk', () => {
     getRun.mockImplementation((id: string) => id === 'older' ? Promise.resolve({ run: makeView({ id, problem: 'Older work', created_at: NOW / 1000 - 500, status: 'completed' }) }) : Promise.reject(new Error('read failed')));
     render(<ProjectDesk {...props} search="?tab=runs" />);
     await loaded();
-    expect(await screen.findByRole('link', { name: 'Older work' })).toBeInTheDocument();
-    expect(screen.getAllByTestId('desk-runs-row').map((row) => row.getAttribute('data-run-id')).sort()).toEqual(['filed', 'older']);
+    fireEvent.click(await screen.findByTestId('desk-runs-group-finished'));
+    expect(await screen.findByRole('link', { name: /^Older work/ })).toBeInTheDocument();
+    expect(allRows()).toEqual(['filed', 'older']);
     expect(await screen.findByTestId('project-jobs-unshown')).toHaveTextContent('1 job in this project');
   });
 
@@ -234,7 +247,7 @@ describe('Not in a project (operator 2026-10-16: the same dashboard as a project
     window.history.replaceState(null, '', '/projects/default');
     rerender(<ProjectDesk {...props} projectId="default" runs={unfiledRuns} search="?tab=runs" />);
     expect(await screen.findByRole('heading', { level: 1, name: 'Not in a project' })).toBeInTheDocument();
-    await waitFor(() => expect(screen.getAllByTestId('desk-runs-row').map((r) => r.getAttribute('data-run-id')).sort()).toEqual(['defaulted', 'loose']));
+    await waitFor(() => expect(allRows()).toEqual(['defaulted', 'loose']));
     expect(screen.queryByText('Project not found')).not.toBeInTheDocument();
     expect(screen.getByTestId('project-meta')).not.toHaveTextContent('repository attached');
     listProjects.mockResolvedValue({ projects: [] });
