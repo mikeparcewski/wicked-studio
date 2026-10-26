@@ -66,4 +66,10 @@
   --nc-fail-bg:   #c0302a;
   --nc-fail-fg:   #ffffff;
   --nc-fail-edge: #c0302a;
+  --nc-ok-hover:   #a6d0b4;
+  --nc-ok-press:   #97c3a5;
+  --nc-warn-hover: #ce9822;
+  --nc-warn-press: #bb8a1e;
+  --nc-fail-hover: #98241f;
+  --nc-fail-press: #841e1a;
 }

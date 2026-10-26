@@ -6,15 +6,16 @@
    filled with its state. ── */
 .wk-nc-tile {
   --nc-bg: var(--nc-warn-bg); --nc-fg: var(--nc-warn-fg); --nc-edge: var(--nc-warn-edge);
+  --nc-hover: var(--nc-warn-hover); --nc-press: var(--nc-warn-press);
   display: flex; align-items: center; gap: 10px;
   padding: 9px 12px; min-height: 52px; box-sizing: border-box;
   border-radius: var(--radius-lg); border: 1px solid var(--nc-edge);
   background: var(--nc-bg); color: var(--nc-fg); text-decoration: none;
-  transition: filter var(--dur-fast, 120ms);
+  transition: background-color var(--dur-fast, 120ms);
 }
-.wk-nc-tile[data-tone="green"] { --nc-bg: var(--nc-ok-bg); --nc-fg: var(--nc-ok-fg); --nc-edge: var(--nc-ok-edge); }
-.wk-nc-tile[data-tone="red"] { --nc-bg: var(--nc-fail-bg); --nc-fg: var(--nc-fail-fg); --nc-edge: var(--nc-fail-edge); }
-.wk-nc-tile:hover { filter: brightness(1.06); }
+.wk-nc-tile[data-tone="green"] { --nc-bg: var(--nc-ok-bg); --nc-fg: var(--nc-ok-fg); --nc-edge: var(--nc-ok-edge); --nc-hover: var(--nc-ok-hover); --nc-press: var(--nc-ok-press); }
+.wk-nc-tile[data-tone="red"] { --nc-bg: var(--nc-fail-bg); --nc-fg: var(--nc-fail-fg); --nc-edge: var(--nc-fail-edge); --nc-hover: var(--nc-fail-hover); --nc-press: var(--nc-fail-press); }
+.wk-nc-tile:hover { background: var(--nc-hover); }
 .wk-nc-tile:focus-visible { outline: 2px solid transparent; box-shadow: var(--focus-ring); }
 /* "You are here": a ring in the tile's own ink (the fill already says the state). */
 .wk-nc-tile[aria-current="page"] { box-shadow: inset 0 0 0 2px var(--nc-fg); }
