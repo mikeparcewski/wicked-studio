@@ -3,7 +3,8 @@
 main_scroll_test.py — the main pane scrolls; nothing on a top-level page sits clipped below the fold
 (1440x700).
 
-  home     Home at 1440x700 with the home-runs corpus (a full Needs You queue, the portfolio wall, the
+  home     Home at 1440x700 with the home-runs corpus (when the Desk fits 1440x700 whole, the fit is
+           recorded and the wheel is certified at 1440x520, where it does not) (a full Needs You queue, the portfolio wall, the
            Unfiled runs shelf last): the page's own content is taller than the pane. Scrolling with the
            mouse wheel alone (no scripted scrollTop) brings the LAST Home section fully into view, above
            the status bar and unobscured — and the left sidebar and the status bar stay where they were.
@@ -144,6 +145,14 @@ with sync_playwright() as p:
         page.get_by_test_id("desk").wait_for(state="attached")
         page.wait_for_timeout(600)
         start = page.evaluate(last_section)
+        if start is not None and start["inView"] and start["unobscured"]:
+            # 2026-10-26: the Desk's Work tab now fits 1440x700 whole (nothing sits below the fold, so
+            # nothing can be clipped there). The wheel must still reach the last section when the page
+            # does NOT fit: a shorter window puts it below the fold, and the scroll is certified there.
+            report["steps"]["home-fits-the-window"] = {"ok": True, "start": start}
+            page.set_viewport_size({"width": W, "height": 520})
+            page.wait_for_timeout(400)
+            start = page.evaluate(last_section)
         check("home-last-section-starts-below-fold", start is not None and not start["inView"], start=start)
         chrome_before = page.evaluate(chrome)
         page.screenshot(path=str(SHOTS / f"main-scroll-desk-home-top.png"))

@@ -9,7 +9,7 @@ import type { Navigate } from '../../hooks/useRoute.js';
 import { STREAM_TYPES, useDeskStream, type StreamItem } from '../../store/deskStream.js';
 import { agentColor } from '../charts/Chart.js';
 import { Skeleton } from '../ui/index.js';
-import { AlertTriangle, CircleAlert } from 'lucide-react';
+import { Activity, AlertTriangle, CheckCircle2, ChevronDown, CircleAlert, Dot } from 'lucide-react';
 
 /** Backfill: the newest frames of the most recently active runs, read once per page load. */
 const BACKFILL_RUNS = 6;
@@ -52,8 +52,6 @@ export function DeskHappening({ runs, runsShown, navigate, now, title, pathOf, a
   const [paused, setPaused] = useState<StreamItem[] | null>(null);
   const [, tick] = useState(0);
   const listRef = useRef<HTMLUListElement | null>(null);
-  const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set());
-  const toggle = (k: string): void => setExpanded((cur) => { const n = new Set(cur); if (n.has(k)) n.delete(k); else n.add(k); return n; });
 
   // The age ticks.
   useEffect(() => { const t = setInterval(() => tick((n) => n + 1), 30_000); return () => clearInterval(t); }, []);
@@ -116,33 +114,46 @@ export function DeskHappening({ runs, runsShown, navigate, now, title, pathOf, a
         >
           {waiting > 0 && <li className="wk-stream-waiting" data-testid="desk-stream-waiting">{waiting} new · move away to see {waiting === 1 ? 'it' : 'them'}</li>}
           {foldRuns(view).map((g) => {
+            // A row is one job's run of consecutive events: newest first, keyed by its oldest event so a new
+            // event joining the run never remounts the row (an open disclosure stays open).
             const it = g[0]!;
             const v = byId.get(it.runId);
             const said = sayEvent(it, v, agentName);
             const folded = g.length > 1;
-            const open = expanded.has(it.key);
             const worst = g.map((x) => sayEvent(x, v, agentName).tone).find((t) => t === 'fail') ?? said.tone;
-            const Sev = worst === 'fail' ? CircleAlert : worst === 'gate' ? AlertTriangle : null;
+            const Mark = TONE_MARK[worst];
+            const markLabel = worst === 'fail' ? 'Problem' : worst === 'gate' ? 'Needs a decision' : undefined;
+            const age = relTime(it.at, Math.max(now, clock));
+            const line = (
+              <>
+                {said.agent !== null && <i aria-hidden className="wk-chart-swatch wk-chart-swatch--dot wk-stream-agent" style={{ background: agentColor(said.agent) }} />}
+                <span className="wk-stream-said">{said.text}</span>
+              </>
+            );
             return (
-              <li key={it.key} data-testid="desk-stream-item" data-type={it.type} data-count={g.length} data-live={it.live ? 'true' : undefined} className="wk-stream-item" data-tone={worst}>
-                {/* The agent is only the dot; severity is its own icon (never the text colour). */}
-                <i aria-hidden className="wk-chart-swatch wk-chart-swatch--dot" style={{ background: said.agent !== null ? agentColor(said.agent) : 'var(--ink-dim)' }} />
+              <li key={g[g.length - 1]!.key} data-testid="desk-stream-item" data-type={it.type} data-count={g.length} data-live={it.live ? 'true' : undefined} className="wk-stream-item" data-tone={worst}>
+                {/* The row's state is its mark (icon + tone, never the text colour); the agent is the dot on its line. */}
+                <span className="wk-stream-mark" data-tone={worst} {...(markLabel !== undefined ? { role: 'img', 'aria-label': markLabel } : { 'aria-hidden': true })}><Mark size={14} aria-hidden /></span>
                 <span className="wk-stream-text">
-                  <span className="wk-stream-line">
-                    {Sev !== null && <Sev size={14} aria-label={worst === 'fail' ? 'Problem' : 'Needs a decision'} className="wk-stream-sev" data-sev={worst} />}
-                    {folded ? `${v !== undefined ? title(v) : 'A job'} · ${g.length} events: ${g.slice(0, 3).map((x) => sayEvent(x, v, agentName).short).join(', ')}${g.length > 3 ? ', …' : ''}` : said.text}
+                  <span className="wk-stream-top">
+                    {v !== undefined
+                      ? <a href={pathOf(it.runId)} onClick={go(pathOf(it.runId))} className="wk-stream-title" data-testid="desk-stream-open" title={title(v)}>{title(v)}</a>
+                      : <span className="wk-stream-title wk-stream-title--gone">A job no longer listed</span>}
+                    <span className="wk-stream-age" title={new Date(it.at).toLocaleString()}>{age}</span>
                   </span>
-                  <span className="wk-stream-meta">
-                    {v !== undefined ? <a href={pathOf(it.runId)} onClick={go(pathOf(it.runId))} className="wk-stream-job" title={title(v)}>{folded ? 'Open the job' : title(v)}</a> : <span>A job no longer listed</span>}
-                    {folded && <button type="button" className="wk-stream-more" aria-expanded={open} data-testid="desk-stream-expand" onClick={() => toggle(it.key)}>{open ? 'Fold' : 'Show each'}</button>}
-                  </span>
-                  {folded && open && (
-                    <ul className="wk-stream-sub">
-                      {g.map((x) => { const sx = sayEvent(x, v, agentName); return <li key={x.key}><i aria-hidden className="wk-chart-swatch wk-chart-swatch--dot" style={{ background: sx.agent !== null ? agentColor(sx.agent) : 'var(--ink-dim)' }} />{sx.text}<span className="wk-stream-age">{relTime(x.at, Math.max(now, clock))}</span></li>; })}
-                    </ul>
-                  )}
+                  {folded ? (
+                    // Every event of the run, in order, behind one disclosure: the line says the newest.
+                    <details className="wk-stream-details">
+                      <summary className="wk-stream-line" data-testid="desk-stream-expand">
+                        {line}
+                        <span className="wk-stream-count">{g.length} events<ChevronDown size={13} aria-hidden className="wk-stream-chev" /></span>
+                      </summary>
+                      <ul className="wk-stream-sub" aria-label={`Every event, newest first${v !== undefined ? `: ${title(v)}` : ''}`}>
+                        {g.map((x) => { const sx = sayEvent(x, v, agentName); return <li key={x.key}><i aria-hidden className="wk-chart-swatch wk-chart-swatch--dot" style={{ background: sx.agent !== null ? agentColor(sx.agent) : 'var(--ink-dim)' }} /><span className="wk-stream-sub-text">{sx.text}</span><span className="wk-stream-age">{relTime(x.at, Math.max(now, clock))}</span></li>; })}
+                      </ul>
+                    </details>
+                  ) : <span className="wk-stream-line">{line}</span>}
                 </span>
-                <span className="wk-stream-age" title={new Date(it.at).toLocaleString()}>{relTime(it.at, Math.max(now, clock))}</span>
               </li>
             );
           })}
@@ -151,6 +162,9 @@ export function DeskHappening({ runs, runsShown, navigate, now, title, pathOf, a
     </section>
   );
 }
+
+/** A row's mark by its worst tone: a problem, a decision, done, working, or quiet. */
+const TONE_MARK = { fail: CircleAlert, gate: AlertTriangle, ok: CheckCircle2, run: Activity, quiet: Dot } as const;
 
 /** Consecutive events of the same job fold into one line, so the ticker shows variety. */
 export function foldRuns(items: readonly StreamItem[]): StreamItem[][] {

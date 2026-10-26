@@ -376,26 +376,28 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
     <div role="tabpanel" id={panelId('work')} aria-labelledby={tabId('work')} data-testid="desk-work" className="wk-work">
       {/* The handover is studio-wide (the audit trail and its dismissal are global): the Desk only, never a project page. */}
       {projectId === undefined && handover.since !== null && <HandoverPanel handover={handover} navigate={navigate} now={now} runs={runs} />}
+      {/* At a glance: four quiet numbers on one surface, above the band (each opens its list). */}
+      <ul className="wk-work-blocks" aria-label="At a glance" data-testid="desk-blocks">
+        <DeskStat icon={Activity} tone="run" label="Running now" testId="desk-block-running" href={runningPath} navigate={navigate}
+          value={runsShown ? String(allRunning) : null} note={allRunning === 0 ? 'nothing running' : 'working now'} />
+        <DeskStat icon={CircleAlert} tone="fail" label="Failed" testId="desk-block-failed" href={everythingPath({ tab: 'sessions', filter: 'failed', ...(projectId !== undefined ? { project: projectId } : {}) })} navigate={navigate}
+          value={runsShown ? String(workFailed.inWindow.length) : null}
+          note={workFailed.inWindow.length === 0 ? (workFailed.older > 0 ? `none new · ${workFailed.older} older still open` : 'none in the last 30 days') : `last 30 days, not retried${workFailed.retried > 0 ? ` · ${workFailed.retried} retried` : ''}`} />
+        <DeskStat icon={Bot} tone="accent" label="Agents ready" testId="desk-block-agents" href={tabPath('agents')} navigate={navigate}
+          value={agentsView.hasRoster ? `${agentsTile.ready} of ${agentsTile.total}` : null}
+          loading={!agentsView.hasRoster && agentsView.rosterState !== 'failed'}
+          note={agentsView.hasRoster ? readyNote(agentsTile) : 'couldn’t read the agents'} />
+        <DeskStat icon={Wallet} tone="accent" label="Spend" testId="desk-block-spend" href={`${tabPath('report')}&focus=spend`} navigate={navigate}
+          value={projectId === 'default' ? '—' : workSpend.phase === 'loading' ? null : workSpend.current === null ? '—' : `${workSpend.truncated || workSpend.partial ? 'at least ' : ''}${moneyWords(workSpend.current)}`}
+          note={projectId === 'default' ? 'Spend is counted per project' : workSpend.truncated ? 'Partial: last 30 days · newest jobs only; older ones were not read' : workSpend.current !== null && workSpend.previous !== null ? deltaWords(workSpend.current, workSpend.previous, (d) => moneyWords(Math.abs(d)), 30) : workSpend.partial ? 'last 30 days · priced usage only' : 'last 30 days'} />
+      </ul>
+      {/* The band: Needs you (the lead) beside Happening now, the same height, each scrolling inside. */}
       <div className="wk-work-top">
         <DeskInbox rows={needRows} runs={runs} navigate={navigate} now={now} settled={readState === 'known' ? settled.phase : 'loading'} agentName={agentName} extra={projectId === undefined ? choresBlock : null} setupCount={setup.length}
           missing={settled.missing} onRetry={rereadSources} retrying={rereading} />
-        <ul className="wk-work-blocks" aria-label="At a glance" data-testid="desk-blocks">
-          <DeskStat icon={Activity} tone="run" label="Running now" testId="desk-block-running" href={runningPath} navigate={navigate}
-            value={runsShown ? String(allRunning) : null} note={allRunning === 0 ? 'nothing running' : 'working now'} />
-          <DeskStat icon={CircleAlert} tone="fail" label="Failed" testId="desk-block-failed" href={everythingPath({ tab: 'sessions', filter: 'failed', ...(projectId !== undefined ? { project: projectId } : {}) })} navigate={navigate}
-            value={runsShown ? String(workFailed.inWindow.length) : null}
-            note={workFailed.inWindow.length === 0 ? (workFailed.older > 0 ? `none new · ${workFailed.older} older still open` : 'none in the last 30 days') : `last 30 days, not retried${workFailed.retried > 0 ? ` · ${workFailed.retried} retried` : ''}`} />
-          <DeskStat icon={Bot} tone="accent" label="Agents ready" testId="desk-block-agents" href={tabPath('agents')} navigate={navigate}
-            value={agentsView.hasRoster ? `${agentsTile.ready} of ${agentsTile.total}` : null}
-            loading={!agentsView.hasRoster && agentsView.rosterState !== 'failed'}
-            note={agentsView.hasRoster ? readyNote(agentsTile) : 'couldn’t read the agents'} />
-          <DeskStat icon={Wallet} tone="accent" label="Spend" testId="desk-block-spend" href={`${tabPath('report')}&focus=spend`} navigate={navigate}
-            value={projectId === 'default' ? '—' : workSpend.phase === 'loading' ? null : workSpend.current === null ? '—' : `${workSpend.truncated || workSpend.partial ? 'at least ' : ''}${moneyWords(workSpend.current)}`}
-            note={projectId === 'default' ? 'Spend is counted per project' : workSpend.truncated ? 'Partial: last 30 days · newest jobs only; older ones were not read' : workSpend.current !== null && workSpend.previous !== null ? deltaWords(workSpend.current, workSpend.previous, (d) => moneyWords(Math.abs(d)), 30) : workSpend.partial ? 'last 30 days · priced usage only' : 'last 30 days'} />
-        </ul>
+        <DeskHappening runs={runs} runsShown={runsShown} navigate={navigate} now={now} title={(v) => jobTitle(v.session)} pathOf={pathOfRun} agentName={agentName}
+          scope={projectRunIds} scopeKey={projectId ?? 'desk'} {...(projectId !== undefined ? { seeAllPath: everythingPath({ tab: 'sessions', project: projectId }) } : {})} />
       </div>
-      <DeskHappening runs={runs} runsShown={runsShown} navigate={navigate} now={now} title={(v) => jobTitle(v.session)} pathOf={pathOfRun} agentName={agentName}
-        scope={projectRunIds} scopeKey={projectId ?? 'desk'} {...(projectId !== undefined ? { seeAllPath: everythingPath({ tab: 'sessions', project: projectId }) } : {})} />
       {/* B9: the one sentence about a rule remembered since the last visit (null when there is none). */}
       {projectId === undefined && <DeskRuleLine navigate={navigate} />}
       {workExtra}

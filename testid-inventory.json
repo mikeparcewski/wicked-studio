@@ -12,8 +12,8 @@
   "studioVersion": "0.12.1",
   "counts": {
     "files": 238,
-    "occurrences": 3072,
-    "static": 2674,
+    "occurrences": 3073,
+    "static": 2675,
     "dynamic": 69,
     "computed": 24
   },
@@ -3707,6 +3707,12 @@
     },
     {
       "testId": "desk-stream-item",
+      "files": [
+        "src/components/desk/DeskHappening.tsx"
+      ]
+    },
+    {
+      "testId": "desk-stream-open",
       "files": [
         "src/components/desk/DeskHappening.tsx"
       ]
