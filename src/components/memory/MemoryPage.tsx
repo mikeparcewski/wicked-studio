@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Brain, Inbox, Plus } from 'lucide-react';
+import { Plus } from 'lucide-react';
 import {
   addMemory, AddMemoryApproveError, editMemory, isEraseByIdUnsupported, isMemoryEditUnsupported, isMemoryUnsupported,
   listMemories, memoryCoverage, memoryPath, readMemoryView, retireMemory, retireMemoryItem,
@@ -15,8 +15,9 @@ import { FacetAutocomplete } from '../FacetAutocomplete.js';
 import { useModalEscape } from '../Modal.js';
 import { shortContent } from '../ProposalChips.js';
 import { ProposalsSection } from '../ProposalsSection.js';
-import { OverflowMenu, Segmented, Skeleton, StateBanner, TechDetails } from '../ui/index.js';
-import { SeStat, SeStats } from '../steer/SeStat.js';
+import { StateBanner, TechDetails } from '../ui/index.js';
+import { CalmAction, CalmButton, CalmEmpty, CalmFacts, CalmHead, CalmLoading, CalmNote, CalmRow, CalmRows, CalmSearch, CalmSection } from '../calm/Calm.js';
+import { memoryOrigin, memorySentence, shortDate } from '../../board/calmMemory.js';
 import { useDialogFocus } from '../steer/useDialogFocus.js';
 
 /**
@@ -51,9 +52,6 @@ const TIER_WORDS: Record<string, string> = {
 };
 function tierWord(tier: string): string {
   return TIER_WORDS[tier] ?? tier.charAt(0).toUpperCase() + tier.slice(1);
-}
-function tierChip(tier: string): string {
-  return tier.charAt(0).toUpperCase() + tier.slice(1);
 }
 
 /** Where a memory applies, in words: its project facet, else its scope, else everywhere. */
@@ -169,145 +167,128 @@ export function MemoryPage({ search, navigate, address = (p) => p, project = nul
   const [retiring, setRetiring] = useState<{ memory: MemoryItem; width: 'item' | 'scope'; token: number } | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
-  // ── Pieces ───────────────────────────────────────────────────────────────────────────────────
+  // ── Pieces (the calm page: title + one sentence + one action; a quiet search; roomy rows) ──────
   const total = coverage.kind === 'ok' && typeof coverage.value.total === 'number' ? coverage.value.total : null;
   const byTier = coverage.kind === 'ok' ? coverage.value.by_tier ?? {} : {};
   const present = [...TIERS, ...Object.keys(byTier).filter((t) => !(TIERS as readonly string[]).includes(t))].filter((t) => (byTier[t] ?? 0) > 0);
   const tierList = tier !== null && !present.includes(tier) ? [...present, tier] : present;
-  const breakdown = present.slice(0, 3).map((t) => `${byTier[t]} ${t}`).join(' · ');
+  const waiting = typeof pending === 'number' ? pending : 0;
 
-  const tiles = (
-    <SeStats data-testid="memory-tiles">
-      <SeStat icon={Brain} tone="accent" label="Memories kept" testId="memory-stat-total"
-        value={total !== null ? String(total) : coverage.kind === 'loading' ? null : '—'}
-        note={coverage.kind === 'unsupported' ? 'This crew can’t count its memories'
-          : coverage.kind === 'failed' ? 'Couldn’t read the totals'
-          : total === 0 ? 'Nothing remembered yet' : breakdown === '' ? 'in the store' : breakdown} />
-      <SeStat icon={Inbox} tone={typeof pending === 'number' && pending > 0 ? 'gate' : 'ok'} label="Proposals to review" testId="memory-stat-review"
-        value={typeof pending === 'number' ? String(pending) : pending === 'unsupported' ? '—' : null}
-        note={pending === 'unsupported' ? 'This crew has no proposal review' : pending === 0 ? 'Nothing waiting on you' : 'Memories helpers want to keep'}
-        onClick={() => go('proposals')} />
-      <li className="wk-card wk-se-addtile" data-testid="memory-add-tile">
-        <button type="button" data-testid="memory-add" className="wk-btn wk-btn--primary" onClick={() => setAdding(++opened.current)}><Plus size={15} aria-hidden /> Add a memory</button>
-        <p className="wk-se-quiet-sm">Something every helper should know. You approve it as you add it.</p>
-      </li>
-    </SeStats>
-  );
-
-  const kindCard = (t: string | null): React.ReactElement => {
-    const on = tier === t;
-    const n = t === null ? total : byTier[t] ?? 0;
-    return (
-      <li key={t ?? 'all'}>
-        <button type="button" onClick={() => { setTier(t); if (view !== 'memories') go('memories'); }} aria-pressed={on}
-          data-testid="memory-kind" data-tier={t ?? 'all'} className={`wk-card wk-se-type${on ? ' is-on' : ''}`}>
-          <span className="wk-se-type-name">{t === null ? 'All kinds' : tierWord(t)}</span>
-          <span className="wk-se-type-count">{n === null ? '—' : n}</span>
-        </button>
-      </li>
-    );
-  };
+  const sentence = memorySentence({ total, pending, coverage: coverage.kind });
+  const addIt = (): void => setAdding(++opened.current);
+  const refresh = (): void => { reread(); setReviewTick((t) => t + 1); };
+  // One action: review what is waiting when something is; otherwise add a memory. The rest sit in its menu.
+  const action = waiting > 0 && view !== 'proposals'
+    ? <CalmAction label={`Review ${waiting} ${waiting === 1 ? 'proposal' : 'proposals'}`} testId="memory-view-proposals" onClick={() => go('proposals')}
+        menuLabel="More for memory" menuTestId="memory-more"
+        menu={[{ id: 'add', label: 'Add a memory…', testId: 'memory-add', onSelect: addIt }, { id: 'refresh', label: 'Refresh', testId: 'memories-refresh', onSelect: refresh }]} />
+    : <CalmAction label="Add a memory" testId="memory-add" icon={<Plus size={16} aria-hidden />} onClick={addIt}
+        menuLabel="More for memory" menuTestId="memory-more"
+        menu={[
+          ...(view === 'proposals' ? [] : [{ id: 'proposals', label: pending === 'unsupported' ? 'Proposals (not available here)' : 'Show proposals', testId: 'memory-view-proposals', onSelect: () => go('proposals'), disabled: pending === 'unsupported' ? 'This crew has no proposal review' : null }]),
+          { id: 'refresh', label: 'Refresh', testId: 'memories-refresh', onSelect: refresh },
+        ]} />;
 
   const memoryRow = (m: MemoryItem): React.ReactElement => {
     const where = whereWords(m, projectName);
     const tags = Object.entries(m.facets).filter(([k]) => k !== 'project');
+    const origin = memoryOrigin(m);
+    const added = typeof m.created_at === 'number' ? shortDate(m.created_at * 1000) : null;
     return (
-      <li key={m.id} data-testid="memory-row" data-memory-id={m.id} data-tier={m.tier} data-scope={m.scope} className="wk-se-rule wk-mem-row">
-        <span className="wk-se-sev" data-testid="memory-tier">{tierChip(m.tier)}</span>
-        <span className="wk-se-rule-main">
-          <span data-testid="memory-content" className="wk-mem-content">{m.content}</span>
-          <span className="wk-se-rule-meta" data-testid="memory-meta">
-            <span data-testid="memory-where">{where}</span>
-            {tags.map(([k, v]) => <span key={k}>{`${k}: ${v}`}</span>)}
-            {typeof m.created_at === 'number' && <span>{`Added ${relTime(m.created_at * 1000)}`}</span>}
-          </span>
-          <span data-testid="memory-scope"><TechDetails text={[`memory_id: ${m.id}`, `scope: ${m.scope === '' ? '(root)' : m.scope}`, ...Object.entries(m.facets).map(([k, v]) => `${k}: ${v}`)]} /></span>
-        </span>
-        <span data-testid="memory-retire">
-          <OverflowMenu data-testid="memory-actions" label={`More for ${shortContent(m.content)}`} items={[
-            { id: 'edit', label: 'Edit…', onSelect: () => setEditing({ memory: m, token: ++opened.current }) },
-            { id: 'retire', label: 'Retire', danger: true, onSelect: () => setRetiring({ memory: m, width: 'item', token: ++opened.current }) },
-            ...(m.scope !== '' ? [{ id: 'retire-scope', label: 'Retire everything in this scope…', onSelect: () => setRetiring({ memory: m, width: 'scope', token: ++opened.current }) }] : []),
-          ]} />
-        </span>
-      </li>
+      <CalmRow key={m.id} data-testid="memory-row" data={{ 'memory-id': m.id, tier: m.tier, scope: m.scope, origin: origin ?? 'unknown' }}
+        tone="accent" title={<span data-testid="memory-content">{m.content}</span>} titleAttr={m.content}
+        sub={<span data-testid="memory-meta">{origin === 'told' ? 'Told by you' : origin === 'session' ? 'Learned in a session' : tierWord(m.tier)} · <span data-testid="memory-where">{where}</span></span>}
+        meta={added ?? undefined}
+        openTestId="memory-open" openLabel={`${shortContent(m.content)}: show details`}
+        menuLabel={`More for ${shortContent(m.content)}`} menuTestId="memory-actions"
+        menu={[
+          { id: 'edit', label: 'Edit…', testId: 'memory-edit', onSelect: () => setEditing({ memory: m, token: ++opened.current }) },
+          { id: 'retire', label: 'Retire', danger: true, testId: 'memory-retire', onSelect: () => setRetiring({ memory: m, width: 'item', token: ++opened.current }) },
+          ...(m.scope !== '' ? [{ id: 'retire-scope', label: 'Retire everything in this scope…', onSelect: () => setRetiring({ memory: m, width: 'scope', token: ++opened.current }) }] : []),
+        ]}
+        details={(
+          <>
+            <p data-testid="memory-full">{m.content}</p>
+            <CalmFacts facts={[
+              { k: 'Kind', v: tierWord(m.tier), testId: 'memory-tier' },
+              { k: 'Recalled on', v: where },
+              ...(tags.length > 0 ? [{ k: 'Tags', v: tags.map(([k, v]) => `${k}: ${v}`).join(' · ') }] : []),
+              ...(typeof m.created_at === 'number' ? [{ k: 'Added', v: relTime(m.created_at * 1000) }] : []),
+            ]} />
+            <span data-testid="memory-scope"><TechDetails text={[`memory_id: ${m.id}`, `scope: ${m.scope === '' ? '(root)' : m.scope}`, ...Object.entries(m.facets).map(([k, v]) => `${k}: ${v}`)]} /></span>
+          </>
+        )} />
     );
   };
 
   const filtered = query !== '' || facet !== null || tier !== null;
+  const kindPick = tierList.length > 0 ? (
+    <select className="wk-calm-pick wk-calm-pick--field" data-testid="memory-kind" aria-label="Kind of memory" value={tier ?? 'all'}
+      onChange={(e) => setTier(e.target.value === 'all' ? null : e.target.value)}>
+      <option value="all">{`All kinds${total !== null ? ` (${total})` : ''}`}</option>
+      {tierList.map((t) => <option key={t} value={t}>{`${tierWord(t)} (${byTier[t] ?? 0})`}</option>)}
+    </select>
+  ) : null;
+  const searchTools = view === 'memories' ? (
+    <CalmSearch value={queryInput} onChange={setQueryInput} onSubmit={applyQuery} placeholder="Search what was learned" label="Search memories"
+      testId="memories-search" buttonTestId="memories-search-open" startOpen={filtered}
+      extra={<>
+        <button type="button" className="wk-calm-btn wk-calm-btn--link" data-testid="memories-search-go" onClick={applyQuery}>Search</button>
+        {kindPick}
+        {facetPairs.length > 0 && <FacetAutocomplete testId="memories-facet-filter" options={facetPairs} value={facet} onChange={setFacet} label="Filter memories by tags" placeholder="Filter by tag" />}
+      </>} />
+  ) : (
+    <button type="button" className="wk-calm-btn wk-calm-btn--link" data-testid="memory-view-memories" onClick={() => go('memories')}>Back to everything learned</button>
+  );
+
   const list = (
-    <section className="wk-card wk-se-list" data-testid="memory-list-card" aria-label="Memories">
-      <header className="wk-se-list-head">
-        <Segmented label="Which list" value={view} onChange={go} data-testid="memory-view"
-          options={[
-            { value: 'memories', label: 'Memories', testId: 'memory-view-memories' },
-            { value: 'proposals', label: typeof pending === 'number' ? `Proposals (${pending})` : 'Proposals', testId: 'memory-view-proposals' },
-          ]} />
-        {view === 'memories' && (
-          <span className="wk-se-list-tools">
-            {facetPairs.length > 0 && <FacetAutocomplete testId="memories-facet-filter" options={facetPairs} value={facet} onChange={setFacet} label="Filter memories by tags" placeholder="Filter by tag" />}
-            <input type="search" className="wk-field wk-se-search" placeholder="Search memories" aria-label="Search memories" data-testid="memories-search"
-              value={queryInput} spellCheck={false} onChange={(e) => setQueryInput(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); applyQuery(); } }} />
-            <button type="button" className="wk-btn wk-btn--secondary wk-btn--sm" data-testid="memories-search-go" onClick={applyQuery}>Search</button>
-          </span>
-        )}
-      </header>
+    <CalmSection label={view === 'proposals' ? 'Waiting for you' : 'Recently learned'} tools={searchTools} data-testid="memory-list-card" ariaLabel="Memories">
       {note !== null && (
-        <p className="wk-se-filternote" data-tone={note.tone} data-testid="memories-note" role="status">
+        <CalmNote tone={note.tone} data-testid="memories-note" role="status">
           {note.text} <button type="button" className="wk-link wk-se-x" onClick={() => setNote(null)} aria-label="Dismiss">Dismiss</button>
-        </p>
+        </CalmNote>
       )}
+      {coverage.kind === 'failed' && <StateBanner kind={coverage.error.kind} what="the memory totals" error={coverage.error.message} onRetry={loadCoverage} />}
       {view === 'proposals' ? (
-        <div className="wk-se-proposals" data-testid="memory-proposals">
+        <div className="wk-se-proposals wk-calm-proposals" data-testid="memory-proposals">
           <ProposalsSection kind="memory" heading="Memory proposals" editable revision={proposalsRev} onDecision={() => { setReviewTick((t) => t + 1); reread(); }} />
         </div>
       ) : loading ? (
-        <div data-testid="memories-loading"><Skeleton rows={5} /></div>
+        <CalmLoading data-testid="memories-loading" rows={4} label="Reading what your agents learned" />
       ) : unsupported ? (
-        <p className="wk-se-quiet" data-testid="memories-unsupported">This crew can’t browse its memories yet. Memory proposals still show under Proposals.</p>
+        <CalmEmpty data-testid="memories-unsupported" title="This crew can’t browse its memories yet." body={<p>Memory proposals still show under Review.</p>} />
       ) : error !== null ? (
         <StateBanner data-testid="memories-error" kind={error.kind} what="the memories" error={error.message} onRetry={() => void load(query)} />
       ) : visible.length === 0 ? (
-        <p className="wk-se-quiet" data-testid="memories-empty">
-          {filtered ? (memories.length > 0 ? 'No memory matches these filters.' : `No memory matches “${query}”.`)
+        <CalmEmpty data-testid="memories-empty"
+          title={filtered ? (memories.length > 0 ? 'No memory matches these filters.' : `No memory matches “${query}”.`)
             // The store's own total says otherwise (#406): never call a non-empty store empty.
-            : total !== null && total > 0 ? `The store holds ${total} ${total === 1 ? 'memory' : 'memories'}, but none were listed. Try a search.`
-            : 'Nothing remembered yet. Approve a proposal or add a memory.'}
-          {filtered && <> <button type="button" className="wk-link wk-se-linkbtn" onClick={clearFilters}>Clear filters</button></>}
-        </p>
+            : total !== null && total > 0 ? `The store holds ${total} ${total === 1 ? 'memory' : 'memories'}, but none were listed.`
+            : 'Your agents haven’t learned anything yet.'}
+          body={filtered ? undefined : total !== null && total > 0 ? <p>Try a search.</p>
+            : <p>When an agent learns something in a session, or you tell it something, it shows up here. Agents propose what to keep; you approve it.</p>}
+          action={filtered
+            ? <CalmButton onClick={clearFilters} testId="memories-clear">Clear filters</CalmButton>
+            : <CalmButton onClick={addIt}>Tell your agents something</CalmButton>} />
       ) : (
-        <ul className="wk-se-rules" data-testid="memories-list">{visible.map(memoryRow)}</ul>
+        <CalmRows data-testid="memories-list" label="Memories">{visible.map(memoryRow)}</CalmRows>
       )}
-      {view === 'memories' && !loading && !unsupported && error === null && (
-        <footer className="wk-se-list-foot">
-          <span className="wk-se-quiet-sm" data-testid="memories-count" data-count={visible.length}>
-            {filtered ? `${visible.length} shown of ${memories.length} read`
-              : total !== null && total > memories.length ? `${visible.length} listed of ${total} in the store`
-              : `${visible.length} ${visible.length === 1 ? 'memory' : 'memories'}`}
-          </span>
-          <span className="wk-se-foot-links">
-            {filtered && <button type="button" className="wk-link wk-se-linkbtn" data-testid="memories-clear" onClick={clearFilters}>Clear filters</button>}
-            <button type="button" className="wk-link wk-se-linkbtn" data-testid="memories-refresh" onClick={() => { reread(); setReviewTick((t) => t + 1); }}>Refresh</button>
-          </span>
-        </footer>
+      {view === 'memories' && !loading && !unsupported && error === null && visible.length > 0 && (
+        <p className="wk-calm-foot" data-testid="memories-count" data-count={visible.length}>
+          {filtered ? `${visible.length} shown of ${memories.length} read`
+            : total !== null && total > memories.length ? `${visible.length} listed of ${total} in the store`
+            : `${visible.length} ${visible.length === 1 ? 'memory' : 'memories'}`}
+          {filtered && <> · <button type="button" className="wk-link wk-se-linkbtn" data-testid="memories-clear" onClick={clearFilters}>Clear filters</button></>}
+        </p>
       )}
-    </section>
+    </CalmSection>
   );
 
   return (
-    <div className="wk-se wk-mem" data-testid="memory-page" data-view={view}>
-      <div className="wk-se-scroll" ref={scrollRef}>
-        <p className="wk-se-card-sub" data-testid="memory-intro">What helpers remember and recall as context. The rules they are held to live under Steer.</p>
-        {coverage.kind === 'failed' && <StateBanner kind={coverage.error.kind} what="the memory totals" error={coverage.error.message} onRetry={loadCoverage} />}
-        {tiles}
-        <div className="wk-se-split">
-          <aside className="wk-se-side">
-            <ul className="wk-se-types" aria-label="Kinds of memory" data-testid="memory-kinds">
-              {kindCard(null)}
-              {tierList.map((t) => kindCard(t))}
-            </ul>
-          </aside>
+    <div className="wk-se wk-mem wk-se--calm" data-testid="memory-page" data-view={view}>
+      <div className="wk-se-scroll wk-calm" ref={scrollRef}>
+        <div className="wk-calm-col">
+          <CalmHead title="Memory" sentence={<span data-testid="memory-intro">{sentence}</span>} sentenceTestId="memory-sentence" action={action} />
           {list}
         </div>
       </div>

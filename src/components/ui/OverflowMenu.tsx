@@ -1,7 +1,11 @@
 import { useCallback, useId, useRef, useState } from 'react';
 import { useDismissable } from '../../hooks/useDismissable.js';
 
-export interface MenuItem { id: string; label: string; onSelect: () => void; danger?: boolean; disabled?: string | null }
+export interface MenuItem {
+  id: string; label: string; onSelect: () => void; danger?: boolean; disabled?: string | null;
+  /** The item's own testid, when a journey selects it (a move that moved behind a menu keeps its id). */
+  testId?: string;
+}
 
 /**
  * A menu button: "⋯" (or a labelled button) opening a list of actions (design/UI-CONTRACT.md §4.5;
@@ -32,7 +36,7 @@ export function OverflowMenu({ label, items, text, tone = 'quiet', 'data-testid'
         <div id={`${id}-menu`} role="menu" aria-label={label} className="wk-menu" data-testid={`${testId}-list`}>
           {items.map((it, i) => (
             <button key={it.id} ref={(el) => { refs.current[i] = el; }} type="button" role="menuitem"
-              aria-disabled={it.disabled != null} data-item={it.id}
+              aria-disabled={it.disabled != null} data-item={it.id} data-testid={it.testId}
               className={`wk-menu-item${it.danger === true ? ' wk-menu-item--danger' : ''}`}
               onKeyDown={(e) => {
                 if (e.key === 'ArrowDown') { e.preventDefault(); focusAt(i + 1); }

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { BookOpenCheck, Inbox, MessageSquare, Plus, Sparkles, Upload } from 'lucide-react';
+import { ChevronDown, Plus } from 'lucide-react';
 import { api } from '../../api/client.js';
 import { RULES_PATH, rulePath } from '../../api/decisions.js';
 import { readErrorKind } from '../../api/errors.js';
@@ -30,7 +30,7 @@ import { relTime } from '../../board/relTime.js';
 import { fromYourWords, groupOf, rulesSentence } from '../../board/rulesPage.js';
 import { ruleSentence } from '../../board/ruleOrigin.js';
 import { importRuleFile } from '../../board/steerImport.js';
-import { steerTotals } from '../../board/steerModel.js';
+import { effectWord, firesWord, ruleFires, ruleReach, ruleTitle, ruleTypeWord, steerSentence } from '../../board/calmSteer.js';
 import { governedRuns, ruleUsage, usageWindows, USAGE_WINDOW_DAYS } from '../../board/steeringUsage.js';
 import { useGovernanceClaims } from '../../hooks/useGovernanceClaims.js';
 import { useDaemonRuleStore } from '../../hooks/useDaemonRuleStore.js';
@@ -48,9 +48,10 @@ import { SteeringRetireModal } from '../SteeringRetireModal.js';
 import { SteeringRuleDrawer } from '../SteeringRuleDrawer.js';
 import { SteeringRuleFormModal } from '../SteeringRuleForm.js';
 import { readFileText } from '../fileText.js';
-import { FilePick, Segmented, Skeleton, StateBanner, TechDetails } from '../ui/index.js';
+import { FilePick, StateBanner, TechDetails } from '../ui/index.js';
+import type { MenuItem } from '../ui/OverflowMenu.js';
+import { CalmAction, CalmButton, CalmEmpty, CalmHead, CalmLoading, CalmNote, CalmRow, CalmRows, CalmSearch, CalmSection, CalmSeg } from '../calm/Calm.js';
 import { FacetAutocomplete } from '../FacetAutocomplete.js';
-import { SeStat, SeStats } from './SeStat.js';
 import { useDialogFocus } from './useDialogFocus.js';
 
 /**
@@ -82,7 +83,6 @@ function steerHref(type: SteeringType | null, mcp: boolean, unused: boolean, tab
 
 const SEVERITIES = ['critical', 'error', 'warn', 'info'] as const;
 type Severity = (typeof SEVERITIES)[number];
-const SEVERITY_WORD: Record<Severity, string> = { critical: 'Critical', error: 'Error', warn: 'Warning', info: 'Info' };
 const PAGE = 20;
 
 type ListView = 'live' | 'proposals' | 'retired';
@@ -112,25 +112,12 @@ function sevOf(r: SteeringRule): Severity {
   return (SEVERITIES as readonly string[]).includes(r.severity) ? (r.severity as Severity) : 'info';
 }
 
-/** A severity bar: one segment per severity, proportional, in the fixed order. */
-function SeverityBar({ rules }: { rules: readonly SteeringRule[] }): React.ReactElement | null {
-  if (rules.length === 0) return null;
-  const counts = SEVERITIES.map((s) => [s, rules.filter((r) => sevOf(r) === s).length] as const).filter(([, n]) => n > 0);
-  const label = counts.map(([s, n]) => `${n} ${SEVERITY_WORD[s].toLowerCase()}`).join(', ');
-  return (
-    <span className="wk-se-sevbar" role="img" aria-label={label} title={label}>
-      {counts.map(([s, n]) => <i key={s} data-sev={s} style={{ flexGrow: n }} />)}
-    </span>
-  );
-}
-
-export function SteerSurface({ pathname, search, navigate: navigateRaw, runs = [], address, title, intro = 'The rules helpers follow, by type. Open a rule to see where it came from and where it applied.' }: {
+export function SteerSurface({ pathname, search, navigate: navigateRaw, runs = [], address, title }: {
   /** Where a steering address lives in the host (the Desk: `/?tab=steer&at=<address>`). Every move
    *  inside the surface goes there directly, so the host never redirects and the surface never remounts. */
   address?: (steeringPath: string) => string;
-  /** A page title — given when the surface stands alone; the Desk tab names it already. */
+  /** The page title (Steering, unless a host names it otherwise). */
   title?: string;
-  intro?: string;
   /** The address this surface renders for — `/rules[/:id]` or `/steering/...`. */
   pathname: string;
   search: string;
@@ -243,7 +230,6 @@ export function SteerSurface({ pathname, search, navigate: navigateRaw, runs = [
   const pageType: SteeringType = type ?? DEFAULT_STEERING_TYPE;
 
   // ── Folds ────────────────────────────────────────────────────────────────────────────────────
-  const totals = steerTotals(rules);
   const live = rules.filter((r) => r.retired !== true);
   const retiredRules = rules.filter((r) => r.retired === true);
   // A run judged against another rule store says nothing about THESE rules, even when ids match (codex r1 #2).
@@ -326,218 +312,203 @@ export function SteerSurface({ pathname, search, navigate: navigateRaw, runs = [
 
   const unseeded = meta !== null && meta.seeded === false && rules.length === 0 && read.kind === 'ok';
 
-  // ── Pieces ───────────────────────────────────────────────────────────────────────────────────
+  // ── Pieces (the calm page: title + one sentence + Add a rule; one filter; roomy rows) ─────────
   const lastEval = latest.kind === 'ok' ? latest.eval : null;
   const blocked = lastEval !== null ? lastEval.results.filter((r) => r.verdict === 'caught' && r.sample.kind === 'bad').length : 0;
-  // A run judged against another rule store did not test these rules: the tile says so (DES-steer-eval §3.2).
+  // A run judged against another rule store did not test these rules: the line says so (DES-steer-eval §3.2).
   const otherStore = lastEval !== null && storeMatch(lastEval.ruleStore, daemonStore) === 'other';
-  const tiles = (
-    <SeStats data-testid="steer-tiles">
-      <SeStat icon={BookOpenCheck} tone="accent" label="Rules in force" testId="steer-stat-rules"
-        value={read.kind === 'ok' ? String(totals.live) : read.kind === 'loading' ? null : '—'}
-        note={read.kind !== 'ok' ? 'Couldn’t read the rules' // never counts over a failed read (codex r3 #3)
-          : `${live.filter((r) => sevOf(r) === 'critical').length} critical · ${totals.gating} carry an effect · ${totals.blocks === 0 ? 'none block' : `${totals.blocks} block`}${totals.retired > 0 ? ` · ${totals.retired} retired` : ''}`} />
-      <SeStat icon={Inbox} tone={typeof pending === 'number' && pending > 0 ? 'gate' : 'ok'} label="Proposals to review" testId="steer-stat-review"
-        value={typeof pending === 'number' ? String(pending) : pending === 'unsupported' ? '—' : null}
-        note={pending === 'unsupported' ? 'This crew has no proposal review' : pending === 0 ? 'Nothing waiting on you' : 'Rules helpers want, waiting on you'}
-        onClick={() => setView('proposals')} />
-      <SeStat icon={Sparkles} tone={lastEval !== null && lastEval.summary.false_positives > 0 ? 'fail' : 'accent'} label="Caught in last eval" testId="steer-stat-eval"
-        value={lastEval !== null ? String(lastEval.summary.caught) : latest.kind === 'loading' ? null : latest.kind === 'failed' ? '—' : 'None yet'}
-        of={lastEval !== null ? `/ ${lastEval.summary.total}` : undefined}
-        note={lastEval !== null
-          ? `${blocked} bad blocked · ${lastEval.summary.gaps} gaps · ${otherStore ? 'another rule store' : relTime(lastEval.at)}`
-          : latest.kind === 'unavailable' ? 'Evals aren’t available here' : latest.kind === 'failed' ? 'Couldn’t read the last eval' : 'Run one to test the rules'}
-        title={otherStore ? 'The last eval was judged against a different rule store, not this daemon’s, so it did not test these rules.' : undefined}
-        href={testingPath('evals')} navigate={navigate} />
-      <li className="wk-card wk-se-addtile" data-testid="steer-add">
-        <button type="button" data-testid="steer-add-rule" className="wk-btn wk-btn--primary" onClick={addRule} disabled={read.kind !== 'ok'}
-          title={read.kind === 'ok' ? undefined : 'Available once the rules have loaded (a new id must not collide with one in force)'}><Plus size={15} aria-hidden /> Add a rule</button>
-        <button type="button" data-testid="steer-import" className="wk-btn wk-btn--secondary" onClick={() => setImporting(true)}><Upload size={15} aria-hidden /> Import</button>
-        <button type="button" data-testid="steer-chat" className="wk-btn wk-btn--secondary" onClick={() => openChat()}><MessageSquare size={15} aria-hidden /> Add with chat</button>
-      </li>
-    </SeStats>
+  // How often each rule fired this week, from the gate-check record (null until it has been read).
+  const fires = useMemo(() => (claims.kind === 'loaded' ? ruleFires(claims.claims, Date.now()) : null), [claims]);
+  const typeLive = read.kind === 'ok' ? live.filter((r) => type === null || steeringTypeOf(r) === type).length : null;
+  const sentence = read.kind === 'failed' ? 'Couldn’t read your rules just now.' : steerSentence({ live: typeLive, type, pending });
+
+  const counts: Record<ListView, number | null> = {
+    live: typeLive,
+    proposals: typeof pending === 'number' ? pending : null,
+    retired: retiredRules.filter((r) => type === null || steeringTypeOf(r) === type).length,
+  };
+  // The table opens on the same filters (type, MCP, unused) the list shows (codex r3 #4).
+  const tableHref = steerHref(type, mcpOnly, usageAsked, true);
+  const refreshAll = (): void => { void load(); setReviewTick((t) => t + 1); latest.reload(); };
+
+  // The one action, and every other way to add or manage behind its menu.
+  const moreMoves: MenuItem[] = [
+    { id: 'chat', label: 'Add with chat', testId: 'steer-chat', onSelect: () => openChat() },
+    { id: 'import', label: 'Import rules…', testId: 'steer-import', onSelect: () => setImporting(true) },
+    { id: 'mcp', label: 'Add an MCP policy', testId: 'steering-add-mcp', onSelect: addMcp, disabled: read.kind === 'ok' ? null : 'Once the rules have loaded' },
+    { id: 'table', label: 'Edit as a table', testId: 'steer-table', onSelect: () => navigate(tableHref) },
+    view === 'retired'
+      ? { id: 'live', label: 'Show the rules in force', testId: 'steer-view-retired', onSelect: () => setView('live') }
+      : { id: 'retired', label: counts.retired !== null && counts.retired > 0 ? `Show retired rules (${counts.retired})` : 'Show retired rules', testId: 'steer-view-retired', onSelect: () => setView('retired') },
+    { id: 'refresh', label: 'Refresh', testId: 'steer-refresh', onSelect: refreshAll },
+  ];
+  const action = (
+    <CalmAction label="Add a rule" testId="steer-add-rule" icon={<Plus size={16} aria-hidden />} onClick={addRule} disabled={read.kind !== 'ok'}
+      title={read.kind === 'ok' ? undefined : 'Available once the rules have loaded (a new id must not collide with one in force)'}
+      menu={moreMoves} menuLabel="More ways to add and manage rules" menuTestId="steer-more" />
   );
 
-  const typeCard = (t: SteeringType | null): React.ReactElement => {
-    const mine = t === null ? live : live.filter((r) => steeringTypeOf(r) === t);
-    const on = type === t;
-    const href = policiesPath(t, mcpOnly);
-    return (
-      <li key={t ?? 'all'}>
-        <a href={at(href)} onClick={go(href)} aria-current={on ? 'page' : undefined} data-testid="steer-type" data-steering-type={t ?? 'all'}
-          className={`wk-card wk-se-type${on ? ' is-on' : ''}`}>
-          <span className="wk-se-type-name">{t === null ? 'All types' : STEERING_TYPE_LABELS[t]}</span>
-          <span className="wk-se-type-count">{read.kind === 'ok' ? mine.length : '—'}</span>
-          {t !== null && <SeverityBar rules={mine} />}
-        </a>
-      </li>
-    );
-  };
-
-  const health = (
-    <section className="wk-card wk-se-health" data-testid="steer-health" aria-label="Rule health">
-      <h3 className="wk-se-card-title">Health</h3>
-      <SteeringStoreHealth state={scoreboard} />
-      <dl className="wk-se-facts">
-        <div><dt>Gate checks, {USAGE_WINDOW_DAYS} days</dt><dd data-testid="steer-fact-checks">{windows !== null ? windows.evaluations.current : claims.kind === 'loading' ? '…' : '—'}</dd></div>
-        <div><dt>Denied</dt><dd>{windows !== null ? windows.denials.current : '—'}</dd></div>
-        <div><dt>Runs checked</dt><dd>{governed !== null && governed.pct !== null ? `${governed.pct}%` : '—'}</dd></div>
-        <div><dt>Never used</dt><dd data-testid="steer-fact-unused">
-          {usage !== null ? (usage.unusedIds.length > 0
-            ? <a href={at(steerHref(type, mcpOnly, true))} onClick={go(steerHref(type, mcpOnly, true))} className="wk-link" data-testid="steer-fact-unused-link">{usage.unusedIds.length}</a>
-            : 0) : '—'}
-        </dd></div>
-      </dl>
-    </section>
+  // The seven steering types are sub-pages of one layout: a quiet picker stands in for the list's label.
+  const typePick = (
+    <label className="wk-calm-typepick">
+      <span className="sr-only">Steering type</span>
+      <select className="wk-calm-pick" data-testid="steer-type-pick" value={type ?? 'all'} aria-label="Steering type"
+        onChange={(e) => { const t = e.target.value === 'all' ? null : (e.target.value as SteeringType); navigate(policiesPath(t, mcpOnly)); }}>
+        <option value="all">{view === 'retired' ? 'Retired · all types' : 'All rules'}</option>
+        {STEERING_TYPES.map((t) => {
+          const n = read.kind === 'ok' ? (view === 'retired' ? retiredRules : live).filter((r) => steeringTypeOf(r) === t).length : null;
+          return <option key={t} value={t}>{`${STEERING_TYPE_LABELS[t]}${n === null ? '' : ` (${n})`}`}</option>;
+        })}
+      </select>
+    </label>
   );
 
   const ruleRow = (r: SteeringRule): React.ReactElement => {
-    const sev = sevOf(r);
     const st = evalStatus.get(r.id);
-    const sentence = ruleSentence(r, projectName(r.targets.project) ?? 'one project');
+    const sentenceLine = ruleSentence(r, projectName(r.targets.project) ?? 'one project');
     const scoped = r.targets.project !== undefined && r.targets.project !== '';
+    const title = r.id.startsWith('proposal:') && r.statement.trim() === '' ? 'Proposed rule' : ruleTitle(r.statement);
+    const effect = effectWord(r);
+    const n = fires?.get(r.id);
     return (
-      <li key={r.id} data-testid="rules-row" data-rule-id={r.id} data-group={groupOf(r)} data-retired={r.retired === true} className="wk-se-rule">
-        <span className="wk-se-sev" data-sev={sev}>{SEVERITY_WORD[sev]}</span>
-        <span className="wk-se-rule-main">
-          <a href={at(openPath(r.id))} data-testid="rules-row-open" className="wk-se-rule-statement" title={r.statement}
-            onClick={(e) => { e.preventDefault(); navigate(openPath(r.id)); }}>{r.statement}</a>
-          <span className="wk-se-rule-meta" data-testid="rules-row-line" data-sentence={sentence} title={sentence}>
-            <span className="wk-se-rule-id">{r.id.startsWith('proposal:') ? 'Proposed rule' : r.id}</span>
-            <span>{STEERING_TYPE_LABELS[steeringTypeOf(r)]}</span>
-            {/* studio#836: the reach is on the row, scoped or not — "Everywhere", the Memory page's word for it. */}
-            <span data-testid="rules-row-reach" data-reach={scoped ? 'project' : 'everywhere'}>{scoped ? projectName(r.targets.project) ?? 'One project' : 'Everywhere'}</span>
-            {r.effect === 'deny' ? <span>Blocks</span> : r.effect === 'warn' ? <span>Warns</span> : r.effect === 'allow_with_conditions' ? <span>Adds conditions</span> : r.effect === 'allow' ? <span>Allows</span> : null}
-            {fromYourWords(r) && <span>From your words</span>}
-            {st !== undefined && <span className="wk-se-evalst" data-eval={st}>{RULE_EVAL_WORDS[st]}</span>}
+      <CalmRow key={r.id} data-testid="rules-row" data={{ 'rule-id': r.id, group: groupOf(r), retired: r.retired === true, sev: sevOf(r) }}
+        tone={r.retired === true ? 'quiet' : 'ok'} title={title} titleAttr={r.statement}
+        sub={(
+          <span data-testid="rules-row-line" data-sentence={sentenceLine} title={sentenceLine}>
+            {ruleTypeWord(r)}
+            {' · '}
+            {/* studio#836: the reach is on the row, scoped or not. */}
+            <span data-testid="rules-row-reach" data-reach={scoped ? 'project' : 'everywhere'}>{ruleReach(r, (id) => projectName(id))}</span>
+            {effect !== null && effect !== 'allows' && ` · ${effect}`}
+            {fromYourWords(r) && ' · from your words'}
+            {st !== undefined && <> · <span className="wk-se-evalst" data-eval={st}>{RULE_EVAL_WORDS[st].toLowerCase()}</span></>}
           </span>
-        </span>
-        {r.retired !== true && (
-          <button type="button" data-testid="steer-retire" className="wk-btn wk-btn--secondary wk-btn--sm wk-se-rule-act" onClick={() => setRetiring({ rule: r, token: ++opened.current })}
-            aria-label={`Retire ${r.id}`}>Retire</button>
         )}
-      </li>
+        meta={r.retired === true ? 'Retired' : fires === null ? null : <span data-testid="rules-row-fires" data-fires={n ?? 0}>{firesWord(n)}</span>}
+        href={at(openPath(r.id))} onOpen={() => navigate(openPath(r.id))} openTestId="rules-row-open" openLabel={`${title}: open the rule`}
+        menuLabel={`More for ${title}`} menuTestId="steer-row-more"
+        menu={[
+          { id: 'open', label: 'Open details', onSelect: () => navigate(openPath(r.id)) },
+          ...(r.retired !== true ? [{ id: 'retire', label: 'Retire…', danger: true, testId: 'steer-retire', onSelect: () => setRetiring({ rule: r, token: ++opened.current }) }] : []),
+        ]} />
     );
   };
 
   const filterNotes = (
     <>
       {usageAsked && (
-        <p className="wk-se-filternote" data-testid="steering-usage-filter-note">
+        <CalmNote data-testid="steering-usage-filter-note">
           {unusedIds !== null ? `Only the ${unusedIds.length} rules no run has cited.` : 'Studio’s service can’t say which rules are unused yet, so all rules are shown.'}{' '}
           <a href={at(steerHref(type, mcpOnly, false))} onClick={go(steerHref(type, mcpOnly, false))} className="wk-link" data-testid="steering-usage-filter-clear">Show all</a>
-        </p>
+        </CalmNote>
       )}
       {mcpOnly && (
-        <p className="wk-se-filternote" data-testid="steer-mcp-note">Only rules that govern MCP calls. <a href={at(steerHref(type, false, usageAsked))} onClick={go(steerHref(type, false, usageAsked))} className="wk-link" data-testid="steer-mcp-clear">Show all</a></p>
+        <CalmNote data-testid="steer-mcp-note">Only rules that govern MCP calls. <a href={at(steerHref(type, false, usageAsked))} onClick={go(steerHref(type, false, usageAsked))} className="wk-link" data-testid="steer-mcp-clear">Show all</a></CalmNote>
+      )}
+      {view === 'retired' && (
+        <CalmNote data-testid="steer-retired-note">Retired rules: helpers no longer follow them; they stay listed here, never deleted. <button type="button" className="wk-link wk-se-linkbtn" onClick={() => setView('live')}>Back to the rules in force</button></CalmNote>
+      )}
+      {refreshFailed !== null && read.kind === 'ok' && (
+        <CalmNote tone="fail" data-testid="steer-refresh-failed" role="status">
+          Couldn&rsquo;t refresh the rules; showing the last ones read. <button type="button" className="wk-link wk-se-x" onClick={() => { void load(); }}>Try again</button>
+        </CalmNote>
+      )}
+      {note !== null && (
+        <CalmNote tone={note.tone} data-testid="steering-saved-note" role="status">
+          {note.text} <button type="button" className="wk-link wk-se-x" onClick={() => setNote(null)} aria-label="Dismiss">Dismiss</button>
+        </CalmNote>
       )}
     </>
   );
 
-  const counts: Record<ListView, number | null> = {
-    live: live.filter((r) => type === null || steeringTypeOf(r) === type).length,
-    proposals: typeof pending === 'number' ? pending : null,
-    retired: retiredRules.filter((r) => type === null || steeringTypeOf(r) === type).length,
-  };
-  const word = (v: ListView, label: string): string => (counts[v] !== null && v !== 'live' ? `${label} (${counts[v]})` : label);
-  // The table opens on the same filters (type, MCP, unused) the list shows (codex r3 #4).
-  const tableHref = steerHref(type, mcpOnly, usageAsked, true);
+  const tools = (
+    <>
+      {view !== 'proposals' && (
+        <CalmSearch value={q} onChange={setQ} placeholder="Search rules" label="Search rules" testId="steer-search" buttonTestId="steer-search-open"
+          startOpen={facet !== null}
+          extra={facetPairs.length > 0 ? <FacetAutocomplete testId="steer-facet" options={facetPairs} value={facet} onChange={setFacet} label="Filter rules by tags" placeholder="Filter by tag" /> : undefined} />
+      )}
+      <CalmSeg label="Which rules" value={view} onChange={setView} data-testid="steer-view"
+        options={[
+          { value: 'live', label: 'Active', testId: 'steer-view-live' },
+          { value: 'proposals', label: typeof pending === 'number' ? `Proposed (${pending})` : 'Proposed', testId: 'steer-view-proposals' },
+        ]} />
+    </>
+  );
 
   const list = (
-    <section className="wk-card wk-se-list" data-testid="steer-rules" aria-label="Rules">
-      <header className="wk-se-list-head">
-        <Segmented label="Which rules" value={view} onChange={setView} data-testid="steer-view"
-          options={[
-            { value: 'live', label: word('live', 'In force'), testId: 'steer-view-live' },
-            { value: 'proposals', label: word('proposals', 'Proposals'), testId: 'steer-view-proposals' },
-            { value: 'retired', label: word('retired', 'Retired'), testId: 'steer-view-retired' },
-          ]} />
-        {view !== 'proposals' && (
-          <span className="wk-se-list-tools">
-            {facetPairs.length > 0 && (
-              <FacetAutocomplete testId="steer-facet" options={facetPairs} value={facet} onChange={setFacet} label="Filter rules by tags" placeholder="Filter by tag" />
-            )}
-            <input type="search" className="wk-field wk-se-search" placeholder="Search rules" aria-label="Search rules"
-              data-testid="steer-search" value={q} onChange={(e) => setQ(e.target.value)} />
-          </span>
-        )}
-      </header>
+    <CalmSection labelNode={view === 'proposals' ? <h2 className="wk-calm-label">Proposed rules</h2> : typePick} tools={tools} data-testid="steer-rules" ariaLabel="Rules">
       {filterNotes}
-      {refreshFailed !== null && read.kind === 'ok' && (
-        <p className="wk-se-filternote" data-tone="fail" data-testid="steer-refresh-failed" role="status">
-          Couldn&rsquo;t refresh the rules; showing the last ones read. <button type="button" className="wk-link wk-se-x" onClick={() => { void load(); }}>Try again</button>
-        </p>
-      )}
-      {note !== null && (
-        <p className="wk-se-filternote" data-tone={note.tone} data-testid="steering-saved-note" role="status">
-          {note.text} <button type="button" className="wk-link wk-se-x" onClick={() => setNote(null)} aria-label="Dismiss">Dismiss</button>
-        </p>
-      )}
       {view === 'proposals' ? (
-        <div className="wk-se-proposals" data-testid="governance-review-inbox">
+        <div className="wk-se-proposals wk-calm-proposals" data-testid="governance-review-inbox">
           <ProposalsSection kind="policy" heading="Rule proposals" onDecision={() => { setReviewTick((t) => t + 1); void load(); }} />
         </div>
       ) : read.kind === 'loading' ? (
-        <div data-testid="rules-loading"><Skeleton rows={5} /></div>
+        <CalmLoading data-testid="rules-loading" rows={5} label="Reading your rules" />
       ) : read.kind === 'failed' ? (
         <StateBanner data-testid="rules-error" kind={readErrorKind(read.error)} what="the rules"
           error={read.error instanceof Error ? read.error.message : String(read.error)} onRetry={() => { setRead({ kind: 'loading' }); void load(); }} />
       ) : unseeded ? (
-        <div className="wk-se-empty" data-testid="steering-unseeded">
-          <p className="wk-se-empty-title">No steering rules yet.</p>
-          <p>Add one, import a doctrine doc, or describe them to the assistant. Or seed from the runbook at{' '}
-            <a href={SEED_RUNBOOK_URL} target="_blank" rel="noreferrer" className="wk-link">{SEED_RUNBOOK_PATH}</a>.</p>
-          <TechDetails summary="Seed command" text={SEED_COMMAND} />
-        </div>
+        <CalmEmpty data-testid="steering-unseeded" title="No steering rules yet."
+          body={<>
+            <p>Rules tell your agents how this team works. Add one, import a doctrine doc, or describe them in a chat. Or seed from the runbook at{' '}
+              <a href={SEED_RUNBOOK_URL} target="_blank" rel="noreferrer" className="wk-link">{SEED_RUNBOOK_PATH}</a>.</p>
+            <TechDetails summary="Seed command" text={SEED_COMMAND} />
+          </>}
+          action={<CalmButton onClick={() => openChat()}>Describe them in a chat</CalmButton>} />
       ) : listed.length === 0 ? (
-        <p className="wk-se-quiet" data-testid="steer-rules-empty">
-          {needle !== '' ? 'No rule matches that search.' : facet !== null || mcpOnly || unusedIds !== null ? 'No rule matches these filters.' : view === 'retired' ? 'Nothing retired. A retired rule stays listed here, never deleted.' : type !== null ? `No ${STEERING_TYPE_LABELS[type]} rules yet.` : 'No rules in force.'}
-        </p>
+        <CalmEmpty data-testid="steer-rules-empty"
+          title={needle !== '' ? 'No rule matches that search.' : facet !== null || mcpOnly || unusedIds !== null ? 'No rule matches these filters.' : view === 'retired' ? 'Nothing retired.' : type !== null ? `No ${STEERING_TYPE_LABELS[type]} rules yet.` : 'No rules in force.'}
+          body={view === 'retired' ? <p>A retired rule stays listed here, never deleted.</p> : needle !== '' || facet !== null ? undefined : <p>Add one with Add a rule, or describe what you want in a chat.</p>}
+          action={needle !== '' || facet !== null ? <CalmButton onClick={() => { setQ(''); setFacet(null); }}>Clear the search</CalmButton> : undefined} />
       ) : (
-        <ul className="wk-se-rules" data-testid="steer-rule-list">{listed.slice(0, shown).map(ruleRow)}</ul>
+        <CalmRows data-testid="steer-rule-list" label="Rules">{listed.slice(0, shown).map(ruleRow)}</CalmRows>
       )}
-      {/* The actions stay on an empty view too: a fresh store, a type with no rules, a search with no match (codex r1 #10). */}
-      {view !== 'proposals' && read.kind === 'ok' && (
-        <footer className="wk-se-list-foot">
-          {listed.length > shown
-            ? <button type="button" className="wk-link wk-se-more" data-testid="steer-show-all" onClick={() => setShown(listed.length)}>Show all {listed.length} →</button>
-            : <span className="wk-se-quiet-sm" data-testid="rules-sentence" data-count={live.length}>{rulesSentence(rules)}</span>}
-          <span className="wk-se-foot-links">
-            <a href={at(tableHref)} onClick={go(tableHref)} className="wk-link" data-testid="steer-table">Edit as a table</a>
-            <button type="button" className="wk-link wk-se-linkbtn" data-testid="steering-add-mcp" onClick={addMcp}>Add MCP policy</button>
-            <button type="button" className="wk-link wk-se-linkbtn" data-testid="steer-refresh" onClick={() => { void load(); setReviewTick((t) => t + 1); latest.reload(); }}>Refresh</button>
-          </span>
-        </footer>
+      {view !== 'proposals' && read.kind === 'ok' && listed.length > shown && (
+        <button type="button" className="wk-calm-more" data-testid="steer-show-all" onClick={() => setShown(listed.length)}>Show all {listed.length}</button>
       )}
       {read.kind === 'ok' && routedRule !== null && !rules.some((r) => r.id === routedRule) && (
-        <p data-testid="rules-missing" className="wk-se-quiet">That rule isn&rsquo;t here; it may have been removed. <TechDetails text={routedRule} summary="Rule id" /></p>
+        <CalmNote data-testid="rules-missing">That rule isn&rsquo;t here; it may have been removed. <TechDetails text={routedRule} summary="Rule id" /></CalmNote>
       )}
-    </section>
+    </CalmSection>
+  );
+
+  // The numbers a person rarely needs — the store's health, the gate record, the last evaluation — behind one quiet disclosure.
+  const health = (
+    <details className="wk-calm-disclose" data-testid="steer-health">
+      <summary><ChevronDown size={16} aria-hidden className="wk-calm-chev" /> Rule health and the last evaluation</summary>
+      <div className="wk-calm-disclose-body">
+        {read.kind === 'ok' && <p className="wk-calm-foot" data-testid="rules-sentence" data-count={live.length}>{rulesSentence(rules)}</p>}
+        <SteeringStoreHealth state={scoreboard} />
+        <dl className="wk-calm-facts">
+          <div><dt>Gate checks, {USAGE_WINDOW_DAYS} days</dt><dd data-testid="steer-fact-checks">{windows !== null ? windows.evaluations.current : claims.kind === 'loading' ? '…' : '—'}</dd></div>
+          <div><dt>Denied</dt><dd>{windows !== null ? windows.denials.current : '—'}</dd></div>
+          <div><dt>Runs checked</dt><dd>{governed !== null && governed.pct !== null ? `${governed.pct}%` : '—'}</dd></div>
+          <div><dt>Never used</dt><dd data-testid="steer-fact-unused">
+            {usage !== null ? (usage.unusedIds.length > 0
+              ? <a href={at(steerHref(type, mcpOnly, true))} onClick={go(steerHref(type, mcpOnly, true))} className="wk-link" data-testid="steer-fact-unused-link">{usage.unusedIds.length}</a>
+              : 0) : '—'}
+          </dd></div>
+          <div><dt>Last evaluation</dt><dd data-testid="steer-stat-eval" title={otherStore ? 'The last eval was judged against a different rule store, not this daemon’s, so it did not test these rules.' : undefined}>
+            {lastEval !== null
+              ? `${lastEval.summary.caught} of ${lastEval.summary.total} caught · ${blocked} bad blocked · ${lastEval.summary.gaps} gaps · ${otherStore ? 'another rule store' : relTime(lastEval.at)}`
+              : latest.kind === 'loading' ? '…' : latest.kind === 'unavailable' ? 'Evaluations aren’t available here' : latest.kind === 'failed' ? 'Couldn’t read the last evaluation' : 'None yet'}
+            {' '}<a href={testingPath('evals')} className="wk-link" onClick={(e) => { e.preventDefault(); navigate(testingPath('evals')); }}>Evaluate</a>
+          </dd></div>
+        </dl>
+      </div>
+    </details>
   );
 
   return (
-    <div className="wk-se" data-testid="steer-surface" data-steering-type={type ?? 'all'}>
-      <div className="wk-se-scroll" ref={scrollRef}>
-        {title !== undefined && (
-          <header className="wk-se-head">
-            <h1 className="wk-se-title">{title}</h1>
-            {intro !== undefined && <p className="wk-se-intro">{intro}</p>}
-          </header>
-        )}
-        {tiles}
-        <div className="wk-se-split">
-          <aside className="wk-se-side">
-            <ul className="wk-se-types" aria-label="Steering types" data-testid="steer-types">
-              {typeCard(null)}
-              {STEERING_TYPES.map((t) => typeCard(t))}
-            </ul>
-            {!phone && health}
-          </aside>
+    <div className="wk-se wk-se--calm" data-testid="steer-surface" data-steering-type={type ?? 'all'}>
+      <div className="wk-se-scroll wk-calm" ref={scrollRef}>
+        <div className="wk-calm-col">
+          <CalmHead title={title ?? 'Steering'} sentence={sentence} sentenceTestId="steer-sentence" action={action} />
           {list}
-          {phone && health}
+          {health}
         </div>
       </div>
-
       {dock !== null && (
         <div ref={dockRef} className="wk-se-dock" role="dialog" aria-label="Steering assistant" data-testid="steer-dock" hidden={!dockOpen}
           {...(phone ? { 'aria-modal': true } : {})}
