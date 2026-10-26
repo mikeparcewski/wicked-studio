@@ -4,10 +4,20 @@
  *  - a 32 px title, one 17 px sentence, at most one primary action;
  *  - lists are roomy two-line rows (16 px title, 14 px muted line, a status dot, the time on the right);
  *  - everything secondary is folded away (a closed <details> row with a chevron);
- *  - every hover is an accent tint a person can see (rest -> hover dE_OK >= 0.08, measured in the
+ *  - every hover is a fill a person can see (rest -> hover dE_OK >= 0.08, measured in the
  *    browser), and every control has the keyboard focus ring. */
 
-.wk-ue { display: flex; justify-content: center; padding: var(--space-8, 32px) 0 var(--space-16, 64px); }
+.wk-ue {
+  display: flex; justify-content: center; padding: var(--space-8, 32px) 0 var(--space-16, 64px);
+  /* The hover fills are the INK, not the accent: the accent is the operator's own colour (a dark teal
+   * on a dark canvas, near black in light) and its tint can vanish, while the ink always stands off the
+   * canvas. Measured in all four themes with the rig's own accent: rest -> hover dE_OK >= 0.08. */
+  --ue-hover: color-mix(in oklab, var(--ink-high) 12%, transparent);
+  --ue-hover-strong: color-mix(in oklab, var(--ink-high) 16%, transparent);
+  --ue-press: color-mix(in oklab, var(--ink-high) 20%, transparent);
+  /* Link words: the accent leaned toward the ink, so a dark accent on a dark canvas still reads (measured 1.55:1 as the bare accent). */
+  --ue-link: color-mix(in oklab, var(--accent) 50%, var(--ink-high));
+}
 .wk-ue-col { width: 100%; max-width: 840px; display: flex; flex-direction: column; gap: 40px; min-width: 0; }
 
 .wk-ue-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; }
@@ -35,8 +45,8 @@
   color: var(--ink-body); font-family: inherit; font-size: 14px; cursor: pointer; text-align: left;
   transition: background-color 0.14s, border-color 0.14s, color 0.14s;
 }
-.wk-ue-chip:hover { background: color-mix(in oklab, var(--accent) 22%, transparent); border-color: color-mix(in oklab, var(--accent) 70%, var(--ink-high)); color: var(--ink-high); }
-.wk-ue-chip:active { background: color-mix(in oklab, var(--accent) 32%, transparent); }
+.wk-ue-chip:hover { background: var(--ue-hover-strong); border-color: color-mix(in oklab, var(--accent) 70%, var(--ink-high)); color: var(--ink-high); }
+.wk-ue-chip:active { background: var(--ue-press); }
 .wk-ue-chip:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-shadow: var(--focus-ring); }
 
 /* Buttons: 44 px tall, 16 px words; hover moves the fill toward the ink. */
@@ -49,22 +59,25 @@
 .wk-ue-btn:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-shadow: var(--focus-ring); }
 .wk-ue-btn:disabled { cursor: default; opacity: 0.6; }
 .wk-ue-btn--primary { border: 0; background: var(--accent); color: var(--accent-fg); }
-.wk-ue-btn--primary:hover:not(:disabled) { background: color-mix(in oklab, var(--accent) 72%, var(--ink-high)); color: var(--accent-fg); transform: translateY(-1px); }
-.wk-ue-btn--primary:active:not(:disabled) { background: color-mix(in oklab, var(--accent) 60%, var(--ink-high)); transform: none; }
+.wk-ue-btn--primary:hover:not(:disabled) {
+  /* Toward its own words' colour: the one direction that always moves off the accent, whatever it is. */
+  background: color-mix(in oklab, var(--accent) 80%, var(--accent-fg)); color: var(--accent-fg); transform: translateY(-1px);
+}
+.wk-ue-btn--primary:active:not(:disabled) { background: color-mix(in oklab, var(--accent) 72%, var(--accent-fg)); transform: none; }
 .wk-ue-btn--secondary { border: 1px solid var(--border-strong); background: transparent; color: var(--ink-high); font-weight: 500; }
 .wk-ue-btn--secondary:hover:not(:disabled) {
-  background: color-mix(in oklab, var(--accent) 22%, transparent); border-color: color-mix(in oklab, var(--accent) 70%, var(--ink-high)); color: var(--ink-high);
+  background: var(--ue-hover-strong); border-color: color-mix(in oklab, var(--accent) 70%, var(--ink-high)); color: var(--ink-high);
 }
-.wk-ue-btn--secondary:active:not(:disabled) { background: color-mix(in oklab, var(--accent) 32%, transparent); }
+.wk-ue-btn--secondary:active:not(:disabled) { background: var(--ue-press); }
 .wk-ue-btn--sm { min-height: 36px; padding: 0 14px; font-size: 14px; }
 /* The ⋯ button: a square secondary. */
 .wk-ue-btn--icon { width: 44px; padding: 0; }
 
 .wk-ue-link, .wk-ue-linkbtn {
-  color: var(--accent); text-decoration: none; border-radius: var(--radius-sm); font-size: 15px; font-family: inherit;
+  color: var(--ue-link); text-decoration: none; border-radius: var(--radius-sm); font-size: 15px; font-family: inherit;
   background: none; border: 0; padding: 2px 4px; cursor: pointer; transition: color 0.14s, background-color 0.14s;
 }
-.wk-ue-link:hover, .wk-ue-linkbtn:hover { text-decoration: underline; text-underline-offset: 3px; background: color-mix(in oklab, var(--accent) 14%, transparent); }
+.wk-ue-link:hover, .wk-ue-linkbtn:hover { text-decoration: underline; text-underline-offset: 3px; background: var(--ue-hover); }
 .wk-ue-link:focus-visible, .wk-ue-linkbtn:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-shadow: var(--focus-ring); }
 
 /* Sections: a quiet label, then the rows. */
@@ -83,8 +96,8 @@
   color: inherit; text-decoration: none; text-align: left; font: inherit; background: transparent; border: 0; cursor: pointer;
   transition: background-color 0.14s;
 }
-.wk-ue-row:hover { background: color-mix(in oklab, var(--accent) 16%, transparent); }
-.wk-ue-row:active { background: color-mix(in oklab, var(--accent) 24%, transparent); }
+.wk-ue-row:hover { background: var(--ue-hover); }
+.wk-ue-row:active { background: var(--ue-press); }
 .wk-ue-row:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-shadow: var(--focus-ring); }
 .wk-ue-row-main { display: flex; flex-direction: column; gap: 4px; flex: 1 1 auto; min-width: 0; }
 .wk-ue-row-title { font-size: 16px; font-weight: 500; line-height: 1.4; color: var(--ink-high); overflow-wrap: anywhere; }
@@ -119,7 +132,7 @@
   transition: background-color 0.14s;
 }
 .wk-ue-fold-sum::-webkit-details-marker { display: none; }
-.wk-ue-fold-sum:hover { background: color-mix(in oklab, var(--accent) 16%, transparent); }
+.wk-ue-fold-sum:hover { background: var(--ue-hover); }
 .wk-ue-fold-sum:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-shadow: var(--focus-ring); }
 .wk-ue-fold[open] > .wk-ue-fold-sum { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
 .wk-ue-fold-words { display: flex; flex-direction: column; gap: 4px; flex: 1 1 auto; min-width: 0; }
@@ -128,7 +141,7 @@
 .wk-ue-fold-chev { flex-shrink: 0; color: var(--ink-muted); transition: transform 0.14s, color 0.14s; }
 .wk-ue-fold-sum:hover .wk-ue-fold-chev { color: var(--accent); }
 .wk-ue-fold[open] .wk-ue-fold-chev { transform: rotate(90deg); }
-.wk-ue-fold-body { padding: 4px 20px 20px; display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.wk-ue-fold-body { padding: 16px 20px 20px; display: flex; flex-direction: column; gap: 16px; min-width: 0; }
 
 /* Evaluate's detail: a back link, the type's sentence, then its behaviours. */
 .wk-ue-stats { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
@@ -152,19 +165,6 @@
 .wk-ue-caveats { gap: 8px; }
 .wk-ue-back { display: inline-flex; align-items: center; gap: 6px; align-self: flex-start; }
 
-/* The ⋯ menu. */
-.wk-ue-menuwrap { position: relative; }
-.wk-ue-menu {
-  position: absolute; right: 0; top: calc(100% + 6px); z-index: 30; min-width: 240px; list-style: none; margin: 0; padding: 6px;
-  border-radius: 14px; background: var(--surface-overlay); box-shadow: var(--shadow-overlay), inset 0 0 0 1px var(--border-subtle);
-}
-.wk-ue-menu-item {
-  display: block; width: 100%; padding: 10px 12px; border: 0; border-radius: 10px; background: transparent; text-align: left;
-  font-family: inherit; font-size: 15px; color: var(--ink-high); cursor: pointer; transition: background-color 0.14s;
-}
-.wk-ue-menu-item:hover { background: color-mix(in oklab, var(--accent) 20%, transparent); }
-.wk-ue-menu-item:focus-visible { outline: 2px solid transparent; box-shadow: var(--focus-ring); }
-
 @media (prefers-reduced-motion: reduce) {
   .wk-ue-btn, .wk-ue-row, .wk-ue-ask, .wk-ue-chip, .wk-ue-fold-sum, .wk-ue-fold-chev, .wk-ue-row-go { transition: none; }
   .wk-ue-btn--primary:hover:not(:disabled) { transform: none; }
@@ -183,8 +183,12 @@
   .wk-ue-ask-input { padding: 0 12px; }
   .wk-ue-row { gap: 14px; padding: 14px 12px; margin: 0 -12px; width: calc(100% + 24px); }
   .wk-ue-row-meta { font-size: 13px; }
+  /* A phone has the width for the words or the ellipsis, not both: the line wraps. */
+  .wk-ue-row-sub { white-space: normal; }
+  /* A hosted page (Evaluate) has no Desk gutter of its own on a phone. */
+  .wk-desk2-hosted .wk-ue { padding-left: 16px; padding-right: 16px; }
   .wk-ue-repo { flex-direction: column; align-items: flex-start; }
   .wk-ue-stats { grid-template-columns: 1fr; gap: 10px; }
   .wk-ue-fold-sum { padding: 16px; }
-  .wk-ue-fold-body { padding: 4px 16px 16px; }
+  .wk-ue-fold-body { padding: 12px 16px 16px; }
 }

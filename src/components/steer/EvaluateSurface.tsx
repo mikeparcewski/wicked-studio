@@ -253,7 +253,7 @@ export function EvaluateSurface({ navigate, title = 'Evaluate', intro = SENTENCE
   if (open !== null && ev !== null) {
     return (
       <TypeDetail open={open} rows={rows} latest={source!} navigate={navigate} rules={ruleMap} daemonStore={daemonStore ?? null}
-        onBack={() => setOpen(null)} onDraft={draft} runButton={runButton} runNotes={runNotes} summaryLine={summaryLine} />
+        onBack={() => setOpen(null)} onDraft={draft} runNotes={runNotes} summaryLine={summaryLine} />
     );
   }
 
@@ -378,7 +378,7 @@ export function EvaluateSurface({ navigate, title = 'Evaluate', intro = SENTENCE
 }
 
 /** One steering type's detail (or every behaviour): its numbers, its gaps to close, and its behaviours. */
-function TypeDetail({ open, rows, latest, navigate, rules, daemonStore, onBack, onDraft, runButton, runNotes, summaryLine }: {
+function TypeDetail({ open, rows, latest, navigate, rules, daemonStore, onBack, onDraft, runNotes, summaryLine }: {
   open: SteeringType | 'all';
   rows: readonly TypeRow[];
   latest: EvalSource;
@@ -387,7 +387,6 @@ function TypeDetail({ open, rows, latest, navigate, rules, daemonStore, onBack, 
   daemonStore: string | null;
   onBack: () => void;
   onDraft: (t: SteeringType, gaps: readonly EvalResult[]) => void;
-  runButton: React.ReactNode;
   runNotes: React.ReactNode;
   summaryLine: React.ReactNode;
 }): React.ReactElement {
@@ -415,15 +414,14 @@ function TypeDetail({ open, rows, latest, navigate, rules, daemonStore, onBack, 
           <div className="wk-ue-head-words">
             <h1 className="wk-ue-title">{name}</h1>
             <p className="wk-ue-sentence">{row?.words ?? `${results.length} behaviours replayed against every steering type.`}</p>
+            <p data-testid="testing-evals-provenance" className="wk-ue-note">
+              <span title={absTime(src.at)}>Ran {relTime(src.at)}</span> · Corpus: {src.corpus ?? 'built-in sample set'} · {results.length} sample{results.length === 1 ? '' : 's'}
+              {src.typeFilter !== null ? ` · ${STEERING_TYPE_LABELS[src.typeFilter as SteeringType] ?? src.typeFilter} only` : ''}
+            </p>
           </div>
-          <div className="wk-ue-head-acts">{runButton}</div>
         </header>
         {runNotes}
         {summaryLine}
-        <p data-testid="testing-evals-provenance" className="wk-ue-note">
-          <span title={absTime(src.at)}>Ran {relTime(src.at)}</span> · Corpus: {src.corpus ?? 'built-in sample set'} · {results.length} sample{results.length === 1 ? '' : 's'}
-          {src.typeFilter !== null ? ` · ${STEERING_TYPE_LABELS[src.typeFilter as SteeringType] ?? src.typeFilter} only` : ''}
-        </p>
         {src.degraded === 'facet-only' && <p data-testid="testing-evals-degraded" className="wk-ue-note"><b>Tags only:</b> {EVAL_FACET_MATCH_EXPLANATION}</p>}
 
         <ul className="wk-ue-stats" data-testid="evaluate-tiles">

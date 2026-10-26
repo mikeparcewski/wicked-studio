@@ -78,15 +78,17 @@ export function UnderstandPage({ project, navigate, now, compare }: {
     <div className="wk-ue" data-testid="understand-page">
       <div className="wk-ue-col">
         <header className="wk-ue-head">
-          <h1 className="wk-ue-title">Understand</h1>
-          <p className="wk-ue-sentence">Ask how your code fits together. Answers cite the code they come from.</p>
+          <div className="wk-ue-head-words">
+            <h1 className="wk-ue-title">Understand</h1>
+            <p className="wk-ue-sentence">Ask how your code fits together. Answers cite the code they come from.</p>
+          </div>
         </header>
 
         <div className="wk-ue-askwrap">
           <form className="wk-ue-ask" role="search" aria-label="Ask about your code" onSubmit={ask} data-testid="understand-ask">
             <label htmlFor={boxId} className="wk-visually-hidden">Your question</label>
             <input id={boxId} ref={inputRef} type="text" value={q} onChange={(e) => setQ(e.target.value)} autoComplete="off"
-              placeholder="e.g. What breaks if I change the floor’s cache?" className="wk-ue-ask-input" data-testid="understand-ask-input" />
+              placeholder="e.g. Who calls the deliver step?" className="wk-ue-ask-input" data-testid="understand-ask-input" />
             <button type="submit" className="wk-ue-btn wk-ue-btn--primary" data-testid="understand-ask-send">Ask</button>
           </form>
           <ul className="wk-ue-chips" aria-label="Suggested questions">
@@ -166,10 +168,7 @@ function ExploreGraph({ repos, failed, navigate }: { repos: RepoEntry[] | null; 
           <ul className="wk-ue-rows" aria-label="Repositories">
             {repos.map((r) => (
               <li key={r.id} className="wk-ue-repo" data-testid="understand-graph-repo">
-                <span className="wk-ue-row-main">
-                  <span className="wk-ue-row-title">{r.name}</span>
-                  <span className="wk-ue-row-sub">Hotspots, and what depends on each symbol</span>
-                </span>
+                <span className="wk-ue-row-main"><span className="wk-ue-row-title">{r.name}</span></span>
                 <span className="wk-ue-repo-acts">
                   <button type="button" className="wk-ue-btn wk-ue-btn--secondary wk-ue-btn--sm" data-testid="understand-graph-open" onClick={() => setGraphOf(r)}>Open the graph</button>
                   <a href={`/repo-detail/${encodeURIComponent(r.id)}`} className="wk-ue-link" onClick={(e) => { e.preventDefault(); navigate(`/repo-detail/${encodeURIComponent(r.id)}`); }}>Repository page</a>
