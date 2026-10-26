@@ -4,7 +4,9 @@ desk_rail_hover_test.py — CAN A PERSON SEE THE RAIL'S HOVER? (operator 2026-10
 buttons"). The first hover pass tinted items one surface step up (--surface-card), which on the rail's
 own ground measured dE_OK 0.03 (dark) to 0.06 (wicked-dark) and looked the same as rest. This journey
 measures what the eye gets, in a real browser at 1440x700, in every shipped theme (wicked-dark,
-wicked-light, dark, light; each chosen the way the app stores it, with the accent that theme writes).
+wicked-light, dark, light; each chosen the way the app stores it, with the accent that theme writes),
+and again in each theme with a CUSTOM accent picked to sit close to that theme's rail (the accent
+picker takes any hue, saturation and lightness, so the hover cannot rest on the accent alone).
 
 For every interactive rail item type — the wordmark, an icon button (New job), a group icon, a group
 header, a session row, "Show N more", a Workspace link, Settings (General) and the Nerve Center tile:
@@ -12,15 +14,17 @@ header, a session row, "Show N more", a Workspace link, Settings (General) and t
   1. VISIBLE: the hover fill, composited over the rail's own background by the browser (a 1x1 canvas),
      sits dE_OK >= 0.08 (OKLab distance) from the rest fill. The current page's hover (the wordmark on
      the Desk, General on /system) moves >= 0.06 from its wash.
-  2. READABLE: the hovered words keep >= 4.5:1 on the hover fill; every item but the Nerve Center tile
-     (its own ink) goes to full ink (--ink-high).
+  2. READABLE: every visible word in the item (each element with its own text, its colour composited
+     over the fill; badges and the move button carry their own fill and are skipped) keeps >= 4.5:1 on
+     the hover fill; every item but the Nerve Center tile (its own ink) goes to full ink (--ink-high).
   3. THE ICON BUTTONS draw an accent edge on hover: the button's border (the group icon: its inset ring)
      sits dE_OK >= 0.10 from the rail.
-  4. PRESSED is a stronger fill than hover (further from the rail).
+  4. PRESSED (a Workspace link and the wordmark, held down) is a stronger fill than hover (further from
+     the rail), with its words still >= 4.5:1.
   5. REDUCED MOTION: a hovered icon button does not move (transform none); with motion it lifts.
   6. 0 page errors.
 
-Captures: e2e/shots/rail-hover-<theme>.png (the rail with a session row hovered).
+Captures: e2e/shots/rail-hover-<theme>.png (the rail with a session row hovered; preset accents).
 Env: FEEDBACK_PORT (default 4391). Prints a JSON report; exit 0/1.
 """
 
@@ -74,18 +78,19 @@ def de(a, b) -> float:
     return round(math.dist(oklab(a), oklab(b)), 4)
 
 
-def contrast(a, b) -> float:
-    la, lb = (0.2126 * lin(c[0]) + 0.7152 * lin(c[1]) + 0.0722 * lin(c[2]) for c in (a, b))
-    hi, lo = max(la, lb), min(la, lb)
-    return round((hi + 0.05) / (lo + 0.05), 2)
-
-
-THEMES = {
-    "wicked-dark": {"theme": "wicked-dark", "accent_h": 200, "accent_s": 47, "accent_l": 25},
-    "wicked-light": {"theme": "wicked-light", "accent_h": 200, "accent_s": 47, "accent_l": 25},
-    "dark": {"theme": "dark", "accent_h": 230, "accent_s": 74, "accent_l": 68},
-    "light": {"theme": "light", "accent_h": 230, "accent_s": 74, "accent_l": 68},
-}
+HARBOR = {"accent_h": 200, "accent_s": 47, "accent_l": 25}
+IRIS = {"accent_h": 230, "accent_s": 74, "accent_l": 68}
+# (case, data-theme, appearance): each theme with the accent it writes, then with an accent near its rail.
+CASES = [
+    ("wicked-dark", "wicked-dark", {"theme": "wicked-dark", **HARBOR}),
+    ("wicked-light", "wicked-light", {"theme": "wicked-light", **HARBOR}),
+    ("dark", None, {"theme": "dark", **IRIS}),
+    ("light", "light", {"theme": "light", **IRIS}),
+    ("wicked-dark-custom", "wicked-dark", {"theme": "wicked-dark", "accent_h": 240, "accent_s": 50, "accent_l": 0}),
+    ("wicked-light-custom", "wicked-light", {"theme": "wicked-light", "accent_h": 0, "accent_s": 0, "accent_l": 88}),
+    ("dark-custom", None, {"theme": "dark", "accent_h": 210, "accent_s": 25, "accent_l": 8}),
+    ("light-custom", "light", {"theme": "light", "accent_h": 60, "accent_s": 100, "accent_l": 68}),
+]
 # (name, selector, kind): kind "button" = an icon button (accent edge), "nc" = the Nerve Center tile.
 ITEMS = [
     ("wordmark", '[data-testid="desk-rail-home"]', "current"),
@@ -106,6 +111,25 @@ PAINT = """([under, fills]) => { const c = document.createElement('canvas'); c.w
     x.fillStyle = f; x.fillRect(0, 0, 1, 1); return Array.from(x.getImageData(0, 0, 1, 1).data).slice(0, 3); }); }"""
 STYLE = """e => { const s = getComputedStyle(e); return { bg: s.backgroundColor, color: s.color,
   border: s.borderTopColor, borderW: s.borderTopWidth, shadow: s.boxShadow, transform: s.transform }; }"""
+# The lowest contrast of any visible word in `el` on `fill` (an opaque rgb string): every element with
+# its own text, its colour composited over the fill; a descendant with its own fill (a badge, the move
+# button) or display:none is skipped.
+WORDS = """(el, fill) => { const c = document.createElement('canvas'); c.width = c.height = 1;
+  const x = c.getContext('2d', { willReadFrequently: true });
+  const paint = (f) => { x.clearRect(0, 0, 1, 1); x.fillStyle = fill; x.fillRect(0, 0, 1, 1); x.fillStyle = f;
+    x.fillRect(0, 0, 1, 1); return Array.from(x.getImageData(0, 0, 1, 1).data).slice(0, 3); };
+  const lin = (v) => { v /= 255; return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; };
+  const lum = (p) => 0.2126 * lin(p[0]) + 0.7152 * lin(p[1]) + 0.0722 * lin(p[2]);
+  const bg = paint('transparent'); let min = 99, who = null;
+  const own = (n) => { for (let a = n; a && a !== el; a = a.parentElement) {
+    const s = getComputedStyle(a); if (s.display === 'none' || s.visibility === 'hidden' || Number(s.opacity) === 0) return true;
+    if (s.backgroundColor !== 'rgba(0, 0, 0, 0)') return true; } return false; };
+  for (const n of [el, ...el.querySelectorAll('*')]) {
+    if (![...n.childNodes].some((t) => t.nodeType === 3 && t.textContent.trim())) continue;
+    if (own(n)) continue;
+    const ink = paint(getComputedStyle(n).color); const [hi, lo] = [lum(ink), lum(bg)].sort((a, b) => b - a);
+    const r = (hi + 0.05) / (lo + 0.05); if (r < min) { min = r; who = n.className || n.tagName; } }
+  return [Math.round(min * 100) / 100, String(who)]; }"""
 INK_HIGH = """() => { const p = document.createElement('div'); p.style.color = 'var(--ink-high)';
   document.body.appendChild(p); const v = getComputedStyle(p).color; p.remove(); return v; }"""
 # The first colour in an inset box-shadow (the group icon's hover ring).
@@ -133,7 +157,7 @@ def settle(page, el=None) -> None:
 with sync_playwright() as p:
     browser = p.chromium.launch()
     results: dict = {}
-    for theme, appearance in THEMES.items():
+    for case, want, appearance in CASES:
         ctx = browser.new_context(viewport={"width": W, "height": H}, device_scale_factor=1)
         page = ctx.new_page()
         page.on("pageerror", lambda e: errors.append(str(e)))
@@ -144,38 +168,57 @@ with sync_playwright() as p:
         set_fixture(origin, wave1=True, wave2b=True, project_dto=True, appearance={**DEFAULT_APPEARANCE, **appearance})
         page.goto(f"{origin}/", wait_until="networkidle")
         page.get_by_test_id("session-rail").wait_for(state="visible", timeout=15000)
-        want = None if theme == "dark" else theme
-        page.wait_for_function("(t) => document.documentElement.getAttribute('data-theme') === t", arg=want, timeout=10000)
+        page.wait_for_function(
+            "([t, l]) => document.documentElement.getAttribute('data-theme') === t"
+            " && document.documentElement.style.getPropertyValue('--_accent-l') === l",
+            arg=[want, f"{appearance['accent_l']}%"], timeout=10000)
         page.locator('[data-testid="rail-session"]').first.wait_for(state="visible", timeout=10000)
         rail_bg = page.get_by_test_id("session-rail").evaluate("e => getComputedStyle(e).backgroundColor")
         ink_high = page.evaluate(INK_HIGH)
+        base = page.evaluate(PAINT, [rail_bg, [rail_bg]])[0]
+        opaque = lambda c: "rgb(%d, %d, %d)" % tuple(c)  # noqa: E731
         rows: dict = {}
         for name, sel, kind in ITEMS:
             el = page.locator(sel).first
             if el.count() == 0:
-                fail(f"{theme}:{name}", f"no {sel} in the rail")
+                fail(f"{case}:{name}", f"no {sel} in the rail")
             el.scroll_into_view_if_needed()
             settle(page)
             rest = el.evaluate(STYLE)
             settle(page, el)
             hov = el.evaluate(STYLE)
-            rest_rgb, hov_rgb, ink_rgb = page.evaluate(PAINT, [rail_bg, [rest["bg"], hov["bg"], hov["color"]]])
-            row = {"rest": rest["bg"], "hover": hov["bg"], "dE": de(rest_rgb, hov_rgb), "text": contrast(ink_rgb, hov_rgb),
+            rest_rgb, hov_rgb = page.evaluate(PAINT, [rail_bg, [rest["bg"], hov["bg"]]])
+            words, weakest = el.evaluate(WORDS, opaque(hov_rgb))
+            row = {"rest": rest["bg"], "hover": hov["bg"], "dE": de(rest_rgb, hov_rgb), "words": words, "weakest": weakest,
                    "ink": hov["color"]}
-            ok = row["dE"] >= (MIN_DE_CURRENT if kind == "current" else MIN_DE) and row["text"] >= MIN_TEXT
+            ok = row["dE"] >= (MIN_DE_CURRENT if kind == "current" else MIN_DE) and words >= MIN_TEXT
             if kind != "nc":
                 ok = ok and hov["color"] == ink_high
             if kind == "button":
-                edge = page.evaluate(PAINT, [rail_bg, [hov["border"]]])[0]
-                row["edge_dE"] = de(page.evaluate(PAINT, [rail_bg, [rail_bg]])[0], edge)
+                row["edge_dE"] = de(base, page.evaluate(PAINT, [rail_bg, [hov["border"]]])[0])
                 ok = ok and hov["borderW"] != "0px" and row["edge_dE"] >= MIN_EDGE_DE
             if kind == "ring":
                 ring = page.evaluate(RING, hov["shadow"])
                 row["ring"] = ring
-                row["edge_dE"] = de(page.evaluate(PAINT, [rail_bg, [rail_bg]])[0], page.evaluate(PAINT, [rail_bg, [ring]])[0]) if ring else 0
+                row["edge_dE"] = de(base, page.evaluate(PAINT, [rail_bg, [ring]])[0]) if ring else 0
                 ok = ok and row["edge_dE"] >= MIN_EDGE_DE
             row["ok"] = ok
             rows[name] = row
+        # Pressed (held down, released off the rail so nothing navigates): a stronger fill than hover,
+        # its words still AA — a Workspace link, and the wordmark (current on the Desk).
+        for name, sel in (("pressed-link", '[data-testid="desk-rail-skills"]'), ("pressed-wordmark", '[data-testid="desk-rail-home"]')):
+            el = page.locator(sel).first
+            settle(page, el)
+            hov_rgb = page.evaluate(PAINT, [rail_bg, [el.evaluate(STYLE)["bg"]]])[0]
+            page.mouse.down()
+            page.wait_for_timeout(320)
+            press_rgb = page.evaluate(PAINT, [rail_bg, [el.evaluate(STYLE)["bg"]]])[0]
+            words, weakest = el.evaluate(WORDS, opaque(press_rgb))
+            page.mouse.move(*PARK)
+            page.mouse.up()
+            press = {"hover_dE": de(base, hov_rgb), "press_dE": de(base, press_rgb), "words": words, "weakest": weakest}
+            press["ok"] = press["press_dE"] > press["hover_dE"] + 0.02 and words >= MIN_TEXT
+            rows[name] = press
         # Settings while it is the current page: hovering its wash still shows.
         page.get_by_test_id("desk-rail-general").click()
         page.wait_for_function("() => window.location.pathname === '/system'", timeout=5000)
@@ -184,31 +227,20 @@ with sync_playwright() as p:
         rest = gen.evaluate(STYLE)
         settle(page, gen)
         hov = gen.evaluate(STYLE)
-        r_rgb, h_rgb, i_rgb = page.evaluate(PAINT, [rail_bg, [rest["bg"], hov["bg"], hov["color"]]])
-        cur = {"dE": de(r_rgb, h_rgb), "text": contrast(i_rgb, h_rgb)}
-        cur["ok"] = cur["dE"] >= MIN_DE_CURRENT and cur["text"] >= MIN_TEXT
+        r_rgb, h_rgb = page.evaluate(PAINT, [rail_bg, [rest["bg"], hov["bg"]]])
+        words, weakest = gen.evaluate(WORDS, opaque(h_rgb))
+        cur = {"dE": de(r_rgb, h_rgb), "words": words}
+        cur["ok"] = cur["dE"] >= MIN_DE_CURRENT and words >= MIN_TEXT
         rows["settings-current"] = cur
-        # Pressed: a stronger fill than hover (held with the button down, released off the rail).
-        link = page.get_by_test_id("desk-rail-skills")
-        settle(page, link)
-        hov_rgb = page.evaluate(PAINT, [rail_bg, [link.evaluate(STYLE)["bg"]]])[0]
-        page.mouse.down()
-        page.wait_for_timeout(320)
-        press_rgb = page.evaluate(PAINT, [rail_bg, [link.evaluate(STYLE)["bg"]]])[0]
-        page.mouse.move(*PARK)
-        page.mouse.up()
-        base = page.evaluate(PAINT, [rail_bg, [rail_bg]])[0]
-        press = {"hover_dE": de(base, hov_rgb), "press_dE": de(base, press_rgb)}
-        press["ok"] = press["press_dE"] > press["hover_dE"] + 0.02
-        rows["pressed"] = press
-        # The evidence shot: a session row hovered.
-        page.goto(f"{origin}/", wait_until="networkidle")
-        page.locator('[data-testid="rail-session"]').first.wait_for(state="visible", timeout=10000)
-        settle(page, page.locator('[data-testid="rail-session"]:not([aria-current="page"])').first)
-        page.screenshot(path=str(SHOTS / f"rail-hover-{theme}.png"))
+        if not case.endswith("-custom"):
+            # The evidence shot: a session row hovered.
+            page.goto(f"{origin}/", wait_until="networkidle")
+            page.locator('[data-testid="rail-session"]').first.wait_for(state="visible", timeout=10000)
+            settle(page, page.locator('[data-testid="rail-session"]:not([aria-current="page"])').first)
+            page.screenshot(path=str(SHOTS / f"rail-hover-{case}.png"))
         ctx.close()
-        results[theme] = rows
-        check(f"visible:{theme}", all(r["ok"] for r in rows.values()), rail=rail_bg, items=rows)
+        results[case] = rows
+        check(f"visible:{case}", all(r["ok"] for r in rows.values()), rail=rail_bg, items=rows)
 
     # Reduced motion: no lift under reduce; a 1 px lift without it.
     lifts = {}

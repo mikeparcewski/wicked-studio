@@ -84,27 +84,32 @@
    could not be seen). ONE language for every rail item — the wordmark, the four icon buttons, group
    headers and their icons, session rows, "Show N more", the Workspace links (Settings among them) and
    the Nerve Center tile:
-   - hover   = an ACCENT-TINTED fill (18% accent over the rail), text and icon at full ink (--ink-high);
-               the icon buttons also draw an accent edge (50%); the icon buttons and the Nerve Center
-               tile lift 1 px. The tile keeps its state colour: its fill moves toward its own ink
-               (--nc-hover). Hovering the current item deepens its wash the same way;
-   - pressed = a stronger accent fill (34%), flat (no lift);
+   - hover   = an ACCENT-TINTED fill on a theme-owned step: the rail moved 14% toward the theme's
+               full ink (so the step is there whatever accent the picker holds, even one the colour
+               of the rail), tinted 10% with the accent. Text and icon go to full ink (--ink-high);
+               the icon buttons also draw an accent edge (the accent with 40% ink, so it shows on any
+               accent); the icon buttons and the Nerve Center tile lift 1 px. The tile keeps its
+               state colour: its fill moves toward its own ink (--nc-hover). Hovering the current
+               item deepens its wash on the same step (22% accent);
+   - pressed = a stronger step (22% ink, 18% accent), flat (no lift);
    - current = the accent wash (12%), ink-high, and a 3 px accent bar at the start edge (the wordmark:
                the wash only);
    - focus   = the --focus-ring (its gap re-pointed at the rail), inset inside the session scroller so
                the sticky group headers and the scroller's edge never clip it; a transparent outline
                rides along for forced-colors mode.
-   Perceptibility is measured in a real browser, every item in all four themes: the hover fill must sit
-   dE_OK >= 0.08 from the rest fill over the rail, with its words at 4.5:1 (e2e/desk_rail_hover_test.py).
+   Perceptibility is measured in a real browser, every item in all four themes with their own accents
+   and with an accent near the rail: the hover fill must sit dE_OK >= 0.08 from the rest fill over the
+   rail, every word at 4.5:1 on it (e2e/desk_rail_hover_test.py).
    Tokens only. 140 ms ease; under reduced motion nothing moves — colour only. ── */
 /* --focus-ring is re-declared, not only --focus-gap: a custom property's var() resolves where it is
    declared (:root), so re-pointing the gap alone would leave the ring's gap the page colour. */
 .wk-rail {
   --focus-gap: var(--surface-rail); --focus-ring: 0 0 0 2px var(--focus-gap), 0 0 0 4px var(--accent);
-  --rail-hover-bg: color-mix(in oklab, var(--accent) 18%, transparent);
-  --rail-hover-current-bg: color-mix(in oklab, var(--accent) 28%, transparent);
-  --rail-hover-edge: color-mix(in oklab, var(--accent) 50%, transparent);
-  --rail-press-bg: color-mix(in oklab, var(--accent) 34%, transparent);
+  --rail-hover-step: color-mix(in oklab, var(--ink-high) 14%, var(--surface-rail));
+  --rail-hover-bg: color-mix(in oklab, var(--accent) 10%, var(--rail-hover-step));
+  --rail-hover-current-bg: color-mix(in oklab, var(--accent) 22%, var(--rail-hover-step));
+  --rail-hover-edge: color-mix(in oklab, color-mix(in oklab, var(--accent) 60%, var(--ink-high)) 60%, transparent);
+  --rail-press-bg: color-mix(in oklab, var(--accent) 18%, color-mix(in oklab, var(--ink-high) 22%, var(--surface-rail)));
 }
 .wk-rail :is(.wk-rail-home, .wk-rail-action, .wk-rail-group-toggle, .wk-rail-icon-btn, .wk-rail-session, .wk-rail-showmore, .wk-rail-link, .wk-nc-tile) {
   transition: background-color 140ms ease, color 140ms ease, border-color 140ms ease, box-shadow 140ms ease, transform 140ms ease;
@@ -112,8 +117,9 @@
 .wk-rail :is(.wk-rail-home, .wk-rail-action, .wk-rail-group-toggle, .wk-rail-icon-btn, .wk-rail-session, .wk-rail-showmore, .wk-rail-link):hover {
   background: var(--rail-hover-bg); color: var(--ink-high); box-shadow: none;
 }
-/* Icons and the quiet parts of a row follow the row's ink on hover. */
-.wk-rail :is(.wk-rail-group-toggle, .wk-rail-session):hover :is(.wk-rail-fold-chevron, .wk-rail-session-tag) { color: var(--ink-high); }
+/* Icons and the quiet parts of an item (the wordmark's "wicked", a group's chevron, a row's tag) follow
+   its ink on hover and press: muted ink on the stronger fills is where words would fall under 4.5:1. */
+.wk-rail :is(.wk-rail-home, .wk-rail-group-toggle, .wk-rail-session):is(:hover, :active) :is(.wk-rail-brand, .wk-rail-fold-chevron, .wk-rail-session-tag) { color: var(--ink-high); }
 .wk-rail .wk-rail-action:hover { border-color: var(--rail-hover-edge); }
 .wk-rail .wk-rail-icon-btn:hover { box-shadow: inset 0 0 0 1px var(--rail-hover-edge); }
 .wk-rail .wk-rail-showmore:hover { text-decoration: underline; }
