@@ -175,13 +175,15 @@ describe('Desk views after the sidebar regroup (ui-v2, 2026-10-26): pages on the
     expect(navigate).toHaveBeenLastCalledWith('/projects/p1?tab=steer');
   });
 
-  it.each([['work', 'Home'], ['runs', 'Jobs'], ['report', 'Report'], ['understand', 'Understand']] as const)('the global %s view is a page: no tabs, titled %s', (view, title) => {
+  it.each([['work', null], ['runs', 'Jobs'], ['report', 'Report'], ['understand', 'Understand']] as const)('the global %s view is a page: no tabs, titled %s', (view, title) => {
     render(<DeskV2 {...props()} view={view} search="?tab=memory" />);
     expect(screen.queryByTestId('desk-tabs')).toBeNull();
     // No tab names a Desk view (a page's own tabs, like the inbox's folders, are its business).
     for (const t of DESK_TABS) expect(screen.queryByRole('tab', { name: t.label })).toBeNull();
     // `?tab=` on a global page means nothing any more (App redirects the old addresses first).
     expect(screen.getByTestId('desk')).toHaveAttribute('data-tab', view);
-    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(title);
+    // Home is the landing: its greeting is its title (home v2); the others carry the page's one name.
+    if (title === null) expect(screen.getByTestId('desk-work')).toHaveAttribute('data-home', 'v2');
+    else expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(title);
   });
 });
