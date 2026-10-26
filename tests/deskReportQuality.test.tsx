@@ -151,7 +151,8 @@ describe('Report quality checks', () => {
     expect(tabs[0]).toHaveFocus();
     expect(navigate).toHaveBeenLastCalledWith('/projects/p1');
     for (const tab of DESK_TABS) {
-      if (tab.id === 'work') continue;
+      // Needs you in full is the Desk's alone (a project's Work view holds its own inbox).
+      if (tab.id === 'work' || tab.deskOnly === true) continue;
       rerender(<DeskV2 {...props} search={`?tab=${tab.id}`} />);
       const active = screen.getByTestId(`desk-tab-${tab.id}`);
       const panel = screen.getByRole('tabpanel', { name: tab.label });
@@ -178,9 +179,10 @@ describe('Desk tabs, grouped (2026-10-26: nine tabs at one level read as a mainf
     expect(more).toHaveAttribute('aria-expanded', 'true');
     expect(panel).toBeVisible();
     // Every Desk view is either a tab or a More item — none is lost.
-    const items = DESK_TABS.filter((t) => t.group === 'more');
+    const items = DESK_TABS.filter((t) => t.group === 'more' && t.deskOnly !== true);
     expect(items.map((t) => t.id)).toEqual(['understand', 'steer', 'memory', 'agents', 'evaluate']);
-    for (const t of DESK_TABS) {
+    expect(screen.queryByTestId('desk-more-tab-inbox')).not.toBeInTheDocument();
+    for (const t of DESK_TABS.filter((x) => x.deskOnly !== true)) {
       const el = t.group === 'primary' ? screen.getByTestId(`desk-tab-${t.id}`) : screen.getByTestId(`desk-more-tab-${t.id}`);
       expect(el).toHaveTextContent(t.label);
       if (t.group === 'more') expect(el).toHaveTextContent(t.hint!);
@@ -188,6 +190,21 @@ describe('Desk tabs, grouped (2026-10-26: nine tabs at one level read as a mainf
     fireEvent.click(screen.getByTestId('desk-more-tab-steer'));
     expect(navigate).toHaveBeenLastCalledWith('/projects/p1?tab=steer');
     expect(more).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('the Desk has Needs you in full under More (the landing\'s "N more waiting"); a project page does not', () => {
+    const navigate = vi.fn();
+    const { rerender } = render(<DeskV2 runs={[]} runsLoaded needRows={[]} now={NOW} navigate={navigate} search="" />);
+    fireEvent.click(screen.getByTestId('desk-tabs-more'));
+    expect(screen.getByTestId('desk-more-tab-inbox')).toHaveTextContent('Needs you');
+    fireEvent.click(screen.getByTestId('desk-more-tab-inbox'));
+    expect(navigate).toHaveBeenLastCalledWith('/?tab=inbox');
+    rerender(<DeskV2 runs={[]} runsLoaded needRows={[]} now={NOW} navigate={navigate} search="?tab=inbox" />);
+    expect(screen.getByTestId('desk-inbox-view')).toBeInTheDocument();
+    expect(screen.getByTestId('desk-tab-inbox')).toHaveAttribute('aria-selected', 'true');
+    rerender(<DeskV2 runs={[]} runsLoaded needRows={[]} now={NOW} navigate={navigate} search="?tab=inbox" projectId="p1" />);
+    expect(screen.queryByTestId('desk-inbox-view')).not.toBeInTheDocument();
+    expect(screen.getByTestId('desk-tab-work')).toHaveAttribute('aria-selected', 'true');
   });
 
   it('Escape closes More and gives the button its focus back', () => {

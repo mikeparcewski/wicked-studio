@@ -115,7 +115,8 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
   const scroller = useRef<HTMLDivElement | null>(null);
   useHistoryScroll(scroller, 'desk.scroll');
   const query = new URLSearchParams(search);
-  const tab: DeskTab = (DESK_TABS.find((t) => t.id === query.get('tab'))?.id) ?? 'work';
+  // `deskOnly` views (Needs you) exist on the Desk alone: a project's Work view already holds its inbox.
+  const tab: DeskTab = (DESK_TABS.find((t) => t.id === query.get('tab') && (projectId === undefined || t.deskOnly !== true))?.id) ?? 'work';
   const focus = query.get('focus');
   const goTab = (t: DeskTab): void => navigate(tabPath(t));
   const tabPrefix = useId();
@@ -373,7 +374,7 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
 
   // Nine views at one level read as a mainframe menu bar (2026-10-26): the four daily views are tabs; the rest
   // sit under More. The open one of those is shown as a tab of its own, so you always see where you are.
-  const shownTabs = DESK_TABS.filter((t) => t.group === 'primary' || t.id === tab);
+  const shownTabs = DESK_TABS.filter((t) => (t.group === 'primary' || t.id === tab) && (projectId === undefined || t.deskOnly !== true));
   const tabs = (
     <div className="wk-desk2-tabbar">
       <div role="tablist" aria-label="Desk view" className="wk-desk2-tabs" data-testid="desk-tabs">
@@ -384,7 +385,7 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
             onClick={(e) => { e.preventDefault(); goTab(t.id); }}>{t.label}</a>
         ))}
       </div>
-      <DeskTabsMore current={tab} pathOf={tabPath} go={(t) => {
+      <DeskTabsMore current={tab} pathOf={tabPath} onDesk={projectId === undefined} go={(t) => {
         // A new view focuses its tab once it is drawn; the view already open has its tab now, so it takes focus now.
         if (t === tab) { goTab(t); document.getElementById(tabId(t))?.focus(); return; }
         keyboardFocus.current = tabId(t); goTab(t);
@@ -427,13 +428,40 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
 
   // THE LANDING: the Desk's own Work view (`/`) is home v2; a project's page keeps its inbox and stream.
   const home = projectId === undefined;
+  // Needs you, in full (`?tab=inbox`, the landing's "N more waiting"): the inbox the Work view had, with
+  // the chores for whoever runs studio riding at its top, as before.
+  const inboxView = (
+    <div role="tabpanel" id={panelId('inbox')} aria-labelledby={tabId('inbox')} data-testid="desk-inbox-view" className="wk-inbox-view">
+      <DeskInbox rows={needRows} runs={runs} navigate={navigate} now={now} settled={readState === 'known' ? settled.phase : 'loading'} agentName={agentName} extra={choresBlock} setupCount={setup.length}
+        missing={settled.missing} onRetry={rereadSources} retrying={rereading} />
+    </div>
+  );
+  // The standing states that change what studio does (deliveries frozen, you marked away) and the
+  // governance replay: rare, and nowhere else to act on them, so the landing keeps them while they hold.
+  const homeStates = (states.frozen || states.away || dead !== null || replaying) ? (
+    <section data-testid="desk-chores" aria-label="For whoever runs studio" className="wk-home-states">
+      <DeskStateRows frozen={states.frozen} away={states.away} />
+      {(dead !== null || replaying) && (
+        <div data-testid="desk-chore" data-chore="deadletters" className="wk-desk-need wk-desk-need--wrap">
+          <span aria-hidden className="wk-desk-dot wk-desk-dot--blocked" />
+          <span className="wk-desk-need-body">
+            <span className="wk-desk-need-title">{dead?.title ?? 'Governance evidence'}</span>
+            <span data-testid="desk-chore-line" className="wk-desk-need-line" title={dead?.line}>{dead?.line ?? 'Replayed. Checking again.'}</span>
+          </span>
+          <ReplayMove replay={replay} />
+        </div>
+      )}
+    </section>
+  ) : null;
   const homeView = (
     <DeskHome runs={runs} runsShown={runsShown} read={readState === 'failed' ? 'failed' : readState === 'checking' ? 'checking' : 'known'}
-      needRows={needRows} settled={readState === 'known' || readState === 'stale' ? settled.phase : 'loading'} missing={settled.missing}
+      needRows={needRows} settled={readState === 'known' || readState === 'stale' ? settled.phase : 'loading'} count={settled.count} missing={settled.missing}
       onRetryNeeds={rereadSources} retryingNeeds={rereading} navigate={navigate} now={now} agentName={agentName} pathOfRun={pathOfRun}
-      setup={setup} chores={chores} onSignIn={setSignIn} reportPath={tabPath('report')}
+      setup={setup} reportPath={tabPath('report')}
       more={<DeskMore runs={runs} needs={readState === 'known' ? needRows.length : null} />}
       handover={handover.since !== null ? <HandoverPanel handover={handover} navigate={navigate} now={now} runs={runs} /> : null}
+      states={homeStates}
+      ruleLine={<DeskRuleLine navigate={navigate} />}
       panelId={panelId('work')} labelledBy={tabId('work')} />
   );
 
@@ -569,14 +597,14 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
         {/* The landing (`/`, Work): home v2 carries its own greeting where the Desk's title was, under the same tabs. */}
         {!home && header}
         {tabs}
-        {tab === 'work' ? (home ? homeView : work) : tab === 'runs' ? runsTab : tab === 'report' ? report : understand}
+        {tab === 'work' ? (home ? homeView : work) : tab === 'inbox' ? inboxView : tab === 'runs' ? runsTab : tab === 'report' ? report : understand}
       </div>
       {signIn !== null && <AgentModal agentKey={signIn.key} onClose={() => setSignIn(null)} />}
     </div>
   );
 }
 
-export type DeskTab = 'work' | 'runs' | 'repositories' | 'report' | 'understand' | 'steer' | 'memory' | 'agents' | 'evaluate';
+export type DeskTab = 'work' | 'inbox' | 'runs' | 'repositories' | 'report' | 'understand' | 'steer' | 'memory' | 'agents' | 'evaluate';
 export type HostedTab = 'repositories' | 'steer' | 'memory' | 'agents' | 'evaluate';
 const HOSTED: readonly HostedTab[] = ['repositories', 'steer', 'memory', 'agents', 'evaluate'];
 function isHosted(t: DeskTab): t is HostedTab { return (HOSTED as readonly string[]).includes(t); }
@@ -585,8 +613,10 @@ function isHosted(t: DeskTab): t is HostedTab { return (HOSTED as readonly strin
  * The Desk's tabs, in order (the address carries `?tab=`; Work is the default). `primary` = a tab in the bar;
  * `more` = under More (the open one shows in the bar too). Every `?tab=` address works either way.
  */
-export const DESK_TABS: readonly { id: DeskTab; label: string; group: 'primary' | 'more'; hint?: string }[] = [
+export const DESK_TABS: readonly { id: DeskTab; label: string; group: 'primary' | 'more'; hint?: string; deskOnly?: boolean }[] = [
   { id: 'work', label: 'Work', group: 'primary' },
+  // Home v2: the landing shows one card; "N more waiting" opens every waiting item here, with its moves.
+  { id: 'inbox', label: 'Needs you', group: 'more', hint: 'Everything waiting on you, with what you can do about it', deskOnly: true },
   { id: 'runs', label: 'Runs', group: 'primary' },
   { id: 'repositories', label: 'Repositories', group: 'primary' },
   { id: 'report', label: 'Report', group: 'primary' },
@@ -687,12 +717,12 @@ function InsightCards({ items, loading, recordFailed, navigate, workPath }: { it
  * each with what it is for. The list is always in the page (hidden while closed), so every view stays one
  * address away and findable; Escape or a click outside closes it.
  */
-function DeskTabsMore({ current, pathOf, go }: { current: DeskTab; pathOf: (t: DeskTab) => string; go: (t: DeskTab) => void }): React.ReactElement {
+function DeskTabsMore({ current, pathOf, go, onDesk }: { current: DeskTab; pathOf: (t: DeskTab) => string; go: (t: DeskTab) => void; onDesk: boolean }): React.ReactElement {
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement | null>(null);
   const btn = useRef<HTMLButtonElement | null>(null);
   const listId = useId();
-  const items = DESK_TABS.filter((t) => t.group === 'more');
+  const items = DESK_TABS.filter((t) => t.group === 'more' && (onDesk || t.deskOnly !== true));
   const inMore = items.some((t) => t.id === current);
   useEffect(() => {
     if (!open) return undefined;

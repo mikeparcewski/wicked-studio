@@ -74,6 +74,9 @@
 
 .wk-home-calm, .wk-home-quiet { margin: 0; font-size: 17px; line-height: 1.5; color: var(--ink-muted); }
 
+/* Standing states (frozen deliveries, marked away, a governance replay): quiet rows, only while they hold. */
+.wk-home-states { display: flex; flex-direction: column; gap: 8px; margin-top: -24px; }
+
 /* In progress: rows, no card chrome; the whole row is the link and tints on hover. */
 .wk-home-jobs { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
 .wk-home-job {
@@ -94,6 +97,8 @@
 .wk-home-bar-fill[data-tone="gate"] { background: var(--status-gate); }
 
 .wk-home-close { margin: 0; font-size: 15px; text-align: center; color: var(--ink-muted); }
+.wk-home-close-wrap { display: flex; flex-direction: column; gap: 12px; align-items: center; }
+.wk-home-close-wrap .wk-desk-rule { margin: 0; font-size: 15px; color: var(--ink-muted); text-align: center; }
 
 @media (prefers-reduced-motion: reduce) {
   .wk-home-btn, .wk-home-job, .wk-home-ask { transition: none; }
@@ -110,4 +115,12 @@
   .wk-home-card { padding: 22px; border-radius: 16px; }
   .wk-home-card-acts .wk-home-btn { flex: 1 1 auto; }
   .wk-home-job { margin: 0 -12px; padding: 14px 12px; }
+}
+
+/* Needs you in full (`?tab=inbox`, the landing's "N more waiting"): the inbox, as tall as the screen allows. */
+.wk-inbox-view { display: flex; flex-direction: column; height: max(440px, calc(100dvh - 190px)); min-height: 0; }
+.wk-inbox-view > .wk-inbox { flex: 1 1 auto; min-height: 0; }
+@media (max-width: 767px) {
+  .wk-inbox-view { height: auto; }
+  .wk-inbox-view .wk-inbox-list { max-height: 520px; }
 }

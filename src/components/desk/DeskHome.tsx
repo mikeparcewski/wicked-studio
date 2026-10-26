@@ -1,8 +1,8 @@
 import { useId, useMemo, useState } from 'react';
-import type { RosterSeat, SessionView } from '../../api/types.js';
+import type { SessionView } from '../../api/types.js';
 import { runBatchDecision, useBatchGateStore } from '../../board/batchGates.js';
 import { useGateActionStore } from '../../board/gateActions.js';
-import type { DeskChore, SetupChore } from '../../board/deskModel.js';
+import type { SetupChore } from '../../board/deskModel.js';
 import { deskGreeting, needRunId } from '../../board/deskModel.js';
 import {
   homeSentence, needCardWords, progressRows, shippedTodayWords, topNeed, type CardMove, type HomeRead,
@@ -10,7 +10,6 @@ import {
 import { everythingPath } from '../../board/everythingModel.js';
 import type { NeedAction, NeedRow } from '../../board/needsYou.js';
 import { attentionRows } from '../../board/attention.js';
-import { needSection } from '../../board/needsQueue.js';
 import { relTime } from '../../board/relTime.js';
 import { deskLiveCounts } from '../../board/statusWords.js';
 import type { Navigate } from '../../hooks/useRoute.js';
@@ -24,10 +23,8 @@ import { Skeleton, StateBanner } from '../ui/index.js';
 /** In progress shows at most this many jobs; "All jobs" has the rest. */
 const PROGRESS_MAX = 3;
 
-/** Where "N more waiting" goes: the Nerve Center's feed, on decisions (as the inbox's "See all" did), or on
- *  problems when only failures are left. */
-const WAITING_PATH = '/watch?filter=decision';
-const PROBLEMS_PATH = '/watch?filter=problem';
+/** Where "N more waiting" goes: Needs you in full (the Desk's `?tab=inbox`), every item with its moves. */
+const WAITING_PATH = '/?tab=inbox';
 
 /**
  * THE LANDING — the Desk's Work view at `/` (home v2, the operator-approved mockup of 2026-10-26).
@@ -40,8 +37,8 @@ const PROBLEMS_PATH = '/watch?filter=problem';
  * Render only: the words are `board/deskHome.ts` over the run list and the needs fold.
  */
 export function DeskHome({
-  runs, runsShown, read, needRows, settled, missing, onRetryNeeds, retryingNeeds, navigate, now, agentName, pathOfRun,
-  setup, chores, onSignIn, reportPath, more, handover = null, panelId, labelledBy,
+  runs, runsShown, read, needRows, settled, count = null, missing, onRetryNeeds, retryingNeeds, navigate, now, agentName, pathOfRun,
+  setup, reportPath, more, handover = null, states = null, ruleLine = null, panelId, labelledBy,
 }: {
   runs: SessionView[];
   runsShown: boolean;
@@ -49,6 +46,8 @@ export function DeskHome({
   needRows: NeedRow[];
   /** The needs sources: still loading, all answered, or some did not (`missing` names them). */
   settled: 'loading' | 'complete' | 'partial';
+  /** The settled "need you" count (`useSettledNeeds`: said once it holds still, studio#723), the rail badge's. */
+  count?: number | null;
   missing: readonly string[];
   onRetryNeeds: () => void;
   retryingNeeds: boolean;
@@ -56,16 +55,19 @@ export function DeskHome({
   now: number;
   agentName: (cli: string) => string;
   pathOfRun: (runId: string) => string;
-  /** Studio's own setup (no agent can work, memory empty): the card shows one when nothing else waits. */
+  /** Studio's own setup (operator 2026-10-17): "no agent can work" leads the card (nothing can run);
+   *  the rest (a second agent, memory) is the card only when nothing needs you. Lapsed sign-ins are
+   *  the Agents view's. */
   setup: readonly SetupChore[];
-  /** Agents whose sign-in lapsed: the card's last resort, opening the agent's sign-in in place. */
-  chores: readonly DeskChore[];
-  onSignIn: (seat: RosterSeat) => void;
   reportPath: string;
   /** The Desk's ⋯ (standing instructions, focus, capture, look underneath). */
   more: React.ReactNode;
   /** While you were away: shown after an absence only, under the ask box. */
   handover?: React.ReactNode;
+  /** Standing states (deliveries frozen, marked away) and the governance replay, while they hold. */
+  states?: React.ReactNode;
+  /** B9: the one sentence about a rule remembered since the last visit (renders nothing when there is none). */
+  ruleLine?: React.ReactNode;
   panelId: string;
   labelledBy: string;
 }): React.ReactElement {
@@ -82,17 +84,16 @@ export function DeskHome({
   // count the same set. Reviews and "worth a look" items are named only when nothing else waits.
   const attention = useMemo(() => attentionRows(needRows), [needRows]);
   const others = needRows.length - attention.length;
-  const sentence = homeSentence({ read: read === 'known' && settled === 'loading' ? 'checking' : read, waiting: known ? attention.length : null, partial: settled === 'partial', running });
+  // The number is the settled one (the rail badge's, held still); before it holds, the rows' own count.
+  const waiting = count ?? attention.length;
+  const sentence = homeSentence({ read: read === 'known' && settled === 'loading' ? 'checking' : read, waiting: known ? waiting : null, partial: settled === 'partial', running });
 
-  // The card: nothing can run outranks everything; then the top need; then setup; then a lapsed sign-in.
+  // The card: "nothing can run" outranks everything; else the top need; else a setup item; else calm.
   const blocker = setup.find((c) => c.key === 'agents') ?? null;
   const top = useMemo(() => topNeed(attention, now), [attention, now]);
-  const fallbackSetup = setup.find((c) => c.key !== 'agents') ?? null;
-  const chore = chores[0] ?? null;
   const shownNeed = blocker === null ? top : null;
-  const moreWaiting = attention.length - (shownNeed !== null ? 1 : 0);
-  const rest = attention.filter((r) => r.key !== shownNeed?.key);
-  const morePath = rest.some((r) => needSection(r) === 'decision') ? WAITING_PATH : PROBLEMS_PATH;
+  const fallbackSetup = blocker === null && top === null ? (setup[0] ?? null) : null;
+  const moreWaiting = Math.max(0, waiting - (shownNeed !== null ? 1 : 0));
 
   const progress = useMemo(() => progressRows(runs, { max: PROGRESS_MAX, agentName }), [runs, agentName]);
   const allJobs = everythingPath({ tab: 'sessions' });
@@ -113,7 +114,9 @@ export function DeskHome({
               <h1 className="wk-home-title" data-testid="desk-greeting">{deskGreeting(now).hello}</h1>
               {more}
             </div>
-            <p className="wk-home-state" data-testid="desk-story" data-phase={settled} aria-live="polite">{sentence}</p>
+            {/* data-count: what "need you" counts (decisions + failures, the rail badge's set), once it is known. */}
+            <p className="wk-home-state" data-testid="desk-story" data-phase={settled} data-count={known ? waiting : undefined}
+              data-total={known ? needRows.length : undefined} aria-live="polite">{sentence}</p>
           </div>
           <form className="wk-home-ask" role="search" aria-label="Start a job" onSubmit={start} data-testid="desk-ask">
             <label htmlFor={askId} className="wk-visually-hidden">What do you want done?</label>
@@ -130,16 +133,16 @@ export function DeskHome({
             <h2 className="wk-home-label">Needs you</h2>
             <div className="wk-home-card wk-home-card--loading" data-testid="desk-loading"><Skeleton rows={3} variant="line" /></div>
           </section>
-        ) : read === 'failed' ? null : (blocker !== null || shownNeed !== null || fallbackSetup !== null || chore !== null) ? (
+        ) : read === 'failed' ? null : (blocker !== null || shownNeed !== null || fallbackSetup !== null) ? (
           <section aria-labelledby={needsId} className="wk-home-sec" data-testid="desk-needs">
-            <h2 id={needsId} className="wk-home-label">Needs you</h2>
+            {/* A setup item when nothing waits is a to-do, not a wait: its own words. */}
+            <h2 id={needsId} className="wk-home-label">{fallbackSetup !== null ? 'Set up studio' : 'Needs you'}</h2>
             {settled === 'partial' && missing.length > 0 && <StateBanner data-testid="desk-needs-partial" kind="partial" what={missing.join(', ')} onRetry={onRetryNeeds} retrying={retryingNeeds} />}
             {blocker !== null ? <SetupCard chore={blocker} navigate={navigate} />
               : shownNeed !== null ? <NeedCard row={shownNeed} view={view(shownNeed)} navigate={navigate} now={now} agentName={agentName} />
-                : fallbackSetup !== null ? <SetupCard chore={fallbackSetup} navigate={navigate} />
-                  : chore !== null && <ChoreCard chore={chore} onSignIn={onSignIn} />}
+                : fallbackSetup !== null && <SetupCard chore={fallbackSetup} navigate={navigate} />}
             {moreWaiting > 0 && (
-              <a href={morePath} onClick={go(morePath)} className="wk-home-more" data-testid="desk-needs-more" data-count={moreWaiting}>
+              <a href={WAITING_PATH} onClick={go(WAITING_PATH)} className="wk-home-more" data-testid="desk-needs-more" data-count={moreWaiting}>
                 {moreWaiting === 1 ? '1 more waiting' : `${moreWaiting}${settled === 'partial' ? '+' : ''} more waiting`} <span aria-hidden>→</span>
               </a>
             )}
@@ -150,12 +153,14 @@ export function DeskHome({
               ? <StateBanner data-testid="desk-needs-partial" kind="partial" what={missing.join(', ')} onRetry={onRetryNeeds} retrying={retryingNeeds} />
               : <p className="wk-home-calm" data-testid="desk-needs-calm">Nothing is waiting on you.</p>}
             {others > 0 && (
-              <a href="/watch" onClick={go('/watch')} className="wk-home-more" data-testid="desk-needs-others" data-count={others}>
+              <a href={WAITING_PATH} onClick={go(WAITING_PATH)} className="wk-home-more" data-testid="desk-needs-others" data-count={others}>
                 {others === 1 ? '1 thing to look at when you have a moment' : `${others} things to look at when you have a moment`} <span aria-hidden>→</span>
               </a>
             )}
           </section>
         )}
+
+        {states}
 
         <section aria-labelledby={progressId} className="wk-home-sec wk-home-sec--jobs" data-testid="desk-progress">
           <div className="wk-home-sec-head">
@@ -189,11 +194,14 @@ export function DeskHome({
           )}
         </section>
 
+        <div className="wk-home-close-wrap">
+        {ruleLine}
         {runsShown && (
           <p className="wk-home-close" data-testid="desk-shipped">
             {shippedTodayWords(runs, now)} · <a href={reportPath} onClick={go(reportPath)} className="wk-home-link" data-testid="desk-shipped-report">See the report</a>
           </p>
         )}
+        </div>
       </div>
     </div>
   );
@@ -270,19 +278,6 @@ function SetupCard({ chore, navigate }: { chore: SetupChore; navigate: Navigate 
       <p className="wk-home-card-body" data-testid="desk-card-body">{chore.line}</p>
       <div className="wk-home-card-acts">
         <a href={chore.action.path} onClick={(e) => { e.preventDefault(); navigate(chore.action.path); }} className="wk-home-btn wk-home-btn--primary" data-testid="desk-setup-act">{chore.action.label}</a>
-      </div>
-    </article>
-  );
-}
-
-function ChoreCard({ chore, onSignIn }: { chore: DeskChore; onSignIn: (seat: RosterSeat) => void }): React.ReactElement {
-  return (
-    <article className="wk-home-card" data-testid="desk-card" data-seat={chore.seat}>
-      <p className="wk-home-card-context">Your agents</p>
-      <h3 className="wk-home-card-title" data-testid="desk-card-title">{chore.title}</h3>
-      <p className="wk-home-card-body" data-testid="desk-card-body">{chore.line}</p>
-      <div className="wk-home-card-acts">
-        <a href={chore.action.path} onClick={(e) => { e.preventDefault(); onSignIn(chore.rosterSeat); }} className="wk-home-btn wk-home-btn--primary" data-testid="desk-chore-signin">{chore.action.label}</a>
       </div>
     </article>
   );

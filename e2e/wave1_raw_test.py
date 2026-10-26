@@ -82,7 +82,7 @@ with sync_playwright() as p:
 
     set_fixture(origin, wave1=True, gate_now=[])
     page.goto(f"{origin}/", wait_until="networkidle")
-    page.wait_for_selector('[data-testid="desk-inbox-count"][data-count="0"]', timeout=15000)
+    page.wait_for_selector('[data-testid="desk-story"][data-count="0"]', timeout=15000)
     # The calm Desk is short at 1440x700: room below its content (a style in <head>, so it outlives the
     # Desk's remount on Back) makes "where you were" a real scroll position.
     page.evaluate("() => { const s = document.createElement('style');"

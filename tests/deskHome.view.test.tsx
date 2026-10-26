@@ -34,7 +34,7 @@ function mount(over: Partial<React.ComponentProps<typeof DeskHome>> = {}): { nav
   const navigate = vi.fn();
   render(
     <DeskHome runs={[]} runsShown read="known" needRows={[]} settled="complete" missing={[]} onRetryNeeds={vi.fn()} retryingNeeds={false}
-      navigate={navigate} now={NOW} agentName={(c) => c} pathOfRun={(id) => `/s/run%3A${id}`} setup={[]} chores={[]} onSignIn={vi.fn()}
+      navigate={navigate} now={NOW} agentName={(c) => c} pathOfRun={(id) => `/s/run%3A${id}`} setup={[]}
       reportPath="/?tab=report" more={null} panelId="p" labelledBy="t" {...over} />,
   );
   return { navigate };
@@ -72,8 +72,8 @@ describe('the landing', () => {
     const more = screen.getByTestId('desk-needs-more');
     expect(more).toHaveTextContent('1 more waiting');
     fireEvent.click(more);
-    // Only the failure is left: the feed opens on problems.
-    expect(navigate).toHaveBeenLastCalledWith('/watch?filter=problem');
+    // Every waiting item, with its moves: Needs you in full.
+    expect(navigate).toHaveBeenLastCalledWith('/?tab=inbox');
   });
 
   it('a simple low-impact plan is approved in place through the one audited batch path', () => {
@@ -86,11 +86,20 @@ describe('the landing', () => {
     expect(mocks.runBatch).toHaveBeenCalledWith({ approve: true });
   });
 
-  it('nothing can run: the agents setup item leads the card', () => {
+  it('nothing can run: the agents setup item leads the card; other setup only when nothing waits', () => {
     mount({ needRows: [need('g', 'gate')], runs: [deskRun('g', { status: 'awaiting_human' })],
       setup: [{ key: 'agents', tone: 'fail', title: 'Set up your agents', line: 'None can work yet.', action: { label: 'Set up agents', path: '/?tab=agents' } }] });
     expect(screen.getByTestId('desk-card')).toHaveAttribute('data-setup', 'agents');
     expect(screen.getByTestId('desk-needs-more')).toHaveTextContent('1 more waiting');
+    cleanup();
+    // Another setup item waits behind any need, and is the card only when nothing needs you.
+    const memory = { key: 'memory-empty' as const, tone: 'gate' as const, title: 'Your memory is empty', line: 'Index a repository.', action: { label: 'Build memory', path: '/?tab=repositories' } };
+    mount({ setup: [memory], needRows: [need('g', 'gate')], runs: [deskRun('g', { status: 'awaiting_human' })] });
+    expect(screen.getByTestId('desk-card')).toHaveAttribute('data-key', 'gate:g');
+    cleanup();
+    mount({ setup: [memory] });
+    expect(screen.getByTestId('desk-card')).toHaveAttribute('data-setup', 'memory-empty');
+    expect(screen.getByText('Set up studio')).toBeInTheDocument();
   });
 
   it('in progress: at most three rows, each a link with a status word and step x of y', () => {

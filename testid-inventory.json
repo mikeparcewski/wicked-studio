@@ -13,7 +13,7 @@
   "counts": {
     "files": 239,
     "occurrences": 3115,
-    "static": 2696,
+    "static": 2697,
     "dynamic": 70,
     "computed": 24
   },
@@ -3018,7 +3018,6 @@
       "testId": "desk-chore-signin",
       "files": [
         "src/components/desk/Desk.tsx",
-        "src/components/desk/DeskHome.tsx",
         "src/components/desk/DeskV2.tsx"
       ]
     },
@@ -3177,6 +3176,12 @@
       "testId": "desk-inbox-subtitle",
       "files": [
         "src/components/desk/DeskInbox.tsx"
+      ]
+    },
+    {
+      "testId": "desk-inbox-view",
+      "files": [
+        "src/components/desk/DeskV2.tsx"
       ]
     },
     {
