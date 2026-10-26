@@ -71,7 +71,7 @@ describe('the card', () => {
     expect(approvesInPlace({ ...plan, action: { kind: 'open', path: '/x', label: 'Send back… ›' } }, v)).toBe(false);
     expect(approvesInPlace({ ...plan, action: { kind: 'open', path: '/x', label: 'Open gate ›' } }, v)).toBe(false);
     // A gate with free text or more than two answers carries no `approval` group key.
-    expect(approvesInPlace({ ...plan, groupKey: undefined } as NeedRow, v)).toBe(false);
+    expect(approvesInPlace(need('g', 'gate', { action: plan.action }), v)).toBe(false);
     expect(approvesInPlace(plan, null)).toBe(false);
   });
 
