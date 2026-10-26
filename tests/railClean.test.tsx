@@ -136,12 +136,12 @@ describe('the top of the rail (operator IA 2026-10-13)', () => {
     expect(screen.queryByTestId('desk-rail-badge')).toBeNull();
   });
 
-  it('the action row sits where the Desk item was: four equal icons, New project · New job · Chat · Search — each named (DES-SYSTEM-CHAT §1)', () => {
+  it('the action row sits where the Desk item was: four equal icons, New job · New project · Chat · Search (New job first, operator 2026-10-26) — each named (DES-SYSTEM-CHAT §1)', () => {
     rail();
     const row = screen.getByTestId('desk-rail-actions');
     expect(row.previousElementSibling).toBe(screen.getByTestId('desk-rail-home'));
     const buttons = [...row.querySelectorAll('button')];
-    expect(buttons.map((b) => b.dataset.testid)).toEqual(['desk-rail-new-project', 'desk-rail-new-job', 'desk-rail-chat', 'desk-rail-search']);
+    expect(buttons.map((b) => b.dataset.testid)).toEqual(['desk-rail-new-job', 'desk-rail-new-project', 'desk-rail-chat', 'desk-rail-search']);
     // Icons only: no visible words, every one the same class (equal width), each with a tooltip.
     expect(buttons.every((b) => b.className === 'wk-rail-action' && (b.textContent ?? '').trim() === '' && b.title !== '')).toBe(true);
     expect(screen.getByTestId('desk-rail-new-job')).toHaveAccessibleName('New job');

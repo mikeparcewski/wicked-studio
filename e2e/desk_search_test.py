@@ -57,7 +57,7 @@ CHROME = """() => ({
   headerChat: !!document.querySelector('[data-testid="desk-chat"], [data-testid="project-chat"]'),
   headerNewJob: !!document.querySelector('[data-testid="desk-new-job"], [data-testid="project-new-job"]'),
 })"""
-RAIL = ["desk-rail-new-project", "desk-rail-new-job", "desk-rail-chat", "desk-rail-search"]
+RAIL = ["desk-rail-new-job", "desk-rail-new-project", "desk-rail-chat", "desk-rail-search"]
 
 dist = ensure_build(fail)
 origin = start_server(PORT, dist)

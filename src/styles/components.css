@@ -630,21 +630,19 @@ select:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-
   display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 10px 10px 6px; padding: 6px 8px;
   border-radius: var(--radius-md); text-decoration: none; min-width: 0;
 }
-.wk-rail-home:hover, .wk-rail-home[aria-current="page"] { background: var(--surface-card); }
+/* Hover, pressed, current and focus for every rail item: sections/rail.css ("Rail interaction states"). */
 .wk-rail-brand { font-size: var(--text-lg); color: var(--ink-muted); display: flex; align-items: center; gap: 6px; min-width: 0; }
 .wk-rail-brand b { color: var(--ink-high); }
 .wk-rail-brand-name { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 /* The wordmark: a yellow dot with a harbor ring (DESIGN-simple §1a). */
 .wk-rail-brand .wk-desk-dot, .wk-desk-avatar .wk-desk-dot { background: var(--spark); box-shadow: 0 0 0 1.5px var(--accent); }
-/* The action row (DES-SYSTEM-CHAT §1): four equal icon buttons — New project · New job · Chat · Search. */
+/* The action row (DES-SYSTEM-CHAT §1): four equal icon buttons — New job · New project · Chat · Search. */
 .wk-rail-actions { display: flex; align-items: center; gap: 6px; margin: 0 10px 10px; }
 .wk-rail-action {
   display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; flex-shrink: 0;
   border: 1px solid var(--border); border-radius: var(--radius-md); background: none; color: var(--ink-muted); cursor: pointer;
 }
 .wk-rail-actions--icons .wk-rail-action { flex: 1 1 0; width: auto; min-width: 0; height: 36px; }
-.wk-rail-action:hover { background: var(--surface-card); color: var(--ink-high); box-shadow: var(--shadow-card); }
-.wk-rail-action:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .wk-rail-action[data-chat-mode="minimized"] { color: var(--accent); border-color: var(--accent); }
 
 /* ── The system chat window (DES-SYSTEM-CHAT §2–3) ─────────────────────────────────────────── */
@@ -816,12 +814,10 @@ select:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-
   display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px;
   border: none; border-radius: var(--radius-sm); background: none; color: var(--ink-muted); cursor: pointer; font: inherit;
 }
-.wk-rail-icon-btn:hover { background: var(--surface-card); color: var(--ink-high); }
 .wk-rail-session {
   display: flex; align-items: center; gap: 8px; padding: 6px 10px; min-height: 30px; border-radius: var(--radius-md);
   color: var(--ink-body); text-decoration: none; min-width: 0;
 }
-.wk-rail-session:hover, .wk-rail-session[aria-current="page"] { background: var(--surface-card); }
 /* One line, cut with an ellipsis (studio-rail-clean): the row shows crew's short title, its full words
    are the row's hover title, and same-named rows carry a tag (.wk-rail-session-tag) — no mid-word wrap. */
 .wk-rail-session-title { flex: 0 1 auto; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; line-height: 1.35; }
@@ -861,7 +857,6 @@ select:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-
   border-radius: var(--radius-md); background: none; border: none; color: var(--ink-body);
   text-decoration: none; font: inherit; cursor: pointer; text-align: left;
 }
-.wk-rail-link:hover { background: var(--surface-card); }
 /* studio#421 change 2: "Additional settings" reads as a control, not another link — a bordered, filled
    button (same height as the links: 4px + a 1px border = the links' 5px), label left, chevron right.
    Hover raises the border to --ink-dim. Same in light and dark (theme tokens, never the skin). */
