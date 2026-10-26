@@ -961,7 +961,7 @@
 .wk-dr-table td { padding-block: var(--space-3); }
 .wk-dr-c-status .wk-dr-status { white-space: nowrap; color: var(--ink-body); }
 /* "Not in a project" is the absence of one: said quietly, so the projects that exist stand out. */
-.wk-dr-project[data-none="true"] { color: var(--ink-dim); }
+.wk-dr-project[data-none="true"] { color: var(--ink-muted); }
 .wk-dr-title { max-width: 0; width: 46%; }
 .wk-dr-title a { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-high); font-weight: var(--weight-semi); text-decoration: none; }
 .wk-dr-title a:hover { color: var(--accent); text-decoration: underline; }
@@ -981,11 +981,15 @@
   .wk-dr-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   .wk-dr-table tbody tr {
     display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: var(--space-3); row-gap: var(--space-2);
-    grid-template-areas: "title title" "status started" "agents took" "steps steps" "project project";
+    grid-template-areas: "title title" "status started" "agents took" "steps steps";
     padding: var(--space-3) 0; border-bottom: 1px solid var(--border-subtle);
   }
-  /* A row with its own ⋯ (a project's page) keeps it beside the title. */
-  .wk-dr-table tbody tr:has(> .wk-dr-acts) { grid-template-areas: "title acts" "status started" "agents took" "steps steps" "project project"; }
+  /* The project line only where a row has one (a project's own page shows none); a row with its own ⋯ (a
+     project's page) keeps it beside the title. */
+  .wk-dr-table tbody tr:has(> .wk-dr-project) { grid-template-areas: "title title" "status started" "agents took" "steps steps" "project project"; }
+  .wk-dr-table tbody tr:has(> .wk-dr-acts:not(:empty)) { grid-template-areas: "title acts" "status started" "agents took" "steps steps"; }
+  .wk-dr-table tbody tr:has(> .wk-dr-project):has(> .wk-dr-acts:not(:empty)) { grid-template-areas: "title acts" "status started" "agents took" "steps steps" "project project"; }
+  .wk-dr-table .wk-dr-acts:empty { display: none; }
   .wk-dr-table tbody tr:last-child { border-bottom: 0; }
   .wk-dr-table td { display: block; padding: 0; border: 0; white-space: normal; min-width: 0; }
   .wk-dr-table .wk-dr-title { grid-area: title; width: auto; max-width: none; }

@@ -88,34 +88,35 @@ export function DeskRuns({ runs, runsShown, refine, refineBar, now, navigate, pa
           </p>
         ) : (
           <div className="wk-table-wrap">
-            <table className="wk-table wk-dr-table" data-testid="desk-runs-table">
-              <thead>
-                <tr>
-                  <th scope="col">Status</th>
-                  <th scope="col">Run</th>
-                  {showProject && <th scope="col">Project</th>}
-                  <th scope="col">Agents</th>
-                  <th scope="col">Steps</th>
-                  <th scope="col" className="wk-num">Started</th>
-                  <th scope="col" className="wk-num">Took</th>
-                  {rowActions !== undefined && <th scope="col"><span className="wk-sr-only">Actions</span></th>}
+            {/* Explicit table roles: the phone lays rows out as a grid, which drops native table semantics in some screen readers. */}
+            <table role="table" className="wk-table wk-dr-table" data-testid="desk-runs-table">
+              <thead role="rowgroup">
+                <tr role="row">
+                  <th role="columnheader" scope="col">Status</th>
+                  <th role="columnheader" scope="col">Run</th>
+                  {showProject && <th role="columnheader" scope="col">Project</th>}
+                  <th role="columnheader" scope="col">Agents</th>
+                  <th role="columnheader" scope="col">Steps</th>
+                  <th role="columnheader" scope="col" className="wk-num">Started</th>
+                  <th role="columnheader" scope="col" className="wk-num">Took</th>
+                  {rowActions !== undefined && <th role="columnheader" scope="col"><span className="wk-sr-only">Actions</span></th>}
                 </tr>
               </thead>
-              <tbody>
+              <tbody role="rowgroup">
                 {rows.map((r) => {
                   const path = pathOf(r.id);
                   // Only a run still moving is measured "so far"; one parked or stopped without an end has no time.
                   const open = r.outcome === 'Working' || r.outcome === 'Waiting on you';
                   const took = r.endedAt === null && !open ? null : durationWords(r, now);
                   return (
-                    <tr key={r.id} data-testid="desk-runs-row" data-run-id={r.id} data-outcome={r.outcome}>
-                      <td className="wk-dr-c-status"><span className="wk-dr-status"><i aria-hidden className="wk-chart-swatch wk-chart-swatch--dot" style={{ background: outcomeColor(r.outcome) }} />{r.outcome}</span></td>
-                      <td className="wk-dr-title">
+                    <tr role="row" key={r.id} data-testid="desk-runs-row" data-run-id={r.id} data-outcome={r.outcome}>
+                      <td role="cell" className="wk-dr-c-status"><span className="wk-dr-status"><i aria-hidden className="wk-chart-swatch wk-chart-swatch--dot" style={{ background: outcomeColor(r.outcome) }} />{r.outcome}</span></td>
+                      <td role="cell" className="wk-dr-title">
                         <a href={path} onClick={go(path)} data-testid="desk-runs-open" title={r.title}>{r.title}</a>
                         <span className="wk-dr-sub">{r.workflow}</span>
                       </td>
-                      {showProject && <td className="wk-dr-project" data-none={r.project === 'default' ? 'true' : undefined} title={projectName(r.project)}>{projectName(r.project)}</td>}
-                      <td className="wk-dr-c-agents">
+                      {showProject && <td role="cell" className="wk-dr-project" data-none={r.project === 'default' ? 'true' : undefined} title={projectName(r.project)}>{projectName(r.project)}</td>}
+                      <td role="cell" className="wk-dr-c-agents">
                         <span className="wk-dr-agents">
                           {r.agents.length === 0 ? <span className="wk-dr-sub">none yet</span> : r.agents.slice(0, 3).map((a) => (
                             <span key={a} className="wk-dr-agent"><i aria-hidden className="wk-chart-swatch wk-chart-swatch--dot" style={{ background: agentColor(a) }} />{agentName(a)}</span>
@@ -123,13 +124,13 @@ export function DeskRuns({ runs, runsShown, refine, refineBar, now, navigate, pa
                           {r.agents.length > 3 && <span className="wk-dr-sub">+{r.agents.length - 3}</span>}
                         </span>
                       </td>
-                      <td className="wk-dr-steps">
+                      <td role="cell" className="wk-dr-steps">
                         <Progress value={r.stepsDone} total={r.steps} tone={r.outcome === 'Failed' ? 'fail' : r.outcome === 'Working' ? 'run' : 'ok'} label={`${r.stepsDone} of ${r.steps} steps`} data-testid="desk-runs-progress" />
                         <span className="wk-dr-sub">{r.steps === 0 ? 'no steps yet' : `${r.stepsDone} of ${r.steps}`}</span>
                       </td>
-                      <td className="wk-num wk-dr-c-started" title={r.startedAt === null ? undefined : new Date(r.startedAt).toLocaleString()}>{r.startedAt === null ? '—' : relTime(r.startedAt, now)}</td>
-                      <td className="wk-num wk-dr-c-took">{took ?? '—'}{open && r.endedAt === null && took !== null ? <span className="wk-dr-sub"> so far</span> : null}</td>
-                      {rowActions !== undefined && <td className="wk-dr-acts">{(() => { const acts = rowActions(r.id, r.title); return acts.length === 0 ? null : <OverflowMenu label={`More actions for ${r.title}`} items={acts} data-testid="desk-runs-row-menu" />; })()}</td>}
+                      <td role="cell" className="wk-num wk-dr-c-started" title={r.startedAt === null ? undefined : new Date(r.startedAt).toLocaleString()}>{r.startedAt === null ? '—' : relTime(r.startedAt, now)}</td>
+                      <td role="cell" className="wk-num wk-dr-c-took">{took ?? '—'}{open && r.endedAt === null && took !== null ? <span className="wk-dr-sub"> so far</span> : null}</td>
+                      {rowActions !== undefined && <td role="cell" className="wk-dr-acts">{(() => { const acts = rowActions(r.id, r.title); return acts.length === 0 ? null : <OverflowMenu label={`More actions for ${r.title}`} items={acts} data-testid="desk-runs-row-menu" />; })()}</td>}
                     </tr>
                   );
                 })}
