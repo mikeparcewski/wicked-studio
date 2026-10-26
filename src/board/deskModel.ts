@@ -335,9 +335,10 @@ export const RAIL_RECENT_MAX = 5;
 
 /**
  * THE RAIL'S RECENT LIST (ui-v2 nav regroup): the project groups stay, under the sidebar's page groups,
- * but they show at most `max` sessions between them: every one that needs you (never hidden, so a
- * badge always has its row), then live work, then the most recently changed. A group keeps its own
- * order and drops out when none of its sessions is shown; `hidden` is how many are left for All jobs.
+ * but they show at most `max` sessions between them: the ones that need you first, then live work,
+ * then the most recently changed. Never more than `max`: everything that needs you is on Home (and
+ * counted in its badge), so the rail stays a short list. A group keeps its own order and drops out
+ * when none of its sessions is shown; `hidden` is how many are left for All jobs.
  */
 export function railRecent(groups: readonly RailGroup[], max: number = RAIL_RECENT_MAX): { groups: RailGroup[]; hidden: number } {
   const all = groups.flatMap((g) => [...g.sessions, ...g.more]);
@@ -349,8 +350,7 @@ export function railRecent(groups: readonly RailGroup[], max: number = RAIL_RECE
       || (b.s.at ?? -Infinity) - (a.s.at ?? -Infinity)
       || a.i - b.i)
     .map((x) => x.s);
-  const needy = ranked.filter((s) => s.badge > 0).length;
-  const keep = new Set(ranked.slice(0, Math.max(max, needy)));
+  const keep = new Set(ranked.slice(0, max));
   const shown = groups
     .map((g) => ({ ...g, sessions: [...g.sessions, ...g.more].filter((s) => keep.has(s)), more: [] }))
     .filter((g) => g.sessions.length > 0);

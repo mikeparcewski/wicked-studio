@@ -22,13 +22,13 @@ describe('railRecent', () => {
     expect(groups.every((g) => g.more.length === 0)).toBe(true);
   });
 
-  it('never hides a session that needs you, even past five; live work comes before ended work', () => {
+  it('never more than five, even when more need you: those that need you lead, then live work, then ended work', () => {
     const needy = Array.from({ length: 6 }, (_, i) => s(`n${i}`, { badge: 1, at: i }));
     const live = s('live', { state: 'working', at: 0 });
     const old = s('old', { at: 99 });
     const { groups, hidden } = railRecent([group('a', [old, live, ...needy])]);
-    expect(groups[0]!.sessions.map((x) => x.id)).toEqual(needy.map((x) => x.id));
-    expect(hidden).toBe(2);
+    expect(groups[0]!.sessions.map((x) => x.id)).toEqual(['n1', 'n2', 'n3', 'n4', 'n5']);
+    expect(hidden).toBe(3);
     const roomy = railRecent([group('a', [old, live, needy[0]!])], 2);
     expect(roomy.groups[0]!.sessions.map((x) => x.id)).toEqual(['live', 'n0']);
   });
