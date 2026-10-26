@@ -12,9 +12,9 @@
   "studioVersion": "0.12.2",
   "counts": {
     "files": 238,
-    "occurrences": 3073,
-    "static": 2675,
-    "dynamic": 69,
+    "occurrences": 3076,
+    "static": 2677,
+    "dynamic": 70,
     "computed": 24
   },
   "static": [
@@ -3749,6 +3749,18 @@
     },
     {
       "testId": "desk-tabs",
+      "files": [
+        "src/components/desk/DeskV2.tsx"
+      ]
+    },
+    {
+      "testId": "desk-tabs-more",
+      "files": [
+        "src/components/desk/DeskV2.tsx"
+      ]
+    },
+    {
+      "testId": "desk-tabs-more-panel",
       "files": [
         "src/components/desk/DeskV2.tsx"
       ]
@@ -16368,6 +16380,12 @@
       "pattern": "desk-inbox-folder-*",
       "files": [
         "src/components/desk/DeskInbox.tsx"
+      ]
+    },
+    {
+      "pattern": "desk-more-tab-*",
+      "files": [
+        "src/components/desk/DeskV2.tsx"
       ]
     },
     {

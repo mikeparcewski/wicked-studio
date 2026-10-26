@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
-import { Activity, AlertTriangle, Bot, CheckCircle2, CircleAlert, Inbox, Info, MoreHorizontal, Rocket, Send, Wallet } from 'lucide-react';
+import { Activity, AlertTriangle, Bot, CheckCircle2, ChevronDown, CircleAlert, Inbox, Info, MoreHorizontal, Rocket, Send, Wallet } from 'lucide-react';
 import { everythingPath } from '../../board/everythingModel.js';
 import type { DiagnosticsGovernance, RosterSeat, SessionView } from '../../api/types.js';
 import { getDiagnostics } from '../../api/diagnostics.js';
@@ -126,6 +126,16 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
     if (keyboardFocus.current === null) return;
     document.getElementById(keyboardFocus.current)?.focus();
     keyboardFocus.current = null;
+  }, [tab]);
+  useEffect(() => {
+    // A narrow bar scrolls sideways: bring the open tab into it (a view opened from More sits at its end).
+    const el = document.getElementById(tabId(tab));
+    const list = el?.parentElement;
+    if (el == null || list == null || list.scrollWidth <= list.clientWidth) return;
+    const over = el.getBoundingClientRect().right - list.getBoundingClientRect().right;
+    const under = el.getBoundingClientRect().left - list.getBoundingClientRect().left;
+    if (over > 0) list.scrollLeft += over; else if (under < 0) list.scrollLeft += under;
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- tabId is stable for this Desk (useId)
   }, [tab]);
   useEffect(() => {
     if (tab !== 'report' || focus === null) return;
@@ -360,14 +370,20 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
     </header>
   );
 
+  // Nine views at one level read as a mainframe menu bar (2026-10-26): the four daily views are tabs; the rest
+  // sit under More. The open one of those is shown as a tab of its own, so you always see where you are.
+  const shownTabs = DESK_TABS.filter((t) => t.group === 'primary' || t.id === tab);
   const tabs = (
-    <div role="tablist" aria-label="Desk view" className="wk-desk2-tabs" data-testid="desk-tabs">
-      {DESK_TABS.map((t) => (
-        <a key={t.id} role="tab" id={tabId(t.id)} aria-controls={panelId(t.id)} tabIndex={tab === t.id ? 0 : -1}
-          href={tabPath(t.id)} aria-selected={tab === t.id} data-testid={`desk-tab-${t.id}`} className="wk-desk2-tab"
-          onKeyDown={(e) => { keyboardFocus.current = handleTabKeyDown(e)?.id ?? null; }}
-          onClick={(e) => { e.preventDefault(); goTab(t.id); }}>{t.label}</a>
-      ))}
+    <div className="wk-desk2-tabbar">
+      <div role="tablist" aria-label="Desk view" className="wk-desk2-tabs" data-testid="desk-tabs">
+        {shownTabs.map((t) => (
+          <a key={t.id} role="tab" id={tabId(t.id)} aria-controls={panelId(t.id)} tabIndex={tab === t.id ? 0 : -1}
+            href={tabPath(t.id)} aria-selected={tab === t.id} data-testid={`desk-tab-${t.id}`} data-group={t.group} className="wk-desk2-tab"
+            onKeyDown={(e) => { keyboardFocus.current = handleTabKeyDown(e)?.id ?? null; }}
+            onClick={(e) => { e.preventDefault(); goTab(t.id); }}>{t.label}</a>
+        ))}
+      </div>
+      <DeskTabsMore current={tab} pathOf={tabPath} go={(t) => { keyboardFocus.current = tabId(t); goTab(t); }} />
     </div>
   );
 
@@ -547,17 +563,20 @@ export type HostedTab = 'repositories' | 'steer' | 'memory' | 'agents' | 'evalua
 const HOSTED: readonly HostedTab[] = ['repositories', 'steer', 'memory', 'agents', 'evaluate'];
 function isHosted(t: DeskTab): t is HostedTab { return (HOSTED as readonly string[]).includes(t); }
 
-/** The Desk's tabs, in order (the address carries `?tab=`; Work is the default). */
-export const DESK_TABS: readonly { id: DeskTab; label: string }[] = [
-  { id: 'work', label: 'Work' },
-  { id: 'runs', label: 'Runs' },
-  { id: 'repositories', label: 'Repositories' },
-  { id: 'report', label: 'Report' },
-  { id: 'understand', label: 'Understand' },
-  { id: 'steer', label: 'Steer' },
-  { id: 'memory', label: 'Memory' },
-  { id: 'agents', label: 'Agents' },
-  { id: 'evaluate', label: 'Evaluate' },
+/**
+ * The Desk's tabs, in order (the address carries `?tab=`; Work is the default). `primary` = a tab in the bar;
+ * `more` = under More (the open one shows in the bar too). Every `?tab=` address works either way.
+ */
+export const DESK_TABS: readonly { id: DeskTab; label: string; group: 'primary' | 'more'; hint?: string }[] = [
+  { id: 'work', label: 'Work', group: 'primary' },
+  { id: 'runs', label: 'Runs', group: 'primary' },
+  { id: 'repositories', label: 'Repositories', group: 'primary' },
+  { id: 'report', label: 'Report', group: 'primary' },
+  { id: 'understand', label: 'Understand', group: 'more', hint: 'Compare agents, workflows and jobs side by side' },
+  { id: 'steer', label: 'Steer', group: 'more', hint: 'The rules agents are held to' },
+  { id: 'memory', label: 'Memory', group: 'more', hint: 'What agents remember and recall' },
+  { id: 'agents', label: 'Agents', group: 'more', hint: 'Sign-in, safety checks and fixes per agent' },
+  { id: 'evaluate', label: 'Evaluate', group: 'more', hint: 'Test the rules against sample behaviour' },
 ];
 
 /** Each hosted tab's own page when the address names none. */
@@ -642,6 +661,50 @@ function InsightCards({ items, loading, recordFailed, navigate, workPath }: { it
         </button>
       )}
     </>
+  );
+}
+
+/**
+ * More (2026-10-26): the Desk's less-used views as a disclosure beside the tabs — a button and a short list,
+ * each with what it is for. The list is always in the page (hidden while closed), so every view stays one
+ * address away and findable; Escape or a click outside closes it.
+ */
+function DeskTabsMore({ current, pathOf, go }: { current: DeskTab; pathOf: (t: DeskTab) => string; go: (t: DeskTab) => void }): React.ReactElement {
+  const [open, setOpen] = useState(false);
+  const root = useRef<HTMLDivElement | null>(null);
+  const btn = useRef<HTMLButtonElement | null>(null);
+  const listId = useId();
+  const items = DESK_TABS.filter((t) => t.group === 'more');
+  const inMore = items.some((t) => t.id === current);
+  useEffect(() => {
+    if (!open) return undefined;
+    root.current?.querySelector<HTMLElement>('a')?.focus();
+    const onDown = (e: MouseEvent): void => { if (root.current !== null && !root.current.contains(e.target as Node)) setOpen(false); };
+    const onKey = (e: KeyboardEvent): void => { if (e.key === 'Escape') { setOpen(false); btn.current?.focus(); } };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey); };
+  }, [open]);
+  return (
+    <div ref={root} className="wk-desk2-tabmore">
+      <button ref={btn} type="button" data-testid="desk-tabs-more" aria-expanded={open} aria-controls={listId} data-current={inMore ? 'true' : undefined}
+        className="wk-desk2-tab wk-desk2-tabmore-btn" onClick={() => setOpen((v) => !v)}>
+        More<ChevronDown size={15} aria-hidden className="wk-desk2-tabmore-chev" />
+      </button>
+      <div id={listId} className="wk-desk2-tabmore-panel wk-overlay" data-testid="desk-tabs-more-panel" hidden={!open}>
+        <ul className="wk-desk2-tabmore-list" aria-label="More Desk views">
+          {items.map((t) => (
+            <li key={t.id}>
+              <a href={pathOf(t.id)} data-testid={`desk-more-tab-${t.id}`} aria-current={current === t.id ? 'page' : undefined} className="wk-desk2-tabmore-item"
+                onClick={(e) => { e.preventDefault(); setOpen(false); go(t.id); }}>
+                <span className="wk-desk2-tabmore-label">{t.label}</span>
+                {t.hint !== undefined && <span className="wk-desk2-tabmore-hint">{t.hint}</span>}
+              </a>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
   );
 }
 

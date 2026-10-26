@@ -582,7 +582,25 @@
 }
 
 /* ── Desk v2 tabs: Work and Understand ─────────────────────────────────────────────────────── */
-.wk-desk2-tabs { display: flex; gap: var(--space-6); border-bottom: 1px solid var(--border-subtle); margin-top: calc(-1 * var(--space-2)); }
+/* The tab bar (2026-10-26): the daily views as tabs, then More (the rest, each with what it is for). The bar
+   owns the hairline; the tablist and More sit on it. */
+.wk-desk2-tabbar { display: flex; align-items: stretch; gap: var(--space-6); border-bottom: 1px solid var(--border-subtle); margin-top: calc(-1 * var(--space-2)); min-width: 0; }
+.wk-desk2-tabs { display: flex; gap: var(--space-6); min-width: 0; }
+.wk-desk2-tabmore { position: relative; display: flex; }
+.wk-desk2-tabmore-btn { display: inline-flex; align-items: center; gap: 4px; border: 0; border-bottom: 2px solid transparent; background: none; font: inherit; font-size: var(--text-md); cursor: pointer; }
+.wk-desk2-tabmore-btn[aria-expanded="true"] { color: var(--ink-high); }
+.wk-desk2-tabmore-chev { transition: transform var(--dur-fast) var(--ease-out); }
+.wk-desk2-tabmore-btn[aria-expanded="true"] .wk-desk2-tabmore-chev { transform: rotate(180deg); }
+.wk-desk2-tabmore-panel { position: absolute; left: 0; top: calc(100% + 6px); z-index: 30; width: 300px; padding: var(--space-2); border-radius: var(--radius-lg); background: var(--surface-overlay); box-shadow: var(--shadow-overlay); }
+.wk-desk2-tabmore-panel[hidden] { display: none; }
+.wk-desk2-tabmore-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.wk-desk2-tabmore-item { display: flex; flex-direction: column; gap: 2px; padding: var(--space-2) var(--space-3); border-radius: var(--radius-md); text-decoration: none; color: var(--ink-high); }
+.wk-desk2-tabmore-item:hover { background: var(--surface-raised); }
+.wk-desk2-tabmore-item:focus-visible { outline: 2px solid transparent; box-shadow: var(--focus-ring); }
+.wk-desk2-tabmore-item[aria-current="page"] { background: var(--accent-wash); box-shadow: inset 3px 0 0 var(--accent); }
+.wk-desk2-tabmore-label { font-size: var(--text-sm); font-weight: var(--weight-semi); }
+.wk-desk2-tabmore-hint { font-size: var(--text-xs); color: var(--ink-muted); line-height: var(--leading-tight); }
+@media (prefers-reduced-motion: reduce) { .wk-desk2-tabmore-chev { transition: none; } }
 .wk-desk2-tab { padding: var(--space-2) 0 var(--space-3); font-size: var(--text-md); font-weight: var(--weight-medium, 500); color: var(--ink-muted); text-decoration: none; border-bottom: 2px solid transparent; margin-bottom: -1px; }
 .wk-desk2-tab:hover { color: var(--ink-high); }
 .wk-desk2-tab[aria-selected="true"] { color: var(--ink-high); border-bottom-color: var(--accent); font-weight: var(--weight-semi); }
@@ -690,7 +708,13 @@
 .wk-analyze-done { margin: 0; font-size: var(--text-sm); color: var(--ink-body); }
 @media (max-width: 767px) {
   .wk-desk2-hosted-head { padding: var(--space-4) var(--space-4) 0; }
-  .wk-desk2-tabs { overflow-x: auto; gap: var(--space-4); }
+  .wk-desk2-tabbar { gap: var(--space-4); }
+  .wk-desk2-tabs { overflow-x: auto; gap: var(--space-4); scrollbar-width: none; }
+  .wk-desk2-tabs::-webkit-scrollbar { display: none; }
+  .wk-desk2-tabmore { flex-shrink: 0; }
+  .wk-desk2-tabmore-btn { min-height: var(--tap-min); }
+  .wk-desk2-tabmore-panel { left: auto; right: 0; width: min(300px, calc(100vw - 32px)); }
+  .wk-desk2-tabmore-item { min-height: var(--tap-min); justify-content: center; }
 }
 
 
@@ -944,6 +968,9 @@
 .wk-und-intro { margin: 0; max-width: 92ch; font-size: var(--text-sm); color: var(--ink-muted); line-height: var(--leading-body); }
 .wk-und-intro b { color: var(--ink-body); font-weight: var(--weight-semi); }
 .wk-und-empty { display: flex; flex-direction: column; gap: var(--space-3); }
+.wk-und-empty-mark { display: grid; place-items: center; width: 36px; height: 36px; border-radius: var(--radius-md); background: var(--accent-wash); color: var(--accent); }
+/* A hosted page under its Desk tab: the tab already names it, so its own title is for a screen reader only. */
+.wk-desk2-hosted .wk-page-title { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 .wk-und-suggest { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: var(--space-2); }
 .wk-und-gen { display: flex; flex-direction: column; gap: var(--space-3); align-items: flex-start; }
 .wk-und-gen .wk-btn svg { margin-right: 4px; }
