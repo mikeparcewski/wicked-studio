@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
-import { Activity, AlertTriangle, Bot, CheckCircle2, ChevronDown, CircleAlert, Inbox, Info, MoreHorizontal, Rocket, Send, Wallet } from 'lucide-react';
+import { Activity, AlertTriangle, Bot, CheckCircle2, CircleAlert, Inbox, Info, MoreHorizontal, Rocket, Send, Wallet } from 'lucide-react';
 import { everythingPath } from '../../board/everythingModel.js';
 import type { DiagnosticsGovernance, RosterSeat, SessionView } from '../../api/types.js';
 import { getDiagnostics } from '../../api/diagnostics.js';
@@ -61,6 +61,8 @@ import { FocusLockToggle } from '../NeedsYouQueue.js';
 import { useNeedsSources } from '../../store/needsSources.js';
 import { DeskUnderstand } from './DeskUnderstand.js';
 import { DeskHome } from './DeskHome.js';
+import { DESK_VIEW_PATH, isHostedView, type DeskView, type HostedView } from '../../board/navModel.js';
+import { PAGE_NAMES } from '../../board/pageNames.js';
 
 /**
  * THE DESK, v2 (design/DES-desk-v2.md) — the route `/`.
@@ -75,7 +77,10 @@ import { DeskHome } from './DeskHome.js';
  *  4. One visual language: every widget is a `ChartCard`; every chart is the kit in
  *     `components/charts/Chart.tsx`; a helper has one colour everywhere.
  */
-export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRuns, needRows: rawNeedRows, now, navigate, search = '', hosted, projectId, projectHead, workExtra, runActions }: {
+export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRuns, needRows: rawNeedRows, now, navigate, search = '', hosted, projectId, projectHead, workExtra, runActions, view }: {
+  /** The global Desk's page (ui-v2 nav regroup): Home (`/`), Jobs, Report or Understand, each at its own
+   *  address and reached from the sidebar. A project's page ignores it and reads its tab off `?tab=`. */
+  view?: DeskTab;
   /** The Runs tab's per-row actions (a project's page: Remove from project). */
   runActions?: (runId: string, title: string) => readonly MenuItem[];
   /** Renders a hosted tab's page for an address (App owns those pages); `project` = the project page's id. */
@@ -89,7 +94,7 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
   projectHead?: { title: string; meta?: React.ReactNode; actions: React.ReactNode };
   /** The project's own Work-tab sections (requirements, documents, edit), under the inbox. */
   workExtra?: React.ReactNode;
-  /** The route's query: `?tab=work|understand` (Work is the default), `&focus=spend`. */
+  /** The route's query: a project page's `?tab=` (Work is the default); Report's `?focus=spend`. */
   search?: string;
   runs: SessionView[];
   runsLoaded: boolean;
@@ -115,7 +120,11 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
   const scroller = useRef<HTMLDivElement | null>(null);
   useHistoryScroll(scroller, 'desk.scroll');
   const query = new URLSearchParams(search);
-  const tab: DeskTab = (DESK_TABS.find((t) => t.id === query.get('tab'))?.id) ?? 'work';
+  // The global Desk's pages have no tabs (the sidebar is the way between them); a project's page does.
+  const tabbed = projectId !== undefined;
+  const tab: DeskTab = tabbed ? (DESK_TABS.find((t) => t.id === query.get('tab'))?.id ?? 'work') : (view ?? 'work');
+  /** A view's panel is a tabpanel of the project's tabs; on a global page it is the page itself. */
+  const panelOf = (t: DeskTab): { role?: 'tabpanel'; id?: string; 'aria-labelledby'?: string } => (tabbed ? { role: 'tabpanel', id: panelId(t), 'aria-labelledby': tabId(t) } : {});
   const focus = query.get('focus');
   const goTab = (t: DeskTab): void => navigate(tabPath(t));
   const tabPrefix = useId();
@@ -360,7 +369,7 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
   const header = (
     <header className="wk-desk2-head">
       <div className="wk-desk-a-titles">
-        <h1 className="wk-desk-a-title" data-testid={projectHead !== undefined ? 'project-title' : undefined}>{projectHead?.title ?? 'Desk'}</h1>
+        <h1 className="wk-desk-a-title" data-testid={projectHead !== undefined ? 'project-title' : undefined}>{projectHead?.title ?? PAGE_TITLE[tab]}</h1>
         <p data-testid="desk-as-of" className="wk-desk-a-when">{projectHead?.meta ?? (readState === 'known' ? `As of ${asOf}` : readState === 'stale' ? 'As of the last read' : 'Reading…')}</p>
       </div>
       {/* Search, New job and Chat live in the rail on every page (SessionRail's action row): the header
@@ -371,30 +380,24 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
     </header>
   );
 
-  // Nine views at one level read as a mainframe menu bar (2026-10-26): the four daily views are tabs; the rest
-  // sit under More. The open one of those is shown as a tab of its own, so you always see where you are.
-  const shownTabs = DESK_TABS.filter((t) => t.group === 'primary' || t.id === tab);
-  const tabs = (
+  // A project's page keeps its views as tabs (they scope each view to the project); the global Desk's
+  // views are pages in the sidebar (ui-v2 nav regroup), so it draws none. No More menu: every tab shows.
+  const tabs = !tabbed ? null : (
     <div className="wk-desk2-tabbar">
-      <div role="tablist" aria-label="Desk view" className="wk-desk2-tabs" data-testid="desk-tabs">
-        {shownTabs.map((t) => (
+      <div role="tablist" aria-label="Project view" className="wk-desk2-tabs" data-testid="desk-tabs">
+        {DESK_TABS.map((t) => (
           <a key={t.id} role="tab" id={tabId(t.id)} aria-controls={panelId(t.id)} tabIndex={tab === t.id ? 0 : -1}
-            href={tabPath(t.id)} aria-selected={tab === t.id} data-testid={`desk-tab-${t.id}`} data-group={t.group} className="wk-desk2-tab"
+            href={tabPath(t.id)} aria-selected={tab === t.id} data-testid={`desk-tab-${t.id}`} className="wk-desk2-tab"
             onKeyDown={(e) => { keyboardFocus.current = handleTabKeyDown(e)?.id ?? null; }}
             onClick={(e) => { e.preventDefault(); goTab(t.id); }}>{t.label}</a>
         ))}
       </div>
-      <DeskTabsMore current={tab} pathOf={tabPath} go={(t) => {
-        // A new view focuses its tab once it is drawn; the view already open has its tab now, so it takes focus now.
-        if (t === tab) { goTab(t); document.getElementById(tabId(t))?.focus(); return; }
-        keyboardFocus.current = tabId(t); goTab(t);
-      }} />
     </div>
   );
 
   const runningPath = everythingPath({ tab: 'sessions', filter: 'active', ...(projectId !== undefined ? { project: projectId } : {}) });
   const work = (
-    <div role="tabpanel" id={panelId('work')} aria-labelledby={tabId('work')} data-testid="desk-work" className="wk-work">
+    <div {...panelOf('work')} data-testid="desk-work" className="wk-work">
       {/* The handover is studio-wide (the audit trail and its dismissal are global): the Desk only, never a project page. */}
       {projectId === undefined && handover.since !== null && <HandoverPanel handover={handover} navigate={navigate} now={now} runs={runs} />}
       {/* The band: Needs you (the lead) beside Happening now, the same height, each scrolling inside. */}
@@ -434,7 +437,7 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
       setup={setup} chores={chores} onSignIn={setSignIn} reportPath={tabPath('report')}
       more={<DeskMore runs={runs} needs={readState === 'known' ? needRows.length : null} />}
       handover={handover.since !== null ? <HandoverPanel handover={handover} navigate={navigate} now={now} runs={runs} /> : null}
-      panelId={panelId('work')} labelledBy={tabId('work')} />
+      />
   );
 
   const reportScope = [`the last ${refine.days} days`, scope !== null ? `project ${projectName(scope)}` : null,
@@ -460,7 +463,7 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
   );
 
   const report = (
-    <div role="tabpanel" id={panelId('report')} aria-labelledby={tabId('report')} data-testid="desk-report" className="wk-understand">
+    <div {...panelOf('report')} data-testid="desk-report" className="wk-understand">
       {refineBarOf(true)}
       <div className="wk-understand-cols">
         <div className="wk-understand-main">
@@ -528,14 +531,14 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
 
   const runsTab = (
     <DeskRuns {...(runActions !== undefined ? { rowActions: runActions } : {})} runs={runs} runsShown={runsShown} refine={refine} refineBar={refineBarOf(false)} now={now} navigate={navigate} pathOf={pathOfRun}
-      panelId={panelId('runs')} labelledBy={tabId('runs')}
+      {...(tabbed ? { panelId: panelId('runs'), labelledBy: tabId('runs') } : {})}
       agentName={agentName} projectName={projectName} title={jobTitleOf} showProject={projectId === undefined} />
   );
 
   const governance = (cli: string) => governanceOf(cli, acp, roster ?? []);
 
   const understand = (
-    <div role="tabpanel" id={panelId('understand')} aria-labelledby={tabId('understand')} data-testid="desk-understand" className="wk-understand">
+    <div {...panelOf('understand')} data-testid="desk-understand" className="wk-understand">
       <DeskUnderstand runsShown={runsShown} agents={agents} agentsRead={record.phase} agentsTruncated={record.truncated}
         filterAgent={refine.agent} filterWorkflow={refine.workflow}
         filters={[refine.agent !== null ? `agent ${agentName(refine.agent)}` : null, refine.workflow !== null ? `workflow ${workflowLabel(refine.workflow)}` : null].filter((x): x is string => x !== null).join(', ') || null}
@@ -545,14 +548,14 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
     </div>
   );
 
-  if (isHosted(tab)) {
-    // The hosted pages (Repositories, Steer, Memory, Agents, Evaluate): App renders the page for the
-    // address the tab carries (`&at=/rules/...`, `&at=/memory?view=proposals`), so every sub-page and
-    // deep link keeps working.
+  if (isHostedView(tab)) {
+    // A project's hosted tabs (Repositories, Steering, Memory, Agents, Evaluate): App renders the page for
+    // the address the tab carries (`&at=/rules/...`, `&at=/memory?view=proposals`), so every sub-page and
+    // deep link keeps working. The global ones are pages of their own (`DeskHostedPage`).
     return (
       <div data-testid="desk" data-object="desk" data-desk="v2" data-tab={tab} className="wk-desk wk-desk2 wk-desk2--hosted">
         <div className="wk-desk2-hosted-head">{header}{tabs}</div>
-        <div className="wk-desk2-hosted" role="tabpanel" id={panelId(tab)} aria-labelledby={tabId(tab)} data-testid={`desk-${tab}`}>
+        <div className="wk-desk2-hosted" {...panelOf(tab)} data-testid={`desk-${tab}`}>
           {hosted?.(tab, query.get('at') ?? HOSTED_HOME[tab], projectId ?? null)}
         </div>
         {signIn !== null && <AgentModal agentKey={signIn.key} onClose={() => setSignIn(null)} />}
@@ -566,8 +569,9 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
         {(readState === 'failed' || readState === 'stale') && runsError !== null && (
           <StateBanner data-testid="desk-runs-failed" kind={readState === 'stale' ? 'stale' : readErrorKind(runsError)} what="your work" error={displayText(runsError)} {...(onRetryRuns !== undefined ? { onRetry: onRetryRuns } : {})} />
         )}
-        {/* The landing (`/`, Work): home v2 carries its own greeting where the Desk's title was, under the same tabs. */}
-        {!home && header}
+        {/* The landing (`/`, Home): home v2 carries its own greeting where the page title would be; Jobs,
+            Report and Understand are titled pages; a project's page keeps its header. */}
+        {!(home && tab === 'work') && header}
         {tabs}
         {tab === 'work' ? (home ? homeView : work) : tab === 'runs' ? runsTab : tab === 'report' ? report : understand}
       </div>
@@ -576,34 +580,57 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
   );
 }
 
-export type DeskTab = 'work' | 'runs' | 'repositories' | 'report' | 'understand' | 'steer' | 'memory' | 'agents' | 'evaluate';
-export type HostedTab = 'repositories' | 'steer' | 'memory' | 'agents' | 'evaluate';
-const HOSTED: readonly HostedTab[] = ['repositories', 'steer', 'memory', 'agents', 'evaluate'];
-function isHosted(t: DeskTab): t is HostedTab { return (HOSTED as readonly string[]).includes(t); }
+export type DeskTab = DeskView;
+export type HostedTab = HostedView;
+
+/** A global Desk page's title (one name per page, board/pageNames). */
+const PAGE_TITLE: Record<DeskTab, string> = {
+  work: PAGE_NAMES.home, runs: PAGE_NAMES.jobs, report: PAGE_NAMES.report, understand: PAGE_NAMES.understand,
+  repositories: PAGE_NAMES.repos, steer: PAGE_NAMES.steering, memory: PAGE_NAMES.memory, agents: PAGE_NAMES.agents, evaluate: PAGE_NAMES.evals,
+};
 
 /**
- * The Desk's tabs, in order (the address carries `?tab=`; Work is the default). `primary` = a tab in the bar;
- * `more` = under More (the open one shows in the bar too). Every `?tab=` address works either way.
+ * A project page's tabs, in order (the address carries `?tab=`; Work is the default), named as the
+ * sidebar names the same views. The global Desk has no tabs: each view is a page (board/navModel.ts).
  */
-export const DESK_TABS: readonly { id: DeskTab; label: string; group: 'primary' | 'more'; hint?: string }[] = [
-  { id: 'work', label: 'Work', group: 'primary' },
-  { id: 'runs', label: 'Runs', group: 'primary' },
-  { id: 'repositories', label: 'Repositories', group: 'primary' },
-  { id: 'report', label: 'Report', group: 'primary' },
-  { id: 'understand', label: 'Understand', group: 'more', hint: 'Compare agents, workflows and jobs side by side' },
-  { id: 'steer', label: 'Steer', group: 'more', hint: 'The rules agents are held to' },
-  { id: 'memory', label: 'Memory', group: 'more', hint: 'What agents remember and recall' },
-  { id: 'agents', label: 'Agents', group: 'more', hint: 'Sign-in, safety checks and fixes per agent' },
-  { id: 'evaluate', label: 'Evaluate', group: 'more', hint: 'Test the rules against sample behaviour' },
+export const DESK_TABS: readonly { id: DeskTab; label: string }[] = [
+  { id: 'work', label: 'Work' },
+  { id: 'runs', label: PAGE_NAMES.jobs },
+  { id: 'repositories', label: PAGE_NAMES.repos },
+  { id: 'report', label: PAGE_NAMES.report },
+  { id: 'understand', label: PAGE_NAMES.understand },
+  { id: 'steer', label: PAGE_NAMES.steering },
+  { id: 'memory', label: PAGE_NAMES.memory },
+  { id: 'agents', label: PAGE_NAMES.agents },
+  { id: 'evaluate', label: PAGE_NAMES.evals },
 ];
 
-/** Each hosted tab's own page when the address names none. */
-export const HOSTED_HOME: Record<HostedTab, string> = { repositories: '/repos', steer: '/rules', memory: '/memory', agents: '/agents', evaluate: '/testing/evals' };
+/** Each hosted view's own page when the address names none. */
+export const HOSTED_HOME: Record<HostedTab, string> = {
+  repositories: DESK_VIEW_PATH.repositories, steer: DESK_VIEW_PATH.steer, memory: DESK_VIEW_PATH.memory, agents: DESK_VIEW_PATH.agents, evaluate: DESK_VIEW_PATH.evaluate,
+};
 
-/** A Desk tab's address; `at` = the hosted page's own address; `base` = `/` or a project's page. */
+/**
+ * A Desk view's address; `at` = a hosted page's own address; `base` = `/` or a project's page. On the
+ * global Desk every view is a page of its own (`/jobs`, `/report`, `/rules/…`), so a hosted view's
+ * address IS its `at`; a project's views are its tabs (`/projects/:id?tab=…&at=…`).
+ */
 export function deskTabPath(t: DeskTab, at?: string, base = '/'): string {
+  if (base === '/') return isHostedView(t) && at !== undefined ? at : DESK_VIEW_PATH[t];
   if (t === 'work') return base;
   return `${base}?tab=${t}${at !== undefined ? `&at=${encodeURIComponent(at)}` : ''}`;
+}
+
+/**
+ * A global hosted page (Repositories, Steering, Memory, Agents, Evaluate at their own addresses): the
+ * page App renders, in the frame a project's hosted tab gives it, without the Desk's header.
+ */
+export function DeskHostedPage({ view, children }: { view: HostedTab; children: React.ReactNode }): React.ReactElement {
+  return (
+    <div data-object="page" data-desk="v2" data-tab={view} className="wk-desk wk-desk2 wk-desk2--hosted wk-desk2--page">
+      <div className="wk-desk2-hosted" data-testid={`desk-${view}`}>{children}</div>
+    </div>
+  );
 }
 
 /** Pre-canned questions the run record, the agent record and the estate can answer (Ask, unchanged). */
@@ -679,53 +706,6 @@ function InsightCards({ items, loading, recordFailed, navigate, workPath }: { it
         </button>
       )}
     </>
-  );
-}
-
-/**
- * More (2026-10-26): the Desk's less-used views as a disclosure beside the tabs — a button and a short list,
- * each with what it is for. The list is always in the page (hidden while closed), so every view stays one
- * address away and findable; Escape or a click outside closes it.
- */
-function DeskTabsMore({ current, pathOf, go }: { current: DeskTab; pathOf: (t: DeskTab) => string; go: (t: DeskTab) => void }): React.ReactElement {
-  const [open, setOpen] = useState(false);
-  const root = useRef<HTMLDivElement | null>(null);
-  const btn = useRef<HTMLButtonElement | null>(null);
-  const listId = useId();
-  const items = DESK_TABS.filter((t) => t.group === 'more');
-  const inMore = items.some((t) => t.id === current);
-  useEffect(() => {
-    if (!open) return undefined;
-    // Never past the screen's foot: on a short screen (a phone on its side) the list scrolls inside.
-    const panel = root.current?.querySelector<HTMLElement>('.wk-desk2-tabmore-panel');
-    if (panel != null) panel.style.maxHeight = `${Math.max(160, window.innerHeight - panel.getBoundingClientRect().top - 12)}px`;
-    root.current?.querySelector<HTMLElement>('a')?.focus();
-    const onDown = (e: MouseEvent): void => { if (root.current !== null && !root.current.contains(e.target as Node)) setOpen(false); };
-    const onKey = (e: KeyboardEvent): void => { if (e.key === 'Escape') { setOpen(false); btn.current?.focus(); } };
-    document.addEventListener('mousedown', onDown);
-    document.addEventListener('keydown', onKey);
-    return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey); };
-  }, [open]);
-  return (
-    <div ref={root} className="wk-desk2-tabmore">
-      <button ref={btn} type="button" data-testid="desk-tabs-more" aria-expanded={open} aria-controls={listId} data-current={inMore ? 'true' : undefined}
-        className="wk-desk2-tab wk-desk2-tabmore-btn" onClick={() => setOpen((v) => !v)}>
-        More<ChevronDown size={15} aria-hidden className="wk-desk2-tabmore-chev" />
-      </button>
-      <div id={listId} className="wk-desk2-tabmore-panel wk-overlay" data-testid="desk-tabs-more-panel" hidden={!open}>
-        <ul className="wk-desk2-tabmore-list" aria-label="More Desk views">
-          {items.map((t) => (
-            <li key={t.id}>
-              <a href={pathOf(t.id)} data-testid={`desk-more-tab-${t.id}`} aria-current={current === t.id ? 'page' : undefined} className="wk-desk2-tabmore-item"
-                onClick={(e) => { e.preventDefault(); setOpen(false); go(t.id); }}>
-                <span className="wk-desk2-tabmore-label">{t.label}</span>
-                {t.hint !== undefined && <span className="wk-desk2-tabmore-hint">{t.hint}</span>}
-              </a>
-            </li>
-          ))}
-        </ul>
-      </div>
-    </div>
   );
 }
 

@@ -1,11 +1,11 @@
 // @vitest-environment node
+import { BUILD_LINKS } from '../src/board/navModel.js';
 import { describe, expect, it } from 'vitest';
 import type { RosterSeat, SessionView } from '../src/api/types.js';
 import type { NeedRow } from '../src/board/needsYou.js';
 import { groupAlike, needCount } from '../src/board/needsQueue.js';
 import { deskReadState } from '../src/board/deskModel.js';
 import {
-  DESK_RAIL_LINKS,
   noSignedInHelper,
   deskGreeting,
   deskProjects,
@@ -196,12 +196,12 @@ describe('chores for whoever runs studio', () => {
 });
 
 describe('the rail destinations', () => {
-  it('the Workspace group (operator IA 2026-10-13; studio-settings-tabs): Skills · MCP · Plugins · Workflows · General; no Desk-tab pages', () => {
-    expect(DESK_RAIL_LINKS.map((l) => [l.label, l.path])).toEqual([
-      ['Skills', '/skills'], ['MCP', '/mcp'], ['Plugins', '/plugins'], ['Workflows', '/workflows'], ['General', '/system'],
+  it('Build & settings lists the old Workspace group: Skills · MCP · Plugins · Workflows · Settings; no sidebar page', () => {
+    expect(BUILD_LINKS.map((l) => [l.label, l.path])).toEqual([
+      ['Skills', '/skills'], ['MCP', '/mcp'], ['Plugins', '/plugins'], ['Workflows', '/workflows'], ['Settings', '/system'],
     ]);
-    // Repositories, Steering, Evals and Agents are Desk tabs; the retired overview is not linked.
-    for (const d of DESK_RAIL_LINKS) {
+    // Repositories, Steering, Evaluate and Agents are sidebar pages; the retired overview is not linked.
+    for (const d of BUILD_LINKS) {
       expect(['/repos', '/rules', '/testing/evals', '/agents', '/settings']).not.toContain(d.path);
       // Nothing that redirects.
       expect(['/projects', '/chats', '/work', '/execute', '/vibe', '/demo']).not.toContain(d.path);

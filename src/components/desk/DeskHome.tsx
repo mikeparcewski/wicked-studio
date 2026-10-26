@@ -66,8 +66,9 @@ export function DeskHome({
   more: React.ReactNode;
   /** While you were away: shown after an absence only, under the ask box. */
   handover?: React.ReactNode;
-  panelId: string;
-  labelledBy: string;
+  /** Set only when a tab bar names this view (the global Desk has none since the sidebar regroup). */
+  panelId?: string;
+  labelledBy?: string;
 }): React.ReactElement {
   const askId = useId();
   const needsId = useId();
@@ -105,7 +106,7 @@ export function DeskHome({
   const view = (row: NeedRow): SessionView | null => { const id = needRunId(row); return id === null ? null : runs.find((v) => v.session.id === id) ?? null; };
 
   return (
-    <div role="tabpanel" id={panelId} aria-labelledby={labelledBy} data-testid="desk-work" data-home="v2" className="wk-home">
+    <div {...(panelId !== undefined && labelledBy !== undefined ? { role: 'tabpanel', id: panelId, 'aria-labelledby': labelledBy } : {})} data-testid="desk-work" data-home="v2" className="wk-home">
       <div className="wk-home-col">
         <header className="wk-home-head">
           <div className="wk-home-hello">

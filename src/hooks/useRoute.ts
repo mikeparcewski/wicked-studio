@@ -27,6 +27,10 @@ import { announceHistoryChange, announceNavigateAway, inAppEntryState, isInAppEn
 // The orphaned `coverage` and `domain` settings panels retired in the same wave:
 // their paths parse to `system` and `useRetiredSettingsRedirect` rewrites the
 // address onto `/system`.
+// `jobs`, `report` and `understand` (the ui-v2 nav regroup, 2026-10-26) are the Desk's old Runs, Report and
+// Understand tabs as pages of their own (`/jobs`, `/report[?focus=]`, `/understand`); `build` is Build &
+// settings (`/build`), the list of Skills, MCP, Plugins, Workflows and Settings. Flat: deeper spellings
+// are dead addresses. The old `/?tab=…` Desk addresses redirect onto them (`legacyDeskTarget`).
 // `not-found` is the honest dead-address state (usability review #4): an address
 // that matches NO page renders a not-found view that PRESERVES the typed URL and
 // offers the way out — it never silently normalizes onto a nearby default. Only
@@ -42,10 +46,10 @@ import { announceHistoryChange, announceNavigateAway, inAppEntryState, isInAppEn
 // worktree files/diff as REAL routes — `/runs/:id/events`, `/runs/:id/files` — so the palette
 // verb that opens them is one history entry and browser Back returns to where you were. The run
 // id rides in `artifactId` (NOT `runId`: no run-selected machinery, no legacy shell redirect).
-export type Panel = 'home' | 'runs' | 'run-events' | 'run-files' | 'workflows' | 'skills' | 'mcp' | 'steering' | 'memory' | 'testing' | 'repos' | 'system' | 'theme' | 'repo-detail' | 'project-detail' | 'session' | 'editors' | 'watch' | 'rules' | 'everything' | 'product' | 'project-requirements' | 'plugins' | 'agents' | 'learn' | 'health' | 'not-found';
+export type Panel = 'home' | 'jobs' | 'report' | 'understand' | 'build' | 'runs' | 'run-events' | 'run-files' | 'workflows' | 'skills' | 'mcp' | 'steering' | 'memory' | 'testing' | 'repos' | 'system' | 'theme' | 'repo-detail' | 'project-detail' | 'session' | 'editors' | 'watch' | 'rules' | 'everything' | 'product' | 'project-requirements' | 'plugins' | 'agents' | 'learn' | 'health' | 'not-found';
 
 /** Every panel, exhaustively (the compile-time check below fails when the union grows without it). */
-export const ALL_PANELS = ['home', 'runs', 'run-events', 'run-files', 'workflows', 'skills', 'mcp', 'steering', 'memory', 'testing', 'repos', 'system', 'theme', 'repo-detail', 'project-detail', 'session', 'editors', 'watch', 'rules', 'everything', 'product', 'project-requirements', 'plugins', 'agents', 'learn', 'health', 'not-found'] as const satisfies readonly Panel[];
+export const ALL_PANELS = ['home', 'jobs', 'report', 'understand', 'build', 'runs', 'run-events', 'run-files', 'workflows', 'skills', 'mcp', 'steering', 'memory', 'testing', 'repos', 'system', 'theme', 'repo-detail', 'project-detail', 'session', 'editors', 'watch', 'rules', 'everything', 'product', 'project-requirements', 'plugins', 'agents', 'learn', 'health', 'not-found'] as const satisfies readonly Panel[];
 type MissingPanel = Exclude<Panel, (typeof ALL_PANELS)[number]>;
 export const PANELS_EXHAUSTIVE: MissingPanel extends never ? true : MissingPanel = true;
 
@@ -294,6 +298,9 @@ function parse(pathname: string): Route {
   }
   if (first === 'projects' && second) {
     return route({ panel: 'project-detail', projectId: safeDecode(second) });
+  }
+  if (first === 'jobs' || first === 'report' || first === 'understand' || first === 'build') {
+    return restEmpty(2) ? route({ panel: first }) : route({ panel: 'not-found' });
   }
   if ((PANELS as string[]).includes(first) && first !== 'runs') {
     return route({ panel: first as Panel });

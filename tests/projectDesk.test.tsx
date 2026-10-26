@@ -131,7 +131,7 @@ describe('the project Desk', () => {
     expect(document.getElementById('requirements')).toBeNull();
     view.rerender(<ProjectDesk {...props} projectId="default" search="?tab=repositories" />);
     expect(screen.getByText(/Work not in a project has no repositories of its own/)).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /Desk’s Repositories/ })).toHaveAttribute('href', '/?tab=repositories');
+    expect(screen.getByRole('link', { name: /Repositories page/ })).toHaveAttribute('href', '/repos');
     expect(screen.queryByTestId('project-repos')).toBeNull();
   });
 

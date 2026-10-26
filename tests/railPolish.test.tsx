@@ -114,29 +114,30 @@ describe('the rail redesign', () => {
     expect(screen.getByTestId('session-rail').textContent).not.toContain('Start something');
   });
 
-  it('"General settings" is gone: General (the /system page) is a Workspace link — no dropdown, no overview', () => {
+  it('"General settings" is gone: the foot holds one Build & settings link (to its page) — no dropdown, no overview', () => {
     const navigate = vi.fn();
     render(<SessionRail runs={[]} needRows={[]} navigate={navigate} pathname="/" />);
     expect(screen.queryByTestId('desk-rail-more')).toBeNull();
     expect(screen.getByTestId('session-rail').textContent).not.toContain('General settings');
-    const general = screen.getByTestId('desk-rail-general');
-    expect(general.tagName).toBe('A');
-    expect(general).toHaveAttribute('href', '/system');
-    expect(general.textContent?.trim()).toBe('General');
-    fireEvent.click(general);
-    expect(navigate).toHaveBeenCalledWith('/system');
+    expect(screen.queryByTestId('desk-rail-general')).toBeNull();
+    const build = screen.getByTestId('desk-rail-build');
+    expect(build.tagName).toBe('A');
+    expect(build).toHaveAttribute('href', '/build');
+    expect(build.textContent?.trim()).toBe('Build & settings');
+    fireEvent.click(build);
+    expect(navigate).toHaveBeenCalledWith('/build');
     expect(screen.queryByTestId('desk-rail-additional')).toBeNull();
   });
 
-  it('the foot order: the Workspace links ending Workflows · General, then the Nerve Center tile last', () => {
+  it('the foot order: Build & settings, then the Nerve Center tile last', () => {
     render(<SessionRail runs={[]} needRows={[]} navigate={() => {}} pathname="/" />);
     const rail = screen.getByTestId('session-rail');
     const ids = [...rail.querySelectorAll('.wk-rail-foot [data-testid], .wk-nc-dock [data-testid]')].map((e) => e.getAttribute('data-testid') ?? '').filter((id) => id.startsWith('desk-rail-'));
-    expect(ids).toEqual(['desk-rail-skills', 'desk-rail-mcp', 'desk-rail-plugins', 'desk-rail-workflows', 'desk-rail-general', 'desk-rail-nerve']);
-    for (const id of ['desk-rail-skills', 'desk-rail-general']) expect(screen.getByTestId(id)).toHaveClass('wk-rail-link--secondary');
-    // Its own tier: the one large tile, not a secondary link (DES-SYSTEM-VIEW).
+    expect(ids).toEqual(['desk-rail-build', 'desk-rail-nerve']);
+    expect(screen.getByTestId('desk-rail-build')).toHaveClass('wk-rail-nav-item');
+    // Its own tier: the one large tile, not a page item (DES-SYSTEM-VIEW).
     expect(screen.getByTestId('desk-rail-nerve')).toHaveClass('wk-nc-tile');
-    expect(screen.getByTestId('desk-rail-nerve')).not.toHaveClass('wk-rail-link--secondary');
+    expect(screen.getByTestId('desk-rail-nerve')).not.toHaveClass('wk-rail-nav-item');
     // The separate Watchtower pill and Health link are gone: the tile replaced both.
     expect(screen.queryByTestId('watch-pill')).toBeNull();
     expect(screen.queryByTestId('desk-rail-health')).toBeNull();
@@ -190,16 +191,15 @@ describe('the rail redesign', () => {
     expect(screen.getByTestId('desk-rail-nerve')).toHaveAttribute('aria-current', 'page');
   });
 
-  it("the separator above the Workspace group is the foot's own top border — no spacer element", () => {
+  it("the separator above Build & settings is the foot's own top border — no spacer element", () => {
     render(<SessionRail runs={[]} needRows={[]} navigate={() => {}} pathname="/" />);
     const rail = screen.getByTestId('session-rail');
     expect(rail.querySelector('.wk-rail-spacer')).toBeNull();
-    const first = screen.getByTestId('desk-rail-skills');
-    // The group sits in the foot — the foot's border-top (components.css) is the separator.
-    expect(first.closest('.wk-rail-foot')).not.toBeNull();
-    // Change 18: the foot's group label leads the links.
-    expect((first.previousElementSibling as HTMLElement).getAttribute('data-testid')).toBe('rail-foot-label');
-    expect(screen.getByTestId('rail-foot-label')).toHaveTextContent('Workspace');
+    const build = screen.getByTestId('desk-rail-build');
+    // It sits in the foot — the foot's border-top (components.css) is the separator; no Workspace label.
+    expect(build.closest('.wk-rail-foot')).not.toBeNull();
+    expect(build.previousElementSibling).toBeNull();
+    expect(screen.queryByTestId('rail-foot-label')).toBeNull();
     // Nerve Center is pinned last: its own dock, the rail's last child (sticky in the phone drawer).
     expect(rail.lastElementChild).toBe(screen.getByTestId('rail-nerve-dock'));
     expect(screen.getByTestId('rail-nerve-dock')).toContainElement(screen.getByTestId('desk-rail-nerve'));

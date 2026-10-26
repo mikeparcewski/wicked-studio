@@ -90,7 +90,7 @@ describe('Desk r3 evidence on screen', () => {
   it('removes workflow-unsupported findings and carries the limitation into Understand and Report questions', async () => {
     const p = { runs: [deskRun('failed', { status: 'failed' })], runsLoaded: true, needRows: [], now: NOW, navigate: vi.fn() };
     let rerender!: ReturnType<typeof render>['rerender'];
-    await act(async () => { ({ rerender } = render(<DeskV2 {...p} search="?tab=report" />)); });
+    await act(async () => { ({ rerender } = render(<DeskV2 {...p} view="report" />)); });
     expect(screen.getAllByTestId('desk-callout').some((c) => c.dataset.id === 'bench:claude')).toBe(true);
     fireEvent.change(screen.getByTestId('desk-refine-workflow'), { target: { value: 'fix-bug' } });
     const improve = screen.getByTestId('desk-insights');
@@ -99,7 +99,7 @@ describe('Desk r3 evidence on screen', () => {
     expect(screen.queryByTestId('desk-callout')).not.toBeInTheDocument();
     fireEvent.click(screen.getAllByTestId('desk-report').find((b) => b.dataset.id === 'bench')!);
     expect(useAskDock.getState().request?.seedText).toContain('the agent record has no workflow filter');
-    rerender(<DeskV2 {...p} search="?tab=understand" />);
+    rerender(<DeskV2 {...p} view="understand" />);
     expect(screen.getByTestId('desk-und-agents-unread')).toHaveTextContent('Agent numbers can’t be split by workflow yet');
     expect(screen.queryByTestId('desk-compare-card')).not.toBeInTheDocument();
     expect(screen.queryByTestId('desk-insights-generate')).not.toBeInTheDocument();
@@ -130,11 +130,11 @@ describe('Desk r4 evidence (codex r4, lane half)', () => {
   it('before the job list is read, Report quality and Understand say nothing and start nothing', async () => {
     const p = { runs: [deskRun('a')], runsLoaded: false, needRows: [], now: NOW, navigate: vi.fn() };
     let rerender!: ReturnType<typeof render>['rerender'];
-    await act(async () => { ({ rerender } = render(<DeskV2 {...p} search="?tab=report" />)); });
+    await act(async () => { ({ rerender } = render(<DeskV2 {...p} view="report" />)); });
     const q = screen.getByTestId('desk-stat-quality');
     expect(q.querySelector('.wk-stat-value')).toHaveAttribute('aria-busy', 'true');
     expect(q).not.toHaveTextContent('no jobs');
-    rerender(<DeskV2 {...p} search="?tab=understand" />);
+    rerender(<DeskV2 {...p} view="understand" />);
     expect(screen.getByTestId('desk-und-reading')).toBeInTheDocument();
     expect(screen.queryByTestId('desk-insights-generate')).not.toBeInTheDocument();
     expect(screen.getByTestId('desk-analyze-start')).toBeDisabled();

@@ -1,11 +1,16 @@
 /**
  * ONE NAME PER PAGE (studio#725, reel UX gate): the rail, the ⌘K "Go to" rows and each page's
  * own title read these words, so a link never lands on a page that calls itself something else
- * ("Configuration" opening "System"). `/system` is "General" (rail restructure 2026-10-13; it was
- * "Configuration", listed on the retired "General settings" overview). Pure.
+ * ("Configuration" opening "System"). The sidebar regroup (ui-v2, 2026-10-26): `/` is "Home", the
+ * Desk's old tabs are pages of their own (Jobs, Report, Understand, Evaluate), and `/system` is
+ * "Settings", the title its page has always had (its first tab is General). Pure.
  */
 export const PAGE_NAMES = {
-  home: 'Desk',
+  home: 'Home',
+  jobs: 'Jobs',
+  report: 'Report',
+  understand: 'Understand',
+  build: 'Build & settings',
   agents: 'Agents',
   /** `/watch` — the system dashboard (DES-SYSTEM-VIEW); `/health` redirects there. */
   watch: 'Nerve Center',
@@ -16,15 +21,20 @@ export const PAGE_NAMES = {
   steering: 'Steering',
   memory: 'Memory',
   testing: 'Testing',
-  evals: 'Evals',
+  evals: 'Evaluate',
   learn: 'Learn',
-  system: 'General',
+  system: 'Settings',
   repos: 'Repositories',
   workflows: 'Workflows',
   theme: 'Theme',
 } as const;
 
 const BY_PATH: ReadonlyArray<[string, string]> = [
+  ['/jobs', PAGE_NAMES.jobs],
+  ['/report', PAGE_NAMES.report],
+  ['/understand', PAGE_NAMES.understand],
+  ['/build', PAGE_NAMES.build],
+  ['/steering', PAGE_NAMES.steering],
   ['/testing/evals', PAGE_NAMES.evals],
   ['/testing', PAGE_NAMES.testing],
   ['/watch', PAGE_NAMES.watch],

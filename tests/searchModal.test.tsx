@@ -329,7 +329,7 @@ describe('where a hit opens (searchHitHref)', () => {
     [hit('project', 'p-up', 't'), '/projects/p-up'],
     [hit('repo', 'repo 1', 't'), '/repo-detail/repo%201'],
     [hit('rule', 'POL-1', 't'), '/rules/POL-1'],
-    [hit('memory', 'm1', 'Uploads over 10 MB go to the bucket'), `/?tab=memory&at=${encodeURIComponent('/memory?q=Uploads%20over%2010%20MB%20go%20to%20the%20bucket')}`],
+    [hit('memory', 'm1', 'Uploads over 10 MB go to the bucket'), '/memory?q=Uploads%20over%2010%20MB%20go%20to%20the%20bucket'],
     [hit('doc', 'upload-design', 't'), '/everything?tab=made&project=p-up&open=upload-design'],
   ])('%#: %s', (h, href) => {
     expect(searchHitHref(h as SearchHit, ctx)).toBe(href);

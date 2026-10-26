@@ -914,6 +914,16 @@
     "watch-pill-card": "nc-attention",
     "watch-pill-row": "nc-attention-item",
     "watch-pill-wrap": "desk-rail-nerve",
-    "desk-rail-theme": "settings-tabs"
+    "desk-rail-theme": "settings-tabs",
+    "desk-rail-skills": "build-link-skills",
+    "desk-rail-mcp": "build-link-mcp",
+    "desk-rail-plugins": "build-link-plugins",
+    "desk-rail-workflows": "build-link-workflows",
+    "desk-rail-general": "build-link-settings",
+    "desk-tabs-more": "rail-nav",
+    "desk-tabs-more-panel": "rail-nav",
+    "desk-more-tab-*": "rail-nav",
+    "rail-foot-label": "desk-rail-build",
+    "rail-group-more": "rail-all-jobs"
   }
 }

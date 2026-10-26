@@ -1,6 +1,5 @@
 import type { CoreEvent, SessionView, WorkUnit } from '../api/types.js';
 import { floorOverrideOf, type FloorOverrideView } from './floorOverride.js';
-import { PAGE_NAMES } from './pageNames.js';
 
 /**
  * The assurance receipt (wicked-core#850 / #852, core-ts 0.7.46): what a run REQUIRES, and for each
@@ -127,11 +126,11 @@ export function qeAcceptanceSetting(caps: Record<string, unknown> | null | undef
   return v === 'off' || v === 'required' ? v : null;
 }
 export const QE_OFF_NOTE =
-  `QE acceptance is off on this computer (Settings › ${PAGE_NAMES.system}), so this job doesn’t wait for it. `
+  `QE acceptance is off on this computer (Settings › General), so this job doesn’t wait for it. `
   + 'The job, its gates and its delivery say it was skipped.';
 /** The same note once the operator forces QE acceptance for this one job. */
 export const QE_OFF_FORCED_NOTE =
-  `QE acceptance is off on this computer (Settings › ${PAGE_NAMES.system}), but this job requires it: `
+  `QE acceptance is off on this computer (Settings › General), but this job requires it: `
   + 'it waits for a QE acceptance pass before it delivers.';
 export const QE_FORCE_LABEL = 'Force QE acceptance';
 export const QE_FORCE_DISCLOSURE =

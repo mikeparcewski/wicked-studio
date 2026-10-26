@@ -2,7 +2,6 @@ import type { SessionView } from '../api/types.js';
 import type { SearchHit } from '../api/search.js';
 import { rulePath } from '../api/decisions.js';
 import { MEMORY_PATH } from '../api/memory.js';
-import { deskTabPath } from '../components/desk/DeskV2.js';
 import { projectDetailPath } from '../hooks/useRoute.js';
 import { madeOpenAddress } from './madeMoves.js';
 import { sessionPath } from './sessionModel.js';
@@ -30,7 +29,7 @@ export function searchHitHref(hit: SearchHit, ctx: { runChatId: boolean; runs: r
     case 'rule':
       return rulePath(t.rule_id);
     case 'memory':
-      return deskTabPath('memory', `${MEMORY_PATH}?q=${encodeURIComponent(memoryNeedle(hit.title))}`);
+      return `${MEMORY_PATH}?q=${encodeURIComponent(memoryNeedle(hit.title))}`;
     case 'doc':
       return madeOpenAddress('document', t.project_id, t.doc, ctx.runs, ctx.runChatId);
   }
