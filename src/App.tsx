@@ -631,13 +631,14 @@ export function App(): React.ReactElement {
         </div>
       );
     }
-    // `/watch` — Nerve Center (DES-SYSTEM-VIEW): one dashboard (attention, CLIs, runs, infra,
-    // governance) with the Watchtower feed (S14) under its panels. `/health` redirects here.
+    // `/watch` — Nerve Center (DES-SYSTEM-VIEW): a compact header over five tabs (attention, CLIs, runs,
+    // infra, governance; `?tab=`), the Watchtower feed (S14) in the Runs tab. `/health` redirects here.
     if (panel === 'watch') {
       return (
         <NerveCenterPage
           navigate={navigate}
           needCount={attentionBadge(needRows)}
+          search={search}
           feed={<WatchtowerPage embedded count={attentionBadge(needRows)} runs={shownRuns} runsLoaded={runsLoaded} runsError={runsError} onRetryRuns={refresh} navigate={navigate} now={needsNow} search={search} />}
         />
       );

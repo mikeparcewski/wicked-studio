@@ -54,7 +54,7 @@ afterEach(() => cleanup());
 
 describe('seat sign-in semantics on the page (F-2R2-009)', () => {
   it('an active, signed-out seat wears the amber "!" and HEDGES the consequence — never a green ✓, never an engine rule the wire does not carry', async () => {
-    render(<HealthPage />);
+    render(<HealthPage search="?tab=clis" />);
     const rows = await screen.findAllByTestId('rail-seat-row');
     const opencode = rows.find((r) => r.getAttribute('data-seat') === 'opencode')!;
     expect(opencode).toHaveAttribute('data-signed-in', 'false');
@@ -80,7 +80,7 @@ describe('seat sign-in semantics on the page (F-2R2-009)', () => {
       { key: 'pi', display_name: 'pi', binary: 'pi', enabled_for_council: true, health: { status: 'active', since: SINCE }, signed_in: false,
         auth: 'signed_out', council_eligible: true } as RosterSeat,
     ];
-    render(<HealthPage />);
+    render(<HealthPage search="?tab=clis" />);
     const rows = await screen.findAllByTestId('rail-seat-row');
     const byKey = (k: string): HTMLElement => rows.find((r) => r.getAttribute('data-seat') === k)!;
     // A free-tier seat: the daemon says no sign-in is needed — a green ✓, the tier named.
@@ -99,7 +99,7 @@ describe('seat sign-in semantics on the page (F-2R2-009)', () => {
   });
 
   it('a signed-in seat is unchanged; an inactive seat keeps its FULL error text; unknown sign-in stays quiet', async () => {
-    render(<HealthPage />);
+    render(<HealthPage search="?tab=clis" />);
     const rows = await screen.findAllByTestId('rail-seat-row');
     const claude = rows.find((r) => r.getAttribute('data-seat') === 'claude')!;
     expect(claude).toHaveAttribute('data-signed-in', 'true');

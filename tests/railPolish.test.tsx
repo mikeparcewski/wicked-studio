@@ -251,13 +251,19 @@ describe('Not in a project has an open icon too', () => {
 });
 
 describe("the old /health page's cards, folded into Nerve Center", () => {
-  it('Connection · Helpers · This week · Governance all render inside the dashboard panels', async () => {
-    render(<HealthPage />);
-    const page = await screen.findByTestId('nerve-center-page');
+  it('Connection · Helpers · This week · Governance all render inside the dashboard tabs', async () => {
+    // Each card lives in its tab (Infra, CLIs, Governance); each tab is one click away.
+    const { rerender } = render(<HealthPage search="?tab=infra" />);
+    let page = await screen.findByTestId('nerve-center-page');
     expect(within(page).getByRole('heading', { level: 1, name: 'Nerve Center' })).toBeInTheDocument();
-    for (const id of ['health-card-connection', 'health-card-seats', 'health-card-week', 'health-card-governance']) {
-      expect(within(page).getByTestId(id)).toBeInTheDocument();
-    }
+    expect(within(page).getByTestId('health-card-connection')).toBeInTheDocument();
+    rerender(<HealthPage search="?tab=governance" />);
+    page = screen.getByTestId('nerve-center-page');
+    expect(within(page).getByTestId('health-card-governance')).toBeInTheDocument();
+    expect(screen.getByTestId('rail-governance')).toHaveAttribute('data-state', 'absent');
+    rerender(<HealthPage search="?tab=clis" />);
+    page = screen.getByTestId('nerve-center-page');
+    for (const id of ['health-card-seats', 'health-card-week']) expect(within(page).getByTestId(id)).toBeInTheDocument();
     // The seats registry, the week's window, and the honest governance "not reported".
     const rows = await screen.findAllByTestId('rail-seat-row');
     expect(rows.map((r) => r.getAttribute('data-seat'))).toEqual(ROSTER.map((s) => s.key));
@@ -268,7 +274,6 @@ describe("the old /health page's cards, folded into Nerve Center", () => {
     const window = within(weekCard).getByTestId('rail-seat-week-window');
     expect(window).toHaveAttribute('data-state', 'ok');
     expect(window.textContent).toContain('2026-09-27');
-    expect(screen.getByTestId('rail-governance')).toHaveAttribute('data-state', 'absent');
     expect(getRoster).toHaveBeenCalled();
     expect(getSeatRecord).toHaveBeenCalled();
   });

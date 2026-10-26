@@ -2,7 +2,12 @@ import { useRef } from 'react';
 import { usePhone } from '../../hooks/usePhone.js';
 import { OverflowMenu } from './OverflowMenu.js';
 
-export interface TabDef { id: string; label: string; count?: number }
+export interface TabDef {
+  id: string; label: string; count?: number;
+  /** A state dot before the label (`data-tone` on the dot; the caller's CSS colours it) and its word
+   *  for a screen reader ("Infra, blocking"). */
+  dot?: { tone: string; word: string };
+}
 
 /**
  * Tabs that never wrap (design/UI-CONTRACT.md §4.4; audit row 28): up to `maxVisible` tabs in one row
@@ -35,14 +40,14 @@ export function Tabs({ tabs, active, onChange, maxVisible, 'aria-label': ariaLab
         {shown.map((t, i) => (
           <button key={t.id} ref={(el) => { refs.current[i] = el; }} id={`${idBase}-tab-${t.id}`} type="button" role="tab"
             aria-selected={t.id === active} aria-controls={`${idBase}-panel`} tabIndex={t.id === active ? 0 : -1}
-            data-tab={t.id} {...(tabTestId !== undefined ? { 'data-testid': tabTestId } : {})} className="wk-tab" onClick={() => onChange(t.id)}
+            data-tab={t.id} {...(t.dot !== undefined ? { 'aria-label': `${word(t)}, ${t.dot.word}` } : {})} {...(tabTestId !== undefined ? { 'data-testid': tabTestId } : {})} className="wk-tab" onClick={() => onChange(t.id)}
             onKeyDown={(e) => {
               if (e.key === 'ArrowRight') { e.preventDefault(); focusAt(i + 1); }
               if (e.key === 'ArrowLeft') { e.preventDefault(); focusAt(i - 1); }
               if (e.key === 'Home') { e.preventDefault(); focusAt(0); }
               if (e.key === 'End') { e.preventDefault(); focusAt(shown.length - 1); }
             }}
-          >{word(t)}</button>
+          >{t.dot !== undefined && <span aria-hidden className="wk-tab-dot" data-tone={t.dot.tone} />}{word(t)}</button>
         ))}
       </div>
       {rest.length > 0 && (

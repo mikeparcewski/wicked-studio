@@ -155,9 +155,12 @@ export function WatchtowerPage({ runs, runsLoaded = true, runsError = null, onRe
     setKindState(k);
     const params = new URLSearchParams(search);
     if (k === null) params.delete('filter'); else params.set('filter', k);
+    // Inside Nerve Center the feed is the Runs tab's: picking a chip keeps the page on it (a bare
+    // `?filter=` opened Runs; clearing it must not drop the page back to its landing tab).
+    if (embedded && !params.has('tab')) params.set('tab', 'runs');
     const query = params.toString();
     navigate(`/watch${query ? `?${query}` : ''}${window.location.hash}`, { replace: true });
-  }, [navigate, search]);
+  }, [navigate, search, embedded]);
   const gateKind = kind === 'approved' || kind === 'rejected' ? kind : null;
   // The decision record (`GET /decisions`), read when the page opens: the Approved / Rejected source.
   const [ledger, setLedger] = useState<{ decisions: DecisionView[]; error: string | null; loaded: boolean; unread: 'absent' | 'off' | null }>({ decisions: [], error: null, loaded: false, unread: null });

@@ -48,7 +48,7 @@ const moveOf = async (seat: string): Promise<HTMLElement> => {
 
 describe('the week rides the mount read', () => {
   it('reads GET /roster/record for 7 days on mount', async () => {
-    render(<HealthPage />);
+    render(<HealthPage search="?tab=clis" />);
     await screen.findAllByTestId('rail-seat-week');
     expect(getSeatRecord).toHaveBeenCalledWith(7);
     expect(screen.getByTestId('rail-seat-week-window')).toHaveTextContent('last 7 days to 2026-09-27 · 9 runs read');
@@ -57,7 +57,7 @@ describe('the week rides the mount read', () => {
 
 describe('each seat gets exactly one move from its own record', () => {
   it('five seats, five weeks, one move each', async () => {
-    render(<HealthPage />);
+    render(<HealthPage search="?tab=clis" />);
     await screen.findAllByTestId('rail-seat-week');
     const kinds = ROSTER.map((s) => {
       const box = screen.getAllByTestId('rail-week-seat').find((el) => el.getAttribute('data-seat') === s.key)!;
@@ -70,7 +70,7 @@ describe('each seat gets exactly one move from its own record', () => {
   });
 
   it('the consequence is shown above the button, before it is taken', async () => {
-    render(<HealthPage />);
+    render(<HealthPage search="?tab=clis" />);
     const codex = await moveOf('codex');
     const consequence = within(codex).getByTestId('rail-seat-move-consequence');
     const button = within(codex).getByTestId('rail-seat-move-button');
@@ -83,7 +83,7 @@ describe('each seat gets exactly one move from its own record', () => {
 
 describe('the move calls the real route', () => {
   it('route-away posts the operations rule and says what landed', async () => {
-    render(<HealthPage />);
+    render(<HealthPage search="?tab=clis" />);
     fireEvent.click(within(await moveOf('codex')).getByTestId('rail-seat-move-button'));
     await waitFor(() => expect(upsertConformanceRule).toHaveBeenCalledTimes(1));
     expect(upsertConformanceRule.mock.calls[0]![0]).toMatchObject({
@@ -97,7 +97,7 @@ describe('the move calls the real route', () => {
 
   it('a refused rule says why, in place', async () => {
     upsertConformanceRule.mockImplementationOnce(() => Promise.reject(new ApiError(400, 'rule refused: bad id')));
-    render(<HealthPage />);
+    render(<HealthPage search="?tab=clis" />);
     fireEvent.click(within(await moveOf('opencode')).getByTestId('rail-seat-move-button'));
     const result = await within(await moveOf('opencode')).findByTestId('rail-seat-move-result');
     expect(result).toHaveAttribute('data-status', 'error');
@@ -105,7 +105,7 @@ describe('the move calls the real route', () => {
   });
 
   it('sign-in opens the agent\'s modal with the seat\'s own line (DES-seats-page §4) — never a terminal', async () => {
-    render(<HealthPage />);
+    render(<HealthPage search="?tab=clis" />);
     fireEvent.click(within(await moveOf('pi')).getByTestId('rail-seat-move-button'));
     expect(await screen.findByTestId('agents-command')).toHaveTextContent('pi login');
     expect(screen.getByRole('dialog', { name: 'Pi' })).toBeInTheDocument();
@@ -118,7 +118,7 @@ describe('the move calls the real route', () => {
 describe('a daemon without the route', () => {
   it('names the absence in plain words and offers no moves', async () => {
     recordAnswer = () => Promise.reject(new ApiError(404, 'Not Found', { error: 'Not Found' }));
-    render(<HealthPage />);
+    render(<HealthPage search="?tab=clis" />);
     const cap = await screen.findByTestId('rail-seat-week-window');
     await waitFor(() => expect(cap).toHaveAttribute('data-state', 'absent'));
     // r4: one plain-words sentence — no daemon jargon, and the "This week" heading is never

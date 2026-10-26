@@ -5,13 +5,14 @@ import { duration, LIVENESS_WORD, percent, runsWorstFirst, toneWord, type NerveS
 import { PAGE_NAMES } from '../../board/pageNames.js';
 import { relTime } from '../../board/relTime.js';
 import { sessionPath } from '../../board/sessionModel.js';
+import { activeNerveTab, AREA_TONE_WORD, landingTab, NERVE_TAB_LABEL, NERVE_TABS, nerveSummary, nerveTabPath, readNerveTab, type NerveTab } from '../../board/nerveTabs.js';
 import { useNerveState } from '../../hooks/useNerveState.js';
 import type { Navigate } from '../../hooks/useRoute.js';
 import { getCachedRoster } from '../../store/rosterCache.js';
 import { useSystemStore } from '../../store/systemSnapshot.js';
 import { AgentModal } from '../agents/AgentModal.js';
-import { ConnectionRegistry, GovernanceRows, SeatsRegistry, WeekRegistry, useHealthRegistry, type HealthRegistry } from '../HealthRailSection.js';
-import { TechDetails } from '../ui/index.js';
+import { ConnectionRegistry, GovernanceRows, SeatsRegistry, WeekRegistry, seatStandingWord, useHealthRegistry, type HealthRegistry } from '../HealthRailSection.js';
+import { Tabs, TechDetails } from '../ui/index.js';
 
 const defaultNavigate: Navigate = (p) => { history.pushState(null, '', p); window.dispatchEvent(new PopStateEvent('popstate')); };
 
@@ -36,25 +37,34 @@ function headline(state: NerveState): string {
 }
 
 /**
- * NERVE CENTER (`/watch`; `/health` redirects here — DES-SYSTEM-VIEW): ONE dashboard that answers
- * "is anything stopping work, why, and what fixes it?". Top to bottom:
+ * NERVE CENTER (`/watch`; `/health` redirects here — DES-SYSTEM-VIEW): ONE place that answers "is
+ * anything stopping work, why, and what fixes it?", scanned in seconds (operator 2026-10-25: "one
+ * giant page — use tabs"). A compact header, always on screen whatever the tab:
  *
- *  - the verdict sentence, when crew last answered, and Re-check;
- *  - Needs attention (only when non-empty), worst first, each with its reason, remedy and action;
- *  - four panels — CLIs · Runs · Infra · Governance — that stack on a phone;
- *  - the feed (the old Watchtower: problems, decisions, finished, delivered), full width.
+ *  - the title, the verdict pill and its one sentence, when crew last answered, and Re-check;
+ *  - one summary chip per area (Attention · CLIs · Runs · Infra · Governance), coloured by its worst
+ *    state and never green over a read that is not fresh; a chip opens its tab.
  *
- * Against a crew with `capabilities.system` the panels read `GET /system`. Against an older crew they
+ * Under it, five tabs (the app's `Tabs`; `?tab=` on the address, `board/nerveTabs`), each with one
+ * primary thing: Attention (the items, worst first, with their fix and action — or a calm "all
+ * clear"), CLIs (the cards, then sign-in and this week), Runs (unfinished runs, then the feed — the old
+ * Watchtower), Infra (studio to crew, then each component) and Governance (the cards, then the
+ * evidence store). No `?tab=` lands on Attention when anything needs it, else on CLIs; a feed filter
+ * (`?filter=`) opens Runs.
+ *
+ * Against a crew with `capabilities.system` the tabs read `GET /system`. Against an older crew they
  * hold today's Health cards (Connection in Infra, Helpers and This week in CLIs, Governance in
- * Governance) with an upgrade note. The Health cards stay in their panels in both modes, so nothing
- * the old `/health` page showed is lost. Read-only apart from Sign in, Re-check and opening a run.
+ * Governance) with an upgrade note. The Health cards stay in their tabs in both modes, so nothing the
+ * old `/health` page showed is lost. Read-only apart from Sign in, Re-check and opening a run.
  */
-export function NerveCenterPage({ navigate = defaultNavigate, needCount = 0, feed = null }: {
+export function NerveCenterPage({ navigate = defaultNavigate, needCount = 0, feed = null, search = window.location.search }: {
   navigate?: Navigate;
   /** The Desk's settled needs-you count (an older crew's "waiting on you"). */
   needCount?: number;
-  /** The feed, rendered under the panels (App passes the embedded Watchtower feed). */
+  /** The feed, rendered in the Runs tab under the runs (App passes the embedded Watchtower feed). */
   feed?: React.ReactNode;
+  /** The router's query (`?tab=`, the feed's `?filter=`), updated by navigation and Back/Forward. */
+  search?: string;
 }): React.ReactElement {
   const registry = useHealthRegistry(true);
   const state = useNerveState(needCount);
@@ -63,6 +73,7 @@ export function NerveCenterPage({ navigate = defaultNavigate, needCount = 0, fee
   const answeredAt = useSystemStore((s) => (s.mode === 'system' ? s.snapshotAt : s.healthAt));
   const reading = useSystemStore((s) => s.reading);
   const snapshotError = useSystemStore((s) => s.snapshotError);
+  const governanceKind = useSystemStore((s) => s.governance.kind);
   // The Health cards read once on mount (EC30); when the shared poll sees crew come back or go away,
   // they re-read too, so the cards never contradict the verdict above them.
   // `null` until the poll has an answer either way: the mount read already covers that first answer.
@@ -82,6 +93,27 @@ export function NerveCenterPage({ navigate = defaultNavigate, needCount = 0, fee
   const system = mode === 'system' && snapshot !== null;
   const { governance, week } = registry;
   const missing = [week.kind === 'absent' ? 'the week' : null, governance.kind === 'absent' ? 'governance' : null].filter((s): s is string => s !== null);
+
+  // Where the page lands with no `?tab=`: decided once, on crew's first answer, so the page never
+  // jumps tabs under the user when attention empties or fills while they read.
+  const [landing, setLanding] = useState<NerveTab | null>(() => landingTab(state));
+  const landingNow = landingTab(state);
+  useEffect(() => { if (landing === null && landingNow !== null) setLanding(landingNow); }, [landing, landingNow]);
+  const tab = activeNerveTab(search, landing);
+  // On a phone the tab row scrolls sideways: keep the open tab in view (a link to `?tab=governance`).
+  useEffect(() => { document.getElementById(`nc-tab-${tab}`)?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' }); }, [tab]);
+  const openTab = (id: NerveTab): void => { if (id !== tab || readNerveTab(search) === null) navigate(nerveTabPath(search, id)); };
+  const areas = nerveSummary(state, system ? snapshot : null, {
+    roster: registry.roster === null ? null : registry.roster.map((seat) => {
+      const k = seatStandingWord(seat).kind;
+      const status = (seat.health as { status?: string } | null | undefined)?.status;
+      return { ready: k === 'signed-in' || k === 'no-sign-in-needed' ? true : k === 'unknown' ? null : false, failing: status !== undefined && status !== 'active' };
+    }),
+    rosterRead: registry.rosterError ? 'failed' : registry.overdue && !registry.rosterFresh ? 'stale' : 'fresh',
+    needCount,
+    governance: governanceKind === 'ok' ? 'ok' : governanceKind,
+  });
+
   const recheck = (): void => registry.reprobeNow();
   const act = (a: SystemAction): void => {
     if (a.kind === 'recheck') { recheck(); return; }
@@ -94,8 +126,8 @@ export function NerveCenterPage({ navigate = defaultNavigate, needCount = 0, fee
     navigate(a.kind === 'open-gate' ? gateOpenPath('', a.target) : sessionPath(`run:${a.target}`));
   };
 
-  // The old Health page's Helpers and This week cards: in the CLIs panel against an older crew, under
-  // the panels when the snapshot's CLI cards are there.
+  // The old Health page's Helpers and This week cards: the CLIs tab's content against an older crew,
+  // under the CLI cards when the snapshot's cards are there.
   const helpers = (
     <>
       <section data-testid="health-card-seats" className="wk-nc-sub" aria-label="Helpers">
@@ -109,88 +141,135 @@ export function NerveCenterPage({ navigate = defaultNavigate, needCount = 0, fee
     </>
   );
 
+  let body: React.ReactNode;
+  if (tab === 'attention') {
+    body = <AttentionList items={state.attention} read={state.read} answeredAt={answeredAt} onAct={act} onOpen={openTab} />;
+  } else if (tab === 'clis') {
+    body = system ? (
+      <>
+        <section data-testid="nc-panel-clis" className="wk-nc-panel" aria-labelledby="nc-clis-title">
+          <h2 id="nc-clis-title" className="wk-nc-panel-title">CLIs</h2>
+          <CliCards clis={snapshot.clis} onSignIn={(key) => act({ kind: 'sign-in', target: key })} />
+        </section>
+        {/* With the snapshot, the CLI cards carry each CLI's state; the roster's sign-in rows and the
+            week's coaching moves (the old Health cards) sit under them, side by side. */}
+        <section data-testid="nc-panel-helpers" className="wk-nc-panel wk-nc-helpers" aria-labelledby="nc-helpers-title">
+          <h2 id="nc-helpers-title" className="wk-nc-panel-title">Helpers: sign-in and this week</h2>
+          <div className="wk-nc-helpers-cols">{helpers}</div>
+        </section>
+      </>
+    ) : (
+      <section data-testid="nc-panel-clis" className="wk-nc-panel" aria-labelledby="nc-clis-title">
+        <h2 id="nc-clis-title" className="wk-nc-panel-title">CLIs</h2>
+        {helpers}
+      </section>
+    );
+  } else if (tab === 'runs') {
+    body = (
+      <>
+        <section data-testid="nc-panel-runs" className="wk-nc-panel" aria-labelledby="nc-runs-title">
+          <h2 id="nc-runs-title" className="wk-nc-panel-title">Unfinished runs</h2>
+          {system
+            ? <RunRows runs={snapshot.runs} now={now} navigate={navigate} />
+            : mode === 'fallback'
+              ? <p data-testid="nc-runs-fallback" className="wk-health-absent">This crew does not report run liveness yet. The feed below shows what needs you, what went quiet and what finished.</p>
+              : <p data-testid="nc-runs-pending" className="wk-health-absent">{snapshotError !== null ? "Crew's system snapshot could not be read. Re-check, or see the feed below." : 'Checking crew…'}</p>}
+        </section>
+        {feed !== null && <section data-testid="nc-feed" className="wk-nc-feed" aria-label="Feed">{feed}</section>}
+      </>
+    );
+  } else if (tab === 'infra') {
+    body = (
+      <section data-testid="nc-panel-infra" className="wk-nc-panel" aria-labelledby="nc-infra-title">
+        <h2 id="nc-infra-title" className="wk-nc-panel-title">Infra</h2>
+        <section data-testid="health-card-connection" className="wk-nc-sub" aria-label="Connection">
+          <h3 className="wk-nc-sub-title">Studio to crew</h3>
+          <ConnectionRegistry registry={registry} />
+        </section>
+        {system && (
+          <section className="wk-nc-sub" aria-label="Components">
+            <h3 className="wk-nc-sub-title">Components</h3>
+            <InfraRows rows={snapshot.infra} onRecheck={recheck} />
+          </section>
+        )}
+      </section>
+    );
+  } else {
+    body = (
+      <section data-testid="nc-panel-governance" className="wk-nc-panel" aria-labelledby="nc-gov-title">
+        <h2 id="nc-gov-title" className="wk-nc-panel-title">Governance</h2>
+        {system && <GovernanceCards cards={snapshot.governance} />}
+        <section data-testid="health-card-governance" className="wk-nc-sub" aria-label="Evidence">
+          <h3 className="wk-nc-sub-title">Evidence store</h3>
+          <GovernanceRows read={governance} overdue={registry.overdue ? registry.probeDeadlineMs : 0} onReprobe={registry.reprobeNow} />
+        </section>
+      </section>
+    );
+  }
+
   return (
-    <div data-testid="nerve-center-page" data-mode={mode} data-tone={state.tone} className="wk-desk-scroll wk-nc-page wk-measure">
+    <div data-testid="nerve-center-page" data-mode={mode} data-tone={state.tone} data-tab={tab} className="wk-desk-scroll wk-nc-page wk-measure">
       <header className="wk-nc-head">
         <div className="wk-nc-head-row">
           <h1 className="wk-desk-hello">{PAGE_NAMES.watch}</h1>
-          <span data-testid="nc-verdict" data-tone={state.tone} className="wk-nc-verdict">
-            <span aria-hidden className="wk-nc-verdict-light" />
-            {state.words}<span className="sr-only"> — {toneWord(state.tone)}</span>
-          </span>
           <button type="button" data-testid="nc-recheck" className="wk-btn wk-btn--secondary wk-btn--sm wk-nc-recheck" disabled={reading} onClick={recheck}>
             {reading ? 'Checking…' : 'Re-check'}
           </button>
         </div>
-        <p data-testid="nc-headline" className="wk-desk-date">
-          {headline(state)}
-          {answeredAt !== null && <span data-testid="nc-checked" className="wk-nc-checked"> Crew answered at {clock(answeredAt)}.</span>}
-        </p>
+        <div className="wk-nc-verdict-row">
+          <span data-testid="nc-verdict" data-tone={state.tone} className="wk-nc-verdict">
+            <span aria-hidden className="wk-nc-verdict-light" />
+            {state.words}<span className="sr-only"> — {toneWord(state.tone)}</span>
+          </span>
+          <p data-testid="nc-headline" className="wk-nc-headline">
+            {headline(state)}
+            {answeredAt !== null && <span data-testid="nc-checked" className="wk-nc-checked"> Crew answered at {clock(answeredAt)}.</span>}
+          </p>
+        </div>
+        <ul data-testid="nc-chips" className="wk-nc-chips" aria-label="Summary by area">
+          {areas.map((a) => (
+            <li key={a.id}>
+              <button type="button" data-testid="nc-chip" data-area={a.id} data-tone={a.tone} data-stale={a.stale ? 'true' : undefined}
+                className="wk-nc-chip" aria-current={a.id === tab ? 'true' : undefined} onClick={() => openTab(a.id)}>
+                <span aria-hidden className="wk-nc-chip-dot" data-tone={a.tone} />
+                <span className="wk-nc-chip-label">{a.label}</span>
+                <span data-testid="nc-chip-words" className="wk-nc-chip-words">{a.words}</span>
+                <span className="sr-only">, {AREA_TONE_WORD[a.tone]}{a.stale ? ' (not current)' : ''}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
         {mode === 'fallback' && (
-          <p data-testid="nc-upgrade-note" className="wk-health-note">
+          <p data-testid="nc-upgrade-note" className="wk-nc-note">
             This version of crew does not report the full system yet (each CLI&apos;s week, run liveness, infra probes, governance cards).
             Upgrade crew to see them. Below are studio&apos;s own checks and the feed.
           </p>
         )}
         {missing.length > 0 && (
-          <p data-testid="health-upgrade-note" className="wk-health-note">
+          <p data-testid="health-upgrade-note" className="wk-nc-note">
             This version of crew does not report {missing.join(' or ')} yet. Upgrade crew to see {missing.length > 1 ? 'them' : 'it'}.
           </p>
         )}
       </header>
 
-      {state.attention.length > 0 && <AttentionStrip items={state.attention} onAct={act} />}
-
-      {/* Two columns that do not share row heights: CLIs over Infra, Runs over Governance (the
-          design's sketch); one column on a phone. */}
-      <div className="wk-nc-grid">
-        <div className="wk-nc-col">
-          <section data-testid="nc-panel-clis" className="wk-nc-panel" aria-labelledby="nc-clis-title">
-            <h2 id="nc-clis-title" className="wk-nc-panel-title">CLIs</h2>
-            {system ? <CliCards clis={snapshot.clis} onSignIn={(key) => act({ kind: 'sign-in', target: key })} /> : helpers}
-          </section>
-
-          <section data-testid="nc-panel-infra" className="wk-nc-panel" aria-labelledby="nc-infra-title">
-            <h2 id="nc-infra-title" className="wk-nc-panel-title">Infra</h2>
-            <section data-testid="health-card-connection" className="wk-nc-sub" aria-label="Connection">
-              <h3 className="wk-nc-sub-title">Studio to crew</h3>
-              <ConnectionRegistry registry={registry} />
-            </section>
-            {system && <InfraRows rows={snapshot.infra} onRecheck={recheck} />}
-          </section>
-        </div>
-
-        <div className="wk-nc-col">
-          <section data-testid="nc-panel-runs" className="wk-nc-panel" aria-labelledby="nc-runs-title">
-            <h2 id="nc-runs-title" className="wk-nc-panel-title">Runs</h2>
-            {system
-              ? <RunRows runs={snapshot.runs} now={now} navigate={navigate} />
-              : mode === 'fallback'
-                ? <p data-testid="nc-runs-fallback" className="wk-health-absent">This crew does not report run liveness yet. The feed below shows what needs you, what went quiet and what finished.</p>
-                : <p data-testid="nc-runs-pending" className="wk-health-absent">{snapshotError !== null ? "Crew's system snapshot could not be read. Re-check, or see the feed below." : 'Checking crew…'}</p>}
-          </section>
-
-          <section data-testid="nc-panel-governance" className="wk-nc-panel" aria-labelledby="nc-gov-title">
-            <h2 id="nc-gov-title" className="wk-nc-panel-title">Governance</h2>
-            {system && <GovernanceCards cards={snapshot.governance} />}
-            <section data-testid="health-card-governance" className="wk-nc-sub" aria-label="Evidence">
-              <h3 className="wk-nc-sub-title">Evidence store</h3>
-              <GovernanceRows read={governance} overdue={registry.overdue ? registry.probeDeadlineMs : 0} onReprobe={registry.reprobeNow} />
-            </section>
-          </section>
-        </div>
+      <div className="wk-nc-tabs">
+        <Tabs
+          idBase="nc"
+          aria-label="Nerve Center"
+          data-testid="nc-tabs"
+          tabTestId="nc-tab"
+          maxVisible={NERVE_TABS.length}
+          tabs={areas.map((a) => ({
+            id: a.id, label: a.label, ...(a.count !== undefined ? { count: a.count } : {}),
+            dot: { tone: a.tone, word: AREA_TONE_WORD[a.tone] + (a.stale ? ', not current' : '') },
+          }))}
+          active={tab}
+          onChange={(id) => openTab(id as NerveTab)}
+        />
       </div>
-
-      {/* With the snapshot, the CLI cards carry each CLI's state; the roster's sign-in rows and the
-          week's coaching moves (the old Health cards) sit under the panels, side by side. */}
-      {system && (
-        <section data-testid="nc-panel-helpers" className="wk-nc-panel wk-nc-helpers" aria-labelledby="nc-helpers-title">
-          <h2 id="nc-helpers-title" className="wk-nc-panel-title">Helpers: sign-in and this week</h2>
-          <div className="wk-nc-helpers-cols">{helpers}</div>
-        </section>
-      )}
-
-      {feed !== null && <section data-testid="nc-feed" className="wk-nc-feed" aria-label="Feed">{feed}</section>}
+      <div id="nc-panel" role="tabpanel" aria-labelledby={`nc-tab-${tab}`} data-testid="nc-tabpanel" data-tab={tab} className="wk-nc-tabpanel">
+        {body}
+      </div>
 
       <SignInModal registry={registry} />
     </div>
@@ -217,11 +296,30 @@ function SignInModal({ registry }: { registry: HealthRegistry }): React.ReactEle
 
 const ACTION_WORD: Record<SystemAction['kind'], string> = { 'sign-in': 'Sign in', recheck: 'Re-check', 'open-gate': 'Open gate', 'open-run': 'Open run' };
 
-/** Needs attention: every item worst first — what, why, what fixes it, and the one existing action. */
-function AttentionStrip({ items, onAct }: { items: SystemAttention[]; onAct: (a: SystemAction) => void }): React.ReactElement {
+const PANEL_TAB: Record<SystemAttention['panel'], NerveTab> = { clis: 'clis', runs: 'runs', infra: 'infra', governance: 'governance' };
+
+/** Needs attention: every item worst first, one roomy card each — what, why, what fixes it, the one
+ *  existing action, and where its area lives. Empty: a calm "all clear" (or "checking"). */
+function AttentionList({ items, read, answeredAt, onAct, onOpen }: {
+  items: SystemAttention[]; read: NerveState['read']; answeredAt: number | null;
+  onAct: (a: SystemAction) => void; onOpen: (tab: NerveTab) => void;
+}): React.ReactElement {
+  if (items.length === 0) {
+    const checking = read === 'checking';
+    return (
+      <section data-testid={checking ? 'nc-attention-checking' : 'nc-attention-empty'} className="wk-nc-clear" data-read={read} aria-label="Needs attention">
+        <span aria-hidden className="wk-nc-clear-mark" data-read={read}>{checking ? '…' : '✓'}</span>
+        <h2 className="wk-nc-clear-title">{checking ? 'Checking crew…' : 'All clear'}</h2>
+        <p className="wk-nc-clear-line">
+          {checking ? 'The verdict appears as soon as crew answers.' : 'Nothing is stopping work.'}
+          {!checking && answeredAt !== null ? ` Crew answered at ${clock(answeredAt)}.` : ''}
+        </p>
+      </section>
+    );
+  }
   return (
     <section data-testid="nc-attention" className="wk-nc-attention" aria-labelledby="nc-attention-title">
-      <h2 id="nc-attention-title" className="wk-nc-panel-title">Needs attention <span className="wk-nc-count">{items.length}</span></h2>
+      <h2 id="nc-attention-title" className="sr-only">Needs attention ({items.length})</h2>
       <ul className="wk-nc-attention-list">
         {items.map((a) => (
           <li key={a.id} data-testid="nc-attention-item" data-id={a.id} data-level={a.level} data-panel={a.panel} className="wk-nc-attention-item">
@@ -230,14 +328,19 @@ function AttentionStrip({ items, onAct }: { items: SystemAttention[]; onAct: (a:
               <span className="wk-nc-attention-text">
                 <span className="sr-only">{a.level === 'red' ? 'Blocking: ' : 'Needs a look: '}</span>{a.text}
               </span>
-              {a.reason !== null && <span className="wk-nc-line">{a.reason}</span>}
-              {a.remedy !== null && <span data-testid="nc-attention-remedy" className="wk-nc-line wk-nc-remedy">{a.remedy}</span>}
+              {a.reason !== null && <span className="wk-nc-attention-line wk-nc-attention-why">{a.reason}</span>}
+              {a.remedy !== null && <span data-testid="nc-attention-remedy" className="wk-nc-attention-line wk-nc-remedy">{a.remedy}</span>}
             </div>
-            {a.action !== null && (
-              <button type="button" data-testid="nc-attention-action" data-kind={a.action.kind} className="wk-btn wk-btn--secondary wk-btn--sm" onClick={() => onAct(a.action!)}>
-                {a.action.label ?? ACTION_WORD[a.action.kind]}
+            <div className="wk-nc-attention-acts">
+              {a.action !== null && (
+                <button type="button" data-testid="nc-attention-action" data-kind={a.action.kind} className="wk-btn wk-btn--secondary wk-btn--sm" onClick={() => onAct(a.action!)}>
+                  {a.action.label ?? ACTION_WORD[a.action.kind]}
+                </button>
+              )}
+              <button type="button" data-testid="nc-attention-goto" data-tab={PANEL_TAB[a.panel]} className="wk-link wk-nc-goto" onClick={() => onOpen(PANEL_TAB[a.panel])}>
+                See {NERVE_TAB_LABEL[PANEL_TAB[a.panel]]}
               </button>
-            )}
+            </div>
           </li>
         ))}
       </ul>
@@ -358,13 +461,16 @@ function InfraRows({ rows, onRecheck }: { rows: SystemInfra[]; onRecheck: () => 
       {rows.map((r) => (
         <li key={r.key} data-testid="nc-infra" data-key={r.key} data-state={r.state} className="wk-nc-infra-row">
           <span aria-hidden className="wk-nc-glyph" data-state={r.state}>{STATE_GLYPH[r.state]}</span>
+          <span className="wk-nc-infra-name">
+            {r.name}
+            <span data-testid="nc-infra-state" className="wk-nc-infra-state" data-state={r.state}>{STATE_WORD[r.state]}{r.state === 'unknown' && r.timeoutMs !== null ? ` — no answer in ${duration(r.timeoutMs)}` : ''}</span>
+          </span>
           <div className="wk-nc-infra-body">
-            <span className="wk-nc-infra-name">{r.name} <span data-testid="nc-infra-state" className="wk-nc-infra-state" data-state={r.state}>{STATE_WORD[r.state]}{r.state === 'unknown' && r.timeoutMs !== null ? ` — no answer in ${duration(r.timeoutMs)}` : ''}</span></span>
             {r.reason !== null && <span className="wk-nc-line">{r.reason}</span>}
             {r.remedy !== null && r.state !== 'ok' && <span data-testid="nc-infra-remedy" className="wk-nc-line wk-nc-remedy">{r.remedy}</span>}
             {r.detail !== null && <TechDetails data-testid="nc-infra-detail" text={r.detail} />}
           </div>
-          <button type="button" data-testid="nc-infra-recheck" data-key={r.key} className="wk-btn wk-btn--secondary wk-btn--sm" onClick={onRecheck} aria-label={`Re-check ${r.name}`}>
+          <button type="button" data-testid="nc-infra-recheck" data-key={r.key} className="wk-btn wk-btn--secondary wk-btn--sm wk-nc-infra-recheck" onClick={onRecheck} aria-label={`Re-check ${r.name}`}>
             Re-check
           </button>
         </li>
