@@ -95,7 +95,7 @@ describe('the summary chips', () => {
 
   it.each(['stale', 'failed', 'checking'] as const)('a %s read is never green, in any chip', (read) => {
     const items = read === 'checking' ? [] : [att('crew-unreachable', 'yellow', 'infra', "can't reach crew")];
-    const a = nerveSummary(state(read, items), GREEN, { roster: [{ signed_in: true }], needCount: 0, governance: 'ok' });
+    const a = nerveSummary(state(read, items), GREEN, { roster: [{ ready: true, failing: false }], needCount: 0, governance: 'ok' });
     expect(a.every((x) => x.tone !== 'ok')).toBe(true);
     expect(a.every((x) => x.stale)).toBe(true);
     // The words stay (the last answer), the colour says it is not current.
@@ -108,16 +108,51 @@ describe('the summary chips', () => {
   });
 
   it('an older crew: CLIs from the roster, Runs from the needs-you count, governance from its read', () => {
-    const fb: FallbackSignals = { roster: [{ signed_in: true }, { signed_in: false }], needCount: 2, governance: 'ok' };
+    const fb: FallbackSignals = { roster: [{ ready: true, failing: false }, { ready: false, failing: false }], needCount: 2, governance: 'ok' };
     const a = byId(nerveSummary(state('fresh', [att('waiting-on-you', 'yellow', 'runs'), att('governance-x', 'yellow', 'governance', 'governance warning')]), null, fb));
     expect(a['clis']).toMatchObject({ words: '1/2 signed in', tone: 'warn' });
     expect(a['runs']).toMatchObject({ words: '2 waiting', tone: 'warn' });
     expect(a['infra']).toMatchObject({ words: 'ok', tone: 'ok' });
     expect(a['governance']).toMatchObject({ words: 'governance warning', tone: 'warn' });
     // A roster whose sign-in is not known, and a crew without governance, are grey — not green.
-    const b = byId(nerveSummary(state('fresh'), null, { roster: [{ signed_in: null }], needCount: 0, governance: 'absent' }));
+    const b = byId(nerveSummary(state('fresh'), null, { roster: [{ ready: null, failing: false }], needCount: 0, governance: 'absent' }));
     expect(b['clis']!.tone).toBe('unknown');
     expect(b['governance']).toMatchObject({ words: 'not reported', tone: 'unknown' });
     expect(b['runs']).toMatchObject({ words: 'none waiting', tone: 'ok' });
+  });
+
+  it('an older crew: a roster re-read that failed or is overdue keeps the last seats but is never green', () => {
+    const roster = [{ ready: true, failing: false }, { ready: true, failing: false }];
+    const failed = byId(nerveSummary(state('fresh'), null, { roster, rosterRead: 'failed', needCount: 0, governance: 'ok' }))['clis']!;
+    expect(failed).toMatchObject({ words: "roster can't be read", tone: 'warn', stale: true });
+    const stale = byId(nerveSummary(state('fresh'), null, { roster, rosterRead: 'stale', needCount: 0, governance: 'ok' }))['clis']!;
+    expect(stale).toMatchObject({ words: '2/2 signed in', tone: 'unknown', stale: true });
+    expect(byId(nerveSummary(state('fresh'), null, { roster, rosterRead: 'fresh', needCount: 0, governance: 'ok' }))['clis']!.tone).toBe('ok');
+  });
+
+  it('an older crew: a signed-in seat the roster reports failing (a quota hit) needs a look', () => {
+    const a = byId(nerveSummary(state('fresh'), null, { roster: [{ ready: true, failing: false }, { ready: true, failing: true }], needCount: 0, governance: 'ok' }));
+    expect(a['clis']).toMatchObject({ words: '2/2 signed in', tone: 'warn' });
+  });
+
+  it('a seat whose sign-in is not known never hides a signed-out seat or a red CLI item', () => {
+    const roster = [{ ready: false, failing: false }, { ready: null, failing: false }];
+    expect(byId(nerveSummary(state('fresh'), null, { roster, needCount: 0, governance: 'ok' }))['clis']!.tone).toBe('warn');
+    const red = byId(nerveSummary(state('fresh', [att('cli:x', 'red', 'clis')]), null, { roster: [{ ready: null, failing: false }], needCount: 0, governance: 'ok' }));
+    expect(red['clis']!.tone).toBe('fail');
+    // The snapshot reporting no CLIs does not hide crew's own red CLI item either.
+    expect(byId(nerveSummary(state('fresh', [att('cli:x', 'red', 'clis')]), snap(), FB))['clis']!.tone).toBe('fail');
+  });
+
+  it('an older crew whose governance read failed is never "ok"', () => {
+    const a = byId(nerveSummary(state('fresh'), null, { roster: null, needCount: 0, governance: 'error' }));
+    expect(a['governance']).toMatchObject({ words: "can't be read", tone: 'warn' });
+  });
+
+  it('after a failed first read the areas say "not known", not "checking"', () => {
+    const a = byId(nerveSummary(state('failed', [att('crew-unreachable', 'yellow', 'infra')]), null, FB));
+    expect(a['clis']!.words).toBe('not known');
+    expect(a['governance']!.words).toBe('not known');
+    expect(byId(nerveSummary(state('checking'), null, FB))['clis']!.words).toBe('checking');
   });
 });

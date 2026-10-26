@@ -17,6 +17,7 @@ import { useConnectionStore } from '../src/store/connection.js';
 const NOW = Date.now();
 let caps: Record<string, unknown> = { system: true };
 let systemAnswer: () => Promise<unknown>;
+let rosterAnswer: () => Promise<unknown> = () => Promise.resolve({ roster: SEATS });
 const getHealth = vi.fn(() => Promise.resolve({ status: 'ok', version: '0.16.0', ping: 'pong', capabilities: caps }));
 const SEATS: RosterSeat[] = [
   { key: 'claude', display_name: 'Claude Code', binary: 'claude', enabled_for_council: true, health: { status: 'active', since: '2026-10-20T00:00:00Z' }, signed_in: true },
@@ -39,7 +40,7 @@ const apiFetch = vi.fn((path: string) => {
 vi.mock('../src/api/client.js', () => ({
   api: {
     getHealth: () => getHealth(),
-    getRoster: () => Promise.resolve({ roster: SEATS }),
+    getRoster: () => rosterAnswer(),
     getSeatRecord: () => Promise.resolve(WEEK),
     upsertConformanceRule: () => Promise.resolve({}),
     listRepos: () => Promise.resolve({ repos: [] }),
@@ -112,6 +113,7 @@ beforeEach(() => {
   clearCachedRoster();
   caps = { system: true };
   systemAnswer = () => Promise.resolve(SNAPSHOT);
+  rosterAnswer = () => Promise.resolve({ roster: SEATS });
   getHealth.mockClear();
   apiFetch.mockClear();
   useConnectionStore.setState({ status: 'connected' });
@@ -419,6 +421,19 @@ describe('against an older crew (no system capability)', () => {
     await waitFor(() => expect(chip('governance')).toHaveAttribute('data-tone', 'warn'));
     expect(within(chip('governance')).getByTestId('nc-chip-words')).toHaveTextContent('governance warning');
     await waitFor(() => expect(within(chip('clis')).getByTestId('nc-chip-words')).toHaveTextContent('1/2 signed in'));
+  });
+
+  it('a roster re-read that fails keeps the last seats on the CLIs tab, and its chip leaves green', async () => {
+    caps = {};
+    rosterAnswer = () => Promise.resolve({ roster: SEATS.map((s) => ({ ...s, signed_in: true })) });
+    renderBoth(vi.fn(), '?tab=clis');
+    await waitFor(() => expect(chip('clis')).toHaveAttribute('data-tone', 'ok'));
+    expect(within(chip('clis')).getByTestId('nc-chip-words')).toHaveTextContent('2/2 signed in');
+    rosterAnswer = () => Promise.reject(new Error('ECONNRESET'));
+    fireEvent.click(screen.getByTestId('nc-recheck'));
+    await waitFor(() => expect(chip('clis')).toHaveAttribute('data-tone', 'warn'));
+    expect(within(chip('clis')).getByTestId('nc-chip-words')).toHaveTextContent("roster can't be read");
+    expect(chip('clis')).toHaveAttribute('data-stale', 'true');
   });
 
   it('a crew that claims the capability but has no route falls back instead of failing', async () => {

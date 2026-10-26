@@ -11,7 +11,7 @@ import type { Navigate } from '../../hooks/useRoute.js';
 import { getCachedRoster } from '../../store/rosterCache.js';
 import { useSystemStore } from '../../store/systemSnapshot.js';
 import { AgentModal } from '../agents/AgentModal.js';
-import { ConnectionRegistry, GovernanceRows, SeatsRegistry, WeekRegistry, useHealthRegistry, type HealthRegistry } from '../HealthRailSection.js';
+import { ConnectionRegistry, GovernanceRows, SeatsRegistry, WeekRegistry, seatStandingWord, useHealthRegistry, type HealthRegistry } from '../HealthRailSection.js';
 import { Tabs, TechDetails } from '../ui/index.js';
 
 const defaultNavigate: Navigate = (p) => { history.pushState(null, '', p); window.dispatchEvent(new PopStateEvent('popstate')); };
@@ -104,7 +104,12 @@ export function NerveCenterPage({ navigate = defaultNavigate, needCount = 0, fee
   useEffect(() => { document.getElementById(`nc-tab-${tab}`)?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' }); }, [tab]);
   const openTab = (id: NerveTab): void => { if (id !== tab || readNerveTab(search) === null) navigate(nerveTabPath(search, id)); };
   const areas = nerveSummary(state, system ? snapshot : null, {
-    roster: registry.roster,
+    roster: registry.roster === null ? null : registry.roster.map((seat) => {
+      const k = seatStandingWord(seat).kind;
+      const status = (seat.health as { status?: string } | null | undefined)?.status;
+      return { ready: k === 'signed-in' || k === 'no-sign-in-needed' ? true : k === 'unknown' ? null : false, failing: status !== undefined && status !== 'active' };
+    }),
+    rosterRead: registry.rosterError ? 'failed' : registry.overdue && !registry.rosterFresh ? 'stale' : 'fresh',
     needCount,
     governance: governanceKind === 'ok' ? 'ok' : governanceKind,
   });

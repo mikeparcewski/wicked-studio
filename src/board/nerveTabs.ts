@@ -69,10 +69,18 @@ export interface AreaSummary {
   stale: boolean;
 }
 
+/** One roster seat as the CLIs summary reads it (an older crew): ready to work (signed in, or no
+ *  sign-in needed), not ready (signed out, or not picked), or not known; and whether the roster
+ *  reports a failure for it (its health is not active: a quota hit, a crash). */
+export interface FallbackSeat { ready: boolean | null; failing: boolean }
+
 /** What an older crew (no snapshot) can still say per area. */
 export interface FallbackSignals {
-  /** The roster's sign-in answer per seat (`null` until the roster is read). */
-  roster: readonly { signed_in?: boolean | null }[] | null;
+  /** The roster's seats (`null` until the roster is read). */
+  roster: readonly FallbackSeat[] | null;
+  /** The roster read behind `roster`: a failed or overdue re-read keeps the last seats on screen,
+   *  and the CLIs chip must not stay green over them. */
+  rosterRead?: 'fresh' | 'failed' | 'stale';
   /** The Desk's settled needs-you count. */
   needCount: number;
   /** The governance read: `unread` until it answers, `absent` when this crew has none. */
@@ -107,10 +115,13 @@ export function nerveSummary(state: Pick<NerveState, 'read' | 'attention'>, snap
   const fresh = state.read === 'fresh';
   const checking = state.read === 'checking';
   const of = (panel: SystemAttention['panel']): SystemAttention[] => state.attention.filter((a) => a.panel === panel);
-  const done = (id: NerveTab, words: string, tone: AreaTone, count?: number): AreaSummary => {
-    const held = !fresh && tone === 'ok';
-    return { id, label: NERVE_TAB_LABEL[id], words, tone: held ? 'unknown' : tone, ...(count !== undefined ? { count } : {}), stale: !fresh };
+  const done = (id: NerveTab, words: string, tone: AreaTone, count?: number, held = false): AreaSummary => {
+    const off = (!fresh || held) && tone === 'ok';
+    return { id, label: NERVE_TAB_LABEL[id], words, tone: off ? 'unknown' : tone, ...(count !== undefined ? { count } : {}), stale: !fresh || held };
   };
+  // Not answered yet ("checking") only while the verdict itself is checking; after a failed read the
+  // area is "not known", never "checking".
+  const pending = checking ? 'checking' : 'not known';
 
   // Attention: the verdict's own items.
   const n = state.attention.length;
@@ -123,16 +134,22 @@ export function nerveSummary(state: Pick<NerveState, 'read' | 'attention'>, snap
   if (snapshot !== null) {
     const total = snapshot.clis.length;
     const signed = snapshot.clis.filter((c) => c.state === 'signed_in').length;
-    const tone = total === 0 ? 'unknown' : worse(signed < total ? 'warn' : 'ok', attentionTone(cliItems));
-    clis = done('clis', total === 0 ? 'none reported' : `${signed}/${total} signed in`, tone);
+    const base: AreaTone = total === 0 ? 'unknown' : signed < total ? 'warn' : 'ok';
+    clis = done('clis', total === 0 ? 'none reported' : `${signed}/${total} signed in`, worse(base, attentionTone(cliItems)));
   } else if (fallback.roster !== null) {
-    const total = fallback.roster.length;
-    const signed = fallback.roster.filter((s) => s.signed_in === true).length;
-    const known = fallback.roster.every((s) => typeof s.signed_in === 'boolean');
-    const tone = total === 0 || !known ? 'unknown' : worse(signed < total ? 'warn' : 'ok', attentionTone(cliItems));
-    clis = done('clis', total === 0 ? 'none reported' : `${signed}/${total} signed in`, tone);
+    const seats = fallback.roster;
+    const total = seats.length;
+    const signed = seats.filter((s) => s.ready === true).length;
+    // A seat known to be out or failing needs a look, even when another seat's state is not known.
+    const bad = seats.some((s) => s.ready === false || s.failing);
+    const known = seats.every((s) => s.ready !== null);
+    const base: AreaTone = total === 0 ? 'unknown' : bad ? 'warn' : known ? 'ok' : 'unknown';
+    const read = fallback.rosterRead ?? 'fresh';
+    const tone = worse(read === 'failed' ? worse(base, 'warn') : base, attentionTone(cliItems));
+    const words = read === 'failed' ? "roster can't be read" : total === 0 ? 'none reported' : `${signed}/${total} signed in`;
+    clis = done('clis', words, tone, undefined, read !== 'fresh');
   } else {
-    clis = done('clis', 'checking', 'unknown');
+    clis = done('clis', pending, worse('unknown', attentionTone(cliItems)));
   }
 
   // Runs: the worst liveness, counted. Waiting on you, held, stalled or quiet needs a look; crew's
@@ -150,7 +167,7 @@ export function nerveSummary(state: Pick<NerveState, 'read' | 'attention'>, snap
     const words = fallback.needCount > 0 ? `${fallback.needCount} waiting` : 'none waiting';
     runs = done('runs', words, worse(fallback.needCount > 0 ? 'warn' : 'ok', attentionTone(runItems)));
   } else {
-    runs = done('runs', 'checking', 'unknown');
+    runs = done('runs', pending, 'unknown');
   }
 
   // Infra: a component down blocks work; degraded or unknown needs a look; `off` is not a problem.
@@ -165,7 +182,7 @@ export function nerveSummary(state: Pick<NerveState, 'read' | 'attention'>, snap
   } else if (!checking) {
     infra = done('infra', attentionWords(infraItems) ?? 'ok', attentionTone(infraItems));
   } else {
-    infra = done('infra', 'checking', 'unknown');
+    infra = done('infra', pending, 'unknown');
   }
 
   // Governance: the same states as infra, over crew's governance cards (or an older crew's findings).
@@ -178,9 +195,12 @@ export function nerveSummary(state: Pick<NerveState, 'read' | 'attention'>, snap
     const tone = worse(down > 0 ? 'fail' : bad !== null ? 'warn' : 'ok', attentionTone(govItems));
     governance = done('governance', bad ?? attentionWords(govItems) ?? 'ok', tone);
   } else if (fallback.governance === 'unread' || checking) {
-    governance = done('governance', 'checking', 'unknown');
+    governance = done('governance', pending, worse('unknown', attentionTone(govItems)));
   } else if (fallback.governance === 'absent') {
-    governance = done('governance', 'not reported', 'unknown');
+    governance = done('governance', 'not reported', worse('unknown', attentionTone(govItems)));
+  } else if (fallback.governance === 'error') {
+    // A governance read that failed is never "ok", whatever attention says.
+    governance = done('governance', attentionWords(govItems) ?? "can't be read", worse('warn', attentionTone(govItems)));
   } else {
     governance = done('governance', attentionWords(govItems) ?? 'ok', attentionTone(govItems));
   }
