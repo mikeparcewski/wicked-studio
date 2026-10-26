@@ -39,8 +39,8 @@
 .wk-home-btn:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-shadow: var(--focus-ring); }
 .wk-home-btn:disabled { cursor: default; opacity: 0.6; }
 .wk-home-btn--primary { border: 0; background: var(--accent); color: var(--accent-fg); }
-.wk-home-btn--primary:hover:not(:disabled) { background: color-mix(in oklab, var(--accent) 72%, var(--ink-high)); color: var(--accent-fg); transform: translateY(-1px); }
-.wk-home-btn--primary:active:not(:disabled) { background: color-mix(in oklab, var(--accent) 60%, var(--ink-high)); transform: none; }
+.wk-home-btn--primary:hover:not(:disabled) { background: color-mix(in oklab, var(--accent) 58%, var(--ink-high)); color: var(--accent-fg); transform: translateY(-1px); }
+.wk-home-btn--primary:active:not(:disabled) { background: color-mix(in oklab, var(--accent) 46%, var(--ink-high)); transform: none; }
 .wk-home-btn--secondary { border: 1px solid var(--border-strong); background: transparent; color: var(--ink-high); font-weight: 500; }
 .wk-home-btn--secondary:hover:not(:disabled) {
   background: color-mix(in oklab, var(--accent) 22%, transparent); border-color: color-mix(in oklab, var(--accent) 70%, var(--ink-high));

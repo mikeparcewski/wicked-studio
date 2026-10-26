@@ -72,7 +72,8 @@ describe('the landing', () => {
     const more = screen.getByTestId('desk-needs-more');
     expect(more).toHaveTextContent('1 more waiting');
     fireEvent.click(more);
-    expect(navigate).toHaveBeenLastCalledWith('/watch');
+    // Only the failure is left: the feed opens on problems.
+    expect(navigate).toHaveBeenLastCalledWith('/watch?filter=problem');
   });
 
   it('a simple low-impact plan is approved in place through the one audited batch path', () => {

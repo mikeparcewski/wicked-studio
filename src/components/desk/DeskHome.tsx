@@ -10,6 +10,7 @@ import {
 import { everythingPath } from '../../board/everythingModel.js';
 import type { NeedAction, NeedRow } from '../../board/needsYou.js';
 import { attentionRows } from '../../board/attention.js';
+import { needSection } from '../../board/needsQueue.js';
 import { relTime } from '../../board/relTime.js';
 import { deskLiveCounts } from '../../board/statusWords.js';
 import type { Navigate } from '../../hooks/useRoute.js';
@@ -23,8 +24,10 @@ import { Skeleton, StateBanner } from '../ui/index.js';
 /** In progress shows at most this many jobs; "All jobs" has the rest. */
 const PROGRESS_MAX = 3;
 
-/** Where "N more waiting" goes: the Nerve Center holds every waiting item. */
-const WAITING_PATH = '/watch';
+/** Where "N more waiting" goes: the Nerve Center's feed, on decisions (as the inbox's "See all" did), or on
+ *  problems when only failures are left. */
+const WAITING_PATH = '/watch?filter=decision';
+const PROBLEMS_PATH = '/watch?filter=problem';
 
 /**
  * THE LANDING — the Desk's Work view at `/` (home v2, the operator-approved mockup of 2026-10-26).
@@ -88,6 +91,8 @@ export function DeskHome({
   const chore = chores[0] ?? null;
   const shownNeed = blocker === null ? top : null;
   const moreWaiting = attention.length - (shownNeed !== null ? 1 : 0);
+  const rest = attention.filter((r) => r.key !== shownNeed?.key);
+  const morePath = rest.some((r) => needSection(r) === 'decision') ? WAITING_PATH : PROBLEMS_PATH;
 
   const progress = useMemo(() => progressRows(runs, { max: PROGRESS_MAX, agentName }), [runs, agentName]);
   const allJobs = everythingPath({ tab: 'sessions' });
@@ -134,7 +139,7 @@ export function DeskHome({
                 : fallbackSetup !== null ? <SetupCard chore={fallbackSetup} navigate={navigate} />
                   : chore !== null && <ChoreCard chore={chore} onSignIn={onSignIn} />}
             {moreWaiting > 0 && (
-              <a href={WAITING_PATH} onClick={go(WAITING_PATH)} className="wk-home-more" data-testid="desk-needs-more" data-count={moreWaiting}>
+              <a href={morePath} onClick={go(morePath)} className="wk-home-more" data-testid="desk-needs-more" data-count={moreWaiting}>
                 {moreWaiting === 1 ? '1 more waiting' : `${moreWaiting}${settled === 'partial' ? '+' : ''} more waiting`} <span aria-hidden>→</span>
               </a>
             )}
@@ -145,7 +150,7 @@ export function DeskHome({
               ? <StateBanner data-testid="desk-needs-partial" kind="partial" what={missing.join(', ')} onRetry={onRetryNeeds} retrying={retryingNeeds} />
               : <p className="wk-home-calm" data-testid="desk-needs-calm">Nothing is waiting on you.</p>}
             {others > 0 && (
-              <a href={WAITING_PATH} onClick={go(WAITING_PATH)} className="wk-home-more" data-testid="desk-needs-others" data-count={others}>
+              <a href="/watch" onClick={go('/watch')} className="wk-home-more" data-testid="desk-needs-others" data-count={others}>
                 {others === 1 ? '1 thing to look at when you have a moment' : `${others} things to look at when you have a moment`} <span aria-hidden>→</span>
               </a>
             )}
