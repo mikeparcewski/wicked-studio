@@ -6,7 +6,8 @@ import { describe, expect, it } from 'vitest';
  * Rail interaction states (operator 2026-10-26: "give all of them hover effects"): every rail item has
  * a hover, a pressed state and a keyboard focus ring; the pressed and current looks are not the hover
  * look; transitions are 120–160 ms; under reduced motion nothing moves. The rules live in one block at
- * the end of sections/rail.css. The look itself is checked in the browser (PR screenshots).
+ * the end of sections/rail.css. These are rule checks only: whether a person can SEE the hover is
+ * measured in a real browser, every item in all four themes (e2e/desk_rail_hover_test.py).
  */
 
 const css = readFileSync(join(__dirname, '..', 'src', 'styles', 'sections', 'rail.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
@@ -92,55 +93,21 @@ describe('motion', () => {
 });
 
 /**
- * The Nerve Center tile's hover/pressed filters keep its words at AA (4.5:1) on every tone, in dark
- * (tokens.css, also wicked-dark) and light (themes/light.css, also wicked-light). Chromium applies
- * `brightness(k)` to the whole tile as a per-channel sRGB multiply, clamped — ink and fill alike
- * (measured: #c9302a under brightness(1.08) paints rgb(217, 52, 45)).
+ * The Nerve Center tile keeps its state colour: hover and pressed swap its fill for the tone's own
+ * --nc-<tone>-hover / -press token (each AA for the tile's words: tests/nerveCenterContrast.test.ts),
+ * and no filter repaints it (a brightness() filter would move the words with the fill).
  */
-describe('the Nerve Center tile stays AA under its hover and pressed filters', () => {
-  const TONES = { green: 'ok', yellow: 'warn', red: 'fail' } as const;
-  const tokens = (file: string): Record<string, string> => {
-    const text = readFileSync(join(__dirname, '..', 'src', 'styles', file), 'utf8');
-    return Object.fromEntries([...text.matchAll(/(--nc-[a-z]+-[a-z]+):\s*(#[0-9a-fA-F]{6})\s*;/gu)].map((m) => [m[1]!, m[2]!]));
-  };
-  const rgb = (hex: string): number[] => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
-  const lum = (c: number[]): number => {
-    const l = c.map((v) => v / 255).map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
-    return 0.2126 * l[0]! + 0.7152 * l[1]! + 0.0722 * l[2]!;
-  };
-  const ratio = (a: number[], b: number[]): number => { const [hi, lo] = [lum(a), lum(b)].sort((x, y) => y - x) as [number, number]; return (hi + 0.05) / (lo + 0.05); };
-  // The filter a tone gets in a state: nerve.css's own `.wk-nc-tile:hover` / `:active` first (it still
-  // applies wherever no rail rule sets a filter), then the last matching rail.css rule wins (every
-  // `.wk-rail .wk-nc-tile` rule out-ranks it).
+describe('the Nerve Center tile hovers and presses through its own state tokens', () => {
   const nerve = rules(readFileSync(join(__dirname, '..', 'src', 'styles', 'sections', 'nerve.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//gu, ''));
-  const filterFor = (tone: string, state: ':hover' | ':active'): string => {
-    let out = 'none';
-    for (const r of nerve) if (expand(r.selector).includes(`.wk-nc-tile${state}`)) { const f = /filter:\s*([^;]+);/u.exec(r.body); if (f !== null) out = f[1]!.trim(); }
-    for (const r of all) for (const sel of expand(r.selector)) {
-      if (!sel.startsWith('.wk-rail .wk-nc-tile') || !sel.endsWith(state) || sel.includes('[aria-current')) continue;
-      const only = /\[data-tone="([a-z]+)"\]/u.exec(sel.replace(/:not\([^)]*\)/gu, ''));
-      const not = /:not\(\[data-tone="([a-z]+)"\]\)/u.exec(sel);
-      if ((only !== null && only[1] !== tone) || (not !== null && not[1] === tone)) continue;
-      const f = /filter:\s*([^;]+);/u.exec(r.body);
-      if (f !== null) out = f[1]!.trim();
-    }
-    return out;
-  };
-  it('the white-ink red tile does not brighten on hover (only the dark-ink tones do)', () => {
-    expect(filterFor('red', ':hover')).toBe('none');
-    expect(filterFor('yellow', ':hover')).toMatch(/^brightness\(1\.0\d\)$/u);
+  const body = (rs: Rule[], sel: string): string => rs.filter((r) => expand(r.selector).includes(sel)).map((r) => r.body).join(';');
+  it('every tone maps --nc-hover and --nc-press to its own tokens', () => {
+    expect(body(nerve, '.wk-nc-tile')).toMatch(/--nc-hover:\s*var\(--nc-warn-hover\);\s*--nc-press:\s*var\(--nc-warn-press\)/u);
+    expect(body(nerve, '.wk-nc-tile[data-tone="green"]')).toMatch(/--nc-hover:\s*var\(--nc-ok-hover\);\s*--nc-press:\s*var\(--nc-ok-press\)/u);
+    expect(body(nerve, '.wk-nc-tile[data-tone="red"]')).toMatch(/--nc-hover:\s*var\(--nc-fail-hover\);\s*--nc-press:\s*var\(--nc-fail-press\)/u);
   });
-  for (const [theme, file] of [['dark', 'tokens.css'], ['light', 'themes/light.css']] as const) {
-    const t = tokens(file);
-    for (const [tone, key] of Object.entries(TONES)) for (const state of [':hover', ':active'] as const) {
-      it(`${theme} ${tone} ${state}`, () => {
-        const f = filterFor(tone, state);
-        // Only brightness() is modelled; any other filter function must be added here first.
-        expect(f === 'none' || /^brightness\([\d.]+\)$/u.test(f)).toBe(true);
-        const k = f === 'none' ? 1 : Number(/[\d.]+/u.exec(f)![0]);
-        const paint = (hex: string): number[] => rgb(hex).map((v) => Math.min(255, Math.round(v * k)));
-        expect(ratio(paint(t[`--nc-${key}-fg`]!), paint(t[`--nc-${key}-bg`]!))).toBeGreaterThanOrEqual(4.5);
-      });
-    }
-  }
+  it('the rail paints them on hover and press, with no filter anywhere', () => {
+    expect(body(all, '.wk-rail .wk-nc-tile:hover')).toMatch(/background:\s*var\(--nc-hover\)/u);
+    expect(body(all, '.wk-rail .wk-nc-tile:active')).toMatch(/background:\s*var\(--nc-press\)/u);
+    for (const r of [...all, ...nerve]) if (expand(r.selector).some((sel) => sel.includes('.wk-nc-tile'))) expect(r.body).not.toMatch(/(^|;)\s*filter:/u);
+  });
 });

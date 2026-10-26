@@ -12,6 +12,9 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+### Fixed
+- **Hovering a rail item is visible in every theme.** The first hover pass tinted items one surface step up, which on the rail's own ground looked the same as rest. Every rail item (the wordmark, the four icon buttons, group headers and icons, session rows, Show N more, the Workspace links with Settings, and the Nerve Center tile) now hovers with an accent-tinted fill and full-ink words; the icon buttons also draw an accent edge, and the Nerve Center tile's state fill deepens toward its own ink. Pressed is a stronger fill; the current page, the focus ring and reduced motion are unchanged. A new browser journey (`e2e/desk_rail_hover_test.py`) measures each item in wicked-dark, wicked-light, dark and light: the hover fill must sit at least 0.08 OKLab ΔE from rest over the rail, with its words at 4.5:1 or better.
+
 ## [0.12.3] — 2026-10-26
 
 A patch release finishing the Desk redesign: the Work tab (#910) and the Desk's tabs grouped as four daily views and More (#913).

@@ -34,6 +34,15 @@ for (const [name, file] of [['dark', 'tokens.css'], ['light', 'themes/light.css'
     expect(contrast(bg!, fg!)).toBeGreaterThanOrEqual(4.5);
   });
 
+  // The hover and pressed fills (rail.css: `.wk-rail .wk-nc-tile:hover/:active`) keep the words AA.
+  // How far they sit from the rest fill is measured in the browser (e2e/desk_rail_hover_test.py).
+  for (const state of ['ok', 'warn', 'fail']) for (const step of ['hover', 'press']) it(`--nc-${state}-fg is AA (4.5:1) on --nc-${state}-${step}`, () => {
+    const fill = t[`--nc-${state}-${step}`];
+    expect(fill, `--nc-${state}-${step} in ${file}`).toBeDefined();
+    expect(fill).not.toBe(t[`--nc-${state}-bg`]);
+    expect(contrast(fill!, t[`--nc-${state}-fg`]!)).toBeGreaterThanOrEqual(4.5);
+  });
+
   it('the three fills are three different colours', () => {
     expect(new Set([t['--nc-ok-bg'], t['--nc-warn-bg'], t['--nc-fail-bg']]).size).toBe(3);
   });
