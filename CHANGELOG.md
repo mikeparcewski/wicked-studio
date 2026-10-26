@@ -14,7 +14,7 @@ npm publish dates. Every version listed here exists on
 
 ## [0.12.2] — 2026-10-26
 
-A patch release: Nerve Center as a compact header over five tabs (#911), and the rail's New job first with one set of hover, pressed, current and focus states on every item (#909).
+A patch release: Nerve Center as a compact header over five tabs (#911); the rail's New job first with one set of hover, pressed, current and focus states on every item (#909); and the Desk's run lists and stat rows redesigned (#912).
 
 ### Changed
 - **Nerve Center is a compact header over five tabs, not one long page (#911).** `/watch` opens on a header that
@@ -36,6 +36,13 @@ A patch release: Nerve Center as a compact header over five tabs (#911), and the
   accent-wash current state with a 3 px bar, and a focus ring for keyboard focus (inset in the session list),
   in 140 ms, with no movement under reduced motion. The red Nerve Center tile does not brighten on hover, so
   its white words stay readable (AA).
+- **The Desk's run lists and stat rows are quieter and fit a phone (#912).** The Runs and Report stat rows are
+  one strip on one surface (label, a mark, the number at one size, and a note that wraps and is never cut)
+  instead of five boxed tiles with wrapped labels. In the Runs table each agent is a dot and its name on one
+  line, so a row is about 56 px tall instead of 96, "Not in a project" is shown quietly, and status never
+  wraps. On a phone, Runs is a list (title first, then state and start time, agents and duration, the steps
+  bar and the project) instead of a squeezed 7-column table, and the status, range and group-by controls keep
+  one line and scroll sideways.
 
 ## [0.12.1] — 2026-10-25
 
