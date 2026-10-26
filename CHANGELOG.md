@@ -12,8 +12,12 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+## [0.12.2] — 2026-10-26
+
+A patch release: Nerve Center as a compact header over five tabs (#911), and the rail's New job first with one set of hover, pressed, current and focus states on every item (#909).
+
 ### Changed
-- **Nerve Center is a compact header over five tabs, not one long page.** `/watch` opens on a header that
+- **Nerve Center is a compact header over five tabs, not one long page (#911).** `/watch` opens on a header that
   stays put: the verdict pill and its one sentence, when crew last answered, Re-check, and a row of five
   summary chips (Attention 3 · CLIs 3/5 signed in · Runs 1 waiting · Infra 1 down · Governance ok), each
   coloured by its area's worst state and opening its tab. Under it are tabs for Attention (each item as a card
@@ -26,6 +30,12 @@ npm publish dates. Every version listed here exists on
   never switches tabs while you read. A feed link (`?filter=`) opens Runs. On a phone the tabs scroll sideways.
   Nothing #901 showed is gone, and a crew without the snapshot still gets the Health cards in their tabs. No
   chip or tab dot is green when the read is checking, failed or stale.
+- **The rail reads New job, New project, Chat, Search, and every rail item answers the pointer (#909).** The
+  wordmark, icon buttons, group headers, session rows, Show N more, Workspace links and the Nerve Center tile
+  share one set of states: a hover tint and lift on raised items, an accent-tinted pressed state, an
+  accent-wash current state with a 3 px bar, and a focus ring for keyboard focus (inset in the session list),
+  in 140 ms, with no movement under reduced motion. The red Nerve Center tile does not brighten on hover, so
+  its white words stay readable (AA).
 
 ## [0.12.1] — 2026-10-25
 
@@ -2522,7 +2532,8 @@ The merged interactive layer: wicked-interactive's UI moved into this skin (DES-
   `git subtree split` (92 commits).
 - The SPA as a pure HTTP/WS client of the wicked-crew daemon: runs, gates, live CoreEvents.
 
-[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.12.1...HEAD
+[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.12.2...HEAD
+[0.12.2]: https://github.com/mikeparcewski/wicked-studio/compare/v0.12.1...v0.12.2
 [0.12.1]: https://github.com/mikeparcewski/wicked-studio/compare/v0.12.0...v0.12.1
 [0.12.0]: https://github.com/mikeparcewski/wicked-studio/compare/v0.11.8...v0.12.0
 [0.11.8]: https://github.com/mikeparcewski/wicked-studio/compare/v0.11.7...v0.11.8
