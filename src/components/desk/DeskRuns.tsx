@@ -78,7 +78,7 @@ export function DeskRuns({ runs, runsShown, refine, refineBar, now, navigate, pa
   return (
     <div role="tabpanel" id={panelId} aria-labelledby={labelledBy} aria-label={labelledBy === undefined ? 'Jobs' : undefined} data-testid="desk-runs" className="wk-jr">
       <div className="wk-jr-col">
-        <QuietHead title="Jobs" level={showProject ? 1 : 2} sentence={sentence} sentenceTestId="desk-runs-sentence"
+        <QuietHead title="Jobs" level={showProject ? 1 : 2} sentence={sentence} testId="desk-runs-sentence"
           action={onNewJob !== undefined ? <button type="button" className="wk-jr-btn wk-jr-btn--primary" data-testid="desk-runs-new" onClick={onNewJob}>New job</button> : undefined} />
 
         <section className="wk-jr-sec" aria-labelledby="desk-runs-title" data-testid="desk-runs-list" data-group={group}>

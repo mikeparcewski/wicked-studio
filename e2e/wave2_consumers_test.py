@@ -102,6 +102,8 @@ with sync_playwright() as p:
     card = page.locator(TID("repo-card")).filter(has=page.locator('[data-repo-id="studio-api"]')).or_(
         page.locator('[data-testid="repo-card"][data-repo-id="studio-api"]'))
     card.first.wait_for(timeout=15000)
+    # Calm v2: a repository is one row; its findings and actions open under it on click.
+    card.first.locator(TID("repo-row")).click()
     row = card.first.locator(TID("repo-card-findings-row"))
     row.wait_for(timeout=10000)
     check("repo_card_finding_row",
@@ -118,9 +120,9 @@ with sync_playwright() as p:
         if onboard_posts:
             break
         page.wait_for_timeout(100)
-    # The host's EXISTING onboard trigger follows the started run (as the card's own
-    # Onboard button does); what must NOT happen is the click falling through to the
-    # card's role=link and opening the repo detail instead.
+    # The host's EXISTING onboard trigger follows the started run (as the row's own
+    # Onboard button does); what must NOT happen is the click falling through to
+    # opening the repo detail instead.
     check("repo_card_reonboard_posts_the_onboard_wire",
           onboard_posts == ["studio-api"] and "/repo-detail/" not in page.url,
           onboard_posts=list(onboard_posts), landed=page.url.replace(ORIGIN, ""))

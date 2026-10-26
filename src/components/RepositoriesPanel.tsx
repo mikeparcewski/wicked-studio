@@ -455,7 +455,7 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
           <QuietHead
             title="Repositories"
             sentence={sentence}
-            sentenceTestId="repos-sentence"
+            testId="repos-sentence"
             action={(
               <button
                 type="button"

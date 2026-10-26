@@ -914,6 +914,14 @@
     "watch-pill-card": "nc-attention",
     "watch-pill-row": "nc-attention-item",
     "watch-pill-wrap": "desk-rail-nerve",
-    "desk-rail-theme": "settings-tabs"
+    "desk-rail-theme": "settings-tabs",
+    "desk-runs-progress": "desk-runs-line",
+    "desk-runs-stat-failed": "desk-runs-sentence",
+    "desk-runs-stat-finished": "desk-runs-sentence",
+    "desk-runs-stat-running": "desk-runs-sentence",
+    "desk-runs-stat-waiting": "desk-runs-sentence",
+    "desk-runs-stat-window": "desk-runs-window",
+    "desk-runs-stats": "desk-runs-sentence",
+    "desk-runs-table": "desk-runs-list"
   }
 }
