@@ -118,8 +118,8 @@ with sync_playwright() as p:
           and badge is not None and r["homeName"] in (f"wicked studio — Desk, {badge} need you", f"wicked studio — Desk, {badge} needs you")
           and all(w not in r["text"] for w in ("Rules", "Everything else", "Product", "Steering", "Evals", "Repositories", "Agents", "General settings", "Configuration", "MCP tools"))
           and "Skills" in r["text"] and "MCP" in r["text"]
-          # DES-SYSTEM-CHAT §1: four equal icon buttons (no words), New project · New job · Chat · Search.
-          and r["actions"] == ["desk-rail-new-project", "desk-rail-new-job", "desk-rail-chat", "desk-rail-search"]
+          # DES-SYSTEM-CHAT §1: four equal icon buttons (no words), New job · New project · Chat · Search.
+          and r["actions"] == ["desk-rail-new-job", "desk-rail-new-project", "desk-rail-chat", "desk-rail-search"]
           and r["general"] == "General"
           and (r["nerveWords"] or "").strip() != "" and r["nerveTone"] in ("green", "yellow", "red")
           and r["footLabel"] == "Workspace",

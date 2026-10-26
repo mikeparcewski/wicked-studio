@@ -41,10 +41,10 @@ export const SESSION_RAIL_PX = 236;
  *    badge (the fold's `needCount`, the Desk sentence's number — one source, so they never disagree);
  *    its accessible name says it ("Desk, 2 need you"). Operator IA 2026-10-13: there is no separate
  *    "Desk" item.
- *  - The action row, on every page (DES-SYSTEM-CHAT §1): four equal icon buttons — New project (the
- *    one New project modal), New job (the launch wizard), Chat (the floating system chat: restores a
- *    minimized one, else starts a new one) and Search (the ONE search modal, ⌘K). New job and Chat
- *    start in the project on screen (`ambientProject`), and say so in their names.
+ *  - The action row, on every page (DES-SYSTEM-CHAT §1): four equal icon buttons — New job (the launch
+ *    wizard; first, operator 2026-10-26), New project (the one New project modal), Chat (the floating
+ *    system chat: restores a minimized one, else starts a new one) and Search (the ONE search modal,
+ *    ⌘K). New job and Chat start in the project on screen (`ambientProject`), and say so in their names.
  *  - Sessions grouped by project (the board model's order), each with ONE status dot (four hues:
  *    waiting on you, working, failed, ended — its word in the row's hover title and accessible label)
  *    and the count of needs-you items that name it. A title is one line, cut with an ellipsis, its
@@ -163,17 +163,17 @@ export function SessionRail({ runs, needRows, navigate, pathname, runsKnown = tr
         </span>
         {count > 0 && <span aria-hidden data-testid="desk-rail-badge" data-phase={settled.phase} className="wk-rail-badge">{badgeText}</span>}
       </a>
-      {/* DES-SYSTEM-CHAT §1: the action row, on every page — four equal icon buttons, New project ·
-          New job · Chat · Search (⌘K), each named and with a tooltip. New job and Chat start in the
+      {/* DES-SYSTEM-CHAT §1: the action row, on every page — four equal icon buttons, New job ·
+          New project · Chat · Search (⌘K), each named and with a tooltip. New job and Chat start in the
           project on screen. The New project modal is portalled so the phone drawer — which closes when
           a modal opens over it — never clips it. */}
       <div className="wk-rail-actions wk-rail-actions--icons" role="group" aria-label="Start or find work" data-testid="desk-rail-actions">
-        <button type="button" data-testid="desk-rail-new-project" className="wk-rail-action" aria-label="New project" title="New project" onClick={() => setNewProjectOpen(true)}>
-          <FolderPlus size={17} aria-hidden />
-        </button>
         <button type="button" data-testid="desk-rail-new-job" className="wk-rail-action" aria-label={inProject !== null ? `New job in ${inProject.name}` : 'New job'} title={inProject !== null ? `New job in ${inProject.name}` : 'New job'}
           onClick={() => startNewJob(ambientProject)}>
           <Plus size={18} aria-hidden />
+        </button>
+        <button type="button" data-testid="desk-rail-new-project" className="wk-rail-action" aria-label="New project" title="New project" onClick={() => setNewProjectOpen(true)}>
+          <FolderPlus size={17} aria-hidden />
         </button>
         <button type="button" data-testid="desk-rail-chat" data-chat-mode={chatMode} className="wk-rail-action" aria-label={chatName} title={chatName}
           onClick={() => openSystemChat(inProject?.id ?? null)}>

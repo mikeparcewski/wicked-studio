@@ -27,10 +27,10 @@ function rail(pathname = '/'): ReturnType<typeof render> {
 }
 
 describe('the rail, top to bottom', () => {
-  it('Desk (the wordmark) · New project · sessions · Skills · MCP · Plugins · Workflows · General · Nerve Center (DES-SYSTEM-VIEW)', () => {
+  it('Desk (the wordmark) · New job · New project · sessions · Skills · MCP · Plugins · Workflows · General · Nerve Center (DES-SYSTEM-VIEW)', () => {
     rail();
     const nav = screen.getByTestId('session-rail');
-    const ids = ['desk-rail-home', 'desk-rail-new-project', 'desk-rail-skills', 'desk-rail-mcp', 'desk-rail-plugins', 'desk-rail-workflows', 'desk-rail-general', 'desk-rail-nerve'];
+    const ids = ['desk-rail-home', 'desk-rail-new-job', 'desk-rail-new-project', 'desk-rail-skills', 'desk-rail-mcp', 'desk-rail-plugins', 'desk-rail-workflows', 'desk-rail-general', 'desk-rail-nerve'];
     const order = [...nav.querySelectorAll('[data-testid]')].map((e) => e.getAttribute('data-testid') ?? '').filter((id) => ids.includes(id));
     expect(order).toEqual(ids);
     expect(nav.querySelector('[data-nav-dest="notifications"]')).toBeNull();
