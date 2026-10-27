@@ -6,7 +6,7 @@ import { duration, LIVENESS_WORD, percent, runsWorstFirst, toneWord, type NerveS
 import { PAGE_NAMES } from '../../board/pageNames.js';
 import { relTime } from '../../board/relTime.js';
 import { sessionPath } from '../../board/sessionModel.js';
-import { activeNerveTab, AREA_TONE_WORD, landingTab, NERVE_TAB_LABEL, NERVE_TABS, nerveSummary, nerveTabPath, readNerveTab, type NerveTab } from '../../board/nerveTabs.js';
+import { activeNerveTab, AREA_TONE_WORD, NERVE_TAB_LABEL, NERVE_TABS, nerveSummary, nerveTabPath, readNerveTab, type NerveTab } from '../../board/nerveTabs.js';
 import { useNerveState } from '../../hooks/useNerveState.js';
 import type { Navigate } from '../../hooks/useRoute.js';
 import { getCachedRoster } from '../../store/rosterCache.js';
@@ -15,6 +15,7 @@ import { AgentModal } from '../agents/AgentModal.js';
 import { ConnectionRegistry, GovernanceRows, SeatsRegistry, WeekRegistry, seatStandingWord, useHealthRegistry, type HealthRegistry } from '../HealthRailSection.js';
 import { Tabs, TechDetails } from '../ui/index.js';
 import { ToResolve } from '../desk/NeedsRanked.js';
+import { NerveOverview } from './NerveOverview.js';
 
 const defaultNavigate: Navigate = (p) => { history.pushState(null, '', p); window.dispatchEvent(new PopStateEvent('popstate')); };
 
@@ -40,24 +41,25 @@ function headline(state: NerveState): string {
 
 /**
  * NERVE CENTER (`/watch`; `/health` redirects here — DES-SYSTEM-VIEW): ONE place that answers "is
- * anything stopping work, why, and what fixes it?", scanned in seconds (operator 2026-10-25: "one
- * giant page — use tabs"). A compact header, always on screen whatever the tab:
+ * anything stopping work, why, and what fixes it?", scanned in seconds.
  *
- *  - the title, the verdict pill and its one sentence, when crew last answered, and Re-check;
- *  - one summary chip per area (Attention · CLIs · Runs · Infra · Governance), coloured by its worst
- *    state and never green over a read that is not fresh; a chip opens its tab.
+ * `/watch` with no `?tab=` is the calm overview (the operator-approved mockup `ui-v2-nerve`,
+ * `NerveOverview`): one sentence, what is slowing work now with its fix, one tile per helper and three
+ * System tiles. Every tile opens the tabbed detail behind it, which is the page as it was (operator
+ * 2026-10-25: "one giant page — use tabs"):
  *
- * Under it, five tabs (the app's `Tabs`; `?tab=` on the address, `board/nerveTabs`), each with one
- * primary thing: Attention (the items, worst first, with their fix and action — or a calm "all
- * clear"), CLIs (the cards, then sign-in and this week), Runs (unfinished runs, then the feed — the old
- * Watchtower), Infra (studio to crew, then each component) and Governance (the cards, then the
- * evidence store). No `?tab=` lands on Attention when anything needs it, else on CLIs; a feed filter
- * (`?filter=`) opens Runs.
+ *  - a compact header: the title, the verdict pill and its one sentence, when crew last answered,
+ *    Re-check, and one summary chip per area (Attention · CLIs · Runs · Infra · Governance), coloured by
+ *    its worst state and never green over a read that is not fresh; a chip opens its tab;
+ *  - five tabs (`?tab=`, `board/nerveTabs`): Attention (the items, worst first, with their fix and
+ *    action), CLIs (the cards, then sign-in and this week), Runs (unfinished runs, then the feed — the old
+ *    Watchtower), Infra (studio to crew, then each component, with the raw probes) and Governance (the
+ *    cards, then the evidence store). A feed filter (`?filter=`) opens Runs.
  *
- * Against a crew with `capabilities.system` the tabs read `GET /system`. Against an older crew they
- * hold today's Health cards (Connection in Infra, Helpers and This week in CLIs, Governance in
- * Governance) with an upgrade note. The Health cards stay in their tabs in both modes, so nothing the
- * old `/health` page showed is lost. Read-only apart from Sign in, Re-check and opening a run.
+ * Against a crew with `capabilities.system` both read `GET /system`. Against an older crew they hold
+ * today's Health cards (Connection in Infra, Helpers and This week in CLIs, Governance in Governance)
+ * with an upgrade note, so nothing the old `/health` page showed is lost. Read-only apart from Sign in,
+ * Re-check and opening a run.
  */
 export function NerveCenterPage({ navigate = defaultNavigate, needCount = 0, feed = null, search = window.location.search }: {
   navigate?: Navigate;
@@ -96,12 +98,10 @@ export function NerveCenterPage({ navigate = defaultNavigate, needCount = 0, fee
   const { governance, week } = registry;
   const missing = [week.kind === 'absent' ? 'the week' : null, governance.kind === 'absent' ? 'governance' : null].filter((s): s is string => s !== null);
 
-  // Where the page lands with no `?tab=`: decided once, on crew's first answer, so the page never
-  // jumps tabs under the user when attention empties or fills while they read.
-  const [landing, setLanding] = useState<NerveTab | null>(() => landingTab(state));
-  const landingNow = landingTab(state);
-  useEffect(() => { if (landing === null && landingNow !== null) setLanding(landingNow); }, [landing, landingNow]);
-  const tab = activeNerveTab(search, landing);
+  // The detail's tab rides the address (`?tab=`; a feed filter alone opens Runs). With neither, the page
+  // is the overview below, whose "All the details" link names the landing tab on the address, so the
+  // detail never jumps tabs under the user when attention empties or fills while they read.
+  const tab = activeNerveTab(search, null);
   // On a phone the tab row scrolls sideways: keep the open tab in view (a link to `?tab=governance`).
   useEffect(() => { document.getElementById(`nc-tab-${tab}`)?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' }); }, [tab]);
   const openTab = (id: NerveTab): void => { if (id !== tab || readNerveTab(search) === null) navigate(nerveTabPath(search, id)); };
@@ -215,9 +215,43 @@ export function NerveCenterPage({ navigate = defaultNavigate, needCount = 0, fee
     );
   }
 
+  const upgradeNotes = (
+    <>
+      {mode === 'fallback' && (
+        <p data-testid="nc-upgrade-note" className="wk-nc-note">
+          This version of crew does not report the full system yet (each CLI&apos;s week, run liveness, infra probes, governance cards).
+          Upgrade crew to see them. Below are studio&apos;s own checks and the feed.
+        </p>
+      )}
+      {missing.length > 0 && (
+        <p data-testid="health-upgrade-note" className="wk-nc-note">
+          This version of crew does not report {missing.join(' or ')} yet. Upgrade crew to see {missing.length > 1 ? 'them' : 'it'}.
+        </p>
+      )}
+    </>
+  );
+
+  // The calm overview (`/watch` with no `?tab=` and no feed filter): the sentence, what is slowing work
+  // and the tiles. Each tile opens the tabbed detail below (`?tab=`), which keeps everything it showed.
+  if (readNerveTab(search) === null && new URLSearchParams(search).get('filter') === null) {
+    return (
+      <div data-testid="nerve-center-page" data-view="overview" data-mode={mode} data-tone={state.tone} className="wk-calm wk-ncv">
+        <div className="wk-calm-col">
+          <NerveOverview state={state} snapshot={system ? snapshot : null} registry={registry} reading={reading} needCount={needCount}
+            search={search} navigate={navigate} onRecheck={recheck} onAct={act} notes={upgradeNotes} />
+        </div>
+        <SignInModal registry={registry} />
+      </div>
+    );
+  }
+
   return (
-    <div data-testid="nerve-center-page" data-mode={mode} data-tone={state.tone} data-tab={tab} className="wk-desk-scroll wk-nc-page wk-measure">
+    <div data-testid="nerve-center-page" data-view="detail" data-mode={mode} data-tone={state.tone} data-tab={tab} className="wk-desk-scroll wk-nc-page wk-measure">
       <header className="wk-nc-head">
+        <a href="/watch" data-testid="nc-back" className="wk-link wk-nc-back"
+          onClick={(e) => { if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return; e.preventDefault(); navigate('/watch'); }}>
+          <span aria-hidden>←</span> {PAGE_NAMES.watch}
+        </a>
         <div className="wk-nc-head-row">
           <h1 className="wk-desk-hello">{PAGE_NAMES.watch}</h1>
           <button type="button" data-testid="nc-recheck" className="wk-btn wk-btn--secondary wk-btn--sm wk-nc-recheck" disabled={reading} onClick={recheck}>
@@ -248,17 +282,7 @@ export function NerveCenterPage({ navigate = defaultNavigate, needCount = 0, fee
           ))}
         </ul>
         <InsightsLine navigate={navigate} testId="nc-insights-line" />
-        {mode === 'fallback' && (
-          <p data-testid="nc-upgrade-note" className="wk-nc-note">
-            This version of crew does not report the full system yet (each CLI&apos;s week, run liveness, infra probes, governance cards).
-            Upgrade crew to see them. Below are studio&apos;s own checks and the feed.
-          </p>
-        )}
-        {missing.length > 0 && (
-          <p data-testid="health-upgrade-note" className="wk-nc-note">
-            This version of crew does not report {missing.join(' or ')} yet. Upgrade crew to see {missing.length > 1 ? 'them' : 'it'}.
-          </p>
-        )}
+        {upgradeNotes}
       </header>
 
       <div className="wk-nc-tabs">

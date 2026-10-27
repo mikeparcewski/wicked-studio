@@ -11,9 +11,9 @@
   "version": 1,
   "studioVersion": "0.12.3",
   "counts": {
-    "files": 251,
-    "occurrences": 3353,
-    "static": 2863,
+    "files": 253,
+    "occurrences": 3421,
+    "static": 2907,
     "dynamic": 75,
     "computed": 33
   },
@@ -7970,6 +7970,12 @@
       ]
     },
     {
+      "testId": "nc-back",
+      "files": [
+        "src/components/nerve/NerveCenterPage.tsx"
+      ]
+    },
+    {
       "testId": "nc-checked",
       "files": [
         "src/components/nerve/NerveCenterPage.tsx"
@@ -8096,6 +8102,12 @@
       ]
     },
     {
+      "testId": "nc-details",
+      "files": [
+        "src/components/nerve/NerveOverview.tsx"
+      ]
+    },
+    {
       "testId": "nc-feed",
       "files": [
         "src/components/nerve/NerveCenterPage.tsx"
@@ -8117,6 +8129,12 @@
       "testId": "nc-headline",
       "files": [
         "src/components/nerve/NerveCenterPage.tsx"
+      ]
+    },
+    {
+      "testId": "nc-helpers",
+      "files": [
+        "src/components/nerve/NerveOverview.tsx"
       ]
     },
     {
@@ -8152,7 +8170,8 @@
     {
       "testId": "nc-insights-line",
       "files": [
-        "src/components/nerve/NerveCenterPage.tsx"
+        "src/components/nerve/NerveCenterPage.tsx",
+        "src/components/nerve/NerveOverview.tsx"
       ]
     },
     {
@@ -8188,7 +8207,8 @@
     {
       "testId": "nc-recheck",
       "files": [
-        "src/components/nerve/NerveCenterPage.tsx"
+        "src/components/nerve/NerveCenterPage.tsx",
+        "src/components/nerve/NerveOverview.tsx"
       ]
     },
     {
@@ -8240,6 +8260,30 @@
       ]
     },
     {
+      "testId": "nc-slow",
+      "files": [
+        "src/components/nerve/NerveOverview.tsx"
+      ]
+    },
+    {
+      "testId": "nc-slow-fix",
+      "files": [
+        "src/components/nerve/NerveOverview.tsx"
+      ]
+    },
+    {
+      "testId": "nc-slowing",
+      "files": [
+        "src/components/nerve/NerveOverview.tsx"
+      ]
+    },
+    {
+      "testId": "nc-system",
+      "files": [
+        "src/components/nerve/NerveOverview.tsx"
+      ]
+    },
+    {
       "testId": "nc-tabpanel",
       "files": [
         "src/components/nerve/NerveCenterPage.tsx"
@@ -8249,6 +8293,36 @@
       "testId": "nc-tabs",
       "files": [
         "src/components/nerve/NerveCenterPage.tsx"
+      ]
+    },
+    {
+      "testId": "nc-tile",
+      "files": [
+        "src/components/nerve/NerveOverview.tsx"
+      ]
+    },
+    {
+      "testId": "nc-tile-line",
+      "files": [
+        "src/components/nerve/NerveOverview.tsx"
+      ]
+    },
+    {
+      "testId": "nc-tile-open",
+      "files": [
+        "src/components/nerve/NerveOverview.tsx"
+      ]
+    },
+    {
+      "testId": "nc-tile-signin",
+      "files": [
+        "src/components/nerve/NerveOverview.tsx"
+      ]
+    },
+    {
+      "testId": "nc-tile-state",
+      "files": [
+        "src/components/nerve/NerveOverview.tsx"
       ]
     },
     {
@@ -8267,6 +8341,18 @@
       "testId": "nc-verdict",
       "files": [
         "src/components/nerve/NerveCenterPage.tsx"
+      ]
+    },
+    {
+      "testId": "nc-waiting",
+      "files": [
+        "src/components/nerve/NerveOverview.tsx"
+      ]
+    },
+    {
+      "testId": "nc-waiting-open",
+      "files": [
+        "src/components/nerve/NerveOverview.tsx"
       ]
     },
     {
@@ -9612,7 +9698,44 @@
     {
       "testId": "project-actions",
       "files": [
+        "src/components/desk/ProjectDesk.tsx",
+        "src/components/desk/ProjectHome.tsx"
+      ]
+    },
+    {
+      "testId": "project-add-repo",
+      "files": [
+        "src/components/desk/ProjectHome.tsx"
+      ]
+    },
+    {
+      "testId": "project-archive",
+      "files": [
         "src/components/desk/ProjectDesk.tsx"
+      ]
+    },
+    {
+      "testId": "project-ask",
+      "files": [
+        "src/components/desk/ProjectHome.tsx"
+      ]
+    },
+    {
+      "testId": "project-ask-input",
+      "files": [
+        "src/components/desk/ProjectHome.tsx"
+      ]
+    },
+    {
+      "testId": "project-ask-start",
+      "files": [
+        "src/components/desk/ProjectHome.tsx"
+      ]
+    },
+    {
+      "testId": "project-back",
+      "files": [
+        "src/components/desk/ProjectHome.tsx"
       ]
     },
     {
@@ -9660,7 +9783,8 @@
     {
       "testId": "project-desc",
       "files": [
-        "src/components/desk/ProjectDesk.tsx"
+        "src/components/desk/ProjectDesk.tsx",
+        "src/components/desk/ProjectHome.tsx"
       ]
     },
     {
@@ -9778,6 +9902,12 @@
       ]
     },
     {
+      "testId": "project-edit",
+      "files": [
+        "src/components/desk/ProjectDesk.tsx"
+      ]
+    },
+    {
       "testId": "project-field",
       "files": [
         "src/components/ProjectSwitcher.tsx"
@@ -9844,6 +9974,42 @@
       ]
     },
     {
+      "testId": "project-home",
+      "files": [
+        "src/components/desk/ProjectHome.tsx"
+      ]
+    },
+    {
+      "testId": "project-home-link",
+      "files": [
+        "src/components/desk/ProjectDesk.tsx"
+      ]
+    },
+    {
+      "testId": "project-home-loading",
+      "files": [
+        "src/components/desk/ProjectHome.tsx"
+      ]
+    },
+    {
+      "testId": "project-home-needs",
+      "files": [
+        "src/components/desk/ProjectHome.tsx"
+      ]
+    },
+    {
+      "testId": "project-home-progress",
+      "files": [
+        "src/components/desk/ProjectHome.tsx"
+      ]
+    },
+    {
+      "testId": "project-home-repos",
+      "files": [
+        "src/components/desk/ProjectHome.tsx"
+      ]
+    },
+    {
       "testId": "project-jobs-unshown",
       "files": [
         "src/components/desk/ProjectDesk.tsx"
@@ -9856,15 +10022,57 @@
       ]
     },
     {
+      "testId": "project-menu",
+      "files": [
+        "src/components/desk/ProjectHome.tsx"
+      ]
+    },
+    {
       "testId": "project-meta",
       "files": [
         "src/components/desk/ProjectDesk.tsx"
       ]
     },
     {
+      "testId": "project-need",
+      "files": [
+        "src/components/desk/ProjectHome.tsx"
+      ]
+    },
+    {
+      "testId": "project-needs-calm",
+      "files": [
+        "src/components/desk/ProjectHome.tsx"
+      ]
+    },
+    {
+      "testId": "project-needs-more",
+      "files": [
+        "src/components/desk/ProjectHome.tsx"
+      ]
+    },
+    {
       "testId": "project-open-repo",
       "files": [
         "src/components/desk/ProjectDesk.tsx"
+      ]
+    },
+    {
+      "testId": "project-progress-more",
+      "files": [
+        "src/components/desk/ProjectHome.tsx"
+      ]
+    },
+    {
+      "testId": "project-progress-quiet",
+      "files": [
+        "src/components/desk/ProjectHome.tsx"
+      ]
+    },
+    {
+      "testId": "project-progress-row",
+      "files": [
+        "src/components/desk/ProjectHome.tsx"
       ]
     },
     {
@@ -9877,6 +10085,12 @@
       "testId": "project-repo-branch",
       "files": [
         "src/components/ProjectRepositories.tsx"
+      ]
+    },
+    {
+      "testId": "project-repo-chip",
+      "files": [
+        "src/components/desk/ProjectHome.tsx"
       ]
     },
     {
@@ -10036,38 +10250,74 @@
       ]
     },
     {
+      "testId": "project-view",
+      "files": [
+        "src/components/desk/ProjectHome.tsx"
+      ]
+    },
+    {
+      "testId": "project-views",
+      "files": [
+        "src/components/desk/ProjectHome.tsx"
+      ]
+    },
+    {
+      "testId": "project-week",
+      "files": [
+        "src/components/desk/ProjectHome.tsx"
+      ]
+    },
+    {
+      "testId": "project-week-report",
+      "files": [
+        "src/components/desk/ProjectHome.tsx"
+      ]
+    },
+    {
       "testId": "projects-archived-failed",
       "files": [
+        "src/components/everything/ProjectsPage.tsx",
         "src/components/everything/ProjectsTab.tsx"
       ]
     },
     {
       "testId": "projects-checking",
       "files": [
+        "src/components/everything/ProjectsPage.tsx",
         "src/components/everything/ProjectsTab.tsx"
       ]
     },
     {
       "testId": "projects-empty",
       "files": [
+        "src/components/everything/ProjectsPage.tsx",
         "src/components/everything/ProjectsTab.tsx"
       ]
     },
     {
       "testId": "projects-failed",
       "files": [
+        "src/components/everything/ProjectsPage.tsx",
         "src/components/everything/ProjectsTab.tsx"
       ]
     },
     {
       "testId": "projects-filter",
       "files": [
+        "src/components/everything/ProjectsPage.tsx",
         "src/components/everything/ProjectsTab.tsx"
+      ]
+    },
+    {
+      "testId": "projects-find",
+      "files": [
+        "src/components/everything/ProjectsPage.tsx"
       ]
     },
     {
       "testId": "projects-new",
       "files": [
+        "src/components/everything/ProjectsPage.tsx",
         "src/components/everything/ProjectsTab.tsx"
       ]
     },
@@ -10080,60 +10330,94 @@
     {
       "testId": "projects-row",
       "files": [
+        "src/components/everything/ProjectsPage.tsx",
         "src/components/everything/ProjectsTab.tsx"
       ]
     },
     {
       "testId": "projects-row-archive",
       "files": [
+        "src/components/everything/ProjectsPage.tsx",
         "src/components/everything/ProjectsTab.tsx"
       ]
     },
     {
       "testId": "projects-row-error",
       "files": [
+        "src/components/everything/ProjectsPage.tsx",
         "src/components/everything/ProjectsTab.tsx"
+      ]
+    },
+    {
+      "testId": "projects-row-menu",
+      "files": [
+        "src/components/everything/ProjectsPage.tsx"
       ]
     },
     {
       "testId": "projects-row-open",
       "files": [
+        "src/components/everything/ProjectsPage.tsx",
         "src/components/everything/ProjectsTab.tsx"
       ]
     },
     {
       "testId": "projects-row-rename",
       "files": [
+        "src/components/everything/ProjectsPage.tsx",
         "src/components/everything/ProjectsTab.tsx"
+      ]
+    },
+    {
+      "testId": "projects-row-sentence",
+      "files": [
+        "src/components/everything/ProjectsPage.tsx"
+      ]
+    },
+    {
+      "testId": "projects-row-state",
+      "files": [
+        "src/components/everything/ProjectsPage.tsx"
       ]
     },
     {
       "testId": "projects-row-unarchive",
       "files": [
+        "src/components/everything/ProjectsPage.tsx",
         "src/components/everything/ProjectsTab.tsx"
       ]
     },
     {
       "testId": "projects-tab",
       "files": [
+        "src/components/everything/ProjectsPage.tsx",
         "src/components/everything/ProjectsTab.tsx"
       ]
     },
     {
       "testId": "projects-unfiled",
       "files": [
+        "src/components/everything/ProjectsPage.tsx",
         "src/components/everything/ProjectsTab.tsx"
+      ]
+    },
+    {
+      "testId": "projects-unfiled-menu",
+      "files": [
+        "src/components/everything/ProjectsPage.tsx"
       ]
     },
     {
       "testId": "projects-unfiled-open",
       "files": [
+        "src/components/everything/ProjectsPage.tsx",
         "src/components/everything/ProjectsTab.tsx"
       ]
     },
     {
       "testId": "projects-unfiled-sessions",
       "files": [
+        "src/components/everything/ProjectsPage.tsx",
         "src/components/everything/ProjectsTab.tsx"
       ]
     },

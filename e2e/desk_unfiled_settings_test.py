@@ -124,6 +124,11 @@ with sync_playwright() as p:
     page.get_by_test_id("rail-group-view-unfiled").click()
     page.wait_for_function("() => window.location.pathname === '/projects/default'", timeout=5000)
     page.get_by_test_id("project-desk").wait_for(state="visible", timeout=8000)
+    # The address with no `?tab=` is the project's calm home; its Work view (the dashboard) is `?tab=work`.
+    page.get_by_test_id("project-home").wait_for(state="visible", timeout=8000)
+    home_title = page.get_by_test_id("project-title").inner_text()
+    page.locator('[data-testid="project-view"][data-tab="work"]').click()
+    page.wait_for_function("() => window.location.search === '?tab=work'", timeout=5000)
     page.get_by_test_id("desk-inbox").wait_for(state="visible", timeout=8000)
     page.wait_for_timeout(500)
     unfiled = page.evaluate(DASH)
@@ -134,12 +139,12 @@ with sync_playwright() as p:
     page.route("**/api/v1/projects/legacy-spike", lambda r: r.fulfill(status=200, json={
         "project": {"id": "legacy-spike", "name": "legacy-spike", "description": None, "status": "active",
                     "scope": "project:legacy-spike", "created_at": 1, "updated_at": 1}, "members": []}))
-    page.goto(f"{origin}/projects/legacy-spike", wait_until="networkidle")
+    page.goto(f"{origin}/projects/legacy-spike?tab=work", wait_until="networkidle")
     page.get_by_test_id("desk-inbox").wait_for(state="visible", timeout=8000)
     page.wait_for_timeout(500)
     real = page.evaluate(DASH)
     page.unroute("**/api/v1/projects/legacy-spike")
-    check("unfiled-is-a-project-dashboard", unfiled["desk"] and unfiled["title"] == "Not in a project" and not unfiled["notFound"]
+    check("unfiled-is-a-project-dashboard", unfiled["desk"] and unfiled["title"] == "Not in a project" and home_title == "Not in a project" and not unfiled["notFound"]
           and unfiled["inbox"] and unfiled["blocks"] and unfiled["tabs"] == real["tabs"] and len(unfiled["tabs"]) >= 6
           and {"project-documents"} <= set(unfiled["actions"]), unfiled=unfiled, real=real)
     page.goto(f"{origin}/projects/default?tab=runs", wait_until="networkidle")

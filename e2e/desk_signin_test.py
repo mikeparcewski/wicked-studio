@@ -147,7 +147,7 @@ with sync_playwright() as p:
     page.goto(f"{origin}/", wait_until="networkidle")
     page.get_by_test_id("desk").wait_for(state="visible", timeout=15000)
     page.get_by_test_id("desk-rail-nerve").click()
-    page.locator('[data-testid="nc-tab"][data-tab="clis"]').click()  # Nerve Center's tabs: the seat rows are in CLIs
+    page.locator('[data-testid="nc-tile-open"][data-tab="clis"]').first.click()  # Nerve Center: a helper tile opens its details (the CLIs tab), where the seat rows are in CLIs
     page.wait_for_function("() => document.querySelectorAll('[data-testid=\"rail-seat-move\"]').length >= 1", timeout=10000)
     move = page.locator('[data-testid="rail-seat-move"][data-kind="sign-in"]').first
     move.get_by_test_id("rail-seat-move-button").click()

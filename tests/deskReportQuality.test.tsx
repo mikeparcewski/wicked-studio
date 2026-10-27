@@ -120,7 +120,8 @@ describe('Desk tabs', () => {
     expect(navigate).toHaveBeenLastCalledWith(last.getAttribute('href'));
     fireEvent.keyDown(last, { key: 'ArrowRight' });
     expect(tabs[0]).toHaveFocus();
-    expect(navigate).toHaveBeenLastCalledWith('/projects/p1');
+    // The project's Work view is its own tab (the address with no `?tab=` is the project's home).
+    expect(navigate).toHaveBeenLastCalledWith('/projects/p1?tab=work');
     for (const tab of DESK_TABS) {
       if (tab.id === 'work') continue;
       rerender(<DeskV2 {...props} search={`?tab=${tab.id}`} />);

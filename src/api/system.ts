@@ -190,6 +190,14 @@ export interface SystemInfra {
   detail: string | null;
   checkedAt: number | null;
   timeoutMs: number | null;
+  /**
+   * The free-disk reading, when the row carries one (the `disk` row). Crew's `freeDisk` block (core#1138:
+   * the volume's free bytes and the floor below which jobs stop) wins where crew provides it; else the
+   * row's own `freeBytes` / `totalBytes`. `null` when the row says neither.
+   */
+  disk: { freeBytes: number; totalBytes: number | null; floorBytes: number | null } | null;
+  /** The host load, when the row carries one (the `load` row). */
+  load: { load1: number; cores: number | null } | null;
 }
 
 export interface SystemGovernanceCard {
@@ -263,6 +271,22 @@ function action(a: Bag, target: Bag): SystemAction | null {
   const t = str(target['cli']) ?? str(target['runId']) ?? str(target['key']) ?? '';
   if (t === '' && kind !== 'recheck') return null;
   return { kind, target: t, ord: num(target['gateOrd']), label: str(a['label']) };
+}
+
+/**
+ * A row's free-disk reading. `details.freeDisk` (core#1138's block: `freeBytes`, `volumeBytes`,
+ * `floorBytes`; or plain bytes) is read first, where crew provides it; then the row's `freeBytes` and
+ * `totalBytes`. Nothing measured stays `null`, never 0.
+ */
+export function diskReading(details: unknown): SystemInfra['disk'] {
+  const d = bag(details);
+  const fd = d['freeDisk'];
+  if (typeof fd === 'number' && Number.isFinite(fd)) return { freeBytes: fd, totalBytes: num(d['totalBytes']), floorBytes: null };
+  const f = bag(fd);
+  const free = num(f['freeBytes']);
+  if (free !== null) return { freeBytes: free, totalBytes: num(f['volumeBytes']) ?? num(d['totalBytes']), floorBytes: num(f['floorBytes']) };
+  const own = num(d['freeBytes']);
+  return own === null ? null : { freeBytes: own, totalBytes: num(d['totalBytes']), floorBytes: null };
 }
 
 /** The governance mode per scope, in words ("admitted", or "unscoped: admitted · repo: enforced"). */
@@ -391,6 +415,8 @@ export function normalizeSnapshot(input: unknown): SystemSnapshot {
         detail: raw(r['details']),
         checkedAt: when(r['checkedAt']),
         timeoutMs: num(r['timeoutMs']),
+        disk: diskReading(r['details']),
+        load: num(bag(r['details'])['load1']) === null ? null : { load1: num(bag(r['details'])['load1'])!, cores: num(bag(r['details'])['cores']) },
       };
     }),
     governance: list(b['governance']).map((x) => {

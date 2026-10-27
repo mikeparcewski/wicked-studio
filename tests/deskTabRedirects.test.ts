@@ -63,7 +63,8 @@ describe('the Desk view addresses studio builds', () => {
   });
 
   it('a project keeps its tabs at `?tab=`', () => {
-    expect(deskTabPath('work', undefined, '/projects/p1')).toBe('/projects/p1');
+    // A project's address with no `?tab=` is its home; its Work view is a tab of its own.
+    expect(deskTabPath('work', undefined, '/projects/p1')).toBe('/projects/p1?tab=work');
     expect(deskTabPath('runs', undefined, '/projects/p1')).toBe('/projects/p1?tab=runs');
     expect(deskTabPath('memory', '/memory?view=proposals', '/projects/p1')).toBe(`/projects/p1?tab=memory&at=${encodeURIComponent('/memory?view=proposals')}`);
   });

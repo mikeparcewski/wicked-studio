@@ -33,12 +33,26 @@ describe('the Projects page', () => {
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Projects');
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
     expect(screen.getAllByTestId('projects-row').map((r) => r.dataset.projectId)).toEqual(['alpha', 'beta']);
-    fireEvent.click(screen.getByRole('button', { name: 'Archived' }));
+    fireEvent.click(screen.getByRole('radio', { name: 'Archived' }));
     expect(navigate).toHaveBeenCalledWith('/projects?filter=archived', { replace: true });
     rerender(<ProjectsPage runs={[]} runsLoaded needRows={[]} navigate={navigate} search="?filter=archived" />);
     await waitFor(() => expect(screen.getAllByTestId('projects-row').map((r) => r.dataset.projectId)).toEqual(['old']));
-    fireEvent.click(screen.getByRole('button', { name: 'Active' }));
+    fireEvent.click(screen.getByRole('radio', { name: 'Active' }));
     expect(navigate).toHaveBeenLastCalledWith('/projects', { replace: true });
+  });
+
+  it('one card per project: its state, one sentence, New project; Rename and Archive behind its ⋯', () => {
+    const navigate = vi.fn();
+    render(<ProjectsPage runs={[]} runsLoaded needRows={[]} navigate={navigate} search="" />);
+    expect(screen.getByTestId('projects-sentence')).toHaveTextContent('Two projects. Nothing needs you.');
+    const alpha = screen.getAllByTestId('projects-row')[0]!;
+    expect(alpha).toHaveTextContent('Quiet');
+    expect(alpha).toHaveTextContent('No jobs yet.');
+    expect(screen.getByTestId('projects-new')).toHaveTextContent('New project');
+    fireEvent.click(alpha.querySelector('[data-testid="projects-row-open"]')!);
+    expect(navigate).toHaveBeenCalledWith('/projects/alpha');
+    fireEvent.click(screen.getByRole('button', { name: 'More actions for Alpha' }));
+    expect(screen.getAllByRole('menuitem').map((m) => m.textContent)).toEqual(['Rename', 'Archive']);
   });
 
   it('/projects is its own page, named Projects, current under the sidebar item; a project keeps its own name', () => {

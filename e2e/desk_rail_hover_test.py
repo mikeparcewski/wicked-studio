@@ -9,7 +9,9 @@ and again in each theme with a CUSTOM accent picked to sit close to that theme's
 picker takes any hue, saturation and lightness, so the hover cannot rest on the accent alone).
 
 For every interactive rail item type — the wordmark, an icon button (New job), a group icon, a group
-header, a session row, "All jobs", a sidebar page item (Jobs), Build & settings and the Nerve Center tile:
+header, a session row, "All jobs", a sidebar page item (Jobs), Build & settings and the Nerve Center tile, and
+the ui-v2 pages' own tiles and cards (a Nerve Center tile on /watch, a project card on /projects), each over
+its page's ground:
 
   1. VISIBLE: the hover fill, composited over the rail's own background by the browser (a 1x1 canvas),
      sits dE_OK >= 0.08 (OKLab distance) from the rest fill. The current page's hover (the wordmark on
@@ -24,7 +26,8 @@ header, a session row, "All jobs", a sidebar page item (Jobs), Build & settings 
   5. REDUCED MOTION: a hovered icon button does not move (transform none); with motion it lifts.
   6. 0 page errors.
 
-Captures: e2e/shots/rail-hover-<theme>.png (the rail with a session row hovered; preset accents).
+Captures: e2e/shots/rail-hover-<theme>.png (the rail with a session row hovered; preset accents) and
+e2e/shots/page-hover-<item>-<theme>.png (each page item hovered).
 Env: FEEDBACK_PORT (default 4391). Prints a JSON report; exit 0/1.
 """
 
@@ -108,6 +111,17 @@ ITEMS = [
     ("build", '[data-testid="desk-rail-build"]', "row"),
     ("nerve-center", '[data-testid="desk-rail-nerve"]', "nc"),
 ]
+
+# The ui-v2 pages' own tiles and cards (the approved ui-v2-nerve and ui-v2-projects mockups): each tints as one
+# over its page's ground, measured the same way (rest -> hover dE_OK >= 0.08, its words >= 4.5:1 on the hover).
+PAGE_ITEMS = [
+    ("nerve-tile", "/watch", '[data-testid="nc-tile"]'),
+    ("project-card", "/projects", '[data-testid="projects-row"]'),
+]
+# The nearest painted ground under an element (its page's own background).
+GROUND = """e => { for (let a = e.parentElement; a; a = a.parentElement) { const c = getComputedStyle(a).backgroundColor;
+  if (c && c !== 'rgba(0, 0, 0, 0)') return c; } return getComputedStyle(document.body).backgroundColor; }"""
+PAGE_PARK = (W - 6, 6)  # the page's top-right corner, over no tile
 
 # The browser composites each computed colour over the rail's background in a 1x1 canvas.
 PAINT = """([under, fills]) => { const c = document.createElement('canvas'); c.width = c.height = 1;
@@ -237,6 +251,30 @@ with sync_playwright() as p:
         cur = {"dE": de(r_rgb, h_rgb), "words": words}
         cur["ok"] = cur["dE"] >= MIN_DE_CURRENT and words >= MIN_TEXT
         rows["build-current"] = cur
+        # The ui-v2 pages' tiles and cards, over their own page's ground.
+        for pname, path, sel in PAGE_ITEMS:
+            page.goto(f"{origin}{path}", wait_until="networkidle")
+            el = page.locator(sel).first
+            try:
+                el.wait_for(state="visible", timeout=10000)
+            except Exception:  # noqa: BLE001
+                fail(f"{case}:{pname}", f"no {sel} on {path}")
+            el.scroll_into_view_if_needed()
+            page.mouse.move(*PAGE_PARK)
+            page.wait_for_timeout(320)
+            rest = el.evaluate(STYLE)
+            under = el.evaluate(GROUND)
+            settle(page, el)
+            hov = el.evaluate(STYLE)
+            rest_rgb, hov_rgb = page.evaluate(PAINT, [under, [rest["bg"], hov["bg"]]])
+            words, weakest = el.evaluate(WORDS, opaque(hov_rgb))
+            prow = {"path": path, "ground": under, "rest": rest["bg"], "hover": hov["bg"], "dE": de(rest_rgb, hov_rgb), "words": words, "weakest": weakest}
+            prow["ok"] = prow["dE"] >= MIN_DE and words >= MIN_TEXT
+            rows[f"page-{pname}"] = prow
+            page.mouse.move(*PAGE_PARK)
+            if not case.endswith("-custom"):
+                settle(page, el)
+                page.screenshot(path=str(SHOTS / f"page-hover-{pname}-{case}.png"))
         if not case.endswith("-custom"):
             # The evidence shot: a session row hovered.
             page.goto(f"{origin}/", wait_until="networkidle")
