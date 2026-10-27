@@ -65,6 +65,11 @@ import { panelPlaceOf } from '../../board/runPanelModel.js';
 import { useRunPanel } from '../../store/runPanel.js';
 import { RunHostProvider } from '../editorHost/RunHostContext.js';
 import { RunBlock } from './RunConversation.js';
+import { DecisionDockFrame, type DockItem } from './DecisionDock.js';
+import { useElicitationStore } from '../../store/elicitations.js';
+import { useSystemStore } from '../../store/systemSnapshot.js';
+import { askingResponder, gateResponder } from '../../board/responder.js';
+import { plainGateQuestion } from '../../board/deskWords.js';
 
 /** S16a-2c: the hash that lands a run's session on its sheet's Governance tab. */
 export const GOVERNANCE_HASH = '#governance';
@@ -840,6 +845,37 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
       onPick: () => openLaunchWizard({ workflowId: DEMO_VIDEO_ID, projectId, composerKey: sessionId }) }];
   }, [madeDocs, newest, sessionId]);
 
+  // The decision dock (mockup ui-v2-gate + addendum): the session's open decisions, in the thread's order — a run's
+  // gate (not an ask turn's, which the composer answers), a run's question, the chat's own gate or question.
+  const elicitations = useElicitationStore((s) => s.elicitations);
+  const attention = useSystemStore((s) => (s.snapshot?.ranked === true ? s.snapshot.attention : null));
+  const dockItems = useMemo<DockItem[]>(() => {
+    const out: DockItem[] = [];
+    const blocking = (id: string): boolean => (attention ?? []).some((a) => (a.runId === id || (a.blockedRunIds ?? []).includes(id)) && (a.level === 'red' || (a.blockedRunIds?.length ?? 0) > 1));
+    for (const v of mine) {
+      const id = v.session.id;
+      if (['completed', 'cancelled', 'failed'].includes(v.session.status)) continue;
+      if (askBlockHidden && id === askRunId) continue;
+      const g = gates[id];
+      const el = elicitations[id];
+      if (g !== undefined) {
+        // The hand-over is crew's own step (its unit runs a script, not a helper): nobody but crew is waiting.
+        const who = g.gateKind === 'deliver' ? null : gateResponder(v, g, roster);
+        out.push({ key: id, who: who !== null && who.role === 'seat' ? who.name : null, since: g.receivedAt ?? null, question: plainGateQuestion(g.prompt, g.gateKind), tone: blocking(id) ? 'blocking' : 'waiting' });
+      } else if (el !== undefined) {
+        const who = askingResponder(v, roster, el);
+        out.push({ key: id, who: who.role === 'seat' ? who.name : null, since: null, question: el.message, tone: blocking(id) ? 'blocking' : 'waiting' });
+      }
+    }
+    if (ref.kind === 'chat') {
+      const g = gates[ref.chatId];
+      const el = elicitations[ref.chatId];
+      if (g !== undefined || el !== undefined) out.push({ key: ref.chatId, who: null, since: g?.receivedAt ?? null, question: g !== undefined ? plainGateQuestion(g.prompt, g.gateKind) : el!.message, tone: 'waiting' });
+    }
+    return out;
+  }, [mine, gates, elicitations, roster, attention, askBlockHidden, askRunId, ref]);
+  const dockWho = dockItems[0]?.who ?? null;
+
   // H3: the composer's props, shared by the thread's composer and the full-screen chat drawer's (one draft).
   const composerProps = {
     suggestions,
@@ -864,7 +900,8 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
     started: entries.length > 0,
     navigate,
     ariaLabel: 'Ask or tell studio what to do next',
-    placeholder: 'Ask about this, or tell studio what to do next — / adds a step, @ names a project or a helper',
+    // While a decision is docked the reply box reads as the reply to it (mockup ui-v2-gate).
+    placeholder: dockItems.length > 0 ? `Or tell ${dockWho ?? 'studio'} what to do…` : 'Ask about this, or tell studio what to do next — / adds a step, @ names a project or a helper',
     variant: 'session' as const,
   };
   // H3 (HOST-API §6): full screen's chat drawer is this run's own thread, compact — its conversation turns,
@@ -945,8 +982,10 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
         )}
       </header>
       {/* Operator 2026-10-18: what waits on you is a banner below the header, in the page's flow (the thread reflows). */}
-      {ready && <NeedsBanner items={waiting} onJump={jumpToItem} />}
+      {/* What the dock already holds is not said again above the thread. */}
+      {ready && <NeedsBanner items={waiting.filter((w) => !dockItems.some((d) => d.key === w.runId))} onJump={jumpToItem} />}
 
+      <DecisionDockFrame items={dockItems}>
       <div className="wk-session-body">
         {/* S16a-4a: an address naming an artifact this session does not hold grows nothing and says so. */}
         {artifactMissing && <p data-testid="session-artifact-missing" className="wk-session-grey">That artifact is not in this session any more.</p>}
@@ -1109,6 +1148,8 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
       {askBlockHidden && askPath.shape.length > 0 && (
         <p data-testid="session-ask-shape" className="wk-session-grey wk-session-shape wk-measure wk-measure--thread">{askShapeFooter(askPath)}</p>
       )}
+
+      </DecisionDockFrame>
 
       {/* The measure sits on a wrapper: the composer's own box (its `/` and `@` menus anchor to it) stays the input's width. */}
       <div className="wk-session-composer-wrap wk-measure wk-measure--thread"><Composer {...composerProps} className="wk-session-composer" /></div>

@@ -29,6 +29,38 @@ export interface FailingOnFace {
   names: string[];
   /** How many more failed beyond `names`. */
   more: number;
+  /** (mockup ui-v2-gate) Where the engine told the failures apart per test (`regressions` / `preExisting`): the
+   *  ones new with this change, and the ones that fail on the base too. Absent when it did not. */
+  split?: { fresh: string[]; onBase: string[] };
+}
+
+/** The engine's per-test split of a floor's failures: new with the change (`regressions`, else the failing ids not
+ *  listed as pre-existing) and failing on the base too (`preExisting`). `null` when no failed check carries one. */
+export function failingSplit(floor: GateFloorView | null | undefined): { fresh: string[]; onBase: string[] } | null {
+  const fresh: string[] = [];
+  const onBase: string[] = [];
+  let told = false;
+  for (const c of failedChecks(floor)) {
+    const pre = [...new Set(c.preExisting.map(failureName).filter((x) => x !== ''))];
+    const reg = [...new Set(c.regressions.map(failureName).filter((x) => x !== ''))];
+    const ids = [...new Set((c.failureIds ?? []).map(failureName).filter((x) => x !== ''))];
+    if (pre.length === 0 && reg.length === 0) { fresh.push(...(ids.length > 0 ? ids : [`the ${c.name} check`])); continue; }
+    told = true;
+    onBase.push(...pre);
+    fresh.push(...(reg.length > 0 ? reg : ids.filter((x) => !pre.includes(x))));
+  }
+  return told ? { fresh: [...new Set(fresh)], onBase: [...new Set(onBase)].filter((x) => !fresh.includes(x)) } : null;
+}
+
+/** A test id in words for the face: `tests/a.py::test_walkthrough_runs_in_a_jail` → "Walkthrough runs in a jail"
+ *  (the id itself stays beside it, muted). An id that is not a test name is kept as it is. */
+export function testWords(id: string): string {
+  // A vitest / jest id ("src/a.test.ts > GateRow > names tests") already ends in words.
+  if (/\s>\s/.test(id)) return id.split(/\s>\s/).pop()!.trim() || id;
+  const leaf = id.split('::').pop()?.replace(/\[.*\]$/, '').trim() ?? id;
+  const bare = leaf.replace(/^test_?/i, '').replace(/_+/g, ' ').trim();
+  if (bare === '' || (bare === leaf && !/^test/i.test(leaf))) return id;
+  return bare.charAt(0).toUpperCase() + bare.slice(1);
 }
 
 /** The failing checks of a floor, the ones the floor counts as failed (a pre-existing failure the engine
@@ -47,7 +79,8 @@ export function failingOnFace(floor: GateFloorView | null | undefined, max = FAC
     else all.push(`the ${c.name} check`);
   }
   if (all.length === 0) return null;
-  return { names: all.slice(0, max), more: Math.max(0, all.length - max) };
+  const split = failingSplit(floor);
+  return { names: all.slice(0, max), more: Math.max(0, all.length - max), ...(split !== null ? { split } : {}) };
 }
 
 /** The face's line: "Failing: a, b, c +2 more". */

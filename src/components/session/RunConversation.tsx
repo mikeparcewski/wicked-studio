@@ -35,6 +35,7 @@ import { RunAssuranceLabel } from './AssuranceReceipt.js';
 import { ChainLine, useRunChain, type RunPhase } from './ChainLine.js';
 import { CodebaseDownload, DeliverCredentialsNotice } from './CodebaseDownload.js';
 import { GateRow } from './GateRow.js';
+import { Docked, DecisionMarker, useDockPlacement } from './DecisionDock.js';
 import { ProposalCard } from './ProposalCard.js';
 import { startRetry } from './RunActions.js';
 import { RunArtifacts } from './RunArtifacts.js';
@@ -258,6 +259,8 @@ export function RunBlock({ view, badge, sessionId, navigate, solo = null }: {
   // plan is answered the running plan's editor shows again (codex r3 #1).
   const planGateOpen = !isTerminal && gate !== undefined && proposalKind === 'plan';
   const deliverOpen = !isTerminal && effectiveKind === 'deliver';
+  // The decision dock: the open plan question draws there; the plan's message keeps its one sentence of steps.
+  const planDocked = useDockPlacement(id, planGateOpen).place !== 'inline';
   const doneCount = chain.steps.filter((s) => s.state === 'done' || s.state === 'checked').length;
   const totalCount = chain.total > 0 ? chain.total : view.units.length;
   const gateVerdict = acceptance?.gate;
@@ -298,8 +301,12 @@ export function RunBlock({ view, badge, sessionId, navigate, solo = null }: {
       {(plan.length > 0 || planOpen) && (
         <AssistantMessage who={plannerWho} runId={id} testId="chat-plan" extra={{ 'data-open': planOpen ? 'true' : 'false' }}>
           {/* While the plan waits on you, the card IS the message: its one sentence of steps, why, and the buttons. */}
-          {!planOpen && <p data-testid="chat-plan-steps" className="wk-chat-p">I split this into {plan.length} {plan.length === 1 ? 'step' : 'steps'}: {listWords(plan)}.</p>}
-          {planOpen && <ProposalCard view={view} chain={chain} acceptance={acceptance?.summary ?? null} variant="chat" onEdit={toggleEdit} editing={editPlan} />}
+          {(!planOpen || planDocked) && plan.length > 0 && <p data-testid="chat-plan-steps" className="wk-chat-p">I split this into {plan.length} {plan.length === 1 ? 'step' : 'steps'}: {listWords(plan)}.</p>}
+          {planOpen && (
+            <Docked dockKey={id} open={planGateOpen} marker={<DecisionMarker dockKey={id} who={null} since={gate?.receivedAt ?? null} />}>
+              <ProposalCard view={view} chain={chain} acceptance={acceptance?.summary ?? null} variant="chat" onEdit={toggleEdit} editing={editPlan} />
+            </Docked>
+          )}
           {/* The plan's editor, in the plan's own message: while the plan waits on you, on Edit; on a running planned
               run (S10), always — a step added there goes through the same undo window. */}
           {(!planGateOpen || editPlan) && <RunArtifacts view={view} composerKey={sessionId} chain={chain} only="plan" frame={(_who, _suffix, cards) => <>{cards}</>} />}
@@ -317,9 +324,12 @@ export function RunBlock({ view, badge, sessionId, navigate, solo = null }: {
 
       {/* 3. A question it is asking now (not the plan, not the hand-over): in the flow, answered here. */}
       {gate !== undefined && effectiveKind === null && finished === null && (
-        <AssistantMessage who={askingWho.role === 'seat' ? askingWho : STUDIO} runId={id} suffix="needs your answer" testId="chat-gate">
-          <GateRow view={view} gate={gate} {...(navigate !== undefined ? { navigate } : {})} />
-        </AssistantMessage>
+        <Docked dockKey={id} open marker={<DecisionMarker dockKey={id} who={askingWho.role === 'seat' ? askingWho.name : null} since={gate.receivedAt} />}
+          dock={<GateRow view={view} gate={gate} {...(navigate !== undefined ? { navigate } : {})} />}>
+          <AssistantMessage who={askingWho.role === 'seat' ? askingWho : STUDIO} runId={id} suffix="needs your answer" testId="chat-gate">
+            <GateRow view={view} gate={gate} {...(navigate !== undefined ? { navigate } : {})} />
+          </AssistantMessage>
+        </Docked>
       )}
       {/* Rule 5: an answered question keeps its "You chose …" receipt (GateRow reads it from the store) after the
           gate is gone — the same row, with no gate, says only what you chose. */}
@@ -336,9 +346,12 @@ export function RunBlock({ view, badge, sessionId, navigate, solo = null }: {
 
       {/* 4. The hand-over it asks for, or the one final message once it ended. */}
       {deliverOpen && (
-        <AssistantMessage who={STUDIO} runId={id} testId="chat-final" extra={{ 'data-kind': 'deliver' }}>
-          <ProposalCard view={view} chain={chain} acceptance={acceptance?.summary ?? null} variant="chat" />
-        </AssistantMessage>
+        <Docked dockKey={id} open={gate !== undefined} marker={<DecisionMarker dockKey={id} who={null} since={gate?.receivedAt ?? null} />}
+          dock={<ProposalCard view={view} chain={chain} acceptance={acceptance?.summary ?? null} variant="chat" />}>
+          <AssistantMessage who={STUDIO} runId={id} testId="chat-final" extra={{ 'data-kind': 'deliver' }}>
+            <ProposalCard view={view} chain={chain} acceptance={acceptance?.summary ?? null} variant="chat" />
+          </AssistantMessage>
+        </Docked>
       )}
       {words !== null && (
         <AssistantMessage who={STUDIO} runId={id} testId="chat-final" extra={{ 'data-kind': status }}>

@@ -27,6 +27,7 @@ import { AGENTS_PATH, type Navigate } from '../../hooks/useRoute.js';
 import { useSignInHere } from '../agents/useSignInHere.js';
 import { AssuranceReceipt, AssuranceReceiptTech, QeAcceptanceLabel, ReducedAssuranceLabel } from './AssuranceReceipt.js';
 import { missingSeatsLine, rejudgeOfferOf, type RejudgeOffer } from '../../board/rejudge.js';
+import { testWords } from '../../board/failingChecks.js';
 import { FLOOR_OVERRIDE_CONSEQUENCE, FLOOR_OVERRIDE_KEY, FLOOR_OVERRIDE_PLACEHOLDER, FLOOR_OVERRIDE_SEND } from '../../board/floorOverride.js';
 
 /** How often a judge-unavailable gate re-reads whether a judge seat can rule now (a seat signed in
@@ -249,7 +250,8 @@ function RunGateRow({ view, gate, navigate }: { view: RunView; gate: OpenGate | 
   const qe = sessionQe(view, events);
   const judgeWait = gate !== undefined && model !== null && waitsForJudge(events, gate.ord, gate.prompt);
   const seatRefusal = gate !== undefined && model !== null && !reduced && creatorSeatRefusal(events, gate.ord, gate.prompt);
-  const assurance = model === null ? null : (
+  const signIn = useSignInHere();
+  const explain = model === null ? null : (
     <>
       {model.deadSeat !== undefined && (
         <DeadSeatLine
@@ -260,9 +262,6 @@ function RunGateRow({ view, gate, navigate }: { view: RunView; gate: OpenGate | 
           {...(navigate !== undefined ? { navigate } : {})}
         />
       )}
-      {model.withheldSeats !== undefined && (
-        <WithheldSeats seats={model.withheldSeats} />
-      )}
       {judgeWait && (
         <JudgeWaitLine
           offer={rejudge}
@@ -272,6 +271,10 @@ function RunGateRow({ view, gate, navigate }: { view: RunView; gate: OpenGate | 
         />
       )}
       {seatRefusal && <CreatorSeatRefusal view={view} {...(navigate !== undefined ? { navigate } : {})} />}
+    </>
+  );
+  const assurance = model === null ? null : (
+    <>
       {receipt !== null
         ? <AssuranceReceipt receipt={receipt} passed={gatePassedFor(events, receiptOrd)} testId="session-gate-assurance" tech="host" />
         : reduced && <p className="wk-assurance"><ReducedAssuranceLabel testId="session-gate-reduced" /></p>}
@@ -284,6 +287,9 @@ function RunGateRow({ view, gate, navigate }: { view: RunView; gate: OpenGate | 
       eventsUnavailable={gate !== undefined && events === null && eventsFetchFailed}
       retryEvents={retryEvents} depth={depth} refusalLines={refusalLines} drift={drift}
       assurance={assurance}
+      explain={explain}
+      unavailable={model?.withheldSeats !== undefined && model.withheldSeats.length > 0 ? <WithheldSeats seats={model.withheldSeats} menu onSignIn={signIn.open} /> : null}
+      signInModal={signIn.modal}
       assuranceTech={model !== null && receipt !== null ? <AssuranceReceiptTech receipt={receipt} passed={gatePassedFor(events, receiptOrd)} testId="session-gate-assurance-tech" /> : null}
     />
   );
@@ -307,7 +313,9 @@ export function CreatorSeatRefusal({ view, navigate }: { view: RunView; navigate
       </p>
       {can && navigate !== undefined
         ? (
-          <>
+          // (mockup ui-v2-gate) The relaunch is a way on, not the question: folded under its own name.
+          <details className="wk-gate2-fold">
+            <summary className="wk-gate2-link">{REDUCED_OPT_IN_LABEL}…</summary>
             <p data-testid="session-gate-creator-seat-disclosure" className="wk-assurance-optin-why">{REDUCED_OPT_IN_DISCLOSURE}</p>
             <button
               type="button"
@@ -318,7 +326,7 @@ export function CreatorSeatRefusal({ view, navigate }: { view: RunView; navigate
             >
               {REDUCED_OPT_IN_LABEL}…
             </button>
-          </>
+          </details>
         )
         : !can && <p data-testid="session-gate-creator-seat-nocap" className="wk-assurance-optin-why">Studio's service does not support reduced assurance; sign a second helper in.</p>}
     </div>
@@ -385,9 +393,39 @@ export function DeadSeatLine({ seat, label, canReassign, withheld, navigate }: {
  * settings); closing it reads the roster again, so the card's reassign choices follow the new sign-in.
  * A seat refused because it made the work under review gets no Sign in: signing in cannot change that.
  */
-export function WithheldSeats({ seats }: { seats: readonly ReassignCandidate[] }): React.ReactElement {
+export function WithheldSeats({ seats, menu = false, onSignIn }: {
+  seats: readonly ReassignCandidate[];
+  /** (mockup ui-v2-gate) Drawn inside Other options: each helper greyed with why, and its Sign in beside it. */
+  menu?: boolean;
+  /** The caller's sign-in opener (its modal sits outside the menu, so it is never hidden with it). */
+  onSignIn?: (cli: string) => void;
+}): React.ReactElement {
   const signIn = useSignInHere();
+  const open = onSignIn ?? signIn.open;
   const signable = seats.filter((c) => c.state !== 'refused');
+  if (menu) {
+    return (
+      <div data-testid="session-gate-withheld" className="wk-gate2-off">
+        {seats.map((c) => {
+          const name = seatName(c.cli, c.label);
+          return (
+            <div key={c.cli} className="wk-gate2-off-row">
+              <button type="button" role="menuitem" disabled aria-disabled="true" data-testid="session-gate-withheld-seat" data-key={c.cli} data-state={c.state}
+                className="wk-gate2-mi wk-gate2-mi--off" title={`${name} cannot take the step now${c.note !== '' ? `: ${c.note}` : ''}.`}>
+                <span className="wk-gate2-mi-label">Give the step to {name}</span>
+                {c.note !== '' && <span className="wk-gate2-mi-sub">{c.note.charAt(0).toUpperCase() + c.note.slice(1)}</span>}
+              </button>
+              {c.state !== 'refused' && (
+                <button type="button" role="menuitem" data-testid="session-gate-withheld-signin" data-key={c.cli} aria-label={`Sign in to ${name}`}
+                  onClick={() => open(c.cli)} className="wk-gate2-link">Sign in</button>
+              )}
+            </div>
+          );
+        })}
+        {onSignIn === undefined && signIn.modal}
+      </div>
+    );
+  }
   return (
     <div data-testid="session-gate-withheld" className="wk-gate-withheld">
       {seats.map((c) => {
@@ -409,7 +447,7 @@ export function WithheldSeats({ seats }: { seats: readonly ReassignCandidate[] }
             </button>
             {c.state !== 'refused' && (
               <button type="button" data-testid="session-gate-withheld-signin" data-key={c.cli} aria-label={`Sign in to ${name}`}
-                onClick={() => signIn.open(c.cli)} className="wk-btn wk-btn--secondary">
+                onClick={() => open(c.cli)} className="wk-btn wk-btn--secondary">
                 {signable.length === 1 ? 'Sign in ›' : `Sign in to ${name} ›`}
               </button>
             )}
@@ -510,7 +548,13 @@ export function refusalWords(r: DeliverRefusal, at: { branch: string | null; rep
   return { lead, consent };
 }
 
-function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, retryEvents, depth, refusalLines = null, drift = null, assurance = null, assuranceTech = null }: {
+function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, retryEvents, depth, refusalLines = null, drift = null, assurance = null, assuranceTech = null, explain = null, unavailable = null, signInModal = null }: {
+  /** Why it stopped, said plainly (a dead seat, a held judge, the creator-seat refusal): under the question. */
+  explain?: React.ReactNode;
+  /** The helpers that cannot take the step now, each with its reason and Sign in: in Other options. */
+  unavailable?: React.ReactNode;
+  /** The sign-in modal those Sign in links open, in place. */
+  signInModal?: React.ReactNode;
   runId: string;
   gate: OpenGate | undefined;
   model: GateRowModel | null;
@@ -559,6 +603,19 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
   // S16a-2a: the choice under the pointer or the keyboard says what it does BEFORE it is taken —
   // the run page's per-arm consequence lines (escalation arms, reassign), one line above the row.
   const [peek, setPeek] = useState<string | null>(null);
+  // (mockup ui-v2-gate) Other options ▾, and the failures that fail on the base too.
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [baseOpen, setBaseOpen] = useState(false);
+  const menuBtnRef = useRef<HTMLButtonElement>(null);
+  const menuWrapRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!menuOpen) return;
+    // Inside the dock (which scrolls in itself) the opened menu comes into view.
+    requestAnimationFrame(() => menuWrapRef.current?.querySelector('[role="menu"]')?.scrollIntoView?.({ block: 'nearest' }));
+    const away = (e: PointerEvent): void => { if (menuWrapRef.current !== null && !menuWrapRef.current.contains(e.target as Node)) setMenuOpen(false); };
+    document.addEventListener('pointerdown', away);
+    return () => document.removeEventListener('pointerdown', away);
+  }, [menuOpen]);
 
   // A new gate instance is a fresh question — reset all state.
   // When gate clears (becomes undefined) after a successful send, do NOT clear `chosen`:
@@ -571,6 +628,8 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
     setNoteOpen(null);
     setNoteText('');
     setConfirmRerun(false);
+    setMenuOpen(false);
+    setBaseOpen(false);
     // Only clear chosen when a NEW gate arrives (gate is defined).
     // When gate cleared (undefined), the receipt must stay until unmount.
     if (gate !== undefined) setChosen(null);
@@ -761,15 +820,67 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
       ? 'Explain what to fix…'
       : 'Add a note…';
 
+  // (mockup ui-v2-gate) ONE recommended primary — the choice crew marks as suggested — and every other choice under
+  // "Other options ▾". Without a suggestion the first choice leads, as a secondary (no recommendation is invented).
+  const primaryIndex = model.recommended ?? (model.choices.length > 0 ? 0 : null);
+  const primary = primaryIndex === null ? null : model.choices[primaryIndex] ?? null;
+  const suggested = model.recommended !== null && primary !== null;
+  const others = [...model.choices.filter((_, i) => i !== primaryIndex), ...model.overflow];
+  const split = model.failingTests?.split;
+  // What happens next: the suggested move's consequence (crew's), else its own hover words.
+  const next = model.consequence ?? (suggested && primary !== null && primary.title !== '' ? primary.title : null);
+  const choiceButton = (choice: GateRowChoice, i: number, asPrimary: boolean): React.ReactElement => (
+    <button
+      key={choice.key}
+      type="button"
+      {...(asPrimary ? { role: 'radio', 'aria-checked': pick.focus === i ? 'true' as const : 'false' as const } : { role: 'menuitem' })}
+      data-testid="session-gate-choice"
+      data-choice-key={choice.key}
+      data-recommended={model.recommended !== null && i === model.recommended ? 'true' : 'false'}
+      title={choice.title}
+      className={asPrimary
+        ? ['wk-session-gate-choice', 'wk-gate2-btn', suggested ? 'wk-gate2-btn--primary wk-session-gate-choice--suggested' : 'wk-gate2-btn--secondary', pick.focus === i ? 'wk-session-gate-choice--focus' : '', choice.disabled === true ? 'wk-session-gate-choice--disabled' : ''].filter(Boolean).join(' ')
+        : ['wk-session-gate-choice', 'wk-gate2-mi', choice.disabled === true ? 'wk-gate2-mi--off wk-session-gate-choice--disabled' : ''].filter(Boolean).join(' ')}
+      disabled={action.busy || choice.disabled === true}
+      onMouseEnter={() => setPeek(choice.key)}
+      onMouseLeave={() => setPeek(null)}
+      onFocus={() => setPeek(choice.key)}
+      onBlur={() => setPeek(null)}
+      onClick={() => {
+        if (choice.disabled === true) return;
+        if (asPrimary) setPick({ focus: i, moved: true });
+        setMenuOpen(false);
+        sendDirect(choice);
+      }}
+    >
+      {asPrimary ? choice.label : (
+        <>
+          <span className="wk-gate2-mi-label">{choice.label}</span>
+          {choice.title !== '' && <span className="wk-gate2-mi-sub">{choice.title}</span>}
+        </>
+      )}
+      {/* core#820: the producer's default is MARKED, never preselected. */}
+      {choice.isDefault === true && (
+        <span data-testid="session-gate-choice-default" className="wk-session-gate-suggested">default</span>
+      )}
+      {/* S16a-1b: the creator seat's record rides Approve as neutral text — never a tone. */}
+      {choice.key === recordOn && seat !== null && seat.record !== null && (
+        <span data-testid="session-gate-track-record" className="wk-session-gate-record">{seat.record}</span>
+      )}
+    </button>
+  );
+
   return (
     <div
       data-testid="session-gate-row"
       data-reason={model.reason}
       ref={rowRef}
       tabIndex={-1}
-      className="wk-session-gate-row"
+      className="wk-session-gate-row wk-gate2"
       onKeyDown={(e) => {
+        if (e.key === 'Escape' && menuOpen) { e.preventDefault(); setMenuOpen(false); menuBtnRef.current?.focus(); return; }
         if (noteOpen !== null) return;
+        if ((e.target as HTMLElement).closest('[role="menu"]') !== null) return;
         const result = pickKey(pick, e.key, model.choices.length);
         if (!result.handled) return;
         e.preventDefault();
@@ -777,89 +888,54 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
         if (result.send !== null) sendDirect(model.choices[result.send]!);
       }}
     >
-      <p data-testid="session-gate-question" className="wk-session-gate-question">{question}</p>
-      {/* rig 0.15.8: what failed, on the face — never only under Technical details. */}
-      {model.failingTests !== undefined && (
-        <p data-testid="session-gate-failing" className="wk-session-gate-detail-item wk-gate-failing">
+      {/* The question, in plain words: the dock's headline. */}
+      <h2 data-testid="session-gate-question" className="wk-session-gate-question wk-gate2-q">{question}</h2>
+      {/* A short explanation: why it stopped, in the engine's terms said plainly. */}
+      {explain}
+      {/* rig 0.15.8: what failed, on the face — never only under Technical details. The new failure is highlighted;
+          the ones that fail on the base too fold behind "See the other N" (mockup ui-v2-gate). */}
+      {model.failingTests !== undefined && split !== undefined && split.onBase.length > 0 ? (
+        <div data-testid="session-gate-failing-split" className="wk-gate2-fails">
+          <p data-testid="session-gate-failing-words" className="wk-gate2-p">
+            {split.fresh.length + split.onBase.length} tests failed. {split.onBase.length === 1 ? 'One of them fails' : `${split.onBase.length} of them fail`} on the base too, so {split.onBase.length === 1 ? 'it isn’t' : 'they aren’t'} caused by this change.
+            {split.fresh.length > 0 ? ` ${split.fresh.length === 1 ? 'One is' : `${split.fresh.length} are`} new:` : ' None is new.'}
+          </p>
+          {split.fresh.length > 0 && (
+            <ul data-testid="session-gate-failing-new" className="wk-gate2-new">
+              {split.fresh.map((n) => <li key={n}><span className="wk-gate2-new-t">{testWords(n)}</span>{testWords(n) !== n && <code className="wk-gate2-new-id">{n}</code>}</li>)}
+            </ul>
+          )}
+          {baseOpen && (
+            <div data-testid="session-gate-failing-base" className="wk-gate2-base">
+              <p className="wk-gate2-label">Also failing on the base (not this change)</p>
+              <ul>{split.onBase.map((n) => <li key={n}>{testWords(n)}{testWords(n) !== n && <code className="wk-gate2-new-id">{n}</code>}</li>)}</ul>
+            </div>
+          )}
+          <button type="button" data-testid="session-gate-failing-toggle" aria-expanded={baseOpen} onClick={() => setBaseOpen((v) => !v)} className="wk-gate2-link">
+            {baseOpen ? `Hide the other ${split.onBase.length}` : `See the other ${split.onBase.length} (also failing on the base)`}
+          </button>
+        </div>
+      ) : model.failingTests !== undefined && (
+        <p data-testid="session-gate-failing" className="wk-session-gate-detail-item wk-gate-failing wk-gate2-new">
           Failing: {model.failingTests.names.map((n, i) => <span key={`${i}:${n}`}>{i > 0 ? ', ' : ''}<code>{n}</code></span>)}
           {model.failingTests.more > 0 && <span data-testid="session-gate-failing-more"> +{model.failingTests.more} more</span>}
         </p>
       )}
       {model.qe !== undefined && (
-        <p data-testid="session-gate-qe-why" data-qe-outcome={model.qe.outcome} className="wk-session-gate-detail-item">{model.qe.why}</p>
+        <p data-testid="session-gate-qe-why" data-qe-outcome={model.qe.outcome} className="wk-session-gate-detail-item wk-gate2-p">{model.qe.why}</p>
       )}
       {/* A refused hand-over says what Deliver again does BEFORE the choice that takes it. */}
       {refusalLines !== null && <>
-        <p data-testid="session-gate-refusal" className="wk-session-gate-detail-item">{refusalLines.lead}</p>
+        <p data-testid="session-gate-refusal" className="wk-session-gate-detail-item wk-gate2-p">{refusalLines.lead}</p>
         <p data-testid="session-gate-deliver-consent" className="wk-gate-consequence">{refusalLines.consent}</p>
       </>}
-      {/* S16a-1b: the recommended move's consequence, above the choice that takes it. */}
-      {model.consequence !== null && (
-        <p data-testid="session-gate-consequence" className="wk-gate-consequence">{model.consequence}</p>
-      )}
-      <div
-        data-testid="session-gate-choices"
-        role="radiogroup"
-        aria-label="Answer this gate"
-        // S16a-2a: the row picks by arrows / digits / Enter only — a typed letter goes on to the
-        // page's composer (§5.6 rule 4); typing never answers the gate.
-        data-releases-letters="true"
-        className="wk-session-gate-choices"
-      >
-        {model.choices.map((choice, i) => (
-          <button
-            key={choice.key}
-            type="button"
-            role="radio"
-            aria-checked={pick.focus === i ? 'true' : 'false'}
-            data-testid="session-gate-choice"
-            data-choice-key={choice.key}
-            data-recommended={i === model.recommended ? 'true' : 'false'}
-            title={choice.title}
-            className={[
-              'wk-session-gate-choice',
-              'wk-btn',
-              i === model.recommended ? 'wk-btn--primary' : 'wk-btn--secondary',
-              pick.focus === i ? 'wk-session-gate-choice--focus' : '',
-              i === model.recommended ? 'wk-session-gate-choice--suggested' : '',
-              choice.disabled === true ? 'wk-session-gate-choice--disabled' : '',
-            ].filter(Boolean).join(' ')}
-            disabled={action.busy || choice.disabled === true}
-            onMouseEnter={() => setPeek(choice.key)}
-            onMouseLeave={() => setPeek(null)}
-            onFocus={() => setPeek(choice.key)}
-            onBlur={() => setPeek(null)}
-            onClick={() => {
-              if (choice.disabled === true) return;
-              setPick({ focus: i, moved: true });
-              sendDirect(choice);
-            }}
-          >
-            {choice.label}
-            {i === model.recommended && (
-              <span className="wk-session-gate-suggested" aria-hidden="true">suggested</span>
-            )}
-            {/* core#820: the producer's default is MARKED, never preselected. */}
-            {choice.isDefault === true && (
-              <span data-testid="session-gate-choice-default" className="wk-session-gate-suggested">default</span>
-            )}
-            {/* S16a-1b: the creator seat's record rides Approve as neutral text — never a tone. */}
-            {choice.key === recordOn && seat !== null && seat.record !== null && (
-              <span data-testid="session-gate-track-record" className="wk-session-gate-record">{seat.record}</span>
-            )}
-          </button>
-        ))}
-      </div>
       {drift !== null && <DriftLine drift={drift} />}
-      {assurance}
-      {/* S16a-1c (TR-W8): a watch finding attached to this gate, as one quiet line (nothing when absent). */}
-      {gate !== undefined && <WatchGateLine runId={runId} ord={typeof gate.ord === 'number' ? gate.ord : null} />}
       {/* studio#639: no install plan ran, so no file list — the engine's own reason, where the lists would be. */}
       {model.consentMissing !== undefined && (
         <p data-testid="session-gate-consent-missing" className="wk-session-gate-detail-item">{showText(model.consentMissing)}</p>
       )}
       {/* core#820: what each install choice writes, before it is taken — the operator's own files said so. */}
-      {[...model.choices, ...model.overflow].filter((c) => c.writes !== undefined).map((c) => (
+      {allChoices.filter((c) => c.writes !== undefined).map((c) => (
         <details key={`writes-${c.key}`} data-testid="session-gate-consent-writes" data-choice-key={c.key} className="wk-tech-details">
           <summary className="wk-tech-details-summary">Files this choice writes</summary>
           <p><b>{c.label}</b>{c.isDefault === true ? ' (default)' : ''} writes {c.writes!.length === 0 ? 'nothing it could list' : `${c.writes!.length} file${c.writes!.length === 1 ? '' : 's'}`}:</p>
@@ -872,43 +948,48 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
           </ul>
         </details>
       ))}
-      {model.overflow.length > 0 && (
-        <details className="wk-session-gate-overflow">
-          <summary className="wk-session-gate-overflow-summary">⋯</summary>
-          <div className="wk-session-gate-choices">
-            {model.overflow.map((choice) => (
-              <button
-                key={choice.key}
-                type="button"
-                data-testid="session-gate-choice"
-                data-choice-key={choice.key}
-                title={choice.title}
-                className={[
-                  'wk-session-gate-choice',
-                  'wk-btn wk-btn--secondary',
-                  choice.disabled === true ? 'wk-session-gate-choice--disabled' : '',
-                ].filter(Boolean).join(' ')}
-                disabled={action.busy || choice.disabled === true}
-                onMouseEnter={() => setPeek(choice.key)}
-                onMouseLeave={() => setPeek(null)}
-                onFocus={() => setPeek(choice.key)}
-                onBlur={() => setPeek(null)}
-                onClick={() => {
-                  if (choice.disabled === true) return;
-                  sendDirect(choice);
-                }}
-              >
-                {choice.label}
+
+      <div className="wk-gate2-decide">
+        {/* What happens next, then the one recommended move and the rest under Other options. */}
+        {next !== null && (
+          <p data-testid="session-gate-consequence" className="wk-gate-consequence wk-gate2-next">{suggested ? 'Recommended: ' : ''}{next}</p>
+        )}
+        <div
+          data-testid="session-gate-choices"
+          role="radiogroup"
+          aria-label="Answer this gate"
+          // S16a-2a: the row picks by arrows / digits / Enter only — a typed letter goes on to the
+          // page's composer (§5.6 rule 4); typing never answers the gate.
+          data-releases-letters="true"
+          className="wk-session-gate-choices wk-gate2-choices"
+        >
+          {primary !== null && primaryIndex !== null && choiceButton(primary, primaryIndex, true)}
+          {(others.length > 0 || unavailable !== null) && (
+            <div className="wk-gate2-more" ref={menuWrapRef}>
+              <button ref={menuBtnRef} type="button" data-testid="session-gate-more" aria-haspopup="menu" aria-expanded={menuOpen} aria-controls={`${runId}-gate-menu`}
+                onClick={() => setMenuOpen((v) => !v)} className="wk-gate2-btn wk-gate2-btn--secondary">
+                Other options <span aria-hidden>▾</span>
               </button>
-            ))}
-          </div>
-        </details>
-      )}
+              {/* Always in the page (hidden while closed), so every choice keeps its one element. */}
+              <div id={`${runId}-gate-menu`} role="menu" aria-label="Other options" data-testid="session-gate-menu" hidden={!menuOpen} className="wk-gate2-menu">
+                {others.map((c) => choiceButton(c, model.choices.indexOf(c), false))}
+                {unavailable !== null && (
+                  <>
+                    <div aria-hidden className="wk-gate2-menu-rule" />
+                    <p className="wk-gate2-menu-label">Not available right now</p>
+                    {unavailable}
+                  </>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
       {/* S16a-2a: the peeked choice's consequence, before it is taken. */}
       {(() => {
         const keyed = peek ?? (pick.moved && pick.focus !== null ? model.choices[pick.focus]?.key ?? null : null);
         const c = keyed === null ? undefined : allChoices.find((x) => x.key === keyed);
-        const shown = c === undefined || c.title === '' || (model.consequence !== null && model.recommended !== null && model.choices[model.recommended]?.key === c.key) ? null : c;
+        const shown = c === undefined || c.title === '' || menuOpen || (next !== null && primary !== null && primary.key === c.key) ? null : c;
         // Below the choices, so the line under the pointer never moves a button; empty while nothing is peeked.
         return <p data-testid="session-gate-choice-consequence" {...(shown !== null ? { 'data-choice-key': shown.key } : {})} aria-live="polite" className="wk-gate-peek">{shown?.title ?? ''}</p>;
       })()}
@@ -929,19 +1010,6 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
             <button type="button" onClick={() => setConfirmRerun(false)} className="wk-btn wk-btn--quiet">Cancel</button>
           </div>
         </div>
-      )}
-      {seat !== null && <RuleOfferBlock seat={seat} locked={action.busy} />}
-      {/* ⋯ details: raw prompt, verdict layers, failing items, reviewer's note; S16a-1b: the work under
-          review, "Why it failed" (the failing criteria beside the creator's claims), the source line. */}
-      {(model.detailItems.length > 0 || assuranceTech !== null) && (
-        <details className="wk-session-gate-prompt-detail">
-          <summary className="wk-session-gate-prompt-summary">Technical details</summary>
-          {assuranceTech}
-          {model.detailItems.map((item, idx) => (
-            <p key={idx} data-testid={idx === 0 ? 'session-gate-raw-prompt' : undefined} className="wk-session-gate-detail-item wk-session-verdict-details">{showText(item)}</p>
-          ))}
-          {depth}
-        </details>
       )}
       {noteChoice !== null && (
         <details data-testid="session-gate-detail" open className="wk-session-gate-detail">
@@ -988,6 +1056,25 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
         // The refusal in its own words (a 409 names what moved); paths read `~` (studio#650).
         <p data-testid="session-gate-error" role="alert" className="wk-session-gate-error">{showText(action.error)}</p>
       )}
+      {seat !== null && <RuleOfferBlock seat={seat} locked={action.busy} />}
+      {/* The quiet foot: what has checked the work so far (the receipt), and the raw detail behind Technical details —
+          check names, paths, run ids. */}
+      <div className="wk-gate2-foot">
+        {assurance}
+        {/* S16a-1c (TR-W8): a watch finding attached to this gate, as one quiet line (nothing when absent). */}
+        {gate !== undefined && <WatchGateLine runId={runId} ord={typeof gate.ord === 'number' ? gate.ord : null} />}
+        {(model.detailItems.length > 0 || assuranceTech !== null) && (
+          <details className="wk-session-gate-prompt-detail">
+            <summary className="wk-session-gate-prompt-summary">Technical details</summary>
+            {assuranceTech}
+            {model.detailItems.map((item, idx) => (
+              <p key={idx} data-testid={idx === 0 ? 'session-gate-raw-prompt' : undefined} className="wk-session-gate-detail-item wk-session-verdict-details">{showText(item)}</p>
+            ))}
+            {depth}
+          </details>
+        )}
+      </div>
+      {signInModal}
     </div>
   );
 }
