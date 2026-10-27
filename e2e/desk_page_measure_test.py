@@ -59,7 +59,8 @@ BOX = """([sel, ref]) => {
 # The ui-v2 nav regroup: Skills, MCP, Plugins, Workflows and Settings are links on Build & settings
 # (`build-link-*`, reached through the rail's `desk-rail-build`), which is itself a narrow page.
 PAGES = [
-    ("desk-rail-build", ".wk-page", "#main", 832),
+    # Build & settings is a calm page (the column the Steering/Memory/Agents pages use, 840 px).
+    ("desk-rail-build", "[data-testid='build-page'] .wk-calm-col", "#main", 840),
     ("build-link-skills", ".wk-page", "#main", 1120),
     ("build-link-mcp", ".wk-page", "#main", 1120),
     ("build-link-plugins", ".wk-page", "#main", 1120),
