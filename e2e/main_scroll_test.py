@@ -95,8 +95,8 @@ LAST_SECTION = """() => {
 # The Desk (the one shell since S18d): its own scroller holds the list and the chores; the
 # floor is the Start row + composer band, which never scrolls.
 DESK_LAST_SECTION = """() => {
-  // Desk v2: the open tab's panel holds the Desk's sections.
-  const main = document.querySelector('[data-place-scroll="desk"] [role="tabpanel"]');
+  // Desk v2: the open tab's panel holds the Desk's sections; Home (home v2, no tabs) is its landing.
+  const main = document.querySelector('[data-place-scroll="desk"] [role="tabpanel"], [data-place-scroll="desk"] [data-testid="desk-work"] > .wk-home-col');
   if (!main) return null;
   const last = main.lastElementChild || main;
   const r = last.getBoundingClientRect();
@@ -140,9 +140,9 @@ with sync_playwright() as p:
 
     def section_home() -> None:
         set_fixture(origin, **CORPUS)
-        # Home v2: the queue is in Needs you in full (/needs).
-        page.goto(f"{origin}/needs", wait_until="networkidle")
-        page.get_by_test_id("needs-you-queue").wait_for(state="visible", timeout=15000)
+        # Home v2: the landing (greeting, ask box, one card, In progress) is what the wheel must scroll.
+        page.goto(f"{origin}/", wait_until="networkidle")
+        page.get_by_test_id("desk-work").wait_for(state="visible", timeout=15000)
         page.get_by_test_id("desk").wait_for(state="attached")
         page.wait_for_timeout(600)
         start = page.evaluate(last_section)

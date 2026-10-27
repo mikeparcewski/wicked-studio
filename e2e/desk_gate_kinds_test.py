@@ -345,19 +345,22 @@ with sync_playwright() as p:
     # unfiled ("Not in a project"), so it is outside the center's 3-card limit and
     # appears in the rail sidebar (data-testid="rail-session"), not desk-session.
     set_fixture(origin, home_paths=True)
-    page.goto(f"{origin}/", wait_until="networkidle")
+    # Home v2 + the ui-v2 sidebar: the rail's Recent holds five sessions, so the waiting run's row is
+    # read where every waiting item is: Needs you in full (/needs), its title links to the run's #gate.
+    page.goto(f"{origin}/needs", wait_until="networkidle")
+    page.get_by_test_id("needs-you-queue").wait_for(state="visible", timeout=15000)
+    for t in page.locator('[data-testid="need-group-toggle"][aria-expanded="false"]').all():
+        t.click()
+    needs_you = page.locator('[data-key="gate:r-home-gate"] a[href*="#gate"]').first
     try:
-        # r-home-gate is awaiting_human — find it in the rail by run-id
-        page.locator('[data-testid="rail-session"][data-run-id="r-home-gate"]').wait_for(state="visible", timeout=10_000)
+        needs_you.wait_for(state="visible", timeout=10_000)
     except Exception:
         page.screenshot(path=str(SHOTS / "desk-gate-kinds-no-needs-you.png"))
         fail("needs-you-link", {
-            "why": "rail-session[data-run-id=r-home-gate] did not appear on the Desk for home_paths fixture",
+            "why": "no Needs you row for r-home-gate linking to its #gate on /needs (home_paths fixture)",
             "text": page.evaluate("() => document.body.innerText.slice(0, 600)"),
         })
-
-    needs_you = page.locator('[data-testid="rail-session"][data-run-id="r-home-gate"]')
-    run_id = needs_you.get_attribute("data-run-id") or "r-home-gate"
+    run_id = "r-home-gate"
     needs_you.click()
 
     try:

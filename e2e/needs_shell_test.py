@@ -165,7 +165,7 @@ with sync_playwright() as p:
     page.wait_for_timeout(1500)
     nav(page, "/everything")
     page.wait_for_timeout(1000)
-    nav(page, "/")
+    nav(page, "/needs")
     page.get_by_test_id("needs-you-queue").wait_for(state="visible", timeout=15000)
     page.wait_for_timeout(1500)
     walk = dict(counts)

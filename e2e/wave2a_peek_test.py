@@ -222,7 +222,8 @@ with sync_playwright() as p:
           url=q.evaluate("() => window.location.href"))
     q.keyboard.press("Alt+b")
     check("queue-back-home-focus-on-queue", wait_ok(
-        q, "() => window.location.pathname === '/'"
+        # Back lands where the queue was opened: Needs you in full (/needs) since home v2.
+        q, "() => window.location.pathname === '/needs'"
            " && !!document.activeElement?.closest('[data-testid=\"needs-you-queue\"]')", 8000),
         url=q.evaluate("() => window.location.href"),
         focused=q.evaluate("() => document.activeElement?.getAttribute('data-testid')"))

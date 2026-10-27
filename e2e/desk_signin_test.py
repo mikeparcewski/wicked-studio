@@ -100,7 +100,7 @@ with sync_playwright() as p:
     page.wait_for_function("() => !!document.querySelector('[data-testid=\"agents-modal\"] [data-testid=\"agents-command\"]')", timeout=5000)
     page.wait_for_timeout(200)
     page.screenshot(path=str(SHOTS / "desk-signin-panel.png"))
-    check("desk-row", "sign" in row_text.lower() and page.evaluate("() => location.pathname") == "/", row=row_text)
+    check("desk-row", "sign" in row_text.lower() and page.evaluate("() => location.pathname") == "/agents", row=row_text)
 
     # ── 2. the modal ──────────────────────────────────────────────────────────────
     pn = page.evaluate(PANEL)
