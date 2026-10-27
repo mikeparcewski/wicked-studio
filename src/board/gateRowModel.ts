@@ -831,7 +831,13 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
         ? { key: 'steer', label: QE_RETRY_NOTE_LABEL, decision: { approve: true }, needsNote: true, title: QE_RETRY_NOTE_TITLE }
         : operatorJudgment
           ? { key: 'steer', label: OPERATOR_JUDGMENT_LABEL, decision: { approve: true }, needsNote: true, title: OPERATOR_JUDGMENT_TITLE }
-          : approveRetriesPhase(gate.prompt)
+          // PRODUCT-WORKS J6: the engine's approve at an escalation amends the CURSOR unit — the
+          // escalated step itself — and re-runs it (every escalation but a judge-unavailable one,
+          // handled above). So when no later creator takes the note, it is a retry of this step,
+          // whatever the prompt's wording: run 9bd0f728's "…and approve to retry, or …" prompt
+          // missed the phrase test and read "Approve with a note for the next step", and the note
+          // went to the same step, which ran again.
+          : approveRetriesPhase(gate.prompt) || escalationScopeTarget === null
           ? { key: 'steer', label: RETRY_NOTE_LABEL, decision: escalationScopeTarget !== null ? { approve: true, amendScope: 'creator' } : { approve: true }, needsNote: true, title: RETRY_NOTE_TITLE }
           : { key: 'steer', label: 'Approve and steer', decision: escalationScopeTarget !== null ? { approve: true, amendScope: 'creator' } : { approve: true }, needsNote: true, title: 'Approve and add a note to steer the next creator phase.' });
     // (crew api-types 0.135.0) A failed repo-checks floor: the operator's own judgment, with a

@@ -93,6 +93,42 @@ describe('studio#832 — a verify FAIL escalation\'s approve-with-note re-runs t
   });
 });
 
+// PRODUCT-WORKS J6 (run 9bd0f728, unit 8): the same-seat-evaluator escalation's prompt says "…and approve to
+// retry, or reject…", which the phrase test missed, so the arm read "Approve with a note for the next step". The
+// engine amended unit 8 itself and re-ran it (13 min) — the note never reached a next step.
+const J6_RUN = 'r-j6';
+const J6_PROMPT = 'Unit 8 (codex) reviewed work built on its own seat: unit 8 checks work built on `codex` and ran on that same seat; the run requires a distinct evaluator (distinct_evaluator) — reassign it to a distinct signed-in seat and approve to re-run, or relaunch with reduced assurance. Reassign the unit to a distinct seat (sign one in first if needed) and approve to retry, or reject to stop the run';
+const J6_UNITS: WorkUnit[] = [
+  makeUnit({ id: `${J6_RUN}:build`, session_id: J6_RUN, ord: 6, stage: 'build', role: 'creator', status: 'done', assigned_cli: 'claude' }),
+  makeUnit({ id: `${J6_RUN}:architecture`, session_id: J6_RUN, ord: 7, stage: 'recon', role: 'neutral', status: 'done', assigned_cli: 'codex' }),
+  makeUnit({ id: `${J6_RUN}:test`, session_id: J6_RUN, ord: 8, stage: 'test', role: 'evaluator', status: 'rejected', assigned_cli: 'codex' }),
+];
+const J6_EVENTS = [
+  { type: 'unitDispatched', session: J6_RUN, ord: 8, attempt: 0, ts: NOW - 5000, seq: 1 },
+  { type: 'gateEscalated', session: J6_RUN, ord: 8, ts: NOW - 900, seq: 2, attempt: 0, condition: 'dead_seat', denialSource: 'same_seat_evaluator', defGate: true, outputCaptured: true, verdictSummary: 'unit 8 checks work built on `codex` and ran on that same seat' },
+  { type: 'awaitingHuman', session: J6_RUN, ord: 8, ts: NOW - 800, seq: 3, prompt: J6_PROMPT, reviewingOrd: 8, gateKind: 'escalation' },
+] as unknown as CoreEvent[];
+
+describe('PRODUCT-WORKS J6 — an escalation\'s note goes to the step that re-runs, and the card says so', () => {
+  const gate: OpenGate = { runId: J6_RUN, ord: 8, prompt: J6_PROMPT, lifecycle: 'open', receivedAt: NOW, gateKind: 'escalation' };
+
+  it('labels the note arm "Retry this step with a note" whatever the prompt\'s wording', () => {
+    expect(approveRetriesPhase(J6_PROMPT)).toBe(false); // the phrase test alone missed it
+    const model = sessionGateChoices({ runId: J6_RUN, gate, units: J6_UNITS, events: J6_EVENTS, pool: ['claude', 'codex'], roster: null })!;
+    const steer = [...model.choices, ...model.overflow].find((c) => c.key === 'steer')!;
+    expect(steer).toMatchObject({ label: RETRY_NOTE_LABEL, title: RETRY_NOTE_TITLE, needsNote: true, decision: { approve: true } });
+    // The amendment lands on the cursor unit (no amendScope), which is the step that re-runs.
+    expect(steer.decision).not.toHaveProperty('amendScope');
+    for (const c of [...model.choices, ...model.overflow]) expect(`${c.label} ${c.title}`).not.toMatch(/next step/);
+  });
+
+  it('keeps "Approve and steer" at a gate whose approve moves the run on (a def gate)', () => {
+    const def: OpenGate = { runId: J6_RUN, ord: 8, prompt: 'Approve the output of unit 7 (architecture)', lifecycle: 'open', receivedAt: NOW, gateKind: 'def' };
+    const model = sessionGateChoices({ runId: J6_RUN, gate: def, units: J6_UNITS.map((u) => (u.ord === 8 ? { ...u, status: 'pending' } : u)), events: [], pool: [], roster: null })!;
+    expect([...model.choices, ...model.overflow].find((c) => c.key === 'steer')!.label).toBe('Approve and steer');
+  });
+});
+
 describe('studio#601 — the preselected Send back follows the denial source', () => {
   const gate: OpenGate = { runId: JUDGE_RUN, ord: 2, prompt: JUDGE_PROMPT, lifecycle: 'open', receivedAt: NOW, gateKind: 'escalation' };
 
