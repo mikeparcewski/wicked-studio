@@ -29,6 +29,7 @@ import { peekTypedSeed, takeTypedSeed } from '../hooks/useTypeToComposer.js';
 import { useAskThreadStore } from '../store/askThread.js';
 import { useCapabilities } from '../store/capabilities.js';
 import { isReviewerOnly } from '../board/seatNames.js';
+import { analysisScopeChips, chatWorkflowFor, indexOfferFor } from '../board/analyzeChat.js';
 import { addChip, chipsOpenFields, chipsScoped, chipsSignature, chosenChips, clickChip, defaultScopeChips, type ScopeChip } from '../board/chatScopes.js';
 import { cliOptions, defaultChatCli, saveChatCli } from '../board/chatCli.js';
 import { cliName, pageContext, pagePlaceholder, pagePrompts } from '../board/pagePrompts.js';
@@ -155,7 +156,7 @@ export function answerFooterWords(cli: string, sources: number): string {
   return `Answered by ${cli} · saw ${sources} source${sources === 1 ? '' : 's'}`;
 }
 
-export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoffTaken, sendProjectId, sendFresh = false, sendPrimary, sendChatId, sendOpenChatId, startProjectId, startText, startFresh = false }: {
+export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoffTaken, sendProjectId, sendFresh = false, sendPrimary, sendChatId, sendOpenChatId, sendWorkflow, sendRepos, startProjectId, startText, startFresh = false }: {
   runs: SessionView[];
   pathname: string;
   /** Collapsing the dock closes Ask entirely — the launcher bubble/shortcut reopen it. */
@@ -182,6 +183,11 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
   /** The chat flow (2026-10-16): the handoff is the FIRST message of a fresh chat whose page is on
    *  screen (`openChatFlow` minted its id): the chat opens under THIS id, so its page becomes it. */
   sendOpenChatId?: string;
+  /** crew#1157 (Understand's Ask): the read-only workflow the handed-over question's NEW chat runs
+   *  (`analyze`) — sent only when `capabilities.chatWorkflows` names it; otherwise a plain chat. */
+  sendWorkflow?: string;
+  /** The repositories that question is about: the new chat's scope. */
+  sendRepos?: Array<{ id: string; name: string }>;
   /** Concept A (`openAskDock`): open a FRESH chat scoped to this project, nothing sent. */
   startProjectId?: string;
   /** Words placed in the box when the dock opens, never sent (⌘K "New demo"). */
@@ -299,6 +305,12 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
    *  send only. A resumed session carries its persisted flag: a first send that failed
    *  leaves it unseeded, so the pack still rides the next question. */
   const seededRef = useRef(resumed?.seeded === true);
+  /** crew#1157: the read-only workflow a NEW chat opened by this dock runs, decided at the open (`null`
+   *  = a plain chat: none asked, or this crew does not run it). */
+  const workflowAsk = useRef<string | undefined>(resumed === null ? sendWorkflow : undefined);
+  const [workflowRun, setWorkflowRun] = useState<string | null>(null);
+  /** The repository the analysis could not ground (no code graph): "Index this repository". */
+  const [indexOffer, setIndexOffer] = useState<{ repoId: string; name: string; state: 'offer' | 'starting' | 'started' | 'failed' } | null>(null);
   /** The session's first question — its /chats handle, re-persisted with the flag. */
   const titleRef = useRef(resumed?.title ?? '');
 
@@ -314,6 +326,12 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
     // A past chat reopened from history whose choices this browser never saw: nothing is claimed as
     // chosen — every chip starts off, and the user turns on what the chat may see now.
     if (resumed?.chipsUnknown === true) return defaultScopeChips(ctx).map((c) => ({ ...c, on: false }));
+    // crew#1157: an analysis question (Understand's Ask) reads exactly the repositories it was asked about.
+    if (resumed === null && sendWorkflow !== undefined) {
+      const pid = sendProjectId ?? null;
+      const pname = pid === null ? null : useProjectsStore.getState().projects.find((p) => p.id === pid)?.name ?? pid;
+      return analysisScopeChips(sendRepos ?? [], pid === null ? null : { id: pid, name: pname! });
+    }
     if (startProject === undefined || startProject === ctx.project?.id) return null;
     const name = useProjectsStore.getState().projects.find((p) => p.id === startProject)?.name ?? startProject;
     return defaultScopeChips({ project: { id: startProject, name }, repo: ctx.repo });
@@ -480,10 +498,13 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
             const askPath = useCapabilities.getState().askPath;
             const eligible = askEligible(roster, scoped);
             const { dropped, picked } = useComposerSeats.getState();
-            const seats = askPath ? [pick, ...chosenSeats(eligible, dropped, picked).filter((k) => k !== pick)] : [pick];
+            // crew#1157: an analysis chat runs on ONE seat, the picked CLI (crew narrows to it too).
+            const workflow = chatWorkflowFor(workflowAsk.current, useCapabilities.getState().chatWorkflows);
+            const seats = askPath && workflow === null ? [pick, ...chosenSeats(eligible, dropped, picked).filter((k) => k !== pick)] : [pick];
             // A failed open keeps the page's id for the retry; only a chat the daemon opened spends it.
             id = openIdRef.current ?? crypto.randomUUID();
-            const body: ChatOpenBody & { startedOn?: ChatStartedOn } = { chatId: id, ...chipsOpenFields(chosen, ambientProjectId(packInputs.current.pathname)), clis: seats };
+            const body: ChatOpenBody & { startedOn?: ChatStartedOn; workflow?: string } = { chatId: id, ...chipsOpenFields(chosen, ambientProjectId(packInputs.current.pathname)), clis: seats };
+            if (workflow !== null) body.workflow = workflow;
             // The page it started on, for past chats (`chatList` only: an older crew's strict schema refuses it).
             if (useCapabilities.getState().chatList) body.startedOn = { route: packInputs.current.pathname, label: packInputs.current.pageLabel };
             if (askPath) body.primary = pick;
@@ -508,6 +529,10 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
             }
             chatIdRef.current = id;
             setShownId(id);
+            workflowAsk.current = undefined;
+            setWorkflowRun(workflow);
+            const offer = workflow !== null ? indexOfferFor(scope) : null;
+            setIndexOffer(offer === null ? null : { ...offer, state: 'offer' });
             // The chat flow: a fresh chat page's chat is open on the daemon now — an ordinary chat from here.
             openIdRef.current = null;
             chatOpened(id);
@@ -634,7 +659,7 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
       <AssistDock
         context={{
           surface: 'ask',
-          title: 'Chat',
+          title: workflowRun !== null ? 'Analysis' : 'Chat',
           contextLabel: resolvedScope === '' ? `Seeing: ${ctx.label}` : `Seeing: ${ctx.label} · ${resolvedScope}`,
           placeholder: pagePlaceholder(ctx),
           hint:
@@ -652,6 +677,32 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
               />
             ) : undefined,
           composerControls: (
+            <>
+              {/* crew#1157: an analysis that could not ground its one repository offers to index it. */}
+              {indexOffer !== null && (
+              <p className="wk-syschat-index" data-testid="analysis-index-offer" data-state={indexOffer.state}>
+                <span>{indexOffer.name} is not indexed yet, so this answer reads the files directly.</span>{' '}
+                {indexOffer.state === 'started' ? (
+                  <span data-testid="analysis-index-started">Indexing started. Ask again when it finishes.</span>
+                ) : (
+                  <button
+                    type="button"
+                    className="wk-ue-btn wk-ue-btn--secondary wk-ue-btn--sm"
+                    data-testid="analysis-index-repo"
+                    disabled={indexOffer.state === 'starting'}
+                    onClick={() => {
+                      setIndexOffer({ ...indexOffer, state: 'starting' });
+                      api.rerunOnboarding(indexOffer.repoId).then(
+                        () => setIndexOffer((o) => (o === null ? o : { ...o, state: 'started' })),
+                        () => setIndexOffer((o) => (o === null ? o : { ...o, state: 'failed' })),
+                      );
+                    }}
+                  >
+                    {indexOffer.state === 'starting' ? 'Starting…' : indexOffer.state === 'failed' ? 'Could not start. Try again' : 'Index this repository'}
+                  </button>
+              )}
+                </p>
+            )}
             <ChatScopeChips
               chips={chips}
               locked={locked}
@@ -660,6 +711,7 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
               onClick={(key) => setChipEdits(clickChip(chips, key))}
               onAdd={(c) => setChipEdits(addChip(chips, { key: c.key, kind: c.kind, label: c.label, ref: c.ref, ...(c.projectId !== undefined ? { projectId: c.projectId } : {}) }))}
             />
+            </>
           ),
         }}
         verbs={verbs}

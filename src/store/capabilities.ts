@@ -38,6 +38,9 @@ interface CapabilitiesStore {
   /** `chatAttachments` (DES-SYSTEM-CHAT, crew) — `POST /chats/:id/attachments` carries files the seat
    *  can read. Absent or false: the system chat offers no upload (the same one-line note). */
   chatAttachments: boolean;
+  /** `chatWorkflows` (crew#1157, api-types 0.140.0) — the read-only workflows `POST /chats {workflow}`
+   *  runs on this daemon (`analyze`). Absent, empty or a failed read: Understand's Ask opens a plain chat. */
+  chatWorkflows: string[];
   load: () => Promise<void>;
 }
 
@@ -54,6 +57,7 @@ export const useCapabilities = create<CapabilitiesStore>((set, get) => ({
   launchPrimary: false,
   chatList: false,
   chatAttachments: false,
+  chatWorkflows: [],
   load: () => {
     if (get().loaded) return Promise.resolve();
     // The HTTP client is reached lazily: the stores that read a capability (gates, the ask thread)
@@ -61,9 +65,9 @@ export const useCapabilities = create<CapabilitiesStore>((set, get) => ({
     inflight ??= import('../api/client.js').then(({ api }) => api.getHealth())
       .then((h) => {
         const caps = ((h as unknown as { capabilities?: Record<string, unknown> }).capabilities) ?? {};
-        set({ loaded: true, runChatId: caps['runChatId'] === true, walkthroughRoots: caps['walkthroughRoots'] === true, askPath: caps['askPath'] === true, chatIdOnLaunch: caps['chatIdOnLaunch'] === true, deliverGate: caps['deliverGate'] === true, reducedAssurance: caps['reducedAssurance'] === true, launchPrimary: caps['launchPrimary'] === true, chatList: caps['chatList'] === true, chatAttachments: caps['chatAttachments'] === true });
+        set({ loaded: true, runChatId: caps['runChatId'] === true, walkthroughRoots: caps['walkthroughRoots'] === true, askPath: caps['askPath'] === true, chatIdOnLaunch: caps['chatIdOnLaunch'] === true, deliverGate: caps['deliverGate'] === true, reducedAssurance: caps['reducedAssurance'] === true, launchPrimary: caps['launchPrimary'] === true, chatList: caps['chatList'] === true, chatAttachments: caps['chatAttachments'] === true, chatWorkflows: Array.isArray(caps['chatWorkflows']) ? (caps['chatWorkflows'] as unknown[]).filter((w): w is string => typeof w === 'string') : [] });
       })
-      .catch(() => { set({ loaded: true, runChatId: false, walkthroughRoots: false, askPath: false, chatIdOnLaunch: false, deliverGate: false, reducedAssurance: false, launchPrimary: false, chatList: false, chatAttachments: false }); })
+      .catch(() => { set({ loaded: true, runChatId: false, walkthroughRoots: false, askPath: false, chatIdOnLaunch: false, deliverGate: false, reducedAssurance: false, launchPrimary: false, chatList: false, chatAttachments: false, chatWorkflows: [] }); })
       .finally(() => { inflight = null; });
     return inflight;
   },

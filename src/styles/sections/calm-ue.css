@@ -40,6 +40,13 @@
 .wk-ue-ask-input::placeholder { color: var(--ink-placeholder); }
 
 .wk-ue-chips { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 10px; }
+/* crew#1157: the repositories the question is about — the same chips, pressed = chosen. */
+.wk-ue-scope { display: flex; flex-direction: column; gap: 8px; }
+.wk-ue-scope .wk-ue-quiet { margin: 0; }
+.wk-ue-chip--pick[aria-pressed="true"] {
+  border-color: color-mix(in oklab, var(--accent) 70%, var(--ink-high)); color: var(--ink-high);
+  background: var(--ue-hover);
+}
 .wk-ue-chip {
   min-height: 36px; padding: 0 16px; border-radius: 999px; border: 1px solid var(--border-strong); background: transparent;
   color: var(--ink-body); font-family: inherit; font-size: 14px; cursor: pointer; text-align: left;
