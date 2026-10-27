@@ -14,6 +14,12 @@ import { useEvalReportStore } from '../src/store/evalReport.js';
 import { useSteerDraft } from '../src/store/steerDraft.js';
 import { importRuleFile } from '../src/board/steerImport.js';
 
+/** The calm page keeps every way to add or manage behind Add a rule's menu: open it, then pick the move. */
+async function more(user: ReturnType<typeof userEvent.setup>, testId: string): Promise<void> {
+  await user.click(await screen.findByTestId('steer-more-button'));
+  await user.click(await screen.findByTestId(testId));
+}
+
 /**
  * DES-steer-eval §3.2–3.3: the Evaluate numbers carry their context, and Draft rules hands the gaps
  * to Steer's assistant without sending anything. The fixtures are the SHAPE of the live :7701 data
@@ -247,14 +253,15 @@ describe('codex r1 fixes', () => {
     const user = userEvent.setup();
     wire();
     render(<SteerSurface pathname="/rules" search="" runs={[]} navigate={vi.fn()} />);
-    await user.click(await screen.findByTestId('steer-chat'));
+    await more(user, 'steer-chat');
     const input = await screen.findByTestId('assist-input');
     expect(input).toHaveFocus();
     await user.type(input, 'keep this draft');
     await user.click(screen.getByTestId('assist-dock-toggle'));
     expect(screen.getByTestId('steer-dock')).not.toBeVisible();
-    expect(screen.getByTestId('steer-chat')).toHaveFocus();
-    await user.click(screen.getByTestId('steer-chat'));
+    // Focus goes back to the menu button that opened it (the menu item is gone once picked).
+    expect(screen.getByTestId('steer-more-button')).toHaveFocus();
+    await more(user, 'steer-chat');
     expect(screen.getByTestId('steer-dock')).toBeVisible();
     expect(screen.getByTestId('assist-input')).toHaveValue('keep this draft');
   });
@@ -313,7 +320,7 @@ describe('codex r2 fixes', () => {
     const user = userEvent.setup();
     render(<SteerSurface pathname="/rules" search="" runs={[]} navigate={vi.fn()} />);
     await screen.findByTestId('rules-row');
-    await user.click(screen.getByTestId('steer-refresh'));
+    await more(user, 'steer-refresh');
     expect(await screen.findByTestId('steer-refresh-failed')).toBeInTheDocument();
     expect(screen.getAllByTestId('rules-row')).toHaveLength(1);
     // The create form still knows PAT-100 is taken.
@@ -346,11 +353,11 @@ describe('codex r2 fixes', () => {
     const user = userEvent.setup();
     wire();
     const { rerender } = render(<SteerSurface pathname="/steering/policies" search="?type=architecture" runs={[]} navigate={vi.fn()} />);
-    await user.click(await screen.findByTestId('steer-chat'));
+    await more(user, 'steer-chat');
     expect(screen.getByTestId('steer-dock')).toHaveTextContent('Steering · Architecture');
     await user.click(screen.getByTestId('assist-dock-toggle'));
     rerender(<SteerSurface pathname="/steering/policies" search="?type=security" runs={[]} navigate={vi.fn()} />);
-    await user.click(screen.getByTestId('steer-chat'));
+    await more(user, 'steer-chat');
     expect(screen.getByTestId('steer-dock')).toHaveTextContent('Steering · Security');
   });
 
@@ -362,24 +369,30 @@ describe('codex r2 fixes', () => {
     expect(groupEvalRuns([a, b])).toHaveLength(2);
   });
 
-  it('#8 Import is a modal: focus moves in, and back to Import on close', async () => {
+  it('#8 Import is a modal: focus moves in, and back to the menu that opened it on close', async () => {
     const user = userEvent.setup();
     wire();
     render(<SteerSurface pathname="/rules" search="" runs={[]} navigate={vi.fn()} />);
     await screen.findAllByTestId('rules-row');
-    await user.click(screen.getByTestId('steer-import'));
+    await more(user, 'steer-import');
     expect(screen.getByTestId('steer-import-type')).toHaveFocus();
     expect(document.querySelector('.wk-se-scroll')?.hasAttribute('inert')).toBe(true);
     await user.click(screen.getByTestId('steer-import-cancel'));
-    expect(screen.getByTestId('steer-import')).toHaveFocus();
+    expect(screen.getByTestId('steer-more-button')).toHaveFocus();
     expect(document.querySelector('.wk-se-scroll')?.hasAttribute('inert')).toBe(false);
   });
 
-  it('#9 a type card keeps the MCP filter', async () => {
+  it('#9 the type picker keeps the MCP filter', async () => {
     wire();
-    render(<SteerSurface pathname="/steering/policies" search="?mcp=1" runs={[]} navigate={vi.fn()} />);
-    const sec = (await screen.findAllByTestId('steer-type')).find((a) => a.getAttribute('data-steering-type') === 'security')!;
-    expect(sec.getAttribute('href')).toContain('mcp=1');
+    const user = userEvent.setup();
+    const navigate = vi.fn();
+    render(<SteerSurface pathname="/steering/policies" search="?mcp=1" runs={[]} navigate={navigate} />);
+    // No rule here governs MCP calls: the list is empty because of the filter; the picker still moves.
+    await screen.findByTestId('steer-rules-empty');
+    await user.selectOptions(screen.getByTestId('steer-type-pick'), 'security');
+    const to = String(navigate.mock.calls.at(-1)?.[0]);
+    expect(to).toContain('mcp=1');
+    expect(to).toContain('security');
   });
 
   it('#5 the tag filter (targets, applies_to) is back', async () => {
@@ -389,6 +402,8 @@ describe('codex r2 fixes', () => {
     render(<SteerSurface pathname="/rules" search="" runs={[]} navigate={vi.fn()} />);
     await screen.findAllByTestId('rules-row');
     expect(ruleFacets({ ...rule('A-1'), applies_to: ['build'], targets: { project: 'payments' } } as SteeringRule)).toContain('project=payments');
+    // The tag filter sits with the quiet search: open it first.
+    await user.click(screen.getByTestId('steer-search-open'));
     await user.type(screen.getByTestId('steer-facet-input'), 'applies_to=build');
     await user.keyboard('{Enter}');
     await waitFor(() => expect(screen.getAllByTestId('rules-row').map((r) => r.getAttribute('data-rule-id'))).toEqual(['A-1']));
@@ -402,17 +417,20 @@ describe('codex r3 fixes', () => {
     wire();
     render(<SteerSurface pathname="/rules" search="" runs={[]} navigate={vi.fn()} />);
     await screen.findByTestId('rules-error');
-    const tile = screen.getByTestId('steer-stat-rules');
-    expect(tile).toHaveTextContent('Couldn’t read the rules');
-    expect(tile).not.toHaveTextContent('none block');
-    expect(screen.getAllByTestId('steer-type').every((c) => c.textContent?.includes('—'))).toBe(true);
+    const sentence = screen.getByTestId('steer-sentence');
+    expect(sentence).toHaveTextContent('Couldn’t read your rules just now.');
+    expect(sentence.textContent).not.toMatch(/\d/);
+    // The type picker counts nothing over a failed read.
+    expect([...screen.getByTestId('steer-type-pick').querySelectorAll('option')].every((o) => !/\d/.test(o.textContent ?? ''))).toBe(true);
   });
 
   it('#4 "Edit as a table" opens on the same type, MCP and unused filters', async () => {
     wire();
-    render(<SteerSurface pathname="/steering/policies" search="?type=security&mcp=1&usage=unused" runs={[]} navigate={vi.fn()} />);
-    const link = await screen.findByTestId('steer-table');
-    const q = new URL(link.getAttribute('href')!, 'http://x').searchParams;
+    const user = userEvent.setup();
+    const navigate = vi.fn();
+    render(<SteerSurface pathname="/steering/policies" search="?type=security&mcp=1&usage=unused" runs={[]} navigate={navigate} />);
+    await more(user, 'steer-table');
+    const q = new URL(String(navigate.mock.calls.at(-1)?.[0]), 'http://x').searchParams;
     expect([q.get('type'), q.get('mcp'), q.get('usage'), q.get('view')]).toEqual(['security', '1', 'unused', 'table']);
   });
 });
@@ -443,15 +461,20 @@ describe('codex r4 fixes', () => {
     const user = userEvent.setup();
     render(<SteerSurface pathname="/rules" search="" runs={[]} navigate={vi.fn()} />);
     const rows = await screen.findAllByTestId('rules-row');
-    const retireOf = (id: string): HTMLElement => within(rows.find((r) => r.getAttribute('data-rule-id') === id)!).getByTestId('steer-retire');
-    await user.click(retireOf('A-1'));
+    // Retire sits behind each row's ⋯.
+    const retireOf = async (id: string): Promise<void> => {
+      const row = rows.find((r) => r.getAttribute('data-rule-id') === id)!;
+      await user.click(within(row).getByTestId('steer-row-more-button'));
+      await user.click(within(row).getByTestId('steer-retire'));
+    };
+    await retireOf('A-1');
     const dialog = (): HTMLElement => screen.getByRole('dialog', { name: /Retire/ });
     const fields = (): HTMLElement[] => within(dialog()).getAllByRole('textbox');
     await user.type(fields()[0]!, 'A-1');
     await user.type(fields()[1]!, 'reason A');
     await user.click(within(dialog()).getByRole('button', { name: /Retire rule/ }));
     await user.click(within(dialog()).getByRole('button', { name: /Cancel/ }));
-    await user.click(retireOf('B-1'));
+    await retireOf('B-1');
     await user.type(fields()[1]!, 'reason B draft');
     finish({ ok: true });
     await waitFor(() => expect(screen.getByTestId('steering-saved-note')).toHaveTextContent('Retired A-1'));
@@ -494,7 +517,7 @@ describe('agy r1 fixes', () => {
     apiFetch.mockImplementation((path: unknown) => String(path) === '/governance/steering/import'
       ? Promise.resolve({ results: [{ status: 'imported', ids: ['N-1'] }] })
       : Promise.reject(new ApiError(404, 'Not Found')));
-    await user.click(screen.getByTestId('steer-import'));
+    await more(user, 'steer-import');
     const input = screen.getByTestId('steer-import-file').querySelector('input[type=file]') as HTMLInputElement;
     await user.upload(input, new File(['[{"id":"N-1","statement":"s"}]'], 'batch.json', { type: 'application/json' }));
     await user.click(screen.getByTestId('steer-import-go'));

@@ -54,9 +54,13 @@ describe('the page and its states (§3.3)', () => {
     renderPage();
     const rows = await screen.findAllByTestId('agents-row');
     expect(rows.map((r) => r.getAttribute('data-agent'))).toEqual(['claude', 'codex', 'pi']);
-    // The four tiles (approved tab concept): pi + codex usable of 3; claude is signed out.
-    await waitFor(() => expect(screen.getByTestId('agents-tile-ready')).toHaveTextContent('Ready for work1 / 31 more with limits · 1 signed out'));
-    expect(screen.getByTestId('agents-tile-fix')).toHaveTextContent('Things to fix2plus 1 note');
+    // One sentence (the calm page): one of 3 is ready; the glance numbers sit behind "At a glance".
+    await waitFor(() => expect(screen.getByTestId('agents-sentence')).toHaveTextContent('1 of 3 are ready to work.'));
+    expect(screen.getByTestId('agents-tile-ready')).toHaveTextContent('1 / 3 · 1 more with limits · 1 signed out');
+    expect(screen.getByTestId('agents-tile-fix')).toHaveTextContent('2 · plus 1 note');
+    // Claude is signed out: its row says so, with Sign in beside it.
+    expect(within(rows[0]!).getByText('Not signed in')).toBeInTheDocument();
+    expect(within(rows[0]!).getByRole('button', { name: 'Sign in to Claude Code' })).toBeInTheDocument();
     expect(screen.getByTestId('agents-foot')).toHaveTextContent('Steps count the last 7 days (32 jobs)');
     // No agent's quality checks are reported yet: said once, in the footnote, not on every row.
     expect(within(rows[0]!).queryByTestId('agents-qe')).toBeNull();
@@ -66,7 +70,8 @@ describe('the page and its states (§3.3)', () => {
   it('loading: skeleton rows and no count', () => {
     getRoster.mockReturnValue(new Promise(() => {}));
     renderPage();
-    expect(screen.getByTestId('agents-loading')).toHaveTextContent('Asking each agent…');
+    expect(screen.getByTestId('agents-loading')).toBeInTheDocument();
+    expect(screen.getByTestId('agents-sentence')).toHaveTextContent('Asking each agent…');
     expect(screen.queryByTestId('agents-tiles')).toBeNull();
     expect(screen.queryByTestId('agents-check-all')).toBeNull();
   });
@@ -102,7 +107,7 @@ describe('the page and its states (§3.3)', () => {
 describe('?fix=<key> (§2.2)', () => {
   it('the fix button opens the modal address; ?fix opens the agent’s modal', async () => {
     const { unmount } = renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: /Fix 1 problem for Claude Code/ }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Sign in to Claude Code' }));
     expect(navigate).toHaveBeenCalledWith('/agents?fix=claude');
     unmount();
     renderPage('?fix=claude');
@@ -185,6 +190,8 @@ describe('check again: crew’s on-demand re-check (§4.2, A3b)', () => {
 
   it('"Check sign-ins now" re-checks every agent with a sign-in, then reads once more', async () => {
     renderPage();
+    // The page's moves sit behind its one quiet menu.
+    fireEvent.click(await screen.findByTestId('agents-more-button'));
     fireEvent.click(await screen.findByTestId('agents-check-all'));
     await waitFor(() => expect(getRoster.mock.calls.map(([k]) => k).filter(Boolean).sort()).toEqual(['claude', 'codex', 'pi']));
   });

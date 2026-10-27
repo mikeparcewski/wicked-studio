@@ -96,8 +96,8 @@ export interface AgentRow {
   /** The exact `login_invocation` / `logout_invocation` (copied verbatim), when crew sent one. */
   login: string | null;
   logout: string | null;
-  /** Week numbers the copy quotes. */
-  week: { units: number } | null;
+  /** Week numbers the copy quotes: steps worked, steps that reached a gate, and those that passed it first time. */
+  week: { units: number; gated: number; firstPass: number } | null;
   acp: { fallbacks: number; sessions: number; kinds: Record<string, number> } | null;
   /** Crew-authored sentences shown ONLY inside Technical details. */
   tech: { disclosure: string | null; ineligible: string | null; evidence: string | null };
@@ -313,7 +313,9 @@ function clock(iso: string): string | null {
 
 /** The Ready-for-work word for an active bench (A3). */
 export function benchWord(b: SeatRecentBench): string {
-  return b.kind === 'quota_exhausted' ? 'Out of quota' : b.kind === 'usage_limit' ? 'Out of usage' : 'Held back for now';
+  // A re-probe bench names its cause with a lead word ("recent quota_exhausted", seen on crew 0.16.3): the token is the last word.
+  const cause = b.kind.trim().split(/\s+/).pop() ?? '';
+  return cause === 'quota_exhausted' ? 'Out of quota' : cause === 'usage_limit' ? 'Out of usage' : 'Held back for now';
 }
 
 /** "studio tries it again by 21:30": crew's window, said as studio's retry, never as a provider reset. */
@@ -453,7 +455,7 @@ function rowOf(seat: RosterSeat, alsoReviews: boolean, keys: string[], inp: Agen
 
   // Week
   const rec = record?.seats.find((s) => s.cli === seat.key);
-  const week = record === undefined ? null : { units: rec?.units ?? 0 };
+  const week = record === undefined ? null : { units: rec?.units ?? 0, gated: rec?.gated ?? 0, firstPass: rec?.firstPass ?? 0 };
   const benched = worktreeBenched(seat);
   const refused = repoRefused(seat);
 

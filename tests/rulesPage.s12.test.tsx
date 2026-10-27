@@ -150,18 +150,19 @@ describe('the page', () => {
     expect(rows.map((r) => r.getAttribute('data-group'))).toStrictEqual(['words', 'testing', 'other']);
     // The row's line keeps DC's sentence for the rule (with the project's NAME) as its description.
     expect(rows[0]?.querySelector('[data-testid="rules-row-line"]')?.getAttribute('data-sentence')).toBe('A Development rule for Kestrel — helpers are told about it when it applies; it never blocks.');
-    // Short facts, not the sentence repeated under every rule: id, type, reach, origin.
-    expect(rows[0]?.querySelector('[data-testid="rules-row-line"]')?.textContent).toBe('Proposed ruleDevelopmentKestrelFrom your words');
-    // studio#836: the reach is visible on every row — the project's name, or "Everywhere" (the Memory page's word).
-    expect(rows.map((r) => r.querySelector('[data-testid="rules-row-reach"]')?.textContent)).toStrictEqual(['Kestrel', 'Everywhere', 'Everywhere']);
+    // Short facts, not the sentence repeated under every rule: type, reach, origin. The id is behind the row (the drawer), not on its face.
+    expect(rows[0]?.querySelector('[data-testid="rules-row-line"]')?.textContent).toBe('Development · applies to Kestrel · from your words');
+    expect(rows[0]?.textContent).not.toContain('proposal:pr-auto');
+    // studio#836: the reach is visible on every row — the project's name, or every repository.
+    expect(rows.map((r) => r.querySelector('[data-testid="rules-row-reach"]')?.textContent)).toStrictEqual(['applies to Kestrel', 'applies to every repository', 'applies to every repository']);
     expect(rows[1]?.querySelector('[data-testid="rules-row-reach"]')?.getAttribute('data-reach')).toBe('everywhere');
     const open = rows[0]?.querySelector('[data-testid="rules-row-open"]') as HTMLAnchorElement;
     expect(open.getAttribute('href')).toBe('/rules/proposal%3Apr-auto');
     fireEvent.click(open);
     expect(navigate).toHaveBeenCalledWith('/rules/proposal%3Apr-auto');
-    const table = screen.getByTestId('steer-table');
-    expect(table.getAttribute('href')).toBe('/steering/policies?view=table');
-    fireEvent.click(table);
+    // The table editor is one menu away (Add a rule's menu).
+    fireEvent.click(screen.getByTestId('steer-more-button'));
+    fireEvent.click(screen.getByTestId('steer-table'));
     expect(navigate).toHaveBeenLastCalledWith('/steering/policies?view=table');
     // No drawer without a rule in the address; "Followed" is nowhere (DC rev 2 B10).
     expect(screen.queryByTestId('steering-rule-drawer')).toBeNull();

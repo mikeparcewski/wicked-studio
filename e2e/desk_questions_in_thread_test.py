@@ -128,7 +128,8 @@ with sync_playwright() as p:
     page.route("**/api/v1/governance/steering/author", lambda r: r.fulfill(
         status=200, content_type="application/json", body='{"runId":"g1"}') if r.request.method == "POST" else r.continue_())
     page.goto(f"{origin}/steering/policies", wait_until="networkidle")
-    # The Steer surface opens its assistant from "Add with chat" (DES-steer-eval §2.3).
+    # The Steer surface opens its assistant from "Add with chat" (DES-steer-eval §2.3), behind Add a rule's menu.
+    page.get_by_test_id("steer-more-button").click()
     page.get_by_test_id("steer-chat").click()
     dock_in = page.get_by_test_id("assist-input")
     try:

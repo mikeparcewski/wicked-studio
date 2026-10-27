@@ -19,11 +19,11 @@
     "computed": 25
 =======
     "files": 240,
-    "occurrences": 3137,
-    "static": 2714,
-    "dynamic": 73,
-    "computed": 24
->>>>>>> origin/ui-v2-report
+    "occurrences": 3159,
+    "static": 2702,
+    "dynamic": 70,
+    "computed": 31
+>>>>>>> origin/ui-v2-steer-memory-agents
   },
   "static": [
     {
@@ -65,19 +65,7 @@
       ]
     },
     {
-      "testId": "agents-band",
-      "files": [
-        "src/components/agents/AgentsPage.tsx"
-      ]
-    },
-    {
       "testId": "agents-banner",
-      "files": [
-        "src/components/agents/AgentsPage.tsx"
-      ]
-    },
-    {
-      "testId": "agents-cards",
       "files": [
         "src/components/agents/AgentsPage.tsx"
       ]
@@ -137,6 +125,18 @@
       ]
     },
     {
+      "testId": "agents-details",
+      "files": [
+        "src/components/agents/AgentsPage.tsx"
+      ]
+    },
+    {
+      "testId": "agents-details-open",
+      "files": [
+        "src/components/agents/AgentsPage.tsx"
+      ]
+    },
+    {
       "testId": "agents-empty",
       "files": [
         "src/components/agents/AgentsPage.tsx"
@@ -176,6 +176,18 @@
       "testId": "agents-issue",
       "files": [
         "src/components/agents/AgentModal.tsx"
+      ]
+    },
+    {
+      "testId": "agents-list",
+      "files": [
+        "src/components/agents/AgentsPage.tsx"
+      ]
+    },
+    {
+      "testId": "agents-list-sec",
+      "files": [
+        "src/components/agents/AgentsPage.tsx"
       ]
     },
     {
@@ -230,6 +242,12 @@
       "testId": "agents-modal-foot",
       "files": [
         "src/components/agents/AgentModal.tsx"
+      ]
+    },
+    {
+      "testId": "agents-more",
+      "files": [
+        "src/components/agents/AgentsPage.tsx"
       ]
     },
     {
@@ -288,6 +306,12 @@
     },
     {
       "testId": "agents-row",
+      "files": [
+        "src/components/agents/AgentsPage.tsx"
+      ]
+    },
+    {
+      "testId": "agents-sentence",
       "files": [
         "src/components/agents/AgentsPage.tsx"
       ]
@@ -413,15 +437,15 @@
       ]
     },
     {
-      "testId": "agents-steps",
+      "testId": "agents-status",
       "files": [
-        "src/components/agents/AgentModal.tsx"
+        "src/components/agents/AgentsPage.tsx"
       ]
     },
     {
-      "testId": "agents-table",
+      "testId": "agents-steps",
       "files": [
-        "src/components/agents/AgentsPage.tsx"
+        "src/components/agents/AgentModal.tsx"
       ]
     },
     {
@@ -1150,6 +1174,12 @@
       "testId": "burn-unavailable",
       "files": [
         "src/components/Burn.tsx"
+      ]
+    },
+    {
+      "testId": "calm-row-details",
+      "files": [
+        "src/components/calm/Calm.tsx"
       ]
     },
     {
@@ -7306,6 +7336,12 @@
       ]
     },
     {
+      "testId": "memories-search-open",
+      "files": [
+        "src/components/memory/MemoryPage.tsx"
+      ]
+    },
+    {
       "testId": "memories-unsupported",
       "files": [
         "src/components/memory/MemoryPage.tsx"
@@ -7354,13 +7390,13 @@
       ]
     },
     {
-      "testId": "memory-add-tile",
+      "testId": "memory-content",
       "files": [
         "src/components/memory/MemoryPage.tsx"
       ]
     },
     {
-      "testId": "memory-content",
+      "testId": "memory-edit",
       "files": [
         "src/components/memory/MemoryPage.tsx"
       ]
@@ -7390,6 +7426,12 @@
       ]
     },
     {
+      "testId": "memory-full",
+      "files": [
+        "src/components/memory/MemoryPage.tsx"
+      ]
+    },
+    {
       "testId": "memory-intro",
       "files": [
         "src/components/memory/MemoryPage.tsx"
@@ -7402,12 +7444,6 @@
       ]
     },
     {
-      "testId": "memory-kinds",
-      "files": [
-        "src/components/memory/MemoryPage.tsx"
-      ]
-    },
-    {
       "testId": "memory-list-card",
       "files": [
         "src/components/memory/MemoryPage.tsx"
@@ -7415,6 +7451,18 @@
     },
     {
       "testId": "memory-meta",
+      "files": [
+        "src/components/memory/MemoryPage.tsx"
+      ]
+    },
+    {
+      "testId": "memory-more",
+      "files": [
+        "src/components/memory/MemoryPage.tsx"
+      ]
+    },
+    {
+      "testId": "memory-open",
       "files": [
         "src/components/memory/MemoryPage.tsx"
       ]
@@ -7474,31 +7522,13 @@
       ]
     },
     {
-      "testId": "memory-stat-review",
-      "files": [
-        "src/components/memory/MemoryPage.tsx"
-      ]
-    },
-    {
-      "testId": "memory-stat-total",
+      "testId": "memory-sentence",
       "files": [
         "src/components/memory/MemoryPage.tsx"
       ]
     },
     {
       "testId": "memory-tier",
-      "files": [
-        "src/components/memory/MemoryPage.tsx"
-      ]
-    },
-    {
-      "testId": "memory-tiles",
-      "files": [
-        "src/components/memory/MemoryPage.tsx"
-      ]
-    },
-    {
-      "testId": "memory-view",
       "files": [
         "src/components/memory/MemoryPage.tsx"
       ]
@@ -10902,6 +10932,12 @@
       ]
     },
     {
+      "testId": "rules-row-fires",
+      "files": [
+        "src/components/steer/SteerSurface.tsx"
+      ]
+    },
+    {
       "testId": "rules-row-line",
       "files": [
         "src/components/steer/SteerSurface.tsx"
@@ -14034,12 +14070,6 @@
       ]
     },
     {
-      "testId": "steer-add",
-      "files": [
-        "src/components/steer/SteerSurface.tsx"
-      ]
-    },
-    {
       "testId": "steer-add-rule",
       "files": [
         "src/components/steer/SteerSurface.tsx"
@@ -14142,6 +14172,12 @@
       ]
     },
     {
+      "testId": "steer-more",
+      "files": [
+        "src/components/steer/SteerSurface.tsx"
+      ]
+    },
+    {
       "testId": "steer-prefill",
       "files": [
         "src/components/ChatInput.tsx"
@@ -14161,6 +14197,18 @@
     },
     {
       "testId": "steer-retire",
+      "files": [
+        "src/components/steer/SteerSurface.tsx"
+      ]
+    },
+    {
+      "testId": "steer-retired-note",
+      "files": [
+        "src/components/steer/SteerSurface.tsx"
+      ]
+    },
+    {
+      "testId": "steer-row-more",
       "files": [
         "src/components/steer/SteerSurface.tsx"
       ]
@@ -14190,6 +14238,18 @@
       ]
     },
     {
+      "testId": "steer-search-open",
+      "files": [
+        "src/components/steer/SteerSurface.tsx"
+      ]
+    },
+    {
+      "testId": "steer-sentence",
+      "files": [
+        "src/components/steer/SteerSurface.tsx"
+      ]
+    },
+    {
       "testId": "steer-show-all",
       "files": [
         "src/components/steer/SteerSurface.tsx"
@@ -14197,18 +14257,6 @@
     },
     {
       "testId": "steer-stat-eval",
-      "files": [
-        "src/components/steer/SteerSurface.tsx"
-      ]
-    },
-    {
-      "testId": "steer-stat-review",
-      "files": [
-        "src/components/steer/SteerSurface.tsx"
-      ]
-    },
-    {
-      "testId": "steer-stat-rules",
       "files": [
         "src/components/steer/SteerSurface.tsx"
       ]
@@ -14226,19 +14274,7 @@
       ]
     },
     {
-      "testId": "steer-tiles",
-      "files": [
-        "src/components/steer/SteerSurface.tsx"
-      ]
-    },
-    {
-      "testId": "steer-type",
-      "files": [
-        "src/components/steer/SteerSurface.tsx"
-      ]
-    },
-    {
-      "testId": "steer-types",
+      "testId": "steer-type-pick",
       "files": [
         "src/components/steer/SteerSurface.tsx"
       ]
@@ -17022,6 +17058,18 @@
       ]
     },
     {
+      "expression": "openTestId",
+      "files": [
+        "src/components/calm/Calm.tsx"
+      ]
+    },
+    {
+      "expression": "sentenceTestId",
+      "files": [
+        "src/components/calm/Calm.tsx"
+      ]
+    },
+    {
       "expression": "tabTestId",
       "files": [
         "src/components/ui/Tabs.tsx"
@@ -17049,6 +17097,7 @@
         "src/components/WhatWhere.tsx",
         "src/components/agents/AgentsPage.tsx",
         "src/components/agents/SetupPanel.tsx",
+        "src/components/calm/Calm.tsx",
         "src/components/charts/CategoryBars.tsx",
         "src/components/charts/Chart.tsx",
         "src/components/dashboardKit.tsx",
@@ -17193,6 +17242,12 @@
         "src/components/SteeringRuleDrawer.tsx",
         "src/components/SteeringRuleForm.tsx",
         "src/components/session/DeckReview.tsx"
+      ]
+    },
+    {
+      "expression": "titleTestId",
+      "files": [
+        "src/components/calm/Calm.tsx"
       ]
     },
     {

@@ -154,6 +154,7 @@ def address(page) -> str:
 ROWS = """() => [...document.querySelectorAll('[data-testid="agents-row"]')].map(r => ({
   key: r.dataset.agent, ready: r.dataset.ready,
   fix: r.querySelector('[data-testid="agents-fix"]')?.innerText ?? null,
+  status: r.querySelector('[data-testid="agents-status"]')?.innerText ?? null,
   qe: r.querySelector('[data-testid="agents-qe"]')?.dataset.qe ?? null }))"""
 
 with sync_playwright() as p:
@@ -173,19 +174,23 @@ with sync_playwright() as p:
     page.wait_for_function("() => document.querySelector('[data-testid=\"desk-rail-nerve\"]')?.dataset.read === 'fresh'", timeout=15000)
     rail = page.evaluate("""() => ({ link: !!document.querySelector('[data-testid="desk-rail-agents"]'), health: document.querySelector('[data-testid="desk-rail-nerve"]').dataset.tone })""")
     page.goto(f"{origin}/agents", wait_until="networkidle")
-    page.get_by_test_id("agents-table").wait_for(state="visible", timeout=10000)
+    page.get_by_test_id("agents-list").wait_for(state="visible", timeout=10000)
     check("rail", not rail["link"] and page.get_by_test_id("agents-panel").count() == 1, **rail)
     healthy_before = rail["health"]
 
-    # ── 1. the table ─────────────────────────────────────────────────────────────
+    # ── 1. the rows (the calm page, 2026-10-26: one row per agent, ONE status word; a signed-out agent says Sign in) ──
     page.wait_for_timeout(300)
     page.screenshot(path=str(SHOTS / "desk-agents-table.png"))
     rows = page.evaluate(ROWS)
-    summary = page.get_by_test_id("agents-tiles").inner_text()
+    # The glance numbers sit behind the page's closed "At a glance" disclosure: read their text.
+    summary = page.get_by_test_id("agents-tiles").text_content()
+    sentence = page.get_by_test_id("agents-sentence").inner_text()
     check("table", [r["key"] for r in rows] == ["claude", "codex", "pi", "copilot", "opencode"]
           and [r["ready"] for r in rows] == ["Not ready", "Ready, except repository jobs", "Ready", "Out of quota", "Not recommended"]
-          and [r["fix"] for r in rows] == ["Fix 1 problem", "See 1 warning", "See 2 notes", "See 2 warnings", "See 1 warning"]
-          and all(r["qe"] is None for r in rows) and "which agents can run quality checks" in page.get_by_test_id("agents-foot").inner_text() and "1 / 5" in summary and "1 more with limits · 1 held back for now · 1 not recommended · 1 signed out" in summary and "1 on a sandbox floor only, 1 on a repository boundary only" in summary and "plus 4 notes" in summary, rows=rows, summary=summary)
+          and [r["status"] for r in rows][:3] == [None, "Ready, except repository jobs", "Ready"] and (rows[3]["status"] or "").startswith("Out of quota")
+          and rows[4]["status"] == "Not recommended"
+          and [r["fix"] for r in rows] == ["Sign in", None, None, None, None] and sentence == "1 of 5 are ready to work."
+          and all(r["qe"] is None for r in rows) and "which agents can run quality checks" in page.get_by_test_id("agents-foot").text_content() and "1 / 5" in summary and "1 more with limits · 1 held back for now · 1 not recommended · 1 signed out" in summary and "1 on a sandbox floor only, 1 on a repository boundary only" in summary and "plus 4 notes" in summary, rows=rows, summary=summary, sentence=sentence)
 
     # ── 3. the modals ────────────────────────────────────────────────────────────
     page.locator('[data-testid="agents-fix"][data-agent="claude"]').click()
@@ -200,7 +205,8 @@ with sync_playwright() as p:
     page.keyboard.press("Escape")
     page.wait_for_function("() => !document.querySelector('[data-testid=\"agents-modal\"]')", timeout=5000)
     check("modal-closes", address(page) == "/agents", landed=address(page))
-    page.locator('[data-testid="agents-fix"][data-agent="copilot"]').click()
+    # A row with no fix link opens its agent from the row itself.
+    page.locator('[data-testid="agents-open"][data-agent="copilot"]').click()
     page.get_by_test_id("agents-modal").wait_for(state="visible", timeout=5000)
     cop = page.evaluate("() => [...document.querySelectorAll('[data-testid=\"agents-modal\"] [data-testid=\"agents-issue\"]')].map(c => c.dataset.code)")
     quota = page.locator('[data-testid="agents-issue"][data-code="quota"]').inner_text()
@@ -211,7 +217,7 @@ with sync_playwright() as p:
           and "not when your plan resets" in quota, cards=cop, quota=quota[:400])
 
     # ── 3b. the sign-in hooks' default affordances: Check now (GET ?refresh=<key>) and Sign out (a copied command) ──
-    page.locator('[data-testid="agents-fix"][data-agent="codex"]').click()
+    page.locator('[data-testid="agents-open"][data-agent="codex"]').click()
     page.get_by_test_id("agents-modal").wait_for(state="visible", timeout=5000)
     foot = page.evaluate("""() => ({ check: !!document.querySelector('[data-testid="agents-check-now"]'),
       signout: document.querySelector('[data-testid="agents-signout-how"] summary')?.innerText ?? null,
@@ -271,11 +277,12 @@ with sync_playwright() as p:
 
     # ── 6. MEASURE: the light problem button ──────────────────────────────────────
     page.goto(f"{origin}/agents", wait_until="networkidle")
-    page.get_by_test_id("agents-table").wait_for(state="visible", timeout=10000)
+    page.get_by_test_id("agents-list").wait_for(state="visible", timeout=10000)
     page.evaluate("() => document.documentElement.setAttribute('data-theme', 'light')")
     page.wait_for_timeout(200)
     light = page.evaluate(CONTRAST, '[data-testid="agents-fix"][data-tone="fail"]')
-    warn = page.evaluate(CONTRAST, '[data-testid="agents-fix"][data-tone="gate"]')
+    # The warning tone now lives on the status word (Out of quota).
+    warn = page.evaluate(CONTRAST, '[data-testid="agents-row"][data-agent="copilot"] [data-testid="agents-status"]')
     page.evaluate("() => document.documentElement.removeAttribute('data-theme')")
     page.wait_for_timeout(200)
     dark = page.evaluate(CONTRAST, '[data-testid="agents-fix"][data-tone="fail"]')
@@ -342,7 +349,7 @@ with sync_playwright() as p:
     pp.on("pageerror", lambda e: errors.append(str(e)))
     wire(pp)
     pp.goto(f"{origin}/agents", wait_until="networkidle")
-    pp.get_by_test_id("agents-cards").wait_for(state="visible", timeout=10000)
+    pp.get_by_test_id("agents-list").wait_for(state="visible", timeout=10000)
     phone = pp.evaluate("""() => ({ cards: document.querySelectorAll('[data-testid="agents-row"]').length,
       fixH: Math.min(...[...document.querySelectorAll('[data-testid="agents-fix"]')].map(b => b.getBoundingClientRect().height)),
       overflow: document.documentElement.scrollWidth > window.innerWidth })""")

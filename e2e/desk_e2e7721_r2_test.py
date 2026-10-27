@@ -154,7 +154,7 @@ with sync_playwright() as p:
       return el ? [el.dataset.reach, el.innerText.trim(), el.offsetWidth > 0] : null;
     })""")
     check("836-reach-on-every-row", len(reach) > 0 and all(x is not None and x[2] for x in reach)
-          and any(x[0] == "everywhere" and x[1] == "Everywhere" for x in reach), reach=reach[:8])
+          and any(x[0] == "everywhere" and x[1] == "applies to every repository" for x in reach), reach=reach[:8])
     hscroll = page.evaluate("() => document.documentElement.scrollWidth > document.documentElement.clientWidth")
     page.close()
 
