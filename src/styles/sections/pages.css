@@ -263,19 +263,8 @@
 .wk-learn-drop-title { font-weight: var(--weight-semi); color: var(--ink-high); overflow-wrap: anywhere; }
 .wk-learn-thumb { width: 56px; height: 56px; object-fit: cover; border-radius: var(--radius-md); border: 1px solid var(--border-subtle); }
 
-/* Build & settings (`/build`, the ui-v2 nav regroup): one row per page, its name and a line on what is
-   there. Hairline rows like the Plugins list; hover is the accent wash. */
-.wk-build-list { display: flex; flex-direction: column; border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); overflow: hidden; background: var(--surface-card); }
-.wk-build-list li + li { border-top: 1px solid var(--border-subtle); }
-.wk-build-link {
-  display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); min-height: 56px;
-  padding: var(--space-3) var(--space-4); color: var(--ink-body); text-decoration: none;
-  transition: background-color 140ms ease;
-}
-.wk-build-link:hover { background: color-mix(in oklab, var(--accent) 14%, var(--surface-card)); }
-.wk-build-link:focus-visible { outline: 2px solid transparent; outline-offset: -2px; box-shadow: inset 0 0 0 2px var(--accent); }
-.wk-build-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.wk-build-name { font-weight: var(--weight-semi); color: var(--ink-high); }
-.wk-build-hint { font-size: var(--text-sm); color: var(--ink-muted); }
+/* Build & settings (`/build`) is a calm page (components/calm); its rows end in a chevron. */
 .wk-build-chev { flex: none; color: var(--ink-muted); }
-@media (prefers-reduced-motion: reduce) { .wk-build-link { transition: none; } }
+/* Build & settings on a phone: the calm row puts its meta under the words; a lone chevron there reads as
+   litter, and the whole row is the link anyway. */
+@media (max-width: 767px) { .wk-calm-row-meta:has(> .wk-build-chev) { display: none; } }
