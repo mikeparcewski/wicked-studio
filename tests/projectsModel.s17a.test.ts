@@ -57,6 +57,9 @@ describe('the Projects cards and a project home say only what the runs say', () 
     expect(projectUnresolved(snap([], [u, { ...u, runId: 'q' }]), r.runIds).map((x) => x.runId)).toEqual(['a']);
     expect(projectsSentence([r, row({})], true)).toBe('Two projects. One needs you.');
     expect(projectsSentence([r, row({})], true, snap([]))).toBe('Two projects. Nothing needs you.');
+    // Work in no project that waits on you is said too (the rail's 1 is never under "Nothing needs you").
+    expect(projectsSentence([r, row({})], true, snap([]), 1)).toBe('Two projects. One job not in a project needs you.');
+    expect(projectsSentence([r, row({})], true, undefined, 2)).toBe('Two projects. One needs you. Two jobs not in a project need you.');
     expect(projectHomeSentence({ known: true, waiting: 1, running: 2, repos: 4 })).toBe('One thing needs you. Two jobs are running across four repositories.');
     expect(projectHomeSentence({ known: true, waiting: 0, running: 0, repos: 6 })).toBe('Nothing needs you. Nothing is running.');
   });

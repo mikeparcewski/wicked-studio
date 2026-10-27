@@ -26,13 +26,15 @@ const COUNT_WORDS = [
   { state: 'done', label: 'finished' },
 ] as const;
 
-export function useProjectRows(runs: SessionView[], needRows: NeedRow[]): { rows: ProjectRow[]; unfiled: number } {
+export function useProjectRows(runs: SessionView[], needRows: NeedRow[]): { rows: ProjectRow[]; unfiled: number; unfiledRunIds: string[] } {
   const projects = useProjectsStore((s) => s.projects);
   const { items, unfiled } = useBoardModel(runs);
   const runChatId = useCapabilities((s) => s.runChatId);
   const deliveredNow = useDeliveredNow();
   const groups = useMemo(() => railGroups(items, unfiled, needsByRun(needRows), Infinity, needTextByRun(needRows), runChatId, deliveredNow), [items, unfiled, needRows, runChatId, deliveredNow]);
-  return { rows: projectRows(projects.filter((p) => p.status === 'active'), items, groups, runs), unfiled: groups.find((g) => g.projectId === null)?.sessions.length ?? 0 };
+  const loose = groups.find((g) => g.projectId === null);
+  const unfiledRunIds = useMemo(() => (loose?.sessions ?? []).flatMap((s) => s.runIds), [loose]);
+  return { rows: projectRows(projects.filter((p) => p.status === 'active'), items, groups, runs), unfiled: loose?.sessions.length ?? 0, unfiledRunIds };
 }
 
 export type ProjectPatch = { name: string; description: string } | { status: 'active' | 'archived' };

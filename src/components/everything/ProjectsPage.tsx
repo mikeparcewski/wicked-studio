@@ -1,12 +1,12 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { Project, SessionView } from '../../api/types.js';
 import type { SystemSnapshot } from '../../api/system.js';
-import { deskReadState } from '../../board/deskModel.js';
+import { deskReadState, needRunId } from '../../board/deskModel.js';
 import { everythingPath } from '../../board/everythingModel.js';
 import type { NeedRow } from '../../board/needsYou.js';
 import { PROJECTS_PATH } from '../../board/navModel.js';
 import { PAGE_NAMES } from '../../board/pageNames.js';
-import { filterProjectRows, projectCardWords, projectRows, projectsSentence, type ProjectRow } from '../../board/projectsModel.js';
+import { filterProjectRows, projectAttention, projectCardWords, projectRows, projectsSentence, type ProjectRow } from '../../board/projectsModel.js';
 import { useSystemStore } from '../../store/systemSnapshot.js';
 import { relTime } from '../../board/relTime.js';
 import { readErrorKind } from '../../api/errors.js';
@@ -40,12 +40,20 @@ export function ProjectsPage({ runs, runsLoaded, runsError = null, onRetryRuns, 
   const archivedLens = new URLSearchParams(search).get('filter') === 'archived';
   const read = deskReadState(runsLoaded, runsError);
   const runsKnown = read === 'known' || read === 'stale';
-  const { rows, unfiled } = useProjectRows(runs, needRows);
+  const { rows, unfiled, unfiledRunIds } = useProjectRows(runs, needRows);
   // A ranked crew's needs-you list decides "N needs you" (the rail's number); an older crew, the board's.
   // Until crew first answers, the counts are held (never the fold's number flashing before crew's).
   const snapshot = useSystemStore((s) => (s.mode === 'system' ? s.snapshot : null));
   const crewPending = useSystemStore((s) => s.mode === 'unknown' && s.healthError === null);
   const known = runsKnown && !crewPending;
+  // Work in no project that waits on you: the same rule as a project's card (crew's list, else the board's fold).
+  const unfiledWaiting = useMemo(() => {
+    if (!known) return 0;
+    const ranked = projectAttention(snapshot, unfiledRunIds);
+    if (ranked !== null) return ranked.length;
+    const ids = new Set(unfiledRunIds);
+    return needRows.filter((r) => { const id = needRunId(r); return id !== null && ids.has(id); }).length;
+  }, [known, snapshot, unfiledRunIds, needRows]);
   const { archived, archivedRead, archivedRepos } = useArchivedProjects(archivedLens);
   const [hidden, setHidden] = useState<string[]>([]);
   const [name, setName] = useState('');
@@ -59,7 +67,7 @@ export function ProjectsPage({ runs, runsLoaded, runsError = null, onRetryRuns, 
   return (
     <CalmPage data-testid="projects-page">
       <CalmHead title={PAGE_NAMES.projects} sentenceTestId="projects-sentence"
-        sentence={archivedLens ? 'Archived projects keep their jobs and repositories. Unarchive one to work in it again.' : projectsSentence(rows, known, snapshot)}
+        sentence={archivedLens ? 'Archived projects keep their jobs and repositories. Unarchive one to work in it again.' : projectsSentence(rows, known, snapshot, unfiledWaiting)}
         action={<CalmAction label="New project" testId="projects-new" onClick={() => setNewOpen(true)} />} />
       {read === 'failed' && <StateBanner data-testid="projects-failed" kind={readErrorKind(runsError)} what="your work" error={runsError} {...(onRetryRuns !== undefined ? { onRetry: onRetryRuns } : {})} />}
       <CalmSection label={archivedLens ? 'Archived' : 'Your projects'} data-testid="projects-tab"
@@ -76,7 +84,7 @@ export function ProjectsPage({ runs, runsLoaded, runsError = null, onRetryRuns, 
               <ProjectCard key={row.project.id} row={row} now={now} known={known && !archivedLens} snapshot={snapshot} navigate={navigate}
                 onStatusChanged={(project) => { if (archivedLens && project.status === 'active') setHidden((ids) => [...ids, project.id]); }} />
             ))}
-            {!archivedLens && runsKnown && unfiled > 0 && name.trim() === '' && <UnfiledCard count={unfiled} navigate={navigate} />}
+            {!archivedLens && runsKnown && unfiled > 0 && name.trim() === '' && <UnfiledCard count={unfiled} waiting={unfiledWaiting} navigate={navigate} />}
           </ul>
         )}
         {listed.length === 0 && (!archivedLens || archivedRead === 'ok') && (
@@ -153,13 +161,14 @@ function ProjectCard({ row, now, known, snapshot, navigate, onStatusChanged }: {
 }
 
 /** The work no project holds: a card like the projects beside it, its dashboard a project's dashboard. */
-function UnfiledCard({ count, navigate }: { count: number; navigate: Navigate }): React.ReactElement {
+function UnfiledCard({ count, waiting, navigate }: { count: number; waiting: number; navigate: Navigate }): React.ReactElement {
   const path = projectDetailPath('default');
   const sessions = everythingPath({ tab: 'sessions' });
   return (
-    <li className="wk-pj-card" data-testid="projects-unfiled" data-tone="quiet">
+    <li className="wk-pj-card" data-testid="projects-unfiled" data-tone={waiting > 0 ? 'gate' : 'quiet'}>
       <a href={path} className="wk-pj-card-main" data-testid="projects-unfiled-open" onClick={go(navigate, path)}>
-        <span className="wk-pj-card-top"><span className="wk-pj-card-name">Not in a project</span></span>
+        <span className="wk-pj-card-top"><span className="wk-pj-card-name">Not in a project</span>
+          {waiting > 0 && <span className="wk-pj-card-state" data-testid="projects-unfiled-state" data-tone="gate">{waiting} {waiting === 1 ? 'needs' : 'need'} you</span>}</span>
         <span className="wk-pj-card-sentence">{count === 1 ? 'One job is not filed in a project.' : `${count} jobs are not filed in a project.`}</span>
       </a>
       <span className="wk-pj-card-menu">

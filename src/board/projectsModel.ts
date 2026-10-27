@@ -81,13 +81,16 @@ export function projectCardWords(row: ProjectRow, now: number, known: boolean, a
 }
 
 /** The Projects page's sentence: "Three projects. One needs you." */
-export function projectsSentence(rows: readonly ProjectRow[], known: boolean, snapshot: SystemSnapshot | null = null): string {
+export function projectsSentence(rows: readonly ProjectRow[], known: boolean, snapshot: SystemSnapshot | null = null, unfiledWaiting = 0): string {
   const n = rows.length;
   if (n === 0) return 'No projects yet. A project keeps the jobs and repositories that belong together.';
   const head = `${countWord(n)} ${n === 1 ? 'project' : 'projects'}.`;
   if (!known) return head;
   const k = rows.filter((r) => projectWaiting(r, snapshot) > 0).length;
-  return k === 0 ? `${head} Nothing needs you.` : `${head} ${countWord(k)} ${k === 1 ? 'needs' : 'need'} you.`;
+  // Work in no project that waits on you is said too: the page never says "Nothing needs you" under the rail's 1.
+  const loose = unfiledWaiting <= 0 ? '' : ` ${countWord(unfiledWaiting)} ${unfiledWaiting === 1 ? 'job' : 'jobs'} not in a project ${unfiledWaiting === 1 ? 'needs' : 'need'} you.`;
+  if (k === 0) return loose === '' ? `${head} Nothing needs you.` : `${head}${loose}`;
+  return `${head} ${countWord(k)} ${k === 1 ? 'needs' : 'need'} you.${loose}`;
 }
 
 /**
