@@ -11,19 +11,11 @@
   "version": 1,
   "studioVersion": "0.12.3",
   "counts": {
-<<<<<<< HEAD
-    "files": 239,
-    "occurrences": 3115,
-    "static": 2697,
-    "dynamic": 70,
-    "computed": 25
-=======
-    "files": 240,
-    "occurrences": 3142,
-    "static": 2716,
-    "dynamic": 70,
-    "computed": 25
->>>>>>> origin/ui-v2-understand-evaluate
+    "files": 244,
+    "occurrences": 3254,
+    "static": 2772,
+    "dynamic": 74,
+    "computed": 34
   },
   "static": [
     {
@@ -3211,12 +3203,6 @@
       ]
     },
     {
-      "testId": "desk-insights",
-      "files": [
-        "src/components/desk/DeskV2.tsx"
-      ]
-    },
-    {
       "testId": "desk-insights-done",
       "files": [
         "src/components/desk/DeskUnderstand.tsx"
@@ -6034,6 +6020,12 @@
       ]
     },
     {
+      "testId": "launch-wizard-signin",
+      "files": [
+        "src/components/launch/LaunchWizard.tsx"
+      ]
+    },
+    {
       "testId": "launch-wizard-skip",
       "files": [
         "src/components/launch/LaunchWizard.tsx"
@@ -6059,6 +6051,12 @@
     },
     {
       "testId": "launch-wizard-step",
+      "files": [
+        "src/components/launch/LaunchWizard.tsx"
+      ]
+    },
+    {
+      "testId": "launch-wizard-unusable-note",
       "files": [
         "src/components/launch/LaunchWizard.tsx"
       ]
@@ -10560,6 +10558,12 @@
       ]
     },
     {
+      "testId": "report-system-failed",
+      "files": [
+        "src/components/report/ReportPage.tsx"
+      ]
+    },
+    {
       "testId": "report-throughput",
       "files": [
         "src/components/report/ReportPage.tsx"
@@ -11941,6 +11945,12 @@
       ]
     },
     {
+      "testId": "session-gate-dead-seat-wait",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
       "testId": "session-gate-deliver-consent",
       "files": [
         "src/components/session/GateRow.tsx"
@@ -12148,6 +12158,24 @@
       "testId": "session-gate-under-review",
       "files": [
         "src/components/session/GateDepth.tsx"
+      ]
+    },
+    {
+      "testId": "session-gate-withheld",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
+      "testId": "session-gate-withheld-seat",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
+      "testId": "session-gate-withheld-signin",
+      "files": [
+        "src/components/session/GateRow.tsx"
       ]
     },
     {
@@ -17159,6 +17187,24 @@
       ]
     },
     {
+      "expression": "buttonTestId",
+      "files": [
+        "src/components/calm/Calm.tsx"
+      ]
+    },
+    {
+      "expression": "f.testId",
+      "files": [
+        "src/components/calm/Calm.tsx"
+      ]
+    },
+    {
+      "expression": "it.testId",
+      "files": [
+        "src/components/ui/OverflowMenu.tsx"
+      ]
+    },
+    {
       "expression": "item.testId",
       "files": [
         "src/components/desk/SessionRail.tsx"
@@ -17171,8 +17217,15 @@
       ]
     },
     {
+      "expression": "menuTestId",
+      "files": [
+        "src/components/calm/Calm.tsx"
+      ]
+    },
+    {
       "expression": "o.testId",
       "files": [
+        "src/components/calm/Calm.tsx",
         "src/components/ui/QuietPage.tsx",
         "src/components/ui/Segmented.tsx"
       ]
@@ -17370,6 +17423,13 @@
       "expression": "titleTestId",
       "files": [
         "src/components/calm/Calm.tsx"
+      ]
+    },
+    {
+      "expression": "toggleId",
+      "files": [
+        "src/components/desk/UnderstandPage.tsx",
+        "src/components/steer/EvaluateSurface.tsx"
       ]
     },
     {
