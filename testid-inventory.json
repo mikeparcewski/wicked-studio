@@ -11,9 +11,9 @@
   "version": 1,
   "studioVersion": "0.12.3",
   "counts": {
-    "files": 245,
-    "occurrences": 3259,
-    "static": 2779,
+    "files": 246,
+    "occurrences": 3277,
+    "static": 2796,
     "dynamic": 74,
     "computed": 33
   },
@@ -4430,6 +4430,18 @@
       ]
     },
     {
+      "testId": "evaluate-drift-line",
+      "files": [
+        "src/components/steer/SystemJudgments.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-drift-more",
+      "files": [
+        "src/components/steer/SystemJudgments.tsx"
+      ]
+    },
+    {
       "testId": "evaluate-filter",
       "files": [
         "src/components/steer/EvaluateSurface.tsx"
@@ -4463,6 +4475,96 @@
       "testId": "evaluate-import",
       "files": [
         "src/components/steer/EvaluateSurface.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-judgment-detail",
+      "files": [
+        "src/components/steer/SystemJudgments.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-judgment-row",
+      "files": [
+        "src/components/steer/SystemJudgments.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-judgment-trend",
+      "files": [
+        "src/components/steer/SystemJudgments.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-judgment-words",
+      "files": [
+        "src/components/steer/SystemJudgments.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-judgments",
+      "files": [
+        "src/components/steer/SystemJudgments.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-judgments-absent",
+      "files": [
+        "src/components/steer/SystemJudgments.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-judgments-baseline",
+      "files": [
+        "src/components/steer/SystemJudgments.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-judgments-check",
+      "files": [
+        "src/components/steer/SystemJudgments.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-judgments-drift",
+      "files": [
+        "src/components/steer/SystemJudgments.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-judgments-empty",
+      "files": [
+        "src/components/steer/SystemJudgments.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-judgments-error",
+      "files": [
+        "src/components/steer/SystemJudgments.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-judgments-run-error",
+      "files": [
+        "src/components/steer/SystemJudgments.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-judgments-scope",
+      "files": [
+        "src/components/steer/SystemJudgments.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-judgments-sentence",
+      "files": [
+        "src/components/steer/SystemJudgments.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-judgments-when",
+      "files": [
+        "src/components/steer/SystemJudgments.tsx"
       ]
     },
     {

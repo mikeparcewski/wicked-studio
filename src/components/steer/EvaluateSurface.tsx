@@ -25,6 +25,7 @@ import { useSteerDraft } from '../../store/steerDraft.js';
 import { EVAL_FACET_MATCH_EXPLANATION, EvalHistory } from '../EvalHistory.js';
 import { readFileText } from '../fileText.js';
 import { FilePick, Segmented, Skeleton, StateBanner, TechDetails } from '../ui/index.js';
+import { SystemJudgments } from './SystemJudgments.js';
 
 /**
  * EVALUATE (the calm page; desk-pages-redesign mockup, operator 2026-10-26: "needs more whitespace,
@@ -322,6 +323,8 @@ export function EvaluateSurface({ navigate, title = 'Evaluate', intro = SENTENCE
             )}
           </section>
         )}
+
+        <SystemJudgments />
 
         <div className="wk-ue-folds">
           <Fold title="What to run" sub={settingsWords} testId="evaluate-options" toggleId="evaluate-options-toggle" open={optionsOpen} onToggle={setOptionsOpen}>
