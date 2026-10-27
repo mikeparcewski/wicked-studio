@@ -29,6 +29,7 @@ vi.mock('../src/store/projects.js', () => {
 });
 
 const { InsightsAdapter, viewOf, scrub } = await import('../src/editors/insightsAdapter.js');
+const words = await import('../src/editors/insightsWords.js');
 const { trendSvg, formatMetric, TREND_METRICS } = await import('../src/plugins/wicked-insights/plugin.js');
 const { insightsLineWords, InsightsLine } = await import('../src/components/insights/InsightsLine.js');
 const { SchedulesSection, scheduleLine } = await import('../src/components/insights/SchedulesSection.js');
@@ -104,14 +105,61 @@ describe('the insights adapter (what the plugin is handed)', () => {
   });
 });
 
+describe('everyday words on the face, the detail behind "Why we think this"', () => {
+  const base = response().reviews[0]!.recommendations[0]!;
+  const judge = { ...base, candidate: 'setting-judge-wicked-e2e', kind: 'setting' as const, title: 'Sign in a second agent so a distinct judge can review',
+    evidence: { ...base.evidence, line: 'A "judge_unavailable" escalation was overridden by a person in 5 runs on wicked-e2e.', n: 5 } };
+  const reg = (metric: 'override_rate' | 'wait_on_people', value: number, baseline: number, unit = 'ratio') => ({ ...base, candidate: `regression-${metric}-all`, kind: 'issue' as const,
+    title: 'x got worse for all runs', changeMind: 'If the work itself changed (bigger tasks in this window), the baseline is not comparable: watch one more window.',
+    evidence: { line: 'Runs with an override, all runs: 75% (95% CI 41%–93%), n=8, against 12% before (n=34).', runs: [], metric, segment: 'all', n: 8, value, baseline, interval: { lo: 0.41, hi: 0.93 } }, unit });
+  const M = [...METRICS, { id: 'override_rate' as const, label: 'Runs with an override', kind: 'rate' as const, unit: 'ratio' as const, higherIsBetter: false },
+    { id: 'wait_on_people' as const, label: 'Time waiting on people', kind: 'median' as const, unit: 'minutes' as const, higherIsBetter: false }];
+
+  it('a stop for no independent reviewer reads as a person standing in for the reviewer, with no engine ids', () => {
+    const p = words.plainRecommendation(judge, M);
+    expect(p.say).toBe('In 5 runs on wicked-e2e a person had to stand in for the reviewer.');
+    expect(`${p.title} ${p.say} ${p.effect}`).not.toMatch(/judge_unavailable|n=\d|CI/u);
+    expect(p.verb).toBe('Change a setting');
+    expect(p.effect).toBe('Reviews come from a different agent, so nobody has to stand in.');
+    expect(`${p.effect} ${p.changeMind}`).not.toMatch(/judge|seat|fallback/u);
+    expect(p.confidence).toBe('Medium');
+    expect(words.plainText('A "judge_unavailable" stop, n=8 (95% CI 41%–93%)')).toBe('A no independent reviewer stop, 8 runs (likely between 41% and 93%)');
+  });
+
+  it('a regression says it in one sentence; the interval and the sample only under Why; each has its own falsifier', () => {
+    const o = words.plainRecommendation(reg('override_rate', 0.75, 0.12), M);
+    expect(o.say).toBe('In 6 of 8 runs a person had to override a stop, up from 12% of runs before.');
+    expect(o.say).not.toMatch(/likely|CI|n=/u);
+    expect(o.why.join(' ')).toContain('likely between 41% and 93%');
+    expect(o.verb).toBe('File an issue');
+    const w = words.plainRecommendation(reg('wait_on_people', 24, 0), M);
+    expect(w.say).toBe('A typical run now waits 24 min for a person, up from 0 min.');
+    expect(w.changeMind).not.toBe(o.changeMind);
+    // The seat's own wording, when the review was interpreted, is kept.
+    expect(words.plainRecommendation(reg('wait_on_people', 24, 0), M, true).changeMind).toContain('If the work itself changed');
+  });
+
+  it('the header is one sentence', () => {
+    const r = response().reviews[0]!;
+    expect(words.reviewSentence({ ...r, window: { startMs: Date.UTC(2026, 9, 25, 12), endMs: Date.UTC(2026, 9, 27, 12) }, totals: { runs: 15 },
+      improvements: [r.improvements[0]!], recommendations: Array.from({ length: 5 }, () => r.recommendations[0]!) }))
+      .toBe('15 runs reviewed (Oct 25\u201327). One thing got better, five could improve.');
+    const { view } = viewOf(response());
+    expect(view.reviews[0]?.footnote).toBeNull();
+    expect(viewOf({ ...response(), reviews: [{ ...response().reviews[0]!, interpreted: false }] }).view.reviews[0]?.footnote).toMatch(/Worded by crew/u);
+  });
+});
+
 describe('the plugin\'s trend lines', () => {
   it('draw an interval band and grey, labelled points below the minimum sample', () => {
     const { view } = viewOf(response());
     const svg = trendSvg(view.trends.find((t) => t.metric === 'spend')?.points ?? [], 'usd');
     expect(svg.querySelector('polygon.band')).not.toBeNull();
     expect(svg.querySelectorAll('circle.pt.small')).toHaveLength(1);
-    expect(svg.querySelector('text.lbl')?.textContent).toBe('n=3');
-    expect(svg.querySelector('circle.small title')?.textContent).toContain('too few runs to tell');
+    // No "n=" labels on the points: the grey dot says "too few", its tooltip says how many.
+    expect(svg.querySelector('text.lbl')).toBeNull();
+    expect(svg.querySelector('circle.small title')?.textContent).toContain('from 3 runs, too few to tell');
+    expect(svg.querySelectorAll('text.axis')).toHaveLength(2);
     expect(formatMetric('ratio', 0.42)).toBe('42%');
     expect(formatMetric('minutes', 150)).toBe('2.5 h');
     expect(TREND_METRICS).toEqual(['spend', 'pass_rate', 'override_rate', 'wait_on_people', 'unresolved_rate']);

@@ -10,19 +10,12 @@
 import { announceReady, helloOf, V2Port, PROTOCOL, ENVELOPE, type Envelope } from '../_shared/v2.js';
 import surfaces from './surfaces.json';
 import type { InsightsView, InsightsViewReview } from '../../editors/insightsAdapter.js';
+import { TREND_CAPTIONS } from '../../editors/insightsWords.js';
 
 interface Reply { ok: boolean; payload?: Record<string, unknown>; error?: { code: string; message: string } }
 
 /** The five trend lines the operator asked for, in order. */
 export const TREND_METRICS = ['spend', 'pass_rate', 'override_rate', 'wait_on_people', 'unresolved_rate'] as const;
-const KIND_WORDS: Record<string, string> = {
-  'steering-rule': 'Steering rule',
-  memory: 'Memory',
-  setting: 'Setting',
-  issue: 'Issue to file',
-  'resolve-stale': 'Resolve runs',
-};
-const STATE_WORDS: Record<string, string> = { new: 'New', accepted: 'Accepted', dismissed: 'Dismissed' };
 
 export function formatMetric(unit: string, v: number | null): string {
   if (v === null || !Number.isFinite(v)) return 'none';
@@ -74,14 +67,9 @@ export function trendSvg(points: InsightsView['trends'][number]['points'], unit:
   for (const { p, i } of line) {
     const c = s('circle', { class: p.small ? 'pt small' : 'pt', cx: String(x(i)), cy: String(y(p.value as number)), r: '3.5', 'data-small': String(p.small) });
     const title = s('title', {});
-    title.textContent = `${dateWords(p.at)}: ${formatMetric(unit, p.value)} (n=${p.n})${p.small ? ', too few runs to tell' : ''}`;
+    title.textContent = `${dateWords(p.at)}: ${formatMetric(unit, p.value)} from ${p.n} run${p.n === 1 ? '' : 's'}${p.small ? ', too few to tell' : ''}`;
     c.append(title);
     svg.append(c);
-    if (p.small) {
-      const t = s('text', { class: 'lbl', x: String(x(i)), y: String(Math.max(10, y(p.value as number) - 7)), 'text-anchor': 'middle' });
-      t.textContent = `n=${p.n}`;
-      svg.append(t);
-    }
   }
   return svg;
 }
@@ -115,55 +103,72 @@ export function start(): void {
     draw();
   };
 
+  function why(r: InsightsViewReview['recommendations'][number]): HTMLDetailsElement {
+    const d = h('details', { class: 'why', 'data-testid': 'insights-why' });
+    d.append(h('summary', {}, 'Why we think this'));
+    const ul = h('ul');
+    for (const line of r.why) ul.append(h('li', {}, line));
+    if (r.runs.length > 0) {
+      const shown = [...new Set(r.runs)].slice(0, 5);
+      ul.append(h('li', {}, `Runs behind it: ${shown.join('; ')}${r.runs.length > shown.length ? `; and ${r.runs.length - shown.length} more` : ''}.`));
+    }
+    ul.append(h('li', {}, `What would change our mind: ${r.changeMind}`));
+    d.append(ul);
+    return d;
+  }
+
   function drawReview(rev: InsightsViewReview): HTMLElement {
     const box = h('section', { 'data-testid': 'insights-review', 'aria-label': 'Review' });
-    const when = `${dateWords(rev.window.startMs)} to ${dateWords(rev.window.endMs)}`;
     const head = h('div');
     head.append(h('h1', {}, 'Run insights'));
-    const runs = rev.totals?.['runs'];
-    head.append(h('p', { class: 'lede', 'data-testid': 'insights-summary' },
-      rev.status === 'running' ? 'A review is running now.'
-        : rev.summary ?? (rev.status === 'completed' ? `Reviewed ${runs ?? 0} runs from ${when}.` : `This review did not finish: ${rev.error ?? rev.status}.`)));
-    head.append(h('p', { class: 'note' }, `${when} · ${runs ?? 0} runs · ${rev.trigger === 'schedule' ? 'on its schedule' : 'run by hand'}${rev.interpreted || rev.status !== 'completed' ? '' : ' · not interpreted: the numbers in crew’s own words'}`));
+    head.append(h('p', { class: 'lede', 'data-testid': 'insights-summary' }, rev.status === 'completed' || rev.status === 'running' ? rev.sentence : `${rev.sentence} ${rev.error ?? ''}`.trim()));
+    if (rev.summary !== null) {
+      const read = h('details', { class: 'why' });
+      read.append(h('summary', {}, 'The reviewer\u2019s reading'));
+      read.append(h('p', {}, rev.summary));
+      head.append(read);
+    }
     box.append(head);
     const cols = h('div', { class: 'cols' });
     const better = h('section', { 'data-testid': 'insights-better', 'aria-label': 'What got better' });
     better.append(h('h2', {}, 'What got better'));
     const goods = h('ul', { class: 'plain' });
-    if (rev.improvements.length === 0) goods.append(h('li', { class: 'muted' }, rev.status === 'completed' ? 'Nothing changed enough to call it better.' : '—'));
+    if (rev.improvements.length === 0) goods.append(h('li', { class: 'muted' }, rev.status === 'completed' ? 'Nothing changed enough to call it better.' : '\u2014'));
     for (const line of rev.improvements) goods.append(h('li', { class: 'good' }, line));
     better.append(goods);
     cols.append(better);
-    const recs = h('section', { 'data-testid': 'insights-recommendations', 'aria-label': 'Recommendations' });
-    recs.append(h('h2', {}, 'Recommendations'));
+    const recs = h('section', { 'data-testid': 'insights-recommendations', 'aria-label': 'Could improve' });
+    recs.append(h('h2', {}, 'Could improve'));
     const list = h('ul', { class: 'plain' });
-    if (rev.recommendations.length === 0) list.append(h('li', { class: 'muted' }, rev.status === 'completed' ? 'Nothing to change: no evidence reached the bar.' : '—'));
+    if (rev.recommendations.length === 0) list.append(h('li', { class: 'muted' }, rev.status === 'completed' ? 'Nothing to change.' : '\u2014'));
     for (const r of rev.recommendations) {
       const li = h('li');
-      const b = h('button', { type: 'button', class: 'rec', 'data-testid': 'insights-rec', 'data-anchor': r.anchor, 'data-state': r.state, 'aria-pressed': String(pointed === r.anchor) });
-      b.append(h('span', { class: 't' }, r.title));
-      b.append(h('span', {}, r.line));
-      b.append(h('span', { class: 'muted' }, `If done: ${r.expectedEffect}`));
-      const row = h('span', { class: 'row' });
-      row.append(h('span', { class: 'pill', 'data-state': r.state }, r.state === 'dismissed' && r.reason !== null ? `Dismissed: ${r.reason}` : STATE_WORDS[r.state] ?? r.state));
-      row.append(h('span', {}, KIND_WORDS[r.kind] ?? r.kind));
-      row.append(h('span', {}, `${r.confidence} confidence · n=${r.n}`));
-      b.append(row);
-      b.append(h('span', { class: 'muted' }, `Would change our mind: ${r.changeMind}`));
-      b.addEventListener('click', () => point(pointed === r.anchor ? null : r.anchor));
-      li.append(b);
+      const card = h('article', { class: 'rec', 'data-testid': 'insights-rec', 'data-anchor': r.anchor, 'data-state': r.state, 'aria-current': String(pointed === r.anchor) });
+      const pick = h('button', { type: 'button', class: 'pick', 'data-testid': 'insights-rec-pick', 'aria-pressed': String(pointed === r.anchor) });
+      pick.append(h('span', { class: 't' }, r.title));
+      pick.append(h('span', { class: 'say' }, r.say));
+      pick.append(h('span', { class: 'effect' }, `If done: ${r.effect}`));
+      pick.addEventListener('click', () => point(pointed === r.anchor ? null : r.anchor));
+      card.append(pick);
+      const row = h('div', { class: 'row' });
+      row.append(h('span', { class: 'chip', 'data-confidence': r.confidence.toLowerCase(), 'data-testid': 'insights-confidence' }, r.confidence));
+      row.append(h('span', { class: 'verb' }, r.verb));
+      if (r.state !== 'new') row.append(h('span', { class: 'pill', 'data-state': r.state }, r.state === 'dismissed' ? `Dismissed${r.reason !== null ? `: ${r.reason}` : ''}` : 'Accepted'));
+      card.append(row);
+      card.append(why(r));
+      li.append(card);
       list.append(li);
     }
     recs.append(list);
     if (rev.recommendations.some((r) => r.state === 'new')) recs.append(h('p', { class: 'note' }, 'Pick one to accept or dismiss it.'));
     cols.append(recs);
     box.append(cols);
-    if (rev.regressions.length > 0 || rev.watching.length > 0) {
-      const watch = h('section', { 'data-testid': 'insights-watching', 'aria-label': 'Watching' });
-      watch.append(h('h2', {}, 'Watching'));
+    if (rev.watching.length > 0 || rev.regressions.length > 0) {
+      const watch = h('details', { class: 'why watching', 'data-testid': 'insights-watching' });
+      watch.append(h('summary', {}, `Also watching (${rev.watching.length + rev.regressions.length})`));
       const ul = h('ul', { class: 'plain' });
-      for (const w of rev.watching) ul.append(h('li', {}, `${w.title}. ${w.line}`));
-      for (const line of rev.regressions) if (!rev.recommendations.some((r) => r.line === line)) ul.append(h('li', { class: 'muted' }, line));
+      for (const w of rev.watching) ul.append(h('li', {}, w.title));
+      for (const line of rev.regressions) ul.append(h('li', { class: 'muted' }, line));
       watch.append(ul);
       box.append(watch);
     }
@@ -184,7 +189,7 @@ export function start(): void {
     main.append(drawReview(rev));
     const trends = h('section', { 'data-testid': 'insights-trends', 'aria-label': 'Trends' });
     trends.append(h('h2', {}, 'Trends'));
-    trends.append(h('p', { class: 'note' }, `Each point is one review: the line is its value, the band its 95% interval. Grey points had fewer than ${view.minSample} runs: too few to tell.`));
+    trends.append(h('p', { class: 'note' }, 'One dot per review. The shaded band is the likely range; grey dots had too few runs to tell.'));
     const grid = h('div', { class: 'trends' });
     for (const id of TREND_METRICS) {
       const def = view.metrics.find((m) => m.id === id);
@@ -193,10 +198,11 @@ export function start(): void {
       const last = series.points[series.points.length - 1];
       const card = h('div', { class: 'chart', 'data-testid': 'insights-trend', 'data-metric': id });
       card.append(h('div', { class: 't' }, def.label));
-      card.append(h('div', { class: 'v' }, last === undefined ? 'No reviews yet' : `${formatMetric(def.unit, last.value)} latest (n=${last.n})${last.small ? ' · too few runs to tell' : ''}`));
+      card.append(h('div', { class: 'v' }, TREND_CAPTIONS[id] ?? def.label));
       const svg = trendSvg(series.points, def.unit);
       svg.setAttribute('aria-label', `${def.label} across ${series.points.length} reviews`);
       card.append(svg);
+      card.append(h('div', { class: 'v' }, last === undefined ? 'No reviews yet' : last.small ? `Latest: too few runs to tell (${last.n})` : `Latest: ${formatMetric(def.unit, last.value)}, from ${last.n} runs`));
       grid.append(card);
     }
     trends.append(grid);
@@ -209,7 +215,7 @@ export function start(): void {
         const b = h('button', { type: 'button', 'data-testid': 'insights-history-row', 'aria-current': String(i === shown) });
         b.append(h('span', {}, `${dateWords(r.launchedAt)} · ${r.status === 'completed' ? `${r.totals?.['runs'] ?? 0} runs` : r.status}`));
         const decided = r.recommendations.filter((x) => x.state !== 'new').length;
-        b.append(h('span', { class: 'muted' }, `${r.recommendations.length} recommendations, ${decided} decided`));
+        b.append(h('span', { class: 'muted' }, `${r.recommendations.length} to improve, ${decided} decided`));
         b.addEventListener('click', () => { shown = i; pointed = null; point(null); });
         const li = h('li');
         li.append(b);
@@ -218,6 +224,7 @@ export function start(): void {
       hist.append(ul);
       main.append(hist);
     }
+    if (rev.footnote !== null) main.append(h('p', { class: 'note footnote', 'data-testid': 'insights-footnote' }, rev.footnote));
   }
 
   async function read(): Promise<void> {

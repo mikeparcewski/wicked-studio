@@ -25,3 +25,10 @@
 .wk-schedule-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 0 0 0 28px; }
 .wk-schedule-toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; color: var(--ink-body); }
 .wk-schedule-controls select { width: auto; min-width: 140px; font-size: 14px; padding: 6px 8px; }
+.wk-insights-muted { color: var(--ink-muted); }
+.wk-insights-chips { margin: 0; display: flex; gap: 10px; align-items: center; font-size: 13px; color: var(--ink-body); }
+.wk-insights-chip { display: inline-block; padding: 1px 9px; border-radius: 999px; font-size: 12px; font-weight: 600; background: color-mix(in oklab, var(--ink-muted) 18%, transparent); color: var(--ink-body); }
+.wk-insights-why { font-size: 13px; color: var(--ink-muted); }
+.wk-insights-why summary { cursor: pointer; color: var(--ink-body); }
+.wk-insights-why ul { margin: 8px 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; }
+.wk-insights-why p { margin: 0; }

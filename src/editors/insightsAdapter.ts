@@ -11,6 +11,7 @@
 
 import type { AdapterResult, ArtifactRef, HostAdapter } from './host.js';
 import type { InsightsRecommendation, InsightsResponse, InsightsReview } from '../api/insights.js';
+import { plainImprovement, plainRecommendation, plainText, reviewSentence, withoutInterval } from './insightsWords.js';
 
 export const INSIGHTS_KIND = 'run-insights';
 
@@ -28,17 +29,24 @@ export interface InsightsViewReview {
   totals: Record<string, number> | null;
   improvements: string[];
   regressions: string[];
+  /** The header's one sentence ("15 runs reviewed (Oct 25–27). One thing got better, five could improve."). */
+  sentence: string;
+  /** A footnote, or null (e.g. the numbers are in crew's own words: the seat's reading was not available). */
+  footnote: string | null;
   recommendations: Array<{
     anchor: string;
     kind: InsightsRecommendation['kind'];
+    /** On the card's face: the plain title, ONE sentence of evidence, the expected effect. */
     title: string;
-    line: string;
+    say: string;
+    effect: string;
+    /** Chips: "High" / "Medium" / "Low", and a verb for the action ("Change a setting"). */
+    confidence: string;
+    verb: string;
+    /** Behind "Why we think this". */
+    why: string[];
     runs: string[];
-    n: number;
-    expectedEffect: string;
-    confidence: InsightsRecommendation['confidence'];
     changeMind: string;
-    basis: InsightsRecommendation['basis'];
     state: InsightsRecommendation['state'];
     reason: string | null;
     decidedAt: string | null;
@@ -76,32 +84,35 @@ export function viewOf(r: InsightsResponse): { view: InsightsView; anchors: Map<
     status: rev.status,
     trigger: rev.trigger,
     window: rev.window,
-    summary: rev.summary === null ? null : scrub(rev.summary),
+    summary: rev.summary === null ? null : scrub(plainText(rev.summary)),
+    sentence: reviewSentence(rev),
+    footnote: rev.status === 'completed' && !rev.interpreted ? 'Worded by crew from the numbers: the reviewer\u2019s own reading was not available for this review.' : null,
     interpreted: rev.interpreted,
     error: rev.error === null ? null : scrub(rev.error),
     totals: rev.totals,
-    improvements: rev.improvements.map((f) => scrub(f.line)),
-    regressions: rev.regressions.map((f) => scrub(f.line)),
+    improvements: rev.improvements.map((f) => scrub(plainImprovement(f.line))),
+    regressions: rev.regressions.map((f) => scrub(plainText(withoutInterval(f.line)))),
     recommendations: rev.recommendations.map((rec, j) => {
       const anchor = `v${i}r${j}`;
       anchors.set(anchor, rec);
+      const p = plainRecommendation(rec, r.metrics, rev.interpreted);
       return {
         anchor,
         kind: rec.kind,
-        title: scrub(rec.title),
-        line: scrub(rec.evidence.line),
+        title: scrub(p.title),
+        say: scrub(p.say),
+        effect: scrub(p.effect),
+        confidence: p.confidence,
+        verb: p.verb,
+        why: p.why.map(scrub),
         runs: rec.evidence.runs.map((x) => scrub(x.title)).slice(0, 12),
-        n: rec.evidence.n,
-        expectedEffect: scrub(rec.expectedEffect),
-        confidence: rec.confidence,
-        changeMind: scrub(rec.changeMind),
-        basis: rec.basis,
+        changeMind: scrub(p.changeMind),
         state: rec.state,
         reason: rec.reason === null ? null : scrub(rec.reason),
         decidedAt: rec.decidedAt,
       };
     }),
-    watching: rev.watching.map((w) => ({ title: scrub(w.title), line: scrub(w.line) })),
+    watching: rev.watching.map((w) => ({ title: scrub(plainText(w.title)), line: scrub(plainText(w.line)) })),
   }));
   const withNumbers = [...r.reviews].filter((x) => x.series.length > 0).sort((a, b) => a.window.endMs - b.window.endMs);
   const trends = r.metrics.map((m) => ({

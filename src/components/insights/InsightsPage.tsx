@@ -8,6 +8,7 @@ import { PAGE_NAMES } from '../../board/pageNames.js';
 import { sessionPath } from '../../board/sessionModel.js';
 import { EditorHost } from '../../editors/host.js';
 import { INSIGHTS_KIND, InsightsAdapter } from '../../editors/insightsAdapter.js';
+import { plainRecommendation } from '../../editors/insightsWords.js';
 import { bundleUrl, fetchGrants } from '../../editors/model.js';
 import type { AnchorRef } from '../../editors/protocol.js';
 import { readThemeTokens } from '../../editors/theme.js';
@@ -40,6 +41,7 @@ export function InsightsPage({ navigate }: { navigate: Navigate }): React.ReactE
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
   const [said, setSaid] = useState<string | null>(null);
+  const [metrics, setMetrics] = useState<import('../../api/insights.js').InsightsMetricDef[]>([]);
   const frameBox = useRef<HTMLDivElement | null>(null);
   const hostRef = useRef<EditorHost | null>(null);
   const adapterRef = useRef<InsightsAdapter | null>(null);
@@ -54,6 +56,7 @@ export function InsightsPage({ navigate }: { navigate: Navigate }): React.ReactE
         const editor = editors === null ? null : editorFor(editors, INSIGHTS_KIND, 'full');
         if (editor === null) { setPhase({ kind: 'no-plugin' }); return; }
         adapterRef.current = new InsightsAdapter(data);
+        setMetrics(data.metrics);
         setPhase({ kind: 'ready', editor });
       } catch (e) {
         if (!cancelled) setPhase({ kind: 'error', message: e instanceof Error ? e.message : String(e) });
@@ -192,15 +195,29 @@ export function InsightsPage({ navigate }: { navigate: Navigate }): React.ReactE
           <p className="wk-insights-hint">Pick a recommendation to see its evidence and accept or dismiss it.</p>
         ) : (
           <>
-            <h2 className="wk-insights-title" data-testid="insights-decide-title">{selected.title}</h2>
-            <p className="wk-insights-line">{selected.evidence.line}</p>
-            {selected.evidence.runs.length > 0 && (
-              <ul className="wk-insights-runs" data-testid="insights-decide-runs" aria-label="Runs behind it">
-                {selected.evidence.runs.slice(0, 12).map((r) => (
-                  <li key={r.id}><a href={sessionPath(`run:${r.id}`)} onClick={(e) => { e.preventDefault(); navigate(sessionPath(`run:${r.id}`)); }}>{r.title}</a></li>
-                ))}
-              </ul>
-            )}
+            {(() => {
+              const plain = plainRecommendation(selected, metrics);
+              return (
+                <>
+                  <h2 className="wk-insights-title" data-testid="insights-decide-title">{plain.title}</h2>
+                  <p className="wk-insights-line">{plain.say}</p>
+                  <p className="wk-insights-line wk-insights-muted">If done: {plain.effect}</p>
+                  <p className="wk-insights-chips"><span className="wk-insights-chip" data-confidence={selected.confidence}>{plain.confidence}</span> <span>{plain.verb}</span></p>
+                  <details className="wk-insights-why" data-testid="insights-decide-why">
+                    <summary>Why we think this</summary>
+                    <ul>{plain.why.map((w) => <li key={w}>{w}</li>)}</ul>
+                    {selected.evidence.runs.length > 0 && (
+                      <ul className="wk-insights-runs" data-testid="insights-decide-runs" aria-label="Runs behind it">
+                        {selected.evidence.runs.slice(0, 12).map((r) => (
+                          <li key={r.id}><a href={sessionPath(`run:${r.id}`)} onClick={(e) => { e.preventDefault(); navigate(sessionPath(`run:${r.id}`)); }}>{r.title}</a></li>
+                        ))}
+                      </ul>
+                    )}
+                    <p>What would change our mind: {plain.changeMind}</p>
+                  </details>
+                </>
+              );
+            })()}
             {selected.proposalError !== null && <p className="wk-insights-line">Its proposal was not filed: {selected.proposalError}</p>}
             {selected.state === 'new' ? (
               dismissing ? (
