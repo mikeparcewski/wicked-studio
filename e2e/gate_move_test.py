@@ -137,7 +137,8 @@ with sync_playwright() as p:
 
     def section_home() -> None:
         reset(origin)
-        page.goto(f"{origin}/", wait_until="networkidle")
+        # Home v2: the queue is in Needs you in full (/needs).
+        page.goto(f"{origin}/needs", wait_until="networkidle")
         row = page.locator('[data-testid="need-row"][data-key="gate:r-review"], [data-testid="need-member"][data-key="gate:r-review"]')
         if row.count() == 0 and page.get_by_test_id("need-group-toggle").count() > 0:
             page.get_by_test_id("need-group-toggle").first.click()

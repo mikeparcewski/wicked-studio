@@ -84,7 +84,8 @@ with sync_playwright() as p:
                 status_over={}, extra_frames=[], reset_gate_posts=True)
 
     # ── 1. the Desk's question row opens the thread with the question focused ──────────
-    page.goto(f"{origin}/", wait_until="networkidle")
+    # Home v2: the queue is in Needs you in full (/needs).
+    page.goto(f"{origin}/needs", wait_until="networkidle")
     page.get_by_test_id("needs-you-queue").wait_for(state="visible", timeout=15000)
     set_fixture(origin, extra_frames=[{"type": "elicitationCreated", "session": "e1", "elicitationId": "el-1",
                                        "message": "Which region should the backfill target?", "options": None}])

@@ -99,8 +99,9 @@ with sync_playwright() as p:
     set_fixture(origin, **STATES[0][1])
     page.goto(f"{origin}/", wait_until="networkidle")
     page.locator('[data-testid="desk-card"][data-setup="agents"] [data-testid="desk-setup-act"]').click()
-    page.wait_for_function("() => new URLSearchParams(location.search).get('tab') === 'agents'", timeout=8000)
-    at = page.evaluate("() => new URLSearchParams(location.search).get('at')")
+    # The Agents page is its own address since the ui-v2 sidebar regroup (no /?tab=agents&at=…).
+    page.wait_for_function("() => location.pathname === '/agents'", timeout=8000)
+    at = page.evaluate("() => location.pathname + location.search")
     check("set-up-agents-opens-setup", at == "/agents?setup=1", at=at)
     set_fixture(origin, roster_signed_in={}, memory_total=267, memory_down=False, never_indexed=0, wave1=False)
 

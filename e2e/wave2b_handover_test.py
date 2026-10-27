@@ -156,8 +156,9 @@ with sync_playwright() as p:
     max_lines = 1
     check("strip-is-one-line", lines <= max_lines and strip["height"] <= 44 * max_lines,
           height=strip["height"], chip_tops=tops, lines=lines, max_lines=max_lines)
-    queue_box = page.get_by_test_id("needs-you-queue").bounding_box()
-    first_row = page.locator('[data-testid="needs-you-queue"] [data-testid="need-row"]').first.bounding_box()
+    # Home v2: the landing's one Needs you card stands where the queue stood (the rest is at /needs).
+    queue_box = page.locator('[data-testid="desk-card"]').first.bounding_box()
+    first_row = queue_box
     check("needs-you-above-the-fold",
           queue_box is not None and first_row is not None and first_row["y"] + first_row["height"] <= H,
           queue_top=None if queue_box is None else queue_box["y"],

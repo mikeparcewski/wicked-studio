@@ -270,7 +270,7 @@ with sync_playwright() as p:
         dest["chore_modal"] = page.get_by_test_id("agents-modal").get_attribute("data-agent")
         dest["chore_stays"] = address(page)
         page.keyboard.press("Escape")
-    check("dest", dest["cmdk"] == "/agents" and dest["cmdk_label"].startswith("Desk › Agents") and dest["helpers_tab"] == "/agents"
+    check("dest", dest["cmdk"] == "/agents" and dest["cmdk_label"].startswith("Agents —") and dest["helpers_tab"] == "/agents"
           and dest["unknown_fix"] == "/agents" and dest["unknown_modal"] == 0
           and dest["landing_chores"] == 0
           and dest["chore"] >= 1 and dest.get("chore_modal") == "claude" and ((dest.get("chore_stays") or "").startswith("/agents") or dest.get("chore_stays") == "/?tab=agents"), **dest)

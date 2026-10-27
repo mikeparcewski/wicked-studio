@@ -78,7 +78,8 @@ with sync_playwright() as p:
 
     set_fixture(origin, wave1=True, wave2b=True, simple_gates=["g1", "g2"], gate_now=[],
                 status_over={}, extra_frames=[])
-    page.goto(f"{origin}/", wait_until="networkidle")
+    # Home v2: the queue is in Needs you in full (/needs).
+    page.goto(f"{origin}/needs", wait_until="networkidle")
     page.get_by_test_id("needs-you-queue").wait_for(state="visible", timeout=15000)
     page.evaluate("() => { window.__w2bNoReload = true; }")
 
@@ -160,7 +161,8 @@ with sync_playwright() as p:
 
     def fresh_home() -> None:
         set_fixture(origin, simple_gates=["g1", "g2"], status_over={}, extra_frames=[])
-        page.goto(f"{origin}/", wait_until="networkidle")
+        # Home v2: the queue is in Needs you in full (/needs).
+        page.goto(f"{origin}/needs", wait_until="networkidle")
         page.get_by_test_id("needs-you-queue").wait_for(state="visible", timeout=15000)
         page.wait_for_function(
             "() => !!document.querySelector('[data-testid=\"need-row\"][data-key=\"group:approval\"]')",

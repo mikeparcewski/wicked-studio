@@ -149,7 +149,8 @@ with sync_playwright() as p:
 
     # ── 3. studio#815: the Desk's failure row says the engine's reason ──────────────
     page = new_page(browser)
-    page.goto(f"{origin}/", wait_until="networkidle")
+    # Home v2: every failure row is in Needs you in full (/needs).
+    page.goto(f"{origin}/needs", wait_until="networkidle")
     fail_row = page.locator('[data-key="fail:r-7721-failed"]').first
     try:
         fail_row.wait_for(state="attached", timeout=15000)

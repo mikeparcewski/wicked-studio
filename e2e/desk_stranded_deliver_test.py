@@ -141,7 +141,8 @@ with sync_playwright() as p:
     page.route(f"**/api/v1/runs/{STRAND}/deliver", route_deliver)
 
     # ── 1. the Desk row: an age off the daemon's clock, "Deliver ›" to the thread ───────────────
-    page.goto(f"{origin}/", wait_until="networkidle")
+    # Home v2: the queue is in Needs you in full (/needs).
+    page.goto(f"{origin}/needs", wait_until="networkidle")
     row = page.locator(f'[data-testid="need-row"][data-key="stranded:{STRAND}"]')
     row.wait_for(state="visible", timeout=15000)
     act = row.get_by_test_id("need-act")

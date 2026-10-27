@@ -165,6 +165,8 @@ with sync_playwright() as p:
         check("nothing-launched-by-the-page", launches == [], launches=launches)
 
     def section_triage() -> None:
+        # Home v2: the proposals' row is in Needs you in full (/needs), the landing's "N more waiting".
+        page.goto(f"{origin}/needs", wait_until="networkidle")
         page.wait_for_selector(GROUP, timeout=15000)
         row = page.locator(GROUP)
         page.wait_for_function(
