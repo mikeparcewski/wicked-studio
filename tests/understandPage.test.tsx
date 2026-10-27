@@ -117,6 +117,31 @@ describe('the Understand page', () => {
     expect(row).toHaveAttribute('href', `/s/${req.send!.chatId}`);
   });
 
+  it('crew#1157: Ask runs the analyze workflow on the chosen repositories (the project on its page; the newest repo elsewhere)', async () => {
+    await act(async () => { render(<UnderstandPage project="proj-1" navigate={vi.fn()} now={NOW} compare={null} />); });
+    expect(screen.getByTestId('understand-scope-words')).toHaveTextContent('Asks about this project’s repositories.');
+    fireEvent.change(screen.getByTestId('understand-ask-input'), { target: { value: 'Who calls deliver?' } });
+    mocks.messages.mockRejectedValue(new ApiError(404, 'Not Found'));
+    await act(async () => { fireEvent.submit(screen.getByTestId('understand-ask')); });
+    let req = useAskDock.getState().request!;
+    expect(req.send?.workflow).toBe('analyze');
+    expect(req.send?.repos).toBeUndefined();
+    expect(req.projectId).toBe('proj-1');
+    cleanup();
+    useAskDock.setState({ request: null });
+    await act(async () => { render(<UnderstandPage project={null} navigate={vi.fn()} now={NOW} compare={null} />); });
+    const chips = screen.getAllByTestId('understand-scope-repo');
+    expect(chips.map((c) => c.getAttribute('aria-pressed'))).toEqual(['true', 'false']);
+    fireEvent.click(chips[1]!);
+    expect(screen.getByTestId('understand-scope-words')).toHaveTextContent('Asks about 2 repositories.');
+    fireEvent.change(screen.getByTestId('understand-ask-input'), { target: { value: 'Who calls deliver?' } });
+    await act(async () => { fireEvent.submit(screen.getByTestId('understand-ask')); });
+    req = useAskDock.getState().request!;
+    expect(req.send?.workflow).toBe('analyze');
+    expect(req.send?.repos).toEqual([{ id: 'r1', name: 'wicked-core' }, { id: 'r2', name: 'wicked-crew' }]);
+    expect(req.projectId).toBeNull();
+  });
+
   it('an empty Ask sends nothing', async () => {
     await act(async () => { render(<UnderstandPage project={null} navigate={vi.fn()} now={NOW} compare={null} />); });
     await act(async () => { fireEvent.submit(screen.getByTestId('understand-ask')); });

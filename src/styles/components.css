@@ -696,6 +696,15 @@ select:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-
    it. The dock is its own container, so its header answers to its own width, not the window's. */
 .wk-syschat { display: flex; flex: 1 1 auto; min-width: 0; min-height: 0; height: 100%; position: relative; container-type: inline-size; }
 .wk-syschat > [data-testid="assist-dock"] { flex: 1 1 auto; min-width: 0; container-type: inline-size; }
+/* crew#1157: an analysis chat that could not ground its repository offers to index it. The hover fills
+ * are the Understand page's ink tints (calm-ue.css), so the button reads the same here. */
+.wk-syschat-index {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 0; padding: 10px 12px;
+  border: 1px solid var(--border-subtle, var(--border-strong)); border-radius: var(--radius-lg);
+  color: var(--ink-body); font-size: 14px; line-height: 1.4;
+  --ue-hover-strong: color-mix(in oklab, var(--ink-high) 16%, transparent);
+  --ue-press: color-mix(in oklab, var(--ink-high) 20%, transparent);
+}
 .wk-chathist {
   display: flex; flex-direction: column; width: 186px; flex-shrink: 0; min-height: 0; overflow-y: auto; box-sizing: border-box;
   border-right: 1px solid var(--surface-raised); background: var(--surface-base); padding: 8px 6px;

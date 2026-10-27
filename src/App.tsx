@@ -399,7 +399,12 @@ export function App(): React.ReactElement {
     // new chat under the id the page minted (the same handoff the Desk composer's send takes).
     if (askRequest.send !== undefined) {
       setAskStart(null);
-      handToAsk(askRequest.seedText, { fresh: true, openChatId: askRequest.send.chatId, ...(askRequest.projectId !== null ? { projectId: askRequest.projectId } : {}) });
+      handToAsk(askRequest.seedText, {
+        fresh: true, openChatId: askRequest.send.chatId,
+        ...(askRequest.projectId !== null ? { projectId: askRequest.projectId } : {}),
+        ...(askRequest.send.workflow !== undefined ? { workflow: askRequest.send.workflow } : {}),
+        ...(askRequest.send.repos !== undefined ? { repos: askRequest.send.repos } : {}),
+      });
       return;
     }
     setAskKey((k) => k + 1);
@@ -835,6 +840,8 @@ export function App(): React.ReactElement {
               ...(askHandoff.primary !== undefined ? { sendPrimary: askHandoff.primary } : {}),
               ...(askHandoff.chatId !== undefined ? { sendChatId: askHandoff.chatId } : {}),
               ...(askHandoff.openChatId !== undefined ? { sendOpenChatId: askHandoff.openChatId } : {}),
+              ...(askHandoff.workflow !== undefined ? { sendWorkflow: askHandoff.workflow } : {}),
+              ...(askHandoff.repos !== undefined ? { sendRepos: askHandoff.repos } : {}),
             } : {})}
             {...(askHandoff === null && askStart !== null ? {
               ...(askStart.projectId !== null ? { startProjectId: askStart.projectId } : {}),

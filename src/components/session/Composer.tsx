@@ -44,6 +44,10 @@ export interface ComposerSend {
   /** The chat flow (2026-10-16): a FRESH chat's page — the send opens the chat on the daemon under
    *  this id (the page's own), so the conversation stays on the page it started on. */
   openChatId?: string;
+  /** crew#1157: the read-only workflow the new chat runs (Understand's Ask: `analyze`), and the
+   *  repositories it reads. Sent only when `capabilities.chatWorkflows` names the workflow. */
+  workflow?: string;
+  repos?: Array<{ id: string; name: string }>;
 }
 
 const TERMINAL = new Set(['completed', 'failed', 'cancelled']);

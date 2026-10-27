@@ -11,9 +11,9 @@
   "version": 1,
   "studioVersion": "0.12.3",
   "counts": {
-    "files": 246,
-    "occurrences": 3287,
-    "static": 2801,
+    "files": 247,
+    "occurrences": 3311,
+    "static": 2824,
     "dynamic": 74,
     "computed": 33
   },
@@ -480,6 +480,24 @@
       "testId": "alt-peek",
       "files": [
         "src/components/sheets/AltPeek.tsx"
+      ]
+    },
+    {
+      "testId": "analysis-index-offer",
+      "files": [
+        "src/components/AskDock.tsx"
+      ]
+    },
+    {
+      "testId": "analysis-index-repo",
+      "files": [
+        "src/components/AskDock.tsx"
+      ]
+    },
+    {
+      "testId": "analysis-index-started",
+      "files": [
+        "src/components/AskDock.tsx"
       ]
     },
     {
@@ -4424,6 +4442,18 @@
       ]
     },
     {
+      "testId": "evaluate-drift-line",
+      "files": [
+        "src/components/steer/SystemJudgments.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-drift-more",
+      "files": [
+        "src/components/steer/SystemJudgments.tsx"
+      ]
+    },
+    {
       "testId": "evaluate-filter",
       "files": [
         "src/components/steer/EvaluateSurface.tsx"
@@ -4457,6 +4487,96 @@
       "testId": "evaluate-import",
       "files": [
         "src/components/steer/EvaluateSurface.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-judgment-detail",
+      "files": [
+        "src/components/steer/SystemJudgments.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-judgment-row",
+      "files": [
+        "src/components/steer/SystemJudgments.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-judgment-trend",
+      "files": [
+        "src/components/steer/SystemJudgments.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-judgment-words",
+      "files": [
+        "src/components/steer/SystemJudgments.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-judgments",
+      "files": [
+        "src/components/steer/SystemJudgments.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-judgments-absent",
+      "files": [
+        "src/components/steer/SystemJudgments.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-judgments-baseline",
+      "files": [
+        "src/components/steer/SystemJudgments.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-judgments-check",
+      "files": [
+        "src/components/steer/SystemJudgments.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-judgments-drift",
+      "files": [
+        "src/components/steer/SystemJudgments.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-judgments-empty",
+      "files": [
+        "src/components/steer/SystemJudgments.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-judgments-error",
+      "files": [
+        "src/components/steer/SystemJudgments.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-judgments-run-error",
+      "files": [
+        "src/components/steer/SystemJudgments.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-judgments-scope",
+      "files": [
+        "src/components/steer/SystemJudgments.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-judgments-sentence",
+      "files": [
+        "src/components/steer/SystemJudgments.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-judgments-when",
+      "files": [
+        "src/components/steer/SystemJudgments.tsx"
       ]
     },
     {
@@ -16212,6 +16332,24 @@
     },
     {
       "testId": "understand-recent-empty",
+      "files": [
+        "src/components/desk/UnderstandPage.tsx"
+      ]
+    },
+    {
+      "testId": "understand-scope",
+      "files": [
+        "src/components/desk/UnderstandPage.tsx"
+      ]
+    },
+    {
+      "testId": "understand-scope-repo",
+      "files": [
+        "src/components/desk/UnderstandPage.tsx"
+      ]
+    },
+    {
+      "testId": "understand-scope-words",
       "files": [
         "src/components/desk/UnderstandPage.tsx"
       ]

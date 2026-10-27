@@ -20,12 +20,12 @@ export interface AskRequest {
   fresh: boolean;
   /** {@link askInChat}: `seedText` is the operator's own question, typed and sent from a page's ask box
    *  (Understand): the dock opens a NEW chat under `chatId` and sends it as the first message. */
-  send?: { chatId: string };
+  send?: { chatId: string; workflow?: string; repos?: Array<{ id: string; name: string }> };
 }
 
 interface AskDockStore {
   request: AskRequest | null;
-  open: (opts?: { projectId?: string | null; seedText?: string; fresh?: boolean; send?: { chatId: string } }) => void;
+  open: (opts?: { projectId?: string | null; seedText?: string; fresh?: boolean; send?: AskRequest['send'] }) => void;
 }
 
 export const useAskDock = create<AskDockStore>((set, get) => ({
@@ -44,8 +44,19 @@ export const useAskDock = create<AskDockStore>((set, get) => ({
  * sends `text` as the operator's first message. Only for words the operator wrote and pressed Ask on;
  * everything else seeds the box unsent ({@link openAskDock}).
  */
-export function askInChat(opts: { text: string; chatId: string; projectId?: string | null }): void {
-  useAskDock.getState().open({ fresh: true, projectId: opts.projectId ?? null, seedText: opts.text, send: { chatId: opts.chatId } });
+export function askInChat(opts: {
+  text: string;
+  chatId: string;
+  projectId?: string | null;
+  /** crew#1157: the read-only workflow the chat runs (`analyze`) — a plain chat where crew lacks it. */
+  workflow?: string;
+  /** The repositories the question is about (the chat's scope). */
+  repos?: Array<{ id: string; name: string }>;
+}): void {
+  useAskDock.getState().open({
+    fresh: true, projectId: opts.projectId ?? null, seedText: opts.text,
+    send: { chatId: opts.chatId, ...(opts.workflow !== undefined ? { workflow: opts.workflow } : {}), ...(opts.repos !== undefined && opts.repos.length > 0 ? { repos: opts.repos } : {}) },
+  });
 }
 
 /** Open the Ask dock (a real chat); nothing is sent. */
