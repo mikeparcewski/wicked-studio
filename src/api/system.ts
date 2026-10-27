@@ -39,7 +39,7 @@ export interface WireSystemSnapshot {
   }[];
   /** api-types 0.140.0: work nobody resolved, with what it cost. */
   unresolved?: {
-    id: string; runId: string; title: string; status: string; why: 'failed' | 'superseded' | 'parked'; reason: string;
+    id: string; runId: string; title: string; repo?: string | null; workflow?: string | null; status: string; why: 'failed' | 'superseded' | 'parked'; reason: string;
     supersededBy?: string; since: string | null;
     cost: { costUsd: number | null; tokens: { input: number; output: number } | null; wallMs: number | null };
     actions: ('retry' | 'archive' | 'close_superseded')[];
@@ -118,6 +118,9 @@ export interface SystemAttention {
 export interface SystemUnresolved {
   runId: string;
   title: string;
+  /** The run's repo and workflow (look-alike items are grouped by them); `null` when crew did not say. */
+  repo: string | null;
+  workflow: string | null;
   status: string;
   why: 'failed' | 'superseded' | 'parked';
   reason: string;
@@ -310,6 +313,8 @@ export function normalizeSnapshot(input: unknown): SystemSnapshot {
       return {
         runId: str(u['runId']) ?? '',
         title: str(u['title']) ?? 'A job',
+        repo: str(u['repo']),
+        workflow: str(u['workflow']),
         status: str(u['status']) ?? 'unknown',
         why,
         reason: str(u['reason']) ?? '',

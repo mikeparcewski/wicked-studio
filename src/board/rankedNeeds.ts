@@ -65,13 +65,69 @@ export function waitWords(since: number, now: number): string {
   return `${Math.round(hours / 24)} days`;
 }
 
-/** An unresolved run's cost line ("$0.42 · 1.5k tokens · ran 17 h"); parts not known are left out. */
-export function costWords(u: SystemUnresolved): string {
+const dollars = (usd: number): string => `$${usd >= 100 ? Math.round(usd) : usd.toFixed(2)}`;
+
+/** An unresolved run's cost line ("$0.42 · 1.5k tokens · ran 17 h"): only what is known; `''` when nothing is. */
+export function costWords(u: Pick<SystemUnresolved, 'costUsd' | 'tokens' | 'wallMs'>): string {
   const parts: string[] = [];
-  if (u.costUsd !== null && u.costUsd > 0) parts.push(`$${u.costUsd >= 100 ? Math.round(u.costUsd) : u.costUsd.toFixed(2)}`);
+  if (u.costUsd !== null && u.costUsd > 0) parts.push(dollars(u.costUsd));
   if (u.tokens !== null && u.tokens > 0) parts.push(`${u.tokens >= 1000 ? `${Math.round(u.tokens / 100) / 10}k` : u.tokens} tokens`);
-  if (u.wallMs !== null) parts.push(`ran ${waitWords(0, u.wallMs)}`);
-  return parts.length === 0 ? 'cost not recorded' : parts.join(' · ');
+  if (u.wallMs !== null && u.wallMs > 0) parts.push(`ran ${waitWords(0, u.wallMs)}`);
+  return parts.join(' · ');
+}
+
+/** One line of "To resolve": a single run, or look-alike runs folded into one (same repo, same
+ *  workflow, same reason), so thirteen probes that failed the same way read as one thing. */
+export interface ResolveGroup {
+  key: string;
+  why: SystemUnresolved['why'];
+  items: SystemUnresolved[];
+  /** The group's words ("12 jobs in tiny-math failed 9–10 days ago"); a single run's own title. */
+  title: string;
+  /** The muted line: a single run's reason; a group's summed cost (empty when none is known). */
+  line: string;
+}
+
+/** At most this many lines show before "Show N more". */
+export const RESOLVE_SHOWN = 5;
+
+const DAY = 86_400_000;
+
+/** "9–10 days ago", "10 days ago", "today": how long ago a group's runs stopped. */
+export function agoRange(sinces: readonly (number | null)[], now: number): string {
+  const days = sinces.filter((x): x is number => x !== null).map((t) => Math.max(0, Math.round((now - t) / DAY)));
+  if (days.length === 0) return '';
+  const lo = Math.min(...days);
+  const hi = Math.max(...days);
+  const word = (d: number): string => (d === 0 ? 'today' : d === 1 ? 'yesterday' : `${d} days ago`);
+  if (lo === hi) return word(lo);
+  return lo === 0 ? `in the last ${hi} days` : `${lo}–${hi} days ago`;
+}
+
+/** Fold look-alike unresolved runs, crew's order kept (a group sits where its first member was). */
+export function resolveGroups(list: readonly SystemUnresolved[], now: number): ResolveGroup[] {
+  const by = new Map<string, SystemUnresolved[]>();
+  for (const u of list) {
+    const key = `${u.why}|${u.repo ?? ''}|${u.why === 'failed' ? (u.workflow ?? '') : ''}`;
+    const g = by.get(key);
+    if (g === undefined) by.set(key, [u]); else g.push(u);
+  }
+  return [...by.entries()].map(([key, items]) => {
+    const one = items[0]!;
+    if (items.length === 1) return { key, why: one.why, items, title: one.title, line: [one.reason, costWords(one)].filter((x) => x !== '').join(' · ') };
+    const where = one.repo !== null ? ` in ${one.repo}` : '';
+    const when = agoRange(items.map((u) => u.since), now);
+    const title = one.why === 'failed'
+      ? `${items.length} jobs${where} failed${when !== '' ? ` ${when}` : ''}`
+      : one.why === 'superseded'
+        ? `${items.length} jobs${where} were replaced by later runs`
+        : `${items.length} answered questions${where} parked for over a day`;
+    const usd = items.reduce((s, u) => s + (u.costUsd ?? 0), 0);
+    const tokens = items.reduce((s, u) => s + (u.tokens ?? 0), 0);
+    const line = costWords({ costUsd: usd > 0 ? usd : null, tokens: tokens > 0 ? tokens : null, wallMs: null });
+    const what = one.why === 'failed' ? 'Never retried or archived' : one.why === 'superseded' ? 'A later run did the work' : 'Answered; nothing waits on them';
+    return { key, why: one.why, items, title, line: line === '' ? what : `${what} · ${line} spent` };
+  });
 }
 
 /** Why it is unresolved, in one word for the row's tag. */

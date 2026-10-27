@@ -2,8 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { normalizeSnapshot, type SystemSnapshot } from '../src/api/system.js';
 import { nerveState, toResolveWords } from '../src/board/nerveCenter.js';
-import { rankedSections, rankedSentence } from '../src/board/rankedNeeds.js';
-import { NeedsRanked } from '../src/components/desk/NeedsRanked.js';
+import { agoRange, costWords, rankedSections, rankedSentence, resolveGroups } from '../src/board/rankedNeeds.js';
+import { namedInStuck, NeedsRanked } from '../src/components/desk/NeedsRanked.js';
 import { useNeedsNumber } from '../src/hooks/useRankedNeeds.js';
 import { useSystemStore, resetSystemStore } from '../src/store/systemSnapshot.js';
 
@@ -40,8 +40,8 @@ const WIRE = {
     { id: 'run:68c26704', severity: 'red', source: 'run', kind: 'prevents', title: 'Where is wicked-core riskiest to change', reason: 'held at an escalation gate (unit 1)', remedy: 'Open the gate and decide.', blocks: 1, blockedRunIds: ['68c26704'], waitedSince: iso(NOW - 0.1 * H), unitsLeft: 1, target: run('68c26704', 1), action: { kind: 'open_gate', label: 'Open the gate' } },
   ],
   unresolved: [
-    { id: 'unresolved:7f4e149f', runId: '7f4e149f', title: 'Build an editor plugin titled "Changelog entry"', status: 'awaiting_human', why: 'superseded', reason: 'still open at its deliver gate; superseded by 6f11390c, which delivered', supersededBy: '6f11390c', since: iso(NOW - 15.9 * H), cost: { costUsd: 1.25, tokens: { input: 1000, output: 500 }, wallMs: 17 * H }, actions: ['close_superseded', 'archive'] },
-    { id: 'unresolved:1ff74953', runId: '1ff74953', title: 'Read src/math.js in this repo with your tools', status: 'failed', why: 'failed', reason: 'failed 10 day(s) ago and was never retried or archived', since: iso(NOW - 244 * H), cost: { costUsd: 0.25, tokens: null, wallMs: 60_000 }, actions: ['retry', 'archive'] },
+    { id: 'unresolved:7f4e149f', runId: '7f4e149f', repo: 'wicked-e2e-j6-plugins', workflow: 'editor-plugin', title: 'Build an editor plugin titled "Changelog entry"', status: 'awaiting_human', why: 'superseded', reason: 'still open at its deliver gate; superseded by 6f11390c, which delivered', supersededBy: '6f11390c', since: iso(NOW - 15.9 * H), cost: { costUsd: 1.25, tokens: { input: 1000, output: 500 }, wallMs: 17 * H }, actions: ['close_superseded', 'archive'] },
+    { id: 'unresolved:1ff74953', runId: '1ff74953', repo: 'tiny-math', workflow: 'ask/adhoc', title: 'Read src/math.js in this repo with your tools', status: 'failed', why: 'failed', reason: 'failed 10 day(s) ago and was never retried or archived', since: iso(NOW - 244 * H), cost: { costUsd: 0.25, tokens: null, wallMs: 60_000 }, actions: ['retry', 'archive'] },
   ],
   unresolvedSpend: { costUsd: 1.5, tokens: { input: 1000, output: 500 }, costKnown: 2 },
   toReview: 30,
@@ -155,3 +155,65 @@ describe('/needs against a ranked crew (the approved mockup)', () => {
     expect(mocks.resolve).toHaveBeenCalledWith('7f4e149f', { action: 'superseded', by: '6f11390c' });
   });
 });
+
+describe('To resolve stays calm (coordinator review of r5)', () => {
+  const u = (runId: string, over: Record<string, unknown> = {}) => ({ id: `unresolved:${runId}`, runId, title: `Read src/math.js ${runId}`, repo: 'tiny-math', workflow: 'ask/adhoc', status: 'failed', why: 'failed', reason: 'failed 10 days ago and was never retried or archived', since: iso(NOW - 10 * 24 * H), cost: { costUsd: null, tokens: null, wallMs: null }, actions: ['retry', 'archive'], ...over });
+  const probes = Array.from({ length: 12 }, (_, i) => u(`p${i}`, i === 0 ? { since: iso(NOW - 9 * 24 * H) } : {}));
+  const replaced = ['a', 'b', 'c'].map((id) => u(`s-${id}`, { repo: 'wicked-e2e-j6-plugins', workflow: 'editor-plugin', why: 'superseded', supersededBy: `new-${id}`, actions: ['close_superseded', 'archive'], reason: 'superseded' }));
+  const others = ['x1', 'x2', 'x3', 'x4'].map((id) => u(id, { repo: `repo-${id}` }));
+  const snapshot = (): SystemSnapshot => ({ ...normalizeSnapshot({ ...WIRE, unresolved: [...probes, ...replaced, ...others] }), ranked: true });
+
+  it('look-alike runs fold into one line in words, with no "cost not recorded" anywhere', () => {
+    const groups = resolveGroups(snapshot().unresolved ?? [], NOW);
+    expect(groups.map((g) => [g.title, g.items.length])).toEqual([
+      ['12 jobs in tiny-math failed 9–10 days ago', 12],
+      ['3 jobs in wicked-e2e-j6-plugins were replaced by later runs', 3],
+      ['Read src/math.js x1', 1], ['Read src/math.js x2', 1], ['Read src/math.js x3', 1], ['Read src/math.js x4', 1],
+    ]);
+    expect(costWords({ costUsd: null, tokens: null, wallMs: null })).toBe('');
+    expect(agoRange([NOW - 2 * 24 * H, NOW - 2 * 24 * H], NOW)).toBe('2 days ago');
+    render(<NeedsRanked snapshot={snapshot()} runs={[]} needRows={[]} navigate={vi.fn()} now={NOW} />);
+    expect(screen.getByTestId('needs-resolve').textContent).not.toMatch(/not recorded|\(s\)/);
+  });
+
+  it('at most five lines, then "Show N more"; a group expands to its runs', () => {
+    render(<NeedsRanked snapshot={snapshot()} runs={[]} needRows={[]} navigate={vi.fn()} now={NOW} />);
+    const section = screen.getByTestId('needs-resolve');
+    expect(within(section).getAllByTestId('needs-resolve-group')).toHaveLength(2);
+    expect(within(section).getAllByTestId('needs-resolve-row')).toHaveLength(3);
+    fireEvent.click(within(section).getByTestId('needs-resolve-more'));
+    expect(within(section).getAllByTestId('needs-resolve-row')).toHaveLength(4);
+    fireEvent.click(within(section).getAllByTestId('needs-resolve-group-toggle')[0]!);
+    expect(within(section).getAllByTestId('needs-resolve-row')).toHaveLength(16);
+  });
+
+  it('one bulk move per group: archive all with a reason (required), close all as superseded each by its own successor', async () => {
+    mocks.resolve.mockResolvedValue({});
+    render(<NeedsRanked snapshot={snapshot()} runs={[]} needRows={[]} navigate={vi.fn()} now={NOW} />);
+    const [failedGroup, replacedGroup] = screen.getAllByTestId('needs-resolve-group');
+    fireEvent.click(within(replacedGroup!).getByTestId('needs-resolve-group-superseded'));
+    await vi.waitFor(() => expect(mocks.resolve).toHaveBeenCalledTimes(3));
+    expect(mocks.resolve.mock.calls.map((c) => c[1])).toEqual([{ action: 'superseded', by: 'new-a' }, { action: 'superseded', by: 'new-b' }, { action: 'superseded', by: 'new-c' }]);
+    mocks.resolve.mockClear();
+    fireEvent.click(within(failedGroup!).getByTestId('needs-resolve-group-archive'));
+    const confirm = within(failedGroup!).getByTestId('needs-resolve-archive-confirm') as HTMLButtonElement;
+    expect(confirm.disabled).toBe(true);
+    fireEvent.change(within(failedGroup!).getByTestId('needs-resolve-reason'), { target: { value: 'routing probes, fixed since' } });
+    fireEvent.click(confirm);
+    await vi.waitFor(() => expect(mocks.resolve).toHaveBeenCalledTimes(12));
+    expect(mocks.resolve.mock.calls[0]![1]).toEqual({ action: 'archive', reason: 'routing probes, fixed since' });
+  });
+
+  it('Set up is calm rows; a helper a stuck item already names is not repeated there', () => {
+    const s = ranked();
+    expect(namedInStuck('pi', s.attention)).toBe(true);
+    expect(namedInStuck('claude', s.attention)).toBe(false);
+    const act = vi.fn();
+    render(<NeedsRanked snapshot={s} runs={[]} needRows={[]} navigate={vi.fn()} now={NOW} setup={[{ key: 'memory-empty', title: 'Your memory is empty', line: 'Index a repository', label: 'Build memory', onAct: act }]} />);
+    const rows = within(screen.getByTestId('needs-setup')).getAllByTestId('needs-setup-row');
+    expect(rows.map((r) => r.getAttribute('data-key'))).toEqual(['memory-empty']);
+    fireEvent.click(within(rows[0]!).getByTestId('needs-setup-act'));
+    expect(act).toHaveBeenCalled();
+  });
+});
+

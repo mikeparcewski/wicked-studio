@@ -12,8 +12,8 @@
   "studioVersion": "0.12.3",
   "counts": {
     "files": 246,
-    "occurrences": 3277,
-    "static": 2793,
+    "occurrences": 3287,
+    "static": 2801,
     "dynamic": 74,
     "computed": 33
   },
@@ -8284,6 +8284,36 @@
       ]
     },
     {
+      "testId": "needs-resolve-group",
+      "files": [
+        "src/components/desk/NeedsRanked.tsx"
+      ]
+    },
+    {
+      "testId": "needs-resolve-group-archive",
+      "files": [
+        "src/components/desk/NeedsRanked.tsx"
+      ]
+    },
+    {
+      "testId": "needs-resolve-group-superseded",
+      "files": [
+        "src/components/desk/NeedsRanked.tsx"
+      ]
+    },
+    {
+      "testId": "needs-resolve-group-toggle",
+      "files": [
+        "src/components/desk/NeedsRanked.tsx"
+      ]
+    },
+    {
+      "testId": "needs-resolve-more",
+      "files": [
+        "src/components/desk/NeedsRanked.tsx"
+      ]
+    },
+    {
       "testId": "needs-resolve-reason",
       "files": [
         "src/components/desk/NeedsRanked.tsx"
@@ -8321,6 +8351,24 @@
     },
     {
       "testId": "needs-sentence",
+      "files": [
+        "src/components/desk/NeedsRanked.tsx"
+      ]
+    },
+    {
+      "testId": "needs-setup",
+      "files": [
+        "src/components/desk/NeedsRanked.tsx"
+      ]
+    },
+    {
+      "testId": "needs-setup-act",
+      "files": [
+        "src/components/desk/NeedsRanked.tsx"
+      ]
+    },
+    {
+      "testId": "needs-setup-row",
       "files": [
         "src/components/desk/NeedsRanked.tsx"
       ]
