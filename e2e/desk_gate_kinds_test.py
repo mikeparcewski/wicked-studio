@@ -4,8 +4,8 @@ desk_gate_kinds_test.py — every gate kind answerable in the session thread (S1
 on the Desk at 1440x700 against the in-process fixture:
 
   1. DEF GATE IN THREAD: navigating to a run's session thread at #gate
-     renders `session-gate-row` with the 4-verb layout (Approve / Approve and steer /
-     Send back / Stop); `session-gate-question` shows the gate prompt.
+     renders `session-gate-row` (in the decision dock) with its verbs (Approve on the face; Approve and
+     steer / Stop under Other options); `session-gate-question` shows the gate prompt.
   2. STEER OPENS NOTE (no send yet): clicking "Approve and steer" opens the note field
      without sending.
   3. APPROVE SENDS: clicking Approve submits, the row transitions to the chosen state;
@@ -45,7 +45,7 @@ import os
 import sys
 import urllib.request
 
-from uxfix_fixture import REPO, ensure_build, set_fixture, start_server
+from uxfix_fixture import REPO, click_gate_choice, ensure_build, gate_choice, open_other_options, open_proposal_more_about, set_fixture, start_server
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4358"))
 W, H = 1440, 700
@@ -118,7 +118,7 @@ with sync_playwright() as p:
     page.screenshot(path=str(SHOTS / "desk-gate-kinds-def.png"))
 
     # ── 2. STEER OPENS NOTE (no send yet) ───────────────────────────────────
-    steer = page.get_by_test_id("session-gate-choice").nth(1)  # Approve and steer
+    steer = gate_choice(page, "steer")  # Approve and steer: under Other options (ui-v2 gate)
     steer.click()
     try:
         page.get_by_test_id("session-gate-note").wait_for(state="visible", timeout=5_000)
@@ -142,7 +142,7 @@ with sync_playwright() as p:
     page.goto(f"{origin}/s/run%3Ar-home-gate#gate", wait_until="networkidle")
     page.get_by_test_id("session-gate-row").wait_for(state="visible", timeout=15_000)
 
-    approve = page.get_by_test_id("session-gate-choice").nth(0)  # Approve
+    approve = gate_choice(page, "approve")  # Approve: the primary
     approve.click()
     try:
         page.get_by_test_id("session-gate-chosen").wait_for(state="visible", timeout=10_000)
@@ -166,7 +166,7 @@ with sync_playwright() as p:
     page.reload(wait_until="networkidle")
     page.get_by_test_id("session-gate-row").wait_for(state="visible", timeout=15_000)
 
-    page.get_by_test_id("session-gate-choice").nth(0).click()  # Approve
+    click_gate_choice(page, "approve")  # Approve: the primary
     try:
         page.get_by_test_id("session-gate-chosen").wait_for(state="visible", timeout=10_000)
     except Exception:
@@ -253,7 +253,7 @@ with sync_playwright() as p:
     page.screenshot(path=str(SHOTS / "desk-gate-kinds-escalation.png"))
 
     # Click Send back → opens note
-    send_back = page.locator("[data-choice-key='send-back']")
+    send_back = gate_choice(page, "send-back")  # under Other options unless it leads
     send_back.click()
     try:
         page.get_by_test_id("session-gate-note").wait_for(state="visible", timeout=5_000)
@@ -302,6 +302,8 @@ with sync_playwright() as p:
           why="deliver gate must show ProposalCard, not session-gate-row")
 
     # Open the delivery details and assert diffstat + branch from GET /runs/r-trust-deliver/diff
+    # ui-v2 gate: Delivery details are under the card's "More about this".
+    open_proposal_more_about(page)
     detail = page.get_by_test_id("session-proposal-deliver-detail")
     if detail.count() > 0:
         detail.locator("summary").click()
@@ -417,7 +419,7 @@ with sync_playwright() as p:
         page.reload(wait_until="networkidle")
         page.get_by_test_id("session-gate-row").wait_for(state="visible", timeout=15_000)
         reassign_btn = page.locator("[data-choice-key^='reassign:']").first
-        reassign_btn.click()
+        click_gate_choice(page, reassign_btn.get_attribute("data-choice-key"))
         try:
             page.get_by_test_id("session-gate-chosen").wait_for(state="visible", timeout=10_000)
         except Exception:
@@ -432,7 +434,7 @@ with sync_playwright() as p:
     set_fixture(origin, seat_escalation=True, reset_gate_posts=True)
     page.reload(wait_until="networkidle")
     page.get_by_test_id("session-gate-row").wait_for(state="visible", timeout=15_000)
-    page.locator("[data-choice-key='stop']").click()
+    click_gate_choice(page, "stop")
     try:
         page.get_by_test_id("session-gate-chosen").wait_for(state="visible", timeout=10_000)
     except Exception:
@@ -451,7 +453,7 @@ with sync_playwright() as p:
     set_fixture(origin, seat_escalation=True, reset_gate_posts=True)
     page.reload(wait_until="networkidle")
     page.get_by_test_id("session-gate-row").wait_for(state="visible", timeout=15_000)
-    steer_btn = page.locator("[data-choice-key='steer']")
+    steer_btn = gate_choice(page, "steer")
     steer_btn.click()
     try:
         page.get_by_test_id("session-gate-note").wait_for(state="visible", timeout=5_000)
@@ -484,7 +486,7 @@ with sync_playwright() as p:
     page.get_by_test_id("session-gate-row").wait_for(state="visible", timeout=15_000)
 
     # Click Approve — the fixture will return 409 gate_changed for the first POST
-    page.get_by_test_id("session-gate-choice").nth(0).click()  # Approve
+    click_gate_choice(page, "approve")  # Approve: the primary
     try:
         # After 409, the gate row should show the error (not chosen state)
         page.get_by_test_id("session-gate-error").wait_for(state="visible", timeout=12_000)
@@ -531,12 +533,8 @@ with sync_playwright() as p:
 
     # Locate the "extend" offer choice (inline — it's the second of four inline choices)
     extend_btn = page.locator('[data-choice-key="offer:extend"]').first
-    if extend_btn.count() == 0:
-        # Also open overflow in case layout shifted
-        overflow_el = page.query_selector("[data-testid='session-gate-row'] details.wk-session-gate-overflow")
-        if overflow_el is not None:
-            overflow_el.click()
-        extend_btn = page.locator('[data-choice-key="offer:extend"]').first
+    if extend_btn.count() > 0 and not extend_btn.is_visible():
+        open_other_options(page)  # ui-v2 gate: the offer arms are Other options unless crew suggests one
     page.screenshot(path=str(SHOTS / "desk-gate-kinds-timeout-before-check.png"))
     all_timeout_keys = [el.get_attribute("data-choice-key") for el in page.query_selector_all("[data-testid='session-gate-choice']")]
     check("timeout-has-extend-offer", extend_btn.count() > 0,
@@ -584,11 +582,8 @@ with sync_playwright() as p:
 
     # Locate the accept_suggestion offer choice
     suggest_btn = page.locator('[data-choice-key="offer:accept_suggestion"]').first
-    if suggest_btn.count() == 0:
-        overflow_el = page.query_selector("[data-testid='session-gate-row'] details.wk-session-gate-overflow")
-        if overflow_el is not None:
-            overflow_el.click()
-        suggest_btn = page.locator('[data-choice-key="offer:accept_suggestion"]').first
+    if suggest_btn.count() > 0 and not suggest_btn.is_visible():
+        open_other_options(page)  # ui-v2 gate: the offer arms are Other options unless crew suggests one
     all_suggest_keys = [el.get_attribute("data-choice-key") for el in page.query_selector_all("[data-testid='session-gate-choice']")]
     check("suggest-has-accept-offer", suggest_btn.count() > 0,
           why="r-suggest restored-tree gate must show accept_suggestion offer (evaluator's edit pinned)",
@@ -634,7 +629,10 @@ with sync_playwright() as p:
     check("denied-approve-suggested", denied_approve.get_attribute("data-recommended") == "true",
           got=denied_approve.get_attribute("data-recommended"), why="floor PASS + judge PASS ⇒ the re-run is the suggested arm")
     denied_q = page.get_by_test_id("session-gate-question").inner_text()
-    check("denied-question", denied_q == "A Bash call was denied — how should the step go on?", got=denied_q)
+    # (live nit 2026-10-27) The headline is the plain cause, the action is on the button ("Approve and re-run this step").
+    denied_label = (denied_approve.text_content() or "").strip()
+    check("denied-question", denied_q == "A Bash call was blocked by the job’s rules" and denied_label.startswith("Approve and re-run this step"),
+          got=denied_q, label=denied_label)
     page.screenshot(path=str(SHOTS / "desk-gate-kinds-denied.png"))
 
     denied_approve.click()
@@ -685,7 +683,7 @@ with sync_playwright() as p:
     page.screenshot(path=str(SHOTS / "desk-gate-kinds-retry.png"))
 
     # Retry → {approve:true, ord}, no action
-    page.locator("[data-testid='session-gate-choice'][data-choice-key='retry']").click()
+    click_gate_choice(page, "retry")
     chosen_then_wait("retry-retry-chosen")
     retry_posts = gate_posts("r-retry")
     retry_body = retry_posts[-1].get("body", {}) if retry_posts else {}
@@ -695,7 +693,7 @@ with sync_playwright() as p:
 
     # Reassign → POST /runs/r-retry/reassign {cli: claude}; no gate POST
     open_retry()
-    page.locator("[data-testid='session-gate-choice'][data-choice-key='reassign:claude']").click()
+    click_gate_choice(page, "reassign:claude")
     chosen_then_wait("retry-reassign-chosen")
     retry_reassigns = reassign_posts("r-retry")
     check("retry-reassign-post",
@@ -705,7 +703,7 @@ with sync_playwright() as p:
 
     # Stop → {approve:false, ord}
     open_retry()
-    page.locator("[data-testid='session-gate-choice'][data-choice-key='stop']").click()
+    click_gate_choice(page, "stop")
     chosen_then_wait("retry-stop-chosen")
     stop_posts = gate_posts("r-retry")
     stop_body = stop_posts[-1].get("body", {}) if stop_posts else {}
@@ -735,7 +733,7 @@ with sync_playwright() as p:
     check("wire433-choices", len(w433_keys) > 0 and w433_keys[0] == "retry" and w433_keys[-1] == "stop"
           and "send-back" not in w433_keys, got=w433_keys)
     page.screenshot(path=str(SHOTS / "desk-gate-kinds-wire433.png"))
-    page.locator("[data-testid='session-gate-choice'][data-choice-key='retry']").click()
+    click_gate_choice(page, "retry")
     chosen_then_wait("wire433-retry-chosen")
     w433_posts = gate_posts("r-api")
     w433_body = w433_posts[-1].get("body", {}) if w433_posts else {}

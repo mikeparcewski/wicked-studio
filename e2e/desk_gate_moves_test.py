@@ -24,7 +24,7 @@ import os
 import sys
 import urllib.request
 
-from uxfix_fixture import REPO, ensure_build, set_fixture, start_server
+from uxfix_fixture import REPO, ensure_build, gate_choice, open_other_options, set_fixture, start_server
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4358"))
 W, H = 1440, 700
@@ -78,8 +78,8 @@ with sync_playwright() as p:
             page.screenshot(path=str(SHOTS / "desk-gate-moves-no-reassign.png"))
             fail("reassign-offered", {"why": "no Reassign to Claude choice on the session gate row",
                                       "text": page.evaluate("() => document.body.innerText.slice(0, 600)")})
-        if not row.is_visible():
-            page.locator(".wk-session-gate-overflow-summary").click()
+        # The reassign is the gate's primary when it leads, else one of its Other options (ui-v2 gate).
+        gate_choice(page, "reassign:claude")
 
     # ── 1. one move ──────────────────────────────────────────────────────────────
     set_fixture(origin, seat_escalation=True, reassign_refuse=0, reset_gate_posts=True)
@@ -103,7 +103,7 @@ with sync_playwright() as p:
     page.screenshot(path=str(SHOTS / "desk-gate-moves-refused.png"))
     # The row keeps the refusal in view, in the daemon's words, with the move still offered.
     if page.locator(REASSIGN).count() and not page.locator(REASSIGN).is_visible():
-        page.locator(".wk-session-gate-overflow-summary").click()
+        open_other_options(page)
     check("refused-move-in-view", err is not None and "not in this run" in err
           and page.locator(REASSIGN).count() == 1 and posts("gate") == [], error=err, gate=posts("gate"))
     page.locator(REASSIGN).click()

@@ -22,7 +22,7 @@ import sys
 import time
 import urllib.request
 
-from uxfix_fixture import (DEFAULT_APPEARANCE, HIDE_GATE_TOASTS, REPO, ensure_build,
+from uxfix_fixture import (DEFAULT_APPEARANCE, HIDE_GATE_TOASTS, REPO, choice_consequence, ensure_build, gate_choice,
                            set_fixture, start_server)
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4473"))
@@ -93,16 +93,15 @@ with sync_playwright() as p:
         set_fixture(origin, **{"floor_override": True, "reset_gate_posts": True, "appearance": {**DEFAULT_APPEARANCE}})
         page.goto(f"{origin}/s/run%3A{RID}", wait_until="networkidle")
         page.get_by_test_id("session-gate-row").wait_for(state="visible", timeout=15000)
-        own = page.locator(CHOICE.format("operator-judgment"))
-        own.wait_for(state="visible", timeout=10000)
-        # It renders: inline, named for what it is, Stop still last.
+        # ui-v2 gate: it is one of the gate's Other options (unless crew suggests it): open them, as the operator does.
+        own = gate_choice(page, "operator-judgment")
+        # It renders: in the gate's choices, named for what it is, Stop still last.
         ks = keys()
         check("renders-inline", "operator-judgment" in ks and ks[-1] == "stop", keys=ks, labels=labels())
         check("named", (own.text_content() or "").startswith("Approve as your own judgment"), label=own.text_content())
-        # Its hover says the consequence first.
-        own.hover()
-        page.wait_for_function("() => document.querySelector('[data-testid=\"session-gate-choice-consequence\"]')?.dataset.choiceKey === 'operator-judgment'", timeout=5000)
-        peek = (page.get_by_test_id("session-gate-choice-consequence").text_content() or "").strip()
+        # It says the consequence before it is taken: its menu item's second line (the hover line under the buttons
+        # stays quiet while Other options is open), or the line above the buttons when it is the face's one move.
+        peek = choice_consequence(page, "operator-judgment")
         check("consequence-first-on-hover", peek.startswith(CONSEQUENCE), peek=peek)
         page.screenshot(path=str(SHOTS / "floor-override-desk-card.png"))
         # The rationale is required: the box opens empty, the consequence above it, Send off while blank.

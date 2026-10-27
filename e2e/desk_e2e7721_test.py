@@ -24,7 +24,7 @@ import os
 import sys
 import urllib.request
 
-from uxfix_fixture import HIDE_GATE_TOASTS, REPO, ensure_build, set_fixture, start_server
+from uxfix_fixture import HIDE_GATE_TOASTS, REPO, click_gate_choice, ensure_build, open_tech_details, set_fixture, start_server
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4483"))
 W, H = 1440, 700
@@ -81,8 +81,8 @@ def new_page(browser):
 
 
 def open_details(page) -> None:
-    """Open every Technical details / overflow disclosure in the gate row so their text is readable."""
-    page.evaluate("""() => document.querySelectorAll('[data-testid="session-gate-row"] details').forEach((d) => { d.open = true; })""")
+    """Open the gate's More about this and its Technical details (the operator's two clicks) so their text is readable."""
+    open_tech_details(page)
 
 
 with sync_playwright() as p:
@@ -109,10 +109,8 @@ with sync_playwright() as p:
 
     # A reassign crew refuses (409, the gate still open) is said on the row.
     set_fixture(origin, e2e7721_reassign_409=True, reset_gate_posts=True)
-    other = page.locator('[data-testid="session-gate-choice"][data-choice-key="reassign:claude"]')
-    if not other.is_visible():
-        page.locator(".wk-session-gate-overflow-summary").first.click()
-    other.click()
+    # The reassign is the gate's primary when crew suggests it, else one of its Other options.
+    click_gate_choice(page, "reassign:claude")
     try:
         page.get_by_test_id("session-gate-error").first.wait_for(state="visible", timeout=25000)
     except Exception:

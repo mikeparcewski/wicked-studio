@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """
 escalation_arms_test.py — batch W2-S3: the gate's escalation arms, its source line and the
-work under review, at 1440x700. S16a-2a: answered in the session thread's row (/s/run%3A<id>); each
-arm's consequence is the line under the row's choices while the arm is under the pointer.
+work under review, at 1440x700. S16a-2a: answered in the session thread's row (/s/run%3A<id>), in the decision
+dock since ui-v2; each arm says its consequence before it is taken — the face's one button on the line above the
+buttons, every other arm as its own second line under Other options.
 
   timeout  r-timeout, paused at a repo-checks floor that did not finish (the test check hit
            its bound): the card offers "Re-run the checks with twice the time" (extend), "Re-run with
@@ -27,8 +28,8 @@ import sys
 import time
 import urllib.request
 
-from uxfix_fixture import (DEFAULT_APPEARANCE, HIDE_GATE_TOASTS, REPO, ensure_build,
-                           set_fixture, start_server)
+from uxfix_fixture import (DEFAULT_APPEARANCE, HIDE_GATE_TOASTS, REPO, choice_consequence, click_gate_choice,
+                           ensure_build, open_tech_details, set_fixture, start_server)
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4472"))
 W, H = 1440, 700
@@ -104,34 +105,35 @@ with sync_playwright() as p:
         return page.evaluate("""() => [...document.querySelectorAll('[data-testid="session-gate-choice"]')].map(e => e.dataset.choiceKey)""")
 
     def peek(key: str) -> str:
-        # S16a-2a: the choice under the pointer says what it does, on the line under the row's choices
-        # (below, so the line never moves the button the pointer is on).
-        if page.locator(f'.wk-session-gate-overflow {CHOICE.format(key)}').count() > 0:
-            ov = page.locator(".wk-session-gate-overflow")
-            if ov.get_attribute("open") is None:
-                page.locator(".wk-session-gate-overflow-summary").click()
-        page.locator(CHOICE.format(key)).hover()
-        page.wait_for_function("(k) => document.querySelector('[data-testid=\"session-gate-choice-consequence\"]')?.dataset.choiceKey === k", arg=key, timeout=5000)
-        return text(page, "session-gate-choice-consequence")
+        # ui-v2 gate: a choice says what it does BEFORE it is taken — on its menu item, or above the face's buttons.
+        return choice_consequence(page, key)
+
+    def consequence_on(key: str) -> bool:
+        """The consequence is ON the choice (its menu item's second line) or above the face's buttons — never a line
+        that appears under the buttons and moves them."""
+        loc = page.locator(CHOICE.format(key)).first
+        if loc.get_attribute("role") == "menuitem":
+            return loc.is_visible() and (loc.get_attribute("data-sub") or "") != ""
+        return page.evaluate(ABOVE_SEL, ['[data-testid="session-gate-consequence"]', '[data-testid="session-gate-choices"]'])
 
     def section_timeout() -> None:
         # S16a-2a: the gate is answered in the session thread's row (/s/run%3Ar-timeout).
         reset(origin)
         page.goto(f"{origin}/s/run%3Ar-timeout", wait_until="networkidle")
         page.get_by_test_id("session-gate-row").wait_for(state="visible", timeout=15000)
-        page.locator(CHOICE.format("offer:extend")).wait_for(state="visible", timeout=10000)
+        page.locator(CHOICE.format("offer:extend")).wait_for(state="attached", timeout=10000)
         arms = [k for k in keys() if k.startswith("offer:")]
         check("three-timeout-arms", arms == ["offer:extend", "offer:targeted", "offer:accept_partial"], arms=arms)
         for a in ("extend", "targeted", "accept_partial"):
             line = peek(f"offer:{a}")
-            check(f"consequence-above-{a}", line != "" and page.evaluate(ABOVE_SEL, ['[data-testid="session-gate-choices"]', '[data-testid="session-gate-choice-consequence"]']), line=line)
+            check(f"consequence-above-{a}", line != "" and consequence_on(f"offer:{a}"), line=line)
         waived = peek("offer:accept_partial")
         check("accept-partial-names-the-waiver", "waives test" in waived, text=waived)
         ks = keys()
         check("escalation-layout", "approve" not in ks and "offer:accept_suggestion" not in ks
               and page.evaluate("""() => { const c = [...document.querySelectorAll('[data-testid="session-gate-choices"] [data-testid="session-gate-choice"]')]; return c[c.length - 1].dataset.choiceKey === 'stop'; }"""), keys=ks)
         page.screenshot(path=str(SHOTS / f"escalation-arms-desk-timeout.png"))
-        page.locator(CHOICE.format("offer:extend")).click()
+        click_gate_choice(page, "offer:extend")
         body = wait_post(page, origin, "r-timeout")
         check("extend-posts-the-arm-alone", body.get("approve") is True and body.get("action") == "extend"
               and "amend" not in body and "amendScope" not in body, body=body)
@@ -139,13 +141,13 @@ with sync_playwright() as p:
     def section_suggest() -> None:
         reset(origin)
         page.goto(f"{origin}/s/run%3Ar-suggest", wait_until="networkidle")
-        page.locator(CHOICE.format("offer:accept_suggestion")).wait_for(state="visible", timeout=15000)
+        page.locator(CHOICE.format("offer:accept_suggestion")).wait_for(state="attached", timeout=15000)
         c = peek("offer:accept_suggestion")
         check("suggestion-consequence", "src/importer.ts" in c and "refs/wicked/suggestions/r-suggest/2/0" in c and "fix" in c, text=c)
         check("no-timeout-arms", "offer:extend" not in keys())
-        check("consequence-above-suggestion", page.evaluate(ABOVE_SEL, [CHOICE.format("offer:accept_suggestion"), '[data-testid="session-gate-choice-consequence"]']))
+        check("consequence-above-suggestion", consequence_on("offer:accept_suggestion"))
         page.screenshot(path=str(SHOTS / f"escalation-arms-desk-suggest.png"))
-        page.locator(CHOICE.format("offer:accept_suggestion")).click()
+        click_gate_choice(page, "offer:accept_suggestion")
         body = wait_post(page, origin, "r-suggest")
         check("suggestion-posts-the-arm-alone", body.get("approve") is True and body.get("action") == "accept_suggestion"
               and "amend" not in body, body=body)
@@ -154,9 +156,10 @@ with sync_playwright() as p:
         reset(origin)
         page.goto(f"{origin}/s/run%3Ar-prerun", wait_until="networkidle")
         page.get_by_test_id("session-gate-row").wait_for(state="visible", timeout=15000)
-        page.locator(CHOICE.format("steer")).wait_for(state="visible", timeout=10000)
-        # The work under review and the source line sit in the row's ⋯ Details (S16a-1b).
-        page.locator(".wk-session-gate-prompt-summary").click()
+        page.locator(CHOICE.format("steer")).wait_for(state="attached", timeout=10000)
+        # The work under review and the source line sit in the row's Technical details (S16a-1b), under its
+        # "More about this" since ui-v2.
+        open_tech_details(page)
         page.get_by_test_id("gate-under-review").wait_for(state="visible", timeout=8000)
         check("under-review-leads", "Under review: recon" in text(page, "gate-under-review")
               and "Approve runs next: triage" in text(page, "gate-next"))
@@ -167,7 +170,7 @@ with sync_playwright() as p:
         check("run-level-source", "Run-level gate" in text(page, "session-gate-source")
               and "Workflow-declared" not in row)
         # The row's steer targets the creator phase (fix) whenever one follows the gate — no picker.
-        page.locator(CHOICE.format("steer")).click()
+        click_gate_choice(page, "steer")
         page.get_by_test_id("session-gate-note").fill("merge the parser branch first")
         page.screenshot(path=str(SHOTS / f"escalation-arms-desk-prerun.png"))
         page.get_by_test_id("session-gate-send").click()

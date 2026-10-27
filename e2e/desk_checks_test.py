@@ -28,7 +28,7 @@ import os
 import sys
 import urllib.request
 
-from uxfix_fixture import HIDE_GATE_TOASTS, REPO, ensure_build, set_fixture, start_server, OPEN_RUN_DETAILS
+from uxfix_fixture import HIDE_GATE_TOASTS, REPO, ensure_build, set_fixture, start_server, OPEN_RUN_DETAILS, open_proposal_more_about
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4359"))
 W, H = 1440, 700
@@ -74,13 +74,16 @@ CHAIN = """(run) => {
   const steps = [...block.querySelectorAll('[data-testid="chain-step"]')].map((s) => [s.dataset.stepId, s.dataset.state]);
   const art = block.querySelector('[data-testid="artifact"][data-kind="walkthrough"]');
   const video = art?.querySelector('video');
-  const prop = block.querySelector('[data-testid="session-proposal"]');
-  const acc = block.querySelector('[data-testid="session-proposal-acceptance"]');
+  // ui-v2 gate: an open hand-over card is in the decision dock (keyed by the run); the block keeps its marker.
+  const dock = document.querySelector(`[data-testid="decision-dock"][data-key="${run}"]`);
+  const prop = block.querySelector('[data-testid="session-proposal"]') || dock?.querySelector('[data-testid="session-proposal"]');
+  const acc = block.querySelector('[data-testid="session-proposal-acceptance"]') || dock?.querySelector('[data-testid="session-proposal-acceptance"]');
   return {
     chips, steps, sentence: block.querySelector('[data-testid="chain-sentence"]')?.innerText ?? null,
     artifact: art ? { size: art.dataset.size, playhead: video ? Math.round(video.currentTime * 10) / 10 : null, ready: video ? video.readyState : null } : null,
     proposal: prop ? { kind: prop.dataset.kind, state: prop.dataset.state, text: prop.querySelector('[data-testid="session-proposal-text"]')?.innerText ?? null } : null,
     acceptance: acc ? { tone: acc.dataset.tone, text: acc.innerText } : null,
+    accVisible: !!acc && acc.getClientRects().length > 0,
   };
 }"""
 
@@ -186,15 +189,17 @@ with sync_playwright() as p:
           and c["artifact"] is None, found=c)
     try:
         page.wait_for_function(
-            """() => !!document.querySelector('[data-testid="session-run"][data-run-id="r-walk-yours"] [data-testid="session-proposal-acceptance"]')""",
+            """() => !!document.querySelector('[data-testid="decision-dock"][data-key="r-walk-yours"] [data-testid="session-proposal-acceptance"]')""",
             timeout=15000)
+        # The line is under the card's "More about this" (ui-v2 gate): open it, as the operator does.
+        open_proposal_more_about(page, page.locator('[data-testid="decision-dock"][data-key="r-walk-yours"]'))
     except Exception as e:  # noqa: BLE001
         page.screenshot(path=str(SHOTS / "desk-checks-deliver-missing.png"))
         fail("deliver-line", {"why": f"no acceptance line on the hand-over card: {e}", "found": page.evaluate(CHAIN, "r-walk-yours")})
     c = page.evaluate(CHAIN, "r-walk-yours")
     page.screenshot(path=str(SHOTS / "desk-checks-deliver.png"))
     check("deliver-line", c["proposal"] is not None and c["proposal"]["kind"] == "deliver" and c["proposal"]["state"] == "ask"
-          and c["acceptance"] == {"tone": "ok", "text": "Accepted: the checks this run had to pass have passed."}
+          and c["acceptance"] == {"tone": "ok", "text": "Accepted: the checks this run had to pass have passed."} and c["accVisible"]
           and gate_posts("r-walk-yours") == [], found=c)
 
     # ── 4. a daemon before WT-W2/W3: nothing claimed ───────────────────────────────────
