@@ -2,8 +2,8 @@
  * The default evals (crew `/api/v1/testing/default-evals*`, DES-DEFAULT-EVALS-001): how well the system's own
  * judgments agree with what really happened. Crew computes every number; studio only reads them.
  *
- * The shapes are crew's `DefaultEval*` types (wicked-crew-api-types 0.140.0). Studio's contract pin predates that
- * release, so the subset the page reads is restated here, tolerant of extra fields. When the pin moves to 0.140.0
+ * The shapes are crew's `DefaultEval*` types (wicked-crew-api-types 0.141.0). Studio's contract pin predates that
+ * release, so the subset the page reads is restated here, tolerant of extra fields. When the pin moves to 0.141.0
  * or later, these become re-exports of the contract package.
  */
 
