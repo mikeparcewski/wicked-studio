@@ -82,6 +82,8 @@
 .wk-launch-wizard .wk-composer-seat { border: 1px solid var(--border-strong); background: var(--surface-raised); }
 .wk-launch-wizard .wk-composer-seat[aria-pressed='true'] { border-color: var(--accent); background: var(--accent-wash); color: var(--ink-high); }
 .wk-launch-wizard .wk-composer-seat--off { border-style: dashed; }
+/* (PRODUCT-WORKS J4) A helper that cannot take work now (signed out, benched): greyed, its reason in the note. */
+.wk-launch-wizard .wk-composer-seat--unusable { opacity: 0.65; }
 @media (max-width: 767px) {
   .wk-launch-wizard select.wk-field, .wk-launch-wizard input.wk-field, .wk-launch-wizard .wk-composer-seat, .wk-launch-wizard .wk-chip { min-height: var(--tap-min); }
 }

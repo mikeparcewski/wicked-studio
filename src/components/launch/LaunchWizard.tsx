@@ -9,7 +9,7 @@ import { QeOffNote } from '../QeOffNote.js';
 import { workflowItems, WORKFLOWS_LOADING_LINE } from '../../board/workflowCommand.js';
 import { sessionPath } from '../../board/sessionModel.js';
 import { seatLabel, userSeats } from '../../board/seatNames.js';
-import { seatCanCarry } from '../gateVerdictModel.js';
+import { seatCanCarry, seatStanding } from '../gateVerdictModel.js';
 import { COMPOSER_DEFAULT_GATE_POSTURE } from '../composerDefaults.js';
 import type { ConfirmMode } from '../ContextPopover.js';
 import { useModalEscape } from '../Modal.js';
@@ -163,7 +163,15 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
 
   // Options: the helpers a workflow launch convenes (council-enabled, addressable), minus the dropped.
   const eligible = useMemo(() => userSeats(roster).filter((s) => s.enabled_for_council), [roster]);
-  const seats = eligible.filter((s) => !seatOff(s.key, dropped, picked));
+  // (PRODUCT-WORKS J4) Only a helper that can take work now is picked by default: one that is signed
+  // out, benched (out of quota until its lift time) or refused work by this computer is shown greyed
+  // out with why, and joins the job only when the operator turns it on.
+  const unusable = useMemo(() => new Map(eligible.flatMap((s) => {
+    const st = seatStanding(s);
+    return st.state === 'ready' || st.state === 'unknown' ? [] : [[s.key, st.state === 'signed-out' ? 'signed out' : st.note] as const];
+  })), [eligible]);
+  const isOff = (key: string): boolean => (unusable.has(key) ? !picked.includes(key) : seatOff(key, dropped, picked));
+  const seats = eligible.filter((s) => !isOff(s.key));
   const offerReduced = reducedCap && seats.length === 1;
   // The Lead agent (DES-TEAMING-002 §8.1): offered when the daemon takes it and there is a choice to
   // make; a pick whose helper was turned off reads as Random again (never a stale seat sent).
@@ -506,24 +514,37 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
                   <legend className="wk-field-label">Helpers</legend>
                   <div className="wk-launch-wizard-seats">
                     {eligible.map((s, i) => {
-                      const on = !seatOff(s.key, dropped, picked);
+                      const on = !isOff(s.key);
+                      const why = unusable.get(s.key);
                       return (
                         <button
                           key={s.key}
                           type="button"
                           data-testid="launch-wizard-seat"
                           data-key={s.key}
+                          data-unusable={why !== undefined ? 'true' : undefined}
                           data-autofocus={i === 0 ? 'true' : undefined}
                           aria-pressed={on}
-                          aria-describedby={isOptInKey(s.key) ? 'launch-wizard-optin-note' : undefined}
-                          className={`wk-composer-chip wk-composer-seat${on ? '' : ' wk-composer-seat--off'}`}
-                          onClick={() => toggleSeat(s.key)}
+                          aria-describedby={why !== undefined ? 'launch-wizard-unusable-note' : isOptInKey(s.key) ? 'launch-wizard-optin-note' : undefined}
+                          title={why !== undefined ? `${seatLabel(s)} cannot take work now: ${why}` : undefined}
+                          className={`wk-composer-chip wk-composer-seat${on ? '' : ' wk-composer-seat--off'}${why !== undefined ? ' wk-composer-seat--unusable' : ''}`}
+                          onClick={() => toggleSeat(s.key, why !== undefined)}
                         >
                           {seatLabel(s)}
                         </button>
                       );
                     })}
                   </div>
+                  {unusable.size > 0 && (
+                    <span id="launch-wizard-unusable-note" className="wk-field-note" data-testid="launch-wizard-unusable-note">
+                      Not picked, because they cannot take work now: {eligible.filter((s) => unusable.has(s.key)).map((s) => `${seatLabel(s)} (${unusable.get(s.key) || 'unavailable'})`).join(', ')}.{' '}
+                      {navigate !== undefined && (
+                        <button type="button" className="wk-btn wk-btn--secondary" data-testid="launch-wizard-signin" onClick={() => { closeStore(); navigate('/system'); }}>
+                          Sign in ›
+                        </button>
+                      )}
+                    </span>
+                  )}
                   <span className="wk-field-note">Who plans, builds and checks the work. Different helpers check each other’s work.</span>
                   {eligible.some((s) => isOptInKey(s.key)) && (
                     <span id="launch-wizard-optin-note" className="wk-field-note" data-testid="launch-wizard-optin-note">

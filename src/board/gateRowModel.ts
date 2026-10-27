@@ -33,7 +33,7 @@ import {
   steerScopeTarget,
   type GateVerdictView,
 } from '../components/gateVerdictModel.js';
-import type { ReassignCandidate } from '../components/gateVerdictModel.js';
+import type { ReassignCandidate, RunBench } from '../components/gateVerdictModel.js';
 import type { GateAnswer } from './gateActions.js';
 import type { RerunOffer } from '../components/rerunModel.js';
 import { qeGateOf, QE_RETRY_LABEL, QE_RETRY_NOTE_LABEL, QE_RETRY_NOTE_TITLE, QE_RETRY_TITLE, type QeGate } from './qeEscalation.js';
@@ -192,6 +192,10 @@ export interface GateRowModel {
   /** studio#835: the step's seat cannot work (out of quota, signed out, not installed) and the engine will not
    *  send the step to it again — the row says so first; absent on every other gate. */
   deadSeat?: DeadSeat;
+  /** (PRODUCT-WORKS J4) The run's other seats a reassign does NOT offer because they cannot take work now
+   *  (benched, signed out, not eligible), with the reason and, for a bench, when it lifts — shown greyed
+   *  out beside the choices, never silently dropped. Absent when every other seat is offered (or none). */
+  withheldSeats?: ReassignCandidate[];
   /** A gate no judge could rule on: `true` when its approve records the OPERATOR's judgment (the
    *  engine's `judge_by_operator`), `false` on a team member's step, whose approve re-runs the step;
    *  absent on every other gate. */
@@ -278,6 +282,22 @@ function mapChoiceTitle(value: string): string {
  *  details — a seat never vanishes from the choices without a word. */
 function refusedSeatLines(candidates: readonly ReassignCandidate[]): string[] {
   return candidates.filter((c) => c.state === 'refused').map((c) => `Not offered for reassign: ${c.label} — ${c.note}.`);
+}
+
+/** (PRODUCT-WORKS J4) The reassign candidates that cannot take work now — benched, signed out, not
+ *  eligible — shown greyed out with their reason (an engine-refused seat keeps its own line above). */
+function withheldOf(candidates: readonly ReassignCandidate[]): ReassignCandidate[] {
+  return candidates.filter((c) => !isOfferable(c) && c.state !== 'refused');
+}
+
+/** (PRODUCT-WORKS J4) The soonest bench lift among `seats` (ISO-8601), or null when none says when. */
+export function soonestBack(seats: readonly ReassignCandidate[] | undefined): ReassignCandidate | null {
+  let best: ReassignCandidate | null = null;
+  for (const c of seats ?? []) {
+    if (c.until === undefined) continue;
+    if (best === null || Date.parse(c.until) < Date.parse(best.until!)) best = c;
+  }
+  return best;
 }
 
 export function shownPrompt(prompt: string): string {
@@ -381,6 +401,10 @@ export interface SessionGateInput {
   pool: readonly string[];
   /** The roster for eligibility checks; null when not yet loaded. */
   roster: readonly RosterSeat[] | null;
+  /** (PRODUCT-WORKS J4) The seats this run benched (`session.benched_seats`); absent = none known. */
+  benched?: readonly RunBench[];
+  /** The clock bench lift times are read against (tests pin it); absent = now. */
+  now?: number;
   /** S16a-1b: the run's "Rerun from here" offer (`useRerunFromHere`), or null/absent. */
   rerun?: RerunOffer | null;
   /** S16a-2a (studio#430): the reviewed unit's WHOLE output when the engine kept only a head-cut
@@ -503,6 +527,8 @@ function withDepth(base: BaseRowModel, input: SessionGateInput): GateRowModel {
 
 function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
   const { runId, gate, units, events, pool, roster } = input;
+  const benched = input.benched ?? [];
+  const now = input.now ?? Date.now();
 
   // crew#888 / wicked-core#801: a `consent` gate pauses BEFORE a `consent_before` phase runs (the
   // mcp-server install). Nothing has run, so there is nothing to steer or send back: Approve gives
@@ -822,14 +848,16 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
     // Reassign candidates
     const failedCli = failedSeatOf(units, gate.ord) ?? deadSeat?.cli;
     const reassignList: GateRowChoice[] = [];
+    const withheld: ReassignCandidate[] = [];
     if (!isToolUnitGate(units, gate.ord) && isSeatFailure(isEscalationGate(gate.prompt, verdict) || deadSeat !== null, failedCli)) {
-      const candidates = reassignCandidates(pool, failedCli ?? null, roster, reassignRefusedOf(units, gate.ord));
+      const candidates = reassignCandidates(pool, failedCli ?? null, roster, reassignRefusedOf(units, gate.ord), benched, now);
       for (const c of candidates) {
         if (isOfferable(c)) {
           reassignList.push({ key: `reassign:${c.cli}`, label: `Reassign to ${c.label}`, decision: null, reassignCli: c.cli, needsNote: false, title: `Move the failed unit to ${c.label}; it retries there.` });
         }
       }
       detailItems.push(...refusedSeatLines(candidates));
+      withheld.push(...withheldOf(candidates));
     }
     // First reassign inline when there's still room in the 3-slot cap; rest to overflow.
     if (escInline.length < 3 && reassignList.length > 0) {
@@ -874,7 +902,7 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
     if (!deniedUnit && !qeNoVerdict && !rejudgeOffered && !overridePath && recommended !== null && rec?.kind === 'retry-findings' && rec.prefill !== null) {
       noteDefault = rec.prefill;
     }
-    return { reason, question, choices: escInline, overflow, noteDefault, recommended, detailItems, ...(qe !== null ? { qe } : {}), ...(deadSeat !== null ? { deadSeat } : {}), ...(judgeWait ? { operatorJudgment } : {}) };
+    return { reason, question, choices: escInline, overflow, noteDefault, recommended, detailItems, ...(qe !== null ? { qe } : {}), ...(deadSeat !== null ? { deadSeat } : {}), ...(judgeWait ? { operatorJudgment } : {}), ...(withheld.length > 0 ? { withheldSeats: withheld } : {}) };
   }
 
   if (reason === 'retry') {
@@ -886,12 +914,14 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
     }
     const failedCli = failedSeatOf(units, gate.ord);
     const retryOverflow: GateRowChoice[] = [];
+    const retryWithheld: ReassignCandidate[] = [];
     // Launch refusals (environment refused / failed before work judged) must not offer reassign:
     // another seat meets the same environment. Gate 11 Item 2 operator ruling.
     const launchRefusal = isLaunchRefusal(gate.prompt, events, gate.ord);
     if (!launchRefusal && !isToolUnitGate(units, gate.ord) && failedCli !== null && failedCli !== undefined) {
-      const candidates = reassignCandidates(pool, failedCli, roster, reassignRefusedOf(units, gate.ord));
+      const candidates = reassignCandidates(pool, failedCli, roster, reassignRefusedOf(units, gate.ord), benched, now);
       detailItems.push(...refusedSeatLines(candidates));
+      retryWithheld.push(...withheldOf(candidates));
       let inlineReassignDone = false;
       for (const c of candidates) {
         if (isOfferable(c)) {
@@ -913,7 +943,7 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
       }
     }
     choices.push({ key: 'stop', label: 'Stop', decision: { approve: false }, needsNote: false, title: 'Cancel the run; the work stops here.' });
-    return { reason, question, choices, overflow: retryOverflow, noteDefault, recommended: 0, detailItems };
+    return { reason, question, choices, overflow: retryOverflow, noteDefault, recommended: 0, detailItems, ...(retryWithheld.length > 0 ? { withheldSeats: retryWithheld } : {}) };
   }
 
   return null;
