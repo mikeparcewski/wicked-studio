@@ -15,12 +15,13 @@
     "files": 239,
     "occurrences": 3115,
     "static": 2697,
+    "dynamic": 70,
 =======
     "files": 240,
-    "occurrences": 3128,
-    "static": 2707,
->>>>>>> origin/ui-v2-nav
-    "dynamic": 70,
+    "occurrences": 3140,
+    "static": 2709,
+    "dynamic": 71,
+>>>>>>> origin/ui-v2-jobs-repos
     "computed": 25
   },
   "static": [
@@ -3587,6 +3588,12 @@
       ]
     },
     {
+      "testId": "desk-runs-clear",
+      "files": [
+        "src/components/desk/DeskRuns.tsx"
+      ]
+    },
+    {
       "testId": "desk-runs-count",
       "files": [
         "src/components/desk/DeskRuns.tsx"
@@ -3606,6 +3613,24 @@
       ]
     },
     {
+      "testId": "desk-runs-filtered",
+      "files": [
+        "src/components/desk/DeskRuns.tsx"
+      ]
+    },
+    {
+      "testId": "desk-runs-group",
+      "files": [
+        "src/components/desk/DeskRuns.tsx"
+      ]
+    },
+    {
+      "testId": "desk-runs-line",
+      "files": [
+        "src/components/desk/DeskRuns.tsx"
+      ]
+    },
+    {
       "testId": "desk-runs-list",
       "files": [
         "src/components/desk/DeskRuns.tsx"
@@ -3618,13 +3643,19 @@
       ]
     },
     {
+      "testId": "desk-runs-new",
+      "files": [
+        "src/components/desk/DeskRuns.tsx"
+      ]
+    },
+    {
       "testId": "desk-runs-open",
       "files": [
         "src/components/desk/DeskRuns.tsx"
       ]
     },
     {
-      "testId": "desk-runs-progress",
+      "testId": "desk-runs-refine",
       "files": [
         "src/components/desk/DeskRuns.tsx"
       ]
@@ -3648,37 +3679,13 @@
       ]
     },
     {
-      "testId": "desk-runs-stat-failed",
+      "testId": "desk-runs-sentence",
       "files": [
         "src/components/desk/DeskRuns.tsx"
       ]
     },
     {
-      "testId": "desk-runs-stat-finished",
-      "files": [
-        "src/components/desk/DeskRuns.tsx"
-      ]
-    },
-    {
-      "testId": "desk-runs-stat-running",
-      "files": [
-        "src/components/desk/DeskRuns.tsx"
-      ]
-    },
-    {
-      "testId": "desk-runs-stat-waiting",
-      "files": [
-        "src/components/desk/DeskRuns.tsx"
-      ]
-    },
-    {
-      "testId": "desk-runs-stat-window",
-      "files": [
-        "src/components/desk/DeskRuns.tsx"
-      ]
-    },
-    {
-      "testId": "desk-runs-stats",
+      "testId": "desk-runs-show-finished",
       "files": [
         "src/components/desk/DeskRuns.tsx"
       ]
@@ -3690,7 +3697,19 @@
       ]
     },
     {
-      "testId": "desk-runs-table",
+      "testId": "desk-runs-tools",
+      "files": [
+        "src/components/desk/DeskRuns.tsx"
+      ]
+    },
+    {
+      "testId": "desk-runs-window",
+      "files": [
+        "src/components/desk/DeskRuns.tsx"
+      ]
+    },
+    {
+      "testId": "desk-runs-word",
       "files": [
         "src/components/desk/DeskRuns.tsx"
       ]
@@ -10243,6 +10262,12 @@
       ]
     },
     {
+      "testId": "repo-details",
+      "files": [
+        "src/components/RepositoriesPanel.tsx"
+      ]
+    },
+    {
       "testId": "repo-findings",
       "files": [
         "src/components/RepoFindings.tsx"
@@ -10303,6 +10328,12 @@
       ]
     },
     {
+      "testId": "repo-open",
+      "files": [
+        "src/components/RepositoriesPanel.tsx"
+      ]
+    },
+    {
       "testId": "repo-open-graph",
       "files": [
         "src/components/RepoDetailPage.tsx"
@@ -10352,6 +10383,36 @@
     },
     {
       "testId": "repo-reindex",
+      "files": [
+        "src/components/RepositoriesPanel.tsx"
+      ]
+    },
+    {
+      "testId": "repo-row",
+      "files": [
+        "src/components/RepositoriesPanel.tsx"
+      ]
+    },
+    {
+      "testId": "repo-row-index",
+      "files": [
+        "src/components/RepositoriesPanel.tsx"
+      ]
+    },
+    {
+      "testId": "repo-row-line",
+      "files": [
+        "src/components/RepositoriesPanel.tsx"
+      ]
+    },
+    {
+      "testId": "repo-row-reindex",
+      "files": [
+        "src/components/RepositoriesPanel.tsx"
+      ]
+    },
+    {
+      "testId": "repo-row-word",
       "files": [
         "src/components/RepositoriesPanel.tsx"
       ]
@@ -10417,6 +10478,12 @@
       ]
     },
     {
+      "testId": "repos-filtered",
+      "files": [
+        "src/components/RepositoriesPanel.tsx"
+      ]
+    },
+    {
       "testId": "repos-kpis",
       "files": [
         "src/components/RepositoriesPanel.tsx"
@@ -10448,6 +10515,18 @@
     },
     {
       "testId": "repos-runs-link",
+      "files": [
+        "src/components/RepositoriesPanel.tsx"
+      ]
+    },
+    {
+      "testId": "repos-sentence",
+      "files": [
+        "src/components/RepositoriesPanel.tsx"
+      ]
+    },
+    {
+      "testId": "repos-tools",
       "files": [
         "src/components/RepositoriesPanel.tsx"
       ]
@@ -16588,6 +16667,12 @@
       ]
     },
     {
+      "pattern": "desk-runs-group-*",
+      "files": [
+        "src/components/desk/DeskRuns.tsx"
+      ]
+    },
+    {
       "pattern": "desk-runs-status-*",
       "files": [
         "src/components/desk/DeskRuns.tsx"
@@ -16802,6 +16887,7 @@
     {
       "expression": "o.testId",
       "files": [
+        "src/components/ui/QuietPage.tsx",
         "src/components/ui/Segmented.tsx"
       ]
     },
@@ -16851,6 +16937,7 @@
         "src/components/ui/OverflowMenu.tsx",
         "src/components/ui/PageFrame.tsx",
         "src/components/ui/Progress.tsx",
+        "src/components/ui/QuietPage.tsx",
         "src/components/ui/Segmented.tsx",
         "src/components/ui/StatLine.tsx",
         "src/components/ui/StatTile.tsx",
@@ -16942,6 +17029,12 @@
       "expression": "testId ?? 'day-bars'",
       "files": [
         "src/components/ui/DayBars.tsx"
+      ]
+    },
+    {
+      "expression": "testId ?? 'skeleton'",
+      "files": [
+        "src/components/ui/QuietPage.tsx"
       ]
     },
     {

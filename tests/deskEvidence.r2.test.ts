@@ -52,8 +52,9 @@ describe('Desk evidence review fixes', () => {
     expect(outcomeOf(unknown)).toBeNull();
     expect(outcomeOf(deskRun('paused', { status: 'paused' as SessionStatus }))).toBeNull();
     expect(recentlyEnded(runs, title, 5).map((r) => r.runId)).toEqual(['completed']);
-    const list = runsView(runs, DEFAULT_REFINE, 'all', '', NOW, title, names);
-    expect(list.stats).toMatchObject({ running: 1, ended: 1 });
+    const list = runsView(runs, DEFAULT_REFINE, { group: 'active', status: 'all', query: '', now: NOW, title, names });
+    expect(list.stats).toMatchObject({ working: 1, ended: 1 });
+    // Not known to have ended: an unknown status stays with the active jobs.
     expect(list.rows.find((r) => r.id === 'unknown')?.outcome).toBe('Unknown');
     expect(workflowRows(runs)[0]).toMatchObject({ finished: 1, stopped: 0, open: 2, successRate: 1 });
     expect(agentRows(record(), runs, names, [])[0]).toMatchObject({ jobsEnded: 1, jobsFinished: 1 });
@@ -79,7 +80,7 @@ describe('Desk evidence review fixes', () => {
     expect(workflowRows([preset, workflow, unknown, free]).map((r) => [r.key, r.jobs])).toEqual([
       ['capture-learnings', 2], ['free_text', 1], ['unknown', 1],
     ]);
-    expect(runsView([preset, unknown, free], { ...DEFAULT_REFINE, workflow: 'capture-learnings' }, 'all', '', NOW, title, names).rows.map((r) => r.id)).toEqual(['preset']);
+    expect(runsView([preset, unknown, free], { ...DEFAULT_REFINE, workflow: 'capture-learnings' }, { group: 'finished', status: 'all', query: '', now: NOW, title, names }).rows.map((r) => r.id)).toEqual(['preset']);
   });
 
   it('divides cost by priced usage records, labels it accurately, and retains strict best marks', () => {

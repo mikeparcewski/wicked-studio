@@ -28,6 +28,24 @@ SHOTS = REPO / "e2e" / "shots"
 report: dict = {"ok": False, "steps": {}}
 
 
+
+def all_jobs_text(page) -> str:
+    """The Jobs view's words across both of its lists (Active, then Finished at All time)."""
+    texts = []
+    page.get_by_test_id("desk-runs-group-active").click()
+    page.wait_for_timeout(200)
+    texts.append(page.evaluate("() => document.querySelector('[data-testid=desk-runs]')?.innerText ?? document.body.innerText"))
+    page.get_by_test_id("desk-runs-group-finished").click()
+    if page.get_by_test_id("desk-runs-refine").is_hidden():
+        page.get_by_test_id("desk-runs-tools").click()
+    alltime = page.get_by_test_id("desk-runs-alltime")
+    if alltime.count() > 0 and alltime.get_attribute("aria-pressed") != "true":
+        alltime.click()  # r-unfiled carries no start time
+    page.wait_for_timeout(300)
+    texts.append(page.evaluate("() => document.querySelector('[data-testid=desk-runs]')?.innerText ?? document.body.innerText"))
+    return "\n".join(texts)
+
+
 def check(step: str, ok: bool, **detail) -> None:
     report["steps"][step] = {"ok": bool(ok), **detail}
     if not ok:
@@ -126,9 +144,7 @@ with sync_playwright() as p:
           and {"project-documents"} <= set(unfiled["actions"]), unfiled=unfiled, real=real)
     page.goto(f"{origin}/projects/default?tab=runs", wait_until="networkidle")
     page.wait_for_timeout(800)
-    page.get_by_text("All time", exact=False).first.click()  # r-unfiled carries no start time
-    page.wait_for_timeout(300)
-    jobs = page.evaluate("() => document.querySelector('[data-testid=\"desk-runs\"]')?.innerText ?? document.body.innerText")
+    jobs = all_jobs_text(page)
     check("unfiled-job-listed", "poke at the flaky CI job" in jobs and "stranded work from another client" in jobs, jobs=jobs[-700:])
 
     # 3b. Crew serves the synthesized project: its members are the dashboard's jobs.
@@ -140,10 +156,8 @@ with sync_playwright() as p:
     page.goto(f"{origin}/projects/default?tab=runs", wait_until="networkidle")
     page.get_by_test_id("project-desk").wait_for(state="visible", timeout=8000)
     page.wait_for_timeout(800)
-    page.get_by_text("All time", exact=False).first.click()
-    page.wait_for_timeout(300)
+    jobs2 = all_jobs_text(page)
     served = page.evaluate(DASH)
-    jobs2 = page.evaluate("() => document.querySelector('[data-testid=\"desk-runs\"]')?.innerText ?? document.body.innerText")
     check("crew-served-unfiled", served["title"] == "Not in a project" and "poke at the flaky CI job" in jobs2 and not served["notFound"], served=served)
     page.unroute("**/api/v1/projects/default")
 

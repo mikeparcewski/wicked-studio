@@ -38,7 +38,7 @@ const RUNS = [
 
 const listRepos = vi.fn(() => Promise.resolve({ repos: REPOS }));
 const listRuns = vi.fn(() => Promise.resolve({ runs: RUNS }));
-const getRepoGraph = vi.fn();
+const getRepoGraph = vi.fn((...args: unknown[]) => { void args; return Promise.resolve({ graph: null as unknown }); });
 const rerunOnboarding = vi.fn(() => Promise.resolve({ runId: 'r-new' }));
 
 vi.mock('../src/api/client.js', () => ({
@@ -54,6 +54,7 @@ vi.mock('../src/api/client.js', () => ({
 const { RepositoriesPanel } = await import('../src/components/RepositoriesPanel.js');
 const { useMembershipStore } = await import('../src/store/membership.js');
 const { clearRetryPrefill, peekRetryPrefill } = await import('../src/store/retryPrefill.js');
+const { resetRepoLanguages } = await import('../src/hooks/useRepoLanguages.js');
 
 async function panel(navigate: (p: string) => void = () => {}): Promise<void> {
   render(<RepositoriesPanel navigate={navigate} />);
@@ -65,6 +66,7 @@ beforeEach(() => {
   listRepos.mockClear();
   listRuns.mockClear();
   getRepoGraph.mockClear();
+  resetRepoLanguages();
   rerunOnboarding.mockClear();
   clearRetryPrefill();
   useMembershipStore.setState({
@@ -125,12 +127,41 @@ describe('the fleet grid — graph honesty, needs-you first, cards are doors', (
     expect(state(cards[2]!).textContent).toContain('Not onboarded yet');
   });
 
-  it('a card is a door: clicking it opens the repo detail', async () => {
+  it('a row opens its details on click; Open <repo> inside goes to the repo detail', async () => {
     const navigate = vi.fn();
     await panel(navigate);
     const card = screen.getAllByTestId('repo-card').find((c) => c.getAttribute('data-repo-id') === 'studio-api')!;
-    fireEvent.click(card);
+    const row = within(card).getByTestId('repo-row');
+    const details = within(card).getByTestId('repo-details');
+    expect(row).toHaveAttribute('aria-expanded', 'false');
+    expect(details).not.toBeVisible();
+    fireEvent.click(row);
+    expect(row).toHaveAttribute('aria-expanded', 'true');
+    expect(details).toBeVisible();
+    expect(navigate).not.toHaveBeenCalled();
+    fireEvent.click(within(card).getByTestId('repo-open'));
     expect(navigate).toHaveBeenCalledWith('/repo-detail/studio-api');
+    // One open at a time: opening another closes this one.
+    fireEvent.click(within(screen.getAllByTestId('repo-card').find((c) => c.getAttribute('data-repo-id') === 'fresh')!).getByTestId('repo-row'));
+    expect(row).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('the face is calm: a name, language · readiness, and one word or one next step on the right', async () => {
+    await panel();
+    const card = (id: string) => screen.getAllByTestId('repo-card').find((c) => c.getAttribute('data-repo-id') === id)!;
+    expect(within(card('studio-api')).getByTestId('repo-row-line')).toHaveTextContent(/^indexed$/);
+    expect(within(card('studio-api')).getByTestId('repo-row-word')).toHaveTextContent('Working now');
+    expect(within(card('billing')).getByTestId('repo-row-line')).toHaveTextContent('indexing failed');
+    expect(within(card('billing')).getByTestId('repo-needs-you')).toHaveTextContent('Waiting on you');
+    expect(within(card('fresh')).getByTestId('repo-row-line')).toHaveTextContent('not indexed yet');
+    expect(within(card('fresh')).getByTestId('repo-row-index')).toHaveTextContent('Index');
+    // No path, branch or id on the face: they live in the row's details.
+    for (const c of screen.getAllByTestId('repo-card')) {
+      const face = within(c).getByTestId('repo-row').textContent ?? '';
+      expect(face).not.toContain('/tmp/');
+      expect(face).not.toContain('main');
+    }
+    expect(screen.getByTestId('repos-sentence')).toHaveTextContent('Three repositories. One is indexed; one needs re-indexing; one is not indexed yet. One job waits on you.');
   });
 
   it('the needs-you badge jumps STRAIGHT to the gate (project known ⇒ the thread AT the gate)', async () => {
@@ -192,20 +223,27 @@ describe('the filters drive the fleet; the register flow is untouched', () => {
     expect(screen.getAllByTestId('repo-card')).toHaveLength(3);
   });
 
-  it('keeps the add affordance and fires exactly GET /repos + GET /runs — the graph fan-out stays retired', async () => {
+  it('keeps the add affordance; the list is GET /repos + GET /runs, then one code-map read per indexed repo for its language', async () => {
+    getRepoGraph.mockImplementation((id: unknown) => Promise.resolve({ graph: id === 'studio-api'
+      ? { nodes: [{ file: 'src/a.ts', lang: 'typescript' }, { file: 'src/b.ts', lang: 'typescript' }, { file: 'x.py', lang: 'python' }], edges: [], stats: { nodeCount: 3, edgeCount: 0, fileCount: 3 } }
+      : null }));
     await panel();
     expect(screen.getByTestId('repos-add')).toHaveTextContent('Add repository');
-    expect(screen.getByTestId('repos-add').className).toContain('wk-btn--primary');
+    expect(screen.getByTestId('repos-add').className).toContain('wk-jr-btn--primary');
     expect(listRepos).toHaveBeenCalledTimes(1);
     expect(listRuns).toHaveBeenCalledTimes(1);
-    expect(getRepoGraph).not.toHaveBeenCalled();
+    // Only repos with a recorded onboard and no engine gap have a map to read; never-indexed fresh is not asked.
+    const api = screen.getAllByTestId('repo-card').find((c) => c.getAttribute('data-repo-id') === 'studio-api')!;
+    await within(api).findByText('TypeScript + Python · indexed');
+    expect(getRepoGraph.mock.calls.map((c) => c[0]).sort()).toEqual(['billing', 'studio-api']);
   });
 
-  it('the fleet is a real CSS grid with no maxWidth anywhere on the surface', async () => {
+  it('the list is one column of rows inside the page measure', async () => {
     await panel();
-    const grid = screen.getByTestId('repos-list') as HTMLElement;
-    expect(grid.style.maxWidth).toBe('');
-    expect(grid.className).toContain('wk-pg-repo-grid'); // repeat(auto-fill, …) in styles/sections/pages.css
+    const list = screen.getByTestId('repos-list') as HTMLElement;
+    expect(list.tagName).toBe('UL');
+    expect(list.className).toContain('wk-jr-list');
+    expect(screen.getByTestId('repos-page').querySelector('.wk-jr-col')).not.toBeNull();
   });
 
   it('with no repos at all, the empty state carries the creation CTA — clicking opens the form, posts nothing', async () => {

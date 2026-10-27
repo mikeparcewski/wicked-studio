@@ -70,12 +70,13 @@ describe('Runs: All time (codex r3)', () => {
     deskRun('archived', { archived_at: (NOW - DAY) / 1000 } as Partial<SessionView['session']>),
   ];
   it('says how many more jobs All time holds, then shows older, undated and archived ones', () => {
-    const win = runsView(runs, DEFAULT_REFINE, 'all', '', NOW, title, names);
+    const opts = { group: 'finished' as const, status: 'all' as const, query: '', now: NOW, title, names };
+    const win = runsView(runs, DEFAULT_REFINE, opts);
     expect(win.rows.map((r) => r.id)).toEqual(['recent']);
     expect(win.beyond).toBe(3);
-    const all = runsView(runs, DEFAULT_REFINE, 'all', '', NOW, title, names, true);
+    const all = runsView(runs, DEFAULT_REFINE, { ...opts, allTime: true });
     expect(all.rows.map((r) => r.id).sort()).toEqual(['archived', 'old', 'recent', 'undated']);
     expect(all.beyond).toBe(0);
-    expect(all.stats.inWindow).toBe(4);
+    expect(all.stats.ended).toBe(4);
   });
 });
