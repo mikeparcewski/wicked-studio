@@ -12,9 +12,9 @@
   "studioVersion": "0.12.3",
   "counts": {
     "files": 246,
-    "occurrences": 3277,
-    "static": 2796,
-    "dynamic": 74,
+    "occurrences": 3282,
+    "static": 2800,
+    "dynamic": 75,
     "computed": 33
   },
   "static": [
@@ -4544,6 +4544,24 @@
       ]
     },
     {
+      "testId": "evaluate-judgments-options",
+      "files": [
+        "src/components/steer/SystemJudgments.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-judgments-options-toggle",
+      "files": [
+        "src/components/steer/SystemJudgments.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-judgments-project",
+      "files": [
+        "src/components/steer/SystemJudgments.tsx"
+      ]
+    },
+    {
       "testId": "evaluate-judgments-run-error",
       "files": [
         "src/components/steer/SystemJudgments.tsx"
@@ -4551,6 +4569,12 @@
     },
     {
       "testId": "evaluate-judgments-scope",
+      "files": [
+        "src/components/steer/SystemJudgments.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-judgments-scope-all",
       "files": [
         "src/components/steer/SystemJudgments.tsx"
       ]
@@ -17152,6 +17176,12 @@
       "pattern": "editor-size-*",
       "files": [
         "src/components/editors/EditorHostPage.tsx"
+      ]
+    },
+    {
+      "pattern": "evaluate-judgments-scope-*",
+      "files": [
+        "src/components/steer/SystemJudgments.tsx"
       ]
     },
     {

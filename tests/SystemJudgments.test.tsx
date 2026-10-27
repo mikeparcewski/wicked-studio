@@ -111,6 +111,23 @@ describe('SystemJudgments', () => {
     await userEvent.click(rows[2]!);
     expect(screen.getByTestId('evaluate-judgment-detail').textContent).toMatch(/Nerve Center: 22 of 27 right/);
     expect(screen.getAllByTestId('evaluate-drift-line')).toHaveLength(1);
+    // The scope is a quiet segment beside the one action: all projects, or one.
+    expect(screen.getByTestId('evaluate-judgments-scope-all').getAttribute('aria-checked')).toBe('true');
+  });
+
+  it('a project chosen in the segment scopes the run', async () => {
+    let sent: unknown = null;
+    const withProjects = { ...REPORT, suites: [{ ...REPORT.suites[0]!, byProject: { 'repo-a': slice(5, 5), 'repo-b': slice(4, 5) } }] };
+    wire({
+      '/testing/default-evals': async () => ({ runs: [{ id: 'r1', createdAt: REPORT.createdAt, project: null }] }),
+      '/testing/default-evals/r1': async () => ({ report: withProjects, cases: [] }),
+      '/testing/default-evals/run': async (body) => { sent = body; return withProjects; },
+    });
+    render(<SystemJudgments />);
+    await userEvent.click(await screen.findByTestId('evaluate-judgments-scope-repo-b'));
+    await userEvent.click(screen.getByTestId('evaluate-judgments-check'));
+    await screen.findAllByTestId('evaluate-judgment-row');
+    expect(sent).toEqual({ project: 'repo-b' });
   });
 
   it('Check now posts the scope and the baseline choice, then shows the new report', async () => {
@@ -124,10 +141,15 @@ describe('SystemJudgments', () => {
     });
     render(<SystemJudgments />);
     expect(await screen.findByTestId('evaluate-judgments-empty')).toBeTruthy();
+    expect(screen.getByTestId('evaluate-judgments-check').textContent).toBe('Run evals');
+    expect(screen.getByTestId('evaluate-judgments-when').textContent).toBe('Not run yet.');
+    // The baseline is a secondary option, behind Options.
+    await userEvent.click(screen.getByTestId('evaluate-judgments-options-toggle'));
     await userEvent.click(screen.getByTestId('evaluate-judgments-baseline'));
     await userEvent.click(screen.getByTestId('evaluate-judgments-check'));
     expect(await screen.findAllByTestId('evaluate-judgment-row')).toHaveLength(3);
     expect(sent).toEqual({ baseline: true });
+    expect(screen.getByTestId('evaluate-judgments-when').textContent).toMatch(/^Last run .* · 145 real cases from your runs/);
   });
 
   it('a crew without the default evals says so, quietly', async () => {

@@ -211,3 +211,14 @@
 /* How well the system judges (DES-DEFAULT-EVALS-001): a row's detail sits under its words, the action at the start. */
 .wk-ue-judge-detail { padding-left: 30px; margin: 0 0 8px; }
 .wk-ue-judge-acts { display: flex; justify-content: flex-start; }
+/* The judgments' one action with its quiet scope, then a small Options disclosure. */
+.wk-ue-judge-when { margin: 4px 0 0; }
+.wk-ue-judge-acts { gap: 12px; align-items: center; flex-wrap: wrap; margin: 4px 0 0; }
+.wk-ue-judge-options { margin: 0; }
+.wk-ue-judge-options > summary { cursor: pointer; width: max-content; font-size: 14px; color: var(--ink-muted); padding: 4px 2px; border-radius: 6px; }
+.wk-ue-judge-options > summary:hover { color: var(--ink-high); text-decoration: underline; }
+.wk-ue-judge-options > summary:focus-visible { outline: 2px solid transparent; box-shadow: var(--focus-ring); }
+.wk-ue-judge-options-body { display: flex; flex-direction: column; gap: 12px; padding: 10px 0 4px; }
+.wk-ue-judge-check { display: flex; gap: 10px; align-items: flex-start; font-size: 14px; color: var(--ink-high); }
+.wk-ue-judge-check small { color: var(--ink-muted); }
+.wk-ue-judge-options .wk-ue-field { max-width: 320px; }

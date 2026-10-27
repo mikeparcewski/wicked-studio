@@ -11,6 +11,10 @@ import { readErrorKind } from '../../api/errors.js';
 import { driftLines, judgeRow, judgeSentence } from '../../board/defaultEvalModel.js';
 import { absTime, relTime } from '../../board/relTime.js';
 import { Skeleton, StateBanner } from '../ui/index.js';
+import { CalmButton, CalmSeg } from '../calm/Calm.js';
+
+/** How many projects the scope segment names; the rest are under Options. */
+const SEG_PROJECTS = 2;
 
 /**
  * "How well the system judges" on the calm Evaluate page (DES-DEFAULT-EVALS-001 §7). Crew scores the system's own
@@ -18,7 +22,9 @@ import { Skeleton, StateBanner } from '../ui/index.js';
  * and normalizing) against what really happened in this daemon's runs. One roomy row per suite; a row opens its
  * detail. Too few cases never reads as a rate, and real and synthetic cases are always named apart.
  *
- * One write: Check now (`POST /testing/default-evals/run`), which reads the run store and keeps the report.
+ * One action: Run evals (`POST /testing/default-evals/run`), with its scope as a quiet segment beside it (all
+ * projects, or one); the baseline and further projects sit under Options. The last run's time is one muted line
+ * under the title.
  */
 
 type Load =
@@ -62,6 +68,12 @@ export function SystemJudgments(): React.ReactElement {
     if (report?.project != null) s.add(report.project);
     return [...s].sort();
   }, [report]);
+  const projectChoices = useMemo(() => {
+    const shown = projects.slice(0, SEG_PROJECTS);
+    // A project picked under Options joins the segment so the choice stays visible.
+    if (scope !== 'all' && !shown.includes(scope)) shown.push(scope);
+    return shown.map((p) => ({ value: p, label: p, testId: `evaluate-judgments-scope-${p}` }));
+  }, [projects, scope]);
 
   const check = (): void => {
     setBusy(true);
@@ -83,16 +95,37 @@ export function SystemJudgments(): React.ReactElement {
 
   return (
     <section className="wk-ue-sec" data-testid="evaluate-judgments" aria-labelledby="evaluate-judgments-title">
-      <div className="wk-ue-sec-head">
-        <h2 id="evaluate-judgments-title" className="wk-ue-label">How well the system judges</h2>
-        <span className="wk-ue-note" data-testid="evaluate-judgments-when">
-          {report !== null ? <span title={absTime(Date.parse(report.createdAt))}>Checked {relTime(Date.parse(report.createdAt))}</span> : load.kind === 'loading' ? 'Reading…' : 'Never checked'}
-        </span>
-      </div>
-      <p className="wk-ue-note">
-        What needs you, floor decisions, QE verdicts and who built the work, each checked against what really happened in your runs.
-        {report !== null && <> <span data-testid="evaluate-judgments-sentence">{judgeSentence(report)}</span></>}
+      <h2 id="evaluate-judgments-title" className="wk-ue-label">How well the system judges</h2>
+      <p className="wk-ue-note wk-ue-judge-when" data-testid="evaluate-judgments-when">
+        {report !== null
+          ? <><span title={absTime(Date.parse(report.createdAt))}>Last run {relTime(Date.parse(report.createdAt))}</span> · <span data-testid="evaluate-judgments-sentence">{judgeSentence(report)}</span></>
+          : load.kind === 'loading' ? 'Reading the last run…' : 'Not run yet.'}
       </p>
+      <p className="wk-ue-note">What needs you, floor decisions, QE verdicts and who built the work, each checked against what really happened in your runs.</p>
+
+      <div className="wk-ue-judge-acts">
+        <CalmButton tone="primary" testId="evaluate-judgments-check" disabled={busy} onClick={check}>{busy ? 'Running…' : 'Run evals'}</CalmButton>
+        <CalmSeg label="Which projects" value={scope} onChange={setScope} data-testid="evaluate-judgments-scope"
+          options={[{ value: 'all', label: 'All projects', testId: 'evaluate-judgments-scope-all' }, ...projectChoices]} />
+      </div>
+      <details className="wk-ue-judge-options" data-testid="evaluate-judgments-options">
+        <summary data-testid="evaluate-judgments-options-toggle">Options</summary>
+        <div className="wk-ue-judge-options-body">
+          {projects.length > SEG_PROJECTS && (
+            <label className="wk-ue-field">
+              <span>Another project</span>
+              <select data-testid="evaluate-judgments-project" className="wk-field" value={projects.includes(scope) ? scope : ''} onChange={(e) => setScope(e.target.value === '' ? 'all' : e.target.value)}>
+                <option value="">Choose a project</option>
+                {projects.map((p) => <option key={p} value={p}>{p}</option>)}
+              </select>
+            </label>
+          )}
+          <label className="wk-ue-judge-check">
+            <input type="checkbox" data-testid="evaluate-judgments-baseline" checked={baseline} onChange={(e) => setBaseline(e.target.checked)} />
+            <span>Also count the shipped baseline <small>(the 2026-10-27 test rig’s cases, said apart in the count)</small></span>
+          </label>
+        </div>
+      </details>
 
       {load.kind === 'failed' && (
         <StateBanner data-testid="evaluate-judgments-error" kind={readErrorKind(load.error)} what="the last check"
@@ -106,7 +139,7 @@ export function SystemJudgments(): React.ReactElement {
       {load.kind === 'loading' ? (
         <div aria-busy="true"><Skeleton rows={3} variant="row" /></div>
       ) : report === null ? (
-        <p className="wk-ue-quiet" data-testid="evaluate-judgments-empty">Not checked yet. Check now to score the system’s judgments against your own runs.</p>
+        <p className="wk-ue-quiet" data-testid="evaluate-judgments-empty">Not run yet. Run evals to score the system’s judgments against your own runs.</p>
       ) : (
         <ul className="wk-ue-rows" aria-label="How well the system judges, by kind of judgment">
           {rows.map((r) => (
@@ -147,24 +180,6 @@ export function SystemJudgments(): React.ReactElement {
         </details>
       )}
 
-      <div className="wk-ue-fields">
-        <label className="wk-ue-field">
-          <span>Check</span>
-          <select data-testid="evaluate-judgments-scope" className="wk-field" value={scope} onChange={(e) => setScope(e.target.value)}>
-            <option value="all">Every project, and compare them</option>
-            {projects.map((p) => <option key={p} value={p}>{p} only</option>)}
-          </select>
-        </label>
-        <label className="wk-ue-field">
-          <span><input type="checkbox" data-testid="evaluate-judgments-baseline" checked={baseline} onChange={(e) => setBaseline(e.target.checked)} /> Also count the shipped baseline</span>
-          <small>Adds the 2026-10-27 test rig’s cases to your own, and says how many. Off, the numbers are your runs only.</small>
-        </label>
-      </div>
-      <div className="wk-ue-judge-acts">
-        <button type="button" className="wk-ue-btn wk-ue-btn--secondary" data-testid="evaluate-judgments-check" disabled={busy} onClick={check}>
-          {busy ? 'Checking…' : 'Check now'}
-        </button>
-      </div>
     </section>
   );
 }
