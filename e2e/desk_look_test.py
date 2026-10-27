@@ -177,7 +177,8 @@ with sync_playwright() as p:
     set_fixture(origin, view_prefs=None)
     page.goto(f"{origin}/", wait_until="networkidle")
     page.get_by_test_id("desk").wait_for(state="visible", timeout=15000)
-    page.wait_for_function("() => document.querySelectorAll('[data-testid=\"rail-session\"]').length >= 6",
+    # Recent shows five sessions at most since the ui-v2 nav regroup (the check below says so).
+    page.wait_for_function("() => document.querySelectorAll('[data-testid=\"rail-session\"]').length >= 1",
                            timeout=10000)
 
     # ── 3. Everything fits: the foot (Build & settings, then Nerve Center last) is on screen, and

@@ -85,6 +85,7 @@ with sync_playwright() as p:
     # Proposals, Memory and Memory's Proposals joined.
     # 27 since Health folded into Nerve Center (DES-SYSTEM-VIEW): `/health` only redirects, and the Nerve
     # Center row (`/watch`) carries "health" in its words.
+    # 30 since the ui-v2 sidebar regroup (2026-10-26): Jobs, Build & settings and Needs you (/needs) joined.
     open_palette("go:")
     dest_rows = page.get_by_test_id("palette-row").count()
     page.keyboard.press("Escape")
@@ -94,7 +95,7 @@ with sync_playwright() as p:
     page.screenshot(path=str(SHOTS / "desk-cmdk-go.png"))
     page.keyboard.press("Escape")
     groups = {r["group"] for r in rows}
-    check("go-group", groups == {"go"} and dest_rows == 27 and len(rows) > 27, groups=sorted(groups), destinations=dest_rows, rows=len(rows))
+    check("go-group", groups == {"go"} and dest_rows == 30 and len(rows) > 30, groups=sorted(groups), destinations=dest_rows, rows=len(rows))
 
     def reach(href: str, label: str) -> dict:
         open_palette(f"go: {label}")

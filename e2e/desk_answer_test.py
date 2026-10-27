@@ -88,7 +88,8 @@ def desk(browser, **corpus):
     page.add_init_script(
         "document.addEventListener('DOMContentLoaded', () => { const s = document.createElement('style'); "
         f"s.textContent = {json.dumps(HIDE_GATE_TOASTS)}; document.head.appendChild(s); }});")
-    page.goto(f"{origin}/", wait_until="networkidle")
+    # Home v2: the queue lives in Needs you in full (/needs, the landing's "N more waiting").
+    page.goto(f"{origin}/needs", wait_until="networkidle")
     page.get_by_test_id("needs-you-queue").wait_for(state="visible", timeout=15000)
     for t in page.locator('[data-testid="need-group-toggle"][aria-expanded="false"]').all():
         t.click()

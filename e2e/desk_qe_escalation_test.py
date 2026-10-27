@@ -75,7 +75,7 @@ with sync_playwright() as p:
         # card and "N more waiting", which opens Needs you in full.
         page.goto(f"{origin}/", wait_until="networkidle")
         page.get_by_test_id("desk-needs-more").click()
-        page.wait_for_function("() => new URLSearchParams(location.search).get('tab') === 'inbox'", timeout=8000)
+        page.wait_for_function("() => location.pathname === '/needs'", timeout=8000)
         # The escalated runs share one title, so Needs you folds them into one decision group; the
         # operator opens it and follows the run's own link.
         page.locator('[data-testid="desk-inbox-row"][data-key="group:approval"]').first.click()

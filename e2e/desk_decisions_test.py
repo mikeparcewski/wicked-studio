@@ -88,7 +88,8 @@ with sync_playwright() as p:
     set_fixture(origin, sessions=True, run_chat_id=True, decisions=True, decisions_mode="on", steering_rules=True, extra_frames=[], reset_decisions=True)
 
     # ── 1. B12: the review proposal is a Needs You row in the operator's words ─────────
-    page.goto(f"{origin}/", wait_until="networkidle")
+    # Home v2: every Needs You row is in Needs you in full (/needs).
+    page.goto(f"{origin}/needs", wait_until="networkidle")
     row = page.locator('[data-testid="need-row"]').filter(has_text="From your words")
     try:
         row.first.wait_for(state="visible", timeout=15000)
