@@ -12,8 +12,8 @@
   "studioVersion": "0.12.3",
   "counts": {
     "files": 251,
-    "occurrences": 3350,
-    "static": 2860,
+    "occurrences": 3353,
+    "static": 2863,
     "dynamic": 75,
     "computed": 33
   },
@@ -5648,6 +5648,12 @@
       ]
     },
     {
+      "testId": "insights-confidence",
+      "files": [
+        "src/plugins/wicked-insights/plugin.ts"
+      ]
+    },
+    {
       "testId": "insights-decide",
       "files": [
         "src/components/insights/InsightsPage.tsx"
@@ -5661,6 +5667,12 @@
     },
     {
       "testId": "insights-decide-title",
+      "files": [
+        "src/components/insights/InsightsPage.tsx"
+      ]
+    },
+    {
+      "testId": "insights-decide-why",
       "files": [
         "src/components/insights/InsightsPage.tsx"
       ]
@@ -5690,6 +5702,12 @@
       ]
     },
     {
+      "testId": "insights-footnote",
+      "files": [
+        "src/plugins/wicked-insights/plugin.ts"
+      ]
+    },
+    {
       "testId": "insights-frame",
       "files": [
         "src/components/insights/InsightsPage.tsx"
@@ -5715,6 +5733,12 @@
     },
     {
       "testId": "insights-rec",
+      "files": [
+        "src/plugins/wicked-insights/plugin.ts"
+      ]
+    },
+    {
+      "testId": "insights-rec-pick",
       "files": [
         "src/plugins/wicked-insights/plugin.ts"
       ]
@@ -5751,12 +5775,6 @@
     },
     {
       "testId": "insights-trends",
-      "files": [
-        "src/plugins/wicked-insights/plugin.ts"
-      ]
-    },
-    {
-      "testId": "insights-watching",
       "files": [
         "src/plugins/wicked-insights/plugin.ts"
       ]
