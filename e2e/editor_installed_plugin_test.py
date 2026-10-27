@@ -117,7 +117,7 @@ with sync_playwright() as p:
         page.screenshot(path=str(SHOTS / f"editor-installed-plugin-list-{theme}.png"))
         check(f"{theme}-listed-as-installed",
               text.startswith("Changelog entry") and row.get_by_test_id("editor-plugin-source").inner_text() == "Installed"
-              and "Version 0.1.0" in text and "Can: " in row.get_by_test_id("editor-plugin-permissions").inner_text(),
+              and "Version 0.1.0" in text and row.get_by_test_id("editor-plugin-permissions").inner_text().strip() == "Can: go full screen",
               text=text[:300])
 
         # ── 2. opens in the editor host: this editor, this version, this hash ───────────────────────
