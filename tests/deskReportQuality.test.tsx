@@ -166,6 +166,7 @@ describe('Desk views after the sidebar regroup (ui-v2, 2026-10-26): pages on the
     expect(screen.getByTestId('desk')).toHaveAttribute('data-tab', view);
     // Home is the landing: its greeting is its title (home v2); the others carry the page's one name.
     if (title === null) expect(screen.getByTestId('desk-work')).toHaveAttribute('data-home', 'v2');
+    // One title: the calm page's own (the Desk's header would be a second h1 above it).
     else expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(title);
   });
 });

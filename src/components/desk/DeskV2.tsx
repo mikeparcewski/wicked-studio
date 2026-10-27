@@ -454,9 +454,10 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
         {(readState === 'failed' || readState === 'stale') && runsError !== null && (
           <StateBanner data-testid="desk-runs-failed" kind={readState === 'stale' ? 'stale' : readErrorKind(runsError)} what="your work" error={displayText(runsError)} {...(onRetryRuns !== undefined ? { onRetry: onRetryRuns } : {})} />
         )}
-        {/* The landing (`/`, Home): home v2 carries its own greeting where the page title would be; Jobs,
-            Report and Understand are titled pages; a project's page keeps its header. */}
-        {!(home && tab === 'work') && header}
+        {/* The landing (`/`, Home) carries its own greeting, and the calm Jobs, Report and Understand pages
+            their own title and sentence, so the Desk draws no second title over them. Needs you in full and
+            a project's page keep the header. */}
+        {!(home && (tab === 'work' || tab === 'runs' || tab === 'report' || tab === 'understand')) && header}
         {tabs}
         {tab === 'work' ? (home ? homeView : work) : tab === 'inbox' ? inboxView : tab === 'runs' ? runsTab : tab === 'report' ? report : understand}
       </div>

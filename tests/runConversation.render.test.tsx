@@ -42,7 +42,9 @@ describe('the run as a conversation, rendered', () => {
       [unit('build', 1, 'done', 'claude'), unit('deliver', 2, 'rejected', null)]);
     render(<RunBlock view={view} badge={0} sessionId={`run:${RUN}`} />);
     expect(await screen.findByTestId('chat-final')).toBeTruthy();
-    expect(screen.getByTestId('chat-final-text').textContent).toMatch(/^Done\./);
+    // J4 deliver truth: a stranded run never reads "Done"; it leads "Not delivered" and names the door.
+    expect(screen.getByTestId('chat-final-text').textContent).toMatch(/^Not delivered\./);
+    expect(screen.getByTestId('chat-final-text').textContent).toContain('Deliver — open a PR');
     expect(screen.getByTestId('session-stranded')).toBeTruthy();
   });
 

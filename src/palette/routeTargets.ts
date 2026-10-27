@@ -29,6 +29,7 @@ export interface RouteShape {
 export const ROUTE_SHAPES: readonly RouteShape[] = [
   { id: 'home', example: '/', is: (r) => r.panel === 'home' },
   // The ui-v2 nav regroup: the Desk's old tabs as pages, and Build & settings.
+  { id: 'needs', example: '/needs', is: (r) => r.panel === 'needs' },
   { id: 'jobs', example: '/jobs', is: (r) => r.panel === 'jobs' },
   { id: 'report', example: '/report', is: (r) => r.panel === 'report' },
   { id: 'understand', example: '/understand', is: (r) => r.panel === 'understand' },
@@ -78,6 +79,7 @@ export const NOT_A_DESTINATION = 'not-found';
 const DESTINATIONS: ReadonlyArray<{ shape: string; label: string; href: string }> = [
   // The sidebar's pages, in its order (ui-v2 nav regroup), each named as the sidebar names it.
   { shape: 'home', label: `${PAGE_NAMES.home} — what needs you, what is running`, href: '/' },
+  { shape: 'needs', label: `${PAGE_NAMES.needs} — everything waiting on you`, href: '/needs' },
   { shape: 'jobs', label: `${PAGE_NAMES.jobs} — every job, running and finished`, href: '/jobs' },
   { shape: 'report', label: `${PAGE_NAMES.report} — charts, spend and outcomes`, href: '/report' },
   { shape: 'understand', label: `${PAGE_NAMES.understand} — compare agents, workflows and jobs`, href: '/understand' },

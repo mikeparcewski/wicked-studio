@@ -67,7 +67,11 @@ describe('every rail item has hover, pressed and focus-visible states', () => {
   it('the current page is not the hover look (the accent wash, not the hover tint)', () => {
     const current = all.filter((r) => r.selector.includes('[aria-current="page"]') && !/:(hover|active|focus-visible)/u.test(r.selector) && r.body.includes('background:'));
     expect(current.length).toBeGreaterThan(0);
-    expect(current.every((r) => r.body.includes('var(--accent-wash)'))).toBe(true);
+    // The accent wash; the sidebar's page items (ui-v2 nav) fill a stronger accent share than their hover.
+    expect(current.every((r) => r.body.includes('var(--accent-wash)') || r.selector.includes('.wk-rail-nav-item'))).toBe(true);
+    const share = (sel: string): number => Number(/var\(--accent\) (\d+)%/u.exec(all.find((r) => r.selector === sel)?.body ?? '')?.[1] ?? NaN);
+    expect(share('.wk-rail .wk-rail-nav-item[aria-current="page"]')).toBeGreaterThan(share('.wk-rail .wk-rail-nav-item:hover'));
+    expect(current.some((r) => r.body.includes('var(--rail-hover-bg'))).toBe(false);
   });
 });
 
