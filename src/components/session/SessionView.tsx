@@ -987,9 +987,9 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
       {/* What the dock already holds is not said again above the thread. */}
       {ready && <NeedsBanner items={waiting.filter((w) => !dockItems.some((d) => d.key === w.runId))} onJump={jumpToItem} />}
 
-      <DecisionDockFrame items={dockItems} composer={(reply) => (
+      <DecisionDockFrame items={dockItems} composer={(reply, docked) => (
         // The measure sits on a wrapper: the composer's own box (its `/` and `@` menus anchor to it) stays the input's width.
-        <div className="wk-session-composer-wrap wk-measure wk-measure--thread"><DockedComposer reply={reply} composerProps={composerProps} who={dockWho} /></div>
+        <div className="wk-session-composer-wrap wk-measure wk-measure--thread"><DockedComposer reply={reply} docked={docked} composerProps={composerProps} who={dockWho} /></div>
       )}>
       <div className="wk-session-body">
         {/* S16a-4a: an address naming an artifact this session does not hold grows nothing and says so. */}
@@ -1224,13 +1224,23 @@ export { RunBlock };
  * its note choice, or asks a separate question — the draft's intent picks which (the platform's prompt routing; none
  * on today's crew, so it replies, and says so), and one click on the switch overrides it for that draft.
  */
-function DockedComposer({ reply, composerProps, who }: {
+function DockedComposer({ reply, docked, composerProps, who }: {
   reply: DockReply | null;
+  /** A decision is docked: with no note choice to reply through, the box says plainly that Send asks separately. */
+  docked: boolean;
   composerProps: React.ComponentProps<typeof Composer>;
   who: string | null;
 }): React.ReactElement {
   const router = useDraftRouter();
   const { route, flip } = useReplyRoute(reply === null ? '' : composerProps.text ?? '', router);
+  if (reply === null && docked) {
+    // The docked decision takes no note (a hand-over, a plan, a question from a run): Send asks a separate question.
+    return (
+      <Composer {...composerProps} placeholder="Ask a separate question about this job…"
+        footer={<p data-testid="session-reply-switch" data-to="ask" data-why="no-note" role="note" className="wk-composer-hint wk-reply-switch"><span data-testid="session-reply-dest">Send asks a separate question</span></p>}
+        className="wk-session-composer" />
+    );
+  }
   if (reply === null) return <Composer {...composerProps} className="wk-session-composer" />;
   const words = switchWords(route, reply.label);
   const footer = (

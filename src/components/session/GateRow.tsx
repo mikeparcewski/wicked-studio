@@ -29,7 +29,7 @@ import { AssuranceReceipt, AssuranceReceiptTech, QeAcceptanceLabel, ReducedAssur
 import { missingSeatsLine, rejudgeOfferOf, type RejudgeOffer } from '../../board/rejudge.js';
 import { testWords } from '../../board/failingChecks.js';
 import { useOfferReply } from './DecisionDock.js';
-import { builderResponder } from '../../board/responder.js';
+import { builderResponder, isHelperSeat } from '../../board/responder.js';
 import { FLOOR_OVERRIDE_CONSEQUENCE, FLOOR_OVERRIDE_KEY, FLOOR_OVERRIDE_PLACEHOLDER, FLOOR_OVERRIDE_SEND } from '../../board/floorOverride.js';
 
 /** How often a judge-unavailable gate re-reads whether a judge seat can rule now (a seat signed in
@@ -92,6 +92,28 @@ function useTicker(on: boolean): number {
 /** A text field anywhere on the page (the composer, a sheet's input): a gate's arrival never yanks its caret. */
 function isEditable(el: Element | null): boolean {
   return el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || (el instanceof HTMLElement && el.isContentEditable);
+}
+
+/**
+ * evaluator ≠ creator, read off the live roster: who may judge the gate's step. `builders` are the seats that built
+ * the judged work — every creator step at or before the gate, the seat crew names ("built on `codex`") and the seat
+ * the gate's own step ran on. `inJob`: a seat of the job's own pool that is none of them and can take work now (the
+ * only kind crew's reassign accepts). `outside`: a signed-in helper outside the job that is none of them.
+ */
+export function judgeSeats(view: RunView, ord: number, prompt: string, pool: readonly string[], roster: readonly RosterSeat[] | null, benched: ReturnType<typeof runBenchesOf> = []): {
+  builders: string[]; inJob?: ReassignCandidate; outside?: RosterSeat;
+} {
+  const builtOn = /built on `([^`]+)`/.exec(prompt)?.[1] ?? null;
+  const unitCli = view.units.find((u) => u.ord === ord)?.assigned_cli ?? null;
+  const builders = [...new Set([
+    ...view.units.filter((u) => u.role === 'creator' && u.ord <= ord && isHelperSeat(u.assigned_cli)).map((u) => u.assigned_cli as string),
+    ...(builtOn !== null ? [builtOn] : []),
+    ...(isHelperSeat(unitCli) ? [unitCli] : []),
+  ])];
+  const inJob = reassignCandidates(pool, unitCli, roster, builders, benched).find((c) => c.state === 'ready' && !builders.includes(c.cli));
+  const outside = (roster ?? []).find((r) => r.signed_in === true && !pool.includes(r.key) && !builders.includes(r.key) && isHelperSeat(r.key)
+    && (r as { health?: { status?: string } }).health?.status !== 'inactive');
+  return { builders, ...(inJob !== undefined ? { inJob } : {}), ...(outside !== undefined ? { outside } : {}) };
 }
 
 /** A phase id in words: "security-review" → "security review". */
@@ -261,11 +283,15 @@ function RunGateRow({ view, gate, navigate }: { view: RunView; gate: OpenGate | 
   // (mockup ui-v2-gate + review) The headline is the cause in plain words, not the engine's framing.
   const split = model?.failingTests?.split;
   const fresh = split !== undefined && split.onBase.length > 0 ? split.fresh : null;
-  const headline = seatRefusal ? 'No second helper is free to review this'
+  const builder = builderResponder(view, gate?.ord ?? null, roster);
+  // evaluator ≠ creator: who may judge this step is read off the live roster, never a seat that built the work.
+  const judges = useMemo(() => (gate === undefined ? null : judgeSeats(view, gate.ord, gate.prompt, pool, roster, benched)), [view, gate, pool, roster, benched]);
+  const headline = seatRefusal ? (judges?.inJob !== undefined ? `${seatName(judges.inJob.cli, judges.inJob.label)} can review this instead`
+      : judges?.outside !== undefined ? `${seatName(judges.outside.key, judges.outside.display_name ?? null)} could review this, but isn’t one of this job’s helpers`
+        : 'No second helper is free to review this')
     : judgeWait && model?.qe === undefined ? 'No helper could check this step independently'
       : fresh !== null && fresh.length > 0 ? (fresh.length === 1 ? 'One test this change broke needs fixing before the job can go on' : `${fresh.length} tests this change broke need fixing before the job can go on`)
         : fresh !== null ? 'Every failing test fails on the base too' : null;
-  const builder = builderResponder(view, gate?.ord ?? null, roster);
   // The action the gate's own words name is a button. Crew marked no suggestion: the gate describes the move.
   const derived = useMemo<DerivedLead | null>(() => {
     if (model === null || model.recommended !== null || gate === undefined) return null;
@@ -275,15 +301,22 @@ function RunGateRow({ view, gate, navigate }: { view: RunView; gate: OpenGate | 
       return { act: { key: 'sign-in', label: 'Sign in a second helper', title: 'Sign a second helper in; then Approve retries the step with it.',
         onClick: () => { if (out !== undefined) signIn.open(out.key); else navigate?.(AGENTS_PATH); } } };
     };
-    if (seatRefusal) {
-      // A distinct seat that can take the review now: approve and retry with it (the reassign route, its undo window).
-      const builtOn = /built on `([^`]+)`/.exec(gate.prompt)?.[1] ?? null;
-      const unitCli = view.units.find((u) => u.ord === gate.ord)?.assigned_cli ?? null;
-      const free = reassignCandidates(pool, unitCli, roster, builtOn !== null ? [builtOn] : [], benched).find((c) => c.state === 'ready');
-      if (free !== undefined) {
-        const name = seatName(free.cli, free.label);
-        return { choice: { key: `reassign:${free.cli}`, label: `Approve and retry with ${name}`, reassignCli: free.cli, decision: null, needsNote: false,
-          title: `${name} reviews the work as it stands; the step runs again there.` } };
+    if (seatRefusal && judges !== null) {
+      // A seat in the job that did not build the work and can take it now: approve and retry with it (the reassign
+      // route, its undo window).
+      if (judges.inJob !== undefined) {
+        const name = seatName(judges.inJob.cli, judges.inJob.label);
+        return { choice: { key: `reassign:${judges.inJob.cli}`, label: `Approve and retry with ${name}`, reassignCli: judges.inJob.cli, decision: null, needsNote: false,
+          title: `${name} reviews the work as it stands; it did not build it. The step runs again there.` } };
+      }
+      // One is signed in but is not in this job: crew re-seats a step only within the job's own helpers (POST
+      // /runs/:id/reassign answers 400 for any other), so the way on is the job again with it.
+      if (judges.outside !== undefined) {
+        const seat = judges.outside;
+        const name = seatName(seat.key, seat.display_name ?? null);
+        return { act: { key: 'relaunch-with', label: `Start again with ${name}…`,
+          title: `Opens the launch form with this job's brief and ${name} added as a helper, so it can review. Nothing starts until you launch; this job stays here.`,
+          onClick: () => { setRetryPrefill({ ...retryPrefillOf(view), clis: [...new Set([...retryPrefillOf(view).clis, seat.key])] }); navigate?.('/runs/new'); } } };
       }
       return signInLead();
     }
@@ -294,11 +327,12 @@ function RunGateRow({ view, gate, navigate }: { view: RunView; gate: OpenGate | 
       return { choice: { ...back, label: fresh.length === 1 ? 'Fix the new failure' : 'Fix the new failures', title: `Send the new ${fresh.length === 1 ? 'failure' : 'failures'} back to ${who} with the test named, so it fixes just that.` },
         prefill: `Fix only the test${fresh.length === 1 ? '' : 's'} this change broke (the others fail on the base too): ${fresh.join(', ')}` };
     }
-    const promote = all.find((c) => c.key === 'rejudge') ?? all.find((c) => c.reassignCli !== undefined);
+    // Never lead with a choice that seats a builder as the judge (it stays under Other options, said as such).
+    const promote = all.find((c) => c.key === 'rejudge') ?? all.find((c) => c.reassignCli !== undefined && !(judges?.builders ?? []).includes(c.reassignCli));
     if (promote !== undefined && (judgeWait || model.deadSeat !== undefined)) return { choice: promote };
     if (judgeWait) return signInLead();
     return null;
-  }, [model, gate, seatRefusal, judgeWait, roster, pool, view.units, benched, signIn, navigate, fresh, builder]);
+  }, [model, gate, seatRefusal, judgeWait, roster, pool, view, signIn, navigate, fresh, builder, judges]);
   const explain = model === null ? null : (
     <>
       {model.deadSeat !== undefined && (
@@ -338,6 +372,8 @@ function RunGateRow({ view, gate, navigate }: { view: RunView; gate: OpenGate | 
       explain={explain}
       headline={headline}
       derived={derived}
+      builders={judges?.builders ?? []}
+      builderName={(cli) => seatName(cli, roster?.find((r) => r.key === cli)?.display_name ?? null)}
       extraItems={seatRefusal ? <ReducedRelaunchItem view={view} {...(navigate !== undefined ? { navigate } : {})} /> : null}
       unavailable={model?.withheldSeats !== undefined && model.withheldSeats.length > 0 ? <WithheldSeats seats={model.withheldSeats} menu onSignIn={signIn.open} /> : null}
       signInModal={signIn.modal}
@@ -612,9 +648,12 @@ export function refusalWords(r: DeliverRefusal, at: { branch: string | null; rep
  *  to a free seat, a re-judge), or an act that is not a gate answer (open sign-in). */
 type DerivedLead = { choice: GateRowChoice; act?: undefined; prefill?: string } | { act: { key: string; label: string; title: string; onClick: () => void }; choice?: undefined; prefill?: undefined };
 
-function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, retryEvents, depth, refusalLines = null, drift = null, assurance = null, assuranceTech = null, explain = null, unavailable = null, signInModal = null, headline = null, derived = null, extraItems = null }: {
+function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, retryEvents, depth, refusalLines = null, drift = null, assurance = null, assuranceTech = null, explain = null, unavailable = null, signInModal = null, headline = null, derived = null, extraItems = null, builders = [], builderName = (c) => c }: {
   /** The cause, in plain words, when it reads better than the engine's question. */
   headline?: string | null;
+  /** The seats that built the judged work: a choice that seats one as the judge is never the lead, and says so. */
+  builders?: readonly string[];
+  builderName?: (cli: string) => string;
   /** The move the gate's words name when crew suggested none. */
   derived?: DerivedLead | null;
   /** More Other options that are not gate answers (start again with reduced assurance). */
@@ -936,7 +975,8 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
       data-choice-key={choice.key}
       data-recommended={model.recommended !== null && i === model.recommended ? 'true' : 'false'}
       title={choice.title}
-      {...(!asPrimary ? { 'data-sub': choice.key === 'rerun' && rerunOffer !== null ? `Keeps the steps before it${rerunOffer.minutes !== null ? ` · about ${rerunOffer.minutes} min` : ''}` : choice.title } : {})}
+      {...(!asPrimary ? { 'data-sub': choice.key === 'rerun' && rerunOffer !== null ? `Keeps the steps before it${rerunOffer.minutes !== null ? ` · about ${rerunOffer.minutes} min` : ''}`
+        : choice.reassignCli !== undefined && builders.includes(choice.reassignCli) ? `${builderName(choice.reassignCli)} checks its own work (reduced assurance)` : choice.title } : {})}
       className={asPrimary
         ? ['wk-session-gate-choice', 'wk-gate2-btn', suggested ? 'wk-gate2-btn--primary wk-session-gate-choice--suggested' : 'wk-gate2-btn--secondary', pick.focus === i ? 'wk-session-gate-choice--focus' : '', choice.disabled === true ? 'wk-session-gate-choice--disabled' : ''].filter(Boolean).join(' ')
         : ['wk-session-gate-choice', 'wk-gate2-mi', choice.disabled === true ? 'wk-gate2-mi--off wk-session-gate-choice--disabled' : ''].filter(Boolean).join(' ')}

@@ -125,7 +125,7 @@ export function DecisionDockFrame({ items, children, composer, now = Date.now() 
   items: readonly DockItem[];
   children: React.ReactNode;
   /** The composer, under the dock: handed the docked decision's note choice while it offers one. */
-  composer?: (reply: DockReply | null) => React.ReactNode;
+  composer?: (reply: DockReply | null, docked: boolean) => React.ReactNode;
   now?: number;
 }): React.ReactElement {
   const [slot, setSlot] = useState<HTMLElement | null>(null);
@@ -212,7 +212,7 @@ export function DecisionDockFrame({ items, children, composer, now = Date.now() 
           </div>
         </section>
       )}
-      {composer?.(reply)}
+      {composer?.(reply, active !== null)}
     </Ctx.Provider>
   );
 }

@@ -7,7 +7,8 @@ import * as client from '../src/api/client.js';
 import type { SessionView } from '../src/api/types.js';
 import { SessionPage } from '../src/components/session/SessionView.js';
 import { DecisionDockFrame, DecisionMarker, Docked, eyebrowWords } from '../src/components/session/DecisionDock.js';
-import { GateRow } from '../src/components/session/GateRow.js';
+import { GateRow, judgeSeats } from '../src/components/session/GateRow.js';
+import { peekRetryPrefill } from '../src/store/retryPrefill.js';
 import { useSheets } from '../src/store/sheets.js';
 import { useRunEventStore } from '../src/store/events.js';
 import { useCapabilities } from '../src/store/capabilities.js';
@@ -138,6 +139,16 @@ describe('the dock: its own surface above the composer, never a bubble', () => {
 });
 
 describe('the reply box: the draft\'s intent picks where Send goes; the switch says so; a click overrides', () => {
+  it('a docked decision with no note choice (a hand-over): the box and its footer say Send asks a separate question', async () => {
+    useGateStore.setState({ gates: { r1: { runId: 'r1', ord: 3, prompt: 'Approve delivery before unit 3 runs. Pushes branch wicked/r1', lifecycle: 'open', receivedAt: Date.now(), gateKind: 'deliver' } } });
+    useRunEventStore.setState({ byRun: { r1: [] } });
+    page();
+    await screen.findByTestId('decision-dock');
+    await waitFor(() => expect(screen.getByTestId('session-composer-input').getAttribute('placeholder')).toBe('Ask a separate question about this job…'));
+    expect(screen.getByTestId('session-reply-switch').textContent).toBe('Send asks a separate question');
+    expect(screen.queryByTestId('session-reply-flip')).toBeNull();
+  });
+
   it('routing unavailable (today\'s crew): it replies to the decision, and the switch says why', async () => {
     page();
     await screen.findByTestId('decision-dock');
@@ -209,17 +220,50 @@ describe('the gate card, compact (review of the dock)', () => {
     { type: 'awaitingHuman', session: 'r1', ord: 2, gateKind: 'escalation', prompt: REFUSAL, ts: 1 },
   ] as unknown as CoreEvent[];
 
-  it('the cause is the headline, and the move the gate names is the primary: approve and retry with a free seat', async () => {
+  const viewWith = (clis: string[]): SessionView => {
+    const v = live();
+    (v.session as unknown as { clis: string[] }).clis = clis;
+    return v;
+  };
+  const rosterWith = (piSignedIn: boolean): void => setCachedRoster(ROSTER.map((r) => (r.key === 'pi' ? { ...r, signed_in: piSignedIn } : r)) as never);
+
+  it('builder ≠ judge: every seat that built the judged work is excluded (the creator steps, crew\'s "built on", the gate\'s own seat)', () => {
+    const j = judgeSeats(viewWith(['claude', 'codex', 'pi']), 2, REFUSAL, ['claude', 'codex', 'pi'], ROSTER as never);
+    expect(j.builders.sort()).toEqual(['claude', 'codex']);
+    expect(j.inJob).toBeUndefined();
+  });
+
+  it('none is free: the headline says so and the primary opens sign-in; no builder is ever offered as the lead', async () => {
     useRunEventStore.setState({ byRun: { r1: refusalEvents } });
-    const gate: OpenGate = { ...GATE, prompt: REFUSAL };
-    render(<GateRow view={live()} gate={gate} navigate={vi.fn()} />);
+    rosterWith(false);
+    render(<GateRow view={viewWith(['claude', 'codex', 'pi'])} gate={{ ...GATE, prompt: REFUSAL }} navigate={vi.fn()} />);
     await waitFor(() => expect(screen.getByTestId('session-gate-question').textContent).toBe('No second helper is free to review this'));
-    const primary = screen.getAllByTestId('session-gate-choice')[0]!;
-    expect(primary.textContent).toBe('Approve and retry with Claude Code');
-    expect(primary.className).toMatch(/wk-gate2-btn--primary/);
+    expect(screen.getByTestId('session-gate-lead-act').textContent).toBe('Sign in a second helper');
+    expect(screen.queryAllByTestId('session-gate-choice').some((b) => /Claude Code|Codex/.test(b.textContent ?? '') && b.className.includes('--primary'))).toBe(false);
     // The explanation, the receipt and the raw detail are folded behind More about this.
     expect((screen.getByTestId('session-gate-more-about') as HTMLDetailsElement).open).toBe(false);
     expect(screen.getByTestId('session-gate-more-about').contains(screen.getByTestId('session-gate-creator-seat'))).toBe(true);
+  });
+
+  it('a distinct seat in the job is free: it is the headline and the primary (approve and retry with it)', async () => {
+    useRunEventStore.setState({ byRun: { r1: refusalEvents } });
+    rosterWith(true);
+    render(<GateRow view={viewWith(['claude', 'codex', 'pi'])} gate={{ ...GATE, prompt: REFUSAL }} navigate={vi.fn()} />);
+    await waitFor(() => expect(screen.getByTestId('session-gate-question').textContent).toBe('Pi CLI can review this instead'));
+    const primary = screen.getAllByTestId('session-gate-choice')[0]!;
+    expect(primary.textContent).toBe('Approve and retry with Pi CLI');
+    expect(primary.className).toMatch(/wk-gate2-btn--primary/);
+  });
+
+  it('a distinct seat is signed in but outside the job (crew re-seats only within it): start again with it, never a builder', async () => {
+    useRunEventStore.setState({ byRun: { r1: refusalEvents } });
+    rosterWith(true);
+    const navigate = vi.fn();
+    render(<GateRow view={viewWith(['claude', 'codex'])} gate={{ ...GATE, prompt: REFUSAL }} navigate={navigate} />);
+    await waitFor(() => expect(screen.getByTestId('session-gate-question').textContent).toBe('Pi CLI could review this, but isn’t one of this job’s helpers'));
+    fireEvent.click(screen.getByTestId('session-gate-lead-act'));
+    expect(navigate).toHaveBeenCalledWith('/runs/new');
+    expect(peekRetryPrefill()?.clis).toEqual(['claude', 'codex', 'pi']);
   });
 
   it('every other choice stays reachable under Other options', async () => {
