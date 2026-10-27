@@ -53,7 +53,7 @@ import { scrollBehavior } from '../ui/motion.js';
 import type { MenuItem } from '../ui/index.js';
 import { projectDetailPath } from '../../hooks/useRoute.js';
 import { DeskInbox } from './DeskInbox.js';
-import { NeedsRanked } from './NeedsRanked.js';
+import { namedInStuck, NeedsRanked } from './NeedsRanked.js';
 import { useRankedNeeds } from '../../hooks/useRankedNeeds.js';
 import { FocusLockToggle } from '../NeedsYouQueue.js';
 import { useNeedsSources } from '../../store/needsSources.js';
@@ -358,7 +358,10 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
   // the chores for whoever runs studio riding at its top, as before.
   const inboxView = ranked !== null && projectId === undefined ? (
     <div data-testid="desk-inbox-view">
-      <NeedsRanked snapshot={ranked} runs={runs} needRows={needRows} navigate={navigate} now={now} extra={choresBlock} />
+      <NeedsRanked snapshot={ranked} runs={runs} needRows={needRows} navigate={navigate} now={now} setup={[
+        ...setup.map((c) => ({ key: c.key, title: c.title, line: c.line, label: c.action.label, onAct: () => navigate(c.action.path) })),
+        ...chores.filter((c) => !namedInStuck(c.seat, ranked.attention)).map((c) => ({ key: c.key, title: c.title, line: c.line, label: c.action.label, onAct: () => setSignIn(c.rosterSeat) })),
+      ]} />
     </div>
   ) : (
     <div data-testid="desk-inbox-view" className="wk-inbox-view">

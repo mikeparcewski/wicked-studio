@@ -163,6 +163,11 @@
 .wk-needs-reason-input:focus-visible { outline: 2px solid transparent; box-shadow: var(--focus-ring); }
 .wk-needs-fail { font-size: 14px; color: var(--status-fail); }
 .wk-needs-worth { font-size: 15px; }
+.wk-needs-more { align-self: flex-start; margin-top: 6px; padding: 2px 4px; border: 0; background: transparent; font: inherit; font-size: 15px; cursor: pointer; }
+.wk-needs-toggle { border: 0; background: transparent; font: inherit; font-size: 14px; cursor: pointer; padding: 0 4px; align-self: center; }
+.wk-needs-row-btn { min-height: 36px; padding: 0 14px; font-size: 14px; flex-shrink: 0; }
+.wk-needs-group { display: flex; flex-direction: column; }
+.wk-needs-members { margin: 0 0 8px 24px; }
 .wk-needs-worth > summary { cursor: pointer; display: inline-block; }
 .wk-needs-worth-list { margin: 12px 0 0; padding-left: 18px; display: flex; flex-direction: column; gap: 8px; color: var(--ink-muted); }
 @media (prefers-reduced-motion: reduce) { .wk-needs-row { transition: none; } }
