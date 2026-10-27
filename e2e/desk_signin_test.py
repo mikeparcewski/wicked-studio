@@ -88,8 +88,8 @@ with sync_playwright() as p:
     # The daemon's own line for codex (worker home as an absolute path, as the real daemon sends it).
     set_fixture(origin, wave1=True, wave2b=True, simple_gates=["g1", "g2"], seat_week=False,
                 roster_login_lines={"codex": LINE}, roster_signed_in={})
-    page.goto(f"{origin}/?tab=agents", wait_until="networkidle")
-    page.get_by_test_id("desk").wait_for(state="visible", timeout=15000)
+    page.goto(f"{origin}/agents", wait_until="networkidle")
+    page.get_by_test_id("agents-page").wait_for(state="visible", timeout=15000)
     page.wait_for_function("() => !!document.querySelector('[data-testid=\"agents-fix\"][data-agent=\"codex\"]')", timeout=10000)
 
     # ── 1. the Agents view's row opens the modal in place ──────────────────────────

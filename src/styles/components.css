@@ -1813,7 +1813,7 @@ html :is(input, textarea)::placeholder { color: var(--ink-placeholder); opacity:
 .wk-tech-details-summary::-webkit-details-marker { display: none; }
 .wk-tech-details-summary::before { content: ''; width: 0; height: 0; border-left: 4px solid currentColor; border-top: 4px solid transparent; border-bottom: 4px solid transparent; transition: transform var(--dur-fast) var(--ease-out); }
 .wk-tech-details[open] > .wk-tech-details-summary::before { transform: rotate(90deg); }
-.wk-tech-details-summary:hover { color: var(--ink-high); }
+.wk-tech-details-summary:hover { color: var(--ink-high); text-decoration: underline; text-underline-offset: 3px; }
 .wk-tech-details-summary:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-shadow: var(--focus-ring); }
 .wk-tech-details-body { margin: var(--space-1) 0 0; padding: var(--space-2) var(--space-3); max-height: 240px; overflow: auto; background: var(--surface-raised); border-radius: var(--radius-md); color: var(--ink-muted); font-family: var(--font-mono) !important; font-size: var(--text-xs); line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
 

@@ -141,7 +141,8 @@ with sync_playwright() as p:
 
     # ── 4. helpers moved: the old tab address lands on the Agents page (DES-seats-page §2.2) ──
     page.goto(f"{origin}/everything?tab=helpers", wait_until="networkidle")
-    page.wait_for_function("() => new URLSearchParams(location.search).get('tab') === 'agents' && document.querySelectorAll('[data-testid=\"agents-row\"]').length >= 3", timeout=10000)
+    # The Agents page is its own address since the ui-v2 sidebar regroup (/agents, not /?tab=agents).
+    page.wait_for_function("() => location.pathname === '/agents' && document.querySelectorAll('[data-testid=\"agents-row\"]').length >= 3", timeout=10000)
     helpers = page.evaluate("""() => [...document.querySelectorAll('[data-testid="agents-row"]')]
         .map(h => ({seat: h.dataset.agent, ready: h.dataset.ready, fix: h.querySelector('[data-testid="agents-fix"]')?.dataset.tone ?? null}))""")
     page.screenshot(path=str(SHOTS / "desk-everything-helpers.png"))
