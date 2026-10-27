@@ -7,7 +7,7 @@ Against the in-process fixture (wave-1 + wave-2b corpus: alpha/beta/gamma with r
 
   1. THE PAGE: /everything renders four tabs — Sessions, Everything made, Handed over, Projects — the
      tab is the address (?tab=), and the Sessions tab lists every session grouped by project.
-  2. THE RETIRED MOVES: /projects, /work?filter=failed, /chats, /execute, /runs, /vibe, /demo,
+  2. THE RETIRED MOVES: /work?filter=failed, /chats, /execute, /runs, /vibe, /demo,
      /p/beta/chronicle and /p/alpha each show the not-found page with the typed address kept (no
      redirect); /everything?tab=sessions&filter=failed presses Blocked and shows only blocked sessions.
   3. ?project= scopes the Sessions tab, including a project with nothing started.
@@ -109,7 +109,8 @@ with sync_playwright() as p:
     check("tabs-are-addresses", address(page) == "/everything?tab=handed", address=address(page))
 
     # ── 2. the retired moves are dead addresses: not-found, the typed address kept ──
-    RETIRED = ["/projects", "/work?filter=failed", "/chats", "/execute", "/runs", "/vibe", "/demo",
+    # `/projects` came back as the Projects page (operator 2026-10-27), so it is no longer retired.
+    RETIRED = ["/work?filter=failed", "/chats", "/execute", "/runs", "/vibe", "/demo",
                "/p/beta/chronicle", "/p/alpha"]
     results = []
     for old in RETIRED:

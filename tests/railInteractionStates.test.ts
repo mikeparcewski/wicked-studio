@@ -68,7 +68,9 @@ describe('every rail item has hover, pressed and focus-visible states', () => {
     const currents = all.filter((r) => r.selector.includes('[aria-current="page"]') && !/:(hover|active|focus-visible)/u.test(r.selector) && r.body.includes('background:'));
     expect(currents.length).toBeGreaterThan(0);
     // The accent wash; the sidebar's page items (ui-v2 nav) fill a stronger accent share than their hover.
-    expect(currents.every((r) => r.body.includes('var(--accent-wash)') || r.selector.includes('.wk-rail-nav-item'))).toBe(true);
+    // The wordmark (the link Home, operator 2026-10-27) stays quiet when current: no fill at rest.
+    expect(currents.every((r) => r.body.includes('var(--accent-wash)') || r.selector.includes('.wk-rail-nav-item')
+      || (r.selector.includes('.wk-rail-wordmark') && /background:\s*none/u.test(r.body)))).toBe(true);
     const current = all.find((r) => r.selector === '.wk-rail .wk-rail-nav-item[aria-current="page"]')?.body ?? '';
     const hoverToken = /--rail-hover-bg:\s*color-mix\(in oklab, var\(--accent\) (\d+)%/u.exec(css)?.[1];
     expect(all.find((r) => r.selector === '.wk-rail .wk-rail-nav-item:hover')?.body).toContain('var(--rail-hover-bg)');
