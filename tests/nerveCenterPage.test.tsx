@@ -141,8 +141,15 @@ function renderBoth(navigate = vi.fn(), search = ''): ReturnType<typeof vi.fn> {
   return navigate;
 }
 
-/** Open a tab the way a user does: its tab button. */
+/** The overview's way into the detail: "All the details" (the landing tab: Attention when anything
+ *  needs attention, else CLIs). */
+function openDetails(): void {
+  fireEvent.click(screen.getByTestId('nc-details'));
+}
+
+/** Open a tab the way a user does: its tab button (from the overview, through All the details first). */
 function openTab(id: string): HTMLElement {
+  if (screen.queryAllByTestId('nc-tab').length === 0) openDetails();
   const tab = screen.getAllByTestId('nc-tab').find((t) => t.getAttribute('data-tab') === id)!;
   fireEvent.click(tab);
   expect(tab).toHaveAttribute('aria-selected', 'true');
@@ -154,8 +161,10 @@ const chip = (area: string): HTMLElement => screen.getAllByTestId('nc-chip').fin
 describe('against a crew with the system snapshot', () => {
   it('lands on Attention; each tab holds its panel; infra down tops attention and the tile is red', async () => {
     renderBoth();
+    await waitFor(() => expect(screen.getByTestId('nerve-center-page')).toHaveAttribute('data-mode', 'system'));
+    await screen.findAllByTestId('nc-slow');
+    openDetails();
     const page = screen.getByTestId('nerve-center-page');
-    await waitFor(() => expect(page).toHaveAttribute('data-mode', 'system'));
     const items = await screen.findAllByTestId('nc-attention-item');
     expect(page).toHaveAttribute('data-tab', 'attention');
     // Red first (crew's order within a level), then yellow.
@@ -164,11 +173,12 @@ describe('against a crew with the system snapshot', () => {
     expect(within(items[0]!).getByTestId('nc-attention-remedy')).toHaveTextContent('Start the gateway');
     const tile = screen.getByTestId('desk-rail-nerve');
     expect(tile).toHaveAttribute('data-tone', 'red');
-    expect(screen.getByTestId('nerve-center-words')).toHaveTextContent('gateway down');
-    expect(tile).toHaveAccessibleName('Nerve Center: gateway down — work is blocked');
+    // A summary, never an item's title: the system's worst (and how many more), then the jobs waiting on you.
+    expect(screen.getByTestId('nerve-center-words')).toHaveTextContent('a service is down and 1 more · 1 needs you');
+    expect(tile).toHaveAccessibleName('Nerve Center: a service is down and 1 more · 1 needs you — work is blocked');
     expect(screen.queryByTestId('nc-upgrade-note')).toBeNull();
-    // The header's sentence names the worst item and how many more.
-    expect(screen.getByTestId('nc-headline')).toHaveTextContent('Work is blocked: gateway down (and 2 more).');
+    // The header's sentence is the same verdict, in full.
+    expect(screen.getByTestId('nc-headline')).toHaveTextContent('Work is stopped: a service is down and 1 more · 1 needs you.');
     // One tab, one panel: the other tabs' panels are not on screen until opened.
     expect(screen.queryByTestId('nc-panel-clis')).toBeNull();
     for (const [tab, id] of [['clis', 'nc-panel-clis'], ['runs', 'nc-panel-runs'], ['runs', 'nc-feed'], ['infra', 'nc-panel-infra'], ['governance', 'nc-panel-governance'], ['attention', 'nc-attention']] as const) {
@@ -177,7 +187,7 @@ describe('against a crew with the system snapshot', () => {
   });
 
   it('the summary chips count each area and are coloured by its worst state; a chip opens its tab', async () => {
-    const navigate = renderBoth();
+    const navigate = renderBoth(vi.fn(), '?tab=attention');
     await screen.findAllByTestId('nc-attention-item');
     const words = Object.fromEntries(screen.getAllByTestId('nc-chip').map((c) => [c.getAttribute('data-area'), [within(c).getByTestId('nc-chip-words').textContent, c.getAttribute('data-tone')]]));
     expect(words).toEqual({
@@ -222,6 +232,7 @@ describe('against a crew with the system snapshot', () => {
     systemAnswer = () => Promise.resolve({ ...SNAPSHOT, level: 'green', attention: [], infra: SNAPSHOT.infra.map((r) => ({ ...r, state: r.state === 'off' ? 'off' : 'ok', remedy: null })) });
     renderBoth();
     await waitFor(() => expect(screen.getByTestId('desk-rail-nerve')).toHaveAttribute('data-tone', 'green'));
+    openDetails();
     await waitFor(() => expect(screen.getByTestId('nerve-center-page')).toHaveAttribute('data-tab', 'clis'));
     expect(await screen.findAllByTestId('nc-cli')).toHaveLength(3);
     expect(chip('attention')).toHaveAttribute('data-tone', 'ok');
@@ -256,8 +267,11 @@ describe('against a crew with the system snapshot', () => {
     expect(screen.queryByTestId('nc-attention')).toBeNull();
   });
 
-  it('the landing is decided once: when attention empties under the user, the page stays on Attention', async () => {
-    renderBoth();
+  it('the landing is decided once: All the details opens Attention on the address, and it stays there when attention empties', async () => {
+    const navigate = renderBoth();
+    await screen.findAllByTestId('nc-slow');
+    openDetails();
+    expect(navigate).toHaveBeenLastCalledWith('/watch?tab=attention');
     await screen.findAllByTestId('nc-attention-item');
     systemAnswer = () => Promise.resolve({ ...SNAPSHOT, level: 'green', attention: [] });
     fireEvent.click(screen.getByTestId('nc-recheck'));
@@ -330,7 +344,7 @@ describe('against a crew with the system snapshot', () => {
 
   it('a failed snapshot read is yellow "can\'t reach crew", never green — even after a green one', async () => {
     systemAnswer = () => Promise.resolve({ ...SNAPSHOT, level: 'green', attention: [] });
-    renderBoth();
+    renderBoth(vi.fn(), '?tab=clis');
     const tile = screen.getByTestId('desk-rail-nerve');
     await waitFor(() => expect(tile).toHaveAttribute('data-tone', 'green'));
     systemAnswer = () => Promise.reject(new Error('Failed to fetch'));
@@ -402,8 +416,7 @@ describe('against an older crew (no system capability)', () => {
   it("shows today's Health cards plus the feed with an upgrade note, and never asks for /system", async () => {
     caps = {};
     renderBoth();
-    const page = screen.getByTestId('nerve-center-page');
-    await waitFor(() => expect(page).toHaveAttribute('data-mode', 'fallback'));
+    await waitFor(() => expect(screen.getByTestId('nerve-center-page')).toHaveAttribute('data-mode', 'fallback'));
     expect(screen.getByTestId('nc-upgrade-note')).toHaveTextContent('Upgrade crew');
     openTab('runs');
     expect(screen.getByTestId('nc-runs-fallback')).toBeInTheDocument();
@@ -442,5 +455,74 @@ describe('against an older crew (no system capability)', () => {
     renderBoth();
     await waitFor(() => expect(screen.getByTestId('nerve-center-page')).toHaveAttribute('data-mode', 'fallback'));
     expect(screen.getByTestId('nc-upgrade-note')).toBeInTheDocument();
+  });
+});
+
+describe('the overview (/watch with no ?tab=, the approved ui-v2-nerve mockup)', () => {
+  it('one sentence, the system items slowing work with their fix, a tile per helper and three System tiles', async () => {
+    const navigate = renderBoth();
+    await waitFor(() => expect(screen.getByTestId('nerve-center-page')).toHaveAttribute('data-view', 'overview'));
+    const slow = await screen.findAllByTestId('nc-slow');
+    // The gateway and the benched helper are the system's; the held run is Needs you's, in one line.
+    expect(slow.map((s) => s.getAttribute('data-id'))).toEqual(['infra:gateway', 'cli:copilot']);
+    expect(screen.getByTestId('nc-headline')).toHaveTextContent('Work is stopped by two things.');
+    expect(screen.getByTestId('nc-waiting')).toHaveAttribute('data-count', '1');
+    expect(screen.getByTestId('nc-waiting')).toHaveTextContent('One job needs you.');
+    // An item with an action does it (Re-check); one without opens the detail where its remedy is.
+    expect(within(slow[0]!).getByTestId('nc-slow-fix')).toHaveAttribute('data-kind', 'recheck');
+    // No run ids, paths or raw checks on the face.
+    expect(screen.getByTestId('nerve-center-page')).not.toHaveTextContent('9b43ee44');
+    expect(screen.getByTestId('nerve-center-page')).not.toHaveTextContent('ECONNREFUSED');
+    expect(screen.queryByTestId('nc-tab')).toBeNull();
+    fireEvent.click(within(slow[1]!).getByTestId('nc-slow-fix'));
+    expect(navigate).toHaveBeenLastCalledWith('/watch?tab=clis');
+  });
+
+  it('helpers say their state; a signed-out helper offers Sign in, which opens the sign-in flow (not Settings)', async () => {
+    const navigate = renderBoth();
+    await waitFor(() => expect(screen.getAllByTestId('nc-tile').length).toBeGreaterThanOrEqual(6));
+    const tile = (id: string): HTMLElement => screen.getAllByTestId('nc-tile').find((t) => t.getAttribute('data-tile') === id)!;
+    expect(within(tile('claude')).getByTestId('nc-tile-state')).toHaveTextContent('Ready');
+    expect(within(tile('claude')).getByTestId('nc-tile-line')).toHaveTextContent('42 steps · 90% pass');
+    expect(within(tile('copilot')).getByTestId('nc-tile-state')).toHaveTextContent(/^Back at /);
+    expect(within(tile('copilot')).queryByTestId('nc-tile-signin')).toBeNull();
+    expect(within(tile('pi')).getByTestId('nc-tile-state')).toHaveTextContent('Not signed in');
+    await waitFor(() => expect(screen.queryAllByTestId('rail-seat-row').length + 1).toBeGreaterThan(0));
+    fireEvent.click(within(tile('pi')).getByTestId('nc-tile-signin'));
+    await waitFor(() => expect(screen.getByTestId('agent-modal')).toHaveAttribute('data-agent', 'pi'));
+    expect(navigate).not.toHaveBeenCalledWith(expect.stringMatching(/^\/system/));
+    // System: services (the gateway down), the machine (not reported by this snapshot) and governance.
+    expect(within(tile('services')).getByTestId('nc-tile-state')).toHaveTextContent('1 down');
+    expect(within(tile('machine')).getByTestId('nc-tile-state')).toHaveTextContent('Not reported');
+    expect(within(tile('governance')).getByTestId('nc-tile-state')).toHaveTextContent('2 need a look');
+    // Every tile opens its details.
+    fireEvent.click(within(tile('services')).getByTestId('nc-tile-open'));
+    expect(navigate).toHaveBeenLastCalledWith('/watch?tab=infra');
+    expect(screen.getByTestId('nerve-center-page')).toHaveAttribute('data-view', 'detail');
+    fireEvent.click(screen.getByTestId('nc-back'));
+    expect(navigate).toHaveBeenLastCalledWith('/watch');
+  });
+
+  it('against an older crew: the roster as helpers, what studio can say as System, never a green over nothing', async () => {
+    caps = {};
+    renderBoth();
+    await waitFor(() => expect(screen.getByTestId('nerve-center-page')).toHaveAttribute('data-mode', 'fallback'));
+    await waitFor(() => expect(screen.getAllByTestId('nc-tile').map((t) => t.getAttribute('data-tile'))).toEqual(['claude', 'pi', 'services', 'machine', 'governance']));
+    const tile = (id: string): HTMLElement => screen.getAllByTestId('nc-tile').find((t) => t.getAttribute('data-tile') === id)!;
+    expect(within(tile('pi')).getByTestId('nc-tile-signin')).toBeInTheDocument();
+    expect(within(tile('machine')).getByTestId('nc-tile-state')).toHaveTextContent('Not reported');
+    await waitFor(() => expect(within(tile('governance')).getByTestId('nc-tile-state')).toHaveTextContent('1 warning'));
+  });
+});
+
+describe('the rail tile while crew has not answered', () => {
+  it('is neutral (no verdict in colour or words) until the first answer', () => {
+    getHealth.mockImplementationOnce(() => new Promise(() => undefined) as never);
+    renderBoth();
+    const tile = screen.getByTestId('desk-rail-nerve');
+    // data-read="checking" is the neutral grey fill (nerve.css), with no verdict word in its name.
+    expect(tile).toHaveAttribute('data-read', 'checking');
+    expect(tile).toHaveAccessibleName('Nerve Center: checking crew');
+    expect(screen.getByTestId('nerve-center-words')).toHaveTextContent('checking crew');
   });
 });

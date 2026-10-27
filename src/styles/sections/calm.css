@@ -143,7 +143,8 @@ select.wk-calm-pick:not([multiple]):not([size]):hover { background-color: var(--
 .wk-calm-row-meta[data-tone="ok"] { color: var(--status-ok); }
 .wk-calm-row-meta[data-tone="gate"] { color: var(--status-gate); }
 .wk-calm-row-meta[data-tone="fail"] { color: var(--status-fail); }
-.wk-calm-row-meta[data-tone="accent"] { color: var(--accent); }
+/* The accent pulled toward the ink (the link words), so a custom dark accent still reads. */
+.wk-calm-row-meta[data-tone="accent"] { color: var(--calm-link); }
 .wk-calm-row-trailing { display: inline-flex; align-items: center; gap: 8px; flex-shrink: 0; }
 .wk-calm-row-menu { flex-shrink: 0; }
 .wk-calm-row-details { padding: 0 20px 20px 50px; display: flex; flex-direction: column; gap: 14px; font-size: 14px; color: var(--ink-body); }

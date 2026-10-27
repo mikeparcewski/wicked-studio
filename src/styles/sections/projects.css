@@ -1,0 +1,79 @@
+/* ── PROJECTS (`/projects`) and a project's home (`/projects/:id`): the operator-approved mockup
+   `ui-v2-projects`, on the calm page pattern (calm.css). A card tints as one (dE_OK >= 0.08 over the page,
+   measured by e2e/desk_rail_hover_test.py in every theme); its words stay at AA on the hover. ── */
+.wk-pj-cards { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+.wk-pj-card {
+  /* The tiles' recipe: a step toward the ink, then a little accent (any accent the picker holds still shows). */
+  --pj-card-hover: color-mix(in oklab, var(--accent) 10%, color-mix(in oklab, var(--ink-high) 14%, var(--surface-card)));
+  position: relative; display: flex; flex-direction: column; min-width: 0; border-radius: 18px; background: var(--surface-card);
+  transition: background-color 0.14s, transform 0.14s;
+}
+.wk-pj-card:hover, .wk-pj-card:focus-within { background: var(--pj-card-hover); }
+@media (prefers-reduced-motion: no-preference) { .wk-pj-card:hover { transform: translateY(-1px); } }
+.wk-pj-card-main {
+  flex: 1 1 auto; display: flex; flex-direction: column; gap: 14px; padding: 24px 26px; min-width: 0; border-radius: 18px;
+  color: inherit; text-decoration: none; cursor: pointer;
+}
+.wk-pj-card-main:focus-visible { outline: 2px solid transparent; box-shadow: var(--focus-ring); }
+/* The ⋯ sits in the top-right corner; the name and state leave room for it. */
+.wk-pj-card-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-right: 40px; min-width: 0; }
+.wk-pj-card-name { font-size: 19px; line-height: 1.3; font-weight: 600; color: var(--ink-high); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wk-pj-card-state { flex-shrink: 0; font-size: 13px; font-weight: 600; color: var(--ink-muted); }
+.wk-pj-card-state[data-tone="gate"] { color: color-mix(in oklab, var(--status-gate) 78%, var(--ink-high)); }
+.wk-pj-card-state[data-tone="ok"] { color: color-mix(in oklab, var(--status-ok) 78%, var(--ink-high)); }
+.wk-pj-card-sentence { font-size: 15px; line-height: 1.5; color: var(--ink-body); }
+.wk-pj-card-menu { position: absolute; top: 16px; right: 14px; }
+.wk-pj-card-edit { display: flex; flex-direction: column; gap: 12px; padding: 24px 26px; }
+.wk-pj-card-acts { display: flex; gap: 10px; flex-wrap: wrap; }
+.wk-pj-card-error { padding: 0 26px 20px; }
+.wk-pj-chips { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.wk-pj-chip {
+  font-size: 12px; line-height: 1.4; padding: 4px 10px; border-radius: 999px;
+  background: color-mix(in oklab, var(--ink-high) 7%, transparent); color: var(--ink-body); text-decoration: none;
+}
+a.wk-pj-chip--link { transition: background-color 0.14s, color 0.14s; }
+a.wk-pj-chip--link:hover { background: var(--calm-hover-ctl); color: var(--ink-high); }
+a.wk-pj-chip--link:focus-visible { outline: 2px solid transparent; box-shadow: var(--focus-ring); }
+.wk-pj-chips--home { gap: 8px; }
+.wk-pj-chips--home .wk-pj-chip { font-size: 13px; padding: 5px 12px; }
+.wk-pj-add { font-size: 14px; }
+.wk-pj-chip + .wk-pj-add { margin-left: 6px; }
+
+/* A project's home: a narrower column (760 px), the back link over the title. */
+.wk-pj-home-col { max-width: 760px; gap: 44px; }
+.wk-pj-home-top { display: flex; flex-direction: column; gap: 10px; }
+.wk-pj-back { align-self: flex-start; display: inline-flex; gap: 6px; font-size: 14px; text-decoration: none; }
+.wk-pj-home-desc { margin: 0; font-size: 15px; line-height: 1.5; color: var(--ink-muted); }
+.wk-pj-home-foot { display: flex; flex-direction: column; gap: 12px; }
+.wk-pj-views { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 14px; color: var(--ink-muted); }
+.wk-pj-views-label { color: var(--ink-muted); }
+/* The tabbed views' way back home, over the project's title. */
+.wk-desk-a-titles > .wk-pj-back { margin-bottom: 4px; }
+
+@media (prefers-reduced-motion: reduce) { .wk-pj-card, a.wk-pj-chip--link { transition: none; } }
+@media (max-width: 767px) {
+  .wk-pj-cards { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .wk-pj-card-main { padding: 20px; gap: 12px; }
+  .wk-pj-card-menu { top: 12px; right: 10px; }
+  .wk-pj-card-top { flex-wrap: wrap; row-gap: 4px; padding-right: 48px; }
+  .wk-pj-card-name { white-space: normal; }
+  .wk-pj-home-col { gap: 32px; }
+}
+
+/* "Not in a project": one line instead of the ask box, and the move list it opens. */
+.wk-pj-unfiled { display: flex; flex-direction: column; gap: 12px; }
+.wk-pj-unfiled-line { font-size: 15px; }
+.wk-pj-unfiled-move {
+  padding: 4px 8px; margin: -4px -8px; border: 0; border-radius: var(--radius-sm); background: transparent;
+  color: var(--calm-link); font: inherit; cursor: pointer; transition: background-color 0.14s, color 0.14s;
+}
+.wk-pj-unfiled-move:hover:not(:disabled) { background: var(--calm-hover-ctl); color: var(--ink-high); text-decoration: underline; text-underline-offset: 3px; }
+.wk-pj-unfiled-move:focus-visible { outline: 2px solid transparent; box-shadow: var(--focus-ring); }
+.wk-pj-unfiled-move:disabled { color: var(--ink-muted); cursor: default; }
+.wk-pj-move-list { list-style: none; margin: 0; padding: 8px 0; display: flex; flex-direction: column; gap: 2px; }
+.wk-pj-move-row { justify-content: space-between; gap: 12px; padding: 6px 4px 6px 12px; border-radius: 10px; transition: background-color 0.14s; }
+.wk-pj-move-row:hover, .wk-pj-move-row:focus-within { background: var(--calm-hover-row); }
+.wk-pj-move-row .wk-desk-move-trigger { opacity: 1; }
+.wk-pj-move-title { flex: 1 1 auto; min-width: 0; font-size: 15px; color: var(--ink-high); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wk-pj-move-more { padding: 8px 12px 0; }
+.wk-pj-tidy { margin-top: 8px; }

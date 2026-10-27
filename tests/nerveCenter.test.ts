@@ -70,15 +70,22 @@ describe('green only over a fresh, successful read', () => {
 });
 
 describe('red when work is blocked, yellow when it needs a look', () => {
-  it('red tops yellow, and the worst item is the words', () => {
+  it('red tops yellow, and the words are a summary of the worst (never its title)', () => {
     const s = nerveState(system({ snapshot: snap({ attention: [yellow, red] }) }), 'connected', 0, NOW);
     expect(s.tone).toBe('red');
-    expect(s.words).toBe('gateway down');
+    expect(s.words).toBe('a service is down and 1 more');
     expect(s.attention.map((a) => a.id)).toEqual(['gw', 'cp']);
   });
 
-  it('yellow only is yellow, with the first item named', () => {
-    expect(nerveState(system({ snapshot: snap({ attention: [yellow] }) }), 'connected', 0, NOW)).toMatchObject({ tone: 'yellow', read: 'fresh', words: 'copilot benched (429)' });
+  it('yellow only is yellow, said as a summary', () => {
+    expect(nerveState(system({ snapshot: snap({ attention: [yellow] }) }), 'connected', 0, NOW)).toMatchObject({ tone: 'yellow', read: 'fresh', words: 'a helper is resting' });
+  });
+
+  it('a job waiting on you is amber, never red, and counted ("1 needs you"); a disk item is "disk low"', () => {
+    const job = { id: 'run:a', level: 'red' as const, panel: 'runs' as const, text: 'Where is wicked-core riskiest to change', reason: null, remedy: null, action: null, kind: 'prevents' as const };
+    expect(nerveState(system({ snapshot: snap({ attention: [job] }) }), 'connected', 0, NOW)).toMatchObject({ tone: 'yellow', words: '1 needs you' });
+    const disk = { ...red, id: 'infra:disk', text: 'Free disk: degraded', level: 'yellow' as const };
+    expect(nerveState(system({ snapshot: snap({ attention: [disk, job] }) }), 'connected', 0, NOW)).toMatchObject({ tone: 'yellow', words: 'disk low · 1 needs you' });
   });
 
   it('a dropped socket is said (yellow) in both modes', () => {

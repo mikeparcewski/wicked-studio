@@ -15,6 +15,7 @@ import { useDecisionsStore } from '../store/decisions.js';
 import { useNeedsSources, type NeedsSource } from '../store/needsSources.js';
 import { attentionBadge } from '../board/attention.js';
 import { useRankedNeeds } from './useRankedNeeds.js';
+import { useSystemStore } from '../store/systemSnapshot.js';
 import { useNotificationStore } from '../store/notifications.js';
 import { useStallEscalationStore } from '../store/stallEscalations.js';
 import { orphanedRuns, useWatchStore } from '../store/watch.js';
@@ -204,6 +205,9 @@ export function resetSettledNeedsForTest(): void { settledScopes.clear(); }
 export function useSettledNeeds(needRows: readonly NeedRow[], runsKnown: boolean, runsFailed = false, scope: string = ALL_NEEDS_SCOPE): { phase: 'loading' | 'complete' | 'partial'; count: number | null; missing: string[] } {
   const s = useNeedsSources();
   const ranked = useRankedNeeds();
+  // Crew has not answered its first read yet: a ranked crew's number may be on its way, so the
+  // app-wide number is held (never the fold's count flashing before crew's, coordinator 2026-10-27).
+  const crewPending = useSystemStore((st) => st.mode === 'unknown' && st.healthError === null);
   const rec = settledScope(scope);
   const [since] = useState(() => Date.now());
   const [, tick] = useState(0);
@@ -248,5 +252,6 @@ export function useSettledNeeds(needRows: readonly NeedRow[], runsKnown: boolean
   // A ranked crew's list is ONE settled read: its length is the number for every run (a project's
   // Desk still counts its own rows).
   if (ranked !== null && scope === ALL_NEEDS_SCOPE && !runsFailed) return { phase: 'complete', count: ranked.attention.length, missing: [] };
+  if (crewPending && scope === ALL_NEEDS_SCOPE && !runsFailed) return { phase: 'loading', count: null, missing: [] };
   return out;
 }

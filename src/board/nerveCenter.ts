@@ -100,8 +100,9 @@ export function nerveState(s: Signals, ws: 'connecting' | 'connected' | 'disconn
     if (s.snapshotError !== null) return unreachable('failed', `Crew's system snapshot could not be read: ${s.snapshotError}`);
     if (s.snapshotAt === null || s.snapshot === null) return checking();
     if (now - s.snapshotAt > STALE_MS) return unreachable('stale', "Crew's system snapshot is too old to trust.");
-    if (s.snapshot.ranked === true) return rankedState(s.snapshot.attention, s.snapshot.unresolved?.length ?? 0, s.snapshot.unresolvedSpendUsd ?? null, socketItems(ws));
-    attention = worstFirst([...s.snapshot.attention, ...socketItems(ws)]);
+    // A ranked crew's list is kept in crew's order; an older snapshot's is worst first.
+    if (s.snapshot.ranked === true) return systemVerdict([...s.snapshot.attention, ...socketItems(ws)], s.snapshot.unresolved?.length ?? 0);
+    return systemVerdict(worstFirst([...s.snapshot.attention, ...socketItems(ws)]), 0);
   } else if (s.mode === 'fallback') {
     if (s.governance.kind === 'unread') return checking();
     // The governance answer must be as fresh as the health one (a read that failed keeps no clock).
@@ -127,21 +128,53 @@ export function toResolveWords(n: number, usd: number | null): string {
   return `${n} ${n === 1 ? 'job' : 'jobs'} to resolve${usd !== null && usd > 0 ? ` · ${spendWords(usd)} spent` : ''}`;
 }
 
+/** A system item that stops work (crew's `prevents`; an older snapshot's red), not one that slows it. */
+export function preventsWork(a: SystemAttention): boolean {
+  return a.panel !== 'runs' && (a.kind === 'prevents' || ((a.kind === null || a.kind === undefined) && a.level === 'red'));
+}
+
 /**
- * A ranked crew's verdict (api-types 0.140.0): `attention` IS the needs-you list, in crew's order
- * (never re-sorted here), and the tile says how many and the first. Green only when nothing holds
- * work up AND nothing is left unresolved; unresolved work alone is yellow, in its own words.
+ * A system item as the tile says it: a short summary of what kind of thing is wrong ("disk low",
+ * "a service is down", "no reviewer free"), never the item's own title (crew's words, which can be a
+ * job's title or a probe's output).
  */
-function rankedState(items: readonly SystemAttention[], unresolved: number, spend: number | null, socket: SystemAttention[]): NerveState {
-  const attention = [...items, ...socket];
-  const top = items[0] ?? socket[0];
-  if (top === undefined) {
-    if (unresolved > 0) return { tone: 'yellow', read: 'fresh', words: toResolveWords(unresolved, spend), attention };
-    return { tone: 'green', read: 'fresh', words: ALL_CLEAR, attention };
+export function systemSummary(a: SystemAttention): string {
+  const said = `${a.id} ${a.text}`.toLowerCase();
+  if (a.panel === 'infra') {
+    if (/disk/.test(said)) return 'disk low';
+    if (/\bload\b/.test(said)) return 'machine busy';
+    if (/socket|live updates/.test(said)) return 'live updates paused';
+    return a.level === 'red' || /\bdown\b/.test(said) ? 'a service is down' : 'a service needs a look';
   }
-  const tone: NerveTone = attention.some((a) => a.level === 'red') ? 'red' : 'yellow';
-  const words = items.length > 1 ? `${items.length} need you · ${top.text}` : top.text;
-  return { tone, read: 'fresh', words, attention };
+  if (a.panel === 'clis') {
+    if (/bench|quota|429|rate.?limit/.test(said)) return 'a helper is resting';
+    if (/sign/.test(said)) return 'a helper is signed out';
+    return 'a helper needs a look';
+  }
+  if (a.panel === 'governance') return /judge|reviewer/.test(said) ? 'no reviewer free' : 'governance needs a look';
+  return 'something needs a look';
+}
+
+/**
+ * THE VERDICT against a crew with the snapshot: ONE derivation for the rail tile, the page's pill and
+ * its sentence.
+ *  - red only when the SYSTEM prevents work (a system item crew marks `prevents`; red on an older snapshot);
+ *  - yellow when the system slows work, a job waits on you, or work is left unresolved (never green
+ *    over stale jobs, operator rule);
+ *  - green only when attention and unresolved are both empty.
+ * The words are a summary ("disk low · 1 needs you", "3 to tidy up", "all clear"), never an item's title.
+ */
+function systemVerdict(attention: SystemAttention[], unresolved: number): NerveState {
+  const system = attention.filter((a) => a.panel !== 'runs');
+  const waiting = attention.length - system.length;
+  const stops = system.filter(preventsWork);
+  const lead = stops[0] ?? system[0];
+  const parts: string[] = [];
+  if (lead !== undefined) parts.push(system.length > 1 ? `${systemSummary(lead)} and ${system.length - 1} more` : systemSummary(lead));
+  if (waiting > 0) parts.push(`${waiting} ${waiting === 1 ? 'needs' : 'need'} you`);
+  if (parts.length === 0 && unresolved > 0) parts.push(`${unresolved} to tidy up`);
+  const tone: NerveTone = stops.length > 0 ? 'red' : parts.length > 0 ? 'yellow' : 'green';
+  return { tone, read: 'fresh', words: parts.length === 0 ? ALL_CLEAR : parts.join(' · '), attention };
 }
 
 /** The tile's state word for an accessible name ("Nerve Center: gateway down, work is blocked"). */

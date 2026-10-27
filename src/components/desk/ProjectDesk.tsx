@@ -23,6 +23,7 @@ import { SectionTitle } from '../ui/PageFrame.js';
 import { StateBanner, Skeleton, EmptyState } from '../ui/StateBanner.js';
 import { OverflowMenu } from '../ui/OverflowMenu.js';
 import { DeskV2, deskTabPath, type HostedTab } from './DeskV2.js';
+import { ProjectHome } from './ProjectHome.js';
 
 const RUN_KIND = 'crew.run';
 /** At most this many run members the run list does not serve are read one by one. */
@@ -138,7 +139,10 @@ export function ProjectDesk({ projectId, navigate, runs, needRows, now, search, 
     return () => { loadVersion.current += 1; };
   }, [load]);
   const base = projectDetailPath(projectId);
-  const tab = new URLSearchParams(search).get('tab') ?? 'work';
+  // No `?tab=` is the project's home (the calm page); its views keep their tabs (`?tab=work`, `?tab=runs`…).
+  const rawTab = new URLSearchParams(search).get('tab');
+  const atHome = rawTab === null;
+  const tab = rawTab ?? 'work';
   const [hashTick, setHashTick] = useState(0);
   const [scrollTarget, setScrollTarget] = useState<string | null>(null);
   useEffect(() => {
@@ -154,12 +158,12 @@ export function ProjectDesk({ projectId, navigate, runs, needRows, now, search, 
     if (target === null) return;
     if (target === 'repositories') {
       navigate(deskTabPath('repositories', undefined, base), { replace: true });
-    } else if (tab !== 'work') {
+    } else if (atHome || tab !== 'work') {
       navigate(`${deskTabPath('work', undefined, base)}${hash}`, { replace: true });
     }
-  }, [base, hash, hashTick, tab, navigate]);
+  }, [base, hash, hashTick, tab, atHome, navigate]);
   useEffect(() => {
-    if (loading || tab !== 'work') return;
+    if (loading || atHome || tab !== 'work') return;
     const id = scrollTarget ?? (hash === '#requirements' || hash === '#project-documents' ? hash.slice(1) : null);
     if (id === null) return;
     const timer = setTimeout(() => {
@@ -167,7 +171,7 @@ export function ProjectDesk({ projectId, navigate, runs, needRows, now, search, 
       setScrollTarget(null);
     }, 300);
     return () => clearTimeout(timer);
-  }, [loading, tab, hash, hashTick, scrollTarget]);
+  }, [loading, atHome, tab, hash, hashTick, scrollTarget]);
 
   // A run member the run list does not serve (an archived run, an older one) is read on its own, so the
   // project shows every job it holds (the page read each member's run before concept P too).
@@ -213,7 +217,7 @@ export function ProjectDesk({ projectId, navigate, runs, needRows, now, search, 
     setEditDesc(project.description ?? '');
     setEditErr(null);
     setEditing(true);
-    if (tab !== 'work') navigate(deskTabPath('work', undefined, base));
+    if (atHome || tab !== 'work') navigate(deskTabPath('work', undefined, base));
   }
   async function saveEdit(): Promise<void> {
     if (!project) return;
@@ -260,7 +264,7 @@ export function ProjectDesk({ projectId, navigate, runs, needRows, now, search, 
   const chatHere = (): void => openAskDock({ projectId: isDefault ? null : projectId });
   const scrollTo = (id: string): void => {
     setScrollTarget(id);
-    if (tab !== 'work') navigate(deskTabPath('work', undefined, base));
+    if (atHome || tab !== 'work') navigate(deskTabPath('work', undefined, base));
   };
   const attachedRepos = used.filter((u) => u.attached && u.repo !== null);
   const title = isDefault ? 'Not in a project' : project?.name ?? 'Project';
@@ -319,12 +323,20 @@ export function ProjectDesk({ projectId, navigate, runs, needRows, now, search, 
   return <div data-testid="project-desk" data-project-id={projectId} className="wk-project-desk">
     {failure && <StateBanner kind={readErrorKind(failure.error)} what={failure.what} error={failures.map((f) => f.error).join('\n')} onRetry={() => failures.forEach((f) => f.retry())} retrying={loading} />}
     {unshown > 0 && <StateBanner data-testid="project-jobs-unshown" kind="partial" what={unshown === 1 ? '1 job in this project' : `${unshown} jobs in this project`} />}
-    {loading ? <Skeleton rows={3} variant="card" /> : !project ? !error && <EmptyState title="Project not found" /> : <DeskV2
+    {loading ? <Skeleton rows={3} variant="card" /> : !project ? !error && <EmptyState title="Project not found" /> : atHome ? <ProjectHome
+      project={project} projectId={projectId} runs={mine} allRuns={runs} needRows={needRows} repos={used} now={now} known={runsLoaded && membersRead} loading={false}
+      navigate={navigate} isDefault={isDefault} menu={[
+        { id: 'documents', label: 'Documents', testId: 'project-documents', onSelect: () => scrollTo('project-documents') },
+        ...(isDefault ? [] : [
+          { id: 'edit', label: 'Edit name and description', testId: 'project-edit', onSelect: startEdit },
+          { id: 'archive', label: project.status === 'active' ? 'Archive this project' : 'Restore this project', testId: 'project-archive', onSelect: () => void toggleArchive(), disabled: archiveBusy ? 'Saving the project’s status…' : null },
+        ]),
+      ]} /> : <DeskV2
       projectId={projectId} runs={mine} needRows={needRows} now={now} navigate={navigate}
       runActions={(runId, runTitle) => { const m = members.find((x) => x.member_kind === RUN_KIND && x.member_ref === runId); return m === undefined ? [] : [{ id: 'detach', label: `Remove “${runTitle}” from this project`, danger: true, onSelect: () => handleDetach(m.id) }]; }}
       search={search} hosted={hostedForProject} runsLoaded={runsLoaded && membersRead} runsError={runsError ?? null}
       {...(onRetryRuns !== undefined ? { onRetryRuns } : {})} workExtra={workExtra}
-      projectHead={{ title, meta: <>
+      projectHead={{ title, back: <a href={base} onClick={go(base)} className="wk-link wk-pj-back" data-testid="project-home-link"><span aria-hidden>←</span> {isDefault ? 'Not in a project' : project.name}</a>, meta: <>
         <span data-testid="project-meta">
           {project.status === 'archived' && <><span className="wk-tag">Archived</span>{' '}</>}
           {projectMeta(project.created_at > 0 ? `Created ${relTime(project.created_at, now)}` : null, jobsCount, used)}

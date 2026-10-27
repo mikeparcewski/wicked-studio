@@ -78,7 +78,7 @@ with sync_playwright() as p:
         link = page.get_by_test_id("desk-rail-nerve")
         link.wait_for(state="visible", timeout=15000)
         link.click()
-        page.locator('[data-testid="nc-tab"][data-tab="clis"]').click()  # Nerve Center's tabs: the week is in CLIs
+        page.locator('[data-testid="nc-tile-open"][data-tab="clis"]').first.click()  # Nerve Center: a helper tile opens its details (the CLIs tab), where the week is in CLIs
         page.get_by_test_id("rail-seat-week-window").wait_for(state="visible", timeout=15000)
 
     def move(seat: str):

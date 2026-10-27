@@ -68,8 +68,8 @@ PAGES = [
     ("build-link-settings", ".wk-page", "#main", 832),
     # studio-settings-tabs: the Theme tab of the same Settings page (picked from its tab row).
     ("settings-tab-theme", ".wk-page", "#main", 832),
-    # Nerve Center (DES-SYSTEM-VIEW): the dashboard on /watch, the Watchtower feed under its panels.
-    ("desk-rail-nerve", "[data-testid='nerve-center-page']", "#main", 1120 - 64),
+    # Nerve Center (the approved ui-v2-nerve mockup): the calm overview on /watch, the calm page's column.
+    ("desk-rail-nerve", "[data-testid='nerve-center-page'] .wk-calm-col", "#main", 840),
 ]
 SESSION = [("/s/run%3Ar-solo", "run"), ("/s/chat-pay", "chat")]
 

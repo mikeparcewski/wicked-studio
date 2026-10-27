@@ -35,6 +35,7 @@
 @import './sections/mcp-inspect.css';
 @import './sections/agents.css';
 @import './sections/calm.css';
+@import './sections/projects.css';
 @import './sections/editor-host.css';
 @import './sections/layout.css';
 @import './sections/jobs-repos.css';

@@ -14,8 +14,8 @@ Against the in-process fixture (wave-1 corpus, b1 waiting at a gate, `watch_feed
   3. JUMP IN: the claim finding's "Jump in" lands on b1's run page at its moment.
   4. ⌥W: from the Desk, ⌥W opens /watch.
   5. THE TILE: the rail's Nerve Center tile (DES-SYSTEM-VIEW, which replaced the pill) says the
-     waiting work in words and opens /watch, which lands on its Attention tab; the feed is in the
-     Runs tab (`/watch?tab=runs`).
+     waiting work in words and opens /watch: the calm overview counts the waiting jobs in one line,
+     and All the details opens its Attention tab; the feed is in the Runs tab (`/watch?tab=runs`).
   6. NO REGISTRY: with the registry off the page says so and still shows studio's own fold.
   7. EMPTY KINDS: every kind with no rows says why (never "Nothing of this kind yet.") and offers
      Show everything, which lands on Everything (DEST); at 390x844 that button is a 44 px tap target
@@ -89,6 +89,12 @@ with sync_playwright() as p:
     page.screenshot(path=str(SHOTS / "desk-watchtower-tile.png"))
     tile.click()
     page.get_by_test_id("nerve-center-page").wait_for(state="visible", timeout=8000)
+    # The overview (the approved ui-v2-nerve mockup) counts the waiting jobs in one line; All the details
+    # opens the tabbed detail on its landing tab (Attention, while anything needs it).
+    waiting_line = page.get_by_test_id("nc-waiting")
+    waiting_line.wait_for(state="visible", timeout=8000)
+    overview_count = int(waiting_line.get_attribute("data-count") or "-4")
+    page.get_by_test_id("nc-details").click()
     waits = page.locator('[data-testid="nc-attention-item"][data-id="waiting-on-you"]')
     waits.wait_for(state="visible", timeout=8000)
     waits_text = waits.inner_text()
@@ -98,8 +104,9 @@ with sync_playwright() as p:
     page.get_by_test_id("watchtower").wait_for(state="visible", timeout=8000)
     said = re.search(r"(\d+) things? waits? on you", waits_text)
     pill = int(said.group(1)) if said else -2
-    check("tile", tile_tone in ("yellow", "red") and tile_words.strip() != "" and "wait" in waits_text and landed == "attention",
-          words=tile_words, tone=tile_tone, waits=waits_text, landed=landed)
+    check("tile", tile_tone in ("yellow", "red") and tile_words.strip() != "" and "wait" in waits_text and landed == "attention"
+          and overview_count == pill,
+          words=tile_words, tone=tile_tone, waits=waits_text, landed=landed, overview=overview_count, pill=pill)
     sentence_count = int(page.get_by_test_id("watchtower-sentence").get_attribute("data-count") or "-3")
     page.locator('[data-testid="watchtower-row"]').first.wait_for(state="visible", timeout=8000)
     open_rows = page.locator('[data-testid="watchtower-row"][data-state="open"]').count()

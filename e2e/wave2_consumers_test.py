@@ -149,7 +149,7 @@ with sync_playwright() as p:
     page.goto(f"{ORIGIN}/")
     page.locator(TID("desk-rail-nerve")).wait_for(timeout=15000)
     page.locator(TID("desk-rail-nerve")).click()
-    page.locator('[data-testid="nc-tab"][data-tab="governance"]').click()  # Nerve Center's tabs
+    page.locator('[data-testid="nc-tile-open"][data-tab="governance"]').click()  # Nerve Center: the Governance tile opens its details
     gov = page.locator(TID("rail-governance"))
     gov.wait_for(timeout=10000)
     gov_text = gov.inner_text()
@@ -181,7 +181,7 @@ with sync_playwright() as p:
     page.goto(f"{ORIGIN}/")
     page.locator(TID("desk-rail-nerve")).wait_for(timeout=15000)
     page.locator(TID("desk-rail-nerve")).click()
-    page.locator('[data-testid="nc-tab"][data-tab="governance"]').click()  # Nerve Center's tabs
+    page.locator('[data-testid="nc-tile-open"][data-tab="governance"]').click()  # Nerve Center: the Governance tile opens its details
     gov = page.locator(TID("rail-governance"))
     gov.wait_for(timeout=10000)
     # (The rail heart's colour is not asserted here: the shared W2 roster carries an

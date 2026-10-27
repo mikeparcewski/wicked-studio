@@ -91,7 +91,7 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
    * and Work-tab sections come in from ProjectDesk. No second implementation.
    */
   projectId?: string;
-  projectHead?: { title: string; meta?: React.ReactNode; actions: React.ReactNode };
+  projectHead?: { title: string; meta?: React.ReactNode; actions: React.ReactNode; back?: React.ReactNode };
   /** The project's own Work-tab sections (requirements, documents, edit), under the inbox. */
   workExtra?: React.ReactNode;
   /** The route's query: a project page's `?tab=` (Work is the default); Report's `?focus=spend`. */
@@ -293,6 +293,7 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
   const header = (
     <header className="wk-desk2-head">
       <div className="wk-desk-a-titles">
+        {projectHead?.back}
         <h1 className="wk-desk-a-title" data-testid={projectHead !== undefined ? 'project-title' : undefined}>{projectHead?.title ?? PAGE_TITLE[tab]}</h1>
         <p data-testid="desk-as-of" className="wk-desk-a-when">{projectHead?.meta ?? (readState === 'known' ? `As of ${asOf}` : readState === 'stale' ? 'As of the last read' : 'Reading…')}</p>
       </div>
@@ -514,7 +515,8 @@ export const HOSTED_HOME: Record<HostedTab, string> = {
  */
 export function deskTabPath(t: DeskTab, at?: string, base = '/'): string {
   if (base === '/') return isHostedView(t) && at !== undefined ? at : DESK_VIEW_PATH[t];
-  if (t === 'work') return base;
+  // A project's Work view is a tab of its own: the project's address with no `?tab=` is its home.
+  if (t === 'work') return `${base}?tab=work`;
   return `${base}?tab=${t}${at !== undefined ? `&at=${encodeURIComponent(at)}` : ''}`;
 }
 
