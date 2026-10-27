@@ -207,3 +207,7 @@
   .wk-ue-fold-sum { padding: 16px; }
   .wk-ue-fold-body { padding: 12px 16px 16px; }
 }
+
+/* How well the system judges (DES-DEFAULT-EVALS-001): a row's detail sits under its words, the action at the start. */
+.wk-ue-judge-detail { padding-left: 30px; margin: 0 0 8px; }
+.wk-ue-judge-acts { display: flex; justify-content: flex-start; }
