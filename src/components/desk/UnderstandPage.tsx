@@ -3,6 +3,7 @@ import { ChevronRight } from 'lucide-react';
 import { api } from '../../api/client.js';
 import { apiStatus } from '../../api/errors.js';
 import type { RepoEntry } from '../../api/types.js';
+import { ANALYZE_CHAT_WORKFLOW, askScopeWords, defaultAskRepos } from '../../board/analyzeChat.js';
 import { answerLine, forgetAsked, questionMessage, readAsked, rememberAsked, suggestedQuestions, type AnswerLine, type AskedQuestion } from '../../board/understandModel.js';
 import { relTime } from '../../board/relTime.js';
 import { sessionPath } from '../../board/sessionModel.js';
@@ -61,6 +62,12 @@ export function UnderstandPage({ project, navigate, now, compare }: {
   const recent = asked.slice(0, RECENT_SHOWN);
   const answers = useAnswers(recent, chatList, (id) => setAsked(forgetAsked(id)));
   const suggestions = useMemo(() => suggestedQuestions((repos ?? []).map((r) => r.name)), [repos]);
+  // crew#1157: the repositories the question is about (the analysis chat's scope). `null` = the
+  // default for this page until the operator picks.
+  const onProject = project !== null && project !== 'default';
+  const [picked, setPicked] = useState<string[] | null>(null);
+  const chosen = picked ?? defaultAskRepos(repos ?? [], onProject ? project : null);
+  const toggle = (id: string): void => setPicked(chosen.includes(id) ? chosen.filter((x) => x !== id) : [...chosen, id]);
 
   const ask = (e: React.FormEvent): void => {
     e.preventDefault();
@@ -68,7 +75,10 @@ export function UnderstandPage({ project, navigate, now, compare }: {
     if (question === '') { inputRef.current?.focus(); return; }
     const chatId = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : `chat-${Date.now().toString(36)}`;
     setAsked(rememberAsked({ chatId, question, at: Date.now() }));
-    askInChat({ text: questionMessage(question), chatId, projectId: project !== null && project !== 'default' ? project : null });
+    // A NEW chat running crew's read-only `analyze` workflow on the chosen repositories (a plain chat on a
+    // crew that does not run it: the dock decides from `capabilities.chatWorkflows`).
+    const scope = (repos ?? []).filter((r) => chosen.includes(r.id)).map((r) => ({ id: r.id, name: r.name }));
+    askInChat({ text: questionMessage(question), chatId, projectId: onProject ? project : null, workflow: ANALYZE_CHAT_WORKFLOW, repos: scope });
     setQ('');
   };
   const pick = (s: string): void => { setQ(s); inputRef.current?.focus(); };
@@ -91,6 +101,20 @@ export function UnderstandPage({ project, navigate, now, compare }: {
               placeholder="e.g. Who calls the deliver step?" className="wk-ue-ask-input" data-testid="understand-ask-input" />
             <button type="submit" className="wk-ue-btn wk-ue-btn--primary" data-testid="understand-ask-send">Ask</button>
           </form>
+          {repos !== null && repos.length > 1 && (
+            <div className="wk-ue-scope" role="group" aria-label="Repositories to ask about" data-testid="understand-scope">
+              <ul className="wk-ue-chips">
+                {repos.map((r) => (
+                  <li key={r.id}>
+                    <button type="button" className="wk-ue-chip wk-ue-chip--pick" aria-pressed={chosen.includes(r.id)} data-testid="understand-scope-repo" data-repo-id={r.id} onClick={() => toggle(r.id)}>
+                      {r.name}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+              <p className="wk-ue-quiet" data-testid="understand-scope-words">{askScopeWords(chosen.length, onProject)}</p>
+            </div>
+          )}
           <ul className="wk-ue-chips" aria-label="Suggested questions">
             {suggestions.map((s) => (
               <li key={s}><button type="button" className="wk-ue-chip" data-testid="understand-suggest" onClick={() => pick(s)}>{s}</button></li>

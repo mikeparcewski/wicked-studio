@@ -12,8 +12,8 @@
   "studioVersion": "0.12.3",
   "counts": {
     "files": 245,
-    "occurrences": 3253,
-    "static": 2773,
+    "occurrences": 3259,
+    "static": 2779,
     "dynamic": 74,
     "computed": 33
   },
@@ -480,6 +480,24 @@
       "testId": "alt-peek",
       "files": [
         "src/components/sheets/AltPeek.tsx"
+      ]
+    },
+    {
+      "testId": "analysis-index-offer",
+      "files": [
+        "src/components/AskDock.tsx"
+      ]
+    },
+    {
+      "testId": "analysis-index-repo",
+      "files": [
+        "src/components/AskDock.tsx"
+      ]
+    },
+    {
+      "testId": "analysis-index-started",
+      "files": [
+        "src/components/AskDock.tsx"
       ]
     },
     {
@@ -16044,6 +16062,24 @@
     },
     {
       "testId": "understand-recent-empty",
+      "files": [
+        "src/components/desk/UnderstandPage.tsx"
+      ]
+    },
+    {
+      "testId": "understand-scope",
+      "files": [
+        "src/components/desk/UnderstandPage.tsx"
+      ]
+    },
+    {
+      "testId": "understand-scope-repo",
+      "files": [
+        "src/components/desk/UnderstandPage.tsx"
+      ]
+    },
+    {
+      "testId": "understand-scope-words",
       "files": [
         "src/components/desk/UnderstandPage.tsx"
       ]
