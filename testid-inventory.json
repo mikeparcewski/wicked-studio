@@ -11,11 +11,17 @@
   "version": 1,
   "studioVersion": "0.12.3",
   "counts": {
+<<<<<<< HEAD
     "files": 239,
     "occurrences": 3115,
     "static": 2697,
+=======
+    "files": 240,
+    "occurrences": 3128,
+    "static": 2707,
+>>>>>>> origin/ui-v2-nav
     "dynamic": 70,
-    "computed": 24
+    "computed": 25
   },
   "static": [
     {
@@ -1016,6 +1022,42 @@
       "testId": "brand-learn",
       "files": [
         "src/components/BrandLearn.tsx"
+      ]
+    },
+    {
+      "testId": "build-link-mcp",
+      "files": [
+        "src/board/navModel.ts"
+      ]
+    },
+    {
+      "testId": "build-link-plugins",
+      "files": [
+        "src/board/navModel.ts"
+      ]
+    },
+    {
+      "testId": "build-link-settings",
+      "files": [
+        "src/board/navModel.ts"
+      ]
+    },
+    {
+      "testId": "build-link-skills",
+      "files": [
+        "src/board/navModel.ts"
+      ]
+    },
+    {
+      "testId": "build-link-workflows",
+      "files": [
+        "src/board/navModel.ts"
+      ]
+    },
+    {
+      "testId": "build-page",
+      "files": [
+        "src/components/BuildPage.tsx"
       ]
     },
     {
@@ -3413,33 +3455,27 @@
       ]
     },
     {
+      "testId": "desk-rail-build",
+      "files": [
+        "src/board/navModel.ts"
+      ]
+    },
+    {
       "testId": "desk-rail-chat",
       "files": [
         "src/components/desk/SessionRail.tsx"
       ]
     },
     {
-      "testId": "desk-rail-general",
-      "files": [
-        "src/board/deskModel.ts"
-      ]
-    },
-    {
       "testId": "desk-rail-home",
       "files": [
-        "src/components/desk/SessionRail.tsx"
+        "src/board/navModel.ts"
       ]
     },
     {
       "testId": "desk-rail-logo",
       "files": [
         "src/components/desk/SessionRail.tsx"
-      ]
-    },
-    {
-      "testId": "desk-rail-mcp",
-      "files": [
-        "src/board/deskModel.ts"
       ]
     },
     {
@@ -3461,12 +3497,6 @@
       ]
     },
     {
-      "testId": "desk-rail-plugins",
-      "files": [
-        "src/board/deskModel.ts"
-      ]
-    },
-    {
       "testId": "desk-rail-rules",
       "files": [
         "src/board/objectActions.ts"
@@ -3479,15 +3509,9 @@
       ]
     },
     {
-      "testId": "desk-rail-skills",
+      "testId": "desk-rail-wordmark",
       "files": [
-        "src/board/deskModel.ts"
-      ]
-    },
-    {
-      "testId": "desk-rail-workflows",
-      "files": [
-        "src/board/deskModel.ts"
+        "src/components/desk/SessionRail.tsx"
       ]
     },
     {
@@ -3875,18 +3899,6 @@
     },
     {
       "testId": "desk-tabs",
-      "files": [
-        "src/components/desk/DeskV2.tsx"
-      ]
-    },
-    {
-      "testId": "desk-tabs-more",
-      "files": [
-        "src/components/desk/DeskV2.tsx"
-      ]
-    },
-    {
-      "testId": "desk-tabs-more-panel",
       "files": [
         "src/components/desk/DeskV2.tsx"
       ]
@@ -7589,6 +7601,54 @@
       ]
     },
     {
+      "testId": "nav-agents",
+      "files": [
+        "src/board/navModel.ts"
+      ]
+    },
+    {
+      "testId": "nav-evaluate",
+      "files": [
+        "src/board/navModel.ts"
+      ]
+    },
+    {
+      "testId": "nav-jobs",
+      "files": [
+        "src/board/navModel.ts"
+      ]
+    },
+    {
+      "testId": "nav-memory",
+      "files": [
+        "src/board/navModel.ts"
+      ]
+    },
+    {
+      "testId": "nav-report",
+      "files": [
+        "src/board/navModel.ts"
+      ]
+    },
+    {
+      "testId": "nav-repos",
+      "files": [
+        "src/board/navModel.ts"
+      ]
+    },
+    {
+      "testId": "nav-steering",
+      "files": [
+        "src/board/navModel.ts"
+      ]
+    },
+    {
+      "testId": "nav-understand",
+      "files": [
+        "src/board/navModel.ts"
+      ]
+    },
+    {
       "testId": "nc-attention",
       "files": [
         "src/components/nerve/NerveCenterPage.tsx"
@@ -9793,6 +9853,12 @@
       ]
     },
     {
+      "testId": "rail-all-jobs",
+      "files": [
+        "src/components/desk/SessionRail.tsx"
+      ]
+    },
+    {
       "testId": "rail-api-server",
       "files": [
         "src/components/HealthRailSection.tsx"
@@ -9814,12 +9880,6 @@
       "testId": "rail-drawer-toggle",
       "files": [
         "src/components/ui/TopBar.tsx"
-      ]
-    },
-    {
-      "testId": "rail-foot-label",
-      "files": [
-        "src/components/desk/SessionRail.tsx"
       ]
     },
     {
@@ -9871,12 +9931,6 @@
       ]
     },
     {
-      "testId": "rail-group-more",
-      "files": [
-        "src/components/desk/SessionRail.tsx"
-      ]
-    },
-    {
       "testId": "rail-group-needs",
       "files": [
         "src/components/desk/SessionRail.tsx"
@@ -9913,6 +9967,12 @@
       ]
     },
     {
+      "testId": "rail-nav",
+      "files": [
+        "src/components/desk/SessionRail.tsx"
+      ]
+    },
+    {
       "testId": "rail-nerve-dock",
       "files": [
         "src/components/desk/SessionRail.tsx"
@@ -9922,6 +9982,18 @@
       "testId": "rail-probe-checked",
       "files": [
         "src/components/HealthRailSection.tsx"
+      ]
+    },
+    {
+      "testId": "rail-recent",
+      "files": [
+        "src/components/desk/SessionRail.tsx"
+      ]
+    },
+    {
+      "testId": "rail-recent-toggle",
+      "files": [
+        "src/components/desk/SessionRail.tsx"
       ]
     },
     {
@@ -16510,12 +16582,6 @@
       ]
     },
     {
-      "pattern": "desk-more-tab-*",
-      "files": [
-        "src/components/desk/DeskV2.tsx"
-      ]
-    },
-    {
       "pattern": "desk-range-*",
       "files": [
         "src/components/desk/DeskV2.tsx"
@@ -16660,6 +16726,12 @@
       ]
     },
     {
+      "pattern": "rail-nav-*",
+      "files": [
+        "src/components/desk/SessionRail.tsx"
+      ]
+    },
+    {
       "pattern": "run-raw-*",
       "files": [
         "src/components/RunRawView.tsx"
@@ -16716,9 +16788,15 @@
       ]
     },
     {
-      "expression": "l.testId",
+      "expression": "item.testId",
       "files": [
         "src/components/desk/SessionRail.tsx"
+      ]
+    },
+    {
+      "expression": "l.testId",
+      "files": [
+        "src/components/BuildPage.tsx"
       ]
     },
     {

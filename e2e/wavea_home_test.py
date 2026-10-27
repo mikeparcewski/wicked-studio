@@ -80,7 +80,7 @@ with sync_playwright() as p:
 
     def home() -> None:
         # Home v2: the landing shows one card; every row (and the chores) is in Needs you in full.
-        page.goto(f"{origin}/?tab=inbox", wait_until="networkidle")
+        page.goto(f"{origin}/needs", wait_until="networkidle")
         page.get_by_test_id("needs-you-queue").wait_for(state="visible", timeout=15000)
 
     def section_clones() -> None:

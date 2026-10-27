@@ -23,8 +23,8 @@ import { Skeleton, StateBanner } from '../ui/index.js';
 /** In progress shows at most this many jobs; "All jobs" has the rest. */
 const PROGRESS_MAX = 3;
 
-/** Where "N more waiting" goes: Needs you in full (the Desk's `?tab=inbox`), every item with its moves. */
-const WAITING_PATH = '/?tab=inbox';
+/** Where "N more waiting" goes: Needs you in full (`/needs`), every item with its moves. */
+const WAITING_PATH = '/needs';
 
 /**
  * THE LANDING — the Desk's Work view at `/` (home v2, the operator-approved mockup of 2026-10-26).
@@ -68,8 +68,9 @@ export function DeskHome({
   states?: React.ReactNode;
   /** B9: the one sentence about a rule remembered since the last visit (renders nothing when there is none). */
   ruleLine?: React.ReactNode;
-  panelId: string;
-  labelledBy: string;
+  /** Set only when a tab bar names this view (the global Desk has none since the sidebar regroup). */
+  panelId?: string;
+  labelledBy?: string;
 }): React.ReactElement {
   const askId = useId();
   const needsId = useId();
@@ -106,7 +107,7 @@ export function DeskHome({
   const view = (row: NeedRow): SessionView | null => { const id = needRunId(row); return id === null ? null : runs.find((v) => v.session.id === id) ?? null; };
 
   return (
-    <div role="tabpanel" id={panelId} aria-labelledby={labelledBy} data-testid="desk-work" data-home="v2" className="wk-home">
+    <div {...(panelId !== undefined && labelledBy !== undefined ? { role: 'tabpanel', id: panelId, 'aria-labelledby': labelledBy } : {})} data-testid="desk-work" data-home="v2" className="wk-home">
       <div className="wk-home-col">
         <header className="wk-home-head">
           <div className="wk-home-hello">

@@ -31,8 +31,8 @@ import sys
 from uxfix_fixture import HIDE_GATE_TOASTS, REPO, ensure_build, set_fixture, start_server
 
 # Home v2 (2026-10-26): the landing shows one card; "N more waiting" opens Needs you in full (the Desk's
-# `?tab=inbox`), the inbox this journey designs.
-INBOX = "/?tab=inbox"
+# `/needs`), the inbox this journey designs.
+INBOX = "/needs"
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4603"))
 SHOTS = REPO / "e2e" / "shots"

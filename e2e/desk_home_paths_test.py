@@ -20,7 +20,7 @@ graph file's absolute path — plus the wave-1 and team corpora, and proves:
      sentence carries its count, the loading line goes, and one card (or the calm line) shows.
   4. #464: the needs row of a run paused before its first unit (crew's unit prompt: the goal and the
      ` ||| PHASE SCOPE:` scaffold) reads "Start the triage step?"; no "|||" in the list (Needs you in
-     full, `?tab=inbox`, since home v2 left one card on the landing).
+     full, `/needs`, since home v2 left one card on the landing).
   5. #479: the delivered run's page — What / Where (worktree), Files referenced, Data used, Delivery (the push
      target) and every unit output (the deliver unit's push line) — names no home directory.
   6. #467: Health → pi's sign-in move: the "Running …" line reads `~/…`; no home directory in the panel.
@@ -237,8 +237,8 @@ with sync_playwright() as p:
         page.wait_for_timeout(600)
 
     # ── 4. #464: the pre-unit gate's Desk row says the step, never the engine's unit prompt ──
-    # Home v2: the landing shows one card; every row is in Needs you in full (`?tab=inbox`).
-    page.goto(f"{origin}/?tab=inbox", wait_until="networkidle")
+    # Home v2: the landing shows one card; every row is in Needs you in full (`/needs`).
+    page.goto(f"{origin}/needs", wait_until="networkidle")
     page.get_by_test_id("desk-inbox-count").wait_for(state="visible", timeout=15000)
     page.wait_for_timeout(500)
     desk_text = page.evaluate("() => (document.querySelector('[data-testid=\"desk\"]') || document.body).innerText")

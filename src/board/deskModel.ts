@@ -1,9 +1,6 @@
 import type { RosterSeat, SessionView } from '../api/types.js';
-import { mcpPath } from '../api/mcp.js';
-import { skillsPath } from '../api/skills.js';
 import type { NeedRow } from './needsYou.js';
 import { DELIVERED_LINE, KEPT_LINE, jobTitle, jobTitleFull, keptLocally } from './deskWords.js';
-import { PAGE_NAMES } from './pageNames.js';
 import { agentFixPath } from '../hooks/useRoute.js';
 import { foldReviewers } from './agentsModel.js';
 import { runState, sessionIdOf, sessionPath, summarize, type SessionState } from './sessionModel.js';
@@ -333,6 +330,33 @@ export function railGroups(
   return groups.filter((g) => g.sessions.length > 0);
 }
 
+/** Sessions the rail's Recent list shows across every project (then "All jobs"). */
+export const RAIL_RECENT_MAX = 5;
+
+/**
+ * THE RAIL'S RECENT LIST (ui-v2 nav regroup): the project groups stay, under the sidebar's page groups,
+ * but they show at most `max` sessions between them: the ones that need you first, then live work,
+ * then the most recently changed. Never more than `max`: everything that needs you is on Home (and
+ * counted in its badge), so the rail stays a short list. A group keeps its own order and drops out
+ * when none of its sessions is shown; `hidden` is how many are left for All jobs.
+ */
+export function railRecent(groups: readonly RailGroup[], max: number = RAIL_RECENT_MAX): { groups: RailGroup[]; hidden: number } {
+  const all = groups.flatMap((g) => [...g.sessions, ...g.more]);
+  const live = (s: RailSession): number => (s.state === 'waiting' || s.state === 'working' ? 0 : 1);
+  const ranked = all
+    .map((s, i) => ({ s, i }))
+    .sort((a, b) => (b.s.badge > 0 ? 1 : 0) - (a.s.badge > 0 ? 1 : 0)
+      || live(a.s) - live(b.s)
+      || (b.s.at ?? -Infinity) - (a.s.at ?? -Infinity)
+      || a.i - b.i)
+    .map((x) => x.s);
+  const keep = new Set(ranked.slice(0, max));
+  const shown = groups
+    .map((g) => ({ ...g, sessions: [...g.sessions, ...g.more].filter((s) => keep.has(s)), more: [] }))
+    .filter((g) => g.sessions.length > 0);
+  return { groups: shown, hidden: all.length - keep.size };
+}
+
 export interface DeskProject {
   projectId: string | null;
   name: string;
@@ -459,22 +483,6 @@ export function lapsedSeatChores(roster: readonly RosterSeat[] | null): DeskChor
       };
     });
 }
-
-// ── Where the rail reaches ───────────────────────────────────────────────────
-
-/**
- * THE RAIL'S WORKSPACE GROUP (operator IA 2026-10-13), top to bottom: Skills · MCP · Plugins, then
- * Workflows · General (the `/system` Settings page, renamed from Configuration; its Theme tab is the
- * retired Theme page, studio-settings-tabs). The Nerve Center tile sits apart at the foot. Repositories, Steering, Evals and Agents are not rail links: they are Desk tabs, and ⌘K still
- * goes to each. Navigation only: the orders/away and delivery-freeze controls are the Desk's.
- */
-export const DESK_RAIL_LINKS: readonly { dest: string; label: string; path: string; testId: string }[] = [
-  { dest: 'section:skills', label: PAGE_NAMES.skills, path: skillsPath(), testId: 'desk-rail-skills' },
-  { dest: 'section:mcp', label: PAGE_NAMES.mcp, path: mcpPath(), testId: 'desk-rail-mcp' },
-  { dest: 'section:plugins', label: PAGE_NAMES.plugins, path: '/plugins', testId: 'desk-rail-plugins' },
-  { dest: 'section:workflows', label: PAGE_NAMES.workflows, path: '/workflows', testId: 'desk-rail-workflows' },
-  { dest: 'section:general', label: PAGE_NAMES.system, path: '/system', testId: 'desk-rail-general' },
-];
 
 /**
  * The Desk's "work moved" fingerprint for its cumulative reads (quality, record, spend): every run's

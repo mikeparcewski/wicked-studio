@@ -12,9 +12,10 @@ import type { Navigate } from './useRoute.js';
  */
 
 /**
- * Where a steering-family address lands (App redirects every `steering` and `rules` parse here, with
- * REPLACE, so Back never re-enters the old address). Steer lives on the Desk's Steer tab and Memory
- * on its Memory tab (operator 2026-10-17: "memories and steering are separate"):
+ * Where a retired steering-family address lands (the Steering page redirects each here, with REPLACE, so
+ * Back never re-enters the old address). Steering and Memory are pages of their own in the sidebar
+ * (ui-v2 nav regroup; operator 2026-10-17: "memories and steering are separate"), and on a project's
+ * page they are its Steering and Memory tabs (`base`):
  *
  *   /steering/memories          → the Memory tab
  *   /proposals?type=memory      → the Memory tab's proposals (`/memory?view=proposals`)
@@ -22,8 +23,8 @@ import type { Navigate } from './useRoute.js';
  *   /proposals (any other type) → Steer's policy proposals
  *   /steering/:type             → Steer's Policies filtered to that type (bookmarks keep their type)
  *   /wiki, /policies            → Steer's Policies (the retired governance panels)
- *   /steering                   → the Steer tab's home
- *   anything else               → the Steer tab at that address (`/steering/policies…`, `/rules…`)
+ *   /steering                   → the Steering page's home (`/rules`)
+ *   anything else               → the Steering page at that address (`/steering/policies…`, `/rules…`)
  *
  * `base` is the Desk the address was on (`/`, or a project's page when a project Desk hosted it), so an
  * old project-hosted bookmark stays on that project. A typo'd `/steering/foo` parses to `not-found`

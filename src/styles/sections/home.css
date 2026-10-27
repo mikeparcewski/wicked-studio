@@ -117,7 +117,7 @@
   .wk-home-job { margin: 0 -12px; padding: 14px 12px; }
 }
 
-/* Needs you in full (`?tab=inbox`, the landing's "N more waiting"): the inbox, as tall as the screen allows. */
+/* Needs you in full (`/needs`, the landing's "N more waiting"): the inbox, as tall as the screen allows. */
 .wk-inbox-view { display: flex; flex-direction: column; height: max(440px, calc(100dvh - 190px)); min-height: 0; }
 .wk-inbox-view > .wk-inbox { flex: 1 1 auto; min-height: 0; }
 @media (max-width: 767px) {

@@ -73,7 +73,7 @@ describe('the landing', () => {
     expect(more).toHaveTextContent('1 more waiting');
     fireEvent.click(more);
     // Every waiting item, with its moves: Needs you in full.
-    expect(navigate).toHaveBeenLastCalledWith('/?tab=inbox');
+    expect(navigate).toHaveBeenLastCalledWith('/needs');
   });
 
   it('a simple low-impact plan is approved in place through the one audited batch path', () => {

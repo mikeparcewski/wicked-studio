@@ -85,7 +85,8 @@ describe('motion', () => {
     const start = css.indexOf('.wk-rail {');
     expect(start).toBeGreaterThan(-1);
     const block = css.slice(start);
-    for (const r of rules(block)) if (r.body.includes('transform:')) expect(r.media).toMatch(/prefers-reduced-motion:\s*no-preference/u);
+    // `text-transform` (a label's case) is not movement.
+    for (const r of rules(block)) if (/(^|[;{\s])transform\s*:/u.test(r.body)) expect(r.media).toMatch(/prefers-reduced-motion:\s*no-preference/u);
     const reduce = rules(block).filter((r) => r.media !== null && /prefers-reduced-motion:\s*reduce/u.test(r.media));
     expect(reduce.length).toBeGreaterThan(0);
     expect(reduce.every((r) => /transition-property:/u.test(r.body) && !r.body.includes('transform'))).toBe(true);

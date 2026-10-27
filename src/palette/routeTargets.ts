@@ -28,6 +28,11 @@ export interface RouteShape {
 
 export const ROUTE_SHAPES: readonly RouteShape[] = [
   { id: 'home', example: '/', is: (r) => r.panel === 'home' },
+  // The ui-v2 nav regroup: the Desk's old tabs as pages, and Build & settings.
+  { id: 'jobs', example: '/jobs', is: (r) => r.panel === 'jobs' },
+  { id: 'report', example: '/report', is: (r) => r.panel === 'report' },
+  { id: 'understand', example: '/understand', is: (r) => r.panel === 'understand' },
+  { id: 'build', example: '/build', is: (r) => r.panel === 'build' },
   { id: 'session', example: '/s/run:r1', is: (r) => r.panel === 'session' && r.artifactId !== null && r.artifactKey === null },
   // S16a-4a: a session with one artifact grown — reached from the artifact itself, never GO TO.
   { id: 'session-artifact', example: '/s/run:r1/a/r1%3Ap1%2Fd1', is: (r) => r.panel === 'session' && r.artifactKey !== null },
@@ -71,32 +76,34 @@ export const NOT_A_DESTINATION = 'not-found';
 
 /** The parameterless destinations, in the words the palette shows. */
 const DESTINATIONS: ReadonlyArray<{ shape: string; label: string; href: string }> = [
-  { shape: 'home', label: 'Desk — Work: what needs you, what is running', href: '/' },
-  // Desk v2: the Desk's tabs (Steer, Agents and Evaluate host the pages that used to be Workspace links).
-  { shape: 'home', label: 'Desk › Report — charts, spend and outcomes', href: '/?tab=report' },
-  { shape: 'home', label: 'Desk › Understand — compare and analyze', href: '/?tab=understand' },
+  // The sidebar's pages, in its order (ui-v2 nav regroup), each named as the sidebar names it.
+  { shape: 'home', label: `${PAGE_NAMES.home} — what needs you, what is running`, href: '/' },
+  { shape: 'jobs', label: `${PAGE_NAMES.jobs} — every job, running and finished`, href: '/jobs' },
+  { shape: 'report', label: `${PAGE_NAMES.report} — charts, spend and outcomes`, href: '/report' },
+  { shape: 'understand', label: `${PAGE_NAMES.understand} — compare agents, workflows and jobs`, href: '/understand' },
+  { shape: 'build', label: `${PAGE_NAMES.build} — skills, MCP, plugins, workflows and settings`, href: '/build' },
   { shape: 'watch', label: `${PAGE_NAMES.watch} — health of CLIs, runs, infra and governance, and the Watchtower feed`, href: '/watch' },
-  { shape: 'agents', label: 'Desk › Agents — sign-in, safety checks and fixes', href: '/agents' },
-  { shape: 'rules', label: `Desk › Steer — ${PAGE_NAMES.steering.toLowerCase()}: what agents are told`, href: '/rules' },
+  { shape: 'agents', label: `${PAGE_NAMES.agents} — sign-in, safety checks and fixes`, href: '/agents' },
+  { shape: 'rules', label: `${PAGE_NAMES.steering} — what agents are told`, href: '/rules' },
   { shape: 'everything', label: 'Everything — every session', href: everythingPath({ tab: 'sessions' }) },
   { shape: 'everything', label: 'Everything made — documents, pages, decks, videos', href: everythingPath({ tab: 'made' }) },
   { shape: 'everything', label: 'Handed over — pull requests and pushes', href: everythingPath({ tab: 'handed' }) },
   { shape: 'everything', label: 'Projects — all your projects', href: everythingPath({ tab: 'projects' }) },
-  { shape: 'steering-proposals', label: 'Desk › Steer › Proposals — rules helpers want, to review', href: '/steering/proposals' },
-  { shape: 'steering-policies', label: 'Steering — all rules and policies', href: '/steering/policies' },
-  { shape: 'memory', label: `Desk › Memory — ${PAGE_NAMES.memory.toLowerCase()}: what helpers remember`, href: '/memory' },
-  { shape: 'memory', label: 'Desk › Memory › Proposals — memories helpers want to keep, to review', href: '/memory?view=proposals' },
-  { shape: 'testing-evals', label: `Desk › Evaluate — ${PAGE_NAMES.evals.toLowerCase()}: check steering rules against samples`, href: '/testing/evals' },
-  { shape: 'repos', label: 'Repositories', href: '/repos' },
+  { shape: 'steering-proposals', label: `${PAGE_NAMES.steering} › Proposals — rules agents want, to review`, href: '/steering/proposals' },
+  { shape: 'steering-policies', label: `${PAGE_NAMES.steering} › All rules — every rule and policy`, href: '/steering/policies' },
+  { shape: 'memory', label: `${PAGE_NAMES.memory} — what agents remember`, href: '/memory' },
+  { shape: 'memory', label: `${PAGE_NAMES.memory} › Proposals — memories agents want to keep, to review`, href: '/memory?view=proposals' },
+  { shape: 'testing-evals', label: `${PAGE_NAMES.evals} — check steering rules against samples`, href: '/testing/evals' },
+  { shape: 'repos', label: PAGE_NAMES.repos, href: '/repos' },
   { shape: 'repos-new', label: 'Register a repository', href: '/repos/new' },
   { shape: 'runs-new', label: 'Start a run', href: '/runs/new' },
-  { shape: 'workflows', label: 'Workflows', href: '/workflows' },
-  { shape: 'skills', label: 'Skills', href: '/skills' },
+  { shape: 'workflows', label: PAGE_NAMES.workflows, href: '/workflows' },
+  { shape: 'skills', label: PAGE_NAMES.skills, href: '/skills' },
   { shape: 'mcp', label: `${PAGE_NAMES.mcp} — the tools helpers can call`, href: '/mcp' },
   { shape: 'mcp-inspect', label: `${PAGE_NAMES.mcpInspect} — test and debug an MCP server`, href: '/mcp/inspect' },
   { shape: 'plugins', label: `${PAGE_NAMES.plugins} — editor plugins, and making one`, href: '/plugins' },
   { shape: 'learn', label: 'Learn', href: '/learn' },
-  { shape: 'system', label: `${PAGE_NAMES.system} — settings for helpers and notifications`, href: '/system' },
+  { shape: 'system', label: `${PAGE_NAMES.system} — agents, notifications and the theme`, href: '/system' },
   // studio-settings-tabs: Theme is a tab of the Settings page (`/theme` only redirects there).
   { shape: 'system', label: `${PAGE_NAMES.theme} — light or dark, logo, site name`, href: SETTINGS_THEME_PATH },
   { shape: 'editors-dev', label: 'Editor test page — try an editor plugin', href: '/editors/dev' },

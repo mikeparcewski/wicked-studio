@@ -44,7 +44,9 @@ import { SETTINGS_THEME_PATH } from './board/settingsTabs.js';
 import { NerveCenterPage } from './components/nerve/NerveCenterPage.js';
 import { NERVE_CENTER_PATH } from './components/desk/NerveCenterTile.js';
 import { parseRoute, projectDetailPath } from './hooks/useRoute.js';
-import { DeskV2, deskTabPath, type HostedTab } from './components/desk/DeskV2.js';
+import { DeskHostedPage, DeskV2, deskTabPath, type HostedTab } from './components/desk/DeskV2.js';
+import { BuildPage } from './components/BuildPage.js';
+import { legacyDeskTarget } from './board/navModel.js';
 import { useDeskStream } from './store/deskStream.js';
 import { SESSION_RAIL_PX, SessionRail } from './components/desk/SessionRail.js';
 import { RailDrawer } from './components/ui/RailDrawer.js';
@@ -180,7 +182,8 @@ export function App(): React.ReactElement {
   );
 
 
-  /** Desk hosted tabs: render the page at the tab's address, with the project page's scope. */
+  /** The hosted pages (Repositories, Steering, Memory, Agents, Evaluate): the page at an address, with a
+   *  project page's scope when a project's tab hosts it (`project`), else at its own address. */
   const renderHosted = (tab: HostedTab, at: string, project: string | null): React.ReactNode => {
     const u = new URL(at.startsWith('/') ? at : `/${at}`, 'http://studio.local');
     const r = parseRoute(u.pathname);
@@ -545,9 +548,9 @@ export function App(): React.ReactElement {
   function renderCenter(): React.ReactElement {
     // A dead address (usability review #4): the honest not-found view. Checked
     // FIRST — no redirect hook fires for this panel, so the typed URL stays.
-    // Desk v2: the Agents page is the Desk's Agents tab; `/agents/...` deep links ride along as `at`.
+    // The sidebar's Agents page (`/agents[?fix=|?setup=1]`; deeper `/agents/...` spellings land on it too).
     if (pathname === '/agents' || pathname.startsWith('/agents/')) {
-      return <RouteRedirect to={deskTabPath('agents', pathname + search)} navigate={navigate} />;
+      return <DeskHostedPage view="agents">{renderHosted('agents', pathname + search, null)}</DeskHostedPage>;
     }
     if (panel === 'not-found') {
       return (
@@ -599,10 +602,17 @@ export function App(): React.ReactElement {
     }
     // `/` is the orchestrator board (§1.4, slice 5); the flat run list it replaced is
     // still at `/runs`, which the `panel === 'runs'` fallback below keeps rendering.
-    if (panel === 'home') {
-      // The Desk (S4) — the one shell since the classic skins retired (S18d).
-      return <DeskV2 hosted={renderHosted} runs={shownRuns} runsLoaded={runsLoaded} runsError={runsError} onRetryRuns={refresh} needRows={needRows} now={needsNow} navigate={navigate} search={search} />;
+    if (panel === 'home' || panel === 'needs' || panel === 'jobs' || panel === 'report' || panel === 'understand') {
+      // The ui-v2 nav regroup: the Desk's old tabs are pages in the sidebar. An old `/?tab=…[&at=…]`
+      // address lands on its page (replace, so Back skips it).
+      const legacy = panel === 'home' ? legacyDeskTarget(search) : null;
+      if (legacy !== null) return <RouteRedirect to={legacy} navigate={navigate} />;
+      const view = panel === 'jobs' ? 'runs' : panel === 'home' ? 'work' : panel === 'needs' ? 'inbox' : panel;
+      // The Desk (S4) — the one shell since the classic skins retired (S18d): Home, Jobs, Report, Understand.
+      return <DeskV2 view={view} hosted={renderHosted} runs={shownRuns} runsLoaded={runsLoaded} runsError={runsError} onRetryRuns={refresh} needRows={needRows} now={needsNow} navigate={navigate} search={search} />;
     }
+    // Build & settings: the list of Skills, MCP, Plugins, Workflows and Settings.
+    if (panel === 'build') return <BuildPage navigate={navigate} />;
     if (panel === 'workflows') {
       return (
         <div className="flex-1 overflow-y-auto">
@@ -610,14 +620,14 @@ export function App(): React.ReactElement {
         </div>
       );
     }
-    // Desk v2: Steer and Memory are Desk tabs. Every steering address (`/steering/...`, `/rules/...`,
-    // and the retired `/wiki`, `/policies`, `/proposals`) lands on the tab where it lives now
-    // (`legacySteeringTarget`), its own path carried as `at` so sub-pages and deep links keep working.
+    // The sidebar's Steering and Memory pages. Every steering address (`/steering/...`, `/rules/...`) is
+    // the Steering page; the retired ones (`/wiki`, `/policies`, `/proposals`, the retired sections)
+    // redirect to where they live now (`legacySteeringTarget`, inside the hosted page).
     if (panel === 'steering' || panel === 'rules') {
-      return <RouteRedirect to={legacySteeringTarget(pathname, search)} navigate={navigate} />;
+      return <DeskHostedPage view="steer">{renderHosted('steer', pathname + search, null)}</DeskHostedPage>;
     }
     if (panel === 'memory') {
-      return <RouteRedirect to={deskTabPath('memory', pathname + search)} navigate={navigate} />;
+      return <DeskHostedPage view="memory">{renderHosted('memory', pathname + search, null)}</DeskHostedPage>;
     }
     // `/skills` — the skills file manager over the daemon's effective plugin root (the skills
     // keystone): the catalog + KPI band, a drawer per skill (skill + support file trees, textarea
@@ -648,10 +658,6 @@ export function App(): React.ReactElement {
     if (panel === 'learn') {
       return <LearnPage navigate={navigate} />;
     }
-    // `/agents` — the Agents page (DES-seats-page): one row per AI agent, `?fix=<key>` opens its modal.
-    if (panel === 'agents') {
-      return <AgentsPage search={search} navigate={navigate} />;
-    }
     if (panel === 'plugins') {
       return (
         <div className="flex-1 overflow-y-auto">
@@ -670,7 +676,7 @@ export function App(): React.ReactElement {
       );
     }
     if (panel === 'repos') {
-      return <RouteRedirect to={deskTabPath('repositories', pathname + search)} navigate={navigate} />;
+      return <DeskHostedPage view="repositories">{renderHosted('repositories', pathname + search, null)}</DeskHostedPage>;
     }
     if (panel === 'repo-detail' && repoId) {
       return (
@@ -694,9 +700,9 @@ export function App(): React.ReactElement {
     if (panel === 'testing' && testingPage === 'campaigns' && campaignId === null) {
       return <CampaignsRedirect search={search} navigate={navigate} />;
     }
-    // Desk v2: Evals lives on the Desk's Evaluate tab (the address carried as `at`).
+    // The sidebar's Evaluate page (`/testing/evals`).
     if (panel === 'testing' && testingPage === 'evals') {
-      return <RouteRedirect to={deskTabPath('evaluate', pathname + search)} navigate={navigate} />;
+      return <DeskHostedPage view="evaluate">{renderHosted('evaluate', pathname + search, null)}</DeskHostedPage>;
     }
     if (panel === 'testing') {
       return (

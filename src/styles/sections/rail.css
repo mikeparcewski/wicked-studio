@@ -11,7 +11,7 @@
 }
 .wk-rail-group-name { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .wk-rail-fold-chevron { flex-shrink: 0; color: var(--ink-muted); transition: transform var(--dur-fast); transform: rotate(90deg); }
-.wk-rail-group-toggle[aria-expanded="false"] .wk-rail-fold-chevron { transform: none; }
+.wk-rail-group-toggle[aria-expanded="false"] .wk-rail-fold-chevron, .wk-rail-sec-toggle[aria-expanded="false"] .wk-rail-fold-chevron { transform: none; }
 .wk-rail-group-toggle .wk-rail-badge { margin-left: auto; }
 @media (prefers-reduced-motion: reduce) { .wk-rail-fold-chevron { transition: none; } }
 
@@ -157,4 +157,55 @@
   .wk-rail :is(.wk-rail-home, .wk-rail-action, .wk-rail-group-toggle, .wk-rail-icon-btn, .wk-rail-session, .wk-rail-showmore, .wk-rail-link, .wk-nc-tile) {
     transition-property: background-color, color, border-color, box-shadow;
   }
+}
+
+/* ── THE SIDEBAR'S PAGES (ui-v2 nav regroup, operator 2026-10-26; mockup desk-home-redesign): three
+   groups of pages under small-caps labels (WORK · INSIGHT · GOVERN), RECENT under them, and Build &
+   settings at the foot. Every page item is a .wk-rail-link, so it shares the rail's interaction states
+   above; on top of them a page item's hover is an ACCENT tint (the rail's hover fill when the theme
+   defines one, else the accent over the rail) and the current page is the accent wash, the start-edge
+   bar and semibold words. Tokens only. ── */
+/* The wordmark is a label now (Home is the first page): the old link's box, no hover. */
+.wk-rail-wordmark {
+  display: flex; align-items: center; gap: 8px; margin: 10px 10px 6px; padding: 6px 8px; min-width: 0;
+}
+.wk-rail-wordmark .wk-rail-brand { color: var(--ink-high); }
+.wk-rail-nav { display: flex; flex-direction: column; }
+.wk-rail-nav-group { display: flex; flex-direction: column; gap: 1px; }
+/* A section label: small caps (the words are "Work", "Insight", "Govern"; screen readers read them so). */
+.wk-rail-sec {
+  margin: 14px 0 4px; padding: 0 10px; font-size: var(--text-2xs); font-weight: var(--weight-semi);
+  letter-spacing: 0.09em; text-transform: uppercase; color: var(--ink-muted); line-height: 1.4;
+}
+.wk-rail-nav-group:first-child .wk-rail-sec { margin-top: 6px; }
+.wk-rail-nav-item { min-height: 34px; padding: 0 10px; font-size: var(--text-sm); color: var(--ink-body); }
+.wk-rail-nav-label { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.wk-rail .wk-rail-nav-item:hover {
+  background: var(--rail-hover-bg, color-mix(in oklab, var(--accent) 18%, var(--surface-rail))); color: var(--ink-high); box-shadow: none;
+}
+/* The current page reads stronger than a hovered one (mockup: hover 14%, current 18% of the accent). */
+.wk-rail .wk-rail-nav-item[aria-current="page"] {
+  background: color-mix(in oklab, var(--accent) 22%, var(--surface-rail)); font-weight: var(--weight-semi); color: var(--ink-high);
+}
+.wk-rail .wk-rail-nav-item[aria-current="page"]:hover {
+  background: color-mix(in oklab, var(--accent) 30%, var(--surface-rail)); box-shadow: inset 3px 0 0 var(--accent);
+}
+/* Home's needs-you count is the spark (one yellow mark per viewport), as the wordmark's was. */
+.wk-rail-badge.wk-rail-badge--home { background: var(--spark); color: var(--spark-ink); }
+
+/* RECENT: its label is the fold toggle for the whole list (a chevron that turns when open). */
+.wk-rail-recent { margin-top: 4px; }
+.wk-rail-sec.wk-rail-sec-toggle {
+  display: flex; align-items: center; gap: 4px; width: 100%; min-height: 26px; margin-bottom: 0;
+  border: none; background: none; border-radius: var(--radius-sm); cursor: pointer; text-align: left; font-family: inherit;
+}
+.wk-rail-sec-toggle .wk-rail-fold-chevron { color: var(--ink-muted); }
+.wk-rail .wk-rail-sec-toggle:hover { background: var(--rail-hover-bg, color-mix(in oklab, var(--accent) 18%, var(--surface-rail))); color: var(--ink-high); }
+.wk-rail .wk-rail-sec-toggle:hover .wk-rail-fold-chevron { color: var(--ink-high); }
+.wk-rail .wk-rail-sec-toggle:focus-visible { outline: 2px solid transparent; outline-offset: -2px; box-shadow: inset 0 0 0 2px var(--accent); }
+#rail-recent-list > div:first-child .wk-rail-group-row { margin-top: 4px; }
+/* All jobs: the old "Show N more" look, inset to the titles. */
+.wk-rail-showmore.wk-rail-alljobs { margin-top: 6px; text-decoration: none; }
+@media (max-width: 767px) {
+  .wk-rail-drawer .wk-rail-sec-toggle { min-height: var(--tap-min); }
 }

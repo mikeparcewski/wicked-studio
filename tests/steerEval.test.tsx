@@ -10,7 +10,6 @@ import { EvaluateSurface } from '../src/components/steer/EvaluateSurface.js';
 import { ruleFacets, SteerSurface } from '../src/components/steer/SteerSurface.js';
 import { groupEvalRuns } from '../src/components/EvalHistory.js';
 import { tableAddress } from '../src/components/steer/tableAddress.js';
-import { deskTabPath } from '../src/components/desk/DeskV2.js';
 import { useEvalReportStore } from '../src/store/evalReport.js';
 import { useSteerDraft } from '../src/store/steerDraft.js';
 import { importRuleFile } from '../src/board/steerImport.js';
@@ -265,9 +264,9 @@ describe('codex r1 fixes', () => {
   });
 
   it('#7 the table editor’s own filter moves keep the table, on the Steer tab’s address', () => {
-    expect(tableAddress('/steering/policies?type=security')).toBe(deskTabPath('steer', '/steering/policies?type=security&view=table'));
-    expect(tableAddress('/steering/policies')).toBe(deskTabPath('steer', '/steering/policies?view=table'));
-    expect(tableAddress('/steering/proposals')).toBe(deskTabPath('steer', '/steering/proposals'));
+    expect(tableAddress('/steering/policies?type=security')).toBe('/steering/policies?type=security&view=table');
+    expect(tableAddress('/steering/policies')).toBe('/steering/policies?view=table');
+    expect(tableAddress('/steering/proposals')).toBe('/steering/proposals');
     expect(tableAddress('/s/run-1')).toBe('/s/run-1');
   });
 

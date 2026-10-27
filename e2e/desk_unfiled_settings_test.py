@@ -47,8 +47,8 @@ errors: list[str] = []
 DASH = """() => ({
   desk: !!document.querySelector('[data-testid="project-desk"]'),
   title: document.querySelector('[data-testid="project-title"]')?.innerText ?? null,
-  // The tab bar's tabs plus the views under its More (2026-10-26): one set of Desk views.
-  tabs: [...document.querySelectorAll('[data-testid^="desk-tab-"], [data-testid^="desk-more-tab-"]')].map((t) => t.dataset.testid),
+  // A project page's tabs: every Desk view, flat (the ui-v2 nav regroup removed More).
+  tabs: [...document.querySelectorAll('[data-testid^="desk-tab-"]')].map((t) => t.dataset.testid),
   inbox: !!document.querySelector('[data-testid="desk-inbox"]'),
   blocks: !!document.querySelector('[data-testid="desk-blocks"]'),
   actions: [...document.querySelectorAll('[data-testid="project-actions"] [data-testid]')].map((a) => a.dataset.testid).filter((t) => t.startsWith('project-')),
@@ -71,8 +71,9 @@ with sync_playwright() as p:
         f"s.textContent = {json.dumps(HIDE_GATE_TOASTS)}; document.head.appendChild(s); }});")
     page.goto(f"{origin}/", wait_until="networkidle")
 
-    # 1. General has no agents block.
-    page.get_by_test_id("desk-rail-general").click()
+    # 1. General has no agents block (Settings is on the Build & settings page).
+    page.get_by_test_id("desk-rail-build").click()
+    page.get_by_test_id("build-link-settings").click()
     page.get_by_test_id("view-settings").wait_for(state="visible", timeout=8000)
     page.wait_for_timeout(400)
     general = page.evaluate("""() => ({ sections: [...document.querySelectorAll('.wk-section-title')].map((h) => h.innerText),

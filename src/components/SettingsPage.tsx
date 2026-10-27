@@ -28,7 +28,7 @@ export function SettingsPage({ navigate, search }: { navigate: Navigate; search:
         aria-label="Settings"
         data-testid="settings-tabs"
         tabTestId="settings-tab"
-        tabs={[{ id: 'general', label: PAGE_NAMES.system }, { id: 'theme', label: PAGE_NAMES.theme }]}
+        tabs={[{ id: 'general', label: 'General' }, { id: 'theme', label: PAGE_NAMES.theme }]}
         active={tab}
         onChange={(id) => { if (id !== tab) navigate(settingsPath(id as SettingsTab)); }}
       />
