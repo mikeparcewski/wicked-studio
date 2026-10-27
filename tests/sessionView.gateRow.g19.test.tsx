@@ -91,7 +91,9 @@ describe('studio#570: session-gate-question reads each gate kind in the row\'s w
       prompt: 'Unit 2 was DENIED by input governance — a tool call was refused (`Bash`): rm -rf is never allowed. confirm to retry the phase, request changes to send it back, or reject to cancel the run',
     };
     render(<GateRow view={makeView({ id: MOVE_RUN, status: 'awaiting_human' }, MOVE_UNITS)} gate={gate} />);
-    expect(screen.getByTestId('session-gate-question').textContent).toBe('A Bash call was denied — how should the step go on?');
+    // (live nit 2026-10-27) A plain cause, not a question; the action is on the button (board/gateHeadline.ts).
+    expect(screen.getByTestId('session-gate-question').textContent).toBe('A Bash call was blocked by the job’s rules');
+    expect(screen.getAllByTestId('session-gate-choice').find((b) => b.dataset['choiceKey'] === 'approve')?.textContent).toMatch(/^Approve and re-run this step/);
   });
 
   it('a team dispute says the team disagreed', () => {
@@ -123,7 +125,8 @@ describe('studio#570: session-gate-question reads each gate kind in the row\'s w
       prompt: 'Governance DENIED unit 1 (review): the refactored middleware drops the token-refresh path — auth.refresh.spec fails on the expired-token branch',
     };
     render(<GateRow view={makeView({ id: MOVE_RUN, status: 'awaiting_human' }, MOVE_UNITS)} gate={gate} />);
-    expect(screen.getByTestId('session-gate-question').textContent).toBe('Governance denied this step — how should it go on?');
+    // (live nit 2026-10-27) A plain cause, not a question.
+    expect(screen.getByTestId('session-gate-question').textContent).toBe('The job’s rules turned down this step’s work');
   });
 
   it('a def gate keeps its "Approve the <step>" question', () => {

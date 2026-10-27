@@ -72,6 +72,8 @@ import { useElicitationStore } from '../../store/elicitations.js';
 import { useSystemStore } from '../../store/systemSnapshot.js';
 import { askingResponder, builderResponder } from '../../board/responder.js';
 import { plainGateQuestion } from '../../board/deskWords.js';
+import { needTone } from '../../board/needTone.js';
+import { governanceDenialHeadline } from '../../board/gateHeadline.js';
 
 /** S16a-2c: the hash that lands a run's session on its sheet's Governance tab. */
 export const GOVERNANCE_HASH = '#governance';
@@ -853,7 +855,8 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
   const attention = useSystemStore((s) => (s.snapshot?.ranked === true ? s.snapshot.attention : null));
   const dockItems = useMemo<DockItem[]>(() => {
     const out: DockItem[] = [];
-    const blocking = (id: string): boolean => (attention ?? []).some((a) => (a.runId === id || (a.blockedRunIds ?? []).includes(id)) && (a.level === 'red' || (a.blockedRunIds?.length ?? 0) > 1));
+    // The rail's red follows the one dot rule (board/needTone): red when the item blocks other work.
+    const blocking = (id: string): boolean => (attention ?? []).some((a) => (a.runId === id || (a.blockedRunIds ?? []).includes(id)) && needTone(a) === 'fail');
     for (const v of mine) {
       const id = v.session.id;
       if (['completed', 'cancelled', 'failed'].includes(v.session.status)) continue;
@@ -864,7 +867,7 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
         // The builder the job waits with (the newest creator step), never a hand-over's script.
         // A plan question is crew's own (nothing is built yet): "the job is waiting".
         const who = g.gateKind === 'plan_approval' ? null : builderResponder(v, g.ord, roster);
-        out.push({ key: id, who: who?.name ?? null, since: g.receivedAt ?? null, question: plainGateQuestion(g.prompt, g.gateKind), tone: blocking(id) ? 'blocking' : 'waiting' });
+        out.push({ key: id, who: who?.name ?? null, since: g.receivedAt ?? null, question: governanceDenialHeadline(g.prompt) ?? plainGateQuestion(g.prompt, g.gateKind), tone: blocking(id) ? 'blocking' : 'waiting' });
       } else if (el !== undefined) {
         const who = askingResponder(v, roster, el);
         out.push({ key: id, who: who.role === 'seat' ? who.name : null, since: null, question: el.message, tone: blocking(id) ? 'blocking' : 'waiting' });

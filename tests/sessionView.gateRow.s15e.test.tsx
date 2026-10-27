@@ -557,7 +557,9 @@ describe('GateRow — a denied unit (studio#573): Approve is on the row and sugg
     const choices = screen.getAllByTestId('session-gate-choice');
     expect(choices.map((c) => c.getAttribute('data-choice-key'))).toEqual(['approve', 'steer', 'stop']);
     expect(choices.map((c) => c.getAttribute('data-recommended'))).toEqual(['true', 'false', 'false']);
-    expect(screen.getByTestId('session-gate-question').textContent).toBe('A Bash call was denied — how should the step go on?');
+    // (live nit 2026-10-27) The plain cause as the headline; the re-run is said on its button.
+    expect(screen.getByTestId('session-gate-question').textContent).toBe('A Bash call was blocked by the job’s rules');
+    expect(choices[0]!.textContent).toMatch(/^Approve and re-run this step/);
   });
 
   it('clicking Approve sends {approve:true} with no action — the engine re-runs the phase', async () => {

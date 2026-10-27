@@ -81,6 +81,21 @@ export function plainGateQuestion(prompt: string | undefined, gateKind: string |
   return first;
 }
 
+/**
+ * A governance denial as a plain cause, never a question (live nit 2026-10-27: "A Bash call was denied — how should
+ * the step go on?" on Home and Needs). The action is the button's ("Approve and re-run this step"); the headline says what
+ * happened. Input governance refused one of the step's tool calls; output governance turned the step's work down.
+ */
+export function governanceDenialHeadline(prompt: string | undefined): string | null {
+  if (prompt === undefined) return null;
+  if (/^\s*Unit\s+\d+\s+was DENIED by input governance\b/i.test(prompt)) {
+    const tool = /tool call was refused\s*\(\s*`?([A-Za-z0-9_.:-]+)`?\s*\)/i.exec(prompt)?.[1];
+    return `A ${tool !== undefined ? `${tool} ` : 'tool '}call was blocked by the job’s rules`;
+  }
+  if (/^\s*Governance DENIED unit\s+\d+/i.test(prompt)) return 'The job’s rules turned down this step’s work';
+  return null;
+}
+
 /** The engine's pause prompts in one line each: what happened, and what the row's choices do
  *  (studio#570). `null` for every other prompt — the caller keeps its own fallbacks. */
 function pausedStepQuestion(p: string, gateKind: string | undefined): string | null {

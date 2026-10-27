@@ -134,6 +134,7 @@ select.wk-calm-pick:not([multiple]):not([size]):hover { background-color: var(--
 .wk-calm-dot[data-tone="ok"] { background: var(--status-ok); }
 .wk-calm-dot[data-tone="run"] { background: var(--status-run); }
 .wk-calm-dot[data-tone="gate"] { background: var(--status-gate); }
+.wk-calm-dot[data-tone="warn"] { background: var(--status-warn); }
 .wk-calm-dot[data-tone="fail"] { background: var(--status-fail); }
 .wk-calm-dot[data-tone="accent"] { background: var(--calm-link); }
 .wk-calm-row-text { display: flex; flex-direction: column; gap: 4px; flex: 1 1 auto; min-width: 0; }

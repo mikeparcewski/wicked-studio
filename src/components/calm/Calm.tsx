@@ -15,7 +15,7 @@ import { OverflowMenu, type MenuItem } from '../ui/OverflowMenu.js';
  * Pure presentation: no reads, no writes — the page owns its data and hands words in.
  */
 
-export type CalmTone = 'ok' | 'run' | 'gate' | 'fail' | 'quiet' | 'accent';
+export type CalmTone = 'ok' | 'run' | 'gate' | 'warn' | 'fail' | 'quiet' | 'accent';
 
 export function CalmPage({ children, 'data-testid': testId, className }: {
   children: React.ReactNode; 'data-testid'?: string | undefined; className?: string | undefined;

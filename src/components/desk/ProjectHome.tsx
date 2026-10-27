@@ -9,7 +9,8 @@ import type { NeedAction, NeedRow } from '../../board/needsYou.js';
 import type { RepoUse } from '../../board/projectModel.js';
 import { homeProgress, projectHomeSentence, weekWords } from '../../board/projectHome.js';
 import { projectAttention, projectUnresolved } from '../../board/projectsModel.js';
-import { preventsWork } from '../../board/nerveCenter.js';
+import { needTone } from '../../board/needTone.js';
+import { QE_REFUSED_DELIVER } from '../../board/gateHeadline.js';
 import { tidyWords } from '../../board/nerveOverview.js';
 import { actionPath, rowVerb, waitWords } from '../../board/rankedNeeds.js';
 import { rowHeadline, rowLead } from '../../board/rowHeadline.js';
@@ -160,13 +161,14 @@ export function ProjectHome({ project, projectId, runs, allRuns, needRows, repos
                     const runId = a.runId ?? a.blockedRunIds?.[0] ?? null;
                     const v = runId === null ? null : runs.find((x) => x.session.id === runId) ?? null;
                     const path = actionPath(a.action) ?? (runId !== null ? sessionPath(`run:${runId}`) : '/needs');
-                    const gateKind = a.reason !== null && /deliver/i.test(a.reason) ? 'deliver' : null;
                     const cause = causes.get(a.id) ?? null;
+                    // A hand-over QE refused is not offered as "Deliver": the row says the refusal and its move is Decide.
+                    const gateKind = cause !== QE_REFUSED_DELIVER && a.reason !== null && /deliver/i.test(a.reason) ? 'deliver' : null;
                     const sub = [rowLead(a, cause), v !== null ? repoNameOf(v) : null, a.waitedSince != null ? `waiting ${waitWords(a.waitedSince, now)}` : null]
                       .filter((x): x is string => x !== null && x !== '').join(' · ');
                     return (
                       <CalmRow key={a.id} data-testid="project-need" data={{ key: a.id, kind: a.panel }}
-                        tone={preventsWork(a) ? 'fail' : 'gate'} title={rowHeadline(a, cause)} sub={sub === '' ? undefined : sub}
+                        tone={needTone(a)} title={rowHeadline(a, cause)} sub={sub === '' ? undefined : sub}
                         meta={<>{rowVerb(a, gateKind)} <span aria-hidden>→</span></>} metaTone="accent"
                         href={path} onOpen={() => navigate(path)} openTestId="project-need-open" />
                     );
@@ -179,7 +181,7 @@ export function ProjectHome({ project, projectId, runs, allRuns, needRows, repos
                     const sub = [v !== null ? repoNameOf(v) : null, row.at !== null ? relTime(row.at, now) : null].filter((x): x is string => x !== null && x !== '').join(' · ');
                     return (
                       <CalmRow key={row.key} data-testid="project-need" data={{ key: row.key, kind: row.kind }}
-                        tone={row.kind === 'failed-run' ? 'fail' : 'gate'} title={row.question ?? row.text} sub={sub === '' ? undefined : sub}
+                        tone={row.kind === 'failed-run' ? 'fail' : 'warn'} title={row.question ?? row.text} sub={sub === '' ? undefined : sub}
                         meta={<>{moveWord(row.action, row.kind)} <span aria-hidden>→</span></>} metaTone="accent"
                         href={path} onOpen={() => act(navigate, row.action)} openTestId="project-need-open" />
                     );

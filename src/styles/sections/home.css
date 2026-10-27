@@ -145,7 +145,7 @@
 .wk-needs-card-line { font-size: 14px; line-height: 1.5; color: var(--ink-body); overflow-wrap: anywhere; }
 .wk-needs-card-remedy { font-size: 14px; line-height: 1.5; color: var(--ink-muted); overflow-wrap: anywhere; }
 .wk-needs-dot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; background: var(--status-warn); }
-.wk-needs-dot[data-level="red"] { background: var(--status-fail); }
+.wk-needs-dot[data-tone="fail"] { background: var(--status-fail); }
 .wk-needs-dot--sm { width: 10px; height: 10px; }
 .wk-needs-rows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
 .wk-needs-row { display: flex; align-items: center; gap: 18px; padding: 18px 20px; margin: 0 -20px; border-radius: 14px; transition: background-color 0.14s; min-width: 0; }
@@ -185,6 +185,12 @@
   .wk-needs-card { flex-direction: column; align-items: stretch; padding: 20px; gap: 14px; }
   .wk-needs-card > .wk-needs-dot { display: none; }
   .wk-needs-row { flex-wrap: wrap; margin: 0 -12px; padding: 14px 12px; }
+  /* (live nit 2026-10-27) The dot sits inline with the headline's first line, never alone on a line of its own:
+     the text takes the rest of the row and the move wraps under the text. */
+  .wk-needs-row:has(> .wk-needs-dot) { gap: 8px 12px; }
+  .wk-needs-row > .wk-needs-dot { align-self: flex-start; margin-top: 6px; }
+  .wk-needs-row:has(> .wk-needs-dot) > .wk-needs-row-body { flex: 1 1 calc(100% - 22px); }
+  .wk-needs-row:has(> .wk-needs-dot) > :is(.wk-needs-row-act, .wk-home-btn) { margin-left: 22px; }
   .wk-needs-row--resolve .wk-needs-acts { width: 100%; }
 }
 /* The one fold's summary is the calm fold row (words, then the chevron), not the inline link it was. */

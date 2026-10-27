@@ -123,9 +123,10 @@ export function spendWords(usd: number): string {
   return `$${usd >= 100 ? Math.round(usd).toLocaleString() : usd.toFixed(2)}`;
 }
 
-/** "16 jobs to resolve · $4.20 spent" (no spend said when none is known). */
+/** "16 jobs to tidy up ($4.20 spent)" (no spend said when none is known). ONE phrase for stale work everywhere —
+ *  Needs you, the Desk, Nerve Center and the project home (live nit 2026-10-27: "to resolve" vs "to tidy up"). */
 export function toResolveWords(n: number, usd: number | null): string {
-  return `${n} ${n === 1 ? 'job' : 'jobs'} to resolve${usd !== null && usd > 0 ? ` · ${spendWords(usd)} spent` : ''}`;
+  return `${n} ${n === 1 ? 'job' : 'jobs'} to tidy up${usd !== null && usd > 0 ? ` (${spendWords(usd)} spent)` : ''}`;
 }
 
 /** A system item that stops work (crew's `prevents`; an older snapshot's red), not one that slows it. */

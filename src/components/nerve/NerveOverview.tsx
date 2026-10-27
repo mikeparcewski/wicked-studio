@@ -13,6 +13,7 @@ import { InsightsLine } from '../insights/InsightsLine.js';
 import { rowHeadline } from '../../board/rowHeadline.js';
 import type { SessionView } from '../../api/types.js';
 import { useRowHeadlines } from '../../hooks/useRowHeadlines.js';
+import { needTone } from '../../board/needTone.js';
 
 const NO_RUNS: readonly SessionView[] = [];
 
@@ -143,7 +144,7 @@ export function NerveOverview({ state, snapshot, registry, reading, needCount, s
           <ul className="wk-ncv-slow-list">
             {slowing.map((a) => (
               <li key={a.id} className="wk-ncv-slow" data-testid="nc-slow" data-id={a.id} data-level={a.level}>
-                <span aria-hidden className="wk-calm-dot" data-tone={a.level === 'red' ? 'fail' : 'warn'} />
+                <span aria-hidden className="wk-calm-dot" data-tone={needTone(a)} />
                 <span className="wk-ncv-slow-text">
                   <span className="wk-ncv-slow-title"><span className="sr-only">{a.level === 'red' ? 'Stopping work: ' : 'Slowing work: '}</span>{rowHeadline(a, causes.get(a.id) ?? null)}</span>
                   {slowingLine(a, snapshot?.infra ?? null, causes.get(a.id) ?? null) !== null && <span className="wk-ncv-slow-line">{slowingLine(a, snapshot?.infra ?? null, causes.get(a.id) ?? null)}</span>}

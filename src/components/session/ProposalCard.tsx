@@ -32,6 +32,7 @@ import { QeDeliveryFixLine, QeRefusalWarning } from '../QeRefusalWarning.js';
 import { useRerunFromHere } from '../../hooks/useRerunFromHere.js';
 import { retryPrefillOf } from '../../board/needsYou.js';
 import { setRetryPrefill } from '../../store/retryPrefill.js';
+import { QE_REFUSED_DELIVER } from '../../board/gateHeadline.js';
 
 /** Open a studio route from a card that is handed no navigate (the router listens for popstate). */
 function goTo(path: string): void {
@@ -241,7 +242,7 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
       {(card.state === 'ask' || card.state === 'confirm') && (
         <>
           {/* (mockup ui-v2-gate) The cause as the headline: a hand-over QE refused says that, first. */}
-          <h2 data-testid="session-proposal-text" className="wk-prop-text wk-gate2-q">{deliverRefused && card.state === 'ask' ? 'QE hasn’t passed, so this can’t be delivered yet' : card.text}</h2>
+          <h2 data-testid="session-proposal-text" className="wk-prop-text wk-gate2-q">{deliverRefused && card.state === 'ask' ? QE_REFUSED_DELIVER : card.text}</h2>
           {deliverRefused && card.state === 'ask'
             ? <p data-testid="session-proposal-why" className="wk-prop-why wk-gate2-p">Delivery is refused until QE acceptance passes. {rerun.offer !== null ? 'Run it again so QE checks it, or start it again with QE skipped and a reason.' : 'Start it again with QE skipped and a reason, or stop it.'}</p>
             : card.why !== null && card.state === 'ask' && <p data-testid="session-proposal-why" className="wk-prop-why wk-gate2-p">{card.why}</p>}

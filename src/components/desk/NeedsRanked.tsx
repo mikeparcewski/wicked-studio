@@ -14,6 +14,8 @@ import { HEALTH_RECHECKED, useSystemStore } from '../../store/systemSnapshot.js'
 import { rowHeadline, rowLead } from '../../board/rowHeadline.js';
 import { useRowHeadlines } from '../../hooks/useRowHeadlines.js';
 import { useSignInHere } from '../agents/useSignInHere.js';
+import { needTone } from '../../board/needTone.js';
+import { QE_REFUSED_DELIVER } from '../../board/gateHeadline.js';
 
 /**
  * NEEDS YOU, RANKED (`/needs` against a crew with `capabilities.attentionRanked`; the approved mockup
@@ -73,7 +75,7 @@ export function NeedsRanked({ snapshot, runs, needRows, navigate, now, setup = [
             <h2 id="needs-several" className="wk-home-label">Blocking several jobs</h2>
             {several.map((a) => (
               <article key={a.id} className="wk-needs-card" data-testid="needs-item" data-id={a.id} data-kind={a.kind ?? undefined} data-blocks={a.blockedRunIds?.length ?? 0}>
-                <span aria-hidden className="wk-needs-dot" data-level={a.level} />
+                <span aria-hidden className="wk-needs-dot" data-level={a.level} data-tone={needTone(a)} />
                 <span className="wk-needs-card-body">
                   <span className="wk-needs-card-title">{rowHeadline(a, causes.get(a.id) ?? null)}</span>
                   {rowLead(a, causes.get(a.id) ?? null) !== null && <span className="wk-needs-card-line">{rowLead(a, causes.get(a.id) ?? null)}</span>}
@@ -92,15 +94,16 @@ export function NeedsRanked({ snapshot, runs, needRows, navigate, now, setup = [
               {single.map((a) => {
                 const v = a.runId != null ? byId.get(a.runId) : undefined;
                 const path = actionPath(a.action) ?? (a.runId != null ? sessionPath(`run:${a.runId}`) : null);
-                const gateKind = a.reason !== null && /deliver/i.test(a.reason) ? 'deliver' : null;
                 // The muted line: why (crew's plain words), where, and how long it has waited.
                 const cause = causes.get(a.id) ?? null;
+                // A hand-over QE refused is not offered as "Deliver": the row says the refusal and its move is Decide.
+                const gateKind = cause !== QE_REFUSED_DELIVER && a.reason !== null && /deliver/i.test(a.reason) ? 'deliver' : null;
                 const meta = [rowLead(a, cause), v?.session.repo_ref ?? null, a.waitedSince != null ? `waiting ${waitWords(a.waitedSince, now)}` : null].filter((x): x is string => x !== null && x !== '').join(' · ');
                 return (
                   // The whole row opens its run (the action link goes to the decision itself, `#gate`).
                   <li key={a.id} className="wk-needs-row wk-needs-row--go" data-testid="needs-item" data-id={a.id} data-kind={a.kind ?? undefined} data-blocks={a.blockedRunIds?.length ?? 0}
                     onClick={(e) => { if ((e.target as HTMLElement).closest('a, button') !== null) return; const to = a.runId != null ? sessionPath(`run:${a.runId}`) : path; if (to !== null) navigate(to); }}>
-                    <span aria-hidden className="wk-needs-dot wk-needs-dot--sm" data-level={a.level} />
+                    <span aria-hidden className="wk-needs-dot wk-needs-dot--sm" data-level={a.level} data-tone={needTone(a)} />
                     <span className="wk-needs-row-body">
                       {a.runId != null
                         ? <a href={sessionPath(`run:${a.runId}`)} onClick={go(sessionPath(`run:${a.runId}`))} data-testid="needs-item-run" className="wk-needs-row-title wk-needs-row-link">{rowHeadline(a, cause)}</a>
@@ -169,11 +172,11 @@ export function NeedsRanked({ snapshot, runs, needRows, navigate, now, setup = [
   );
 }
 
-/** The fold's one muted line: what is in it, in words ("3 proposals to review · 16 jobs to resolve · 1 to set up"). */
+/** The fold's one muted line: what is in it, in words ("3 proposals to review · 16 jobs to tidy up · 1 to set up"). */
 export function worthWords(toReview: number, unresolved: number, setup: number, other: number): string {
   return [
     toReview > 0 ? `${toReview} ${toReview === 1 ? 'proposal' : 'proposals'} to review` : null,
-    unresolved > 0 ? `${unresolved} ${unresolved === 1 ? 'job' : 'jobs'} to resolve` : null,
+    unresolved > 0 ? `${unresolved} ${unresolved === 1 ? 'job' : 'jobs'} to tidy up` : null,
     setup > 0 ? `${setup} to set up` : null,
     other > 0 ? `${other} more` : null,
   ].filter((x): x is string => x !== null).join(' · ');
@@ -191,7 +194,7 @@ export function ToResolve({ snapshot, runs, navigate, now = Date.now() }: { snap
   return (
     <section className="wk-home-sec wk-needs-sec wk-needs-sec--rows" aria-labelledby="needs-resolve" data-testid="needs-resolve">
       <div className="wk-home-sec-head">
-        <h2 id="needs-resolve" className="wk-home-label">To resolve</h2>
+        <h2 id="needs-resolve" className="wk-home-label">To tidy up</h2>
         <span className="wk-needs-meta" data-testid="needs-resolve-words">{toResolveWords(list.length, snapshot.unresolvedSpendUsd ?? null)}</span>
       </div>
       <p className="wk-needs-note">Jobs that stopped and nobody closed. Retry them, or archive them with a reason so the record stays honest.</p>

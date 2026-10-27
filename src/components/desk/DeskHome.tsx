@@ -1,4 +1,6 @@
 import { useId, useMemo, useState } from 'react';
+import { rowHeadline, rowLead } from '../../board/rowHeadline.js';
+import { useRowHeadlines } from '../../hooks/useRowHeadlines.js';
 import type { SessionView } from '../../api/types.js';
 import type { SystemAttention, SystemSnapshot } from '../../api/system.js';
 import { actionPath } from '../../board/rankedNeeds.js';
@@ -155,7 +157,7 @@ export function DeskHome({
             {settled === 'partial' && missing.length > 0 && <StateBanner data-testid="desk-needs-partial" kind="partial" what={missing.join(', ')} onRetry={onRetryNeeds} retrying={retryingNeeds} />}
             {blocker !== null ? <SetupCard chore={blocker} navigate={navigate} />
               : shownNeed !== null ? <NeedCard row={shownNeed} view={view(shownNeed)} navigate={navigate} now={now} agentName={agentName} />
-              : shownRanked !== null ? <RankedCard item={shownRanked} navigate={navigate} />
+              : shownRanked !== null ? <RankedCard item={shownRanked} runs={runs} navigate={navigate} />
                 : fallbackSetup !== null && <SetupCard chore={fallbackSetup} navigate={navigate} />}
             {moreWaiting > 0 && (
               <a href={WAITING_PATH} onClick={go(WAITING_PATH)} className="wk-home-more" data-testid="desk-needs-more" data-count={moreWaiting}>
@@ -244,14 +246,18 @@ function useAct(navigate: Navigate): (a: NeedAction, rowKey: string) => void {
 }
 
 /** A ranked crew's first item when it is not one run's own gate: crew's words and its one move. */
-function RankedCard({ item, navigate }: { item: SystemAttention; navigate: Navigate }): React.ReactElement {
+function RankedCard({ item, runs, navigate }: { item: SystemAttention; runs: readonly SessionView[]; navigate: Navigate }): React.ReactElement {
   const path = actionPath(item.action);
+  // The card says what the dock says (board/gateHeadline via useRowHeadlines): a gate's plain cause leads, the job's
+  // title moves to the line; anything else keeps crew's own title and reason.
+  const cause = useRowHeadlines(useMemo(() => [item], [item]), runs).get(item.id) ?? null;
+  const lead = rowLead(item, cause);
   const held = item.blockedRunIds?.length ?? 0;
   return (
     <article className="wk-home-card" data-testid="desk-need-card" data-ranked={item.id}>
       {held > 1 && <p className="wk-home-card-context">{item.kind === 'slows' ? `Slowing ${held} jobs` : `Blocking ${held} jobs`}</p>}
-      <h3 className="wk-home-card-title">{item.text}</h3>
-      {item.reason !== null && <p className="wk-home-card-body">{item.reason}</p>}
+      <h3 className="wk-home-card-title" data-testid="desk-need-card-title">{rowHeadline(item, cause)}</h3>
+      {lead !== null && <p className="wk-home-card-body">{lead}</p>}
       {item.remedy !== null && item.remedy !== 'Re-check.' && <p className="wk-home-card-context">{item.remedy}</p>}
       <div className="wk-home-card-acts">
         {path !== null && item.action !== null && (

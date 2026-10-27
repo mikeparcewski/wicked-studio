@@ -12,8 +12,8 @@
   "studioVersion": "0.12.3",
   "counts": {
     "files": 255,
-    "occurrences": 3473,
-    "static": 2953,
+    "occurrences": 3474,
+    "static": 2954,
     "dynamic": 75,
     "computed": 33
   },
@@ -3338,6 +3338,12 @@
     },
     {
       "testId": "desk-need-card",
+      "files": [
+        "src/components/desk/DeskHome.tsx"
+      ]
+    },
+    {
+      "testId": "desk-need-card-title",
       "files": [
         "src/components/desk/DeskHome.tsx"
       ]

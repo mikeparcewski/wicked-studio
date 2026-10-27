@@ -1,8 +1,10 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import type { SystemAttention } from '../api/system.js';
 import type { SessionView } from '../api/types.js';
 import { runBenchesOf } from '../components/gateVerdictModel.js';
-import { GENERIC_GATE_QUESTION, gateCause, gateQuestion, gateWithLogChoices, openGateFromEvents, runPoolOf } from '../board/gateHeadline.js';
+import { GENERIC_GATE_QUESTION, deliverRowHeadline, gateCause, gateQuestion, gateWithLogChoices, openGateFromEvents, runPoolOf } from '../board/gateHeadline.js';
+import { isDeliverGate } from '../components/gateMoveModel.js';
+import { useRunAcceptanceStore } from '../store/runAcceptance.js';
 import { sessionGateChoices } from '../board/gateRowModel.js';
 import { useGateStore } from '../store/gates.js';
 import { useRoster } from './useRoster.js';
@@ -25,8 +27,12 @@ export function useRowHeadlines(items: readonly SystemAttention[], runs: readonl
   const gates = useGateStore((s) => s.gates);
   const ids = useMemo(() => items.map(gateRunOf).filter((id): id is string => id !== null), [items]);
   const byRun = useRunEventsFor(ids);
-  return useMemo(() => {
+  // A hand-over row says what the dock says: QE refused it, when it did — read off the run's acceptance, fetched the
+  // way the dock's card fetches it (`GET /runs/:id/acceptance`, one read per run) when no surface has read it yet.
+  const acceptance = useRunAcceptanceStore((s) => s.byRun);
+  const { out, unread } = useMemo(() => {
     const out = new Map<string, string>();
+    const unread: string[] = [];
     const views = new Map(runs.map((v) => [v.session.id, v]));
     for (const a of items) {
       const runId = gateRunOf(a);
@@ -39,12 +45,23 @@ export function useRowHeadlines(items: readonly SystemAttention[], runs: readonl
       const open = live !== undefined && (ord === null || live.ord === ord) ? live : openGateFromEvents(runId, events, ord);
       if (open === null) continue;
       const gate = gateWithLogChoices(open, events);
+      if (gate.gateKind === 'deliver' || isDeliverGate(runId, view.units, gate.ord)) {
+        if (!(runId in acceptance)) unread.push(runId);
+        const refused = deliverRowHeadline(view, gate, events, acceptance[runId]?.summary);
+        if (refused !== null) { out.set(a.id, refused); continue; }
+      }
       const pool = runPoolOf(view);
       const benched = runBenchesOf(view.session);
       const model = sessionGateChoices({ runId, gate, units: view.units, events, pool, roster, benched });
       const q = gateQuestion(model, gateCause({ view, gate, events, model, roster, pool, benched }).headline, gate);
       if (q !== GENERIC_GATE_QUESTION && q.trim() !== '') out.set(a.id, q);
     }
-    return out;
-  }, [items, runs, byRun, gates, roster]);
+    return { out, unread };
+  }, [items, runs, byRun, gates, roster, acceptance]);
+  const unreadKey = unread.join(',');
+  useEffect(() => {
+    if (unreadKey === '') return;
+    for (const id of unreadKey.split(',')) void useRunAcceptanceStore.getState().read(id);
+  }, [unreadKey]);
+  return out;
 }

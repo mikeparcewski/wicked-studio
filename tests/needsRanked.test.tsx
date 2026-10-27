@@ -93,7 +93,7 @@ describe('Nerve Center tile against a ranked crew', () => {
     const onlyResolve = { ...ranked(), attention: [] };
     expect(nerveState(signals(onlyResolve), 'connected', 0, NOW)).toMatchObject({ tone: 'yellow', words: '2 to tidy up' });
     expect(nerveState(signals({ ...onlyResolve, unresolved: [] }), 'connected', 0, NOW)).toMatchObject({ tone: 'green' });
-    expect(toResolveWords(1, null)).toBe('1 job to resolve');
+    expect(toResolveWords(1, null)).toBe('1 job to tidy up');
   });
 });
 
@@ -116,7 +116,7 @@ describe('the number every surface reads', () => {
 describe('/needs against a ranked crew (the approved mockup)', () => {
   const renderPage = (navigate = vi.fn()) => render(<NeedsRanked snapshot={ranked()} runs={[]} needRows={[]} navigate={navigate} now={NOW} />);
 
-  it('several jobs first as cards, then one decision each as rows, then To resolve with its spend; reviews folded', () => {
+  it('several jobs first as cards, then one decision each as rows, then To tidy up with its spend; reviews folded', () => {
     renderPage();
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Needs you');
     expect(screen.getByTestId('needs-sentence').textContent).toMatch(/^Five things are holding up work/);
@@ -124,10 +124,10 @@ describe('/needs against a ranked crew (the approved mockup)', () => {
     const rows = within(screen.getByTestId('needs-single')).getAllByTestId('needs-item');
     expect(rows.map((e) => e.getAttribute('data-id'))).toEqual(['base:wicked-crew:test_targeted', 'run:290a7fee', 'run:68c26704']);
     expect(rows[0]!.textContent).toMatch(/waiting 31 h/);
-    expect(screen.getByTestId('needs-resolve-words').textContent).toBe('2 jobs to resolve · $1.50 spent');
+    expect(screen.getByTestId('needs-resolve-words').textContent).toBe('2 jobs to tidy up ($1.50 spent)');
     expect(screen.getAllByTestId('needs-resolve-row').map((e) => e.getAttribute('data-run'))).toEqual(['7f4e149f', '1ff74953']);
     // (brief ui-v2-needs) One folded line for all of it: proposals, the unresolved work with its spend, the rest.
-    expect(screen.getByTestId('needs-worth-summary').textContent).toMatch(/^32 things worth a look \(not blocking\)30 proposals to review · 2 jobs to resolve/);
+    expect(screen.getByTestId('needs-worth-summary').textContent).toMatch(/^32 things worth a look \(not blocking\)30 proposals to review · 2 jobs to tidy up/);
     expect(screen.getByTestId('needs-worth').contains(screen.getByTestId('needs-resolve'))).toBe(true);
     expect((screen.getByTestId('needs-worth') as HTMLDetailsElement).open).toBe(false);
     expect(screen.getByTestId('needs-to-review').textContent).toBe('30 to review');

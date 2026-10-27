@@ -1,5 +1,5 @@
 import type { SystemAttention, SystemCli, SystemGovernanceCard, SystemInfra, SystemSnapshot } from '../api/system.js';
-import { spendWords, type NerveState } from './nerveCenter.js';
+import { toResolveWords, type NerveState } from './nerveCenter.js';
 import type { NerveTab } from './nerveTabs.js';
 import { countWord } from './deskHome.js';
 import { rowLead } from './rowHeadline.js';
@@ -194,5 +194,5 @@ export function waitingWords(n: number): string | null {
 /** "16 jobs to tidy up ($4.20 spent)": work nobody resolved (failed, superseded, parked), or null with none. */
 export function tidyWords(n: number, spendUsd: number | null): string | null {
   if (n <= 0) return null;
-  return `${n} ${n === 1 ? 'job' : 'jobs'} to tidy up${spendUsd !== null && spendUsd > 0 ? ` (${spendWords(spendUsd)} spent)` : ''}`;
+  return toResolveWords(n, spendUsd);
 }
