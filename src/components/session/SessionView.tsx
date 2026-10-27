@@ -65,10 +65,12 @@ import { panelPlaceOf } from '../../board/runPanelModel.js';
 import { useRunPanel } from '../../store/runPanel.js';
 import { RunHostProvider } from '../editorHost/RunHostContext.js';
 import { RunBlock } from './RunConversation.js';
-import { DecisionDockFrame, type DockItem } from './DecisionDock.js';
+import { DecisionDockFrame, type DockItem, type DockReply } from './DecisionDock.js';
+import { switchWords, useReplyRoute } from '../../board/replyRoute.js';
+import { useDraftRouter } from '../../hooks/useDraftRouter.js';
 import { useElicitationStore } from '../../store/elicitations.js';
 import { useSystemStore } from '../../store/systemSnapshot.js';
-import { askingResponder, gateResponder } from '../../board/responder.js';
+import { askingResponder, builderResponder } from '../../board/responder.js';
 import { plainGateQuestion } from '../../board/deskWords.js';
 
 /** S16a-2c: the hash that lands a run's session on its sheet's Governance tab. */
@@ -143,7 +145,7 @@ const OPERATOR_SCROLL_MS = 1000;
 /** How long a jump's smooth scroll is the thread's own (its scroll events are not the operator's). */
 const GLIDE_MS = 700;
 /** DES-CHAT-NATIVE-RUN: the message inside a run's conversation that asks the operator something. */
-const ASKING_SELECTOR = '[data-testid="chat-plan"][data-open="true"], [data-testid="chat-gate"], [data-testid="chat-final"][data-kind="deliver"]';
+const ASKING_SELECTOR = '[data-testid="chat-plan"][data-open="true"], [data-testid="chat-gate"], [data-testid="chat-final"][data-kind="deliver"], [data-testid="decision-marker"]';
 
 export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onRetryRuns, needRows, navigate, onAsk, artifactKey = null, artifactSize = 'pane', artifactVersion = null }: {
   /** The runs read's failure (App's `useRuns`): said with Retry, never an endless skeleton. */
@@ -859,9 +861,10 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
       const g = gates[id];
       const el = elicitations[id];
       if (g !== undefined) {
-        // The hand-over is crew's own step (its unit runs a script, not a helper): nobody but crew is waiting.
-        const who = g.gateKind === 'deliver' ? null : gateResponder(v, g, roster);
-        out.push({ key: id, who: who !== null && who.role === 'seat' ? who.name : null, since: g.receivedAt ?? null, question: plainGateQuestion(g.prompt, g.gateKind), tone: blocking(id) ? 'blocking' : 'waiting' });
+        // The builder the job waits with (the newest creator step), never a hand-over's script.
+        // A plan question is crew's own (nothing is built yet): "the job is waiting".
+        const who = g.gateKind === 'plan_approval' ? null : builderResponder(v, g.ord, roster);
+        out.push({ key: id, who: who?.name ?? null, since: g.receivedAt ?? null, question: plainGateQuestion(g.prompt, g.gateKind), tone: blocking(id) ? 'blocking' : 'waiting' });
       } else if (el !== undefined) {
         const who = askingResponder(v, roster, el);
         out.push({ key: id, who: who.role === 'seat' ? who.name : null, since: null, question: el.message, tone: blocking(id) ? 'blocking' : 'waiting' });
@@ -900,8 +903,7 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
     started: entries.length > 0,
     navigate,
     ariaLabel: 'Ask or tell studio what to do next',
-    // While a decision is docked the reply box reads as the reply to it (mockup ui-v2-gate).
-    placeholder: dockItems.length > 0 ? `Or tell ${dockWho ?? 'studio'} what to do…` : 'Ask about this, or tell studio what to do next — / adds a step, @ names a project or a helper',
+    placeholder: 'Ask about this, or tell studio what to do next — / adds a step, @ names a project or a helper',
     variant: 'session' as const,
   };
   // H3 (HOST-API §6): full screen's chat drawer is this run's own thread, compact — its conversation turns,
@@ -985,7 +987,10 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
       {/* What the dock already holds is not said again above the thread. */}
       {ready && <NeedsBanner items={waiting.filter((w) => !dockItems.some((d) => d.key === w.runId))} onJump={jumpToItem} />}
 
-      <DecisionDockFrame items={dockItems}>
+      <DecisionDockFrame items={dockItems} composer={(reply) => (
+        // The measure sits on a wrapper: the composer's own box (its `/` and `@` menus anchor to it) stays the input's width.
+        <div className="wk-session-composer-wrap wk-measure wk-measure--thread"><DockedComposer reply={reply} composerProps={composerProps} who={dockWho} /></div>
+      )}>
       <div className="wk-session-body">
         {/* S16a-4a: an address naming an artifact this session does not hold grows nothing and says so. */}
         {artifactMissing && <p data-testid="session-artifact-missing" className="wk-session-grey">That artifact is not in this session any more.</p>}
@@ -1150,9 +1155,6 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
       )}
 
       </DecisionDockFrame>
-
-      {/* The measure sits on a wrapper: the composer's own box (its `/` and `@` menus anchor to it) stays the input's width. */}
-      <div className="wk-session-composer-wrap wk-measure wk-measure--thread"><Composer {...composerProps} className="wk-session-composer" /></div>
     </div>
     <HostPanel edgeHandle="Show the run’s details" onToggle={writeDetailsOpen} runTab={<RunTab runs={mine} allRuns={runs} sessionId={sessionId} title={title} navigate={navigate} />} ribbon={<RunRibbon runs={mine} />} />
     </div>
@@ -1216,3 +1218,36 @@ function TurnDecisions({ chatId, turnId, navigate }: { chatId: string; turnId: s
 
 /** The run's block in the thread is its conversation (DES-CHAT-NATIVE-RUN): see RunConversation. */
 export { RunBlock };
+
+/**
+ * The session composer while a decision is docked (operator 2026-10-27): the reply box answers the decision through
+ * its note choice, or asks a separate question — the draft's intent picks which (the platform's prompt routing; none
+ * on today's crew, so it replies, and says so), and one click on the switch overrides it for that draft.
+ */
+function DockedComposer({ reply, composerProps, who }: {
+  reply: DockReply | null;
+  composerProps: React.ComponentProps<typeof Composer>;
+  who: string | null;
+}): React.ReactElement {
+  const router = useDraftRouter();
+  const { route, flip } = useReplyRoute(reply === null ? '' : composerProps.text ?? '', router);
+  if (reply === null) return <Composer {...composerProps} className="wk-session-composer" />;
+  const words = switchWords(route, reply.label);
+  const footer = (
+    <p data-testid="session-reply-switch" data-to={route.to} data-why={route.why} role="note" className="wk-composer-hint wk-reply-switch">
+      <span data-testid="session-reply-dest">{words.dest}</span>
+      {words.why !== null && <span className="wk-reply-why"> · {words.why}</span>}
+      {' · '}
+      <button type="button" data-testid="session-reply-flip" onClick={flip} className="wk-reply-flip">{words.flip}</button>
+    </p>
+  );
+  return (
+    <Composer
+      {...composerProps}
+      placeholder={`Or tell ${who ?? 'the job'} what to do…`}
+      footer={footer}
+      onSend={(text, opts) => { if (route.to === 'reply') reply.send(text); else composerProps.onSend(text, opts); }}
+      className="wk-session-composer"
+    />
+  );
+}

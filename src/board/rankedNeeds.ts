@@ -34,7 +34,9 @@ export function rankedSentence(items: readonly SystemAttention[]): string {
 export function rankedSections(items: readonly SystemAttention[]): { several: SystemAttention[]; single: SystemAttention[] } {
   const several: SystemAttention[] = [];
   const single: SystemAttention[] = [];
-  for (const a of items) ((a.blockedRunIds?.length ?? 0) >= 2 || a.panel === 'infra' ? several : single).push(a);
+  // (brief ui-v2-needs) Several jobs held, or the system itself preventing or slowing work (an item about no one run).
+  const system = (a: SystemAttention): boolean => a.panel === 'infra' || (a.runId == null && (a.kind === 'prevents' || a.kind === 'slows'));
+  for (const a of items) ((a.blockedRunIds?.length ?? 0) >= 2 || system(a) ? several : single).push(a);
   return { several, single };
 }
 

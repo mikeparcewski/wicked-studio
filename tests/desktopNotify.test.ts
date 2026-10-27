@@ -104,7 +104,7 @@ describe('the guard set (§8.2)', () => {
     notifyGateIfUnfocused(gateEvent('r-q3'));
     expect(FakeNotification.instances).toHaveLength(1);
     const n = FakeNotification.instances[0]!;
-    expect(n.title).toBe('Gate needs you');
+    expect(n.title).toBe('A job needs your decision');
     expect(n.tag).toBe('r-q3');
     expect(n.body).toBe('Approve the deck outline? · q3-review-deck');
     // EC25: this path NEVER prompts.
@@ -138,6 +138,15 @@ describe('the guard set (§8.2)', () => {
 
     expect(FakeNotification.instances).toHaveLength(0);
     expect(FakeNotification.requestPermission).not.toHaveBeenCalled();
+  });
+
+  it('the engine\'s prompt never reaches the notification: a plain title and the question\'s headline', () => {
+    notifyGateIfUnfocused(gateEvent('r-raw', 0, 'Unit 8 (codex) reviewed work built on its own seat: unit 8 checks work built on `codex`; reassign it'));
+    const n = FakeNotification.instances[0]!;
+    expect(n.title).toBe('A job needs your decision');
+    expect(n.body).not.toMatch(/Unit 8|codex|`/);
+    notifyGateIfUnfocused(gateEvent('r-raw2', 0, 'Approve completion after the final phase (unit 1): answer-1 — Use the tool'));
+    expect(FakeNotification.instances[1]!.body).not.toMatch(/answer-1|unit 1/);
   });
 
   it('an unfiled run still notifies — body is the bare prompt line', () => {

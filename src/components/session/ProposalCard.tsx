@@ -29,6 +29,15 @@ import { deliveryAssuranceOf, deliveryReceiptOf, sessionQe } from '../../board/a
 import { usePostHocDeliverStore } from '../../store/postHocDeliver.js';
 import { AssuranceReceipt, DeliveryAssuranceLines } from './AssuranceReceipt.js';
 import { QeDeliveryFixLine, QeRefusalWarning } from '../QeRefusalWarning.js';
+import { useRerunFromHere } from '../../hooks/useRerunFromHere.js';
+import { retryPrefillOf } from '../../board/needsYou.js';
+import { setRetryPrefill } from '../../store/retryPrefill.js';
+
+/** Open a studio route from a card that is handed no navigate (the router listens for popstate). */
+function goTo(path: string): void {
+  history.pushState(null, '', path);
+  window.dispatchEvent(new PopStateEvent('popstate'));
+}
 
 /**
  * THE PROPOSAL CARD (DES-STUDIO-REBUILD-001 §3 scenes 07/08/24/42, slice S6b): a run's plan or
@@ -135,6 +144,19 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
   // S7 (§5.7): a `/` command made while the plan question is open is a DRAFT on this card. Only
   // "Approve with these changes" sends it — as the gate's answer, through the one decision path.
   const drafts = usePlanDrafts((s) => s.gate);
+  // (mockup ui-v2-gate) Other options, and a refused hand-over's "Run QE again": the run's own rewind (the
+  // engine re-runs from its last creator step, so QE checks the new result), through the gate's undo window.
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuWrap = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!menuOpen) return;
+    const away = (e: PointerEvent): void => { if (menuWrap.current !== null && !menuWrap.current.contains(e.target as Node)) setMenuOpen(false); };
+    const esc = (e: KeyboardEvent): void => { if (e.key === 'Escape') setMenuOpen(false); };
+    document.addEventListener('pointerdown', away);
+    document.addEventListener('keydown', esc);
+    return () => { document.removeEventListener('pointerdown', away); document.removeEventListener('keydown', esc); };
+  }, [menuOpen]);
+  const rerun = useRerunFromHere(view);
   if (card === null) return null;
   const chat = variant === 'chat';
   const instance = gateInstance(gate);
@@ -201,92 +223,28 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
       .finally(() => { sending.current = false; });
   };
 
+  // The hand-over's (or the plan's) one go button: the primary, or — when crew refuses the delivery — a disabled item
+  // under Other options that says why.
+  const goButton = (
+    <button ref={goRef} type="button" data-testid="session-proposal-go" data-draft={draft !== null ? 'true' : 'false'} onClick={go} disabled={deliverRefused}
+      {...(deliverRefused ? { 'aria-describedby': `${runId}-go-why`, role: 'menuitem', 'data-sub': 'Refused until QE acceptance passes' } : {})}
+      className={deliverRefused ? 'wk-prop-btn wk-gate2-mi wk-gate2-mi--off' : 'wk-prop-btn wk-prop-btn--primary wk-gate2-btn wk-gate2-btn--primary'}>
+      {deliverRefused
+        ? card.act
+        : draft !== null ? 'Approve with these changes' : card.act}
+      {!deliverRefused && card.kind === 'deliver' && seat.record !== null && <span data-testid="session-proposal-track-record" className="wk-session-gate-record">{seat.record}</span>}
+    </button>
+  );
+
   return (
     <div ref={cardRef} tabIndex={-1} data-testid="session-proposal" data-run-id={runId} data-kind={card.kind} data-state={card.state} data-variant={variant} className={`wk-prop wk-prop--${card.state}${chat ? ' wk-prop--chat' : ''}`}>
       {(card.state === 'ask' || card.state === 'confirm') && (
         <>
-          <p data-testid="session-proposal-text" className="wk-prop-text">{card.text}</p>
-          {card.why !== null && card.state === 'ask' && <p data-testid="session-proposal-why" className="wk-prop-why">{card.why}</p>}
-          {card.kind === 'deliver' && drift !== null && <DriftLine drift={drift} />}
-          {/* S16a-1b: the plan gate's score, band, the score's reasons and the floor's additions —
-              behind the why line (PlanGateSummary's own testids kept). */}
-          {card.kind === 'plan' && card.state === 'ask' && ask === null && gate !== undefined && (
-            <details data-testid="session-proposal-plan-why" className="wk-prop-deliver-detail">
-              <summary className="wk-prop-deliver-summary">Why this plan</summary>
-              <PlanGateSummary view={planGate.view} />
-            </details>
-          )}
-          {/* WT-U2: what the acceptance gate says before the hand-over — crew's line, studio's tone. */}
-          {card.kind === 'deliver' && accept !== null && (
-            <p data-testid="session-proposal-acceptance" data-tone={accept.tone} className={`wk-prop-why wk-prop-accept wk-prop-accept--${accept.tone}`}>{accept.text}</p>
-          )}
-          {card.kind === 'deliver' && accept !== null && accept.detail !== undefined && (
-            <TechDetails data-testid="session-proposal-acceptance-detail" summary="What QE acceptance recorded" text={accept.detail} />
-          )}
-          {/* A re-opened deliver gate after a failed hand-over: what checked the work, never "accepted". */}
-          {card.kind === 'deliver' && deliveryReceipt !== null && <AssuranceReceipt receipt={deliveryReceipt} passed={deliverFailure === null ? true : null} testId="session-proposal-assurance" />}
-          {/* The engine's own card (the origin's path, the run branch): underneath only (studio#444). */}
-          {card.kind === 'deliver' && (() => {
-            // Branch: prefer session.run_branch; fall back to the diff's branch field (source:'branch').
-            const branch = (view.session as unknown as { run_branch?: string }).run_branch ?? runDiff?.branch;
-            const repoName = repoNameOf(view);
-            // Primary diffstat: parse GET /runs/:id/diff?base=merge-base (files changed / +lines / −lines).
-            // Fallback: changed-file count from repoChecksEvaluated event when diff is unavailable.
-            let diffstatText: string | null = runDiff !== null && typeof runDiff.diff === 'string' ? diffstatOf(runDiff.diff) : null;
-            if (diffstatText === null) {
-              // Fallback: event-based changed-file count when diff is unavailable, empty, or parsed to 0.
-              const events = eventsRaw ?? [];
-              const deliverOrd = gate?.ord;
-              const repoChecksEv = deliverOrd !== undefined
-                ? [...events].reverse().find(
-                    (e) => (e as unknown as { type?: string; ord?: number }).type === 'repoChecksEvaluated'
-                      && (e as unknown as { ord?: number }).ord === deliverOrd,
-                  )
-                : undefined;
-              const changedFiles = repoChecksEv !== undefined
-                ? ((repoChecksEv as unknown as { changed?: unknown }).changed)
-                : undefined;
-              const changedCount = Array.isArray(changedFiles) ? changedFiles.length : null;
-              if (changedCount !== null && changedCount > 0) {
-                diffstatText = `${changedCount} file${changedCount === 1 ? '' : 's'} changed`;
-              }
-            }
-            const floorView = gate !== undefined
-              ? (gateVerdictFor(eventsRaw ?? [], gate.ord, gate.prompt)?.floor ?? null)
-              : null;
-            return (
-              <details data-testid="session-proposal-deliver-detail" className="wk-prop-deliver-detail">
-                <summary className="wk-prop-deliver-summary">Delivery details</summary>
-                {diffstatText !== null && (
-                  <p data-testid="session-proposal-deliver-diffstat">
-                    {diffstatText}
-                  </p>
-                )}
-                {branch !== undefined && (
-                  <p data-testid="session-proposal-deliver-branch">Branch: <code>{branch}</code></p>
-                )}
-                {repoName !== null && (
-                  <p data-testid="session-proposal-deliver-repo">Repository: <code>{repoName}</code></p>
-                )}
-                {floorView !== null && (floorView.checks.length > 0 || floorView.skipped.length > 0) && (
-                  <div data-testid="session-proposal-deliver-checks">
-                    {floorView.checks.map((c, i) => {
-                      const o = checkOutcome(c);
-                      return <p key={i} data-testid="session-proposal-deliver-check">{c.name} · {o.ok ? 'passed' : 'failed'} · {o.word} · {Math.round(c.durationMs / 1000)} s</p>;
-                    })}
-                    {floorView.skipped.map((name, i) => (
-                      <p key={`skip-${i}`} data-testid="session-proposal-deliver-check">{name} · skipped</p>
-                    ))}
-                  </div>
-                )}
-                {/* core#686: the approved intent amendments the hand-over carries, off the unit's own field. */}
-                {unitAmendmentsOf(view.units, gate?.ord).map((a, i) => (
-                  <p key={`amend-${i}`} data-testid="session-proposal-deliver-amendment">Approved amendment: {showText(a)}</p>
-                ))}
-                <Tech data-testid="tech-proposal-deliver-card" parts={[deliverCardOf(view, gate)]} block />
-              </details>
-            );
-          })()}
+          {/* (mockup ui-v2-gate) The cause as the headline: a hand-over QE refused says that, first. */}
+          <h2 data-testid="session-proposal-text" className="wk-prop-text wk-gate2-q">{deliverRefused && card.state === 'ask' ? 'QE hasn’t passed, so this can’t be delivered yet' : card.text}</h2>
+          {deliverRefused && card.state === 'ask'
+            ? <p data-testid="session-proposal-why" className="wk-prop-why wk-gate2-p">Delivery is refused until QE acceptance passes. {rerun.offer !== null ? 'Run it again so QE checks it, or start it again with QE skipped and a reason.' : 'Start it again with QE skipped and a reason, or stop it.'}</p>
+            : card.why !== null && card.state === 'ask' && <p data-testid="session-proposal-why" className="wk-prop-why wk-gate2-p">{card.why}</p>}
           {card.state === 'confirm' && card.confirm !== null ? (
             <div data-testid="session-proposal-confirm" role="alertdialog" aria-label={`Are you sure? ${card.confirm.q}`} className="wk-prop-confirm">
               <p className="wk-prop-why"><b>Are you sure? {card.confirm.q}</b> {card.confirm.w}</p>
@@ -298,21 +256,122 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
           ) : (
             <>
               {draft !== null && <p data-testid="session-proposal-draft" className="wk-prop-why"><b>{draftLine(draft, planWords)}</b> Approving sends your changes with it; nothing has been sent yet.</p>}
-              <div className="wk-prop-btns">
-                <button ref={goRef} type="button" data-testid="session-proposal-go" data-draft={draft !== null ? 'true' : 'false'} onClick={go} disabled={deliverRefused} {...(deliverRefused ? { 'aria-describedby': `${runId}-go-why` } : {})} className="wk-prop-btn wk-prop-btn--primary">
-                  {draft !== null ? 'Approve with these changes' : card.act}
-                  {card.kind === 'deliver' && seat.record !== null && <span data-testid="session-proposal-track-record" className="wk-session-gate-record">{seat.record}</span>}
-                </button>
-                {draft !== null && <button type="button" data-testid="session-proposal-drop-draft" onClick={() => dropGateDraft(runId, draft.gateKey)} className="wk-prop-btn wk-prop-btn--ghost">Drop the changes</button>}
-                {chat && card.kind === 'plan' && onEdit !== undefined && <button type="button" data-testid="session-proposal-edit" aria-expanded={editing} onClick={onEdit} className="wk-prop-btn wk-prop-btn--ghost">{editing ? 'Done editing' : 'Edit'}</button>}
-                <button type="button" data-testid="session-proposal-not-now" onClick={notNow} className="wk-prop-btn wk-prop-btn--ghost">Not now</button>
-                {card.end !== undefined && <button type="button" data-testid="session-proposal-end" onClick={end} className="wk-prop-btn wk-prop-btn--ghost">{card.end}</button>}
+              <div ref={menuWrap} className="wk-prop-btns wk-gate2-choices">
+                {/* One primary. A hand-over QE refused leads with running it again (QE checks the new result); Deliver
+                    stays in Other options, disabled, with why. */}
+                {deliverRefused && rerun.offer !== null && (
+                  <button type="button" data-testid="session-proposal-qe-again" title={rerun.offer.consequence} onClick={() => { void rerun.rerun(); }}
+                    disabled={rerun.state.kind === 'sending'} className="wk-prop-btn wk-prop-btn--primary wk-gate2-btn wk-gate2-btn--primary">Run QE again</button>
+                )}
+                {deliverRefused && (
+                  <button type="button" data-testid="session-proposal-skip-qe" title="Opens the launch form with this job's brief and Skip QE acceptance ticked; give the reason there. Nothing starts until you launch; this job stays here."
+                    onClick={() => { setRetryPrefill({ ...retryPrefillOf(view), skipQe: true }); goTo('/runs/new'); }}
+                    className={`wk-prop-btn wk-gate2-btn ${rerun.offer === null ? 'wk-prop-btn--primary wk-gate2-btn--primary' : 'wk-gate2-btn--secondary'}`}>Skip QE with a reason…</button>
+                )}
+                {!deliverRefused && goButton}
+                <button type="button" data-testid="session-proposal-more" aria-haspopup="menu" aria-expanded={menuOpen} onClick={() => setMenuOpen((v) => !v)} className="wk-prop-btn wk-gate2-btn wk-gate2-btn--secondary">Other options <span aria-hidden>▾</span></button>
+                <div role="menu" aria-label="Other options" data-testid="session-proposal-menu" hidden={!menuOpen} className="wk-gate2-menu">
+                  {deliverRefused && (
+                    <div className="wk-gate2-off-row">{goButton}</div>
+                  )}
+                  {draft !== null && <button type="button" role="menuitem" data-testid="session-proposal-drop-draft" onClick={() => dropGateDraft(runId, draft.gateKey)} className="wk-prop-btn wk-gate2-mi"><span className="wk-gate2-mi-label">Drop the changes</span></button>}
+                  {chat && card.kind === 'plan' && onEdit !== undefined && <button type="button" role="menuitem" data-testid="session-proposal-edit" aria-expanded={editing} onClick={() => { setMenuOpen(false); onEdit(); }} className="wk-prop-btn wk-gate2-mi" data-sub={'Change, add or reorder steps before you approve'}>{editing ? 'Done editing' : 'Edit the plan'}</button>}
+                  <button type="button" role="menuitem" data-testid="session-proposal-not-now" onClick={() => { setMenuOpen(false); notNow(); }} className="wk-prop-btn wk-gate2-mi" data-sub={ask === null ? 'Hide this here; the question stays open' : 'The conversation goes on; nothing is built'}>Not now</button>
+                  {card.end !== undefined && <button type="button" role="menuitem" data-testid="session-proposal-end" onClick={() => { setMenuOpen(false); end(); }} className="wk-prop-btn wk-gate2-mi" data-sub={card.kind === 'deliver' ? 'The job stops here; nothing is pushed' : 'The helpers stand down'}>{card.end}</button>}
+                </div>
               </div>
-              {deliverRefused && <p id={`${runId}-go-why`} data-testid="session-proposal-go-why" className="wk-field-note">Delivery is refused until QE acceptance passes.</p>}
-              {/* The way on: turn QE acceptance off for later jobs (the link lands on the switch), or what else. */}
-              {deliverRefused && <QeDeliveryFixLine refusalKey={`${runId}:parked`} testId="session-proposal-qe-fix" />}
+              {/* The disabled Deliver's reason (read by assistive tech; the headline and sentence already say it). */}
+              {deliverRefused && <p id={`${runId}-go-why`} data-testid="session-proposal-go-why" className="wk-visually-hidden">Delivery is refused until QE acceptance passes.</p>}
             </>
           )}
+          {/* (review of the dock) Compact by default: the why of the plan, what QE recorded, the receipt and the
+              delivery's own details are behind one "More about this". */}
+          <details data-testid="session-proposal-more-about" className="wk-gate2-about">
+            <summary className="wk-gate2-link wk-gate2-about-sum">More about this</summary>
+            <div className="wk-gate2-about-body">
+              {card.kind === 'deliver' && drift !== null && <DriftLine drift={drift} />}
+              {/* S16a-1b: the plan gate's score, band, the score's reasons and the floor's additions (PlanGateSummary's own testids kept). */}
+              {card.kind === 'plan' && card.state === 'ask' && ask === null && gate !== undefined && (
+                <details data-testid="session-proposal-plan-why" className="wk-prop-deliver-detail">
+                  <summary className="wk-prop-deliver-summary">Why this plan</summary>
+                  <PlanGateSummary view={planGate.view} />
+                </details>
+              )}
+              {/* WT-U2: what the acceptance gate says before the hand-over — crew's line, studio's tone. */}
+              {card.kind === 'deliver' && accept !== null && (
+                <p data-testid="session-proposal-acceptance" data-tone={accept.tone} className={`wk-prop-why wk-prop-accept wk-prop-accept--${accept.tone}`}>{accept.text}</p>
+              )}
+              {card.kind === 'deliver' && accept !== null && accept.detail !== undefined && (
+                <TechDetails data-testid="session-proposal-acceptance-detail" summary="What QE acceptance recorded" text={accept.detail} />
+              )}
+              {/* A re-opened deliver gate after a failed hand-over: what checked the work, never "accepted". */}
+              {card.kind === 'deliver' && deliveryReceipt !== null && <AssuranceReceipt receipt={deliveryReceipt} passed={deliverFailure === null ? true : null} testId="session-proposal-assurance" />}
+              {/* The way on: turn QE acceptance off for later jobs (the link lands on the switch), or what else. */}
+              {deliverRefused && card.state === 'ask' && <QeDeliveryFixLine refusalKey={`${runId}:parked`} testId="session-proposal-qe-fix" />}
+          {/* The engine's own card (the origin's path, the run branch): underneath only (studio#444). */}
+              {card.kind === 'deliver' && (() => {
+                // Branch: prefer session.run_branch; fall back to the diff's branch field (source:'branch').
+                const branch = (view.session as unknown as { run_branch?: string }).run_branch ?? runDiff?.branch;
+                const repoName = repoNameOf(view);
+                // Primary diffstat: parse GET /runs/:id/diff?base=merge-base (files changed / +lines / −lines).
+                // Fallback: changed-file count from repoChecksEvaluated event when diff is unavailable.
+                let diffstatText: string | null = runDiff !== null && typeof runDiff.diff === 'string' ? diffstatOf(runDiff.diff) : null;
+                if (diffstatText === null) {
+                  // Fallback: event-based changed-file count when diff is unavailable, empty, or parsed to 0.
+                  const events = eventsRaw ?? [];
+                  const deliverOrd = gate?.ord;
+                  const repoChecksEv = deliverOrd !== undefined
+                    ? [...events].reverse().find(
+                        (e) => (e as unknown as { type?: string; ord?: number }).type === 'repoChecksEvaluated'
+                          && (e as unknown as { ord?: number }).ord === deliverOrd,
+                      )
+                    : undefined;
+                  const changedFiles = repoChecksEv !== undefined
+                    ? ((repoChecksEv as unknown as { changed?: unknown }).changed)
+                    : undefined;
+                  const changedCount = Array.isArray(changedFiles) ? changedFiles.length : null;
+                  if (changedCount !== null && changedCount > 0) {
+                    diffstatText = `${changedCount} file${changedCount === 1 ? '' : 's'} changed`;
+                  }
+                }
+                const floorView = gate !== undefined
+                  ? (gateVerdictFor(eventsRaw ?? [], gate.ord, gate.prompt)?.floor ?? null)
+                  : null;
+                return (
+                  <details data-testid="session-proposal-deliver-detail" className="wk-prop-deliver-detail">
+                    <summary className="wk-prop-deliver-summary">Delivery details</summary>
+                    {diffstatText !== null && (
+                      <p data-testid="session-proposal-deliver-diffstat">
+                        {diffstatText}
+                      </p>
+                    )}
+                    {branch !== undefined && (
+                      <p data-testid="session-proposal-deliver-branch">Branch: <code>{branch}</code></p>
+                    )}
+                    {repoName !== null && (
+                      <p data-testid="session-proposal-deliver-repo">Repository: <code>{repoName}</code></p>
+                    )}
+                    {floorView !== null && (floorView.checks.length > 0 || floorView.skipped.length > 0) && (
+                      <div data-testid="session-proposal-deliver-checks">
+                        {floorView.checks.map((c, i) => {
+                          const o = checkOutcome(c);
+                          return <p key={i} data-testid="session-proposal-deliver-check">{c.name} · {o.ok ? 'passed' : 'failed'} · {o.word} · {Math.round(c.durationMs / 1000)} s</p>;
+                        })}
+                        {floorView.skipped.map((name, i) => (
+                          <p key={`skip-${i}`} data-testid="session-proposal-deliver-check">{name} · skipped</p>
+                        ))}
+                      </div>
+                    )}
+                    {/* core#686: the approved intent amendments the hand-over carries, off the unit's own field. */}
+                    {unitAmendmentsOf(view.units, gate?.ord).map((a, i) => (
+                      <p key={`amend-${i}`} data-testid="session-proposal-deliver-amendment">Approved amendment: {showText(a)}</p>
+                    ))}
+                    <Tech data-testid="tech-proposal-deliver-card" parts={[deliverCardOf(view, gate)]} block />
+                  </details>
+                );
+              })()}
+            </div>
+          </details>
         </>
       )}
       {card.state === 'run' && (

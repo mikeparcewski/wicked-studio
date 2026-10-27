@@ -11,9 +11,9 @@
   "version": 1,
   "studioVersion": "0.12.3",
   "counts": {
-    "files": 251,
-    "occurrences": 3353,
-    "static": 2863,
+    "files": 252,
+    "occurrences": 3394,
+    "static": 2901,
     "dynamic": 75,
     "computed": 33
   },
@@ -2202,6 +2202,42 @@
       ]
     },
     {
+      "testId": "decision-dock",
+      "files": [
+        "src/components/session/DecisionDock.tsx"
+      ]
+    },
+    {
+      "testId": "decision-dock-eyebrow",
+      "files": [
+        "src/components/session/DecisionDock.tsx"
+      ]
+    },
+    {
+      "testId": "decision-dock-handle",
+      "files": [
+        "src/components/session/DecisionDock.tsx"
+      ]
+    },
+    {
+      "testId": "decision-dock-next",
+      "files": [
+        "src/components/session/DecisionDock.tsx"
+      ]
+    },
+    {
+      "testId": "decision-dock-peek",
+      "files": [
+        "src/components/session/DecisionDock.tsx"
+      ]
+    },
+    {
+      "testId": "decision-dock-slot",
+      "files": [
+        "src/components/session/DecisionDock.tsx"
+      ]
+    },
+    {
       "testId": "decision-error",
       "files": [
         "src/components/decisions/DecisionLine.tsx"
@@ -2217,6 +2253,12 @@
       "testId": "decision-lines",
       "files": [
         "src/components/decisions/DecisionLine.tsx"
+      ]
+    },
+    {
+      "testId": "decision-marker",
+      "files": [
+        "src/components/session/DecisionDock.tsx"
       ]
     },
     {
@@ -8554,6 +8596,12 @@
       ]
     },
     {
+      "testId": "needs-item-run",
+      "files": [
+        "src/components/desk/NeedsRanked.tsx"
+      ]
+    },
+    {
       "testId": "needs-ranked",
       "files": [
         "src/components/desk/NeedsRanked.tsx"
@@ -8693,6 +8741,12 @@
     },
     {
       "testId": "needs-worth",
+      "files": [
+        "src/components/desk/NeedsRanked.tsx"
+      ]
+    },
+    {
+      "testId": "needs-worth-summary",
       "files": [
         "src/components/desk/NeedsRanked.tsx"
       ]
@@ -11883,6 +11937,66 @@
       ]
     },
     {
+      "testId": "run-tab-glance",
+      "files": [
+        "src/components/session/RunTab.tsx"
+      ]
+    },
+    {
+      "testId": "run-tab-glance-asked",
+      "files": [
+        "src/components/session/RunTab.tsx"
+      ]
+    },
+    {
+      "testId": "run-tab-glance-changes",
+      "files": [
+        "src/components/session/RunTab.tsx"
+      ]
+    },
+    {
+      "testId": "run-tab-glance-evidence",
+      "files": [
+        "src/components/session/RunTab.tsx"
+      ]
+    },
+    {
+      "testId": "run-tab-glance-helpers",
+      "files": [
+        "src/components/session/RunTab.tsx"
+      ]
+    },
+    {
+      "testId": "run-tab-glance-plan",
+      "files": [
+        "src/components/session/RunTab.tsx"
+      ]
+    },
+    {
+      "testId": "run-tab-glance-progress",
+      "files": [
+        "src/components/session/RunTab.tsx"
+      ]
+    },
+    {
+      "testId": "run-tab-glance-stop",
+      "files": [
+        "src/components/session/RunTab.tsx"
+      ]
+    },
+    {
+      "testId": "run-tab-glance-stop-confirm",
+      "files": [
+        "src/components/session/RunTab.tsx"
+      ]
+    },
+    {
+      "testId": "run-tab-glance-stop-confirm-row",
+      "files": [
+        "src/components/session/RunTab.tsx"
+      ]
+    },
+    {
       "testId": "run-tab-goto-question",
       "files": [
         "src/components/session/RunTab.tsx"
@@ -12515,7 +12629,37 @@
       ]
     },
     {
+      "testId": "session-gate-failing-base",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
       "testId": "session-gate-failing-more",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
+      "testId": "session-gate-failing-new",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
+      "testId": "session-gate-failing-split",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
+      "testId": "session-gate-failing-toggle",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
+      "testId": "session-gate-failing-words",
       "files": [
         "src/components/session/GateRow.tsx"
       ]
@@ -12546,6 +12690,30 @@
     },
     {
       "testId": "session-gate-judge-wait",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
+      "testId": "session-gate-lead-act",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
+      "testId": "session-gate-menu",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
+      "testId": "session-gate-more",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
+      "testId": "session-gate-more-about",
       "files": [
         "src/components/session/GateRow.tsx"
       ]
@@ -12600,6 +12768,12 @@
     },
     {
       "testId": "session-gate-refusal",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
+      "testId": "session-gate-refusal-changed",
       "files": [
         "src/components/session/GateRow.tsx"
       ]
@@ -12666,6 +12840,12 @@
     },
     {
       "testId": "session-gate-send",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
+      "testId": "session-gate-sentence",
       "files": [
         "src/components/session/GateRow.tsx"
       ]
@@ -12995,6 +13175,24 @@
       ]
     },
     {
+      "testId": "session-proposal-menu",
+      "files": [
+        "src/components/session/ProposalCard.tsx"
+      ]
+    },
+    {
+      "testId": "session-proposal-more",
+      "files": [
+        "src/components/session/ProposalCard.tsx"
+      ]
+    },
+    {
+      "testId": "session-proposal-more-about",
+      "files": [
+        "src/components/session/ProposalCard.tsx"
+      ]
+    },
+    {
       "testId": "session-proposal-no",
       "files": [
         "src/components/session/ProposalCard.tsx"
@@ -13027,6 +13225,12 @@
       ]
     },
     {
+      "testId": "session-proposal-qe-again",
+      "files": [
+        "src/components/session/ProposalCard.tsx"
+      ]
+    },
+    {
       "testId": "session-proposal-qe-fix",
       "files": [
         "src/components/session/ProposalCard.tsx"
@@ -13040,6 +13244,12 @@
     },
     {
       "testId": "session-proposal-reason",
+      "files": [
+        "src/components/session/ProposalCard.tsx"
+      ]
+    },
+    {
+      "testId": "session-proposal-skip-qe",
       "files": [
         "src/components/session/ProposalCard.tsx"
       ]
@@ -13066,6 +13276,24 @@
       "testId": "session-rail",
       "files": [
         "src/components/desk/SessionRail.tsx"
+      ]
+    },
+    {
+      "testId": "session-reply-dest",
+      "files": [
+        "src/components/session/SessionView.tsx"
+      ]
+    },
+    {
+      "testId": "session-reply-flip",
+      "files": [
+        "src/components/session/SessionView.tsx"
+      ]
+    },
+    {
+      "testId": "session-reply-switch",
+      "files": [
+        "src/components/session/SessionView.tsx"
       ]
     },
     {

@@ -30,7 +30,12 @@ export interface DockItem {
   tone: 'waiting' | 'blocking';
 }
 
+/** The docked decision's note choice, for the reply box: its label ("Send back") and the send (its undo window). */
+export interface DockReply { label: string; send: (text: string) => void }
+
 interface DockCtx {
+  /** The docked renderer offers its note choice to the reply box (null withdraws it). */
+  setReply: (key: string, reply: DockReply | null) => void;
   /** The node the active decision is portalled into (null until the dock mounts). */
   slot: HTMLElement | null;
   /** The decision shown in the dock now. */
@@ -73,7 +78,7 @@ export function DecisionMarker({ dockKey, who, since, now = Date.now() }: { dock
   return (
     <button type="button" data-testid="decision-marker" data-key={dockKey} onClick={focus} className="wk-dmark">
       <MessageCircleQuestion size={15} aria-hidden className="wk-dmark-icon" />
-      <span className="wk-dmark-words">{who ?? 'crew'} asked for a decision{since !== null ? ` · ${relTime(since, now)}` : ''}</span>
+      <span className="wk-dmark-words">{who ?? 'The job'} asked for a decision{since !== null ? ` · ${relTime(since, now)}` : ''}</span>
       <span aria-hidden className="wk-dmark-go">Go to it ↓</span>
     </button>
   );
@@ -93,10 +98,12 @@ export function waitedWords(since: number | null, now: number): string | null {
 /** The eyebrow: "Your decision · Codex is waiting · 3 h". */
 export function eyebrowWords(item: Pick<DockItem, 'who' | 'since'>, now: number): string {
   const waited = waitedWords(item.since, now);
-  return ['Your decision', item.who !== null ? `${item.who} is waiting` : null, waited].filter((x): x is string => x !== null).join(' · ');
+  return ['Your decision', item.who !== null ? `${item.who} is waiting` : 'the job is waiting', waited].filter((x): x is string => x !== null).join(' · ');
 }
 
 const PHONE = '(max-width: 640px)';
+/** A docked renderer's headline (GateRow's question, a plan or hand-over card's, a run's question). */
+const HEADLINE = '[data-testid="session-gate-question"], [data-testid="session-proposal-text"], [data-testid="elicitation-prompt"] p';
 
 function usePhone(): boolean {
   const [phone, setPhone] = useState(() => typeof window !== 'undefined' && window.matchMedia?.(PHONE).matches === true);
@@ -114,8 +121,21 @@ function usePhone(): boolean {
  * The provider and the dock surface. `items` are the session's open decisions, in the thread's order; the dock
  * renders around `children` (the thread), between it and the composer (`composer`).
  */
-export function DecisionDockFrame({ items, children, now = Date.now() }: { items: readonly DockItem[]; children: React.ReactNode; now?: number }): React.ReactElement {
+export function DecisionDockFrame({ items, children, composer, now = Date.now() }: {
+  items: readonly DockItem[];
+  children: React.ReactNode;
+  /** The composer, under the dock: handed the docked decision's note choice while it offers one. */
+  composer?: (reply: DockReply | null) => React.ReactNode;
+  now?: number;
+}): React.ReactElement {
   const [slot, setSlot] = useState<HTMLElement | null>(null);
+  const [replies, setReplies] = useState<Record<string, DockReply>>({});
+  const setReply = useCallback((key: string, reply: DockReply | null) => {
+    setReplies((cur) => {
+      if (reply === null) { if (!(key in cur)) return cur; const next = { ...cur }; delete next[key]; return next; }
+      return { ...cur, [key]: reply };
+    });
+  }, []);
   const [picked, setPicked] = useState<string | null>(null);
   const dockRef = useRef<HTMLElement | null>(null);
   const phone = usePhone();
@@ -146,7 +166,19 @@ export function DecisionDockFrame({ items, children, now = Date.now() }: { items
     setExpanded(true);
   }, [activeKey]);
 
-  const value = useMemo<DockCtx>(() => ({ slot, activeKey, focus }), [slot, activeKey, focus]);
+  // The folded sheet's headline is the docked renderer's own (the cause in plain words), read off the slot as it
+  // renders; the item's question stands in until it has.
+  const [drawn, setDrawn] = useState<string | null>(null);
+  useEffect(() => {
+    if (slot === null) return;
+    const read = (): void => setDrawn(slot.querySelector(HEADLINE)?.textContent?.trim() || null);
+    read();
+    const mo = new MutationObserver(read);
+    mo.observe(slot, { childList: true, subtree: true, characterData: true });
+    return () => mo.disconnect();
+  }, [slot]);
+  const value = useMemo<DockCtx>(() => ({ slot, activeKey, focus, setReply }), [slot, activeKey, focus, setReply]);
+  const reply = activeKey !== null ? replies[activeKey] ?? null : null;
   const collapsed = phone && !expanded;
 
   return (
@@ -173,13 +205,14 @@ export function DecisionDockFrame({ items, children, now = Date.now() }: { items
               )}
             </div>
             {collapsed && (
-              <button type="button" data-testid="decision-dock-peek" onClick={() => setExpanded(true)} className="wk-dock-peek">{active.question}</button>
+              <button type="button" data-testid="decision-dock-peek" onClick={() => setExpanded(true)} className="wk-dock-peek">{drawn ?? active.question}</button>
             )}
             {/* The active decision's renderer is portalled in here; hidden (never unmounted) while the sheet is folded. */}
             <div ref={setSlot} data-testid="decision-dock-slot" className="wk-dock-slot" hidden={collapsed} />
           </div>
         </section>
       )}
+      {composer?.(reply)}
     </Ctx.Provider>
   );
 }
@@ -187,4 +220,20 @@ export function DecisionDockFrame({ items, children, now = Date.now() }: { items
 /** Whether a dock is present (a session page): the composer says "Or tell <builder> what to do…" while it is open. */
 export function useDockOpen(): boolean {
   return useContext(Ctx)?.activeKey != null;
+}
+
+/** A docked renderer offers its note choice to the reply box while it is the one in the dock. */
+export function useOfferReply(key: string, reply: DockReply | null): void {
+  const ctx = useContext(Ctx);
+  const docked = ctx !== null && ctx.activeKey === key && ctx.slot !== null;
+  const setReply = ctx?.setReply;
+  const label = reply?.label ?? null;
+  const sendRef = useRef(reply?.send);
+  sendRef.current = reply?.send;
+  useEffect(() => {
+    if (setReply === undefined) return;
+    if (!docked || label === null) { setReply(key, null); return; }
+    setReply(key, { label, send: (t) => sendRef.current?.(t) });
+    return () => setReply(key, null);
+  }, [setReply, docked, key, label]);
 }

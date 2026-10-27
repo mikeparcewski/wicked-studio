@@ -492,10 +492,10 @@ describe('GateRow — overflow disabled choice cannot be sent', () => {
     // 5 choices: first 4 inline (all known), 5th in overflow (unknown engine value → disabled)
     const gate = plainGate({ choices: ['approve', 'reject', 'request_changes', 'extend', 'custom-unknown'] });
     render(<GateRow view={view()} gate={gate} />);
-    const overflowDetails = document.querySelector('.wk-session-gate-overflow') as HTMLDetailsElement | null;
-    expect(overflowDetails).not.toBeNull();
-    overflowDetails!.setAttribute('open', '');
-    const overflowBtns = overflowDetails!.querySelectorAll('[data-testid="session-gate-choice"]');
+    // (mockup ui-v2-gate) Every choice past the primary is under Other options ▾; the unknown one is there, disabled.
+    fireEvent.click(screen.getByTestId('session-gate-more'));
+    const menu = screen.getByTestId('session-gate-menu');
+    const overflowBtns = [...menu.querySelectorAll('[data-testid="session-gate-choice"]')].filter((b) => (b as HTMLButtonElement).disabled);
     expect(overflowBtns.length).toBe(1);
     const btn = overflowBtns[0] as HTMLButtonElement;
     expect(btn.disabled).toBe(true);

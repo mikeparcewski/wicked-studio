@@ -142,8 +142,10 @@ describe('the judge-unavailable gate row', () => {
   it('a judge seat can rule: the Re-run choice, and the line says what each way forward does', async () => {
     vi.spyOn(client.api, 'getGate').mockResolvedValue({ runId: RUN, ord: 4, prompt: PROMPT, lifecycle: 'open', receivedAt: '', rejudge: AVAILABLE } as never);
     renderRow();
-    await waitFor(() => expect(labels()).toContain(`${REJUDGE_LABEL}suggested`));
-    expect(labels()).toEqual([`${REJUDGE_LABEL}suggested`, 'Send back', OPERATOR_JUDGMENT_LABEL, 'Stop']);
+    // (mockup ui-v2-gate) The suggested choice is the one primary button (no "suggested" tag), the rest are Other options.
+    await waitFor(() => expect(labels()).toContain(REJUDGE_LABEL));
+    expect(labels()).toEqual([REJUDGE_LABEL, 'Send back', OPERATOR_JUDGMENT_LABEL, 'Stop']);
+    expect(screen.getAllByTestId('session-gate-choice')[0]!.dataset['recommended']).toBe('true');
     const line = screen.getByTestId('session-gate-judge-wait');
     expect(line.getAttribute('data-rejudge')).toBe('available');
     expect(line.textContent).toMatch(/Pi, Copilot can run it now/);

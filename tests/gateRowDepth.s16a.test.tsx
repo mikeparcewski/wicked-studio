@@ -138,7 +138,8 @@ describe('S16a-1b — GateRow renders the depth', () => {
       expect(b).toBeDefined();
       return b!;
     });
-    expect(rerun).toHaveTextContent('Rerun from build');
+    // (mockup ui-v2-gate) Under Other options, in plain words: "Redo from the build step".
+    expect(rerun).toHaveTextContent('Redo from the build step');
     await user.click(rerun);
     expect(confirm).not.toHaveBeenCalled();
     expect(screen.getByTestId('session-gate-rerun-consequence').textContent).toMatch(/redoes build/);

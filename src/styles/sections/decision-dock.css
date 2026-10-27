@@ -157,3 +157,56 @@
 .wk-gate2-fold > summary { list-style: none; display: inline-block; }
 .wk-gate2-fold > summary::-webkit-details-marker { display: none; }
 .wk-gate2-fold[open] > summary { margin-bottom: 6px; }
+
+/* More about this: the explanation, the base failures, the receipt and Technical details, folded by default. */
+.wk-gate2-about > summary { list-style: none; display: inline-block; }
+.wk-gate2-about > summary::-webkit-details-marker { display: none; }
+.wk-gate2-about-body { display: flex; flex-direction: column; gap: 12px; margin-top: 10px; font-size: 14px; line-height: 1.55; color: var(--ink-body); }
+.wk-gate2-about-body .wk-gate-consequence { font-size: 14px; }
+.wk-gate2-about-body .wk-gate2-foot { padding-top: 4px; }
+/* Compact by default: the dock holds the eyebrow, headline, one sentence and the buttons (about 240 px). */
+.wk-dock-surface { padding-top: 18px; padding-bottom: 18px; gap: 10px; }
+.wk-dock .wk-gate2 { gap: 10px; }
+.wk-dock .wk-gate2-q { font-size: 20px; }
+.wk-dock .wk-gate2-decide { padding-top: 12px; gap: 10px; }
+.wk-dock .wk-gate-peek:empty { display: none; }
+
+/* The reply box's switch: where Send goes, before Send, and the other way in one click. */
+.wk-reply-switch { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 4px; }
+.wk-reply-switch [data-testid="session-reply-dest"] { color: var(--ink-body); font-weight: 500; }
+.wk-reply-flip {
+  border: 0; background: transparent; padding: 2px 6px; margin: 0 -2px; border-radius: var(--radius-sm); font: inherit; cursor: pointer;
+  color: color-mix(in oklab, var(--accent) 50%, var(--ink-high)); transition: background-color 0.14s;
+}
+.wk-reply-flip:hover { text-decoration: underline; text-underline-offset: 3px; background: color-mix(in oklab, var(--ink-high) 12%, transparent); }
+.wk-reply-flip:focus-visible { outline: 2px solid transparent; box-shadow: var(--focus-ring); }
+
+/* A menu item's consequence, the second line (its words stay the item's label). */
+.wk-gate2-mi[data-sub]::after { content: attr(data-sub); display: block; font-size: 12px; line-height: 1.45; font-weight: 400; color: var(--ink-muted); }
+.wk-gate2-mi--off[data-sub]::after, .wk-gate2-mi:disabled[data-sub]::after { color: var(--ink-dim); }
+.wk-gate2-mi { font-weight: 500; }
+
+/* ── The run panel's glance (mockup ui-v2-gate's side panel): progress, changes, helpers, three ways in, Stop job. ── */
+.wk-run-glance { display: flex; flex-direction: column; gap: 18px; padding: 4px 0 20px; margin-bottom: 8px; border-bottom: 1px solid var(--border-subtle); }
+.wk-run-glance-item { display: flex; flex-direction: column; gap: 6px; }
+.wk-run-glance-label { font-size: 12px; font-weight: 600; letter-spacing: 0.09em; text-transform: uppercase; color: var(--ink-muted); }
+.wk-run-glance-value { font-size: 15px; line-height: 1.45; color: var(--ink-high); }
+.wk-run-glance-bar { display: block; height: 4px; border-radius: 999px; background: color-mix(in oklab, var(--ink-high) 10%, transparent); overflow: hidden; }
+.wk-run-glance-bar > span { display: block; height: 100%; border-radius: 999px; background: var(--status-run); }
+.wk-run-glance-bar[data-tone="waiting"] > span { background: var(--status-warn); }
+.wk-run-glance-bar[data-tone="done"] > span { background: var(--status-ok); }
+.wk-run-glance-links { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+.wk-run-glance-link {
+  border: 0; background: transparent; padding: 3px 6px; margin-left: -6px; border-radius: var(--radius-sm); font: inherit; font-size: 14px; cursor: pointer;
+  color: color-mix(in oklab, var(--accent) 50%, var(--ink-high)); transition: background-color 0.14s;
+}
+.wk-run-glance-link:hover { text-decoration: underline; text-underline-offset: 3px; background: color-mix(in oklab, var(--ink-high) 12%, transparent); }
+.wk-run-glance-link:focus-visible { outline: 2px solid transparent; box-shadow: var(--focus-ring); }
+.wk-run-glance-stop { align-self: flex-start; }
+
+/* The plan / hand-over card's menu items take the menu's own shape (not the card's bordered buttons). */
+.wk-gate2-menu .wk-prop-btn.wk-gate2-mi { min-height: 0; padding: 10px 12px; border: 0; border-radius: 10px; background: transparent; color: var(--ink-high); font-size: 14px; box-shadow: none; }
+.wk-gate2-menu .wk-prop-btn.wk-gate2-mi:hover:not(:disabled) { background: color-mix(in oklab, var(--ink-high) 12%, transparent); }
+.wk-gate2-menu .wk-prop-btn.wk-gate2-mi:disabled { color: var(--ink-dim); background: transparent; opacity: 1; }
+.wk-gate2-menu .wk-gate2-off-row { padding-right: 0; }
+.wk-gate2-btn--secondary[aria-expanded="true"]:hover:not(:disabled) { background: color-mix(in oklab, var(--ink-high) 26%, transparent); }

@@ -139,15 +139,17 @@ describe('where today’s features go (one row each)', () => {
     expect(within(thread()).getByTestId('session-run')).toBeTruthy();
   });
 
-  it('GateRow (Approve, Send back, Reassign, Stop) → an inline gate card labelled with the seat that is asking', () => {
+  it('GateRow (Approve, Send back, Reassign, Stop) → the decision dock above the composer; a marker where it was asked', () => {
     useGateStore.setState({ gates: { r1: REVIEW_GATE } });
     page([live()]);
     const block = within(thread()).getByTestId('session-run');
-    // DES-CHAT-NATIVE-RUN: the question is an assistant message from the seat asking it.
-    const asking = within(within(block).getByTestId('chat-gate')).getAllByTestId('turn-who').find((w) => w.textContent?.includes('needs your answer'));
-    expect(asking).toHaveAttribute('data-role', 'seat');
-    expect(asking).toHaveTextContent('Codex');
-    expect(within(block).getByTestId('session-gate-row')).toBeTruthy();
+    // Mockup ui-v2-gate + addendum: the decision is its own surface, outside the message stream (never a bubble);
+    // in the thread only a one-line marker remains, and it focuses the dock.
+    expect(within(block).getByTestId('decision-marker')).toHaveTextContent(/asked for a decision/);
+    expect(within(block).queryByTestId('session-gate-row')).toBeNull();
+    const dock = screen.getByTestId('decision-dock');
+    expect(within(dock).getByTestId('decision-dock-eyebrow')).toHaveTextContent(/^Your decision · /);
+    expect(within(dock).getByTestId('session-gate-row')).toBeTruthy();
   });
 
   it('the run block itself (status sentence, record lines) → turns from crew', () => {
@@ -191,8 +193,9 @@ describe('where today’s features go (one row each)', () => {
   it('RunQuestions → an inline question card from the asking seat', () => {
     act(() => { useElicitationStore.getState().setElicitation({ runId: 'r1', elicitationId: 'e1', message: 'Which region?', options: null, receivedAt: new Date().toISOString() }); });
     page([live('executing')]);
-    const q = within(thread()).getByTestId('session-run-questions');
-    const who = within(q).getByTestId('turn-who');
+    // The question docks above the composer (the asking seat named on it); the run's block keeps its marker.
+    expect(within(within(thread()).getByTestId('session-run-questions')).getByTestId('decision-marker')).toBeTruthy();
+    const who = within(screen.getByTestId('decision-dock')).getByTestId('turn-who');
     expect(who).toHaveAttribute('data-role', 'seat');
     expect(who).toHaveTextContent('Codex');
   });

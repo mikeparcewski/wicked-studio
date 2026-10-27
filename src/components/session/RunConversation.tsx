@@ -4,7 +4,7 @@ import type { CoreEvent, SessionView as RunView } from '../../api/types.js';
 import { IDLE_GATE_ACTION, useGateActionStore } from '../../board/gateActions.js';
 import { finishedDeliveryArm, proposalKindOf, statusSentence } from '../../board/proposalCard.js';
 import type { Responder } from '../../board/responder.js';
-import { gateResponder, isReviewUnit, seatResponder } from '../../board/responder.js';
+import { builderResponder, gateResponder, isReviewUnit, seatResponder } from '../../board/responder.js';
 import { approvingReviewers, conciseOutput, decisionMessages, finalWords, planSteps, stepMessages, testCountOf, type StepMessage } from '../../board/runConversation.js';
 import { isCliSeat, seatLabel } from '../../board/seatNames.js';
 import { jobTitle } from '../../board/deskWords.js';
@@ -302,15 +302,18 @@ export function RunBlock({ view, badge, sessionId, navigate, solo = null }: {
         <AssistantMessage who={plannerWho} runId={id} testId="chat-plan" extra={{ 'data-open': planOpen ? 'true' : 'false' }}>
           {/* While the plan waits on you, the card IS the message: its one sentence of steps, why, and the buttons. */}
           {(!planOpen || planDocked) && plan.length > 0 && <p data-testid="chat-plan-steps" className="wk-chat-p">I split this into {plan.length} {plan.length === 1 ? 'step' : 'steps'}: {listWords(plan)}.</p>}
-          {planOpen && (
-            <Docked dockKey={id} open={planGateOpen} marker={<DecisionMarker dockKey={id} who={null} since={gate?.receivedAt ?? null} />}>
-              <ProposalCard view={view} chain={chain} acceptance={acceptance?.summary ?? null} variant="chat" onEdit={toggleEdit} editing={editPlan} />
-            </Docked>
-          )}
+          {planOpen && !planDocked && <ProposalCard view={view} chain={chain} acceptance={acceptance?.summary ?? null} variant="chat" onEdit={toggleEdit} editing={editPlan} />}
           {/* The plan's editor, in the plan's own message: while the plan waits on you, on Edit; on a running planned
               run (S10), always — a step added there goes through the same undo window. */}
           {(!planGateOpen || editPlan) && <RunArtifacts view={view} composerKey={sessionId} chain={chain} only="plan" frame={(_who, _suffix, cards) => <>{cards}</>} />}
         </AssistantMessage>
+      )}
+      {/* The open plan question docks above the composer; where it was asked, under the plan's message, its marker. */}
+      {planOpen && planDocked && (
+        <Docked dockKey={id} open={planGateOpen} marker={<DecisionMarker dockKey={id} who={null} since={gate?.receivedAt ?? null} />}
+          dock={<ProposalCard view={view} chain={chain} acceptance={acceptance?.summary ?? null} variant="chat" onEdit={toggleEdit} editing={editPlan} />}>
+          {null}
+        </Docked>
       )}
       {decisions.filter((d) => d.ord === planOrd).map((d) => <YouBubble key={`d${d.ord}-${d.at}`} text={d.text} testId="chat-you-decision" />)}
       {/* The plan editor, only when you asked to edit (it is the plan's own artifact). */}
@@ -324,7 +327,7 @@ export function RunBlock({ view, badge, sessionId, navigate, solo = null }: {
 
       {/* 3. A question it is asking now (not the plan, not the hand-over): in the flow, answered here. */}
       {gate !== undefined && effectiveKind === null && finished === null && (
-        <Docked dockKey={id} open marker={<DecisionMarker dockKey={id} who={askingWho.role === 'seat' ? askingWho.name : null} since={gate.receivedAt} />}
+        <Docked dockKey={id} open marker={<DecisionMarker dockKey={id} who={builderResponder(view, gate.ord, roster)?.name ?? null} since={gate.receivedAt} />}
           dock={<GateRow view={view} gate={gate} {...(navigate !== undefined ? { navigate } : {})} />}>
           <AssistantMessage who={askingWho.role === 'seat' ? askingWho : STUDIO} runId={id} suffix="needs your answer" testId="chat-gate">
             <GateRow view={view} gate={gate} {...(navigate !== undefined ? { navigate } : {})} />
