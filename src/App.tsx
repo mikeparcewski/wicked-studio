@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { EditorHostPage } from './components/editors/EditorHostPage.js';
 import { useHostChrome } from './editors/hostApi.js';
 import { AskDock } from './components/AskDock.js';
@@ -394,7 +394,10 @@ export function App(): React.ReactElement {
   // the dock through `openAskDock` — a fresh chat in the project when one is named.
   const askRequest = useAskDock((s) => s.request);
   const [askStart, setAskStart] = useState<AskRequest | null>(null);
-  useEffect(() => {
+  // A layout effect, not a passive one: the request opens the window in the same store update, so the dock first
+  // mounts under the OLD key; this remount must land before the browser takes any input, or the first letters typed
+  // (or filled) into the fresh dock are dropped by it (desk_ask_team: Send stayed disabled after a fill).
+  useLayoutEffect(() => {
     if (askRequest === null) return;
     // Understand's ask box (`askInChat`): the operator's own question, sent as the first message of a
     // new chat under the id the page minted (the same handoff the Desk composer's send takes).
