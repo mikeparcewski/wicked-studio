@@ -79,7 +79,7 @@ export const NOT_A_DESTINATION = 'not-found';
 const DESTINATIONS: ReadonlyArray<{ shape: string; label: string; href: string }> = [
   // The sidebar's pages, in its order (ui-v2 nav regroup), each named as the sidebar names it.
   { shape: 'home', label: `${PAGE_NAMES.home} — what needs you, what is running`, href: '/' },
-  { shape: 'needs', label: `${PAGE_NAMES.needs} — everything waiting on you`, href: '/needs' },
+  { shape: 'needs', label: `${PAGE_NAMES.needs} — what you need to decide`, href: '/needs' },
   { shape: 'jobs', label: `${PAGE_NAMES.jobs} — every job, running and finished`, href: '/jobs' },
   { shape: 'report', label: `${PAGE_NAMES.report} — charts, spend and outcomes`, href: '/report' },
   { shape: 'understand', label: `${PAGE_NAMES.understand} — compare agents, workflows and jobs`, href: '/understand' },

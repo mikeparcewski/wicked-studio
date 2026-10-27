@@ -180,16 +180,15 @@
 .wk-rail-nav-group:first-child .wk-rail-sec { margin-top: 6px; }
 .wk-rail-nav-item { min-height: 34px; padding: 0 10px; font-size: var(--text-sm); color: var(--ink-body); }
 .wk-rail-nav-label { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.wk-rail .wk-rail-nav-item:hover {
-  background: var(--rail-hover-bg, color-mix(in oklab, var(--accent) 18%, var(--surface-rail))); color: var(--ink-high); box-shadow: none;
-}
-/* The current page reads stronger than a hovered one (mockup: hover 14%, current 18% of the accent). */
+.wk-rail .wk-rail-nav-item:hover { background: var(--rail-hover-bg); color: var(--ink-high); box-shadow: none; }
+/* The current page reads stronger than a hovered one (mockup: hover 14%, current 18% of the accent). Its
+   hover adds the rail's ink step under it (dE_OK >= 0.06 from rest on any accent, desk_rail_hover), and
+   pressed is the rail's pressed fill: these come after the generic rail rules, so they restate :active. */
 .wk-rail .wk-rail-nav-item[aria-current="page"] {
   background: color-mix(in oklab, var(--accent) 22%, var(--surface-rail)); font-weight: var(--weight-semi); color: var(--ink-high);
 }
-.wk-rail .wk-rail-nav-item[aria-current="page"]:hover {
-  background: color-mix(in oklab, var(--accent) 30%, var(--surface-rail)); box-shadow: inset 3px 0 0 var(--accent);
-}
+.wk-rail .wk-rail-nav-item[aria-current="page"]:hover { background: var(--rail-hover-current-bg); box-shadow: inset 3px 0 0 var(--accent); }
+.wk-rail .wk-rail-nav-item:active, .wk-rail .wk-rail-nav-item[aria-current="page"]:active { background: var(--rail-press-bg); color: var(--ink-high); }
 /* Home's needs-you count is the spark (one yellow mark per viewport), as the wordmark's was. */
 .wk-rail-badge.wk-rail-badge--home { background: var(--spark); color: var(--spark-ink); }
 

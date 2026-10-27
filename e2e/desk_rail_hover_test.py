@@ -9,17 +9,17 @@ and again in each theme with a CUSTOM accent picked to sit close to that theme's
 picker takes any hue, saturation and lightness, so the hover cannot rest on the accent alone).
 
 For every interactive rail item type — the wordmark, an icon button (New job), a group icon, a group
-header, a session row, "Show N more", a Workspace link, Settings (General) and the Nerve Center tile:
+header, a session row, "All jobs", a sidebar page item (Jobs), Build & settings and the Nerve Center tile:
 
   1. VISIBLE: the hover fill, composited over the rail's own background by the browser (a 1x1 canvas),
      sits dE_OK >= 0.08 (OKLab distance) from the rest fill. The current page's hover (the wordmark on
-     the Desk, General on /system) moves >= 0.06 from its wash.
+     Home on the Desk, Build & settings on /build) moves >= 0.06 from its wash.
   2. READABLE: every visible word in the item (each element with its own text, its colour composited
      over the fill; badges and the move button carry their own fill and are skipped) keeps >= 4.5:1 on
      the hover fill; every item but the Nerve Center tile (its own ink) goes to full ink (--ink-high).
   3. THE ICON BUTTONS draw an accent edge on hover: the button's border (the group icon: its inset ring)
      sits dE_OK >= 0.10 from the rail.
-  4. PRESSED (a Workspace link and the wordmark, held down) is a stronger fill than hover (further from
+  4. PRESSED (a sidebar page item and Home, held down) is a stronger fill than hover (further from
      the rail), with its words still >= 4.5:1.
   5. REDUCED MOTION: a hovered icon button does not move (transform none); with motion it lifts.
   6. 0 page errors.
@@ -98,9 +98,10 @@ ITEMS = [
     ("group-icon", '[data-testid="rail-group-new"], [data-testid="rail-group-view-unfiled"]', "ring"),
     ("group-header", '[data-testid="rail-group-toggle"]', "row"),
     ("session", '[data-testid="rail-session"]:not([aria-current="page"])', "row"),
-    ("show-more", '[data-testid="rail-group-more"]', "row"),
-    ("workspace-link", '[data-testid="desk-rail-skills"]', "row"),
-    ("settings", '[data-testid="desk-rail-general"]', "row"),
+    ("all-jobs", '[data-testid="rail-all-jobs"]', "row"),
+    # The ui-v2 sidebar: a page item (Jobs) and Build & settings replace the Workspace links and General.
+    ("page-item", '[data-testid="nav-jobs"]', "row"),
+    ("build", '[data-testid="desk-rail-build"]', "row"),
     ("nerve-center", '[data-testid="desk-rail-nerve"]', "nc"),
 ]
 
@@ -205,8 +206,8 @@ with sync_playwright() as p:
             row["ok"] = ok
             rows[name] = row
         # Pressed (held down, released off the rail so nothing navigates): a stronger fill than hover,
-        # its words still AA — a Workspace link, and the wordmark (current on the Desk).
-        for name, sel in (("pressed-link", '[data-testid="desk-rail-skills"]'), ("pressed-wordmark", '[data-testid="desk-rail-home"]')):
+        # its words still AA — a sidebar page item, and Home (current on the Desk).
+        for name, sel in (("pressed-link", '[data-testid="nav-jobs"]'), ("pressed-wordmark", '[data-testid="desk-rail-home"]')):
             el = page.locator(sel).first
             settle(page, el)
             hov_rgb = page.evaluate(PAINT, [rail_bg, [el.evaluate(STYLE)["bg"]]])[0]
@@ -219,10 +220,10 @@ with sync_playwright() as p:
             press = {"hover_dE": de(base, hov_rgb), "press_dE": de(base, press_rgb), "words": words, "weakest": weakest}
             press["ok"] = press["press_dE"] > press["hover_dE"] + 0.02 and words >= MIN_TEXT
             rows[name] = press
-        # Settings while it is the current page: hovering its wash still shows.
-        page.get_by_test_id("desk-rail-general").click()
-        page.wait_for_function("() => window.location.pathname === '/system'", timeout=5000)
-        gen = page.get_by_test_id("desk-rail-general")
+        # Build & settings while it is the current page: hovering its wash still shows.
+        page.get_by_test_id("desk-rail-build").click()
+        page.wait_for_function("() => window.location.pathname === '/build'", timeout=5000)
+        gen = page.get_by_test_id("desk-rail-build")
         settle(page)
         rest = gen.evaluate(STYLE)
         settle(page, gen)
@@ -231,7 +232,7 @@ with sync_playwright() as p:
         words, weakest = gen.evaluate(WORDS, opaque(h_rgb))
         cur = {"dE": de(r_rgb, h_rgb), "words": words}
         cur["ok"] = cur["dE"] >= MIN_DE_CURRENT and words >= MIN_TEXT
-        rows["settings-current"] = cur
+        rows["build-current"] = cur
         if not case.endswith("-custom"):
             # The evidence shot: a session row hovered.
             page.goto(f"{origin}/", wait_until="networkidle")
