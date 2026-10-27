@@ -14,6 +14,9 @@ vi.mock('../src/hooks/useDeskRecord.js', () => ({
   useDeskRecord: () => ({ phase: 'done', reads: recordState.truncated ? [{ truncated: true, seats: [] }] : [], window: null, truncated: recordState.truncated }),
   useDeskRecordByProject: () => ({ phase: 'done', byProject: recordState.projectMap, truncated: recordState.projectTruncated }),
 }));
+vi.mock('../src/hooks/useReportRecord.js', () => ({
+  useReportRecord: (days: readonly number[]) => ({ phase: 'done', reads: new Map(days.map((d) => [d, recordState.truncated ? { truncated: true, seats: [] } : { truncated: false, seats: [] }])) }),
+}));
 vi.mock('../src/hooks/useWindowSpend.js', () => ({ useWindowSpend: () => ({ phase: 'done', current: 0, previous: null, partial: false }) }));
 vi.mock('../src/hooks/useStandingOrders.js', () => ({ useStandingOrders: () => ({ state: null }) }));
 vi.mock('../src/api/diagnostics.js', () => ({ getDiagnostics: () => Promise.resolve({}) }));
@@ -43,98 +46,66 @@ function report(runs = [run('older', 2), run('newer', 1)], projectId?: string): 
     {...(projectId === undefined ? {} : { projectId })} />);
 }
 
-function expectQuality(value: string, note: string): void {
-  const tile = screen.getByTestId('desk-stat-quality');
-  expect(tile.querySelector('.wk-stat-value')).toHaveTextContent(value);
-  expect(tile.querySelector('.wk-stat-note')).toHaveTextContent(note);
+const ended = (id: string, days: number, project = 'p1'): SessionView => {
+  const v = run(id, days + 1, project);
+  (v.session as { ended_at?: number }).ended_at = (NOW - days * DAY) / 1000;
+  return v;
+};
+
+function expectQe(value: string | null, note: string): void {
+  const block = screen.getByTestId('report-qe');
+  if (value !== null) expect(block.querySelector('.wk-rep-big')).toHaveTextContent(value);
+  expect(block).toHaveTextContent(note);
 }
 
-describe('Report quality checks', () => {
-  it.each([undefined, 'p1'])('labels truncated spend on Desk/project %s and omits unknown buckets', (projectId) => {
+describe('Report (ui-v2): quality and honesty', () => {
+  it.each([undefined, 'p1'])('a truncated record draws no spend and claims no total (Desk/project %s)', (projectId) => {
     recordState.truncated = true;
-    report(undefined, projectId);
-    const spend = screen.getByTestId('desk-viz-spend');
-    expect(spend).toHaveTextContent('Partial: the agent record left out older runs');
-    expect(spend).toHaveTextContent('Spend buckets affected by truncated reads are unknown and omitted');
-    expect(screen.queryByTestId('desk-chart-spend')).not.toBeInTheDocument();
-    expect(screen.getByTestId('desk-stat-spend').querySelector('.wk-stat-value')).toHaveTextContent('—');
+    report([ended('older', 2), ended('newer', 1)], projectId);
+    expect(screen.getByTestId('report-tile-spend').querySelector('.wk-rep-tile-value')).toHaveTextContent('—');
+    expect(screen.getByTestId('report-tile-spend')).toHaveTextContent('Couldn’t read spend for this period');
+    expect(screen.getByTestId('report-cost')).toHaveTextContent('Couldn’t read spend for every day of this period');
+    expect(screen.queryByTestId('report-spend-chart')).not.toBeInTheDocument();
+    expect(screen.getByTestId('report-tile-firstpass').querySelector('.wk-rep-tile-value')).toHaveTextContent('—');
   });
 
-  it('labels truncation when spend is grouped by project', () => {
-    recordState.projectTruncated = true;
-    report();
-    fireEvent.click(screen.getByTestId('desk-groupby-project'));
-    expect(screen.getByTestId('desk-viz-spend')).toHaveTextContent('Partial: the agent record left out older runs');
-    expect(screen.queryByTestId('desk-chart-spend')).not.toBeInTheDocument();
-  });
-
-  it('by project, a truncated project is left out while complete projects with spend still draw', () => {
-    recordState.projectTruncated = true;
-    // p1 complete with $5 in its one bucket; p2's read was capped (truncated).
-    recordState.projectMap = new Map<string, unknown[]>([
-      ['p1', [{ truncated: false, seats: [{ cli: 'claude', costUsd: 5, units: 1 }] }]],
-      ['p2', [{ truncated: true, seats: [{ cli: 'claude', costUsd: 9, units: 1 }] }]],
-    ]);
-    report([run('older', 2), run('newer', 1), run('other', 1, 'p2')]);
-    fireEvent.click(screen.getByTestId('desk-groupby-project'));
-    const spend = screen.getByTestId('desk-viz-spend');
-    expect(spend).toHaveTextContent('Partial: the agent record left out older runs');
-    // The complete project draws; the stat says the total is partial rather than a plain verdict.
-    expect(screen.getByTestId('desk-chart-spend')).toBeInTheDocument();
-    expect(screen.getByTestId('desk-stat-spend').querySelector('.wk-stat-note')).toHaveTextContent('Partial');
-  });
-
-  it.each([undefined, 'p1'])('shows the quality tile on the Desk/project %s', (projectId) => {
-    report(undefined, projectId);
-    expect(within(screen.getByTestId('desk-stats')).getAllByRole('listitem')).toHaveLength(5);
-    expect(screen.getByTestId('desk-stat-quality')).toHaveTextContent('Quality checks passed');
-    expectQuality('1 of 2', 'checks passed of those recorded');
-    // The work fingerprint carries each run's status and its done/rejected unit counts.
-    expect(qualityMock).toHaveBeenLastCalledWith(['newer', 'older'], expect.stringContaining('newer:completed:0:0'));
-  });
-
-  it('uses the refined window, newest first, and the work fingerprint', () => {
-    const runs = [run('older', 2), run('outside', 31), run('newer', 1)];
-    runs[2]!.units = [{ status: 'done', seat: 'claude' } as unknown as NonNullable<SessionView['units']>[number]];
+  it('reads the QE verdicts of the jobs that finished in the period, newest first, with the work fingerprint', () => {
+    const runs = [ended('older', 2), ended('outside', 9), ended('newer', 1)];
     report(runs);
     expect(qualityMock).toHaveBeenLastCalledWith(['newer', 'older'], workFingerprint(runs));
-    expect(workFingerprint(runs)).toContain('newer:completed:1:0');
-    fireEvent.change(screen.getByTestId('desk-refine-project'), { target: { value: 'p1' } });
-    fireEvent.click(screen.getByTestId('desk-range-7'));
-    // Refining narrows the ids, never the fingerprint: it is the work the whole Desk sees.
-    expect(qualityMock).toHaveBeenLastCalledWith(['newer', 'older'], workFingerprint(runs));
+    expectQe('1 of 2', 'passed acceptance, of the finished jobs with a verdict');
+    fireEvent.click(screen.getByTestId('report-period-30'));
+    expect(qualityMock).toHaveBeenLastCalledWith(['newer', 'older', 'outside'], workFingerprint(runs));
   });
 
-  it('has a null value and reading note while checks are being read', () => {
+  it('says nothing while the verdicts are being read', () => {
     qualityMock.mockReturnValue({ tally: null, failed: 0, capped: false });
-    report();
-    expectQuality('…', 'Reading checks…');
-    expect(screen.getByTestId('desk-stat-quality').querySelector('.wk-stat-value')).toHaveAttribute('aria-busy', 'true');
+    report([ended('a', 1)]);
+    expect(screen.getByTestId('report-qe').querySelector('.wk-rep-big')).toBeNull();
+    expect(screen.getByTestId('report-qe')).not.toHaveTextContent('No QE verdict');
   });
 
   it.each([
-    { read: 0, recorded: 0, passed: 0, failed: 2, capped: false, note: 'Checks could not be read' },
-    { read: 1, recorded: 1, passed: 1, failed: 1, capped: false, note: '1 could not be read; of the rest' },
-    { read: 1, recorded: 0, passed: 0, failed: 1, capped: false, note: '1 could not be read; none recorded for the rest' },
-    { read: 20, recorded: 3, passed: 2, failed: 0, capped: true, note: 'of the newest 20 jobs' },
-    { read: 20, recorded: 0, passed: 0, failed: 0, capped: true, note: 'no checks recorded for the newest 20 jobs' },
-    { read: 2, recorded: 0, passed: 0, failed: 0, capped: false, note: 'no checks recorded for these 2 jobs' },
-  ])('preserves the note "$note"', ({ read, recorded, passed, failed, capped, note }) => {
+    { read: 0, recorded: 0, passed: 0, failed: 2, capped: false, value: null, note: 'Couldn’t read the verdicts.' },
+    { read: 1, recorded: 1, passed: 1, failed: 1, capped: false, value: '1 of 1', note: '1 couldn’t be read' },
+    { read: 20, recorded: 3, passed: 2, failed: 0, capped: true, value: '2 of 3', note: 'the newest 20 jobs read' },
+    { read: 2, recorded: 0, passed: 0, failed: 0, capped: false, value: null, note: 'No QE verdict recorded for these jobs.' },
+    { read: 30, recorded: 25, passed: 20, failed: 0, capped: false, value: '80%', note: 'passed acceptance' },
+  ])('says "$note"', ({ read, recorded, passed, failed, capped, value, note }) => {
     qualityMock.mockReturnValue({ tally: { read, recorded, passed }, failed, capped });
-    report();
-    expectQuality(recorded === 0 ? '—' : `${passed} of ${recorded}`, note);
-    expect(screen.getByTestId('desk-stat-quality').querySelector('.wk-stat-value')).not.toHaveAttribute('aria-busy');
+    report([ended('a', 1), ended('b', 2)]);
+    expectQe(value, note);
   });
 
-  it.each([
-    { runs: [], note: 'no jobs in the last 30 days' },
-    { runs: [run('one', 1)], note: 'no checks recorded for these 1 job' },
-  ])('preserves the empty/singular note "$note"', ({ runs, note }) => {
-    qualityMock.mockReturnValue({ tally: { read: runs.length, recorded: 0, passed: 0 }, failed: 0, capped: false });
-    report(runs);
-    expectQuality('—', note);
+  it('with no job finished it says so, never 0%', () => {
+    qualityMock.mockReturnValue({ tally: { read: 0, recorded: 0, passed: 0 }, failed: 0, capped: false });
+    report([]);
+    expectQe(null, 'No job finished in this period.');
+    expect(screen.getByTestId('report-qe')).not.toHaveTextContent('0%');
   });
+});
 
+describe('Desk tabs', () => {
   it('gives Desk links roving focus, navigates by keyboard, and labels every selected panel', () => {
     const navigate = vi.fn();
     const props = { runs: [], runsLoaded: true, needRows: [], now: NOW, navigate, projectId: 'p1' };

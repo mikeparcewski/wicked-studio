@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, render, screen } from '@testing-library/react';
 import type { SeatRecord, SeatRecordResponse } from '../src/api/types.js';
 import { spendAvailability, spendSeries, spendTotals } from '../src/board/deskInsights.js';
 import { spendOf } from '../src/hooks/useWindowSpend.js';
@@ -14,6 +14,10 @@ vi.mock('../src/hooks/useRoster.js', () => ({ useRoster: () => [] }));
 vi.mock('../src/hooks/useDeskRecord.js', () => ({
   useDeskRecord: () => ({ phase: 'done', reads: mocks.reads, window: mocks.reads.at(-1), truncated: false }),
   useDeskRecordByProject: () => ({ phase: 'done', byProject: mocks.projects, truncated: false }),
+}));
+// The Report (ui-v2) reads its own edges: every edge answers the newest record, so the period is that record.
+vi.mock('../src/hooks/useReportRecord.js', () => ({
+  useReportRecord: (days: readonly number[]) => ({ phase: 'done', reads: new Map(days.map((d) => [d, mocks.reads.at(-1) ?? null])) }),
 }));
 vi.mock('../src/hooks/useWindowSpend.js', async (importOriginal) => {
   const original = await importOriginal<typeof import('../src/hooks/useWindowSpend.js')>();
@@ -68,38 +72,31 @@ describe('Desk r4 spend availability', () => {
     expect(spendAvailability([{ ...reads[0]!, truncated: true }], null)).toBeNull();
   });
 
-  it.each(['agent', 'project'])('shows unknown spend in the stat and card grouped by %s', async (group) => {
+  it('shows unknown spend on the Report as unknown, never $0', async () => {
     await mount();
-    fireEvent.click(screen.getByTestId(`desk-groupby-${group}`));
-    const stat = screen.getByTestId('desk-stat-spend');
-    expect(stat.querySelector('.wk-stat-value')?.textContent).toBe('—');
-    expect(stat).toHaveTextContent('unknown: usage recorded, no price reported');
-    expect(screen.getByTestId('desk-viz-spend')).toHaveTextContent('Spend unknown: usage recorded, no price reported');
-    expect(stat).not.toHaveTextContent('$0');
-    expect(screen.queryByTestId('desk-chart-spend')).not.toBeInTheDocument();
+    const tile = screen.getByTestId('report-tile-spend');
+    expect(tile.querySelector('.wk-rep-tile-value')?.textContent).toBe('—');
+    expect(tile).toHaveTextContent('usage recorded, no price reported');
+    expect(tile).not.toHaveTextContent('$0');
+    expect(screen.getByTestId('report-spend-unknown')).toHaveTextContent('Spend unknown: usage recorded, no price reported');
+    expect(screen.queryByTestId('report-spend-chart')).not.toBeInTheDocument();
   });
 
-  it.each(['agent', 'project'])('qualifies the priced subtotal grouped by %s', async (group) => {
+  it('qualifies the priced subtotal on the Report', async () => {
     mocks.reads = [record(seat('claude', 12), seat('codex', null))];
-    mocks.projects.set('studio', [record(seat('claude', 12))]);
-    mocks.projects.set('crew', [record(seat('codex', null))]);
     await mount();
-    fireEvent.click(screen.getByTestId(`desk-groupby-${group}`));
-    const stat = screen.getByTestId('desk-stat-spend');
-    expect(stat.querySelector('.wk-stat-value')?.textContent).toBe('at least $12.00');
-    expect(stat).toHaveTextContent('priced usage only');
-    expect(screen.getByTestId('desk-viz-spend')).toHaveTextContent('At least $12.00 · priced usage only');
-    fireEvent.change(screen.getByTestId('desk-refine-agent'), { target: { value: 'codex' } });
-    expect(stat.querySelector('.wk-stat-value')?.textContent).toBe('—');
-    fireEvent.change(screen.getByTestId('desk-refine-agent'), { target: { value: 'claude' } });
-    expect(stat.querySelector('.wk-stat-value')?.textContent).toBe('$12.00');
-    expect(stat).not.toHaveTextContent('priced usage only');
+    const tile = screen.getByTestId('report-tile-spend');
+    expect(tile.querySelector('.wk-rep-tile-value')?.textContent).toBe('≥ $12.00');
+    expect(tile).toHaveTextContent('priced usage only');
+    // A partial total claims no change against the period before.
+    expect(screen.queryByTestId('report-tile-spend-change')).not.toBeInTheDocument();
+    expect(screen.getByTestId('report-spend-agents')).toHaveTextContent('no price');
   });
 
   it.each<[SeatRecord[]]>([[[]], [[seat('claude', 0)]]])('retains $0 for no usage or a known zero price: %j', async (seats) => {
     mocks.reads = [record(...seats)];
     await mount();
-    expect(screen.getByTestId('desk-stat-spend').querySelector('.wk-stat-value')?.textContent).toBe('$0.00');
+    expect(screen.getByTestId('report-tile-spend').querySelector('.wk-rep-tile-value')?.textContent).toBe('$0.00');
   });
 
   // The Work tiles live on a project's page (the landing has none since home v2).

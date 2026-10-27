@@ -1,13 +1,12 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
-import { Activity, AlertTriangle, Bot, CheckCircle2, CircleAlert, Inbox, Info, MoreHorizontal, Rocket, Send, Wallet } from 'lucide-react';
+import { Activity, Bot, CircleAlert, MoreHorizontal, Wallet } from 'lucide-react';
 import { everythingPath } from '../../board/everythingModel.js';
 import type { DiagnosticsGovernance, RosterSeat, SessionView } from '../../api/types.js';
 import { getDiagnostics } from '../../api/diagnostics.js';
 import { readErrorKind } from '../../api/errors.js';
 import { failureCounts } from '../../board/attention.js';
 import {
-  agentRows, agentsOf, governanceOf, AGENT_WORKFLOW_NOTE, PARTIAL_RECORD_NOTE, bucketsOf, callouts, DEFAULT_REFINE, GROUP_BYS, jobSeries, OUTCOMES, outcomeOf, projectOf, RANGES,
-  refineRuns, spendAvailability, spendSeries, spendTotals as projectSpend, stepFor, outcomeRows, sum, workflowLabel, workflowOf, workflowRows, type AcpFallbacks, type Callout, type GroupBy, type GroupNames, type RangeDays, type Refine,
+  agentRows, agentsOf, governanceOf, DEFAULT_REFINE, GROUP_BYS, projectOf, RANGES, refineRuns, stepFor, workflowLabel, workflowOf, workflowRows, type AcpFallbacks, type GroupNames, type RangeDays, type Refine,
 } from '../../board/deskInsights.js';
 import { deskReadState, lapsedSeatChores, needRunId, noSignedInHelper, setupChores, workFingerprint } from '../../board/deskModel.js';
 import { useMemoryReading } from '../../hooks/useMemoryReading.js';
@@ -20,35 +19,30 @@ import { useMovableBoardModel } from './MoveToProject.js';
 import { useHandover } from '../../hooks/useHandover.js';
 import { HandoverPanel } from '../HandoverPanel.js';
 import { createdAtMs } from '../../board/windowStats.js';
-import { moneyWords, windowWords } from '../../board/deskPulse.js';
-import { newestFirst } from '../../board/projectModel.js';
-import { useQualityChecks } from '../../hooks/useQualityChecks.js';
+import { moneyWords } from '../../board/deskPulse.js';
 import { handleTabKeyDown } from '../ui/tabKeys.js';
 import { jobTitle } from '../../board/deskWords.js';
 import type { NeedRow } from '../../board/needsYou.js';
 import { displaySeats, seatLabel } from '../../board/seatNames.js';
 import { sessionIdOf, sessionPath } from '../../board/sessionModel.js';
-import { useDeskRecord, useDeskRecordByProject } from '../../hooks/useDeskRecord.js';
+import { useDeskRecord } from '../../hooks/useDeskRecord.js';
 import { useHistoryScroll } from '../../hooks/useHistoryState.js';
 import { useDisplayText } from '../../hooks/useHomePath.js';
 import { ALL_NEEDS_SCOPE, useSettledNeeds } from '../../hooks/useNeedsRows.js';
-import { usePhone } from '../../hooks/usePhone.js';
 import type { Navigate } from '../../hooks/useRoute.js';
 import { useRoster } from '../../hooks/useRoster.js';
 import { useStartClocks } from '../../hooks/useStartClocks.js';
-import { openAskDock } from '../../store/askDock.js';
 import { useCapabilities } from '../../store/capabilities.js';
 import { useProjectsStore } from '../../store/projects.js';
 import { openSheet } from '../../store/sheets.js';
 import { CaptureDrop } from '../CaptureDrop.js';
 import { AgentModal } from '../agents/AgentModal.js';
 import { StandingOrdersPanel } from '../StandingOrdersPanel.js';
-import { agentColor, AreaChart, catColor, ChartCard, OutcomeBreakdown, outcomeColor, StackedBars, type BarSeries, type ChartState } from '../charts/Chart.js';
 import { liveRows } from '../../board/deskInsights.js';
 import { agentTiles, readyNote } from '../../board/agentsModel.js';
 import { useAgentRows } from '../agents/useAgentRows.js';
 import { useWindowSpend } from '../../hooks/useWindowSpend.js';
-import { Segmented, Skeleton, StateBanner } from '../ui/index.js';
+import { Segmented, StateBanner } from '../ui/index.js';
 import { DeskHappening } from './DeskHappening.js';
 import { DeskStat, RefineSelect } from './DeskParts.js';
 import { DeskRuleLine } from './DeskRuleLine.js';
@@ -65,6 +59,7 @@ import { DeskUnderstand } from './DeskUnderstand.js';
 import { DeskHome } from './DeskHome.js';
 import { DESK_VIEW_PATH, isHostedView, type DeskView, type HostedView } from '../../board/navModel.js';
 import { PAGE_NAMES } from '../../board/pageNames.js';
+import { ReportPage } from '../report/ReportPage.js';
 
 /**
  * THE DESK, v2 (design/DES-desk-v2.md) — the route `/`.
@@ -154,7 +149,6 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
     const t = setTimeout(() => document.getElementById(`desk-focus-${focus}`)?.scrollIntoView({ behavior: scrollBehavior(), block: 'center' }), 400);
     return () => clearTimeout(t);
   }, [tab, focus]);
-  const phone = usePhone();
   const roster = useRoster();
   const displayText = useDisplayText();
   const readState = deskReadState(runsLoaded, runsError);
@@ -198,23 +192,13 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
     return [...m.entries()].map(([value, label]) => ({ value, label })).sort((a, b) => a.label.localeCompare(b.label));
   }, [live]);
 
-  const { kept, undated } = useMemo(() => refineRuns(runs, refine, now), [runs, refine, now]);
+  const { kept } = useMemo(() => refineRuns(runs, refine, now), [runs, refine, now]);
   const step = useMemo(() => stepFor(refine.days, kept.map(createdAtMs).filter((t): t is number => t !== null), now), [refine.days, kept, now]);
-  const buckets = useMemo(() => bucketsOf(refine.days, now, step), [refine.days, now, step]);
-  const per = step === 7 ? 'week' : 'day';
 
   // Spend + helper record (cumulative reads; read again when work moves).
   // Read again when work moves: a unit finishes, fails or retries, or a run changes state (a failed,
   // cancelled or resumed run moves quality/record/spend without finishing a unit).
   const workPrint = useMemo(() => workFingerprint(runs), [runs]);
-  const qualityIds = useMemo(() => newestFirst(kept).map((v) => v.session.id), [kept]);
-  const quality = useQualityChecks(qualityIds, workPrint);
-  const qualityValue = quality.tally === null ? null : quality.tally.recorded === 0 ? null : `${quality.tally.passed} of ${quality.tally.recorded}`;
-  const qualityNote = quality.tally === null ? 'Reading checks…'
-    : quality.failed > 0 && quality.tally.read === 0 ? 'Checks could not be read'
-    : quality.failed > 0 ? `${quality.failed} could not be read; ${quality.tally.recorded === 0 ? 'none recorded for the rest' : 'of the rest'}`
-    : quality.tally.recorded === 0 ? (qualityIds.length === 0 ? `no jobs in ${windowWords(refine.days)}` : quality.capped ? `no checks recorded for the newest ${quality.tally.read} jobs` : `no checks recorded for these ${qualityIds.length} ${qualityIds.length === 1 ? 'job' : 'jobs'}`)
-      : quality.capped ? `of the newest ${quality.tally.read} jobs` : 'checks passed of those recorded';
   const record = useDeskRecord(refine.days, step, scope, workPrint);
   const [acp, setAcp] = useState<AcpFallbacks | null>(null);
   useEffect(() => {
@@ -226,87 +210,19 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
     return () => { alive = false; };
   }, []);
 
-  // ── Widgets' data ──
-  const jobsSeries: BarSeries[] = useMemo(() => jobSeries(kept, buckets, refine.groupBy, names).map((s, i) => ({ ...s, color: colorFor(refine.groupBy, s.key, i) })), [kept, buckets, refine.groupBy, names]);
-  const spend = useMemo(() => (record.phase === 'done' ? spendSeries(record.reads, refine.agent, names) : null), [record, refine.agent, names]);
-  const projectIds = useMemo(() => projectOpts.map((o) => o.value).filter((id) => refine.project === null || id === refine.project), [projectOpts, refine.project]);
-  const byProject = useDeskRecordByProject(refine.days, step, projectIds, workPrint, tab === 'report' && refine.groupBy === 'project' && projectId === undefined);
-  // Group by applies to Spend where the record can split it: by agent (always), by project (one read
-  // per project); outcome and workflow have no spend split on the wire (said in the card).
-  // A project whose reads failed is unknown, never $0: it is left out and the card says how many.
-  const byProjectOn = refine.groupBy === 'project' && projectId === undefined;
-  const projectSeries = !byProjectOn || byProject.phase !== 'done' ? null
-    : projectIds.map((id, i) => ({ key: id, label: projectName(id), color: catColor(i), values: projectSpend(byProject.byProject.get(id) ?? [], refine.agent), availability: spendAvailability(byProject.byProject.get(id) ?? [], refine.agent) }));
-  const projectsUnread = projectSeries?.filter((x) => x.values === null).length ?? 0;
-  const spendByProject: BarSeries[] | null = projectSeries === null ? null
-    : projectSeries.filter((x): x is typeof x & { values: number[] } => x.values !== null && x.values.some((v) => v > 0));
-  const spendBars: BarSeries[] = byProjectOn ? (spendByProject ?? []) : (spend ?? []).map((s) => ({ ...s, color: agentColor(s.key) }));
-  const spendGroupNote = refine.groupBy === 'outcome' ? 'Not grouped by outcome: spend is recorded per agent, not per job outcome. Showing by agent.'
-    : refine.groupBy === 'workflow' ? 'Not grouped by workflow: the agent record has no workflow split yet (needs crew data). Showing by agent.' : null;
-  const outcomeGroups = useMemo(() => outcomeRows(kept, refine.groupBy === 'outcome' ? 'workflow' : refine.groupBy, names).map((r) => ({ key: r.key, label: r.label, values: r.counts as unknown as Record<string, number> })), [kept, refine.groupBy, names]);
-  const spendTotal = sum(spendBars.flatMap((s) => s.values));
-  const availability = byProjectOn ? projectSeries?.map((s) => s.availability) ?? [] : [spendAvailability(record.reads, refine.agent)];
-  const unpriced = availability.some((s) => s?.unpriced);
-  const unknownSpend = unpriced && !availability.some((s) => s?.anyPriced);
   const rosterKeys = useMemo(() => displaySeats(roster).map((s) => s.key), [roster]);
   // Agent rows exist only from a read record: an unread or failed record is never a row of zeros.
   const agents = useMemo(() => (record.window === null ? [] : agentRows(record.window, kept, names, rosterKeys, refine.workflow)).filter((a) => refine.agent === null || a.cli === refine.agent), [record.window, kept, names, rosterKeys, refine.agent, refine.workflow]);
   const flows = useMemo(() => workflowRows(kept), [kept]);
-  // Open failures follow the refine bar's project, agent and workflow (the window is failureCounts' own).
-  const openFailures = useMemo(() => {
-    if (!refined(refine)) return failureCounts(runs, needRows, refine.days, now);
-    const inScope = runs.filter((v) => (refine.project === null || projectOf(v) === refine.project)
-      && (refine.workflow === null || workflowOf(v).key === refine.workflow) && (refine.agent === null || agentsOf(v).includes(refine.agent)));
-    const ids = new Set(inScope.map((v) => v.session.id));
-    return failureCounts(inScope, needRows.filter((r) => { const id = needRunId(r); return id !== null && ids.has(id); }), refine.days, now);
-  }, [runs, needRows, refine, now]);
-  const tips = useMemo(() => callouts({ agents, workflows: flows, acp: refine.agent === null ? acp : acp === null ? null : Object.fromEntries(Object.entries(acp).filter(([k]) => k === refine.agent)), openFailures: openFailures.inWindow.length + openFailures.older, days: refine.days, scoped: projectId !== undefined || refined(refine), workflow: refine.workflow }), [agents, flows, acp, openFailures, refine, projectId]);
-
-  const runsState: ChartState = !runsShown ? { kind: 'loading' } : kept.length === 0 ? { kind: 'empty', text: `No jobs started in the last ${refine.days} days${refined(refine) ? ' in this view' : ''}.` } : { kind: 'ready' };
-  const spendTruncated = byProjectOn ? byProject.truncated : record.truncated;
-  // Truncated: by agent nothing is drawn (spendSeries is null); by project the complete projects still
-  // draw and the truncated ones are left out as unread, under the partial note.
-  const spendState: ChartState = spendTruncated && spendTotal === 0
-    ? { kind: 'needs-crew', text: `${PARTIAL_RECORD_NOTE}. Spend buckets affected by truncated reads are unknown and omitted.` }
-    : projectId === 'default'
-    ? { kind: 'empty', text: 'Spend is counted per project, so work not in a project has none of its own.' }
-    : refine.workflow !== null
-    ? { kind: 'needs-crew', text: 'Spend can’t be split by workflow yet: the agent record has no workflow filter.' }
-    : record.phase === 'loading' || (byProjectOn && byProject.phase === 'loading') ? { kind: 'loading' }
-      : byProjectOn && projectIds.length > 0 && projectsUnread === projectIds.length ? { kind: 'error', text: 'Couldn’t read spend for any project in this window.' }
-      // Some projects unread and the rest at $0: unknown, never a zero verdict.
-      : byProjectOn && projectsUnread > 0 && spendTotal === 0 ? { kind: 'error', text: `Couldn’t read spend for ${projectsUnread} of ${projectIds.length} projects, and the rest recorded none.` }
-      : !byProjectOn && spend === null ? { kind: 'error', text: 'Couldn’t read spend for this window.' }
-        : unknownSpend ? { kind: 'needs-crew', text: 'Spend unknown: usage recorded, no price reported.' }
-        : spendTotal === 0 ? { kind: 'empty', text: `No priced usage in the last ${refine.days} days${refined(refine) ? ' in this view' : ''}.` } : { kind: 'ready' };
-  const money = (v: number): string => (v === 0 ? '$0' : v < 1 ? `$${v.toFixed(2)}` : `$${Math.round(v)}`);
 
   const runHolds = useMemo(() => needHolds(needRows), [needRows]);
   const heldByNeeds = useMemo(() => new Set(needRows.map(needRunId).filter((id): id is string => id !== null)), [needRows]);
-  const finishedN = kept.filter((v) => { const o = outcomeOf(v); return o === 'Finished' || o === 'Answered'; }).length;
-  const endedN = kept.filter((v) => ['Finished', 'Answered', 'Failed', 'Stopped'].includes(outcomeOf(v) ?? '')).length;
-  const busiest = jobsSeries.length === 0 ? null : buckets.map((b, i) => ({ b, n: sum(jobsSeries.map((x) => x.values[i] ?? 0)) })).sort((a, b) => b.n - a.n)[0]!;
-  const topSpender = spendBars.map((x) => ({ x, v: sum(x.values) })).sort((a, b) => b.v - a.v)[0];
-  // ── The Report stat row: five numbers that follow the refine bar. ──
-  const prev = useMemo(() => refineRuns(runs, refine, now - refine.days * 86_400_000).kept, [runs, refine, now]);
-  const rate = (vs: readonly SessionView[]): number | null => {
-    const ended = vs.filter((v) => ['Finished', 'Answered', 'Failed', 'Stopped'].includes(outcomeOf(v) ?? ''));
-    return ended.length === 0 ? null : ended.filter((v) => ['Finished', 'Answered'].includes(outcomeOf(v) ?? '')).length / ended.length;
-  };
-  const rateNow = rate(kept);
-  const ratePrev = rate(prev);
-  const winSpend = useWindowSpend(refine.days, scope ?? undefined, workPrint, refine.agent === null && refine.workflow === null && projectId !== 'default');
   // "Agents ready" is the Agents tab's own Ready-for-work count, from the same rows (one model, one number).
   const agentsView = useAgentRows();
   const agentsTile = agentTiles(agentsView.rows);
-  const jobTotals = buckets.map((_, i) => sum(jobsSeries.map((x) => x.values[i] ?? 0)));
-  const spendTotals = buckets.map((_, i) => sum(spendBars.map((x) => x.values[i] ?? 0)));
   const allRunning = useMemo(() => liveRows(runs, (v) => jobTitle(v.session), heldByNeeds).length, [runs, heldByNeeds]);
   const workSpend = useWindowSpend(30, projectId, workPrint, tab === 'work' && projectId !== 'default');
   const workFailed = useMemo(() => failureCounts(runs, needRows, 30, now), [runs, needRows, now]);
-  // Small-sample honesty: under 20 jobs a rate is said as a count and no change is claimed.
-  const few = kept.length < SMALL_SAMPLE;
-  const delivered = kept.filter((v) => { const d = (v.session as { delivery?: unknown }).delivery; return d === 'delivered' || d === 'pushed'; }).length;
   const chores = useMemo(() => lapsedSeatChores(roster), [roster]);
   // Studio's own setup (operator 2026-10-17): live items from the agents and the memory read, the Desk only.
   const memory = useMemoryReading(projectId === undefined, tab);
@@ -469,10 +385,6 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
       ruleLine={<DeskRuleLine navigate={navigate} />} />
   );
 
-  const reportScope = [`the last ${refine.days} days`, scope !== null ? `project ${projectName(scope)}` : null,
-    refine.agent !== null ? `agent ${agentName(refine.agent)}` : null, refine.workflow !== null ? `workflow ${workflowLabel(refine.workflow)}` : null].filter((x): x is string => x !== null).join(', ');
-  const ask = (q: string): void => openAskDock({ fresh: true, projectId: scope !== null && scope !== 'default' ? scope : null, seedText: `${q} (Look at ${reportScope}; answer from the run record and cite the jobs.)${refine.workflow !== null ? ` ${AGENT_WORKFLOW_NOTE} Do not treat agent-record totals as workflow-scoped numbers.` : ''}` });
-
   const refineBarOf = (withGroup: boolean): React.ReactElement => (
       <div className="wk-refine" role="group" aria-label="Refine every chart below" data-testid="desk-refine">
       <Segmented label="Time range" data-testid="desk-range" value={String(refine.days) as `${RangeDays}`}
@@ -492,69 +404,9 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
   );
 
   const report = (
-    <div {...panelOf('report')} data-testid="desk-report" className="wk-understand">
-      {refineBarOf(true)}
-      <div className="wk-understand-cols">
-        <div className="wk-understand-main">
-          <ul className="wk-stats" aria-label="This window" data-testid="desk-stats">
-            <DeskStat icon={Rocket} tone="accent" label="Jobs started" testId="desk-stat-started" value={runsShown ? String(kept.length) : null}
-              note={few ? 'too few jobs to compare' : deltaWords(kept.length, prev.length, (d) => `${Math.abs(d)}`, refine.days)} spark={jobTotals} />
-            <DeskStat icon={CheckCircle2} tone="ok" label="Finished" testId="desk-stat-success" value={!runsShown ? null : rateNow === null ? '—' : few ? `${finishedN} of ${endedN}` : `${Math.round(rateNow * 100)}%`}
-              note={rateNow === null ? 'no job ended yet' : few ? 'too few jobs to compare' : ratePrev === null ? 'of the jobs that ended' : deltaWords(Math.round(rateNow * 100), Math.round(ratePrev * 100), (d) => `${Math.abs(d)} pts`, refine.days)} />
-            <DeskStat icon={Send} tone="accent" label="Delivered" testId="desk-stat-delivered" value={runsShown ? String(delivered) : null}
-              note={delivered === 0 ? 'no job delivered in this window' : `of ${kept.length} started`} />
-            <DeskStat icon={Wallet} tone="accent" label="Spend" testId="desk-stat-spend" value={spendState.kind === 'ready' || spendState.kind === 'empty' ? `${unpriced ? 'at least ' : ''}${moneyWords(spendTotal)}` : spendState.kind === 'loading' ? null : '—'}
-              note={spendState.kind === 'error' ? spendState.text
-                : spendTruncated ? PARTIAL_RECORD_NOTE
-                : unknownSpend ? 'Spend unknown: usage recorded, no price reported'
-                : projectsUnread > 0 ? `at least: ${projectsUnread} ${projectsUnread === 1 ? 'project' : 'projects'} not read`
-                : unpriced ? 'priced usage only'
-                : !few && winSpend.phase === 'done' && winSpend.previous !== null && refine.agent === null ? deltaWords(spendTotal, winSpend.previous, (d) => moneyWords(Math.abs(d)), refine.days) : `last ${refine.days} days`} {...(spendTruncated || unknownSpend ? {} : { spark: spendTotals })} />
-            <DeskStat icon={CheckCircle2} tone="ok" label="Quality checks passed" testId="desk-stat-quality" value={runsShown ? qualityValue : null}
-              note={runsShown ? qualityNote : 'Reading…'} loading={!runsShown || quality.tally === null} loadingNote={runsShown ? 'Reading checks…' : 'Reading…'} />
-          </ul>
-          <div className="wk-desk2-charts">
-            <ChartCard title="Jobs started" state={runsState} data-testid="desk-viz-jobs"
-              meta={busiest !== null && busiest.n > 1 ? `by ${per} · busiest ${busiest.b.label}` : `by ${per}`}
-              note={undated > 0 ? `${undated} ${undated === 1 ? 'job has' : 'jobs have'} no start time and ${undated === 1 ? 'is' : 'are'} left out.` : refine.groupBy === 'agent' ? 'Each job counts under the agent that took most of its steps.' : undefined}>
-              <StackedBars buckets={buckets} series={jobsSeries} format={(v) => String(Math.round(v))} label={`Jobs started per ${per}, last ${refine.days} days, by ${groupWord(refine.groupBy)}`} compact height={phone ? 96 : 120} data-testid="desk-chart-jobs" />
-            </ChartCard>
-            <ChartCard id="desk-focus-spend" title="Spend" state={spendState} data-testid="desk-viz-spend"
-              meta={topSpender !== undefined ? `by ${per} · most on ${topSpender.x.label}` : `by ${per}`}
-              note={[unpriced && !unknownSpend ? `At least ${moneyWords(spendTotal)} · priced usage only.` : null, spendTruncated ? `${PARTIAL_RECORD_NOTE}. Spend buckets affected by truncated reads are unknown and omitted.` : projectsUnread > 0 && spendState.kind === 'ready' ? `Spend for ${projectsUnread} ${projectsUnread === 1 ? 'project' : 'projects'} couldn’t be read and is left out.` : spendGroupNote ?? (refine.days === 90 ? 'The oldest week is 6 days: the record reaches 90 days back.' : null)].filter(Boolean).join(' ') || undefined}>
-              <AreaChart buckets={buckets} series={spendBars} format={money} label={`Spend per ${per} by ${refine.groupBy === 'project' ? 'project' : 'agent'}, last ${refine.days} days`} compact height={phone ? 96 : 120} data-testid="desk-chart-spend" />
-            </ChartCard>
-            <ChartCard title="Outcomes" state={runsState} data-testid="desk-viz-outcomes"
-              meta={`by ${refine.groupBy === 'outcome' ? 'workflow' : groupWord(refine.groupBy)} · ${rateNow === null ? 'none ended' : few ? `${finishedN} of ${endedN} finished` : `${Math.round(rateNow * 100)}% finished`}`}
-              note={refine.groupBy === 'outcome' ? 'Grouped by workflow: the bars are already split by outcome.' : refine.groupBy === 'agent' ? 'A job counts once, under the agent that took most of its steps.' : undefined}>
-              <OutcomeBreakdown rows={outcomeGroups} segments={OUTCOMES.map((o) => ({ key: o, label: o, color: outcomeColor(o) }))}
-                groupLabel={refine.groupBy === 'outcome' ? 'Workflow' : cap(groupWord(refine.groupBy))}
-                centre={rateNow === null ? '—' : few ? `${finishedN}/${endedN}` : `${Math.round(rateNow * 100)}%`} centreLabel="finished"
-                label={`Job outcomes by ${refine.groupBy === 'outcome' ? 'workflow' : groupWord(refine.groupBy)}, last ${refine.days} days`} />
-            </ChartCard>
-            <section className="wk-card wk-viz wk-viz-insights" aria-labelledby="desk-insights-title" data-testid="desk-insights">
-              <header className="wk-viz-head"><h3 id="desk-insights-title" className="wk-viz-title">Improve this</h3><span className="wk-viz-meta">{refine.groupBy === 'agent' ? 'by agent' : refine.groupBy === 'workflow' ? 'by workflow' : 'from the evidence'}</span></header>
-              {refine.workflow !== null && <p className="wk-viz-note">{AGENT_WORKFLOW_NOTE}</p>}
-              <InsightCards items={groupTips(tips, refine.groupBy)} loading={!runsShown || (refine.workflow === null && record.phase === 'loading')} recordFailed={refine.workflow === null && record.phase === 'error'} navigate={navigate} workPath={tabPath('work')} />
-              {(refine.groupBy === 'project' || refine.groupBy === 'outcome') && <p className="wk-viz-note">Not grouped by {refine.groupBy}: each finding is about an agent, a workflow or failed jobs.</p>}
-            </section>
-          </div>
-        </div>
-        <aside className="wk-card wk-reports" aria-labelledby="desk-reports-title" data-testid="desk-reports">
-          <h3 id="desk-reports-title" className="wk-desk2-title">Ask about it</h3>
-          <p className="wk-viz-note">Opens Chat with the question written for {reportScope}. Press Send when it reads right.</p>
-          <ul className="wk-reports-list">
-            {REPORTS.map((r) => (
-              <li key={r.id}>
-                <button type="button" data-testid="desk-report" data-id={r.id} className="wk-report" onClick={() => ask(r.question)}>
-                  <r.icon size={15} aria-hidden className="wk-report-icon" />
-                  <span className="wk-report-text"><span className="wk-report-q">{r.question}</span><span className="wk-report-from">From {r.from}</span></span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        </aside>
-      </div>
+    <div {...panelOf('report')} data-testid="desk-report" className="wk-desk2-report">
+      <ReportPage runs={runs} runsShown={runsShown} now={now} navigate={navigate} agentName={agentName} pathOfRun={pathOfRun} work={workPrint}
+        {...(projectId !== undefined ? { projectId } : {})} />
     </div>
   );
 
@@ -664,81 +516,14 @@ export function DeskHostedPage({ view, children }: { view: HostedTab; children: 
   );
 }
 
-/** Pre-canned questions the run record, the agent record and the estate can answer (Ask, unchanged). */
-const REPORTS: readonly { id: string; question: string; from: string; icon: typeof Inbox }[] = [
-  // `from` = what the answer is built from (said on the button).
-  { id: 'spend', question: 'Where is my spend going?', from: 'run data: usage and cost per job and agent', icon: Wallet },
-  { id: 'fail', question: 'Why do my jobs fail?', from: 'run data: failed steps and their recorded reasons', icon: CircleAlert },
-  { id: 'fix', question: 'What should I fix first?', from: 'run data + agent record + estate knowledge', icon: AlertTriangle },
-  { id: 'bugs', question: 'Which agent does best on bug jobs?', from: 'run data: bug-job outcomes per agent', icon: Bot },
-  { id: 'week', question: 'How did this week compare to last?', from: 'run data: jobs, outcomes and spend per week', icon: Activity },
-  { id: 'bench', question: 'Which agents keep sitting out, and why?', from: 'agent record: benches and their reasons', icon: Info },
-  { id: 'slow', question: 'Which workflow takes longest, and where does the time go?', from: 'run data: step start and end times', icon: Rocket },
-  { id: 'gov', question: 'Did any job run without its governance checks?', from: 'run data + estate governance records', icon: CheckCircle2 },
-];
-
-
 function deltaWords(cur: number, prev: number, fmt: (d: number) => string, days: number): string {
   const d = cur - prev;
   if (d === 0) return `same as prior ${days}d`;
   return `${d > 0 ? '▲' : '▼'} ${fmt(d)} vs prior ${days}d`;
 }
 
-/** One stat tile: a quiet icon, one big number, a short label, a delta or a sparkline. */
-
-const SMALL_SAMPLE = 20;
-
 const jobTitleOf = (v: SessionView): string => jobTitle(v.session);
 
-const TONE_ICON = { fail: CircleAlert, warn: AlertTriangle, info: Info } as const;
-const INSIGHTS_SHOWN = 3;
-
-/** The top improve-this callouts as compact cards; "See all" opens the rest in place. */
-function InsightCards({ items, loading, recordFailed, navigate, workPath }: { items: readonly Callout[]; loading: boolean; recordFailed: boolean; navigate: Navigate; workPath: string }): React.ReactElement {
-  const [all, setAll] = useState(false);
-  if (loading) return <div className="wk-insight-grid"><div className="wk-card wk-insight"><Skeleton rows={2} variant="line" /></div></div>;
-  // A failed agent record says so: no verdict about agents is drawn from a read that did not land.
-  const unread = recordFailed ? <p className="wk-viz-note" data-testid="desk-callouts-partial">Couldn’t read the agent record, so nothing here is about agents.</p> : null;
-  if (items.length === 0) return <>{unread ?? <p className="wk-viz-state" data-testid="desk-callouts-none">Nothing to fix from what was read in this window.</p>}</>;
-  const shown = all ? items : items.slice(0, INSIGHTS_SHOWN);
-  return (
-    <>
-      {unread}
-      <ul className="wk-insight-grid" data-testid="desk-callouts">
-        {shown.map((c) => {
-          const Icon = TONE_ICON[c.tone];
-          return (
-            <li key={c.id} data-testid="desk-callout" data-id={c.id} data-tone={c.tone} className="wk-card wk-insight">
-              <span className="wk-insight-title"><Icon size={15} aria-hidden className="wk-callout-icon" />{c.title}</span>
-              <span className="wk-insight-why">{c.why} {c.fix}</span>
-              <a href={c.evidence.path} data-testid="desk-callout-evidence" className="wk-link wk-insight-link"
-                onClick={(e) => {
-                  e.preventDefault();
-                  // An in-page anchor (the inbox) lives on the Work tab: go there, then bring it into view once it mounts.
-                  if (c.evidence.path.startsWith('#')) {
-                    const id = c.evidence.path.slice(1);
-                    navigate(workPath);
-                    const t0 = Date.now();
-                    const find = (): void => {
-                      const el = document.getElementById(id);
-                      if (el !== null) { el.scrollIntoView({ behavior: scrollBehavior(), block: 'start' }); (el.querySelector<HTMLElement>('[role="tab"][aria-selected="true"], button, a') ?? el).focus?.(); }
-                      else if (Date.now() - t0 < 2000) requestAnimationFrame(find);
-                    };
-                    requestAnimationFrame(find);
-                  } else navigate(c.evidence.path);
-                }}>Evidence: {c.evidence.label}</a>
-            </li>
-          );
-        })}
-      </ul>
-      {items.length > INSIGHTS_SHOWN && (
-        <button type="button" data-testid="desk-callouts-more" aria-expanded={all} className="wk-link wk-insights-more" onClick={() => setAll((v) => !v)}>
-          {all ? 'Show fewer' : `See all ${items.length}`}
-        </button>
-      )}
-    </>
-  );
-}
 
 /** The Desk's ⋯: standing instructions, Mark me away, Capture notes and the look underneath (New project is the rail's). */
 function DeskMore({ runs, needs }: { runs: SessionView[]; needs: number | null }): React.ReactElement {
@@ -775,21 +560,4 @@ function DeskMore({ runs, needs }: { runs: SessionView[]; needs: number | null }
   );
 }
 
-/** Improve this, grouped: agent findings first (by agent) or workflow findings first (by workflow). */
-function groupTips(items: readonly Callout[], g: GroupBy): Callout[] {
-  const kind = (c: Callout): string => (c.id.startsWith('wf:') ? 'workflow' : c.id === 'failures' ? 'jobs' : 'agent');
-  if (g !== 'agent' && g !== 'workflow') return [...items];
-  return [...items].sort((a, b) => Number(kind(b) === g) - Number(kind(a) === g) || a.id.localeCompare(b.id));
-}
-
-
-function groupWord(g: GroupBy): string { return g; }
-
-function cap(w: string): string { return w.charAt(0).toUpperCase() + w.slice(1); }
-
-function colorFor(g: GroupBy, key: string, i: number): string {
-  if (g === 'outcome') return outcomeColor(key);
-  if (g === 'agent') return key === 'none' ? 'var(--status-done)' : agentColor(key);
-  return catColor(i);
-}
 
