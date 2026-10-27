@@ -158,13 +158,27 @@ export function DecisionDockFrame({ items, children, composer, now = Date.now() 
     });
   }, [items]);
 
-  // `#gate` (a Needs you row, a toast) lands on the dock, once per decision.
+  // `#gate` (a Needs you row, a toast) lands on the dock, once per decision. A docked gate row focuses itself (its
+  // own `#gate` rule); a docked run question gets its answer field focused here, once it has drawn in the slot.
   const landed = useRef<string | null>(null);
   useEffect(() => {
-    if (activeKey === null || window.location.hash !== GATE_HASH || landed.current === activeKey) return;
+    if (activeKey === null || slot === null || window.location.hash !== GATE_HASH || landed.current === activeKey) return;
     landed.current = activeKey;
     setExpanded(true);
-  }, [activeKey]);
+    // No cleanup cancel: `landed` is already set, so a re-run (StrictMode) must not drop the one focus.
+    let frames = 0;
+    const tryFocus = (): void => {
+      const field = slot.querySelector<HTMLElement>('[data-testid="elicitation-prompt"] :is(input, textarea, select, button)');
+      const active = document.activeElement;
+      if (field !== null) {
+        if (!(active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement)) field.focus({ preventScroll: true });
+        return;
+      }
+      if (slot.querySelector('[data-testid="session-gate-row"], [data-testid="session-proposal"]') !== null || ++frames > 20) return;
+      requestAnimationFrame(tryFocus);
+    };
+    requestAnimationFrame(tryFocus);
+  }, [activeKey, slot]);
 
   // The folded sheet's headline is the docked renderer's own (the cause in plain words), read off the slot as it
   // renders; the item's question stands in until it has.
@@ -180,6 +194,14 @@ export function DecisionDockFrame({ items, children, composer, now = Date.now() 
   const value = useMemo<DockCtx>(() => ({ slot, activeKey, focus, setReply }), [slot, activeKey, focus, setReply]);
   const reply = activeKey !== null ? replies[activeKey] ?? null : null;
   const collapsed = phone && !expanded;
+  // A tap in the folded sheet unfolds it (the primary still acts), so what the tap opens is in view. A DOM listener:
+  // the renderer is portalled in, so React's events bubble to its thread-side parent, never to the slot.
+  useEffect(() => {
+    if (slot === null || !collapsed) return;
+    const unfold = (): void => setExpanded(true);
+    slot.addEventListener('click', unfold, true);
+    return () => slot.removeEventListener('click', unfold, true);
+  }, [slot, collapsed]);
 
   return (
     <Ctx.Provider value={value}>
@@ -204,11 +226,15 @@ export function DecisionDockFrame({ items, children, composer, now = Date.now() 
                 </button>
               )}
             </div>
-            {collapsed && (
-              <button type="button" data-testid="decision-dock-peek" onClick={() => setExpanded(true)} className="wk-dock-peek">{drawn ?? active.question}</button>
+            {/* Folded, the renderer's own headline and primary move show (decision-dock.css); the item's question stands
+                in only while the renderer has drawn no headline yet. */}
+            {collapsed && drawn === null && (
+              <button type="button" data-testid="decision-dock-peek" onClick={() => setExpanded(true)} className="wk-dock-peek">{active.question}</button>
             )}
-            {/* The active decision's renderer is portalled in here; hidden (never unmounted) while the sheet is folded. */}
-            <div ref={setSlot} data-testid="decision-dock-slot" className="wk-dock-slot" hidden={collapsed} />
+            {/* The active decision's renderer is portalled in here, never unmounted. Folded (a phone), it shows only the
+                headline and the primary move, so the operator can act without unfolding; any tap in it unfolds the
+                sheet, so what the tap opens (a note, the undo line) is in view. */}
+            <div ref={setSlot} data-testid="decision-dock-slot" data-folded={collapsed ? 'true' : 'false'} className="wk-dock-slot" />
           </div>
         </section>
       )}

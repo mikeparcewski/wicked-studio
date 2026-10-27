@@ -4,7 +4,7 @@
  *  - elevated, with a status rail on its left edge: amber = waiting on you, red = blocking other work;
  *  - eyebrow, the plain question as its headline, one line on what happens next, one primary + "Other options ▾";
  *  - it grows to about 60% of the viewport, then scrolls inside itself;
- *  - on a phone it is a bottom sheet with a grab handle (folded: the eyebrow and the headline).
+ *  - on a phone it is a bottom sheet with a grab handle (folded: the eyebrow, the headline and the primary move).
  * Hover fills are the ink (the calm pattern's rule: rest -> hover dE_OK >= 0.08 whatever the accent). */
 
 .wk-dock {
@@ -129,7 +129,7 @@
 .wk-gate2-foot .wk-assurance { margin: 0; font-size: 13px; }
 .wk-gate2-foot .wk-session-gate-prompt-summary { font-size: 13px; color: var(--dock-link, var(--ink-muted)); }
 
-/* ── Phone: a bottom sheet with a grab handle. Folded, the eyebrow and the headline. ── */
+/* ── Phone: a bottom sheet with a grab handle. Folded, the eyebrow, the headline and the primary move. ── */
 .wk-dock-handle { display: none; }
 .wk-dock-peek { display: none; }
 @media (max-width: 640px) {
@@ -148,6 +148,15 @@
     font-weight: 600; line-height: 1.35; text-align: left; cursor: pointer;
   }
   .wk-gate2-q { font-size: 19px; }
+  /* Folded: the eyebrow, the headline and the primary move, so the operator can act without unfolding the sheet. */
+  .wk-dock-slot[data-folded="true"] .wk-gate2 > :not(.wk-gate2-q):not(.wk-gate2-decide),
+  .wk-dock-slot[data-folded="true"] .wk-gate2-next,
+  .wk-dock-slot[data-folded="true"] .wk-gate2-more,
+  .wk-dock-slot[data-folded="true"] .wk-prop > :not(.wk-gate2-q):not(.wk-prop-btns),
+  .wk-dock-slot[data-folded="true"] .wk-prop-btns > :not(.wk-gate2-btn--primary),
+  .wk-dock-slot[data-folded="true"] .wk-who { display: none; }
+  .wk-dock-slot[data-folded="true"] .wk-gate2-q { cursor: pointer; }
+  .wk-dock-slot[data-folded="true"] .wk-gate2-decide { padding-top: 4px; }
   .wk-gate2-choices { flex-direction: column; align-items: stretch; }
   .wk-gate2-choices .wk-gate2-btn { width: 100%; }
   .wk-gate2-menu { max-width: none; }

@@ -39,7 +39,9 @@ function useFocusQuestionOnGateHash(questionId: string | null, gateOpen: boolean
     focusedFor.current = questionId;
     const active = document.activeElement;
     if (active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement) return;
-    ref.current?.querySelector<HTMLElement>('input, textarea, select, button')?.focus();
+    // In place, the question's own first control. While the question sits in the decision dock the thread holds only
+    // its marker: the dock focuses the docked question's field on `#gate` (DecisionDockFrame), never the marker.
+    ref.current?.querySelector<HTMLElement>('[data-testid="elicitation-prompt"] :is(input, textarea, select, button)')?.focus();
   }, [questionId, gateOpen]);
   return ref;
 }

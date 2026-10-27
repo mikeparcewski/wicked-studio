@@ -893,10 +893,17 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
   const primaryIndex = model.recommended ?? (promotedIndex >= 0 ? promotedIndex : lead !== null ? null : model.choices.length > 0 ? 0 : null);
   const primary = lead?.choice !== undefined ? lead.choice : primaryIndex === null ? null : model.choices[primaryIndex] ?? null;
   const suggested = (model.recommended !== null || lead !== null) && (primary !== null || lead?.act !== undefined);
-  const others = [...model.choices.filter((c, i) => i !== primaryIndex && c.key !== primary?.key), ...model.overflow.filter((c) => c.key !== primary?.key)];
+  // Stop is the menu's last way on (mockup ui-v2-gate: "… · Stop the job"), after the overflow choices (a rerun) and
+  // the extra items; only the helpers that are not available right now come after it, under their own rule.
+  const othersAll = [...model.choices.filter((c, i) => i !== primaryIndex && c.key !== primary?.key), ...model.overflow.filter((c) => c.key !== primary?.key)];
+  const others = othersAll.filter((c) => c.key !== 'stop');
+  const stopItem = othersAll.find((c) => c.key === 'stop') ?? null;
   const split = model.failingTests?.split;
-  // What happens next: the suggested move's consequence (crew's), else its own words.
-  const leadTitle = lead?.act?.title ?? (suggested && primary !== null && primary.title !== '' ? primary.title : null);
+  // What happens next: the suggested move's consequence (crew's), else its own words. With no suggestion the face's
+  // one button still says what it does here, ABOVE the buttons (no "Recommended:"): in the dock, which is anchored to
+  // the composer, a line that appeared under the buttons on hover grew the dock upward and moved the very button under
+  // the pointer, so a click's mouseup landed off it and the choice never ran (desk_gate_kinds, r-seat's primary).
+  const leadTitle = lead?.act?.title ?? (primary !== null && primary.title !== '' ? primary.title : null);
   const next = model.consequence ?? leadTitle;
   // One sentence under the headline: the failures in a line, a refused hand-over's reason, a QE review's why.
   const sentence = split !== undefined && split.onBase.length > 0 ? null : refusalLines?.lead ?? model.qe?.why ?? null;
@@ -1005,7 +1012,7 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
           {lead?.act !== undefined
             ? <button type="button" data-testid="session-gate-lead-act" data-act={lead.act.key} title={lead.act.title} onClick={lead.act.onClick} className="wk-gate2-btn wk-gate2-btn--primary">{lead.act.label}</button>
             : primary !== null && choiceButton(primary, primaryIndex ?? -1, true)}
-          {(others.length > 0 || unavailable !== null || extraItems !== null) && (
+          {(othersAll.length > 0 || unavailable !== null || extraItems !== null) && (
             <div className="wk-gate2-more" ref={menuWrapRef}>
               <button ref={menuBtnRef} type="button" data-testid="session-gate-more" aria-haspopup="menu" aria-expanded={menuOpen} aria-controls={`${runId}-gate-menu`}
                 onClick={() => setMenuOpen((v) => !v)} className="wk-gate2-btn wk-gate2-btn--secondary">
@@ -1015,6 +1022,7 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
               <div id={`${runId}-gate-menu`} role="menu" aria-label="Other options" data-testid="session-gate-menu" hidden={!menuOpen} className="wk-gate2-menu">
                 {others.map((c) => choiceButton(c, model.choices.indexOf(c), false))}
                 {extraItems}
+                {stopItem !== null && choiceButton(stopItem, model.choices.indexOf(stopItem), false)}
                 {unavailable !== null && (
                   <>
                     <div aria-hidden className="wk-gate2-menu-rule" />

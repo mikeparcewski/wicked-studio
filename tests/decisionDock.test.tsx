@@ -276,6 +276,21 @@ describe('the gate card, compact (review of the dock)', () => {
     const keys = [...menu.querySelectorAll('[data-testid="session-gate-choice"]')].map((b) => (b as HTMLElement).dataset['choiceKey']);
     expect(keys).toContain('stop');
     expect(keys.length).toBeGreaterThan(1);
+    // Stop is the menu's last way on (mockup ui-v2-gate), after a rerun from the overflow (gate_move journey).
+    expect(keys[keys.length - 1]).toBe('stop');
+  });
+
+  it('the face\'s one button says what it does ABOVE the buttons, so hovering it never grows the dock under the pointer', async () => {
+    render(<GateRow view={live()} gate={GATE} navigate={vi.fn()} />);
+    const choices = await screen.findByTestId('session-gate-choices');
+    const primary = choices.querySelector<HTMLElement>(':scope > [data-testid="session-gate-choice"]');
+    expect(primary).not.toBeNull();
+    const line = screen.getByTestId('session-gate-consequence');
+    expect(line.textContent).not.toBe('');
+    // The line is before the buttons in the row's order.
+    expect(line.compareDocumentPosition(choices) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    fireEvent.mouseEnter(primary!);
+    expect(screen.getByTestId('session-gate-choice-consequence').textContent).toBe('');
   });
 
   it('the new failure is highlighted; the ones failing on the base too are counted and folded', () => {
@@ -289,5 +304,66 @@ describe('the gate card, compact (review of the dock)', () => {
     expect(testWords('b::test_walkthrough_runs_in_a_jail')).toBe('Walkthrough runs in a jail');
     expect(testWords('src/a.test.ts > GateRow > names tests')).toBe('names tests');
     expect(testWords('the test check')).toBe('the test check');
+  });
+});
+
+describe('the phone sheet, folded (live nit 2026-10-27: act without expanding the sheet)', () => {
+  // jsdom has no matchMedia: stub it for the dock's phone query.
+  const phone = (matches: boolean): void => {
+    vi.stubGlobal('matchMedia', (q: string) => ({
+      matches, media: q, onchange: null, addEventListener: () => {}, removeEventListener: () => {},
+      addListener: () => {}, removeListener: () => {}, dispatchEvent: () => false,
+    }) as unknown as MediaQueryList);
+  };
+  afterEach(() => { vi.unstubAllGlobals(); });
+
+  it('folded: the eyebrow, the renderer\'s own headline and its primary move are in the sheet; no stand-in peek', async () => {
+    phone(true);
+    page();
+    const dock = await screen.findByTestId('decision-dock');
+    expect(dock.dataset.collapsed).toBe('true');
+    const slot = within(dock).getByTestId('decision-dock-slot');
+    // The slot is drawn (folded by CSS to the headline + primary), never hidden.
+    expect(slot.hidden).toBe(false);
+    expect(slot.dataset.folded).toBe('true');
+    expect(within(dock).getByTestId('decision-dock-eyebrow').textContent).toMatch(/^Your decision/);
+    expect(within(slot).getByTestId('session-gate-question').textContent).not.toBe('');
+    const primary = slot.querySelector('.wk-gate2-choices > .wk-gate2-btn, [data-testid="session-gate-lead-act"]');
+    expect(primary).not.toBeNull();
+    await waitFor(() => expect(within(dock).queryByTestId('decision-dock-peek')).toBeNull());
+  });
+
+  it('a tap in the folded sheet unfolds it (what the tap opens is in view)', async () => {
+    phone(true);
+    page();
+    const dock = await screen.findByTestId('decision-dock');
+    fireEvent.click(within(dock).getByTestId('session-gate-question'));
+    expect(dock.dataset.collapsed).toBe('false');
+    expect(within(dock).getByTestId('decision-dock-slot').dataset.folded).toBe('false');
+  });
+
+  it('a desk never folds', async () => {
+    phone(false);
+    page();
+    const dock = await screen.findByTestId('decision-dock');
+    expect(dock.dataset.collapsed).toBe('false');
+    expect(within(dock).queryByTestId('decision-dock-handle')).toBeNull();
+  });
+});
+
+describe('#gate on a run question lands its answer field in the dock (never the thread marker)', () => {
+  it('the docked question\'s field takes the focus; the marker stays in the thread', async () => {
+    useGateStore.setState({ gates: {} });
+    useElicitationStore.setState({ elicitations: { r1: { runId: 'r1', elicitationId: 'el-1', message: 'Which region?', options: null, receivedAt: new Date().toISOString() } } });
+    window.history.replaceState(null, '', '/s/run%3Ar1#gate');
+    try {
+      page();
+      const dock = await screen.findByTestId('decision-dock');
+      const prompt = await within(dock).findByTestId('elicitation-prompt');
+      await waitFor(() => expect(prompt.contains(document.activeElement)).toBe(true));
+      expect(document.activeElement?.getAttribute('data-testid')).not.toBe('decision-marker');
+    } finally {
+      window.history.replaceState(null, '', '/');
+    }
   });
 });
