@@ -3427,9 +3427,25 @@ def run_scenarios(rig: Rig, page) -> None:
     suite.run("XPS-2", "Steering is global — grid ids == store ids from another project's context", xps2, requires=("STR-1B", "PRJ-2"))
 
     # ── Evals (deterministic engine replay — no model call) ───────────────────
+    # The calm Evaluate page (2026-10-26) leads with one row per steering type: the run's behaviours are
+    # behind "See every behaviour", and what to run, the import and past runs are folded away.
+    def open_fold(name: str) -> None:
+        fold = tid(page, name)
+        fold.wait_for(timeout=20_000)
+        if fold.get_attribute("open") is None:
+            tid(page, f"{name}-toggle").click()
+
+    def every_behaviour() -> None:
+        tid(page, "evaluate-all-behaviours").click()
+        tid(page, "testing-evals").wait_for(timeout=15_000)
+
+    def back_to_results() -> None:
+        tid(page, "evaluate-back").click()
+        tid(page, "evaluate-results").wait_for(timeout=15_000)
+
     def evl1() -> str:
         goto(page, "/testing/evals")
-        tid(page, "testing-evals").wait_for(timeout=20_000)
+        tid(page, "evaluate-surface").wait_for(timeout=20_000)
         tid(page, "testing-evals-run").click()
         seen = wait_any(page, ["testing-evals-summary", "testing-evals-error", "testing-evals-unsupported"], EVALS_TIMEOUT_MS)
         if seen == "testing-evals-unsupported":
@@ -3446,10 +3462,14 @@ def run_scenarios(rig: Rig, page) -> None:
         gaps = int(re.search(r"(\d+) uncovered", summary).group(1))
         fps = int(re.search(r"(\d+) false positives", summary).group(1))
         assert total > 0, f"the built-in corpus served no samples: {summary!r}"
+        assert tid(page, "evaluate-type-row").count() > 0, "no per-type result rows after the run"
+        every_behaviour()
         rows = tid(page, "testing-evals-row").count()
         assert rows == total, f"{rows} result rows ≠ {total} samples"
         caught = (blocked or 0) + (passed or 0)
         assert caught + gaps + fps == total, f"{caught}+{gaps}+{fps} ≠ {total}"
+        back_to_results()
+        open_fold("evaluate-history")
         history = tid(page, "eval-history-row")
         history.first.wait_for(timeout=15_000)
         assert history.count() == 1, f"{history.count()} history rows after the first run"
@@ -3473,6 +3493,7 @@ def run_scenarios(rig: Rig, page) -> None:
     def evl2() -> str:
         run_id = ctx["eval_run"]
         goto(page, "/testing/evals")
+        open_fold("evaluate-history")
         row = tid(page, "eval-history-row", run_id=run_id)
         row.wait_for(timeout=20_000)
         assert tid(page, "eval-history-row").count() == 1
@@ -3490,7 +3511,8 @@ def run_scenarios(rig: Rig, page) -> None:
         `testing-evals-corpus` field, and prove the selection is reflected (provenance line, history
         row, API) and persists (the recorded run still names the corpus after a full reload)."""
         goto(page, "/testing/evals")
-        tid(page, "testing-evals").wait_for(timeout=20_000)
+        tid(page, "evaluate-surface").wait_for(timeout=20_000)
+        open_fold("evaluate-import")
         samples = [
             {"id": f"seed-{STAMP}-bad", "description": f"seed-surfaces {STAMP}: a wire body that never names its project",
              "kind": "bad", "steering_type": "architecture",
@@ -3519,9 +3541,12 @@ def run_scenarios(rig: Rig, page) -> None:
         tid(page, "testing-evals-run").click()
         seen = wait_any(page, ["testing-evals-summary", "testing-evals-error", "testing-evals-unsupported"], EVALS_TIMEOUT_MS)
         assert seen == "testing-evals-summary", f"evals against {CORPUS_SCOPE} failed: {text_of(tid(page, 'testing-evals-error'))}"
+        every_behaviour()
         provenance = text_of(tid(page, "testing-evals-provenance"))
         assert f"corpus: {CORPUS_SCOPE}" in provenance, f"provenance line {provenance!r} does not name the selected corpus"
         assert f"{len(samples)} samples" in provenance, provenance
+        back_to_results()
+        open_fold("evaluate-history")
         history = tid(page, "eval-history-row")
         page.wait_for_function("n => document.querySelectorAll('[data-testid=\"eval-history-row\"]').length === n", arg=2, timeout=15_000)
         newest = history.first
@@ -3541,6 +3566,7 @@ def run_scenarios(rig: Rig, page) -> None:
         before = text_of(detail_el)
         # Persistence: a FULL reload — the recorded run still names the corpus; its drilldown is byte-identical.
         goto(page, "/testing/evals")
+        open_fold("evaluate-history")
         row = tid(page, "eval-history-row", run_id=run_id)
         row.wait_for(timeout=20_000)
         assert CORPUS_SCOPE in text_of(row), f"after reload the history row no longer names the corpus: {text_of(row)!r}"

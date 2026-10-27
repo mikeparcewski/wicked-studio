@@ -963,6 +963,11 @@
     "steer-stat-rules": "steer-sentence",
     "steer-tiles": "steer-sentence",
     "steer-type": "steer-type-pick",
-    "steer-types": "steer-type-pick"
+    "steer-types": "steer-type-pick",
+    "evaluate-all-gaps": "evaluate-all-behaviours",
+    "evaluate-coverage": "evaluate-results",
+    "evaluate-coverage-chart": "evaluate-type-row",
+    "evaluate-run": "testing-evals-run",
+    "evaluate-options-toggle": "evaluate-options"
   }
 }

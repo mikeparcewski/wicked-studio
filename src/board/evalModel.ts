@@ -174,3 +174,72 @@ export function evalCaveats(input: {
   }
   return out;
 }
+
+// ── The calm Evaluate page: last results per steering type (desk-pages-redesign, 2026-10-26) ──────
+
+/** One eval run as the page reads it: the latest, or the newest all-types run behind a filtered one. */
+export interface EvalSource {
+  /** Unix ms. */
+  at: number;
+  corpus: string | null;
+  /** The steering type the run was limited to; null = all types. */
+  typeFilter: string | null;
+  degraded: 'facet-only' | null;
+  results: readonly EvalResult[];
+  id: string | null;
+  ruleStore: string | null;
+}
+
+export type TypeTone = 'fail' | 'warn' | 'ok' | 'quiet';
+
+/** A steering type's last result: its numbers, from the newest run that judged it. */
+export interface TypeRow {
+  type: SteeringType;
+  cov: TypeCoverage;
+  source: EvalSource;
+  tone: TypeTone;
+  /** The numbers in plain words. */
+  words: string;
+}
+
+const plural = (n: number, one: string, many: string): string => `${n} ${n === 1 ? one : many}`;
+
+/** A type's numbers in plain words: what was blocked, what slipped through, what was blocked by mistake. */
+export function typeWords(c: TypeCoverage): string {
+  const parts: string[] = [];
+  if (c.bad === 0) parts.push('No bad behaviours in this set, so nothing could be blocked');
+  else if (c.blocked === c.bad) parts.push(c.bad === 1 ? 'Blocked the 1 bad behaviour' : `Blocked all ${c.bad} bad behaviours`);
+  else parts.push(`Blocked ${c.blocked} of ${c.bad} bad behaviours`);
+  if (c.gaps > 0) parts.push(`${plural(c.gaps, 'gap', 'gaps')}: not covered by any rule`);
+  if (c.falsePositives > 0) parts.push(`${plural(c.falsePositives, 'false alarm', 'false alarms')} on good work`);
+  return parts.join(' · ');
+}
+
+/** A false alarm (good work blocked) is red; a gap is amber; every bad one blocked is green. */
+export function typeTone(c: TypeCoverage): TypeTone {
+  if (c.falsePositives > 0) return 'fail';
+  if (c.gaps > 0) return 'warn';
+  if (c.bad > 0 && c.blocked === c.bad) return 'ok';
+  return 'quiet';
+}
+
+const TONE_RANK: Record<TypeTone, number> = { fail: 0, warn: 1, ok: 2, quiet: 3 };
+
+/**
+ * The last result per steering type. A type the latest run judged reads from it; when the latest run
+ * was limited to one type, every other type reads from `older` (the newest all-types run before it),
+ * with that run's own time. What needs a look comes first (false alarms, then gaps), then the
+ * canonical type order.
+ */
+export function typeRows(latest: EvalSource, older: EvalSource | null): TypeRow[] {
+  const rows = new Map<SteeringType, TypeRow>();
+  const add = (src: EvalSource, only: (t: SteeringType) => boolean): void => {
+    for (const cov of coverageByType(src.results)) {
+      if (!only(cov.type) || rows.has(cov.type)) continue;
+      rows.set(cov.type, { type: cov.type, cov, source: src, tone: typeTone(cov), words: typeWords(cov) });
+    }
+  };
+  add(latest, () => true);
+  if (older !== null && latest.typeFilter !== null) add(older, (t) => t !== latest.typeFilter);
+  return [...rows.values()].sort((a, b) => TONE_RANK[a.tone] - TONE_RANK[b.tone] || STEERING_TYPES.indexOf(a.type) - STEERING_TYPES.indexOf(b.type));
+}
