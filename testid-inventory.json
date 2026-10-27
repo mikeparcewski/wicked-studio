@@ -12,10 +12,10 @@
   "studioVersion": "0.12.3",
   "counts": {
     "files": 244,
-    "occurrences": 3254,
+    "occurrences": 3253,
     "static": 2772,
     "dynamic": 74,
-    "computed": 34
+    "computed": 33
   },
   "static": [
     {
@@ -17208,12 +17208,6 @@
       "expression": "item.testId",
       "files": [
         "src/components/desk/SessionRail.tsx"
-      ]
-    },
-    {
-      "expression": "l.testId",
-      "files": [
-        "src/components/BuildPage.tsx"
       ]
     },
     {

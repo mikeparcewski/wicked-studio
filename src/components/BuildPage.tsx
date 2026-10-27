@@ -2,7 +2,7 @@ import { ChevronRight } from 'lucide-react';
 import { BUILD_LINKS } from '../board/navModel.js';
 import { PAGE_NAMES } from '../board/pageNames.js';
 import type { Navigate } from '../hooks/useRoute.js';
-import { PageFrame } from './ui/PageFrame.js';
+import { CalmHead, CalmPage, CalmRow, CalmRows } from './calm/Calm.js';
 
 /**
  * BUILD & SETTINGS (`/build`, the ui-v2 nav regroup): the rail's one foot entry opens this list of the
@@ -11,24 +11,16 @@ import { PageFrame } from './ui/PageFrame.js';
  * page, with one line on what is there.
  */
 export function BuildPage({ navigate }: { navigate: Navigate }): React.ReactElement {
+  // The calm page pattern (Steering, Memory, Agents): a title and one sentence, then roomy rows.
   return (
-    <div className="flex-1 overflow-y-auto">
-      <PageFrame width="narrow" title={PAGE_NAMES.build} intro="What your agents can use, and how studio runs on this computer." data-testid="build-page">
-        <ul className="wk-build-list" aria-label={PAGE_NAMES.build}>
-          {BUILD_LINKS.map((l) => (
-            <li key={l.id}>
-              <a href={l.path} data-testid={l.testId} className="wk-build-link"
-                onClick={(e) => { e.preventDefault(); navigate(l.path); }}>
-                <span className="wk-build-text">
-                  <span className="wk-build-name">{l.label}</span>
-                  <span className="wk-build-hint">{l.hint}</span>
-                </span>
-                <ChevronRight size={16} aria-hidden className="wk-build-chev" />
-              </a>
-            </li>
-          ))}
-        </ul>
-      </PageFrame>
-    </div>
+    <CalmPage data-testid="build-page">
+      <CalmHead title={PAGE_NAMES.build} sentence="What your agents can use, and how studio runs on this computer." />
+      <CalmRows label={PAGE_NAMES.build}>
+        {BUILD_LINKS.map((l) => (
+          <CalmRow key={l.id} tone="quiet" title={l.label} sub={l.hint} href={l.path} openTestId={l.testId} onOpen={() => navigate(l.path)}
+            meta={<ChevronRight size={18} aria-hidden className="wk-build-chev" />} />
+        ))}
+      </CalmRows>
+    </CalmPage>
   );
 }

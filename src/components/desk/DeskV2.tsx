@@ -355,7 +355,7 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
   const inboxView = (
     <div data-testid="desk-inbox-view" className="wk-inbox-view">
       <DeskInbox rows={needRows} runs={runs} navigate={navigate} now={now} settled={readState === 'known' ? settled.phase : 'loading'} agentName={agentName} extra={choresBlock} setupCount={setup.length}
-        missing={settled.missing} onRetry={rereadSources} retrying={rereading} />
+        missing={settled.missing} onRetry={rereadSources} retrying={rereading} asPage />
     </div>
   );
   // The standing states that change what studio does (deliveries frozen, you marked away) and the
@@ -455,9 +455,9 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
           <StateBanner data-testid="desk-runs-failed" kind={readState === 'stale' ? 'stale' : readErrorKind(runsError)} what="your work" error={displayText(runsError)} {...(onRetryRuns !== undefined ? { onRetry: onRetryRuns } : {})} />
         )}
         {/* The landing (`/`, Home) carries its own greeting, and the calm Jobs, Report and Understand pages
-            their own title and sentence, so the Desk draws no second title over them. Needs you in full and
-            a project's page keep the header. */}
-        {!(home && (tab === 'work' || tab === 'runs' || tab === 'report' || tab === 'understand')) && header}
+            their own title and sentence, and Needs you in full its inbox's name and count, so the Desk draws no
+            second title over them. A project's page keeps the header. */}
+        {!(home && (tab === 'work' || tab === 'inbox' || tab === 'runs' || tab === 'report' || tab === 'understand')) && header}
         {tabs}
         {tab === 'work' ? (home ? homeView : work) : tab === 'inbox' ? inboxView : tab === 'runs' ? runsTab : tab === 'report' ? report : understand}
       </div>

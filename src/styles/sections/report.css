@@ -168,3 +168,16 @@
   .wk-rep-row { margin: 0 -12px; padding: 14px 12px; gap: 14px; }
   .wk-rep-table { font-size: 14px; }
 }
+
+/* The period control reads as the calm pages' segment (Jobs' Active/Finished, Steering's filter): a quiet
+   track, the chosen period a neutral lift, hover an ink-led tint a person can see (dE_OK >= 0.08 in all four
+   themes, also on a dark learned accent). The keyboard behaviour stays Segmented's. */
+.wk-rep .wk-segmented { gap: 2px; padding: 3px; border-radius: 11px; background: color-mix(in oklab, var(--ink-high) 5%, transparent); box-shadow: none; }
+.wk-rep .wk-segmented-option {
+  min-height: 34px; padding: 0 16px; border-radius: 9px; font-size: 14px; font-weight: 500; color: var(--ink-muted);
+  transition: background-color 0.14s, color 0.14s;
+}
+.wk-rep .wk-segmented-option:hover:not([aria-checked="true"]) { background: color-mix(in oklab, var(--ink-high) 16%, transparent); color: var(--ink-high); }
+.wk-rep .wk-segmented-option[aria-checked="true"] { background: color-mix(in oklab, var(--ink-high) 12%, transparent); color: var(--ink-high); box-shadow: none; }
+.wk-rep .wk-segmented-option[aria-checked="true"]:hover { background: color-mix(in oklab, var(--ink-high) 22%, transparent); }
+@media (prefers-reduced-motion: reduce) { .wk-rep .wk-segmented-option { transition: none; } }

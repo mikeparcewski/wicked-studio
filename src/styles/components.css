@@ -108,7 +108,8 @@
   background: transparent;
   color: var(--ink-muted);
 }
-.wk-btn--quiet:hover:not(:disabled) { background: var(--surface-raised); color: var(--ink-high); }
+/* Hover leans on the ink, not one surface step (which on wicked-light's page is dE 0.01, invisible): ui-v2. */
+.wk-btn--quiet:hover:not(:disabled) { background: color-mix(in oklab, var(--ink-high) 12%, transparent); color: var(--ink-high); }
 
 /* An accent-text ghost: a door, not a commitment (Ask, "Open gate ›"). */
 .wk-btn--link {

@@ -82,7 +82,7 @@ const DESTINATIONS: ReadonlyArray<{ shape: string; label: string; href: string }
   { shape: 'needs', label: `${PAGE_NAMES.needs} — what you need to decide`, href: '/needs' },
   { shape: 'jobs', label: `${PAGE_NAMES.jobs} — every job, running and finished`, href: '/jobs' },
   { shape: 'report', label: `${PAGE_NAMES.report} — charts, spend and outcomes`, href: '/report' },
-  { shape: 'understand', label: `${PAGE_NAMES.understand} — compare agents, workflows and jobs`, href: '/understand' },
+  { shape: 'understand', label: `${PAGE_NAMES.understand} — ask how your code fits together`, href: '/understand' },
   { shape: 'build', label: `${PAGE_NAMES.build} — skills, MCP, plugins, workflows and settings`, href: '/build' },
   { shape: 'watch', label: `${PAGE_NAMES.watch} — health of CLIs, runs, infra and governance, and the Watchtower feed`, href: '/watch' },
   { shape: 'agents', label: `${PAGE_NAMES.agents} — sign-in, safety checks and fixes`, href: '/agents' },

@@ -171,6 +171,9 @@
   .wk-ue-row:hover .wk-ue-row-go { transform: none; }
 }
 
+/* A hosted page (Evaluate) starts where Steering, Memory and Agents start (their calm 56 px), not 24 px higher. */
+@media (min-width: 768px) { .wk-desk2-hosted .wk-ue { padding-top: 56px; } }
+
 /* A phone: the same column, stacked; the action under the sentence, the box full width. */
 @media (max-width: 767px) {
   .wk-ue { padding: var(--space-4, 16px) 0 var(--space-10, 40px); }
