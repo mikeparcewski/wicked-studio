@@ -1,0 +1,53 @@
+{
+  "spec": 2,
+  "name": "mpx-changelog-entry",
+  "vendor": "mpx",
+  "version": "0.1.0",
+  "description": "Changelog entry: an artifact editor plugin for wicked-studio.",
+  "editors": [
+    {
+      "id": "mpx-changelog-entry",
+      "title": "Changelog entry",
+      "version": "0.1.0",
+      "protocol": [
+        1,
+        2
+      ],
+      "kinds": [
+        "page"
+      ],
+      "entry": "editors/mpx-changelog-entry/index.html",
+      "sha256": "9bb3121a91e45f4bcef2f5bcb53b39fe5ca58ea918e1f76ca8bfced99878e339",
+      "sizes": [
+        "inline",
+        "pane",
+        "full"
+      ],
+      "surfaces": {
+        "card": {
+          "interactive": true,
+          "aspect": "auto",
+          "actions": [
+            {
+              "id": "clear",
+              "label": "Clear form",
+              "verb": "plugin"
+            },
+            {
+              "id": "ask",
+              "label": "Ask about it",
+              "verb": "host:ask"
+            }
+          ]
+        },
+        "full": {}
+      },
+      "permissions": [
+        {
+          "id": "ui.fullscreen",
+          "why": "to go full screen"
+        }
+      ]
+    }
+  ]
+}

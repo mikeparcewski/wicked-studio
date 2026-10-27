@@ -1,0 +1,218 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: MIT -->
+<!--
+  Changelog entry (mpx-changelog-entry 0.1.0): an artifact editor plugin speaking wicked.editor/2, and
+  /1 to an older host (DES-EDITOR-PLUGIN-CONTRACT-001; DES-EDITOR-PLUGINS-001 §5). ONE self-contained file:
+  every script and style is inline, nothing is loaded from outside it (the bundle's policy has connect-src
+  'none' and the pack check refuses outside references). It talks only to the host, over the MessagePort the
+  host transfers with host.hello.
+
+  Protocol 2: the host draws this editor in up to three places from the SURFACES declaration below, which is
+  the same JSON as `surfaces` in wicked-pack.json (the host and the conformance run compare the two):
+    card     a live frame in the thread; the host draws the action buttons, Options and Full screen around it
+    options  a frame in the host panel showing one of the plugin tabs (host.tab); controls tabs are drawn by
+             the host, and this editor owns their values (options.values / options.changed)
+    full     the full-screen body; the host draws the header, Simple/Advanced (host.mode) and the chat drawer
+  The card and full screen are ONE instance that morphs (host.surface): never reload on a morph.
+
+  The protocol plumbing below is what the conformance run checks; keep it. Put your editor in render(),
+  in the YOUR EDITOR handlers, and in SURFACES (then copy SURFACES into wicked-pack.json, or re-scaffold).
+  After every change to this file, re-pin its hash: wicked-garden run scripts/editor/pin.py <pack dir>
+-->
+<html lang="en"><head><meta charset="utf-8"><title>Changelog entry</title>
+<style>
+  :root { --accent: #224a5e; --ink: #0d1117; --ink-muted: #44515d; --surface: #ffffff; color-scheme: light dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.45 system-ui, sans-serif; color: var(--ink); background: var(--surface); }
+  main { padding: 10px 14px; }
+  .note { color: var(--ink-muted); font-size: 12px; margin: 0 0 8px; }
+  .field { display: block; margin: 0 0 8px; }
+  .field > label { display: block; font-weight: 600; margin: 0 0 2px; }
+  select, input { width: 100%; font: inherit; color: var(--ink); background: var(--surface); border: 1px solid var(--ink-muted); border-radius: 4px; padding: 4px 6px; }
+  select:focus-visible, input:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  button { font: inherit; color: var(--ink); background: transparent; border: 1px solid var(--ink-muted); border-radius: 4px; padding: 2px 8px; }
+  .hint { color: var(--ink-muted); font-size: 12px; min-height: 1.4em; margin: 2px 0 0; }
+  h2 { font-size: 13px; margin: 10px 0 4px; }
+  pre { margin: 0; padding: 6px 8px; border: 1px solid var(--ink-muted); border-radius: 4px; white-space: pre-wrap; word-break: break-word; font: 12px/1.4 ui-monospace, monospace; }
+  body[data-protocol="1"][data-size="inline"] main { pointer-events: none; }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style></head>
+<body data-size="pane" data-protocol="1">
+<main>
+  <p class="note" id="status">Fill in the form to build an entry.</p>
+  <div class="field"><label for="type">Type</label>
+    <select id="type"><option>Added</option><option>Changed</option><option>Deprecated</option><option>Removed</option><option>Fixed</option><option>Security</option></select></div>
+  <div class="field"><label for="summary">Summary</label>
+    <input type="text" id="summary" maxlength="200" autocomplete="off"></div>
+  <div class="field"><label for="pr">PR number</label>
+    <input type="text" id="pr" inputmode="numeric" maxlength="10" autocomplete="off" aria-describedby="prnote">
+    <p class="hint" id="prnote"></p></div>
+  <h2 id="outh">Entry</h2>
+  <pre id="out" aria-labelledby="outh" aria-live="polite"></pre>
+  <p><button type="button" id="clear">Clear form</button> <button type="button" id="full">Full screen</button></p>
+</main>
+<script>
+(() => {
+  'use strict';
+  const EDITOR = 'mpx-changelog-entry', VERSION = '0.1.0';
+  // The protocol-2 declaration: byte-for-byte the manifest's `surfaces` (the scaffold writes both).
+  const SURFACES = {
+  "card": {
+    "interactive": true,
+    "aspect": "auto",
+    "actions": [
+      {
+        "id": "clear",
+        "label": "Clear form",
+        "verb": "plugin"
+      },
+      {
+        "id": "ask",
+        "label": "Ask about it",
+        "verb": "host:ask"
+      }
+    ]
+  },
+  "full": {}
+};
+  let port = null, grants = [], seq = 0, protocol = 1;
+  let surface = 'card', mode = 'simple';
+  const pending = new Map();
+  const $ = (id) => document.getElementById(id);
+  const env = (type, payload) => ({ p: 'wicked.editor', v: 1, type, payload });
+  // A request expects one reply on the port (the host answers every request within 10 s).
+  const req = (type, payload) => new Promise((resolve) => {
+    if (!port) { resolve({ ok: false, error: { code: 'unavailable', message: 'no port' } }); return; }
+    const id = 'r' + (++seq);
+    pending.set(id, resolve);
+    port.postMessage({ p: 'wicked.editor', v: 1, type, id, payload });
+  });
+  const send = (type, payload) => { if (port) port.postMessage(env(type, payload)); };
+  const answer = (id, payload) => { if (port) port.postMessage({ p: 'wicked.editor', v: 1, re: id, ok: true, payload }); };
+  const status = (line) => {
+    $('status').textContent = line;
+    send('ui.status', { line: String(line).slice(0, 120) });
+  };
+  const granted = (p) => grants.includes(p);
+
+  // The card's height, when it declares aspect "auto" (the host clamps it to 120-560 px).
+  function reportHeight() {
+    if (protocol >= 2 && surface === 'card' && SURFACES.card.aspect === 'auto') send('ui.height', { px: Math.ceil(document.body.scrollHeight) });
+  }
+
+  // The entry as plain text. PR: optional leading '#', then digits only; anything else is no PR.
+  function render() {
+    const summary = $('summary').value.trim().replace(/\s+/g, ' ');
+    const prRaw = $('pr').value.trim();
+    const m = /^#?(\d+)$/.exec(prRaw);
+    $('prnote').textContent = prRaw && !m ? 'PR number must be digits' : '';
+    const line = summary
+      ? '- ' + summary + (m ? ' (#' + m[1] + ')' : '')
+      : 'Add a summary to see the entry line.';
+    $('out').textContent = '### ' + $('type').value + '\n' + line;
+    reportHeight();
+  }
+
+  // A host-drawn card action with verb "plugin": no user activation, no request.
+  function onAction(id) {
+    if (id === 'clear') {
+      $('summary').value = ''; $('pr').value = ''; $('type').selectedIndex = 0;
+      render();
+      return { handled: true, status: 'Form cleared' };
+    }
+    return { handled: false };
+  }
+
+  function setSurface(s, m) {
+    surface = s;
+    document.body.dataset.surface = s;
+    if (typeof m === 'string') setMode(m);
+    if (s === 'card' && document.activeElement && document.activeElement !== document.body) document.activeElement.blur();
+    reportHeight();
+  }
+  function setMode(m) { mode = m === 'advanced' ? 'advanced' : 'simple'; document.body.dataset.mode = mode; }
+
+  for (const id of ['type', 'summary', 'pr']) { $(id).addEventListener('input', render); $(id).addEventListener('change', render); }
+  $('clear').addEventListener('click', () => { onAction('clear'); });
+  $('full').addEventListener('click', () => {
+    if (protocol >= 2) { if (SURFACES.full) send('ui.morph', { to: surface === 'full' ? 'card' : 'full' }); return; }
+    if (granted('ui.fullscreen')) req('ui.fullscreen', {}); // protocol 1: the host's container
+  });
+
+  // Keys (DES §5.10): forward only Escape, Mod+K, Alt+<letter> and Tab at the edges; the FIRST printable
+  // key goes to the composer as ONE grapheme (rule 2). A key never approves, deletes or sends anything.
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') { send('ui.key', { key: 'Escape' }); return; }
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); send('ui.key', { key: 'Mod+K' }); return; }
+    // Only the host's navigation chords; Alt+A (approve), Alt+R / Alt+X (decide), Alt+N (compose) are never sent.
+    if (e.altKey && e.code && /^Key[JKPGBTU]$/.test(e.code)) { e.preventDefault(); send('ui.key', { key: 'Alt+' + e.code.slice(3) }); return; }
+    if (e.altKey && e.code === 'Slash') { e.preventDefault(); send('ui.key', { key: 'Alt+/' }); return; }
+    if (e.key === 'Tab') {
+      const items = [...document.querySelectorAll('select, input, button:not([hidden])')];
+      const i = items.indexOf(document.activeElement);
+      if ((!e.shiftKey && i === items.length - 1) || (e.shiftKey && i <= 0)) { e.preventDefault(); send('ui.key', { key: e.shiftKey ? 'Shift+Tab' : 'Tab' }); }
+      return;
+    }
+    const t = e.target && e.target.tagName;
+    const inForm = t === 'INPUT' || t === 'SELECT' || t === 'BUTTON' || t === 'TEXTAREA';
+    if (!inForm && e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) { e.preventDefault(); send('ui.typed', { grapheme: e.key }); }
+    // Backspace / Delete: nothing (a stray key never removes anything).
+  });
+
+  function onPort(m) {
+    const d = m.data;
+    try {
+      if (!d || d.p !== 'wicked.editor' || d.v !== 1) return;
+      if (typeof d.re === 'string' && pending.has(d.re)) { const r = pending.get(d.re); pending.delete(d.re); r(d); return; }
+      const p = d.payload || {};
+      switch (d.type) {
+        case 'host.ping': if (typeof d.id === 'string') answer(d.id, {}); break;
+        case 'host.size':
+          if (typeof p.size === 'string') {
+            document.body.dataset.size = p.size;
+            if (p.size === 'inline' && document.activeElement) document.activeElement.blur();
+          }
+          break;
+        case 'host.theme': {
+          const t = p.theme || {};
+          const map = { '--accent': '--accent', '--ink-high': '--ink', '--ink-muted': '--ink-muted', '--surface-card': '--surface' };
+          for (const [k, v] of Object.entries(t)) {
+            if (map[k] && typeof v === 'string' && !/url\(|[;{}]/i.test(v)) document.documentElement.style.setProperty(map[k], v);
+          }
+          break;
+        }
+        case 'artifact.changed': break; // the editor never reads the page
+        // ── protocol 2 (only a host that negotiated 2 sends these) ──
+        case 'host.surface': if (protocol >= 2 && ['card', 'options', 'full'].includes(p.surface)) setSurface(p.surface, p.mode); break;
+        case 'host.mode': if (protocol >= 2 && typeof d.id === 'string') { setMode('simple'); answer(d.id, { mode }); } break;
+        case 'host.action': if (protocol >= 2 && typeof d.id === 'string') answer(d.id, onAction(String(p.id))); break;
+        case 'host.tab': case 'host.selection': break;
+        case 'options.changed': if (protocol >= 2 && typeof d.id === 'string') answer(d.id, { applied: false, rev: 0, values: {}, reason: 'no options' }); break;
+        case 'host.teardown': break;
+        default: break; // an unknown type is ignored, never an error (§5.4)
+      }
+    } catch (err) { /* a malformed host message is ignored */ }
+  }
+
+  window.addEventListener('message', (e) => {
+    // One handshake: the first host.hello carrying a port; everything after rides that port.
+    if (port || e.source !== parent || !e.data || e.data.p !== 'wicked.editor' || e.data.v !== 1 || e.data.type !== 'host.hello' || !e.ports || !e.ports[0]) return;
+    port = e.ports[0];
+    port.onmessage = onPort;
+    const p = e.data.payload || {};
+    grants = Array.isArray(p.grants) ? p.grants : [];
+    protocol = p.protocol === 2 ? 2 : 1;
+    document.body.dataset.protocol = String(protocol);
+    if (typeof p.size === 'string') document.body.dataset.size = p.size;
+    if (protocol >= 2) {
+      // No full surface declared: no way to it from inside the editor either.
+      if (!SURFACES.full) $('full').hidden = true;
+      setMode(typeof p.mode === 'string' ? p.mode : (SURFACES.full && SURFACES.full.default) || 'simple');
+      setSurface(['card', 'options', 'full'].includes(p.surface) ? p.surface : 'card');
+    }
+    render();
+  });
+  parent.postMessage(env('plugin.ready', { editor: EDITOR, version: VERSION, protocol: [1, 2], surfaces: SURFACES }), '*');
+})();
+</script>
+</body></html>
