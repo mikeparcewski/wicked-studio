@@ -63,7 +63,10 @@ def desk_count(page) -> int:
     page.goto(f"{origin}/", wait_until="networkidle")
     page.get_by_test_id("desk").wait_for(state="visible", timeout=15000)
     page.wait_for_timeout(800)
-    return int(page.get_by_test_id("desk-inbox-count").get_attribute("data-count") or "0")
+    # Home v2: the landing's sentence carries the "need you" count once it is known.
+    story = page.locator('[data-testid="desk-story"][data-count]')
+    story.wait_for(state="visible", timeout=15000)
+    return int(story.get_attribute("data-count") or "0")
 
 
 with sync_playwright() as p:

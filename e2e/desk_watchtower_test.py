@@ -77,7 +77,10 @@ with sync_playwright() as p:
     page.goto(f"{origin}/", wait_until="networkidle")
     page.get_by_test_id("desk").wait_for(state="visible", timeout=15000)
     page.wait_for_timeout(800)
-    desk = int(page.get_by_test_id("desk-inbox-count").get_attribute("data-count") or "-1")
+    # Home v2: the landing's sentence carries the "need you" count once it is known.
+    story = page.locator('[data-testid="desk-story"][data-count]')
+    story.wait_for(state="visible", timeout=15000)
+    desk = int(story.get_attribute("data-count") or "-1")
     # ── 5. the tile: the waiting work in words, and it opens /watch ────────────────
     tile = page.get_by_test_id("desk-rail-nerve")
     page.wait_for_function("() => document.querySelector('[data-testid=\"desk-rail-nerve\"]')?.dataset.read === 'fresh'", timeout=10000)

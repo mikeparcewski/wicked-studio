@@ -249,19 +249,25 @@ with sync_playwright() as p:
     page.wait_for_timeout(600)
     dest["unknown_fix"] = address(page)
     dest["unknown_modal"] = page.get_by_test_id("agents-modal").count()
+    # Home v2: the landing carries no sign-in chores; the Agents view's row is the sign-in door, in place.
     page.goto(f"{origin}/", wait_until="networkidle")
     page.get_by_test_id("desk").wait_for(state="visible", timeout=15000)
-    chore = page.locator('[data-testid="desk-chore"][data-seat="claude"]')
+    page.locator('[data-testid="desk-story"][data-count]').wait_for(state="visible", timeout=15000)
+    dest["landing_chores"] = page.locator('[data-testid="desk-chore"]').count()
+    page.goto(f"{origin}/?tab=agents", wait_until="networkidle")
+    chore = page.locator('[data-testid="agents-fix"][data-agent="claude"]')
+    chore.first.wait_for(state="visible", timeout=10000)
     dest["chore"] = chore.count()
     if dest["chore"]:
-        chore.get_by_test_id("desk-chore-signin").click()
+        chore.first.click()
         page.get_by_test_id("agents-modal").wait_for(state="visible", timeout=5000)
         dest["chore_modal"] = page.get_by_test_id("agents-modal").get_attribute("data-agent")
         dest["chore_stays"] = address(page)
         page.keyboard.press("Escape")
     check("dest", dest["cmdk"] == "/agents" and dest["cmdk_label"].startswith("Desk › Agents") and dest["helpers_tab"] == "/agents"
           and dest["unknown_fix"] == "/agents" and dest["unknown_modal"] == 0
-          and dest["chore"] == 1 and dest.get("chore_modal") == "claude" and dest.get("chore_stays") == "/", **dest)
+          and dest["landing_chores"] == 0
+          and dest["chore"] >= 1 and dest.get("chore_modal") == "claude" and ((dest.get("chore_stays") or "").startswith("/agents") or dest.get("chore_stays") == "/?tab=agents"), **dest)
 
     # ── 6. MEASURE: the light problem button ──────────────────────────────────────
     page.goto(f"{origin}/agents", wait_until="networkidle")
