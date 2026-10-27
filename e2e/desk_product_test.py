@@ -146,7 +146,9 @@ with sync_playwright() as p:
 
     page.route("**/api/v1/projects/shop/requirements*", lambda r: r.fulfill(status=200, json=REQS))
     page.route("**/api/v1/projects/shop/product/compose", compose_route)
-    page.goto(f"{origin}/projects/shop", wait_until="networkidle")
+    # ui-v2 project home: the requirements section lives in the project's "Work and documents" view (?tab=work, where
+    # the home's "Work and documents" link and #requirements land), no longer on the home itself.
+    page.goto(f"{origin}/projects/shop?tab=work", wait_until="networkidle")
     page.get_by_test_id("project-requirements-line").wait_for(state="visible", timeout=15000)
     line = page.get_by_test_id("project-requirements-line").inner_text()
     unread_line = page.get_by_test_id("project-requirements-unread").inner_text()
@@ -183,7 +185,7 @@ with sync_playwright() as p:
           and page.url.endswith("/s/run%3Ar-auth"), chosen=chosen, composes=composes, url=page.url)
 
     # The dashboard's own Draft epics opens the same step with the project chosen and nothing picked.
-    page.goto(f"{origin}/projects/shop", wait_until="networkidle")
+    page.goto(f"{origin}/projects/shop?tab=work", wait_until="networkidle")
     page.get_by_test_id("project-draft-epics").click()
     wiz.wait_for(state="visible", timeout=8000)
     dash_draft = {"project": page.get_by_test_id("launch-wizard-draft-project").input_value(),
