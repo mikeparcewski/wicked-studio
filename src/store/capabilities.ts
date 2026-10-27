@@ -38,7 +38,7 @@ interface CapabilitiesStore {
   /** `chatAttachments` (DES-SYSTEM-CHAT, crew) — `POST /chats/:id/attachments` carries files the seat
    *  can read. Absent or false: the system chat offers no upload (the same one-line note). */
   chatAttachments: boolean;
-  /** `chatWorkflows` (crew#1157, api-types 0.140.0) — the read-only workflows `POST /chats {workflow}`
+  /** `chatWorkflows` (crew#1157, api-types 0.141.0) — the read-only workflows `POST /chats {workflow}`
    *  runs on this daemon (`analyze`). Absent, empty or a failed read: Understand's Ask opens a plain chat. */
   chatWorkflows: string[];
   load: () => Promise<void>;
