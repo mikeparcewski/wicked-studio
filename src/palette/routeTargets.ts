@@ -67,6 +67,7 @@ export const ROUTE_SHAPES: readonly RouteShape[] = [
   { id: 'plugins', example: '/plugins', is: (r) => r.panel === 'plugins' },
   { id: 'agents', example: '/agents', is: (r) => r.panel === 'agents' },
   { id: 'learn', example: '/learn', is: (r) => r.panel === 'learn' },
+  { id: 'insights', example: '/insights', is: (r) => r.panel === 'insights' },
   { id: 'system', example: '/system', is: (r) => r.panel === 'system' },
   { id: 'theme', example: '/theme', is: (r) => r.panel === 'theme' },
   { id: 'editors-dev', example: '/editors/dev', is: (r) => r.panel === 'editors' && r.artifactId === 'dev' },
@@ -106,6 +107,7 @@ const DESTINATIONS: ReadonlyArray<{ shape: string; label: string; href: string }
   { shape: 'mcp-inspect', label: `${PAGE_NAMES.mcpInspect} — test and debug an MCP server`, href: '/mcp/inspect' },
   { shape: 'plugins', label: `${PAGE_NAMES.plugins} — editor plugins, and making one`, href: '/plugins' },
   { shape: 'learn', label: 'Learn', href: '/learn' },
+  { shape: 'insights', label: 'Run insights', href: '/insights' },
   { shape: 'system', label: `${PAGE_NAMES.system} — agents, notifications and the theme`, href: '/system' },
   // studio-settings-tabs: Theme is a tab of the Settings page (`/theme` only redirects there).
   { shape: 'system', label: `${PAGE_NAMES.theme} — light or dark, logo, site name`, href: SETTINGS_THEME_PATH },

@@ -3,6 +3,7 @@ import { BUILD_LINKS } from '../board/navModel.js';
 import { PAGE_NAMES } from '../board/pageNames.js';
 import type { Navigate } from '../hooks/useRoute.js';
 import { CalmHead, CalmPage, CalmRow, CalmRows } from './calm/Calm.js';
+import { SchedulesSection } from './insights/SchedulesSection.js';
 
 /**
  * BUILD & SETTINGS (`/build`, the ui-v2 nav regroup): the rail's one foot entry opens this list of the
@@ -21,6 +22,7 @@ export function BuildPage({ navigate }: { navigate: Navigate }): React.ReactElem
             meta={<ChevronRight size={18} aria-hidden className="wk-build-chev" />} />
         ))}
       </CalmRows>
+      <SchedulesSection navigate={navigate} />
     </CalmPage>
   );
 }

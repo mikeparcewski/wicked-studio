@@ -46,14 +46,14 @@ import { announceHistoryChange, announceNavigateAway, inAppEntryState, isInAppEn
 // worktree files/diff as REAL routes — `/runs/:id/events`, `/runs/:id/files` — so the palette
 // verb that opens them is one history entry and browser Back returns to where you were. The run
 // id rides in `artifactId` (NOT `runId`: no run-selected machinery, no legacy shell redirect).
-export type Panel = 'home' | 'needs' | 'projects' | 'jobs' | 'report' | 'understand' | 'build' | 'runs' | 'run-events' | 'run-files' | 'workflows' | 'skills' | 'mcp' | 'steering' | 'memory' | 'testing' | 'repos' | 'system' | 'theme' | 'repo-detail' | 'project-detail' | 'session' | 'editors' | 'watch' | 'rules' | 'everything' | 'product' | 'project-requirements' | 'plugins' | 'agents' | 'learn' | 'health' | 'not-found';
+export type Panel = 'home' | 'needs' | 'projects' | 'jobs' | 'report' | 'understand' | 'build' | 'runs' | 'run-events' | 'run-files' | 'workflows' | 'skills' | 'mcp' | 'steering' | 'memory' | 'testing' | 'repos' | 'system' | 'theme' | 'repo-detail' | 'project-detail' | 'session' | 'editors' | 'watch' | 'rules' | 'everything' | 'product' | 'project-requirements' | 'plugins' | 'agents' | 'learn' | 'insights' | 'health' | 'not-found';
 
 /** Every panel, exhaustively (the compile-time check below fails when the union grows without it). */
-export const ALL_PANELS = ['home', 'needs', 'projects', 'jobs', 'report', 'understand', 'build', 'runs', 'run-events', 'run-files', 'workflows', 'skills', 'mcp', 'steering', 'memory', 'testing', 'repos', 'system', 'theme', 'repo-detail', 'project-detail', 'session', 'editors', 'watch', 'rules', 'everything', 'product', 'project-requirements', 'plugins', 'agents', 'learn', 'health', 'not-found'] as const satisfies readonly Panel[];
+export const ALL_PANELS = ['home', 'needs', 'projects', 'jobs', 'report', 'understand', 'build', 'runs', 'run-events', 'run-files', 'workflows', 'skills', 'mcp', 'steering', 'memory', 'testing', 'repos', 'system', 'theme', 'repo-detail', 'project-detail', 'session', 'editors', 'watch', 'rules', 'everything', 'product', 'project-requirements', 'plugins', 'agents', 'learn', 'insights', 'health', 'not-found'] as const satisfies readonly Panel[];
 type MissingPanel = Exclude<Panel, (typeof ALL_PANELS)[number]>;
 export const PANELS_EXHAUSTIVE: MissingPanel extends never ? true : MissingPanel = true;
 
-const PANELS: Panel[] = ['runs', 'workflows', 'skills', 'mcp', 'plugins', 'agents', 'repos', 'system', 'theme', 'repo-detail', 'watch', 'learn', 'health'];
+const PANELS: Panel[] = ['runs', 'workflows', 'skills', 'mcp', 'plugins', 'agents', 'repos', 'system', 'theme', 'repo-detail', 'watch', 'learn', 'insights', 'health'];
 /** studio#157's Product view retired (operator 2026-10-12): `/product[?project=<id>]` only redirects —
  *  to that project's dashboard (its Requirements section), or to the projects list. */
 export function productRedirectPath(search: string): string {

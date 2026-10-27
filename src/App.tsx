@@ -42,6 +42,7 @@ import { ConnectionStatus } from './components/ConnectionStatus.js';
 import { SettingsPage } from './components/SettingsPage.js';
 import { SETTINGS_THEME_PATH } from './board/settingsTabs.js';
 import { NerveCenterPage } from './components/nerve/NerveCenterPage.js';
+import { InsightsPage } from './components/insights/InsightsPage.js';
 import { NERVE_CENTER_PATH } from './components/desk/NerveCenterTile.js';
 import { parseRoute, projectDetailPath } from './hooks/useRoute.js';
 import { DeskHostedPage, DeskV2, deskTabPath, type HostedTab } from './components/desk/DeskV2.js';
@@ -674,6 +675,8 @@ export function App(): React.ReactElement {
     }
     // `/mcp` — MCP tools (DES-MCP-TOOLS-001 §7): the registered servers, their tools, the policy
     // matrix and Approve / Revoke. `?server=<name>` deep-links a server row open.
+    // `/insights` — Run insights (crew DES-RUNS-REVIEW-001): the first-party plugin over every review of recent work.
+    if (panel === 'insights') return <InsightsPage navigate={navigate} />;
     if (panel === 'learn') {
       return <LearnPage navigate={navigate} />;
     }
