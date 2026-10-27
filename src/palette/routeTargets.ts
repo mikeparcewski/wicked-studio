@@ -42,6 +42,7 @@ export const ROUTE_SHAPES: readonly RouteShape[] = [
   // "See everything" (S15c/S17a): one page, five tabs in `?tab=` (a project's sessions ride
   // `?project=`). The retired addresses (`RETIRED_ADDRESSES` in hooks/useRoute.ts) are not shapes.
   { id: 'everything', example: '/everything', is: (r) => r.panel === 'everything' },
+  { id: 'projects', example: '/projects', is: (r) => r.panel === 'projects' },
   { id: 'project-detail', example: '/projects/p1', is: (r) => r.panel === 'project-detail' && r.projectId !== null },
   { id: 'steering-proposals', example: '/steering/proposals', is: (r) => r.panel === 'steering' && r.steeringSection === 'proposals' },
   { id: 'steering-policies', example: '/steering/policies', is: (r) => r.panel === 'steering' && r.steeringSection === 'policies' },
@@ -80,6 +81,7 @@ const DESTINATIONS: ReadonlyArray<{ shape: string; label: string; href: string }
   // The sidebar's pages, in its order (ui-v2 nav regroup), each named as the sidebar names it.
   { shape: 'home', label: `${PAGE_NAMES.home} — what needs you, what is running`, href: '/' },
   { shape: 'needs', label: `${PAGE_NAMES.needs} — what you need to decide`, href: '/needs' },
+  { shape: 'projects', label: `${PAGE_NAMES.projects} — all your projects`, href: '/projects' },
   { shape: 'jobs', label: `${PAGE_NAMES.jobs} — every job, running and finished`, href: '/jobs' },
   { shape: 'report', label: `${PAGE_NAMES.report} — charts, spend and outcomes`, href: '/report' },
   { shape: 'understand', label: `${PAGE_NAMES.understand} — ask how your code fits together`, href: '/understand' },
@@ -90,7 +92,6 @@ const DESTINATIONS: ReadonlyArray<{ shape: string; label: string; href: string }
   { shape: 'everything', label: 'Everything — every session', href: everythingPath({ tab: 'sessions' }) },
   { shape: 'everything', label: 'Everything made — documents, pages, decks, videos', href: everythingPath({ tab: 'made' }) },
   { shape: 'everything', label: 'Handed over — pull requests and pushes', href: everythingPath({ tab: 'handed' }) },
-  { shape: 'everything', label: 'Projects — all your projects', href: everythingPath({ tab: 'projects' }) },
   { shape: 'steering-proposals', label: `${PAGE_NAMES.steering} › Proposals — rules agents want, to review`, href: '/steering/proposals' },
   { shape: 'steering-policies', label: `${PAGE_NAMES.steering} › All rules — every rule and policy`, href: '/steering/policies' },
   { shape: 'memory', label: `${PAGE_NAMES.memory} — what agents remember`, href: '/memory' },

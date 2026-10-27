@@ -35,9 +35,9 @@ describe('the Desk rail brand and Theme › Site name (studio#512)', () => {
     const b = brand();
     expect(b.textContent?.replace(/\s+/g, ' ').trim()).toBe('Reel studio');
     expect(b.textContent).not.toContain('wicked');
-    // The wordmark is a label; Home is the page link, named by its own word.
+    // The wordmark is the link Home, named "Home" whatever the site is called.
     expect(screen.getByTestId('desk-rail-wordmark')).toContainElement(b);
-    expect(screen.getByTestId('desk-rail-home')).toHaveAccessibleName('Home');
+    expect(screen.getByTestId('desk-rail-wordmark')).toHaveAccessibleName('Home');
   });
 
   it('blank keeps the default wordmark', () => {

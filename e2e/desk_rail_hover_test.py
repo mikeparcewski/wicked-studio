@@ -93,7 +93,9 @@ CASES = [
 ]
 # (name, selector, kind): kind "button" = an icon button (accent edge), "nc" = the Nerve Center tile.
 ITEMS = [
-    ("wordmark", '[data-testid="desk-rail-home"]', "current"),
+    # The wordmark is the link Home (operator 2026-10-27): current on the Desk, but quiet at rest, so its
+    # hover is a full rest -> hover step.
+    ("wordmark", '[data-testid="desk-rail-wordmark"]', "row"),
     ("icon-button", '[data-testid="desk-rail-new-job"]', "button"),
     ("group-icon", '[data-testid="rail-group-new"], [data-testid="rail-group-view-unfiled"]', "ring"),
     ("group-header", '[data-testid="rail-group-toggle"]', "row"),
@@ -101,6 +103,8 @@ ITEMS = [
     ("all-jobs", '[data-testid="rail-all-jobs"]', "row"),
     # The ui-v2 sidebar: a page item (Jobs) and Build & settings replace the Workspace links and General.
     ("page-item", '[data-testid="nav-jobs"]', "row"),
+    # WORK's primary entry (Projects): stronger words, the same hover as every page item.
+    ("page-primary", '[data-testid="nav-projects"]', "row"),
     ("build", '[data-testid="desk-rail-build"]', "row"),
     ("nerve-center", '[data-testid="desk-rail-nerve"]', "nc"),
 ]
@@ -207,7 +211,7 @@ with sync_playwright() as p:
             rows[name] = row
         # Pressed (held down, released off the rail so nothing navigates): a stronger fill than hover,
         # its words still AA — a sidebar page item, and Home (current on the Desk).
-        for name, sel in (("pressed-link", '[data-testid="nav-jobs"]'), ("pressed-wordmark", '[data-testid="desk-rail-home"]')):
+        for name, sel in (("pressed-link", '[data-testid="nav-jobs"]'), ("pressed-wordmark", '[data-testid="desk-rail-wordmark"]')):
             el = page.locator(sel).first
             settle(page, el)
             hov_rgb = page.evaluate(PAINT, [rail_bg, [el.evaluate(STYLE)["bg"]]])[0]

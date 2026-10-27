@@ -7,10 +7,12 @@ import { PAGE_NAMES } from './pageNames.js';
  * tabs (Work · Runs · Repositories · Report · More ▾) became three groups of pages in the rail, each
  * page at an address of its own:
  *
- *   WORK     Home · Jobs · Repositories
+ *   WORK     Projects · Jobs · Repositories
  *   INSIGHT  Report · Understand · Evaluate
  *   GOVERN   Steering · Memory · Agents
  *
+ * Home is the wordmark at the rail's top (operator 2026-10-27: "remove Home from WORK, the wordmark
+ * goes Home"); Projects is WORK's first item and its primary one (`primary`, a calm marker).
  * and, at the rail's foot above the Nerve Center tile, ONE "Build & settings" entry: a page listing
  * Skills, MCP, Plugins, Workflows and Settings (the rail's old Workspace links). A project's page keeps
  * its own tabs (`/projects/:id?tab=`): they scope a view to the project, which the sidebar does not.
@@ -33,7 +35,10 @@ export const DESK_VIEW_PATH: Record<DeskView, string> = {
 /** The page that lists Skills, MCP, Plugins, Workflows and Settings. */
 export const BUILD_PATH = '/build';
 
-export type NavId = 'home' | 'jobs' | 'repos' | 'report' | 'understand' | 'evaluate' | 'steering' | 'memory' | 'agents' | 'build';
+/** The projects page (for now the projects list; a designed Projects home follows its mockup). */
+export const PROJECTS_PATH = '/projects';
+
+export type NavId = 'home' | 'projects' | 'jobs' | 'repos' | 'report' | 'understand' | 'evaluate' | 'steering' | 'memory' | 'agents' | 'build';
 
 export interface NavItem {
   id: NavId;
@@ -42,13 +47,15 @@ export interface NavItem {
   testId: string;
   /** Address prefixes that make this item the current page (besides `path` itself). */
   under: readonly string[];
+  /** The group's primary entry (Projects): drawn a little stronger, never louder than the current page. */
+  primary?: true;
 }
 
 export interface NavGroup { id: 'work' | 'insight' | 'govern'; label: string; items: readonly NavItem[] }
 
 export const NAV_GROUPS: readonly NavGroup[] = [
   { id: 'work', label: 'Work', items: [
-    { id: 'home', label: PAGE_NAMES.home, path: '/', testId: 'desk-rail-home', under: ['/needs'] },
+    { id: 'projects', label: PAGE_NAMES.projects, path: PROJECTS_PATH, testId: 'nav-projects', under: [PROJECTS_PATH], primary: true },
     { id: 'jobs', label: PAGE_NAMES.jobs, path: DESK_VIEW_PATH.runs, testId: 'nav-jobs', under: ['/jobs'] },
     { id: 'repos', label: PAGE_NAMES.repos, path: DESK_VIEW_PATH.repositories, testId: 'nav-repos', under: ['/repos', '/repo-detail'] },
   ] },
@@ -80,9 +87,10 @@ export const BUILD_ITEM: NavItem = {
 
 const within = (pathname: string, prefix: string): boolean => pathname === prefix || pathname.startsWith(`${prefix}/`);
 
-/** The sidebar item the address is on (one at most), or null (a session, a project, Nerve Center…). */
+/** The sidebar item the address is on (one at most), or null (a session, Nerve Center…). `home` is the
+ *  wordmark: Home and Needs you in full. A project's own page is under Projects. */
 export function navCurrent(pathname: string): NavId | null {
-  if (pathname === '/') return 'home';
+  if (pathname === '/' || within(pathname, '/needs')) return 'home';
   for (const item of [...NAV_GROUPS.flatMap((g) => g.items), BUILD_ITEM]) {
     if (item.under.some((p) => within(pathname, p))) return item.id;
   }

@@ -129,30 +129,41 @@ describe('folding a group', () => {
 });
 
 describe('the top of the rail (operator IA 2026-10-13)', () => {
-  it('Home is the one link to `/`; its name carries the needs-you badge; the wordmark is a label', () => {
+  it('the wordmark is the one link to `/`, named "Home"; the needs-you badge rides it as its description (operator 2026-10-27)', () => {
     rail();
-    const home = screen.getByTestId('desk-rail-home');
+    const home = screen.getByTestId('desk-rail-wordmark');
     expect(home.tagName).toBe('A');
     expect(home).toHaveAttribute('href', '/');
     expect(home).toHaveAttribute('aria-current', 'page');
-    expect(home).toHaveAccessibleName('Home, 1 needs you');
+    expect(home).toHaveAccessibleName('Home');
+    expect(home).toHaveAccessibleDescription('1 needs you');
     expect(within(home).getByTestId('desk-rail-badge')).toHaveTextContent('1');
-    const mark = screen.getByTestId('desk-rail-wordmark');
-    expect(mark.tagName).toBe('DIV');
-    expect(within(mark).getByTestId('desk-rail-brand')).toHaveTextContent('wicked studio');
+    expect(within(home).getByTestId('desk-rail-brand')).toHaveTextContent('wicked studio');
     expect(screen.getByTestId('session-rail').querySelectorAll('a[href="/"]')).toHaveLength(1);
+    // Home is no longer a WORK item.
+    expect(screen.queryByTestId('desk-rail-home')).toBeNull();
   });
 
-  it('a partial count says so: "Home, 2+ need you"', () => {
+  it('a partial count says so: "2+ need you"', () => {
     settledPhase = 'partial';
     render(<SessionRail runs={RUNS} needRows={[...NEED, { ...NEED[0]!, key: 'fail:u1' }] as never} navigate={() => {}} pathname="/" />);
-    expect(screen.getByTestId('desk-rail-home')).toHaveAccessibleName('Home, 2+ need you');
+    expect(screen.getByTestId('desk-rail-wordmark')).toHaveAccessibleDescription('2+ need you');
   });
 
-  it('with nothing waiting the link is just "Home" and carries no badge', () => {
+  it('with nothing waiting the wordmark is just "Home" and carries no badge', () => {
     render(<SessionRail runs={RUNS} needRows={[]} navigate={() => {}} pathname="/" />);
-    expect(screen.getByTestId('desk-rail-home')).toHaveAccessibleName('Home');
+    expect(screen.getByTestId('desk-rail-wordmark')).toHaveAccessibleName('Home');
+    expect(screen.getByTestId('desk-rail-wordmark')).not.toHaveAttribute('aria-describedby');
     expect(screen.queryByTestId('desk-rail-badge')).toBeNull();
+  });
+
+  it('pressing the wordmark goes Home', () => {
+    const navigate = vi.fn();
+    render(<SessionRail runs={RUNS} needRows={[]} navigate={navigate} pathname="/jobs" />);
+    const home = screen.getByTestId('desk-rail-wordmark');
+    expect(home).not.toHaveAttribute('aria-current');
+    fireEvent.click(home);
+    expect(navigate).toHaveBeenCalledWith('/');
   });
 
   it('the action row sits under the wordmark: four equal icons, New job · New project · Chat · Search (New job first, operator 2026-10-26) — each named (DES-SYSTEM-CHAT §1)', () => {

@@ -205,7 +205,16 @@ describe('launch wizard', () => {
     const note = screen.getByTestId('launch-wizard-unusable-note');
     expect(note).toHaveTextContent('copilot (out of quota — back by');
     expect(note).toHaveTextContent('pi (signed out)');
-    expect(screen.getByTestId('launch-wizard-signin')).toBeTruthy();
+    // Each greyed helper's Sign in opens its own sign-in modal over the wizard (operator 2026-10-27: it
+    // used to close the wizard and open General settings); closing it leaves the wizard where it was.
+    const signIns = screen.getAllByTestId('launch-wizard-signin');
+    expect(signIns.map((b) => b.dataset.key)).toEqual(['copilot', 'pi']);
+    fireEvent.click(signIns[1]!);
+    expect((await screen.findByTestId('agents-modal')).dataset.agent).toBe('pi');
+    expect(screen.getByTestId('launch-wizard-unusable-note')).toBeTruthy();
+    fireEvent.click(screen.getByTestId('agents-modal-close'));
+    await waitFor(() => expect(screen.queryByTestId('agents-modal')).toBeNull());
+    expect(useLaunchWizard.getState().open).toBe(true);
     next();
     fireEvent.click(screen.getByTestId('launch-wizard-launch'));
     await waitFor(() => expect(posts.some((p) => p.path === '/runs')).toBe(true));

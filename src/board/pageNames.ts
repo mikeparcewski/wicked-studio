@@ -7,6 +7,8 @@
  */
 export const PAGE_NAMES = {
   home: 'Home',
+  /** `/projects` — the projects list (WORK's primary entry). */
+  projects: 'Projects',
   /** `/needs` — everything waiting on you, in full (the landing's "N more waiting"). */
   needs: 'Needs you',
   jobs: 'Jobs',
@@ -60,6 +62,8 @@ const BY_PATH: ReadonlyArray<[string, string]> = [
 export function pageNameFor(href: string): string | null {
   const path = href.split('?')[0] ?? href;
   if (path === '/') return PAGE_NAMES.home;
+  // Only the list itself: a project's own page (`/projects/:id`) is named by its project.
+  if (path === '/projects') return PAGE_NAMES.projects;
   const hit = BY_PATH.find(([p]) => path === p || path.startsWith(`${p}/`));
   return hit === undefined ? null : hit[1];
 }

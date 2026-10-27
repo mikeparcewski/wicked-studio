@@ -11,9 +11,9 @@
   "version": 1,
   "studioVersion": "0.12.3",
   "counts": {
-    "files": 244,
+    "files": 245,
     "occurrences": 3253,
-    "static": 2772,
+    "static": 2773,
     "dynamic": 74,
     "computed": 33
   },
@@ -3434,12 +3434,6 @@
       "testId": "desk-rail-chat",
       "files": [
         "src/components/desk/SessionRail.tsx"
-      ]
-    },
-    {
-      "testId": "desk-rail-home",
-      "files": [
-        "src/board/navModel.ts"
       ]
     },
     {
@@ -7604,6 +7598,12 @@
       ]
     },
     {
+      "testId": "nav-projects",
+      "files": [
+        "src/board/navModel.ts"
+      ]
+    },
+    {
       "testId": "nav-report",
       "files": [
         "src/board/navModel.ts"
@@ -9607,6 +9607,12 @@
       "testId": "projects-new",
       "files": [
         "src/components/everything/ProjectsTab.tsx"
+      ]
+    },
+    {
+      "testId": "projects-page",
+      "files": [
+        "src/components/everything/ProjectsPage.tsx"
       ]
     },
     {

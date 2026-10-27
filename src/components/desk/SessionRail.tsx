@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ChevronRight, FolderPlus, LayoutGrid, MessageSquare, MessageSquarePlus, Plus, Search } from 'lucide-react';
 import { useDeliveredNow } from '../../store/postHocDeliver.js';
@@ -41,16 +41,19 @@ export const SESSION_RAIL_PX = 236;
  * THE SESSION RAIL (skin `desk`, DES-STUDIO-REBUILD-001 §4.2, slice S4; the sidebar regroup of ui-v2,
  * operator 2026-10-26, mockup `desk-home-redesign`) — 236 px, on every route. Top to bottom:
  *
- *  - The wordmark (logo + site name), a label, not a link: Home is the first page below.
+ *  - The wordmark (logo + site name) is the link Home (`/`, named "Home"; operator 2026-10-27: Home left
+ *    WORK, the wordmark goes Home). It carries the needs-you badge (the fold's `needCount`, the Desk
+ *    sentence's number — one source), said as its description ("22 need you"), and is current on Home
+ *    and on Needs you in full.
  *  - The action row, on every page (DES-SYSTEM-CHAT §1): four equal icon buttons — New job (the launch
  *    wizard), New project (the one New project modal), Chat (the floating system chat: restores a
  *    minimized one, else starts a new one) and Search (the ONE search modal, ⌘K). New job and Chat
  *    start in the project on screen (`ambientProject`), and say so in their names.
- *  - The pages, in three groups under small-caps labels (`NAV_GROUPS`, board/navModel.ts): WORK (Home,
- *    Jobs, Repositories), INSIGHT (Report, Understand, Evaluate), GOVERN (Steering, Memory, Agents).
- *    They replaced the Desk's tabs and its More menu. Home carries the needs-you badge (the fold's
- *    `needCount`, the Desk sentence's number — one source), and its accessible name says it ("Home,
- *    2 need you"). The page you are on is `aria-current="page"`.
+ *  - The pages, in three groups under small-caps labels (`NAV_GROUPS`, board/navModel.ts): WORK
+ *    (Projects, Jobs, Repositories), INSIGHT (Report, Understand, Evaluate), GOVERN (Steering, Memory,
+ *    Agents). They replaced the Desk's tabs and its More menu. Projects is WORK's primary entry: its
+ *    words are a step stronger and a small accent mark sits before them. The page you are on is
+ *    `aria-current="page"`.
  *  - RECENT, under the groups and folding as one: the sessions grouped by project (the board model's
  *    order), at most five between them (`railRecent`: every one that needs you, then live work, then
  *    the newest), then "All jobs" (the Jobs page). Each row has ONE status dot (four hues: waiting on
@@ -82,8 +85,9 @@ export function SessionRail({ runs, needRows, navigate, pathname, runsKnown = tr
   const settled = useSettledNeeds(needRows, runsKnown, runsFailed);
   const count = settled.count ?? 0;
   const badgeText = settled.phase === 'partial' ? `${count}+` : String(count);
-  // Home's name says the badge after its visible word (label-in-name, WCAG 2.5.3): "Home, 2 need you".
-  const deskName = count > 0 ? `${PAGE_NAMES.home}, ${badgeText} ${badgeText === '1' ? 'needs' : 'need'} you` : PAGE_NAMES.home;
+  // The wordmark is named "Home"; its badge is said as the link's description: "22 need you".
+  const needWords = `${badgeText} ${badgeText === '1' ? 'needs' : 'need'} you`;
+  const needsId = useId();
   const runChatId = useCapabilities((s) => s.runChatId);
   const deliveredNow = useDeliveredNow();
   // The tags' and hover titles' clock: the queue's shared minute tick, so ages move while nothing else does.
@@ -121,12 +125,13 @@ export function SessionRail({ runs, needRows, navigate, pathname, runsKnown = tr
   const go = (path: string) => (e: React.MouseEvent): void => { e.preventDefault(); navigate(path); };
   const on = navCurrent(pathname);
   const recentFolded = collapsed.has(RECENT_KEY);
-  const navLink = (item: NavItem, extra?: React.ReactNode, label?: string): React.ReactElement => (
+  const navLink = (item: NavItem): React.ReactElement => (
     <a key={item.id} href={item.path} onClick={go(item.path)} data-testid={item.testId} data-nav-dest={`page:${item.id}`}
-      aria-current={on === item.id ? 'page' : undefined} aria-label={label} title={label}
-      className="wk-rail-link wk-rail-nav-item">
+      data-primary={item.primary === true ? 'true' : undefined}
+      aria-current={on === item.id ? 'page' : undefined}
+      className={`wk-rail-link wk-rail-nav-item${item.primary === true ? ' wk-rail-nav-item--primary' : ''}`}>
+      {item.primary === true && <span aria-hidden className="wk-rail-nav-mark" />}
       <span className="wk-rail-nav-label">{item.label}</span>
-      {extra}
     </a>
   );
   const siteName = useAppearanceStore((s) => s.appearance.site_name?.trim() || null);
@@ -135,9 +140,11 @@ export function SessionRail({ runs, needRows, navigate, pathname, runsKnown = tr
 
   return (
     <nav data-testid="session-rail" aria-label="Studio" className="wk-rail" style={{ width: SESSION_RAIL_PX }}>
-      {/* The wordmark: logo and name, a label (Home is the first page below). studio#512: Theme › Site
+      {/* The wordmark: logo and name, the link Home, with the needs-you badge. studio#512: Theme › Site
           name and Theme › Logo are shown here. */}
-      <div data-testid="desk-rail-wordmark" className="wk-rail-wordmark">
+      <a href="/" onClick={go('/')} data-testid="desk-rail-wordmark" data-nav-dest="page:home" aria-label={PAGE_NAMES.home}
+        aria-describedby={count > 0 ? needsId : undefined} aria-current={on === 'home' ? 'page' : undefined}
+        title={count > 0 ? `${PAGE_NAMES.home} · ${needWords}` : PAGE_NAMES.home} className="wk-rail-home wk-rail-wordmark">
         <span data-testid="desk-rail-brand" className="wk-rail-brand">
           {logoUrl !== null
             ? <span
@@ -152,7 +159,9 @@ export function SessionRail({ runs, needRows, navigate, pathname, runsKnown = tr
             : <span aria-hidden className="wk-desk-dot wk-desk-dot--waiting" />}
           <span className="wk-rail-brand-name">{siteName !== null ? <b>{siteName}</b> : <>wicked <b>studio</b></>}</span>
         </span>
-      </div>
+        {count > 0 && <span aria-hidden data-testid="desk-rail-badge" data-phase={settled.phase} className="wk-rail-badge wk-rail-badge--home">{badgeText}</span>}
+        {count > 0 && <span id={needsId} className="wk-visually-hidden">{needWords}</span>}
+      </a>
       {/* DES-SYSTEM-CHAT §1: the action row, on every page — four equal icon buttons, New job ·
           New project · Chat · Search (⌘K), each named and with a tooltip. New job and Chat start in the
           project on screen. The New project modal is portalled so the phone drawer — which closes when
@@ -182,9 +191,7 @@ export function SessionRail({ runs, needRows, navigate, pathname, runsKnown = tr
           {NAV_GROUPS.map((g) => (
             <div key={g.id} role="group" aria-labelledby={`rail-sec-${g.id}`} data-testid={`rail-nav-${g.id}`} className="wk-rail-nav-group">
               <p id={`rail-sec-${g.id}`} className="wk-rail-sec">{g.label}</p>
-              {g.items.map((item) => (item.id === 'home'
-                ? navLink(item, count > 0 ? <span aria-hidden data-testid="desk-rail-badge" data-phase={settled.phase} className="wk-rail-badge wk-rail-badge--home">{badgeText}</span> : null, count > 0 ? deskName : undefined)
-                : navLink(item)))}
+              {g.items.map((item) => navLink(item))}
             </div>
           ))}
         </div>

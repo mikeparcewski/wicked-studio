@@ -17,6 +17,7 @@ import { QeAcceptanceOptions, ReducedAssuranceOptIn } from '../session/Assurance
 import { Switch } from '../ui/Switch.js';
 import { TechDetails } from '../ui/TechDetails.js';
 import { useRoster } from '../../hooks/useRoster.js';
+import { useSignInHere } from '../agents/useSignInHere.js';
 import { useLaunchPreview } from '../../hooks/useLaunchPlan.js';
 import { useCapabilities } from '../../store/capabilities.js';
 import { isOptInKey, OPT_IN_NOTE, seatOff, useLaunchSeats } from '../../store/composerSeats.js';
@@ -107,6 +108,9 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
   useEffect(() => { loadPresets(draft.projectId ?? null); }, [draft.projectId]);
   const rows = useMemo(() => workflowItems('', defs, presets), [defs, presets]);
   const roster = useRoster();
+  // A greyed helper's Sign in opens its sign-in modal over the wizard; closing it re-reads the roster,
+  // and the helpers below re-derive from it (a helper that signed in is picked by default again).
+  const signIn = useSignInHere();
   const projects = useProjectsStore((s) => s.projects) ?? [];
   const dropped = useLaunchSeats((s) => s.dropped);
   const picked = useLaunchSeats((s) => s.picked);
@@ -538,11 +542,13 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
                   {unusable.size > 0 && (
                     <span id="launch-wizard-unusable-note" className="wk-field-note" data-testid="launch-wizard-unusable-note">
                       Not picked, because they cannot take work now: {eligible.filter((s) => unusable.has(s.key)).map((s) => `${seatLabel(s)} (${unusable.get(s.key) || 'unavailable'})`).join(', ')}.{' '}
-                      {navigate !== undefined && (
-                        <button type="button" className="wk-btn wk-btn--secondary" data-testid="launch-wizard-signin" onClick={() => { closeStore(); navigate('/system'); }}>
-                          Sign in ›
+                      {eligible.filter((s) => unusable.has(s.key)).map((s, _i, all) => (
+                        <button key={s.key} type="button" className="wk-btn wk-btn--secondary" data-testid="launch-wizard-signin" data-key={s.key}
+                          aria-label={`Sign in to ${seatLabel(s)}`} onClick={() => signIn.open(s.key)}>
+                          {all.length === 1 ? 'Sign in ›' : `Sign in to ${seatLabel(s)} ›`}
                         </button>
-                      )}
+                      ))}
+                      {signIn.modal}
                     </span>
                   )}
                   <span className="wk-field-note">Who plans, builds and checks the work. Different helpers check each other’s work.</span>

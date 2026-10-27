@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { RosterSeat, SessionView as RunView } from '../../api/types.js';
 import { QeRefusalWarning } from '../QeRefusalWarning.js';
 import { GATE_HASH, IDLE_GATE_ACTION, commitGateDecision, commitGateReassign, useGateActionStore, type GateAnswer } from '../../board/gateActions.js';
@@ -23,7 +23,8 @@ import { REDUCED_OPT_IN_DISCLOSURE, REDUCED_OPT_IN_LABEL, creatorSeatRefusal, ga
 import { retryPrefillOf } from '../../board/needsYou.js';
 import { setRetryPrefill } from '../../store/retryPrefill.js';
 import { useCapabilities } from '../../store/capabilities.js';
-import type { Navigate } from '../../hooks/useRoute.js';
+import { AGENTS_PATH, type Navigate } from '../../hooks/useRoute.js';
+import { useSignInHere } from '../agents/useSignInHere.js';
 import { AssuranceReceipt, AssuranceReceiptTech, QeAcceptanceLabel, ReducedAssuranceLabel } from './AssuranceReceipt.js';
 import { missingSeatsLine, rejudgeOfferOf, type RejudgeOffer } from '../../board/rejudge.js';
 import { FLOOR_OVERRIDE_CONSEQUENCE, FLOOR_OVERRIDE_KEY, FLOOR_OVERRIDE_PLACEHOLDER, FLOOR_OVERRIDE_SEND } from '../../board/floorOverride.js';
@@ -260,7 +261,7 @@ function RunGateRow({ view, gate, navigate }: { view: RunView; gate: OpenGate | 
         />
       )}
       {model.withheldSeats !== undefined && (
-        <WithheldSeats seats={model.withheldSeats} {...(navigate !== undefined ? { navigate } : {})} />
+        <WithheldSeats seats={model.withheldSeats} />
       )}
       {judgeWait && (
         <JudgeWaitLine
@@ -367,46 +368,55 @@ export function DeadSeatLine({ seat, label, canReassign, withheld, navigate }: {
       {' '}
       {navigate !== undefined
         ? (
-          <button type="button" data-testid="session-gate-dead-seat-signin" onClick={() => navigate('/system')} className="wk-btn wk-btn--secondary">
+          <button type="button" data-testid="session-gate-dead-seat-signin" onClick={() => navigate(AGENTS_PATH)} className="wk-btn wk-btn--secondary">
             Sign another helper in ›
           </button>
         )
-        : <span data-testid="session-gate-dead-seat-signin">Sign one in from Settings.</span>}
+        : <span data-testid="session-gate-dead-seat-signin">Sign one in on the Agents page.</span>}
     </p>
   );
 }
 
 /**
  * (PRODUCT-WORKS J4) The job's other helpers a reassign does not offer, greyed out with why — benched
- * (and when it lifts), signed out, not eligible — and the way to fix it: sign a helper in. On the rig the
+ * (and when it lifts), signed out, not eligible — and the way to fix it: sign that helper in. On the rig the
  * dead-seat card offered only quota-benched Copilot; a seat that cannot work is shown, never offered.
+ * Each one's Sign in opens ITS sign-in modal right here (operator 2026-10-27: it used to open General
+ * settings); closing it reads the roster again, so the card's reassign choices follow the new sign-in.
+ * A seat refused because it made the work under review gets no Sign in: signing in cannot change that.
  */
-export function WithheldSeats({ seats, navigate }: { seats: readonly ReassignCandidate[]; navigate?: Navigate }): React.ReactElement {
+export function WithheldSeats({ seats }: { seats: readonly ReassignCandidate[] }): React.ReactElement {
+  const signIn = useSignInHere();
+  const signable = seats.filter((c) => c.state !== 'refused');
   return (
     <div data-testid="session-gate-withheld" className="wk-gate-withheld">
-      {seats.map((c) => (
-        <button
-          key={c.cli}
-          type="button"
-          disabled
-          aria-disabled="true"
-          data-testid="session-gate-withheld-seat"
-          data-key={c.cli}
-          data-state={c.state}
-          className="wk-btn wk-btn--secondary"
-          title={`${seatName(c.cli, c.label)} cannot take the step now${c.note !== '' ? `: ${c.note}` : ''}.`}
-        >
-          Reassign to {seatName(c.cli, c.label)}
-          {c.note !== '' && <span className="wk-gate-withheld-why"> — {c.note}</span>}
-        </button>
-      ))}
-      {navigate !== undefined
-        ? (
-          <button type="button" data-testid="session-gate-withheld-signin" onClick={() => navigate('/system')} className="wk-btn wk-btn--secondary">
-            Sign in ›
-          </button>
-        )
-        : <span data-testid="session-gate-withheld-signin">Sign in from Settings.</span>}
+      {seats.map((c) => {
+        const name = seatName(c.cli, c.label);
+        return (
+          <Fragment key={c.cli}>
+            <button
+              type="button"
+              disabled
+              aria-disabled="true"
+              data-testid="session-gate-withheld-seat"
+              data-key={c.cli}
+              data-state={c.state}
+              className="wk-btn wk-btn--secondary"
+              title={`${name} cannot take the step now${c.note !== '' ? `: ${c.note}` : ''}.`}
+            >
+              Reassign to {name}
+              {c.note !== '' && <span className="wk-gate-withheld-why"> — {c.note}</span>}
+            </button>
+            {c.state !== 'refused' && (
+              <button type="button" data-testid="session-gate-withheld-signin" data-key={c.cli} aria-label={`Sign in to ${name}`}
+                onClick={() => signIn.open(c.cli)} className="wk-btn wk-btn--secondary">
+                {signable.length === 1 ? 'Sign in ›' : `Sign in to ${name} ›`}
+              </button>
+            )}
+          </Fragment>
+        );
+      })}
+      {signIn.modal}
     </div>
   );
 }
@@ -427,11 +437,11 @@ export function JudgeWaitLine({ offer, operatorJudgment = true, name = (s) => s,
 }): React.ReactElement {
   const signIn = navigate !== undefined
     ? (
-      <button type="button" data-testid="session-gate-judge-signin" onClick={() => navigate('/system')} className="wk-btn wk-btn--secondary">
+      <button type="button" data-testid="session-gate-judge-signin" onClick={() => navigate(AGENTS_PATH)} className="wk-btn wk-btn--secondary">
         Sign another helper in ›
       </button>
     )
-    : <span data-testid="session-gate-judge-signin">Sign one in from Settings.</span>;
+    : <span data-testid="session-gate-judge-signin">Sign one in on the Agents page.</span>;
   if (!operatorJudgment) {
     return (
       <p data-testid="session-gate-judge-wait" data-rejudge="member-step" role="status" className="wk-gate-consequence">

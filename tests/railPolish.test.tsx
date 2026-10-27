@@ -183,7 +183,7 @@ describe('the rail redesign', () => {
     const navigate = vi.fn();
     const { unmount } = render(<SessionRail runs={[]} needRows={[]} navigate={navigate} pathname="/watch" />);
     expect(screen.getByTestId('desk-rail-nerve')).toHaveAttribute('aria-current', 'page');
-    expect(screen.getByTestId('desk-rail-home')).not.toHaveAttribute('aria-current');
+    expect(screen.getByTestId('desk-rail-wordmark')).not.toHaveAttribute('aria-current');
     fireEvent.click(screen.getByTestId('desk-rail-nerve'));
     expect(navigate).toHaveBeenCalledWith('/watch');
     unmount();

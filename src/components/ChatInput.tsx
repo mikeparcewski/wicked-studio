@@ -1586,7 +1586,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
           className="text-xs rounded-xl px-4 py-2"
           style={{ background: 'var(--status-fail-dim)', border: '1px solid var(--status-fail)', color: 'var(--status-fail)', margin: 0 }}
         >
-          Send is off: no selected seat can take this run — {noSeatReason}. Sign a seat in from Settings or select another
+          Send is off: no selected seat can take this run — {noSeatReason}. Sign a seat in on the Agents page or select another
           seat, then send.
         </p>
       )}

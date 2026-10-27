@@ -70,6 +70,7 @@ import { altChord, setShortcutsPaletteOpen, useGlobalShortcuts } from './hooks/u
 import { takeTypedSeed, typeInto, typeTarget, useTypeToComposer } from './hooks/useTypeToComposer.js';
 import { legacySteeringTarget, useRetiredSettingsRedirect, useTestingRedirect } from './hooks/useLegacyRedirect.js';
 import { EverythingPage } from './components/everything/EverythingPage.js';
+import { ProjectsPage } from './components/everything/ProjectsPage.js';
 import { productRedirectPath, useRoute } from './hooks/useRoute.js';
 import { useRuns } from './hooks/useRuns.js';
 import { useAnnotationStore } from './store/annotations.js';
@@ -572,6 +573,10 @@ export function App(): React.ReactElement {
       if (new URLSearchParams(search).get('tab') === 'helpers') return <RouteRedirect to={AGENTS_PATH} navigate={navigate} />;
       // Like the Desk: the page owns its scroller (`.wk-desk-scroll`) — no clipping wrapper (main_scroll).
       return <EverythingPage runs={shownRuns} runsLoaded={runsLoaded} runsError={runsError} onRetryRuns={refresh} needRows={needRows} navigate={navigate} search={search} />;
+    }
+    // Projects (`/projects`, the sidebar's first WORK item): the projects list, for now.
+    if (panel === 'projects') {
+      return <ProjectsPage runs={shownRuns} runsLoaded={runsLoaded} runsError={runsError} onRetryRuns={refresh} needRows={needRows} navigate={navigate} search={search} />;
     }
     // Wave 1 ("raw in one step"): a run's raw event JSON / worktree files as routes — the
     // palette's `>events <run>` / `>files <run>` verbs land here, and Back returns.

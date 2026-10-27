@@ -3,14 +3,22 @@
 // offers only helpers that can take work (signed in, not benched); the others are shown greyed out
 // with their reason and lift time, beside a Sign in link, and a card with nothing usable says who is
 // back first and when.
-import { cleanup, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { CoreEvent, RosterSeat, WorkUnit } from '../src/api/types.js';
 import type { OpenGate } from '../src/store/gates.js';
 import { sessionGateChoices, soonestBack } from '../src/board/gateRowModel.js';
 import { liftClock, reassignCandidates, runBenchesOf, seatStanding } from '../src/components/gateVerdictModel.js';
 import { DeadSeatLine, WithheldSeats } from '../src/components/session/GateRow.js';
 import { makeUnit } from './factories.js';
+import { useAgentsReads } from '../src/store/agentsReads.js';
+
+// The one sign-in modal (the Agents page's), as a stand-in: which agent it was opened for, how, and its close.
+vi.mock('../src/components/agents/AgentModal.js', () => ({
+  AgentModal: ({ agentKey, intent, onClose }: { agentKey: string; intent?: string; onClose: () => void }) => (
+    <div data-testid="agent-modal" data-agent={agentKey} data-intent={intent ?? ''}><button type="button" data-testid="agent-modal-close" onClick={onClose}>Close</button></div>
+  ),
+}));
 
 afterEach(cleanup);
 
@@ -82,15 +90,45 @@ describe('J4 — a reassign offers only helpers that can take work', () => {
     expect(screen.getByTestId('session-gate-dead-seat-signin')).toBeTruthy();
   });
 
-  it('withheld seats render disabled with their reason, beside a Sign in link', () => {
-    const navigated: string[] = [];
+  it('withheld seats render disabled with their reason, each beside its own Sign in, which opens its sign-in modal here', () => {
+    const load = vi.fn(() => Promise.resolve());
+    useAgentsReads.setState({ load });
     const cands = reassignCandidates(['copilot', 'pi'], null, [COPILOT_BENCHED, PI_OUT], [], [], NOW);
-    render(<WithheldSeats seats={cands} navigate={(p) => navigated.push(p)} />);
+    render(<WithheldSeats seats={cands} />);
     const buttons = screen.getAllByTestId('session-gate-withheld-seat') as HTMLButtonElement[];
     expect(buttons.map((b) => [b.dataset['key'], b.disabled])).toEqual([['pi', true], ['copilot', true]]);
     expect(buttons[1]!.textContent).toBe(`Reassign to GitHub Copilot CLI — out of quota — back by ${liftClock(LIFT)}`);
     expect(buttons[0]!.textContent).toContain('no sign-in observed');
-    screen.getByTestId('session-gate-withheld-signin').click();
-    expect(navigated).toEqual(['/system']);
+    // Operator 2026-10-27: Sign in opened General settings. Now each seat's own Sign in opens ITS modal, in place.
+    const signIns = screen.getAllByTestId('session-gate-withheld-signin');
+    expect(signIns.map((b) => [b.dataset['key'], b.textContent, b.getAttribute('aria-label')])).toEqual([
+      ['pi', 'Sign in to Pi ›', 'Sign in to Pi'], ['copilot', 'Sign in to GitHub Copilot CLI ›', 'Sign in to GitHub Copilot CLI'],
+    ]);
+    expect(screen.queryByTestId('agent-modal')).toBeNull();
+    fireEvent.click(signIns[0]!);
+    const modal = screen.getByTestId('agent-modal');
+    expect(modal.dataset['agent']).toBe('pi');
+    expect(modal.dataset['intent']).toBe('sign-in');
+    // Closing it reads the roster again, so the card's choices follow the sign-in.
+    expect(load).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByTestId('agent-modal-close'));
+    expect(screen.queryByTestId('agent-modal')).toBeNull();
+    expect(load).toHaveBeenCalledTimes(1);
+  });
+
+  it('one withheld seat: its Sign in reads "Sign in ›"; a seat refused for making the work gets none', () => {
+    const one = reassignCandidates(['pi'], null, [PI_OUT], [], [], NOW);
+    render(<WithheldSeats seats={[...one, { cli: 'codex', label: 'Codex', state: 'refused', note: 'it made the work' }]} />);
+    const signIns = screen.getAllByTestId('session-gate-withheld-signin');
+    expect(signIns.map((b) => [b.dataset['key'], b.textContent])).toEqual([['pi', 'Sign in ›']]);
+  });
+
+  it('the generic "Sign another helper in" goes to the Agents page, never to Settings', () => {
+    const roster = [seat('claude', 'Claude Code'), COPILOT_BENCHED];
+    const model = sessionGateChoices({ runId: RUN, gate, units: UNITS, events: EVENTS, pool: ['claude', 'copilot'], roster, now: NOW })!;
+    const navigated: string[] = [];
+    render(<DeadSeatLine seat={model.deadSeat!} label="Claude Code" canReassign={false} withheld={model.withheldSeats!} navigate={(p) => navigated.push(p)} />);
+    fireEvent.click(screen.getByTestId('session-gate-dead-seat-signin'));
+    expect(navigated).toEqual(['/agents']);
   });
 });

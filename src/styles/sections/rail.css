@@ -165,11 +165,16 @@
    above; on top of them a page item's hover is an ACCENT tint (the rail's hover fill when the theme
    defines one, else the accent over the rail) and the current page is the accent wash, the start-edge
    bar and semibold words. Tokens only. ── */
-/* The wordmark is a label now (Home is the first page): the old link's box, no hover. */
+/* The wordmark is the link Home (operator 2026-10-27; it is a .wk-rail-home, so it takes the rail's hover,
+   pressed and focus states above) with the needs-you badge at its end. Current on Home, it stays quiet:
+   the landing says where you are, and a tinted wordmark would be the loudest thing in the rail. */
 .wk-rail-wordmark {
   display: flex; align-items: center; gap: 8px; margin: 10px 10px 6px; padding: 6px 8px; min-width: 0;
 }
 .wk-rail-wordmark .wk-rail-brand { color: var(--ink-high); }
+.wk-rail .wk-rail-wordmark[aria-current="page"] { background: none; }
+.wk-rail .wk-rail-wordmark[aria-current="page"]:hover { background: var(--rail-hover-bg); }
+.wk-rail .wk-rail-wordmark[aria-current="page"]:active { background: var(--rail-press-bg); }
 .wk-rail-nav { display: flex; flex-direction: column; }
 .wk-rail-nav-group { display: flex; flex-direction: column; gap: 1px; }
 /* A section label: small caps (the words are "Work", "Insight", "Govern"; screen readers read them so). */
@@ -189,7 +194,12 @@
 }
 .wk-rail .wk-rail-nav-item[aria-current="page"]:hover { background: var(--rail-hover-current-bg); box-shadow: inset 3px 0 0 var(--accent); }
 .wk-rail .wk-rail-nav-item:active, .wk-rail .wk-rail-nav-item[aria-current="page"]:active { background: var(--rail-press-bg); color: var(--ink-high); }
-/* Home's needs-you count is the spark (one yellow mark per viewport), as the wordmark's was. */
+/* WORK's primary entry (Projects): a step stronger words and a small accent mark before them, calm at
+   rest; hover, pressed and current are every page item's. */
+.wk-rail .wk-rail-nav-item--primary { justify-content: flex-start; color: var(--ink-high); font-weight: var(--weight-medium); }
+.wk-rail .wk-rail-nav-item--primary[aria-current="page"] { font-weight: var(--weight-semi); }
+.wk-rail-nav-mark { width: 6px; height: 6px; flex-shrink: 0; border-radius: var(--radius-full); background: var(--accent); }
+/* The wordmark's needs-you count is the spark (one yellow mark per viewport). */
 .wk-rail-badge.wk-rail-badge--home { background: var(--spark); color: var(--spark-ink); }
 
 /* RECENT: its label is the fold toggle for the whole list (a chevron that turns when open). */

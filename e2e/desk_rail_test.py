@@ -55,12 +55,12 @@ def check(step: str, ok: bool, **detail) -> None:
 
 
 
-PAGES = ["desk-rail-home", "nav-jobs", "nav-repos", "nav-report", "nav-understand", "nav-evaluate",
+PAGES = ["nav-projects", "nav-jobs", "nav-repos", "nav-report", "nav-understand", "nav-evaluate",
          "nav-steering", "nav-memory", "nav-agents"]
 
 RAIL = """() => {
   const rail = document.querySelector('[data-testid="session-rail"]');
-  const ids = ['desk-rail-wordmark', 'desk-rail-new-job', 'desk-rail-new-project', 'desk-rail-home', 'nav-jobs', 'nav-repos',
+  const ids = ['desk-rail-wordmark', 'desk-rail-new-job', 'desk-rail-new-project', 'nav-projects', 'nav-jobs', 'nav-repos',
                'nav-report', 'nav-understand', 'nav-evaluate', 'nav-steering', 'nav-memory', 'nav-agents', 'rail-recent-toggle',
                'rail-group', 'rail-all-jobs', 'desk-rail-build', 'desk-rail-nerve',
                'desk-rail-skills', 'desk-rail-general', 'rail-foot-label', 'desk-tabs-more', 'desk-rail-more'];
@@ -69,7 +69,11 @@ RAIL = """() => {
     const id = el.dataset.testid;
     if (ids.includes(id) && seen[seen.length - 1] !== id) seen.push(id);
   }
-  const home = rail.querySelector('[data-testid="desk-rail-home"]');
+  // The wordmark is the link Home (operator 2026-10-27); its badge is said as its description.
+  const home = rail.querySelector('[data-testid="desk-rail-wordmark"]');
+  const descId = home?.getAttribute('aria-describedby');
+  const primary = rail.querySelector('[data-testid="nav-projects"]');
+  const jobs = rail.querySelector('[data-testid="nav-jobs"]');
   const badge = rail.querySelector('[data-testid="desk-rail-badge"]');
   return {
     order: seen,
@@ -78,6 +82,12 @@ RAIL = """() => {
     bell: !!rail.querySelector('[data-nav-dest="notifications"], [aria-label^="Notifications"], [aria-label$="notifications"]'),
     homeLinks: rail.querySelectorAll('a[href="/"]').length,
     homeName: home?.getAttribute('aria-label') ?? null,
+    homeTag: home?.tagName ?? null,
+    homeDesc: descId ? (document.getElementById(descId)?.textContent ?? null) : null,
+    primaries: [...rail.querySelectorAll('[data-primary="true"]')].map(e => e.dataset.testid),
+    primaryWeight: primary ? parseInt(getComputedStyle(primary).fontWeight, 10) : null,
+    jobsWeight: jobs ? parseInt(getComputedStyle(jobs).fontWeight, 10) : null,
+    primaryMark: !!primary?.querySelector('.wk-rail-nav-mark'),
     badge: badge && home?.contains(badge) ? badge.innerText.trim() : null,
     nerveLast: !!rail.lastElementChild?.querySelector('[data-testid="desk-rail-nerve"]'),
     secs: [...rail.querySelectorAll('.wk-rail-sec')].map(e => e.innerText.trim()),
@@ -120,11 +130,15 @@ with sync_playwright() as p:
     badge = r["badge"]
     check("order",
           r["order"] == want
-          and r["dests"] == ["page:home", "page:jobs", "page:repos", "page:report", "page:understand", "page:evaluate",
+          and r["dests"] == ["page:home", "page:projects", "page:jobs", "page:repos", "page:report", "page:understand", "page:evaluate",
                              "page:steering", "page:memory", "page:agents", "page:build", "watch"]
           and not r["bell"] and r["homeLinks"] == 1 and r["nerveLast"]
-          # Home's name says the badge (the fixture has gates waiting).
-          and badge is not None and r["homeName"] in (f"Home, {badge} need you", f"Home, {badge} needs you")
+          # The wordmark is the link Home; its description says the badge (the fixture has gates waiting).
+          and r["homeTag"] == "A" and r["homeName"] == "Home"
+          and badge is not None and r["homeDesc"] in (f"{badge} need you", f"{badge} needs you")
+          # Projects is WORK's one primary entry: a stronger weight than its siblings and an accent mark.
+          and r["primaries"] == ["nav-projects"] and r["primaryMark"]
+          and (r["primaryWeight"] or 0) > (r["jobsWeight"] or 0)
           and r["secs"] == ["WORK", "INSIGHT", "GOVERN", "RECENT"]
           and 1 <= r["sessions"] <= 5 and r["allJobs"] == "/jobs"
           and all(w not in r["text"] for w in ("Everything else", "Product", "Workspace", "General settings", "Configuration", "MCP tools", "Skills"))
@@ -214,9 +228,9 @@ with sync_playwright() as p:
     # ── 3. the pages navigate and mark the current one; Build & settings lists the rest ──
     went = {}
     page.goto(f"{origin}/", wait_until="networkidle")
-    for tid, path in (("nav-jobs", "/jobs"), ("nav-repos", "/repos"), ("nav-report", "/report"), ("nav-understand", "/understand"),
+    for tid, path in (("nav-projects", "/projects"), ("nav-jobs", "/jobs"), ("nav-repos", "/repos"), ("nav-report", "/report"), ("nav-understand", "/understand"),
                       ("nav-evaluate", "/testing/evals"), ("nav-steering", "/rules"), ("nav-memory", "/memory"),
-                      ("nav-agents", "/agents"), ("desk-rail-home", "/"), ("desk-rail-build", "/build")):
+                      ("nav-agents", "/agents"), ("desk-rail-wordmark", "/"), ("desk-rail-build", "/build")):
         page.get_by_test_id(tid).click()
         page.wait_for_function(f"() => window.location.pathname === '{path}'", timeout=5000)
         page.wait_for_timeout(150)
@@ -249,7 +263,7 @@ with sync_playwright() as p:
 
     # ── 3b. the group icons: a project's four-boxes icon opens its DASHBOARD (/projects/:id, not the
     #        Product flow); "Not in a project" carries the open icon to See everything › Projects.
-    page.get_by_test_id("desk-rail-home").click()
+    page.get_by_test_id("desk-rail-wordmark").click()
     page.wait_for_function("() => window.location.pathname === '/'", timeout=5000)
     view = page.locator('[data-testid="rail-group"]:not([data-project-id=""]) [data-testid="rail-group-view"]').first
     view.wait_for(state="visible", timeout=5000)
@@ -285,7 +299,7 @@ with sync_playwright() as p:
         page.set_viewport_size({"width": W, "height": H})
         page.evaluate("() => document.documentElement.removeAttribute('data-theme')")
 
-    page.get_by_test_id("desk-rail-home").click()
+    page.get_by_test_id("desk-rail-wordmark").click()
     page.wait_for_function("() => window.location.pathname === '/'", timeout=5000)
     page.get_by_test_id("desk-rail-build").wait_for(state="visible", timeout=5000)
     shots("rail")

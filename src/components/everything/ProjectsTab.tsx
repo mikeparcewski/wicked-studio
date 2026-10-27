@@ -97,8 +97,10 @@ export function ProjectEntry({ row, navigate, onStatusChanged, header = false, c
   </section>;
 }
 
-export function ProjectsTab({ q, runs, runsLoaded = true, runsError = null, onRetryRuns, needRows, navigate }: {
+export function ProjectsTab({ q, runs, runsLoaded = true, runsError = null, onRetryRuns, needRows, navigate, lensPath }: {
   q: EverythingQuery; runs: SessionView[]; runsLoaded?: boolean; runsError?: string | null; onRetryRuns?: (() => void) | undefined; needRows: NeedRow[]; navigate: Navigate;
+  /** Where the Active / Archived lens goes (the Projects page keeps its own address); default: the tab's. */
+  lensPath?: (filter: 'all' | 'archived') => string;
 }): React.ReactElement {
   const read = deskReadState(runsLoaded, runsError);
   const countsKnown = read === 'known' || read === 'stale';
@@ -128,7 +130,7 @@ export function ProjectsTab({ q, runs, runsLoaded = true, runsError = null, onRe
     return () => { live = false; };
   }, [archivedLens]);
   const shown = archivedLens ? projectRows(archived, [], [], []).map((row) => ({ ...row, repos: archivedRepos[row.project.id] ?? [] })) : rows;
-  const lens = (filter: 'all' | 'archived') => navigate(everythingPath({ tab: 'projects', filter }), { replace: true });
+  const lens = (filter: 'all' | 'archived') => navigate(lensPath !== undefined ? lensPath(filter) : everythingPath({ tab: 'projects', filter }), { replace: true });
   const listed = filterProjectRows(shown, name).filter((row) => !archivedLens || !hidden.includes(row.project.id));
   return <div data-testid="projects-tab" className="wk-projects-tab">
     {read === 'failed' && <StateBanner data-testid="projects-failed" kind={readErrorKind(runsError)} what="your work" error={runsError} {...(onRetryRuns !== undefined ? { onRetry: onRetryRuns } : {})} />}

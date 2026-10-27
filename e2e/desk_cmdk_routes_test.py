@@ -125,7 +125,7 @@ with sync_playwright() as p:
 
     # ── 2. every parameterless destination ──────────────────────────────────────────
     FIXED = {"/", "/watch", "/rules", "/everything?tab=sessions", "/everything?tab=made", "/agents",
-             "/everything?tab=handed", "/everything?tab=projects", "/steering/proposals",
+             "/everything?tab=handed", "/projects", "/steering/proposals",
              "/steering/policies", "/memory", "/memory?view=proposals", "/testing/evals", "/repos", "/repos/new",
              "/runs/new", "/workflows", "/skills", "/mcp", "/plugins", "/learn", "/system", "/system?tab=theme", "/editors/dev"}
     open_palette("go:")
