@@ -432,7 +432,7 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
   const understand = (
     <div {...panelOf('understand')} data-testid="desk-understand" className="wk-understand">
       {/* The calm page: one question box and Recent answers; the comparison is folded away under it. */}
-      <UnderstandPage project={projectId ?? null} navigate={navigate} now={now} compare={<DeskUnderstand runsShown={runsShown} agents={agents} agentsRead={record.phase} agentsTruncated={record.truncated}
+      <UnderstandPage project={projectId ?? null} navigate={navigate} now={now} runs={runs} compare={<DeskUnderstand runsShown={runsShown} agents={agents} agentsRead={record.phase} agentsTruncated={record.truncated}
         filterAgent={refine.agent} filterWorkflow={refine.workflow}
         filters={[refine.agent !== null ? `agent ${agentName(refine.agent)}` : null, refine.workflow !== null ? `workflow ${workflowLabel(refine.workflow)}` : null].filter((x): x is string => x !== null).join(', ') || null}
         workflows={flows} kept={kept} allRuns={runs} days={refine.days} onDays={(d) => set('days', d)} project={scope}

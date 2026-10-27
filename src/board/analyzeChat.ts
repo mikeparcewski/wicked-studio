@@ -45,15 +45,52 @@ export function indexOfferFor(scope: ChatScope | null | undefined): { repoId: st
   return { repoId: r.id, name: r.name };
 }
 
+/** How far back "most active" looks (integrator, 2026-10-27: the newest repository was a test repo). */
+export const ACTIVE_WINDOW_DAYS = 7;
+
 /**
- * Which repositories Understand's Ask starts with: none on a project's page (the project is the
- * scope, and its graph grounds it), else the most recently registered one (one repository binds its
- * own graph; several without a project bind none). The operator changes the choice before asking.
+ * The repository with the most jobs started in the last {@link ACTIVE_WINDOW_DAYS} days (a tie goes to
+ * the one worked on last), or `null` when none was worked on in that window. `created_at` is unix
+ * seconds; `nowMs` is milliseconds.
  */
-export function defaultAskRepos(repos: ReadonlyArray<{ id: string; registered_at?: number }>, project: string | null): string[] {
-  if (project !== null || repos.length === 0) return [];
-  const newest = [...repos].sort((a, b) => (b.registered_at ?? 0) - (a.registered_at ?? 0))[0]!;
-  return [newest.id];
+export function mostActiveRepo(
+  repos: ReadonlyArray<{ id: string }>,
+  runs: ReadonlyArray<{ session: { repo_ref?: string | null; created_at?: number | null; archived_at?: number | null } }>,
+  nowMs: number,
+): string | null {
+  const since = nowMs / 1000 - ACTIVE_WINDOW_DAYS * 86_400;
+  const known = new Set(repos.map((r) => r.id));
+  const tally = new Map<string, { n: number; last: number }>();
+  for (const { session: s } of runs) {
+    if (typeof s.repo_ref !== 'string' || !known.has(s.repo_ref) || s.archived_at != null) continue;
+    if (typeof s.created_at !== 'number' || s.created_at < since) continue;
+    const t = tally.get(s.repo_ref) ?? { n: 0, last: 0 };
+    tally.set(s.repo_ref, { n: t.n + 1, last: Math.max(t.last, s.created_at) });
+  }
+  let best: [string, { n: number; last: number }] | null = null;
+  for (const e of tally) if (best === null || e[1].n > best[1].n || (e[1].n === best[1].n && e[1].last > best[1].last)) best = e;
+  return best?.[0] ?? null;
+}
+
+/**
+ * Which repositories Understand's Ask starts with (integrator, 2026-10-27):
+ *  1. on a project's page, that project's repositories (`projectRepoIds`, once read);
+ *  2. otherwise the most active repository over the last {@link ACTIVE_WINDOW_DAYS} days;
+ *  3. otherwise none ("all repositories"), never a repository picked by registration order.
+ * The suggested questions are written from this choice ({@link suggestedQuestions} on the chosen
+ * names), so they never name a repository the question would not read.
+ */
+export function defaultAskRepos(
+  repos: ReadonlyArray<{ id: string }>,
+  opts: {
+    projectRepoIds: readonly string[] | null;
+    runs: ReadonlyArray<{ session: { repo_ref?: string | null; created_at?: number | null; archived_at?: number | null } }>;
+    now: number;
+  },
+): string[] {
+  if (opts.projectRepoIds !== null) return repos.filter((r) => opts.projectRepoIds!.includes(r.id)).map((r) => r.id);
+  const active = mostActiveRepo(repos, opts.runs, opts.now);
+  return active === null ? [] : [active];
 }
 
 /** The words under the box that say what the question will read. */
