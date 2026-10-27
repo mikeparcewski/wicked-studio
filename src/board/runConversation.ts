@@ -1,5 +1,5 @@
 import type { CoreEvent, SessionView } from '../api/types.js';
-import { deliveryOf } from '../components/delivery.js';
+import { deliveryOf, hasDeliveredRef } from '../components/delivery.js';
 import type { ChainModel } from './chainModel.js';
 
 /**
@@ -208,6 +208,9 @@ export interface FinalChecks {
   /** rig 0.15.8: the operator overrode a failed floor on the way here — the sentence that says so
    *  (`overriddenLine`), said instead of "The checks passed"; absent/null when nothing was overridden. */
   overridden?: string | null;
+  /** J4: what assured the tree that was DELIVERED — `false` for a hand-over nothing re-verified (crew's
+   *  `delivery_assurance.verified: false`, the post-hoc lift); absent/null when no record says so. */
+  deliveryVerified?: boolean | null;
 }
 
 /** The test count in crew's acceptance words ("the repo's checks passed (38 tests)"), or null. */
@@ -251,8 +254,16 @@ export function finalWords(view: SessionView, steps: { done: number; total: numb
   // An override replaces only "passed": checks that did not pass are still said (pr-xreview on studio#899).
   const overridden = checks.overridden ?? null;
   if (overridden !== null) sentences.push(overridden);
-  const tested = checks.passed === true ? (overridden !== null ? null : checks.tests !== null ? `Tests pass (${checks.tests})` : 'The checks passed')
+  // J4 (rig run f3d30829): "The checks passed" is said of the tree that SHIPPED. A run with a deliver step
+  // says it only when that tree was delivered (a recorded PR or pushed branch) by the engine's checked
+  // hand-over; a hand-over nothing re-verified says so instead, and work that was not pushed claims nothing.
+  const deliverStep = d.state !== 'none';
+  const shipped = s === 'completed' && (pr !== null || d.state === 'pushed' || (d.state === 'delivered' && hasDeliveredRef(view)));
+  const unverified = shipped && checks.deliveryVerified === false;
+  const passedHere = !deliverStep || (shipped && !unverified);
+  const tested = checks.passed === true ? (overridden !== null || !passedHere ? null : checks.tests !== null ? `Tests pass (${checks.tests})` : 'The checks passed')
     : checks.passed === false ? 'The checks did not pass' : null;
+  if (unverified) sentences.push('Nothing re-checked the tree that was delivered.');
   const reviewed = checks.reviewers.length > 0 ? andList(checks.reviewers) : null;
   if (tested !== null && reviewed !== null) sentences.push(`${tested}, and ${reviewed} reviewed and approved it.`);
   else if (tested !== null) sentences.push(`${tested}.`);
@@ -261,9 +272,12 @@ export function finalWords(view: SessionView, steps: { done: number; total: numb
   if (s === 'completed') {
     if (pr !== null) sentences.push(pr.number !== null ? `Pull request #${pr.number} is open.` : 'A pull request is open.');
     else if (d.state === 'pushed') sentences.push(branch !== null ? `The work is on branch ${branch}.` : 'The branch was pushed.');
-    else if (d.state === 'stranded') sentences.push('The work hasn’t been pushed anywhere yet.');
+    else if (d.state === 'stranded') sentences.push('The work hasn’t been pushed anywhere yet: “Deliver — open a PR” on its delivery card pushes it.');
     else if (d.state === 'nothing-to-deliver') sentences.push('There was nothing to deliver.');
     else if (d.state === 'failed') sentences.push('The delivery didn’t go through.');
+    else if (d.state === 'delivered' && !shipped) sentences.push('No pull request or pushed branch is recorded.');
   }
-  return { lead: s === 'completed' ? 'Done' : 'Stopped', line: sentences.join(' '), pr, branch };
+  // A finished run whose hand-over did not land is not "Done" (J4): it says so first.
+  const lead = s !== 'completed' ? 'Stopped' : d.state === 'stranded' || d.state === 'failed' ? 'Not delivered' : 'Done';
+  return { lead, line: sentences.join(' '), pr, branch };
 }

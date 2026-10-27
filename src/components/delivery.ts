@@ -275,6 +275,20 @@ export function deliveryOf(view: SessionView): Delivery {
   return { state, unitId: unit?.id ?? null, reason, url, ...(pushed !== undefined ? { pushed } : {}) };
 }
 
+/**
+ * Whether the delivery RECORD names a pushed ref (J4, rig run f3d30829): a pull request url (the
+ * wire's, a legacy object's, or one this browser read), a push-only branch, or crew's own
+ * `delivered` / `pushed` verdict (crew records those only over a PR url or a pushed branch). A
+ * deliver unit that finished, or a run that completed, is not enough — "Delivered" is said only
+ * over a ref that was actually pushed.
+ */
+export function hasDeliveredRef(view: SessionView, readUrl: string | null = null): boolean {
+  const s = view.session as SessionWithDelivery;
+  if (s.delivery === 'delivered' || s.delivery === 'pushed') return true;
+  if (readUrl !== null && isPrUrl(readUrl)) return true;
+  return deliveryOf(view).url !== null;
+}
+
 /** A {@link Delivery} plus the claim it licenses and the url that licensed it. */
 export interface ResolvedDelivery extends Delivery {
   /** What the surface may say. See {@link DeliveryClaim}. */
