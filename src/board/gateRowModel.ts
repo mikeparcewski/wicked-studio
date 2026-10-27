@@ -383,6 +383,18 @@ export const FLOOR_FIX_LABEL = 'Fix with a note';
  * the same verify run again and fail the same way.
  */
 export const RETRY_NOTE_LABEL = 'Retry this step with a note';
+/**
+ * wicked-core#761: a capped review's gate (`review_adjudication`, "Unit N verdict is NOT PASS again — …
+ * Approve = LAND WITH CARRIED ITEMS"). Its approve ACCEPTS the work with the reviewer's open items carried,
+ * records the note as the landing ruling and moves on (`land_with_carried_items`); another round is Send back.
+ */
+export const LAND_NOTE_LABEL = 'Land with carried items and a note';
+export const LAND_NOTE_TITLE = 'Accept the work as it stands, with the reviewer\'s open items carried and your note on the record; the run moves on. For one more review round, Send back.';
+/** Whether the gate is a capped review's adjudication (its approve lands the work and advances). */
+export function isReviewAdjudication(gate: { gateKind?: string | undefined; prompt: string }): boolean {
+  return gate.gateKind === 'review_adjudication'
+    || (/^\s*Unit\s+\d+\s+verdict is NOT PASS again\b/i.test(gate.prompt) && /\bApprove = LAND WITH CARRIED ITEMS\b/i.test(gate.prompt));
+}
 export const RETRY_NOTE_TITLE = 'Run this step again with your note; the run does not move on. To have the builder change something, Send back.';
 /** Whether the engine's approve at this gate re-runs the phase (its prompt says so). */
 export function approveRetriesPhase(prompt: string): boolean {
@@ -831,9 +843,12 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
         ? { key: 'steer', label: QE_RETRY_NOTE_LABEL, decision: { approve: true }, needsNote: true, title: QE_RETRY_NOTE_TITLE }
         : operatorJudgment
           ? { key: 'steer', label: OPERATOR_JUDGMENT_LABEL, decision: { approve: true }, needsNote: true, title: OPERATOR_JUDGMENT_TITLE }
+          // wicked-core#761: a capped review's approve lands the work and moves on — never a retry.
+          : isReviewAdjudication(gate)
+          ? { key: 'steer', label: LAND_NOTE_LABEL, decision: { approve: true }, needsNote: true, title: LAND_NOTE_TITLE }
           // PRODUCT-WORKS J6: the engine's approve at an escalation amends the CURSOR unit — the
-          // escalated step itself — and re-runs it (every escalation but a judge-unavailable one,
-          // handled above). So when no later creator takes the note, it is a retry of this step,
+          // escalated step itself — and re-runs it (every escalation but a judge-unavailable one and a
+          // capped review's adjudication, both handled above). So when no later creator takes the note, it is a retry of this step,
           // whatever the prompt's wording: run 9bd0f728's "…and approve to retry, or …" prompt
           // missed the phrase test and read "Approve with a note for the next step", and the note
           // went to the same step, which ran again.

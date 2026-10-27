@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { CoreEvent, WorkUnit } from '../src/api/types.js';
 import type { OpenGate } from '../src/store/gates.js';
-import { approveRetriesPhase, FLOOR_FIX_LABEL, FLOOR_FIX_TITLE, isToolUnitGate, RETRY_NOTE_LABEL, RETRY_NOTE_TITLE, sessionGateChoices } from '../src/board/gateRowModel.js';
+import { approveRetriesPhase, isReviewAdjudication, LAND_NOTE_LABEL, FLOOR_FIX_LABEL, FLOOR_FIX_TITLE, isToolUnitGate, RETRY_NOTE_LABEL, RETRY_NOTE_TITLE, sessionGateChoices } from '../src/board/gateRowModel.js';
 import { classifyRowGate } from '../src/board/questionRow.js';
 import { recommendGateMove } from '../src/components/gateMoveModel.js';
 import { gateVerdictFor, isFloorFixGate } from '../src/components/gateVerdictModel.js';
@@ -120,6 +120,25 @@ describe('PRODUCT-WORKS J6 — an escalation\'s note goes to the step that re-ru
     // The amendment lands on the cursor unit (no amendScope), which is the step that re-runs.
     expect(steer.decision).not.toHaveProperty('amendScope');
     for (const c of [...model.choices, ...model.overflow]) expect(`${c.label} ${c.title}`).not.toMatch(/next step/);
+  });
+
+  it("labels a capped review's adjudication as landing the work, never a retry (wicked-core#761)", () => {
+    const prompt = 'Unit 8 verdict is NOT PASS again — round 3, after 2 send-backs to unit 6 (the rework cap is 2), so this gate adjudicates instead of sending it back. Items — none. Approve = LAND WITH CARRIED ITEMS: the creator\'s work counts. Request changes = ONE MORE ROUND. Reject = STOP the run';
+    let checked = 0;
+    for (const g of [{ gateKind: 'escalation' as const }, { gateKind: 'review_adjudication' as const }]) {
+      const adj = { runId: J6_RUN, ord: 8, prompt, lifecycle: 'open', receivedAt: NOW, ...g } as unknown as OpenGate;
+      expect(isReviewAdjudication(adj)).toBe(true);
+      const model = sessionGateChoices({ runId: J6_RUN, gate: adj, units: J6_UNITS, events: J6_EVENTS.slice(0, 1), pool: [], roster: null });
+      if (model === null) continue;
+      const steer = [...model.choices, ...model.overflow].find((c) => c.key === 'steer');
+      if (steer === undefined) continue;
+      expect(steer.label, g.gateKind).toBe(LAND_NOTE_LABEL);
+      expect(`${steer.label} ${steer.title}`).not.toMatch(/retry|does not move on/i);
+      checked += 1;
+    }
+    // At least the escalation-classified shape (the one codex reproduced) offers the arm.
+    expect(checked).toBeGreaterThan(0);
+    expect(isReviewAdjudication({ prompt: J6_PROMPT })).toBe(false);
   });
 
   it('keeps "Approve and steer" at a gate whose approve moves the run on (a def gate)', () => {
