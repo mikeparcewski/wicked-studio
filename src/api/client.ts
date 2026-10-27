@@ -180,6 +180,17 @@ export const api = {
       body: JSON.stringify(note === undefined ? { archived } : { archived, note }),
     }),
 
+  /**
+   * Resolve an unresolved run (crew api-types 0.140.0, `capabilities.attentionRanked`): archive it
+   * with a reason (required), or close it as superseded by another run. A run parked at a gate is
+   * stopped first; a running job is refused (409).
+   */
+  resolveRun: (id: string, body: { action: 'archive'; reason: string } | { action: 'superseded'; by: string; reason?: string }) =>
+    apiFetch<{ runId: string; action: 'archive' | 'superseded'; archived: true; cancelled: boolean; note: string }>(`/runs/${encodeURIComponent(id)}/resolve`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
   /** One run's detail (`SessionView`). */
   getRun: (id: string) => apiFetch<{ run: SessionView }>(`/runs/${encodeURIComponent(id)}`),
 

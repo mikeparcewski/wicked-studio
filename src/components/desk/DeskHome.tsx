@@ -1,5 +1,9 @@
 import { useId, useMemo, useState } from 'react';
 import type { SessionView } from '../../api/types.js';
+import type { SystemAttention, SystemSnapshot } from '../../api/system.js';
+import { actionPath } from '../../board/rankedNeeds.js';
+import { toResolveWords } from '../../board/nerveCenter.js';
+import { HEALTH_RECHECKED } from '../../store/systemSnapshot.js';
 import { runBatchDecision, useBatchGateStore } from '../../board/batchGates.js';
 import { useGateActionStore } from '../../board/gateActions.js';
 import type { SetupChore } from '../../board/deskModel.js';
@@ -38,8 +42,10 @@ const WAITING_PATH = '/needs';
  */
 export function DeskHome({
   runs, runsShown, read, needRows, settled, count = null, missing, onRetryNeeds, retryingNeeds, navigate, now, agentName, pathOfRun,
-  setup, reportPath, more, handover = null, states = null, ruleLine = null, panelId, labelledBy,
+  setup, reportPath, more, handover = null, states = null, ruleLine = null, panelId, labelledBy, ranked = null,
 }: {
+  /** A ranked crew's list (crew api-types 0.140.0): the card is its first item, the number its length. */
+  ranked?: SystemSnapshot | null;
   runs: SessionView[];
   runsShown: boolean;
   read: HomeRead;
@@ -91,10 +97,18 @@ export function DeskHome({
 
   // The card: "nothing can run" outranks everything; else the top need; else a setup item; else calm.
   const blocker = setup.find((c) => c.key === 'agents') ?? null;
-  const top = useMemo(() => topNeed(attention, now), [attention, now]);
+  const foldTop = useMemo(() => topNeed(attention, now), [attention, now]);
+  // A ranked crew decides the first item. One run's own cause shows as that run's card (its gate's
+  // moves in place); a cause holding several runs, or the system itself, as crew's words.
+  const rankedTop = ranked?.attention[0] ?? null;
+  const rankedRow = rankedTop !== null && (rankedTop.blockedRunIds?.length ?? 0) <= 1 && rankedTop.runId != null
+    ? attention.find((r) => needRunId(r) === rankedTop.runId) ?? null : null;
+  const top = ranked === null ? foldTop : rankedRow;
+  const shownRanked = blocker === null && ranked !== null && rankedTop !== null && rankedRow === null ? rankedTop : null;
   const shownNeed = blocker === null ? top : null;
-  const fallbackSetup = blocker === null && top === null ? (setup[0] ?? null) : null;
-  const moreWaiting = Math.max(0, waiting - (shownNeed !== null ? 1 : 0));
+  const fallbackSetup = blocker === null && top === null && shownRanked === null ? (setup[0] ?? null) : null;
+  const moreWaiting = Math.max(0, waiting - (shownNeed !== null || shownRanked !== null ? 1 : 0));
+  const resolveCount = ranked?.unresolved?.length ?? 0;
 
   const progress = useMemo(() => progressRows(runs, { max: PROGRESS_MAX, agentName }), [runs, agentName]);
   const allJobs = everythingPath({ tab: 'sessions' });
@@ -134,13 +148,14 @@ export function DeskHome({
             <h2 className="wk-home-label">Needs you</h2>
             <div className="wk-home-card wk-home-card--loading" data-testid="desk-loading"><Skeleton rows={3} variant="line" /></div>
           </section>
-        ) : read === 'failed' ? null : (blocker !== null || shownNeed !== null || fallbackSetup !== null) ? (
+        ) : read === 'failed' ? null : (blocker !== null || shownNeed !== null || shownRanked !== null || fallbackSetup !== null) ? (
           <section aria-labelledby={needsId} className="wk-home-sec" data-testid="desk-needs">
             {/* A setup item when nothing waits is a to-do, not a wait: its own words. */}
             <h2 id={needsId} className="wk-home-label">{fallbackSetup !== null ? 'Set up studio' : 'Needs you'}</h2>
             {settled === 'partial' && missing.length > 0 && <StateBanner data-testid="desk-needs-partial" kind="partial" what={missing.join(', ')} onRetry={onRetryNeeds} retrying={retryingNeeds} />}
             {blocker !== null ? <SetupCard chore={blocker} navigate={navigate} />
               : shownNeed !== null ? <NeedCard row={shownNeed} view={view(shownNeed)} navigate={navigate} now={now} agentName={agentName} />
+              : shownRanked !== null ? <RankedCard item={shownRanked} navigate={navigate} />
                 : fallbackSetup !== null && <SetupCard chore={fallbackSetup} navigate={navigate} />}
             {moreWaiting > 0 && (
               <a href={WAITING_PATH} onClick={go(WAITING_PATH)} className="wk-home-more" data-testid="desk-needs-more" data-count={moreWaiting}>
@@ -153,6 +168,11 @@ export function DeskHome({
             {settled === 'partial' && missing.length > 0
               ? <StateBanner data-testid="desk-needs-partial" kind="partial" what={missing.join(', ')} onRetry={onRetryNeeds} retrying={retryingNeeds} />
               : <p className="wk-home-calm" data-testid="desk-needs-calm">Nothing is waiting on you.</p>}
+            {resolveCount > 0 && (
+              <a href={WAITING_PATH} onClick={go(WAITING_PATH)} className="wk-home-more" data-testid="desk-needs-resolve" data-count={resolveCount}>
+                {toResolveWords(resolveCount, ranked?.unresolvedSpendUsd ?? null)} <span aria-hidden>→</span>
+              </a>
+            )}
             {others > 0 && (
               <a href={WAITING_PATH} onClick={go(WAITING_PATH)} className="wk-home-more" data-testid="desk-needs-others" data-count={others}>
                 {others === 1 ? '1 thing to look at when you have a moment' : `${others} things to look at when you have a moment`} <span aria-hidden>→</span>
@@ -221,6 +241,29 @@ function useAct(navigate: Navigate): (a: NeedAction, rowKey: string) => void {
     // A group's batch moves never reach the card (it shows one item); its page has them.
     navigate(WAITING_PATH);
   };
+}
+
+/** A ranked crew's first item when it is not one run's own gate: crew's words and its one move. */
+function RankedCard({ item, navigate }: { item: SystemAttention; navigate: Navigate }): React.ReactElement {
+  const path = actionPath(item.action);
+  const held = item.blockedRunIds?.length ?? 0;
+  return (
+    <article className="wk-home-card" data-testid="desk-need-card" data-ranked={item.id}>
+      {held > 1 && <p className="wk-home-card-context">{item.kind === 'slows' ? `Slowing ${held} jobs` : `Blocking ${held} jobs`}</p>}
+      <h3 className="wk-home-card-title">{item.text}</h3>
+      {item.reason !== null && <p className="wk-home-card-body">{item.reason}</p>}
+      {item.remedy !== null && item.remedy !== 'Re-check.' && <p className="wk-home-card-context">{item.remedy}</p>}
+      <div className="wk-home-card-acts">
+        {path !== null && item.action !== null && (
+          <a href={path} onClick={(e) => { e.preventDefault(); navigate(path); }} className="wk-home-btn wk-home-btn--primary">{item.action.label ?? 'Open'}</a>
+        )}
+        {item.action?.kind === 'recheck' && (
+          <button type="button" className="wk-home-btn wk-home-btn--primary" onClick={() => window.dispatchEvent(new Event(HEALTH_RECHECKED))}>{item.action.label ?? 'Re-check'}</button>
+        )}
+        <a href={WAITING_PATH} onClick={(e) => { e.preventDefault(); navigate(WAITING_PATH); }} className="wk-home-btn wk-home-btn--secondary">See what it holds</a>
+      </div>
+    </article>
+  );
 }
 
 function NeedCard({ row, view, navigate, now, agentName }: { row: NeedRow; view: SessionView | null; navigate: Navigate; now: number; agentName: (cli: string) => string }): React.ReactElement {

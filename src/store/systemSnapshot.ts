@@ -85,7 +85,9 @@ async function readTick(): Promise<Answer> {
   const health: Answer = { health: h, healthAt: Date.now(), healthError: null };
   if (h.capabilities?.['system'] === true) {
     try {
-      const snapshot = await bounded(getSystem());
+      const read = await bounded(getSystem());
+      // The one needs-you rule needs both: the capability, and the contract's own fields.
+      const snapshot = { ...read, ranked: read.ranked === true && h.capabilities?.['attentionRanked'] === true };
       return { ...health, mode: 'system', snapshot, snapshotAt: Date.now(), snapshotError: null };
     } catch (e) {
       // A crew that claims the capability but has no route is an older crew after all.
