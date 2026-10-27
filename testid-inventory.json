@@ -12,8 +12,8 @@
   "studioVersion": "0.12.3",
   "counts": {
     "files": 255,
-    "occurrences": 3472,
-    "static": 2952,
+    "occurrences": 3473,
+    "static": 2953,
     "dynamic": 75,
     "computed": 33
   },
@@ -10515,6 +10515,12 @@
       "files": [
         "src/components/everything/ProjectsPage.tsx",
         "src/components/everything/ProjectsTab.tsx"
+      ]
+    },
+    {
+      "testId": "projects-unfiled-state",
+      "files": [
+        "src/components/everything/ProjectsPage.tsx"
       ]
     },
     {
