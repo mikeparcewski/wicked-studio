@@ -13,6 +13,7 @@ import { useSystemStore } from '../../store/systemSnapshot.js';
 import { AgentModal } from '../agents/AgentModal.js';
 import { ConnectionRegistry, GovernanceRows, SeatsRegistry, WeekRegistry, seatStandingWord, useHealthRegistry, type HealthRegistry } from '../HealthRailSection.js';
 import { Tabs, TechDetails } from '../ui/index.js';
+import { ToResolve } from '../desk/NeedsRanked.js';
 
 const defaultNavigate: Navigate = (p) => { history.pushState(null, '', p); window.dispatchEvent(new PopStateEvent('popstate')); };
 
@@ -143,7 +144,13 @@ export function NerveCenterPage({ navigate = defaultNavigate, needCount = 0, fee
 
   let body: React.ReactNode;
   if (tab === 'attention') {
-    body = <AttentionList items={state.attention} read={state.read} answeredAt={answeredAt} onAct={act} onOpen={openTab} />;
+    body = (
+      <>
+        <AttentionList items={state.attention} read={state.read} answeredAt={answeredAt} onAct={act} onOpen={openTab} />
+        {/* A ranked crew (api-types 0.140.0): the work nobody resolved, with its spend, below what is stuck. */}
+        {system && snapshot.ranked === true && <div className="wk-nc-panel" data-testid="nc-to-resolve"><ToResolve snapshot={snapshot} runs={[]} navigate={navigate} /></div>}
+      </>
+    );
   } else if (tab === 'clis') {
     body = system ? (
       <>

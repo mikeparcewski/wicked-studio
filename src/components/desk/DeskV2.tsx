@@ -53,6 +53,8 @@ import { scrollBehavior } from '../ui/motion.js';
 import type { MenuItem } from '../ui/index.js';
 import { projectDetailPath } from '../../hooks/useRoute.js';
 import { DeskInbox } from './DeskInbox.js';
+import { NeedsRanked } from './NeedsRanked.js';
+import { useRankedNeeds } from '../../hooks/useRankedNeeds.js';
 import { FocusLockToggle } from '../NeedsYouQueue.js';
 import { useNeedsSources } from '../../store/needsSources.js';
 import { DeskUnderstand } from './DeskUnderstand.js';
@@ -155,6 +157,8 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
   const readState = deskReadState(runsLoaded, runsError);
   // studio#833: a project's Desk counts its own rows, so it settles on its own (never the rail's count).
   const settled = useSettledNeeds(needRows, readState === 'known', readState === 'failed', projectId ?? ALL_NEEDS_SCOPE);
+  // A ranked crew's list (crew api-types 0.140.0) is the needs-you list for the whole Desk.
+  const ranked = useRankedNeeds();
   const [rereading, setRereading] = useState(false);
   const rereadSources = useCallback((): void => { setRereading(true); void useNeedsSources.getState().load(0).finally(() => setRereading(false)); }, []);
   const runsShown = readState === 'known' || readState === 'stale';
@@ -352,7 +356,11 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
   const home = projectId === undefined;
   // Needs you, in full (`/needs`, the landing's "N more waiting"): the inbox the Work view had, with
   // the chores for whoever runs studio riding at its top, as before.
-  const inboxView = (
+  const inboxView = ranked !== null && projectId === undefined ? (
+    <div data-testid="desk-inbox-view">
+      <NeedsRanked snapshot={ranked} runs={runs} needRows={needRows} navigate={navigate} now={now} extra={choresBlock} />
+    </div>
+  ) : (
     <div data-testid="desk-inbox-view" className="wk-inbox-view">
       <DeskInbox rows={needRows} runs={runs} navigate={navigate} now={now} settled={readState === 'known' ? settled.phase : 'loading'} agentName={agentName} extra={choresBlock} setupCount={setup.length}
         missing={settled.missing} onRetry={rereadSources} retrying={rereading} asPage />
@@ -383,7 +391,7 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
       more={<DeskMore runs={runs} needs={readState === 'known' ? needRows.length : null} />}
       handover={handover.since !== null ? <HandoverPanel handover={handover} navigate={navigate} now={now} runs={runs} /> : null}
       states={homeStates}
-      ruleLine={<DeskRuleLine navigate={navigate} />} />
+      ruleLine={<DeskRuleLine navigate={navigate} />} ranked={ranked} />
   );
 
   const refineBarOf = (withGroup: boolean): React.ReactElement => (

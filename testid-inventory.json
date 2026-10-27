@@ -11,9 +11,9 @@
   "version": 1,
   "studioVersion": "0.12.3",
   "counts": {
-    "files": 245,
-    "occurrences": 3259,
-    "static": 2779,
+    "files": 246,
+    "occurrences": 3283,
+    "static": 2799,
     "dynamic": 74,
     "computed": 33
   },
@@ -3295,6 +3295,12 @@
       ]
     },
     {
+      "testId": "desk-need-card",
+      "files": [
+        "src/components/desk/DeskHome.tsx"
+      ]
+    },
+    {
       "testId": "desk-needs",
       "files": [
         "src/components/desk/Desk.tsx",
@@ -3325,6 +3331,12 @@
         "src/components/desk/Desk.tsx",
         "src/components/desk/DeskHome.tsx",
         "src/components/desk/DeskInbox.tsx"
+      ]
+    },
+    {
+      "testId": "desk-needs-resolve",
+      "files": [
+        "src/components/desk/DeskHome.tsx"
       ]
     },
     {
@@ -7964,6 +7976,12 @@
       ]
     },
     {
+      "testId": "nc-to-resolve",
+      "files": [
+        "src/components/nerve/NerveCenterPage.tsx"
+      ]
+    },
+    {
       "testId": "nc-upgrade-note",
       "files": [
         "src/components/nerve/NerveCenterPage.tsx"
@@ -8242,15 +8260,117 @@
       ]
     },
     {
+      "testId": "needs-calm",
+      "files": [
+        "src/components/desk/NeedsRanked.tsx"
+      ]
+    },
+    {
+      "testId": "needs-item",
+      "files": [
+        "src/components/desk/NeedsRanked.tsx"
+      ]
+    },
+    {
+      "testId": "needs-item-act",
+      "files": [
+        "src/components/desk/NeedsRanked.tsx"
+      ]
+    },
+    {
+      "testId": "needs-ranked",
+      "files": [
+        "src/components/desk/NeedsRanked.tsx"
+      ]
+    },
+    {
+      "testId": "needs-resolve",
+      "files": [
+        "src/components/desk/NeedsRanked.tsx"
+      ]
+    },
+    {
+      "testId": "needs-resolve-archive",
+      "files": [
+        "src/components/desk/NeedsRanked.tsx"
+      ]
+    },
+    {
+      "testId": "needs-resolve-archive-confirm",
+      "files": [
+        "src/components/desk/NeedsRanked.tsx"
+      ]
+    },
+    {
+      "testId": "needs-resolve-reason",
+      "files": [
+        "src/components/desk/NeedsRanked.tsx"
+      ]
+    },
+    {
+      "testId": "needs-resolve-retry",
+      "files": [
+        "src/components/desk/NeedsRanked.tsx"
+      ]
+    },
+    {
+      "testId": "needs-resolve-row",
+      "files": [
+        "src/components/desk/NeedsRanked.tsx"
+      ]
+    },
+    {
+      "testId": "needs-resolve-superseded",
+      "files": [
+        "src/components/desk/NeedsRanked.tsx"
+      ]
+    },
+    {
+      "testId": "needs-resolve-words",
+      "files": [
+        "src/components/desk/NeedsRanked.tsx"
+      ]
+    },
+    {
       "testId": "needs-review-badge",
       "files": [
         "src/components/AssumptionsPanel.tsx"
       ]
     },
     {
+      "testId": "needs-sentence",
+      "files": [
+        "src/components/desk/NeedsRanked.tsx"
+      ]
+    },
+    {
+      "testId": "needs-several",
+      "files": [
+        "src/components/desk/NeedsRanked.tsx"
+      ]
+    },
+    {
+      "testId": "needs-single",
+      "files": [
+        "src/components/desk/NeedsRanked.tsx"
+      ]
+    },
+    {
       "testId": "needs-summary",
       "files": [
         "src/components/NeedsYouQueue.tsx"
+      ]
+    },
+    {
+      "testId": "needs-to-review",
+      "files": [
+        "src/components/desk/NeedsRanked.tsx"
+      ]
+    },
+    {
+      "testId": "needs-worth",
+      "files": [
+        "src/components/desk/NeedsRanked.tsx"
       ]
     },
     {

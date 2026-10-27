@@ -100,6 +100,7 @@ export function nerveState(s: Signals, ws: 'connecting' | 'connected' | 'disconn
     if (s.snapshotError !== null) return unreachable('failed', `Crew's system snapshot could not be read: ${s.snapshotError}`);
     if (s.snapshotAt === null || s.snapshot === null) return checking();
     if (now - s.snapshotAt > STALE_MS) return unreachable('stale', "Crew's system snapshot is too old to trust.");
+    if (s.snapshot.ranked === true) return rankedState(s.snapshot.attention, s.snapshot.unresolved?.length ?? 0, s.snapshot.unresolvedSpendUsd ?? null, socketItems(ws));
     attention = worstFirst([...s.snapshot.attention, ...socketItems(ws)]);
   } else if (s.mode === 'fallback') {
     if (s.governance.kind === 'unread') return checking();
@@ -114,6 +115,33 @@ export function nerveState(s: Signals, ws: 'connecting' | 'connected' | 'disconn
   const top = attention[0];
   if (top === undefined) return { tone: 'green', read: 'fresh', words: ALL_CLEAR, attention };
   return { tone: top.level === 'red' ? 'red' : 'yellow', read: 'fresh', words: top.text, attention };
+}
+
+/** Dollars in words ("$12.40", "$0.42"). */
+export function spendWords(usd: number): string {
+  return `$${usd >= 100 ? Math.round(usd).toLocaleString() : usd.toFixed(2)}`;
+}
+
+/** "16 jobs to resolve · $4.20 spent" (no spend said when none is known). */
+export function toResolveWords(n: number, usd: number | null): string {
+  return `${n} ${n === 1 ? 'job' : 'jobs'} to resolve${usd !== null && usd > 0 ? ` · ${spendWords(usd)} spent` : ''}`;
+}
+
+/**
+ * A ranked crew's verdict (api-types 0.140.0): `attention` IS the needs-you list, in crew's order
+ * (never re-sorted here), and the tile says how many and the first. Green only when nothing holds
+ * work up AND nothing is left unresolved; unresolved work alone is yellow, in its own words.
+ */
+function rankedState(items: readonly SystemAttention[], unresolved: number, spend: number | null, socket: SystemAttention[]): NerveState {
+  const attention = [...items, ...socket];
+  const top = items[0] ?? socket[0];
+  if (top === undefined) {
+    if (unresolved > 0) return { tone: 'yellow', read: 'fresh', words: toResolveWords(unresolved, spend), attention };
+    return { tone: 'green', read: 'fresh', words: ALL_CLEAR, attention };
+  }
+  const tone: NerveTone = attention.some((a) => a.level === 'red') ? 'red' : 'yellow';
+  const words = items.length > 1 ? `${items.length} need you · ${top.text}` : top.text;
+  return { tone, read: 'fresh', words, attention };
 }
 
 /** The tile's state word for an accessible name ("Nerve Center: gateway down, work is blocked"). */

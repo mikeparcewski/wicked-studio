@@ -91,7 +91,7 @@ import { useWatchHydrate } from './hooks/useWatchFeed.js';
 import { WatchtowerPage } from './components/watch/WatchtowerPage.js';
 import { SteerSurface } from './components/steer/SteerSurface.js';
 import { tableAddress } from './components/steer/tableAddress.js';
-import { attentionBadge } from './board/attention.js';
+import { useNeedsNumber } from './hooks/useRankedNeeds.js';
 import type { CoreEvent, RepoEntry } from './api/types.js';
 import { readSteeringTypeFilter } from './api/steering.js';
 import { isTestingSubPage, readLaunchIntent } from './api/testing.js';
@@ -509,6 +509,8 @@ export function App(): React.ReactElement {
   // the right rail renders it on every route, peek shows its top item, Home reads the same.
   const needsNow = useNeedsClock();
   const needRows = useNeedsRows(runs, needsNow, runsLoaded);
+  // THE needs-you number: a ranked crew's list length (useRankedNeeds), else the fold's badge.
+  const needsNumber = useNeedsNumber(needRows);
   // The runs a Needs-you row holds: the Desk peek leaves them out of "running", as Running now does.
   const heldByNeeds = useMemo(() => new Set(needRows.map(needRunId).filter((id): id is string => id !== null)), [needRows]);
   // studio#805: the Desk's surfaces read a held live run as waiting on you (statusWord reads the mark).
@@ -664,9 +666,9 @@ export function App(): React.ReactElement {
       return (
         <NerveCenterPage
           navigate={navigate}
-          needCount={attentionBadge(needRows)}
+          needCount={needsNumber}
           search={search}
-          feed={<WatchtowerPage embedded count={attentionBadge(needRows)} runs={shownRuns} runsLoaded={runsLoaded} runsError={runsError} onRetryRuns={refresh} navigate={navigate} now={needsNow} search={search} />}
+          feed={<WatchtowerPage embedded count={needsNumber} runs={shownRuns} runsLoaded={runsLoaded} runsError={runsError} onRetryRuns={refresh} navigate={navigate} now={needsNow} search={search} />}
         />
       );
     }
@@ -851,8 +853,8 @@ export function App(): React.ReactElement {
       </ChatWindow>
 
       {/* S11: the open "look underneath" sheet (a step, a helper, a session, the Desk). */}
-      <ObjectSheet runs={shownRuns} navigate={navigate} needCount={attentionBadge(needRows)} />
-      <AltPeek runs={shownRuns} needCount={attentionBadge(needRows)} heldRuns={heldByNeeds} />
+      <ObjectSheet runs={shownRuns} navigate={navigate} needCount={needsNumber} />
+      <AltPeek runs={shownRuns} needCount={needsNumber} heldRuns={heldByNeeds} />
 
       {/* The universal command palette (DES-FEEDBACK-002 §1, slice G) — corpus
           from already-loaded stores + the runs prop; repos cached on first open. */}

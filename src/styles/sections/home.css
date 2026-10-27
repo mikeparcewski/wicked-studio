@@ -124,3 +124,51 @@
   .wk-inbox-view { height: auto; }
   .wk-inbox-view .wk-inbox-list { max-height: 520px; }
 }
+
+/* ── Needs you, ranked (`/needs` against a ranked crew; components/desk/NeedsRanked.tsx; the approved
+ * `ui-v2-needs` mockup): cards for what blocks several jobs, rows for one decision each, then the
+ * work to resolve with its cost, and what is worth a look folded at the end. */
+.wk-needs-col { max-width: 840px; gap: 40px; }
+.wk-needs-sec { gap: 14px; }
+.wk-needs-sec--rows { gap: 6px; }
+.wk-needs-sec--rows > .wk-home-label, .wk-needs-sec--rows > .wk-home-sec-head { margin-bottom: 8px; }
+.wk-needs-card { display: flex; align-items: center; gap: 20px; padding: 24px 26px; border-radius: 18px; background: var(--surface-card); min-width: 0; }
+.wk-needs-card-body, .wk-needs-row-body { display: flex; flex-direction: column; gap: 6px; flex: 1 1 auto; min-width: 0; }
+.wk-needs-card-title { font-size: 18px; font-weight: 600; color: var(--ink-high); overflow-wrap: anywhere; }
+.wk-needs-card-line { font-size: 14px; line-height: 1.5; color: var(--ink-body); overflow-wrap: anywhere; }
+.wk-needs-card-remedy { font-size: 14px; line-height: 1.5; color: var(--ink-muted); overflow-wrap: anywhere; }
+.wk-needs-dot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; background: var(--status-warn); }
+.wk-needs-dot[data-level="red"] { background: var(--status-fail); }
+.wk-needs-dot--sm { width: 10px; height: 10px; }
+.wk-needs-rows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.wk-needs-row { display: flex; align-items: center; gap: 18px; padding: 18px 20px; margin: 0 -20px; border-radius: 14px; transition: background-color 0.14s; min-width: 0; }
+.wk-needs-row:hover { background: color-mix(in oklab, var(--accent) 16%, transparent); }
+.wk-needs-row-title { font-size: 16px; font-weight: 500; color: var(--ink-high); overflow-wrap: anywhere; }
+.wk-needs-row-link { text-decoration: none; }
+.wk-needs-row-link:hover { text-decoration: underline; text-underline-offset: 3px; }
+.wk-needs-row-link:focus-visible { outline: 2px solid transparent; box-shadow: var(--focus-ring); border-radius: var(--radius-sm); }
+.wk-needs-row-line { font-size: 14px; line-height: 1.5; color: var(--ink-muted); overflow-wrap: anywhere; }
+.wk-needs-row-act { flex-shrink: 0; font-weight: 500; font-size: 14px; }
+.wk-needs-meta { font-size: 14px; color: var(--ink-muted); }
+.wk-needs-note { margin: 0 0 6px; font-size: 14px; line-height: 1.5; color: var(--ink-muted); }
+.wk-needs-tag { flex-shrink: 0; min-width: 84px; font-size: 13px; font-weight: 600; color: var(--ink-muted); }
+.wk-needs-tag[data-why="failed"] { color: var(--status-fail); }
+.wk-needs-acts { display: flex; flex-wrap: wrap; gap: 8px; flex-shrink: 0; }
+.wk-needs-acts .wk-home-btn, .wk-needs-reason .wk-home-btn { min-height: 36px; padding: 0 14px; font-size: 14px; }
+.wk-needs-reason { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+.wk-needs-reason-input {
+  flex: 1 1 240px; min-width: 0; height: 36px; padding: 0 12px; border-radius: var(--radius-md, 10px);
+  border: 1px solid var(--border-strong); background: transparent; color: var(--ink-high); font: inherit; font-size: 14px;
+}
+.wk-needs-reason-input:focus-visible { outline: 2px solid transparent; box-shadow: var(--focus-ring); }
+.wk-needs-fail { font-size: 14px; color: var(--status-fail); }
+.wk-needs-worth { font-size: 15px; }
+.wk-needs-worth > summary { cursor: pointer; display: inline-block; }
+.wk-needs-worth-list { margin: 12px 0 0; padding-left: 18px; display: flex; flex-direction: column; gap: 8px; color: var(--ink-muted); }
+@media (prefers-reduced-motion: reduce) { .wk-needs-row { transition: none; } }
+@media (max-width: 767px) {
+  .wk-needs-card { flex-direction: column; align-items: stretch; padding: 20px; gap: 14px; }
+  .wk-needs-card > .wk-needs-dot { display: none; }
+  .wk-needs-row { flex-wrap: wrap; margin: 0 -12px; padding: 14px 12px; }
+  .wk-needs-row--resolve .wk-needs-acts { width: 100%; }
+}
