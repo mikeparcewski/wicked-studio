@@ -1,3 +1,4 @@
+import { InsightsLine } from '../insights/InsightsLine.js';
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { ArrowDown, ArrowUp, ExternalLink, Minus } from 'lucide-react';
 import type { SessionView } from '../../api/types.js';
@@ -111,6 +112,7 @@ export function ReportPage({ runs, runsShown, now, navigate, projectId, agentNam
           <div className="wk-rep-hello">
             <h1 className="wk-rep-title">Report</h1>
             <p className="wk-rep-lede" data-testid="report-lede">{lede}</p>
+            <InsightsLine navigate={navigate} testId="report-insights-line" />
           </div>
           <div className="wk-rep-period">
             <Segmented label="Period" data-testid="report-period" value={kind}

@@ -85,6 +85,19 @@ export const EDITORS = [
       { id: 'artifact.theme', why: 'to change the deck’s theme, colours and fonts from its Style tab, as one version with Undo' },
     ],
   },
+  {
+    // crew DES-RUNS-REVIEW-001 §7: the Run insights dashboard. It reads and points; it never decides (the host
+    // draws Accept / Dismiss for the recommendation it points at).
+    id: 'wicked-insights',
+    title: 'Run insights',
+    protocol: [1, 2],
+    kinds: ['run-insights'],
+    sizes: ['inline', 'pane', 'full'],
+    permissions: [
+      { id: 'artifact.read', why: 'to read the run insights: every review of recent work, its recommendations and what happened to them, and the run metrics behind them' },
+      { id: 'selection.chip', why: 'to point at the recommendation you pick, so you can accept or dismiss it' },
+    ],
+  },
 ];
 
 /** A protocol-2 plugin's surfaces declaration, `src/plugins/<id>/surfaces.json`. */

@@ -1,3 +1,4 @@
+import { InsightsLine } from '../insights/InsightsLine.js';
 import { useEffect, useRef, useState } from 'react';
 import type { SystemAction, SystemAttention, SystemCli, SystemGovernanceCard, SystemInfra, SystemRun } from '../../api/system.js';
 import { gateOpenPath } from '../../board/gateActions.js';
@@ -239,6 +240,7 @@ export function NerveCenterPage({ navigate = defaultNavigate, needCount = 0, fee
             </li>
           ))}
         </ul>
+        <InsightsLine navigate={navigate} testId="nc-insights-line" />
         {mode === 'fallback' && (
           <p data-testid="nc-upgrade-note" className="wk-nc-note">
             This version of crew does not report the full system yet (each CLI&apos;s week, run liveness, infra probes, governance cards).

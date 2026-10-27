@@ -1,0 +1,27 @@
+/* Run insights (crew DES-RUNS-REVIEW-001 §7): the plugin's frame, and the host-owned decision panel beside it. */
+.wk-insights-page { flex: 1 1 auto; min-height: 0; min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 0; }
+.wk-insights-frame { min-width: 0; min-height: 0; height: 100%; display: flex; }
+.wk-insights-frame iframe { flex: 1 1 auto; width: 100%; height: 100%; min-height: 70vh; border: 0; background: var(--surface-base); }
+.wk-insights-decide { border-left: 1px solid var(--border); padding: 28px 22px; display: flex; flex-direction: column; gap: 12px; overflow-y: auto; background: var(--surface-base); }
+.wk-insights-hint { margin: 0; color: var(--ink-muted); font-size: 14px; }
+.wk-insights-title { margin: 0; font-size: 17px; font-weight: 600; color: var(--ink-high); }
+.wk-insights-line { margin: 0; color: var(--ink-body); font-size: 14px; }
+.wk-insights-runs { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+.wk-insights-runs a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+.wk-insights-buttons { display: flex; flex-wrap: wrap; gap: 8px; }
+.wk-insights-dismiss { display: flex; flex-direction: column; gap: 8px; }
+.wk-insights-dismiss label { font-size: 13px; color: var(--ink-muted); }
+.wk-insights-dismiss textarea { width: 100%; box-sizing: border-box; padding: 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-card); color: var(--ink-high); font: inherit; }
+.wk-insights-said { margin: 0; font-size: 13px; color: var(--ink-muted); }
+.wk-nc-insights { margin: 10px 0 0; font-size: 14px; color: var(--ink-muted); }
+.wk-nc-insights a { color: var(--accent); }
+@media (max-width: 860px) {
+  .wk-insights-page { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto; overflow-y: auto; }
+  .wk-insights-decide { border-left: 0; border-top: 1px solid var(--border); }
+}
+.wk-schedule-projects { border: 0; margin: 0; padding: 4px 0 8px 28px; display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 14px; color: var(--ink-body); }
+.wk-schedule-projects legend { padding: 0 0 6px; font-size: 13px; color: var(--ink-muted); }
+.wk-schedules { display: flex; flex-direction: column; gap: 18px; }
+.wk-schedule-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 0 0 0 28px; }
+.wk-schedule-toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; color: var(--ink-body); }
+.wk-schedule-controls select { width: auto; min-width: 140px; font-size: 14px; padding: 6px 8px; }

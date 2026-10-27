@@ -25,6 +25,8 @@ export const PAGE_NAMES = {
   testing: 'Testing',
   evals: 'Evaluate',
   learn: 'Learn',
+  /** `/insights` — the Run insights plugin: every review of recent work (crew DES-RUNS-REVIEW-001). */
+  insights: 'Run insights',
   system: 'Settings',
   repos: 'Repositories',
   workflows: 'Workflows',
@@ -41,6 +43,7 @@ const BY_PATH: ReadonlyArray<[string, string]> = [
   ['/testing/evals', PAGE_NAMES.evals],
   ['/testing', PAGE_NAMES.testing],
   ['/watch', PAGE_NAMES.watch],
+  ['/insights', PAGE_NAMES.insights],
   ['/skills', PAGE_NAMES.skills],
   ['/mcp/inspect', PAGE_NAMES.mcpInspect],
   ['/mcp', PAGE_NAMES.mcp],

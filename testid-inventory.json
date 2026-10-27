@@ -11,9 +11,9 @@
   "version": 1,
   "studioVersion": "0.12.3",
   "counts": {
-    "files": 244,
-    "occurrences": 3253,
-    "static": 2772,
+    "files": 248,
+    "occurrences": 3287,
+    "static": 2804,
     "dynamic": 74,
     "computed": 33
   },
@@ -5486,6 +5486,132 @@
       ]
     },
     {
+      "testId": "insights-accept",
+      "files": [
+        "src/components/insights/InsightsPage.tsx"
+      ]
+    },
+    {
+      "testId": "insights-better",
+      "files": [
+        "src/plugins/wicked-insights/plugin.ts"
+      ]
+    },
+    {
+      "testId": "insights-decide",
+      "files": [
+        "src/components/insights/InsightsPage.tsx"
+      ]
+    },
+    {
+      "testId": "insights-decide-runs",
+      "files": [
+        "src/components/insights/InsightsPage.tsx"
+      ]
+    },
+    {
+      "testId": "insights-decide-title",
+      "files": [
+        "src/components/insights/InsightsPage.tsx"
+      ]
+    },
+    {
+      "testId": "insights-decided",
+      "files": [
+        "src/components/insights/InsightsPage.tsx"
+      ]
+    },
+    {
+      "testId": "insights-dismiss",
+      "files": [
+        "src/components/insights/InsightsPage.tsx"
+      ]
+    },
+    {
+      "testId": "insights-dismiss-confirm",
+      "files": [
+        "src/components/insights/InsightsPage.tsx"
+      ]
+    },
+    {
+      "testId": "insights-dismiss-reason",
+      "files": [
+        "src/components/insights/InsightsPage.tsx"
+      ]
+    },
+    {
+      "testId": "insights-frame",
+      "files": [
+        "src/components/insights/InsightsPage.tsx"
+      ]
+    },
+    {
+      "testId": "insights-history",
+      "files": [
+        "src/plugins/wicked-insights/plugin.ts"
+      ]
+    },
+    {
+      "testId": "insights-history-row",
+      "files": [
+        "src/plugins/wicked-insights/plugin.ts"
+      ]
+    },
+    {
+      "testId": "insights-page",
+      "files": [
+        "src/components/insights/InsightsPage.tsx"
+      ]
+    },
+    {
+      "testId": "insights-rec",
+      "files": [
+        "src/plugins/wicked-insights/plugin.ts"
+      ]
+    },
+    {
+      "testId": "insights-recommendations",
+      "files": [
+        "src/plugins/wicked-insights/plugin.ts"
+      ]
+    },
+    {
+      "testId": "insights-review",
+      "files": [
+        "src/plugins/wicked-insights/plugin.ts"
+      ]
+    },
+    {
+      "testId": "insights-said",
+      "files": [
+        "src/components/insights/InsightsPage.tsx"
+      ]
+    },
+    {
+      "testId": "insights-summary",
+      "files": [
+        "src/plugins/wicked-insights/plugin.ts"
+      ]
+    },
+    {
+      "testId": "insights-trend",
+      "files": [
+        "src/plugins/wicked-insights/plugin.ts"
+      ]
+    },
+    {
+      "testId": "insights-trends",
+      "files": [
+        "src/plugins/wicked-insights/plugin.ts"
+      ]
+    },
+    {
+      "testId": "insights-watching",
+      "files": [
+        "src/plugins/wicked-insights/plugin.ts"
+      ]
+    },
+    {
       "testId": "kpi-repair",
       "files": [
         "src/components/ReplayMove.tsx"
@@ -7845,6 +7971,12 @@
     },
     {
       "testId": "nc-infra-state",
+      "files": [
+        "src/components/nerve/NerveCenterPage.tsx"
+      ]
+    },
+    {
+      "testId": "nc-insights-line",
       "files": [
         "src/components/nerve/NerveCenterPage.tsx"
       ]
@@ -10450,6 +10582,12 @@
       ]
     },
     {
+      "testId": "report-insights-line",
+      "files": [
+        "src/components/report/ReportPage.tsx"
+      ]
+    },
+    {
       "testId": "report-lede",
       "files": [
         "src/components/report/ReportPage.tsx"
@@ -11660,6 +11798,60 @@
       "testId": "runs-settings",
       "files": [
         "src/components/SystemSettings.tsx"
+      ]
+    },
+    {
+      "testId": "schedule-cadence",
+      "files": [
+        "src/components/insights/SchedulesSection.tsx"
+      ]
+    },
+    {
+      "testId": "schedule-enabled",
+      "files": [
+        "src/components/insights/SchedulesSection.tsx"
+      ]
+    },
+    {
+      "testId": "schedule-projects",
+      "files": [
+        "src/components/insights/SchedulesSection.tsx"
+      ]
+    },
+    {
+      "testId": "schedule-row",
+      "files": [
+        "src/components/insights/SchedulesSection.tsx"
+      ]
+    },
+    {
+      "testId": "schedule-run-now",
+      "files": [
+        "src/components/insights/SchedulesSection.tsx"
+      ]
+    },
+    {
+      "testId": "schedules-empty",
+      "files": [
+        "src/components/insights/SchedulesSection.tsx"
+      ]
+    },
+    {
+      "testId": "schedules-said",
+      "files": [
+        "src/components/insights/SchedulesSection.tsx"
+      ]
+    },
+    {
+      "testId": "schedules-section",
+      "files": [
+        "src/components/insights/SchedulesSection.tsx"
+      ]
+    },
+    {
+      "testId": "schedules-unsupported",
+      "files": [
+        "src/components/insights/SchedulesSection.tsx"
       ]
     },
     {
@@ -17272,6 +17464,7 @@
         "src/components/desk/DeskParts.tsx",
         "src/components/desk/UnderstandPage.tsx",
         "src/components/everything/FinishedRunMenu.tsx",
+        "src/components/insights/InsightsLine.tsx",
         "src/components/memory/MemoryPage.tsx",
         "src/components/product/RequirementsBrowser.tsx",
         "src/components/report/ReportPage.tsx",
