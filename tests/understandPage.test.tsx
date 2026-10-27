@@ -1,6 +1,7 @@
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ChatTranscriptRecord } from 'wicked-crew-api-types';
+import type { SessionView } from '../src/api/types.js';
 import { ApiError } from '../src/api/errors.js';
 import {
   ASKED_KEY, answerLine, firstSentence, forgetAsked, GROUNDING_LINE, questionMessage, readAsked, rememberAsked, suggestedQuestions,
@@ -13,9 +14,10 @@ import { useCapabilities } from '../src/store/capabilities.js';
 const mocks = vi.hoisted(() => ({
   messages: vi.fn(),
   listRepos: vi.fn(),
+  members: vi.fn(),
 }));
 vi.mock('../src/api/client.js', () => ({
-  api: { getChatMessages: mocks.messages, listRepos: mocks.listRepos },
+  api: { getChatMessages: mocks.messages, listRepos: mocks.listRepos, listProjectMembers: mocks.members },
   apiBase: () => '/api/v1',
 }));
 // The folded views are their own surfaces (with their own tests); here they only need to be reachable.
@@ -37,6 +39,8 @@ beforeEach(() => {
   mocks.messages.mockReset();
   mocks.listRepos.mockReset();
   mocks.listRepos.mockResolvedValue({ repos: [{ id: 'r1', name: 'wicked-core' }, { id: 'r2', name: 'wicked-crew' }] });
+  mocks.members.mockReset();
+  mocks.members.mockResolvedValue({ members: [{ member_kind: 'crew.repo', member_ref: 'r1' }, { member_kind: 'crew.chat', member_ref: 'c1' }] });
   useCapabilities.setState({ chatList: true, loaded: true });
   useAskDock.setState({ request: null });
 });
@@ -86,7 +90,8 @@ describe('the Understand page', () => {
     await act(async () => { render(<UnderstandPage project={null} navigate={vi.fn()} now={NOW} compare={<div data-testid="compare-stub" />} />); });
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Understand');
     expect(screen.getByText('Ask how your code fits together. Answers cite the code they come from.')).toBeInTheDocument();
-    expect(screen.getAllByTestId('understand-suggest').map((b) => b.textContent)).toEqual(suggestedQuestions(['wicked-core', 'wicked-crew']));
+    // No project and no job this week: nothing is chosen, so the questions name no repository.
+    expect(screen.getAllByTestId('understand-suggest').map((b) => b.textContent)).toEqual(suggestedQuestions([]));
     expect(screen.getByTestId('understand-recent-empty')).toHaveTextContent('Nothing asked yet');
     expect(screen.getByTestId('understand-graph')).not.toHaveAttribute('open');
     expect(screen.getByTestId('understand-compare')).not.toHaveAttribute('open');
@@ -117,27 +122,37 @@ describe('the Understand page', () => {
     expect(row).toHaveAttribute('href', `/s/${req.send!.chatId}`);
   });
 
-  it('crew#1157: Ask runs the analyze workflow on the chosen repositories (the project on its page; the newest repo elsewhere)', async () => {
+  it('crew#1157: Ask runs analyze on the project’s repositories on its page, the week’s most active one elsewhere; the questions name only those', async () => {
     await act(async () => { render(<UnderstandPage project="proj-1" navigate={vi.fn()} now={NOW} compare={null} />); });
-    expect(screen.getByTestId('understand-scope-words')).toHaveTextContent('Asks about this project’s repositories.');
+    expect(mocks.members).toHaveBeenCalledWith('proj-1');
+    expect(screen.getAllByTestId('understand-scope-repo').map((c) => c.getAttribute('aria-pressed'))).toEqual(['true', 'false']);
+    expect(screen.getAllByTestId('understand-suggest').map((b) => b.textContent)).toEqual(suggestedQuestions(['wicked-core']));
     fireEvent.change(screen.getByTestId('understand-ask-input'), { target: { value: 'Who calls deliver?' } });
     mocks.messages.mockRejectedValue(new ApiError(404, 'Not Found'));
     await act(async () => { fireEvent.submit(screen.getByTestId('understand-ask')); });
     let req = useAskDock.getState().request!;
     expect(req.send?.workflow).toBe('analyze');
-    expect(req.send?.repos).toBeUndefined();
+    expect(req.send?.repos).toEqual([{ id: 'r1', name: 'wicked-core' }]);
     expect(req.projectId).toBe('proj-1');
     cleanup();
     useAskDock.setState({ request: null });
-    await act(async () => { render(<UnderstandPage project={null} navigate={vi.fn()} now={NOW} compare={null} />); });
+    const day = 86_400;
+    const at = (d: number) => NOW / 1000 - d * day;
+    const runs = [
+      { session: { id: 'a', repo_ref: 'r1', created_at: at(20) } },
+      { session: { id: 'b', repo_ref: 'r1', created_at: at(19) } },
+      { session: { id: 'c', repo_ref: 'r2', created_at: at(2) } },
+    ] as unknown as SessionView[];
+    await act(async () => { render(<UnderstandPage project={null} navigate={vi.fn()} now={NOW} compare={null} runs={runs} />); });
     const chips = screen.getAllByTestId('understand-scope-repo');
-    expect(chips.map((c) => c.getAttribute('aria-pressed'))).toEqual(['true', 'false']);
-    fireEvent.click(chips[1]!);
+    expect(chips.map((c) => c.getAttribute('aria-pressed'))).toEqual(['false', 'true']);
+    expect(screen.getAllByTestId('understand-suggest').map((b) => b.textContent)).toEqual(suggestedQuestions(['wicked-crew']));
+    fireEvent.click(chips[0]!);
     expect(screen.getByTestId('understand-scope-words')).toHaveTextContent('Asks about 2 repositories.');
+    expect(screen.getAllByTestId('understand-suggest').map((b) => b.textContent)).toEqual(suggestedQuestions(['wicked-core', 'wicked-crew']));
     fireEvent.change(screen.getByTestId('understand-ask-input'), { target: { value: 'Who calls deliver?' } });
     await act(async () => { fireEvent.submit(screen.getByTestId('understand-ask')); });
     req = useAskDock.getState().request!;
-    expect(req.send?.workflow).toBe('analyze');
     expect(req.send?.repos).toEqual([{ id: 'r1', name: 'wicked-core' }, { id: 'r2', name: 'wicked-crew' }]);
     expect(req.projectId).toBeNull();
   });

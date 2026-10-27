@@ -2,7 +2,7 @@ import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { ChevronRight } from 'lucide-react';
 import { api } from '../../api/client.js';
 import { apiStatus } from '../../api/errors.js';
-import type { RepoEntry } from '../../api/types.js';
+import type { RepoEntry, SessionView } from '../../api/types.js';
 import { ANALYZE_CHAT_WORKFLOW, askScopeWords, defaultAskRepos } from '../../board/analyzeChat.js';
 import { answerLine, forgetAsked, questionMessage, readAsked, rememberAsked, suggestedQuestions, type AnswerLine, type AskedQuestion } from '../../board/understandModel.js';
 import { relTime } from '../../board/relTime.js';
@@ -35,9 +35,11 @@ type AnswerRead =
  * away, closed until asked for: Explore the graph (each repository's code graph with its hotspots
  * and blast radius, and coverage) and Compare side by side (the comparison and its analysis job).
  */
-export function UnderstandPage({ project, navigate, now, compare }: {
+export function UnderstandPage({ project, navigate, now, compare, runs = [] }: {
   /** The project on screen (a project's page): the chat is scoped to it. */
   project: string | null;
+  /** The jobs the page already holds: the default repository is the most active one this week. */
+  runs?: readonly SessionView[];
   navigate: Navigate;
   now: number;
   /** Compare side by side (DeskUnderstand), folded away. */
@@ -61,12 +63,31 @@ export function UnderstandPage({ project, navigate, now, compare }: {
 
   const recent = asked.slice(0, RECENT_SHOWN);
   const answers = useAnswers(recent, chatList, (id) => setAsked(forgetAsked(id)));
-  const suggestions = useMemo(() => suggestedQuestions((repos ?? []).map((r) => r.name)), [repos]);
   // crew#1157: the repositories the question is about (the analysis chat's scope). `null` = the
   // default for this page until the operator picks.
   const onProject = project !== null && project !== 'default';
   const [picked, setPicked] = useState<string[] | null>(null);
-  const chosen = picked ?? defaultAskRepos(repos ?? [], onProject ? project : null);
+  // On a project's page, its repositories (read once; a failed read leaves the project as the scope).
+  const [projectRepoIds, setProjectRepoIds] = useState<string[] | null>(null);
+  useEffect(() => {
+    setProjectRepoIds(null);
+    if (!onProject) return undefined;
+    let live = true;
+    api.listProjectMembers(project).then(
+      (r) => { if (live) setProjectRepoIds(r.members.filter((m) => m.member_kind === 'crew.repo').map((m) => m.member_ref)); },
+      () => { if (live) setProjectRepoIds([]); },
+    );
+    return () => { live = false; };
+  }, [onProject, project]);
+  const chosen = useMemo(
+    () => picked ?? defaultAskRepos(repos ?? [], { projectRepoIds: onProject ? projectRepoIds ?? [] : null, runs, now }),
+    [picked, repos, onProject, projectRepoIds, runs, now],
+  );
+  // The suggested questions name exactly the chosen repositories (never one the question would not read).
+  const suggestions = useMemo(
+    () => suggestedQuestions((repos ?? []).filter((r) => chosen.includes(r.id)).map((r) => r.name)),
+    [repos, chosen],
+  );
   const toggle = (id: string): void => setPicked(chosen.includes(id) ? chosen.filter((x) => x !== id) : [...chosen, id]);
 
   const ask = (e: React.FormEvent): void => {

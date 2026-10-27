@@ -133,6 +133,12 @@ export function suggestedQuestions(repoNames: readonly string[]): string[] {
   if (a === undefined) {
     return ['How do the parts of my code fit together?', 'Where are the riskiest files to change?', 'What changed in my code this week?'];
   }
+  // Three or more (a project's repositories): the first question names them all, so no chosen
+  // repository goes unmentioned.
+  if (repoNames.length > 2) {
+    const all = `${repoNames.slice(0, -1).join(', ')} and ${repoNames[repoNames.length - 1]}`;
+    return [`How do ${all} fit together?`, `Where is ${a} riskiest to change?`, `What changed in ${b} this week?`];
+  }
   return [
     `How is ${a} put together?`,
     `Where is ${b ?? a} riskiest to change?`,

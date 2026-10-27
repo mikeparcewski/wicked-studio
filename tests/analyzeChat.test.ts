@@ -1,9 +1,19 @@
 import { describe, expect, it } from 'vitest';
-import { analysisScopeChips, askScopeWords, chatWorkflowFor, defaultAskRepos, indexOfferFor } from '../src/board/analyzeChat.js';
+import { analysisScopeChips, askScopeWords, chatWorkflowFor, defaultAskRepos, indexOfferFor, mostActiveRepo } from '../src/board/analyzeChat.js';
+import { suggestedQuestions } from '../src/board/understandModel.js';
 import { chipsOpenFields } from '../src/board/chatScopes.js';
 import type { ChatScope } from '../src/api/types.js';
 
 describe('analysis chat (crew#1157, pure)', () => {
+  it('the suggested questions name every chosen repository and no other', () => {
+    expect(suggestedQuestions(['a', 'b', 'c'])[0]).toBe('How do a, b and c fit together?');
+    expect(suggestedQuestions(['a', 'b', 'c', 'd', 'e'])[0]).toBe('How do a, b, c, d and e fit together?');
+    for (const names of [['a'], ['a', 'b'], ['a', 'b', 'c'], ['a', 'b', 'c', 'd', 'e']]) {
+      const text = suggestedQuestions(names).join(' ');
+      for (const n of names) expect(text).toContain(n);
+    }
+  });
+
   it('sends a workflow only when crew runs it', () => {
     expect(chatWorkflowFor('analyze', ['analyze'])).toBe('analyze');
     expect(chatWorkflowFor('analyze', [])).toBeNull();
@@ -30,10 +40,27 @@ describe('analysis chat (crew#1157, pure)', () => {
     expect(indexOfferFor(null)).toBeNull();
   });
 
-  it('starts with the newest repository off a project, none on a project, and says what it asks about', () => {
-    expect(defaultAskRepos([{ id: 'a', registered_at: 1 }, { id: 'b', registered_at: 5 }], null)).toEqual(['b']);
-    expect(defaultAskRepos([{ id: 'a', registered_at: 1 }], 'p1')).toEqual([]);
-    expect(defaultAskRepos([], null)).toEqual([]);
+  it('starts with the project’s repositories, else the week’s most active one, else none; says what it asks about', () => {
+    const now = Date.UTC(2026, 9, 27);
+    const at = (days: number) => now / 1000 - days * 86_400;
+    const repos = [{ id: 'test-repo' }, { id: 'core' }, { id: 'math' }];
+    const runs = [
+      { session: { repo_ref: 'core', created_at: at(1) } },
+      { session: { repo_ref: 'core', created_at: at(3) } },
+      { session: { repo_ref: 'math', created_at: at(2) } },
+      { session: { repo_ref: 'test-repo', created_at: at(30) } },
+      { session: { repo_ref: 'test-repo', created_at: at(31) } },
+      { session: { repo_ref: 'test-repo', created_at: at(32) } },
+      { session: { repo_ref: 'math', created_at: at(1), archived_at: 1 } },
+      { session: { repo_ref: 'gone', created_at: at(1) } },
+    ];
+    expect(mostActiveRepo(repos, runs, now)).toBe('core');
+    expect(mostActiveRepo(repos, [{ session: { repo_ref: 'core', created_at: at(2) } }, { session: { repo_ref: 'math', created_at: at(1) } }], now)).toBe('math');
+    expect(mostActiveRepo(repos, [{ session: { repo_ref: 'core', created_at: at(8) } }], now)).toBeNull();
+    expect(defaultAskRepos(repos, { projectRepoIds: null, runs, now })).toEqual(['core']);
+    expect(defaultAskRepos(repos, { projectRepoIds: ['math', 'test-repo', 'elsewhere'], runs, now })).toEqual(['test-repo', 'math']);
+    expect(defaultAskRepos(repos, { projectRepoIds: [], runs, now })).toEqual([]);
+    expect(defaultAskRepos(repos, { projectRepoIds: null, runs: [], now })).toEqual([]);
     expect(askScopeWords(0, true)).toBe('Asks about this project’s repositories.');
     expect(askScopeWords(0, false)).toBe('Asks about all repositories.');
     expect(askScopeWords(1, false)).toBe('Asks about 1 repository.');
