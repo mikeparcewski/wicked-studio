@@ -201,7 +201,8 @@ const LIVE_RUN_ENDS = new Set(['completed', 'failed', 'cancelled']);
  * and on a live chat's own session (the text replies into that chat).
  */
 export const SEPARATE_ASK_NOTE =
-  'Send asks a separate question: it starts its own run and does not steer this one. To change this run, answer its question in the thread, add a step with /, or message a working step from its ⋯ — and ⋯ → Stop this session stops it.';
+  // (review of the dock) One line naming what Send does; the ways to change the run are where they are used.
+  'Send asks a separate question; it does not steer this one.';
 
 /** The working step's ⋯ (the thread's "Working on …" line) opens with this choice — what the note above names
  *  (rig 0.15.8: the note named a ⋯ that row did not have). It opens the step's sheet with its message box. */

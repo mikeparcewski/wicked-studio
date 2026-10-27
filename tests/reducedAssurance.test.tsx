@@ -83,7 +83,7 @@ describe('the dead-seat gate offers it', () => {
     const launch = vi.spyOn(client.api, 'launchRun');
     const navigate = vi.fn();
     render(<GateRow view={view()} gate={gate} navigate={navigate} />);
-    expect(screen.getByTestId('session-gate-creator-seat').textContent).toMatch(/^Stopped: no second helper to review this\./);
+    expect(screen.getByTestId('session-gate-creator-seat').textContent).toMatch(/^This job requires an independent check/);
     expect(screen.getByTestId('session-gate-creator-seat-disclosure').textContent).toMatch(/creator's seat reviews its own work/);
     fireEvent.click(screen.getByTestId('session-gate-reduced-relaunch'));
     expect(navigate).toHaveBeenCalledWith('/runs/new');

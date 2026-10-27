@@ -128,7 +128,14 @@
 /* ── Needs you, ranked (`/needs` against a ranked crew; components/desk/NeedsRanked.tsx; the approved
  * `ui-v2-needs` mockup): cards for what blocks several jobs, rows for one decision each, then the
  * work to resolve with its cost, and what is worth a look folded at the end. */
-.wk-needs-col { max-width: 840px; gap: 40px; }
+.wk-needs-col {
+  max-width: 840px; gap: 40px;
+  /* The calm pattern's hover fills (calm-ue.css): the ink, not the accent, so a dark accent never vanishes. */
+  --ue-hover: color-mix(in oklab, var(--ink-high) 12%, transparent);
+  --ue-hover-strong: color-mix(in oklab, var(--ink-high) 16%, transparent);
+  --ue-press: color-mix(in oklab, var(--ink-high) 20%, transparent);
+  --ue-link: color-mix(in oklab, var(--accent) 50%, var(--ink-high));
+}
 .wk-needs-sec { gap: 14px; }
 .wk-needs-sec--rows { gap: 6px; }
 .wk-needs-sec--rows > .wk-home-label, .wk-needs-sec--rows > .wk-home-sec-head { margin-bottom: 8px; }
@@ -142,7 +149,10 @@
 .wk-needs-dot--sm { width: 10px; height: 10px; }
 .wk-needs-rows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
 .wk-needs-row { display: flex; align-items: center; gap: 18px; padding: 18px 20px; margin: 0 -20px; border-radius: 14px; transition: background-color 0.14s; min-width: 0; }
-.wk-needs-row:hover { background: color-mix(in oklab, var(--accent) 16%, transparent); }
+.wk-needs-row:hover { background: var(--ue-hover, color-mix(in oklab, var(--ink-high) 12%, transparent)); }
+.wk-needs-row--go { cursor: pointer; }
+.wk-needs-worth-body { display: flex; flex-direction: column; gap: 32px; padding: 8px 20px 20px; }
+.wk-needs-worth.wk-ue-fold[open] .wk-ue-fold-chev { transform: rotate(90deg); }
 .wk-needs-row-title { font-size: 16px; font-weight: 500; color: var(--ink-high); overflow-wrap: anywhere; }
 .wk-needs-row-link { text-decoration: none; }
 .wk-needs-row-link:hover { text-decoration: underline; text-underline-offset: 3px; }
@@ -177,3 +187,5 @@
   .wk-needs-row { flex-wrap: wrap; margin: 0 -12px; padding: 14px 12px; }
   .wk-needs-row--resolve .wk-needs-acts { width: 100%; }
 }
+/* The one fold's summary is the calm fold row (words, then the chevron), not the inline link it was. */
+.wk-needs-worth.wk-ue-fold > summary { display: flex; }

@@ -65,6 +65,13 @@ import { panelPlaceOf } from '../../board/runPanelModel.js';
 import { useRunPanel } from '../../store/runPanel.js';
 import { RunHostProvider } from '../editorHost/RunHostContext.js';
 import { RunBlock } from './RunConversation.js';
+import { DecisionDockFrame, type DockItem, type DockReply } from './DecisionDock.js';
+import { switchWords, useReplyRoute } from '../../board/replyRoute.js';
+import { useDraftRouter } from '../../hooks/useDraftRouter.js';
+import { useElicitationStore } from '../../store/elicitations.js';
+import { useSystemStore } from '../../store/systemSnapshot.js';
+import { askingResponder, builderResponder } from '../../board/responder.js';
+import { plainGateQuestion } from '../../board/deskWords.js';
 
 /** S16a-2c: the hash that lands a run's session on its sheet's Governance tab. */
 export const GOVERNANCE_HASH = '#governance';
@@ -138,7 +145,7 @@ const OPERATOR_SCROLL_MS = 1000;
 /** How long a jump's smooth scroll is the thread's own (its scroll events are not the operator's). */
 const GLIDE_MS = 700;
 /** DES-CHAT-NATIVE-RUN: the message inside a run's conversation that asks the operator something. */
-const ASKING_SELECTOR = '[data-testid="chat-plan"][data-open="true"], [data-testid="chat-gate"], [data-testid="chat-final"][data-kind="deliver"]';
+const ASKING_SELECTOR = '[data-testid="chat-plan"][data-open="true"], [data-testid="chat-gate"], [data-testid="chat-final"][data-kind="deliver"], [data-testid="decision-marker"]';
 
 export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onRetryRuns, needRows, navigate, onAsk, artifactKey = null, artifactSize = 'pane', artifactVersion = null }: {
   /** The runs read's failure (App's `useRuns`): said with Retry, never an endless skeleton. */
@@ -840,6 +847,38 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
       onPick: () => openLaunchWizard({ workflowId: DEMO_VIDEO_ID, projectId, composerKey: sessionId }) }];
   }, [madeDocs, newest, sessionId]);
 
+  // The decision dock (mockup ui-v2-gate + addendum): the session's open decisions, in the thread's order — a run's
+  // gate (not an ask turn's, which the composer answers), a run's question, the chat's own gate or question.
+  const elicitations = useElicitationStore((s) => s.elicitations);
+  const attention = useSystemStore((s) => (s.snapshot?.ranked === true ? s.snapshot.attention : null));
+  const dockItems = useMemo<DockItem[]>(() => {
+    const out: DockItem[] = [];
+    const blocking = (id: string): boolean => (attention ?? []).some((a) => (a.runId === id || (a.blockedRunIds ?? []).includes(id)) && (a.level === 'red' || (a.blockedRunIds?.length ?? 0) > 1));
+    for (const v of mine) {
+      const id = v.session.id;
+      if (['completed', 'cancelled', 'failed'].includes(v.session.status)) continue;
+      if (askBlockHidden && id === askRunId) continue;
+      const g = gates[id];
+      const el = elicitations[id];
+      if (g !== undefined) {
+        // The builder the job waits with (the newest creator step), never a hand-over's script.
+        // A plan question is crew's own (nothing is built yet): "the job is waiting".
+        const who = g.gateKind === 'plan_approval' ? null : builderResponder(v, g.ord, roster);
+        out.push({ key: id, who: who?.name ?? null, since: g.receivedAt ?? null, question: plainGateQuestion(g.prompt, g.gateKind), tone: blocking(id) ? 'blocking' : 'waiting' });
+      } else if (el !== undefined) {
+        const who = askingResponder(v, roster, el);
+        out.push({ key: id, who: who.role === 'seat' ? who.name : null, since: null, question: el.message, tone: blocking(id) ? 'blocking' : 'waiting' });
+      }
+    }
+    if (ref.kind === 'chat') {
+      const g = gates[ref.chatId];
+      const el = elicitations[ref.chatId];
+      if (g !== undefined || el !== undefined) out.push({ key: ref.chatId, who: null, since: g?.receivedAt ?? null, question: g !== undefined ? plainGateQuestion(g.prompt, g.gateKind) : el!.message, tone: 'waiting' });
+    }
+    return out;
+  }, [mine, gates, elicitations, roster, attention, askBlockHidden, askRunId, ref]);
+  const dockWho = dockItems[0]?.who ?? null;
+
   // H3: the composer's props, shared by the thread's composer and the full-screen chat drawer's (one draft).
   const composerProps = {
     suggestions,
@@ -945,8 +984,13 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
         )}
       </header>
       {/* Operator 2026-10-18: what waits on you is a banner below the header, in the page's flow (the thread reflows). */}
-      {ready && <NeedsBanner items={waiting} onJump={jumpToItem} />}
+      {/* What the dock already holds is not said again above the thread. */}
+      {ready && <NeedsBanner items={waiting.filter((w) => !dockItems.some((d) => d.key === w.runId))} onJump={jumpToItem} />}
 
+      <DecisionDockFrame items={dockItems} composer={(reply, docked) => (
+        // The measure sits on a wrapper: the composer's own box (its `/` and `@` menus anchor to it) stays the input's width.
+        <div className="wk-session-composer-wrap wk-measure wk-measure--thread"><DockedComposer reply={reply} docked={docked} composerProps={composerProps} who={dockWho} /></div>
+      )}>
       <div className="wk-session-body">
         {/* S16a-4a: an address naming an artifact this session does not hold grows nothing and says so. */}
         {artifactMissing && <p data-testid="session-artifact-missing" className="wk-session-grey">That artifact is not in this session any more.</p>}
@@ -1110,8 +1154,7 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
         <p data-testid="session-ask-shape" className="wk-session-grey wk-session-shape wk-measure wk-measure--thread">{askShapeFooter(askPath)}</p>
       )}
 
-      {/* The measure sits on a wrapper: the composer's own box (its `/` and `@` menus anchor to it) stays the input's width. */}
-      <div className="wk-session-composer-wrap wk-measure wk-measure--thread"><Composer {...composerProps} className="wk-session-composer" /></div>
+      </DecisionDockFrame>
     </div>
     <HostPanel edgeHandle="Show the run’s details" onToggle={writeDetailsOpen} runTab={<RunTab runs={mine} allRuns={runs} sessionId={sessionId} title={title} navigate={navigate} />} ribbon={<RunRibbon runs={mine} />} />
     </div>
@@ -1175,3 +1218,46 @@ function TurnDecisions({ chatId, turnId, navigate }: { chatId: string; turnId: s
 
 /** The run's block in the thread is its conversation (DES-CHAT-NATIVE-RUN): see RunConversation. */
 export { RunBlock };
+
+/**
+ * The session composer while a decision is docked (operator 2026-10-27): the reply box answers the decision through
+ * its note choice, or asks a separate question — the draft's intent picks which (the platform's prompt routing; none
+ * on today's crew, so it replies, and says so), and one click on the switch overrides it for that draft.
+ */
+function DockedComposer({ reply, docked, composerProps, who }: {
+  reply: DockReply | null;
+  /** A decision is docked: with no note choice to reply through, the box says plainly that Send asks separately. */
+  docked: boolean;
+  composerProps: React.ComponentProps<typeof Composer>;
+  who: string | null;
+}): React.ReactElement {
+  const router = useDraftRouter();
+  const { route, flip } = useReplyRoute(reply === null ? '' : composerProps.text ?? '', router);
+  if (reply === null && docked) {
+    // The docked decision takes no note (a hand-over, a plan, a question from a run): Send asks a separate question.
+    return (
+      <Composer {...composerProps} placeholder="Ask a separate question about this job…"
+        footer={<p data-testid="session-reply-switch" data-to="ask" data-why="no-note" role="note" className="wk-composer-hint wk-reply-switch"><span data-testid="session-reply-dest">Send asks a separate question</span></p>}
+        className="wk-session-composer" />
+    );
+  }
+  if (reply === null) return <Composer {...composerProps} className="wk-session-composer" />;
+  const words = switchWords(route, reply.label);
+  const footer = (
+    <p data-testid="session-reply-switch" data-to={route.to} data-why={route.why} role="note" className="wk-composer-hint wk-reply-switch">
+      <span data-testid="session-reply-dest">{words.dest}</span>
+      {words.why !== null && <span className="wk-reply-why"> · {words.why}</span>}
+      {' · '}
+      <button type="button" data-testid="session-reply-flip" onClick={flip} className="wk-reply-flip">{words.flip}</button>
+    </p>
+  );
+  return (
+    <Composer
+      {...composerProps}
+      placeholder={`Or tell ${who ?? 'the job'} what to do…`}
+      footer={footer}
+      onSend={(text, opts) => { if (route.to === 'reply') reply.send(text); else composerProps.onSend(text, opts); }}
+      className="wk-session-composer"
+    />
+  );
+}

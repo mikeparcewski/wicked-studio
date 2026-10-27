@@ -1,3 +1,4 @@
+import { plainGateQuestion } from './deskWords.js';
 import type { CoreEvent } from '../api/types.js';
 import { useMembershipStore } from '../store/membership.js';
 import { useNotifPrefsStore } from '../store/notifPrefs.js';
@@ -104,15 +105,17 @@ export function notifyGateIfUnfocused(event: CoreEvent): void {
   if (fired.get(runId) === ord) return; // a replayed frame, not a new gate
 
   const { projectNameByRun } = useMembershipStore.getState();
-  const prompt = typeof event.prompt === 'string' && event.prompt !== ''
-    ? event.prompt
-    : 'A run is awaiting your review';
-  const firstLine = prompt.split('\n', 1)[0] ?? prompt;
+  // (operator 2026-10-27) A plain title and the question's headline — never the engine's prompt line ("Unit 8
+  // (codex) reviewed work built on its own seat: …", "… (unit 1): answer-1 — …").
+  const prompt = typeof event.prompt === 'string' ? event.prompt : '';
+  const kind = (event as unknown as { gateKind?: unknown }).gateKind;
+  const gateKind = typeof kind === 'string' ? kind : undefined;
+  const question = prompt.trim() === '' ? 'A job is waiting on your decision' : plainGateQuestion(prompt, gateKind);
   const projectName = projectNameByRun[runId];
-  const body = projectName !== undefined ? `${firstLine} · ${projectName}` : firstLine;
+  const body = projectName !== undefined ? `${question} · ${projectName}` : question;
 
   try {
-    const n = new Notification('Gate needs you', { body, tag: runId });
+    const n = new Notification('A job needs your decision', { body, tag: runId });
     fired.set(runId, ord);
     n.onclick = () => {
       window.focus();

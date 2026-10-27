@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef } from 'react';
 import type { SessionView as RunView } from '../../api/types.js';
 import { GATE_HASH } from '../../board/gateActions.js';
 import { pinAwaiting } from '../../store/awaitingPins.js';
+import { Docked, DecisionMarker } from './DecisionDock.js';
 import { useElicitationStore } from '../../store/elicitations.js';
 import { useGateStore } from '../../store/gates.js';
 import { ElicitationPrompt } from '../ElicitationPrompt.js';
@@ -58,8 +59,12 @@ export function RunQuestions({ view }: { view: RunView }): React.ReactElement | 
       {/* `key`: a half-typed answer to question A never survives into B (v0.24 F3). */}
       {/* H3: a question card says who is asking — the seat that asked (an ask question names it),
           else the seat running the step; the stall watchdog's hand-off is crew's. */}
-      {elicitation !== undefined && <TurnWho who={askingResponder(view, roster, elicitation)} runId={id} suffix="is asking" className="wk-who--asking" />}
-      {elicitation !== undefined && <ElicitationPrompt key={elicitation.elicitationId} e={elicitation} />}
+      {elicitation !== undefined && (
+        <Docked dockKey={id} open marker={<DecisionMarker dockKey={id} who={askingResponder(view, roster, elicitation).name} since={null} />}>
+          <TurnWho who={askingResponder(view, roster, elicitation)} runId={id} suffix="is asking" className="wk-who--asking" />
+          <ElicitationPrompt key={elicitation.elicitationId} e={elicitation} />
+        </Docked>
+      )}
       {needsYou !== null && <TurnWho who={CREW} suffix="handing this to you" className="wk-who--asking" />}
       {needsYou !== null && <NeedsYouCard view={view} state={needsYou} />}
     </div>
@@ -76,8 +81,10 @@ export function ChatQuestions({ chatId }: { chatId: string }): React.ReactElemen
   if (elicitation === undefined && gate === undefined) return null;
   return (
     <div ref={ref} data-testid="session-chat-questions" data-chat-id={chatId} className="wk-session-questions">
-      {elicitation !== undefined && <ElicitationPrompt key={elicitation.elicitationId} e={elicitation} />}
-      {gate !== undefined && <GateRow view={null} gate={gate} chatId={chatId} />}
+      <Docked dockKey={chatId} open marker={<DecisionMarker dockKey={chatId} who={null} since={gate?.receivedAt ?? null} />}>
+        {elicitation !== undefined && <ElicitationPrompt key={elicitation.elicitationId} e={elicitation} />}
+        {gate !== undefined && <GateRow view={null} gate={gate} chatId={chatId} />}
+      </Docked>
     </div>
   );
 }

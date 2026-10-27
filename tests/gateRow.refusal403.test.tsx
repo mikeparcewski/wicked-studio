@@ -193,3 +193,22 @@ describe('a refused hand-over whose re-verify failed — the operator\'s judgmen
     expect(body).toMatchObject({ approve: true, action: 'operator_judgment', amend: why });
   });
 });
+
+describe('studio#920 — the engine\'s [exit N] is not the reason; a preflight change names its files', () => {
+  const PREFLIGHT = 'The deliver phase refused: deliver: pushing as mikeparcewski (GH_ACCOUNT)\n'
+    + 'deliver: re-verifying the lifted tree … Nothing was staged, committed or pushed; deliver: PREFLIGHT CHANGED the verified tree: packages/crew/tests/generated/api-sample.generated.test.ts \n'
+    + 'deliver: OUTCOME 9f2c failed\n\n[exit 1]. Approve to re-run the deliver phase now, or reject to cancel the run';
+  it('drops a bare [exit N] line: the reason is the script\'s own last line', () => {
+    const r = deliverRefusalOf('The deliver phase refused: deliver: gh is not signed in as the push identity\n\n[exit 1]. Approve to re-run the deliver phase now');
+    expect(r?.reason).toBe('gh is not signed in as the push identity');
+  });
+  it('names the changed file, and keeps the whole list for More about this (never cut at 240)', () => {
+    const r = deliverRefusalOf(PREFLIGHT)!;
+    expect(r.reason).toBe('the deliver step\'s preflight changed packages/crew/tests/generated/api-sample.generated.test.ts after the checks; deliver again re-checks and delivers it');
+    expect(r.changed).toEqual(['packages/crew/tests/generated/api-sample.generated.test.ts']);
+    const many = deliverRefusalOf(PREFLIGHT.replace('api-sample.generated.test.ts', `api-sample.generated.test.ts ${Array.from({ length: 30 }, (_, i) => `packages/crew/src/generated/file-${i}.ts`).join(' ')}`))!;
+    expect(many.reason).toMatch(/changed packages\/crew\/tests\/generated\/api-sample\.generated\.test\.ts and 30 more files after the checks/);
+    expect(many.changed).toHaveLength(31);
+    expect(many.changed!.at(-1)).toBe('packages/crew/src/generated/file-29.ts');
+  });
+});

@@ -11,6 +11,7 @@ import { sessionPath } from '../../board/sessionModel.js';
 import type { Navigate } from '../../hooks/useRoute.js';
 import { setRetryPrefill } from '../../store/retryPrefill.js';
 import { HEALTH_RECHECKED, useSystemStore } from '../../store/systemSnapshot.js';
+import { useSignInHere } from '../agents/useSignInHere.js';
 
 /**
  * NEEDS YOU, RANKED (`/needs` against a crew with `capabilities.attentionRanked`; the approved mockup
@@ -42,12 +43,18 @@ export function NeedsRanked({ snapshot, runs, needRows, navigate, now, setup = [
   const toReview = snapshot.toReview ?? needRows.filter((r) => needSection(r) === 'review').length;
   const worthCount = worth.length + toReview;
   const go = (path: string) => (e: React.MouseEvent): void => { e.preventDefault(); navigate(path); };
+  // Sign in opens that helper's own sign-in here (operator 2026-10-27: never a settings page).
+  const signIn = useSignInHere();
   const act = (a: SystemAttention): void => {
     const path = actionPath(a.action);
     if (path !== null) { navigate(path); return; }
-    if (a.action?.kind === 'sign-in') { navigate(`/agents?fix=${encodeURIComponent(a.action.target)}`); return; }
+    if (a.action?.kind === 'sign-in') { signIn.open(a.action.target); return; }
     window.dispatchEvent(new Event(HEALTH_RECHECKED));
   };
+  const unresolved = snapshot.unresolved ?? [];
+  // One folded line for everything worth a look but not blocking: proposals, unresolved work (with its spend),
+  // studio's own setup and the fold's other rows.
+  const foldCount = worthCount + unresolved.length + setup.length;
 
   return (
     <div className="wk-home" data-testid="needs-ranked">
@@ -85,10 +92,14 @@ export function NeedsRanked({ snapshot, runs, needRows, navigate, now, setup = [
                 // The muted line: why (crew's plain words), where, and how long it has waited.
                 const meta = [a.reason, v?.session.repo_ref ?? null, a.waitedSince != null ? `waiting ${waitWords(a.waitedSince, now)}` : null].filter((x): x is string => x !== null && x !== '').join(' · ');
                 return (
-                  <li key={a.id} className="wk-needs-row" data-testid="needs-item" data-id={a.id} data-kind={a.kind ?? undefined} data-blocks={a.blockedRunIds?.length ?? 0}>
+                  // The whole row opens its run (the action link goes to the decision itself, `#gate`).
+                  <li key={a.id} className="wk-needs-row wk-needs-row--go" data-testid="needs-item" data-id={a.id} data-kind={a.kind ?? undefined} data-blocks={a.blockedRunIds?.length ?? 0}
+                    onClick={(e) => { if ((e.target as HTMLElement).closest('a, button') !== null) return; const to = a.runId != null ? sessionPath(`run:${a.runId}`) : path; if (to !== null) navigate(to); }}>
                     <span aria-hidden className="wk-needs-dot wk-needs-dot--sm" data-level={a.level} />
                     <span className="wk-needs-row-body">
-                      <span className="wk-needs-row-title">{a.text}</span>
+                      {a.runId != null
+                        ? <a href={sessionPath(`run:${a.runId}`)} onClick={go(sessionPath(`run:${a.runId}`))} data-testid="needs-item-run" className="wk-needs-row-title wk-needs-row-link">{a.text}</a>
+                        : <span className="wk-needs-row-title">{a.text}</span>}
                       <span className="wk-needs-row-line">{meta}</span>
                     </span>
                     {path !== null
@@ -103,42 +114,64 @@ export function NeedsRanked({ snapshot, runs, needRows, navigate, now, setup = [
 
         {items.length === 0 && <p className="wk-home-calm" data-testid="needs-calm">Nothing is waiting on you.</p>}
 
-        <ToResolve snapshot={snapshot} runs={runs} navigate={navigate} now={now} />
-
-        {/* Studio's own setup sits under what holds work up (the mockup leads with the stuck items). */}
-        {setup.length > 0 && (
-          <section className="wk-home-sec wk-needs-sec wk-needs-sec--rows" aria-labelledby="needs-setup" data-testid="needs-setup">
-            <h2 id="needs-setup" className="wk-home-label">Set up</h2>
-            <ul className="wk-needs-rows">
-              {setup.map((c) => (
-                <li key={c.key} className="wk-needs-row" data-testid="needs-setup-row" data-key={c.key}>
-                  <span className="wk-needs-row-body">
-                    <span className="wk-needs-row-title">{c.title}</span>
-                    <span className="wk-needs-row-line">{c.line}</span>
-                  </span>
-                  <button type="button" className="wk-home-btn wk-home-btn--secondary wk-needs-row-btn" data-testid="needs-setup-act" onClick={c.onAct}>{c.label}</button>
-                </li>
-              ))}
-            </ul>
-          </section>
-        )}
-
-        {worthCount > 0 && (
-          <details className="wk-needs-worth" data-testid="needs-worth">
-            <summary className="wk-home-link">{worthCount} {worthCount === 1 ? 'thing' : 'things'} worth a look (not blocking)</summary>
-            <ul className="wk-needs-worth-list">
-              {toReview > 0 && (
-                <li><a href="/steering" onClick={go('/steering')} className="wk-home-link" data-testid="needs-to-review">{toReview} to review</a><span className="wk-needs-meta"> · proposed memories and rules</span></li>
+        {foldCount > 0 && (
+          <details className="wk-needs-worth wk-ue-fold" data-testid="needs-worth">
+            <summary className="wk-ue-fold-sum" data-testid="needs-worth-summary">
+              <span className="wk-ue-fold-words">
+                <span className="wk-ue-row-title">{foldCount} {foldCount === 1 ? 'thing' : 'things'} worth a look (not blocking)</span>
+                <span className="wk-ue-row-sub">{worthWords(toReview, unresolved.length, setup.length, worth.length)}</span>
+              </span>
+              <span aria-hidden className="wk-ue-fold-chev">›</span>
+            </summary>
+            <div className="wk-needs-worth-body">
+              <ToResolve snapshot={snapshot} runs={runs} navigate={navigate} now={now} />
+              {/* Studio's own setup (memory, a helper to sign in) — never stuck work. */}
+              {setup.length > 0 && (
+                <section className="wk-home-sec wk-needs-sec wk-needs-sec--rows" aria-labelledby="needs-setup" data-testid="needs-setup">
+                  <h2 id="needs-setup" className="wk-home-label">Set up</h2>
+                  <ul className="wk-needs-rows">
+                    {setup.map((c) => (
+                      <li key={c.key} className="wk-needs-row" data-testid="needs-setup-row" data-key={c.key}>
+                        <span className="wk-needs-row-body">
+                          <span className="wk-needs-row-title">{c.title}</span>
+                          <span className="wk-needs-row-line">{c.line}</span>
+                        </span>
+                        <button type="button" className="wk-home-btn wk-home-btn--secondary wk-needs-row-btn" data-testid="needs-setup-act" onClick={c.onAct}>{c.label}</button>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
               )}
-              {worth.map((r) => (
-                <li key={r.key}><a href={r.subjectPath} onClick={go(r.subjectPath)} className="wk-home-link">{r.question ?? r.text}</a></li>
-              ))}
-            </ul>
+              {worthCount > 0 && (
+                <section className="wk-home-sec wk-needs-sec wk-needs-sec--rows" aria-labelledby="needs-look">
+                  <h2 id="needs-look" className="wk-home-label">Worth a look</h2>
+                  <ul className="wk-needs-worth-list">
+                    {toReview > 0 && (
+                      <li><a href="/steering" onClick={go('/steering')} className="wk-home-link" data-testid="needs-to-review">{toReview} to review</a><span className="wk-needs-meta"> · proposed memories and rules</span></li>
+                    )}
+                    {worth.map((r) => (
+                      <li key={r.key}><a href={r.subjectPath} onClick={go(r.subjectPath)} className="wk-home-link">{r.question ?? r.text}</a></li>
+                    ))}
+                  </ul>
+                </section>
+              )}
+            </div>
           </details>
         )}
+        {signIn.modal}
       </div>
     </div>
   );
+}
+
+/** The fold's one muted line: what is in it, in words ("3 proposals to review · 16 jobs to resolve · 1 to set up"). */
+export function worthWords(toReview: number, unresolved: number, setup: number, other: number): string {
+  return [
+    toReview > 0 ? `${toReview} ${toReview === 1 ? 'proposal' : 'proposals'} to review` : null,
+    unresolved > 0 ? `${unresolved} ${unresolved === 1 ? 'job' : 'jobs'} to resolve` : null,
+    setup > 0 ? `${setup} to set up` : null,
+    other > 0 ? `${other} more` : null,
+  ].filter((x): x is string => x !== null).join(' · ');
 }
 
 /** "To resolve": the work nobody resolved, with what it cost (/needs and Nerve Center). Look-alike runs

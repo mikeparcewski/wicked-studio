@@ -104,8 +104,9 @@ describe('run clarity: an open gate is the action — the thread brings its run 
     const WAITING = { ...VIEW, session: { ...VIEW.session, status: 'awaiting_human' } } as typeof VIEW;
     useGateStore.setState({ gates: { [RUN]: { runId: RUN, ord: 1, prompt: 'Approve the output of unit 1 (build) before unit 2 runs', lifecycle: 'open', receivedAt: 1, gateKind: 'def' } }, approaching: {} });
     vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
-      // The run starts at 708; its question message (chat-gate) sits 200 px further down, under its steps.
-      const base = this.dataset['testid'] === 'session-run' ? 708 : this.dataset['testid'] === 'chat-gate' ? 908 : null;
+      // The run starts at 708; where its question was asked (the dock's marker; the question itself is docked
+      // above the composer) sits 200 px further down, under its steps.
+      const base = this.dataset['testid'] === 'session-run' ? 708 : this.dataset['testid'] === 'decision-marker' ? 908 : null;
       const top = base !== null ? base - (tops.get(this.closest('[data-testid="session-thread"]') ?? this) ?? 0) : 0;
       return { top, bottom: this.dataset['testid'] === 'session-thread' ? 500 : top + 50, left: 0, right: 0, width: 0, height: 0, x: 0, y: top, toJSON: () => ({}) } as DOMRect;
     });

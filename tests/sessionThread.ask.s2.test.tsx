@@ -124,7 +124,9 @@ describe('the proposal card in the thread', () => {
     expect(c.getAttribute('data-first-creator')).toBe('true');
     expect(c.querySelector('[data-testid="session-proposal-text"]')!.textContent).toBe('Continue in Build? claude proposes: Build → Check (required).');
     expect(c.querySelector('[data-testid="session-proposal-why"]')!.textContent).toContain('band 20–39 · touches 1 declared path · 3 dependents');
-    expect([...c.querySelectorAll('.wk-prop-btns button')].map((b) => b.textContent)).toStrictEqual(['Continue in Build', 'Not now', 'End']);
+    // (mockup ui-v2-gate) One primary; Not now and End under Other options.
+    expect(c.querySelector('[data-testid="session-proposal-go"]')!.textContent).toBe('Continue in Build');
+    expect([...c.querySelectorAll('[data-testid="session-proposal-menu"] button')].map((b) => b.textContent)).toStrictEqual(['Not now', 'End']);
     expect(screen.queryByTestId('session-run')).toBeNull();
     expect(screen.queryByTestId('chain')).toBeNull();
     // After the reply bubble, in time order.

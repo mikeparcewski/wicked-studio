@@ -44,6 +44,9 @@ export interface RetryPrefill {
    * the reduced-assurance opt-in ticked and says what it means; nothing launches until Launch.
    */
   reducedAssurance?: boolean;
+  /** (mockup ui-v2-gate) A hand-over QE refused: "Skip QE with a reason" opens the launch form with Skip QE
+   *  acceptance ticked and its reason asked for (required there); nothing launches until Launch. */
+  skipQe?: boolean;
 }
 
 let pending: RetryPrefill | null = null;

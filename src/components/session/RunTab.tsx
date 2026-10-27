@@ -10,7 +10,8 @@ import { seatLabel } from '../../board/seatNames.js';
 import { ORPHANED_LINE, orphanedOf } from '../../board/sessionModel.js';
 import { finishedDeliveryArm } from '../../board/proposalCard.js';
 import { useRoster } from '../../hooks/useRoster.js';
-import { isReviewUnit } from '../../board/responder.js';
+import { builderResponder, isHelperSeat, isReviewUnit } from '../../board/responder.js';
+import { executingOrd } from '../../api/run-state.js';
 import { useRunAcceptance } from '../../hooks/useRunAcceptance.js';
 import { useRunEvents } from '../../hooks/useRunEvents.js';
 import { overriddenFloorsOf, overriddenLine } from '../../board/failingChecks.js';
@@ -78,7 +79,7 @@ function startedMs(view: SessionView): number | null {
 }
 
 /** The question a run is waiting on, as the thread draws it (the plan, a step's question, the hand-over). */
-const ASKING = '[data-testid="chat-plan"][data-open="true"], [data-testid="chat-gate"], [data-testid="chat-final"][data-kind="deliver"]';
+const ASKING = '[data-testid="chat-plan"][data-open="true"], [data-testid="chat-gate"], [data-testid="chat-final"][data-kind="deliver"], [data-testid="decision-marker"]';
 
 /**
  * THE RUN PANEL (src/board/runPanelModel.ts): the run page's one right panel — what the Details panel's Run tab and
@@ -142,6 +143,7 @@ function RunTabDetails({ view, allRuns, sessionId, title, navigate }: { view: Se
   const roster = useRoster();
   const stopping = useSheets((s) => s.stopping[id] !== undefined);
   const [confirmStop, setConfirmStop] = useState(false);
+  const [glanceStop, setGlanceStop] = useState(false);
   const current = currentStep(view, chain);
   const clis = assignedClis(view);
   const session = view.session;
@@ -165,12 +167,64 @@ function RunTabDetails({ view, allRuns, sessionId, title, navigate }: { view: Se
     const block = [...document.querySelectorAll<HTMLElement>('[data-testid="session-run"]')].find((b) => b.dataset['runId'] === id);
     const asking = block?.querySelector<HTMLElement>(ASKING) ?? block;
     if (asking === undefined) return;
+    // The question is docked above the composer: its marker in the thread focuses the dock.
+    if (asking.dataset['testid'] === 'decision-marker') { if (narrow) useHostPanel.getState().setOverlay(false); asking.click(); return; }
     if (narrow) useHostPanel.getState().setOverlay(false);
     asking.scrollIntoView?.({ block: 'start', behavior: 'smooth' });
   };
 
+  // (mockup ui-v2-gate) The panel's glance: progress, changes, helpers, three ways in, and Stop job — the folding
+  // sections below keep everything else.
+  const total = chain.steps.length;
+  const stepAt = current !== undefined ? chain.steps.indexOf(current) + 1 : doneSteps;
+  const builder = builderResponder(view, gate?.ord ?? null, roster);
+  const runningOrd = executingOrd(view.session, view.units);
+  const helpers = clis.filter(isHelperSeat).map((cli) => {
+    const seat = roster?.find((entry) => entry.key === cli);
+    const name = seat === undefined ? cli : seatLabel(seat);
+    const running = runningOrd !== null && view.units.some((u) => u.ord === runningOrd && u.assigned_cli === cli);
+    const reviews = view.units.some((unit) => unit.assigned_cli === cli && isReviewUnit(unit));
+    return `${name} ${running ? (reviews ? 'reviewing' : 'building') : builder?.cli === cli ? 'built it' : reviews ? 'reviews' : 'builds'}`;
+  });
+  const changesWord = deliverySummary(view) ?? (delivered ? 'Nothing pushed' : 'Nothing delivered yet');
+  const glance = (
+    <div data-testid="run-tab-glance" className="wk-run-glance">
+      <div className="wk-run-glance-item">
+        <span className="wk-run-glance-label">Progress</span>
+        <span data-testid="run-tab-glance-progress" className="wk-run-glance-value">{total === 0 ? 'No steps yet' : `Step ${Math.max(1, stepAt)} of ${total}${current !== undefined ? ` · ${current.label}` : ''}`}</span>
+        {total > 0 && <span aria-hidden className="wk-run-glance-bar" data-tone={session.status === 'awaiting_human' ? 'waiting' : isTerminal(view) ? 'done' : 'run'}><span style={{ width: `${Math.round((doneSteps / total) * 100)}%` }} /></span>}
+      </div>
+      <div className="wk-run-glance-item">
+        <span className="wk-run-glance-label">Changes</span>
+        <span data-testid="run-tab-glance-changes" className="wk-run-glance-value">{changesWord}</span>
+      </div>
+      {helpers.length > 0 && (
+        <div className="wk-run-glance-item">
+          <span className="wk-run-glance-label">Helpers</span>
+          <span data-testid="run-tab-glance-helpers" className="wk-run-glance-value">{helpers.join(' · ')}</span>
+        </div>
+      )}
+      <nav aria-label="About this job" className="wk-run-glance-links">
+        <button type="button" data-testid="run-tab-glance-asked" className="wk-run-glance-link" onClick={() => useRunPanel.getState().focusOn('now', 'goal')}>What you asked for</button>
+        <button type="button" data-testid="run-tab-glance-plan" className="wk-run-glance-link" onClick={() => useRunPanel.getState().focusOn('plan', 'steps')}>Plan and steps</button>
+        <button type="button" data-testid="run-tab-glance-evidence" className="wk-run-glance-link" onClick={() => useRunPanel.getState().focusOn('checks', 'evidence')}>Evidence and record</button>
+      </nav>
+      {!isTerminal(view) && !glanceStop && (
+        <button type="button" data-testid="run-tab-glance-stop" className="wk-run-tab-button wk-stop-btn wk-run-glance-stop" disabled={stopping} onClick={() => setGlanceStop(true)}>{stopping ? 'Stopping…' : 'Stop job'}</button>
+      )}
+      {!isTerminal(view) && glanceStop && (
+        <div data-testid="run-tab-glance-stop-confirm-row" className="wk-run-tab-confirm">
+          <span>Stop this job? What it did so far is kept.</span>
+          <button type="button" data-testid="run-tab-glance-stop-confirm" className="wk-run-tab-button wk-stop-btn wk-stop-btn--confirm" disabled={stopping} onClick={() => { stopRun([id], `“${title}”`); setGlanceStop(false); }}>Stop this job</button>
+          <button type="button" className="wk-run-tab-button" onClick={() => setGlanceStop(false)}>Keep going</button>
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <>
+      {glance}
       <Section id="now" {...fold} summary={chatStatusWord([view]).word}>
         <div data-testid="run-tab-now" className="wk-run-tab-block">
           <p data-testid="run-tab-status" role="status" className="wk-run-tab-line">{statusSentence(view, chain, gate, action)}</p>
