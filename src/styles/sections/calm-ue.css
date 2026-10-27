@@ -47,6 +47,11 @@
   border-color: color-mix(in oklab, var(--accent) 70%, var(--ink-high)); color: var(--ink-high);
   background: var(--ue-hover);
 }
+/* Chosen reads as chosen, not as hovered (live on :7721, wicked-dark: the two looked alike): a stronger
+   ink fill than hover (the ink, not the accent: see .wk-ue), semibold words and a check before them. */
+.wk-ue .wk-ue-chip--pick[aria-pressed="true"] { background: var(--ue-press); font-weight: var(--weight-semi); border-width: 2px; padding: 0 15px; }
+.wk-ue .wk-ue-chip--pick[aria-pressed="true"]::before { content: "\2713"; margin-right: 6px; }
+.wk-ue .wk-ue-chip--pick[aria-pressed="true"]:hover { background: color-mix(in oklab, var(--ink-high) 26%, transparent); }
 .wk-ue-chip {
   min-height: 36px; padding: 0 16px; border-radius: 999px; border: 1px solid var(--border-strong); background: transparent;
   color: var(--ink-body); font-family: inherit; font-size: 14px; cursor: pointer; text-align: left;
