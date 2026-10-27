@@ -1,5 +1,5 @@
 import type { Project, SessionView } from '../api/types.js';
-import type { SystemSnapshot } from '../api/system.js';
+import type { SystemAttention, SystemSnapshot, SystemUnresolved } from '../api/system.js';
 import type { BoardProject } from '../hooks/useBoardModel.js';
 import type { RailGroup } from './deskModel.js';
 import { endedAtMs, finishedAtMs } from './needsYou.js';
@@ -65,9 +65,9 @@ export interface ProjectCardWords {
  * runs: "N needs you" while any of its jobs waits on you, "On track" while one is working, else "Quiet".
  * `known` false (the runs read has not answered) says nothing about the jobs, never "Nothing running".
  */
-export function projectCardWords(row: ProjectRow, now: number, known: boolean, ago: (ms: number) => string, ranked: ReadonlySet<string> | null = null): ProjectCardWords {
+export function projectCardWords(row: ProjectRow, now: number, known: boolean, ago: (ms: number) => string, snapshot: SystemSnapshot | null = null): ProjectCardWords {
   const { working, blocked } = row.counts;
-  const waiting = projectWaiting(row, ranked);
+  const waiting = projectWaiting(row, snapshot);
   const state = waiting > 0 ? { state: `${waiting} ${waiting === 1 ? 'needs' : 'need'} you`, tone: 'gate' as const }
     : working > 0 ? { state: 'On track', tone: 'ok' as const } : { state: 'Quiet', tone: 'quiet' as const };
   if (!known) return { ...state, state: waiting > 0 || working > 0 ? state.state : '', sentence: 'Reading its jobs…' };
@@ -81,33 +81,35 @@ export function projectCardWords(row: ProjectRow, now: number, known: boolean, a
 }
 
 /** The Projects page's sentence: "Three projects. One needs you." */
-export function projectsSentence(rows: readonly ProjectRow[], known: boolean, ranked: ReadonlySet<string> | null = null): string {
+export function projectsSentence(rows: readonly ProjectRow[], known: boolean, snapshot: SystemSnapshot | null = null): string {
   const n = rows.length;
   if (n === 0) return 'No projects yet. A project keeps the jobs and repositories that belong together.';
   const head = `${countWord(n)} ${n === 1 ? 'project' : 'projects'}.`;
   if (!known) return head;
-  const k = rows.filter((r) => projectWaiting(r, ranked) > 0).length;
+  const k = rows.filter((r) => projectWaiting(r, snapshot) > 0).length;
   return k === 0 ? `${head} Nothing needs you.` : `${head} ${countWord(k)} ${k === 1 ? 'needs' : 'need'} you.`;
 }
 
 /**
- * How many of a project's jobs need you. A ranked crew (api-types 0.140.0) says it: its needs-you list's
- * runs (`rankedNeedRunIds`) that are this project's. An older crew: the board's own "waiting" sessions.
+ * The needs-you items that are a project's (crew api-types 0.140.0, the rail's own list): every item of
+ * a ranked snapshot whose run, or a run it holds (`blockedRunIds`), is one of the project's. `null` when
+ * the snapshot is not ranked (an older crew, or none yet): the caller keeps the board's fold.
  */
-export function projectWaiting(row: ProjectRow, ranked: ReadonlySet<string> | null): number {
-  if (ranked === null) return row.counts.waiting;
-  return new Set(row.runIds.filter((id) => ranked.has(id))).size;
+export function projectAttention(snapshot: SystemSnapshot | null, runIds: Iterable<string>): SystemAttention[] | null {
+  if (snapshot === null || snapshot.ranked !== true) return null;
+  const mine = new Set(runIds);
+  return snapshot.attention.filter((a) => (a.runId != null && mine.has(a.runId)) || (a.blockedRunIds ?? []).some((id) => mine.has(id)));
 }
 
-/** The runs a ranked crew's needs-you list names (each item's run, and the runs it holds), or null
- *  when the snapshot is not ranked (an older crew, or no snapshot yet). */
-export function rankedNeedRunIds(snapshot: SystemSnapshot | null): Set<string> | null {
-  if (snapshot === null || snapshot.ranked !== true) return null;
-  const ids = new Set<string>();
-  for (const a of snapshot.attention) {
-    if (a.panel !== 'runs') continue;
-    if (a.runId != null) ids.add(a.runId);
-    for (const id of a.blockedRunIds ?? []) ids.add(id);
-  }
-  return ids;
+/** The work nobody resolved that is a project's (failed, superseded, parked), from a ranked snapshot. */
+export function projectUnresolved(snapshot: SystemSnapshot | null, runIds: Iterable<string>): SystemUnresolved[] {
+  if (snapshot === null || snapshot.ranked !== true) return [];
+  const mine = new Set(runIds);
+  return (snapshot.unresolved ?? []).filter((u) => mine.has(u.runId));
+}
+
+/** How many things a project's jobs need from you: the ranked list's items that are its, else the
+ *  board's own "waiting" sessions (an older crew). */
+export function projectWaiting(row: ProjectRow, snapshot: SystemSnapshot | null): number {
+  return projectAttention(snapshot, row.runIds)?.length ?? row.counts.waiting;
 }

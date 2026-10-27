@@ -1,5 +1,5 @@
 import type { SystemAttention, SystemCli, SystemGovernanceCard, SystemInfra, SystemSnapshot } from '../api/system.js';
-import type { NerveState } from './nerveCenter.js';
+import { spendWords, type NerveState } from './nerveCenter.js';
 import type { NerveTab } from './nerveTabs.js';
 import { countWord } from './deskHome.js';
 
@@ -123,6 +123,9 @@ export function qePassPct(cards: readonly SystemGovernanceCard[]): number | null
   return Math.round((passed / (passed + failed)) * 100);
 }
 
+/** Below this QE pass rate (percent) the Governance tile says "QE passes rarely" (amber). */
+export const QE_RARE_PCT = 50;
+
 /** Governance: crew's cards, worst state first; the rules loaded and the QE pass rate when counted. */
 export function governanceTile(cards: readonly SystemGovernanceCard[]): Tile {
   const base = { id: 'governance', name: 'Governance', tab: 'governance' as const };
@@ -135,6 +138,11 @@ export function governanceTile(cards: readonly SystemGovernanceCard[]): Tile {
     .filter((x): x is string => x !== null).join(' · ') || null;
   if (down.length > 0) return { ...base, state: down.length === 1 ? down[0]!.name : `${down.length} problems`, tone: 'fail', line: facts };
   if (bad.length > 0) return { ...base, state: bad.length === 1 ? bad[0]!.name : `${bad.length} need a look`, tone: 'warn', line: facts };
+  // Crew may call every card ok while QE acceptance passes rarely: never "Healthy" next to that figure.
+  if (qe !== null && qe < QE_RARE_PCT) {
+    const rest = rules !== undefined && rules.value !== 'not counted' ? ` · ${rules.value} ${rules.value === '1' ? 'rule' : 'rules'}` : '';
+    return { ...base, state: 'QE passes rarely', tone: 'warn', line: `QE pass ${qe}%${rest}` };
+  }
   return { ...base, state: 'Healthy', tone: 'ok', line: facts };
 }
 
@@ -179,4 +187,10 @@ export function tilesNeedingALook(tiles: readonly Tile[]): number {
 export function waitingWords(n: number): string | null {
   if (n <= 0) return null;
   return `${countWord(n)} ${n === 1 ? 'job needs' : 'jobs need'} you.`;
+}
+
+/** "16 jobs to tidy up ($4.20 spent)": work nobody resolved (failed, superseded, parked), or null with none. */
+export function tidyWords(n: number, spendUsd: number | null): string | null {
+  if (n <= 0) return null;
+  return `${n} ${n === 1 ? 'job' : 'jobs'} to tidy up${spendUsd !== null && spendUsd > 0 ? ` (${spendWords(spendUsd)} spent)` : ''}`;
 }

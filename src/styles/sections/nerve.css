@@ -15,6 +15,11 @@
 }
 .wk-nc-tile[data-tone="green"] { --nc-bg: var(--nc-ok-bg); --nc-fg: var(--nc-ok-fg); --nc-edge: var(--nc-ok-edge); --nc-hover: var(--nc-ok-hover); --nc-press: var(--nc-ok-press); }
 .wk-nc-tile[data-tone="red"] { --nc-bg: var(--nc-fail-bg); --nc-fg: var(--nc-fail-fg); --nc-edge: var(--nc-fail-edge); --nc-hover: var(--nc-fail-hover); --nc-press: var(--nc-fail-press); }
+/* Not answered yet: neutral, no verdict (the page's own ground and ink; never amber before crew speaks). */
+.wk-nc-tile[data-read="checking"] {
+  --nc-bg: var(--surface-card); --nc-fg: var(--ink-high); --nc-edge: var(--border-strong);
+  --nc-hover: color-mix(in oklab, var(--ink-high) 12%, var(--surface-card)); --nc-press: color-mix(in oklab, var(--ink-high) 18%, var(--surface-card));
+}
 .wk-nc-tile:hover { background: var(--nc-hover); }
 .wk-nc-tile:focus-visible { outline: 2px solid transparent; box-shadow: var(--focus-ring); }
 /* "You are here": a ring in the tile's own ink (the fill already says the state). */

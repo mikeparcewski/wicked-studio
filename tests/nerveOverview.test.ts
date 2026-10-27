@@ -77,7 +77,10 @@ describe('the sections', () => {
     expect(machineTile(LIVE.infra)).toMatchObject({ state: 'Running slowly', tone: 'warn', line: '55 GB free · Load is high' });
     // 2 of 14 passed: 14%, from the card's own counts (never the gate count read as a percent).
     expect(qePassPct(LIVE.governance)).toBe(14);
-    expect(governanceTile(LIVE.governance)).toMatchObject({ state: 'Healthy', tone: 'ok', line: '21 rules · QE pass 14%' });
+    // Crew calls every card ok, but QE passes 2 times in 14: never "Healthy" beside that figure.
+    expect(governanceTile(LIVE.governance)).toMatchObject({ state: 'QE passes rarely', tone: 'warn', line: 'QE pass 14% · 21 rules' });
+    const good = normalizeSnapshot({ governance: [{ key: 'qe_acceptance', state: 'ok', value: 10, breakdown: { passed: 8, failed: 2 } }, { key: 'steering_rules', state: 'ok', value: 21 }] }).governance;
+    expect(governanceTile(good)).toMatchObject({ state: 'Healthy', tone: 'ok', line: '21 rules · QE pass 80%' });
     const down = normalizeSnapshot({ infra: [{ key: 'gateway', label: 'Model gateway', state: 'down' }, { key: 'bus', label: 'Event bus', state: 'ok' }] }).infra;
     expect(servicesTile(down)).toMatchObject({ state: '1 down', tone: 'fail', line: 'Model gateway' });
     expect(machineTile([])).toMatchObject({ state: 'Not reported', tone: 'quiet' });
@@ -91,5 +94,14 @@ describe('the sections', () => {
     expect(overviewSentence({ read: 'fresh' }, [], 0)).toEqual({ lead: 'Nothing is slowing work.', rest: 'Everything is healthy.', tone: 'ok' });
     expect(overviewSentence({ read: 'stale' }, [], 0).lead).toBe('Can’t reach crew.');
     expect(overviewSentence({ read: 'checking' }, [], 0).lead).toBe('Checking crew…');
+  });
+});
+
+describe('the tidy-up line', () => {
+  it('says how many jobs nobody resolved and what they cost, or nothing', async () => {
+    const { tidyWords } = await import('../src/board/nerveOverview.js');
+    expect(tidyWords(16, 4.2)).toBe('16 jobs to tidy up ($4.20 spent)');
+    expect(tidyWords(1, null)).toBe('1 job to tidy up');
+    expect(tidyWords(0, 3)).toBeNull();
   });
 });

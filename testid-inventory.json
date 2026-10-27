@@ -11,9 +11,9 @@
   "version": 1,
   "studioVersion": "0.12.3",
   "counts": {
-    "files": 253,
-    "occurrences": 3421,
-    "static": 2907,
+    "files": 254,
+    "occurrences": 3429,
+    "static": 2914,
     "dynamic": 75,
     "computed": 33
   },
@@ -8296,6 +8296,12 @@
       ]
     },
     {
+      "testId": "nc-tidy",
+      "files": [
+        "src/components/nerve/NerveOverview.tsx"
+      ]
+    },
+    {
       "testId": "nc-tile",
       "files": [
         "src/components/nerve/NerveOverview.tsx"
@@ -10244,9 +10250,45 @@
       ]
     },
     {
+      "testId": "project-tidy",
+      "files": [
+        "src/components/desk/ProjectHome.tsx"
+      ]
+    },
+    {
+      "testId": "project-tidy-open",
+      "files": [
+        "src/components/desk/ProjectHome.tsx"
+      ]
+    },
+    {
       "testId": "project-title",
       "files": [
         "src/components/desk/DeskV2.tsx"
+      ]
+    },
+    {
+      "testId": "project-unfiled",
+      "files": [
+        "src/components/desk/UnfiledLine.tsx"
+      ]
+    },
+    {
+      "testId": "project-unfiled-list",
+      "files": [
+        "src/components/desk/UnfiledLine.tsx"
+      ]
+    },
+    {
+      "testId": "project-unfiled-move",
+      "files": [
+        "src/components/desk/UnfiledLine.tsx"
+      ]
+    },
+    {
+      "testId": "project-unfiled-row",
+      "files": [
+        "src/components/desk/UnfiledLine.tsx"
       ]
     },
     {

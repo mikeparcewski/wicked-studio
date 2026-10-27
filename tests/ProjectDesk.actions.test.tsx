@@ -147,11 +147,14 @@ describe('ProjectDesk — the home keeps the moves', () => {
     expect(navigate).toHaveBeenCalledWith('/projects/proj-1?tab=work');
   });
 
-  it('the default project\'s home offers Documents only', async () => {
+  it('work in no project is not a project: no ask box, no ⋯, one line offering to file it', async () => {
     getProject.mockResolvedValue(detail(proj('default')));
     getProjectActivity.mockResolvedValue({ entries: [], nextCursor: null, projectId: 'default' });
     await renderLoaded('default', vi.fn(), '');
-    fireEvent.click(screen.getByRole('button', { name: 'More actions for work not in a project' }));
-    expect(screen.getAllByRole('menuitem').map((m) => m.textContent)).toEqual(['Documents']);
+    expect(screen.queryByTestId('project-ask')).toBeNull();
+    expect(screen.queryByRole('button', { name: /^More actions for/ })).toBeNull();
+    expect(screen.getByTestId('project-unfiled')).toHaveTextContent('These jobs aren\u2019t filed in a project · Move to a project'.replace('\u2019', "'"));
+    // Its documents stay one link away (the Work view).
+    expect(screen.getAllByTestId('project-view')[0]).toHaveAttribute('href', '/projects/default?tab=work');
   });
 });

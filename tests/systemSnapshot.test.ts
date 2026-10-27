@@ -98,7 +98,7 @@ describe('Re-check supersedes a read in flight', () => {
     await flush();
     systemQ[1]!.resolve(SNAP([RED]));
     await recheck;
-    expect(verdict()).toMatchObject({ tone: 'red', words: 'gateway down' });
+    expect(verdict()).toMatchObject({ tone: 'red', words: 'a service is down' });
   });
 
   it('a plain poll during a read shares it (no second request)', async () => {

@@ -16,6 +16,7 @@ import { ConnectionRegistry, GovernanceRows, SeatsRegistry, WeekRegistry, seatSt
 import { Tabs, TechDetails } from '../ui/index.js';
 import { ToResolve } from '../desk/NeedsRanked.js';
 import { NerveOverview } from './NerveOverview.js';
+import { qePassPct } from '../../board/nerveOverview.js';
 
 const defaultNavigate: Navigate = (p) => { history.pushState(null, '', p); window.dispatchEvent(new PopStateEvent('popstate')); };
 
@@ -28,15 +29,13 @@ const LEVEL_GLYPH = { red: '✕', yellow: '!' } as const;
 const STATE_GLYPH = { ok: '✓', degraded: '!', down: '✕', unknown: '?', off: '–' } as const;
 const STATE_WORD = { ok: 'ok', degraded: 'degraded', down: 'down', unknown: 'unknown', off: 'off' } as const;
 
-/** The page's one sentence: the tile's verdict, said in full. */
+/** The page's one sentence: the tile's verdict (the same derivation), said in full. */
 function headline(state: NerveState): string {
   if (state.read === 'checking') return 'Checking crew…';
   if (state.read !== 'fresh') return "Can't reach crew — what you see below may be out of date.";
-  const red = state.attention.filter((a) => a.level === 'red').length;
-  const n = state.attention.length;
-  if (n === 0) return 'All clear — nothing is stopping work.';
-  if (red > 0) return `Work is blocked: ${state.words}${n > 1 ? ` (and ${n - 1} more)` : ''}.`;
-  return `${n === 1 ? '1 thing needs' : `${n} things need`} a look — work still flows.`;
+  if (state.tone === 'green') return 'All clear — nothing is stopping work.';
+  if (state.tone === 'red') return `Work is stopped: ${state.words}.`;
+  return `Work still flows: ${state.words}.`;
 }
 
 /**
@@ -512,6 +511,19 @@ function InfraRows({ rows, onRecheck }: { rows: SystemInfra[]; onRecheck: () => 
   );
 }
 
+/**
+ * A governance card's headline value. QE acceptance: crew now counts gates (`value` = how many, the
+ * passed/failed breakdown beside it), so the pass rate is derived from those counts ("14% passed, 2 of
+ * 14"); an older crew sent the rate itself as the value, which keeps its "%".
+ */
+function governanceValue(g: SystemGovernanceCard, cards: readonly SystemGovernanceCard[]): string {
+  if (g.key !== 'qe_acceptance' || g.value === 'not counted') return g.value;
+  const pct = qePassPct(cards);
+  if (pct === null) return g.counts === null ? `${g.value}%` : g.value;
+  const passed = g.counts?.['passed'] ?? g.counts?.['pass'] ?? 0;
+  return `${pct}% passed (${passed} of ${g.value})`;
+}
+
 function GovernanceCards({ cards }: { cards: SystemGovernanceCard[] }): React.ReactElement {
   if (cards.length === 0) return <p className="wk-health-absent">Crew reports no governance cards.</p>;
   return (
@@ -520,7 +532,7 @@ function GovernanceCards({ cards }: { cards: SystemGovernanceCard[] }): React.Re
         <li key={g.key} data-testid="nc-gov" data-key={g.key} data-state={g.state} className="wk-nc-govcard">
           <span className="wk-nc-govcard-name">{g.name}</span>
           <span className="wk-nc-govcard-value" data-state={g.state}>
-            <span aria-hidden className="wk-nc-glyph" data-state={g.state}>{STATE_GLYPH[g.state]}</span> {g.value}{g.key === 'qe_acceptance' && g.value !== 'not counted' ? '%' : ''}
+            <span aria-hidden className="wk-nc-glyph" data-state={g.state}>{STATE_GLYPH[g.state]}</span> {governanceValue(g, cards)}
           </span>
           {g.breakdown !== null && <span data-testid="nc-gov-breakdown" className="wk-nc-line">{g.breakdown}</span>}
           {g.detail !== null && <span className="wk-nc-line">{g.detail}</span>}

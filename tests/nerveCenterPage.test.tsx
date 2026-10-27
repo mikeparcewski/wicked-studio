@@ -173,11 +173,12 @@ describe('against a crew with the system snapshot', () => {
     expect(within(items[0]!).getByTestId('nc-attention-remedy')).toHaveTextContent('Start the gateway');
     const tile = screen.getByTestId('desk-rail-nerve');
     expect(tile).toHaveAttribute('data-tone', 'red');
-    expect(screen.getByTestId('nerve-center-words')).toHaveTextContent('gateway down');
-    expect(tile).toHaveAccessibleName('Nerve Center: gateway down — work is blocked');
+    // A summary, never an item's title: the system's worst (and how many more), then the jobs waiting on you.
+    expect(screen.getByTestId('nerve-center-words')).toHaveTextContent('a service is down and 1 more · 1 needs you');
+    expect(tile).toHaveAccessibleName('Nerve Center: a service is down and 1 more · 1 needs you — work is blocked');
     expect(screen.queryByTestId('nc-upgrade-note')).toBeNull();
-    // The header's sentence names the worst item and how many more.
-    expect(screen.getByTestId('nc-headline')).toHaveTextContent('Work is blocked: gateway down (and 2 more).');
+    // The header's sentence is the same verdict, in full.
+    expect(screen.getByTestId('nc-headline')).toHaveTextContent('Work is stopped: a service is down and 1 more · 1 needs you.');
     // One tab, one panel: the other tabs' panels are not on screen until opened.
     expect(screen.queryByTestId('nc-panel-clis')).toBeNull();
     for (const [tab, id] of [['clis', 'nc-panel-clis'], ['runs', 'nc-panel-runs'], ['runs', 'nc-feed'], ['infra', 'nc-panel-infra'], ['governance', 'nc-panel-governance'], ['attention', 'nc-attention']] as const) {
@@ -511,5 +512,17 @@ describe('the overview (/watch with no ?tab=, the approved ui-v2-nerve mockup)',
     expect(within(tile('pi')).getByTestId('nc-tile-signin')).toBeInTheDocument();
     expect(within(tile('machine')).getByTestId('nc-tile-state')).toHaveTextContent('Not reported');
     await waitFor(() => expect(within(tile('governance')).getByTestId('nc-tile-state')).toHaveTextContent('1 warning'));
+  });
+});
+
+describe('the rail tile while crew has not answered', () => {
+  it('is neutral (no verdict in colour or words) until the first answer', () => {
+    getHealth.mockImplementationOnce(() => new Promise(() => undefined) as never);
+    renderBoth();
+    const tile = screen.getByTestId('desk-rail-nerve');
+    // data-read="checking" is the neutral grey fill (nerve.css), with no verdict word in its name.
+    expect(tile).toHaveAttribute('data-read', 'checking');
+    expect(tile).toHaveAccessibleName('Nerve Center: checking crew');
+    expect(screen.getByTestId('nerve-center-words')).toHaveTextContent('checking crew');
   });
 });

@@ -14,6 +14,7 @@ vi.mock('../src/hooks/useBoardModel.js', () => ({ useBoardModel: () => ({ items:
 
 const { ProjectsPage } = await import('../src/components/everything/ProjectsPage.js');
 const { useProjectsStore } = await import('../src/store/projects.js');
+const { useSystemStore } = await import('../src/store/systemSnapshot.js');
 const { parseRoute } = await import('../src/hooks/useRoute.js');
 const { pageNameFor } = await import('../src/board/pageNames.js');
 const { navCurrent } = await import('../src/board/navModel.js');
@@ -23,6 +24,8 @@ const p = (id: string, name: string, status: 'active' | 'archived' = 'active'): 
 beforeEach(() => {
   useProjectsStore.setState({ projects: [p('default', 'Unfiled'), p('alpha', 'Alpha'), p('beta', 'Beta')] });
   listProjects.mockReset().mockResolvedValue({ projects: [p('old', 'Old sprint', 'archived')] });
+  // An older crew has answered (no ranked list): the fold is the needs-you source.
+  useSystemStore.setState({ mode: 'fallback', healthAt: Date.now(), healthError: null, snapshot: null });
 });
 afterEach(cleanup);
 

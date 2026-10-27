@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
 import type { Project, SessionView } from '../../api/types.js';
+import type { SystemSnapshot } from '../../api/system.js';
 import { deskReadState } from '../../board/deskModel.js';
 import { everythingPath } from '../../board/everythingModel.js';
 import type { NeedRow } from '../../board/needsYou.js';
 import { PROJECTS_PATH } from '../../board/navModel.js';
 import { PAGE_NAMES } from '../../board/pageNames.js';
-import { filterProjectRows, projectCardWords, projectRows, projectsSentence, rankedNeedRunIds, type ProjectRow } from '../../board/projectsModel.js';
+import { filterProjectRows, projectCardWords, projectRows, projectsSentence, type ProjectRow } from '../../board/projectsModel.js';
 import { useSystemStore } from '../../store/systemSnapshot.js';
 import { relTime } from '../../board/relTime.js';
 import { readErrorKind } from '../../api/errors.js';
@@ -38,11 +39,13 @@ export function ProjectsPage({ runs, runsLoaded, runsError = null, onRetryRuns, 
 }): React.ReactElement {
   const archivedLens = new URLSearchParams(search).get('filter') === 'archived';
   const read = deskReadState(runsLoaded, runsError);
-  const known = read === 'known' || read === 'stale';
+  const runsKnown = read === 'known' || read === 'stale';
   const { rows, unfiled } = useProjectRows(runs, needRows);
   // A ranked crew's needs-you list decides "N needs you" (the rail's number); an older crew, the board's.
+  // Until crew first answers, the counts are held (never the fold's number flashing before crew's).
   const snapshot = useSystemStore((s) => (s.mode === 'system' ? s.snapshot : null));
-  const ranked = rankedNeedRunIds(snapshot);
+  const crewPending = useSystemStore((s) => s.mode === 'unknown' && s.healthError === null);
+  const known = runsKnown && !crewPending;
   const { archived, archivedRead, archivedRepos } = useArchivedProjects(archivedLens);
   const [hidden, setHidden] = useState<string[]>([]);
   const [name, setName] = useState('');
@@ -56,7 +59,7 @@ export function ProjectsPage({ runs, runsLoaded, runsError = null, onRetryRuns, 
   return (
     <CalmPage data-testid="projects-page">
       <CalmHead title={PAGE_NAMES.projects} sentenceTestId="projects-sentence"
-        sentence={archivedLens ? 'Archived projects keep their jobs and repositories. Unarchive one to work in it again.' : projectsSentence(rows, known, ranked)}
+        sentence={archivedLens ? 'Archived projects keep their jobs and repositories. Unarchive one to work in it again.' : projectsSentence(rows, known, snapshot)}
         action={<CalmAction label="New project" testId="projects-new" onClick={() => setNewOpen(true)} />} />
       {read === 'failed' && <StateBanner data-testid="projects-failed" kind={readErrorKind(runsError)} what="your work" error={runsError} {...(onRetryRuns !== undefined ? { onRetry: onRetryRuns } : {})} />}
       <CalmSection label={archivedLens ? 'Archived' : 'Your projects'} data-testid="projects-tab"
@@ -67,13 +70,13 @@ export function ProjectsPage({ runs, runsLoaded, runsError = null, onRetryRuns, 
         </>}>
         {archivedLens && archivedRead === 'pending' && <CalmLoading rows={2} data-testid="projects-checking" label="Reading the archived projects" />}
         {archivedLens && archivedRead === 'failed' && <StateBanner data-testid="projects-archived-failed" kind="error" what="the archived projects" />}
-        {(listed.length > 0 || (!archivedLens && known && unfiled > 0)) && (
+        {(listed.length > 0 || (!archivedLens && runsKnown && unfiled > 0)) && (
           <ul className="wk-pj-cards" aria-label={archivedLens ? 'Archived projects' : 'Projects'}>
             {listed.map((row) => (
-              <ProjectCard key={row.project.id} row={row} now={now} known={known && !archivedLens} ranked={ranked} navigate={navigate}
+              <ProjectCard key={row.project.id} row={row} now={now} known={known && !archivedLens} snapshot={snapshot} navigate={navigate}
                 onStatusChanged={(project) => { if (archivedLens && project.status === 'active') setHidden((ids) => [...ids, project.id]); }} />
             ))}
-            {!archivedLens && known && unfiled > 0 && name.trim() === '' && <UnfiledCard count={unfiled} navigate={navigate} />}
+            {!archivedLens && runsKnown && unfiled > 0 && name.trim() === '' && <UnfiledCard count={unfiled} navigate={navigate} />}
           </ul>
         )}
         {listed.length === 0 && (!archivedLens || archivedRead === 'ok') && (
@@ -93,8 +96,8 @@ const go = (navigate: Navigate, path: string) => (e: React.MouseEvent): void => 
   navigate(path);
 };
 
-function ProjectCard({ row, now, known, ranked, navigate, onStatusChanged }: {
-  row: ProjectRow; now: number; known: boolean; ranked: ReadonlySet<string> | null; navigate: Navigate; onStatusChanged: (project: Project) => void;
+function ProjectCard({ row, now, known, snapshot, navigate, onStatusChanged }: {
+  row: ProjectRow; now: number; known: boolean; snapshot: SystemSnapshot | null; navigate: Navigate; onStatusChanged: (project: Project) => void;
 }): React.ReactElement {
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(row.project.name);
@@ -103,7 +106,7 @@ function ProjectCard({ row, now, known, ranked, navigate, onStatusChanged }: {
   const { apply, error, busy } = useProjectSave(row.project.id, onStatusChanged);
   const archived = row.project.status === 'archived';
   const path = projectDetailPath(row.project.id);
-  const words = archived ? { state: 'Archived', tone: 'quiet' as const, sentence: row.project.description ?? 'Archived.' } : projectCardWords(row, now, known, (ms) => relTime(ms, now), ranked);
+  const words = archived ? { state: 'Archived', tone: 'quiet' as const, sentence: row.project.description ?? 'Archived.' } : projectCardWords(row, now, known, (ms) => relTime(ms, now), snapshot);
   return (
     <li className="wk-pj-card" data-testid="projects-row" data-project-id={row.project.id} data-tone={words.tone}>
       {editing ? (

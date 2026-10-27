@@ -2,7 +2,7 @@ import type { SystemAction, SystemAttention, SystemSnapshot } from '../../api/sy
 import type { RosterSeat } from '../../api/types.js';
 import type { NerveState } from '../../board/nerveCenter.js';
 import {
-  cliTile, overviewSentence, slowingItems, slowingLine, systemTiles, tilesNeedingALook, waitingItems, waitingWords, type Tile,
+  cliTile, overviewSentence, slowingItems, slowingLine, systemTiles, tidyWords, tilesNeedingALook, waitingItems, waitingWords, type Tile,
 } from '../../board/nerveOverview.js';
 import { landingTab, nerveTabPath, type NerveTab } from '../../board/nerveTabs.js';
 import { PAGE_NAMES } from '../../board/pageNames.js';
@@ -10,6 +10,7 @@ import type { Navigate } from '../../hooks/useRoute.js';
 import { CalmButton, CalmHead, CalmLoading, CalmSection } from '../calm/Calm.js';
 import { seatStandingWord, type HealthRegistry } from '../HealthRailSection.js';
 import { InsightsLine } from '../insights/InsightsLine.js';
+import { rowHeadline } from '../../board/rowHeadline.js';
 
 /** Where "See what needs you" goes: Needs you in full. */
 const NEEDS_PATH = '/needs';
@@ -94,6 +95,8 @@ export function NerveOverview({ state, snapshot, registry, reading, needCount, s
   const sentence = overviewSentence(state, slowing, others);
   const details = nerveTabPath(search, landingTab(state) ?? 'attention');
   const waitLine = waitingWords(waiting);
+  // Work nobody resolved keeps the tile amber (never green over stale jobs): said here too, with its spend.
+  const tidy = snapshot !== null ? tidyWords(snapshot.unresolved?.length ?? 0, snapshot.unresolvedSpendUsd ?? null) : null;
 
   const fix = (a: SystemAttention): React.ReactElement => {
     const tab = PANEL_TAB[a.panel];
@@ -121,9 +124,10 @@ export function NerveOverview({ state, snapshot, registry, reading, needCount, s
         action={<CalmButton testId="nc-recheck" disabled={reading} onClick={onRecheck}>{reading ? 'Checking…' : 'Check again'}</CalmButton>}
       />
 
-      {waitLine !== null && (
-        <p className="wk-ncv-waiting" data-testid="nc-waiting" data-count={waiting}>
-          {waitLine} <a href={NEEDS_PATH} onClick={go(NEEDS_PATH)} className="wk-link" data-testid="nc-waiting-open">See what needs you</a>
+      {(waitLine !== null || tidy !== null) && (
+        <p className="wk-ncv-waiting" data-testid="nc-waiting" data-count={waiting} data-tidy={snapshot?.unresolved?.length ?? 0}>
+          {waitLine}{waitLine !== null && tidy !== null ? ' ' : ''}{tidy !== null && <span data-testid="nc-tidy">{tidy}.</span>}{' '}
+          <a href={NEEDS_PATH} onClick={go(NEEDS_PATH)} className="wk-link" data-testid="nc-waiting-open">See what needs you</a>
         </p>
       )}
 
@@ -134,7 +138,7 @@ export function NerveOverview({ state, snapshot, registry, reading, needCount, s
               <li key={a.id} className="wk-ncv-slow" data-testid="nc-slow" data-id={a.id} data-level={a.level}>
                 <span aria-hidden className="wk-calm-dot" data-tone={a.level === 'red' ? 'fail' : 'warn'} />
                 <span className="wk-ncv-slow-text">
-                  <span className="wk-ncv-slow-title"><span className="sr-only">{a.level === 'red' ? 'Stopping work: ' : 'Slowing work: '}</span>{a.text}</span>
+                  <span className="wk-ncv-slow-title"><span className="sr-only">{a.level === 'red' ? 'Stopping work: ' : 'Slowing work: '}</span>{rowHeadline(a)}</span>
                   {slowingLine(a, snapshot?.infra ?? null) !== null && <span className="wk-ncv-slow-line">{slowingLine(a, snapshot?.infra ?? null)}</span>}
                 </span>
                 {fix(a)}

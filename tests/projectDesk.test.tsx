@@ -31,6 +31,8 @@ vi.mock('../src/store/launchWizard.js', async (importOriginal) => ({ ...(await i
 import { ProjectDesk } from '../src/components/desk/ProjectDesk.js';
 import { makeUnit } from './factories.js';
 import { useProjectsStore } from '../src/store/projects.js';
+import { useSystemStore } from '../src/store/systemSnapshot.js';
+import type { SystemSnapshot } from '../src/api/system.js';
 import { clearRepoCache } from '../src/store/repoCache.js';
 
 const NOW = Date.UTC(2026, 9, 13, 12);
@@ -48,6 +50,8 @@ beforeEach(() => {
   clearRepoCache();
   window.history.replaceState(null, '', '/projects/p1');
   useProjectsStore.setState({ projects: [project], loading: false, error: null });
+  // An older crew has answered (no ranked list): the fold is the needs-you source.
+  useSystemStore.setState({ mode: 'fallback', healthAt: Date.now(), healthError: null, snapshot: null });
   getProject.mockResolvedValue({ project, members: [member('member'), member('repo', 'crew.repo')] });
   apiFetch.mockImplementation((path: string) => {
     if (path.includes('/standing-orders')) return Promise.resolve({ away: false, orders: [] });
@@ -108,6 +112,35 @@ describe("a project's home (no ?tab=, the approved ui-v2-projects mockup)", () =
     expect(screen.getAllByTestId('project-view').map((a) => a.getAttribute('href'))).toEqual([
       '/projects/p1?tab=work', '/projects/p1?tab=runs', '/projects/p1?tab=repositories', '/projects/p1?tab=report', '/projects/p1?tab=understand',
       '/projects/p1?tab=steer', '/projects/p1?tab=memory', '/projects/p1?tab=agents', '/projects/p1?tab=evaluate']);
+  });
+
+  it("a ranked crew: Needs you is crew's attention filtered to the project; stale work is one tidy-up line with its spend", async () => {
+    const snap: SystemSnapshot = {
+      checkedAt: NOW, ranked: true, clis: [], runs: [], infra: [], governance: [],
+      attention: [
+        { id: 'run:member', level: 'red', panel: 'runs', kind: 'prevents', text: 'Improve cart', reason: 'held at an escalation gate (unit 2)', remedy: null,
+          action: { kind: 'open-gate', target: 'member', ord: 2 }, runId: 'member', blockedRunIds: ['member'], waitedSince: NOW - 3_600_000 },
+        { id: 'run:elsewhere', level: 'red', panel: 'runs', kind: 'prevents', text: 'Other work', reason: null, remedy: null, action: null, runId: 'elsewhere', blockedRunIds: ['elsewhere'] },
+      ],
+      unresolved: [{ runId: 'filed', title: 'Fix checkout', repo: null, workflow: null, status: 'failed', why: 'failed', reason: 'failed 10 days ago', supersededBy: null, since: null, costUsd: 0.75, tokens: null, wallMs: null, actions: ['retry'] }],
+    };
+    useSystemStore.setState({ mode: 'system', snapshot: snap, snapshotAt: NOW, snapshotError: null });
+    render(<ProjectDesk {...props} />);
+    await loaded();
+    const rows = screen.getAllByTestId('project-need');
+    expect(rows.map((r) => r.getAttribute('data-key'))).toEqual(['run:member']);
+    expect(rows[0]).toHaveTextContent('Improve cart');
+    expect(rows[0]).toHaveTextContent('Decide');
+    expect(screen.getByTestId('project-sentence')).toHaveTextContent(/^One thing needs you\./);
+    expect(screen.getByTestId('project-tidy')).toHaveTextContent('1 job to tidy up ($0.75 spent)');
+  });
+
+  it('holds Needs you until crew first answers (no fold count flashing first)', async () => {
+    useSystemStore.setState({ mode: 'unknown', healthAt: null, healthError: null });
+    render(<ProjectDesk {...props} />);
+    await loaded();
+    expect(screen.getByTestId('project-home-loading')).toBeInTheDocument();
+    expect(screen.getByTestId('project-sentence')).toHaveTextContent('Reading this project’s jobs…');
   });
 
   it('a tabbed view links back to the home', async () => {

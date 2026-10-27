@@ -80,15 +80,18 @@ describe('the ranked wire', () => {
 });
 
 describe('Nerve Center tile against a ranked crew', () => {
-  it('says how many and the first, in crew’s order (never re-sorted red first); red when any item is red', () => {
+  it('one derivation: a summary, never a title; red only when the system prevents work, amber when it slows or a job waits', () => {
     const st = nerveState(signals(ranked()), 'connected', 99, NOW);
-    expect(st).toMatchObject({ tone: 'red', words: '5 need you · Host load: degraded' });
+    // The load slows work (amber); four jobs wait on you (amber). Nothing in the system prevents work.
+    expect(st).toMatchObject({ tone: 'yellow', words: 'machine busy · 4 need you' });
     expect(st.attention.map((a) => a.id).slice(0, 2)).toEqual(['infra:load', 'base:wicked-core:test']);
+    const down = { ...ranked(), attention: [{ ...ranked().attention[0]!, id: 'infra:gateway', text: 'gateway down', kind: 'prevents' as const, level: 'red' as const }] };
+    expect(nerveState(signals(down), 'connected', 0, NOW)).toMatchObject({ tone: 'red', words: 'a service is down' });
   });
 
-  it('unresolved work alone is yellow with its spend, never green; nothing at all is green', () => {
+  it('unresolved work alone is yellow, never green; nothing at all is green', () => {
     const onlyResolve = { ...ranked(), attention: [] };
-    expect(nerveState(signals(onlyResolve), 'connected', 0, NOW)).toMatchObject({ tone: 'yellow', words: '2 jobs to resolve · $1.50 spent' });
+    expect(nerveState(signals(onlyResolve), 'connected', 0, NOW)).toMatchObject({ tone: 'yellow', words: '2 to tidy up' });
     expect(nerveState(signals({ ...onlyResolve, unresolved: [] }), 'connected', 0, NOW)).toMatchObject({ tone: 'green' });
     expect(toResolveWords(1, null)).toBe('1 job to resolve');
   });

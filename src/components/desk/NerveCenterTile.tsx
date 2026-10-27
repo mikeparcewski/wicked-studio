@@ -15,7 +15,9 @@ export const NERVE_CENTER_PATH = '/watch';
  * pulses once when it turns red. Colour is never the only signal: the worst item is said in words
  * beside the name, and the accessible name carries the state.
  *
- * Green only over a fresh, successful read (`nerveState`): a failed, pending or stale read is yellow.
+ * Green only over a fresh, successful read (`nerveState`): a failed or stale read is yellow; a read that
+ * has not answered yet is neutral grey (no verdict). The words are a summary ("disk low · 1 needs you"),
+ * never an item's title.
  */
 export function NerveCenterTile({ navigate, pathname, waitingOnYou }: {
   navigate: Navigate;
@@ -25,7 +27,8 @@ export function NerveCenterTile({ navigate, pathname, waitingOnYou }: {
 }): React.ReactElement {
   const state = useNerveState(waitingOnYou);
   const here = pathname === NERVE_CENTER_PATH || pathname === '/health';
-  const label = `${PAGE_NAMES.watch}: ${state.words} — ${toneWord(state.tone)}`;
+  // While crew has not answered yet the tile is neutral: no verdict, in colour or in words.
+  const label = state.read === 'checking' ? `${PAGE_NAMES.watch}: ${state.words}` : `${PAGE_NAMES.watch}: ${state.words} — ${toneWord(state.tone)}`;
   return (
     <a
       href={NERVE_CENTER_PATH}

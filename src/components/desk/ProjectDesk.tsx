@@ -324,7 +324,7 @@ export function ProjectDesk({ projectId, navigate, runs, needRows, now, search, 
     {failure && <StateBanner kind={readErrorKind(failure.error)} what={failure.what} error={failures.map((f) => f.error).join('\n')} onRetry={() => failures.forEach((f) => f.retry())} retrying={loading} />}
     {unshown > 0 && <StateBanner data-testid="project-jobs-unshown" kind="partial" what={unshown === 1 ? '1 job in this project' : `${unshown} jobs in this project`} />}
     {loading ? <Skeleton rows={3} variant="card" /> : !project ? !error && <EmptyState title="Project not found" /> : atHome ? <ProjectHome
-      project={project} projectId={projectId} runs={mine} needRows={needRows} repos={used} now={now} known={runsLoaded && membersRead} loading={false}
+      project={project} projectId={projectId} runs={mine} allRuns={runs} needRows={needRows} repos={used} now={now} known={runsLoaded && membersRead} loading={false}
       navigate={navigate} isDefault={isDefault} menu={[
         { id: 'documents', label: 'Documents', testId: 'project-documents', onSelect: () => scrollTo('project-documents') },
         ...(isDefault ? [] : [

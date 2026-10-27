@@ -36,7 +36,8 @@ a.wk-pj-chip--link:hover { background: var(--calm-hover-ctl); color: var(--ink-h
 a.wk-pj-chip--link:focus-visible { outline: 2px solid transparent; box-shadow: var(--focus-ring); }
 .wk-pj-chips--home { gap: 8px; }
 .wk-pj-chips--home .wk-pj-chip { font-size: 13px; padding: 5px 12px; }
-.wk-pj-add { margin-left: 6px; font-size: 14px; }
+.wk-pj-add { font-size: 14px; }
+.wk-pj-chip + .wk-pj-add { margin-left: 6px; }
 
 /* A project's home: a narrower column (760 px), the back link over the title. */
 .wk-pj-home-col { max-width: 760px; gap: 44px; }
@@ -58,3 +59,21 @@ a.wk-pj-chip--link:focus-visible { outline: 2px solid transparent; box-shadow: v
   .wk-pj-card-name { white-space: normal; }
   .wk-pj-home-col { gap: 32px; }
 }
+
+/* "Not in a project": one line instead of the ask box, and the move list it opens. */
+.wk-pj-unfiled { display: flex; flex-direction: column; gap: 12px; }
+.wk-pj-unfiled-line { font-size: 15px; }
+.wk-pj-unfiled-move {
+  padding: 4px 8px; margin: -4px -8px; border: 0; border-radius: var(--radius-sm); background: transparent;
+  color: var(--calm-link); font: inherit; cursor: pointer; transition: background-color 0.14s, color 0.14s;
+}
+.wk-pj-unfiled-move:hover:not(:disabled) { background: var(--calm-hover-ctl); color: var(--ink-high); text-decoration: underline; text-underline-offset: 3px; }
+.wk-pj-unfiled-move:focus-visible { outline: 2px solid transparent; box-shadow: var(--focus-ring); }
+.wk-pj-unfiled-move:disabled { color: var(--ink-muted); cursor: default; }
+.wk-pj-move-list { list-style: none; margin: 0; padding: 8px 0; display: flex; flex-direction: column; gap: 2px; }
+.wk-pj-move-row { justify-content: space-between; gap: 12px; padding: 6px 4px 6px 12px; border-radius: 10px; transition: background-color 0.14s; }
+.wk-pj-move-row:hover, .wk-pj-move-row:focus-within { background: var(--calm-hover-row); }
+.wk-pj-move-row .wk-desk-move-trigger { opacity: 1; }
+.wk-pj-move-title { flex: 1 1 auto; min-width: 0; font-size: 15px; color: var(--ink-high); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wk-pj-move-more { padding: 8px 12px 0; }
+.wk-pj-tidy { margin-top: 8px; }
