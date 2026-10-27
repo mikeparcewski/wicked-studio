@@ -56,7 +56,7 @@ beforeEach(() => {
   mocks.wide = rec([seat('claude', 12, 12, 8, 10), seat('codex', 2, 2, 2, null)]);
   useSystemStore.setState({ mode: 'system', snapshot });
 });
-afterEach(() => { cleanup(); useSystemStore.setState({ mode: 'unknown', snapshot: null }); });
+afterEach(() => { cleanup(); useSystemStore.setState({ mode: 'unknown', snapshot: null, snapshotError: null }); });
 
 describe('Report page (ui-v2)', () => {
   it('leads with a title, one sentence and the period as the one control', () => {
@@ -98,7 +98,10 @@ describe('Report page (ui-v2)', () => {
     expect(flow).toHaveTextContent('3 jobs finished: 1 delivered, 1 done with nothing to ship, 1 failed.');
     fireEvent.click(screen.getByTestId('report-throughput-chart-table-toggle'));
     const table = within(flow).getByRole('table');
-    expect(within(table).getByRole('rowheader', { name: 'Delivered' })).toBeInTheDocument();
+    expect(within(table).getByRole('columnheader', { name: 'Delivered' })).toBeInTheDocument();
+    // One row per day (7), then the totals.
+    expect(within(table).getAllByRole('row')).toHaveLength(9);
+    expect(within(table).getAllByRole('row').at(-1)).toHaveTextContent('Total11103');
     expect(within(screen.getByTestId('report-spend-chart')).getByRole('table')).toBeInTheDocument();
   });
 
@@ -122,6 +125,13 @@ describe('Report page (ui-v2)', () => {
     fireEvent.click(within(floors).getByRole('button', { name: 'Show the last 7 days' }));
     expect(screen.getByTestId('report-period-7')).toHaveAttribute('aria-checked', 'true');
     expect(screen.getByTestId('report-floors')).toHaveTextContent('4 of 6');
+  });
+
+  it('a failed system read says so instead of waiting', () => {
+    useSystemStore.setState({ mode: 'system', snapshot: null, snapshotError: 'no answer after 10 s' });
+    page(runs());
+    expect(within(screen.getByTestId('report-floors')).getByTestId('report-system-failed')).toHaveTextContent('Couldn’t read crew’s floor outcomes: no answer after 10 s.');
+    expect(within(screen.getByTestId('report-gates')).getByTestId('report-system-failed')).toBeInTheDocument();
   });
 
   it('by agent: steps, pass rate, median step, 429s and cost; sortable', () => {

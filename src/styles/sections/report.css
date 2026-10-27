@@ -7,6 +7,22 @@
  *  - "Not tracked yet" is one dashed chip everywhere, never a number. */
 
 .wk-desk2-report { min-width: 0; }
+/* The endings' colours: told apart by lightness as well as hue (a strong delivered, a pale "nothing to
+ * ship", a mid failed, a neutral stopped: adjacent OKLab L >= 0.1 apart in all four themes, measured). */
+.wk-rep {
+  --rep-delivered: var(--status-ok);
+  --rep-finished: color-mix(in oklab, var(--status-ok) 22%, var(--surface-card));
+  --rep-failed: color-mix(in oklab, var(--status-fail) 80%, var(--surface-card));
+  --rep-stopped: color-mix(in oklab, var(--ink-high) 33%, var(--surface-card));
+  /* Gates: you (leans to the text colour) and judges (a paler gate violet). */
+  --rep-you: color-mix(in oklab, var(--accent) 45%, var(--ink-high));
+  --rep-judges: color-mix(in oklab, var(--status-gate) 55%, var(--surface-card));
+  /* Links lean toward the text colour: a dark accent (a learned theme) still reads (>= 7:1 measured). */
+  --rep-link: color-mix(in oklab, var(--accent) 45%, var(--ink-high));
+  /* Hovers lean toward the text colour too (rest -> hover dL_OK >= 0.07 in all four themes). */
+  --rep-hover: color-mix(in oklab, var(--ink-high) 12%, transparent);
+  --rep-hover-strong: color-mix(in oklab, var(--ink-high) 14%, transparent);
+}
 .wk-rep { display: flex; justify-content: center; padding: var(--space-8, 32px) 0 var(--space-16, 64px); }
 .wk-rep-col { width: 100%; max-width: 960px; display: flex; flex-direction: column; gap: 64px; min-width: 0; }
 
@@ -49,7 +65,7 @@
 .wk-rep-figure { margin: 0; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 .wk-rep-figcap { font-size: 14px; line-height: 1.5; color: var(--ink-body); }
 .wk-rep-data > summary {
-  display: inline-flex; align-items: center; gap: 6px; cursor: pointer; font-size: 14px; color: var(--accent);
+  display: inline-flex; align-items: center; gap: 6px; cursor: pointer; font-size: 14px; color: var(--rep-link);
   border-radius: var(--radius-sm); padding: 2px 4px; margin-left: -4px; list-style: none;
 }
 .wk-rep-data > summary::-webkit-details-marker { display: none; }
@@ -69,12 +85,14 @@
 .wk-rep-table th:first-child, .wk-rep-table td:first-child { padding-left: 0; }
 .wk-rep-table th:last-child, .wk-rep-table td:last-child { padding-right: 0; }
 .wk-rep-table .num { text-align: right; }
+.wk-rep-table--data th, .wk-rep-table--data td { padding-top: 10px; padding-bottom: 10px; }
+.wk-rep-table--data tfoot th, .wk-rep-table--data tfoot td { border-top: 1px solid var(--border); border-bottom: 0; color: var(--ink-high); }
 .wk-rep-table td[data-hot="true"], .wk-rep-table [data-hot="true"] { color: var(--status-warn); font-weight: 600; }
 .wk-rep-sort {
   display: inline-flex; align-items: center; gap: 4px; padding: 2px 4px; margin: -2px -4px; border: 0; border-radius: var(--radius-sm);
   background: transparent; color: inherit; font: inherit; cursor: pointer; transition: background-color 0.14s, color 0.14s;
 }
-.wk-rep-sort:hover { background: color-mix(in oklab, var(--accent) 16%, transparent); color: var(--ink-high); }
+.wk-rep-sort:hover { background: var(--rep-hover-strong); color: var(--ink-high); }
 .wk-rep-sort:focus-visible { outline: 2px solid transparent; box-shadow: var(--focus-ring); }
 .wk-rep-sort[data-on="true"] { color: var(--ink-high); }
 .wk-rep-agent { display: inline-flex; align-items: center; gap: 8px; }
@@ -104,7 +122,7 @@
 .wk-rep-nt-tag { font-size: 13px; font-weight: 600; letter-spacing: 0.02em; color: var(--ink-body); }
 
 .wk-rep-link {
-  padding: 2px 4px; margin: 0 -4px; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--accent);
+  padding: 2px 4px; margin: 0 -4px; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--rep-link);
   font: inherit; font-size: 14px; cursor: pointer;
 }
 .wk-rep-link:hover { text-decoration: underline; text-underline-offset: 3px; }
@@ -113,9 +131,9 @@
 /* Shipped: rows with no chrome; the title opens the job, the PR opens GitHub. */
 .wk-rep-rows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
 .wk-rep-row { display: flex; align-items: center; gap: 20px; padding: 16px 20px; margin: 0 -20px; border-radius: 14px; transition: background-color 0.14s; }
-.wk-rep-row:hover { background: color-mix(in oklab, var(--accent) 10%, transparent); }
+.wk-rep-row:hover { background: var(--rep-hover); }
 .wk-rep-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; background: var(--status-ok); }
-.wk-rep-dot[data-kind="pushed"] { background: var(--accent); }
+.wk-rep-dot[data-kind="pushed"] { background: var(--rep-you); }
 .wk-rep-dot[data-kind="delivered"] { background: var(--status-done); }
 .wk-rep-row-body { display: flex; flex-direction: column; gap: 4px; flex: 1 1 auto; min-width: 0; }
 .wk-rep-row-title { font-size: 16px; font-weight: 500; color: var(--ink-high); text-decoration: none; border-radius: var(--radius-sm); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -123,7 +141,7 @@
 .wk-rep-row-title:focus-visible, .wk-rep-pr:focus-visible { outline: 2px solid transparent; box-shadow: var(--focus-ring); }
 .wk-rep-row-sub { font-size: 14px; color: var(--ink-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .wk-rep-row-meta { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex-shrink: 0; font-size: 14px; }
-.wk-rep-pr { display: inline-flex; align-items: center; gap: 4px; color: var(--accent); text-decoration: none; border-radius: var(--radius-sm); font-weight: 500; }
+.wk-rep-pr { display: inline-flex; align-items: center; gap: 4px; color: var(--rep-link); text-decoration: none; border-radius: var(--radius-sm); font-weight: 500; }
 .wk-rep-pr:hover { text-decoration: underline; text-underline-offset: 3px; }
 
 @media (prefers-reduced-motion: reduce) {

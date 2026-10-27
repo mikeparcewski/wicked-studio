@@ -7,6 +7,7 @@ import {
   spendOfDeltas, spendPerBucket, stepOf, sumOf, SYSTEM_WINDOW_DAYS, throughput, timeToPr, DAY_MS,
   type AgentReportRow, type Change, type CustomRange, type Ending, type Period, type PeriodKind, type RepoRow,
 } from '../../board/reportModel.js';
+import type { Bucket } from '../../board/deskInsights.js';
 import { durationWords, moneyWords } from '../../board/deskPulse.js';
 import { jobTitle } from '../../board/deskWords.js';
 import { useReportRecord } from '../../hooks/useReportRecord.js';
@@ -80,6 +81,7 @@ export function ReportPage({ runs, runsShown, now, navigate, projectId, agentNam
   useSystemPoll();
   const snapshot = useSystemStore((s) => s.snapshot);
   const systemMode = useSystemStore((s) => s.mode);
+  const systemError = useSystemStore((s) => (s.snapshot === null ? s.snapshotError ?? (s.mode === 'unknown' ? s.healthError : null) : null));
   const sysClis = snapshot?.clis.map((c) => ({ key: c.key, name: c.name, medianMs: c.statsDays === SYSTEM_WINDOW_DAYS ? c.medianMs : null, rateLimited: c.statsDays === SYSTEM_WINDOW_DAYS ? c.rateLimited : null })) ?? null;
   const agents = now7 === null ? [] : agentReportRows(now7, sysClis, isLast7 && projectId === undefined, agentName);
   const gov = (key: string): { counts: Record<string, number> | null } | null => snapshot?.governance.find((g) => g.key === key) ?? null;
@@ -158,7 +160,7 @@ export function ReportPage({ runs, runsShown, now, navigate, projectId, agentNam
           <SecHead id="report-h-flow" label="Throughput" meta={`jobs finished per ${per}, by how they ended`} />
           {!runsShown ? <Skeleton rows={3} variant="line" /> : jobs.length === 0 ? <p className="wk-rep-quiet">No job finished in this period.</p> : (
             <ChartFigure summary={`${count(jobs.length, 'job')} finished: ${flow.filter((s) => sumOf(s.values) > 0).map((s) => `${sumOf(s.values)} ${ENDING_WORDS[s.key]}`).join(', ')}.`}
-              table={{ caption: `Jobs finished per ${per}`, cols: buckets.map((b) => b.title), rows: flow.map((s) => ({ label: s.label, values: s.values.map(String) })) }} testId="report-throughput-chart">
+              table={{ caption: `Jobs finished per ${per}`, head: cap(per), rows: bucketWords(buckets, per), series: flow, format: String, note: dayNote(buckets, per) }} testId="report-throughput-chart">
               <StackedBars buckets={buckets} series={flow.map((s) => ({ ...s, color: ENDING_COLOR[s.key] }))} format={(v) => String(Math.round(v))}
                 label={`Jobs finished per ${per}, ${periodWords(period, now).toLowerCase()}, by how they ended`} height={180} ownTable />
             </ChartFigure>
@@ -177,22 +179,22 @@ export function ReportPage({ runs, runsShown, now, navigate, projectId, agentNam
               ) : (
                 <>
                   <p className="wk-rep-big">{qe.tally.recorded < 20 ? `${qe.tally.passed} of ${qe.tally.recorded}` : `${Math.round((qe.tally.passed / qe.tally.recorded) * 100)}%`}</p>
-                  <Meter parts={[{ key: 'passed', label: 'Passed', value: qe.tally.passed, color: 'var(--status-ok)' }, { key: 'failed', label: 'Not passed', value: qe.tally.recorded - qe.tally.passed, color: 'var(--status-fail)' }]} label="QE acceptance verdicts" />
+                  <Meter parts={[{ key: 'passed', label: 'Passed', value: qe.tally.passed, color: 'var(--rep-delivered)' }, { key: 'failed', label: 'Not passed', value: qe.tally.recorded - qe.tally.passed, color: 'var(--rep-failed)' }]} label="QE acceptance verdicts" />
                   <p className="wk-rep-note">passed acceptance, of the finished jobs with a verdict{qe.capped ? ` (the newest ${qe.tally.read} jobs read)` : ''}{qe.failed > 0 ? `; ${qe.failed} couldn’t be read` : ''}</p>
                 </>
               )}
             </div>
             <div className="wk-rep-block" data-testid="report-floors">
               <h3 className="wk-rep-block-title">Floor outcomes</h3>
-              <SevenDay isLast7={isLast7} mode={systemMode} snapshotRead={snapshot !== null} onLast7={goLast7} what="floor outcomes">
+              <SevenDay isLast7={isLast7} mode={systemMode} snapshotRead={snapshot !== null} error={systemError} onLast7={goLast7} what="floor outcomes">
                 {(() => {
                   const c = gov('floor_outcomes')?.counts ?? null;
                   if (c === null) return <NotTracked feed="floor-outcomes" why="Crew served no floor counts." />;
                   const parts = [
-                    { key: 'passed', label: 'Passed', value: c['passed'] ?? 0, color: 'var(--status-ok)' },
-                    { key: 'failed', label: 'Failed', value: c['failed'] ?? 0, color: 'var(--status-fail)' },
+                    { key: 'passed', label: 'Passed', value: c['passed'] ?? 0, color: 'var(--rep-delivered)' },
+                    { key: 'failed', label: 'Failed', value: c['failed'] ?? 0, color: 'var(--rep-failed)' },
                     { key: 'timed_out', label: 'Timed out', value: c['timed_out'] ?? 0, color: 'var(--status-warn)' },
-                    { key: 'not_run', label: 'Not run', value: c['not_run'] ?? 0, color: 'var(--status-done)' },
+                    { key: 'not_run', label: 'Not run', value: c['not_run'] ?? 0, color: 'var(--rep-stopped)' },
                   ];
                   const total = sumOf(parts.map((p) => p.value));
                   return (
@@ -210,13 +212,13 @@ export function ReportPage({ runs, runsShown, now, navigate, projectId, agentNam
             </div>
             <div className="wk-rep-block" data-testid="report-gates">
               <h3 className="wk-rep-block-title">Gates answered</h3>
-              <SevenDay isLast7={isLast7} mode={systemMode} snapshotRead={snapshot !== null} onLast7={goLast7} what="gates answered">
+              <SevenDay isLast7={isLast7} mode={systemMode} snapshotRead={snapshot !== null} error={systemError} onLast7={goLast7} what="gates answered">
                 {(() => {
                   const c = gov('gates_answered')?.counts ?? null;
                   if (c === null) return <NotTracked feed="gates-answered" why="Crew served no gate counts." />;
                   const you = c['byYou'] ?? 0;
                   const judges = c['byJudges'] ?? 0;
-                  const parts = [{ key: 'you', label: 'By you', value: you, color: 'var(--accent)' }, { key: 'judges', label: 'By judges', value: judges, color: 'var(--status-gate)' }];
+                  const parts = [{ key: 'you', label: 'By you', value: you, color: 'var(--rep-you)' }, { key: 'judges', label: 'By judges', value: judges, color: 'var(--rep-judges)' }];
                   return (
                     <>
                       <p className="wk-rep-big">{you + judges}</p>
@@ -241,7 +243,7 @@ export function ReportPage({ runs, runsShown, now, navigate, projectId, agentNam
             : spend === null ? <p className="wk-rep-quiet" data-testid="report-spend-unknown">Spend unknown: usage recorded, no price reported.</p>
             : spendDaily.length === 0 ? <p className="wk-rep-quiet">No priced usage in this period.</p> : (
               <ChartFigure summary={`Spend per ${per}: ${spendDaily.map((s) => `${s.label} ${moneyWords(sumOf(s.values))}`).join(', ')}.`}
-                table={{ caption: `Spend per ${per} by agent`, cols: buckets.map((b) => b.title), rows: spendDaily.map((s) => ({ label: s.label, values: s.values.map(moneyWords) })) }} testId="report-spend-chart">
+                table={{ caption: `Spend per ${per} by agent`, head: cap(per), rows: bucketWords(buckets, per), series: spendDaily, format: moneyWords, note: dayNote(buckets, per) }} testId="report-spend-chart">
                 <StackedBars buckets={buckets} series={spendDaily.map((s) => ({ ...s, color: agentColor(s.key) }))} format={money} label={`Spend per ${per} by agent, ${periodWords(period, now).toLowerCase()}`} height={160} ownTable />
               </ChartFigure>
             )}
@@ -332,17 +334,21 @@ export function ReportPage({ runs, runsShown, now, navigate, projectId, agentNam
 
 // ── Pieces ─────────────────────────────────────────────────────────────────────────────────────
 
+/** Each ending's colour (report.css sets them per theme, told apart by lightness as well as hue). */
 const ENDING_COLOR: Record<Ending, string> = {
-  delivered: 'var(--status-ok)',
-  finished: 'color-mix(in oklab, var(--status-ok) 40%, var(--surface-card))',
-  failed: 'var(--status-fail)',
-  stopped: 'color-mix(in oklab, var(--status-done) 55%, var(--surface-card))',
+  delivered: 'var(--rep-delivered)',
+  finished: 'var(--rep-finished)',
+  failed: 'var(--rep-failed)',
+  stopped: 'var(--rep-stopped)',
 };
 
 /** How a job ended, in the summary sentence ("4 delivered, 7 done with nothing to ship"). */
 const ENDING_WORDS: Record<Ending, string> = { delivered: 'delivered', finished: 'done with nothing to ship', failed: 'failed', stopped: 'stopped' };
 
 function money(v: number): string { return v === 0 ? '$0' : v < 1 ? `$${v.toFixed(2)}` : `$${Math.round(v)}`; }
+
+/** A share in whole percent; a sliver is "<1%", never "0%". */
+function shareWords(x: number): string { return x > 0 && x < 0.005 ? '<1%' : `${Math.round(x * 100)}%`; }
 
 function count(n: number, one: string, many = `${one}s`): string { return `${n} ${n === 1 ? one : many}`; }
 
@@ -394,8 +400,8 @@ export function NotTracked({ feed, why, block = false, short = false }: { feed: 
 }
 
 /** A /system figure: crew counts it for the last 7 days only, so another period says so. */
-function SevenDay({ isLast7, mode, snapshotRead, onLast7, what, children }: {
-  isLast7: boolean; mode: 'unknown' | 'system' | 'fallback'; snapshotRead: boolean; onLast7: () => void; what: string; children: React.ReactNode;
+function SevenDay({ isLast7, mode, snapshotRead, error, onLast7, what, children }: {
+  isLast7: boolean; mode: 'unknown' | 'system' | 'fallback'; snapshotRead: boolean; error: string | null; onLast7: () => void; what: string; children: React.ReactNode;
 }): React.ReactElement {
   if (!isLast7) {
     return (
@@ -407,6 +413,8 @@ function SevenDay({ isLast7, mode, snapshotRead, onLast7, what, children }: {
     );
   }
   if (mode === 'fallback') return <NotTracked block feed="system" why="This crew serves no system snapshot, so it doesn’t count these." />;
+  // A failed read says so (it is read again every 30 s), never a skeleton that waits forever.
+  if (!snapshotRead && error !== null) return <p className="wk-rep-quiet" data-tone="fail" data-testid="report-system-failed">Couldn’t read crew’s {what}: {error}. Trying again.</p>;
   if (!snapshotRead) return <Skeleton rows={2} variant="line" />;
   return <>{children}</>;
 }
@@ -426,10 +434,22 @@ function Meter({ parts, label }: { parts: readonly { key: string; label: string;
 }
 
 /** A chart with its text alternative (one sentence) and its numbers as a table you can open. */
-function ChartFigure({ summary, table, children, testId }: {
-  summary: string; table: { caption: string; cols: readonly string[]; rows: readonly { label: string; values: readonly string[] }[] }; children: React.ReactNode; testId: string;
-}): React.ReactElement {
+interface FigureTable {
+  caption: string;
+  /** The first column's heading ("Day", "Week"). */
+  head: string;
+  /** One row per bucket, oldest first. */
+  rows: readonly string[];
+  series: readonly { key: string; label: string; values: readonly number[] }[];
+  format: (v: number) => string;
+  note: string | null;
+}
+
+/** A chart with its text alternative (one sentence) and its numbers as a table you can open: one row per
+ *  day (or week), one column per series, and the totals. */
+function ChartFigure({ summary, table, children, testId }: { summary: string; table: FigureTable; children: React.ReactNode; testId: string }): React.ReactElement {
   const id = useId();
+  const rowTotal = (i: number): number => sumOf(table.series.map((s) => s.values[i] ?? 0));
   return (
     <figure className="wk-rep-figure" data-testid={testId} aria-describedby={id}>
       {children}
@@ -437,24 +457,38 @@ function ChartFigure({ summary, table, children, testId }: {
       <details className="wk-rep-data">
         <summary data-testid={`${testId}-table-toggle`}>Show the numbers</summary>
         <div className="wk-rep-scroll" tabIndex={0} role="region" aria-label={table.caption}>
-          <table className="wk-table wk-rep-table">
+          <table className="wk-table wk-rep-table wk-rep-table--data">
             <caption className="wk-sr-only">{table.caption}</caption>
-            <thead><tr><th scope="col">{''}</th>{table.cols.map((c, i) => <th key={i} scope="col" className="num">{c}</th>)}<th scope="col" className="num">Total</th></tr></thead>
-            <tbody>{table.rows.map((r) => (
-              <tr key={r.label}><th scope="row">{r.label}</th>{r.values.map((v, i) => <td key={i} className="num">{v}</td>)}<td className="num"><b>{totalOf(r.values)}</b></td></tr>
-            ))}</tbody>
+            <thead><tr><th scope="col">{table.head}</th>{table.series.map((s) => <th key={s.key} scope="col" className="num">{s.label}</th>)}<th scope="col" className="num">Total</th></tr></thead>
+            <tbody>
+              {table.rows.map((r, i) => (
+                <tr key={i}><th scope="row">{r}</th>{table.series.map((s) => <td key={s.key} className="num">{table.format(s.values[i] ?? 0)}</td>)}<td className="num">{table.format(rowTotal(i))}</td></tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr><th scope="row">Total</th>{table.series.map((s) => <td key={s.key} className="num"><b>{table.format(sumOf(s.values))}</b></td>)}<td className="num"><b>{table.format(sumOf(table.series.flatMap((s) => s.values)))}</b></td></tr>
+            </tfoot>
           </table>
         </div>
+        {table.note !== null && <p className="wk-rep-note">{table.note}</p>}
       </details>
     </figure>
   );
 }
 
-function totalOf(values: readonly string[]): string {
-  const money = values.some((v) => v.startsWith('$'));
-  const n = sumOf(values.map((v) => Number(v.replace(/[$,]/g, '')) || 0));
-  return money ? moneyWords(n) : String(n);
+/** Each bucket's row name: the date it ends on ("Sun, Oct 25"), or "Week to Oct 25". */
+function bucketWords(buckets: readonly Bucket[], per: 'day' | 'week'): string[] {
+  return buckets.map((b) => (per === 'week' ? `Week to ${b.label}` : new Date(b.end).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })));
 }
+
+function dayNote(buckets: readonly Bucket[], per: 'day' | 'week'): string | null {
+  const last = buckets[buckets.length - 1];
+  if (last === undefined) return null;
+  const time = new Date(last.end).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+  return per === 'day' ? `A day is the 24 hours up to ${time} on that date.` : `A week is the 7 days up to ${time} on that date.`;
+}
+
+function cap(w: string): string { return w.charAt(0).toUpperCase() + w.slice(1); }
 
 function SpendTable({ rows }: { rows: readonly AgentReportRow[] }): React.ReactElement {
   const priced = rows.filter((r) => r.costUsd !== null && r.costUsd > 0);
@@ -468,7 +502,7 @@ function SpendTable({ rows }: { rows: readonly AgentReportRow[] }): React.ReactE
       <tbody>
         {[...priced].sort((a, b) => b.costUsd! - a.costUsd!).map((r) => (
           <tr key={r.cli}><th scope="row"><span className="wk-rep-agent"><i className="wk-chart-swatch wk-chart-swatch--dot" style={{ background: agentColor(r.cli) }} aria-hidden />{r.label}</span></th>
-            <td className="num">{moneyWords(r.costUsd!)}</td><td className="num">{total > 0 ? `${Math.round((r.costUsd! / total) * 100)}%` : '—'}</td></tr>
+            <td className="num">{moneyWords(r.costUsd!)}</td><td className="num">{total > 0 ? shareWords(r.costUsd! / total) : '—'}</td></tr>
         ))}
         {unpriced.map((r) => (
           <tr key={r.cli}><th scope="row"><span className="wk-rep-agent"><i className="wk-chart-swatch wk-chart-swatch--dot" style={{ background: agentColor(r.cli) }} aria-hidden />{r.label}</span></th>
