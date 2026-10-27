@@ -667,6 +667,7 @@ export function App(): React.ReactElement {
       return (
         <NerveCenterPage
           navigate={navigate}
+          runs={shownRuns}
           needCount={needsNumber}
           search={search}
           feed={<WatchtowerPage embedded count={needsNumber} runs={shownRuns} runsLoaded={runsLoaded} runsError={runsError} onRetryRuns={refresh} navigate={navigate} now={needsNow} search={search} />}

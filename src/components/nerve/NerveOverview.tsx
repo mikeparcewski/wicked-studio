@@ -11,6 +11,10 @@ import { CalmButton, CalmHead, CalmLoading, CalmSection } from '../calm/Calm.js'
 import { seatStandingWord, type HealthRegistry } from '../HealthRailSection.js';
 import { InsightsLine } from '../insights/InsightsLine.js';
 import { rowHeadline } from '../../board/rowHeadline.js';
+import type { SessionView } from '../../api/types.js';
+import { useRowHeadlines } from '../../hooks/useRowHeadlines.js';
+
+const NO_RUNS: readonly SessionView[] = [];
 
 /** Where "See what needs you" goes: Needs you in full. */
 const NEEDS_PATH = '/needs';
@@ -61,7 +65,9 @@ function fallbackSystemTiles(registry: HealthRegistry): Tile[] {
  * tiles. Every tile opens the tabbed detail (`?tab=`), where run ids, paths and raw checks live.
  * Read-only apart from Check again, Sign in and an item's own fix.
  */
-export function NerveOverview({ state, snapshot, registry, reading, needCount, search, navigate, onRecheck, onAct, notes }: {
+export function NerveOverview({ state, snapshot, registry, reading, needCount, search, navigate, onRecheck, onAct, notes, runs = NO_RUNS }: {
+  /** The board's runs (a slowing item that opens a gate is worded as the dock words it). */
+  runs?: readonly SessionView[];
   state: NerveState;
   /** Crew's snapshot (a crew with `capabilities.system`), or null against an older crew or before it answers. */
   snapshot: SystemSnapshot | null;
@@ -82,6 +88,7 @@ export function NerveOverview({ state, snapshot, registry, reading, needCount, s
     navigate(path);
   };
   const slowing = slowingItems(state.attention);
+  const causes = useRowHeadlines(slowing, runs);
   const waiting = snapshot !== null ? waitingItems(state.attention).length : needCount;
   const helpers: Tile[] | null = snapshot !== null ? snapshot.clis.map(cliTile) : registry.roster !== null ? registry.roster.map(seatTile) : null;
   const system: Tile[] | null = snapshot !== null ? systemTiles(snapshot) : state.read === 'checking' && registry.health === null ? null : fallbackSystemTiles(registry);
@@ -138,8 +145,8 @@ export function NerveOverview({ state, snapshot, registry, reading, needCount, s
               <li key={a.id} className="wk-ncv-slow" data-testid="nc-slow" data-id={a.id} data-level={a.level}>
                 <span aria-hidden className="wk-calm-dot" data-tone={a.level === 'red' ? 'fail' : 'warn'} />
                 <span className="wk-ncv-slow-text">
-                  <span className="wk-ncv-slow-title"><span className="sr-only">{a.level === 'red' ? 'Stopping work: ' : 'Slowing work: '}</span>{rowHeadline(a)}</span>
-                  {slowingLine(a, snapshot?.infra ?? null) !== null && <span className="wk-ncv-slow-line">{slowingLine(a, snapshot?.infra ?? null)}</span>}
+                  <span className="wk-ncv-slow-title"><span className="sr-only">{a.level === 'red' ? 'Stopping work: ' : 'Slowing work: '}</span>{rowHeadline(a, causes.get(a.id) ?? null)}</span>
+                  {slowingLine(a, snapshot?.infra ?? null, causes.get(a.id) ?? null) !== null && <span className="wk-ncv-slow-line">{slowingLine(a, snapshot?.infra ?? null, causes.get(a.id) ?? null)}</span>}
                 </span>
                 {fix(a)}
               </li>

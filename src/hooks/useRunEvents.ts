@@ -60,3 +60,19 @@ export function useRunEvents(runId: string, enabled = true): RunEventsRead {
   }, []);
   return { events: raw ?? null, failed: raw === undefined && failedFor === runId, retry };
 }
+
+/**
+ * Several runs' logs at once (a list of rows that each name a gate: Needs you, the project home): each run is read
+ * once through the same one-in-flight hydration, and a failed read stays `undefined` (never an empty log).
+ */
+export function useRunEventsFor(runIds: readonly string[]): Readonly<Record<string, CoreEvent[] | undefined>> {
+  const byRun = useRunEventStore((s) => s.byRun);
+  const key = [...new Set(runIds)].sort().join(',');
+  useEffect(() => {
+    if (key === '') return;
+    for (const id of key.split(',')) {
+      if (useRunEventStore.getState().byRun[id] === undefined) hydrateRunEvents(id).catch(() => { /* fail closed: the row keeps crew's words */ });
+    }
+  }, [key]);
+  return byRun;
+}

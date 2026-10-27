@@ -2,6 +2,7 @@ import type { SystemAttention, SystemCli, SystemGovernanceCard, SystemInfra, Sys
 import { spendWords, type NerveState } from './nerveCenter.js';
 import type { NerveTab } from './nerveTabs.js';
 import { countWord } from './deskHome.js';
+import { rowLead } from './rowHeadline.js';
 
 /**
  * NERVE CENTER'S OVERVIEW (`/watch`, the operator-approved mockup `ui-v2-nerve`, 2026-10-27): the calm
@@ -152,13 +153,14 @@ export function systemTiles(snapshot: SystemSnapshot): Tile[] {
 }
 
 /** What a slowing item says on its card: the title, one line, and its fix in words. */
-export function slowingLine(a: SystemAttention, infra: readonly SystemInfra[] | null): string | null {
+export function slowingLine(a: SystemAttention, infra: readonly SystemInfra[] | null, cause: string | null = null): string | null {
   // The disk row in a person's words: what is left, and where jobs stop (crew's floor, when it says).
   if (a.panel === 'infra' && /disk/i.test(a.id)) {
     const d = infra?.find((r) => r.key === 'disk')?.disk ?? null;
     if (d != null) return `${bytesWords(d.freeBytes)} left${d.floorBytes !== null ? `; jobs stop below ${bytesWords(d.floorBytes)}` : ''}.`;
   }
-  return a.reason;
+  // Under a gate's cause headline (`rowHeadline`), the line names the job; else crew's reason.
+  return rowLead(a, cause);
 }
 
 /**

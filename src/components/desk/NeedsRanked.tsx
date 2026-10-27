@@ -11,6 +11,8 @@ import { sessionPath } from '../../board/sessionModel.js';
 import type { Navigate } from '../../hooks/useRoute.js';
 import { setRetryPrefill } from '../../store/retryPrefill.js';
 import { HEALTH_RECHECKED, useSystemStore } from '../../store/systemSnapshot.js';
+import { rowHeadline, rowLead } from '../../board/rowHeadline.js';
+import { useRowHeadlines } from '../../hooks/useRowHeadlines.js';
 import { useSignInHere } from '../agents/useSignInHere.js';
 
 /**
@@ -39,6 +41,8 @@ export function NeedsRanked({ snapshot, runs, needRows, navigate, now, setup = [
   const items = snapshot.attention;
   const { several, single } = rankedSections(items);
   const byId = new Map(runs.map((v) => [v.session.id, v]));
+  // Each gate row says what the dock says (its plain cause); the job's title moves to the line.
+  const causes = useRowHeadlines(items, runs);
   const worth = needRows.filter((r) => needSection(r) === 'other');
   const toReview = snapshot.toReview ?? needRows.filter((r) => needSection(r) === 'review').length;
   const worthCount = worth.length + toReview;
@@ -71,8 +75,8 @@ export function NeedsRanked({ snapshot, runs, needRows, navigate, now, setup = [
               <article key={a.id} className="wk-needs-card" data-testid="needs-item" data-id={a.id} data-kind={a.kind ?? undefined} data-blocks={a.blockedRunIds?.length ?? 0}>
                 <span aria-hidden className="wk-needs-dot" data-level={a.level} />
                 <span className="wk-needs-card-body">
-                  <span className="wk-needs-card-title">{a.text}</span>
-                  {a.reason !== null && <span className="wk-needs-card-line">{a.reason}</span>}
+                  <span className="wk-needs-card-title">{rowHeadline(a, causes.get(a.id) ?? null)}</span>
+                  {rowLead(a, causes.get(a.id) ?? null) !== null && <span className="wk-needs-card-line">{rowLead(a, causes.get(a.id) ?? null)}</span>}
                   {a.remedy !== null && a.remedy !== 'Re-check.' && <span className="wk-needs-card-remedy">{a.remedy}</span>}
                 </span>
                 {a.action !== null && <button type="button" className="wk-home-btn wk-home-btn--primary" data-testid="needs-item-act" onClick={() => act(a)}>{a.action.label ?? rowVerb(a, null)}</button>}
@@ -90,7 +94,8 @@ export function NeedsRanked({ snapshot, runs, needRows, navigate, now, setup = [
                 const path = actionPath(a.action) ?? (a.runId != null ? sessionPath(`run:${a.runId}`) : null);
                 const gateKind = a.reason !== null && /deliver/i.test(a.reason) ? 'deliver' : null;
                 // The muted line: why (crew's plain words), where, and how long it has waited.
-                const meta = [a.reason, v?.session.repo_ref ?? null, a.waitedSince != null ? `waiting ${waitWords(a.waitedSince, now)}` : null].filter((x): x is string => x !== null && x !== '').join(' · ');
+                const cause = causes.get(a.id) ?? null;
+                const meta = [rowLead(a, cause), v?.session.repo_ref ?? null, a.waitedSince != null ? `waiting ${waitWords(a.waitedSince, now)}` : null].filter((x): x is string => x !== null && x !== '').join(' · ');
                 return (
                   // The whole row opens its run (the action link goes to the decision itself, `#gate`).
                   <li key={a.id} className="wk-needs-row wk-needs-row--go" data-testid="needs-item" data-id={a.id} data-kind={a.kind ?? undefined} data-blocks={a.blockedRunIds?.length ?? 0}
@@ -98,8 +103,8 @@ export function NeedsRanked({ snapshot, runs, needRows, navigate, now, setup = [
                     <span aria-hidden className="wk-needs-dot wk-needs-dot--sm" data-level={a.level} />
                     <span className="wk-needs-row-body">
                       {a.runId != null
-                        ? <a href={sessionPath(`run:${a.runId}`)} onClick={go(sessionPath(`run:${a.runId}`))} data-testid="needs-item-run" className="wk-needs-row-title wk-needs-row-link">{a.text}</a>
-                        : <span className="wk-needs-row-title">{a.text}</span>}
+                        ? <a href={sessionPath(`run:${a.runId}`)} onClick={go(sessionPath(`run:${a.runId}`))} data-testid="needs-item-run" className="wk-needs-row-title wk-needs-row-link">{rowHeadline(a, cause)}</a>
+                        : <span className="wk-needs-row-title">{rowHeadline(a, cause)}</span>}
                       <span className="wk-needs-row-line">{meta}</span>
                     </span>
                     {path !== null

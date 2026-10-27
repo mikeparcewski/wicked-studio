@@ -4,7 +4,7 @@ import { QeRefusalWarning } from '../QeRefusalWarning.js';
 import { GATE_HASH, IDLE_GATE_ACTION, commitGateDecision, commitGateReassign, useGateActionStore, type GateAnswer } from '../../board/gateActions.js';
 import { FLOOR_FIX_LABEL, sessionGateChoices, soonestBack, type DeadSeat, type GateRowChoice, type GateRowModel } from '../../board/gateRowModel.js';
 import { INITIAL_PICK, pickKey, type RowPick } from '../../board/questionRow.js';
-import { plainGateQuestion, repoNameOf, stepNoun } from '../../board/deskWords.js';
+import { repoNameOf, stepNoun } from '../../board/deskWords.js';
 import { api } from '../../api/client.js';
 import { useDisplayPath, useDisplayText } from '../../hooks/useHomePath.js';
 import { driftLine, useDiffDrift, type DiffDrift } from '../../store/gateDiffSeen.js';
@@ -12,14 +12,14 @@ import { diffstatOf, type DeliverRefusal } from '../gateMoveModel.js';
 import { secondsLeft, undoDecision, useUndoQueue } from '../../board/undoQueue.js';
 import { useRunEvents } from '../../hooks/useRunEvents.js';
 import { getCachedRoster, subscribeRoster } from '../../store/rosterCache.js';
-import { choicesOf, type OpenGate } from '../../store/gates.js';
-import type { CoreEvent, WorkUnit } from '../../api/types.js';
-import { liftClock, reassignCandidates, runBenchesOf, steerScopeTarget, type ReassignCandidate } from '../gateVerdictModel.js';
+import type { OpenGate } from '../../store/gates.js';
+import type { WorkUnit } from '../../api/types.js';
+import { liftClock, runBenchesOf, steerScopeTarget, type ReassignCandidate } from '../gateVerdictModel.js';
 import { useRerunFromHere } from '../../hooks/useRerunFromHere.js';
 import type { RerunOffer } from '../rerunModel.js';
 import { GateDepthDetails, RuleOfferBlock, useFullVerdict, useSeatTrust, type SeatTrust } from './GateDepth.js';
 import { WatchGateLine } from '../WatchLines.js';
-import { REDUCED_OPT_IN_LABEL, creatorSeatRefusal, gatePassedFor, gateReceiptFor, isReduced, sessionAssurance, sessionQe, waitsForJudge } from '../../board/assuranceModel.js';
+import { REDUCED_OPT_IN_LABEL, gatePassedFor, gateReceiptFor, isReduced, sessionAssurance, sessionQe, waitsForJudge } from '../../board/assuranceModel.js';
 import { retryPrefillOf } from '../../board/needsYou.js';
 import { setRetryPrefill } from '../../store/retryPrefill.js';
 import { useCapabilities } from '../../store/capabilities.js';
@@ -29,7 +29,10 @@ import { AssuranceReceipt, AssuranceReceiptTech, QeAcceptanceLabel, ReducedAssur
 import { missingSeatsLine, rejudgeOfferOf, type RejudgeOffer } from '../../board/rejudge.js';
 import { testWords } from '../../board/failingChecks.js';
 import { useOfferReply } from './DecisionDock.js';
-import { builderResponder, isHelperSeat } from '../../board/responder.js';
+import { builderResponder } from '../../board/responder.js';
+import { gateCause, gateQuestion, gateWithLogChoices, judgeSeats, runPoolOf, seatName } from '../../board/gateHeadline.js';
+
+export { gateWithLogChoices, judgeSeats };
 import { FLOOR_OVERRIDE_CONSEQUENCE, FLOOR_OVERRIDE_KEY, FLOOR_OVERRIDE_PLACEHOLDER, FLOOR_OVERRIDE_SEND } from '../../board/floorOverride.js';
 
 /** How often a judge-unavailable gate re-reads whether a judge seat can rule now (a seat signed in
@@ -94,28 +97,6 @@ function isEditable(el: Element | null): boolean {
   return el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || (el instanceof HTMLElement && el.isContentEditable);
 }
 
-/**
- * evaluator ≠ creator, read off the live roster: who may judge the gate's step. `builders` are the seats that built
- * the judged work — every creator step at or before the gate, the seat crew names ("built on `codex`") and the seat
- * the gate's own step ran on. `inJob`: a seat of the job's own pool that is none of them and can take work now (the
- * only kind crew's reassign accepts). `outside`: a signed-in helper outside the job that is none of them.
- */
-export function judgeSeats(view: RunView, ord: number, prompt: string, pool: readonly string[], roster: readonly RosterSeat[] | null, benched: ReturnType<typeof runBenchesOf> = []): {
-  builders: string[]; inJob?: ReassignCandidate; outside?: RosterSeat;
-} {
-  const builtOn = /built on `([^`]+)`/.exec(prompt)?.[1] ?? null;
-  const unitCli = view.units.find((u) => u.ord === ord)?.assigned_cli ?? null;
-  const builders = [...new Set([
-    ...view.units.filter((u) => u.role === 'creator' && u.ord <= ord && isHelperSeat(u.assigned_cli)).map((u) => u.assigned_cli as string),
-    ...(builtOn !== null ? [builtOn] : []),
-    ...(isHelperSeat(unitCli) ? [unitCli] : []),
-  ])];
-  const inJob = reassignCandidates(pool, unitCli, roster, builders, benched).find((c) => c.state === 'ready' && !builders.includes(c.cli));
-  const outside = (roster ?? []).find((r) => r.signed_in === true && !pool.includes(r.key) && !builders.includes(r.key) && isHelperSeat(r.key)
-    && (r as { health?: { status?: string } }).health?.status !== 'inactive');
-  return { builders, ...(inJob !== undefined ? { inJob } : {}), ...(outside !== undefined ? { outside } : {}) };
-}
-
 /** A phase id in words: "security-review" → "security review". */
 function stepWords(phase: string): string {
   return stepNoun(phase).trim().toLowerCase();
@@ -141,31 +122,6 @@ export function GateRow({ view, gate, chatId, navigate }: {
 }): React.ReactElement | null {
   if (view === null) return chatId === undefined ? null : <ChatGateRow chatId={chatId} gate={gate} />;
   return <RunGateRow view={view} gate={gate} {...(navigate !== undefined ? { navigate } : {})} />;
-}
-
-/**
- * Crew's `GET /runs/:id/gate` caches only the prompt (no `choices`, `recommended` or `gateKind`), so a
- * gate this client did not see live — a reload, a late join — lost what the engine offered: a team
- * dispute read back as Approve / Reject only, without its Send back (rig run ac5d1033). The run's own
- * log has the `awaitingHuman` frame that opened the gate; what the cached gate lacks is read from the
- * newest one for the same step. Pure.
- */
-export function gateWithLogChoices(gate: OpenGate, events: readonly CoreEvent[]): OpenGate {
-  if (gate.choices !== undefined && gate.gateKind !== undefined) return gate;
-  for (let i = events.length - 1; i >= 0; i -= 1) {
-    const e = events[i] as unknown as Record<string, unknown>;
-    if (e['type'] !== 'awaitingHuman' || e['ord'] !== gate.ord) continue;
-    const choices = gate.choices !== undefined ? undefined : choicesOf(e);
-    const rec = e['recommended'];
-    const kind = e['gateKind'];
-    return {
-      ...gate,
-      ...(choices !== undefined ? { choices } : {}),
-      ...(gate.recommended === undefined && typeof rec === 'number' ? { recommended: rec } : {}),
-      ...(gate.gateKind === undefined && typeof kind === 'string' ? { gateKind: kind } : {}),
-    };
-  }
-  return gate;
 }
 
 /**
@@ -203,13 +159,7 @@ function RunGateRow({ view, gate, navigate }: { view: RunView; gate: OpenGate | 
   useEffect(() => subscribeRoster((r) => setRoster(r)), []);
 
   // Pool: prefer session.clis (the run's full seat list), fall back to units' assigned CLIs
-  const pool = useMemo(() => {
-    const sessionClis = (view.session as unknown as { clis?: unknown }).clis;
-    if (Array.isArray(sessionClis) && sessionClis.length > 0) return sessionClis as string[];
-    return view.units
-      .map((u) => u.assigned_cli)
-      .filter((c): c is string => typeof c === 'string' && c !== '');
-  }, [view.session, view.units]);
+  const pool = useMemo(() => runPoolOf(view), [view]);
 
   // S16a-1b: "Rerun from <step>" — the run page breadcrumb's offer, one more ⋯ choice here.
   const { offer: rerunOffer } = useRerunFromHere(view);
@@ -277,21 +227,13 @@ function RunGateRow({ view, gate, navigate }: { view: RunView; gate: OpenGate | 
   // QE-IN-APP-WORKFLOWS: the run's current QE decision on every gate (a plan gate has no receipt yet;
   // a receipt that carries its own decision says it there).
   const qe = sessionQe(view, events);
-  const judgeWait = gate !== undefined && model !== null && waitsForJudge(events, gate.ord, gate.prompt);
-  const seatRefusal = gate !== undefined && model !== null && !reduced && creatorSeatRefusal(events, gate.ord, gate.prompt);
   const signIn = useSignInHere();
-  // (mockup ui-v2-gate + review) The headline is the cause in plain words, not the engine's framing.
-  const split = model?.failingTests?.split;
-  const fresh = split !== undefined && split.onBase.length > 0 ? split.fresh : null;
+  // (mockup ui-v2-gate + review) The headline is the cause in plain words, not the engine's framing — one source
+  // (board/gateHeadline.ts) with every row that names this gate.
   const builder = builderResponder(view, gate?.ord ?? null, roster);
   // evaluator ≠ creator: who may judge this step is read off the live roster, never a seat that built the work.
-  const judges = useMemo(() => (gate === undefined ? null : judgeSeats(view, gate.ord, gate.prompt, pool, roster, benched)), [view, gate, pool, roster, benched]);
-  const headline = seatRefusal ? (judges?.inJob !== undefined ? `${seatName(judges.inJob.cli, judges.inJob.label)} can review this instead`
-      : judges?.outside !== undefined ? `${seatName(judges.outside.key, judges.outside.display_name ?? null)} could review this, but isn’t one of this job’s helpers`
-        : 'No second helper is free to review this')
-    : judgeWait && model?.qe === undefined ? 'No helper could check this step independently'
-      : fresh !== null && fresh.length > 0 ? (fresh.length === 1 ? 'One test this change broke needs fixing before the job can go on' : `${fresh.length} tests this change broke need fixing before the job can go on`)
-        : fresh !== null ? 'Every failing test fails on the base too' : null;
+  const { seatRefusal, judgeWait, judges, fresh, headline } = useMemo(
+    () => gateCause({ view, gate, events, model, roster, pool, benched }), [view, gate, events, model, roster, pool, benched]);
   // The action the gate's own words name is a button. Crew marked no suggestion: the gate describes the move.
   const derived = useMemo<DerivedLead | null>(() => {
     if (model === null || model.recommended !== null || gate === undefined) return null;
@@ -440,13 +382,6 @@ const DEAD_SEAT_CAUSE: Record<DeadSeat['cause'], string> = {
   not_installed: 'is not installed',
   unusable: 'cannot work right now',
 };
-
-/** The seat's name in the Desk's words: the roster's, else its key with a capital ("Copilot"). */
-function seatName(cli: string, label: string | null): string {
-  if (label !== null && label !== '') return label;
-  const base = cli.split('#')[0] ?? cli;
-  return base.charAt(0).toUpperCase() + base.slice(1);
-}
 
 /**
  * studio#835: the dead-seat gate, said plainly — which helper cannot work and why, and what can still move the
@@ -794,7 +729,7 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
   }, [noteOpen]);
 
   // studio#762: a QE review's gate leads with WHY it stopped (the engine's prompt only says NOT PASS).
-  const question = model?.qe?.lead ?? headline ?? plainGateQuestion(gate?.prompt, gate?.gateKind);
+  const question = gateQuestion(model, headline, gate);
 
   // ── Folded view: must come BEFORE model null guard so the receipt shows after clearGate ──
   if (chosen !== null && (chosen.key === gateKey || (chosen.sentAt !== null && gate === undefined))) {

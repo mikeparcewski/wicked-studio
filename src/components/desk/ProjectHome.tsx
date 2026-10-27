@@ -1,5 +1,6 @@
 import { useId, useMemo, useState } from 'react';
 import type { Project, SessionView } from '../../api/types.js';
+import type { SystemAttention } from '../../api/system.js';
 import { attentionRows } from '../../board/attention.js';
 import { needRunId } from '../../board/deskModel.js';
 import { repoNameOf } from '../../board/deskWords.js';
@@ -11,7 +12,8 @@ import { projectAttention, projectUnresolved } from '../../board/projectsModel.j
 import { preventsWork } from '../../board/nerveCenter.js';
 import { tidyWords } from '../../board/nerveOverview.js';
 import { actionPath, rowVerb, waitWords } from '../../board/rankedNeeds.js';
-import { rowHeadline } from '../../board/rowHeadline.js';
+import { rowHeadline, rowLead } from '../../board/rowHeadline.js';
+import { useRowHeadlines } from '../../hooks/useRowHeadlines.js';
 import { UnfiledLine } from './UnfiledLine.js';
 import { useSystemStore } from '../../store/systemSnapshot.js';
 import { relTime } from '../../board/relTime.js';
@@ -24,6 +26,8 @@ import { setRetryPrefill } from '../../store/retryPrefill.js';
 import { CalmHead, CalmLoading, CalmRow, CalmRows, CalmSection } from '../calm/Calm.js';
 import { OverflowMenu, type MenuItem } from '../ui/OverflowMenu.js';
 import { DESK_TABS, deskTabPath } from './DeskV2.js';
+
+const NO_ITEMS: readonly SystemAttention[] = [];
 
 /** Needs you and In progress show at most this many rows; Needs you in full and the Jobs view have the rest. */
 const ROWS_MAX = 5;
@@ -99,6 +103,8 @@ export function ProjectHome({ project, projectId, runs, allRuns, needRows, repos
   const snapshot = useSystemStore((s) => (s.mode === 'system' ? s.snapshot : null));
   const crewPending = useSystemStore((s) => s.mode === 'unknown' && s.healthError === null);
   const items = useMemo(() => projectAttention(snapshot, ids), [snapshot, ids]);
+  // Each gate row says what the dock says (its plain cause); the job's title moves to the line.
+  const causes = useRowHeadlines(items ?? NO_ITEMS, runs);
   const tidy = useMemo(() => projectUnresolved(snapshot, ids), [snapshot, ids]);
   const tidySpend = tidy.some((u) => u.costUsd !== null) ? tidy.reduce((n, u) => n + (u.costUsd ?? 0), 0) : null;
   const folded = useMemo(() => attentionRows(needRows.filter((r) => {
@@ -155,11 +161,12 @@ export function ProjectHome({ project, projectId, runs, allRuns, needRows, repos
                     const v = runId === null ? null : runs.find((x) => x.session.id === runId) ?? null;
                     const path = actionPath(a.action) ?? (runId !== null ? sessionPath(`run:${runId}`) : '/needs');
                     const gateKind = a.reason !== null && /deliver/i.test(a.reason) ? 'deliver' : null;
-                    const sub = [a.reason, v !== null ? repoNameOf(v) : null, a.waitedSince != null ? `waiting ${waitWords(a.waitedSince, now)}` : null]
+                    const cause = causes.get(a.id) ?? null;
+                    const sub = [rowLead(a, cause), v !== null ? repoNameOf(v) : null, a.waitedSince != null ? `waiting ${waitWords(a.waitedSince, now)}` : null]
                       .filter((x): x is string => x !== null && x !== '').join(' · ');
                     return (
                       <CalmRow key={a.id} data-testid="project-need" data={{ key: a.id, kind: a.panel }}
-                        tone={preventsWork(a) ? 'fail' : 'gate'} title={rowHeadline(a)} sub={sub === '' ? undefined : sub}
+                        tone={preventsWork(a) ? 'fail' : 'gate'} title={rowHeadline(a, cause)} sub={sub === '' ? undefined : sub}
                         meta={<>{rowVerb(a, gateKind)} <span aria-hidden>→</span></>} metaTone="accent"
                         href={path} onOpen={() => navigate(path)} openTestId="project-need-open" />
                     );

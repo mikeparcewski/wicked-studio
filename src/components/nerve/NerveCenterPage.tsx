@@ -17,6 +17,9 @@ import { Tabs, TechDetails } from '../ui/index.js';
 import { ToResolve } from '../desk/NeedsRanked.js';
 import { NerveOverview } from './NerveOverview.js';
 import { qePassPct } from '../../board/nerveOverview.js';
+import type { SessionView } from '../../api/types.js';
+
+const NO_RUNS: readonly SessionView[] = [];
 
 const defaultNavigate: Navigate = (p) => { history.pushState(null, '', p); window.dispatchEvent(new PopStateEvent('popstate')); };
 
@@ -60,8 +63,10 @@ function headline(state: NerveState): string {
  * with an upgrade note, so nothing the old `/health` page showed is lost. Read-only apart from Sign in,
  * Re-check and opening a run.
  */
-export function NerveCenterPage({ navigate = defaultNavigate, needCount = 0, feed = null, search = window.location.search }: {
+export function NerveCenterPage({ navigate = defaultNavigate, needCount = 0, feed = null, search = window.location.search, runs = NO_RUNS }: {
   navigate?: Navigate;
+  /** The board's runs: a slowing item that opens a gate is worded as the dock words it. */
+  runs?: readonly SessionView[];
   /** The Desk's settled needs-you count (an older crew's "waiting on you"). */
   needCount?: number;
   /** The feed, rendered in the Runs tab under the runs (App passes the embedded Watchtower feed). */
@@ -236,7 +241,7 @@ export function NerveCenterPage({ navigate = defaultNavigate, needCount = 0, fee
     return (
       <div data-testid="nerve-center-page" data-view="overview" data-mode={mode} data-tone={state.tone} className="wk-calm wk-ncv">
         <div className="wk-calm-col">
-          <NerveOverview state={state} snapshot={system ? snapshot : null} registry={registry} reading={reading} needCount={needCount}
+          <NerveOverview state={state} snapshot={system ? snapshot : null} registry={registry} reading={reading} needCount={needCount} runs={runs}
             search={search} navigate={navigate} onRecheck={recheck} onAct={act} notes={upgradeNotes} />
         </div>
         <SignInModal registry={registry} />
