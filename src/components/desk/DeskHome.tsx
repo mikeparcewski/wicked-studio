@@ -1,6 +1,7 @@
 import { useId, useMemo, useState } from 'react';
 import { rowHeadline, rowLead } from '../../board/rowHeadline.js';
-import { useRowHeadlines } from '../../hooks/useRowHeadlines.js';
+import { useDeliverRefusals, useRowHeadlines } from '../../hooks/useRowHeadlines.js';
+import { QE_REFUSED_DELIVER } from '../../board/gateHeadline.js';
 import type { SessionView } from '../../api/types.js';
 import type { SystemAttention, SystemSnapshot } from '../../api/system.js';
 import { actionPath } from '../../board/rankedNeeds.js';
@@ -273,7 +274,11 @@ function RankedCard({ item, runs, navigate }: { item: SystemAttention; runs: rea
 }
 
 function NeedCard({ row, view, navigate, now, agentName }: { row: NeedRow; view: SessionView | null; navigate: Navigate; now: number; agentName: (cli: string) => string }): React.ReactElement {
-  const words = needCardWords(row, view, { agentName, ago: row.at === null ? null : relTime(row.at, now) });
+  const base = needCardWords(row, view, { agentName, ago: row.at === null ? null : relTime(row.at, now) });
+  // A hand-over QE refused is titled as the dock titles it (board/gateHeadline), never "Approve the hand-over".
+  const refusedRun = row.kind === 'gate' && view !== null ? view.session.id : null;
+  const refused = useDeliverRefusals(useMemo(() => (refusedRun !== null ? [refusedRun] : []), [refusedRun]), useMemo(() => (view !== null ? [view] : []), [view]));
+  const words = refusedRun !== null && refused.has(refusedRun) ? { ...base, title: QE_REFUSED_DELIVER } : base;
   const act = useAct(navigate);
   const running = useBatchGateStore((s) => s.running);
   const queued = useBatchGateStore((s) => s.queued);

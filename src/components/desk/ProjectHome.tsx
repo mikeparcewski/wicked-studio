@@ -14,7 +14,7 @@ import { QE_REFUSED_DELIVER } from '../../board/gateHeadline.js';
 import { tidyWords } from '../../board/nerveOverview.js';
 import { actionPath, rowVerb, waitWords } from '../../board/rankedNeeds.js';
 import { rowHeadline, rowLead } from '../../board/rowHeadline.js';
-import { useRowHeadlines } from '../../hooks/useRowHeadlines.js';
+import { useDeliverRefusals, useRowHeadlines } from '../../hooks/useRowHeadlines.js';
 import { UnfiledLine } from './UnfiledLine.js';
 import { useSystemStore } from '../../store/systemSnapshot.js';
 import { relTime } from '../../board/relTime.js';
@@ -112,6 +112,9 @@ export function ProjectHome({ project, projectId, runs, allRuns, needRows, repos
     const id = needRunId(r);
     return id !== null && ids.has(id) && !(r.kind === 'failed-run' && r.at !== null && now - r.at > STALE_FAILURE_MS);
   })), [needRows, ids, now]);
+  // On a crew without the ranked snapshot the rows come from the run index: a hand-over QE refused says so.
+  const foldedGateRuns = useMemo(() => (items !== null ? [] : folded.filter((r) => r.kind === 'gate').map(needRunId).filter((id): id is string => id !== null)), [items, folded]);
+  const refusedDeliver = useDeliverRefusals(foldedGateRuns, runs);
   const waiting = items !== null ? items.length : folded.length;
   const held = useMemo(() => new Set(items !== null
     ? items.flatMap((a) => [a.runId, ...(a.blockedRunIds ?? [])]).filter((id): id is string => id != null)
@@ -181,7 +184,7 @@ export function ProjectHome({ project, projectId, runs, allRuns, needRows, repos
                     const sub = [v !== null ? repoNameOf(v) : null, row.at !== null ? relTime(row.at, now) : null].filter((x): x is string => x !== null && x !== '').join(' · ');
                     return (
                       <CalmRow key={row.key} data-testid="project-need" data={{ key: row.key, kind: row.kind }}
-                        tone={row.kind === 'failed-run' ? 'fail' : 'warn'} title={row.question ?? row.text} sub={sub === '' ? undefined : sub}
+                        tone={row.kind === 'failed-run' ? 'fail' : 'warn'} title={v !== null && refusedDeliver.has(v.session.id) ? QE_REFUSED_DELIVER : row.question ?? row.text} sub={sub === '' ? undefined : sub}
                         meta={<>{moveWord(row.action, row.kind)} <span aria-hidden>→</span></>} metaTone="accent"
                         href={path} onOpen={() => act(navigate, row.action)} openTestId="project-need-open" />
                     );

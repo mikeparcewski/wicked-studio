@@ -116,12 +116,11 @@ function pausedStepQuestion(p: string, gateKind: string | undefined): string | n
     return 'The step did not pass review — how should it go on?';
   }
   if (/^\s*Unit\s+\d+\s+failed its deterministic floor\b/i.test(p)) return 'A required check failed — how should the step go on?';
-  if (/^\s*Unit\s+\d+\s+was DENIED by input governance\b/i.test(p)) {
-    const tool = /tool call was refused\s*\(\s*`?([A-Za-z0-9_.:-]+)`?\s*\)/i.exec(p)?.[1];
-    return tool !== undefined ? `A ${tool} call was denied — how should the step go on?` : 'A tool call was denied — how should the step go on?';
-  }
-  // Core's output-governance denial ("Governance DENIED unit N (key): …") judges the WORK, not a tool call.
-  if (/^\s*Governance DENIED unit\s+\d+/i.test(p)) return 'Governance denied this step — how should it go on?';
+  // A governance denial is said as its plain cause on every surface (the dock, the rows, the toast, the desktop
+  // notification): input governance refused a tool call; output governance ("Governance DENIED unit N (key): …")
+  // judged the WORK, not a tool call.
+  const denied = governanceDenialHeadline(p);
+  if (denied !== null) return denied;
   if (/^\s*Team dispute on unit\s+\d+/i.test(p) || gateKind === 'team_dispute') return 'The team disagreed — send it back, approve or reject?';
   if (gateKind === 'team_transport') return 'The team lost a seat — approve or reject the work?';
   if (/^\s*Unit\s+\d+\s+failed and triage escalated\b/i.test(p)) return 'The step failed — send it back, reassign or stop?';

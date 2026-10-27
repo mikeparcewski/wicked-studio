@@ -8,7 +8,7 @@ import * as client from '../src/api/client.js';
 import { resetRunAcceptanceForTest } from '../src/store/runAcceptance.js';
 import { slowingLine } from '../src/board/nerveOverview.js';
 import { rowHeadline, rowLead } from '../src/board/rowHeadline.js';
-import { useRowHeadlines } from '../src/hooks/useRowHeadlines.js';
+import { useDeliverRefusals, useRowHeadlines } from '../src/hooks/useRowHeadlines.js';
 import { useRunEventStore } from '../src/store/events.js';
 import { useGateStore } from '../src/store/gates.js';
 import { setCachedRoster, clearCachedRoster } from '../src/store/rosterCache.js';
@@ -108,5 +108,32 @@ describe('live nits 2026-10-27: one dot rule, a plain governance cause, the hand
     await waitFor(() => expect(result.current.get('run:r2')).toBe(QE_REFUSED_DELIVER));
     expect(read).toHaveBeenCalledWith('r2');
     expect(read).toHaveBeenCalledTimes(1);
+  });
+
+  it('useDeliverRefusals: Home’s card and the index-fed project rows learn the same refusal (open gate, QE required, not passed)', async () => {
+    const v = makeView({ id: 'r3', status: 'awaiting_human', workflow_id: 'feature', unit_ix: 2, repo_ref: 'tip-splitter', clis: ['claude'] } as never, [
+      makeUnit({ id: 'r3:build', session_id: 'r3', ord: 1, assigned_cli: 'claude', role: 'creator', status: 'done', stage: 'build' }),
+      makeUnit({ id: 'r3:deliver', session_id: 'r3', ord: 2, assigned_cli: 'bash', status: 'pending', stage: 'build' }),
+    ]);
+    useGateStore.setState({ gates: { r3: { runId: 'r3', ord: 2, prompt: 'Approve delivery', lifecycle: 'open', receivedAt: 1, gateKind: 'deliver' } } });
+    useRunEventStore.setState({ byRun: { r3: [
+      { type: 'qeAcceptanceDecided', session: 'r3', qe: { status: 'required', basis: 'diff', score: 55, threshold: 20, reason: 'the diff scored 55', reasons: [] } },
+    ] as unknown as CoreEvent[] } });
+    vi.spyOn(client.api, 'getRunAcceptance').mockResolvedValue({ summary: { required: true, satisfied: false, line: 'QE acceptance: no verdict recorded' } } as never);
+    const { result } = renderHook(() => useDeliverRefusals(['r3'], [v]));
+    await waitFor(() => expect(result.current.has('r3')).toBe(true));
+  });
+
+  it('useDeliverRefusals: a passed acceptance, or no hand-over gate, refuses nothing', async () => {
+    const v = makeView({ id: 'r4', status: 'awaiting_human', workflow_id: 'feature', unit_ix: 2, repo_ref: 'tip-splitter', clis: ['claude'] } as never, []);
+    useGateStore.setState({ gates: { r4: { runId: 'r4', ord: 2, prompt: 'Approve delivery', lifecycle: 'open', receivedAt: 1, gateKind: 'deliver' } } });
+    useRunEventStore.setState({ byRun: { r4: [
+      { type: 'qeAcceptanceDecided', session: 'r4', qe: { status: 'required', basis: 'diff', score: 55, threshold: 20, reason: 'x', reasons: [] } },
+    ] as unknown as CoreEvent[] } });
+    const read = vi.spyOn(client.api, 'getRunAcceptance').mockResolvedValue({ summary: { required: true, satisfied: true, line: 'QE acceptance: passed' } } as never);
+    const { result } = renderHook(() => useDeliverRefusals(['r4', 'r9'], [v]));
+    await waitFor(() => expect(read).toHaveBeenCalledWith('r4'));
+    expect(read).not.toHaveBeenCalledWith('r9');
+    expect(result.current.size).toBe(0);
   });
 });

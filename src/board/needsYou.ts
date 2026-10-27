@@ -8,7 +8,7 @@ import { decisionRowText, statementOf } from './decisionLine.js';
 import type { RepoEntry, SessionView } from '../api/types.js';
 import { deliveryOf } from '../components/delivery.js';
 import { narrate, narrateStranded, type NarrationTone } from '../components/narrator.js';
-import { governanceDenialHeadline, jobTitle, jobTitleFull, keptLocally, plainGateQuestion } from './deskWords.js';
+import { jobTitle, jobTitleFull, keptLocally, plainGateQuestion } from './deskWords.js';
 import type { RetryPrefill } from '../store/retryPrefill.js';
 import { campaignCounts, campaignMemberRunIds } from './campaignStats.js';
 import { STALLED_IDLE_SECS, stalledLiveChats, type LiveChatSnapshot } from './chatStats.js';
@@ -440,8 +440,7 @@ export function needsYouRows(inputs: NeedsYouInputs): NeedRow[] {
         subject: jobTitle(s),
         subjectFull: jobTitleFull(s),
         text: line?.text ?? 'Gate: waiting on you',
-        // A governance denial reads as its plain cause, as the dock says it (board/gateHeadline).
-        question: governanceDenialHeadline(gate?.prompt) ?? plainGateQuestion(gate?.prompt, gate?.gateKind),
+        question: plainGateQuestion(gate?.prompt, gate?.gateKind),
         tone: 'gate',
         at: gate?.receivedAt ?? attachedAt[s.id] ?? null,
         subjectPath: sessionPath('run:' + s.id),

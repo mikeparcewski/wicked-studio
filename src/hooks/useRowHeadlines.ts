@@ -65,3 +65,35 @@ export function useRowHeadlines(items: readonly SystemAttention[], runs: readonl
   }, [unreadKey]);
   return out;
 }
+
+/**
+ * The runs among `runIds` whose open hand-over gate QE refused (the dock's deliver card rule), for the surfaces that
+ * list a gate from the run index rather than from crew's attention items (Home's card, the project home's rows on a
+ * crew without the ranked snapshot): they title it as the dock does, never "Approve the hand-over". The acceptance is
+ * read the way the dock reads it (one `GET /runs/:id/acceptance` per run) when nothing has read it yet.
+ */
+export function useDeliverRefusals(runIds: readonly string[], runs: readonly SessionView[]): ReadonlySet<string> {
+  const gates = useGateStore((s) => s.gates);
+  const deliverIds = useMemo(() => runIds.filter((id) => {
+    const g = gates[id];
+    const v = runs.find((x) => x.session.id === id);
+    return g !== undefined && v !== undefined && (g.gateKind === 'deliver' || isDeliverGate(id, v.units, g.ord));
+  }), [runIds, runs, gates]);
+  const byRun = useRunEventsFor(deliverIds);
+  const acceptance = useRunAcceptanceStore((s) => s.byRun);
+  const unreadKey = deliverIds.filter((id) => !(id in acceptance)).join(',');
+  useEffect(() => {
+    if (unreadKey === '') return;
+    for (const id of unreadKey.split(',')) void useRunAcceptanceStore.getState().read(id);
+  }, [unreadKey]);
+  return useMemo(() => {
+    const out = new Set<string>();
+    for (const id of deliverIds) {
+      const v = runs.find((x) => x.session.id === id);
+      const g = gates[id];
+      if (v === undefined || g === undefined) continue;
+      if (deliverRowHeadline(v, g, byRun[id] ?? null, acceptance[id]?.summary) !== null) out.add(id);
+    }
+    return out;
+  }, [deliverIds, runs, gates, byRun, acceptance]);
+}
