@@ -11,9 +11,9 @@
   "version": 1,
   "studioVersion": "0.12.3",
   "counts": {
-    "files": 255,
-    "occurrences": 3474,
-    "static": 2954,
+    "files": 256,
+    "occurrences": 3489,
+    "static": 2969,
     "dynamic": 75,
     "computed": 33
   },
@@ -1772,6 +1772,12 @@
       "testId": "chat-history-toggle",
       "files": [
         "src/components/AskDock.tsx"
+      ]
+    },
+    {
+      "testId": "chat-job-decision",
+      "files": [
+        "src/components/session/RunConversation.tsx"
       ]
     },
     {
@@ -12973,6 +12979,12 @@
       ]
     },
     {
+      "testId": "session-gate-failing-base-words",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
       "testId": "session-gate-failing-more",
       "files": [
         "src/components/session/GateRow.tsx"
@@ -13016,6 +13028,12 @@
     },
     {
       "testId": "session-gate-judge-missing",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
+      "testId": "session-gate-judge-signed-in",
       "files": [
         "src/components/session/GateRow.tsx"
       ]
@@ -13204,6 +13222,12 @@
       "testId": "session-gate-under-review",
       "files": [
         "src/components/session/GateDepth.tsx"
+      ]
+    },
+    {
+      "testId": "session-gate-why-not",
+      "files": [
+        "src/components/session/GateRow.tsx"
       ]
     },
     {
@@ -13587,7 +13611,43 @@
       ]
     },
     {
+      "testId": "session-proposal-relaunch-skip-qe",
+      "files": [
+        "src/components/session/ProposalCard.tsx"
+      ]
+    },
+    {
       "testId": "session-proposal-skip-qe",
+      "files": [
+        "src/components/session/ProposalCard.tsx"
+      ]
+    },
+    {
+      "testId": "session-proposal-skip-qe-cancel",
+      "files": [
+        "src/components/session/ProposalCard.tsx"
+      ]
+    },
+    {
+      "testId": "session-proposal-skip-qe-consequence",
+      "files": [
+        "src/components/session/ProposalCard.tsx"
+      ]
+    },
+    {
+      "testId": "session-proposal-skip-qe-form",
+      "files": [
+        "src/components/session/ProposalCard.tsx"
+      ]
+    },
+    {
+      "testId": "session-proposal-skip-qe-reason",
+      "files": [
+        "src/components/session/ProposalCard.tsx"
+      ]
+    },
+    {
+      "testId": "session-proposal-skip-qe-send",
       "files": [
         "src/components/session/ProposalCard.tsx"
       ]
@@ -14306,6 +14366,36 @@
       "testId": "signin-warning-fix",
       "files": [
         "src/components/ChatInput.tsx"
+      ]
+    },
+    {
+      "testId": "silent-step",
+      "files": [
+        "src/components/session/SilentStepCard.tsx"
+      ]
+    },
+    {
+      "testId": "silent-step-headline",
+      "files": [
+        "src/components/session/SilentStepCard.tsx"
+      ]
+    },
+    {
+      "testId": "silent-step-move",
+      "files": [
+        "src/components/session/SilentStepCard.tsx"
+      ]
+    },
+    {
+      "testId": "silent-step-note",
+      "files": [
+        "src/components/session/SilentStepCard.tsx"
+      ]
+    },
+    {
+      "testId": "silent-step-nudge",
+      "files": [
+        "src/components/session/SilentStepCard.tsx"
       ]
     },
     {

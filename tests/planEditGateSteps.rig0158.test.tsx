@@ -45,7 +45,7 @@ describe('the plan editor holds the steps the card proposes', () => {
 
   it('the editor lists the card\'s 10 steps in the card\'s words; the floor\'s steps stay where the floor put them', () => {
     const rows = gateRows(planGateOf(team, PROMPT)!, null);
-    expect(rows.map((r) => r.label)).toEqual(['Scope', 'Research', 'Reproduce', 'Design', 'Architecture', 'Fix', 'Review', 'Security check', 'Check', 'Deliver']);
+    expect(rows.map((r) => r.label)).toEqual(['Scope', 'Triage', 'Reproduce', 'Design', 'Architecture', 'Fix', 'Review', 'Security check', 'Check', 'Deliver']);
     expect(rows.filter((r) => r.fixed === 'floor').map((r) => r.label)).toEqual(['Design', 'Architecture', 'Review', 'Security check']);
     // the card's sentence names the same steps, the same way
     expect(gatePlanOf(PROMPT)!.ids.map((id) => stepLabelOf(id))).toContain('Security check');
@@ -56,7 +56,7 @@ describe('the plan editor holds the steps the card proposes', () => {
     const line = withGatePlan(chainFromTeam(fold), PROMPT);
     const card = gatePlanLabels(PROMPT, chainFromTeam(fold).steps)!.labels;
     expect(line.steps.map((s) => s.label)).toEqual(card);
-    expect(card).toEqual(['Scope', 'Research', 'Reproduce', 'Design', 'Architecture', 'Fix', 'Review', 'Security check', 'Check', 'Deliver']);
+    expect(card).toEqual(['Scope', 'Triage', 'Reproduce', 'Design', 'Architecture', 'Fix', 'Review', 'Security check', 'Check', 'Deliver']);
     expect(gateRows(planGateOf(team, PROMPT)!, null).map((r) => r.label)).toEqual(card);
   });
 
