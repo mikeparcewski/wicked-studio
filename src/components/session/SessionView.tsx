@@ -1098,7 +1098,7 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
                 <div key={e.key} data-testid="session-working" data-run-id={e.runId} data-object={`step:${e.runId}:${e.ord}`} className="wk-chat-working">
                   <span aria-hidden className="wk-chat-working-dots"><i /><i /><i /></span>
                   {/* rig 0.15.8: the step in the chain's own word ("Check", never "Verify" beside it). */}
-                  <span data-testid="session-working-text" data-silent={e.runId === silentRunId ? 'true' : 'false'} aria-live="polite"><span className="wk-chat-working-who">{who.role === 'crew' ? 'studio' : who.name}</span> {e.runId === silentRunId && silent !== null ? `${silentWords(silent).replace(/^No/, 'no')} on ${workingStepWord(e.step)}` : `Working on ${workingStepWord(e.step)}…`}</span>
+                  <span data-testid="session-working-text" data-silent={e.runId === silentRunId ? 'true' : 'false'} aria-live="polite"><span className="wk-chat-working-who">{who.role === 'crew' ? 'studio' : who.name}</span> {e.runId === silentRunId && silent !== null ? `· ${silentWords(silent)} on ${workingStepWord(e.step)}` : `Working on ${workingStepWord(e.step)}…`}</span>
                   {/* rig 0.15.8: the composer says "message a working step from its ⋯" — this is that ⋯. */}
                   <OverflowMenu label={`More for ${workingStepWord(e.step)}`} data-testid="session-working-menu"
                     items={[{ id: 'message', label: MESSAGE_STEP_LABEL, onSelect: () => openSheet({ kind: 'step', runId: e.runId, ord: e.ord }, undefined, { compose: true }) }]} />

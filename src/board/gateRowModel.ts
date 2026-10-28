@@ -889,7 +889,7 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
     const qeBehind = /\balso: QE acceptance (?:did not pass|is inconclusive)\b/.test(gate.prompt);
     if (floorDenied && deadSeat === null && !offersFloorOverride(gate.prompt, verdict, gate.ord)) {
       whyNot.push(qeBehind
-        ? `Your own judgment isn’t offered while QE has no verdict on this tree.${skipHere ? ' Skip QE with a reason and this question comes back on the checks alone, with it.' : ''}`
+        ? `Your own judgment isn’t offered while QE has no verdict on this tree.${skipHere ? ' Skip QE with a reason first, and this question comes back with it.' : ''}`
         : 'Your own judgment isn’t offered here: the job takes it only when the failed checks are all that stop this step.');
     }
     if (skipQeAtDelivery(gate.prompt)) whyNot.push('Skipping QE is offered at the hand-over, not here.');

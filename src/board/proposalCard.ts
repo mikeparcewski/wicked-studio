@@ -115,7 +115,7 @@ export function planSentence(steps: readonly string[]): string {
 
 /** The run's ONE status sentence: what is happening now, in words, with the step count. While an
  *  answer is queued (the 10 s undo window) or being sent, it says so — never that work started. */
-export function statusSentence(view: SessionView, chain: ChainModel, gate: OpenGate | undefined, action?: GateActionState): string {
+export function statusSentence(view: SessionView, chain: ChainModel, gate: OpenGate | undefined, action?: GateActionState, silentMinutes: number | null = null): string {
   const s = view.session.status;
   const count = chain.total > 0 && !chain.proposed ? ` · ${chain.done} of ${chain.total} done` : '';
   if (action !== undefined && (s === 'awaiting_human' || gate !== undefined)) {
@@ -141,6 +141,8 @@ export function statusSentence(view: SessionView, chain: ChainModel, gate: OpenG
   }
   if (s === 'cancelled') return `Cancelled${count}`;
   const running = chain.steps.find((x) => x.state === 'running');
+  // (J4 0.16.6) A step silent past crew's quiet mark is not "running" in words: it says how long it has said nothing.
+  if (silentMinutes !== null) return `${running !== undefined ? stepWords(running.label) : 'The step'} has had no output for ${silentMinutes} min${count}`;
   return `${running !== undefined ? `${stepWords(running.label)} is running` : 'Being worked on'}${count}`;
 }
 
