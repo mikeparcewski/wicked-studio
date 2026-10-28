@@ -12,7 +12,9 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
-UI v2: the calm-page redesign (#924).
+## [0.13.0] — 2026-10-28
+
+A minor release: UI v2, the calm-page redesign (#924), with the gate fixes from the J4 re-run on crew 0.16.6.
 
 ### Changed
 - **Calm pages.** Home, Jobs, Repositories, Report, Understand, Evaluate, Steering, Memory and Agents each open with one plain sentence and a few calm sections. The rail reads Projects · Jobs · Repositories, and the wordmark goes Home.
@@ -2586,7 +2588,8 @@ The merged interactive layer: wicked-interactive's UI moved into this skin (DES-
   `git subtree split` (92 commits).
 - The SPA as a pure HTTP/WS client of the wicked-crew daemon: runs, gates, live CoreEvents.
 
-[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.12.3...HEAD
+[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.13.0...HEAD
+[0.13.0]: https://github.com/mikeparcewski/wicked-studio/compare/v0.12.3...v0.13.0
 [0.12.3]: https://github.com/mikeparcewski/wicked-studio/compare/v0.12.2...v0.12.3
 [0.12.2]: https://github.com/mikeparcewski/wicked-studio/compare/v0.12.1...v0.12.2
 [0.12.1]: https://github.com/mikeparcewski/wicked-studio/compare/v0.12.0...v0.12.1
