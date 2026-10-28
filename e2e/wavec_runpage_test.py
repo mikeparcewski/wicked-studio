@@ -30,7 +30,7 @@ from uxfix_fixture import (open_run_panel_item, run_panel_item_ids, DEFAULT_APPE
 PORT = int(os.environ.get("FEEDBACK_PORT", "4481"))
 W, H = 1440, 700
 SHOTS = REPO / "e2e" / "shots"
-CONSEQUENCE = "Keeps understand, redoes build → review → deliver, ~9 min from past durations (deliver not timed yet)"
+CONSEQUENCE = "Keeps understand, redoes build → review → deliver, ~21 min from past durations (deliver not timed yet)"
 RULE = {"scope": {"kind": "project", "projectId": "northwind"},
         "trigger": {"kind": "gate", "phase": "plan_approval", "band": "0-19", "preset": "bugfix"},
         "action": "approve", "activeWhen": "always"}

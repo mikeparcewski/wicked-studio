@@ -191,7 +191,9 @@ def _events(rid: str, now0: int) -> list:
         return [
             {"type": "sessionStarted", "session": rid, "ts": t0, "seq": 1},
             {"type": "unitDone", "session": rid, "ord": 1, "ts": t0 + 4 * MIN, "seq": 2},
-            {"type": "unitDispatched", "session": rid, "ord": 2, "attempt": 1, "cli": "claude", "ts": t0 + 4 * MIN + 2000, "seq": 3},
+            # Build is working now: its dispatch is a minute old (past crew's 5-min quiet mark the page says
+            # "No output for N min" instead, J4 0.16.6).
+            {"type": "unitDispatched", "session": rid, "ord": 2, "attempt": 1, "cli": "claude", "ts": t0 + 8 * MIN, "seq": 3},
         ]
     return []
 

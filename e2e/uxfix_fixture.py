@@ -2719,7 +2719,8 @@ TRUST_HISTORY = sorted([
 # ── Brainstorm-actionable ideas 6+13: the run page (switch `run_page`) ────────────────────────
 # r-rerun: understand (2 min) → build (6 min, its second attempt) → review (3 min, NOT PASS) → deliver
 # (never ran), paused at the escalation on review. A request_changes there rewinds to build (the
-# newest creator before the gate): keeps understand, redoes build → review → deliver, ~9 min.
+# newest creator before the gate): keeps understand, redoes build → review → deliver, ~21 min (a redo is timed
+# from each step's longest attempt, J4 0.16.6: build's first attempt took longer than its second).
 RUN_PAGE_T0 = NOW0 - 40 * MIN
 RUN_PAGE_PROMPT = ("Unit 3 verdict is NOT PASS — confirm to retry the phase, request changes to send the "
                    "review back to the creator phase, or reject to cancel the run")
