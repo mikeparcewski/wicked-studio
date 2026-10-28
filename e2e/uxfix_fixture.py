@@ -1053,6 +1053,13 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          #   mcp_inspect_grant — acme-mcp's mcp.session decided `allow` (its install consent), else `ask`.
          #   Every bridge write lands in mcp_inspect_posts (GET /__fixture/mcp-inspect-posts).
          "mcp_inspect": False, "mcp_inspect_grant": True,
+         # installed_editor — (e2e/editor_installed_plugin_test.py; needs `editors`) an editor plugin a
+         #   /workflow-editor-plugin run BUILT and garden's install.py INSTALLED: GET /api/v1/editors also lists
+         #   `mpx-changelog-entry` exactly as crew 0.16.3 listed it after that install
+         #   (e2e/editor-fixtures/changelog-entry.registry.json, source `pack`); its entry is the run's own bundle,
+         #   byte for byte (e2e/editor-fixtures/changelog-entry.html), and its grants are crew's decided set for
+         #   it (ui.fullscreen, allowed by EDITOR-OPEN-DEFAULTS).
+         "installed_editor": False,
          }
 state_lock = threading.Lock()
 # mcp_inspect: the fake bridge's sessions (id -> dict) and the writes it received.
@@ -8747,7 +8754,12 @@ class W2Handler(SimpleHTTPRequestHandler):
                                                 {"id": "ui.fullscreen", "why": "go full screen"}],
                                 "sha256": hashlib.sha256(body).hexdigest(), "bytes": len(body), "first_party": False,
                                 "enabled": True, "source": "pack", "entry_url": "/api/v1/editors/acme-mcp/0.1.0/entry"})
-            self._json(200, {"editors": editors, "installs": "conformance_required" if mcp_on else "refused_until_conformance"})
+            with state_lock:
+                installed_on = state["installed_editor"]
+            if installed_on:
+                editors.append(json.loads((REPO / "e2e" / "editor-fixtures" / "changelog-entry.registry.json").read_text()))
+            self._json(200, {"editors": editors,
+                             "installs": "conformance_required" if (mcp_on or installed_on) else "refused_until_conformance"})
             return True
         # /api/v1/editors/<id>/grants — crew's DECIDED set: {permission, decision, ruleIds, token} per permission.
         if len(parts) == 6 and parts[5] == "grants":
@@ -8759,6 +8771,8 @@ class W2Handler(SimpleHTTPRequestHandler):
                 with state_lock:
                     mcp_grant = state["mcp_inspect_grant"]
                 decided = [("artifact.read", "allow"), ("ui.fullscreen", "allow"), ("mcp.session", "allow" if mcp_grant else "ask")]
+            if parts[4] == "mpx-changelog-entry":
+                decided = [("ui.fullscreen", "allow")]
             self._json(200, {"editorId": parts[4], "version": version, "sha256": sha, "project": (q.get("project") or [None])[0],
                              "firstParty": parts[4].startswith("wicked-"),
                              "grants": [{"permission": g, "decision": d, "ruleIds": [],
@@ -8766,7 +8780,8 @@ class W2Handler(SimpleHTTPRequestHandler):
             return True
         # /api/v1/editors/<id>/<version>/entry
         if len(parts) == 7 and parts[6] == "entry":
-            files = {"acme-good": "good.html", "acme-hostile": "hostile.html", "acme-mcp": "mcp-inspector.html", "acme-v2": "v2-sample.html", "acme-notes": "scaffold.html"}
+            files = {"acme-good": "good.html", "acme-hostile": "hostile.html", "acme-mcp": "mcp-inspector.html", "acme-v2": "v2-sample.html", "acme-notes": "scaffold.html",
+                     "mpx-changelog-entry": "changelog-entry.html"}
             name = files.get(parts[4])
             first_party = next((e for e in self._studio_editors() if e["manifest"]["id"] == parts[4]), None)
             if first_party is not None:

@@ -1,0 +1,54 @@
+{
+  "id": "mpx-changelog-entry",
+  "title": "Changelog entry",
+  "version": "0.1.0",
+  "protocol": [
+    1,
+    2
+  ],
+  "kinds": [
+    "page"
+  ],
+  "sizes": [
+    "inline",
+    "pane",
+    "full"
+  ],
+  "surfaces": {
+    "card": {
+      "interactive": true,
+      "aspect": "auto",
+      "actions": [
+        {
+          "id": "clear",
+          "label": "Clear form",
+          "primary": false,
+          "verb": "plugin"
+        },
+        {
+          "id": "ask",
+          "label": "Ask about it",
+          "primary": false,
+          "verb": "host:ask"
+        }
+      ]
+    },
+    "options": null,
+    "full": {
+      "modes": null,
+      "default": "simple"
+    }
+  },
+  "permissions": [
+    {
+      "id": "ui.fullscreen",
+      "why": "to go full screen"
+    }
+  ],
+  "sha256": "9bb3121a91e45f4bcef2f5bcb53b39fe5ca58ea918e1f76ca8bfced99878e339",
+  "bytes": 12244,
+  "first_party": false,
+  "enabled": true,
+  "source": "pack",
+  "entry_url": "/api/v1/editors/mpx-changelog-entry/0.1.0/entry"
+}
