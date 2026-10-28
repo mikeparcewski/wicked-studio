@@ -117,6 +117,16 @@ export function standingFloor(events: readonly CoreEvent[], ord: number, own: Ga
   return null;
 }
 
+/** Where a failing test lives, short, for the face's tag: a vitest / jest file's name (`mcp-policies.test.ts`), a pytest
+ *  file's, a Rust test's module (`deliver_lift::tests`); `null` when the id names no place. */
+export function testPlace(id: string): string | null {
+  if (/\s>\s/.test(id)) return id.split(/\s>\s/)[0]!.trim().split('/').pop() || null;
+  const parts = id.split('::');
+  if (parts.length < 2) return null;
+  const head = parts.slice(0, -1).join('::');
+  return /[\\/]/.test(head) ? head.split(/[\\/]/).pop() || null : head;
+}
+
 /** A test id in words for the face: `tests/a.py::test_walkthrough_runs_in_a_jail` → "Walkthrough runs in a jail"
  *  (the id itself stays beside it, muted). An id that is not a test name is kept as it is. */
 export function testWords(id: string): string {

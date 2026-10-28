@@ -28,7 +28,7 @@ import { AGENTS_PATH, type Navigate } from '../../hooks/useRoute.js';
 import { useSignInHere } from '../agents/useSignInHere.js';
 import { AssuranceReceipt, AssuranceReceiptTech, QeAcceptanceLabel, ReducedAssuranceLabel } from './AssuranceReceipt.js';
 import { missingSeatsLine, OPERATOR_JUDGMENT_LABEL, rejudgeOfferOf, type RejudgeOffer } from '../../board/rejudge.js';
-import { baseCountOf, testWords } from '../../board/failingChecks.js';
+import { baseCountOf, testPlace, testWords } from '../../board/failingChecks.js';
 import { useOfferReply } from './DecisionDock.js';
 import { builderResponder } from '../../board/responder.js';
 import { gateCause, gateQuestion, gateWithLogChoices, judgeSeats, runPoolOf, seatName } from '../../board/gateHeadline.js';
@@ -1007,7 +1007,8 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
                 {split.fresh.length === 1 ? 'Failing only with this change:' : `${split.fresh.length} tests fail only with this change:`}
               </p>
               <ul data-testid="session-gate-failing-new" className="wk-gate2-new">
-                {split.fresh.map((n) => <li key={n}><span className="wk-gate2-new-t">{testWords(n)}</span>{testWords(n) !== n && <code className="wk-gate2-new-id">{n}</code>}</li>)}
+                {/* One line each: the test in words, where it lives as a short tag; the whole id on hover (the dock stays compact). */}
+                {split.fresh.map((n) => <li key={n} title={n}><span className="wk-gate2-new-t">{testWords(n)}</span>{testWords(n) !== n && testPlace(n) !== null && <code className="wk-gate2-new-id">{testPlace(n)}</code>}</li>)}
               </ul>
             </>
           ) : (
@@ -1016,7 +1017,7 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
           {baseCountOf(split) > 0 && (
             <div data-testid="session-gate-failing-base" className="wk-gate2-base">
               {split.fresh.length > 0 && <p data-testid="session-gate-failing-base-words" className="wk-gate2-base-words">{baseCountOf(split) === 1 ? 'One more fails on the base too, so it isn’t caused by this change.' : `${baseCountOf(split)} more fail on the base too, so they aren’t caused by this change.`}</p>}
-              {split.onBase.length > 0 && baseOpen && <ul>{split.onBase.map((n) => <li key={n}>{testWords(n)}{testWords(n) !== n && <code className="wk-gate2-new-id">{n}</code>}</li>)}</ul>}
+              {split.onBase.length > 0 && baseOpen && <ul>{split.onBase.map((n) => <li key={n} title={n}><span>{testWords(n)}</span>{testWords(n) !== n && testPlace(n) !== null && <code className="wk-gate2-new-id">{testPlace(n)}</code>}</li>)}</ul>}
               {split.onBase.length > 0 && (
                 <button type="button" data-testid="session-gate-failing-toggle" aria-expanded={baseOpen} onClick={() => setBaseOpen((v) => !v)} className="wk-gate2-link">
                   {baseOpen ? 'Hide the base’s failures' : split.onBase.length === 1 ? 'See the one that fails on the base' : `See the ${split.onBase.length} that fail on the base`}
