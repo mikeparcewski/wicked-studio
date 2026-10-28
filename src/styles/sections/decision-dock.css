@@ -219,3 +219,7 @@
 .wk-gate2-menu .wk-prop-btn.wk-gate2-mi:disabled { color: var(--ink-dim); background: transparent; opacity: 1; }
 .wk-gate2-menu .wk-gate2-off-row { padding-right: 0; }
 .wk-gate2-btn--secondary[aria-expanded="true"]:hover:not(:disabled) { background: color-mix(in oklab, var(--ink-high) 26%, transparent); }
+/* (J4 0.16.6) Why an override path is not offered here: one quiet line, never a control. */
+.wk-gate2-why-not { margin: 6px 0 0; font-size: var(--text-xs); color: var(--ink-muted); }
+.wk-gate2-fails .wk-gate2-base { margin-top: 6px; }
+.wk-gate2-base-words { margin: 0; font-size: 14px; color: var(--ink-muted); }

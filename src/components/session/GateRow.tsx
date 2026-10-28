@@ -1,3 +1,4 @@
+import { SKIP_QE_KEY, SKIP_QE_PLACEHOLDER } from '../../board/qeSkip.js';
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { RosterSeat, SessionView as RunView } from '../../api/types.js';
 import { QeRefusalWarning } from '../QeRefusalWarning.js';
@@ -831,7 +832,7 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
       setNoteOpen(choice.key);
       // The floor override's rationale is the operator's own words: never pre-filled (a prefill
       // would make the required box look answered), and never another choice's draft.
-      if (choice.key === FLOOR_OVERRIDE_KEY) setNoteText('');
+      if (choice.key === FLOOR_OVERRIDE_KEY || choice.key === SKIP_QE_KEY) setNoteText('');
       else setNoteText((prev) => prev || model.noteDefault);
       return;
     }
@@ -896,6 +897,8 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
   // studio#612: the floor fix's note is the fixing seat's whole task, not a steer.
   const notePlaceholder = floorOverrideNote
     ? FLOOR_OVERRIDE_PLACEHOLDER
+    : noteChoice?.key === SKIP_QE_KEY
+    ? SKIP_QE_PLACEHOLDER
     : noteChoice?.key === 'steer' && noteChoice.label === FLOOR_FIX_LABEL
     ? 'What should the fixing helper change…'
     : noteChoice?.key === 'steer'
@@ -1012,7 +1015,7 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
           )}
           {baseCountOf(split) > 0 && (
             <div data-testid="session-gate-failing-base" className="wk-gate2-base">
-              {split.fresh.length > 0 && <p className="wk-gate2-label">{baseCountOf(split) === 1 ? 'One more fails on the base too, so it isn’t caused by this change.' : `${baseCountOf(split)} more fail on the base too, so they aren’t caused by this change.`}</p>}
+              {split.fresh.length > 0 && <p data-testid="session-gate-failing-base-words" className="wk-gate2-base-words">{baseCountOf(split) === 1 ? 'One more fails on the base too, so it isn’t caused by this change.' : `${baseCountOf(split)} more fail on the base too, so they aren’t caused by this change.`}</p>}
               {split.onBase.length > 0 && baseOpen && <ul>{split.onBase.map((n) => <li key={n}>{testWords(n)}{testWords(n) !== n && <code className="wk-gate2-new-id">{n}</code>}</li>)}</ul>}
               {split.onBase.length > 0 && (
                 <button type="button" data-testid="session-gate-failing-toggle" aria-expanded={baseOpen} onClick={() => setBaseOpen((v) => !v)} className="wk-gate2-link">
@@ -1028,6 +1031,8 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
           {model.failingTests.more > 0 && <span data-testid="session-gate-failing-more"> +{model.failingTests.more} more</span>}
         </p>
       )}
+      {/* (J4 0.16.6) An override path the job does not offer here says why, in one line. */}
+      {model.whyNot !== undefined && <p data-testid="session-gate-why-not" className="wk-session-gate-detail-item wk-gate2-why-not">{model.whyNot.join(' ')}</p>}
       {/* A refused hand-over says what Deliver again does BEFORE the choice that takes it. */}
       {refusalLines !== null && <p data-testid="session-gate-deliver-consent" className="wk-gate-consequence">{refusalLines.consent}</p>}
       <div className="wk-gate2-decide">

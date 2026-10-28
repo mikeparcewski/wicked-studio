@@ -109,23 +109,23 @@ export function decisionMessages(events: readonly CoreEvent[] | null | undefined
   if (events === null || events === undefined) return [];
   const asked = new Map<number, { plan: boolean }>();
   const out: DecisionMessage[] = [];
-  const list = events as readonly Ev[];
+  const list = events as readonly (Ev & { scope?: unknown })[];
+  const answered = (ord: number, at: number, allow: boolean): void => {
+    const q = asked.get(ord);
+    if (q === undefined) return;
+    asked.delete(ord);
+    out.push({ ord, at, by: 'you', text: allow ? (q.plan ? 'Approved the plan' : 'Approved') : (q.plan ? 'Turned the plan down' : 'Sent it back') });
+  };
   for (let i = 0; i < list.length; i++) {
     const e = list[i]!;
     const ord = typeof e.ord === 'number' ? e.ord : null;
     if (ord === null) continue;
+    const at = typeof e.ts === 'number' ? e.ts : 0;
     if (e.type === 'awaitingHuman') {
       const prompt = typeof e.prompt === 'string' ? e.prompt : '';
       asked.set(ord, { plan: e.gateKind === 'plan_approval' || /^\s*approve plan\b/i.test(prompt) });
     } else if (e.type === 'gateDecided') {
-      const at = typeof e.ts === 'number' ? e.ts : 0;
-      const q = asked.get(ord);
-      if (q !== undefined) {
-        asked.delete(ord);
-        const text = e.allow === true ? (q.plan ? 'Approved the plan' : 'Approved') : (q.plan ? 'Turned the plan down' : 'Sent it back');
-        out.push({ ord, at, text, by: 'you' });
-        continue;
-      }
+      if (asked.has(ord)) { answered(ord, at, e.allow === true); continue; }
       if (e.allow === true) continue;
       // What the job did next with this step: retried it on its own, or stopped to ask.
       for (let j = i + 1; j < list.length; j++) {
@@ -137,9 +137,19 @@ export function decisionMessages(events: readonly CoreEvent[] | null | undefined
           break;
         }
       }
-    } else if (e.type === 'unitDispatched' || e.type === 'resumed') {
-      // A question closed by something other than a gate answer (a reassign, a rewind) is not open any more.
-      if (e.type === 'unitDispatched') asked.delete(ord);
+    } else if (e.type === 'resumed' && asked.has(ord)) {
+      // Your answer resumes the run: an approve's `gateDecided` follows at once; a plan approval has none (the next
+      // `gateDecided` for that step is the engine judging the step's own work).
+      const next = list.slice(i + 1).find((n) => n.ord === ord);
+      if (next?.type === 'gateDecided' && next.ts === e.ts) continue;
+      answered(ord, at, true);
+    } else if (e.type === 'unitReworkAmended' && e.scope === 'request_changes') {
+      // A send-back or a rewind from a later question ("Run QE again" at the hand-over) re-arms an earlier step.
+      const open = [...asked.keys()].filter((q) => q >= ord).sort((x, y) => y - x)[0];
+      if (open !== undefined) { asked.delete(open); out.push({ ord, at, text: 'Sent it back', by: 'you' }); }
+    } else if (e.type === 'unitDispatched') {
+      // A question closed by something other than an answer (a reassign) is not open any more.
+      asked.delete(ord);
     }
   }
   return out;

@@ -40,6 +40,7 @@ import { qeGateOf, QE_RETRY_LABEL, QE_RETRY_NOTE_LABEL, QE_RETRY_NOTE_TITLE, QE_
 import { waitsForJudge } from './assuranceModel.js';
 import { OPERATOR_JUDGMENT_LABEL, OPERATOR_JUDGMENT_TITLE, REJUDGE_ACTION, REJUDGE_LABEL, rejudgeTitle, type RejudgeOffer } from './rejudge.js';
 import { engineNamesFloorOverride, FLOOR_OVERRIDE_ACTION, FLOOR_OVERRIDE_CONSEQUENCE, FLOOR_OVERRIDE_KEY, FLOOR_OVERRIDE_TITLE, offersDeliverFloorOverride, offersFloorOverride } from './floorOverride.js';
+import { offersSkipQeHere, skipQeAtDelivery, SKIP_QE_ACTION, SKIP_QE_GATE_TITLE, SKIP_QE_KEY, SKIP_QE_LABEL } from './qeSkip.js';
 import { FACE_MAX, failingOnFace, failingSplit, standingFloor, type FailingOnFace, type FailingSplit } from './failingChecks.js';
 import { deliverLift } from '../components/deliverLiftModel.js';
 
@@ -203,6 +204,9 @@ export interface GateRowModel {
   /** rig 0.15.8: the failing checks / tests of THIS gate's failed floor, named on the face (up to five,
    *  "+N more"); absent when the gate's own floor did not fail. */
   failingTests?: FailingOnFace;
+  /** (J4 0.16.6) Why an override path is not offered at this gate ("Your own judgment isn’t offered while QE has no
+   *  verdict on this tree."), one line each; absent when nothing is withheld. */
+  whyNot?: string[];
 }
 
 /** studio#835: a dead-seat gate's seat, and why it cannot work, in the engine's cause token's terms. */
@@ -872,6 +876,24 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
       coreWithoutStop.push({ key: FLOOR_OVERRIDE_KEY, label: OPERATOR_JUDGMENT_LABEL, decision: { approve: true, action: FLOOR_OVERRIDE_ACTION } as unknown as GateAnswer, needsNote: true, title: FLOOR_OVERRIDE_TITLE });
     }
 
+    // studio#923 / J4 0.16.6: the engine takes the QE skip AT this gate (a QE-only denial, or a failed floor with QE behind
+    // it): offered here with a required reason, never only by starting the job again.
+    const skipHere = deadSeat === null && offersSkipQeHere(gate.prompt);
+    if (skipHere) {
+      coreWithoutStop.push({ key: SKIP_QE_KEY, label: SKIP_QE_LABEL, decision: { approve: true, action: SKIP_QE_ACTION } as unknown as GateAnswer, needsNote: true, title: SKIP_QE_GATE_TITLE });
+    }
+    // (J4 0.16.6) The override paths the engine did not offer, and why, in one line each: the operator read engine source
+    // to learn why "Approve as your own judgment" was missing.
+    const whyNot: string[] = [];
+    const floorDenied = verdict !== null && verdict.ord === gate.ord && verdict.outcome === 'fail' && (verdict.denial?.source === 'repo_checks' || verdict.denial?.source === 'repo_checks_timeout');
+    const qeBehind = /\balso: QE acceptance (?:did not pass|is inconclusive)\b/.test(gate.prompt);
+    if (floorDenied && deadSeat === null && !offersFloorOverride(gate.prompt, verdict, gate.ord)) {
+      whyNot.push(qeBehind
+        ? `Your own judgment isn’t offered while QE has no verdict on this tree.${skipHere ? ' Skip QE with a reason and this question comes back on the checks alone, with it.' : ''}`
+        : 'Your own judgment isn’t offered here: the job takes it only when the failed checks are all that stop this step.');
+    }
+    if (skipQeAtDelivery(gate.prompt)) whyNot.push('Skipping QE is offered at the hand-over, not here.');
+
     // Cap at 3 (stop always occupies the 4th inline slot); excess goes to overflow.
     const escInline = coreWithoutStop.slice(0, 3);
     const overflow: GateRowChoice[] = coreWithoutStop.slice(3);
@@ -947,7 +969,7 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
     if (!deniedUnit && !qeNoVerdict && !rejudgeOffered && !overridePath && backAt < 0 && recommended !== null && rec?.kind === 'retry-findings' && rec.prefill !== null) {
       noteDefault = rec.prefill;
     }
-    return { reason, question, choices: escInline, overflow, noteDefault, recommended, detailItems, ...(qe !== null ? { qe } : {}), ...(deadSeat !== null ? { deadSeat } : {}), ...(judgeWait ? { operatorJudgment } : {}), ...(withheld.length > 0 ? { withheldSeats: withheld } : {}) };
+    return { reason, question, choices: escInline, overflow, noteDefault, recommended, detailItems, ...(whyNot.length > 0 ? { whyNot } : {}), ...(qe !== null ? { qe } : {}), ...(deadSeat !== null ? { deadSeat } : {}), ...(judgeWait ? { operatorJudgment } : {}), ...(withheld.length > 0 ? { withheldSeats: withheld } : {}) };
   }
 
   if (reason === 'retry') {

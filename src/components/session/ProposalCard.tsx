@@ -1,3 +1,4 @@
+import { SKIP_QE_ACTION, SKIP_QE_CONSEQUENCE, SKIP_QE_SEND } from '../../board/qeSkip.js';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { TechDetails } from '../ui/TechDetails.js';
 import type { SessionView } from '../../api/types.js';
@@ -158,6 +159,9 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
     return () => { document.removeEventListener('pointerdown', away); document.removeEventListener('keydown', esc); };
   }, [menuOpen]);
   const rerun = useRerunFromHere(view);
+  // studio#923: a hand-over QE refused takes the skip IN PLACE (crew's gate action `skip_qe`, a required reason, the
+  // gate's undo window), never only by starting the job again.
+  const [skip, setSkip] = useState<{ open: boolean; reason: string }>({ open: false, reason: '' });
   if (card === null) return null;
   const chat = variant === 'chat';
   const instance = gateInstance(gate);
@@ -211,6 +215,17 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
       .catch(() => { /* the refusal is in the shared action state, which the card renders */ })
       .finally(() => { sending.current = false; });
   };
+  const skipQe = (): void => {
+    const reason = skip.reason.trim();
+    if (reason === '' || sending.current || gate === undefined) return;
+    sending.current = true;
+    const deliver = { deliver: { branch: (view.session as unknown as { run_branch?: string }).run_branch ?? null, repo: null, card: deliverLine(view, gate) } };
+    commitGateDecision(runId, { approve: true, action: SKIP_QE_ACTION, amend: reason } as unknown as GateAnswer,
+      { ...deliver, receipt: { kind: 'deliver', chosenLabel: SKIP_QE_SEND } })
+      .then((outcome) => { if (outcome === 'sent') setSkip({ open: false, reason: '' }); })
+      .catch(() => { /* the refusal is in the shared action state, which the card renders */ })
+      .finally(() => { sending.current = false; });
+  };
   // §4.7 End = reject: the path is cancelled, the conversation is over.
   const end = (): void => {
     if (sending.current || gate === undefined) return;
@@ -244,7 +259,7 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
           {/* (mockup ui-v2-gate) The cause as the headline: a hand-over QE refused says that, first. */}
           <h2 data-testid="session-proposal-text" className="wk-prop-text wk-gate2-q">{deliverRefused && card.state === 'ask' ? QE_REFUSED_DELIVER : card.text}</h2>
           {deliverRefused && card.state === 'ask'
-            ? <p data-testid="session-proposal-why" className="wk-prop-why wk-gate2-p">Delivery is refused until QE acceptance passes. {rerun.offer !== null ? 'Run it again so QE checks it, or start it again with QE skipped and a reason.' : 'Start it again with QE skipped and a reason, or stop it.'}</p>
+            ? <p data-testid="session-proposal-why" className="wk-prop-why wk-gate2-p">Delivery is refused until QE acceptance passes. {rerun.offer !== null ? 'Run it again so QE checks it, or skip QE here with a reason.' : 'Skip QE here with a reason, or stop it.'}</p>
             : card.why !== null && card.state === 'ask' && <p data-testid="session-proposal-why" className="wk-prop-why wk-gate2-p">{card.why}</p>}
           {card.state === 'confirm' && card.confirm !== null ? (
             <div data-testid="session-proposal-confirm" role="alertdialog" aria-label={`Are you sure? ${card.confirm.q}`} className="wk-prop-confirm">
@@ -265,8 +280,8 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
                     disabled={rerun.state.kind === 'sending'} className="wk-prop-btn wk-prop-btn--primary wk-gate2-btn wk-gate2-btn--primary">Run QE again</button>
                 )}
                 {deliverRefused && (
-                  <button type="button" data-testid="session-proposal-skip-qe" title="Opens the launch form with this job's brief and Skip QE acceptance ticked; give the reason there. Nothing starts until you launch; this job stays here."
-                    onClick={() => { setRetryPrefill({ ...retryPrefillOf(view), skipQe: true }); goTo('/runs/new'); }}
+                  <button type="button" data-testid="session-proposal-skip-qe" aria-expanded={skip.open} title={SKIP_QE_CONSEQUENCE}
+                    onClick={() => setSkip((v) => ({ ...v, open: true }))}
                     className={`wk-prop-btn wk-gate2-btn ${rerun.offer === null ? 'wk-prop-btn--primary wk-gate2-btn--primary' : 'wk-gate2-btn--secondary'}`}>Skip QE with a reason…</button>
                 )}
                 {!deliverRefused && goButton}
@@ -275,12 +290,29 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
                   {deliverRefused && (
                     <div className="wk-gate2-off-row">{goButton}</div>
                   )}
+                  {deliverRefused && (
+                    <button type="button" role="menuitem" data-testid="session-proposal-relaunch-skip-qe" className="wk-prop-btn wk-gate2-mi"
+                      data-sub="Opens the launch form with this job’s brief and Skip QE acceptance ticked; this job stays here"
+                      onClick={() => { setMenuOpen(false); setRetryPrefill({ ...retryPrefillOf(view), skipQe: true }); goTo('/runs/new'); }}>Start again with QE skipped…</button>
+                  )}
                   {draft !== null && <button type="button" role="menuitem" data-testid="session-proposal-drop-draft" onClick={() => dropGateDraft(runId, draft.gateKey)} className="wk-prop-btn wk-gate2-mi"><span className="wk-gate2-mi-label">Drop the changes</span></button>}
                   {chat && card.kind === 'plan' && onEdit !== undefined && <button type="button" role="menuitem" data-testid="session-proposal-edit" aria-expanded={editing} onClick={() => { setMenuOpen(false); onEdit(); }} className="wk-prop-btn wk-gate2-mi" data-sub={'Change, add or reorder steps before you approve'}>{editing ? 'Done editing' : 'Edit the plan'}</button>}
                   <button type="button" role="menuitem" data-testid="session-proposal-not-now" onClick={() => { setMenuOpen(false); notNow(); }} className="wk-prop-btn wk-gate2-mi" data-sub={ask === null ? 'Hide this here; the question stays open' : 'The conversation goes on; nothing is built'}>Not now</button>
                   {card.end !== undefined && <button type="button" role="menuitem" data-testid="session-proposal-end" onClick={() => { setMenuOpen(false); end(); }} className="wk-prop-btn wk-gate2-mi" data-sub={card.kind === 'deliver' ? 'The job stops here; nothing is pushed' : 'The helpers stand down'}>{card.end}</button>}
                 </div>
               </div>
+              {deliverRefused && skip.open && (
+                <div data-testid="session-proposal-skip-qe-form" className="wk-gate2-note">
+                  <p data-testid="session-proposal-skip-qe-consequence" className="wk-gate-consequence">{SKIP_QE_CONSEQUENCE}</p>
+                  <textarea data-testid="session-proposal-skip-qe-reason" aria-label="Why QE acceptance is skipped" autoFocus rows={3}
+                    value={skip.reason} onChange={(e) => setSkip({ open: true, reason: e.target.value })}
+                    placeholder="Why QE acceptance is skipped (the seats couldn’t run the tests, you checked it yourself)…" className="wk-session-gate-note" />
+                  <div className="wk-prop-btns">
+                    <button type="button" data-testid="session-proposal-skip-qe-send" disabled={skip.reason.trim() === '' || action.busy} onClick={skipQe} className="wk-prop-btn wk-prop-btn--primary wk-gate2-btn wk-gate2-btn--primary">{SKIP_QE_SEND}</button>
+                    <button type="button" data-testid="session-proposal-skip-qe-cancel" onClick={() => setSkip({ open: false, reason: '' })} className="wk-prop-btn wk-prop-btn--ghost">Cancel</button>
+                  </div>
+                </div>
+              )}
               {/* The disabled Deliver's reason (read by assistive tech; the headline and sentence already say it). */}
               {deliverRefused && <p id={`${runId}-go-why`} data-testid="session-proposal-go-why" className="wk-visually-hidden">Delivery is refused until QE acceptance passes.</p>}
             </>

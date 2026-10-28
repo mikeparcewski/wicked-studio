@@ -11,7 +11,7 @@ const T0 = 1_793_000_000_000;
 const MIN = 60_000;
 const view = (status = 'executing') => makeView({ id: 'r1', status: status as never, unit_ix: 1 } as never, [
   makeUnit({ id: 'r1:triage', session_id: 'r1', ord: 1, stage: 'recon', status: 'done', assigned_cli: 'claude' }),
-  makeUnit({ id: 'r1:reproduce', session_id: 'r1', ord: 2, stage: 'design', status: 'distributed', assigned_cli: 'codex' }),
+  makeUnit({ id: 'r1:reproduce', session_id: 'r1', ord: 2, stage: 'design' as never, status: 'distributed', assigned_cli: 'codex' }),
 ]);
 const ev = (type: string, ts: number): CoreEvent => ({ type, session: 'r1', ord: 2, ts }) as unknown as CoreEvent;
 
