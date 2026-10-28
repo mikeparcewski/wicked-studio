@@ -63,19 +63,19 @@ describe('one count for "ready"', () => {
     expect(`${t.ready} of ${t.total}`).toBe('2 of 5');
     expect(readyNote(t)).toBe('1 more with limits · 1 can’t tell · 1 signed out');
 
-    render(<DeskV2 runs={[]} runsLoaded needRows={[]} now={Date.now()} navigate={vi.fn()} search="?tab=work" />);
+    render(<DeskV2 runs={[]} runsLoaded needRows={[]} now={Date.now()} navigate={vi.fn()} search="?tab=work" projectId="studio" />);
     const tile = await screen.findByTestId('desk-block-agents');
     await waitFor(() => expect(tile.querySelector('.wk-stat-value')).toHaveTextContent('2 of 5'));
     expect(tile.querySelector('.wk-stat-note')).toHaveTextContent('1 more with limits · 1 can’t tell · 1 signed out');
     cleanup();
 
     render(<AgentsPage search="" navigate={vi.fn()} />);
-    await waitFor(() => expect(screen.getByTestId('agents-tile-ready')).toHaveTextContent('Ready for work2 / 51 more with limits · 1 can’t tell · 1 signed out'));
+    await waitFor(() => expect(screen.getByTestId('agents-tile-ready')).toHaveTextContent('2 / 5 · 1 more with limits · 1 can’t tell · 1 signed out'));
   });
 });
 
 describe('the Desk tile in every reading state, and with reviewer-only seats', () => {
-  const desk = (): void => { render(<DeskV2 runs={[]} runsLoaded needRows={[]} now={Date.now()} navigate={vi.fn()} search="?tab=work" />); };
+  const desk = (): void => { render(<DeskV2 runs={[]} runsLoaded needRows={[]} now={Date.now()} navigate={vi.fn()} search="?tab=work" projectId="studio" />); };
   const tile = (): HTMLElement => screen.getByTestId('desk-block-agents');
 
   it('loading: no number and no claim (never "all signed in" for nothing read)', async () => {
@@ -115,7 +115,7 @@ describe('the Desk tile in every reading state, and with reviewer-only seats', (
     expect(tile().querySelector('.wk-stat-note')).toHaveTextContent(readyNote(t));
     cleanup();
     render(<AgentsPage search="" navigate={vi.fn()} />);
-    await waitFor(() => expect(screen.getByTestId('agents-tile-ready')).toHaveTextContent(`Ready for work${t.ready} / 6${readyNote(t)}`));
+    await waitFor(() => expect(screen.getByTestId('agents-tile-ready')).toHaveTextContent(`${t.ready} / 6 · ${readyNote(t)}`));
   });
 });
 

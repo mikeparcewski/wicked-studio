@@ -7,8 +7,8 @@ at 1440x700. S16a-1b: said in the session thread (/s/run%3Ar-review), not on the
           `VERDICT: FAIL` frames): the suggested choice is the recommended move (Send back) with its
           consequence line above it ("produce reruns with 2 items; critique re-reviews"); the note
           opens pre-filled with the reviewer's failing lines; no duplicate "Request changes" choice,
-          Stop stays last.
-  diff    ⋯ Details › "Why it failed" lists the reviewer's failing criteria beside what the creator
+          Stop stays last (the last of Other options).
+  diff    More about this › Technical details › "Why it failed" lists the reviewer's failing criteria beside what the creator
           (produce) claimed, read from the creator's transcript.
   send    taking the move POSTs {approve: false, action: "request_changes", amend: <the items>} once.
   home    the Home "Needs you" row for r-review names the move ("Send back… ›") and opens the gate in the
@@ -24,7 +24,7 @@ import sys
 import time
 import urllib.request
 
-from uxfix_fixture import (DEFAULT_APPEARANCE, HIDE_GATE_TOASTS, REPO, ensure_build,
+from uxfix_fixture import (DEFAULT_APPEARANCE, HIDE_GATE_TOASTS, REPO, ensure_build, open_tech_details,
                            set_fixture, start_server)
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4471"))
@@ -104,8 +104,8 @@ with sync_playwright() as p:
                   return b.top >= 0 && b.bottom <= window.innerHeight; }"""))
         page.screenshot(path=str(SHOTS / f"gate-move-desk-card.png"))
 
-        # "Why it failed" sits behind the row's ⋯ Details.
-        page.locator(".wk-session-gate-prompt-summary").click()
+        # "Why it failed" sits behind the row's Technical details, under "More about this" since ui-v2.
+        open_tech_details(page)
         page.get_by_test_id("verdict-diff-toggle").click()
         page.wait_for_function("""() => document.querySelector('[data-testid="verdict-diff"]')
           ?.getAttribute('data-state') === 'ready'""", timeout=8000)
@@ -137,7 +137,8 @@ with sync_playwright() as p:
 
     def section_home() -> None:
         reset(origin)
-        page.goto(f"{origin}/", wait_until="networkidle")
+        # Home v2: the queue is in Needs you in full (/needs).
+        page.goto(f"{origin}/needs", wait_until="networkidle")
         row = page.locator('[data-testid="need-row"][data-key="gate:r-review"], [data-testid="need-member"][data-key="gate:r-review"]')
         if row.count() == 0 and page.get_by_test_id("need-group-toggle").count() > 0:
             page.get_by_test_id("need-group-toggle").first.click()

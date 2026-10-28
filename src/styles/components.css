@@ -108,7 +108,8 @@
   background: transparent;
   color: var(--ink-muted);
 }
-.wk-btn--quiet:hover:not(:disabled) { background: var(--surface-raised); color: var(--ink-high); }
+/* Hover leans on the ink, not one surface step (which on wicked-light's page is dE 0.01, invisible): ui-v2. */
+.wk-btn--quiet:hover:not(:disabled) { background: color-mix(in oklab, var(--ink-high) 12%, transparent); color: var(--ink-high); }
 
 /* An accent-text ghost: a door, not a commitment (Ask, "Open gate ›"). */
 .wk-btn--link {
@@ -185,6 +186,21 @@ button.wk-chip, a.wk-chip { min-height: var(--control-h-sm); cursor: pointer; fo
   line-height: var(--leading-body);
   color: var(--ink-body);
 }
+
+/* (PRODUCT-WORKS J4) The job's helpers a reassign does not offer: greyed out, each with its reason
+   (and lift time), beside a Sign in link. Disabled, so never mistaken for a choice. */
+.wk-gate-withheld {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-2);
+}
+.wk-gate-withheld [data-testid="session-gate-withheld-seat"]:disabled {
+  opacity: 0.6;
+  border-style: dashed;
+  cursor: not-allowed;
+}
+.wk-gate-withheld-why { color: var(--ink-muted); font-weight: var(--weight-normal); }
 
 /* The gate's answers sit in FIXED slots on every gate kind (council M5): the primary alone on
    its own row, then [secondary] [danger] as equal columns — Reject is ALWAYS the right column —
@@ -680,6 +696,15 @@ select:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-
    it. The dock is its own container, so its header answers to its own width, not the window's. */
 .wk-syschat { display: flex; flex: 1 1 auto; min-width: 0; min-height: 0; height: 100%; position: relative; container-type: inline-size; }
 .wk-syschat > [data-testid="assist-dock"] { flex: 1 1 auto; min-width: 0; container-type: inline-size; }
+/* crew#1157: an analysis chat that could not ground its repository offers to index it. The hover fills
+ * are the Understand page's ink tints (calm-ue.css), so the button reads the same here. */
+.wk-syschat-index {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 0; padding: 10px 12px;
+  border: 1px solid var(--border-subtle, var(--border-strong)); border-radius: var(--radius-lg);
+  color: var(--ink-body); font-size: 14px; line-height: 1.4;
+  --ue-hover-strong: color-mix(in oklab, var(--ink-high) 16%, transparent);
+  --ue-press: color-mix(in oklab, var(--ink-high) 20%, transparent);
+}
 .wk-chathist {
   display: flex; flex-direction: column; width: 186px; flex-shrink: 0; min-height: 0; overflow-y: auto; box-sizing: border-box;
   border-right: 1px solid var(--surface-raised); background: var(--surface-base); padding: 8px 6px;
@@ -1797,7 +1822,7 @@ html :is(input, textarea)::placeholder { color: var(--ink-placeholder); opacity:
 .wk-tech-details-summary::-webkit-details-marker { display: none; }
 .wk-tech-details-summary::before { content: ''; width: 0; height: 0; border-left: 4px solid currentColor; border-top: 4px solid transparent; border-bottom: 4px solid transparent; transition: transform var(--dur-fast) var(--ease-out); }
 .wk-tech-details[open] > .wk-tech-details-summary::before { transform: rotate(90deg); }
-.wk-tech-details-summary:hover { color: var(--ink-high); }
+.wk-tech-details-summary:hover { color: var(--ink-high); text-decoration: underline; text-underline-offset: 3px; }
 .wk-tech-details-summary:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-shadow: var(--focus-ring); }
 .wk-tech-details-body { margin: var(--space-1) 0 0; padding: var(--space-2) var(--space-3); max-height: 240px; overflow: auto; background: var(--surface-raised); border-radius: var(--radius-md); color: var(--ink-muted); font-family: var(--font-mono) !important; font-size: var(--text-xs); line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
 

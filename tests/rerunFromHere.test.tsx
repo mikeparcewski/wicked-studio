@@ -23,7 +23,7 @@ const units = (over: Partial<Record<number, Partial<WorkUnit>>> = {}): WorkUnit[
 const ev = (type: string, ord: number, ts: number, extra: Record<string, unknown> = {}): CoreEvent =>
   ({ type, session: RUN, ord, ts, ...extra }) as unknown as CoreEvent;
 
-/** understand 2 min, build 6 min (its second attempt), review 3 min; deliver never ran. */
+/** understand 2 min, build 17 min (its longest attempt; the second took 6), review 3 min; deliver never ran. */
 const EVENTS: CoreEvent[] = [
   ev('unitDispatched', 1, T0), ev('unitOutputCaptured', 1, T0 + 2 * MIN),
   ev('unitDispatched', 2, T0 + 3 * MIN), ev('unitOutputCaptured', 2, T0 + 20 * MIN),
@@ -35,16 +35,31 @@ const EVENTS: CoreEvent[] = [
 const base = { runId: RUN, status: 'awaiting_human', units: units(), gateOrd: 3, events: EVENTS };
 
 describe('rerunModel — the offer is the engine\'s own rewind, with its consequence', () => {
+  it('(J4 0.16.6) a step\'s time includes its check run, and a no-change retry does not shrink it', () => {
+    // Run 115fabdb: fix wrote for 5 min, its floor ran 40 more; the no-change retry took half a minute and re-ran nothing.
+    const fix: CoreEvent[] = [
+      ev('unitDispatched', 2, T0), ev('unitOutputCaptured', 2, T0 + 5 * MIN), ev('repoChecksEvaluated', 2, T0 + 45 * MIN),
+      ev('gateEvaluated', 2, T0 + 45 * MIN + 1), ev('gateDecided', 2, T0 + 45 * MIN + 2, { allow: false }),
+      ev('unitDispatched', 2, T0 + 46 * MIN, { attempt: 1 }), ev('unitOutputCaptured', 2, T0 + 46 * MIN + 30_000),
+      ev('gateEvaluated', 2, T0 + 47 * MIN), ev('gateEscalated', 2, T0 + 47 * MIN),
+      ev('awaitingHuman', 2, T0 + 47 * MIN + 1, { gateKind: 'escalation', prompt: 'Unit 2 failed its deterministic floor' }),
+      // The operator answered two hours later: that wait is not the step's.
+      ev('unitDone', 2, T0 + 167 * MIN),
+    ];
+    expect(unitDurations(fix).get(2)).toBe(45 * MIN + 1);
+  });
+
+
   it('names what is kept and what is redone, with minutes from past durations', () => {
     const offer = rerunOffer(base)!;
     expect(offer.ord).toBe(2);
     expect(offer.phase).toBe('build');
     expect(offer.kept).toEqual(['understand']);
     expect(offer.redone).toEqual(['build', 'review', 'deliver']);
-    expect(offer.minutes).toBe(9);
+    expect(offer.minutes).toBe(20);
     expect(offer.untimed).toEqual(['deliver']);
     expect(offer.consequence).toBe(
-      'Keeps understand, redoes build → review → deliver, ~9 min from past durations (deliver not timed yet)',
+      'Keeps understand, redoes build → review → deliver, ~20 min from past durations (deliver not timed yet)',
     );
     expect(offer.decision).toEqual({ approve: false, action: 'request_changes' });
   });

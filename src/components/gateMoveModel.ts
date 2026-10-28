@@ -613,7 +613,12 @@ export interface DeliverRefusal {
   remote: boolean;
   branch: string | null;
   reason: string;
+  /** studio#920: the files crew's deliver preflight found changed after the checks (`deliver: PREFLIGHT CHANGED the
+   *  verified tree: <files>`), in full — the card names the first and lists them all under More about this. */
+  changed?: string[];
 }
+/** studio#920: crew's `DELIVER_PREFLIGHT_CHANGED_MARKER` and the files after it. */
+const PREFLIGHT_CHANGED = /deliver:\s*PREFLIGHT CHANGED the verified tree:\s*([^\n]+)/i;
 const DELIVER_REFUSED_HEAD = /^\s*The deliver phase refused:\s*/i;
 export function deliverRefusalOf(prompt: string | undefined): DeliverRefusal | null {
   if (prompt === undefined || !DELIVER_REFUSED_HEAD.test(prompt)) return null;
@@ -624,10 +629,20 @@ export function deliverRefusalOf(prompt: string | undefined): DeliverRefusal | n
     const why = (remote[2] ?? remote[3] ?? '').replace(/\s+/g, ' ').trim();
     return { remote: true, branch: remote[1]!, reason: why === '' ? 'no reason was given' : why };
   }
+  // studio#920: the files the preflight found changed lead the reason; the list never falls to the 240-char cut.
+  const pre = PREFLIGHT_CHANGED.exec(body);
+  if (pre !== null) {
+    const changed = [...new Set(pre[1]!.split(/[\s,]+/).map((f) => f.trim().replace(/[.;]+$/, '')).filter((f) => f !== ''))];
+    if (changed.length > 0) {
+      const named = changed.length === 1 ? changed[0]! : `${changed[0]!} and ${changed.length - 1} more file${changed.length === 2 ? '' : 's'}`;
+      return { remote: false, branch: null, reason: `the deliver step's preflight changed ${named} after the checks; deliver again re-checks and delivers it`, changed };
+    }
+  }
   const lines = body
     .split(/\n/)
     .map((l) => l.trim())
-    .filter((l) => l !== '' && !/^deliver: pushing as\b/i.test(l) && !/^deliver: [A-Z-]+$/.test(l) && !/^deliver: OUTCOME\b/.test(l))
+    // studio#920: the engine's own `[exit N]` after the script's output is not the reason.
+    .filter((l) => l !== '' && !/^\[exit -?\d+\]$/i.test(l) && !/^deliver: pushing as\b/i.test(l) && !/^deliver: [A-Z-]+$/.test(l) && !/^deliver: OUTCOME\b/.test(l))
     .map((l) => l.replace(/^deliver:\s*/i, ''));
   const cause = lines[lines.length - 1] ?? 'the deliver step failed';
   return { remote: false, branch: null, reason: cause.length > 240 ? `${cause.slice(0, 239)}…` : cause };

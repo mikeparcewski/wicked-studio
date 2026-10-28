@@ -5,6 +5,7 @@ import { act, cleanup, renderHook } from '@testing-library/react';
 import type { NeedRow } from '../src/board/needsYou.js';
 import { NEEDS_QUIET_MS, resetSettledNeedsForTest, useSettledNeeds } from '../src/hooks/useNeedsRows.js';
 import { useNeedsSources } from '../src/store/needsSources.js';
+import { resetSystemStore, useSystemStore } from '../src/store/systemSnapshot.js';
 
 const rows = (n: number, kind = 'gate'): NeedRow[] => Array.from({ length: n }, (_, i) => ({ key: `r${i}`, kind }) as unknown as NeedRow);
 
@@ -13,6 +14,9 @@ beforeEach(() => {
   resetSettledNeedsForTest();
   const now = Date.now();
   useNeedsSources.setState({ chats: [], proposals: [], repos: [], readAt: { chats: now, proposals: now, repos: now, campaigns: now } });
+  // An older crew has answered (no ranked list): the fold's number is the one to settle.
+  resetSystemStore();
+  useSystemStore.setState({ mode: 'fallback', healthAt: now });
 });
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 
@@ -67,5 +71,23 @@ describe('useSettledNeeds', () => {
     }
     expect(rail.result.current).toMatchObject({ phase: 'complete', count: 12 });
     expect(project.result.current).toMatchObject({ phase: 'complete', count: 0 });
+  });
+});
+
+describe('the app-wide number waits for crew', () => {
+  it('is held (no number) until crew first answers, so the fold never flashes before a ranked count', () => {
+    resetSystemStore();
+    const { result } = renderHook(() => useSettledNeeds(rows(17), true));
+    expect(result.current).toMatchObject({ phase: 'loading', count: null });
+    act(() => { useSystemStore.setState({ mode: 'fallback', healthAt: Date.now() }); vi.advanceTimersByTime(NEEDS_QUIET_MS + 50); });
+    expect(result.current.count).toBe(17);
+  });
+
+  it('a crew that cannot be reached does not hold it: the fold is said', () => {
+    resetSystemStore();
+    useSystemStore.setState({ healthError: 'Failed to fetch' });
+    const { result } = renderHook(() => useSettledNeeds(rows(3), true));
+    act(() => { vi.advanceTimersByTime(NEEDS_QUIET_MS + 50); });
+    expect(result.current.count).toBe(3);
   });
 });

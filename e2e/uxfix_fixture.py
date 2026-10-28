@@ -296,6 +296,109 @@ def run_panel_item_ids(page) -> list:
     return page.locator('[data-testid="host-panel"] [data-testid="run-panel-item"]').evaluate_all("els => els.map(e => e.dataset.item)")
 
 
+# ── The decision dock's user path (mockup ui-v2-gate, 2026-10-27) ───────────────────────────────────────────────────
+# A gate shows ONE recommended move; every other choice is under "Other options ▾" (a menu, hidden while closed, so
+# each choice keeps its one element), and the explanation, the receipt, the watch line and Technical details are under
+# "More about this". On a session page the open decision is portalled into the dock above the composer; the thread
+# keeps a marker. These helpers take the operator's path: open the menu / the fold, then act.
+
+def _scope(page, scope):
+    return scope if scope is not None else page
+
+
+def open_other_options(page, scope=None) -> None:
+    """Open the gate's "Other options" menu (no-op when it is open or the gate has none)."""
+    btn = _scope(page, scope).locator('[data-testid="session-gate-more"]').first
+    if btn.count() == 0:
+        return
+    if btn.get_attribute("aria-expanded") != "true":
+        btn.click()
+    _scope(page, scope).locator('[data-testid="session-gate-menu"]').first.wait_for(state="visible", timeout=5000)
+
+
+def close_other_options(page, scope=None) -> None:
+    btn = _scope(page, scope).locator('[data-testid="session-gate-more"]').first
+    if btn.count() > 0 and btn.get_attribute("aria-expanded") == "true":
+        btn.click()
+
+
+def gate_choice(page, key: str, scope=None, timeout: int = 10000):
+    """The gate choice `key`, made visible the user's way: the primary is on the face; any other is in Other options."""
+    loc = _scope(page, scope).locator(f'[data-testid="session-gate-choice"][data-choice-key="{key}"]').first
+    loc.wait_for(state="attached", timeout=timeout)
+    if not loc.is_visible():
+        open_other_options(page, scope)
+    loc.wait_for(state="visible", timeout=timeout)
+    return loc
+
+
+def click_gate_choice(page, key: str, scope=None, timeout: int = 10000) -> None:
+    gate_choice(page, key, scope, timeout).click()
+
+
+def choice_consequence(page, key: str, scope=None) -> str:
+    """What a gate choice says it does BEFORE it is taken, where the operator reads it: an item under Other options says
+    it as its own second line (data-sub, drawn by CSS — the S16a-2a pointer line stays quiet while the menu is open);
+    the face's one button says it on the line above the buttons (session-gate-consequence). "" when nothing is drawn."""
+    loc = gate_choice(page, key, scope)
+    if loc.get_attribute("role") == "menuitem":
+        sub = loc.get_attribute("data-sub") or ""
+        drawn = loc.evaluate("e => getComputedStyle(e, '::after').content")
+        return sub if sub != "" and sub in drawn else ""
+    line = _scope(page, scope).locator('[data-testid="session-gate-consequence"]').first
+    return (line.text_content() or "").strip() if line.count() else ""
+
+
+def open_more_about(page, scope=None) -> None:
+    """Open every gate's "More about this" fold in scope (the explanation, receipt, watch line, Technical details)."""
+    s = _scope(page, scope)
+    s.locator('[data-testid="session-gate-more-about"]').first.wait_for(state="attached", timeout=10000)
+    for d in s.locator('[data-testid="session-gate-more-about"]').all():
+        if d.get_attribute("open") is None and d.is_visible():
+            d.locator("summary").first.click()
+
+
+def open_tech_details(page, scope=None) -> None:
+    """Open More about this, then each Technical details fold inside it."""
+    open_more_about(page, scope)
+    for d in _scope(page, scope).locator('[data-testid="session-gate-more-about"] details.wk-session-gate-prompt-detail').all():
+        if d.get_attribute("open") is None and d.is_visible():
+            d.locator("summary").first.click()
+
+
+def proposal_menu_item(page, testid: str, scope=None, timeout: int = 10000):
+    """A plan/hand-over card's secondary move (Not now, End, Edit the plan, Drop the changes), the user's way: in the
+    card's Other options menu since ui-v2 (the in-place card keeps its own buttons on the face)."""
+    s = _scope(page, scope)
+    loc = s.locator(f'[data-testid="{testid}"]').first
+    loc.wait_for(state="attached", timeout=timeout)
+    if not loc.is_visible():
+        btn = s.locator('[data-testid="session-proposal-more"]').first
+        if btn.get_attribute("aria-expanded") != "true":
+            btn.click()
+    loc.wait_for(state="visible", timeout=timeout)
+    return loc
+
+
+def open_proposal_more_about(page, scope=None) -> None:
+    """Open a plan/hand-over card's "More about this" (why this plan, the acceptance line, Delivery details)."""
+    s = _scope(page, scope)
+    s.locator('[data-testid="session-proposal-more-about"]').first.wait_for(state="attached", timeout=10000)
+    for d in s.locator('[data-testid="session-proposal-more-about"]').all():
+        if d.get_attribute("open") is None and d.is_visible():
+            d.locator("summary").first.click()
+
+
+# An init script that keeps every gate's "More about this" open as it renders — for journeys that measure the gate's
+# explanation lines on load (what an operator sees after pressing More about this). The fold's closed default is
+# tests/decisionDock.test.tsx's and desk_gate_kinds' to prove.
+OPEN_MORE_ABOUT = (
+    "(() => { const open = () => document.querySelectorAll('details[data-testid=\"session-gate-more-about\"]:not([open])')"
+    ".forEach((d) => { d.open = true; });"
+    " new MutationObserver(open).observe(document, { childList: true, subtree: true }); })();"
+)
+
+
 # Studio wave 1 (dark when healthy): the home board's WORKING band collapses to a count line
 # by default, and its expansion rides the history entry (`home.workingOpen`). Rigs that assert
 # on the working CARDS (the W2 upload-endpoint card, its narration) open it before the app
@@ -2623,7 +2726,8 @@ TRUST_HISTORY = sorted([
 # ── Brainstorm-actionable ideas 6+13: the run page (switch `run_page`) ────────────────────────
 # r-rerun: understand (2 min) → build (6 min, its second attempt) → review (3 min, NOT PASS) → deliver
 # (never ran), paused at the escalation on review. A request_changes there rewinds to build (the
-# newest creator before the gate): keeps understand, redoes build → review → deliver, ~9 min.
+# newest creator before the gate): keeps understand, redoes build → review → deliver, ~21 min (a redo is timed
+# from each step's longest attempt, J4 0.16.6: build's first attempt took longer than its second).
 RUN_PAGE_T0 = NOW0 - 40 * MIN
 RUN_PAGE_PROMPT = ("Unit 3 verdict is NOT PASS — confirm to retry the phase, request changes to send the "
                    "review back to the creator phase, or reject to cancel the run")

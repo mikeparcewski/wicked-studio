@@ -105,6 +105,8 @@ interface TimeChartProps {
   label: string;
   height?: number;
   compact?: boolean;
+  /** The caller shows the same numbers as a table of its own (the Report's "Show the numbers"): no hidden copy. */
+  ownTable?: boolean;
   'data-testid'?: string;
 }
 
@@ -128,7 +130,7 @@ function TipContent({ active, payload, label, format, titles, series }: {
   );
 }
 
-function TimeChart({ kind, buckets, series, format, label, height = 150, compact = false, 'data-testid': testId }: TimeChartProps & { kind: 'bars' | 'area' }): React.ReactElement {
+function TimeChart({ kind, buckets, series, format, label, height = 150, compact = false, ownTable = false, 'data-testid': testId }: TimeChartProps & { kind: 'bars' | 'area' }): React.ReactElement {
   const reduced = useReducedMotion();
   const gid = useId().replace(/:/g, '');
   const n = buckets.length;
@@ -184,7 +186,7 @@ function TimeChart({ kind, buckets, series, format, label, height = 150, compact
         </ResponsiveContainer>
       </div>
       <Legend items={series.map((s) => ({ key: s.key, label: s.label, color: s.color }))} />
-      <DataTable caption={label} cols={buckets.map((b) => b.title)} rows={series.map((s) => ({ label: s.label, values: s.values.map(format) }))} />
+      {!ownTable && <DataTable caption={label} cols={buckets.map((b) => b.title)} rows={series.map((s) => ({ label: s.label, values: s.values.map(format) }))} />}
     </div>
   );
 }

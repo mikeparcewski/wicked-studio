@@ -29,7 +29,7 @@ import sys
 import time
 import urllib.request
 
-from uxfix_fixture import HIDE_GATE_TOASTS, REPO, ensure_build, set_fixture, start_server, OPEN_RUN_DETAILS
+from uxfix_fixture import HIDE_GATE_TOASTS, REPO, ensure_build, set_fixture, start_server, OPEN_RUN_DETAILS, proposal_menu_item
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4467"))
 W, H = 1440, 700
@@ -71,7 +71,9 @@ CARD = """() => {
   const txt = (s) => { const el = c && c.querySelector(s); return el ? el.innerText.replace(/\\s+/g, ' ').trim() : null; };
   return { card: !!c, firstCreator: c ? c.dataset.firstCreator : null, state: p ? p.dataset.state : null,
            text: txt('[data-testid="session-proposal-text"]'), why: txt('[data-testid="session-proposal-why"]'),
-           buttons: c ? [...c.querySelectorAll('.wk-prop-btns button')].map((b) => b.innerText.trim()) : [],
+           // ui-v2 gate: the face holds the one move + "Other options"; the rest are that menu's items (label only).
+           buttons: c ? [...c.querySelectorAll('.wk-prop-btns button')].filter((b) => !b.closest('[role="menu"]')).map((b) => b.innerText.replace(/\\s*▾\\s*$/, '').trim()) : [],
+           menu: c ? [...c.querySelectorAll('.wk-prop-btns [role="menu"] button')].map((b) => b.textContent.trim()) : [],
            no: txt('[data-testid="session-proposal-no"]'),
            runs: document.querySelectorAll('[data-testid="session-run"]').length,
            chain: [...document.querySelectorAll('[data-testid="chain-step"]')].map((s) => [(s.querySelector('.wk-chain-label') || s).innerText.replace(/\\s+/g, ' ').trim(), s.dataset.state]),
@@ -154,12 +156,13 @@ with sync_playwright() as p:
           c1["card"] and c1["firstCreator"] == "true" and c1["state"] == "ask"
           and c1["text"] == f"Continue in Build? {pa} proposes: Build → Check (required)."
           and c1["why"].startswith("band 20–39 · touches 2 declared paths · 12 dependents · Continue starts the work on")
-          and c1["buttons"] == ["Continue in Build", "Not now", "End"]
+          # ui-v2 gate: Continue in Build is the one move on the face; Not now and End are under Other options.
+          and c1["buttons"] == ["Continue in Build", "Other options"] and c1["menu"] == ["Not now", "End"]
           and c1["runs"] == 0 and c1["chain"] == [] and c1["shape"] is not None and not c1["hscroll"], card=c1)
     run_id = fixture_get(origin, f"/api/v1/chats/{chat_id}")["path"]["runId"]
 
     # ── 2. Not now ────────────────────────────────────────────────────────────────
-    page.locator('[data-testid="session-ask-proposal"] [data-testid="session-proposal-not-now"]').click()
+    proposal_menu_item(page, "session-proposal-not-now", page.locator('[data-testid="session-ask-proposal"]')).click()
     # The one decision path: a 10 s undo window, then the POST.
     for _ in range(80):
         posts = [g for g in fixture_get(origin, "/__fixture/gate-posts")["posts"] if g["runId"] == run_id]
@@ -226,7 +229,7 @@ with sync_playwright() as p:
         fail("card-2", {"card": page.evaluate(CARD), "posts": fixture_get(origin, "/__fixture/ask-posts")["posts"][-2:], "runBlock": page.evaluate("() => (document.querySelector('[data-testid=\"session-run\"]') || {}).innerText?.slice(0, 600) || null"),
                         "team": fixture_get(origin, f"/api/v1/runs/{fixture_get(origin, f'/api/v1/chats/{chat2}')['path']['runId']}/team")})
     run2 = fixture_get(origin, f"/api/v1/chats/{chat2}")["path"]["runId"]
-    page.locator('[data-testid="session-ask-proposal"] [data-testid="session-proposal-end"]').click()
+    proposal_menu_item(page, "session-proposal-end", page.locator('[data-testid="session-ask-proposal"]')).click()
     for _ in range(80):
         posts2 = [g for g in fixture_get(origin, "/__fixture/gate-posts")["posts"] if g["runId"] == run2]
         if posts2:

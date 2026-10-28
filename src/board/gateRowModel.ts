@@ -33,14 +33,15 @@ import {
   steerScopeTarget,
   type GateVerdictView,
 } from '../components/gateVerdictModel.js';
-import type { ReassignCandidate } from '../components/gateVerdictModel.js';
+import type { ReassignCandidate, RunBench } from '../components/gateVerdictModel.js';
 import type { GateAnswer } from './gateActions.js';
 import type { RerunOffer } from '../components/rerunModel.js';
 import { qeGateOf, QE_RETRY_LABEL, QE_RETRY_NOTE_LABEL, QE_RETRY_NOTE_TITLE, QE_RETRY_TITLE, type QeGate } from './qeEscalation.js';
 import { waitsForJudge } from './assuranceModel.js';
 import { OPERATOR_JUDGMENT_LABEL, OPERATOR_JUDGMENT_TITLE, REJUDGE_ACTION, REJUDGE_LABEL, rejudgeTitle, type RejudgeOffer } from './rejudge.js';
 import { engineNamesFloorOverride, FLOOR_OVERRIDE_ACTION, FLOOR_OVERRIDE_CONSEQUENCE, FLOOR_OVERRIDE_KEY, FLOOR_OVERRIDE_TITLE, offersDeliverFloorOverride, offersFloorOverride } from './floorOverride.js';
-import { failingOnFace, type FailingOnFace } from './failingChecks.js';
+import { offersSkipQeHere, skipQeAtDelivery, SKIP_QE_ACTION, SKIP_QE_GATE_TITLE, SKIP_QE_KEY, SKIP_QE_LABEL } from './qeSkip.js';
+import { FACE_MAX, failingOnFace, failingSplit, standingFloor, type FailingOnFace, type FailingSplit } from './failingChecks.js';
 import { deliverLift } from '../components/deliverLiftModel.js';
 
 /**
@@ -192,6 +193,10 @@ export interface GateRowModel {
   /** studio#835: the step's seat cannot work (out of quota, signed out, not installed) and the engine will not
    *  send the step to it again — the row says so first; absent on every other gate. */
   deadSeat?: DeadSeat;
+  /** (PRODUCT-WORKS J4) The run's other seats a reassign does NOT offer because they cannot take work now
+   *  (benched, signed out, not eligible), with the reason and, for a bench, when it lifts — shown greyed
+   *  out beside the choices, never silently dropped. Absent when every other seat is offered (or none). */
+  withheldSeats?: ReassignCandidate[];
   /** A gate no judge could rule on: `true` when its approve records the OPERATOR's judgment (the
    *  engine's `judge_by_operator`), `false` on a team member's step, whose approve re-runs the step;
    *  absent on every other gate. */
@@ -199,6 +204,9 @@ export interface GateRowModel {
   /** rig 0.15.8: the failing checks / tests of THIS gate's failed floor, named on the face (up to five,
    *  "+N more"); absent when the gate's own floor did not fail. */
   failingTests?: FailingOnFace;
+  /** (J4 0.16.6) Why an override path is not offered at this gate ("Your own judgment isn’t offered while QE has no
+   *  verdict on this tree."), one line each; absent when nothing is withheld. */
+  whyNot?: string[];
 }
 
 /** studio#835: a dead-seat gate's seat, and why it cannot work, in the engine's cause token's terms. */
@@ -278,6 +286,22 @@ function mapChoiceTitle(value: string): string {
  *  details — a seat never vanishes from the choices without a word. */
 function refusedSeatLines(candidates: readonly ReassignCandidate[]): string[] {
   return candidates.filter((c) => c.state === 'refused').map((c) => `Not offered for reassign: ${c.label} — ${c.note}.`);
+}
+
+/** (PRODUCT-WORKS J4) The reassign candidates that cannot take work now — benched, signed out, not
+ *  eligible — shown greyed out with their reason (an engine-refused seat keeps its own line above). */
+function withheldOf(candidates: readonly ReassignCandidate[]): ReassignCandidate[] {
+  return candidates.filter((c) => !isOfferable(c) && c.state !== 'refused');
+}
+
+/** (PRODUCT-WORKS J4) The soonest bench lift among `seats` (ISO-8601), or null when none says when. */
+export function soonestBack(seats: readonly ReassignCandidate[] | undefined): ReassignCandidate | null {
+  let best: ReassignCandidate | null = null;
+  for (const c of seats ?? []) {
+    if (c.until === undefined) continue;
+    if (best === null || Date.parse(c.until) < Date.parse(best.until!)) best = c;
+  }
+  return best;
 }
 
 export function shownPrompt(prompt: string): string {
@@ -363,6 +387,18 @@ export const FLOOR_FIX_LABEL = 'Fix with a note';
  * the same verify run again and fail the same way.
  */
 export const RETRY_NOTE_LABEL = 'Retry this step with a note';
+/**
+ * wicked-core#761: a capped review's gate (`review_adjudication`, "Unit N verdict is NOT PASS again — …
+ * Approve = LAND WITH CARRIED ITEMS"). Its approve ACCEPTS the work with the reviewer's open items carried,
+ * records the note as the landing ruling and moves on (`land_with_carried_items`); another round is Send back.
+ */
+export const LAND_NOTE_LABEL = 'Land with carried items and a note';
+export const LAND_NOTE_TITLE = 'Accept the work as it stands, with the reviewer\'s open items carried and your note on the record; the run moves on. For one more review round, Send back.';
+/** Whether the gate is a capped review's adjudication (its approve lands the work and advances). */
+export function isReviewAdjudication(gate: { gateKind?: string | undefined; prompt: string }): boolean {
+  return gate.gateKind === 'review_adjudication'
+    || (/^\s*Unit\s+\d+\s+verdict is NOT PASS again\b/i.test(gate.prompt) && /\bApprove = LAND WITH CARRIED ITEMS\b/i.test(gate.prompt));
+}
 export const RETRY_NOTE_TITLE = 'Run this step again with your note; the run does not move on. To have the builder change something, Send back.';
 /** Whether the engine's approve at this gate re-runs the phase (its prompt says so). */
 export function approveRetriesPhase(prompt: string): boolean {
@@ -381,6 +417,10 @@ export interface SessionGateInput {
   pool: readonly string[];
   /** The roster for eligibility checks; null when not yet loaded. */
   roster: readonly RosterSeat[] | null;
+  /** (PRODUCT-WORKS J4) The seats this run benched (`session.benched_seats`); absent = none known. */
+  benched?: readonly RunBench[];
+  /** The clock bench lift times are read against (tests pin it); absent = now. */
+  now?: number;
   /** S16a-1b: the run's "Rerun from here" offer (`useRerunFromHere`), or null/absent. */
   rerun?: RerunOffer | null;
   /** S16a-2a (studio#430): the reviewed unit's WHOLE output when the engine kept only a head-cut
@@ -466,13 +506,30 @@ function withDepth(base: BaseRowModel, input: SessionGateInput): GateRowModel {
   // studio#761: a QE review that recorded no verdict judged nothing — the retry's consequence is its
   // own, and there are no failing criteria to list beside the creator's claims.
   const qeNoVerdict = base.qe?.outcome === 'no-verdict';
+  // rig 0.15.8: the failing tests on the face — this gate's own failed floor only (an earlier unit's
+  // floor is not what this gate asks about).
+  // A refused hand-over's failure is the deliver phase's own re-verify, which emits no gate verdict
+  // (pr-xreview on studio#899): read it off the lift story for this gate's ord.
+  // (J4 0.16.6) A no-change answer re-runs nothing: the engine keeps the unit's last floor on that tree, and the face
+  // names its failures (it named none); the engine's own words split them when no record is in hand.
+  const failingTests = base.refusal !== undefined
+    ? failingOnFace(deliverLift(events, gate.ord)?.reverify ?? null)
+    : raw !== null && repoChecksFailed(raw, gate.ord)
+      ? failingOnFace(standingFloor(events, gate.ord, raw.floor), FACE_MAX, escalationSummaryFor(events, gate.ord) ?? gate.prompt)
+      : raw !== null && raw.ord === gate.ord && raw.outcome === 'fail' ? failingOnFace(raw.floor) : null;
+  const freshCount = failingTests?.split !== undefined ? failingTests.split.fresh.length : null;
   const overrideSuggested = base.recommended !== null && base.choices[base.recommended]?.key === FLOOR_OVERRIDE_KEY;
+  const namedBack = base.recommended !== null && base.choices[base.recommended]?.label === SEND_BACK_NAMED_LABEL ? base.choices[base.recommended]! : null;
   const consequence = qeNoVerdict
     ? 'Only the QE check and its review run again; the earlier steps are kept'
+    : namedBack !== null
+    ? namedBack.title
     : overrideSuggested
     ? FLOOR_OVERRIDE_CONSEQUENCE
     : floorFix
-    ? `A seat other than this phase makes the fix from the ${rec!.items.length > 0 ? `${rec!.items.length} failing check${rec!.items.length === 1 ? '' : 's'}` : 'note'}; only the floor re-runs`
+    ? `A seat other than this phase makes the fix from ${freshCount !== null
+      ? freshCount > 0 ? `the ${freshCount === 1 ? 'test' : `${freshCount} tests`} only this change fails` : 'your note (every failure fails on the base too)'
+      : rec!.items.length > 0 ? `the ${rec!.items.length} failing check${rec!.items.length === 1 ? '' : 's'}` : 'note'}; only the floor re-runs`
     : suggested && rec!.consequence !== '' ? rec!.consequence : null;
   const source = gateSourceLine(gate.gateKind ?? gateFrameFor(events, gate.ord)?.gateKind ?? null);
   const overflow = [...base.overflow];
@@ -486,13 +543,6 @@ function withDepth(base: BaseRowModel, input: SessionGateInput): GateRowModel {
       title: offer.consequence,
     });
   }
-  // rig 0.15.8: the failing tests on the face — this gate's own failed floor only (an earlier unit's
-  // floor is not what this gate asks about).
-  // A refused hand-over's failure is the deliver phase's own re-verify, which emits no gate verdict
-  // (pr-xreview on studio#899): read it off the lift story for this gate's ord.
-  const failingTests = base.refusal !== undefined
-    ? failingOnFace(deliverLift(events, gate.ord)?.reverify ?? null)
-    : raw !== null && raw.ord === gate.ord && raw.outcome === 'fail' ? failingOnFace(raw.floor) : null;
   return {
     ...base, overflow, consequence, source,
     failing: qeNoVerdict ? [] : rec?.items ?? [],
@@ -503,6 +553,8 @@ function withDepth(base: BaseRowModel, input: SessionGateInput): GateRowModel {
 
 function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
   const { runId, gate, units, events, pool, roster } = input;
+  const benched = input.benched ?? [];
+  const now = input.now ?? Date.now();
 
   // crew#888 / wicked-core#801: a `consent` gate pauses BEFORE a `consent_before` phase runs (the
   // mcp-server install). Nothing has run, so there is nothing to steer or send back: Approve gives
@@ -805,7 +857,16 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
         ? { key: 'steer', label: QE_RETRY_NOTE_LABEL, decision: { approve: true }, needsNote: true, title: QE_RETRY_NOTE_TITLE }
         : operatorJudgment
           ? { key: 'steer', label: OPERATOR_JUDGMENT_LABEL, decision: { approve: true }, needsNote: true, title: OPERATOR_JUDGMENT_TITLE }
-          : approveRetriesPhase(gate.prompt)
+          // wicked-core#761: a capped review's approve lands the work and moves on — never a retry.
+          : isReviewAdjudication(gate)
+          ? { key: 'steer', label: LAND_NOTE_LABEL, decision: { approve: true }, needsNote: true, title: LAND_NOTE_TITLE }
+          // PRODUCT-WORKS J6: the engine's approve at an escalation amends the CURSOR unit — the
+          // escalated step itself — and re-runs it (every escalation but a judge-unavailable one and a
+          // capped review's adjudication, both handled above). So when no later creator takes the note, it is a retry of this step,
+          // whatever the prompt's wording: run 9bd0f728's "…and approve to retry, or …" prompt
+          // missed the phrase test and read "Approve with a note for the next step", and the note
+          // went to the same step, which ran again.
+          : approveRetriesPhase(gate.prompt) || escalationScopeTarget === null
           ? { key: 'steer', label: RETRY_NOTE_LABEL, decision: escalationScopeTarget !== null ? { approve: true, amendScope: 'creator' } : { approve: true }, needsNote: true, title: RETRY_NOTE_TITLE }
           : { key: 'steer', label: 'Approve and steer', decision: escalationScopeTarget !== null ? { approve: true, amendScope: 'creator' } : { approve: true }, needsNote: true, title: 'Approve and add a note to steer the next creator phase.' });
     // (crew api-types 0.135.0) A failed repo-checks floor: the operator's own judgment, with a
@@ -815,6 +876,24 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
       coreWithoutStop.push({ key: FLOOR_OVERRIDE_KEY, label: OPERATOR_JUDGMENT_LABEL, decision: { approve: true, action: FLOOR_OVERRIDE_ACTION } as unknown as GateAnswer, needsNote: true, title: FLOOR_OVERRIDE_TITLE });
     }
 
+    // studio#923 / J4 0.16.6: the engine takes the QE skip AT this gate (a QE-only denial, or a failed floor with QE behind
+    // it): offered here with a required reason, never only by starting the job again.
+    const skipHere = deadSeat === null && offersSkipQeHere(gate.prompt);
+    if (skipHere) {
+      coreWithoutStop.push({ key: SKIP_QE_KEY, label: SKIP_QE_LABEL, decision: { approve: true, action: SKIP_QE_ACTION } as unknown as GateAnswer, needsNote: true, title: SKIP_QE_GATE_TITLE });
+    }
+    // (J4 0.16.6) The override paths the engine did not offer, and why, in one line each: the operator read engine source
+    // to learn why "Approve as your own judgment" was missing.
+    const whyNot: string[] = [];
+    const floorDenied = verdict !== null && verdict.ord === gate.ord && verdict.outcome === 'fail' && (verdict.denial?.source === 'repo_checks' || verdict.denial?.source === 'repo_checks_timeout');
+    const qeBehind = /\balso: QE acceptance (?:did not pass|is inconclusive)\b/.test(gate.prompt);
+    if (floorDenied && deadSeat === null && !offersFloorOverride(gate.prompt, verdict, gate.ord)) {
+      whyNot.push(qeBehind
+        ? `Your own judgment isn’t offered while QE has no verdict on this tree.${skipHere ? ' Skip QE with a reason first, and this question comes back with it.' : ''}`
+        : 'Your own judgment isn’t offered here: the job takes it only when the failed checks are all that stop this step.');
+    }
+    if (skipQeAtDelivery(gate.prompt)) whyNot.push('Skipping QE is offered at the hand-over, not here.');
+
     // Cap at 3 (stop always occupies the 4th inline slot); excess goes to overflow.
     const escInline = coreWithoutStop.slice(0, 3);
     const overflow: GateRowChoice[] = coreWithoutStop.slice(3);
@@ -822,14 +901,16 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
     // Reassign candidates
     const failedCli = failedSeatOf(units, gate.ord) ?? deadSeat?.cli;
     const reassignList: GateRowChoice[] = [];
+    const withheld: ReassignCandidate[] = [];
     if (!isToolUnitGate(units, gate.ord) && isSeatFailure(isEscalationGate(gate.prompt, verdict) || deadSeat !== null, failedCli)) {
-      const candidates = reassignCandidates(pool, failedCli ?? null, roster, reassignRefusedOf(units, gate.ord));
+      const candidates = reassignCandidates(pool, failedCli ?? null, roster, reassignRefusedOf(units, gate.ord), benched, now);
       for (const c of candidates) {
         if (isOfferable(c)) {
           reassignList.push({ key: `reassign:${c.cli}`, label: `Reassign to ${c.label}`, decision: null, reassignCli: c.cli, needsNote: false, title: `Move the failed unit to ${c.label}; it retries there.` });
         }
       }
       detailItems.push(...refusedSeatLines(candidates));
+      withheld.push(...withheldOf(candidates));
     }
     // First reassign inline when there's still room in the 3-slot cap; rest to overflow.
     if (escInline.length < 3 && reassignList.length > 0) {
@@ -863,18 +944,32 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
     // rig 0.15.8: when the engine names the operator's override as the way through (a red base it cannot
     // separate from the change), that is the suggestion — a retry or a fix would loop on the base's failures.
     const overrideAt = escInline.findIndex((c) => c.key === FLOOR_OVERRIDE_KEY);
-    const overridePath = overrideAt >= 0 && engineNamesFloorOverride(verdict, summary ?? null);
+    // (J4 0.16.6) Failures only this change has (the engine's per-test split, its structured base comparison, or its
+    // words): the work is what failed, so the face leads with sending them back, named — never the operator's own
+    // judgment, which would override them too.
+    const split = gateFloorSplit(events, gate, verdict);
+    const changeOnly = split !== null && split.fresh.length > 0 ? split.fresh : null;
+    const overridePath = overrideAt >= 0 && changeOnly === null && engineNamesFloorOverride(verdict, summary ?? null);
+    const backAt = changeOnly !== null ? escInline.findIndex((c) => c.key === 'send-back' && c.decision !== null) : -1;
+    if (backAt >= 0) {
+      const n = changeOnly!.length;
+      escInline[backAt] = { ...escInline[backAt]!, label: SEND_BACK_NAMED_LABEL,
+        title: `Send ${n === 1 ? 'the test' : `the ${n} tests`} only this change fails back to the builder, named, so it fixes just ${n === 1 ? 'that' : 'those'}.` };
+    }
     const recommended = deniedUnit ? (deniedUnitJudgedOk(verdict) ? 0 : null)
       : qeNoVerdict ? 0
         : rejudgeOffered ? 0
-          : overridePath ? overrideAt
-            : recommendedChoiceIndex(escInline, rec);
+          : backAt >= 0 ? backAt
+            : overridePath ? overrideAt
+              : changeOnly !== null && escInline[recommendedChoiceIndex(escInline, rec) ?? -1]?.key === FLOOR_OVERRIDE_KEY ? null
+                : recommendedChoiceIndex(escInline, rec);
+    if (backAt >= 0) noteDefault = namedSendBackNote(changeOnly!.slice(0, FACE_MAX * 2));
     // A retry with findings is taken with ITS note (a validator's failing checks are not "the
     // reviewer's"), so the note field opens on the move's own prefill.
-    if (!deniedUnit && !qeNoVerdict && !rejudgeOffered && !overridePath && recommended !== null && rec?.kind === 'retry-findings' && rec.prefill !== null) {
+    if (!deniedUnit && !qeNoVerdict && !rejudgeOffered && !overridePath && backAt < 0 && recommended !== null && rec?.kind === 'retry-findings' && rec.prefill !== null) {
       noteDefault = rec.prefill;
     }
-    return { reason, question, choices: escInline, overflow, noteDefault, recommended, detailItems, ...(qe !== null ? { qe } : {}), ...(deadSeat !== null ? { deadSeat } : {}), ...(judgeWait ? { operatorJudgment } : {}) };
+    return { reason, question, choices: escInline, overflow, noteDefault, recommended, detailItems, ...(whyNot.length > 0 ? { whyNot } : {}), ...(qe !== null ? { qe } : {}), ...(deadSeat !== null ? { deadSeat } : {}), ...(judgeWait ? { operatorJudgment } : {}), ...(withheld.length > 0 ? { withheldSeats: withheld } : {}) };
   }
 
   if (reason === 'retry') {
@@ -886,12 +981,14 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
     }
     const failedCli = failedSeatOf(units, gate.ord);
     const retryOverflow: GateRowChoice[] = [];
+    const retryWithheld: ReassignCandidate[] = [];
     // Launch refusals (environment refused / failed before work judged) must not offer reassign:
     // another seat meets the same environment. Gate 11 Item 2 operator ruling.
     const launchRefusal = isLaunchRefusal(gate.prompt, events, gate.ord);
     if (!launchRefusal && !isToolUnitGate(units, gate.ord) && failedCli !== null && failedCli !== undefined) {
-      const candidates = reassignCandidates(pool, failedCli, roster, reassignRefusedOf(units, gate.ord));
+      const candidates = reassignCandidates(pool, failedCli, roster, reassignRefusedOf(units, gate.ord), benched, now);
       detailItems.push(...refusedSeatLines(candidates));
+      retryWithheld.push(...withheldOf(candidates));
       let inlineReassignDone = false;
       for (const c of candidates) {
         if (isOfferable(c)) {
@@ -913,8 +1010,31 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
       }
     }
     choices.push({ key: 'stop', label: 'Stop', decision: { approve: false }, needsNote: false, title: 'Cancel the run; the work stops here.' });
-    return { reason, question, choices, overflow: retryOverflow, noteDefault, recommended: 0, detailItems };
+    return { reason, question, choices, overflow: retryOverflow, noteDefault, recommended: 0, detailItems, ...(retryWithheld.length > 0 ? { withheldSeats: retryWithheld } : {}) };
   }
 
   return null;
+}
+
+/** The label of the send-back the face leads with when the floor failed on tests only this change has. */
+export const SEND_BACK_NAMED_LABEL = 'Send back with the failing tests named';
+
+/** A failed repo-checks floor's verdict (the only gate the per-test split is about). */
+function repoChecksFailed(verdict: { ord: number | null; outcome: string; denial: { source?: string | null } | null } | null, ord: number): boolean {
+  const source = verdict?.denial?.source;
+  return verdict !== null && verdict.ord === ord && verdict.outcome === 'fail' && (source === 'repo_checks' || source === 'repo_checks_timeout');
+}
+
+/**
+ * (J4 0.16.6) The failed floor's failures told apart for THIS gate: its own floor record, else the one the engine kept
+ * for the unchanged tree, else the engine's words. `null` on any other gate, or when nothing tells them apart.
+ */
+export function gateFloorSplit(events: readonly CoreEvent[], gate: Pick<OpenGate, 'ord' | 'prompt'>, verdict: Parameters<typeof repoChecksFailed>[0] & { floor: Parameters<typeof standingFloor>[2] } | null): FailingSplit | null {
+  if (!repoChecksFailed(verdict, gate.ord)) return null;
+  return failingSplit(standingFloor(events, gate.ord, verdict!.floor), escalationSummaryFor(events, gate.ord) ?? gate.prompt);
+}
+
+/** The note a named send-back opens with: the tests only this change has, and nothing else. */
+export function namedSendBackNote(fresh: readonly string[]): string {
+  return `Fix only the test${fresh.length === 1 ? '' : 's'} this change broke (the others fail on the base too): ${fresh.join(', ')}`;
 }

@@ -6,8 +6,8 @@ surfaces that exist today, at 1440x700 on the Desk.
 Against the in-process fixture (wave-1 corpus, b1 waiting at a gate, `watch_feed` on):
 
   S16a-1c: every step reads the run's session thread (/s/run%3A<id>), not the run page.
-  1. GATE LINE: b1's gate row carries the registry's gate-attached finding as ONE quiet line; with
-     the registry absent (404) the card carries no line at all.
+  1. GATE LINE: b1's gate row carries the registry's gate-attached finding as ONE quiet line, under the gate's
+     "More about this" (ui-v2 gate: the receipt's foot); with the registry absent (404) the card carries no line at all.
   2. COVERAGE: b1's thread says "1 check didn’t run on this run." (the reason behind Technical details); a run
      whose entries were all checked shows no line (never "all clear").
   3. JUMP IN: /s/run%3A<id>?jump=<ord>:1:<at> says "You jumped in from Nerve Center" and marks that
@@ -23,7 +23,7 @@ import json
 import os
 import sys
 
-from uxfix_fixture import HIDE_GATE_TOASTS, NOW0, REPO, ensure_build, set_fixture, start_server, OPEN_RUN_DETAILS
+from uxfix_fixture import HIDE_GATE_TOASTS, NOW0, REPO, ensure_build, set_fixture, start_server, OPEN_RUN_DETAILS, open_more_about
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4349"))
 W, H = 1440, 700
@@ -63,7 +63,10 @@ def desk_count(page) -> int:
     page.goto(f"{origin}/", wait_until="networkidle")
     page.get_by_test_id("desk").wait_for(state="visible", timeout=15000)
     page.wait_for_timeout(800)
-    return int(page.get_by_test_id("desk-inbox-count").get_attribute("data-count") or "0")
+    # Home v2: the landing's sentence carries the "need you" count once it is known.
+    story = page.locator('[data-testid="desk-story"][data-count]')
+    story.wait_for(state="visible", timeout=15000)
+    return int(story.get_attribute("data-count") or "0")
 
 
 with sync_playwright() as p:
@@ -83,6 +86,8 @@ with sync_playwright() as p:
     page.goto(f"{origin}/s/run%3Ab1", wait_until="networkidle")
     page.get_by_test_id("session-gate-row").first.wait_for(state="visible", timeout=15000)
     page.wait_for_timeout(600)
+    open_more_about(page)  # the line would be in More about this: absent even with the fold open
+    page.wait_for_timeout(300)
     absent_line = page.get_by_test_id("watch-gate-line").count()
     absent_cov = page.get_by_test_id("watch-coverage").count()
 
@@ -91,6 +96,8 @@ with sync_playwright() as p:
     count_on = desk_count(page)
     page.goto(f"{origin}/s/run%3Ab1", wait_until="networkidle")
     page.get_by_test_id("session-gate-row").first.wait_for(state="visible", timeout=15000)
+    # ui-v2 gate: the watch line is in the gate's "More about this" fold (with the receipt); open it, as the operator does.
+    open_more_about(page)
     try:
         page.get_by_test_id("watch-gate-line").first.wait_for(state="visible", timeout=8000)
     except Exception:  # noqa: BLE001
@@ -133,6 +140,7 @@ with sync_playwright() as p:
 
     # ── 4. live: a clearing frame removes the gate line ───────────────────────────
     page.goto(f"{origin}/s/run%3Ab1", wait_until="networkidle")
+    open_more_about(page)
     page.get_by_test_id("watch-gate-line").first.wait_for(state="visible", timeout=8000)
     set_fixture(origin, extra_frames=[{"type": "watchEvent", "event": {
         "event_id": 99, "event_type": "wicked.crew.watch_finding.cleared",

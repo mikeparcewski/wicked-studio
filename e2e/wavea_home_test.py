@@ -79,7 +79,8 @@ with sync_playwright() as p:
         f"s.textContent = {json.dumps(HIDE_GATE_TOASTS)}; document.head.appendChild(s); }});")
 
     def home() -> None:
-        page.goto(f"{origin}/", wait_until="networkidle")
+        # Home v2: the landing shows one card; every row (and the chores) is in Needs you in full.
+        page.goto(f"{origin}/needs", wait_until="networkidle")
         page.get_by_test_id("needs-you-queue").wait_for(state="visible", timeout=15000)
 
     def section_clones() -> None:

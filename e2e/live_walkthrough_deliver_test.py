@@ -328,8 +328,10 @@ CHAIN = """() => {
     step: c.closest('[data-testid="chain-step"]')?.dataset.stepId, check: c.dataset.check, sec: c.dataset.sec ?? null,
     text: c.innerText.replace(/\\s+/g, ' ').trim(), button: c.tagName === 'BUTTON' }));
   const steps = [...block.querySelectorAll('[data-testid="chain-step"]')].map((s) => [s.dataset.stepId, s.dataset.state]);
-  const prop = block.querySelector('[data-testid="session-proposal"]');
-  const acc = block.querySelector('[data-testid="session-proposal-acceptance"]');
+  // ui-v2 gate: an open hand-over card is in the decision dock (keyed by the run); the block keeps its marker.
+  const dock = document.querySelector('[data-testid="decision-dock"][data-key=' + JSON.stringify(window.__walkRun) + ']');
+  const prop = block.querySelector('[data-testid="session-proposal"]') || dock?.querySelector('[data-testid="session-proposal"]');
+  const acc = block.querySelector('[data-testid="session-proposal-acceptance"]') || dock?.querySelector('[data-testid="session-proposal-acceptance"]');
   return {
     chips, steps, sentence: block.querySelector('[data-testid="chain-sentence"]')?.innerText ?? null,
     acceptanceRead: block.dataset.acceptance ?? null,
@@ -771,6 +773,12 @@ def main(p) -> None:  # noqa: ANN001, C901
         if not got:
             shot(page, "no-deliver-card")
             fail("deliver", f"no deliver card with an acceptance line within {WAIT_S} s", chain=chain)
+        # The acceptance line is under the card's "More about this" (ui-v2 gate): open it, as the operator does.
+        more = page.locator(f'[data-testid="session-proposal"][data-run-id="{RUN}"] [data-testid="session-proposal-more-about"]').first
+        if more.count() > 0 and more.get_attribute("open") is None:
+            more.locator("summary").first.click()
+            page.wait_for_timeout(300)
+            chain = page.evaluate(CHAIN)
         shot(page, "deliver-card")
         # The card's line is crew's `summary.line`, verbatim, and its tone is crew's `satisfied` — where served.
         acc = acceptance()

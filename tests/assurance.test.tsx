@@ -284,7 +284,7 @@ describe('the receipt renders', () => {
     render(<GateRow view={makeView({ id: RUN, status: 'awaiting_human' } as never, UNITS)} gate={g} navigate={navigate} />);
     expect(screen.getByTestId('session-gate-judge-wait').textContent).toMatch(/^Waiting for an independent check\./);
     fireEvent.click(screen.getByTestId('session-gate-judge-signin'));
-    expect(navigate).toHaveBeenCalledWith('/system');
+    expect(navigate).toHaveBeenCalledWith('/agents');
     expect(screen.getByTestId('assurance-kind').textContent).toBe('Floor checks only');
   });
 

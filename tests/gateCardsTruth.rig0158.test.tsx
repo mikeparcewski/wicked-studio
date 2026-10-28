@@ -8,7 +8,8 @@
  *     the card suggested "Retry this step with a note" / "Fix with a note". It now suggests the override.
  *  3. The failing tests were only under Technical details. The face now names up to five, "+N more".
  */
-import { cleanup, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { flushDecisionsForTest, resetDecisionsForTest } from '../src/board/undoQueue.js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as client from '../src/api/client.js';
 import type { CoreEvent, RunAcceptanceSummary, SessionView, WorkUnit } from '../src/api/types.js';
@@ -258,5 +259,44 @@ describe('1 on the rendered deliver card', () => {
     expect(line.textContent).toBe('Overridden by you: test failed on this change and its base.');
     expect(line.textContent).not.toMatch(/passed/i);
     expect(screen.getByTestId('session-proposal-acceptance-detail').textContent).toContain(ACCEPTED);
+  });
+});
+
+describe('studio#923: a hand-over QE refused takes the skip in place', () => {
+  const CHAIN: ChainModel = { source: 'units', steps: [], proposed: false, transportLine: null, done: 0, total: 0, checked: null };
+  const deliverGate: OpenGate = { runId: RUN, ord: 3, prompt: 'Approve delivery before unit 3 runs.', lifecycle: 'open', receivedAt: NOW, gateKind: 'deliver' };
+  const REFUSED: RunAcceptanceSummary = { required: true, satisfied: false, walkthrough: null, line: 'QE acceptance did not pass' };
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    resetDecisionsForTest();
+    useGateStore.setState({ gates: { [RUN]: deliverGate } });
+    useGateActionStore.setState({ byGate: {} });
+    useRunEventStore.setState({ byRun: { [RUN]: [] } });
+    vi.spyOn(client.api, 'getRunEvents').mockResolvedValue({ events: [] });
+    vi.spyOn(client.api, 'getRunDiff').mockResolvedValue({ diff: '', truncated: false });
+    vi.spyOn(client.api, 'listWorkflows').mockResolvedValue({ workflows: [] });
+    vi.spyOn(client.api, 'listRepos').mockResolvedValue({ repos: [] });
+  });
+  afterEach(() => cleanup());
+
+  it('Skip QE with a reason… opens a required reason here and answers the gate with skip_qe through the undo window', async () => {
+    const confirm = vi.spyOn(client.api, 'confirmGate').mockResolvedValue({ ok: true } as never);
+    const view = makeView({ id: RUN, status: 'awaiting_human' } as never, DELIVER_UNITS);
+    Object.assign(view.session as object, { assurance: { mode: 'full', required: ['qe_acceptance'], qe: { status: 'required', basis: 'diff', score: 100, threshold: 20, reason: 'required', reasons: [], ord: 2, tree: 'abc' } } });
+    render(<ProposalCard view={view} chain={CHAIN} acceptance={REFUSED} />);
+    expect(screen.getByTestId('session-proposal-text').textContent).toBe('QE hasn’t passed, so this can’t be delivered yet');
+    // Starting the job over is still there, under Other options, named for what it does.
+    fireEvent.click(screen.getByTestId('session-proposal-more'));
+    expect(screen.getByTestId('session-proposal-relaunch-skip-qe').textContent).toBe('Start again with QE skipped…');
+    fireEvent.click(screen.getByTestId('session-proposal-skip-qe'));
+    const send = screen.getByTestId('session-proposal-skip-qe-send') as HTMLButtonElement;
+    expect(send.disabled).toBe(true);
+    expect(screen.getByTestId('session-proposal-skip-qe-consequence').textContent).toMatch(/QE acceptance skipped by operator/);
+    fireEvent.change(screen.getByTestId('session-proposal-skip-qe-reason'), { target: { value: 'The seats could not install deps; I ran the tests myself.' } });
+    expect(send.disabled).toBe(false);
+    fireEvent.click(send);
+    await act(async () => { await flushDecisionsForTest(); });
+    expect(confirm).toHaveBeenCalledTimes(1);
+    expect(confirm.mock.calls[0]![1]).toMatchObject({ approve: true, action: 'skip_qe', amend: 'The seats could not install deps; I ran the tests myself.', ord: 3 });
   });
 });

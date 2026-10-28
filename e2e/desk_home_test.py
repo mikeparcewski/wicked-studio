@@ -8,11 +8,11 @@ proves the S4 acceptance:
 
   1. SHELL: data-shell="desk" (the one shell since S18d), the session rail is 236 px, and the classic left nav, the runs
      bottom bar and every KPI tile are gone.
-  2. ONE COUNT (concept A, operator ruling 2026-10-12): the Desk rail badge = the needs-you list's
-     decisions + failures (reviews are never in it), the list is drawn in labelled sections, the
-     Desk v2 inbox says how many wait, and every session badge in the rail names a run the list holds.
-  3. CHORES: the lapsed-seat chore ("For whoever runs studio") comes from GET /roster, is not in
-     the count, and no disk chore is rendered.
+  2. ONE COUNT (concept A, operator ruling 2026-10-12): the Desk rail badge = the landing's count
+     (decisions + failures; reviews are never in it). Home v2 (2026-10-26): the landing shows ONE card,
+     the top decision, and "N more waiting" for the rest; the session badges never add up past it.
+  3. CHORES: the lapsed-seat sign-in (GET /roster) is not in the count and not on the landing (home
+     v2 left chores off it): the Agents view shows codex as needing a sign-in. No disk chore anywhere.
   4. NO COMPOSER (concept A): the Desk has no bottom composer; its header carries the ⌘K command
      bar (it opens the palette), Chat and New job.
   5. WHILE YOU WERE AWAY: after a 3 h absence the handover renders on the Desk, from
@@ -72,26 +72,24 @@ SHELL = """() => {
   };
 }"""
 
+# The landing's sentence says a count in words up to ten (board/deskHome.ts countWord).
+COUNT_WORDS = {2: "Two", 3: "Three", 4: "Four", 5: "Five", 6: "Six", 7: "Seven", 8: "Eight", 9: "Nine", 10: "Ten"}
+
 COUNTS = """() => {
-  const q = document.querySelector('[data-testid="needs-you-queue"]');
-  const h = document.querySelector('[data-testid="desk-inbox-count"]');
-  const inSection = (ids) => [...document.querySelectorAll('[data-testid="need-row"]')]
-    .filter(r => ids.includes(r.closest('[data-section]')?.dataset.section)).reduce((n, r) => n + Number(r.dataset.count || '1'), 0);
+  const h = document.querySelector('[data-testid="desk-story"][data-count]');
+  const card = document.querySelector('[data-testid="desk-card"]');
+  const more = document.querySelector('[data-testid="desk-needs-more"]');
   const b = document.querySelector('[data-testid="desk-rail-badge"]');
   const sessions = [...document.querySelectorAll('[data-testid="rail-session"]')]
     .map(s => ({run: s.dataset.runId, badge: Number(s.dataset.badge || '0')}));
   return {
-    queue: q ? Number(q.dataset.count) : null, variant: q ? (q.classList.contains('wk-desk-needs') ? 'desk' : 'other') : null,
-    headlineText: h ? h.innerText : null,
-    badgeRows: inSection(['decision', 'failure']), reviewRows: inSection(['review']),
-    sections: [...document.querySelectorAll('[data-testid="need-section"]')].map(e => e.dataset.section),
+    count: h ? Number(h.dataset.count) : null, sentence: h ? h.innerText : null,
+    cardKind: card ? card.dataset.kind : null, cardKey: card ? card.dataset.key : null,
+    more: more ? Number(more.dataset.count) : 0,
     badge: b ? Number(b.innerText) : 0,
     sessions,
   };
 }"""
-
-KEYS = """() => [...document.querySelectorAll('[data-testid="need-row"], [data-testid="need-member"]')]
-  .map(r => r.dataset.key)"""
 
 HEADER = """() => ({
   composer: !!document.querySelector('[data-testid="composer"][data-composer="desk"]'),
@@ -125,13 +123,12 @@ with sync_playwright() as p:
     except Exception:
         page.screenshot(path=str(SHOTS / "desk-home-missing.png"))
         fail("desk-renders", "no [data-testid=desk] on /")
-    page.get_by_test_id("needs-you-queue").wait_for(state="visible", timeout=10000)
+    page.get_by_test_id("desk-card").wait_for(state="visible", timeout=10000)
     set_fixture(origin, extra_frames=[{"type": "elicitationCreated", "session": "e1", "elicitationId": "el-1",
                                        "message": "Which region should the backfill target?", "options": None}])
+    # The elicitation joins the count (home v2: the card stays on the top decision, a gate).
     page.wait_for_function(
-        "() => !!document.querySelector('[data-testid=\"need-row\"][data-kind=\"elicitation\"]')", timeout=5000)
-    page.wait_for_function(
-        "() => !!document.querySelector('[data-testid=\"desk-chore\"]')", timeout=10000)
+        "() => Number(document.querySelector('[data-testid=\"desk-story\"][data-count]')?.dataset.count || '0') >= 4", timeout=15000)
     page.mouse.move(W // 2, 20)
     page.wait_for_timeout(300)
 
@@ -143,36 +140,31 @@ with sync_playwright() as p:
 
     # ── 2. one count ──────────────────────────────────────────────────────────────
     # studio#723: the count is said only once it holds still (NEEDS_QUIET_MS) — wait for it.
-    page.get_by_test_id("desk-inbox-count").wait_for(state="visible", timeout=10000)
+    page.locator('[data-testid="desk-story"][data-count]').wait_for(state="visible", timeout=10000)
     page.get_by_test_id("desk-rail-badge").wait_for(state="visible", timeout=10000)
     c = page.evaluate(COUNTS)
-    # Open every group so the members' keys are on the page.
-    for t in page.locator('[data-testid="need-group-toggle"][aria-expanded="false"]').all():
-        t.click()
-    keys = page.evaluate(KEYS)
-    runs_needing = {k.split(":", 1)[1] for k in keys if k.split(":", 1)[0] in
-                    ("gate", "fail", "stall-esc", "stalled", "stranded", "elicit", "steer")}
     badged = [s for s in c["sessions"] if s["badge"] > 0]
     check("one-count",
-          c["queue"] is not None and c["queue"] >= 3 and c["variant"] == "desk"
-          and c["badge"] == c["badgeRows"] and c["badge"] == c["queue"] - c["reviewRows"] - 0
-          and c["sections"][:1] == ["decision"]
-          and "waiting" in (c["headlineText"] or "")
-          and len(badged) > 0 and all(s["run"] in runs_needing for s in badged)
-          and sum(s["badge"] for s in badged) <= c["queue"],
-          counts=c, keys=keys)
-    for t in page.locator('[data-testid="need-group-toggle"][aria-expanded="true"]').all():
-        t.click()
+          c["count"] is not None and c["count"] >= 3 and c["badge"] == c["count"]
+          and c["cardKind"] in ("gate", "elicitation", "steer-request")
+          and c["more"] == c["count"] - 1
+          and (c["sentence"] or "").startswith(f"{COUNT_WORDS.get(c['count'], str(c['count']))} things need you")
+          and len(badged) > 0 and sum(s["badge"] for s in badged) <= c["count"],
+          counts=c)
 
-    # ── 3. chores ─────────────────────────────────────────────────────────────────
-    chores = page.evaluate("""() => [...document.querySelectorAll('[data-testid="desk-chore"]')]
-      .map(c => ({seat: c.dataset.seat, text: c.innerText}))""")
-    label = page.get_by_test_id("desk-chores").inner_text()
+    # ── 3. chores: off the landing, not counted; the Agents view has the sign-in ─────
+    landing = page.evaluate("""() => ({ chores: document.querySelectorAll('[data-testid="desk-chores"], [data-testid="desk-chore"]').length,
+      text: (document.querySelector('[data-testid="desk"]') || document.body).innerText.toLowerCase() })""")
+    page.goto(f"{origin}/?tab=agents", wait_until="networkidle")
+    codex = page.locator('[data-testid="agents-row"][data-agent="codex"]').first
+    codex.wait_for(state="visible", timeout=10000)
+    codex_ready = codex.get_attribute("data-ready")
     check("chores",
-          len(chores) >= 1 and any(ch["seat"] == "codex" and "signing in again" in ch["text"] for ch in chores)
-          and "For whoever runs studio" in label
-          and not any(w in label.lower() for w in ("disk", "space", "storage")),
-          chores=chores)
+          landing["chores"] == 0 and codex_ready is not None and codex_ready.lower() != "ready"
+          and not any(w in landing["text"] for w in ("disk space", "storage")),
+          codex_ready=codex_ready, landing_chores=landing["chores"])
+    page.goto(f"{origin}/", wait_until="networkidle")
+    page.locator('[data-testid="desk-story"][data-count]').wait_for(state="visible", timeout=15000)
 
     # ── 4. no composer: Search, Chat and New job in the rail's action row ──────────
     head = page.evaluate(HEADER)
@@ -229,8 +221,10 @@ with sync_playwright() as p:
     #       Skills · MCP · Plugins · Workflows · General · Nerve Center (last); no Notifications entry.
     dests = page.evaluate("""() => [...document.querySelectorAll(
       '[data-testid="session-rail"] [data-nav-dest]')].map(e => e.dataset.navDest)""")
-    expected = ["section:skills", "section:mcp", "section:plugins", "section:workflows", "section:general", "watch"]
-    page.get_by_test_id("desk-rail-general").click()
+    expected = ["page:home", "page:projects", "page:jobs", "page:repos", "page:report", "page:understand", "page:evaluate",
+                "page:steering", "page:memory", "page:agents", "page:build", "watch"]
+    page.get_by_test_id("desk-rail-build").click()
+    page.get_by_test_id("build-link-settings").click()
     page.wait_for_function("() => window.location.pathname === '/system'", timeout=5000)
     check("every-destination", dests == expected, dests=dests, expected=expected)
 

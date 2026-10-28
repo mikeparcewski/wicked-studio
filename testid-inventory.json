@@ -11,11 +11,11 @@
   "version": 1,
   "studioVersion": "0.12.3",
   "counts": {
-    "files": 238,
-    "occurrences": 3076,
-    "static": 2677,
-    "dynamic": 70,
-    "computed": 24
+    "files": 256,
+    "occurrences": 3489,
+    "static": 2969,
+    "dynamic": 75,
+    "computed": 33
   },
   "static": [
     {
@@ -57,19 +57,7 @@
       ]
     },
     {
-      "testId": "agents-band",
-      "files": [
-        "src/components/agents/AgentsPage.tsx"
-      ]
-    },
-    {
       "testId": "agents-banner",
-      "files": [
-        "src/components/agents/AgentsPage.tsx"
-      ]
-    },
-    {
-      "testId": "agents-cards",
       "files": [
         "src/components/agents/AgentsPage.tsx"
       ]
@@ -129,6 +117,18 @@
       ]
     },
     {
+      "testId": "agents-details",
+      "files": [
+        "src/components/agents/AgentsPage.tsx"
+      ]
+    },
+    {
+      "testId": "agents-details-open",
+      "files": [
+        "src/components/agents/AgentsPage.tsx"
+      ]
+    },
+    {
       "testId": "agents-empty",
       "files": [
         "src/components/agents/AgentsPage.tsx"
@@ -168,6 +168,18 @@
       "testId": "agents-issue",
       "files": [
         "src/components/agents/AgentModal.tsx"
+      ]
+    },
+    {
+      "testId": "agents-list",
+      "files": [
+        "src/components/agents/AgentsPage.tsx"
+      ]
+    },
+    {
+      "testId": "agents-list-sec",
+      "files": [
+        "src/components/agents/AgentsPage.tsx"
       ]
     },
     {
@@ -222,6 +234,12 @@
       "testId": "agents-modal-foot",
       "files": [
         "src/components/agents/AgentModal.tsx"
+      ]
+    },
+    {
+      "testId": "agents-more",
+      "files": [
+        "src/components/agents/AgentsPage.tsx"
       ]
     },
     {
@@ -280,6 +298,12 @@
     },
     {
       "testId": "agents-row",
+      "files": [
+        "src/components/agents/AgentsPage.tsx"
+      ]
+    },
+    {
+      "testId": "agents-sentence",
       "files": [
         "src/components/agents/AgentsPage.tsx"
       ]
@@ -405,15 +429,15 @@
       ]
     },
     {
-      "testId": "agents-steps",
+      "testId": "agents-status",
       "files": [
-        "src/components/agents/AgentModal.tsx"
+        "src/components/agents/AgentsPage.tsx"
       ]
     },
     {
-      "testId": "agents-table",
+      "testId": "agents-steps",
       "files": [
-        "src/components/agents/AgentsPage.tsx"
+        "src/components/agents/AgentModal.tsx"
       ]
     },
     {
@@ -456,6 +480,24 @@
       "testId": "alt-peek",
       "files": [
         "src/components/sheets/AltPeek.tsx"
+      ]
+    },
+    {
+      "testId": "analysis-index-offer",
+      "files": [
+        "src/components/AskDock.tsx"
+      ]
+    },
+    {
+      "testId": "analysis-index-repo",
+      "files": [
+        "src/components/AskDock.tsx"
+      ]
+    },
+    {
+      "testId": "analysis-index-started",
+      "files": [
+        "src/components/AskDock.tsx"
       ]
     },
     {
@@ -1019,6 +1061,42 @@
       ]
     },
     {
+      "testId": "build-link-mcp",
+      "files": [
+        "src/board/navModel.ts"
+      ]
+    },
+    {
+      "testId": "build-link-plugins",
+      "files": [
+        "src/board/navModel.ts"
+      ]
+    },
+    {
+      "testId": "build-link-settings",
+      "files": [
+        "src/board/navModel.ts"
+      ]
+    },
+    {
+      "testId": "build-link-skills",
+      "files": [
+        "src/board/navModel.ts"
+      ]
+    },
+    {
+      "testId": "build-link-workflows",
+      "files": [
+        "src/board/navModel.ts"
+      ]
+    },
+    {
+      "testId": "build-page",
+      "files": [
+        "src/components/BuildPage.tsx"
+      ]
+    },
+    {
       "testId": "builder-save-blocker",
       "files": [
         "src/components/WorkflowViewer.tsx"
@@ -1106,6 +1184,12 @@
       "testId": "burn-unavailable",
       "files": [
         "src/components/Burn.tsx"
+      ]
+    },
+    {
+      "testId": "calm-row-details",
+      "files": [
+        "src/components/calm/Calm.tsx"
       ]
     },
     {
@@ -1691,6 +1775,12 @@
       ]
     },
     {
+      "testId": "chat-job-decision",
+      "files": [
+        "src/components/session/RunConversation.tsx"
+      ]
+    },
+    {
       "testId": "chat-minimize",
       "files": [
         "src/components/chat/ChatWindow.tsx"
@@ -2118,6 +2208,42 @@
       ]
     },
     {
+      "testId": "decision-dock",
+      "files": [
+        "src/components/session/DecisionDock.tsx"
+      ]
+    },
+    {
+      "testId": "decision-dock-eyebrow",
+      "files": [
+        "src/components/session/DecisionDock.tsx"
+      ]
+    },
+    {
+      "testId": "decision-dock-handle",
+      "files": [
+        "src/components/session/DecisionDock.tsx"
+      ]
+    },
+    {
+      "testId": "decision-dock-next",
+      "files": [
+        "src/components/session/DecisionDock.tsx"
+      ]
+    },
+    {
+      "testId": "decision-dock-peek",
+      "files": [
+        "src/components/session/DecisionDock.tsx"
+      ]
+    },
+    {
+      "testId": "decision-dock-slot",
+      "files": [
+        "src/components/session/DecisionDock.tsx"
+      ]
+    },
+    {
       "testId": "decision-error",
       "files": [
         "src/components/decisions/DecisionLine.tsx"
@@ -2133,6 +2259,12 @@
       "testId": "decision-lines",
       "files": [
         "src/components/decisions/DecisionLine.tsx"
+      ]
+    },
+    {
+      "testId": "decision-marker",
+      "files": [
+        "src/components/session/DecisionDock.tsx"
       ]
     },
     {
@@ -2849,6 +2981,24 @@
       ]
     },
     {
+      "testId": "desk-ask",
+      "files": [
+        "src/components/desk/DeskHome.tsx"
+      ]
+    },
+    {
+      "testId": "desk-ask-input",
+      "files": [
+        "src/components/desk/DeskHome.tsx"
+      ]
+    },
+    {
+      "testId": "desk-ask-start",
+      "files": [
+        "src/components/desk/DeskHome.tsx"
+      ]
+    },
+    {
       "testId": "desk-block-agents",
       "files": [
         "src/components/desk/DeskV2.tsx"
@@ -2879,57 +3029,45 @@
       ]
     },
     {
-      "testId": "desk-callout",
+      "testId": "desk-card",
       "files": [
-        "src/components/desk/DeskV2.tsx"
+        "src/components/desk/DeskHome.tsx"
       ]
     },
     {
-      "testId": "desk-callout-evidence",
+      "testId": "desk-card-body",
       "files": [
-        "src/components/desk/DeskV2.tsx"
+        "src/components/desk/DeskHome.tsx"
       ]
     },
     {
-      "testId": "desk-callouts",
+      "testId": "desk-card-context",
       "files": [
-        "src/components/desk/DeskV2.tsx"
+        "src/components/desk/DeskHome.tsx"
       ]
     },
     {
-      "testId": "desk-callouts-more",
+      "testId": "desk-card-failure",
       "files": [
-        "src/components/desk/DeskV2.tsx"
+        "src/components/desk/DeskHome.tsx"
       ]
     },
     {
-      "testId": "desk-callouts-none",
+      "testId": "desk-card-failure-qe",
       "files": [
-        "src/components/desk/DeskV2.tsx"
+        "src/components/desk/DeskHome.tsx"
       ]
     },
     {
-      "testId": "desk-callouts-partial",
+      "testId": "desk-card-title",
       "files": [
-        "src/components/desk/DeskV2.tsx"
+        "src/components/desk/DeskHome.tsx"
       ]
     },
     {
       "testId": "desk-chart",
       "files": [
         "src/components/desk/Desk.tsx"
-      ]
-    },
-    {
-      "testId": "desk-chart-jobs",
-      "files": [
-        "src/components/desk/DeskV2.tsx"
-      ]
-    },
-    {
-      "testId": "desk-chart-spend",
-      "files": [
-        "src/components/desk/DeskV2.tsx"
       ]
     },
     {
@@ -3008,6 +3146,12 @@
       "testId": "desk-feed",
       "files": [
         "src/components/desk/Desk.tsx"
+      ]
+    },
+    {
+      "testId": "desk-greeting",
+      "files": [
+        "src/components/desk/DeskHome.tsx"
       ]
     },
     {
@@ -3119,7 +3263,7 @@
       ]
     },
     {
-      "testId": "desk-insights",
+      "testId": "desk-inbox-view",
       "files": [
         "src/components/desk/DeskV2.tsx"
       ]
@@ -3182,6 +3326,7 @@
       "testId": "desk-loading",
       "files": [
         "src/components/desk/Desk.tsx",
+        "src/components/desk/DeskHome.tsx",
         "src/components/desk/DeskInbox.tsx"
       ]
     },
@@ -3198,16 +3343,54 @@
       ]
     },
     {
+      "testId": "desk-need-card",
+      "files": [
+        "src/components/desk/DeskHome.tsx"
+      ]
+    },
+    {
+      "testId": "desk-need-card-title",
+      "files": [
+        "src/components/desk/DeskHome.tsx"
+      ]
+    },
+    {
       "testId": "desk-needs",
       "files": [
-        "src/components/desk/Desk.tsx"
+        "src/components/desk/Desk.tsx",
+        "src/components/desk/DeskHome.tsx"
+      ]
+    },
+    {
+      "testId": "desk-needs-calm",
+      "files": [
+        "src/components/desk/DeskHome.tsx"
+      ]
+    },
+    {
+      "testId": "desk-needs-more",
+      "files": [
+        "src/components/desk/DeskHome.tsx"
+      ]
+    },
+    {
+      "testId": "desk-needs-others",
+      "files": [
+        "src/components/desk/DeskHome.tsx"
       ]
     },
     {
       "testId": "desk-needs-partial",
       "files": [
         "src/components/desk/Desk.tsx",
+        "src/components/desk/DeskHome.tsx",
         "src/components/desk/DeskInbox.tsx"
+      ]
+    },
+    {
+      "testId": "desk-needs-resolve",
+      "files": [
+        "src/components/desk/DeskHome.tsx"
       ]
     },
     {
@@ -3250,6 +3433,30 @@
       "testId": "desk-pick-menu",
       "files": [
         "src/components/desk/DeskUnderstand.tsx"
+      ]
+    },
+    {
+      "testId": "desk-progress",
+      "files": [
+        "src/components/desk/DeskHome.tsx"
+      ]
+    },
+    {
+      "testId": "desk-progress-more",
+      "files": [
+        "src/components/desk/DeskHome.tsx"
+      ]
+    },
+    {
+      "testId": "desk-progress-quiet",
+      "files": [
+        "src/components/desk/DeskHome.tsx"
+      ]
+    },
+    {
+      "testId": "desk-progress-row",
+      "files": [
+        "src/components/desk/DeskHome.tsx"
       ]
     },
     {
@@ -3302,19 +3509,13 @@
       ]
     },
     {
+      "testId": "desk-rail-build",
+      "files": [
+        "src/board/navModel.ts"
+      ]
+    },
+    {
       "testId": "desk-rail-chat",
-      "files": [
-        "src/components/desk/SessionRail.tsx"
-      ]
-    },
-    {
-      "testId": "desk-rail-general",
-      "files": [
-        "src/board/deskModel.ts"
-      ]
-    },
-    {
-      "testId": "desk-rail-home",
       "files": [
         "src/components/desk/SessionRail.tsx"
       ]
@@ -3323,12 +3524,6 @@
       "testId": "desk-rail-logo",
       "files": [
         "src/components/desk/SessionRail.tsx"
-      ]
-    },
-    {
-      "testId": "desk-rail-mcp",
-      "files": [
-        "src/board/deskModel.ts"
       ]
     },
     {
@@ -3350,12 +3545,6 @@
       ]
     },
     {
-      "testId": "desk-rail-plugins",
-      "files": [
-        "src/board/deskModel.ts"
-      ]
-    },
-    {
       "testId": "desk-rail-rules",
       "files": [
         "src/board/objectActions.ts"
@@ -3368,15 +3557,9 @@
       ]
     },
     {
-      "testId": "desk-rail-skills",
+      "testId": "desk-rail-wordmark",
       "files": [
-        "src/board/deskModel.ts"
-      ]
-    },
-    {
-      "testId": "desk-rail-workflows",
-      "files": [
-        "src/board/deskModel.ts"
+        "src/components/desk/SessionRail.tsx"
       ]
     },
     {
@@ -3422,12 +3605,6 @@
       ]
     },
     {
-      "testId": "desk-reports",
-      "files": [
-        "src/components/desk/DeskV2.tsx"
-      ]
-    },
-    {
       "testId": "desk-rule-line",
       "files": [
         "src/components/desk/DeskRuleLine.tsx"
@@ -3452,6 +3629,12 @@
       ]
     },
     {
+      "testId": "desk-runs-clear",
+      "files": [
+        "src/components/desk/DeskRuns.tsx"
+      ]
+    },
+    {
       "testId": "desk-runs-count",
       "files": [
         "src/components/desk/DeskRuns.tsx"
@@ -3471,6 +3654,24 @@
       ]
     },
     {
+      "testId": "desk-runs-filtered",
+      "files": [
+        "src/components/desk/DeskRuns.tsx"
+      ]
+    },
+    {
+      "testId": "desk-runs-group",
+      "files": [
+        "src/components/desk/DeskRuns.tsx"
+      ]
+    },
+    {
+      "testId": "desk-runs-line",
+      "files": [
+        "src/components/desk/DeskRuns.tsx"
+      ]
+    },
+    {
       "testId": "desk-runs-list",
       "files": [
         "src/components/desk/DeskRuns.tsx"
@@ -3483,13 +3684,19 @@
       ]
     },
     {
+      "testId": "desk-runs-new",
+      "files": [
+        "src/components/desk/DeskRuns.tsx"
+      ]
+    },
+    {
       "testId": "desk-runs-open",
       "files": [
         "src/components/desk/DeskRuns.tsx"
       ]
     },
     {
-      "testId": "desk-runs-progress",
+      "testId": "desk-runs-refine",
       "files": [
         "src/components/desk/DeskRuns.tsx"
       ]
@@ -3513,37 +3720,13 @@
       ]
     },
     {
-      "testId": "desk-runs-stat-failed",
+      "testId": "desk-runs-sentence",
       "files": [
         "src/components/desk/DeskRuns.tsx"
       ]
     },
     {
-      "testId": "desk-runs-stat-finished",
-      "files": [
-        "src/components/desk/DeskRuns.tsx"
-      ]
-    },
-    {
-      "testId": "desk-runs-stat-running",
-      "files": [
-        "src/components/desk/DeskRuns.tsx"
-      ]
-    },
-    {
-      "testId": "desk-runs-stat-waiting",
-      "files": [
-        "src/components/desk/DeskRuns.tsx"
-      ]
-    },
-    {
-      "testId": "desk-runs-stat-window",
-      "files": [
-        "src/components/desk/DeskRuns.tsx"
-      ]
-    },
-    {
-      "testId": "desk-runs-stats",
+      "testId": "desk-runs-show-finished",
       "files": [
         "src/components/desk/DeskRuns.tsx"
       ]
@@ -3555,7 +3738,19 @@
       ]
     },
     {
-      "testId": "desk-runs-table",
+      "testId": "desk-runs-tools",
+      "files": [
+        "src/components/desk/DeskRuns.tsx"
+      ]
+    },
+    {
+      "testId": "desk-runs-window",
+      "files": [
+        "src/components/desk/DeskRuns.tsx"
+      ]
+    },
+    {
+      "testId": "desk-runs-word",
       "files": [
         "src/components/desk/DeskRuns.tsx"
       ]
@@ -3565,7 +3760,8 @@
       "files": [
         "src/board/objectActions.ts",
         "src/components/desk/Desk.tsx",
-        "src/components/desk/DeskHappening.tsx"
+        "src/components/desk/DeskHappening.tsx",
+        "src/components/desk/DeskHome.tsx"
       ]
     },
     {
@@ -3577,6 +3773,7 @@
     {
       "testId": "desk-setup-act",
       "files": [
+        "src/components/desk/DeskHome.tsx",
         "src/components/desk/DeskV2.tsx"
       ]
     },
@@ -3591,6 +3788,18 @@
       "files": [
         "src/components/desk/Desk.tsx",
         "src/components/desk/DeskV2.tsx"
+      ]
+    },
+    {
+      "testId": "desk-shipped",
+      "files": [
+        "src/components/desk/DeskHome.tsx"
+      ]
+    },
+    {
+      "testId": "desk-shipped-report",
+      "files": [
+        "src/components/desk/DeskHome.tsx"
       ]
     },
     {
@@ -3609,8 +3818,7 @@
     {
       "testId": "desk-stat-delivered",
       "files": [
-        "src/components/desk/Desk.tsx",
-        "src/components/desk/DeskV2.tsx"
+        "src/components/desk/Desk.tsx"
       ]
     },
     {
@@ -3620,29 +3828,15 @@
       ]
     },
     {
-      "testId": "desk-stat-quality",
-      "files": [
-        "src/components/desk/DeskV2.tsx"
-      ]
-    },
-    {
       "testId": "desk-stat-spend",
       "files": [
-        "src/components/desk/Desk.tsx",
-        "src/components/desk/DeskV2.tsx"
+        "src/components/desk/Desk.tsx"
       ]
     },
     {
       "testId": "desk-stat-started",
       "files": [
-        "src/components/desk/Desk.tsx",
-        "src/components/desk/DeskV2.tsx"
-      ]
-    },
-    {
-      "testId": "desk-stat-success",
-      "files": [
-        "src/components/desk/DeskV2.tsx"
+        "src/components/desk/Desk.tsx"
       ]
     },
     {
@@ -3676,15 +3870,10 @@
       ]
     },
     {
-      "testId": "desk-stats",
-      "files": [
-        "src/components/desk/DeskV2.tsx"
-      ]
-    },
-    {
       "testId": "desk-story",
       "files": [
-        "src/components/desk/Desk.tsx"
+        "src/components/desk/Desk.tsx",
+        "src/components/desk/DeskHome.tsx"
       ]
     },
     {
@@ -3754,18 +3943,6 @@
       ]
     },
     {
-      "testId": "desk-tabs-more",
-      "files": [
-        "src/components/desk/DeskV2.tsx"
-      ]
-    },
-    {
-      "testId": "desk-tabs-more-panel",
-      "files": [
-        "src/components/desk/DeskV2.tsx"
-      ]
-    },
-    {
       "testId": "desk-und-agents-unread",
       "files": [
         "src/components/desk/DeskUnderstand.tsx"
@@ -3820,24 +3997,6 @@
       ]
     },
     {
-      "testId": "desk-viz-jobs",
-      "files": [
-        "src/components/desk/DeskV2.tsx"
-      ]
-    },
-    {
-      "testId": "desk-viz-outcomes",
-      "files": [
-        "src/components/desk/DeskV2.tsx"
-      ]
-    },
-    {
-      "testId": "desk-viz-spend",
-      "files": [
-        "src/components/desk/DeskV2.tsx"
-      ]
-    },
-    {
       "testId": "desk-window",
       "files": [
         "src/components/desk/Desk.tsx"
@@ -3846,6 +4005,7 @@
     {
       "testId": "desk-work",
       "files": [
+        "src/components/desk/DeskHome.tsx",
         "src/components/desk/DeskV2.tsx"
       ]
     },
@@ -4306,7 +4466,13 @@
       ]
     },
     {
-      "testId": "evaluate-all-gaps",
+      "testId": "evaluate-all-behaviours",
+      "files": [
+        "src/components/steer/EvaluateSurface.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-back",
       "files": [
         "src/components/steer/EvaluateSurface.tsx"
       ]
@@ -4318,13 +4484,7 @@
       ]
     },
     {
-      "testId": "evaluate-coverage",
-      "files": [
-        "src/components/steer/EvaluateSurface.tsx"
-      ]
-    },
-    {
-      "testId": "evaluate-coverage-chart",
+      "testId": "evaluate-detail",
       "files": [
         "src/components/steer/EvaluateSurface.tsx"
       ]
@@ -4333,6 +4493,18 @@
       "testId": "evaluate-draft",
       "files": [
         "src/components/steer/EvaluateSurface.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-drift-line",
+      "files": [
+        "src/components/steer/SystemJudgments.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-drift-more",
+      "files": [
+        "src/components/steer/SystemJudgments.tsx"
       ]
     },
     {
@@ -4360,9 +4532,129 @@
       ]
     },
     {
+      "testId": "evaluate-history",
+      "files": [
+        "src/components/steer/EvaluateSurface.tsx"
+      ]
+    },
+    {
       "testId": "evaluate-import",
       "files": [
         "src/components/steer/EvaluateSurface.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-judgment-detail",
+      "files": [
+        "src/components/steer/SystemJudgments.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-judgment-row",
+      "files": [
+        "src/components/steer/SystemJudgments.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-judgment-trend",
+      "files": [
+        "src/components/steer/SystemJudgments.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-judgment-words",
+      "files": [
+        "src/components/steer/SystemJudgments.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-judgments",
+      "files": [
+        "src/components/steer/SystemJudgments.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-judgments-absent",
+      "files": [
+        "src/components/steer/SystemJudgments.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-judgments-baseline",
+      "files": [
+        "src/components/steer/SystemJudgments.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-judgments-check",
+      "files": [
+        "src/components/steer/SystemJudgments.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-judgments-drift",
+      "files": [
+        "src/components/steer/SystemJudgments.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-judgments-empty",
+      "files": [
+        "src/components/steer/SystemJudgments.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-judgments-error",
+      "files": [
+        "src/components/steer/SystemJudgments.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-judgments-options",
+      "files": [
+        "src/components/steer/SystemJudgments.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-judgments-options-toggle",
+      "files": [
+        "src/components/steer/SystemJudgments.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-judgments-project",
+      "files": [
+        "src/components/steer/SystemJudgments.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-judgments-run-error",
+      "files": [
+        "src/components/steer/SystemJudgments.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-judgments-scope",
+      "files": [
+        "src/components/steer/SystemJudgments.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-judgments-scope-all",
+      "files": [
+        "src/components/steer/SystemJudgments.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-judgments-sentence",
+      "files": [
+        "src/components/steer/SystemJudgments.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-judgments-when",
+      "files": [
+        "src/components/steer/SystemJudgments.tsx"
       ]
     },
     {
@@ -4384,12 +4676,6 @@
       ]
     },
     {
-      "testId": "evaluate-options-toggle",
-      "files": [
-        "src/components/steer/EvaluateSurface.tsx"
-      ]
-    },
-    {
       "testId": "evaluate-read-error",
       "files": [
         "src/components/steer/EvaluateSurface.tsx"
@@ -4402,7 +4688,19 @@
       ]
     },
     {
-      "testId": "evaluate-run",
+      "testId": "evaluate-results",
+      "files": [
+        "src/components/steer/EvaluateSurface.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-results-empty",
+      "files": [
+        "src/components/steer/EvaluateSurface.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-results-loading",
       "files": [
         "src/components/steer/EvaluateSurface.tsx"
       ]
@@ -4433,6 +4731,18 @@
     },
     {
       "testId": "evaluate-tiles",
+      "files": [
+        "src/components/steer/EvaluateSurface.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-type-row",
+      "files": [
+        "src/components/steer/EvaluateSurface.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-type-words",
       "files": [
         "src/components/steer/EvaluateSurface.tsx"
       ]
@@ -5380,6 +5690,150 @@
       ]
     },
     {
+      "testId": "insights-accept",
+      "files": [
+        "src/components/insights/InsightsPage.tsx"
+      ]
+    },
+    {
+      "testId": "insights-better",
+      "files": [
+        "src/plugins/wicked-insights/plugin.ts"
+      ]
+    },
+    {
+      "testId": "insights-confidence",
+      "files": [
+        "src/plugins/wicked-insights/plugin.ts"
+      ]
+    },
+    {
+      "testId": "insights-decide",
+      "files": [
+        "src/components/insights/InsightsPage.tsx"
+      ]
+    },
+    {
+      "testId": "insights-decide-runs",
+      "files": [
+        "src/components/insights/InsightsPage.tsx"
+      ]
+    },
+    {
+      "testId": "insights-decide-title",
+      "files": [
+        "src/components/insights/InsightsPage.tsx"
+      ]
+    },
+    {
+      "testId": "insights-decide-why",
+      "files": [
+        "src/components/insights/InsightsPage.tsx"
+      ]
+    },
+    {
+      "testId": "insights-decided",
+      "files": [
+        "src/components/insights/InsightsPage.tsx"
+      ]
+    },
+    {
+      "testId": "insights-dismiss",
+      "files": [
+        "src/components/insights/InsightsPage.tsx"
+      ]
+    },
+    {
+      "testId": "insights-dismiss-confirm",
+      "files": [
+        "src/components/insights/InsightsPage.tsx"
+      ]
+    },
+    {
+      "testId": "insights-dismiss-reason",
+      "files": [
+        "src/components/insights/InsightsPage.tsx"
+      ]
+    },
+    {
+      "testId": "insights-footnote",
+      "files": [
+        "src/plugins/wicked-insights/plugin.ts"
+      ]
+    },
+    {
+      "testId": "insights-frame",
+      "files": [
+        "src/components/insights/InsightsPage.tsx"
+      ]
+    },
+    {
+      "testId": "insights-history",
+      "files": [
+        "src/plugins/wicked-insights/plugin.ts"
+      ]
+    },
+    {
+      "testId": "insights-history-row",
+      "files": [
+        "src/plugins/wicked-insights/plugin.ts"
+      ]
+    },
+    {
+      "testId": "insights-page",
+      "files": [
+        "src/components/insights/InsightsPage.tsx"
+      ]
+    },
+    {
+      "testId": "insights-rec",
+      "files": [
+        "src/plugins/wicked-insights/plugin.ts"
+      ]
+    },
+    {
+      "testId": "insights-rec-pick",
+      "files": [
+        "src/plugins/wicked-insights/plugin.ts"
+      ]
+    },
+    {
+      "testId": "insights-recommendations",
+      "files": [
+        "src/plugins/wicked-insights/plugin.ts"
+      ]
+    },
+    {
+      "testId": "insights-review",
+      "files": [
+        "src/plugins/wicked-insights/plugin.ts"
+      ]
+    },
+    {
+      "testId": "insights-said",
+      "files": [
+        "src/components/insights/InsightsPage.tsx"
+      ]
+    },
+    {
+      "testId": "insights-summary",
+      "files": [
+        "src/plugins/wicked-insights/plugin.ts"
+      ]
+    },
+    {
+      "testId": "insights-trend",
+      "files": [
+        "src/plugins/wicked-insights/plugin.ts"
+      ]
+    },
+    {
+      "testId": "insights-trends",
+      "files": [
+        "src/plugins/wicked-insights/plugin.ts"
+      ]
+    },
+    {
       "testId": "kpi-repair",
       "files": [
         "src/components/ReplayMove.tsx"
@@ -5914,6 +6368,12 @@
       ]
     },
     {
+      "testId": "launch-wizard-signin",
+      "files": [
+        "src/components/launch/LaunchWizard.tsx"
+      ]
+    },
+    {
       "testId": "launch-wizard-skip",
       "files": [
         "src/components/launch/LaunchWizard.tsx"
@@ -5939,6 +6399,12 @@
     },
     {
       "testId": "launch-wizard-step",
+      "files": [
+        "src/components/launch/LaunchWizard.tsx"
+      ]
+    },
+    {
+      "testId": "launch-wizard-unusable-note",
       "files": [
         "src/components/launch/LaunchWizard.tsx"
       ]
@@ -7240,6 +7706,12 @@
       ]
     },
     {
+      "testId": "memories-search-open",
+      "files": [
+        "src/components/memory/MemoryPage.tsx"
+      ]
+    },
+    {
       "testId": "memories-unsupported",
       "files": [
         "src/components/memory/MemoryPage.tsx"
@@ -7288,13 +7760,13 @@
       ]
     },
     {
-      "testId": "memory-add-tile",
+      "testId": "memory-content",
       "files": [
         "src/components/memory/MemoryPage.tsx"
       ]
     },
     {
-      "testId": "memory-content",
+      "testId": "memory-edit",
       "files": [
         "src/components/memory/MemoryPage.tsx"
       ]
@@ -7324,6 +7796,12 @@
       ]
     },
     {
+      "testId": "memory-full",
+      "files": [
+        "src/components/memory/MemoryPage.tsx"
+      ]
+    },
+    {
       "testId": "memory-intro",
       "files": [
         "src/components/memory/MemoryPage.tsx"
@@ -7336,12 +7814,6 @@
       ]
     },
     {
-      "testId": "memory-kinds",
-      "files": [
-        "src/components/memory/MemoryPage.tsx"
-      ]
-    },
-    {
       "testId": "memory-list-card",
       "files": [
         "src/components/memory/MemoryPage.tsx"
@@ -7349,6 +7821,18 @@
     },
     {
       "testId": "memory-meta",
+      "files": [
+        "src/components/memory/MemoryPage.tsx"
+      ]
+    },
+    {
+      "testId": "memory-more",
+      "files": [
+        "src/components/memory/MemoryPage.tsx"
+      ]
+    },
+    {
+      "testId": "memory-open",
       "files": [
         "src/components/memory/MemoryPage.tsx"
       ]
@@ -7408,31 +7892,13 @@
       ]
     },
     {
-      "testId": "memory-stat-review",
-      "files": [
-        "src/components/memory/MemoryPage.tsx"
-      ]
-    },
-    {
-      "testId": "memory-stat-total",
+      "testId": "memory-sentence",
       "files": [
         "src/components/memory/MemoryPage.tsx"
       ]
     },
     {
       "testId": "memory-tier",
-      "files": [
-        "src/components/memory/MemoryPage.tsx"
-      ]
-    },
-    {
-      "testId": "memory-tiles",
-      "files": [
-        "src/components/memory/MemoryPage.tsx"
-      ]
-    },
-    {
-      "testId": "memory-view",
       "files": [
         "src/components/memory/MemoryPage.tsx"
       ]
@@ -7459,6 +7925,60 @@
       "testId": "narration-line",
       "files": [
         "src/components/NarratorFeed.tsx"
+      ]
+    },
+    {
+      "testId": "nav-agents",
+      "files": [
+        "src/board/navModel.ts"
+      ]
+    },
+    {
+      "testId": "nav-evaluate",
+      "files": [
+        "src/board/navModel.ts"
+      ]
+    },
+    {
+      "testId": "nav-jobs",
+      "files": [
+        "src/board/navModel.ts"
+      ]
+    },
+    {
+      "testId": "nav-memory",
+      "files": [
+        "src/board/navModel.ts"
+      ]
+    },
+    {
+      "testId": "nav-projects",
+      "files": [
+        "src/board/navModel.ts"
+      ]
+    },
+    {
+      "testId": "nav-report",
+      "files": [
+        "src/board/navModel.ts"
+      ]
+    },
+    {
+      "testId": "nav-repos",
+      "files": [
+        "src/board/navModel.ts"
+      ]
+    },
+    {
+      "testId": "nav-steering",
+      "files": [
+        "src/board/navModel.ts"
+      ]
+    },
+    {
+      "testId": "nav-understand",
+      "files": [
+        "src/board/navModel.ts"
       ]
     },
     {
@@ -7499,6 +8019,12 @@
     },
     {
       "testId": "nc-attention-remedy",
+      "files": [
+        "src/components/nerve/NerveCenterPage.tsx"
+      ]
+    },
+    {
+      "testId": "nc-back",
       "files": [
         "src/components/nerve/NerveCenterPage.tsx"
       ]
@@ -7630,6 +8156,12 @@
       ]
     },
     {
+      "testId": "nc-details",
+      "files": [
+        "src/components/nerve/NerveOverview.tsx"
+      ]
+    },
+    {
       "testId": "nc-feed",
       "files": [
         "src/components/nerve/NerveCenterPage.tsx"
@@ -7651,6 +8183,12 @@
       "testId": "nc-headline",
       "files": [
         "src/components/nerve/NerveCenterPage.tsx"
+      ]
+    },
+    {
+      "testId": "nc-helpers",
+      "files": [
+        "src/components/nerve/NerveOverview.tsx"
       ]
     },
     {
@@ -7681,6 +8219,13 @@
       "testId": "nc-infra-state",
       "files": [
         "src/components/nerve/NerveCenterPage.tsx"
+      ]
+    },
+    {
+      "testId": "nc-insights-line",
+      "files": [
+        "src/components/nerve/NerveCenterPage.tsx",
+        "src/components/nerve/NerveOverview.tsx"
       ]
     },
     {
@@ -7716,7 +8261,8 @@
     {
       "testId": "nc-recheck",
       "files": [
-        "src/components/nerve/NerveCenterPage.tsx"
+        "src/components/nerve/NerveCenterPage.tsx",
+        "src/components/nerve/NerveOverview.tsx"
       ]
     },
     {
@@ -7768,6 +8314,30 @@
       ]
     },
     {
+      "testId": "nc-slow",
+      "files": [
+        "src/components/nerve/NerveOverview.tsx"
+      ]
+    },
+    {
+      "testId": "nc-slow-fix",
+      "files": [
+        "src/components/nerve/NerveOverview.tsx"
+      ]
+    },
+    {
+      "testId": "nc-slowing",
+      "files": [
+        "src/components/nerve/NerveOverview.tsx"
+      ]
+    },
+    {
+      "testId": "nc-system",
+      "files": [
+        "src/components/nerve/NerveOverview.tsx"
+      ]
+    },
+    {
       "testId": "nc-tabpanel",
       "files": [
         "src/components/nerve/NerveCenterPage.tsx"
@@ -7775,6 +8345,48 @@
     },
     {
       "testId": "nc-tabs",
+      "files": [
+        "src/components/nerve/NerveCenterPage.tsx"
+      ]
+    },
+    {
+      "testId": "nc-tidy",
+      "files": [
+        "src/components/nerve/NerveOverview.tsx"
+      ]
+    },
+    {
+      "testId": "nc-tile",
+      "files": [
+        "src/components/nerve/NerveOverview.tsx"
+      ]
+    },
+    {
+      "testId": "nc-tile-line",
+      "files": [
+        "src/components/nerve/NerveOverview.tsx"
+      ]
+    },
+    {
+      "testId": "nc-tile-open",
+      "files": [
+        "src/components/nerve/NerveOverview.tsx"
+      ]
+    },
+    {
+      "testId": "nc-tile-signin",
+      "files": [
+        "src/components/nerve/NerveOverview.tsx"
+      ]
+    },
+    {
+      "testId": "nc-tile-state",
+      "files": [
+        "src/components/nerve/NerveOverview.tsx"
+      ]
+    },
+    {
+      "testId": "nc-to-resolve",
       "files": [
         "src/components/nerve/NerveCenterPage.tsx"
       ]
@@ -7789,6 +8401,18 @@
       "testId": "nc-verdict",
       "files": [
         "src/components/nerve/NerveCenterPage.tsx"
+      ]
+    },
+    {
+      "testId": "nc-waiting",
+      "files": [
+        "src/components/nerve/NerveOverview.tsx"
+      ]
+    },
+    {
+      "testId": "nc-waiting-open",
+      "files": [
+        "src/components/nerve/NerveOverview.tsx"
       ]
     },
     {
@@ -8058,15 +8682,177 @@
       ]
     },
     {
+      "testId": "needs-calm",
+      "files": [
+        "src/components/desk/NeedsRanked.tsx"
+      ]
+    },
+    {
+      "testId": "needs-item",
+      "files": [
+        "src/components/desk/NeedsRanked.tsx"
+      ]
+    },
+    {
+      "testId": "needs-item-act",
+      "files": [
+        "src/components/desk/NeedsRanked.tsx"
+      ]
+    },
+    {
+      "testId": "needs-item-run",
+      "files": [
+        "src/components/desk/NeedsRanked.tsx"
+      ]
+    },
+    {
+      "testId": "needs-ranked",
+      "files": [
+        "src/components/desk/NeedsRanked.tsx"
+      ]
+    },
+    {
+      "testId": "needs-resolve",
+      "files": [
+        "src/components/desk/NeedsRanked.tsx"
+      ]
+    },
+    {
+      "testId": "needs-resolve-archive",
+      "files": [
+        "src/components/desk/NeedsRanked.tsx"
+      ]
+    },
+    {
+      "testId": "needs-resolve-archive-confirm",
+      "files": [
+        "src/components/desk/NeedsRanked.tsx"
+      ]
+    },
+    {
+      "testId": "needs-resolve-group",
+      "files": [
+        "src/components/desk/NeedsRanked.tsx"
+      ]
+    },
+    {
+      "testId": "needs-resolve-group-archive",
+      "files": [
+        "src/components/desk/NeedsRanked.tsx"
+      ]
+    },
+    {
+      "testId": "needs-resolve-group-superseded",
+      "files": [
+        "src/components/desk/NeedsRanked.tsx"
+      ]
+    },
+    {
+      "testId": "needs-resolve-group-toggle",
+      "files": [
+        "src/components/desk/NeedsRanked.tsx"
+      ]
+    },
+    {
+      "testId": "needs-resolve-more",
+      "files": [
+        "src/components/desk/NeedsRanked.tsx"
+      ]
+    },
+    {
+      "testId": "needs-resolve-reason",
+      "files": [
+        "src/components/desk/NeedsRanked.tsx"
+      ]
+    },
+    {
+      "testId": "needs-resolve-retry",
+      "files": [
+        "src/components/desk/NeedsRanked.tsx"
+      ]
+    },
+    {
+      "testId": "needs-resolve-row",
+      "files": [
+        "src/components/desk/NeedsRanked.tsx"
+      ]
+    },
+    {
+      "testId": "needs-resolve-superseded",
+      "files": [
+        "src/components/desk/NeedsRanked.tsx"
+      ]
+    },
+    {
+      "testId": "needs-resolve-words",
+      "files": [
+        "src/components/desk/NeedsRanked.tsx"
+      ]
+    },
+    {
       "testId": "needs-review-badge",
       "files": [
         "src/components/AssumptionsPanel.tsx"
       ]
     },
     {
+      "testId": "needs-sentence",
+      "files": [
+        "src/components/desk/NeedsRanked.tsx"
+      ]
+    },
+    {
+      "testId": "needs-setup",
+      "files": [
+        "src/components/desk/NeedsRanked.tsx"
+      ]
+    },
+    {
+      "testId": "needs-setup-act",
+      "files": [
+        "src/components/desk/NeedsRanked.tsx"
+      ]
+    },
+    {
+      "testId": "needs-setup-row",
+      "files": [
+        "src/components/desk/NeedsRanked.tsx"
+      ]
+    },
+    {
+      "testId": "needs-several",
+      "files": [
+        "src/components/desk/NeedsRanked.tsx"
+      ]
+    },
+    {
+      "testId": "needs-single",
+      "files": [
+        "src/components/desk/NeedsRanked.tsx"
+      ]
+    },
+    {
       "testId": "needs-summary",
       "files": [
         "src/components/NeedsYouQueue.tsx"
+      ]
+    },
+    {
+      "testId": "needs-to-review",
+      "files": [
+        "src/components/desk/NeedsRanked.tsx"
+      ]
+    },
+    {
+      "testId": "needs-worth",
+      "files": [
+        "src/components/desk/NeedsRanked.tsx"
+      ]
+    },
+    {
+      "testId": "needs-worth-summary",
+      "files": [
+        "src/components/desk/NeedsRanked.tsx"
       ]
     },
     {
@@ -8984,7 +9770,44 @@
     {
       "testId": "project-actions",
       "files": [
+        "src/components/desk/ProjectDesk.tsx",
+        "src/components/desk/ProjectHome.tsx"
+      ]
+    },
+    {
+      "testId": "project-add-repo",
+      "files": [
+        "src/components/desk/ProjectHome.tsx"
+      ]
+    },
+    {
+      "testId": "project-archive",
+      "files": [
         "src/components/desk/ProjectDesk.tsx"
+      ]
+    },
+    {
+      "testId": "project-ask",
+      "files": [
+        "src/components/desk/ProjectHome.tsx"
+      ]
+    },
+    {
+      "testId": "project-ask-input",
+      "files": [
+        "src/components/desk/ProjectHome.tsx"
+      ]
+    },
+    {
+      "testId": "project-ask-start",
+      "files": [
+        "src/components/desk/ProjectHome.tsx"
+      ]
+    },
+    {
+      "testId": "project-back",
+      "files": [
+        "src/components/desk/ProjectHome.tsx"
       ]
     },
     {
@@ -9032,7 +9855,8 @@
     {
       "testId": "project-desc",
       "files": [
-        "src/components/desk/ProjectDesk.tsx"
+        "src/components/desk/ProjectDesk.tsx",
+        "src/components/desk/ProjectHome.tsx"
       ]
     },
     {
@@ -9150,6 +9974,12 @@
       ]
     },
     {
+      "testId": "project-edit",
+      "files": [
+        "src/components/desk/ProjectDesk.tsx"
+      ]
+    },
+    {
       "testId": "project-field",
       "files": [
         "src/components/ProjectSwitcher.tsx"
@@ -9216,6 +10046,42 @@
       ]
     },
     {
+      "testId": "project-home",
+      "files": [
+        "src/components/desk/ProjectHome.tsx"
+      ]
+    },
+    {
+      "testId": "project-home-link",
+      "files": [
+        "src/components/desk/ProjectDesk.tsx"
+      ]
+    },
+    {
+      "testId": "project-home-loading",
+      "files": [
+        "src/components/desk/ProjectHome.tsx"
+      ]
+    },
+    {
+      "testId": "project-home-needs",
+      "files": [
+        "src/components/desk/ProjectHome.tsx"
+      ]
+    },
+    {
+      "testId": "project-home-progress",
+      "files": [
+        "src/components/desk/ProjectHome.tsx"
+      ]
+    },
+    {
+      "testId": "project-home-repos",
+      "files": [
+        "src/components/desk/ProjectHome.tsx"
+      ]
+    },
+    {
       "testId": "project-jobs-unshown",
       "files": [
         "src/components/desk/ProjectDesk.tsx"
@@ -9228,15 +10094,57 @@
       ]
     },
     {
+      "testId": "project-menu",
+      "files": [
+        "src/components/desk/ProjectHome.tsx"
+      ]
+    },
+    {
       "testId": "project-meta",
       "files": [
         "src/components/desk/ProjectDesk.tsx"
       ]
     },
     {
+      "testId": "project-need",
+      "files": [
+        "src/components/desk/ProjectHome.tsx"
+      ]
+    },
+    {
+      "testId": "project-needs-calm",
+      "files": [
+        "src/components/desk/ProjectHome.tsx"
+      ]
+    },
+    {
+      "testId": "project-needs-more",
+      "files": [
+        "src/components/desk/ProjectHome.tsx"
+      ]
+    },
+    {
       "testId": "project-open-repo",
       "files": [
         "src/components/desk/ProjectDesk.tsx"
+      ]
+    },
+    {
+      "testId": "project-progress-more",
+      "files": [
+        "src/components/desk/ProjectHome.tsx"
+      ]
+    },
+    {
+      "testId": "project-progress-quiet",
+      "files": [
+        "src/components/desk/ProjectHome.tsx"
+      ]
+    },
+    {
+      "testId": "project-progress-row",
+      "files": [
+        "src/components/desk/ProjectHome.tsx"
       ]
     },
     {
@@ -9249,6 +10157,12 @@
       "testId": "project-repo-branch",
       "files": [
         "src/components/ProjectRepositories.tsx"
+      ]
+    },
+    {
+      "testId": "project-repo-chip",
+      "files": [
+        "src/components/desk/ProjectHome.tsx"
       ]
     },
     {
@@ -9402,105 +10316,223 @@
       ]
     },
     {
+      "testId": "project-tidy",
+      "files": [
+        "src/components/desk/ProjectHome.tsx"
+      ]
+    },
+    {
+      "testId": "project-tidy-open",
+      "files": [
+        "src/components/desk/ProjectHome.tsx"
+      ]
+    },
+    {
       "testId": "project-title",
       "files": [
         "src/components/desk/DeskV2.tsx"
       ]
     },
     {
+      "testId": "project-unfiled",
+      "files": [
+        "src/components/desk/UnfiledLine.tsx"
+      ]
+    },
+    {
+      "testId": "project-unfiled-list",
+      "files": [
+        "src/components/desk/UnfiledLine.tsx"
+      ]
+    },
+    {
+      "testId": "project-unfiled-move",
+      "files": [
+        "src/components/desk/UnfiledLine.tsx"
+      ]
+    },
+    {
+      "testId": "project-unfiled-row",
+      "files": [
+        "src/components/desk/UnfiledLine.tsx"
+      ]
+    },
+    {
+      "testId": "project-view",
+      "files": [
+        "src/components/desk/ProjectHome.tsx"
+      ]
+    },
+    {
+      "testId": "project-views",
+      "files": [
+        "src/components/desk/ProjectHome.tsx"
+      ]
+    },
+    {
+      "testId": "project-week",
+      "files": [
+        "src/components/desk/ProjectHome.tsx"
+      ]
+    },
+    {
+      "testId": "project-week-report",
+      "files": [
+        "src/components/desk/ProjectHome.tsx"
+      ]
+    },
+    {
       "testId": "projects-archived-failed",
       "files": [
+        "src/components/everything/ProjectsPage.tsx",
         "src/components/everything/ProjectsTab.tsx"
       ]
     },
     {
       "testId": "projects-checking",
       "files": [
+        "src/components/everything/ProjectsPage.tsx",
         "src/components/everything/ProjectsTab.tsx"
       ]
     },
     {
       "testId": "projects-empty",
       "files": [
+        "src/components/everything/ProjectsPage.tsx",
         "src/components/everything/ProjectsTab.tsx"
       ]
     },
     {
       "testId": "projects-failed",
       "files": [
+        "src/components/everything/ProjectsPage.tsx",
         "src/components/everything/ProjectsTab.tsx"
       ]
     },
     {
       "testId": "projects-filter",
       "files": [
+        "src/components/everything/ProjectsPage.tsx",
         "src/components/everything/ProjectsTab.tsx"
+      ]
+    },
+    {
+      "testId": "projects-find",
+      "files": [
+        "src/components/everything/ProjectsPage.tsx"
       ]
     },
     {
       "testId": "projects-new",
       "files": [
+        "src/components/everything/ProjectsPage.tsx",
         "src/components/everything/ProjectsTab.tsx"
+      ]
+    },
+    {
+      "testId": "projects-page",
+      "files": [
+        "src/components/everything/ProjectsPage.tsx"
       ]
     },
     {
       "testId": "projects-row",
       "files": [
+        "src/components/everything/ProjectsPage.tsx",
         "src/components/everything/ProjectsTab.tsx"
       ]
     },
     {
       "testId": "projects-row-archive",
       "files": [
+        "src/components/everything/ProjectsPage.tsx",
         "src/components/everything/ProjectsTab.tsx"
       ]
     },
     {
       "testId": "projects-row-error",
       "files": [
+        "src/components/everything/ProjectsPage.tsx",
         "src/components/everything/ProjectsTab.tsx"
+      ]
+    },
+    {
+      "testId": "projects-row-menu",
+      "files": [
+        "src/components/everything/ProjectsPage.tsx"
       ]
     },
     {
       "testId": "projects-row-open",
       "files": [
+        "src/components/everything/ProjectsPage.tsx",
         "src/components/everything/ProjectsTab.tsx"
       ]
     },
     {
       "testId": "projects-row-rename",
       "files": [
+        "src/components/everything/ProjectsPage.tsx",
         "src/components/everything/ProjectsTab.tsx"
+      ]
+    },
+    {
+      "testId": "projects-row-sentence",
+      "files": [
+        "src/components/everything/ProjectsPage.tsx"
+      ]
+    },
+    {
+      "testId": "projects-row-state",
+      "files": [
+        "src/components/everything/ProjectsPage.tsx"
       ]
     },
     {
       "testId": "projects-row-unarchive",
       "files": [
+        "src/components/everything/ProjectsPage.tsx",
         "src/components/everything/ProjectsTab.tsx"
       ]
     },
     {
       "testId": "projects-tab",
       "files": [
+        "src/components/everything/ProjectsPage.tsx",
         "src/components/everything/ProjectsTab.tsx"
       ]
     },
     {
       "testId": "projects-unfiled",
       "files": [
+        "src/components/everything/ProjectsPage.tsx",
         "src/components/everything/ProjectsTab.tsx"
+      ]
+    },
+    {
+      "testId": "projects-unfiled-menu",
+      "files": [
+        "src/components/everything/ProjectsPage.tsx"
       ]
     },
     {
       "testId": "projects-unfiled-open",
       "files": [
+        "src/components/everything/ProjectsPage.tsx",
         "src/components/everything/ProjectsTab.tsx"
       ]
     },
     {
       "testId": "projects-unfiled-sessions",
       "files": [
+        "src/components/everything/ProjectsPage.tsx",
         "src/components/everything/ProjectsTab.tsx"
+      ]
+    },
+    {
+      "testId": "projects-unfiled-state",
+      "files": [
+        "src/components/everything/ProjectsPage.tsx"
       ]
     },
     {
@@ -9666,6 +10698,12 @@
       ]
     },
     {
+      "testId": "rail-all-jobs",
+      "files": [
+        "src/components/desk/SessionRail.tsx"
+      ]
+    },
+    {
       "testId": "rail-api-server",
       "files": [
         "src/components/HealthRailSection.tsx"
@@ -9687,12 +10725,6 @@
       "testId": "rail-drawer-toggle",
       "files": [
         "src/components/ui/TopBar.tsx"
-      ]
-    },
-    {
-      "testId": "rail-foot-label",
-      "files": [
-        "src/components/desk/SessionRail.tsx"
       ]
     },
     {
@@ -9744,12 +10776,6 @@
       ]
     },
     {
-      "testId": "rail-group-more",
-      "files": [
-        "src/components/desk/SessionRail.tsx"
-      ]
-    },
-    {
       "testId": "rail-group-needs",
       "files": [
         "src/components/desk/SessionRail.tsx"
@@ -9786,6 +10812,12 @@
       ]
     },
     {
+      "testId": "rail-nav",
+      "files": [
+        "src/components/desk/SessionRail.tsx"
+      ]
+    },
+    {
       "testId": "rail-nerve-dock",
       "files": [
         "src/components/desk/SessionRail.tsx"
@@ -9795,6 +10827,18 @@
       "testId": "rail-probe-checked",
       "files": [
         "src/components/HealthRailSection.tsx"
+      ]
+    },
+    {
+      "testId": "rail-recent",
+      "files": [
+        "src/components/desk/SessionRail.tsx"
+      ]
+    },
+    {
+      "testId": "rail-recent-toggle",
+      "files": [
+        "src/components/desk/SessionRail.tsx"
       ]
     },
     {
@@ -10044,6 +11088,12 @@
       ]
     },
     {
+      "testId": "repo-details",
+      "files": [
+        "src/components/RepositoriesPanel.tsx"
+      ]
+    },
+    {
       "testId": "repo-findings",
       "files": [
         "src/components/RepoFindings.tsx"
@@ -10104,6 +11154,12 @@
       ]
     },
     {
+      "testId": "repo-open",
+      "files": [
+        "src/components/RepositoriesPanel.tsx"
+      ]
+    },
+    {
       "testId": "repo-open-graph",
       "files": [
         "src/components/RepoDetailPage.tsx"
@@ -10158,6 +11214,36 @@
       ]
     },
     {
+      "testId": "repo-row",
+      "files": [
+        "src/components/RepositoriesPanel.tsx"
+      ]
+    },
+    {
+      "testId": "repo-row-index",
+      "files": [
+        "src/components/RepositoriesPanel.tsx"
+      ]
+    },
+    {
+      "testId": "repo-row-line",
+      "files": [
+        "src/components/RepositoriesPanel.tsx"
+      ]
+    },
+    {
+      "testId": "repo-row-reindex",
+      "files": [
+        "src/components/RepositoriesPanel.tsx"
+      ]
+    },
+    {
+      "testId": "repo-row-word",
+      "files": [
+        "src/components/RepositoriesPanel.tsx"
+      ]
+    },
+    {
       "testId": "repo-run-onboarding",
       "files": [
         "src/components/RepoDetailPage.tsx"
@@ -10167,6 +11253,222 @@
       "testId": "repo-source",
       "files": [
         "src/components/RepositoriesPanel.tsx"
+      ]
+    },
+    {
+      "testId": "report-agents",
+      "files": [
+        "src/components/report/ReportPage.tsx"
+      ]
+    },
+    {
+      "testId": "report-agents-table",
+      "files": [
+        "src/components/report/ReportPage.tsx"
+      ]
+    },
+    {
+      "testId": "report-cost",
+      "files": [
+        "src/components/report/ReportPage.tsx"
+      ]
+    },
+    {
+      "testId": "report-custom",
+      "files": [
+        "src/components/report/ReportPage.tsx"
+      ]
+    },
+    {
+      "testId": "report-custom-from",
+      "files": [
+        "src/components/report/ReportPage.tsx"
+      ]
+    },
+    {
+      "testId": "report-custom-note",
+      "files": [
+        "src/components/report/ReportPage.tsx"
+      ]
+    },
+    {
+      "testId": "report-custom-to",
+      "files": [
+        "src/components/report/ReportPage.tsx"
+      ]
+    },
+    {
+      "testId": "report-floors",
+      "files": [
+        "src/components/report/ReportPage.tsx"
+      ]
+    },
+    {
+      "testId": "report-gates",
+      "files": [
+        "src/components/report/ReportPage.tsx"
+      ]
+    },
+    {
+      "testId": "report-headline",
+      "files": [
+        "src/components/report/ReportPage.tsx"
+      ]
+    },
+    {
+      "testId": "report-insights-line",
+      "files": [
+        "src/components/report/ReportPage.tsx"
+      ]
+    },
+    {
+      "testId": "report-lede",
+      "files": [
+        "src/components/report/ReportPage.tsx"
+      ]
+    },
+    {
+      "testId": "report-not-tracked",
+      "files": [
+        "src/components/report/ReportPage.tsx"
+      ]
+    },
+    {
+      "testId": "report-page",
+      "files": [
+        "src/components/report/ReportPage.tsx"
+      ]
+    },
+    {
+      "testId": "report-period",
+      "files": [
+        "src/components/report/ReportPage.tsx"
+      ]
+    },
+    {
+      "testId": "report-period-30",
+      "files": [
+        "src/components/report/ReportPage.tsx"
+      ]
+    },
+    {
+      "testId": "report-period-7",
+      "files": [
+        "src/components/report/ReportPage.tsx"
+      ]
+    },
+    {
+      "testId": "report-period-custom",
+      "files": [
+        "src/components/report/ReportPage.tsx"
+      ]
+    },
+    {
+      "testId": "report-qe",
+      "files": [
+        "src/components/report/ReportPage.tsx"
+      ]
+    },
+    {
+      "testId": "report-quality",
+      "files": [
+        "src/components/report/ReportPage.tsx"
+      ]
+    },
+    {
+      "testId": "report-repos",
+      "files": [
+        "src/components/report/ReportPage.tsx"
+      ]
+    },
+    {
+      "testId": "report-repos-table",
+      "files": [
+        "src/components/report/ReportPage.tsx"
+      ]
+    },
+    {
+      "testId": "report-shipped",
+      "files": [
+        "src/components/report/ReportPage.tsx"
+      ]
+    },
+    {
+      "testId": "report-shipped-pr",
+      "files": [
+        "src/components/report/ReportPage.tsx"
+      ]
+    },
+    {
+      "testId": "report-shipped-row",
+      "files": [
+        "src/components/report/ReportPage.tsx"
+      ]
+    },
+    {
+      "testId": "report-spend-agents",
+      "files": [
+        "src/components/report/ReportPage.tsx"
+      ]
+    },
+    {
+      "testId": "report-spend-chart",
+      "files": [
+        "src/components/report/ReportPage.tsx"
+      ]
+    },
+    {
+      "testId": "report-spend-repos",
+      "files": [
+        "src/components/report/ReportPage.tsx"
+      ]
+    },
+    {
+      "testId": "report-spend-unknown",
+      "files": [
+        "src/components/report/ReportPage.tsx"
+      ]
+    },
+    {
+      "testId": "report-system-failed",
+      "files": [
+        "src/components/report/ReportPage.tsx"
+      ]
+    },
+    {
+      "testId": "report-throughput",
+      "files": [
+        "src/components/report/ReportPage.tsx"
+      ]
+    },
+    {
+      "testId": "report-throughput-chart",
+      "files": [
+        "src/components/report/ReportPage.tsx"
+      ]
+    },
+    {
+      "testId": "report-tile-finished",
+      "files": [
+        "src/components/report/ReportPage.tsx"
+      ]
+    },
+    {
+      "testId": "report-tile-firstpass",
+      "files": [
+        "src/components/report/ReportPage.tsx"
+      ]
+    },
+    {
+      "testId": "report-tile-spend",
+      "files": [
+        "src/components/report/ReportPage.tsx"
+      ]
+    },
+    {
+      "testId": "report-tile-ttp",
+      "files": [
+        "src/components/report/ReportPage.tsx"
       ]
     },
     {
@@ -10218,6 +11520,12 @@
       ]
     },
     {
+      "testId": "repos-filtered",
+      "files": [
+        "src/components/RepositoriesPanel.tsx"
+      ]
+    },
+    {
       "testId": "repos-kpis",
       "files": [
         "src/components/RepositoriesPanel.tsx"
@@ -10249,6 +11557,18 @@
     },
     {
       "testId": "repos-runs-link",
+      "files": [
+        "src/components/RepositoriesPanel.tsx"
+      ]
+    },
+    {
+      "testId": "repos-sentence",
+      "files": [
+        "src/components/RepositoriesPanel.tsx"
+      ]
+    },
+    {
+      "testId": "repos-tools",
       "files": [
         "src/components/RepositoriesPanel.tsx"
       ]
@@ -10507,6 +11827,12 @@
     },
     {
       "testId": "rules-row",
+      "files": [
+        "src/components/steer/SteerSurface.tsx"
+      ]
+    },
+    {
+      "testId": "rules-row-fires",
       "files": [
         "src/components/steer/SteerSurface.tsx"
       ]
@@ -10955,6 +12281,66 @@
       ]
     },
     {
+      "testId": "run-tab-glance",
+      "files": [
+        "src/components/session/RunTab.tsx"
+      ]
+    },
+    {
+      "testId": "run-tab-glance-asked",
+      "files": [
+        "src/components/session/RunTab.tsx"
+      ]
+    },
+    {
+      "testId": "run-tab-glance-changes",
+      "files": [
+        "src/components/session/RunTab.tsx"
+      ]
+    },
+    {
+      "testId": "run-tab-glance-evidence",
+      "files": [
+        "src/components/session/RunTab.tsx"
+      ]
+    },
+    {
+      "testId": "run-tab-glance-helpers",
+      "files": [
+        "src/components/session/RunTab.tsx"
+      ]
+    },
+    {
+      "testId": "run-tab-glance-plan",
+      "files": [
+        "src/components/session/RunTab.tsx"
+      ]
+    },
+    {
+      "testId": "run-tab-glance-progress",
+      "files": [
+        "src/components/session/RunTab.tsx"
+      ]
+    },
+    {
+      "testId": "run-tab-glance-stop",
+      "files": [
+        "src/components/session/RunTab.tsx"
+      ]
+    },
+    {
+      "testId": "run-tab-glance-stop-confirm",
+      "files": [
+        "src/components/session/RunTab.tsx"
+      ]
+    },
+    {
+      "testId": "run-tab-glance-stop-confirm-row",
+      "files": [
+        "src/components/session/RunTab.tsx"
+      ]
+    },
+    {
       "testId": "run-tab-goto-question",
       "files": [
         "src/components/session/RunTab.tsx"
@@ -11206,6 +12592,60 @@
       "testId": "runs-settings",
       "files": [
         "src/components/SystemSettings.tsx"
+      ]
+    },
+    {
+      "testId": "schedule-cadence",
+      "files": [
+        "src/components/insights/SchedulesSection.tsx"
+      ]
+    },
+    {
+      "testId": "schedule-enabled",
+      "files": [
+        "src/components/insights/SchedulesSection.tsx"
+      ]
+    },
+    {
+      "testId": "schedule-projects",
+      "files": [
+        "src/components/insights/SchedulesSection.tsx"
+      ]
+    },
+    {
+      "testId": "schedule-row",
+      "files": [
+        "src/components/insights/SchedulesSection.tsx"
+      ]
+    },
+    {
+      "testId": "schedule-run-now",
+      "files": [
+        "src/components/insights/SchedulesSection.tsx"
+      ]
+    },
+    {
+      "testId": "schedules-empty",
+      "files": [
+        "src/components/insights/SchedulesSection.tsx"
+      ]
+    },
+    {
+      "testId": "schedules-said",
+      "files": [
+        "src/components/insights/SchedulesSection.tsx"
+      ]
+    },
+    {
+      "testId": "schedules-section",
+      "files": [
+        "src/components/insights/SchedulesSection.tsx"
+      ]
+    },
+    {
+      "testId": "schedules-unsupported",
+      "files": [
+        "src/components/insights/SchedulesSection.tsx"
       ]
     },
     {
@@ -11491,6 +12931,12 @@
       ]
     },
     {
+      "testId": "session-gate-dead-seat-wait",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
       "testId": "session-gate-deliver-consent",
       "files": [
         "src/components/session/GateRow.tsx"
@@ -11527,7 +12973,43 @@
       ]
     },
     {
+      "testId": "session-gate-failing-base",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
+      "testId": "session-gate-failing-base-words",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
       "testId": "session-gate-failing-more",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
+      "testId": "session-gate-failing-new",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
+      "testId": "session-gate-failing-split",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
+      "testId": "session-gate-failing-toggle",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
+      "testId": "session-gate-failing-words",
       "files": [
         "src/components/session/GateRow.tsx"
       ]
@@ -11551,6 +13033,12 @@
       ]
     },
     {
+      "testId": "session-gate-judge-signed-in",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
       "testId": "session-gate-judge-signin",
       "files": [
         "src/components/session/GateRow.tsx"
@@ -11558,6 +13046,30 @@
     },
     {
       "testId": "session-gate-judge-wait",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
+      "testId": "session-gate-lead-act",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
+      "testId": "session-gate-menu",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
+      "testId": "session-gate-more",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
+      "testId": "session-gate-more-about",
       "files": [
         "src/components/session/GateRow.tsx"
       ]
@@ -11612,6 +13124,12 @@
     },
     {
       "testId": "session-gate-refusal",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
+      "testId": "session-gate-refusal-changed",
       "files": [
         "src/components/session/GateRow.tsx"
       ]
@@ -11683,6 +13201,12 @@
       ]
     },
     {
+      "testId": "session-gate-sentence",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
       "testId": "session-gate-source",
       "files": [
         "src/components/session/GateDepth.tsx"
@@ -11698,6 +13222,30 @@
       "testId": "session-gate-under-review",
       "files": [
         "src/components/session/GateDepth.tsx"
+      ]
+    },
+    {
+      "testId": "session-gate-why-not",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
+      "testId": "session-gate-withheld",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
+      "testId": "session-gate-withheld-seat",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
+      "testId": "session-gate-withheld-signin",
+      "files": [
+        "src/components/session/GateRow.tsx"
       ]
     },
     {
@@ -11989,6 +13537,24 @@
       ]
     },
     {
+      "testId": "session-proposal-menu",
+      "files": [
+        "src/components/session/ProposalCard.tsx"
+      ]
+    },
+    {
+      "testId": "session-proposal-more",
+      "files": [
+        "src/components/session/ProposalCard.tsx"
+      ]
+    },
+    {
+      "testId": "session-proposal-more-about",
+      "files": [
+        "src/components/session/ProposalCard.tsx"
+      ]
+    },
+    {
       "testId": "session-proposal-no",
       "files": [
         "src/components/session/ProposalCard.tsx"
@@ -12021,6 +13587,12 @@
       ]
     },
     {
+      "testId": "session-proposal-qe-again",
+      "files": [
+        "src/components/session/ProposalCard.tsx"
+      ]
+    },
+    {
       "testId": "session-proposal-qe-fix",
       "files": [
         "src/components/session/ProposalCard.tsx"
@@ -12034,6 +13606,48 @@
     },
     {
       "testId": "session-proposal-reason",
+      "files": [
+        "src/components/session/ProposalCard.tsx"
+      ]
+    },
+    {
+      "testId": "session-proposal-relaunch-skip-qe",
+      "files": [
+        "src/components/session/ProposalCard.tsx"
+      ]
+    },
+    {
+      "testId": "session-proposal-skip-qe",
+      "files": [
+        "src/components/session/ProposalCard.tsx"
+      ]
+    },
+    {
+      "testId": "session-proposal-skip-qe-cancel",
+      "files": [
+        "src/components/session/ProposalCard.tsx"
+      ]
+    },
+    {
+      "testId": "session-proposal-skip-qe-consequence",
+      "files": [
+        "src/components/session/ProposalCard.tsx"
+      ]
+    },
+    {
+      "testId": "session-proposal-skip-qe-form",
+      "files": [
+        "src/components/session/ProposalCard.tsx"
+      ]
+    },
+    {
+      "testId": "session-proposal-skip-qe-reason",
+      "files": [
+        "src/components/session/ProposalCard.tsx"
+      ]
+    },
+    {
+      "testId": "session-proposal-skip-qe-send",
       "files": [
         "src/components/session/ProposalCard.tsx"
       ]
@@ -12060,6 +13674,24 @@
       "testId": "session-rail",
       "files": [
         "src/components/desk/SessionRail.tsx"
+      ]
+    },
+    {
+      "testId": "session-reply-dest",
+      "files": [
+        "src/components/session/SessionView.tsx"
+      ]
+    },
+    {
+      "testId": "session-reply-flip",
+      "files": [
+        "src/components/session/SessionView.tsx"
+      ]
+    },
+    {
+      "testId": "session-reply-switch",
+      "files": [
+        "src/components/session/SessionView.tsx"
       ]
     },
     {
@@ -12734,6 +14366,36 @@
       "testId": "signin-warning-fix",
       "files": [
         "src/components/ChatInput.tsx"
+      ]
+    },
+    {
+      "testId": "silent-step",
+      "files": [
+        "src/components/session/SilentStepCard.tsx"
+      ]
+    },
+    {
+      "testId": "silent-step-headline",
+      "files": [
+        "src/components/session/SilentStepCard.tsx"
+      ]
+    },
+    {
+      "testId": "silent-step-move",
+      "files": [
+        "src/components/session/SilentStepCard.tsx"
+      ]
+    },
+    {
+      "testId": "silent-step-note",
+      "files": [
+        "src/components/session/SilentStepCard.tsx"
+      ]
+    },
+    {
+      "testId": "silent-step-nudge",
+      "files": [
+        "src/components/session/SilentStepCard.tsx"
       ]
     },
     {
@@ -13644,12 +15306,6 @@
       ]
     },
     {
-      "testId": "steer-add",
-      "files": [
-        "src/components/steer/SteerSurface.tsx"
-      ]
-    },
-    {
       "testId": "steer-add-rule",
       "files": [
         "src/components/steer/SteerSurface.tsx"
@@ -13752,6 +15408,12 @@
       ]
     },
     {
+      "testId": "steer-more",
+      "files": [
+        "src/components/steer/SteerSurface.tsx"
+      ]
+    },
+    {
       "testId": "steer-prefill",
       "files": [
         "src/components/ChatInput.tsx"
@@ -13771,6 +15433,18 @@
     },
     {
       "testId": "steer-retire",
+      "files": [
+        "src/components/steer/SteerSurface.tsx"
+      ]
+    },
+    {
+      "testId": "steer-retired-note",
+      "files": [
+        "src/components/steer/SteerSurface.tsx"
+      ]
+    },
+    {
+      "testId": "steer-row-more",
       "files": [
         "src/components/steer/SteerSurface.tsx"
       ]
@@ -13800,6 +15474,18 @@
       ]
     },
     {
+      "testId": "steer-search-open",
+      "files": [
+        "src/components/steer/SteerSurface.tsx"
+      ]
+    },
+    {
+      "testId": "steer-sentence",
+      "files": [
+        "src/components/steer/SteerSurface.tsx"
+      ]
+    },
+    {
       "testId": "steer-show-all",
       "files": [
         "src/components/steer/SteerSurface.tsx"
@@ -13807,18 +15493,6 @@
     },
     {
       "testId": "steer-stat-eval",
-      "files": [
-        "src/components/steer/SteerSurface.tsx"
-      ]
-    },
-    {
-      "testId": "steer-stat-review",
-      "files": [
-        "src/components/steer/SteerSurface.tsx"
-      ]
-    },
-    {
-      "testId": "steer-stat-rules",
       "files": [
         "src/components/steer/SteerSurface.tsx"
       ]
@@ -13836,19 +15510,7 @@
       ]
     },
     {
-      "testId": "steer-tiles",
-      "files": [
-        "src/components/steer/SteerSurface.tsx"
-      ]
-    },
-    {
-      "testId": "steer-type",
-      "files": [
-        "src/components/steer/SteerSurface.tsx"
-      ]
-    },
-    {
-      "testId": "steer-types",
+      "testId": "steer-type-pick",
       "files": [
         "src/components/steer/SteerSurface.tsx"
       ]
@@ -15475,6 +17137,120 @@
       ]
     },
     {
+      "testId": "understand-answer",
+      "files": [
+        "src/components/desk/UnderstandPage.tsx"
+      ]
+    },
+    {
+      "testId": "understand-answer-sub",
+      "files": [
+        "src/components/desk/UnderstandPage.tsx"
+      ]
+    },
+    {
+      "testId": "understand-ask",
+      "files": [
+        "src/components/desk/UnderstandPage.tsx"
+      ]
+    },
+    {
+      "testId": "understand-ask-input",
+      "files": [
+        "src/components/desk/UnderstandPage.tsx"
+      ]
+    },
+    {
+      "testId": "understand-ask-send",
+      "files": [
+        "src/components/desk/UnderstandPage.tsx"
+      ]
+    },
+    {
+      "testId": "understand-compare",
+      "files": [
+        "src/components/desk/UnderstandPage.tsx"
+      ]
+    },
+    {
+      "testId": "understand-coverage",
+      "files": [
+        "src/components/desk/UnderstandPage.tsx"
+      ]
+    },
+    {
+      "testId": "understand-coverage-toggle",
+      "files": [
+        "src/components/desk/UnderstandPage.tsx"
+      ]
+    },
+    {
+      "testId": "understand-graph",
+      "files": [
+        "src/components/desk/UnderstandPage.tsx"
+      ]
+    },
+    {
+      "testId": "understand-graph-empty",
+      "files": [
+        "src/components/desk/UnderstandPage.tsx"
+      ]
+    },
+    {
+      "testId": "understand-graph-open",
+      "files": [
+        "src/components/desk/UnderstandPage.tsx"
+      ]
+    },
+    {
+      "testId": "understand-graph-repo",
+      "files": [
+        "src/components/desk/UnderstandPage.tsx"
+      ]
+    },
+    {
+      "testId": "understand-page",
+      "files": [
+        "src/components/desk/UnderstandPage.tsx"
+      ]
+    },
+    {
+      "testId": "understand-recent",
+      "files": [
+        "src/components/desk/UnderstandPage.tsx"
+      ]
+    },
+    {
+      "testId": "understand-recent-empty",
+      "files": [
+        "src/components/desk/UnderstandPage.tsx"
+      ]
+    },
+    {
+      "testId": "understand-scope",
+      "files": [
+        "src/components/desk/UnderstandPage.tsx"
+      ]
+    },
+    {
+      "testId": "understand-scope-repo",
+      "files": [
+        "src/components/desk/UnderstandPage.tsx"
+      ]
+    },
+    {
+      "testId": "understand-scope-words",
+      "files": [
+        "src/components/desk/UnderstandPage.tsx"
+      ]
+    },
+    {
+      "testId": "understand-suggest",
+      "files": [
+        "src/components/desk/UnderstandPage.tsx"
+      ]
+    },
+    {
       "testId": "undo-button",
       "files": [
         "src/components/UndoToasts.tsx"
@@ -16158,6 +17934,12 @@
       ]
     },
     {
+      "pattern": "*-change",
+      "files": [
+        "src/components/report/ReportPage.tsx"
+      ]
+    },
+    {
       "pattern": "*-chip",
       "files": [
         "src/components/SteeringRuleForm.tsx",
@@ -16329,6 +18111,18 @@
       ]
     },
     {
+      "pattern": "*-sort-*",
+      "files": [
+        "src/components/report/ReportPage.tsx"
+      ]
+    },
+    {
+      "pattern": "*-table-toggle",
+      "files": [
+        "src/components/report/ReportPage.tsx"
+      ]
+    },
+    {
       "pattern": "*-toggle",
       "files": [
         "src/components/session/AssuranceReceipt.tsx"
@@ -16383,15 +18177,15 @@
       ]
     },
     {
-      "pattern": "desk-more-tab-*",
+      "pattern": "desk-range-*",
       "files": [
         "src/components/desk/DeskV2.tsx"
       ]
     },
     {
-      "pattern": "desk-range-*",
+      "pattern": "desk-runs-group-*",
       "files": [
-        "src/components/desk/DeskV2.tsx"
+        "src/components/desk/DeskRuns.tsx"
       ]
     },
     {
@@ -16416,6 +18210,12 @@
       "pattern": "editor-size-*",
       "files": [
         "src/components/editors/EditorHostPage.tsx"
+      ]
+    },
+    {
+      "pattern": "evaluate-judgments-scope-*",
+      "files": [
+        "src/components/steer/SystemJudgments.tsx"
       ]
     },
     {
@@ -16533,6 +18333,12 @@
       ]
     },
     {
+      "pattern": "rail-nav-*",
+      "files": [
+        "src/components/desk/SessionRail.tsx"
+      ]
+    },
+    {
       "pattern": "run-raw-*",
       "files": [
         "src/components/RunRawView.tsx"
@@ -16589,15 +18395,53 @@
       ]
     },
     {
-      "expression": "l.testId",
+      "expression": "buttonTestId",
+      "files": [
+        "src/components/calm/Calm.tsx"
+      ]
+    },
+    {
+      "expression": "f.testId",
+      "files": [
+        "src/components/calm/Calm.tsx"
+      ]
+    },
+    {
+      "expression": "it.testId",
+      "files": [
+        "src/components/ui/OverflowMenu.tsx"
+      ]
+    },
+    {
+      "expression": "item.testId",
       "files": [
         "src/components/desk/SessionRail.tsx"
       ]
     },
     {
+      "expression": "menuTestId",
+      "files": [
+        "src/components/calm/Calm.tsx"
+      ]
+    },
+    {
       "expression": "o.testId",
       "files": [
+        "src/components/calm/Calm.tsx",
+        "src/components/ui/QuietPage.tsx",
         "src/components/ui/Segmented.tsx"
+      ]
+    },
+    {
+      "expression": "openTestId",
+      "files": [
+        "src/components/calm/Calm.tsx"
+      ]
+    },
+    {
+      "expression": "sentenceTestId",
+      "files": [
+        "src/components/calm/Calm.tsx"
       ]
     },
     {
@@ -16628,16 +18472,22 @@
         "src/components/WhatWhere.tsx",
         "src/components/agents/AgentsPage.tsx",
         "src/components/agents/SetupPanel.tsx",
+        "src/components/calm/Calm.tsx",
         "src/components/charts/CategoryBars.tsx",
         "src/components/charts/Chart.tsx",
         "src/components/dashboardKit.tsx",
+        "src/components/desk/DeskHome.tsx",
         "src/components/desk/DeskParts.tsx",
+        "src/components/desk/UnderstandPage.tsx",
         "src/components/everything/FinishedRunMenu.tsx",
+        "src/components/insights/InsightsLine.tsx",
         "src/components/memory/MemoryPage.tsx",
         "src/components/product/RequirementsBrowser.tsx",
+        "src/components/report/ReportPage.tsx",
         "src/components/session/AssuranceReceipt.tsx",
         "src/components/session/CodebaseDownload.tsx",
         "src/components/session/RunConversation.tsx",
+        "src/components/steer/EvaluateSurface.tsx",
         "src/components/steer/SeStat.tsx",
         "src/components/ui/Combobox.tsx",
         "src/components/ui/DayBars.tsx",
@@ -16645,6 +18495,7 @@
         "src/components/ui/OverflowMenu.tsx",
         "src/components/ui/PageFrame.tsx",
         "src/components/ui/Progress.tsx",
+        "src/components/ui/QuietPage.tsx",
         "src/components/ui/Segmented.tsx",
         "src/components/ui/StatLine.tsx",
         "src/components/ui/StatTile.tsx",
@@ -16739,6 +18590,12 @@
       ]
     },
     {
+      "expression": "testId ?? 'skeleton'",
+      "files": [
+        "src/components/ui/QuietPage.tsx"
+      ]
+    },
+    {
       "expression": "testId ?? 'stat-band'",
       "files": [
         "src/components/ui/StatTile.tsx"
@@ -16763,6 +18620,19 @@
         "src/components/SteeringRuleDrawer.tsx",
         "src/components/SteeringRuleForm.tsx",
         "src/components/session/DeckReview.tsx"
+      ]
+    },
+    {
+      "expression": "titleTestId",
+      "files": [
+        "src/components/calm/Calm.tsx"
+      ]
+    },
+    {
+      "expression": "toggleId",
+      "files": [
+        "src/components/desk/UnderstandPage.tsx",
+        "src/components/steer/EvaluateSurface.tsx"
       ]
     },
     {

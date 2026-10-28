@@ -24,13 +24,13 @@ import os
 import sys
 import urllib.request
 
-from uxfix_fixture import (open_run_panel_item, run_panel_item_ids, DEFAULT_APPEARANCE, HIDE_GATE_TOASTS, REPO, ensure_build,
+from uxfix_fixture import (open_run_panel_item, run_panel_item_ids, DEFAULT_APPEARANCE, HIDE_GATE_TOASTS, REPO, click_gate_choice, ensure_build,
                            set_fixture, start_server, OPEN_RUN_DETAILS)
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4481"))
 W, H = 1440, 700
 SHOTS = REPO / "e2e" / "shots"
-CONSEQUENCE = "Keeps understand, redoes build → review → deliver, ~9 min from past durations (deliver not timed yet)"
+CONSEQUENCE = "Keeps understand, redoes build → review → deliver, ~21 min from past durations (deliver not timed yet)"
 RULE = {"scope": {"kind": "project", "projectId": "northwind"},
         "trigger": {"kind": "gate", "phase": "plan_approval", "band": "0-19", "preset": "bugfix"},
         "action": "approve", "activeWhen": "always"}
@@ -104,16 +104,17 @@ with sync_playwright() as p:
         sheet_tab(page, "whatwhere")
 
     def section_rerun() -> None:
-        # S16a-1b: "Rerun from <step>" is one more ⋯ choice on the session thread's gate row.
+        # S16a-1b: "Rerun from <step>" is one more choice on the session thread's gate row (under Other options).
         page.goto(f"{origin}/s/run%3Ar-rerun", wait_until="networkidle")
         page.get_by_test_id("session-gate-row").wait_for(state="visible", timeout=15000)
         choice = page.locator('[data-testid="session-gate-choice"][data-choice-key="rerun"]')
         choice.wait_for(state="attached", timeout=10000)
         labels = page.evaluate("""() => [...document.querySelectorAll('[data-testid="session-gate-choice"][data-choice-key="rerun"]')].map(e => e.textContent.trim())""")
-        check("only-the-rewind-target-offers", labels == ["Rerun from build"], labels=labels)
+        # ui-v2 gate: the rerun is one of the gate's Other options, labelled in plain words ("Redo from the build
+        # step", never the phase list); still exactly one, naming the rewind target.
+        check("only-the-rewind-target-offers", labels == ["Redo from the build step"], labels=labels)
         check("no-preview-before-asked", page.get_by_test_id("session-gate-rerun").count() == 0)
-        page.locator(".wk-session-gate-overflow-summary").click()
-        choice.click()
+        click_gate_choice(page, "rerun")
         page.get_by_test_id("session-gate-rerun-consequence").wait_for(state="visible")
         consequence = text(page, "session-gate-rerun-consequence")
         check("preview-names-kept-and-redone", consequence == CONSEQUENCE, consequence=consequence)

@@ -25,7 +25,7 @@ import sys
 import time
 import urllib.request
 
-from uxfix_fixture import (DEFAULT_APPEARANCE, HIDE_GATE_TOASTS, REPO, ensure_build,
+from uxfix_fixture import (DEFAULT_APPEARANCE, HIDE_GATE_TOASTS, REPO, ensure_build, open_proposal_more_about,
                            set_fixture, start_server)
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4473"))
@@ -130,6 +130,8 @@ with sync_playwright() as p:
         check("no-offer-for-deliver", page.get_by_test_id("session-gate-rule-offer").count() == 0)
         # The deliver card reads the run branch's diff before anything is pushed (#300): the diffstat
         # names what the approve pushes, and the first press only asks "Are you sure?".
+        # ui-v2 gate: Delivery details are under the card's "More about this".
+        open_proposal_more_about(page, page.locator('[data-testid="session-proposal"][data-kind="deliver"]'))
         page.get_by_test_id("session-proposal-deliver-detail").locator("summary").click()
         page.get_by_test_id("session-proposal-deliver-diffstat").wait_for(state="visible", timeout=10000)
         stat = text(page, "session-proposal-deliver-diffstat")

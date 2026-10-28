@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import userEvent from '@testing-library/user-event';
 import * as client from '../src/api/client.js';
 import { readSettingsTab, SETTINGS_THEME_PATH, settingsPath } from '../src/board/settingsTabs.js';
-import { DESK_RAIL_LINKS } from '../src/board/deskModel.js';
+import { BUILD_LINKS } from '../src/board/navModel.js';
 import { parseRoute } from '../src/hooks/useRoute.js';
 import { NOT_IN_PALETTE, routeTargets } from '../src/palette/routeTargets.js';
 import { DEFAULT_APPEARANCE, useAppearanceStore } from '../src/theming/appearance.js';
@@ -102,9 +102,9 @@ describe('the Settings page', () => {
 });
 
 describe('one settings item, and every Theme link opens the tab', () => {
-  it('the rail has one settings item (General → /system), no Theme item', () => {
-    expect(DESK_RAIL_LINKS.map((l) => l.path)).toContain('/system');
-    expect(DESK_RAIL_LINKS.some((l) => l.path === '/theme' || l.label === 'Theme')).toBe(false);
+  it('Build & settings has one settings item (Settings → /system), no Theme item', () => {
+    expect(BUILD_LINKS.map((l) => l.path)).toContain('/system');
+    expect(BUILD_LINKS.some((l) => l.path === '/theme' || l.label === 'Theme')).toBe(false);
   });
 
   it('the palette\'s Theme row opens the Theme tab; /theme is redirect-only', () => {

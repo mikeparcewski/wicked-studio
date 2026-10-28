@@ -73,7 +73,8 @@ def open_board(browser):
     posts: list = []
     page.on("request", lambda r: posts.append(time.monotonic())
             if r.method == "POST" and r.url.endswith("/api/v1/runs/b1/gate") else None)
-    page.goto(f"{origin}/", wait_until="networkidle")
+    # Home v2: the queue is in Needs you in full (/needs).
+    page.goto(f"{origin}/needs", wait_until="networkidle")
     page.get_by_test_id("needs-you-queue").wait_for(state="visible", timeout=15000)
     for t in page.locator('[data-testid="need-group-toggle"][aria-expanded="false"]').all():
         t.click()

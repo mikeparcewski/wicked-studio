@@ -1,6 +1,6 @@
 import { act } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 /**
@@ -100,8 +100,14 @@ function page(search = ''): ReturnType<typeof render> {
 }
 async function openRowMenu(row: HTMLElement, item: string): Promise<void> {
   const user = userEvent.setup();
-  await user.click(within(within(row).getByTestId('memory-retire')).getByRole('button'));
+  await user.click(within(row).getByTestId('memory-actions-button'));
   await user.click(screen.getByRole('menuitem', { name: item }));
+}
+/** The search is quiet until asked for: open it (once), then type and search. */
+async function search(user: ReturnType<typeof userEvent.setup>, words: string): Promise<void> {
+  if (screen.queryByTestId('memories-search') === null) await user.click(screen.getByTestId('memories-search-open'));
+  await user.type(screen.getByTestId('memories-search'), words);
+  await user.click(screen.getByTestId('memories-search-go'));
 }
 
 beforeEach(() => {
@@ -111,20 +117,23 @@ beforeEach(() => {
 });
 
 describe('MemoryPage — the store, read honestly', () => {
-  it('the tiles and kind cards read the store totals (GET /memory/coverage), newest memory first', async () => {
+  it('the sentence and the kind picker read the store totals (GET /memory/coverage), newest memory first', async () => {
     wire([M2, M1], [PM, PP]);
     page();
+    const user = userEvent.setup();
     const rows = await screen.findAllByTestId('memory-row');
     expect(rows.map((r) => r.getAttribute('data-memory-id'))).toEqual(['m1', 'm2']);
-    await waitFor(() => expect(screen.getByTestId('memory-stat-total')).toHaveTextContent('2'));
-    expect(screen.getByTestId('memory-stat-total')).toHaveTextContent('1 semantic · 1 episodic');
-    // Only MEMORY proposals are this page's to review.
-    await waitFor(() => expect(screen.getByTestId('memory-stat-review')).toHaveTextContent('1'));
-    const kinds = screen.getAllByTestId('memory-kind').map((k) => [k.getAttribute('data-tier'), k.textContent]);
-    expect(kinds).toEqual([['all', 'All kinds2'], ['semantic', 'Facts and decisions1'], ['episodic', 'Things that happened1']]);
-    // A row says where it applies (its project, by name) and its kind.
+    await waitFor(() => expect(screen.getByTestId('memory-sentence')).toHaveTextContent('Your agents remember 2 things'));
+    // Only MEMORY proposals are this page's to review: the one action says how many.
+    await waitFor(() => expect(screen.getByTestId('memory-view-proposals')).toHaveTextContent('Review 1 proposal'));
+    expect(screen.getByTestId('memory-sentence')).toHaveTextContent('1 proposal is waiting for you.');
+    await user.click(screen.getByTestId('memories-search-open'));
+    const kinds = [...screen.getByTestId('memory-kind').querySelectorAll('option')].map((o) => [o.getAttribute('value'), o.textContent]);
+    expect(kinds).toEqual([['all', 'All kinds (2)'], ['semantic', 'Facts and decisions (1)'], ['episodic', 'Things that happened (1)']]);
+    // A row says where it applies (its project, by name); its kind opens under it.
     expect(within(rows[0]!).getByTestId('memory-where')).toHaveTextContent('Wicked');
-    expect(within(rows[0]!).getByTestId('memory-tier')).toHaveTextContent('Semantic');
+    await user.click(within(rows[0]!).getByTestId('memory-open'));
+    expect(within(rows[0]!).getByTestId('memory-tier')).toHaveTextContent('Facts and decisions');
     expect(apiFetch).toHaveBeenCalledWith('/memory');
   });
 
@@ -133,17 +142,18 @@ describe('MemoryPage — the store, read honestly', () => {
     page();
     const user = userEvent.setup();
     await screen.findAllByTestId('memory-row');
-    await user.click(screen.getAllByTestId('memory-kind').find((k) => k.getAttribute('data-tier') === 'episodic')!);
+    await user.click(screen.getByTestId('memories-search-open'));
+    await waitFor(() => expect(screen.getByTestId('memory-kind').querySelector('option[value="episodic"]')).not.toBeNull());
+    await user.selectOptions(screen.getByTestId('memory-kind'), 'episodic');
     expect(screen.getAllByTestId('memory-row').map((r) => r.getAttribute('data-memory-id'))).toEqual(['m2']);
-    await user.click(screen.getAllByTestId('memory-kind').find((k) => k.getAttribute('data-tier') === 'all')!);
+    await user.selectOptions(screen.getByTestId('memory-kind'), 'all');
     const input = screen.getByTestId('memories-facet-filter-input');
     await user.click(input);
     await user.type(input, 'ops');
     await user.click(screen.getByTestId('memories-facet-filter').querySelector('[data-facet="domain=ops"]') as HTMLElement);
     expect(screen.getAllByTestId('memory-row').map((r) => r.getAttribute('data-memory-id'))).toEqual(['m1']);
     await user.click(screen.getByTestId('memories-clear'));
-    await user.type(screen.getByTestId('memories-search'), 'codesign');
-    await user.click(screen.getByTestId('memories-search-go'));
+    await search(user, 'codesign');
     await waitFor(() => expect(calls).toContain('/memory?query=codesign'));
     await waitFor(() => expect(screen.getAllByTestId('memory-row').map((r) => r.getAttribute('data-memory-id'))).toEqual(['m2']));
   });
@@ -153,12 +163,11 @@ describe('MemoryPage — the store, read honestly', () => {
     page();
     const user = userEvent.setup();
     await screen.findAllByTestId('memory-row');
-    await user.type(screen.getByTestId('memories-search'), 'quantum sigils');
-    await user.click(screen.getByTestId('memories-search-go'));
+    await search(user, 'quantum sigils');
     const empty = await screen.findByTestId('memories-empty');
     expect(empty).toHaveTextContent('No memory matches “quantum sigils”.');
-    // The tile still says what the store holds.
-    expect(screen.getByTestId('memory-stat-total')).toHaveTextContent('2');
+    // The sentence still says what the store holds.
+    expect(screen.getByTestId('memory-sentence')).toHaveTextContent('Your agents remember 2 things');
     await user.click(within(empty).getByRole('button', { name: 'Clear filters' }));
     expect(await screen.findAllByTestId('memory-row')).toHaveLength(2);
   });
@@ -174,14 +183,15 @@ describe('MemoryPage — the store, read honestly', () => {
     page();
     const empty = await screen.findByTestId('memories-empty');
     await waitFor(() => expect(empty).toHaveTextContent('The store holds 3 memories, but none were listed. Try a search.'));
-    expect(empty).not.toHaveTextContent('Nothing remembered yet');
+    expect(empty).not.toHaveTextContent('When your agents learn something');
   });
 
   it('a daemon that predates the memory routes gets the honest unsupported state', async () => {
     apiFetch.mockImplementation((path: unknown) => (String(path).startsWith('/proposals') ? Promise.resolve({ proposals: [] }) : Promise.reject(new ApiError(404, 'Not Found'))));
     page();
     expect(await screen.findByTestId('memories-unsupported')).toHaveTextContent('This crew can’t browse its memories yet.');
-    expect(screen.getByTestId('memory-stat-total')).toHaveTextContent('—');
+    // No count is claimed over a store that can't be read.
+    expect(screen.getByTestId('memory-sentence').textContent).not.toMatch(/\d/);
   });
 
   it('a slow mount coverage read that lands AFTER a newer one cannot put the stale total back', async () => {
@@ -204,9 +214,9 @@ describe('MemoryPage — the store, read honestly', () => {
     const user = userEvent.setup();
     await openRowMenu((await screen.findAllByTestId('memory-row'))[0]!, 'Retire');
     await user.click(await screen.findByTestId('memory-retire-confirm'));
-    await waitFor(() => expect(screen.getByTestId('memory-stat-total')).toHaveTextContent('0'));
+    await waitFor(() => expect(screen.getByTestId('memory-sentence')).toHaveTextContent('Nothing learned yet.'));
     await act(async () => { releaseFirst!(); await Promise.resolve(); });
-    expect(screen.getByTestId('memory-stat-total')).toHaveTextContent('0');
+    expect(screen.getByTestId('memory-sentence')).toHaveTextContent('Nothing learned yet.');
   });
 });
 
@@ -369,8 +379,7 @@ describe('MemoryPage — late answers (codex r1)', () => {
     await user.click(await screen.findByTestId('memory-retire-confirm'));
     await waitFor(() => expect(releaseRetire).toBeTypeOf('function'));
     await user.click(screen.getByTestId('memory-retire-cancel'));
-    await user.type(screen.getByTestId('memories-search'), 'codesign');
-    await user.click(screen.getByTestId('memories-search-go'));
+    await search(user, 'codesign');
     await waitFor(() => expect(screen.getAllByTestId('memory-row').map((r) => r.getAttribute('data-memory-id'))).toEqual(['m2']));
     await act(async () => { releaseRetire(); await Promise.resolve(); });
     await screen.findByTestId('memories-note');
@@ -419,9 +428,12 @@ describe('MemoryPage — the Proposals view (memory proposals only)', () => {
     page();
     const user = userEvent.setup();
     await screen.findAllByTestId('memory-row');
-    await user.click(screen.getByTestId('memory-view-proposals'));
+    // The one action reviews what is waiting; Back returns to everything learned.
+    await user.click(await screen.findByRole('button', { name: 'Review 1 proposal' }));
     expect(navigate).toHaveBeenLastCalledWith('/?tab=memory&at=%2Fmemory%3Fview%3Dproposals');
-    await user.click(screen.getByTestId('memory-stat-review-open'));
-    expect(navigate).toHaveBeenLastCalledWith('/?tab=memory&at=%2Fmemory%3Fview%3Dproposals');
+    cleanup();
+    page('?view=proposals');
+    await user.click(await screen.findByTestId('memory-view-memories'));
+    expect(navigate).toHaveBeenLastCalledWith('/?tab=memory&at=%2Fmemory');
   });
 });

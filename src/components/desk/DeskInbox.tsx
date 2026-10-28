@@ -49,7 +49,9 @@ function readSeen(): Set<string> {
 
 function seenId(row: NeedRow): string { return `${row.key}@${row.at ?? ''}`; }
 
-export function DeskInbox({ rows, runs, navigate, now, settled, agentName, extra = null, setupCount = 0, missing = [], onRetry, retrying = false }: {
+export function DeskInbox({ rows, runs, navigate, now, settled, agentName, extra = null, setupCount = 0, missing = [], onRetry, retrying = false, asPage = false }: {
+  /** The inbox IS the page (`/needs`): its name is the page's one title (h1), no second header above it. */
+  asPage?: boolean;
   /** Studio's own setup items above the list (codex r2: the inbox never reads all-clear beside them). */
   setupCount?: number;
   /** Needs sources that did not answer (a partial read): named, with a retry. */
@@ -124,7 +126,7 @@ export function DeskInbox({ rows, runs, navigate, now, settled, agentName, extra
         <span aria-hidden className="wk-inbox-icon"><Inbox size={18} /></span>
         <div className="wk-inbox-heading">
           <div className="wk-inbox-title-row">
-            <h2 id="desk-inbox-title" className="wk-desk2-title">Needs you</h2>
+            {asPage ? <h1 id="desk-inbox-title" className="wk-desk2-title">Needs you</h1> : <h2 id="desk-inbox-title" className="wk-desk2-title">Needs you</h2>}
             {settled !== 'loading' && <span className="wk-viz-meta wk-inbox-count" data-testid="desk-inbox-count" data-phase={settled} data-count={needCount(rows)}>{byFolder.get('all') === 0 ? (settled === 'partial' ? 'not everything could be read' : setupCount > 0 ? `${setupCount} to set up` : 'nothing is waiting for you') : `${byFolder.get('all')}${settled === 'partial' ? '+' : ''} waiting${unread > 0 ? ` · ${unread} unread` : ''}`}</span>}
           </div>
           <p data-testid="desk-inbox-subtitle" className="wk-inbox-subtitle">Decisions, questions and problems waiting on you</p>

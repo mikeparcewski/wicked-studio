@@ -8,17 +8,18 @@ line should appear as a banner below the header (when needed) and putting mouse 
 quick overview"). Against the `chat_native` corpus (e2e/chat_native_corpus.py), at 1440x700 and 390x844:
 
   1. NOTHING OVER THE THREAD: no "since you left" card; the header is the title and one state badge (no Details
-     button); a waiting run's "1 needs you" banner sits between the header and the thread, in the flow.
-  2. THE OVERVIEW: hovering the yellow words lists each waiting item (kind · step · age, the question) with Go to it,
-     which brings the plan card into view. Keyboard focus opens it too; Esc closes it. A running run has no banner.
+     button); a waiting run's decision sits in the decision dock between the thread and the composer, in the flow
+     (ui-v2 gate: no banner repeats what the dock holds).
+  2. THE OVERVIEW: the thread's marker ("… asked for a decision · Go to it") brings the docked plan into view and
+     focuses it, by click and by keyboard; Esc leaves it in place. A running run has no banner.
   3. JUMP TO LATEST: scrolled up from the newest message, a ↓ button shows above the composer; it goes back to the
      newest message and goes away.
   4. THE PANEL: open by default beside the chat; its close leaves a right-edge handle (labelled, focusable) that
      opens it again from the keyboard; a closed panel is remembered across a reload.
   5. STOP STANDS OUT: a running run's Stop says "Stop run" in red; a failed run's badge is filled red — text on it
      clears 4.5:1 in the light and dark themes.
-  6. PHONE: the panel starts behind the handle and opens over the page; the banner and the header fit; no
-     horizontal scroll. 0 page errors.
+  6. PHONE: the panel starts behind the handle and opens over the page; the decision is a folded sheet that still
+     shows its eyebrow, headline and primary move, and unfolds within the width; no horizontal scroll. 0 page errors.
 
 Captures: e2e/shots/desk-run-header-*.png. Env: FEEDBACK_PORT (default 4615).
 """
@@ -68,6 +69,12 @@ LAYOUT = """() => {
     tone: q('[data-testid="session-status"]')?.dataset.tone ?? null,
     needs: q('[data-testid="session-needs-trigger"]')?.innerText ?? null,
     jump: box(q('[data-testid="session-jump-latest"]')), composer: box(q('.wk-session-composer-wrap')),
+    // ui-v2 gate: the decision dock (between the thread and the composer) and the thread's marker.
+    dock: box(q('[data-testid="decision-dock"]')), dockCollapsed: q('[data-testid="decision-dock"]')?.dataset.collapsed ?? null,
+    eyebrow: q('[data-testid="decision-dock-eyebrow"]')?.innerText ?? null, marker: box(q('[data-testid="decision-marker"]')),
+    peek: box(q('[data-testid="decision-dock-peek"]')), dockGo: box(q('[data-testid="decision-dock"] [data-testid="session-proposal-go"]')),
+    dockQ: box(q('[data-testid="decision-dock"] [data-testid="session-proposal-text"]')),
+    dockMore: box(q('[data-testid="decision-dock"] [data-testid="session-proposal-more"]')),
     hscroll: document.documentElement.scrollWidth > document.documentElement.clientWidth,
   };
 }"""
@@ -119,31 +126,36 @@ with sync_playwright() as p:
     page.screenshot(path=str(SHOTS / "desk-run-header-waiting-1440.png"))
     check("header-clean", d["since"] == 0 and d["detailsButton"] == 0 and d["status"] == "Waiting"
           and "needs you" not in (d["headText"] or "") and "Waiting on you" not in (d["headText"] or ""), page=d)
-    check("banner-in-flow", d["banner"] is not None and d["needs"] == "1 needs you"
-          and d["head"]["b"] <= d["banner"]["t"] and d["banner"]["b"] <= d["thread"]["t"], page=d)
+    # ui-v2 gate (the decision dock, operator-approved mockup 2026-10-27): what waits on you here is no longer a
+    # banner over the thread — the plan is the docked decision, IN THE FLOW between the thread and the composer, and
+    # the banner never says again what the dock holds (SessionView: `waiting.filter(… !dockItems …)`). So the banner
+    # assertion became: no banner, and the dock sits under the thread and over the composer, its eyebrow saying it waits.
+    check("banner-in-flow", d["banner"] is None and d["dock"] is not None and d["head"]["b"] <= d["thread"]["t"]
+          and d["thread"]["b"] <= d["dock"]["t"] + 1 and d["dock"]["b"] <= d["composer"]["t"] + 1
+          and (d["eyebrow"] or "").startswith("Your decision"), page=d)
 
-    # ── 2. the overview on hover; Go to it brings the plan card into view ─────────────────────────────
-    page.get_by_test_id("session-needs-trigger").hover()
-    overview = page.get_by_test_id("session-needs-overview")
-    overview.wait_for(state="visible", timeout=3000)
-    page.screenshot(path=str(SHOTS / "desk-run-header-overview-1440.png"))
-    items = page.locator('[data-testid="session-needs-item"]').evaluate_all(
-        "els => els.map(e => ({ kind: e.querySelector('[data-testid=\"session-needs-kind\"]')?.innerText, "
-        "question: e.querySelector('[data-testid=\"session-needs-question\"]')?.innerText, run: e.dataset.runId }))")
-    check("overview-items", len(items) == 1 and items[0]["run"] == "r-cn-plan" and items[0]["kind"] == "Plan approval"
-          and (items[0]["question"] or "").startswith("Approve the plan"), items=items)
-    page.get_by_test_id("session-thread").evaluate("el => { el.scrollTop = el.scrollHeight; }")
-    page.get_by_test_id("session-needs-jump").first.click()
-    page.wait_for_timeout(900)
-    inview = page.evaluate("""() => { const t = document.querySelector('[data-testid="session-thread"]').getBoundingClientRect();
-      const c = document.querySelector('[data-testid="chat-plan"][data-open="true"]').getBoundingClientRect();
-      return c.top >= t.top - 2 && c.top < t.bottom; }""")
-    check("overview-go-to-it", inview and not overview.is_visible())
-    page.mouse.move(700, 650)
-    page.get_by_test_id("session-needs-trigger").focus()
-    check("overview-keyboard-opens", overview.is_visible())
+    # ── 2. the overview: the thread's marker says what waits; Go to it brings the decision into view ─────────────
+    # The hover overview (kind · step · question) was the banner's; for a docked decision the dock itself is the
+    # overview (its eyebrow + the card's question), and the thread's marker is the "Go to it" — kept below.
+    q_text = page.locator('[data-testid="decision-dock"] [data-testid="session-proposal-text"]').inner_text()
+    marker = page.locator('[data-testid="decision-marker"][data-key="r-cn-plan"]')
+    check("overview-items", marker.count() == 1 and "asked for a decision" in marker.inner_text()
+          and q_text.startswith("Here’s the plan"), marker=marker.inner_text() if marker.count() else None, question=q_text)
+    page.get_by_test_id("session-thread").evaluate("el => { el.scrollTop = 0; }")
+    marker.click()
+    page.wait_for_timeout(600)
+    inview = page.evaluate("""() => { const d = document.querySelector('[data-testid="decision-dock"]').getBoundingClientRect();
+      return d.top >= 0 && d.bottom <= window.innerHeight + 1 && document.querySelector('[data-testid="decision-dock"]').contains(document.activeElement); }""")
+    check("overview-go-to-it", inview)
+    # Keyboard: the marker is a button; Enter on it focuses the decision (the old overview's focus-open).
+    page.evaluate("() => document.activeElement?.blur()")
+    marker.focus()
+    page.keyboard.press("Enter")
+    page.wait_for_timeout(400)
+    check("overview-keyboard-opens", page.evaluate("() => document.querySelector('[data-testid=\"decision-dock\"]').contains(document.activeElement)"))
+    # Esc closed the overview; with no popover there is nothing to close — Esc must leave the decision where it is.
     page.keyboard.press("Escape")
-    check("overview-esc-closes", not overview.is_visible())
+    check("overview-esc-closes", page.get_by_test_id("decision-dock").is_visible() and page.get_by_test_id("session-needs-overview").count() == 0)
 
     # ── 3. jump to latest ───────────────────────────────────────────────────────────────────────────
     d = open_run(page, "r-cn-bug", '[data-testid="chat-final"]')
@@ -205,14 +217,19 @@ with sync_playwright() as p:
     ctx, page = new_page(browser, 390, 844)
     d = open_run(page, "r-cn-plan", PLAN)
     page.screenshot(path=str(SHOTS / "desk-run-header-waiting-390.png"))
-    check("phone-banner-handle", d["banner"] is not None and d["head"]["b"] <= d["banner"]["t"] and d["banner"]["b"] <= d["thread"]["t"]
+    # ui-v2 gate: on a phone the decision is a sheet folded above the composer (no banner): its eyebrow, the
+    # headline and the primary move show while folded, so the operator can act without unfolding it.
+    check("phone-banner-handle", d["banner"] is None and d["dock"] is not None and d["dockCollapsed"] == "true"
+          and d["dock"]["l"] >= 0 and d["dock"]["r"] <= 390 and d["dock"]["b"] <= d["composer"]["t"] + 1
+          and d["eyebrow"] is not None and d["dockQ"] is not None and d["dockGo"] is not None and (d["dockMore"] is None or d["dockMore"]["w"] == 0)
+          and d["dockQ"]["b"] <= d["dockGo"]["t"] and d["dockGo"]["b"] <= d["dock"]["b"]
           and d["panel"] is None and d["handle"] is not None and d["handle"]["r"] == 390 and not d["hscroll"], page=d)
-    page.get_by_test_id("session-needs-trigger").click()
-    page.get_by_test_id("session-needs-overview").wait_for(state="visible", timeout=3000)
-    ov = page.get_by_test_id("session-needs-overview").bounding_box()
+    page.get_by_test_id("decision-dock-handle").click()
+    page.wait_for_timeout(400)
+    ov = page.get_by_test_id("decision-dock").bounding_box()
     page.screenshot(path=str(SHOTS / "desk-run-header-overview-390.png"))
-    check("phone-overview-fits", ov is not None and ov["x"] >= 0 and ov["x"] + ov["width"] <= 390, overview=ov)
-    page.keyboard.press("Escape")
+    check("phone-overview-fits", ov is not None and ov["x"] >= 0 and ov["x"] + ov["width"] <= 390
+          and page.get_by_test_id("decision-dock").get_attribute("data-collapsed") == "false", overview=ov)
     page.get_by_test_id("run-details-handle").click()
     page.locator('[data-testid="host-panel"]').wait_for(state="visible", timeout=5000)
     page.screenshot(path=str(SHOTS / "desk-run-header-panel-390.png"))

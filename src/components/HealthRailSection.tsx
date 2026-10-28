@@ -127,7 +127,7 @@ export const SIGNED_OUT_DETAIL = 'signed out — it may be skipped for checks';
 export const SIGNED_OUT_TITLE =
   'Studio\'s service saw no sign-in for this helper. A helper that cannot sign in fails when it starts '
   + 'and is skipped — but a provider free tier may still answer; Studio cannot tell yet. '
-  + 'Sign in from Settings.';
+  + 'Sign it in on the Agents page.';
 
 /** The roster's word on one seat's standing, read for what the WIRE says (never inferred). */
 export type SeatStanding =

@@ -173,6 +173,57 @@ describe('launch wizard', () => {
     act(() => { useLaunchSeats.getState().toggle('opencode'); });
     expect(useLaunchSeats.getState().picked).toContain('opencode');
   });
+
+  it('PRODUCT-WORKS J4: only helpers that can take work are picked; a benched or signed-out one is greyed out with why, and joins only when ticked', async () => {
+    const lift = new Date(Date.now() + 3_600_000).toISOString();
+    const roster = [
+      seat('claude'),
+      seat('codex'),
+      { ...seat('copilot'), benchedUntil: lift, benchReason: 'quota_exhausted', recent_bench: { kind: 'quota_exhausted', runs: 1, last_at: lift, lifts_at: lift, until_source: 'engine', strikes: 1, source: 'worker', reason: 'quota_exhausted' } } as RosterSeat,
+      { ...seat('pi'), signed_in: false, auth: 'signed_out' } as RosterSeat,
+    ];
+    setCachedRoster(roster);
+    vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
+      const path = new URL(url, 'http://x').pathname.replace(/^\/api\/v1/, '');
+      if (init?.method === 'POST') {
+        posts.push({ path, body: JSON.parse(String(init.body ?? '{}')) as Record<string, unknown> });
+        return Promise.resolve(new Response(JSON.stringify({ runId: 'r-new' }), { status: 200, headers: { 'content-type': 'application/json' } }));
+      }
+      const body = path === '/roster' ? { roster } : path === '/repos' ? { repos: [REPO] } : path === '/workflows' ? { workflows: WF } : path === '/projects' ? { projects: [] } : {};
+      return Promise.resolve(new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } }));
+    }));
+    render(<Harness />);
+    act(() => { openLaunchWizard({ workflowId: 'mcp-server' }); });
+    fireEvent.change(await screen.findByTestId('launch-wizard-intent'), { target: { value: 'build it' } });
+    next();
+    await waitFor(() => expect((screen.getByTestId('launch-wizard-repo') as HTMLSelectElement).value).toBe('repo-1'));
+    next();
+    const chips = screen.getAllByTestId('launch-wizard-seat');
+    const pressed = Object.fromEntries(chips.map((c) => [c.dataset.key, c.getAttribute('aria-pressed')]));
+    expect(pressed).toEqual({ claude: 'true', codex: 'true', copilot: 'false', pi: 'false' });
+    expect(chips.filter((c) => c.dataset.unusable === 'true').map((c) => c.dataset.key)).toEqual(['copilot', 'pi']);
+    const note = screen.getByTestId('launch-wizard-unusable-note');
+    expect(note).toHaveTextContent('copilot (out of quota — back by');
+    expect(note).toHaveTextContent('pi (signed out)');
+    // Each greyed helper's Sign in opens its own sign-in modal over the wizard (operator 2026-10-27: it
+    // used to close the wizard and open General settings); closing it leaves the wizard where it was.
+    const signIns = screen.getAllByTestId('launch-wizard-signin');
+    expect(signIns.map((b) => b.dataset.key)).toEqual(['copilot', 'pi']);
+    fireEvent.click(signIns[1]!);
+    expect((await screen.findByTestId('agents-modal')).dataset.agent).toBe('pi');
+    expect(screen.getByTestId('launch-wizard-unusable-note')).toBeTruthy();
+    fireEvent.click(screen.getByTestId('agents-modal-close'));
+    await waitFor(() => expect(screen.queryByTestId('agents-modal')).toBeNull());
+    expect(useLaunchWizard.getState().open).toBe(true);
+    next();
+    fireEvent.click(screen.getByTestId('launch-wizard-launch'));
+    await waitFor(() => expect(posts.some((p) => p.path === '/runs')).toBe(true));
+    const sent = JSON.parse(String(posts.find((p) => p.path === '/runs')!.body.clisJson)) as Array<{ key: string }>;
+    expect(sent.map((x) => x.key)).toEqual(['claude', 'codex']);
+    // The operator may still choose one: a tick is an explicit pick.
+    act(() => { useLaunchSeats.getState().toggle('copilot', true); });
+    expect(useLaunchSeats.getState().picked).toContain('copilot');
+  });
 });
 
 describe('Draft epics — a launch-wizard job (operator 2026-10-12: the Product page retired)', () => {

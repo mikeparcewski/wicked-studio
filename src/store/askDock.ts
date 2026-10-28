@@ -18,19 +18,46 @@ export interface AskRequest {
   seedText: string;
   /** A new chat even without a project (the Desk's Chat): the dock's stored chat is not resumed. */
   fresh: boolean;
+  /** {@link askInChat}: `seedText` is the operator's own question, typed and sent from a page's ask box
+   *  (Understand): the dock opens a NEW chat under `chatId` and sends it as the first message. */
+  send?: { chatId: string; workflow?: string; repos?: Array<{ id: string; name: string }> };
 }
 
 interface AskDockStore {
   request: AskRequest | null;
-  open: (opts?: { projectId?: string | null; seedText?: string; fresh?: boolean }) => void;
+  open: (opts?: { projectId?: string | null; seedText?: string; fresh?: boolean; send?: AskRequest['send'] }) => void;
 }
 
 export const useAskDock = create<AskDockStore>((set, get) => ({
   request: null,
   open: (opts = {}) => set({
-    request: { nonce: (get().request?.nonce ?? 0) + 1, projectId: opts.projectId ?? null, seedText: opts.seedText ?? '', fresh: opts.fresh === true || (opts.projectId ?? null) !== null },
+    request: {
+      nonce: (get().request?.nonce ?? 0) + 1, projectId: opts.projectId ?? null, seedText: opts.seedText ?? '', fresh: opts.fresh === true || (opts.projectId ?? null) !== null,
+      ...(opts.send !== undefined ? { send: opts.send } : {}),
+    },
   }),
 }));
+
+/**
+ * Ask a question the operator typed and SENT from a page's own ask box (Understand's "Ask"): the dock
+ * opens a new chat under `chatId` (minted by the caller, so the page can find the answer again) and
+ * sends `text` as the operator's first message. Only for words the operator wrote and pressed Ask on;
+ * everything else seeds the box unsent ({@link openAskDock}).
+ */
+export function askInChat(opts: {
+  text: string;
+  chatId: string;
+  projectId?: string | null;
+  /** crew#1157: the read-only workflow the chat runs (`analyze`) — a plain chat where crew lacks it. */
+  workflow?: string;
+  /** The repositories the question is about (the chat's scope). */
+  repos?: Array<{ id: string; name: string }>;
+}): void {
+  useAskDock.getState().open({
+    fresh: true, projectId: opts.projectId ?? null, seedText: opts.text,
+    send: { chatId: opts.chatId, ...(opts.workflow !== undefined ? { workflow: opts.workflow } : {}), ...(opts.repos !== undefined && opts.repos.length > 0 ? { repos: opts.repos } : {}) },
+  });
+}
 
 /** Open the Ask dock (a real chat); nothing is sent. */
 export function openAskDock(opts?: { projectId?: string | null; seedText?: string; fresh?: boolean }): void {

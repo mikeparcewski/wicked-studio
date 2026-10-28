@@ -161,6 +161,20 @@ describe('HandoverPanel — the strip', () => {
     expect(screen.queryByTestId('handover-overlay')).toBeNull();
   });
 
+  it('on the landing (no queue on the page) a reveal opens Needs you in full first; beside the queue it stays put', () => {
+    mount();
+    fireEvent.click(screen.getAllByTestId('handover-chip')[0]!);
+    expect(navigate).toHaveBeenLastCalledWith('/needs');
+    navigate.mockReset();
+    const queue = document.createElement('div');
+    queue.setAttribute('data-testid', 'needs-you-queue');
+    document.body.appendChild(queue);
+    fireEvent.click(screen.getAllByTestId('handover-chip')[1]!);
+    expect(navigate).not.toHaveBeenCalled();
+    expect(useQueueReveal.getState().keys).toEqual(['fail:f1']);
+    queue.remove();
+  });
+
   it('done for you: an overlay grouped by who acted; Open navigates and counts as acting', () => {
     mount();
     const chip = screen.getAllByTestId('handover-chip')[3]!;

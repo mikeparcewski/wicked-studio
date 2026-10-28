@@ -81,7 +81,7 @@ with sync_playwright() as p:
 
     # ── 1. the action row on every page; no page header of its own ─────────────────────
     chrome = {}
-    for name, path, ready in (("desk", "/", "desk-tabs"), ("project", "/projects/upload-endpoint", "project-desk"),
+    for name, path, ready in (("desk", "/", "desk-work"), ("project", "/projects/upload-endpoint", "project-desk"),
                               ("run", "/s/run%3Ar-upload", "session-rail"), ("general", "/system", "session-rail")):
         page.goto(f"{origin}{path}", wait_until="networkidle")
         page.get_by_test_id(ready).first.wait_for(state="visible", timeout=15000)
@@ -93,7 +93,7 @@ with sync_playwright() as p:
 
     # ── 2. the rail's Search opens the modal; results tabbed by entity, the match marked ──
     page.goto(f"{origin}/", wait_until="networkidle")
-    page.get_by_test_id("desk-tabs").wait_for(state="visible", timeout=15000)
+    page.get_by_test_id("desk-work").wait_for(state="visible", timeout=15000)
     page.get_by_test_id("desk-rail-search").click()
     page.get_by_test_id("command-palette").wait_for(state="visible", timeout=5000)
     page.get_by_test_id("palette-input").fill("upload")

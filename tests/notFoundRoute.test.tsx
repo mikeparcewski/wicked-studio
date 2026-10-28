@@ -20,8 +20,9 @@ import { NotFoundPage } from '../src/components/NotFoundPage.js';
  */
 
 /** The X1 list as ruled (COVERAGE-EXCEPTIONS X1), spelled out so the table below cannot shrink. */
+// `/projects` was ruled dead in X1 and came back as the Projects page (operator 2026-10-27).
 const X1_RULED = [
-  '/projects', '/chats', '/work', '/work?filter=active', '/execute', '/vibe', '/demo', '/make', '/runs',
+  '/chats', '/work', '/work?filter=active', '/execute', '/vibe', '/demo', '/make', '/runs',
   '/runs/r1', '/runs/r1/timeline', '/p/kes', '/p/kes/chronicle',
   '/p/kes/build', '/p/kes/build/new', '/p/kes/build/r1',
   '/p/kes/document', '/p/kes/document/d1', '/p/kes/video', '/p/kes/video/r1',
@@ -95,6 +96,12 @@ describe('X1 — the moved addresses are retired: each parses to not-found', () 
       expect(shapes.some((re) => re.test(path)), a).toBe(true);
       expect(routeAt(a).current.panel, a).toBe('not-found');
     }
+  });
+
+  it('/projects is a page again (the sidebar\'s Projects), and a project stays /projects/:id', () => {
+    expect(parseRoute('/projects').panel).toBe('projects');
+    expect(parseRoute('/projects/').panel).toBe('projects');
+    expect(parseRoute('/projects/p1').panel).toBe('project-detail');
   });
 
   it('a typo near a retired address is not-found too', () => {

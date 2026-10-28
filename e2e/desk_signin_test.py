@@ -7,17 +7,17 @@ Against the in-process fixture, whose roster has a seat whose sign-in lapsed (co
 `roster_login_lines` / `roster_signed_in` / `roster_probed` switches, the daemon's own login line and a
 later re-check:
 
-  1. THE DESK ROW: "An AI helper (codex) needs signing in again" with a Sign in action that opens the
-     agent's modal in place — no navigation.
+  1. THE AGENTS VIEW: codex's row carries a fix action (home v2 left the sign-in chores off the landing;
+     the Desk's Agents view is where they live) that opens the agent's modal in place — no navigation.
   2. THE MODAL: the agent's name; a "Signed out" problem card saying what is happening, why it matters
      and what to do; the daemon's command with the home directory as $HOME (no absolute home path in
      the words, the Copy button's name or its tooltip); Copy; "I've signed in: check again".
   3. CHECK AGAIN (crew's on-demand re-check, GET /roster?refresh=<key>): one read per click; while the
      daemon checks the modal says it is checking; a still-out answer says "Still signed out"; after the
-     seat signs in, the next check says the sign-in worked, the problem card is gone, and the Desk row
-     clears without a reload. It never opens a terminal (no POST /terminals).
+     seat signs in, the next check says the sign-in worked, the problem card is gone, and the row's
+     fix clears without a reload. It never opens a terminal (no POST /terminals).
   4. HEALTH: the rail's Health registry offers the same modal for a benched signed-out seat.
-  5. FIRST RUN: with every seat signed out, the Desk leads with the sign-in.
+  5. FIRST RUN: with every seat signed out, the landing's one card is "Set up your agents".
   6. 0 page errors.
 
 Captures: e2e/shots/desk-signin-*.png. Env: FEEDBACK_PORT (default 4368).
@@ -88,19 +88,19 @@ with sync_playwright() as p:
     # The daemon's own line for codex (worker home as an absolute path, as the real daemon sends it).
     set_fixture(origin, wave1=True, wave2b=True, simple_gates=["g1", "g2"], seat_week=False,
                 roster_login_lines={"codex": LINE}, roster_signed_in={})
-    page.goto(f"{origin}/", wait_until="networkidle")
-    page.get_by_test_id("desk").wait_for(state="visible", timeout=15000)
-    page.wait_for_function("() => !!document.querySelector('[data-testid=\"desk-chore\"][data-seat=\"codex\"]')", timeout=10000)
+    page.goto(f"{origin}/agents", wait_until="networkidle")
+    page.get_by_test_id("agents-page").wait_for(state="visible", timeout=15000)
+    page.wait_for_function("() => !!document.querySelector('[data-testid=\"agents-fix\"][data-agent=\"codex\"]')", timeout=10000)
 
-    # ── 1. the Desk row opens the modal in place ───────────────────────────────────
-    row = page.locator('[data-testid="desk-chore"][data-seat="codex"]')
+    # ── 1. the Agents view's row opens the modal in place ──────────────────────────
+    row = page.locator('[data-testid="agents-row"][data-agent="codex"]').first
     row_text = row.inner_text()
-    row.get_by_test_id("desk-chore-signin").click()
+    page.locator('[data-testid="agents-fix"][data-agent="codex"]').first.click()
     page.get_by_test_id("agents-modal").wait_for(state="visible", timeout=5000)
     page.wait_for_function("() => !!document.querySelector('[data-testid=\"agents-modal\"] [data-testid=\"agents-command\"]')", timeout=5000)
     page.wait_for_timeout(200)
     page.screenshot(path=str(SHOTS / "desk-signin-panel.png"))
-    check("desk-row", "needs signing in again" in row_text and page.evaluate("() => location.pathname") == "/", row=row_text)
+    check("desk-row", "sign" in row_text.lower() and page.evaluate("() => location.pathname") == "/agents", row=row_text)
 
     # ── 2. the modal ──────────────────────────────────────────────────────────────
     pn = page.evaluate(PANEL)
@@ -135,7 +135,7 @@ with sync_playwright() as p:
     page.screenshot(path=str(SHOTS / "desk-signin-back.png"))
     page.keyboard.press("Escape")
     page.wait_for_function("() => !document.querySelector('[data-testid=\"agents-modal\"]')", timeout=5000)
-    page.wait_for_function("() => !document.querySelector('[data-testid=\"desk-chore\"][data-seat=\"codex\"]')", timeout=5000)
+    page.wait_for_function("() => !document.querySelector('[data-testid=\"agents-fix\"][data-agent=\"codex\"][data-tone=\"fail\"]')", timeout=5000)
     check("check-again", "Checking" in checking and "Still signed out" in still and "The sign-in worked" in back
           and "signed_out" not in cards and reads == 2
           and not any(r.startswith("POST /terminals") or r.startswith("POST /seats") for r in requests),
@@ -147,7 +147,7 @@ with sync_playwright() as p:
     page.goto(f"{origin}/", wait_until="networkidle")
     page.get_by_test_id("desk").wait_for(state="visible", timeout=15000)
     page.get_by_test_id("desk-rail-nerve").click()
-    page.locator('[data-testid="nc-tab"][data-tab="clis"]').click()  # Nerve Center's tabs: the seat rows are in CLIs
+    page.locator('[data-testid="nc-tile-open"][data-tab="clis"]').first.click()  # Nerve Center: a helper tile opens its details (the CLIs tab), where the seat rows are in CLIs
     page.wait_for_function("() => document.querySelectorAll('[data-testid=\"rail-seat-move\"]').length >= 1", timeout=10000)
     move = page.locator('[data-testid="rail-seat-move"][data-kind="sign-in"]').first
     move.get_by_test_id("rail-seat-move-button").click()
@@ -163,19 +163,17 @@ with sync_playwright() as p:
     set_fixture(origin, seat_week=False, roster_signed_in={"claude": False, "codex": False, "agy": False, "pi": False})
     page.goto(f"{origin}/", wait_until="networkidle")
     page.get_by_test_id("desk").wait_for(state="visible", timeout=15000)
-    # 2026-10-17: the lead is the pinned setup item "Set up your agents" (a live item, gone once one is signed in).
-    page.locator('[data-testid="desk-setup"][data-setup="agents"]').wait_for(state="visible", timeout=10000)
+    # Home v2: nothing can run, so the landing's one card is the pinned setup item "Set up your agents"
+    # (a live item, gone once one is signed in), above every waiting decision.
+    page.locator('[data-testid="desk-card"][data-setup="agents"]').wait_for(state="visible", timeout=10000)
     lead = page.evaluate("""() => {
-      // Desk v2: the chores lead the Needs-you inbox's list (the first thing in it).
-      const main = document.querySelector('[data-testid="desk-inbox-list"]');
-      const first = main ? main.firstElementChild?.dataset.testid : null;
-      const chores = document.querySelector('[data-testid="desk-chores"]');
-      return { first, lead: chores?.dataset.lead, text: document.querySelector('[data-testid="desk-setup"][data-setup="agents"]')?.innerText,
-               rows: document.querySelectorAll('[data-testid="desk-chore"] [data-testid="desk-chore-signin"]').length };
+      const card = document.querySelector('[data-testid="desk-card"]');
+      return { setup: card?.dataset.setup ?? null, text: card?.innerText ?? null,
+               act: card?.querySelector('[data-testid="desk-setup-act"]')?.innerText ?? null };
     }""")
     page.screenshot(path=str(SHOTS / "desk-signin-firstrun.png"))
-    check("first-run", lead["first"] == "desk-chores" and lead["rows"] >= 4
-          and "Set up your agents" in (lead["text"] or "") and "Set up agents" in (lead["text"] or ""), **lead)
+    check("first-run", lead["setup"] == "agents"
+          and "Set up your agents" in (lead["text"] or "") and lead["act"] == "Set up agents", **lead)
 
     check("no-errors", not errors, errors=errors[:5])
     browser.close()

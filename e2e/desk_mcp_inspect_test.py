@@ -96,7 +96,7 @@ with sync_playwright() as p:
     page.wait_for_url("**/mcp/inspect?server=fixture-tools")
     page.get_by_test_id("mcp-inspect-ready").wait_for(state="visible")
     check("preselected", page.get_by_test_id("mcp-inspect-server").input_value() == "fixture-tools",
-          rail=page.get_by_test_id("desk-rail-mcp").get_attribute("aria-current"))
+          rail=page.get_by_test_id("desk-rail-build").get_attribute("aria-current"))
     plugin().locator('[data-testid="plugin-status"]').wait_for(state="visible")
     check("plugin-not-connected", plugin().locator('[data-testid="plugin-status"]').inner_text() == "Not connected")
 

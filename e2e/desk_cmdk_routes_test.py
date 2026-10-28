@@ -85,6 +85,9 @@ with sync_playwright() as p:
     # Proposals, Memory and Memory's Proposals joined.
     # 27 since Health folded into Nerve Center (DES-SYSTEM-VIEW): `/health` only redirects, and the Nerve
     # Center row (`/watch`) carries "health" in its words.
+    # 30 since the ui-v2 sidebar regroup (2026-10-26): Jobs, Build & settings and Needs you (/needs) joined.
+    # 31 since Run insights (/insights, crew DES-RUNS-REVIEW-001) joined; Projects (/projects) took the place
+    # of Everything's Projects tab row (operator 2026-10-27).
     open_palette("go:")
     dest_rows = page.get_by_test_id("palette-row").count()
     page.keyboard.press("Escape")
@@ -94,7 +97,7 @@ with sync_playwright() as p:
     page.screenshot(path=str(SHOTS / "desk-cmdk-go.png"))
     page.keyboard.press("Escape")
     groups = {r["group"] for r in rows}
-    check("go-group", groups == {"go"} and dest_rows == 27 and len(rows) > 27, groups=sorted(groups), destinations=dest_rows, rows=len(rows))
+    check("go-group", groups == {"go"} and dest_rows == 31 and len(rows) > 31, groups=sorted(groups), destinations=dest_rows, rows=len(rows))
 
     def reach(href: str, label: str) -> dict:
         open_palette(f"go: {label}")
@@ -124,7 +127,7 @@ with sync_playwright() as p:
 
     # ── 2. every parameterless destination ──────────────────────────────────────────
     FIXED = {"/", "/watch", "/rules", "/everything?tab=sessions", "/everything?tab=made", "/agents",
-             "/everything?tab=handed", "/everything?tab=projects", "/steering/proposals",
+             "/everything?tab=handed", "/projects", "/insights", "/steering/proposals",
              "/steering/policies", "/memory", "/memory?view=proposals", "/testing/evals", "/repos", "/repos/new",
              "/runs/new", "/workflows", "/skills", "/mcp", "/plugins", "/learn", "/system", "/system?tab=theme", "/editors/dev"}
     open_palette("go:")

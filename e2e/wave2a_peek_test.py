@@ -195,7 +195,8 @@ with sync_playwright() as p:
     q.add_init_script(
         "document.addEventListener('DOMContentLoaded', () => { const s = document.createElement('style'); "
         f"s.textContent = {json.dumps(HIDE_GATE_TOASTS)}; document.head.appendChild(s); }});")
-    q.goto(f"{origin}/", wait_until="networkidle")
+    # Home v2: the queue is in Needs you in full (/needs).
+    q.goto(f"{origin}/needs", wait_until="networkidle")
     q.get_by_test_id("needs-you-queue").wait_for(state="visible", timeout=15000)
     check("queue-top-is-approvals", wait_ok(
         q, "() => { const r = document.querySelector('[data-testid=\"need-row\"]');"
@@ -221,7 +222,8 @@ with sync_playwright() as p:
           url=q.evaluate("() => window.location.href"))
     q.keyboard.press("Alt+b")
     check("queue-back-home-focus-on-queue", wait_ok(
-        q, "() => window.location.pathname === '/'"
+        # Back lands where the queue was opened: Needs you in full (/needs) since home v2.
+        q, "() => window.location.pathname === '/needs'"
            " && !!document.activeElement?.closest('[data-testid=\"needs-you-queue\"]')", 8000),
         url=q.evaluate("() => window.location.href"),
         focused=q.evaluate("() => document.activeElement?.getAttribute('data-testid')"))

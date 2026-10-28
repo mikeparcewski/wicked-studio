@@ -1,7 +1,8 @@
 """The Desk's inbox, designed (operator 2026-10-16: "On the desk, the inbox just looks like a thing of
 boxes in both light/dark modes - needs more design").
 
-The operator's path: open the Desk, read Needs you, switch to Failures, pick an item. In each of the
+The operator's path: open Needs you in full (home v2: the landing's "N more waiting"), read it, switch to
+Failures, pick an item. In each of the
 four themes (wicked-light, wicked-dark, light, dark) at 1440x700, it certifies the inbox reads as one
 designed list, not boxes in boxes:
 
@@ -28,6 +29,10 @@ import os
 import sys
 
 from uxfix_fixture import HIDE_GATE_TOASTS, REPO, ensure_build, set_fixture, start_server
+
+# Home v2 (2026-10-26): the landing shows one card; "N more waiting" opens Needs you in full (the Desk's
+# `/needs`), the inbox this journey designs.
+INBOX = "/needs"
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4603"))
 SHOTS = REPO / "e2e" / "shots"
@@ -112,7 +117,7 @@ with sync_playwright() as p:
     page.add_init_script(
         "document.addEventListener('DOMContentLoaded', () => { const s = document.createElement('style'); "
         f"s.textContent = {json.dumps(HIDE_GATE_TOASTS)}; document.head.appendChild(s); }});")
-    page.goto(f"{origin}/", wait_until="networkidle")
+    page.goto(f"{origin}{INBOX}", wait_until="networkidle")
     page.locator('[data-testid="desk-inbox-count"]').wait_for(state="visible", timeout=15000)
     page.wait_for_selector('[data-testid="desk-inbox-read"]', timeout=10000)
     page.wait_for_timeout(300)
@@ -135,7 +140,7 @@ with sync_playwright() as p:
         look_ok(f"{theme}-failures", m, "Failed")
     # 6b. Empty, it is still the inbox: its mark, name and an explicit "Nothing needs you right now".
     set_fixture(origin, no_runs=True, roster_signed_in={"codex": True})
-    page.goto(f"{origin}/", wait_until="networkidle")
+    page.goto(f"{origin}{INBOX}", wait_until="networkidle")
     page.get_by_test_id("home-calm").wait_for(state="visible", timeout=15000)
     page.wait_for_timeout(400)
     empty = page.evaluate("""() => ({ calm: document.querySelector('[data-testid="home-calm"]')?.innerText ?? '',
@@ -146,7 +151,7 @@ with sync_playwright() as p:
         page.locator('[data-testid="desk-inbox"]').screenshot(path=str(SHOTS / f"desk-inbox-look-empty-{theme}.png"))
     check("empty-is-still-the-inbox", empty["rows"] == 0 and "Nothing needs you right now" in empty["calm"] and empty["icon"], empty=empty)
     set_fixture(origin, no_runs=False, roster_signed_in={})
-    page.goto(f"{origin}/", wait_until="networkidle")
+    page.goto(f"{origin}{INBOX}", wait_until="networkidle")
     page.locator('[data-testid="desk-inbox-count"]').wait_for(state="visible", timeout=15000)
 
     # 7. The keyboard's ring on the selected folder.
@@ -161,7 +166,7 @@ with sync_playwright() as p:
 
     # 8. A group of approvals: its moves on their own line; its snippet keeps its width.
     set_fixture(origin, wave1=True, wave2b=True, simple_gates=["g1", "g2"], gate_now=[], status_over={}, extra_frames=[])
-    page.goto(f"{origin}/", wait_until="networkidle")
+    page.goto(f"{origin}{INBOX}", wait_until="networkidle")
     page.locator('[data-testid="desk-inbox-count"]').wait_for(state="visible", timeout=15000)
     page.wait_for_timeout(500)
     groups = page.evaluate("""() => [...document.querySelectorAll('[data-testid="need-row"]:not([data-count="1"])')].map((r) => {
@@ -175,7 +180,7 @@ with sync_playwright() as p:
     ctx = browser.new_context(viewport={"width": 390, "height": 844}, device_scale_factor=1, is_mobile=True, has_touch=True)
     page = ctx.new_page()
     page.on("pageerror", lambda e: errors.append(str(e)))
-    page.goto(f"{origin}/", wait_until="networkidle")
+    page.goto(f"{origin}{INBOX}", wait_until="networkidle")
     page.locator('[data-testid="desk-inbox-count"]').wait_for(state="visible", timeout=15000)
     page.wait_for_timeout(300)
     phone = page.evaluate("""() => { const r = document.querySelector('[data-testid="need-row"]'); const a = r.querySelector('.wk-inbox-acts');

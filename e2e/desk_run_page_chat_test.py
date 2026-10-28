@@ -11,7 +11,8 @@ Against the fixture's runs it proves, at `/s/run:r-review` (paused at a review g
      actions (Look underneath, Tech details). The thread never runs under the panel; no horizontal scroll.
   2. WHO RESPONDED: every thread entry that is not a chat bubble sits under a "who" line; each line says seat,
      you or crew (`data-role`), and the run's own block is crew's.
-  3. THE GATE CARD is inline in the thread, in the run's block (the panel holds no gate card).
+  3. THE GATE CARD is the chat's: in the decision dock under the thread, its marker in the run's block (the panel
+     holds no gate card).
   4. LOOK UNDERNEATH from the Run tab opens the run's sheet.
   5. NARROW (1100x700): no ribbon line over the chat; the header's Details opens the panel over the page
      (DES-CHAT-NATIVE-RUN: the panel is closed by default and opened from Details, wide or narrow).
@@ -72,7 +73,11 @@ PAGE = """() => {
       sections: [...tab.querySelectorAll('[data-testid="run-panel-section"]')].map((s) => s.dataset.section), tech: !!tab.querySelector('[data-testid="run-tab-tech"]'),
     } : null,
     who: [...document.querySelectorAll('[data-testid="session-thread"] [data-testid="turn-who"]')].map((w) => ({ role: w.dataset.role, text: txt(w) })),
-    gateInThread: !!document.querySelector('[data-testid="session-thread"] [data-testid="session-run"] [data-testid="session-gate-row"]'),
+    // ui-v2 gate: the gate card is in the decision dock between the thread and the composer (never the panel); the
+    // run's block in the thread keeps its marker where the question was asked.
+    gateInThread: !!document.querySelector('[data-testid="session-thread"] [data-testid="session-run"] [data-testid="decision-marker"]')
+      && !!document.querySelector('[data-testid="decision-dock"] [data-testid="session-gate-row"]')
+      && !(panel && panel.contains(document.querySelector('[data-testid="decision-dock"]'))),
     gateInPanel: !!(panel && panel.querySelector('[data-testid="session-gate-row"]')),
     hscroll: document.documentElement.scrollWidth > document.documentElement.clientWidth,
   };

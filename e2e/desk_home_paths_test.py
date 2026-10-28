@@ -15,11 +15,12 @@ graph file's absolute path — plus the wave-1 and team corpora, and proves:
      opened; then document.body.innerText and every [title] attribute are free of the home directory.
   2. THE FORMATTER RAN: /system and /skills print `~/` — the fixture's paths were abbreviated, not
      left out — and the technical-details switch is off (the default layer is what was scanned).
-  3. #459: with GET /runs held 2.5 s, a fresh `/` shows `desk-loading` and no headline, no calm copy
-     in the needs-you fold (rows already known may show), no "Nothing has been started yet."; when
-     /runs answers, the Desk's sentence appears, the loading line goes, and the projects are back.
-  4. #464: the Desk row of a run paused before its first unit (crew's unit prompt: the goal and the
-     ` ||| PHASE SCOPE:` scaffold) reads "Start the triage step?"; no "|||" on the Desk.
+  3. #459: with GET /runs held 2.5 s, a fresh `/` shows `desk-loading` and no count, no calm copy
+     in the needs-you fold, no "Nothing has been started yet."; when /runs answers, the landing's
+     sentence carries its count, the loading line goes, and one card (or the calm line) shows.
+  4. #464: the needs row of a run paused before its first unit (crew's unit prompt: the goal and the
+     ` ||| PHASE SCOPE:` scaffold) reads "Start the triage step?"; no "|||" in the list (Needs you in
+     full, `/needs`, since home v2 left one card on the landing).
   5. #479: the delivered run's page — What / Where (worktree), Files referenced, Data used, Delivery (the push
      target) and every unit output (the deliver unit's push line) — names no home directory.
   6. #467: Health → pi's sign-in move: the "Running …" line reads `~/…`; no home directory in the panel.
@@ -106,7 +107,7 @@ with sync_playwright() as p:
                 sheets=True, home_paths=True, runs_delay_ms=0)
     page.goto(f"{origin}/", wait_until="networkidle")
     page.get_by_test_id("desk").wait_for(state="visible", timeout=15000)
-    page.get_by_test_id("desk-inbox-count").wait_for(state="visible", timeout=15000)
+    page.locator('[data-testid="desk-story"][data-count]').wait_for(state="visible", timeout=15000)
     page.wait_for_timeout(500)
 
     # ── the addresses: the ⌘K GO TO group — every destination, and one row of each parametric shape ──
@@ -180,7 +181,7 @@ with sync_playwright() as p:
           settings_line=settings_line, skills_root=skills_root, technical_details=str(tech))
 
     # ── 3. #459: the Desk while /runs is held ────────────────────────────────────────
-    # Desk v2: the inbox holds a skeleton (desk-loading) and the header says "Reading…" until /runs answers.
+    # Home v2: the needs card holds a skeleton (desk-loading) and the sentence says it is checking until /runs answers.
     set_fixture(origin, runs_delay_ms=6000)
     page.goto(f"{origin}/", wait_until="commit")
     try:
@@ -194,8 +195,8 @@ with sync_playwright() as p:
       const t = d ? d.innerText : '';
       return {
         loading: document.querySelectorAll('[data-testid="desk-loading"]').length > 0
-          && (document.querySelector('[data-testid="desk-as-of"]') || {}).innerText === 'Reading…',
-        headline: document.querySelectorAll('[data-testid="desk-inbox-count"]').length,
+          && (document.querySelector('[data-testid="desk-story"]') || {}).innerText === 'Checking what is going on…',
+        headline: document.querySelectorAll('[data-testid="desk-story"][data-count]').length,
         calm: document.querySelectorAll('[data-testid="home-calm"]').length,
         fold: document.querySelectorAll('[data-testid="needs-you-queue"]').length,
         nothingNeeds: t.includes('Nothing needs you'),
@@ -208,11 +209,12 @@ with sync_playwright() as p:
     # fold's calm copy, the headline's all-clear and the projects sentence may not.
     check("desk-holds-its-verdict", held["loading"] and held["headline"] == 0 and held["calm"] == 0
           and not held["nothingNeeds"] and not held["nothingStarted"], **held)
-    page.get_by_test_id("desk-inbox-count").wait_for(state="visible", timeout=15000)
+    page.locator('[data-testid="desk-story"][data-count]').wait_for(state="visible", timeout=15000)
     after = page.evaluate("""() => ({
       loading: document.querySelectorAll('[data-testid="desk-loading"]').length,
-      headline: (document.querySelector('[data-testid="desk-inbox-count"]') || {}).innerText || '',
-      fold: document.querySelectorAll('[data-testid="needs-you-queue"]').length,
+      headline: (document.querySelector('[data-testid="desk-story"][data-count]') || {}).innerText || '',
+      // Home v2: the fold is one card (or the calm line), never both and never neither.
+      fold: document.querySelectorAll('[data-testid="desk-card"], [data-testid="desk-needs-calm"]').length,
       happening: document.querySelectorAll('[data-testid="desk-happening"], [data-testid="desk-now"]').length,
     })""")
     page.screenshot(path=str(SHOTS / "desk-home-paths-loaded.png"))
@@ -235,7 +237,8 @@ with sync_playwright() as p:
         page.wait_for_timeout(600)
 
     # ── 4. #464: the pre-unit gate's Desk row says the step, never the engine's unit prompt ──
-    page.goto(f"{origin}/", wait_until="networkidle")
+    # Home v2: the landing shows one card; every row is in Needs you in full (`/needs`).
+    page.goto(f"{origin}/needs", wait_until="networkidle")
     page.get_by_test_id("desk-inbox-count").wait_for(state="visible", timeout=15000)
     page.wait_for_timeout(500)
     desk_text = page.evaluate("() => (document.querySelector('[data-testid=\"desk\"]') || document.body).innerText")
@@ -279,7 +282,7 @@ with sync_playwright() as p:
     link = page.get_by_test_id("desk-rail-nerve")
     link.wait_for(state="visible", timeout=15000)
     link.click()
-    page.locator('[data-testid="nc-tab"][data-tab="clis"]').click()  # Nerve Center's tabs: the seat rows are in CLIs
+    page.locator('[data-testid="nc-tile-open"][data-tab="clis"]').first.click()  # Nerve Center: a helper tile opens its details (the CLIs tab), where the seat rows are in CLIs
     pi_move = page.locator('[data-testid="rail-seat-move"][data-seat="pi"] [data-testid="rail-seat-move-button"]')
     pi_move.wait_for(state="visible", timeout=15000)
     pi_move.click()

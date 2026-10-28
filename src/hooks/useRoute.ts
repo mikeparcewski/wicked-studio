@@ -6,10 +6,10 @@ import { announceHistoryChange, announceNavigateAway, inAppEntryState, isInAppEn
 // `everything` is "See everything" (`/everything`, DES-STUDIO-REBUILD-001 §5.4, slices S15c/S17a): five
 // tabs — Sessions, Everything made, Helpers, Handed over, Projects — selected by `?tab=`; the Sessions tab keeps
 // `?filter=` and takes `?project=` for one project's sessions. X1 (operator ruling 2026-10-09: "we
-// should just remove these"): the addresses that once MOVED onto it or onto a session — `/projects`,
-// `/chats`, `/work`, `/execute`, `/vibe`, `/demo`, `/make`, the bare `/runs`, `/runs/:id[/timeline]`,
+// should just remove these"): the addresses that once MOVED onto it or onto a session — `/chats`, `/work`, `/execute`, `/vibe`, `/demo`, `/make`, the bare `/runs`, `/runs/:id[/timeline]`,
 // every `/p/:id/…` project-shell address and `/chat/…` — no longer redirect: each is a dead address
-// ({@link RETIRED_ADDRESSES}) and parses to `not-found`.
+// ({@link RETIRED_ADDRESSES}) and parses to `not-found`. `/projects` came back as a page of its own
+// (operator 2026-10-27: Projects is WORK's first sidebar item): the projects list.
 // `steering` is the Steer surface (`/steering/{policies,proposals}`, hosted on the Desk's Steer tab):
 // the rules helpers are held to — Policies (the seven-type rule corpus; the seven types are a
 // `?type=` FILTER on one list) and Proposals (policy proposals waiting on review). The panels it
@@ -27,6 +27,10 @@ import { announceHistoryChange, announceNavigateAway, inAppEntryState, isInAppEn
 // The orphaned `coverage` and `domain` settings panels retired in the same wave:
 // their paths parse to `system` and `useRetiredSettingsRedirect` rewrites the
 // address onto `/system`.
+// `jobs`, `report` and `understand` (the ui-v2 nav regroup, 2026-10-26) are the Desk's old Runs, Report and
+// Understand tabs as pages of their own (`/jobs`, `/report[?focus=]`, `/understand`); `build` is Build &
+// settings (`/build`), the list of Skills, MCP, Plugins, Workflows and Settings. Flat: deeper spellings
+// are dead addresses. The old `/?tab=…` Desk addresses redirect onto them (`legacyDeskTarget`).
 // `not-found` is the honest dead-address state (usability review #4): an address
 // that matches NO page renders a not-found view that PRESERVES the typed URL and
 // offers the way out — it never silently normalizes onto a nearby default. Only
@@ -42,14 +46,14 @@ import { announceHistoryChange, announceNavigateAway, inAppEntryState, isInAppEn
 // worktree files/diff as REAL routes — `/runs/:id/events`, `/runs/:id/files` — so the palette
 // verb that opens them is one history entry and browser Back returns to where you were. The run
 // id rides in `artifactId` (NOT `runId`: no run-selected machinery, no legacy shell redirect).
-export type Panel = 'home' | 'runs' | 'run-events' | 'run-files' | 'workflows' | 'skills' | 'mcp' | 'steering' | 'memory' | 'testing' | 'repos' | 'system' | 'theme' | 'repo-detail' | 'project-detail' | 'session' | 'editors' | 'watch' | 'rules' | 'everything' | 'product' | 'project-requirements' | 'plugins' | 'agents' | 'learn' | 'health' | 'not-found';
+export type Panel = 'home' | 'needs' | 'projects' | 'jobs' | 'report' | 'understand' | 'build' | 'runs' | 'run-events' | 'run-files' | 'workflows' | 'skills' | 'mcp' | 'steering' | 'memory' | 'testing' | 'repos' | 'system' | 'theme' | 'repo-detail' | 'project-detail' | 'session' | 'editors' | 'watch' | 'rules' | 'everything' | 'product' | 'project-requirements' | 'plugins' | 'agents' | 'learn' | 'insights' | 'health' | 'not-found';
 
 /** Every panel, exhaustively (the compile-time check below fails when the union grows without it). */
-export const ALL_PANELS = ['home', 'runs', 'run-events', 'run-files', 'workflows', 'skills', 'mcp', 'steering', 'memory', 'testing', 'repos', 'system', 'theme', 'repo-detail', 'project-detail', 'session', 'editors', 'watch', 'rules', 'everything', 'product', 'project-requirements', 'plugins', 'agents', 'learn', 'health', 'not-found'] as const satisfies readonly Panel[];
+export const ALL_PANELS = ['home', 'needs', 'projects', 'jobs', 'report', 'understand', 'build', 'runs', 'run-events', 'run-files', 'workflows', 'skills', 'mcp', 'steering', 'memory', 'testing', 'repos', 'system', 'theme', 'repo-detail', 'project-detail', 'session', 'editors', 'watch', 'rules', 'everything', 'product', 'project-requirements', 'plugins', 'agents', 'learn', 'insights', 'health', 'not-found'] as const satisfies readonly Panel[];
 type MissingPanel = Exclude<Panel, (typeof ALL_PANELS)[number]>;
 export const PANELS_EXHAUSTIVE: MissingPanel extends never ? true : MissingPanel = true;
 
-const PANELS: Panel[] = ['runs', 'workflows', 'skills', 'mcp', 'plugins', 'agents', 'repos', 'system', 'theme', 'repo-detail', 'watch', 'learn', 'health'];
+const PANELS: Panel[] = ['runs', 'workflows', 'skills', 'mcp', 'plugins', 'agents', 'repos', 'system', 'theme', 'repo-detail', 'watch', 'learn', 'insights', 'health'];
 /** studio#157's Product view retired (operator 2026-10-12): `/product[?project=<id>]` only redirects —
  *  to that project's dashboard (its Requirements section), or to the projects list. */
 export function productRedirectPath(search: string): string {
@@ -77,7 +81,7 @@ export function projectRequirementsPath(projectId: string): string {
  * per shape (`:id` segments are filled with a sample id).
  */
 export const RETIRED_ADDRESSES: readonly string[] = [
-  '/projects', '/chats', '/work', '/execute', '/vibe', '/demo', '/make', '/runs',
+  '/chats', '/work', '/execute', '/vibe', '/demo', '/make', '/runs',
   '/runs/:id', '/runs/:id/timeline',
   '/p/:id', '/p/:id/chronicle',
   '/p/:id/build', '/p/:id/build/new', '/p/:id/build/:id',
@@ -289,11 +293,15 @@ function parse(pathname: string): Route {
   if (first === 'product') {
     return second === '' && restEmpty(2) ? route({ panel: 'product' }) : route({ panel: 'not-found' });
   }
+  if (first === 'projects' && !second) return route({ panel: 'projects' });
   if (first === 'projects' && second && third === 'requirements' && restEmpty(4)) {
     return route({ panel: 'project-requirements', projectId: safeDecode(second) });
   }
   if (first === 'projects' && second) {
     return route({ panel: 'project-detail', projectId: safeDecode(second) });
+  }
+  if (first === 'needs' || first === 'jobs' || first === 'report' || first === 'understand' || first === 'build') {
+    return restEmpty(2) ? route({ panel: first }) : route({ panel: 'not-found' });
   }
   if ((PANELS as string[]).includes(first) && first !== 'runs') {
     return route({ panel: first as Panel });

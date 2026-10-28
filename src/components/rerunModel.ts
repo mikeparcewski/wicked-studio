@@ -53,8 +53,10 @@ export interface RerunInput {
 const NOT_A_REWIND: ReadonlySet<string> = new Set(['plan_approval', 'team_dispute', 'team_transport']);
 /** Unit statuses of a unit that has not run: there is nothing of it to rerun. */
 const NOT_RUN: ReadonlySet<string> = new Set(['pending', 'distributed']);
-/** The events that end a unit's run (its output captured, or its gate's answer). */
-const ENDS: ReadonlySet<string> = new Set(['unitOutputCaptured', 'unitDone', 'unitDenied', 'stepFailed']);
+/** The events that end a unit's work, its check run included: the output, the floor's record (the repository's own checks
+ *  run AFTER the output is captured, and on a red base they are most of the time), the verdict and the escalation.
+ *  `unitDone` counts only when none of those came: it can land after the operator's answer, which is not the step's time. */
+const WORK_ENDS: ReadonlySet<string> = new Set(['unitOutputCaptured', 'repoChecksEvaluated', 'gateEvaluated', 'gateEscalated', 'unitDenied', 'stepFailed']);
 
 /** The gate kind the log's newest `awaitingHuman` for `ord` names, else `null`. */
 export function gateKindFromLog(events: readonly CoreEvent[], ord: number | undefined): string | null {
@@ -79,25 +81,37 @@ export function rewindTarget(units: readonly WorkUnit[], gateOrd: number): WorkU
 }
 
 /**
- * How long each unit's newest run took, in ms, from the recorded event times: its newest
- * `unitDispatched` to the first event that ends it. Live frames carry no `ts`, so a unit whose
- * pair was not replayed from the log is simply absent.
+ * How long each unit took, in ms, from the run's own recorded event times (J4 0.16.6: "Redo from the fix step · about
+ * 6 min" for a step whose check run took 40). Each attempt runs from its `unitDispatched` to the last event that ends its
+ * work ({@link WORK_ENDS}: the check run included, the operator's wait not); a unit's time is its LONGEST finished attempt
+ * (a no-change retry that re-ran nothing is not what a redo costs). Live frames carry no `ts`, so a unit whose events
+ * were not replayed from the log is simply absent.
  */
 export function unitDurations(events: readonly CoreEvent[]): Map<number, number> {
   const out = new Map<number, number>();
-  const started = new Map<number, number>();
+  const open = new Map<number, { t0: number; end: number | null; done: number | null }>();
+  const close = (ord: number): void => {
+    const a = open.get(ord);
+    if (a === undefined) return;
+    const end = a.end ?? a.done;
+    if (end !== null && end >= a.t0) out.set(ord, Math.max(out.get(ord) ?? 0, end - a.t0));
+    open.delete(ord);
+  };
   for (const e of events) {
     if (typeof e.ord !== 'number' || typeof e.ts !== 'number') continue;
     if (e.type === 'unitDispatched') {
-      started.set(e.ord, e.ts);
-    } else if (ENDS.has(e.type)) {
-      const t0 = started.get(e.ord);
-      if (t0 !== undefined && e.ts >= t0) {
-        out.set(e.ord, e.ts - t0);
-        started.delete(e.ord);
-      }
+      close(e.ord);
+      open.set(e.ord, { t0: e.ts, end: null, done: null });
+      continue;
     }
+    const a = open.get(e.ord);
+    if (a === undefined) continue;
+    if (WORK_ENDS.has(e.type)) a.end = e.ts;
+    else if (e.type === 'unitDone' && a.end === null) a.done = e.ts;
+    // The operator's answer ends the attempt: whatever follows is the next attempt's (or the operator's wait).
+    if (e.type === 'awaitingHuman' || e.type === 'gateDecided') { if (a.end === null && e.type === 'awaitingHuman') a.end = e.ts; close(e.ord); }
   }
+  for (const ord of [...open.keys()]) close(ord);
   return out;
 }
 

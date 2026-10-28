@@ -1,0 +1,234 @@
+/* ── THE DECISION DOCK + THE GATE CARD (mockup ui-v2-gate, operator addendum 2026-10-27) ──
+ * A decision is its own surface about moving the work forward, never a chat bubble with buttons inside:
+ *  - docked between the thread and the composer, the content column wide; it stays put while the thread scrolls;
+ *  - elevated, with a status rail on its left edge: amber = waiting on you, red = blocking other work;
+ *  - eyebrow, the plain question as its headline, one line on what happens next, one primary + "Other options ▾";
+ *  - it grows to about 60% of the viewport, then scrolls inside itself;
+ *  - on a phone it is a bottom sheet with a grab handle (folded: the eyebrow, the headline and the primary move).
+ * Hover fills are the ink (the calm pattern's rule: rest -> hover dE_OK >= 0.08 whatever the accent). */
+
+.wk-dock {
+  flex-shrink: 0; position: relative; z-index: 2; padding-top: 10px; padding-bottom: 10px;
+  --dock-rail: var(--status-warn);
+  --dock-hover: color-mix(in oklab, var(--ink-high) 12%, transparent);
+  --dock-hover-strong: color-mix(in oklab, var(--ink-high) 16%, transparent);
+  --dock-press: color-mix(in oklab, var(--ink-high) 20%, transparent);
+  --dock-link: color-mix(in oklab, var(--accent) 50%, var(--ink-high));
+}
+.wk-dock[data-tone="blocking"] { --dock-rail: var(--status-fail); }
+/* A decision whose renderer drew nothing here (a run that settled between reads) leaves no empty surface. */
+.wk-dock:has(.wk-dock-slot:empty):not([data-collapsed="true"]) { display: none; }
+.wk-dock-surface {
+  position: relative; display: flex; flex-direction: column; gap: 14px; max-height: 60vh; overflow-y: auto; overscroll-behavior: contain;
+  padding: 22px 28px; border-radius: 18px; background: var(--surface-raised); border-left: 4px solid var(--dock-rail);
+  box-shadow: inset 0 0 0 1px var(--border-subtle), var(--shadow-raised);
+}
+.wk-dock:focus-visible { outline: none; }
+.wk-dock:focus-visible .wk-dock-surface { box-shadow: inset 0 0 0 1px var(--border-subtle), var(--focus-ring); }
+
+.wk-dock-top { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.wk-dock-eyebrow { margin: 0; display: flex; align-items: center; gap: 10px; font-size: 14px; font-weight: 600; color: color-mix(in oklab, var(--dock-rail) 72%, var(--ink-high)); }
+.wk-dock-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--dock-rail); flex-shrink: 0; }
+.wk-dock-next {
+  flex-shrink: 0; border: 0; background: transparent; color: var(--dock-link); font: inherit; font-size: 14px; cursor: pointer;
+  padding: 4px 8px; border-radius: var(--radius-sm); transition: background-color 0.14s;
+}
+.wk-dock-next:hover { background: var(--dock-hover); text-decoration: underline; text-underline-offset: 3px; }
+.wk-dock-next:focus-visible { outline: 2px solid transparent; box-shadow: var(--focus-ring); }
+.wk-dock-slot { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.wk-dock-slot[hidden] { display: none; }
+
+/* The renderers in the dock lose their in-thread chrome: no bordered box, no bubble. */
+.wk-dock-slot > .wk-session-gate-row, .wk-dock-slot > .wk-prop, .wk-dock-slot .wk-session-questions { margin: 0; padding: 0; border: 0; background: transparent; box-shadow: none; }
+.wk-dock-slot > .wk-prop .wk-prop-text { font-size: 22px; line-height: 1.35; font-weight: 600; letter-spacing: -0.005em; }
+.wk-dock-slot > .wk-prop .wk-prop-why { font-size: 16px; line-height: 1.6; color: var(--ink-body); }
+.wk-dock-slot > .wk-prop .wk-prop-btns { margin-top: 14px; gap: 12px; flex-wrap: wrap; }
+.wk-dock-slot > .wk-prop .wk-prop-btn { min-height: 44px; padding: 0 18px; border-radius: 12px; font-size: 15px; }
+
+/* ── The thread's marker where the question was asked: a hairline row with an icon, never a bubble. ── */
+.wk-dmark {
+  display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 4px; border: 0; border-top: 1px solid var(--border-subtle);
+  border-bottom: 1px solid var(--border-subtle); background: transparent; color: var(--ink-muted); font: inherit; font-size: 14px;
+  text-align: left; cursor: pointer; transition: background-color 0.14s, color 0.14s;
+}
+.wk-dmark:hover { background: var(--dock-hover, color-mix(in oklab, var(--ink-high) 12%, transparent)); color: var(--ink-high); }
+.wk-dmark:focus-visible { outline: 2px solid transparent; box-shadow: var(--focus-ring); }
+.wk-dmark-icon { flex-shrink: 0; color: var(--status-warn); }
+.wk-dmark-words { flex: 1 1 auto; min-width: 0; }
+.wk-dmark-go { flex-shrink: 0; font-size: 13px; color: var(--ink-dim); }
+.wk-dmark:hover .wk-dmark-go { color: var(--ink-high); }
+
+/* ── The gate card's own layout (GateRow), wherever it draws ── */
+.wk-gate2 { gap: 14px; }
+.wk-gate2-q { margin: 0; font-size: 22px; line-height: 1.35; font-weight: 600; letter-spacing: -0.005em; color: var(--ink-high); }
+.wk-gate2-p { margin: 0; font-size: 16px; line-height: 1.6; color: var(--ink-body); }
+.wk-gate2 > .wk-gate-consequence, .wk-gate2 > p.wk-gate-consequence { font-size: 15px; line-height: 1.6; }
+.wk-gate2-fails { display: flex; flex-direction: column; gap: 12px; }
+.wk-gate2-new {
+  margin: 0; list-style: none; padding: 14px 18px; border-radius: 14px; display: flex; flex-direction: column; gap: 10px;
+  background: color-mix(in oklab, var(--status-fail) 10%, transparent); color: var(--ink-high); font-size: 15px; line-height: 1.5;
+}
+.wk-gate2-new li { display: flex; flex-direction: column; gap: 2px; }
+.wk-gate2-new-t { font-weight: 500; }
+.wk-gate2-new-id { font-size: 13px; color: var(--ink-muted); background: none; padding: 0; overflow-wrap: anywhere; }
+.wk-gate2-base { display: flex; flex-direction: column; gap: 8px; padding-left: 4px; }
+.wk-gate2-base ul { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; font-size: 14px; color: var(--ink-body); }
+.wk-gate2-base li { display: flex; flex-direction: column; gap: 2px; }
+.wk-gate2-label { margin: 0; font-size: 13px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-muted); }
+.wk-gate2-link {
+  align-self: flex-start; border: 0; background: transparent; color: var(--dock-link, color-mix(in oklab, var(--accent) 50%, var(--ink-high)));
+  font: inherit; font-size: 14px; padding: 4px 6px; margin-left: -6px; border-radius: var(--radius-sm); cursor: pointer; transition: background-color 0.14s;
+}
+.wk-gate2-link:hover { text-decoration: underline; text-underline-offset: 3px; background: var(--dock-hover, color-mix(in oklab, var(--ink-high) 12%, transparent)); }
+.wk-gate2-link:focus-visible { outline: 2px solid transparent; box-shadow: var(--focus-ring); }
+
+.wk-gate2-decide { display: flex; flex-direction: column; gap: 14px; padding-top: 16px; border-top: 1px solid var(--border-subtle); }
+.wk-gate2-next { margin: 0; font-size: 14px; line-height: 1.55; color: var(--ink-muted); border: 0; padding: 0; background: none; }
+.wk-gate2-choices { gap: 12px; }
+.wk-gate2-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 0 20px; border-radius: 12px;
+  font-family: inherit; font-size: 15px; font-weight: 600; line-height: 1.2; cursor: pointer; white-space: nowrap;
+  transition: background-color 0.14s, border-color 0.14s, color 0.14s, transform 0.14s;
+}
+.wk-gate2-btn:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-shadow: var(--focus-ring); }
+.wk-gate2-btn:disabled { cursor: default; opacity: 0.6; }
+.wk-gate2-btn--primary { border: 0; background: var(--accent); color: var(--accent-fg); }
+.wk-gate2-btn--primary:hover:not(:disabled) { background: color-mix(in oklab, var(--accent) 80%, var(--accent-fg)); transform: translateY(-1px); }
+.wk-gate2-btn--primary:active:not(:disabled) { background: color-mix(in oklab, var(--accent) 72%, var(--accent-fg)); transform: none; }
+.wk-gate2-btn--secondary { border: 1px solid var(--border-strong); background: transparent; color: var(--ink-high); font-weight: 500; }
+.wk-gate2-btn--secondary:hover:not(:disabled) { background: var(--dock-hover-strong, color-mix(in oklab, var(--ink-high) 16%, transparent)); border-color: color-mix(in oklab, var(--accent) 70%, var(--ink-high)); }
+.wk-gate2-btn--secondary:active:not(:disabled), .wk-gate2-btn--secondary[aria-expanded="true"] { background: var(--dock-press, color-mix(in oklab, var(--ink-high) 20%, transparent)); }
+.wk-gate2-btn.wk-session-gate-choice--focus { box-shadow: var(--focus-ring); }
+
+/* The menu opens in the card's flow, under the buttons (the dock scrolls inside itself; nothing is clipped). */
+.wk-gate2-choices { flex-wrap: wrap; }
+.wk-gate2-more { display: contents; }
+.wk-gate2-menu {
+  flex: 1 0 100%; max-width: 420px; display: flex; flex-direction: column; padding: 6px; border-radius: 14px;
+  background: var(--surface-overlay); box-shadow: inset 0 0 0 1px var(--border-subtle), var(--shadow-overlay);
+}
+.wk-gate2-menu[hidden] { display: none; }
+.wk-gate2-mi {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 2px; width: 100%; padding: 10px 12px; border: 0; border-radius: 10px;
+  background: transparent; color: var(--ink-high); font: inherit; font-size: 14px; text-align: left; cursor: pointer; transition: background-color 0.14s;
+}
+.wk-gate2-mi:hover:not(:disabled) { background: var(--dock-hover, color-mix(in oklab, var(--ink-high) 12%, transparent)); }
+.wk-gate2-mi:focus-visible { outline: 2px solid transparent; box-shadow: var(--focus-ring); }
+.wk-gate2-mi-label { font-weight: 500; }
+.wk-gate2-mi-sub { font-size: 12px; line-height: 1.45; color: var(--ink-muted); }
+.wk-gate2-mi--off, .wk-gate2-mi:disabled { color: var(--ink-dim); cursor: not-allowed; }
+.wk-gate2-mi--off .wk-gate2-mi-sub { color: var(--ink-dim); }
+.wk-gate2-menu-rule { border-top: 1px solid var(--border-subtle); margin: 6px 4px; }
+.wk-gate2-menu-label { margin: 0; padding: 6px 12px; font-size: 12px; color: var(--ink-muted); }
+.wk-gate2-off { display: flex; flex-direction: column; }
+.wk-gate2-off-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-right: 8px; }
+.wk-gate2-off-row .wk-gate2-mi { flex: 1 1 auto; }
+.wk-gate2-off-row .wk-gate2-link { margin-left: 0; flex-shrink: 0; }
+
+.wk-gate2-foot { display: flex; flex-direction: column; gap: 8px; font-size: 13px; color: var(--ink-muted); }
+.wk-gate2-foot .wk-assurance { margin: 0; font-size: 13px; }
+.wk-gate2-foot .wk-session-gate-prompt-summary { font-size: 13px; color: var(--dock-link, var(--ink-muted)); }
+
+/* ── Phone: a bottom sheet with a grab handle. Folded, the eyebrow, the headline and the primary move. ── */
+.wk-dock-handle { display: none; }
+.wk-dock-peek { display: none; }
+@media (max-width: 640px) {
+  .wk-dock { padding: 0; }
+  .wk-dock-surface {
+    max-height: 70vh; padding: 8px 18px 18px 18px; border-left: 0; border-top: 4px solid var(--dock-rail);
+    border-radius: 18px 18px 0 0;
+  }
+  .wk-dock-handle {
+    display: flex; justify-content: center; align-items: center; width: 100%; min-height: 24px; padding: 0; border: 0; background: transparent; cursor: pointer;
+  }
+  .wk-dock-handle:focus-visible { outline: 2px solid transparent; box-shadow: var(--focus-ring); border-radius: var(--radius-sm); }
+  .wk-dock-grab { width: 40px; height: 4px; border-radius: 999px; background: var(--border-strong); }
+  .wk-dock-peek {
+    display: block; width: 100%; padding: 0; border: 0; background: transparent; color: var(--ink-high); font: inherit; font-size: 18px;
+    font-weight: 600; line-height: 1.35; text-align: left; cursor: pointer;
+  }
+  .wk-gate2-q { font-size: 19px; }
+  /* Folded: the eyebrow, the headline and the primary move, so the operator can act without unfolding the sheet. */
+  .wk-dock-slot[data-folded="true"] .wk-gate2 > :not(.wk-gate2-q):not(.wk-gate2-decide),
+  .wk-dock-slot[data-folded="true"] .wk-gate2-next,
+  .wk-dock-slot[data-folded="true"] .wk-gate2-more,
+  .wk-dock-slot[data-folded="true"] .wk-prop > :not(.wk-gate2-q):not(.wk-prop-btns),
+  .wk-dock-slot[data-folded="true"] .wk-prop-btns > :not(.wk-gate2-btn--primary),
+  .wk-dock-slot[data-folded="true"] .wk-who { display: none; }
+  .wk-dock-slot[data-folded="true"] .wk-gate2-q { cursor: pointer; }
+  .wk-dock-slot[data-folded="true"] .wk-gate2-decide { padding-top: 4px; }
+  .wk-gate2-choices { flex-direction: column; align-items: stretch; }
+  .wk-gate2-choices .wk-gate2-btn { width: 100%; }
+  .wk-gate2-menu { max-width: none; }
+}
+
+/* A way on that is not the question (the reduced-assurance relaunch), folded under its own name. */
+.wk-gate2-fold > summary { list-style: none; display: inline-block; }
+.wk-gate2-fold > summary::-webkit-details-marker { display: none; }
+.wk-gate2-fold[open] > summary { margin-bottom: 6px; }
+
+/* More about this: the explanation, the base failures, the receipt and Technical details, folded by default. */
+.wk-gate2-about > summary { list-style: none; display: inline-block; }
+.wk-gate2-about > summary::-webkit-details-marker { display: none; }
+.wk-gate2-about-body { display: flex; flex-direction: column; gap: 12px; margin-top: 10px; font-size: 14px; line-height: 1.55; color: var(--ink-body); }
+.wk-gate2-about-body .wk-gate-consequence { font-size: 14px; }
+.wk-gate2-about-body .wk-gate2-foot { padding-top: 4px; }
+/* Compact by default: the dock holds the eyebrow, headline, one sentence and the buttons (about 240 px). */
+.wk-dock-surface { padding-top: 18px; padding-bottom: 18px; gap: 10px; }
+.wk-dock .wk-gate2 { gap: 10px; }
+.wk-dock .wk-gate2-q { font-size: 20px; }
+.wk-dock .wk-gate2-decide { padding-top: 12px; gap: 10px; }
+.wk-dock .wk-gate-peek:empty { display: none; }
+
+/* The reply box's switch: where Send goes, before Send, and the other way in one click. */
+.wk-reply-switch { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 4px; }
+.wk-reply-switch [data-testid="session-reply-dest"] { color: var(--ink-body); font-weight: 500; }
+.wk-reply-flip {
+  border: 0; background: transparent; padding: 2px 6px; margin: 0 -2px; border-radius: var(--radius-sm); font: inherit; cursor: pointer;
+  color: color-mix(in oklab, var(--accent) 50%, var(--ink-high)); transition: background-color 0.14s;
+}
+.wk-reply-flip:hover { text-decoration: underline; text-underline-offset: 3px; background: color-mix(in oklab, var(--ink-high) 12%, transparent); }
+.wk-reply-flip:focus-visible { outline: 2px solid transparent; box-shadow: var(--focus-ring); }
+
+/* A menu item's consequence, the second line (its words stay the item's label). */
+.wk-gate2-mi[data-sub]::after { content: attr(data-sub); display: block; font-size: 12px; line-height: 1.45; font-weight: 400; color: var(--ink-muted); }
+.wk-gate2-mi--off[data-sub]::after, .wk-gate2-mi:disabled[data-sub]::after { color: var(--ink-dim); }
+.wk-gate2-mi { font-weight: 500; }
+
+/* ── The run panel's glance (mockup ui-v2-gate's side panel): progress, changes, helpers, three ways in, Stop job. ── */
+.wk-run-glance { display: flex; flex-direction: column; gap: 18px; padding: 4px 0 20px; margin-bottom: 8px; border-bottom: 1px solid var(--border-subtle); }
+.wk-run-glance-item { display: flex; flex-direction: column; gap: 6px; }
+.wk-run-glance-label { font-size: 12px; font-weight: 600; letter-spacing: 0.09em; text-transform: uppercase; color: var(--ink-muted); }
+.wk-run-glance-value { font-size: 15px; line-height: 1.45; color: var(--ink-high); }
+.wk-run-glance-bar { display: block; height: 4px; border-radius: 999px; background: color-mix(in oklab, var(--ink-high) 10%, transparent); overflow: hidden; }
+.wk-run-glance-bar > span { display: block; height: 100%; border-radius: 999px; background: var(--status-run); }
+.wk-run-glance-bar[data-tone="waiting"] > span { background: var(--status-warn); }
+.wk-run-glance-bar[data-tone="done"] > span { background: var(--status-ok); }
+.wk-run-glance-links { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+.wk-run-glance-link {
+  border: 0; background: transparent; padding: 3px 6px; margin-left: -6px; border-radius: var(--radius-sm); font: inherit; font-size: 14px; cursor: pointer;
+  color: color-mix(in oklab, var(--accent) 50%, var(--ink-high)); transition: background-color 0.14s;
+}
+.wk-run-glance-link:hover { text-decoration: underline; text-underline-offset: 3px; background: color-mix(in oklab, var(--ink-high) 12%, transparent); }
+.wk-run-glance-link:focus-visible { outline: 2px solid transparent; box-shadow: var(--focus-ring); }
+.wk-run-glance-stop { align-self: flex-start; }
+
+/* The plan / hand-over card's menu items take the menu's own shape (not the card's bordered buttons). */
+.wk-gate2-menu .wk-prop-btn.wk-gate2-mi { min-height: 0; padding: 10px 12px; border: 0; border-radius: 10px; background: transparent; color: var(--ink-high); font-size: 14px; box-shadow: none; }
+.wk-gate2-menu .wk-prop-btn.wk-gate2-mi:hover:not(:disabled) { background: color-mix(in oklab, var(--ink-high) 12%, transparent); }
+.wk-gate2-menu .wk-prop-btn.wk-gate2-mi:disabled { color: var(--ink-dim); background: transparent; opacity: 1; }
+.wk-gate2-menu .wk-gate2-off-row { padding-right: 0; }
+.wk-gate2-btn--secondary[aria-expanded="true"]:hover:not(:disabled) { background: color-mix(in oklab, var(--ink-high) 26%, transparent); }
+/* (J4 0.16.6) Why an override path is not offered here: one quiet line, never a control. */
+.wk-gate2-why-not { margin: 6px 0 0; font-size: var(--text-xs); color: var(--ink-muted); }
+.wk-gate2-fails .wk-gate2-base { margin-top: 6px; }
+.wk-gate2-base-words { margin: 0; font-size: 14px; color: var(--ink-muted); }
+/* (J4 0.16.6) The failing lists: one line per test (words, then a short place tag), so the primary stays in view. */
+.wk-gate2-fails .wk-gate2-new li, .wk-gate2-fails .wk-gate2-base li { flex-direction: row; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; }
+.wk-gate2-fails .wk-gate2-new-id { font-size: 12px; }
+.wk-gate2-fails .wk-gate2-base { gap: 4px; }
+.wk-gate2-fails { gap: 8px; }
+.wk-gate2-fails .wk-gate2-new { padding: 10px 14px; gap: 6px; }
+.wk-gate2-fails .wk-gate2-base { flex-direction: row; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; margin-top: 0; }
+.wk-gate2-fails .wk-gate2-base > ul { flex-basis: 100%; order: 3; }
+.wk-gate2-fails .wk-gate2-base > .wk-gate2-link { margin-left: 0; padding: 2px 4px; }

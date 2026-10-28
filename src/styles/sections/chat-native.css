@@ -47,6 +47,8 @@
 .wk-chat-p { margin: 0 0 8px; }
 .wk-chat-p:last-child { margin-bottom: 0; }
 .wk-chat-quiet { margin: 0; color: var(--ink-muted); font-size: var(--text-sm); }
+/* A decision the job made on its own (an automatic retry): a quiet line at the right, where your answers sit. */
+.wk-chat-job { align-self: flex-end; font-style: italic; }
 .wk-chat-plan { margin: 4px 0 10px; padding-left: 1.4em; list-style: decimal; }
 .wk-chat-plan li { margin: 2px 0; padding-left: 4px; }
 .wk-chat-verdict { margin: 0 0 6px; font-weight: var(--weight-semi); }
@@ -259,3 +261,11 @@
 }
 .wk-session-turn--you.wk-session-turn--kickoff-open > .wk-session-text { display: block; -webkit-line-clamp: none; overflow: visible; }
 .wk-session-turn--you.wk-session-turn--kickoff { padding: 0; }
+
+/* (J4 0.16.6) A running step that has said nothing for a while: calm, the gate's tone, not a failure. */
+.wk-silent { display: flex; flex-direction: column; gap: 6px; padding: 10px 14px; border: 1px solid var(--status-gate); border-radius: var(--radius-lg); background: var(--status-gate-dim, var(--surface-raised)); }
+.wk-silent-q { margin: 0; font-weight: var(--weight-semi); color: var(--ink-high); font-size: var(--text-sm); }
+.wk-silent-p { margin: 0; color: var(--ink-body); font-size: var(--text-xs); }
+.wk-silent-btns { display: flex; flex-wrap: wrap; gap: 8px; }
+.wk-silent-note { margin: 0; font-size: var(--text-xs); color: var(--ink-muted); }
+.wk-silent-note[data-tone="fail"] { color: var(--status-fail); }

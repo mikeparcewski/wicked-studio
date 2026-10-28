@@ -191,7 +191,7 @@ describe('the repo card (RepositoriesPanel)', () => {
     fireEvent.click(within(card(cards, 'wicked-studio')).getByTestId('repo-card-findings-reonboard'));
     await waitFor(() => expect(rerunOnboarding).toHaveBeenCalledWith('wicked-studio'));
     expect(rerunOnboarding).toHaveBeenCalledTimes(1);
-    // The card is a role=link; the finding's action must not also open the detail.
+    // The finding's action sits in the row's details: it must not also open the repo detail.
     expect(navigate).not.toHaveBeenCalled();
   });
 });

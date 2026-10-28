@@ -12,6 +12,31 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+UI v2: the calm-page redesign (#924).
+
+### Changed
+- **Calm pages.** Home, Jobs, Repositories, Report, Understand, Evaluate, Steering, Memory and Agents each open with one plain sentence and a few calm sections. The rail reads Projects · Jobs · Repositories, and the wordmark goes Home.
+- **Projects home.** A Projects list and a project home; "Not in a project" holds the work that belongs to none.
+- **Nerve Center and Needs you read one verdict.** The rail tile, the badge, Nerve Center and `/needs` all read crew's ranked `attention[]`. Look-alike work folds together, and cost shows only when it is known.
+- **The decision dock.** Every decision a job asks sits above the composer, with a marker in the thread where it was asked. Each has a plain-cause headline, one recommended primary, Other options (unavailable helpers greyed, with Sign in) and More about this.
+- **Insights and evals.** Run-insights recommendations as calm cards, with schedules under Build & settings. Evaluate gains "How well the system judges" (crew's default evals).
+- **Understand Ask** opens a new chat on crew's analyze workflow (crew#1157).
+
+### Fixed
+- **A failed check's gate leads with the tests only this change fails (#922).** They are named on the face; the base's failures stay folded. When every failure also fails on the base, the face says so in plain words. The split comes from the engine's per-test lists, else its structured base comparison (the check and its re-run against `base.run.failureIds`), else its own words. A no-change answer's standing floor is read.
+- **Failures only this change has make "Send back with the failing tests named" the primary**, with the tests in the note. It is never "Approve as your own judgment".
+- **"Redo from the … step · about N min" is timed from each step's longest attempt, including its check run**, never from the operator's wait.
+- **A missing override path says why**, in one line ("Your own judgment isn't offered while QE has no verdict on this tree"). Skip QE is offered in place wherever the engine offers `skip_qe`.
+- **A gate with no judge reads the live roster.** It never asks you to sign in a second helper while one is signed in.
+- **The thread says who acted.** Rounds the engine ran on its own read "The job retried automatically". Your plan approvals and the hand-over's Run QE again are yours.
+- **A step silent for 5 min or more says so on the run page:** the header, the working line and the Now section read "No output for N min", with a card to ask the helper or move the step.
+- **The plan names real phases:** core's triage and reproduce read Triage and Reproduce.
+- **A hand-over QE refused takes the skip in place (#923).** "Skip QE with a reason…" answers crew#1181's `skip_qe` offer with a required reason and the gate's ord, through the undo window. "Start again with QE skipped…" stays under Other options.
+- **A refused hand-over names its reason (#920)**, not only "[exit 1]".
+- **An escalation's note says it re-runs the step, because it does (PRODUCT-WORKS J6).** The engine's approve at an escalation amends the escalated step itself and runs it again; only a judge-unavailable gate's approve and a capped review's adjudication (now labelled "Land with carried items and a note": it accepts the work and moves on) do not. A same-seat-evaluator gate ("…and approve to retry, or reject…") missed the prompt-phrase test and read "Approve with a note for the next step": the operator's note went to the same step, which re-ran for 13 minutes. Every escalation whose note lands on the escalated step now reads "Retry this step with a note"; a def gate keeps "Approve and steer" / "…for the next step".
+- **Hovering a rail item is visible in every theme.** The first hover pass tinted items one surface step up, which on the rail's own ground looked the same as rest. Every rail item (the wordmark, the four icon buttons, group headers and icons, session rows, Show N more, the Workspace links with Settings, and the Nerve Center tile) now hovers with an accent-tinted fill and full-ink words; the icon buttons also draw an accent edge, and the Nerve Center tile's state fill deepens toward its own ink. Pressed is a stronger fill; the current page, the focus ring and reduced motion are unchanged. A new browser journey (`e2e/desk_rail_hover_test.py`) measures each item in wicked-dark, wicked-light, dark and light: the hover fill must sit at least 0.08 OKLab ΔE from rest over the rail, with its words at 4.5:1 or better.
+- **Seat choices offer only helpers that can work (PRODUCT-WORKS J4).** On the test rig, after a container-runtime blip, the dead-seat card offered only "Reassign to GitHub Copilot CLI". That seat was out of quota and failed at once. A reassign now offers only helpers that are signed in and not benched. It reads the roster's active bench (`recent_bench` / `benchedUntil`, crew#1138), crew's `work_eligible`, and the run's own `benched_seats` with their lift times (wicked-core#1118). The other helpers are shown greyed out with their reason and lift time, beside a Sign in link. A card with no usable helper says who is back first and when ("wait until then and reassign the step to it, or sign another helper in"). The New job wizard preselects only helpers that can take work; a signed-out or benched one is shown greyed out with why and joins the job only when you tick it. The live feed says "Waiting for the container runtime…" while the engine waits out a runtime blip (`containerRuntimeWait`, wicked-core#1129).
+
 ## [0.12.3] — 2026-10-26
 
 A patch release finishing the Desk redesign: the Work tab (#910) and the Desk's tabs grouped as four daily views and More (#913).

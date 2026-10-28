@@ -56,16 +56,20 @@ BOX = """([sel, ref]) => {
 }"""
 
 # (rail test id or path, the page's content element, the column it is centred in, its measure)
+# The ui-v2 nav regroup: Skills, MCP, Plugins, Workflows and Settings are links on Build & settings
+# (`build-link-*`, reached through the rail's `desk-rail-build`), which is itself a narrow page.
 PAGES = [
-    ("desk-rail-skills", ".wk-page", "#main", 1120),
-    ("desk-rail-mcp", ".wk-page", "#main", 1120),
-    ("desk-rail-plugins", ".wk-page", "#main", 1120),
-    ("desk-rail-workflows", ".wk-page", "#main", 1120),
-    ("desk-rail-general", ".wk-page", "#main", 832),
+    # Build & settings is a calm page (the column the Steering/Memory/Agents pages use, 840 px).
+    ("desk-rail-build", "[data-testid='build-page'] .wk-calm-col", "#main", 840),
+    ("build-link-skills", ".wk-page", "#main", 1120),
+    ("build-link-mcp", ".wk-page", "#main", 1120),
+    ("build-link-plugins", ".wk-page", "#main", 1120),
+    ("build-link-workflows", ".wk-page", "#main", 1120),
+    ("build-link-settings", ".wk-page", "#main", 832),
     # studio-settings-tabs: the Theme tab of the same Settings page (picked from its tab row).
     ("settings-tab-theme", ".wk-page", "#main", 832),
-    # Nerve Center (DES-SYSTEM-VIEW): the dashboard on /watch, the Watchtower feed under its panels.
-    ("desk-rail-nerve", "[data-testid='nerve-center-page']", "#main", 1120 - 64),
+    # Nerve Center (the approved ui-v2-nerve mockup): the calm overview on /watch, the calm page's column.
+    ("desk-rail-nerve", "[data-testid='nerve-center-page'] .wk-calm-col", "#main", 840),
 ]
 SESSION = [("/s/run%3Ar-solo", "run"), ("/s/chat-pay", "chat")]
 
@@ -83,6 +87,9 @@ with sync_playwright() as p:
             if rail == "settings-tab-theme":
                 page.locator('[data-testid="settings-tab"][data-tab="theme"]').click()
                 page.wait_for_function("() => window.location.search === '?tab=theme'", timeout=5000)
+            elif rail.startswith("build-link-"):
+                page.get_by_test_id("desk-rail-build").click()
+                page.get_by_test_id(rail).click()
             else:
                 page.get_by_test_id(rail).click()
             page.wait_for_selector(sel, state="visible", timeout=8000)

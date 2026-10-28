@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef } from 'react';
 import type { SessionView as RunView } from '../../api/types.js';
 import { GATE_HASH } from '../../board/gateActions.js';
 import { pinAwaiting } from '../../store/awaitingPins.js';
+import { Docked, DecisionMarker } from './DecisionDock.js';
 import { useElicitationStore } from '../../store/elicitations.js';
 import { useGateStore } from '../../store/gates.js';
 import { ElicitationPrompt } from '../ElicitationPrompt.js';
@@ -10,6 +11,9 @@ import { GateRow } from './GateRow.js';
 import { askingResponder, CREW } from '../../board/responder.js';
 import { useRoster } from '../../hooks/useRoster.js';
 import { TurnWho } from './TurnWho.js';
+import { SilentStepCard } from './SilentStepCard.js';
+import { useSilentStep } from '../../hooks/useSilentStep.js';
+import { seatName } from '../../board/gateHeadline.js';
 
 /**
  * S16a-4g (DES-STUDIO-REBUILD-001 Amendment 5 §1, §5.5): every question a run or a chat asks the
@@ -38,7 +42,9 @@ function useFocusQuestionOnGateHash(questionId: string | null, gateOpen: boolean
     focusedFor.current = questionId;
     const active = document.activeElement;
     if (active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement) return;
-    ref.current?.querySelector<HTMLElement>('input, textarea, select, button')?.focus();
+    // In place, the question's own first control. While the question sits in the decision dock the thread holds only
+    // its marker: the dock focuses the docked question's field on `#gate` (DecisionDockFrame), never the marker.
+    ref.current?.querySelector<HTMLElement>('[data-testid="elicitation-prompt"] :is(input, textarea, select, button)')?.focus();
   }, [questionId, gateOpen]);
   return ref;
 }
@@ -52,16 +58,24 @@ export function RunQuestions({ view }: { view: RunView }): React.ReactElement | 
   const live = !TERMINAL.has(view.session.status);
   const ref = useFocusQuestionOnGateHash(live && elicitation !== undefined ? elicitation.elicitationId : null, gateOpen);
   const roster = useRoster();
-  if (!live || (elicitation === undefined && needsYou === null)) return null;
+  // (J4 0.16.6) A step silent past crew's quiet mark: said here, with its levers, until the watchdog hands it over.
+  const silent = useSilentStep(view);
+  const silentShown = silent !== null && needsYou === null && elicitation === undefined;
+  if (!live || (elicitation === undefined && needsYou === null && !silentShown)) return null;
   return (
     <div ref={ref} data-testid="session-run-questions" data-run-id={id} className="wk-session-questions">
       {/* `key`: a half-typed answer to question A never survives into B (v0.24 F3). */}
       {/* H3: a question card says who is asking — the seat that asked (an ask question names it),
           else the seat running the step; the stall watchdog's hand-off is crew's. */}
-      {elicitation !== undefined && <TurnWho who={askingResponder(view, roster, elicitation)} runId={id} suffix="is asking" className="wk-who--asking" />}
-      {elicitation !== undefined && <ElicitationPrompt key={elicitation.elicitationId} e={elicitation} />}
+      {elicitation !== undefined && (
+        <Docked dockKey={id} open marker={<DecisionMarker dockKey={id} who={askingResponder(view, roster, elicitation).name} since={null} />}>
+          <TurnWho who={askingResponder(view, roster, elicitation)} runId={id} suffix="is asking" className="wk-who--asking" />
+          <ElicitationPrompt key={elicitation.elicitationId} e={elicitation} />
+        </Docked>
+      )}
       {needsYou !== null && <TurnWho who={CREW} suffix="handing this to you" className="wk-who--asking" />}
       {needsYou !== null && <NeedsYouCard view={view} state={needsYou} />}
+      {silentShown && <SilentStepCard view={view} silent={silent!} name={(cli) => seatName(cli, roster?.find((r) => r.key === cli)?.display_name ?? null)} />}
     </div>
   );
 }
@@ -76,8 +90,10 @@ export function ChatQuestions({ chatId }: { chatId: string }): React.ReactElemen
   if (elicitation === undefined && gate === undefined) return null;
   return (
     <div ref={ref} data-testid="session-chat-questions" data-chat-id={chatId} className="wk-session-questions">
-      {elicitation !== undefined && <ElicitationPrompt key={elicitation.elicitationId} e={elicitation} />}
-      {gate !== undefined && <GateRow view={null} gate={gate} chatId={chatId} />}
+      <Docked dockKey={chatId} open marker={<DecisionMarker dockKey={chatId} who={null} since={gate?.receivedAt ?? null} />}>
+        {elicitation !== undefined && <ElicitationPrompt key={elicitation.elicitationId} e={elicitation} />}
+        {gate !== undefined && <GateRow view={null} gate={gate} chatId={chatId} />}
+      </Docked>
     </div>
   );
 }

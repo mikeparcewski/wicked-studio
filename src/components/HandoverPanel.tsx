@@ -86,6 +86,9 @@ export function HandoverPanel({ handover, navigate, now, runs }: {
   const press = (c: HandoverChip): void => {
     if (HANDOVER_CHIP_ACTION[c.key] === 'reveal') {
       setOpen(null);
+      // Home v2 holds one card, not the queue: open Needs you in full first; the queue it mounts replays
+      // a request under a second old (REVEAL_FRESH_MS), so the rows still open and light up there.
+      if (document.querySelector('[data-testid="needs-you-queue"]') === null) navigate('/needs');
       useQueueReveal.getState().reveal(c.items.map((i) => i.key));
       return;
     }

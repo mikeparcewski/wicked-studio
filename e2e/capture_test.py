@@ -165,6 +165,9 @@ with sync_playwright() as p:
         check("nothing-launched-by-the-page", launches == [], launches=launches)
 
     def section_triage() -> None:
+        # Home v2: the proposals' row is in Needs you in full (/needs), the landing's "N more waiting".
+        # In-app navigation (no reload): the capture's status is this page's own memory.
+        page.evaluate("(p) => { history.pushState({}, '', p); dispatchEvent(new PopStateEvent('popstate')); }", "/needs")
         page.wait_for_selector(GROUP, timeout=15000)
         row = page.locator(GROUP)
         page.wait_for_function(
@@ -173,6 +176,9 @@ with sync_playwright() as p:
         check("group-consequence-first", line == "4 memories · 1 rule change", line=line)
         act = row.get_by_test_id("need-accept-act")
         check("group-accept-label", act.inner_text().strip() == "Accept 4 memories", label=act.inner_text())
+        # The capture status rides in the landing's ⋯ (home v2); the rows stay at /needs.
+        page.evaluate("(p) => { history.pushState({}, '', p); dispatchEvent(new PopStateEvent('popstate')); }", "/")
+        page.get_by_test_id("desk-more").click()
         page.wait_for_function(
             """() => document.querySelector('[data-testid="capture-status"]')?.dataset.waiting === '5'""", timeout=15000)
         chip = page.get_by_test_id("capture-status-line")
@@ -182,10 +188,13 @@ with sync_playwright() as p:
               and status.startswith("5 proposals from your capture waiting in Needs You: 4 memories, 1 rule change"),
               chip=chip.inner_text(), status=status)
         # The header's actions row (Chat, New job, ⋯ — Capture rides in ⋯ since Desk v2) stays one row while the status chip shows.
-        header_rows = page.evaluate("""() => { const rs = [...document.querySelector('[data-testid="desk"] .wk-desk2-actions').children]
+        header_rows = page.evaluate("""() => { const rs = [...document.querySelector('[data-testid="desk"] .wk-desk2-actions, [data-testid="desk"] .wk-home-hello-row').children]
             .map(c => c.getBoundingClientRect()).filter(r => r.height > 0);
             return Math.max(...rs.map(r => r.top)) < Math.min(...rs.map(r => r.bottom)) ? 1 : 2; }""")
         check("verb-row-stays-one-row", header_rows == 1, rows=header_rows)
+        page.keyboard.press("Escape")
+        page.evaluate("(p) => { history.pushState({}, '', p); dispatchEvent(new PopStateEvent('popstate')); }", "/needs")
+        page.wait_for_selector(GROUP, timeout=15000)
         row.get_by_test_id("need-group-toggle").click()
         members = page.locator(MEMBERS)
         lines = [members.nth(i).get_by_test_id("need-line").inner_text() for i in range(members.count())]
@@ -207,7 +216,9 @@ with sync_playwright() as p:
         run_id = captures(origin)[0]["runId"]
         want = sorted(f"{run_id}-p{i}" for i in (1, 2, 3, 4))
         check("accepts-exactly-the-captured-memories", sorted(approves(origin)) == want, posts=approves(origin))
-        # Desk v2: Capture's status rides in the header's ⋯ panel; open it again to read it.
+        # Home v2: Capture's status rides in the landing's ⋯ panel; back there (in-app) to read it.
+        page.evaluate("(p) => { history.pushState({}, '', p); dispatchEvent(new PopStateEvent('popstate')); }", "/")
+        page.get_by_test_id("desk-more").wait_for(state="visible", timeout=10000)
         if page.get_by_test_id("desk-more-panel").count() == 0:
             page.get_by_test_id("desk-more").click()
         page.wait_for_function(

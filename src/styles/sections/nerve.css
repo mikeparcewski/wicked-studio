@@ -6,15 +6,21 @@
    filled with its state. ── */
 .wk-nc-tile {
   --nc-bg: var(--nc-warn-bg); --nc-fg: var(--nc-warn-fg); --nc-edge: var(--nc-warn-edge);
+  --nc-hover: var(--nc-warn-hover); --nc-press: var(--nc-warn-press);
   display: flex; align-items: center; gap: 10px;
   padding: 9px 12px; min-height: 52px; box-sizing: border-box;
   border-radius: var(--radius-lg); border: 1px solid var(--nc-edge);
   background: var(--nc-bg); color: var(--nc-fg); text-decoration: none;
-  transition: filter var(--dur-fast, 120ms);
+  transition: background-color var(--dur-fast, 120ms);
 }
-.wk-nc-tile[data-tone="green"] { --nc-bg: var(--nc-ok-bg); --nc-fg: var(--nc-ok-fg); --nc-edge: var(--nc-ok-edge); }
-.wk-nc-tile[data-tone="red"] { --nc-bg: var(--nc-fail-bg); --nc-fg: var(--nc-fail-fg); --nc-edge: var(--nc-fail-edge); }
-.wk-nc-tile:hover { filter: brightness(1.06); }
+.wk-nc-tile[data-tone="green"] { --nc-bg: var(--nc-ok-bg); --nc-fg: var(--nc-ok-fg); --nc-edge: var(--nc-ok-edge); --nc-hover: var(--nc-ok-hover); --nc-press: var(--nc-ok-press); }
+.wk-nc-tile[data-tone="red"] { --nc-bg: var(--nc-fail-bg); --nc-fg: var(--nc-fail-fg); --nc-edge: var(--nc-fail-edge); --nc-hover: var(--nc-fail-hover); --nc-press: var(--nc-fail-press); }
+/* Not answered yet: neutral, no verdict (the page's own ground and ink; never amber before crew speaks). */
+.wk-nc-tile[data-read="checking"] {
+  --nc-bg: var(--surface-card); --nc-fg: var(--ink-high); --nc-edge: var(--border-strong);
+  --nc-hover: color-mix(in oklab, var(--ink-high) 12%, var(--surface-card)); --nc-press: color-mix(in oklab, var(--ink-high) 18%, var(--surface-card));
+}
+.wk-nc-tile:hover { background: var(--nc-hover); }
 .wk-nc-tile:focus-visible { outline: 2px solid transparent; box-shadow: var(--focus-ring); }
 /* "You are here": a ring in the tile's own ink (the fill already says the state). */
 .wk-nc-tile[aria-current="page"] { box-shadow: inset 0 0 0 2px var(--nc-fg); }
@@ -221,3 +227,73 @@
 /* `off`: not part of this deployment right now — not a problem, said quietly. */
 .wk-nc-glyph[data-state="off"] { background: transparent; color: var(--ink-muted); box-shadow: inset 0 0 0 1px var(--border-strong); }
 .wk-nc-infra-row[data-state="off"] .wk-nc-infra-name { color: var(--ink-body); }
+
+/* ── The calm overview (`/watch` with no `?tab=`; the operator-approved mockup `ui-v2-nerve`): the
+   sentence, what is slowing work now, one tile per helper and three System tiles. The calm page's
+   column, type and hover (calm.css); a tile tints as one, its words at AA on the hover. ── */
+/* A tile's hover: a step toward the ink, then a little accent (the rail's recipe), so it shows on every
+   ground and with any accent the picker holds, even one close to the tile itself. */
+.wk-ncv { --ncv-tile-hover: color-mix(in oklab, var(--accent) 10%, color-mix(in oklab, var(--ink-high) 14%, var(--surface-card))); }
+.wk-ncv-lead { font-weight: 600; color: var(--ink-high); }
+.wk-ncv-lead[data-tone="fail"] { color: var(--status-fail); }
+.wk-ncv-lead[data-tone="warn"] { color: var(--status-warn); }
+.wk-ncv-waiting { margin: -16px 0 0; font-size: 15px; line-height: 1.5; color: var(--ink-muted); }
+
+.wk-ncv-slow-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+.wk-ncv-slow {
+  display: flex; align-items: center; gap: 18px; padding: 20px 16px 20px 24px; border-radius: 18px;
+  background: var(--surface-card); min-width: 0;
+}
+.wk-ncv-slow > .wk-calm-dot { width: 12px; height: 12px; }
+.wk-ncv-slow > .wk-calm-dot[data-tone="warn"] { background: var(--status-warn); }
+.wk-ncv-slow-text { display: flex; flex-direction: column; gap: 4px; flex: 1 1 auto; min-width: 0; }
+.wk-ncv-slow-title { font-size: 17px; line-height: 1.4; font-weight: 600; color: var(--ink-high); overflow-wrap: anywhere; }
+.wk-ncv-slow-line { font-size: 14px; line-height: 1.5; color: var(--ink-body); overflow-wrap: anywhere; }
+.wk-ncv-fix { flex-shrink: 0; }
+.wk-ncv-slow .wk-calm-btn--link:hover:not(:disabled) { background: var(--ncv-tile-hover); }
+
+.wk-ncv-tiles { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.wk-ncv-tiles[data-cols="3"] { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.wk-ncv-tile {
+  display: flex; flex-direction: column; min-width: 0; border-radius: 16px; background: var(--surface-card);
+  transition: background-color 0.14s;
+}
+.wk-ncv-tile:hover, .wk-ncv-tile:focus-within { background: var(--ncv-tile-hover); }
+.wk-ncv-tile-main {
+  flex: 1 1 auto; display: flex; flex-direction: column; gap: 6px; padding: 18px 20px; min-width: 0;
+  border-radius: 16px; color: inherit; text-decoration: none; cursor: pointer;
+}
+.wk-ncv-tile-main:focus-visible { outline: 2px solid transparent; box-shadow: var(--focus-ring); }
+.wk-ncv-tile-name { font-size: 15px; font-weight: 600; color: var(--ink-high); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wk-ncv-tile-state { font-size: 13px; font-weight: 500; color: var(--ink-muted); }
+/* A state word wears its tone pulled a little toward the ink, so it keeps AA on the tile's hover in every theme. */
+.wk-ncv-tile-state[data-tone="ok"] { color: color-mix(in oklab, var(--status-ok) 78%, var(--ink-high)); }
+.wk-ncv-tile-state[data-tone="warn"] { color: color-mix(in oklab, var(--status-warn) 78%, var(--ink-high)); }
+.wk-ncv-tile-state[data-tone="fail"] { color: color-mix(in oklab, var(--status-fail) 78%, var(--ink-high)); }
+.wk-ncv-tile-line { font-size: 13px; line-height: 1.4; color: var(--ink-muted); overflow-wrap: anywhere; }
+.wk-ncv-tile-signin {
+  align-self: flex-start; margin: -10px 12px 12px; padding: 6px 8px; border: 0; border-radius: var(--radius-sm);
+  background: transparent; color: var(--calm-link); font-family: inherit; font-size: 13px; font-weight: 500; cursor: pointer;
+  transition: background-color 0.14s, color 0.14s;
+}
+.wk-ncv-tile-signin:hover { background: var(--calm-hover-ctl); color: var(--ink-high); text-decoration: underline; text-underline-offset: 3px; }
+.wk-ncv-tile-signin:focus-visible { outline: 2px solid transparent; box-shadow: var(--focus-ring); }
+.wk-ncv-foot { display: flex; flex-direction: column; gap: 10px; }
+.wk-ncv-foot .wk-nc-insights { margin: 0; font-size: 14px; }
+.wk-ncv-foot .wk-nc-insights a { color: var(--calm-link); }
+.wk-ncv-foot .wk-nc-note { margin: 0; }
+
+/* The detail's way back to the overview. */
+.wk-nc-back { display: inline-flex; align-items: center; gap: 6px; align-self: flex-start; font-size: 14px; margin-bottom: 4px; }
+
+@media (prefers-reduced-motion: reduce) { .wk-ncv-tile, .wk-ncv-tile-signin { transition: none; } }
+@media (max-width: 1023px) { .wk-ncv-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 767px) {
+  .wk-ncv-tiles, .wk-ncv-tiles[data-cols="3"] { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .wk-ncv-tiles[data-cols="3"] > :last-child:nth-child(odd) { grid-column: 1 / -1; }
+  .wk-ncv-slow { flex-wrap: wrap; gap: 12px 16px; padding: 18px; }
+  .wk-ncv-slow > .wk-ncv-fix { margin-left: 22px; }
+  .wk-ncv-tile-main { padding: 16px; }
+  .wk-ncv-tile-signin { min-height: 44px; margin: -8px 8px 8px; }
+  .wk-ncv-waiting { margin-top: -12px; }
+}

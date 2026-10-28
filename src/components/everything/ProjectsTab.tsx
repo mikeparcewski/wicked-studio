@@ -26,13 +26,42 @@ const COUNT_WORDS = [
   { state: 'done', label: 'finished' },
 ] as const;
 
-export function useProjectRows(runs: SessionView[], needRows: NeedRow[]): { rows: ProjectRow[]; unfiled: number } {
+export function useProjectRows(runs: SessionView[], needRows: NeedRow[]): { rows: ProjectRow[]; unfiled: number; unfiledRunIds: string[] } {
   const projects = useProjectsStore((s) => s.projects);
   const { items, unfiled } = useBoardModel(runs);
   const runChatId = useCapabilities((s) => s.runChatId);
   const deliveredNow = useDeliveredNow();
   const groups = useMemo(() => railGroups(items, unfiled, needsByRun(needRows), Infinity, needTextByRun(needRows), runChatId, deliveredNow), [items, unfiled, needRows, runChatId, deliveredNow]);
-  return { rows: projectRows(projects.filter((p) => p.status === 'active'), items, groups, runs), unfiled: groups.find((g) => g.projectId === null)?.sessions.length ?? 0 };
+  const loose = groups.find((g) => g.projectId === null);
+  const unfiledRunIds = useMemo(() => (loose?.sessions ?? []).flatMap((s) => s.runIds), [loose]);
+  return { rows: projectRows(projects.filter((p) => p.status === 'active'), items, groups, runs), unfiled: loose?.sessions.length ?? 0, unfiledRunIds };
+}
+
+export type ProjectPatch = { name: string; description: string } | { status: 'active' | 'archived' };
+
+/** Rename or archive a project through crew (`PATCH /projects/:id`), keeping the projects store in step.
+ *  `apply` answers whether it saved; a failure's raw words are `error` (shown behind technical details). */
+export function useProjectSave(projectId: string, onStatusChanged?: (project: Project) => void): { apply: (body: ProjectPatch) => Promise<boolean>; error: string | null; busy: boolean } {
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const apply = async (body: ProjectPatch): Promise<boolean> => {
+    if (busy) return false;
+    setBusy(true);
+    setError(null);
+    try {
+      const { project } = await api.updateProject(projectId, body);
+      const store = useProjectsStore.getState();
+      if (project.status === 'active' && !store.projects.some((p) => p.id === project.id)) store.addProject(project);
+      else store.updateProject(project);
+      onStatusChanged?.(project);
+      return true;
+    } catch (e) {
+      // The sentence is plain; the raw error lives behind technical details (UI-CONTRACT §4.7).
+      setError(e instanceof Error ? e.message : String(e));
+      return false;
+    } finally { setBusy(false); }
+  };
+  return { apply, error, busy };
 }
 
 export function ProjectEntry({ row, navigate, onStatusChanged, header = false, countsKnown = true }: {
@@ -46,25 +75,9 @@ export function ProjectEntry({ row, navigate, onStatusChanged, header = false, c
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(row.project.name);
   const [description, setDescription] = useState(row.project.description ?? '');
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
   useEffect(() => { setName(row.project.name); setDescription(row.project.description ?? ''); }, [row.project.name, row.project.description]);
-  const apply = async (body: { name: string; description: string } | { status: 'active' | 'archived' }): Promise<void> => {
-    if (busy) return;
-    setBusy(true);
-    setError(null);
-    try {
-      const { project } = await api.updateProject(row.project.id, body);
-      const store = useProjectsStore.getState();
-      if (project.status === 'active' && !store.projects.some((p) => p.id === project.id)) store.addProject(project);
-      else store.updateProject(project);
-      onStatusChanged?.(project);
-      setEditing(false);
-    } catch (e) {
-      // The sentence is plain; the raw error lives behind technical details (UI-CONTRACT §4.7).
-      setError(e instanceof Error ? e.message : String(e));
-    } finally { setBusy(false); }
-  };
+  const { apply: save, error, busy } = useProjectSave(row.project.id, onStatusChanged);
+  const apply = async (body: ProjectPatch): Promise<void> => { if (await save(body)) setEditing(false); };
   const archived = row.project.status === 'archived';
   const path = everythingPath({ tab: 'sessions', project: row.project.id });
   return <section data-testid={header ? 'everything-project-header' : 'projects-row'} data-project-id={row.project.id} className="wk-desk-card wk-everything-group">
@@ -97,20 +110,13 @@ export function ProjectEntry({ row, navigate, onStatusChanged, header = false, c
   </section>;
 }
 
-export function ProjectsTab({ q, runs, runsLoaded = true, runsError = null, onRetryRuns, needRows, navigate }: {
-  q: EverythingQuery; runs: SessionView[]; runsLoaded?: boolean; runsError?: string | null; onRetryRuns?: (() => void) | undefined; needRows: NeedRow[]; navigate: Navigate;
-}): React.ReactElement {
-  const read = deskReadState(runsLoaded, runsError);
-  const countsKnown = read === 'known' || read === 'stale';
-  const { rows, unfiled } = useProjectRows(runs, needRows);
+/** The Archived lens's own read: the archived projects and the repositories each one holds. 'ok' (and so
+ *  "Nothing is archived") is said only after the read answered, never while it is pending or failed. */
+export function useArchivedProjects(archivedLens: boolean): { archived: Project[]; archivedRead: 'pending' | 'ok' | 'failed'; archivedRepos: Record<string, string[]> } {
   const [archived, setArchived] = useState<Project[]>([]);
   // The Archived lens's own read: 'empty' is said only after it answered (never while pending or failed).
   const [archivedRead, setArchivedRead] = useState<'pending' | 'ok' | 'failed'>('pending');
   const [archivedRepos, setArchivedRepos] = useState<Record<string, string[]>>({});
-  const [hidden, setHidden] = useState<string[]>([]);
-  const [name, setName] = useState('');
-  const [newOpen, setNewOpen] = useState(false);
-  const archivedLens = q.filter === 'archived';
   useEffect(() => {
     if (!archivedLens) return;
     let live = true;
@@ -127,8 +133,24 @@ export function ProjectsTab({ q, runs, runsLoaded = true, runsError = null, onRe
     }).catch(() => { if (live) setArchivedRead('failed'); });
     return () => { live = false; };
   }, [archivedLens]);
+  return { archived, archivedRead, archivedRepos };
+}
+
+export function ProjectsTab({ q, runs, runsLoaded = true, runsError = null, onRetryRuns, needRows, navigate, lensPath }: {
+  q: EverythingQuery; runs: SessionView[]; runsLoaded?: boolean; runsError?: string | null; onRetryRuns?: (() => void) | undefined; needRows: NeedRow[]; navigate: Navigate;
+  /** Where the Active / Archived lens goes (the Projects page keeps its own address); default: the tab's. */
+  lensPath?: (filter: 'all' | 'archived') => string;
+}): React.ReactElement {
+  const read = deskReadState(runsLoaded, runsError);
+  const countsKnown = read === 'known' || read === 'stale';
+  const { rows, unfiled } = useProjectRows(runs, needRows);
+  const archivedLens = q.filter === 'archived';
+  const { archived, archivedRead, archivedRepos } = useArchivedProjects(archivedLens);
+  const [hidden, setHidden] = useState<string[]>([]);
+  const [name, setName] = useState('');
+  const [newOpen, setNewOpen] = useState(false);
   const shown = archivedLens ? projectRows(archived, [], [], []).map((row) => ({ ...row, repos: archivedRepos[row.project.id] ?? [] })) : rows;
-  const lens = (filter: 'all' | 'archived') => navigate(everythingPath({ tab: 'projects', filter }), { replace: true });
+  const lens = (filter: 'all' | 'archived') => navigate(lensPath !== undefined ? lensPath(filter) : everythingPath({ tab: 'projects', filter }), { replace: true });
   const listed = filterProjectRows(shown, name).filter((row) => !archivedLens || !hidden.includes(row.project.id));
   return <div data-testid="projects-tab" className="wk-projects-tab">
     {read === 'failed' && <StateBanner data-testid="projects-failed" kind={readErrorKind(runsError)} what="your work" error={runsError} {...(onRetryRuns !== undefined ? { onRetry: onRetryRuns } : {})} />}

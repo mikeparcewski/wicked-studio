@@ -84,6 +84,12 @@ export interface GateFloorCheck {
   /** The same check on the run base (`RepoCheckRun.base.run`) failed too: `true`, passed: `false`, `null`
    *  when the base was not run (or could not be). */
   baseFailed?: boolean | null;
+  /** The failing tests of the same check on the run base (`RepoCheckRun.base.run.failureIds`), `null` when the base
+   *  was not run (or its run names none). With `failureIds` it is the engine's own per-test comparison, structured. */
+  baseFailureIds?: string[] | null;
+  /** The failing tests of the check's own re-runs (`RepoCheckRun.reruns[].failureIds`): a failure that reproduces
+   *  on the retry is the change's (the engine's WICKED-RETRY rule). */
+  rerunFailureIds?: string[];
 }
 
 /** The F-039 floor as `repoChecksEvaluated` reported it. */
@@ -242,7 +248,17 @@ function checkOf(raw: unknown): GateFloorCheck | null {
     regressions: strings(c.regressions),
     failureIds: strings(c.failureIds),
     baseFailed: baseFailedOf(c.base),
+    baseFailureIds: baseFailureIdsOf(c.base),
+    rerunFailureIds: Array.isArray(c['reruns']) ? (c['reruns'] as unknown[]).flatMap((r) => (isRecord(r) ? strings((r as Record<string, unknown>)['failureIds']) : [])) : [],
   };
+}
+
+/** The base run's failing tests (`RepoCheckRun.base.run.failureIds`), or `null` when no base run names any. */
+function baseFailureIdsOf(base: unknown): string[] | null {
+  const run = isRecord(base) ? (base as Record<string, unknown>)['run'] : null;
+  if (!isRecord(run)) return null;
+  const ids = strings((run as Record<string, unknown>)['failureIds']);
+  return ids.length > 0 ? ids : null;
 }
 
 /** Whether the check's run on the base failed (`base.run` — an open object on the pinned api-types). */
@@ -724,6 +740,62 @@ export interface ReassignCandidate {
   state: 'ready' | 'unknown' | 'signed-out' | 'inactive' | 'ineligible' | 'refused';
   /** The suffix the picker shows after the name — empty when nothing follows from the roster. */
   note: string;
+  /** (PRODUCT-WORKS J4) When a benched seat's bench lifts (ISO-8601): the roster's `recent_bench.lifts_at`
+   *  (`benchedUntil`), or this run's own bench `benched_until`. Absent when nothing says it lifts. */
+  until?: string;
+}
+
+/** (PRODUCT-WORKS J4) One seat this run benched (`AgentSession.benched_seats`, read defensively):
+ *  `benched_until` is unix millis (wicked-core#1118), absent for a bench that never lifts by itself. */
+export interface RunBench {
+  cli: string;
+  reason: string;
+  benched_until?: number;
+}
+
+/** The run's own benches off its session bag, tolerant of a malformed entry. */
+export function runBenchesOf(session: unknown): RunBench[] {
+  const v = (session as { benched_seats?: unknown } | null | undefined)?.benched_seats;
+  if (!Array.isArray(v)) return [];
+  const out: RunBench[] = [];
+  for (const b of v) {
+    if (b === null || typeof b !== 'object') continue;
+    const o = b as Record<string, unknown>;
+    if (typeof o['cli'] !== 'string') continue;
+    const until = o['benched_until'];
+    out.push({ cli: o['cli'], reason: typeof o['reason'] === 'string' ? o['reason'] : '', ...(typeof until === 'number' && Number.isFinite(until) ? { benched_until: until } : {}) });
+  }
+  return out;
+}
+
+/** A time of day ("09:19") for a bench's lift, or null when the time does not parse. */
+export function liftClock(iso: string): string | null {
+  const t = Date.parse(iso);
+  return Number.isFinite(t) ? new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : null;
+}
+
+/** A bench's cause in plain words: the engine's token (`quota_exhausted`, `not_logged_in`, …) or its sentence. */
+function benchWords(kind: string): string {
+  if (/quota|usage_limit|rate.?limit|429/i.test(kind)) return 'out of quota';
+  if (/not_logged_in|not logged in|signed.?out|unauthori[sz]ed|401/i.test(kind)) return 'signed out';
+  if (/not_installed|not installed/i.test(kind)) return 'not installed';
+  return kind.trim() === '' ? 'benched' : `benched: ${kind.trim()}`;
+}
+
+/** The roster's ACTIVE bench of the seat (crew#1138: `recent_bench` / flat `benchedUntil` + `benchReason`):
+ *  its words and lift time, or null when none is active at `now`. */
+function activeRosterBench(seat: RosterSeat, now: number): { words: string; until: string } | null {
+  const bag = seat as Record<string, unknown>;
+  const rb = bag['recent_bench'];
+  const rbo = rb !== null && typeof rb === 'object' ? rb as Record<string, unknown> : null;
+  const until = typeof bag['benchedUntil'] === 'string' ? bag['benchedUntil'] as string
+    : typeof rbo?.['lifts_at'] === 'string' ? rbo['lifts_at'] as string : null;
+  if (until === null) return null;
+  const t = Date.parse(until);
+  if (!Number.isFinite(t) || t <= now) return null;
+  const kind = typeof rbo?.['kind'] === 'string' ? rbo['kind'] as string
+    : typeof bag['benchReason'] === 'string' ? bag['benchReason'] as string : '';
+  return { words: benchWords(kind), until };
 }
 
 const CANDIDATE_RANK: Record<ReassignCandidate['state'], number> = { ready: 0, unknown: 1, 'signed-out': 2, inactive: 3, ineligible: 4, refused: 5 };
@@ -753,12 +825,24 @@ export function reassignRefusedOf(units: readonly WorkUnit[], ord: number | null
  * phase2-r2 rig is the reason for the hedge: opencode read `signed_in:false` and still answered a
  * chat on its provider free tier — "councils bench this seat" is not a fact today's roster carries.
  */
-export function seatStanding(seat: RosterSeat | undefined): { state: ReassignCandidate['state']; note: string } {
+export function seatStanding(seat: RosterSeat | undefined, now: number = Date.now()): { state: ReassignCandidate['state']; note: string; until?: string } {
   if (seat === undefined) return { state: 'unknown', note: '' };
   if (seat.health?.status === 'inactive') {
     return { state: 'inactive', note: `inactive${seat.health.message ? `: ${seat.health.message}` : ''}` };
   }
+  // (PRODUCT-WORKS J4) An active engine bench keeps the seat out of work until it lifts: on the rig the
+  // dead-seat card offered only quota-benched Copilot, which refused at once. Its words and lift time.
+  const bench = activeRosterBench(seat, now);
+  if (bench !== null) {
+    const at = liftClock(bench.until);
+    return { state: 'inactive', note: at !== null ? `${bench.words} — back by ${at}` : bench.words, until: bench.until };
+  }
   const bag = seat as Record<string, unknown>;
+  // (crew api-types 0.129.0) The daemon's own word on WORK: a seat it would give no work.
+  if (bag['work_eligible'] === false) {
+    const why = bag['work_ineligible_reason'];
+    return { state: 'ineligible', note: typeof why === 'string' && why !== '' ? why : 'this computer would give it no work' };
+  }
   const eligible = bag['council_eligible'];
   const auth = bag['auth'];
   const reason = bag['council_ineligible_reason'];
@@ -827,6 +911,9 @@ export function reassignCandidates(
   roster: readonly RosterSeat[] | null,
   /** studio#813: seats the engine refuses for this unit ({@link reassignRefusedOf}) — never offered. */
   refused: readonly string[] = [],
+  /** (PRODUCT-WORKS J4) The seats THIS run benched ({@link runBenchesOf}) — never offered while benched. */
+  runBenched: readonly RunBench[] = [],
+  now: number = Date.now(),
 ): ReassignCandidate[] {
   const seen = new Set<string>();
   const out: ReassignCandidate[] = [];
@@ -834,12 +921,23 @@ export function reassignCandidates(
     if (cli === failedCli || seen.has(cli)) continue;
     seen.add(cli);
     const seat = roster?.find((s) => s.key === cli);
+    const label = seat?.display_name ?? cli;
     if (refused.includes(cli)) {
-      out.push({ cli, label: seat?.display_name ?? cli, state: 'refused', note: REFUSED_SEAT_NOTE });
+      out.push({ cli, label, state: 'refused', note: REFUSED_SEAT_NOTE });
       continue;
     }
-    const { state, note } = seatStanding(seat);
-    out.push({ cli, label: seat?.display_name ?? cli, state, note });
+    const standing = seatStanding(seat, now);
+    // The run's own bench: one that never lifts by itself, or whose lift time is still ahead. A lift
+    // time already past is the engine's re-probe to make (wicked-core#1118), so the roster decides.
+    const own = runBenched.find((b) => b.cli === cli && (b.benched_until === undefined || b.benched_until > now));
+    if (own !== undefined && standing.state !== 'inactive') {
+      const until = own.benched_until !== undefined ? new Date(own.benched_until).toISOString() : undefined;
+      const at = until !== undefined ? liftClock(until) : null;
+      const words = `${benchWords(own.reason)} in this job`;
+      out.push({ cli, label, state: 'inactive', note: at !== null ? `${words} — back by ${at}` : words, ...(until !== undefined ? { until } : {}) });
+      continue;
+    }
+    out.push({ cli, label, state: standing.state, note: standing.note, ...(standing.until !== undefined ? { until: standing.until } : {}) });
   }
   return out.sort((a, b) => CANDIDATE_RANK[a.state] - CANDIDATE_RANK[b.state] || pool.indexOf(a.cli) - pool.indexOf(b.cli));
 }

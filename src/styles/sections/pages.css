@@ -262,3 +262,9 @@
 .wk-learn-drop-text { flex: 1 1 220px; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .wk-learn-drop-title { font-weight: var(--weight-semi); color: var(--ink-high); overflow-wrap: anywhere; }
 .wk-learn-thumb { width: 56px; height: 56px; object-fit: cover; border-radius: var(--radius-md); border: 1px solid var(--border-subtle); }
+
+/* Build & settings (`/build`) is a calm page (components/calm); its rows end in a chevron. */
+.wk-build-chev { flex: none; color: var(--ink-muted); }
+/* Build & settings on a phone: the calm row puts its meta under the words; a lone chevron there reads as
+   litter, and the whole row is the link anyway. */
+@media (max-width: 767px) { .wk-calm-row-meta:has(> .wk-build-chev) { display: none; } }

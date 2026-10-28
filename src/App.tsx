@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { EditorHostPage } from './components/editors/EditorHostPage.js';
 import { useHostChrome } from './editors/hostApi.js';
 import { AskDock } from './components/AskDock.js';
@@ -42,9 +42,12 @@ import { ConnectionStatus } from './components/ConnectionStatus.js';
 import { SettingsPage } from './components/SettingsPage.js';
 import { SETTINGS_THEME_PATH } from './board/settingsTabs.js';
 import { NerveCenterPage } from './components/nerve/NerveCenterPage.js';
+import { InsightsPage } from './components/insights/InsightsPage.js';
 import { NERVE_CENTER_PATH } from './components/desk/NerveCenterTile.js';
 import { parseRoute, projectDetailPath } from './hooks/useRoute.js';
-import { DeskV2, deskTabPath, type HostedTab } from './components/desk/DeskV2.js';
+import { DeskHostedPage, DeskV2, deskTabPath, type HostedTab } from './components/desk/DeskV2.js';
+import { BuildPage } from './components/BuildPage.js';
+import { legacyDeskTarget } from './board/navModel.js';
 import { useDeskStream } from './store/deskStream.js';
 import { SESSION_RAIL_PX, SessionRail } from './components/desk/SessionRail.js';
 import { RailDrawer } from './components/ui/RailDrawer.js';
@@ -68,6 +71,7 @@ import { altChord, setShortcutsPaletteOpen, useGlobalShortcuts } from './hooks/u
 import { takeTypedSeed, typeInto, typeTarget, useTypeToComposer } from './hooks/useTypeToComposer.js';
 import { legacySteeringTarget, useRetiredSettingsRedirect, useTestingRedirect } from './hooks/useLegacyRedirect.js';
 import { EverythingPage } from './components/everything/EverythingPage.js';
+import { ProjectsPage } from './components/everything/ProjectsPage.js';
 import { productRedirectPath, useRoute } from './hooks/useRoute.js';
 import { useRuns } from './hooks/useRuns.js';
 import { useAnnotationStore } from './store/annotations.js';
@@ -88,7 +92,7 @@ import { useWatchHydrate } from './hooks/useWatchFeed.js';
 import { WatchtowerPage } from './components/watch/WatchtowerPage.js';
 import { SteerSurface } from './components/steer/SteerSurface.js';
 import { tableAddress } from './components/steer/tableAddress.js';
-import { attentionBadge } from './board/attention.js';
+import { useNeedsNumber } from './hooks/useRankedNeeds.js';
 import type { CoreEvent, RepoEntry } from './api/types.js';
 import { readSteeringTypeFilter } from './api/steering.js';
 import { isTestingSubPage, readLaunchIntent } from './api/testing.js';
@@ -180,7 +184,8 @@ export function App(): React.ReactElement {
   );
 
 
-  /** Desk hosted tabs: render the page at the tab's address, with the project page's scope. */
+  /** The hosted pages (Repositories, Steering, Memory, Agents, Evaluate): the page at an address, with a
+   *  project page's scope when a project's tab hosts it (`project`), else at its own address. */
   const renderHosted = (tab: HostedTab, at: string, project: string | null): React.ReactNode => {
     const u = new URL(at.startsWith('/') ? at : `/${at}`, 'http://studio.local');
     const r = parseRoute(u.pathname);
@@ -389,13 +394,28 @@ export function App(): React.ReactElement {
   // the dock through `openAskDock` — a fresh chat in the project when one is named.
   const askRequest = useAskDock((s) => s.request);
   const [askStart, setAskStart] = useState<AskRequest | null>(null);
-  useEffect(() => {
+  // A layout effect, not a passive one: the request opens the window in the same store update, so the dock first
+  // mounts under the OLD key; this remount must land before the browser takes any input, or the first letters typed
+  // (or filled) into the fresh dock are dropped by it (desk_ask_team: Send stayed disabled after a fill).
+  useLayoutEffect(() => {
     if (askRequest === null) return;
+    // Understand's ask box (`askInChat`): the operator's own question, sent as the first message of a
+    // new chat under the id the page minted (the same handoff the Desk composer's send takes).
+    if (askRequest.send !== undefined) {
+      setAskStart(null);
+      handToAsk(askRequest.seedText, {
+        fresh: true, openChatId: askRequest.send.chatId,
+        ...(askRequest.projectId !== null ? { projectId: askRequest.projectId } : {}),
+        ...(askRequest.send.workflow !== undefined ? { workflow: askRequest.send.workflow } : {}),
+        ...(askRequest.send.repos !== undefined ? { repos: askRequest.send.repos } : {}),
+      });
+      return;
+    }
     setAskKey((k) => k + 1);
     setAskHandoff(null);
     setAskStart(askRequest);
     setAskOpen(true);
-  }, [askRequest]);
+  }, [askRequest, handToAsk]);
   useEffect(() => {
     if (!askOpen) setAskStart(null);
   }, [askOpen]);
@@ -493,6 +513,8 @@ export function App(): React.ReactElement {
   // the right rail renders it on every route, peek shows its top item, Home reads the same.
   const needsNow = useNeedsClock();
   const needRows = useNeedsRows(runs, needsNow, runsLoaded);
+  // THE needs-you number: a ranked crew's list length (useRankedNeeds), else the fold's badge.
+  const needsNumber = useNeedsNumber(needRows);
   // The runs a Needs-you row holds: the Desk peek leaves them out of "running", as Running now does.
   const heldByNeeds = useMemo(() => new Set(needRows.map(needRunId).filter((id): id is string => id !== null)), [needRows]);
   // studio#805: the Desk's surfaces read a held live run as waiting on you (statusWord reads the mark).
@@ -545,9 +567,9 @@ export function App(): React.ReactElement {
   function renderCenter(): React.ReactElement {
     // A dead address (usability review #4): the honest not-found view. Checked
     // FIRST — no redirect hook fires for this panel, so the typed URL stays.
-    // Desk v2: the Agents page is the Desk's Agents tab; `/agents/...` deep links ride along as `at`.
+    // The sidebar's Agents page (`/agents[?fix=|?setup=1]`; deeper `/agents/...` spellings land on it too).
     if (pathname === '/agents' || pathname.startsWith('/agents/')) {
-      return <RouteRedirect to={deskTabPath('agents', pathname + search)} navigate={navigate} />;
+      return <DeskHostedPage view="agents">{renderHosted('agents', pathname + search, null)}</DeskHostedPage>;
     }
     if (panel === 'not-found') {
       return (
@@ -562,6 +584,10 @@ export function App(): React.ReactElement {
       if (new URLSearchParams(search).get('tab') === 'helpers') return <RouteRedirect to={AGENTS_PATH} navigate={navigate} />;
       // Like the Desk: the page owns its scroller (`.wk-desk-scroll`) — no clipping wrapper (main_scroll).
       return <EverythingPage runs={shownRuns} runsLoaded={runsLoaded} runsError={runsError} onRetryRuns={refresh} needRows={needRows} navigate={navigate} search={search} />;
+    }
+    // Projects (`/projects`, the sidebar's first WORK item): the projects list, for now.
+    if (panel === 'projects') {
+      return <ProjectsPage runs={shownRuns} runsLoaded={runsLoaded} runsError={runsError} onRetryRuns={refresh} needRows={needRows} navigate={navigate} search={search} />;
     }
     // Wave 1 ("raw in one step"): a run's raw event JSON / worktree files as routes — the
     // palette's `>events <run>` / `>files <run>` verbs land here, and Back returns.
@@ -599,10 +625,17 @@ export function App(): React.ReactElement {
     }
     // `/` is the orchestrator board (§1.4, slice 5); the flat run list it replaced is
     // still at `/runs`, which the `panel === 'runs'` fallback below keeps rendering.
-    if (panel === 'home') {
-      // The Desk (S4) — the one shell since the classic skins retired (S18d).
-      return <DeskV2 hosted={renderHosted} runs={shownRuns} runsLoaded={runsLoaded} runsError={runsError} onRetryRuns={refresh} needRows={needRows} now={needsNow} navigate={navigate} search={search} />;
+    if (panel === 'home' || panel === 'needs' || panel === 'jobs' || panel === 'report' || panel === 'understand') {
+      // The ui-v2 nav regroup: the Desk's old tabs are pages in the sidebar. An old `/?tab=…[&at=…]`
+      // address lands on its page (replace, so Back skips it).
+      const legacy = panel === 'home' ? legacyDeskTarget(search) : null;
+      if (legacy !== null) return <RouteRedirect to={legacy} navigate={navigate} />;
+      const view = panel === 'jobs' ? 'runs' : panel === 'home' ? 'work' : panel === 'needs' ? 'inbox' : panel;
+      // The Desk (S4) — the one shell since the classic skins retired (S18d): Home, Jobs, Report, Understand.
+      return <DeskV2 view={view} hosted={renderHosted} runs={shownRuns} runsLoaded={runsLoaded} runsError={runsError} onRetryRuns={refresh} needRows={needRows} now={needsNow} navigate={navigate} search={search} />;
     }
+    // Build & settings: the list of Skills, MCP, Plugins, Workflows and Settings.
+    if (panel === 'build') return <BuildPage navigate={navigate} />;
     if (panel === 'workflows') {
       return (
         <div className="flex-1 overflow-y-auto">
@@ -610,14 +643,14 @@ export function App(): React.ReactElement {
         </div>
       );
     }
-    // Desk v2: Steer and Memory are Desk tabs. Every steering address (`/steering/...`, `/rules/...`,
-    // and the retired `/wiki`, `/policies`, `/proposals`) lands on the tab where it lives now
-    // (`legacySteeringTarget`), its own path carried as `at` so sub-pages and deep links keep working.
+    // The sidebar's Steering and Memory pages. Every steering address (`/steering/...`, `/rules/...`) is
+    // the Steering page; the retired ones (`/wiki`, `/policies`, `/proposals`, the retired sections)
+    // redirect to where they live now (`legacySteeringTarget`, inside the hosted page).
     if (panel === 'steering' || panel === 'rules') {
-      return <RouteRedirect to={legacySteeringTarget(pathname, search)} navigate={navigate} />;
+      return <DeskHostedPage view="steer">{renderHosted('steer', pathname + search, null)}</DeskHostedPage>;
     }
     if (panel === 'memory') {
-      return <RouteRedirect to={deskTabPath('memory', pathname + search)} navigate={navigate} />;
+      return <DeskHostedPage view="memory">{renderHosted('memory', pathname + search, null)}</DeskHostedPage>;
     }
     // `/skills` — the skills file manager over the daemon's effective plugin root (the skills
     // keystone): the catalog + KPI band, a drawer per skill (skill + support file trees, textarea
@@ -637,20 +670,19 @@ export function App(): React.ReactElement {
       return (
         <NerveCenterPage
           navigate={navigate}
-          needCount={attentionBadge(needRows)}
+          runs={shownRuns}
+          needCount={needsNumber}
           search={search}
-          feed={<WatchtowerPage embedded count={attentionBadge(needRows)} runs={shownRuns} runsLoaded={runsLoaded} runsError={runsError} onRetryRuns={refresh} navigate={navigate} now={needsNow} search={search} />}
+          feed={<WatchtowerPage embedded count={needsNumber} runs={shownRuns} runsLoaded={runsLoaded} runsError={runsError} onRetryRuns={refresh} navigate={navigate} now={needsNow} search={search} />}
         />
       );
     }
     // `/mcp` — MCP tools (DES-MCP-TOOLS-001 §7): the registered servers, their tools, the policy
     // matrix and Approve / Revoke. `?server=<name>` deep-links a server row open.
+    // `/insights` — Run insights (crew DES-RUNS-REVIEW-001): the first-party plugin over every review of recent work.
+    if (panel === 'insights') return <InsightsPage navigate={navigate} />;
     if (panel === 'learn') {
       return <LearnPage navigate={navigate} />;
-    }
-    // `/agents` — the Agents page (DES-seats-page): one row per AI agent, `?fix=<key>` opens its modal.
-    if (panel === 'agents') {
-      return <AgentsPage search={search} navigate={navigate} />;
     }
     if (panel === 'plugins') {
       return (
@@ -670,7 +702,7 @@ export function App(): React.ReactElement {
       );
     }
     if (panel === 'repos') {
-      return <RouteRedirect to={deskTabPath('repositories', pathname + search)} navigate={navigate} />;
+      return <DeskHostedPage view="repositories">{renderHosted('repositories', pathname + search, null)}</DeskHostedPage>;
     }
     if (panel === 'repo-detail' && repoId) {
       return (
@@ -694,9 +726,9 @@ export function App(): React.ReactElement {
     if (panel === 'testing' && testingPage === 'campaigns' && campaignId === null) {
       return <CampaignsRedirect search={search} navigate={navigate} />;
     }
-    // Desk v2: Evals lives on the Desk's Evaluate tab (the address carried as `at`).
+    // The sidebar's Evaluate page (`/testing/evals`).
     if (panel === 'testing' && testingPage === 'evals') {
-      return <RouteRedirect to={deskTabPath('evaluate', pathname + search)} navigate={navigate} />;
+      return <DeskHostedPage view="evaluate">{renderHosted('evaluate', pathname + search, null)}</DeskHostedPage>;
     }
     if (panel === 'testing') {
       return (
@@ -815,6 +847,8 @@ export function App(): React.ReactElement {
               ...(askHandoff.primary !== undefined ? { sendPrimary: askHandoff.primary } : {}),
               ...(askHandoff.chatId !== undefined ? { sendChatId: askHandoff.chatId } : {}),
               ...(askHandoff.openChatId !== undefined ? { sendOpenChatId: askHandoff.openChatId } : {}),
+              ...(askHandoff.workflow !== undefined ? { sendWorkflow: askHandoff.workflow } : {}),
+              ...(askHandoff.repos !== undefined ? { sendRepos: askHandoff.repos } : {}),
             } : {})}
             {...(askHandoff === null && askStart !== null ? {
               ...(askStart.projectId !== null ? { startProjectId: askStart.projectId } : {}),
@@ -826,8 +860,8 @@ export function App(): React.ReactElement {
       </ChatWindow>
 
       {/* S11: the open "look underneath" sheet (a step, a helper, a session, the Desk). */}
-      <ObjectSheet runs={shownRuns} navigate={navigate} needCount={attentionBadge(needRows)} />
-      <AltPeek runs={shownRuns} needCount={attentionBadge(needRows)} heldRuns={heldByNeeds} />
+      <ObjectSheet runs={shownRuns} navigate={navigate} needCount={needsNumber} />
+      <AltPeek runs={shownRuns} needCount={needsNumber} heldRuns={heldByNeeds} />
 
       {/* The universal command palette (DES-FEEDBACK-002 §1, slice G) — corpus
           from already-loaded stores + the runs prop; repos cached on first open. */}

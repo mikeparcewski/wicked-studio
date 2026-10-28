@@ -73,6 +73,9 @@ POSITIONS = """() => {
   pick('strip', document.querySelector('[data-testid="handover-panel"]'));
   pick('queue', document.querySelector('[data-testid="needs-you-queue"]'));
   pick('center', document.querySelector('[data-testid="command-center"]'));
+  // Home v2's landing: the ask box and the one Needs you card stand where the queue stood.
+  pick('ask', document.querySelector('[data-testid="desk-ask"]'));
+  pick('card', document.querySelector('[data-testid="desk-card"]'));
   pick('header', document.querySelector('header'));
   document.querySelectorAll('[data-testid="handover-chip"]').forEach(c => pick('chip:' + c.dataset.section, c));
   document.querySelectorAll('[data-testid="need-row"]').forEach(r => pick('row:' + r.dataset.key, r));
@@ -156,8 +159,9 @@ with sync_playwright() as p:
     max_lines = 1
     check("strip-is-one-line", lines <= max_lines and strip["height"] <= 44 * max_lines,
           height=strip["height"], chip_tops=tops, lines=lines, max_lines=max_lines)
-    queue_box = page.get_by_test_id("needs-you-queue").bounding_box()
-    first_row = page.locator('[data-testid="needs-you-queue"] [data-testid="need-row"]').first.bounding_box()
+    # Home v2: the landing's one Needs you card stands where the queue stood (the rest is at /needs).
+    queue_box = page.locator('[data-testid="desk-card"]').first.bounding_box()
+    first_row = queue_box
     check("needs-you-above-the-fold",
           queue_box is not None and first_row is not None and first_row["y"] + first_row["height"] <= H,
           queue_top=None if queue_box is None else queue_box["y"],
@@ -190,6 +194,10 @@ with sync_playwright() as p:
     check("decisions-reveal-queue-rows", any(r["inView"] for r in rev) and
           {r["key"] for r in rev} >= {"gate:g1", "gate:g2", "gate:g3"}, revealed=rev)
     check("decisions-not-duplicated", page.locator('[data-testid="handover-overlay"]').count() == 0)
+    check("decisions-reveal-opens-needs", page.evaluate("() => location.pathname") == "/needs")
+    # Home v2: the reveal opened Needs you in full (/needs); the strip lives on the landing, so go back.
+    page.go_back(wait_until="networkidle")
+    page.get_by_test_id("handover-panel").wait_for(state="visible", timeout=10000)
     page.locator('[data-testid="handover-chip"][data-section="broke"]').click()
     try:
         page.wait_for_function(
@@ -206,6 +214,9 @@ with sync_playwright() as p:
     except Exception:
         fail("highlight-is-brief", page.evaluate(REVEALED))
     check("highlight-is-brief", True)
+    # Home v2: the reveal opened Needs you in full (/needs); the strip lives on the landing, so go back.
+    page.go_back(wait_until="networkidle")
+    page.get_by_test_id("handover-panel").wait_for(state="visible", timeout=10000)
 
     # ── 4. finished → an overlay that shifts nothing ──────────────────────────
     # The page's own scroller (Home's board, or the Desk's under desk) back at the top.
@@ -304,17 +315,19 @@ with sync_playwright() as p:
     # ── 6. Got it; reload: gone until the next absence ────────────────────────
     page.evaluate("() => document.querySelectorAll('[data-place-scroll=\"home-board\"], [data-place-scroll=\"desk\"]')"
                   ".forEach((el) => el.scrollTo(0, 0))")
-    with_top = page.get_by_test_id("needs-you-queue").bounding_box()["y"]
+    # Home v2: the landing's one card is what the strip pushes down (the queue is at /needs).
+    with_top = page.locator('[data-testid="desk-card"]').first.bounding_box()["y"]
     page.get_by_test_id("handover-dismiss").click()
     page.wait_for_function("() => !document.querySelector('[data-testid=\"handover-panel\"]')", timeout=3000)
     page.wait_for_timeout(300)
-    without_top = page.get_by_test_id("needs-you-queue").bounding_box()["y"]
+    without_top = page.locator('[data-testid="desk-card"]').first.bounding_box()["y"]
     # The handover costs the page at most its one line — never a block that grows with its items.
     # Desk v2: one line (~38px) plus the Desk's 24px layout gap.
-    check("handover-holds-at-most-one-line", with_top - without_top <= (64),
+    # Home v2: one line plus the landing's own block gap (the calm page's whitespace), never a growing block.
+    check("handover-holds-at-most-one-line", with_top - without_top <= strip["height"] + 64,
           with_handover=with_top, without=without_top, delta=with_top - without_top)
     page.reload(wait_until="networkidle")
-    page.get_by_test_id("needs-you-queue").wait_for(state="visible", timeout=15000)
+    page.get_by_test_id("desk-work").wait_for(state="visible", timeout=15000)
     page.wait_for_timeout(800)
     check("got-it-stays-gone", page.locator('[data-testid="handover-panel"]').count() == 0)
 
@@ -334,7 +347,7 @@ with sync_playwright() as p:
 
     def back_home() -> None:
         page.goto(home, wait_until="domcontentloaded")
-        page.get_by_test_id("needs-you-queue").wait_for(state="visible", timeout=15000)
+        page.get_by_test_id("desk-work").wait_for(state="visible", timeout=15000)
 
     for key in ("gate:g1", "fail:f1"):
         page.locator('[data-testid="handover-chip"][data-section="%s"]' % ("decisions" if key.startswith("gate") else "broke")).click()
@@ -359,7 +372,7 @@ with sync_playwright() as p:
         fail("acted-on-all-clears", page.get_by_test_id("handover-panel").inner_text())
     check("acted-on-all-clears", True)
     page.reload(wait_until="networkidle")
-    page.get_by_test_id("needs-you-queue").wait_for(state="visible", timeout=15000)
+    page.get_by_test_id("desk-work").wait_for(state="visible", timeout=15000)
     page.wait_for_timeout(800)
     check("cleared-stays-gone", page.locator('[data-testid="handover-panel"]').count() == 0)
 

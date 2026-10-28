@@ -190,7 +190,9 @@ with sync_playwright() as p:
             route.fallback()
 
     page.route("**/api/v1/projects/scratch", project_route)
-    page.goto(f"{origin}/projects/scratch", wait_until="networkidle")
+    # ui-v2 project home: the documents root lives in the project's "Work and documents" view (?tab=work; the home's
+    # Documents menu item and its "Work and documents" link both land there), no longer on the home itself.
+    page.goto(f"{origin}/projects/scratch?tab=work", wait_until="networkidle")
     page.get_by_test_id("project-docs-root").wait_for(state="visible", timeout=15000)
     before = page.get_by_test_id("project-docs-root").get_attribute("data-bound")
     page.get_by_test_id("project-docs-root-edit").click()
@@ -201,7 +203,7 @@ with sync_playwright() as p:
     page.screenshot(path=str(SHOTS / "desk-ports-docs-root.png"))
     page.get_by_test_id("project-docs-root-clear").click()
     page.wait_for_function("() => document.querySelector('[data-testid=\"project-docs-root\"]')?.dataset.bound === 'false'", timeout=5000)
-    page.goto(f"{origin}/projects/default", wait_until="networkidle")
+    page.goto(f"{origin}/projects/default?tab=work", wait_until="networkidle")
     page.wait_for_timeout(800)
     on_default = page.get_by_test_id("project-docs-root").count()
     page.unroute("**/api/v1/projects/scratch")

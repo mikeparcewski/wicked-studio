@@ -69,7 +69,8 @@ with sync_playwright() as p:
     set_fixture(origin, reset_gate_posts=True, orphan=True)
 
     # ── 1. The Desk counts it ────────────────────────────────────────────────────
-    page.goto(f"{origin}/", wait_until="networkidle")
+    # Home v2: the queue is in Needs you in full (/needs).
+    page.goto(f"{origin}/needs", wait_until="networkidle")
     page.get_by_test_id("desk").wait_for(state="visible", timeout=15000)
     need = page.locator('[data-testid="need-line"]', has_text="nothing is working on it")
     try:

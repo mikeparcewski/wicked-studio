@@ -71,8 +71,11 @@ with sync_playwright() as p:
         "document.addEventListener('DOMContentLoaded', () => { const s = document.createElement('style'); "
         f"s.textContent = {json.dumps(HIDE_GATE_TOASTS)}; document.head.appendChild(s); }});")
     try:
-        # 1. From the Desk to the run, the way the operator gets there.
+        # 1. From the Desk to the run, the way the operator gets there. Home v2: the landing shows one
+        # card and "N more waiting", which opens Needs you in full.
         page.goto(f"{origin}/", wait_until="networkidle")
+        page.get_by_test_id("desk-needs-more").click()
+        page.wait_for_function("() => location.pathname === '/needs'", timeout=8000)
         # The escalated runs share one title, so Needs you folds them into one decision group; the
         # operator opens it and follows the run's own link.
         page.locator('[data-testid="desk-inbox-row"][data-key="group:approval"]').first.click()

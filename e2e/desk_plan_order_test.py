@@ -33,7 +33,7 @@ import os
 import sys
 import urllib.request
 
-from uxfix_fixture import HIDE_GATE_TOASTS, REPO, ensure_build, set_fixture, start_server
+from uxfix_fixture import HIDE_GATE_TOASTS, REPO, ensure_build, proposal_menu_item, set_fixture, start_server
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4356"))
 W, H = 1440, 700
@@ -106,7 +106,7 @@ with sync_playwright() as p:
         # DES-CHAT-NATIVE-RUN: while the plan waits on you, its editor opens from the plan message's Edit.
         page.wait_for_timeout(800)
         if page.get_by_test_id("session-proposal-edit").count() > 0 and page.get_by_test_id("session-proposal-edit").get_attribute("aria-expanded") != "true":
-            page.get_by_test_id("session-proposal-edit").click()
+            proposal_menu_item(page, "session-proposal-edit").click()  # ui-v2 gate: Edit the plan is under Other options
         plan.wait_for(state="visible", timeout=15000)
         rows.first.wait_for(state="visible", timeout=8000)
 
@@ -164,7 +164,7 @@ with sync_playwright() as p:
           tag=added_tag, draft=draft2, labels=with_test)
 
     # ── 5. drop the changes: the held order, no draft ────────────────────────────────
-    page.get_by_test_id("session-proposal-drop-draft").click()
+    proposal_menu_item(page, "session-proposal-drop-draft").click()  # ui-v2 gate: under the card's Other options
     page.get_by_test_id("session-proposal-draft").wait_for(state="hidden", timeout=8000)
     check("drop", labels() == inline_labels and page.get_by_test_id("session-proposal-draft").count() == 0, labels=labels())
 

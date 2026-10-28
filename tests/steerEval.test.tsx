@@ -10,10 +10,15 @@ import { EvaluateSurface } from '../src/components/steer/EvaluateSurface.js';
 import { ruleFacets, SteerSurface } from '../src/components/steer/SteerSurface.js';
 import { groupEvalRuns } from '../src/components/EvalHistory.js';
 import { tableAddress } from '../src/components/steer/tableAddress.js';
-import { deskTabPath } from '../src/components/desk/DeskV2.js';
 import { useEvalReportStore } from '../src/store/evalReport.js';
 import { useSteerDraft } from '../src/store/steerDraft.js';
 import { importRuleFile } from '../src/board/steerImport.js';
+
+/** The calm page keeps every way to add or manage behind Add a rule's menu: open it, then pick the move. */
+async function more(user: ReturnType<typeof userEvent.setup>, testId: string): Promise<void> {
+  await user.click(await screen.findByTestId('steer-more-button'));
+  await user.click(await screen.findByTestId(testId));
+}
 
 /**
  * DES-steer-eval §3.2–3.3: the Evaluate numbers carry their context, and Draft rules hands the gaps
@@ -138,12 +143,24 @@ describe('the folds', () => {
 });
 
 describe('the Evaluate surface on the live shape', () => {
-  it('leads the Caught tile with bad-blocked and shows every caveat beside the numbers', async () => {
+  it('one row per steering type in plain words; the detail leads with bad-blocked; every caveat sits beside the numbers', async () => {
+    const user = userEvent.setup();
     wire();
     render(<EvaluateSurface navigate={vi.fn()} />);
+    const rows = await screen.findAllByTestId('evaluate-type-row');
+    // Both types have gaps (amber); the canonical order breaks the tie.
+    expect(rows.map((r) => [r.getAttribute('data-steering-type'), r.getAttribute('data-tone')])).toEqual([['development', 'warn'], ['security', 'warn']]);
+    expect(rows[1]).toHaveTextContent('Security rules');
+    expect(rows[1]).toHaveTextContent('Blocked 0 of 2 bad behaviours · 2 gaps: not covered by any rule');
+    // No ids on the face: the row names the type and the numbers, never the run or a sample id.
+    expect(rows[1]).not.toHaveTextContent('r3');
+    const card0 = screen.getByTestId('evaluate-measures');
+    await user.click(screen.getByTestId('evaluate-all-behaviours'));
     const caught = await screen.findByTestId('evaluate-stat-caught');
-    await waitFor(() => expect(caught).toHaveTextContent('2of 5'));
-    expect(caught).toHaveTextContent('0 of 3 bad blocked · 2 good left alone');
+    expect(caught).toHaveTextContent('0 of 3');
+    expect(caught).toHaveTextContent('bad behaviours blocked · 2 good left alone');
+    await user.click(screen.getByTestId('evaluate-back'));
+    expect(card0).not.toBeInTheDocument();
     const card = await screen.findByTestId('evaluate-measures');
     await waitFor(() => expect(card.getAttribute('data-store')).toBe('other'));
     const keys = within(card).getAllByTestId('evaluate-caveat').map((li) => li.getAttribute('data-caveat'));
@@ -175,7 +192,11 @@ describe('Draft rules: Evaluate → Steer’s assistant, typed in, never sent', 
     wire();
     const navigate = vi.fn();
     render(<EvaluateSurface navigate={navigate} />);
+    // A type's row opens its detail; its gaps carry Draft rules.
+    await user.click((await screen.findAllByTestId('evaluate-type-row')).find((r) => r.getAttribute('data-steering-type') === 'security')!);
+    expect(screen.getByTestId('evaluate-detail')).toHaveAttribute('data-steering-type', 'security');
     const drafts = await screen.findAllByTestId('evaluate-draft');
+    expect(drafts).toHaveLength(1);
     await user.click(drafts[0]!);
     expect(navigate).toHaveBeenCalledWith('/steering/policies?type=security');
     expect(useSteerDraft.getState().seed?.text).toBe(draftRequest('security', gapsByType(RESULTS)[0]!.gaps));
@@ -229,9 +250,9 @@ describe('codex r1 fixes', () => {
   it('#4 no eval, no claim; a corpus with no bad behaviours never says "every bad behaviour was blocked"', async () => {
     apiFetch.mockImplementation((path: unknown) => (String(path) === '/testing/evals' ? Promise.resolve({ runs: [] }) : Promise.reject(new ApiError(404, 'Not Found'))));
     const { unmount } = render(<EvaluateSurface navigate={vi.fn()} />);
-    const fp = await screen.findByTestId('evaluate-stat-fp');
-    await waitFor(() => expect(fp).toHaveTextContent('No eval yet'));
-    expect(fp.getAttribute('data-tone')).toBe('accent');
+    expect(await screen.findByTestId('evaluate-results-empty')).toHaveTextContent('No evaluation yet');
+    expect(screen.queryByTestId('evaluate-type-row')).toBeNull();
+    expect(screen.getByTestId('evaluate-last-run')).toHaveTextContent('Never run');
     unmount();
     const goodOnly = [res('g1', 'good', 'security', 'caught')];
     apiFetch.mockImplementation((path: unknown) => {
@@ -241,21 +262,27 @@ describe('codex r1 fixes', () => {
       return Promise.reject(new ApiError(404, 'Not Found'));
     });
     render(<EvaluateSurface navigate={vi.fn()} />);
-    expect(await screen.findByTestId('evaluate-gaps-none')).toHaveTextContent('this corpus has no bad behaviours, so nothing could be blocked');
+    const row = await screen.findByTestId('evaluate-type-row');
+    expect(row).toHaveTextContent('No bad behaviours in this set, so nothing could be blocked');
+    expect(row).not.toHaveTextContent('Blocked all');
+    expect(row.getAttribute('data-tone')).toBe('quiet');
+    await userEvent.setup().click(row);
+    expect(await screen.findByTestId('evaluate-gaps-none')).toHaveTextContent('this set has no bad behaviours, so nothing could be blocked');
   });
 
   it('#5 closing the assistant keeps its draft; reopening shows it again', async () => {
     const user = userEvent.setup();
     wire();
     render(<SteerSurface pathname="/rules" search="" runs={[]} navigate={vi.fn()} />);
-    await user.click(await screen.findByTestId('steer-chat'));
+    await more(user, 'steer-chat');
     const input = await screen.findByTestId('assist-input');
     expect(input).toHaveFocus();
     await user.type(input, 'keep this draft');
     await user.click(screen.getByTestId('assist-dock-toggle'));
     expect(screen.getByTestId('steer-dock')).not.toBeVisible();
-    expect(screen.getByTestId('steer-chat')).toHaveFocus();
-    await user.click(screen.getByTestId('steer-chat'));
+    // Focus goes back to the menu button that opened it (the menu item is gone once picked).
+    expect(screen.getByTestId('steer-more-button')).toHaveFocus();
+    await more(user, 'steer-chat');
     expect(screen.getByTestId('steer-dock')).toBeVisible();
     expect(screen.getByTestId('assist-input')).toHaveValue('keep this draft');
   });
@@ -265,9 +292,9 @@ describe('codex r1 fixes', () => {
   });
 
   it('#7 the table editor’s own filter moves keep the table, on the Steer tab’s address', () => {
-    expect(tableAddress('/steering/policies?type=security')).toBe(deskTabPath('steer', '/steering/policies?type=security&view=table'));
-    expect(tableAddress('/steering/policies')).toBe(deskTabPath('steer', '/steering/policies?view=table'));
-    expect(tableAddress('/steering/proposals')).toBe(deskTabPath('steer', '/steering/proposals'));
+    expect(tableAddress('/steering/policies?type=security')).toBe('/steering/policies?type=security&view=table');
+    expect(tableAddress('/steering/policies')).toBe('/steering/policies?view=table');
+    expect(tableAddress('/steering/proposals')).toBe('/steering/proposals');
     expect(tableAddress('/s/run-1')).toBe('/s/run-1');
   });
 
@@ -286,14 +313,17 @@ describe('codex r1 #9 / r2 #4, #6 / r3 #1: a run made here, ordered without cloc
       return Promise.reject(new ApiError(404, 'Not Found'));
     });
     render(<EvaluateSurface navigate={vi.fn()} />);
+    await user.click(await screen.findByTestId('evaluate-all-behaviours'));
     await waitFor(() => expect(screen.getByTestId('testing-evals-provenance')).toHaveTextContent('built-in sample set'));
+    await user.click(screen.getByTestId('evaluate-back'));
     historyUp = false;
     await user.click(screen.getByTestId('evaluate-options-toggle'));
     await user.type(screen.getByTestId('testing-evals-corpus'), 'evals:mine');
     await user.click(screen.getByTestId('testing-evals-run'));
     // The refresh after the run failed: the run made here is the answer, and the failure is said.
-    await waitFor(() => expect(screen.getByTestId('testing-evals-provenance')).toHaveTextContent('Corpus: evals:mine'));
     expect(await screen.findByTestId('evaluate-refresh-failed')).toBeInTheDocument();
+    await user.click(screen.getByTestId('evaluate-all-behaviours'));
+    await waitFor(() => expect(screen.getByTestId('testing-evals-provenance')).toHaveTextContent('Corpus: evals:mine'));
     expect(useEvalReportStore.getState().latest).not.toBeNull();
   });
 
@@ -301,6 +331,7 @@ describe('codex r1 #9 / r2 #4, #6 / r3 #1: a run made here, ordered without cloc
     useEvalReportStore.setState({ latest: { report: { results: RESULTS, summary: SUMMARY, degraded: null }, corpus: 'mine', at: Date.now() + 3_600_000, seq: 0 } });
     wire();
     render(<EvaluateSurface navigate={vi.fn()} />);
+    await userEvent.setup().click(await screen.findByTestId('evaluate-all-behaviours'));
     await waitFor(() => expect(screen.getByTestId('testing-evals-provenance')).toHaveTextContent('Corpus: built-in sample set'));
     await waitFor(() => expect(useEvalReportStore.getState().latest).toBeNull());
   });
@@ -314,7 +345,7 @@ describe('codex r2 fixes', () => {
     const user = userEvent.setup();
     render(<SteerSurface pathname="/rules" search="" runs={[]} navigate={vi.fn()} />);
     await screen.findByTestId('rules-row');
-    await user.click(screen.getByTestId('steer-refresh'));
+    await more(user, 'steer-refresh');
     expect(await screen.findByTestId('steer-refresh-failed')).toBeInTheDocument();
     expect(screen.getAllByTestId('rules-row')).toHaveLength(1);
     // The create form still knows PAT-100 is taken.
@@ -347,11 +378,11 @@ describe('codex r2 fixes', () => {
     const user = userEvent.setup();
     wire();
     const { rerender } = render(<SteerSurface pathname="/steering/policies" search="?type=architecture" runs={[]} navigate={vi.fn()} />);
-    await user.click(await screen.findByTestId('steer-chat'));
+    await more(user, 'steer-chat');
     expect(screen.getByTestId('steer-dock')).toHaveTextContent('Steering · Architecture');
     await user.click(screen.getByTestId('assist-dock-toggle'));
     rerender(<SteerSurface pathname="/steering/policies" search="?type=security" runs={[]} navigate={vi.fn()} />);
-    await user.click(screen.getByTestId('steer-chat'));
+    await more(user, 'steer-chat');
     expect(screen.getByTestId('steer-dock')).toHaveTextContent('Steering · Security');
   });
 
@@ -363,24 +394,30 @@ describe('codex r2 fixes', () => {
     expect(groupEvalRuns([a, b])).toHaveLength(2);
   });
 
-  it('#8 Import is a modal: focus moves in, and back to Import on close', async () => {
+  it('#8 Import is a modal: focus moves in, and back to the menu that opened it on close', async () => {
     const user = userEvent.setup();
     wire();
     render(<SteerSurface pathname="/rules" search="" runs={[]} navigate={vi.fn()} />);
     await screen.findAllByTestId('rules-row');
-    await user.click(screen.getByTestId('steer-import'));
+    await more(user, 'steer-import');
     expect(screen.getByTestId('steer-import-type')).toHaveFocus();
     expect(document.querySelector('.wk-se-scroll')?.hasAttribute('inert')).toBe(true);
     await user.click(screen.getByTestId('steer-import-cancel'));
-    expect(screen.getByTestId('steer-import')).toHaveFocus();
+    expect(screen.getByTestId('steer-more-button')).toHaveFocus();
     expect(document.querySelector('.wk-se-scroll')?.hasAttribute('inert')).toBe(false);
   });
 
-  it('#9 a type card keeps the MCP filter', async () => {
+  it('#9 the type picker keeps the MCP filter', async () => {
     wire();
-    render(<SteerSurface pathname="/steering/policies" search="?mcp=1" runs={[]} navigate={vi.fn()} />);
-    const sec = (await screen.findAllByTestId('steer-type')).find((a) => a.getAttribute('data-steering-type') === 'security')!;
-    expect(sec.getAttribute('href')).toContain('mcp=1');
+    const user = userEvent.setup();
+    const navigate = vi.fn();
+    render(<SteerSurface pathname="/steering/policies" search="?mcp=1" runs={[]} navigate={navigate} />);
+    // No rule here governs MCP calls: the list is empty because of the filter; the picker still moves.
+    await screen.findByTestId('steer-rules-empty');
+    await user.selectOptions(screen.getByTestId('steer-type-pick'), 'security');
+    const to = String(navigate.mock.calls.at(-1)?.[0]);
+    expect(to).toContain('mcp=1');
+    expect(to).toContain('security');
   });
 
   it('#5 the tag filter (targets, applies_to) is back', async () => {
@@ -390,6 +427,8 @@ describe('codex r2 fixes', () => {
     render(<SteerSurface pathname="/rules" search="" runs={[]} navigate={vi.fn()} />);
     await screen.findAllByTestId('rules-row');
     expect(ruleFacets({ ...rule('A-1'), applies_to: ['build'], targets: { project: 'payments' } } as SteeringRule)).toContain('project=payments');
+    // The tag filter sits with the quiet search: open it first.
+    await user.click(screen.getByTestId('steer-search-open'));
     await user.type(screen.getByTestId('steer-facet-input'), 'applies_to=build');
     await user.keyboard('{Enter}');
     await waitFor(() => expect(screen.getAllByTestId('rules-row').map((r) => r.getAttribute('data-rule-id'))).toEqual(['A-1']));
@@ -403,17 +442,20 @@ describe('codex r3 fixes', () => {
     wire();
     render(<SteerSurface pathname="/rules" search="" runs={[]} navigate={vi.fn()} />);
     await screen.findByTestId('rules-error');
-    const tile = screen.getByTestId('steer-stat-rules');
-    expect(tile).toHaveTextContent('Couldn’t read the rules');
-    expect(tile).not.toHaveTextContent('none block');
-    expect(screen.getAllByTestId('steer-type').every((c) => c.textContent?.includes('—'))).toBe(true);
+    const sentence = screen.getByTestId('steer-sentence');
+    expect(sentence).toHaveTextContent('Couldn’t read your rules just now.');
+    expect(sentence.textContent).not.toMatch(/\d/);
+    // The type picker counts nothing over a failed read.
+    expect([...screen.getByTestId('steer-type-pick').querySelectorAll('option')].every((o) => !/\d/.test(o.textContent ?? ''))).toBe(true);
   });
 
   it('#4 "Edit as a table" opens on the same type, MCP and unused filters', async () => {
     wire();
-    render(<SteerSurface pathname="/steering/policies" search="?type=security&mcp=1&usage=unused" runs={[]} navigate={vi.fn()} />);
-    const link = await screen.findByTestId('steer-table');
-    const q = new URL(link.getAttribute('href')!, 'http://x').searchParams;
+    const user = userEvent.setup();
+    const navigate = vi.fn();
+    render(<SteerSurface pathname="/steering/policies" search="?type=security&mcp=1&usage=unused" runs={[]} navigate={navigate} />);
+    await more(user, 'steer-table');
+    const q = new URL(String(navigate.mock.calls.at(-1)?.[0]), 'http://x').searchParams;
     expect([q.get('type'), q.get('mcp'), q.get('usage'), q.get('view')]).toEqual(['security', '1', 'unused', 'table']);
   });
 });
@@ -425,6 +467,7 @@ describe('codex r4 fixes', () => {
     const { unmount } = render(<EvaluateSurface navigate={vi.fn()} />);
     await screen.findByTestId('evaluate-measures');
     await waitFor(() => expect(screen.getByTestId('evaluate-measures').getAttribute('data-store')).toBe('other'));
+    await user.click(screen.getByTestId('evaluate-all-behaviours'));
     await user.click(screen.getAllByTestId('testing-evals-gap-toggle')[0]!);
     expect(screen.getByTestId('testing-evals-nearest-foreign')).toHaveTextContent('SEC-1');
     expect(screen.queryByTestId('testing-evals-nearest-link')).toBeNull();
@@ -432,6 +475,7 @@ describe('codex r4 fixes', () => {
     wire({ top: DAEMON });
     render(<EvaluateSurface navigate={vi.fn()} />);
     await waitFor(() => expect(screen.getByTestId('evaluate-measures').getAttribute('data-store')).toBe('daemon'));
+    await user.click(screen.getByTestId('evaluate-all-behaviours'));
     await user.click(screen.getAllByTestId('testing-evals-gap-toggle')[0]!);
     expect(screen.getByTestId('testing-evals-nearest-link')).toHaveAttribute('data-rule-id', 'SEC-1');
   });
@@ -444,15 +488,20 @@ describe('codex r4 fixes', () => {
     const user = userEvent.setup();
     render(<SteerSurface pathname="/rules" search="" runs={[]} navigate={vi.fn()} />);
     const rows = await screen.findAllByTestId('rules-row');
-    const retireOf = (id: string): HTMLElement => within(rows.find((r) => r.getAttribute('data-rule-id') === id)!).getByTestId('steer-retire');
-    await user.click(retireOf('A-1'));
+    // Retire sits behind each row's ⋯.
+    const retireOf = async (id: string): Promise<void> => {
+      const row = rows.find((r) => r.getAttribute('data-rule-id') === id)!;
+      await user.click(within(row).getByTestId('steer-row-more-button'));
+      await user.click(within(row).getByTestId('steer-retire'));
+    };
+    await retireOf('A-1');
     const dialog = (): HTMLElement => screen.getByRole('dialog', { name: /Retire/ });
     const fields = (): HTMLElement[] => within(dialog()).getAllByRole('textbox');
     await user.type(fields()[0]!, 'A-1');
     await user.type(fields()[1]!, 'reason A');
     await user.click(within(dialog()).getByRole('button', { name: /Retire rule/ }));
     await user.click(within(dialog()).getByRole('button', { name: /Cancel/ }));
-    await user.click(retireOf('B-1'));
+    await retireOf('B-1');
     await user.type(fields()[1]!, 'reason B draft');
     finish({ ok: true });
     await waitFor(() => expect(screen.getByTestId('steering-saved-note')).toHaveTextContent('Retired A-1'));
@@ -495,7 +544,7 @@ describe('agy r1 fixes', () => {
     apiFetch.mockImplementation((path: unknown) => String(path) === '/governance/steering/import'
       ? Promise.resolve({ results: [{ status: 'imported', ids: ['N-1'] }] })
       : Promise.reject(new ApiError(404, 'Not Found')));
-    await user.click(screen.getByTestId('steer-import'));
+    await more(user, 'steer-import');
     const input = screen.getByTestId('steer-import-file').querySelector('input[type=file]') as HTMLInputElement;
     await user.upload(input, new File(['[{"id":"N-1","statement":"s"}]'], 'batch.json', { type: 'application/json' }));
     await user.click(screen.getByTestId('steer-import-go'));
@@ -509,8 +558,8 @@ describe('agy r1 fixes', () => {
     render(<EvaluateSurface navigate={vi.fn()} />);
     await screen.findByTestId('evaluate-read-error');
     expect(screen.getByTestId('evaluate-last-run')).toHaveTextContent('Couldn’t read the last run');
-    expect(screen.getByTestId('evaluate-stat-caught')).toHaveTextContent('Couldn’t read the last eval');
-    expect(screen.getByTestId('evaluate-tiles')).not.toHaveTextContent('No eval yet');
+    expect(screen.getByTestId('evaluate-results-empty')).toHaveTextContent('Couldn’t read the last evaluation');
+    expect(screen.getByTestId('evaluate-surface')).not.toHaveTextContent('No evaluation yet');
     cleanup();
     render(<SteerSurface pathname="/rules" search="" runs={[]} navigate={vi.fn()} />);
     await waitFor(() => expect(screen.getByTestId('steer-stat-eval')).toHaveTextContent('Couldn’t read the last eval'));

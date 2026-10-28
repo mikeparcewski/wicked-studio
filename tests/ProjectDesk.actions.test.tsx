@@ -48,8 +48,9 @@ beforeEach(() => {
 });
 afterEach(cleanup);
 
-async function renderLoaded(projectId: string, navigate = vi.fn()): Promise<void> {
-  render(<ProjectDesk needRows={[]} now={1_757_300_000_000} runsLoaded={true} search="" runs={[]} projectId={projectId} navigate={navigate} />);
+/** The project's tabbed views (`?tab=work`): the home (no `?tab=`) has its own suite below. */
+async function renderLoaded(projectId: string, navigate = vi.fn(), search = '?tab=work'): Promise<void> {
+  render(<ProjectDesk needRows={[]} now={1_757_300_000_000} runsLoaded={true} search={search} runs={[]} projectId={projectId} navigate={navigate} />);
   await waitFor(() => expect(getProject).toHaveBeenCalledWith(projectId));
   // wait for the page to finish loading
   await screen.findByRole('heading', { level: 1, name: projectId === 'default' ? 'Not in a project' : `Project ${projectId}` });
@@ -130,5 +131,30 @@ describe('ProjectDesk — default-project guard', () => {
 
     expect(screen.queryByRole('button', { name: /^More actions for/ })).toBeNull();
     expect(screen.queryByRole('menuitem', { name: /^Edit|^Archive|^Restore/ })).toBeNull();
+  });
+});
+
+describe('ProjectDesk — the home keeps the moves', () => {
+  it('the home ⋯ holds Documents, Edit and Archive; Edit opens the Work view, where the editor is', async () => {
+    getProject.mockResolvedValue(detail(proj('proj-1')));
+    const navigate = vi.fn();
+    await renderLoaded('proj-1', navigate, '');
+    expect(screen.getByTestId('project-home')).toBeInTheDocument();
+    expect(screen.queryByTestId('desk-tabs')).toBeNull();
+    expect(menuItem(/^Documents/)).not.toBeNull();
+    expect(menuItem(/^Archive/)).not.toBeNull();
+    fireEvent.click(menuItem(/^Edit/)!);
+    expect(navigate).toHaveBeenCalledWith('/projects/proj-1?tab=work');
+  });
+
+  it('work in no project is not a project: no ask box, no ⋯, one line offering to file it', async () => {
+    getProject.mockResolvedValue(detail(proj('default')));
+    getProjectActivity.mockResolvedValue({ entries: [], nextCursor: null, projectId: 'default' });
+    await renderLoaded('default', vi.fn(), '');
+    expect(screen.queryByTestId('project-ask')).toBeNull();
+    expect(screen.queryByRole('button', { name: /^More actions for/ })).toBeNull();
+    expect(screen.getByTestId('project-unfiled')).toHaveTextContent('These jobs aren\u2019t filed in a project · Move to a project'.replace('\u2019', "'"));
+    // Its documents stay one link away (the Work view).
+    expect(screen.getAllByTestId('project-view')[0]).toHaveAttribute('href', '/projects/default?tab=work');
   });
 });

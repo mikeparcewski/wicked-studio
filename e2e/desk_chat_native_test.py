@@ -28,7 +28,7 @@ import sys
 import time
 import urllib.request
 
-from uxfix_fixture import DEFAULT_APPEARANCE, HIDE_GATE_TOASTS, REPO, ensure_build, set_fixture, start_server
+from uxfix_fixture import DEFAULT_APPEARANCE, HIDE_GATE_TOASTS, REPO, ensure_build, proposal_menu_item, set_fixture, start_server
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4483"))
 W, H = 1440, 900
@@ -79,7 +79,8 @@ PAGE = """() => {
     divider: txt(document.querySelector('[data-testid="session-closed-line"]')),
     you: [...document.querySelectorAll('[data-testid="session-turn"][data-who="you"]')].map(txt),
     youDecisions: [...document.querySelectorAll('[data-testid="chat-you-decision"]')].map(txt),
-    plan: document.querySelector('[data-testid="chat-plan"]') ? { open: document.querySelector('[data-testid="chat-plan"]').dataset.open, text: txt(document.querySelector('[data-testid="chat-plan"] [data-testid="session-proposal-text"]')) } : null,
+    // ui-v2 gate: the open plan's card is in the decision dock (the chat-plan message keeps the plan's line + marker).
+    plan: document.querySelector('[data-testid="chat-plan"]') ? { open: document.querySelector('[data-testid="chat-plan"]').dataset.open, text: txt(document.querySelector('[data-testid="chat-plan"] [data-testid="session-proposal-text"]') || document.querySelector('[data-testid="decision-dock"] [data-testid="session-proposal-text"]')), marker: !!document.querySelector('[data-testid="decision-marker"]') } : null,
     steps: [...document.querySelectorAll('[data-testid="chat-step"]')].map((s) => ({ key: s.dataset.step, who: txt(s.querySelector('[data-testid="turn-who"]')), text: txt(s.querySelector('.wk-chat-body')) })),
     finalText: txt(document.querySelector('[data-testid="chat-final-text"]')),
     chips: [...document.querySelectorAll('[data-testid="chat-final"] .wk-chat-chips > *')].map(txt),
@@ -166,16 +167,17 @@ with sync_playwright() as p:
         # ── 3. the plan, approved inline ─────────────────────────────────────────────────────────
         d = open_session(page, "/s/run%3Ar-cn-plan", theme, '[data-testid="chat-plan"][data-open="true"]')
         page.screenshot(path=str(SHOTS / f"desk-chat-native-plan-{theme}.png"))
-        check(f"{theme}-plan-inline", d["plan"] is not None and d["plan"]["text"] == "Here’s the plan: Research → Build → Test → Review → Deliver (5 steps)."
+        check(f"{theme}-plan-inline", d["plan"] is not None and d["plan"]["marker"] and d["plan"]["text"] == "Here’s the plan: Research → Build → Test → Review → Deliver (5 steps)."
               and page.get_by_test_id("session-proposal-go").inner_text().strip() == "Approve plan"
               and page.get_by_test_id("session-proposal-edit").count() == 1 and page.get_by_test_id("session-proposal-not-now").count() == 1,
               plan=d["plan"])
         if theme == "light":
-            page.get_by_test_id("session-proposal-edit").click()
+            # ui-v2 gate: Edit the plan is under the card's Other options.
+            proposal_menu_item(page, "session-proposal-edit").click()
             page.locator('[data-testid="run-artifacts"]').wait_for(state="visible", timeout=8000)
             page.screenshot(path=str(SHOTS / "desk-chat-native-plan-edit-light.png"))
             check("plan-edit-opens-editor", page.get_by_test_id("session-proposal-edit").get_attribute("aria-expanded") == "true")
-            page.get_by_test_id("session-proposal-edit").click()
+            proposal_menu_item(page, "session-proposal-edit").click()
             before = len(gate_posts("r-cn-plan"))
             page.get_by_test_id("session-proposal-go").click()
             deadline = time.time() + UNDO_S + 8

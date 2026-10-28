@@ -175,9 +175,11 @@ describe('the setup steps (§5.2)', () => {
     expect(putSetup).not.toHaveBeenCalled();
   });
 
-  it('without ?setup the table carries a quiet Setup guide link back to the steps', async () => {
+  it('without ?setup the page carries a quiet Setup guide back to the steps', async () => {
     const navigate = vi.fn();
     render(<AgentsPage search="" navigate={navigate} />);
+    // It sits behind the page's one quiet menu.
+    fireEvent.click(await screen.findByTestId('agents-more-button'));
     fireEvent.click(await screen.findByTestId('agents-setup-guide'));
     expect(navigate).toHaveBeenCalledWith('/agents?setup=1');
   });

@@ -1,22 +1,25 @@
 #!/usr/bin/env python3
 """
-desk_rail_test.py — THE DESK RAIL after the operator's IA change (2026-10-13; first Amendment 5, S15c)
-at 1440x700 on the Desk.
+desk_rail_test.py — THE DESK RAIL after the sidebar regroup (ui-v2, operator 2026-10-26; mockup
+desk-home-redesign; before it the IA change of 2026-10-13) at 1440x700 on the Desk.
 
 Against the in-process fixture (wave-1 + wave-2b corpus):
 
-  1. ORDER (operator IA 2026-10-13): top to bottom — the wordmark (ONE link to the Desk, its name
-     saying the needs-you badge) · New project · the sessions list · then the Workspace: Skills · MCP ·
-     Plugins · Workflows · General (Settings, with Theme as its tab), and the Nerve Center tile pinned last (DES-SYSTEM-VIEW: one
-     tile, larger than every other item, filled by its state, the worst item in words); no separate Desk
-     item, no Product, no Testing, none of the Desk tabs (Repositories, Steering, Evals, Agents), no
-     "General settings"; no Notifications entry (no bell, no "notifications" nav-dest).
+  1. ORDER: top to bottom — the wordmark (a label, not a link) · the four icon buttons (New job · New
+     project · Chat · Search) · the pages in three groups under small-caps labels — WORK (Home, Jobs,
+     Repositories), INSIGHT (Report, Understand, Evaluate), GOVERN (Steering, Memory, Agents) · RECENT
+     (the sessions by project, at most five, then All jobs) · Build & settings · the Nerve Center tile
+     pinned last. Home carries the needs-you badge and its name says it. No Workspace group, no More,
+     no "General settings"; no Notifications entry (no bell, no "notifications" nav-dest).
+  1b. MEASURED: the section labels are small caps (uppercase, letter-spaced, <= 11px), the pages 13px
+     at >= 4.5:1, and Nerve Center larger than every other item; HOVER on a page is a visible accent
+     tint (dE_OK >= 0.08 from its rest fill, words still >= 4.5:1).
   2. NEW PROJECT: the button opens the New project modal; Escape closes it.
   3. RETIRED /settings: the address REPLACES itself with /system, the Settings page on its General
-     tab; General no longer links to Testing. /theme REPLACES itself with /system?tab=theme.
-  4. NAVIGATES: Skills, MCP, Plugins, Workflows and General open their pages; /theme lands on the
-     Settings page's Theme tab; and are marked
-     current; Nerve Center opens /watch; the wordmark opens the Desk.
+     tab; /theme REPLACES itself with /system?tab=theme. Build & settings is current on both.
+  4. NAVIGATES: every page opens its address and is marked current; Build & settings opens its page,
+     whose links open Skills, MCP, Plugins, Workflows and Settings (Build & settings current on each);
+     the old Desk addresses (`/?tab=…`) replace themselves with their pages; Nerve Center opens /watch.
   5. NERVE CENTER: /health REPLACES itself with /watch (the dashboard), and the tile is marked current.
   6. 0 page errors.
 
@@ -52,17 +55,25 @@ def check(step: str, ok: bool, **detail) -> None:
 
 
 
+PAGES = ["nav-projects", "nav-jobs", "nav-repos", "nav-report", "nav-understand", "nav-evaluate",
+         "nav-steering", "nav-memory", "nav-agents"]
+
 RAIL = """() => {
   const rail = document.querySelector('[data-testid="session-rail"]');
-  const ids = ['desk-rail-home', 'desk-rail-new-project', 'rail-group', 'desk-rail-skills', 'desk-rail-mcp',
-               'desk-rail-plugins', 'desk-rail-workflows', 'desk-rail-theme', 'desk-rail-general', 'desk-rail-nerve',
-               'desk-rail-steering', 'desk-rail-evals', 'desk-rail-repos', 'desk-rail-more', 'desk-rail-product', 'desk-rail-testing'];
+  const ids = ['desk-rail-wordmark', 'desk-rail-new-job', 'desk-rail-new-project', 'nav-projects', 'nav-jobs', 'nav-repos',
+               'nav-report', 'nav-understand', 'nav-evaluate', 'nav-steering', 'nav-memory', 'nav-agents', 'rail-recent-toggle',
+               'rail-group', 'rail-all-jobs', 'desk-rail-build', 'desk-rail-nerve',
+               'desk-rail-skills', 'desk-rail-general', 'rail-foot-label', 'desk-tabs-more', 'desk-rail-more'];
   const seen = [];
   for (const el of rail.querySelectorAll('[data-testid]')) {
     const id = el.dataset.testid;
     if (ids.includes(id) && seen[seen.length - 1] !== id) seen.push(id);
   }
-  const home = rail.querySelector('[data-testid="desk-rail-home"]');
+  // The wordmark is the link Home (operator 2026-10-27); its badge is said as its description.
+  const home = rail.querySelector('[data-testid="desk-rail-wordmark"]');
+  const descId = home?.getAttribute('aria-describedby');
+  const primary = rail.querySelector('[data-testid="nav-projects"]');
+  const jobs = rail.querySelector('[data-testid="nav-jobs"]');
   const badge = rail.querySelector('[data-testid="desk-rail-badge"]');
   return {
     order: seen,
@@ -71,10 +82,17 @@ RAIL = """() => {
     bell: !!rail.querySelector('[data-nav-dest="notifications"], [aria-label^="Notifications"], [aria-label$="notifications"]'),
     homeLinks: rail.querySelectorAll('a[href="/"]').length,
     homeName: home?.getAttribute('aria-label') ?? null,
+    homeTag: home?.tagName ?? null,
+    homeDesc: descId ? (document.getElementById(descId)?.textContent ?? null) : null,
+    primaries: [...rail.querySelectorAll('[data-primary="true"]')].map(e => e.dataset.testid),
+    primaryWeight: primary ? parseInt(getComputedStyle(primary).fontWeight, 10) : null,
+    jobsWeight: jobs ? parseInt(getComputedStyle(jobs).fontWeight, 10) : null,
+    primaryMark: !!primary?.querySelector('.wk-rail-nav-mark'),
     badge: badge && home?.contains(badge) ? badge.innerText.trim() : null,
     nerveLast: !!rail.lastElementChild?.querySelector('[data-testid="desk-rail-nerve"]'),
-    general: rail.querySelector('[data-testid="desk-rail-general"]')?.innerText ?? null,
-    footLabel: rail.querySelector('[data-testid="rail-foot-label"]')?.textContent ?? null,
+    secs: [...rail.querySelectorAll('.wk-rail-sec')].map(e => e.innerText.trim()),
+    sessions: rail.querySelectorAll('[data-testid="rail-session"]').length,
+    allJobs: rail.querySelector('[data-testid="rail-all-jobs"]')?.getAttribute('href') ?? null,
     nerveWords: rail.querySelector('[data-testid="nerve-center-words"]')?.innerText ?? null,
     nerveTone: rail.querySelector('[data-testid="desk-rail-nerve"]')?.dataset.tone ?? null,
     actions: [...rail.querySelectorAll('[data-testid="desk-rail-actions"] button')].map(b => b.dataset.testid),
@@ -107,27 +125,31 @@ with sync_playwright() as p:
     # The badge is said once the needs-you count has settled (useSettledNeeds).
     page.get_by_test_id("desk-rail-badge").wait_for(state="visible", timeout=15000)
     r = page.evaluate(RAIL)
-    want = ['desk-rail-home', 'desk-rail-new-project', 'rail-group', 'desk-rail-skills', 'desk-rail-mcp',
-            'desk-rail-plugins', 'desk-rail-workflows', 'desk-rail-general', 'desk-rail-nerve']
+    want = ['desk-rail-wordmark', 'desk-rail-new-job', 'desk-rail-new-project', *PAGES, 'rail-recent-toggle',
+            'rail-group', 'rail-all-jobs', 'desk-rail-build', 'desk-rail-nerve']
     badge = r["badge"]
     check("order",
           r["order"] == want
-          and r["dests"] == ["section:skills", "section:mcp", "section:plugins", "section:workflows", "section:general", "watch"]
+          and r["dests"] == ["page:home", "page:projects", "page:jobs", "page:repos", "page:report", "page:understand", "page:evaluate",
+                             "page:steering", "page:memory", "page:agents", "page:build", "watch"]
           and not r["bell"] and r["homeLinks"] == 1 and r["nerveLast"]
-          # The wordmark link's name says the badge (the fixture has gates waiting).
-          and badge is not None and r["homeName"] in (f"wicked studio — Desk, {badge} need you", f"wicked studio — Desk, {badge} needs you")
-          and all(w not in r["text"] for w in ("Rules", "Everything else", "Product", "Steering", "Evals", "Repositories", "Agents", "General settings", "Configuration", "MCP tools"))
-          and "Skills" in r["text"] and "MCP" in r["text"]
+          # The wordmark is the link Home; its description says the badge (the fixture has gates waiting).
+          and r["homeTag"] == "A" and r["homeName"] == "Home"
+          and badge is not None and r["homeDesc"] in (f"{badge} need you", f"{badge} needs you")
+          # Projects is WORK's one primary entry: a stronger weight than its siblings and an accent mark.
+          and r["primaries"] == ["nav-projects"] and r["primaryMark"]
+          and (r["primaryWeight"] or 0) > (r["jobsWeight"] or 0)
+          and r["secs"] == ["WORK", "INSIGHT", "GOVERN", "RECENT"]
+          and 1 <= r["sessions"] <= 5 and r["allJobs"] == "/jobs"
+          and all(w not in r["text"] for w in ("Everything else", "Product", "Workspace", "General settings", "Configuration", "MCP tools", "Skills"))
           # DES-SYSTEM-CHAT §1: four equal icon buttons (no words), New job · New project · Chat · Search.
           and r["actions"] == ["desk-rail-new-job", "desk-rail-new-project", "desk-rail-chat", "desk-rail-search"]
-          and r["general"] == "General"
-          and (r["nerveWords"] or "").strip() != "" and r["nerveTone"] in ("green", "yellow", "red")
-          and r["footLabel"] == "Workspace",
+          and (r["nerveWords"] or "").strip() != "" and r["nerveTone"] in ("green", "yellow", "red"),
           **{k: v for k, v in r.items() if k != "text"})
 
-    # ── 1b. the Workspace tier MEASURED (operator 2026-10-11 20:50Z: "still large"): computed font
-    #        sizes in the browser — every Workspace link is smaller than the session rows and Desk.
-    sizes = page.evaluate("""() => {
+    # ── 1b. the sidebar MEASURED in the browser: small-caps labels, 13px pages at AA, Nerve Center the
+    #        largest item; and hover on a page is a visible ACCENT tint (operator 2026-10-26).
+    MEASURE = """(hovered) => {
       const px = (el) => el ? parseFloat(getComputedStyle(el).fontSize) : null;
       // Any CSS colour (oklch, color-mix…) to sRGB through a 1×1 canvas; alpha < 0.5 counts as transparent.
       const cv = document.createElement('canvas'); cv.width = cv.height = 1; const cx = cv.getContext('2d', { willReadFrequently: true });
@@ -135,24 +157,38 @@ with sync_playwright() as p:
       // The background actually behind el: every translucent layer composited over the first opaque one.
       const bgOf = (el) => { const layers = []; for (let e = el; e; e = e.parentElement) { const c = rgb(getComputedStyle(e).backgroundColor); if (c[3] > 0) layers.push(c); if (c[3] >= 1) break; }
         let out = [255, 255, 255]; for (const c of layers.reverse()) out = [0, 1, 2].map((i) => c[3] * c[i] + (1 - c[3]) * out[i]); return out; };
-      const lum = ([r, g, b]) => { const f = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }; return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b); };
+      const lin = (v) => { v /= 255; return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; };
+      const lum = ([r, g, b]) => 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
       const contrast = (el) => { const bg = bgOf(el); const f = rgb(getComputedStyle(el).color); const ink = [0, 1, 2].map((i) => f[3] * f[i] + (1 - f[3]) * bg[i]); const a = lum(ink), b = lum(bg); return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05); };
-      const foot = [...document.querySelectorAll('[data-testid="session-rail"] .wk-rail-foot .wk-rail-link')].filter((e) => e.getAttribute('aria-current') !== 'page');
-      const label = document.querySelector('[data-testid="rail-foot-label"]');
-      return { desk: px(document.querySelector('[data-testid="desk-rail-new-project"]')),
+      const oklab = ([r, g, b]) => { const [R, G, B] = [lin(r), lin(g), lin(b)];
+        const l = Math.cbrt(0.4122214708 * R + 0.5363325363 * G + 0.0514459929 * B), m = Math.cbrt(0.2119034982 * R + 0.6806995451 * G + 0.1073969566 * B), s = Math.cbrt(0.0883024619 * R + 0.2817188376 * G + 0.6299787005 * B);
+        return [0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s, 1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s, 0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s]; };
+      const dE = (a, b) => { const [x, y] = [oklab(a), oklab(b)]; return Math.hypot(x[0] - y[0], x[1] - y[1], x[2] - y[2]); };
+      const rail = document.querySelector('[data-testid="session-rail"]');
+      const pages = [...rail.querySelectorAll('.wk-rail-nav-item')].filter((e) => e.getAttribute('aria-current') !== 'page');
+      const label = rail.querySelector('.wk-rail-sec');
+      const el = document.querySelector(`[data-testid="${hovered}"]`);
+      return { page: Math.max(...pages.map(px)), contrast: Math.min(...pages.map(contrast)),
                nerve: px(document.querySelector('[data-testid="desk-rail-nerve"] .wk-nc-name')),
                session: px(document.querySelector('[data-testid="rail-session"] .wk-rail-session-title')),
-               workspace: foot.map(px), contrast: Math.min(...foot.map(contrast)), ink: foot[0] ? getComputedStyle(foot[0]).color : null, bg: foot[0] ? bgOf(foot[0]).join(',') : null, theme: document.documentElement.dataset.theme ?? null,
-               label: px(label), labelTransform: label ? getComputedStyle(label).textTransform : null, labelSpacing: label ? parseFloat(getComputedStyle(label).letterSpacing) || 0 : null };
-    }""")
-    ws = sizes["workspace"]
-    # Operator 23:40Z: unmistakably smaller — ≤ 11px AND ≤ 0.85× the session rows, still ≥ 4.5:1.
-    check("workspace-tier-measured", len(ws) >= 5 and None not in ws and sizes["desk"] == 13 and sizes["session"] == 13
-          and max(ws) <= 11 and max(ws) <= 0.85 * sizes["session"] and max(ws) < sizes["desk"]
-          and sizes["contrast"] >= 4.5 and sizes["labelTransform"] == "uppercase"
-          and sizes["label"] is not None and sizes["label"] <= 11 and (sizes["labelSpacing"] or 0) > 0
+               label: px(label), labelTransform: label ? getComputedStyle(label).textTransform : null, labelSpacing: label ? parseFloat(getComputedStyle(label).letterSpacing) || 0 : null,
+               fill: el ? bgOf(el) : null, rail: bgOf(rail), hoverContrast: el ? contrast(el) : null, dE: el ? dE(bgOf(el), bgOf(rail)) : null };
+    }"""
+    page.mouse.move(W // 2, 20)
+    page.wait_for_timeout(250)
+    rest = page.evaluate(MEASURE, "nav-report")
+    page.get_by_test_id("nav-report").hover()
+    page.wait_for_timeout(400)
+    hov = page.evaluate(MEASURE, "nav-report")
+    page.screenshot(path=str(SHOTS / "desk-rail-hover.png"))
+    page.mouse.move(W // 2, 20)
+    check("sidebar-measured", rest["page"] == 13 and rest["contrast"] >= 4.5
+          and rest["labelTransform"] == "uppercase" and rest["label"] is not None and rest["label"] <= 11 and (rest["labelSpacing"] or 0) > 0
           # DES-SYSTEM-VIEW: Nerve Center is larger than every other rail item.
-          and sizes["nerve"] is not None and sizes["nerve"] > max(sizes["session"], sizes["desk"], max(ws)), **sizes)
+          and rest["nerve"] is not None and rest["nerve"] > max(rest["session"] or 0, rest["page"])
+          # Hover: the page's fill moves off the rail by a visible step, an accent tint (blue leads), AA words.
+          and (rest["dE"] or 0) < 0.01 and (hov["dE"] or 0) >= 0.08 and (hov["hoverContrast"] or 0) >= 4.5,
+          rest=rest, hover={k: hov[k] for k in ("fill", "rail", "dE", "hoverContrast")})
 
     # ── 2. New project opens the one New project modal; Escape closes it ──────────
     page.get_by_test_id("desk-rail-new-project").click()
@@ -173,7 +209,7 @@ with sync_playwright() as p:
     cfg = page.evaluate("""() => ({ testing: !!document.querySelector('[data-testid="settings-testing-link"]'),
       developer: !!document.querySelector('[data-testid="developer-settings"]'),
       overview: !!document.querySelector('[data-testid="settings-overview"]'),
-      current: document.querySelector('[data-testid="desk-rail-general"]')?.getAttribute('aria-current') ?? null })""")
+      current: document.querySelector('[data-testid="desk-rail-build"]')?.getAttribute('aria-current') ?? null })""")
     check("general", not cfg["testing"] and not cfg["developer"] and not cfg["overview"] and cfg["current"] == "page"
           and general_tab == "true", general_tab=general_tab, **cfg)
 
@@ -183,28 +219,51 @@ with sync_playwright() as p:
     page.get_by_role("radiogroup", name="Theme").wait_for(state="visible", timeout=8000)
     tabs = page.evaluate("""() => ({ selected: [...document.querySelectorAll('[data-testid="settings-tab"]')].map(t => [t.dataset.tab, t.getAttribute('aria-selected')]),
       panel: document.querySelector('[data-testid="settings-panel"]')?.dataset.tab ?? null,
-      current: document.querySelector('[data-testid="desk-rail-general"]')?.getAttribute('aria-current') ?? null,
+      current: document.querySelector('[data-testid="desk-rail-build"]')?.getAttribute('aria-current') ?? null,
       themeLink: !!document.querySelector('[data-testid="desk-rail-theme"]') })""")
     page.screenshot(path=str(SHOTS / "desk-rail-theme-tab.png"))
     check("theme-tab", tabs["selected"] == [["general", "false"], ["theme", "true"]] and tabs["panel"] == "theme"
           and tabs["current"] == "page" and not tabs["themeLink"], **tabs)
 
-    # ── 3. the rail entries navigate and mark the current one ────────────────────
+    # ── 3. the pages navigate and mark the current one; Build & settings lists the rest ──
     went = {}
-    for tid, path in (("desk-rail-skills", "/skills"), ("desk-rail-mcp", "/mcp"), ("desk-rail-plugins", "/plugins"),
-                      ("desk-rail-workflows", "/workflows"), ("desk-rail-general", "/system")):
+    page.goto(f"{origin}/", wait_until="networkidle")
+    for tid, path in (("nav-projects", "/projects"), ("nav-jobs", "/jobs"), ("nav-repos", "/repos"), ("nav-report", "/report"), ("nav-understand", "/understand"),
+                      ("nav-evaluate", "/testing/evals"), ("nav-steering", "/rules"), ("nav-memory", "/memory"),
+                      ("nav-agents", "/agents"), ("desk-rail-wordmark", "/"), ("desk-rail-build", "/build")):
+        page.get_by_test_id(tid).click()
+        page.wait_for_function(f"() => window.location.pathname === '{path}'", timeout=5000)
+        page.wait_for_timeout(150)
+        went[tid] = {"path": page.evaluate("() => window.location.pathname"),
+                     "current": page.evaluate("""() => [...document.querySelectorAll('[data-testid="session-rail"] [aria-current="page"]')].map(e => e.dataset.testid)""")}
+    page.screenshot(path=str(SHOTS / "desk-rail-build.png"))
+    for tid, path in (("build-link-skills", "/skills"), ("build-link-mcp", "/mcp"), ("build-link-plugins", "/plugins"),
+                      ("build-link-workflows", "/workflows"), ("build-link-settings", "/system")):
+        page.goto(f"{origin}/build", wait_until="networkidle")
         page.get_by_test_id(tid).click()
         page.wait_for_function(f"() => window.location.pathname === '{path}'", timeout=5000)
         went[tid] = {"path": page.evaluate("() => window.location.pathname"),
-                     "current": page.get_by_test_id(tid).get_attribute("aria-current")}
+                     "current": page.evaluate("""() => [...document.querySelectorAll('[data-testid="session-rail"] [aria-current="page"]')].map(e => e.dataset.testid)""")}
     page.get_by_test_id("desk-rail-nerve").click()
     page.wait_for_function("() => window.location.pathname === '/watch'", timeout=5000)
     went["watch"] = page.evaluate("() => window.location.pathname")
-    check("navigates", all(v["current"] == "page" for k, v in went.items() if k != "watch") and went["watch"] == "/watch", **went)
+    check("navigates", all(v["current"] == [k if not k.startswith("build-link-") else "desk-rail-build"] for k, v in went.items() if k != "watch")
+          and went["watch"] == "/watch", **went)
+
+    # ── 3a'. the old Desk addresses REPLACE themselves with their pages (Back skips them) ──
+    moved = {}
+    for old, new in (("/?tab=runs", "/jobs"), ("/?tab=report&focus=spend", "/report?focus=spend"), ("/?tab=understand", "/understand"),
+                     ("/?tab=steer", "/rules"), ("/?tab=memory&at=%2Fmemory%3Fview%3Dproposals", "/memory?view=proposals"),
+                     ("/?tab=agents&at=%2Fagents%3Ffix%3Dclaude", "/agents?fix=claude"), ("/?tab=evaluate", "/testing/evals"),
+                     ("/?tab=repositories", "/repos")):
+        page.goto(f"{origin}{old}", wait_until="networkidle")
+        page.wait_for_function(f"() => window.location.pathname + window.location.search === {json.dumps(new)}", timeout=5000)
+        moved[old] = page.evaluate("() => window.location.pathname + window.location.search")
+    check("old-desk-addresses", all(moved[o] == n for o, n in (("/?tab=runs", "/jobs"), ("/?tab=evaluate", "/testing/evals"))), **moved)
 
     # ── 3b. the group icons: a project's four-boxes icon opens its DASHBOARD (/projects/:id, not the
     #        Product flow); "Not in a project" carries the open icon to See everything › Projects.
-    page.get_by_test_id("desk-rail-home").click()
+    page.get_by_test_id("desk-rail-wordmark").click()
     page.wait_for_function("() => window.location.pathname === '/'", timeout=5000)
     view = page.locator('[data-testid="rail-group"]:not([data-project-id=""]) [data-testid="rail-group-view"]').first
     view.wait_for(state="visible", timeout=5000)
@@ -240,13 +299,14 @@ with sync_playwright() as p:
         page.set_viewport_size({"width": W, "height": H})
         page.evaluate("() => document.documentElement.removeAttribute('data-theme')")
 
-    page.get_by_test_id("desk-rail-home").click()
+    page.get_by_test_id("desk-rail-wordmark").click()
     page.wait_for_function("() => window.location.pathname === '/'", timeout=5000)
-    page.get_by_test_id("desk-rail-plugins").wait_for(state="visible", timeout=5000)
+    page.get_by_test_id("desk-rail-build").wait_for(state="visible", timeout=5000)
     shots("rail")
 
-    # r3: the same matrix on the General page.
-    page.get_by_test_id("desk-rail-general").click()
+    # r3: the same matrix on the Settings page (through Build & settings).
+    page.get_by_test_id("desk-rail-build").click()
+    page.get_by_test_id("build-link-settings").click()
     page.wait_for_function("() => window.location.pathname === '/system'", timeout=5000)
     shots("general")
 

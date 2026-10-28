@@ -25,8 +25,14 @@ vi.mock('../src/api/client.js', () => ({
   },
 }));
 
+const { openWizard } = vi.hoisted(() => ({ openWizard: vi.fn() }));
+vi.mock('../src/store/launchWizard.js', async (importOriginal) => ({ ...(await importOriginal<object>()), openLaunchWizard: (...a: unknown[]) => openWizard(...a) }));
+
 import { ProjectDesk } from '../src/components/desk/ProjectDesk.js';
+import { makeUnit } from './factories.js';
 import { useProjectsStore } from '../src/store/projects.js';
+import { useSystemStore } from '../src/store/systemSnapshot.js';
+import type { SystemSnapshot } from '../src/api/system.js';
 import { clearRepoCache } from '../src/store/repoCache.js';
 
 const NOW = Date.UTC(2026, 9, 13, 12);
@@ -44,6 +50,8 @@ beforeEach(() => {
   clearRepoCache();
   window.history.replaceState(null, '', '/projects/p1');
   useProjectsStore.setState({ projects: [project], loading: false, error: null });
+  // An older crew has answered (no ranked list): the fold is the needs-you source.
+  useSystemStore.setState({ mode: 'fallback', healthAt: Date.now(), healthError: null, snapshot: null });
   getProject.mockResolvedValue({ project, members: [member('member'), member('repo', 'crew.repo')] });
   apiFetch.mockImplementation((path: string) => {
     if (path.includes('/standing-orders')) return Promise.resolve({ away: false, orders: [] });
@@ -60,12 +68,95 @@ async function loaded(): Promise<void> {
   expect(await screen.findByRole('heading', { level: 1, name: 'Shop' })).toBeInTheDocument();
 }
 
+/** The Jobs view shows Active or Finished: every row the project holds is both lists together. */
+const rowIds = (): string[] => screen.queryAllByTestId('desk-runs-row').map((r) => r.getAttribute('data-run-id') ?? '');
+function allRows(): string[] {
+  fireEvent.click(screen.getByTestId('desk-runs-group-active'));
+  const active = rowIds();
+  fireEvent.click(screen.getByTestId('desk-runs-group-finished'));
+  const finished = rowIds();
+  fireEvent.click(screen.getByTestId('desk-runs-group-active'));
+  return [...active, ...finished].sort();
+}
+
+describe("a project's home (no ?tab=, the approved ui-v2-projects mockup)", () => {
+  it('the back link, the title and one sentence, the ask box, in progress (step x of y), the repositories and the week', async () => {
+    const navigate = vi.fn();
+    const working = makeView({ id: 'member', problem: 'Improve cart', status: 'executing', repo_ref: 'repo', created_at: NOW / 1000 - 200 },
+      [makeUnit({ ord: 0, status: 'done' }), makeUnit({ ord: 1, status: 'distributed' }), makeUnit({ ord: 2, status: 'pending' })]);
+    const done = makeView({ id: 'filed', project_id: 'p1', problem: 'Fix checkout', status: 'completed', created_at: NOW / 1000 - 100, ended_at: NOW / 1000 - 3600 });
+    render(<ProjectDesk {...props} runs={[done, working, runs[2]!]} navigate={navigate} />);
+    await loaded();
+    expect(screen.getByTestId('project-home')).toBeInTheDocument();
+    expect(screen.queryByTestId('desk-tabs')).toBeNull();
+    expect(screen.getByTestId('project-back')).toHaveAttribute('href', '/projects');
+    expect(screen.getByTestId('project-sentence')).toHaveTextContent('Nothing needs you. One job is running across one repository.');
+    expect(screen.getByTestId('project-desc')).toHaveTextContent('Checkout work');
+    // The ask box starts a job here through the one New job flow, the words carried in.
+    fireEvent.change(screen.getByTestId('project-ask-input'), { target: { value: 'Add a coupon field' } });
+    fireEvent.click(screen.getByTestId('project-ask-start'));
+    expect(openWizard).toHaveBeenCalledWith({ intent: 'Add a coupon field', projectId: 'p1', composerKey: 'desk' });
+    // In progress: the working job, its repository and step x of y; never another project's job.
+    const rows = screen.getAllByTestId('project-progress-row');
+    expect(rows.map((r) => r.getAttribute('data-run-id'))).toEqual(['member']);
+    expect(rows[0]).toHaveTextContent('repo · step 2 of 3');
+    expect(screen.getByTestId('project-needs-calm')).toBeInTheDocument();
+    // Repositories: the chip, and Add a repository opens the Repositories tab (where Attach is).
+    expect(await screen.findAllByTestId('project-repo-chip')).toHaveLength(1);
+    fireEvent.click(screen.getByTestId('project-add-repo'));
+    expect(navigate).toHaveBeenLastCalledWith('/projects/p1?tab=repositories');
+    expect(screen.getByTestId('project-week')).toHaveTextContent('This week: 1 job finished');
+    fireEvent.click(screen.getByTestId('project-week-report'));
+    expect(navigate).toHaveBeenLastCalledWith('/projects/p1?tab=report');
+    // Every tabbed view stays one link away.
+    expect(screen.getAllByTestId('project-view').map((a) => a.getAttribute('href'))).toEqual([
+      '/projects/p1?tab=work', '/projects/p1?tab=runs', '/projects/p1?tab=repositories', '/projects/p1?tab=report', '/projects/p1?tab=understand',
+      '/projects/p1?tab=steer', '/projects/p1?tab=memory', '/projects/p1?tab=agents', '/projects/p1?tab=evaluate']);
+  });
+
+  it("a ranked crew: Needs you is crew's attention filtered to the project; stale work is one tidy-up line with its spend", async () => {
+    const snap: SystemSnapshot = {
+      checkedAt: NOW, ranked: true, clis: [], runs: [], infra: [], governance: [],
+      attention: [
+        { id: 'run:member', level: 'red', panel: 'runs', kind: 'prevents', text: 'Improve cart', reason: 'held at an escalation gate (unit 2)', remedy: null,
+          action: { kind: 'open-gate', target: 'member', ord: 2 }, runId: 'member', blockedRunIds: ['member'], waitedSince: NOW - 3_600_000 },
+        { id: 'run:elsewhere', level: 'red', panel: 'runs', kind: 'prevents', text: 'Other work', reason: null, remedy: null, action: null, runId: 'elsewhere', blockedRunIds: ['elsewhere'] },
+      ],
+      unresolved: [{ runId: 'filed', title: 'Fix checkout', repo: null, workflow: null, status: 'failed', why: 'failed', reason: 'failed 10 days ago', supersededBy: null, since: null, costUsd: 0.75, tokens: null, wallMs: null, actions: ['retry'] }],
+    };
+    useSystemStore.setState({ mode: 'system', snapshot: snap, snapshotAt: NOW, snapshotError: null });
+    render(<ProjectDesk {...props} />);
+    await loaded();
+    const rows = screen.getAllByTestId('project-need');
+    expect(rows.map((r) => r.getAttribute('data-key'))).toEqual(['run:member']);
+    expect(rows[0]).toHaveTextContent('Improve cart');
+    expect(rows[0]).toHaveTextContent('Decide');
+    expect(screen.getByTestId('project-sentence')).toHaveTextContent(/^One thing needs you\./);
+    expect(screen.getByTestId('project-tidy')).toHaveTextContent('1 job to tidy up ($0.75 spent)');
+  });
+
+  it('holds Needs you until crew first answers (no fold count flashing first)', async () => {
+    useSystemStore.setState({ mode: 'unknown', healthAt: null, healthError: null });
+    render(<ProjectDesk {...props} />);
+    await loaded();
+    expect(screen.getByTestId('project-home-loading')).toBeInTheDocument();
+    expect(screen.getByTestId('project-sentence')).toHaveTextContent('Reading this project’s jobs…');
+  });
+
+  it('a tabbed view links back to the home', async () => {
+    const navigate = vi.fn();
+    render(<ProjectDesk {...props} navigate={navigate} search="?tab=runs" />);
+    await loaded();
+    fireEvent.click(screen.getByTestId('project-home-link'));
+    expect(navigate).toHaveBeenCalledWith('/projects/p1');
+  });
+});
+
 describe('the project Desk', () => {
   it('shares the Runs tab and includes both project_id and membership, excluding other projects', async () => {
     render(<ProjectDesk {...props} search="?tab=runs" />);
     await loaded();
-    await waitFor(() => expect(screen.getAllByTestId('desk-runs-row')).toHaveLength(2));
-    expect(screen.getAllByTestId('desk-runs-row').map((row) => row.getAttribute('data-run-id')).sort()).toEqual(['filed', 'member']);
+    await waitFor(() => expect(allRows()).toEqual(['filed', 'member']));
     expect(screen.getByRole('tab', { name: 'Repositories' })).toHaveAttribute('href', '/projects/p1?tab=repositories');
     expect(getRun).not.toHaveBeenCalled();
     expect(fetch).not.toHaveBeenCalled();
@@ -75,19 +166,21 @@ describe('the project Desk', () => {
     detach.mockResolvedValue({});
     render(<ProjectDesk {...props} search="?tab=runs" />);
     await loaded();
-    await waitFor(() => expect(screen.getAllByTestId('desk-runs-row')).toHaveLength(2));
+    await waitFor(() => expect(allRows()).toEqual(['filed', 'member']));
     const rowOf = (id: string): HTMLElement => screen.getAllByTestId('desk-runs-row').find((r) => r.getAttribute('data-run-id') === id)!;
+    fireEvent.click(screen.getByTestId('desk-runs-group-finished'));
     expect(within(rowOf('filed')).queryByTestId('desk-runs-row-menu-button')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('desk-runs-group-active'));
     fireEvent.click(within(rowOf('member')).getByTestId('desk-runs-row-menu-button'));
     const item = within(rowOf('member')).getByRole('menuitem', { name: /Remove .Improve cart. from this project/ });
     fireEvent.click(item);
     expect(detach).toHaveBeenCalledExactlyOnceWith('p1', 'crew.run:member');
     // The membership is gone, so the run leaves the project's list.
-    await waitFor(() => expect(screen.getAllByTestId('desk-runs-row').map((r) => r.getAttribute('data-run-id'))).toEqual(['filed']));
+    await waitFor(() => expect(allRows()).toEqual(['filed']));
   });
 
   it('keeps project actions, requirements and documents under Work without duplicate dashboard sections', async () => {
-    render(<ProjectDesk {...props} />);
+    render(<ProjectDesk {...props} search="?tab=work" />);
     await loaded();
     // New job and Chat are the rail's (in this project); the header keeps only the project's own actions.
     expect(screen.queryByTestId('project-new-job')).toBeNull();
@@ -118,20 +211,20 @@ describe('the project Desk', () => {
     await waitFor(() => expect(getRun).toHaveBeenCalledWith('member'));
     // While the member read is out, the Runs tab is still reading (no partial list, no counts).
     expect(screen.queryAllByTestId('desk-runs-row')).toHaveLength(0);
-    expect(screen.getByTestId('desk-runs-stat-window').querySelector('.wk-stat-value')?.textContent ?? '').not.toMatch(/\d/);
+    expect(screen.getByTestId('desk-runs-sentence')).toHaveTextContent('Reading your jobs…');
     answer({ run: runs.find((v) => v.session.id === 'member') });
-    await waitFor(() => expect(screen.getAllByTestId('desk-runs-row').map((r) => r.getAttribute('data-run-id')).sort()).toEqual(['filed', 'member']));
+    await waitFor(() => expect(allRows()).toEqual(['filed', 'member']));
   });
 
   it('names default honestly and offers no requirements, repositories, edit or archive', async () => {
     getProject.mockResolvedValue({ project: { ...project, id: 'default' }, members: [] });
-    const view = render(<ProjectDesk {...props} projectId="default" />);
+    const view = render(<ProjectDesk {...props} projectId="default" search="?tab=work" />);
     expect(await screen.findByRole('heading', { level: 1, name: 'Not in a project' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /^More actions for/ })).toBeNull();
     expect(document.getElementById('requirements')).toBeNull();
     view.rerender(<ProjectDesk {...props} projectId="default" search="?tab=repositories" />);
     expect(screen.getByText(/Work not in a project has no repositories of its own/)).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /Desk’s Repositories/ })).toHaveAttribute('href', '/?tab=repositories');
+    expect(screen.getByRole('link', { name: /Repositories page/ })).toHaveAttribute('href', '/repos');
     expect(screen.queryByTestId('project-repos')).toBeNull();
   });
 
@@ -140,8 +233,9 @@ describe('the project Desk', () => {
     getRun.mockImplementation((id: string) => id === 'older' ? Promise.resolve({ run: makeView({ id, problem: 'Older work', created_at: NOW / 1000 - 500, status: 'completed' }) }) : Promise.reject(new Error('read failed')));
     render(<ProjectDesk {...props} search="?tab=runs" />);
     await loaded();
-    expect(await screen.findByRole('link', { name: 'Older work' })).toBeInTheDocument();
-    expect(screen.getAllByTestId('desk-runs-row').map((row) => row.getAttribute('data-run-id')).sort()).toEqual(['filed', 'older']);
+    fireEvent.click(await screen.findByTestId('desk-runs-group-finished'));
+    expect(await screen.findByRole('link', { name: /^Older work/ })).toBeInTheDocument();
+    expect(allRows()).toEqual(['filed', 'older']);
     expect(await screen.findByTestId('project-jobs-unshown')).toHaveTextContent('1 job in this project');
   });
 
@@ -159,8 +253,8 @@ describe('the project Desk', () => {
     const scroll = vi.spyOn(HTMLElement.prototype, 'scrollIntoView');
     const view = render(<ProjectDesk {...props} navigate={navigate} search="?tab=runs" />);
     await loaded();
-    expect(navigate).toHaveBeenCalledWith(`/projects/p1#${id}`, { replace: true });
-    view.rerender(<ProjectDesk {...props} navigate={navigate} />);
+    expect(navigate).toHaveBeenCalledWith(`/projects/p1?tab=work#${id}`, { replace: true });
+    view.rerender(<ProjectDesk {...props} navigate={navigate} search="?tab=work" />);
     await waitFor(() => expect(scroll.mock.instances).toContain(document.getElementById(id)));
     scroll.mockRestore();
   });
@@ -171,8 +265,8 @@ describe('the project Desk', () => {
     const view = render(<ProjectDesk {...props} navigate={navigate} search="?tab=repositories" />);
     await loaded();
     fireEvent.click(screen.getByTestId('project-documents'));
-    expect(navigate).toHaveBeenCalledWith('/projects/p1');
-    view.rerender(<ProjectDesk {...props} navigate={navigate} />);
+    expect(navigate).toHaveBeenCalledWith('/projects/p1?tab=work');
+    view.rerender(<ProjectDesk {...props} navigate={navigate} search="?tab=work" />);
     await waitFor(() => expect(scroll.mock.instances).toContain(document.getElementById('project-documents')));
     scroll.mockRestore();
   });
@@ -189,7 +283,7 @@ describe('the project Desk', () => {
   it('first-run guidance opens the project Repositories tab', async () => {
     getProject.mockResolvedValue({ project, members: [] });
     const navigate = vi.fn();
-    render(<ProjectDesk {...props} runs={[]} navigate={navigate} />);
+    render(<ProjectDesk {...props} runs={[]} navigate={navigate} search="?tab=work" />);
     await loaded();
     fireEvent.click(within(screen.getByTestId('project-first-run')).getByRole('button', { name: 'Go to repositories' }));
     expect(navigate).toHaveBeenCalledWith('/projects/p1?tab=repositories');
@@ -234,7 +328,7 @@ describe('Not in a project (operator 2026-10-16: the same dashboard as a project
     window.history.replaceState(null, '', '/projects/default');
     rerender(<ProjectDesk {...props} projectId="default" runs={unfiledRuns} search="?tab=runs" />);
     expect(await screen.findByRole('heading', { level: 1, name: 'Not in a project' })).toBeInTheDocument();
-    await waitFor(() => expect(screen.getAllByTestId('desk-runs-row').map((r) => r.getAttribute('data-run-id')).sort()).toEqual(['defaulted', 'loose']));
+    await waitFor(() => expect(allRows()).toEqual(['defaulted', 'loose']));
     expect(screen.queryByText('Project not found')).not.toBeInTheDocument();
     expect(screen.getByTestId('project-meta')).not.toHaveTextContent('repository attached');
     listProjects.mockResolvedValue({ projects: [] });

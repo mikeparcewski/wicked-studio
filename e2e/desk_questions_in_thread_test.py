@@ -5,13 +5,15 @@ answered in its session thread; the docks and panels point there ("Answer in its
 carry no gate card. At 1440x700 on the Desk, against the in-process fixture (wave1 + wave2b).
 
   1. MCP QUESTION: the Desk's question row ("Answer ›") opens /s/run%3Ae1#gate with the question
-     focused under e1's card; the answer is ONE POST /runs/e1/elicitation.
+     focused in the decision dock (e1's thread keeps its marker under e1's card); the answer is ONE POST
+     /runs/e1/elicitation.
   2. STALL HAND-OFF: the stall watchdog's hand-off (workerStallEscalated, needsYou) renders in e1's block.
   3. STEERING DOCK: "add with chat" launches the authoring run (routed to g1, a run at a simple gate);
      the dock shows the line and no card; its link lands on /s/run%3Ag1#gate with the gate row
-     focused; Approve sends ONE POST /runs/g1/gate after the undo window.
+     focused in the decision dock; Approve sends ONE POST /runs/g1/gate after the undo window.
   4. ASK DOCK + CHAT GATE: the Ask dock opens a chat; a chat-keyed gate shows the line in the dock
-     (no card); its link lands on /s/<chat>#gate, where the gate is answered — ONE POST after undo.
+     (no card); its link lands on /s/<chat>#gate, where the gate is answered in the decision dock — ONE POST
+     after undo.
   5. 0 page errors.
 
 Captures: e2e/shots/desk-questions-*.png. Env: FEEDBACK_PORT (default 4485). JSON report; exit 0/1.
@@ -23,7 +25,7 @@ import sys
 import time
 import urllib.parse
 
-from uxfix_fixture import HIDE_GATE_TOASTS, REPO, ensure_build, set_fixture, start_server
+from uxfix_fixture import HIDE_GATE_TOASTS, REPO, click_gate_choice, ensure_build, set_fixture, start_server
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4485"))
 W, H = 1440, 700
@@ -53,6 +55,7 @@ from playwright.sync_api import sync_playwright  # noqa: E402
 
 SHOTS.mkdir(parents=True, exist_ok=True)
 errors: list[str] = []
+E1_Q = '[data-testid="decision-dock"][data-key="e1"] [data-testid="elicitation-prompt"]'
 ACTIVE_IN = """(sel) => { const el = document.querySelector(sel); return !!el && el.contains(document.activeElement); }"""
 
 
@@ -84,7 +87,8 @@ with sync_playwright() as p:
                 status_over={}, extra_frames=[], reset_gate_posts=True)
 
     # ── 1. the Desk's question row opens the thread with the question focused ──────────
-    page.goto(f"{origin}/", wait_until="networkidle")
+    # Home v2: the queue is in Needs you in full (/needs).
+    page.goto(f"{origin}/needs", wait_until="networkidle")
     page.get_by_test_id("needs-you-queue").wait_for(state="visible", timeout=15000)
     set_fixture(origin, extra_frames=[{"type": "elicitationCreated", "session": "e1", "elicitationId": "el-1",
                                        "message": "Which region should the backfill target?", "options": None}])
@@ -96,13 +100,15 @@ with sync_playwright() as p:
     row.locator('[data-testid="need-act"]').click()
     try:
         page.wait_for_function("() => location.pathname === '/s/run%3Ae1' && location.hash === '#gate'", timeout=10000)
-        page.locator('[data-testid="session-run-questions"][data-run-id="e1"] [data-testid="elicitation-prompt"]').wait_for(timeout=10000)
-        page.wait_for_function(ACTIVE_IN, arg='[data-testid="session-run-questions"][data-run-id="e1"] [data-testid="elicitation-prompt"]', timeout=5000)
+        # ui-v2 gate: the question is in the decision dock above the composer; e1's thread keeps its marker.
+        page.locator('[data-testid="session-run-questions"][data-run-id="e1"] [data-testid="decision-marker"][data-key="e1"]').wait_for(timeout=10000)
+        page.locator(E1_Q).wait_for(timeout=10000)
+        page.wait_for_function(ACTIVE_IN, arg=E1_Q, timeout=5000)
     except Exception as e:  # noqa: BLE001
         page.screenshot(path=str(SHOTS / "desk-questions-mcp-miss.png"))
         fail("question-in-thread-focused", f"{e} at {path_of(page)}")
     page.screenshot(path=str(SHOTS / "desk-questions-mcp.png"))
-    prompt = page.locator('[data-testid="session-run-questions"][data-run-id="e1"] [data-testid="elicitation-prompt"]')
+    prompt = page.locator(E1_Q)
     prompt.get_by_placeholder("Your answer").fill("eu-west-1")
     prompt.get_by_role("button", name="Send").click()
     wait_posts(page, answers, 1, 5)
@@ -128,7 +134,8 @@ with sync_playwright() as p:
     page.route("**/api/v1/governance/steering/author", lambda r: r.fulfill(
         status=200, content_type="application/json", body='{"runId":"g1"}') if r.request.method == "POST" else r.continue_())
     page.goto(f"{origin}/steering/policies", wait_until="networkidle")
-    # The Steer surface opens its assistant from "Add with chat" (DES-steer-eval §2.3).
+    # The Steer surface opens its assistant from "Add with chat" (DES-steer-eval §2.3), behind Add a rule's menu.
+    page.get_by_test_id("steer-more-button").click()
     page.get_by_test_id("steer-chat").click()
     dock_in = page.get_by_test_id("assist-input")
     try:
@@ -152,11 +159,13 @@ with sync_playwright() as p:
     line.get_by_test_id("answer-in-thread-open").click()
     try:
         page.wait_for_function("() => location.pathname === '/s/run%3Ag1' && location.hash === '#gate'", timeout=10000)
-        page.wait_for_function(ACTIVE_IN, arg='[data-testid="session-run"][data-run-id="g1"] [data-testid="session-gate-row"]', timeout=10000)
+        # ui-v2 gate: g1's gate row is in the decision dock (its thread keeps the marker), focused on `#gate`.
+        page.locator('[data-testid="session-run"][data-run-id="g1"] [data-testid="decision-marker"][data-key="g1"]').wait_for(timeout=10000)
+        page.wait_for_function(ACTIVE_IN, arg='[data-testid="decision-dock"][data-key="g1"] [data-testid="session-gate-row"]', timeout=10000)
     except Exception as e:  # noqa: BLE001
         page.screenshot(path=str(SHOTS / "desk-questions-steer-thread-miss.png"))
         fail("steering-gate-in-thread", f"{e} at {path_of(page)}")
-    page.locator('[data-testid="session-run"][data-run-id="g1"] [data-testid="session-gate-choice"][data-choice-key="approve"]').click()
+    click_gate_choice(page, "approve", page.locator('[data-testid="decision-dock"][data-key="g1"]'))
     wait_posts(page, gate_posts, 1, UNDO_S)
     page.wait_for_timeout(800)
     page.screenshot(path=str(SHOTS / "desk-questions-steer-answered.png"))
@@ -195,13 +204,16 @@ with sync_playwright() as p:
     want = f"/s/{urllib.parse.quote(chat_id)}"
     try:
         page.wait_for_function(f"() => location.pathname === {json.dumps(want)} && location.hash === '#gate'", timeout=10000)
-        page.locator(f'[data-testid="session-chat-questions"][data-chat-id="{chat_id}"] [data-testid="session-gate-row"]').wait_for(timeout=10000)
+        # ui-v2 gate: the chat's gate is in the decision dock; the chat's thread keeps the marker.
+        page.locator(f'[data-testid="session-chat-questions"][data-chat-id="{chat_id}"] [data-testid="decision-marker"]').wait_for(timeout=10000)
+        page.locator(f'[data-testid="decision-dock"][data-key="{chat_id}"] [data-testid="session-gate-row"]').wait_for(timeout=10000)
     except Exception as e:  # noqa: BLE001
         page.screenshot(path=str(SHOTS / "desk-questions-chat-miss.png"))
         fail("chat-gate-in-thread", f"{e} at {path_of(page)}")
-    keys = page.locator('[data-testid="session-chat-questions"] [data-testid="session-gate-choice"]').evaluate_all(
-        "els => els.map(e => e.dataset.choiceKey)")
-    page.locator('[data-testid="session-chat-questions"] [data-testid="session-gate-choice"][data-choice-key="approve"]').click()
+    cdock = page.locator(f'[data-testid="decision-dock"][data-key="{chat_id}"]')
+    # Every choice the gate offers (the primary and Other options): none is a reassign on a chat.
+    keys = cdock.locator('[data-testid="session-gate-choice"]').evaluate_all("els => els.map(e => e.dataset.choiceKey)")
+    click_gate_choice(page, "approve", cdock)
     wait_posts(page, gate_posts, 1, UNDO_S)
     page.wait_for_timeout(800)
     page.screenshot(path=str(SHOTS / "desk-questions-chat-answered.png"))

@@ -4,13 +4,13 @@ import type { CoreEvent, SessionView as RunView } from '../../api/types.js';
 import { IDLE_GATE_ACTION, useGateActionStore } from '../../board/gateActions.js';
 import { finishedDeliveryArm, proposalKindOf, statusSentence } from '../../board/proposalCard.js';
 import type { Responder } from '../../board/responder.js';
-import { gateResponder, isReviewUnit, seatResponder } from '../../board/responder.js';
-import { approvingReviewers, conciseOutput, decisionMessages, finalWords, planSteps, stepMessages, testCountOf, type StepMessage } from '../../board/runConversation.js';
+import { builderResponder, gateResponder, isReviewUnit, seatResponder } from '../../board/responder.js';
+import { approvingReviewers, conciseOutput, decisionMessages, finalWords, planSteps, stepMessages, testCountOf, type DecisionMessage, type StepMessage } from '../../board/runConversation.js';
 import { isCliSeat, seatLabel } from '../../board/seatNames.js';
 import { jobTitle } from '../../board/deskWords.js';
 import { ORPHANED_LINE, orphanedOf, runState } from '../../board/sessionModel.js';
 import { applyCheckState } from '../../board/checkState.js';
-import { deliveryReceiptOf } from '../../board/assuranceModel.js';
+import { deliveryAssuranceOf, deliveryReceiptOf } from '../../board/assuranceModel.js';
 import { overriddenFloorsOf, overriddenLine } from '../../board/failingChecks.js';
 import { wordOf } from '../../board/planDraft.js';
 import { undoDecision } from '../../board/undoQueue.js';
@@ -21,6 +21,7 @@ import { useRunAcceptance } from '../../hooks/useRunAcceptance.js';
 import { useRunEvents } from '../../hooks/useRunEvents.js';
 import { useRunCoverage } from '../../hooks/useRunCoverage.js';
 import { useGateStore } from '../../store/gates.js';
+import { usePostHocDeliverStore } from '../../store/postHocDeliver.js';
 import { useRunEventStore } from '../../store/events.js';
 import { usePlanDrafts } from '../../store/planDrafts.js';
 import { momentOfRecording, useRecordingsStore } from '../../store/recordings.js';
@@ -34,6 +35,7 @@ import { RunAssuranceLabel } from './AssuranceReceipt.js';
 import { ChainLine, useRunChain, type RunPhase } from './ChainLine.js';
 import { CodebaseDownload, DeliverCredentialsNotice } from './CodebaseDownload.js';
 import { GateRow } from './GateRow.js';
+import { Docked, DecisionMarker, useDockPlacement } from './DecisionDock.js';
 import { ProposalCard } from './ProposalCard.js';
 import { startRetry } from './RunActions.js';
 import { RunArtifacts } from './RunArtifacts.js';
@@ -134,6 +136,16 @@ function AssistantMessage({ who, runId, suffix = null, testId, children, extra =
       <div className="wk-chat-body">{children}</div>
     </div>
   );
+}
+
+/** A decision the JOB made on its own (an automatic retry round): a quiet line in the flow, never your bubble. */
+function JobLine({ text }: { text: string }): React.ReactElement {
+  return <p data-testid="chat-job-decision" className="wk-chat-quiet wk-chat-job">{text}</p>;
+}
+
+/** One gate decision, said by who made it. */
+function DecisionLine({ d }: { d: DecisionMessage }): React.ReactElement {
+  return d.by === 'job' ? <JobLine text={d.text} /> : <YouBubble text={d.text} testId="chat-you-decision" />;
 }
 
 /** Your answer to one of the run's questions, as your own bubble. */
@@ -257,6 +269,8 @@ export function RunBlock({ view, badge, sessionId, navigate, solo = null }: {
   // plan is answered the running plan's editor shows again (codex r3 #1).
   const planGateOpen = !isTerminal && gate !== undefined && proposalKind === 'plan';
   const deliverOpen = !isTerminal && effectiveKind === 'deliver';
+  // The decision dock: the open plan question draws there; the plan's message keeps its one sentence of steps.
+  const planDocked = useDockPlacement(id, planGateOpen).place !== 'inline';
   const doneCount = chain.steps.filter((s) => s.state === 'done' || s.state === 'checked').length;
   const totalCount = chain.total > 0 ? chain.total : view.units.length;
   const gateVerdict = acceptance?.gate;
@@ -268,12 +282,16 @@ export function RunBlock({ view, badge, sessionId, navigate, solo = null }: {
     const o = overriddenFloorsOf(deliveryReceiptOf(view, runEvents ?? null), runEvents ?? null, view);
     return o === null ? null : overriddenLine(o);
   }, [isTerminal, view, runEvents]);
+  // J4: what assured the tree that shipped — crew's record, or this browser's post-hoc hand-over answer.
+  const postHoc = usePostHocDeliverStore((st) => st.byRun[id]);
+  const deliveryVerified = deliveryAssuranceOf(view, postHoc?.phase === 'delivered' ? { raw: postHoc.assurance, delivered: true } : undefined)?.verified ?? null;
   const words = isTerminal ? finalWords(view, { done: chain.total > 0 ? chain.done : doneCount, total: totalCount }, {
     passed,
     tests: testCountOf(acceptance?.summary?.line, gateVerdict?.reason),
     nothing: noEvidenceSummary?.nothing === true,
     reviewers: approvingReviewers(view, isReviewUnit, (ord) => reviewVerdicts.get(ord) ?? null),
     overridden: finalOverridden,
+    deliveryVerified,
   }) : null;
   const askingWho = gateResponder(view, gate, roster);
   const checkOf = (s: StepMessage): string | null => {
@@ -293,28 +311,38 @@ export function RunBlock({ view, badge, sessionId, navigate, solo = null }: {
       {(plan.length > 0 || planOpen) && (
         <AssistantMessage who={plannerWho} runId={id} testId="chat-plan" extra={{ 'data-open': planOpen ? 'true' : 'false' }}>
           {/* While the plan waits on you, the card IS the message: its one sentence of steps, why, and the buttons. */}
-          {!planOpen && <p data-testid="chat-plan-steps" className="wk-chat-p">I split this into {plan.length} {plan.length === 1 ? 'step' : 'steps'}: {listWords(plan)}.</p>}
-          {planOpen && <ProposalCard view={view} chain={chain} acceptance={acceptance?.summary ?? null} variant="chat" onEdit={toggleEdit} editing={editPlan} />}
+          {(!planOpen || planDocked) && plan.length > 0 && <p data-testid="chat-plan-steps" className="wk-chat-p">I split this into {plan.length} {plan.length === 1 ? 'step' : 'steps'}: {listWords(plan)}.</p>}
+          {planOpen && !planDocked && <ProposalCard view={view} chain={chain} acceptance={acceptance?.summary ?? null} variant="chat" onEdit={toggleEdit} editing={editPlan} />}
           {/* The plan's editor, in the plan's own message: while the plan waits on you, on Edit; on a running planned
               run (S10), always — a step added there goes through the same undo window. */}
           {(!planGateOpen || editPlan) && <RunArtifacts view={view} composerKey={sessionId} chain={chain} only="plan" frame={(_who, _suffix, cards) => <>{cards}</>} />}
         </AssistantMessage>
       )}
-      {decisions.filter((d) => d.ord === planOrd).map((d) => <YouBubble key={`d${d.ord}-${d.at}`} text={d.text} testId="chat-you-decision" />)}
+      {/* The open plan question docks above the composer; where it was asked, under the plan's message, its marker. */}
+      {planOpen && planDocked && (
+        <Docked dockKey={id} open={planGateOpen} marker={<DecisionMarker dockKey={id} who={null} since={gate?.receivedAt ?? null} />}
+          dock={<ProposalCard view={view} chain={chain} acceptance={acceptance?.summary ?? null} variant="chat" onEdit={toggleEdit} editing={editPlan} />}>
+          {null}
+        </Docked>
+      )}
+      {decisions.filter((d) => d.ord === planOrd).map((d) => <DecisionLine key={`d${d.ord}-${d.at}`} d={d} />)}
       {/* The plan editor, only when you asked to edit (it is the plan's own artifact). */}
 
 
       {/* 2. One message per finished step, then your answer to a question it raised. */}
       {steps.map((s) => (
         <StepTurn key={s.ord} runId={id} step={s} who={s.cli !== null ? seatResponder(s.cli, roster) : STUDIO} checkWord={checkOf(s)} onOpen={openSteps}
-          answers={decisions.filter((d) => d.ord === s.ord && d.ord !== planOrd).map((d) => d.text)} />
+          answers={decisions.filter((d) => d.ord === s.ord && d.ord !== planOrd)} />
       ))}
 
       {/* 3. A question it is asking now (not the plan, not the hand-over): in the flow, answered here. */}
       {gate !== undefined && effectiveKind === null && finished === null && (
-        <AssistantMessage who={askingWho.role === 'seat' ? askingWho : STUDIO} runId={id} suffix="needs your answer" testId="chat-gate">
-          <GateRow view={view} gate={gate} {...(navigate !== undefined ? { navigate } : {})} />
-        </AssistantMessage>
+        <Docked dockKey={id} open marker={<DecisionMarker dockKey={id} who={builderResponder(view, gate.ord, roster)?.name ?? null} since={gate.receivedAt} />}
+          dock={<GateRow view={view} gate={gate} {...(navigate !== undefined ? { navigate } : {})} />}>
+          <AssistantMessage who={askingWho.role === 'seat' ? askingWho : STUDIO} runId={id} suffix="needs your answer" testId="chat-gate">
+            <GateRow view={view} gate={gate} {...(navigate !== undefined ? { navigate } : {})} />
+          </AssistantMessage>
+        </Docked>
       )}
       {/* Rule 5: an answered question keeps its "You chose …" receipt (GateRow reads it from the store) after the
           gate is gone — the same row, with no gate, says only what you chose. */}
@@ -331,9 +359,12 @@ export function RunBlock({ view, badge, sessionId, navigate, solo = null }: {
 
       {/* 4. The hand-over it asks for, or the one final message once it ended. */}
       {deliverOpen && (
-        <AssistantMessage who={STUDIO} runId={id} testId="chat-final" extra={{ 'data-kind': 'deliver' }}>
-          <ProposalCard view={view} chain={chain} acceptance={acceptance?.summary ?? null} variant="chat" />
-        </AssistantMessage>
+        <Docked dockKey={id} open={gate !== undefined} marker={<DecisionMarker dockKey={id} who={null} since={gate?.receivedAt ?? null} />}
+          dock={<ProposalCard view={view} chain={chain} acceptance={acceptance?.summary ?? null} variant="chat" />}>
+          <AssistantMessage who={STUDIO} runId={id} testId="chat-final" extra={{ 'data-kind': 'deliver' }}>
+            <ProposalCard view={view} chain={chain} acceptance={acceptance?.summary ?? null} variant="chat" />
+          </AssistantMessage>
+        </Docked>
       )}
       {words !== null && (
         <AssistantMessage who={STUDIO} runId={id} testId="chat-final" extra={{ 'data-kind': status }}>
@@ -373,12 +404,12 @@ export function RunBlock({ view, badge, sessionId, navigate, solo = null }: {
 }
 
 function StepTurn({ runId, step, who, checkWord, onOpen, answers }: {
-  runId: string; step: StepMessage; who: Responder; checkWord: string | null; onOpen: () => void; answers: string[];
+  runId: string; step: StepMessage; who: Responder; checkWord: string | null; onOpen: () => void; answers: readonly DecisionMessage[];
 }): React.ReactElement {
   return (
     <>
       <StepMessageView runId={runId} step={step} who={who} checkWord={checkWord} onOpen={onOpen} />
-      {answers.map((t, i) => <YouBubble key={i} text={t} testId="chat-you-decision" />)}
+      {answers.map((d, i) => <DecisionLine key={i} d={d} />)}
     </>
   );
 }

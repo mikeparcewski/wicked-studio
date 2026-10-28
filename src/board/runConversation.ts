@@ -1,5 +1,5 @@
 import type { CoreEvent, SessionView } from '../api/types.js';
-import { deliveryOf } from '../components/delivery.js';
+import { deliveryOf, hasDeliveredRef } from '../components/delivery.js';
 import type { ChainModel } from './chainModel.js';
 
 /**
@@ -29,8 +29,11 @@ export interface StepMessage {
 export interface DecisionMessage {
   ord: number;
   at: number;
-  /** What you did, in your words: "Approved the plan", "Approved", "Sent it back". */
+  /** What was done, in words: "Approved the plan", "Approved", "Sent it back", "The job retried automatically". */
   text: string;
+  /** Who acted (J4 0.16.6: the thread said "Sent it back" for the engine's own rounds): you answered a question the job
+   *  asked, or the job decided on its own. */
+  by: 'you' | 'job';
 }
 
 /** The step words the thread uses for a unit key or catalog id (one vocabulary with the chain line). */
@@ -95,23 +98,58 @@ export function planSteps(view: SessionView, chain: ChainModel): string[] {
 
 type Ev = CoreEvent & { ord?: unknown; allow?: unknown; prompt?: unknown; gateKind?: unknown; ts?: unknown };
 
-/** Your answers to the run's gates, from its event log: each `gateDecided` after the question it answered. */
+/**
+ * The run's gate decisions, from its event log, labelled by who made them. A `gateDecided` answers YOU only when it
+ * answers a question the job asked (`awaitingHuman` for that step, still open). The engine decides every other gate
+ * itself: a pass says nothing here (the step's own message does), and a denial the job retries on its own — the
+ * automatic floor round, a no-change answer — is "The job retried automatically", never your "Sent it back". A denial
+ * that stops to ask you is the question itself (the dock), not a message.
+ */
 export function decisionMessages(events: readonly CoreEvent[] | null | undefined): DecisionMessage[] {
   if (events === null || events === undefined) return [];
   const asked = new Map<number, { plan: boolean }>();
   const out: DecisionMessage[] = [];
-  for (const raw of events) {
-    const e = raw as Ev;
+  const list = events as readonly (Ev & { scope?: unknown })[];
+  const answered = (ord: number, at: number, allow: boolean): void => {
+    const q = asked.get(ord);
+    if (q === undefined) return;
+    asked.delete(ord);
+    out.push({ ord, at, by: 'you', text: allow ? (q.plan ? 'Approved the plan' : 'Approved') : (q.plan ? 'Turned the plan down' : 'Sent it back') });
+  };
+  for (let i = 0; i < list.length; i++) {
+    const e = list[i]!;
     const ord = typeof e.ord === 'number' ? e.ord : null;
     if (ord === null) continue;
+    const at = typeof e.ts === 'number' ? e.ts : 0;
     if (e.type === 'awaitingHuman') {
       const prompt = typeof e.prompt === 'string' ? e.prompt : '';
       asked.set(ord, { plan: e.gateKind === 'plan_approval' || /^\s*approve plan\b/i.test(prompt) });
     } else if (e.type === 'gateDecided') {
-      const q = asked.get(ord);
-      const at = typeof e.ts === 'number' ? e.ts : 0;
-      const text = e.allow === true ? (q?.plan === true ? 'Approved the plan' : 'Approved') : (q?.plan === true ? 'Turned the plan down' : 'Sent it back');
-      out.push({ ord, at, text });
+      if (asked.has(ord)) { answered(ord, at, e.allow === true); continue; }
+      if (e.allow === true) continue;
+      // What the job did next with this step: retried it on its own, or stopped to ask.
+      for (let j = i + 1; j < list.length; j++) {
+        const n = list[j]!;
+        if (n.ord !== ord) continue;
+        if (n.type === 'awaitingHuman' || n.type === 'gateEscalated' || n.type === 'gateDecided') break;
+        if (n.type === 'unitReworkAmended' || n.type === 'resumed' || n.type === 'unitDispatched') {
+          out.push({ ord, at, text: 'The job retried automatically', by: 'job' });
+          break;
+        }
+      }
+    } else if (e.type === 'resumed' && asked.has(ord)) {
+      // Your answer resumes the run: an approve's `gateDecided` follows at once; a plan approval has none (the next
+      // `gateDecided` for that step is the engine judging the step's own work).
+      const next = list.slice(i + 1).find((n) => n.ord === ord);
+      if (next?.type === 'gateDecided' && next.ts === e.ts) continue;
+      answered(ord, at, true);
+    } else if (e.type === 'unitReworkAmended' && e.scope === 'request_changes') {
+      // A send-back or a rewind from a later question ("Run QE again" at the hand-over) re-arms an earlier step.
+      const open = [...asked.keys()].filter((q) => q >= ord).sort((x, y) => y - x)[0];
+      if (open !== undefined) { asked.delete(open); out.push({ ord, at, text: 'Sent it back', by: 'you' }); }
+    } else if (e.type === 'unitDispatched') {
+      // A question closed by something other than an answer (a reassign) is not open any more.
+      asked.delete(ord);
     }
   }
   return out;
@@ -208,6 +246,9 @@ export interface FinalChecks {
   /** rig 0.15.8: the operator overrode a failed floor on the way here — the sentence that says so
    *  (`overriddenLine`), said instead of "The checks passed"; absent/null when nothing was overridden. */
   overridden?: string | null;
+  /** J4: what assured the tree that was DELIVERED — `false` for a hand-over nothing re-verified (crew's
+   *  `delivery_assurance.verified: false`, the post-hoc lift); absent/null when no record says so. */
+  deliveryVerified?: boolean | null;
 }
 
 /** The test count in crew's acceptance words ("the repo's checks passed (38 tests)"), or null. */
@@ -251,8 +292,16 @@ export function finalWords(view: SessionView, steps: { done: number; total: numb
   // An override replaces only "passed": checks that did not pass are still said (pr-xreview on studio#899).
   const overridden = checks.overridden ?? null;
   if (overridden !== null) sentences.push(overridden);
-  const tested = checks.passed === true ? (overridden !== null ? null : checks.tests !== null ? `Tests pass (${checks.tests})` : 'The checks passed')
+  // J4 (rig run f3d30829): "The checks passed" is said of the tree that SHIPPED. A run with a deliver step
+  // says it only when that tree was delivered (a recorded PR or pushed branch) by the engine's checked
+  // hand-over; a hand-over nothing re-verified says so instead, and work that was not pushed claims nothing.
+  const deliverStep = d.state !== 'none';
+  const shipped = s === 'completed' && (pr !== null || d.state === 'pushed' || (d.state === 'delivered' && hasDeliveredRef(view)));
+  const unverified = shipped && checks.deliveryVerified === false;
+  const passedHere = !deliverStep || (shipped && !unverified);
+  const tested = checks.passed === true ? (overridden !== null || !passedHere ? null : checks.tests !== null ? `Tests pass (${checks.tests})` : 'The checks passed')
     : checks.passed === false ? 'The checks did not pass' : null;
+  if (unverified) sentences.push('Nothing re-checked the tree that was delivered.');
   const reviewed = checks.reviewers.length > 0 ? andList(checks.reviewers) : null;
   if (tested !== null && reviewed !== null) sentences.push(`${tested}, and ${reviewed} reviewed and approved it.`);
   else if (tested !== null) sentences.push(`${tested}.`);
@@ -261,9 +310,12 @@ export function finalWords(view: SessionView, steps: { done: number; total: numb
   if (s === 'completed') {
     if (pr !== null) sentences.push(pr.number !== null ? `Pull request #${pr.number} is open.` : 'A pull request is open.');
     else if (d.state === 'pushed') sentences.push(branch !== null ? `The work is on branch ${branch}.` : 'The branch was pushed.');
-    else if (d.state === 'stranded') sentences.push('The work hasn’t been pushed anywhere yet.');
+    else if (d.state === 'stranded') sentences.push('The work hasn’t been pushed anywhere yet: “Deliver — open a PR” on its delivery card pushes it.');
     else if (d.state === 'nothing-to-deliver') sentences.push('There was nothing to deliver.');
     else if (d.state === 'failed') sentences.push('The delivery didn’t go through.');
+    else if (d.state === 'delivered' && !shipped) sentences.push('No pull request or pushed branch is recorded.');
   }
-  return { lead: s === 'completed' ? 'Done' : 'Stopped', line: sentences.join(' '), pr, branch };
+  // A finished run whose hand-over did not land is not "Done" (J4): it says so first.
+  const lead = s !== 'completed' ? 'Stopped' : d.state === 'stranded' || d.state === 'failed' ? 'Not delivered' : 'Done';
+  return { lead, line: sentences.join(' '), pr, branch };
 }

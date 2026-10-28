@@ -1,10 +1,11 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { SKIP_QE_KEY, SKIP_QE_PLACEHOLDER } from '../../board/qeSkip.js';
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { RosterSeat, SessionView as RunView } from '../../api/types.js';
 import { QeRefusalWarning } from '../QeRefusalWarning.js';
 import { GATE_HASH, IDLE_GATE_ACTION, commitGateDecision, commitGateReassign, useGateActionStore, type GateAnswer } from '../../board/gateActions.js';
-import { FLOOR_FIX_LABEL, sessionGateChoices, type DeadSeat, type GateRowChoice, type GateRowModel } from '../../board/gateRowModel.js';
+import { FLOOR_FIX_LABEL, namedSendBackNote, SEND_BACK_NAMED_LABEL, sessionGateChoices, soonestBack, type DeadSeat, type GateRowChoice, type GateRowModel } from '../../board/gateRowModel.js';
 import { INITIAL_PICK, pickKey, type RowPick } from '../../board/questionRow.js';
-import { plainGateQuestion, repoNameOf } from '../../board/deskWords.js';
+import { repoNameOf, stepNoun } from '../../board/deskWords.js';
 import { api } from '../../api/client.js';
 import { useDisplayPath, useDisplayText } from '../../hooks/useHomePath.js';
 import { driftLine, useDiffDrift, type DiffDrift } from '../../store/gateDiffSeen.js';
@@ -12,20 +13,27 @@ import { diffstatOf, type DeliverRefusal } from '../gateMoveModel.js';
 import { secondsLeft, undoDecision, useUndoQueue } from '../../board/undoQueue.js';
 import { useRunEvents } from '../../hooks/useRunEvents.js';
 import { getCachedRoster, subscribeRoster } from '../../store/rosterCache.js';
-import { choicesOf, type OpenGate } from '../../store/gates.js';
-import type { CoreEvent, WorkUnit } from '../../api/types.js';
-import { steerScopeTarget } from '../gateVerdictModel.js';
+import type { OpenGate } from '../../store/gates.js';
+import type { WorkUnit } from '../../api/types.js';
+import { liftClock, runBenchesOf, steerScopeTarget, type ReassignCandidate } from '../gateVerdictModel.js';
 import { useRerunFromHere } from '../../hooks/useRerunFromHere.js';
 import type { RerunOffer } from '../rerunModel.js';
 import { GateDepthDetails, RuleOfferBlock, useFullVerdict, useSeatTrust, type SeatTrust } from './GateDepth.js';
 import { WatchGateLine } from '../WatchLines.js';
-import { REDUCED_OPT_IN_DISCLOSURE, REDUCED_OPT_IN_LABEL, creatorSeatRefusal, gatePassedFor, gateReceiptFor, isReduced, sessionAssurance, sessionQe, waitsForJudge } from '../../board/assuranceModel.js';
+import { REDUCED_OPT_IN_LABEL, gatePassedFor, gateReceiptFor, isReduced, sessionAssurance, sessionQe, waitsForJudge } from '../../board/assuranceModel.js';
 import { retryPrefillOf } from '../../board/needsYou.js';
 import { setRetryPrefill } from '../../store/retryPrefill.js';
 import { useCapabilities } from '../../store/capabilities.js';
-import type { Navigate } from '../../hooks/useRoute.js';
+import { AGENTS_PATH, type Navigate } from '../../hooks/useRoute.js';
+import { useSignInHere } from '../agents/useSignInHere.js';
 import { AssuranceReceipt, AssuranceReceiptTech, QeAcceptanceLabel, ReducedAssuranceLabel } from './AssuranceReceipt.js';
-import { missingSeatsLine, rejudgeOfferOf, type RejudgeOffer } from '../../board/rejudge.js';
+import { missingSeatsLine, OPERATOR_JUDGMENT_LABEL, rejudgeOfferOf, type RejudgeOffer } from '../../board/rejudge.js';
+import { baseCountOf, testPlace, testWords } from '../../board/failingChecks.js';
+import { useOfferReply } from './DecisionDock.js';
+import { builderResponder } from '../../board/responder.js';
+import { gateCause, gateQuestion, gateWithLogChoices, judgeSeats, runPoolOf, seatName } from '../../board/gateHeadline.js';
+
+export { gateWithLogChoices, judgeSeats };
 import { FLOOR_OVERRIDE_CONSEQUENCE, FLOOR_OVERRIDE_KEY, FLOOR_OVERRIDE_PLACEHOLDER, FLOOR_OVERRIDE_SEND } from '../../board/floorOverride.js';
 
 /** How often a judge-unavailable gate re-reads whether a judge seat can rule now (a seat signed in
@@ -90,6 +98,11 @@ function isEditable(el: Element | null): boolean {
   return el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || (el instanceof HTMLElement && el.isContentEditable);
 }
 
+/** A phase id in words: "security-review" → "security review". */
+function stepWords(phase: string): string {
+  return stepNoun(phase).trim().toLowerCase();
+}
+
 function formatSentTime(ts: number): string {
   return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
@@ -110,31 +123,6 @@ export function GateRow({ view, gate, chatId, navigate }: {
 }): React.ReactElement | null {
   if (view === null) return chatId === undefined ? null : <ChatGateRow chatId={chatId} gate={gate} />;
   return <RunGateRow view={view} gate={gate} {...(navigate !== undefined ? { navigate } : {})} />;
-}
-
-/**
- * Crew's `GET /runs/:id/gate` caches only the prompt (no `choices`, `recommended` or `gateKind`), so a
- * gate this client did not see live — a reload, a late join — lost what the engine offered: a team
- * dispute read back as Approve / Reject only, without its Send back (rig run ac5d1033). The run's own
- * log has the `awaitingHuman` frame that opened the gate; what the cached gate lacks is read from the
- * newest one for the same step. Pure.
- */
-export function gateWithLogChoices(gate: OpenGate, events: readonly CoreEvent[]): OpenGate {
-  if (gate.choices !== undefined && gate.gateKind !== undefined) return gate;
-  for (let i = events.length - 1; i >= 0; i -= 1) {
-    const e = events[i] as unknown as Record<string, unknown>;
-    if (e['type'] !== 'awaitingHuman' || e['ord'] !== gate.ord) continue;
-    const choices = gate.choices !== undefined ? undefined : choicesOf(e);
-    const rec = e['recommended'];
-    const kind = e['gateKind'];
-    return {
-      ...gate,
-      ...(choices !== undefined ? { choices } : {}),
-      ...(gate.recommended === undefined && typeof rec === 'number' ? { recommended: rec } : {}),
-      ...(gate.gateKind === undefined && typeof kind === 'string' ? { gateKind: kind } : {}),
-    };
-  }
-  return gate;
 }
 
 /**
@@ -172,13 +160,7 @@ function RunGateRow({ view, gate, navigate }: { view: RunView; gate: OpenGate | 
   useEffect(() => subscribeRoster((r) => setRoster(r)), []);
 
   // Pool: prefer session.clis (the run's full seat list), fall back to units' assigned CLIs
-  const pool = useMemo(() => {
-    const sessionClis = (view.session as unknown as { clis?: unknown }).clis;
-    if (Array.isArray(sessionClis) && sessionClis.length > 0) return sessionClis as string[];
-    return view.units
-      .map((u) => u.assigned_cli)
-      .filter((c): c is string => typeof c === 'string' && c !== '');
-  }, [view.session, view.units]);
+  const pool = useMemo(() => runPoolOf(view), [view]);
 
   // S16a-1b: "Rerun from <step>" — the run page breadcrumb's offer, one more ⋯ choice here.
   const { offer: rerunOffer } = useRerunFromHere(view);
@@ -188,9 +170,11 @@ function RunGateRow({ view, gate, navigate }: { view: RunView; gate: OpenGate | 
   // A gate no judge could rule on: whether its judge can be re-run now (crew's gate read).
   const waitingForJudge = gate !== undefined && events !== null && waitsForJudge(events, gate.ord, gate.prompt);
   const rejudge = useRejudgeOffer(runId, gate?.ord, waitingForJudge);
+  // (PRODUCT-WORKS J4) The seats this run benched: a reassign never offers one while its bench holds.
+  const benched = useMemo(() => runBenchesOf(view.session), [view.session]);
   const model = useMemo<GateRowModel | null>(() => {
     if (gate === undefined || events === null) return null;
-    const result = sessionGateChoices({ runId, gate: gateWithLogChoices(gate, events), units: view.units, events, pool, roster, rerun: rerunOffer, fullVerdict, rejudge });
+    const result = sessionGateChoices({ runId, gate: gateWithLogChoices(gate, events), units: view.units, events, pool, roster, benched, rerun: rerunOffer, fullVerdict, rejudge });
     if (result === null) return null;
     const toBuilder = steerReachesBuilder(view.units, gate.ord);
     // Label each arm by its effect: the denied-step approve re-runs the step; a steer on a review gate
@@ -202,7 +186,7 @@ function RunGateRow({ view, gate, navigate }: { view: RunView; gate: OpenGate | 
         ? { ...choice, label: 'Approve with a note for the next step', title: 'Approve, and your note goes to the next step — not to the builder. To have the builder change something, Send back.' }
         : choice;
     return { ...result, choices: result.choices.map(effectLabel), overflow: result.overflow.map(effectLabel) };
-  }, [runId, gate, view.units, events, pool, roster, rerunOffer, fullVerdict, rejudge]);
+  }, [runId, gate, view.units, events, pool, roster, benched, rerunOffer, fullVerdict, rejudge]);
   // S16a-1b: the creator seat's record on Approve and the standing-order offer (review gates).
   const seat = useSeatTrust(view, gate, {
     isPlanGate: false, isDeliverGate: gate?.gateKind === 'deliver',
@@ -244,27 +228,88 @@ function RunGateRow({ view, gate, navigate }: { view: RunView; gate: OpenGate | 
   // QE-IN-APP-WORKFLOWS: the run's current QE decision on every gate (a plan gate has no receipt yet;
   // a receipt that carries its own decision says it there).
   const qe = sessionQe(view, events);
-  const judgeWait = gate !== undefined && model !== null && waitsForJudge(events, gate.ord, gate.prompt);
-  const seatRefusal = gate !== undefined && model !== null && !reduced && creatorSeatRefusal(events, gate.ord, gate.prompt);
-  const assurance = model === null ? null : (
+  const signIn = useSignInHere();
+  // (mockup ui-v2-gate + review) The headline is the cause in plain words, not the engine's framing — one source
+  // (board/gateHeadline.ts) with every row that names this gate.
+  const builder = builderResponder(view, gate?.ord ?? null, roster);
+  // evaluator ≠ creator: who may judge this step is read off the live roster, never a seat that built the work.
+  const { seatRefusal, judgeWait, judges, fresh, headline } = useMemo(
+    () => gateCause({ view, gate, events, model, roster, pool, benched }), [view, gate, events, model, roster, pool, benched]);
+  // The action the gate's own words name is a button. Crew marked no suggestion: the gate describes the move.
+  const derived = useMemo<DerivedLead | null>(() => {
+    if (model === null || model.recommended !== null || gate === undefined) return null;
+    const all = [...model.choices, ...model.overflow];
+    const signInLead = (): DerivedLead => {
+      const out = (roster ?? []).find((r) => pool.includes(r.key) && r.signed_in === false);
+      return { act: { key: 'sign-in', label: 'Sign in a second helper', title: 'Sign a second helper in; then Approve retries the step with it.',
+        onClick: () => { if (out !== undefined) signIn.open(out.key); else navigate?.(AGENTS_PATH); } } };
+    };
+    if (seatRefusal && judges !== null) {
+      // A seat in the job that did not build the work and can take it now: approve and retry with it (the reassign
+      // route, its undo window).
+      if (judges.inJob !== undefined) {
+        const name = seatName(judges.inJob.cli, judges.inJob.label);
+        return { choice: { key: `reassign:${judges.inJob.cli}`, label: `Approve and retry with ${name}`, reassignCli: judges.inJob.cli, decision: null, needsNote: false,
+          title: `${name} reviews the work as it stands; it did not build it. The step runs again there.` } };
+      }
+      // One is signed in but is not in this job: crew re-seats a step only within the job's own helpers (POST
+      // /runs/:id/reassign answers 400 for any other), so the way on is the job again with it.
+      if (judges.outside !== undefined) {
+        const seat = judges.outside;
+        const name = seatName(seat.key, seat.display_name ?? null);
+        return { act: { key: 'relaunch-with', label: `Start again with ${name}…`,
+          title: `Opens the launch form with this job's brief and ${name} added as a helper, so it can review. Nothing starts until you launch; this job stays here.`,
+          onClick: () => { setRetryPrefill({ ...retryPrefillOf(view), clis: [...new Set([...retryPrefillOf(view).clis, seat.key])] }); navigate?.('/runs/new'); } } };
+      }
+      return signInLead();
+    }
+    // A new failure the engine told apart from the base's: send just that back to the builder, with the test named.
+    const back = all.find((c) => c.key === 'send-back' && c.decision !== null);
+    if (fresh !== null && fresh.length > 0 && back !== undefined) {
+      const who = builder?.name ?? 'the builder';
+      return { choice: { ...back, label: SEND_BACK_NAMED_LABEL, title: `Send ${fresh.length === 1 ? 'the test' : `the ${fresh.length} tests`} only this change fails back to ${who}, named, so it fixes just ${fresh.length === 1 ? 'that' : 'those'}.` },
+        prefill: namedSendBackNote(fresh) };
+    }
+    // Never lead with a choice that seats a builder as the judge (it stays under Other options, said as such).
+    const promote = all.find((c) => c.key === 'rejudge') ?? all.find((c) => c.reassignCli !== undefined && !(judges?.builders ?? []).includes(c.reassignCli));
+    if (promote !== undefined && (judgeWait || model.deadSeat !== undefined)) return { choice: promote };
+    if (judgeWait) {
+      // (J4 0.16.6) Never "sign in a second helper" while the live roster has one signed in: a helper of this job that
+      // did not build the work, or one outside it. The engine did not seat it as the judge and crew refuses a re-seat
+      // at this gate, so the way on is the gate's own approve (the operator's judgment), said as such.
+      if (judges?.inJob !== undefined || judges?.outside !== undefined) {
+        const own = all.find((c) => c.key === 'steer' && c.label === OPERATOR_JUDGMENT_LABEL);
+        return own !== undefined ? { choice: own } : null;
+      }
+      return signInLead();
+    }
+    return null;
+  }, [model, gate, seatRefusal, judgeWait, roster, pool, view, signIn, navigate, fresh, builder, judges]);
+  const explain = model === null ? null : (
     <>
       {model.deadSeat !== undefined && (
         <DeadSeatLine
           seat={model.deadSeat}
           label={roster?.find((r) => r.key === model.deadSeat!.cli)?.display_name ?? null}
           canReassign={[...model.choices, ...model.overflow].some((c) => c.reassignCli !== undefined)}
+          {...(model.withheldSeats !== undefined ? { withheld: model.withheldSeats } : {})}
           {...(navigate !== undefined ? { navigate } : {})}
         />
       )}
       {judgeWait && (
         <JudgeWaitLine
           offer={rejudge}
+          signedIn={judges?.inJob !== undefined ? seatName(judges.inJob.cli, judges.inJob.label) : judges?.outside !== undefined ? seatName(judges.outside.key, judges.outside.display_name ?? null) : null}
           operatorJudgment={model.operatorJudgment !== false}
           name={(cli) => seatName(cli, roster?.find((r) => r.key === cli)?.display_name ?? null)}
           {...(navigate !== undefined ? { navigate } : {})}
         />
       )}
       {seatRefusal && <CreatorSeatRefusal view={view} {...(navigate !== undefined ? { navigate } : {})} />}
+    </>
+  );
+  const assurance = model === null ? null : (
+    <>
       {receipt !== null
         ? <AssuranceReceipt receipt={receipt} passed={gatePassedFor(events, receiptOrd)} testId="session-gate-assurance" tech="host" />
         : reduced && <p className="wk-assurance"><ReducedAssuranceLabel testId="session-gate-reduced" /></p>}
@@ -277,6 +322,14 @@ function RunGateRow({ view, gate, navigate }: { view: RunView; gate: OpenGate | 
       eventsUnavailable={gate !== undefined && events === null && eventsFetchFailed}
       retryEvents={retryEvents} depth={depth} refusalLines={refusalLines} drift={drift}
       assurance={assurance}
+      explain={explain}
+      headline={headline}
+      derived={derived}
+      builders={judges?.builders ?? []}
+      builderName={(cli) => seatName(cli, roster?.find((r) => r.key === cli)?.display_name ?? null)}
+      extraItems={seatRefusal ? <ReducedRelaunchItem view={view} {...(navigate !== undefined ? { navigate } : {})} /> : null}
+      unavailable={model?.withheldSeats !== undefined && model.withheldSeats.length > 0 ? <WithheldSeats seats={model.withheldSeats} menu onSignIn={signIn.open} /> : null}
+      signInModal={signIn.modal}
       assuranceTech={model !== null && receipt !== null ? <AssuranceReceiptTech receipt={receipt} passed={gatePassedFor(events, receiptOrd)} testId="session-gate-assurance-tech" /> : null}
     />
   );
@@ -291,30 +344,41 @@ function RunGateRow({ view, gate, navigate }: { view: RunView; gate: OpenGate | 
  */
 export function CreatorSeatRefusal({ view, navigate }: { view: RunView; navigate?: Navigate }): React.ReactElement {
   const can = useCapabilities((s) => s.reducedAssurance);
+  // (mockup ui-v2-gate) The headline already says it ("No second helper is free to review this"): no bold lead-in
+  // here, and the reduced-assurance relaunch is one of the Other options ({@link ReducedRelaunchItem}).
+  void view; void navigate;
   return (
     <div data-testid="session-gate-creator-seat" role="status" className="wk-gate-consequence">
       <p className="wk-assurance-lead">
-        <b>Stopped: no second helper to review this.</b> This run requires an independent check, and the
-        only helper that could review the work is the one that built it. Sign a second helper in and Approve
-        to retry, or run it again with reduced assurance.
+        This job requires an independent check, and the only helper that could review the work is the one that
+        built it. Give the review to a second signed-in helper, or start the job again with reduced assurance.
       </p>
-      {can && navigate !== undefined
-        ? (
-          <>
-            <p data-testid="session-gate-creator-seat-disclosure" className="wk-assurance-optin-why">{REDUCED_OPT_IN_DISCLOSURE}</p>
-            <button
-              type="button"
-              data-testid="session-gate-reduced-relaunch"
-              title="Open the launch form with this run's brief and reduced assurance ticked; nothing starts until you launch, and this run stays at its gate."
-              onClick={() => { setRetryPrefill({ ...retryPrefillOf(view), reducedAssurance: true }); navigate('/runs/new'); }}
-              className="wk-btn wk-btn--secondary"
-            >
-              {REDUCED_OPT_IN_LABEL}…
-            </button>
-          </>
-        )
-        : !can && <p data-testid="session-gate-creator-seat-nocap" className="wk-assurance-optin-why">Studio's service does not support reduced assurance; sign a second helper in.</p>}
+      {!can && <p data-testid="session-gate-creator-seat-nocap" className="wk-assurance-optin-why">Studio's service does not support reduced assurance; sign a second helper in.</p>}
     </div>
+  );
+}
+
+/** The relaunch's consequence, in plain words. */
+export const REDUCED_RELAUNCH_WORDS = 'Starts this job again where the creator\'s seat reviews its own work; it is labelled “Reduced assurance” on the job, every gate and the delivery. This job stays here until you stop it.';
+
+/** The creator-seat refusal's other way on, as an Other options item: start the job again with reduced assurance.
+ *  It opens the launch form with this job's brief and the opt-in ticked; nothing starts until Launch, and this job
+ *  stays at its gate. `null` when crew does not offer reduced assurance. */
+export function ReducedRelaunchItem({ view, navigate, onPick }: { view: RunView; navigate?: Navigate; onPick?: () => void }): React.ReactElement | null {
+  const can = useCapabilities((s) => s.reducedAssurance);
+  if (!can || navigate === undefined) return null;
+  return (
+    <button
+      type="button"
+      role="menuitem"
+      data-testid="session-gate-reduced-relaunch"
+      title="Open the launch form with this run's brief and reduced assurance ticked; nothing starts until you launch, and this run stays at its gate."
+      onClick={() => { onPick?.(); setRetryPrefill({ ...retryPrefillOf(view), reducedAssurance: true }); navigate('/runs/new'); }}
+      className="wk-gate2-mi"
+    >
+      <span className="wk-gate2-mi-label">{REDUCED_OPT_IN_LABEL}…</span>
+      <span data-testid="session-gate-creator-seat-disclosure" className="wk-gate2-mi-sub">{REDUCED_RELAUNCH_WORDS}</span>
+    </button>
   );
 }
 
@@ -330,36 +394,110 @@ const DEAD_SEAT_CAUSE: Record<DeadSeat['cause'], string> = {
   unusable: 'cannot work right now',
 };
 
-/** The seat's name in the Desk's words: the roster's, else its key with a capital ("Copilot"). */
-function seatName(cli: string, label: string | null): string {
-  if (label !== null && label !== '') return label;
-  const base = cli.split('#')[0] ?? cli;
-  return base.charAt(0).toUpperCase() + base.slice(1);
-}
-
 /**
  * studio#835: the dead-seat gate, said plainly — which helper cannot work and why, and what can still move the
  * step. The engine benched the seat for this run and never sends it the step again, so the row offers no approve:
  * Reassign to another helper in this job when there is one; otherwise sign another helper in and start the job
  * again with it, or Stop.
  */
-export function DeadSeatLine({ seat, label, canReassign, navigate }: { seat: DeadSeat; label: string | null; canReassign: boolean; navigate?: Navigate }): React.ReactElement {
+export function DeadSeatLine({ seat, label, canReassign, withheld, navigate }: { seat: DeadSeat; label: string | null; canReassign: boolean; withheld?: readonly ReassignCandidate[]; navigate?: Navigate }): React.ReactElement {
   const name = seatName(seat.cli, label);
+  // (PRODUCT-WORKS J4) Other helpers ARE in this job but none can work now: say who is back first, and when.
+  const back = canReassign ? null : soonestBack(withheld);
+  const backAt = back?.until !== undefined ? liftClock(back.until) : null;
   return (
     <p data-testid="session-gate-dead-seat" data-cause={seat.cause} role="status" className="wk-gate-consequence">
       <b>{name} {DEAD_SEAT_CAUSE[seat.cause]}.</b>{' '}
       {canReassign
         ? <>This job will not send the step to {name} again. Reassign it to another helper in this job, or stop.</>
-        : <>No other helper is in this job, so the step cannot go on here. Sign another helper in and start the job again with it, or stop.</>}
+        : back !== null && backAt !== null
+          ? <span data-testid="session-gate-dead-seat-wait">No helper in this job can take the step right now. {seatName(back.cli, back.label)} is back by {backAt}: wait until then and reassign the step to it, or sign another helper in.</span>
+          : (withheld ?? []).length > 0
+            ? <>No helper in this job can take the step right now. Sign another helper in, or stop.</>
+            : <>No other helper is in this job, so the step cannot go on here. Sign another helper in and start the job again with it, or stop.</>}
       {' '}
       {navigate !== undefined
         ? (
-          <button type="button" data-testid="session-gate-dead-seat-signin" onClick={() => navigate('/system')} className="wk-btn wk-btn--secondary">
+          <button type="button" data-testid="session-gate-dead-seat-signin" onClick={() => navigate(AGENTS_PATH)} className="wk-btn wk-btn--secondary">
             Sign another helper in ›
           </button>
         )
-        : <span data-testid="session-gate-dead-seat-signin">Sign one in from Settings.</span>}
+        : <span data-testid="session-gate-dead-seat-signin">Sign one in on the Agents page.</span>}
     </p>
+  );
+}
+
+/**
+ * (PRODUCT-WORKS J4) The job's other helpers a reassign does not offer, greyed out with why — benched
+ * (and when it lifts), signed out, not eligible — and the way to fix it: sign that helper in. On the rig the
+ * dead-seat card offered only quota-benched Copilot; a seat that cannot work is shown, never offered.
+ * Each one's Sign in opens ITS sign-in modal right here (operator 2026-10-27: it used to open General
+ * settings); closing it reads the roster again, so the card's reassign choices follow the new sign-in.
+ * A seat refused because it made the work under review gets no Sign in: signing in cannot change that.
+ */
+export function WithheldSeats({ seats, menu = false, onSignIn }: {
+  seats: readonly ReassignCandidate[];
+  /** (mockup ui-v2-gate) Drawn inside Other options: each helper greyed with why, and its Sign in beside it. */
+  menu?: boolean;
+  /** The caller's sign-in opener (its modal sits outside the menu, so it is never hidden with it). */
+  onSignIn?: (cli: string) => void;
+}): React.ReactElement {
+  const signIn = useSignInHere();
+  const open = onSignIn ?? signIn.open;
+  const signable = seats.filter((c) => c.state !== 'refused');
+  if (menu) {
+    return (
+      <div data-testid="session-gate-withheld" className="wk-gate2-off">
+        {seats.map((c) => {
+          const name = seatName(c.cli, c.label);
+          return (
+            <div key={c.cli} className="wk-gate2-off-row">
+              <button type="button" role="menuitem" disabled aria-disabled="true" data-testid="session-gate-withheld-seat" data-key={c.cli} data-state={c.state}
+                className="wk-gate2-mi wk-gate2-mi--off" title={`${name} cannot take the step now${c.note !== '' ? `: ${c.note}` : ''}.`}
+                {...(c.note !== '' ? { 'data-sub': c.note.charAt(0).toUpperCase() + c.note.slice(1) } : {})}>
+                Give the step to {name}
+              </button>
+              {c.state !== 'refused' && (
+                <button type="button" role="menuitem" data-testid="session-gate-withheld-signin" data-key={c.cli} aria-label={`Sign in to ${name}`}
+                  onClick={() => open(c.cli)} className="wk-gate2-link">Sign in</button>
+              )}
+            </div>
+          );
+        })}
+        {onSignIn === undefined && signIn.modal}
+      </div>
+    );
+  }
+  return (
+    <div data-testid="session-gate-withheld" className="wk-gate-withheld">
+      {seats.map((c) => {
+        const name = seatName(c.cli, c.label);
+        return (
+          <Fragment key={c.cli}>
+            <button
+              type="button"
+              disabled
+              aria-disabled="true"
+              data-testid="session-gate-withheld-seat"
+              data-key={c.cli}
+              data-state={c.state}
+              className="wk-btn wk-btn--secondary"
+              title={`${name} cannot take the step now${c.note !== '' ? `: ${c.note}` : ''}.`}
+            >
+              Reassign to {name}
+              {c.note !== '' && <span className="wk-gate-withheld-why"> — {c.note}</span>}
+            </button>
+            {c.state !== 'refused' && (
+              <button type="button" data-testid="session-gate-withheld-signin" data-key={c.cli} aria-label={`Sign in to ${name}`}
+                onClick={() => open(c.cli)} className="wk-btn wk-btn--secondary">
+                {signable.length === 1 ? 'Sign in ›' : `Sign in to ${name} ›`}
+              </button>
+            )}
+          </Fragment>
+        );
+      })}
+      {signIn.modal}
+    </div>
   );
 }
 
@@ -370,20 +508,24 @@ export function DeadSeatLine({ seat, label, canReassign, navigate }: { seat: Dea
  * judgment ("judged by operator"); it never re-runs the check. `offer`: crew's re-judge read, `null`
  * when none was read (an older daemon, or not loaded yet).
  */
-export function JudgeWaitLine({ offer, operatorJudgment = true, name = (s) => s, navigate }: {
+export function JudgeWaitLine({ offer, operatorJudgment = true, name = (s) => s, navigate, signedIn = null }: {
   offer?: RejudgeOffer | null;
+  /** (J4 0.16.6) A helper the live roster has signed in that did not build the work: no "sign one in" then. */
+  signedIn?: string | null;
   /** `false` on a team member's step: its approve re-runs the step with the check, never a judgment. */
   operatorJudgment?: boolean;
   name?: (seat: string) => string;
   navigate?: Navigate;
 }): React.ReactElement {
-  const signIn = navigate !== undefined
+  const signIn = signedIn !== null
+    ? <span data-testid="session-gate-judge-signed-in">{signedIn} is signed in, but this job didn’t seat it as the judge, so signing another helper in won’t help here.</span>
+    : navigate !== undefined
     ? (
-      <button type="button" data-testid="session-gate-judge-signin" onClick={() => navigate('/system')} className="wk-btn wk-btn--secondary">
+      <button type="button" data-testid="session-gate-judge-signin" onClick={() => navigate(AGENTS_PATH)} className="wk-btn wk-btn--secondary">
         Sign another helper in ›
       </button>
     )
-    : <span data-testid="session-gate-judge-signin">Sign one in from Settings.</span>;
+    : <span data-testid="session-gate-judge-signin">Sign one in on the Agents page.</span>;
   if (!operatorJudgment) {
     return (
       <p data-testid="session-gate-judge-wait" data-rejudge="member-step" role="status" className="wk-gate-consequence">
@@ -452,7 +594,32 @@ export function refusalWords(r: DeliverRefusal, at: { branch: string | null; rep
   return { lead, consent };
 }
 
-function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, retryEvents, depth, refusalLines = null, drift = null, assurance = null, assuranceTech = null }: {
+/** (review of the dock) The move a gate's own words name when crew marked no suggestion: one of its choices (a reassign
+ *  to a free seat, a re-judge), or an act that is not a gate answer (open sign-in). */
+/** (J4 0.16.6) Every failure of the floor also fails on the base: said in plain words on the face. */
+export function allOnBaseWords(n: number): string {
+  return n === 1 ? 'The one failure also fails on the base, so it isn’t caused by this change.'
+    : `All ${n} failures also fail on the base, so they aren’t caused by this change.`;
+}
+
+type DerivedLead = { choice: GateRowChoice; act?: undefined; prefill?: string } | { act: { key: string; label: string; title: string; onClick: () => void }; choice?: undefined; prefill?: undefined };
+
+function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, retryEvents, depth, refusalLines = null, drift = null, assurance = null, assuranceTech = null, explain = null, unavailable = null, signInModal = null, headline = null, derived = null, extraItems = null, builders = [], builderName = (c) => c }: {
+  /** The cause, in plain words, when it reads better than the engine's question. */
+  headline?: string | null;
+  /** The seats that built the judged work: a choice that seats one as the judge is never the lead, and says so. */
+  builders?: readonly string[];
+  builderName?: (cli: string) => string;
+  /** The move the gate's words name when crew suggested none. */
+  derived?: DerivedLead | null;
+  /** More Other options that are not gate answers (start again with reduced assurance). */
+  extraItems?: React.ReactNode;
+  /** Why it stopped, said plainly (a dead seat, a held judge, the creator-seat refusal): under the question. */
+  explain?: React.ReactNode;
+  /** The helpers that cannot take the step now, each with its reason and Sign in: in Other options. */
+  unavailable?: React.ReactNode;
+  /** The sign-in modal those Sign in links open, in place. */
+  signInModal?: React.ReactNode;
   runId: string;
   gate: OpenGate | undefined;
   model: GateRowModel | null;
@@ -501,6 +668,27 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
   // S16a-2a: the choice under the pointer or the keyboard says what it does BEFORE it is taken —
   // the run page's per-arm consequence lines (escalation arms, reassign), one line above the row.
   const [peek, setPeek] = useState<string | null>(null);
+  // (mockup ui-v2-gate) Other options ▾, and the failures that fail on the base too.
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [baseOpen, setBaseOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
+  // (operator 2026-10-27) The reply box under the dock answers through this gate's note choice: Send back, else the
+  // retry / steer note (never the floor override, whose rationale is asked for on its own).
+  const replyChoice = model === null ? null : [...model.choices, ...model.overflow].find((c) => c.key === 'send-back' && c.decision !== null)
+    ?? [...model.choices, ...model.overflow].find((c) => c.key === 'steer' && c.decision !== null)
+    ?? [...model.choices, ...model.overflow].find((c) => c.key === 'free-text-send' && c.decision !== null) ?? null;
+  const replySend = useRef<((text: string) => void) | null>(null);
+  useOfferReply(runId, replyChoice === null || chosen !== null ? null : { label: replyChoice.label, send: (t) => replySend.current?.(t) });
+  const menuBtnRef = useRef<HTMLButtonElement>(null);
+  const menuWrapRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!menuOpen) return;
+    // Inside the dock (which scrolls in itself) the opened menu comes into view.
+    requestAnimationFrame(() => menuWrapRef.current?.querySelector('[role="menu"]')?.scrollIntoView?.({ block: 'nearest' }));
+    const away = (e: PointerEvent): void => { if (menuWrapRef.current !== null && !menuWrapRef.current.contains(e.target as Node)) setMenuOpen(false); };
+    document.addEventListener('pointerdown', away);
+    return () => document.removeEventListener('pointerdown', away);
+  }, [menuOpen]);
 
   // A new gate instance is a fresh question — reset all state.
   // When gate clears (becomes undefined) after a successful send, do NOT clear `chosen`:
@@ -513,6 +701,9 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
     setNoteOpen(null);
     setNoteText('');
     setConfirmRerun(false);
+    setMenuOpen(false);
+    setBaseOpen(false);
+    setMoreOpen(false);
     // Only clear chosen when a NEW gate arrives (gate is defined).
     // When gate cleared (undefined), the receipt must stay until unmount.
     if (gate !== undefined) setChosen(null);
@@ -559,7 +750,7 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
   }, [noteOpen]);
 
   // studio#762: a QE review's gate leads with WHY it stopped (the engine's prompt only says NOT PASS).
-  const question = model?.qe?.lead ?? plainGateQuestion(gate?.prompt, gate?.gateKind);
+  const question = gateQuestion(model, headline, gate);
 
   // ── Folded view: must come BEFORE model null guard so the receipt shows after clearGate ──
   if (chosen !== null && (chosen.key === gateKey || (chosen.sentAt !== null && gate === undefined))) {
@@ -641,7 +832,7 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
       setNoteOpen(choice.key);
       // The floor override's rationale is the operator's own words: never pre-filled (a prefill
       // would make the required box look answered), and never another choice's draft.
-      if (choice.key === FLOOR_OVERRIDE_KEY) setNoteText('');
+      if (choice.key === FLOOR_OVERRIDE_KEY || choice.key === SKIP_QE_KEY) setNoteText('');
       else setNoteText((prev) => prev || model.noteDefault);
       return;
     }
@@ -653,6 +844,17 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
         if (outcome === 'sent') setChosen((c) => (c !== null && c.key === key ? { ...c, sentAt: Date.now() } : c));
         else setChosen(null);
       },
+      () => { setChosen(null); },
+    );
+  };
+
+  // The reply box's send: the note choice with the typed words as its note, through the same path and undo window.
+  replySend.current = (text: string): void => {
+    if (replyChoice === null || replyChoice.decision === null || text.trim() === '') return;
+    const key = gateKey;
+    setChosen({ key, label: replyChoice.label, sentAt: null });
+    void commitGateDecision(runId, { ...replyChoice.decision, amend: text.trim() }, { receipt: { kind: 'row', chosenLabel: replyChoice.label } }).then(
+      (outcome) => { if (outcome === 'sent') setChosen((c) => (c !== null && c.key === key ? { ...c, sentAt: Date.now() } : c)); else setChosen(null); },
       () => { setChosen(null); },
     );
   };
@@ -695,6 +897,8 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
   // studio#612: the floor fix's note is the fixing seat's whole task, not a steer.
   const notePlaceholder = floorOverrideNote
     ? FLOOR_OVERRIDE_PLACEHOLDER
+    : noteChoice?.key === SKIP_QE_KEY
+    ? SKIP_QE_PLACEHOLDER
     : noteChoice?.key === 'steer' && noteChoice.label === FLOOR_FIX_LABEL
     ? 'What should the fixing helper change…'
     : noteChoice?.key === 'steer'
@@ -703,15 +907,90 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
       ? 'Explain what to fix…'
       : 'Add a note…';
 
+  // (mockup ui-v2-gate) ONE recommended primary — the choice crew marks as suggested — and every other choice under
+  // "Other options ▾". Without a suggestion the first choice leads, as a secondary (no recommendation is invented).
+  // With no suggestion, the move the gate's own words name leads (a free seat's reassign, a re-judge, sign-in);
+  // failing that the first choice leads as a secondary.
+  const lead = model.recommended === null ? derived : null;
+  const promotedIndex = lead?.choice !== undefined ? model.choices.findIndex((c) => c.key === lead.choice!.key) : -1;
+  const primaryIndex = model.recommended ?? (promotedIndex >= 0 ? promotedIndex : lead !== null ? null : model.choices.length > 0 ? 0 : null);
+  const primary = lead?.choice !== undefined ? lead.choice : primaryIndex === null ? null : model.choices[primaryIndex] ?? null;
+  const suggested = (model.recommended !== null || lead !== null) && (primary !== null || lead?.act !== undefined);
+  // Stop is the menu's last way on (mockup ui-v2-gate: "… · Stop the job"), after the overflow choices (a rerun) and
+  // the extra items; only the helpers that are not available right now come after it, under their own rule.
+  const othersAll = [...model.choices.filter((c, i) => i !== primaryIndex && c.key !== primary?.key), ...model.overflow.filter((c) => c.key !== primary?.key)];
+  const others = othersAll.filter((c) => c.key !== 'stop');
+  const stopItem = othersAll.find((c) => c.key === 'stop') ?? null;
+  const split = model.failingTests?.split;
+  // What happens next: the suggested move's consequence (crew's), else its own words. With no suggestion the face's
+  // one button still says what it does here, ABOVE the buttons (no "Recommended:"): in the dock, which is anchored to
+  // the composer, a line that appeared under the buttons on hover grew the dock upward and moved the very button under
+  // the pointer, so a click's mouseup landed off it and the choice never ran (desk_gate_kinds, r-seat's primary).
+  const leadTitle = lead?.act?.title ?? (primary !== null && primary.title !== '' ? primary.title : null);
+  const next = model.consequence ?? leadTitle;
+  // One sentence under the headline: the failures in a line, a refused hand-over's reason, a QE review's why.
+  const sentence = split !== undefined ? null : refusalLines?.lead ?? model.qe?.why ?? null;
+  const [more, setMore] = [moreOpen, setMoreOpen];
+  const choiceButton = (choice: GateRowChoice, i: number, asPrimary: boolean): React.ReactElement => (
+    <button
+      key={choice.key}
+      type="button"
+      {...(asPrimary ? { role: 'radio', 'aria-checked': pick.focus === i ? 'true' as const : 'false' as const } : { role: 'menuitem' })}
+      data-testid="session-gate-choice"
+      data-choice-key={choice.key}
+      data-recommended={model.recommended !== null && i === model.recommended ? 'true' : 'false'}
+      title={choice.title}
+      {...(!asPrimary ? { 'data-sub': choice.key === 'rerun' && rerunOffer !== null ? `Keeps the steps before it${rerunOffer.minutes !== null ? ` · about ${rerunOffer.minutes} min` : ''}`
+        : choice.reassignCli !== undefined && builders.includes(choice.reassignCli) ? `${builderName(choice.reassignCli)} checks its own work (reduced assurance)` : choice.title } : {})}
+      className={asPrimary
+        ? ['wk-session-gate-choice', 'wk-gate2-btn', suggested ? 'wk-gate2-btn--primary wk-session-gate-choice--suggested' : 'wk-gate2-btn--secondary', pick.focus === i ? 'wk-session-gate-choice--focus' : '', choice.disabled === true ? 'wk-session-gate-choice--disabled' : ''].filter(Boolean).join(' ')
+        : ['wk-session-gate-choice', 'wk-gate2-mi', choice.disabled === true ? 'wk-gate2-mi--off wk-session-gate-choice--disabled' : ''].filter(Boolean).join(' ')}
+      disabled={action.busy || choice.disabled === true}
+      onMouseEnter={() => setPeek(choice.key)}
+      onMouseLeave={() => setPeek(null)}
+      onFocus={() => setPeek(choice.key)}
+      onBlur={() => setPeek(null)}
+      onClick={() => {
+        if (choice.disabled === true) return;
+        if (asPrimary) setPick({ focus: i, moved: true });
+        setMenuOpen(false);
+        // The derived move's note names what to fix (the new failure); still the operator's to edit before Send.
+        if (asPrimary && lead?.prefill !== undefined && choice.needsNote) { setNoteOpen(choice.key); setNoteText(lead.prefill); return; }
+        sendDirect(choice);
+      }}
+    >
+      {/* A menu item's second line is its consequence (`data-sub`, drawn by CSS): the item's words stay its label. */}
+      {asPrimary ? choice.label : choice.key === 'rerun' && rerunOffer !== null
+        // Plain words, never the phase list: "Redo from the build step · about 25 min".
+        ? `Redo from the ${stepWords(rerunOffer.phase)} step`
+        : choice.label}
+      {/* core#820: the producer's default is MARKED, never preselected. */}
+      {choice.isDefault === true && (
+        <span data-testid="session-gate-choice-default" className="wk-session-gate-suggested">default</span>
+      )}
+      {/* S16a-1b: the creator seat's record rides Approve as neutral text — never a tone. */}
+      {choice.key === recordOn && seat !== null && seat.record !== null && (
+        <span data-testid="session-gate-track-record" className="wk-session-gate-record">{seat.record}</span>
+      )}
+    </button>
+  );
+
   return (
     <div
       data-testid="session-gate-row"
       data-reason={model.reason}
       ref={rowRef}
       tabIndex={-1}
-      className="wk-session-gate-row"
+      className="wk-session-gate-row wk-gate2"
       onKeyDown={(e) => {
+        if (e.key === 'Escape' && menuOpen) { e.preventDefault(); setMenuOpen(false); menuBtnRef.current?.focus(); return; }
         if (noteOpen !== null) return;
+        if ((e.target as HTMLElement).closest('[role="menu"]') !== null) return;
+        // The row's shortcuts are the row's and its choice radios' only: Enter / Space on Other options, a lead act,
+        // More about this or a link keeps its own activation, and never sends the remembered pick
+        // (pr-xreview on #924).
+        const t = e.target as HTMLElement;
+        if (t !== e.currentTarget && t.getAttribute('role') !== 'radio' && t.closest('button, summary, a, input, textarea, select') !== null) return;
         const result = pickKey(pick, e.key, model.choices.length);
         if (!result.handled) return;
         e.preventDefault();
@@ -719,138 +998,95 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
         if (result.send !== null) sendDirect(model.choices[result.send]!);
       }}
     >
-      <p data-testid="session-gate-question" className="wk-session-gate-question">{question}</p>
-      {/* rig 0.15.8: what failed, on the face — never only under Technical details. */}
-      {model.failingTests !== undefined && (
-        <p data-testid="session-gate-failing" className="wk-session-gate-detail-item wk-gate-failing">
+      {/* The question, in plain words: the dock's headline. */}
+      <h2 data-testid="session-gate-question" className="wk-session-gate-question wk-gate2-q">{question}</h2>
+      {sentence !== null && <p data-testid={refusalLines !== null && sentence === refusalLines.lead ? 'session-gate-refusal' : model.qe !== undefined && sentence === model.qe.why ? 'session-gate-qe-why' : 'session-gate-sentence'} {...(model.qe !== undefined && sentence === model.qe.why ? { 'data-qe-outcome': model.qe.outcome } : {})} className="wk-session-gate-detail-item wk-gate2-p">{sentence}</p>}
+      {/* rig 0.15.8: what failed, on the face — never only under Technical details. The new failure is highlighted;
+          the ones that fail on the base too are under More about this (mockup ui-v2-gate). */}
+      {model.failingTests !== undefined && split !== undefined ? (
+        <div data-testid="session-gate-failing-split" data-fresh={split.fresh.length} data-on-base={baseCountOf(split)} className="wk-gate2-fails">
+          {split.fresh.length > 0 ? (
+            <>
+              {/* (J4 0.16.6) The face leads with what only this change fails, by name; the base's failures stay folded. */}
+              <p data-testid="session-gate-failing-words" className="wk-gate2-p">
+                {split.fresh.length === 1 ? 'Failing only with this change:' : `${split.fresh.length} tests fail only with this change:`}
+              </p>
+              <ul data-testid="session-gate-failing-new" className="wk-gate2-new">
+                {/* One line each: the test in words, where it lives as a short tag; the whole id on hover (the dock stays compact). */}
+                {split.fresh.map((n) => <li key={n} title={n}><span className="wk-gate2-new-t">{testWords(n)}</span>{testWords(n) !== n && testPlace(n) !== null && <code className="wk-gate2-new-id">{testPlace(n)}</code>}</li>)}
+              </ul>
+            </>
+          ) : (
+            <p data-testid="session-gate-failing-words" className="wk-gate2-p">{allOnBaseWords(baseCountOf(split))}</p>
+          )}
+          {baseCountOf(split) > 0 && (
+            <div data-testid="session-gate-failing-base" className="wk-gate2-base">
+              {split.fresh.length > 0 && <p data-testid="session-gate-failing-base-words" className="wk-gate2-base-words">{baseCountOf(split) === 1 ? 'One more fails on the base too, so it isn’t caused by this change.' : `${baseCountOf(split)} more fail on the base too, so they aren’t caused by this change.`}</p>}
+              {split.onBase.length > 0 && baseOpen && <ul>{split.onBase.map((n) => <li key={n} title={n}><span>{testWords(n)}</span>{testWords(n) !== n && testPlace(n) !== null && <code className="wk-gate2-new-id">{testPlace(n)}</code>}</li>)}</ul>}
+              {split.onBase.length > 0 && (
+                <button type="button" data-testid="session-gate-failing-toggle" aria-expanded={baseOpen} onClick={() => setBaseOpen((v) => !v)} className="wk-gate2-link">
+                  {baseOpen ? 'Hide the base’s failures' : split.onBase.length === 1 ? 'See the one that fails on the base' : `See the ${split.onBase.length} that fail on the base`}
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      ) : model.failingTests !== undefined && (
+        <p data-testid="session-gate-failing" className="wk-session-gate-detail-item wk-gate-failing wk-gate2-new">
           Failing: {model.failingTests.names.map((n, i) => <span key={`${i}:${n}`}>{i > 0 ? ', ' : ''}<code>{n}</code></span>)}
           {model.failingTests.more > 0 && <span data-testid="session-gate-failing-more"> +{model.failingTests.more} more</span>}
         </p>
       )}
-      {model.qe !== undefined && (
-        <p data-testid="session-gate-qe-why" data-qe-outcome={model.qe.outcome} className="wk-session-gate-detail-item">{model.qe.why}</p>
-      )}
+      {/* (J4 0.16.6) An override path the job does not offer here says why, in one line. */}
+      {model.whyNot !== undefined && <p data-testid="session-gate-why-not" className="wk-session-gate-detail-item wk-gate2-why-not">{model.whyNot.join(' ')}</p>}
       {/* A refused hand-over says what Deliver again does BEFORE the choice that takes it. */}
-      {refusalLines !== null && <>
-        <p data-testid="session-gate-refusal" className="wk-session-gate-detail-item">{refusalLines.lead}</p>
-        <p data-testid="session-gate-deliver-consent" className="wk-gate-consequence">{refusalLines.consent}</p>
-      </>}
-      {/* S16a-1b: the recommended move's consequence, above the choice that takes it. */}
-      {model.consequence !== null && (
-        <p data-testid="session-gate-consequence" className="wk-gate-consequence">{model.consequence}</p>
-      )}
-      <div
-        data-testid="session-gate-choices"
-        role="radiogroup"
-        aria-label="Answer this gate"
-        // S16a-2a: the row picks by arrows / digits / Enter only — a typed letter goes on to the
-        // page's composer (§5.6 rule 4); typing never answers the gate.
-        data-releases-letters="true"
-        className="wk-session-gate-choices"
-      >
-        {model.choices.map((choice, i) => (
-          <button
-            key={choice.key}
-            type="button"
-            role="radio"
-            aria-checked={pick.focus === i ? 'true' : 'false'}
-            data-testid="session-gate-choice"
-            data-choice-key={choice.key}
-            data-recommended={i === model.recommended ? 'true' : 'false'}
-            title={choice.title}
-            className={[
-              'wk-session-gate-choice',
-              'wk-btn',
-              i === model.recommended ? 'wk-btn--primary' : 'wk-btn--secondary',
-              pick.focus === i ? 'wk-session-gate-choice--focus' : '',
-              i === model.recommended ? 'wk-session-gate-choice--suggested' : '',
-              choice.disabled === true ? 'wk-session-gate-choice--disabled' : '',
-            ].filter(Boolean).join(' ')}
-            disabled={action.busy || choice.disabled === true}
-            onMouseEnter={() => setPeek(choice.key)}
-            onMouseLeave={() => setPeek(null)}
-            onFocus={() => setPeek(choice.key)}
-            onBlur={() => setPeek(null)}
-            onClick={() => {
-              if (choice.disabled === true) return;
-              setPick({ focus: i, moved: true });
-              sendDirect(choice);
-            }}
-          >
-            {choice.label}
-            {i === model.recommended && (
-              <span className="wk-session-gate-suggested" aria-hidden="true">suggested</span>
-            )}
-            {/* core#820: the producer's default is MARKED, never preselected. */}
-            {choice.isDefault === true && (
-              <span data-testid="session-gate-choice-default" className="wk-session-gate-suggested">default</span>
-            )}
-            {/* S16a-1b: the creator seat's record rides Approve as neutral text — never a tone. */}
-            {choice.key === recordOn && seat !== null && seat.record !== null && (
-              <span data-testid="session-gate-track-record" className="wk-session-gate-record">{seat.record}</span>
-            )}
-          </button>
-        ))}
-      </div>
-      {drift !== null && <DriftLine drift={drift} />}
-      {assurance}
-      {/* S16a-1c (TR-W8): a watch finding attached to this gate, as one quiet line (nothing when absent). */}
-      {gate !== undefined && <WatchGateLine runId={runId} ord={typeof gate.ord === 'number' ? gate.ord : null} />}
-      {/* studio#639: no install plan ran, so no file list — the engine's own reason, where the lists would be. */}
-      {model.consentMissing !== undefined && (
-        <p data-testid="session-gate-consent-missing" className="wk-session-gate-detail-item">{showText(model.consentMissing)}</p>
-      )}
-      {/* core#820: what each install choice writes, before it is taken — the operator's own files said so. */}
-      {[...model.choices, ...model.overflow].filter((c) => c.writes !== undefined).map((c) => (
-        <details key={`writes-${c.key}`} data-testid="session-gate-consent-writes" data-choice-key={c.key} className="wk-tech-details">
-          <summary className="wk-tech-details-summary">Files this choice writes</summary>
-          <p><b>{c.label}</b>{c.isDefault === true ? ' (default)' : ''} writes {c.writes!.length === 0 ? 'nothing it could list' : `${c.writes!.length} file${c.writes!.length === 1 ? '' : 's'}`}:</p>
-          <ul>
-            {c.writes!.map((w, j) => (
-              <li key={j} data-testid="session-gate-consent-write" data-own={w.operatorOwned ? 'true' : 'false'}>
-                {w.operatorOwned ? 'your own ' : ''}<code>{showPath(w.path)}</code>{w.what !== '' ? ` — ${w.what}` : ''}
-              </li>
-            ))}
-          </ul>
-        </details>
-      ))}
-      {model.overflow.length > 0 && (
-        <details className="wk-session-gate-overflow">
-          <summary className="wk-session-gate-overflow-summary">⋯</summary>
-          <div className="wk-session-gate-choices">
-            {model.overflow.map((choice) => (
-              <button
-                key={choice.key}
-                type="button"
-                data-testid="session-gate-choice"
-                data-choice-key={choice.key}
-                title={choice.title}
-                className={[
-                  'wk-session-gate-choice',
-                  'wk-btn wk-btn--secondary',
-                  choice.disabled === true ? 'wk-session-gate-choice--disabled' : '',
-                ].filter(Boolean).join(' ')}
-                disabled={action.busy || choice.disabled === true}
-                onMouseEnter={() => setPeek(choice.key)}
-                onMouseLeave={() => setPeek(null)}
-                onFocus={() => setPeek(choice.key)}
-                onBlur={() => setPeek(null)}
-                onClick={() => {
-                  if (choice.disabled === true) return;
-                  sendDirect(choice);
-                }}
-              >
-                {choice.label}
+      {refusalLines !== null && <p data-testid="session-gate-deliver-consent" className="wk-gate-consequence">{refusalLines.consent}</p>}
+      <div className="wk-gate2-decide">
+        {/* What happens next, then the one recommended move and the rest under Other options. */}
+        {next !== null && (
+          <p className="wk-gate-consequence wk-gate2-next">{suggested ? 'Recommended: ' : ''}<span data-testid="session-gate-consequence">{next}</span></p>
+        )}
+        <div
+          data-testid="session-gate-choices"
+          role="radiogroup"
+          aria-label="Answer this gate"
+          // S16a-2a: the row picks by arrows / digits / Enter only — a typed letter goes on to the
+          // page's composer (§5.6 rule 4); typing never answers the gate.
+          data-releases-letters="true"
+          className="wk-session-gate-choices wk-gate2-choices"
+        >
+          {lead?.act !== undefined
+            ? <button type="button" data-testid="session-gate-lead-act" data-act={lead.act.key} title={lead.act.title} onClick={lead.act.onClick} className="wk-gate2-btn wk-gate2-btn--primary">{lead.act.label}</button>
+            : primary !== null && choiceButton(primary, primaryIndex ?? -1, true)}
+          {(othersAll.length > 0 || unavailable !== null || extraItems !== null) && (
+            <div className="wk-gate2-more" ref={menuWrapRef}>
+              <button ref={menuBtnRef} type="button" data-testid="session-gate-more" aria-haspopup="menu" aria-expanded={menuOpen} aria-controls={`${runId}-gate-menu`}
+                onClick={() => setMenuOpen((v) => !v)} className="wk-gate2-btn wk-gate2-btn--secondary">
+                Other options <span aria-hidden>▾</span>
               </button>
-            ))}
-          </div>
-        </details>
-      )}
+              {/* Always in the page (hidden while closed), so every choice keeps its one element. */}
+              <div id={`${runId}-gate-menu`} role="menu" aria-label="Other options" data-testid="session-gate-menu" hidden={!menuOpen} className="wk-gate2-menu">
+                {others.map((c) => choiceButton(c, model.choices.indexOf(c), false))}
+                {extraItems}
+                {stopItem !== null && choiceButton(stopItem, model.choices.indexOf(stopItem), false)}
+                {unavailable !== null && (
+                  <>
+                    <div aria-hidden className="wk-gate2-menu-rule" />
+                    <p className="wk-gate2-menu-label">Not available right now</p>
+                    {unavailable}
+                  </>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
       {/* S16a-2a: the peeked choice's consequence, before it is taken. */}
       {(() => {
         const keyed = peek ?? (pick.moved && pick.focus !== null ? model.choices[pick.focus]?.key ?? null : null);
         const c = keyed === null ? undefined : allChoices.find((x) => x.key === keyed);
-        const shown = c === undefined || c.title === '' || (model.consequence !== null && model.recommended !== null && model.choices[model.recommended]?.key === c.key) ? null : c;
+        // While Other options is open each item says its own consequence; the line under the buttons stays quiet.
+        const shown = c === undefined || c.title === '' || menuOpen || (next !== null && primary !== null && primary.key === c.key) ? null : c;
         // Below the choices, so the line under the pointer never moves a button; empty while nothing is peeked.
         return <p data-testid="session-gate-choice-consequence" {...(shown !== null ? { 'data-choice-key': shown.key } : {})} aria-live="polite" className="wk-gate-peek">{shown?.title ?? ''}</p>;
       })()}
@@ -871,19 +1107,6 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
             <button type="button" onClick={() => setConfirmRerun(false)} className="wk-btn wk-btn--quiet">Cancel</button>
           </div>
         </div>
-      )}
-      {seat !== null && <RuleOfferBlock seat={seat} locked={action.busy} />}
-      {/* ⋯ details: raw prompt, verdict layers, failing items, reviewer's note; S16a-1b: the work under
-          review, "Why it failed" (the failing criteria beside the creator's claims), the source line. */}
-      {(model.detailItems.length > 0 || assuranceTech !== null) && (
-        <details className="wk-session-gate-prompt-detail">
-          <summary className="wk-session-gate-prompt-summary">Technical details</summary>
-          {assuranceTech}
-          {model.detailItems.map((item, idx) => (
-            <p key={idx} data-testid={idx === 0 ? 'session-gate-raw-prompt' : undefined} className="wk-session-gate-detail-item wk-session-verdict-details">{showText(item)}</p>
-          ))}
-          {depth}
-        </details>
       )}
       {noteChoice !== null && (
         <details data-testid="session-gate-detail" open className="wk-session-gate-detail">
@@ -930,6 +1153,63 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
         // The refusal in its own words (a 409 names what moved); paths read `~` (studio#650).
         <p data-testid="session-gate-error" role="alert" className="wk-session-gate-error">{showText(action.error)}</p>
       )}
+      {seat !== null && <RuleOfferBlock seat={seat} locked={action.busy} />}
+      {/* (review of the dock) Compact by default: the explanation, the base failures, the receipt and the raw detail
+          are behind one "More about this" — the dock grows (to 60% of the view) only when it is open. */}
+      <details data-testid="session-gate-more-about" className="wk-gate2-about" open={more} onToggle={(e) => { const d = e.currentTarget as HTMLDetailsElement; setMore(d.open); if (d.open) requestAnimationFrame(() => d.querySelector('.wk-gate2-about-body')?.scrollIntoView?.({ block: 'nearest' })); }}>
+        <summary className="wk-gate2-link wk-gate2-about-sum">{more ? 'Less about this' : 'More about this'}</summary>
+        <div className="wk-gate2-about-body">
+          {explain}
+          {model.qe !== undefined && sentence !== model.qe.why && (
+            <p data-testid="session-gate-qe-why" data-qe-outcome={model.qe.outcome} className="wk-session-gate-detail-item">{model.qe.why}</p>
+          )}
+          {refusalLines !== null && sentence !== refusalLines.lead && <p data-testid="session-gate-refusal" className="wk-session-gate-detail-item">{refusalLines.lead}</p>}
+          {/* studio#920: every file the deliver preflight found changed, in full (the reason names the first). */}
+          {model.refusal?.changed !== undefined && (
+            <div data-testid="session-gate-refusal-changed" className="wk-gate2-base">
+              <p className="wk-gate2-label">Changed after the checks</p>
+              <ul>{model.refusal.changed.map((f) => <li key={f}><code className="wk-gate2-new-id">{showPath(f)}</code></li>)}</ul>
+            </div>
+          )}
+          {drift !== null && <DriftLine drift={drift} />}
+          {/* studio#639: no install plan ran, so no file list — the engine's own reason, where the lists would be. */}
+          {model.consentMissing !== undefined && (
+            <p data-testid="session-gate-consent-missing" className="wk-session-gate-detail-item">{showText(model.consentMissing)}</p>
+          )}
+          {/* core#820: what each install choice writes, before it is taken — the operator's own files said so. */}
+          {allChoices.filter((c) => c.writes !== undefined).map((c) => (
+            <details key={`writes-${c.key}`} data-testid="session-gate-consent-writes" data-choice-key={c.key} className="wk-tech-details">
+              <summary className="wk-tech-details-summary">Files this choice writes</summary>
+              <p><b>{c.label}</b>{c.isDefault === true ? ' (default)' : ''} writes {c.writes!.length === 0 ? 'nothing it could list' : `${c.writes!.length} file${c.writes!.length === 1 ? '' : 's'}`}:</p>
+              <ul>
+                {c.writes!.map((w, j) => (
+                  <li key={j} data-testid="session-gate-consent-write" data-own={w.operatorOwned ? 'true' : 'false'}>
+                    {w.operatorOwned ? 'your own ' : ''}<code>{showPath(w.path)}</code>{w.what !== '' ? ` — ${w.what}` : ''}
+                  </li>
+                ))}
+              </ul>
+            </details>
+          ))}
+      {/* The quiet foot: what has checked the work so far (the receipt), and the raw detail behind Technical details —
+              check names, paths, run ids. */}
+          <div className="wk-gate2-foot">
+            {assurance}
+            {/* S16a-1c (TR-W8): a watch finding attached to this gate, as one quiet line (nothing when absent). */}
+            {gate !== undefined && <WatchGateLine runId={runId} ord={typeof gate.ord === 'number' ? gate.ord : null} />}
+            {(model.detailItems.length > 0 || assuranceTech !== null) && (
+              <details className="wk-session-gate-prompt-detail">
+                <summary className="wk-session-gate-prompt-summary">Technical details</summary>
+                {assuranceTech}
+                {model.detailItems.map((item, idx) => (
+                  <p key={idx} data-testid={idx === 0 ? 'session-gate-raw-prompt' : undefined} className="wk-session-gate-detail-item wk-session-verdict-details">{showText(item)}</p>
+                ))}
+                {depth}
+              </details>
+            )}
+          </div>
+        </div>
+      </details>
+      {signInModal}
     </div>
   );
 }

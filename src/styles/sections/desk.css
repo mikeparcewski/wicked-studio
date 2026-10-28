@@ -834,7 +834,7 @@
 .wk-inbox-list div.wk-inbox-row::after { content: ''; position: absolute; left: calc(var(--space-2) + 28px + var(--space-3)); right: var(--space-2); bottom: 0; height: 1px; background: var(--border-subtle); }
 .wk-inbox-list [role="group"]:last-child > div.wk-inbox-row::after,
 .wk-inbox-list div.wk-inbox-row:hover::after, .wk-inbox-list div.wk-inbox-row[aria-current="true"]::after { display: none; }
-.wk-inbox-list div.wk-inbox-row:hover { background: var(--surface-raised); }
+.wk-inbox-list div.wk-inbox-row:hover { background: color-mix(in oklab, var(--ink-high) 13%, transparent); }
 .wk-inbox-list div.wk-inbox-row[aria-current="true"] { background: var(--accent-wash); box-shadow: inset 3px 0 0 var(--accent); }
 /* The keyboard's place in the list is ringed only while the keyboard is in it (a click selects and reads). */
 .wk-inbox-list .wk-desk-needs:is(:focus-visible, :has(:focus-visible)) div.wk-inbox-row[data-kbd-selected="true"] { box-shadow: inset 0 0 0 2px var(--accent); }

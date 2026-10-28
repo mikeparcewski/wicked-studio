@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { ChevronDown, ChevronRight, ChevronUp, FolderPlus, LayoutGrid, MessageSquare, MessageSquarePlus, Plus, Search } from 'lucide-react';
+import { ChevronRight, FolderPlus, LayoutGrid, MessageSquare, MessageSquarePlus, Plus, Search } from 'lucide-react';
 import { useDeliveredNow } from '../../store/postHocDeliver.js';
 import type { SessionView } from '../../api/types.js';
-import { DESK_RAIL_LINKS, needsByRun, needTextByRun, needsYouWords, railGroups, railRowWords, type RailSession } from '../../board/deskModel.js';
+import { needsByRun, needTextByRun, needsYouWords, railGroups, railRecent, railRowWords } from '../../board/deskModel.js';
+import { BUILD_ITEM, DESK_VIEW_PATH, NAV_GROUPS, navCurrent, type NavItem } from '../../board/navModel.js';
 import { useRailCollapsed } from '../../hooks/useRailCollapsed.js';
 import { useNeedsClock, useSettledNeeds } from '../../hooks/useNeedsRows.js';
 import type { NeedRow } from '../../board/needsYou.js';
@@ -30,41 +31,41 @@ export function startNewJob(ambientProject: string | null): void {
   openLaunchWizard({ projectId: ambientProject !== null && ambientProject !== 'default' ? ambientProject : null, composerKey: pageComposerKey() ?? 'desk' });
 }
 
+/** The Recent list's fold key in `useRailCollapsed` (a project id never starts with NUL). */
+const RECENT_KEY = '\u0000recent';
+
 /** Width of the desk shell's session rail (px) — fixed, so nothing moves when a pane opens. */
 export const SESSION_RAIL_PX = 236;
 
 /**
- * THE SESSION RAIL (skin `desk`, DES-STUDIO-REBUILD-001 §4.2, slice S4; Amendment 5 as revised,
- * S15c; studio#421 rail polish) — 236 px, on every route. Top to bottom:
+ * THE SESSION RAIL (skin `desk`, DES-STUDIO-REBUILD-001 §4.2, slice S4; the sidebar regroup of ui-v2,
+ * operator 2026-10-26, mockup `desk-home-redesign`) — 236 px, on every route. Top to bottom:
  *
- *  - The wordmark (logo + site name) — ONE link to the Desk, carrying the Desk's needs-you count as its
- *    badge (the fold's `needCount`, the Desk sentence's number — one source, so they never disagree);
- *    its accessible name says it ("Desk, 2 need you"). Operator IA 2026-10-13: there is no separate
- *    "Desk" item.
+ *  - The wordmark (logo + site name) is the link Home (`/`, named "Home"; operator 2026-10-27: Home left
+ *    WORK, the wordmark goes Home). It carries the needs-you badge (the fold's `needCount`, the Desk
+ *    sentence's number — one source), said as its description ("22 need you"), and is current on Home
+ *    and on Needs you in full.
  *  - The action row, on every page (DES-SYSTEM-CHAT §1): four equal icon buttons — New job (the launch
- *    wizard; first, operator 2026-10-26), New project (the one New project modal), Chat (the floating
- *    system chat: restores a minimized one, else starts a new one) and Search (the ONE search modal,
- *    ⌘K). New job and Chat start in the project on screen (`ambientProject`), and say so in their names.
- *  - Sessions grouped by project (the board model's order), each with ONE status dot (four hues:
- *    waiting on you, working, failed, ended — its word in the row's hover title and accessible label)
- *    and the count of needs-you items that name it. A title is one line, cut with an ellipsis, its
- *    full words in the hover title; same-named sessions in a group carry a short tag ("· 29d",
- *    `disambiguate`). A group header folds its group (remembered per viewer in localStorage,
- *    `useRailCollapsed`; a folded group still shows its needs-you count), and a group shows its first
- *    few with "Show N more" for the rest (studio-rail-clean). A project group carries two quick icons (new session →
- *    `/` + the project's `@` chip, open project → its dashboard `/projects/:id`); the
- *    unfiled group ("Not in a project") carries only the open icon, to its own dashboard — the same
- *    project dashboard every project has (`/projects/default`, operator 2026-10-16). A session is a chat and its runs when the
- *    daemon stamps `chat_id` (C1), else one run; each opens `/s/:id` (S6a).
- *  - the "Workspace" group (operator IA 2026-10-13): Skills · MCP · Plugins · Workflows · Theme ·
- *    General (`DESK_RAIL_LINKS`; General is the `/system` page, and `/settings` redirects there).
- *    Repositories, Steering, Evals and Agents are Desk tabs, not rail links. The foot's top border
- *    separates the sessions above it from the Workspace below; its label is styled like the project
- *    groups and its links are the rail's secondary tier.
- *  - LAST, pinned to the bottom, the Nerve Center tile (DES-SYSTEM-VIEW, `NerveCenterTile`): one label,
- *    larger than every other item, filled green / amber / red by the system's state with the worst
- *    item in words. It replaced the Watchtower pill and the Health link; `/watch` and `/health` land
- *    on its dashboard.
+ *    wizard), New project (the one New project modal), Chat (the floating system chat: restores a
+ *    minimized one, else starts a new one) and Search (the ONE search modal, ⌘K). New job and Chat
+ *    start in the project on screen (`ambientProject`), and say so in their names.
+ *  - The pages, in three groups under small-caps labels (`NAV_GROUPS`, board/navModel.ts): WORK
+ *    (Projects, Jobs, Repositories), INSIGHT (Report, Understand, Evaluate), GOVERN (Steering, Memory,
+ *    Agents). They replaced the Desk's tabs and its More menu. Projects is WORK's primary entry: its
+ *    words are a step stronger and a small accent mark sits before them. The page you are on is
+ *    `aria-current="page"`.
+ *  - RECENT, under the groups and folding as one: the sessions grouped by project (the board model's
+ *    order), at most five between them (`railRecent`: every one that needs you, then live work, then
+ *    the newest), then "All jobs" (the Jobs page). Each row has ONE status dot (four hues: waiting on
+ *    you, working, failed, ended — its word in the row's hover title and accessible label) and the
+ *    count of needs-you items that name it; a title is one line, cut with an ellipsis; same-named
+ *    sessions in a group carry a short tag ("· 29d"). A group header folds its group (remembered per
+ *    viewer, `useRailCollapsed`; a folded group still shows its needs-you count). A project group
+ *    carries two quick icons (new session in it, open its page `/projects/:id`); the unfiled group
+ *    ("Not in a project") carries only the open icon (`/projects/default`). A session opens `/s/:id`.
+ *  - At the foot, "Build & settings" (one page listing Skills, MCP, Plugins, Workflows and Settings,
+ *    the old Workspace links), then LAST the Nerve Center tile (DES-SYSTEM-VIEW, `NerveCenterTile`):
+ *    one label, filled green / amber / red by the system's state with the worst item in words.
  *
  * Render only: the groups are `railGroups` (board/deskModel.ts) over `useBoardModel` + the fold.
  */
@@ -84,17 +85,18 @@ export function SessionRail({ runs, needRows, navigate, pathname, runsKnown = tr
   const settled = useSettledNeeds(needRows, runsKnown, runsFailed);
   const count = settled.count ?? 0;
   const badgeText = settled.phase === 'partial' ? `${count}+` : String(count);
-  // The wordmark link's name says where it goes and the badge — "Desk", or "Desk, 2 need you" / "Desk, 1
-  // needs you" — after the visible words (label-in-name, WCAG 2.5.3): "wicked studio — Desk, 2 need you".
-  const deskName = count > 0 ? `${PAGE_NAMES.home}, ${badgeText} ${badgeText === '1' ? 'needs' : 'need'} you` : PAGE_NAMES.home;
+  // The wordmark is named "Home"; its badge is said as the link's description: "22 need you".
+  const needWords = `${badgeText} ${badgeText === '1' ? 'needs' : 'need'} you`;
+  const needsId = useId();
   const runChatId = useCapabilities((s) => s.runChatId);
   const deliveredNow = useDeliveredNow();
   // The tags' and hover titles' clock: the queue's shared minute tick, so ages move while nothing else does.
   const now = useNeedsClock();
-  const groups = useMemo(
-    () => railGroups(items, unfiled, needsByRun(needRows), undefined, needTextByRun(needRows), runChatId, deliveredNow, now),
+  const recent = useMemo(
+    () => railRecent(railGroups(items, unfiled, needsByRun(needRows), Infinity, needTextByRun(needRows), runChatId, deliveredNow, now)),
     [items, unfiled, needRows, runChatId, deliveredNow, now],
   );
+  const groups = recent.groups;
   const { collapsed, toggle } = useRailCollapsed();
   const [newProjectOpen, setNewProjectOpen] = useState(false);
   // The project New job and Chat start in: the one on screen, never the Unfiled bucket.
@@ -106,8 +108,6 @@ export function SessionRail({ runs, needRows, navigate, pathname, runsKnown = tr
   const chatMode = useChatWindow((st) => st.mode);
   const chatName = chatMode === 'minimized' ? 'Show the chat' : chatMode !== 'closed' ? 'Chat'
     : inProject !== null ? `New chat in ${inProject.name}` : 'New chat';
-  // "Show N more" is this page's choice only; folding is what persists.
-  const [showAll, setShowAll] = useState<ReadonlySet<string>>(() => new Set());
   // A list that runs past the rail's fold fades out at its foot instead of slicing a row in half;
   // the fade lifts once the list is scrolled to its end.
   const groupsRef = useRef<HTMLDivElement>(null);
@@ -121,32 +121,30 @@ export function SessionRail({ runs, needRows, navigate, pathname, runsKnown = tr
     const ro = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(check);
     ro?.observe(el);
     return () => { el.removeEventListener('scroll', check); ro?.disconnect(); };
-  }, [groups, collapsed, showAll]);
-  const flipShowAll = (key: string): void => setShowAll((prev) => {
-    const next = new Set(prev);
-    if (next.has(key)) next.delete(key); else next.add(key);
-    return next;
-  });
+  }, [groups, collapsed]);
   const go = (path: string) => (e: React.MouseEvent): void => { e.preventDefault(); navigate(path); };
-  const current = (path: string): 'page' | undefined => (pathname === path || pathname.startsWith(`${path}/`) ? 'page' : undefined);
+  const on = navCurrent(pathname);
+  const recentFolded = collapsed.has(RECENT_KEY);
+  const navLink = (item: NavItem): React.ReactElement => (
+    <a key={item.id} href={item.path} onClick={go(item.path)} data-testid={item.testId} data-nav-dest={`page:${item.id}`}
+      data-primary={item.primary === true ? 'true' : undefined}
+      aria-current={on === item.id ? 'page' : undefined}
+      className={`wk-rail-link wk-rail-nav-item${item.primary === true ? ' wk-rail-nav-item--primary' : ''}`}>
+      {item.primary === true && <span aria-hidden className="wk-rail-nav-mark" />}
+      <span className="wk-rail-nav-label">{item.label}</span>
+    </a>
+  );
   const siteName = useAppearanceStore((s) => s.appearance.site_name?.trim() || null);
   // studio#512 (S18b): Theme › Logo takes the dot's place — the classic chrome's §3.1 slot, 32 px, contain-fit.
   const logoUrl = useAppearanceStore((s) => s.appearance.logo_url);
 
   return (
-    <nav data-testid="session-rail" aria-label="Sessions" className="wk-rail" style={{ width: SESSION_RAIL_PX }}>
-      {/* Operator IA 2026-10-13: the wordmark IS the way to the Desk — logo, name and the Desk's needs-you
-          badge are one link (its accessible name says the count). studio#512: Theme › Site name and
-          Theme › Logo are shown here under the Desk skin. */}
-      <a
-        href="/"
-        onClick={go('/')}
-        data-testid="desk-rail-home"
-        aria-current={pathname === '/' ? 'page' : undefined}
-        aria-label={`${siteName ?? 'wicked studio'} — ${deskName}`}
-        title={deskName}
-        className="wk-rail-home"
-      >
+    <nav data-testid="session-rail" aria-label="Studio" className="wk-rail" style={{ width: SESSION_RAIL_PX }}>
+      {/* The wordmark: logo and name, the link Home, with the needs-you badge. studio#512: Theme › Site
+          name and Theme › Logo are shown here. */}
+      <a href="/" onClick={go('/')} data-testid="desk-rail-wordmark" data-nav-dest="page:home" aria-label={PAGE_NAMES.home}
+        aria-describedby={count > 0 ? needsId : undefined} aria-current={on === 'home' ? 'page' : undefined}
+        title={count > 0 ? `${PAGE_NAMES.home} · ${needWords}` : PAGE_NAMES.home} className="wk-rail-home wk-rail-wordmark">
         <span data-testid="desk-rail-brand" className="wk-rail-brand">
           {logoUrl !== null
             ? <span
@@ -161,7 +159,8 @@ export function SessionRail({ runs, needRows, navigate, pathname, runsKnown = tr
             : <span aria-hidden className="wk-desk-dot wk-desk-dot--waiting" />}
           <span className="wk-rail-brand-name">{siteName !== null ? <b>{siteName}</b> : <>wicked <b>studio</b></>}</span>
         </span>
-        {count > 0 && <span aria-hidden data-testid="desk-rail-badge" data-phase={settled.phase} className="wk-rail-badge">{badgeText}</span>}
+        {count > 0 && <span aria-hidden data-testid="desk-rail-badge" data-phase={settled.phase} className="wk-rail-badge wk-rail-badge--home">{badgeText}</span>}
+        {count > 0 && <span id={needsId} className="wk-visually-hidden">{needWords}</span>}
       </a>
       {/* DES-SYSTEM-CHAT §1: the action row, on every page — four equal icon buttons, New job ·
           New project · Chat · Search (⌘K), each named and with a tooltip. New job and Chat start in the
@@ -187,128 +186,135 @@ export function SessionRail({ runs, needRows, navigate, pathname, runsKnown = tr
 
       <div ref={groupsRef} className="wk-rail-groups" data-more-below={moreBelow ? 'true' : 'false'}>
         <MoveProjectStatus />
-        {groups.map((g, gi) => {
-          const key = g.projectId ?? '';
-          const folded = collapsed.has(key);
-          const all = showAll.has(key);
-          const listId = `rail-group-list-${gi}`;
-          const needs = [...g.sessions, ...g.more].reduce((n, s) => n + s.badge, 0);
-          const rows: RailSession[] = all ? [...g.sessions, ...g.more] : g.sessions;
-          return (
-          <div key={g.projectId ?? 'unfiled'} data-testid="rail-group" data-project-id={g.projectId ?? ''} data-folded={folded ? 'true' : 'false'}>
-            <div className="wk-rail-group-row">
-              <button
-                type="button"
-                data-testid="rail-group-toggle"
-                className="wk-rail-group wk-rail-group-toggle"
-                aria-expanded={!folded}
-                aria-controls={folded ? undefined : listId}
-                title={g.name}
-                onClick={() => toggle(key)}
-              >
-                <ChevronRight size={12} aria-hidden className="wk-rail-fold-chevron" />
-                <span className="wk-rail-group-name">{g.name}</span>
-                {folded && needs > 0 && (
-                  <span data-testid="rail-group-needs" className="wk-rail-badge wk-rail-badge--row" title={needsYouWords(needs)} aria-label={needsYouWords(needs)}>{needs}</span>
-                )}
-              </button>
-              {g.projectId !== null && g.projectId !== '' && (
-                <span className="wk-rail-group-icons">
-                  <button
-                    type="button"
-                    data-testid="rail-group-new"
-                    aria-label={`New work in ${g.name}`}
-                    title={`New work in ${g.name}`}
-                    className="wk-rail-icon-btn"
-                    onClick={() => openLaunchWizard({ projectId: g.projectId, composerKey: 'desk' })}
-                  >
-                    <Plus size={14} aria-hidden />
-                  </button>
-                  <button
-                    type="button"
-                    data-testid="rail-group-view"
-                    aria-label={`Open ${g.name}`}
-                    title={`Open ${g.name}`}
-                    className="wk-rail-icon-btn"
-                    onClick={() => { navigate(projectDetailPath(g.projectId!)); }}
-                  >
-                    <LayoutGrid size={14} aria-hidden />
-                  </button>
-                </span>
-              )}
-              {g.projectId === null && (
-                <span className="wk-rail-group-icons">
-                  <button
-                    type="button"
-                    data-testid="rail-group-view-unfiled"
-                    aria-label="Open work not in a project"
-                    title="Open work not in a project"
-                    className="wk-rail-icon-btn"
-                    onClick={() => { navigate(projectDetailPath('default')); }}
-                  >
-                    <LayoutGrid size={14} aria-hidden />
-                  </button>
-                </span>
-              )}
+        {/* The pages, in three groups (board/navModel.ts): they replaced the Desk's tabs and its More menu. */}
+        <div className="wk-rail-nav" data-testid="rail-nav">
+          {NAV_GROUPS.map((g) => (
+            <div key={g.id} role="group" aria-labelledby={`rail-sec-${g.id}`} data-testid={`rail-nav-${g.id}`} className="wk-rail-nav-group">
+              <p id={`rail-sec-${g.id}`} className="wk-rail-sec">{g.label}</p>
+              {g.items.map((item) => navLink(item))}
             </div>
-            {!folded && (
-              <div id={listId} className="wk-rail-group-list">
-                {rows.map((s) => {
-                  const words = railRowWords(s, now);
-                  return (
-                  <div key={s.id} className="wk-rail-session-row" data-move-row={s.id}>
-                    <a
-                      href={s.path}
-                      onClick={go(s.path)}
-                      data-testid="rail-session"
-                      data-session-id={s.id}
-                      data-run-id={s.runId}
-                      data-run-ids={s.runIds.join(' ')}
-                      data-state={s.state}
-                      data-status={s.status.word}
-                      data-badge={s.badge}
-                      title={words.title}
-                      aria-label={words.label}
-                      aria-current={pathname === s.path ? 'page' : undefined}
-                      className="wk-rail-session"
-                    >
-                      <span aria-hidden data-testid="rail-session-dot" data-tone={s.status.tone} className={`wk-desk-dot wk-rail-dot wk-rail-dot--${s.status.tone}`} />
-                      <span className="wk-rail-session-title">{s.title}</span>
-                      {s.tag !== null && <span data-testid="rail-session-tag" className="wk-rail-session-tag">· {s.tag}</span>}
-                      {s.badge > 0 && <span aria-hidden className="wk-rail-badge wk-rail-badge--row">{s.badge}</span>}
-                    </a>
-                    <MoveToProject session={s} projectId={g.projectId} runs={runs} />
-                  </div>
-                  );
-                })}
-                {g.more.length > 0 && (
+          ))}
+        </div>
+
+        {/* RECENT: the session/project list, folding as one, at most five sessions, then All jobs. */}
+        {groups.length > 0 && (
+        <section aria-labelledby="rail-recent-label" data-testid="rail-recent" data-folded={recentFolded ? 'true' : 'false'} className="wk-rail-recent">
+          <button type="button" id="rail-recent-label" data-testid="rail-recent-toggle" aria-expanded={!recentFolded}
+            aria-controls={recentFolded ? undefined : 'rail-recent-list'} onClick={() => toggle(RECENT_KEY)} className="wk-rail-sec wk-rail-sec-toggle">
+            <span>Recent</span>
+            <ChevronRight size={12} aria-hidden className="wk-rail-fold-chevron" />
+          </button>
+          {!recentFolded && (
+          <div id="rail-recent-list">
+            {groups.map((g, gi) => {
+              const key = g.projectId ?? '';
+              const folded = collapsed.has(key);
+              const listId = `rail-group-list-${gi}`;
+              const needs = g.sessions.reduce((n, s) => n + s.badge, 0);
+              const rows = g.sessions;
+              return (
+              <div key={g.projectId ?? 'unfiled'} data-testid="rail-group" data-project-id={g.projectId ?? ''} data-folded={folded ? 'true' : 'false'}>
+                <div className="wk-rail-group-row">
                   <button
                     type="button"
-                    data-testid="rail-group-more"
-                    className="wk-rail-showmore"
-                    aria-expanded={all}
-                    onClick={() => flipShowAll(key)}
+                    data-testid="rail-group-toggle"
+                    className="wk-rail-group wk-rail-group-toggle"
+                    aria-expanded={!folded}
+                    aria-controls={folded ? undefined : listId}
+                    title={g.name}
+                    onClick={() => toggle(key)}
                   >
-                    {all ? <ChevronUp size={12} aria-hidden /> : <ChevronDown size={12} aria-hidden />}
-                    {all ? 'Show fewer' : `Show ${g.more.length} more`}
+                    <ChevronRight size={12} aria-hidden className="wk-rail-fold-chevron" />
+                    <span className="wk-rail-group-name">{g.name}</span>
+                    {folded && needs > 0 && (
+                      <span data-testid="rail-group-needs" className="wk-rail-badge wk-rail-badge--row" title={needsYouWords(needs)} aria-label={needsYouWords(needs)}>{needs}</span>
+                    )}
                   </button>
+                  {g.projectId !== null && g.projectId !== '' && (
+                    <span className="wk-rail-group-icons">
+                      <button
+                        type="button"
+                        data-testid="rail-group-new"
+                        aria-label={`New work in ${g.name}`}
+                        title={`New work in ${g.name}`}
+                        className="wk-rail-icon-btn"
+                        onClick={() => openLaunchWizard({ projectId: g.projectId, composerKey: 'desk' })}
+                      >
+                        <Plus size={14} aria-hidden />
+                      </button>
+                      <button
+                        type="button"
+                        data-testid="rail-group-view"
+                        aria-label={`Open ${g.name}`}
+                        title={`Open ${g.name}`}
+                        className="wk-rail-icon-btn"
+                        onClick={() => { navigate(projectDetailPath(g.projectId!)); }}
+                      >
+                        <LayoutGrid size={14} aria-hidden />
+                      </button>
+                    </span>
+                  )}
+                  {g.projectId === null && (
+                    <span className="wk-rail-group-icons">
+                      <button
+                        type="button"
+                        data-testid="rail-group-view-unfiled"
+                        aria-label="Open work not in a project"
+                        title="Open work not in a project"
+                        className="wk-rail-icon-btn"
+                        onClick={() => { navigate(projectDetailPath('default')); }}
+                      >
+                        <LayoutGrid size={14} aria-hidden />
+                      </button>
+                    </span>
+                  )}
+                </div>
+                {!folded && (
+                  <div id={listId} className="wk-rail-group-list">
+                    {rows.map((s) => {
+                      const words = railRowWords(s, now);
+                      return (
+                      <div key={s.id} className="wk-rail-session-row" data-move-row={s.id}>
+                        <a
+                          href={s.path}
+                          onClick={go(s.path)}
+                          data-testid="rail-session"
+                          data-session-id={s.id}
+                          data-run-id={s.runId}
+                          data-run-ids={s.runIds.join(' ')}
+                          data-state={s.state}
+                          data-status={s.status.word}
+                          data-badge={s.badge}
+                          title={words.title}
+                          aria-label={words.label}
+                          aria-current={pathname === s.path ? 'page' : undefined}
+                          className="wk-rail-session"
+                        >
+                          <span aria-hidden data-testid="rail-session-dot" data-tone={s.status.tone} className={`wk-desk-dot wk-rail-dot wk-rail-dot--${s.status.tone}`} />
+                          <span className="wk-rail-session-title">{s.title}</span>
+                          {s.tag !== null && <span data-testid="rail-session-tag" className="wk-rail-session-tag">· {s.tag}</span>}
+                          {s.badge > 0 && <span aria-hidden className="wk-rail-badge wk-rail-badge--row">{s.badge}</span>}
+                        </a>
+                        <MoveToProject session={s} projectId={g.projectId} runs={runs} />
+                      </div>
+                      );
+                    })}
+                  </div>
                 )}
               </div>
-            )}
+              );
+            })}
+            <a href={DESK_VIEW_PATH.runs} onClick={go(DESK_VIEW_PATH.runs)} data-testid="rail-all-jobs" className="wk-rail-showmore wk-rail-alljobs">
+              {recent.hidden > 0 ? `All jobs · ${recent.hidden} more` : 'All jobs'}
+            </a>
           </div>
-          );
-        })}
+          )}
+        </section>
+        )}
       </div>
 
       <div className="wk-rail-foot">
-        {/* studio#421 r3 (change 18): the foot's group label, under the separator, styled like the
-            project groups — the links below are the "Workspace". */}
-        <p className="wk-rail-group" data-testid="rail-foot-label">Workspace</p>
-        {DESK_RAIL_LINKS.map((l) => (
-          <a key={l.dest} href={l.path} onClick={go(l.path)} data-testid={l.testId} data-nav-dest={l.dest} aria-current={current(l.path)} className="wk-rail-link wk-rail-link--secondary">
-            {l.label}
-          </a>
-        ))}
+        {navLink(BUILD_ITEM)}
       </div>
       {/* DES-SYSTEM-VIEW: Nerve Center, pinned last — the one way to the system dashboard. Its own dock
           so it stays on screen at the bottom of the phone drawer, which scrolls as one. */}

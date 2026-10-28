@@ -94,3 +94,26 @@ export function isReviewUnit(u: { stage?: unknown; role?: unknown }): boolean {
 export function responderKey(r: Responder): string {
   return r.role === 'seat' ? `seat:${r.cli ?? r.name}` : r.role;
 }
+
+/** Seats that are crew's own machinery (a deliver script, a tool step), never a helper building the work. */
+const NOT_A_HELPER = new Set(['bash', 'tool', 'shell', 'script', 'crew']);
+
+/** Whether a unit's seat is a helper (a coding-agent CLI), not crew's own machinery (a deliver script, a tool step). */
+export function isHelperSeat(cli: unknown): cli is string {
+  return typeof cli === 'string' && cli !== '' && !NOT_A_HELPER.has(cli.split('#')[0]!.toLowerCase());
+}
+
+/**
+ * (mockup ui-v2-gate) Who the job is waiting with at a gate: the BUILDER — the newest creator step at or before the
+ * gate (`role: creator`, a helper's seat), else the gate's own step when a helper runs it; `null` when neither names a
+ * helper (a hand-over's script, a plan), and the dock then says "the job is waiting".
+ */
+export function builderResponder(view: RunView | null, ord: number | null | undefined, roster: Roster): Responder | null {
+  if (view === null) return null;
+  const helper = isHelperSeat;
+  const at = typeof ord === 'number' ? ord : Number.POSITIVE_INFINITY;
+  const creators = view.units.filter((u) => u.role === 'creator' && u.ord <= at && helper(u.assigned_cli)).sort((a, b) => b.ord - a.ord);
+  if (creators[0] !== undefined) return seatResponder(creators[0].assigned_cli as string, roster);
+  const own = view.units.find((u) => u.ord === ord)?.assigned_cli;
+  return helper(own) ? seatResponder(own, roster) : null;
+}

@@ -28,6 +28,24 @@ SHOTS = REPO / "e2e" / "shots"
 report: dict = {"ok": False, "steps": {}}
 
 
+
+def all_jobs_text(page) -> str:
+    """The Jobs view's words across both of its lists (Active, then Finished at All time)."""
+    texts = []
+    page.get_by_test_id("desk-runs-group-active").click()
+    page.wait_for_timeout(200)
+    texts.append(page.evaluate("() => document.querySelector('[data-testid=desk-runs]')?.innerText ?? document.body.innerText"))
+    page.get_by_test_id("desk-runs-group-finished").click()
+    if page.get_by_test_id("desk-runs-refine").is_hidden():
+        page.get_by_test_id("desk-runs-tools").click()
+    alltime = page.get_by_test_id("desk-runs-alltime")
+    if alltime.count() > 0 and alltime.get_attribute("aria-pressed") != "true":
+        alltime.click()  # r-unfiled carries no start time
+    page.wait_for_timeout(300)
+    texts.append(page.evaluate("() => document.querySelector('[data-testid=desk-runs]')?.innerText ?? document.body.innerText"))
+    return "\n".join(texts)
+
+
 def check(step: str, ok: bool, **detail) -> None:
     report["steps"][step] = {"ok": bool(ok), **detail}
     if not ok:
@@ -47,8 +65,8 @@ errors: list[str] = []
 DASH = """() => ({
   desk: !!document.querySelector('[data-testid="project-desk"]'),
   title: document.querySelector('[data-testid="project-title"]')?.innerText ?? null,
-  // The tab bar's tabs plus the views under its More (2026-10-26): one set of Desk views.
-  tabs: [...document.querySelectorAll('[data-testid^="desk-tab-"], [data-testid^="desk-more-tab-"]')].map((t) => t.dataset.testid),
+  // A project page's tabs: every Desk view, flat (the ui-v2 nav regroup removed More).
+  tabs: [...document.querySelectorAll('[data-testid^="desk-tab-"]')].map((t) => t.dataset.testid),
   inbox: !!document.querySelector('[data-testid="desk-inbox"]'),
   blocks: !!document.querySelector('[data-testid="desk-blocks"]'),
   actions: [...document.querySelectorAll('[data-testid="project-actions"] [data-testid]')].map((a) => a.dataset.testid).filter((t) => t.startsWith('project-')),
@@ -71,8 +89,9 @@ with sync_playwright() as p:
         f"s.textContent = {json.dumps(HIDE_GATE_TOASTS)}; document.head.appendChild(s); }});")
     page.goto(f"{origin}/", wait_until="networkidle")
 
-    # 1. General has no agents block.
-    page.get_by_test_id("desk-rail-general").click()
+    # 1. General has no agents block (Settings is on the Build & settings page).
+    page.get_by_test_id("desk-rail-build").click()
+    page.get_by_test_id("build-link-settings").click()
     page.get_by_test_id("view-settings").wait_for(state="visible", timeout=8000)
     page.wait_for_timeout(400)
     general = page.evaluate("""() => ({ sections: [...document.querySelectorAll('.wk-section-title')].map((h) => h.innerText),
@@ -105,6 +124,11 @@ with sync_playwright() as p:
     page.get_by_test_id("rail-group-view-unfiled").click()
     page.wait_for_function("() => window.location.pathname === '/projects/default'", timeout=5000)
     page.get_by_test_id("project-desk").wait_for(state="visible", timeout=8000)
+    # The address with no `?tab=` is the project's calm home; its Work view (the dashboard) is `?tab=work`.
+    page.get_by_test_id("project-home").wait_for(state="visible", timeout=8000)
+    home_title = page.get_by_test_id("project-title").inner_text()
+    page.locator('[data-testid="project-view"][data-tab="work"]').click()
+    page.wait_for_function("() => window.location.search === '?tab=work'", timeout=5000)
     page.get_by_test_id("desk-inbox").wait_for(state="visible", timeout=8000)
     page.wait_for_timeout(500)
     unfiled = page.evaluate(DASH)
@@ -115,19 +139,17 @@ with sync_playwright() as p:
     page.route("**/api/v1/projects/legacy-spike", lambda r: r.fulfill(status=200, json={
         "project": {"id": "legacy-spike", "name": "legacy-spike", "description": None, "status": "active",
                     "scope": "project:legacy-spike", "created_at": 1, "updated_at": 1}, "members": []}))
-    page.goto(f"{origin}/projects/legacy-spike", wait_until="networkidle")
+    page.goto(f"{origin}/projects/legacy-spike?tab=work", wait_until="networkidle")
     page.get_by_test_id("desk-inbox").wait_for(state="visible", timeout=8000)
     page.wait_for_timeout(500)
     real = page.evaluate(DASH)
     page.unroute("**/api/v1/projects/legacy-spike")
-    check("unfiled-is-a-project-dashboard", unfiled["desk"] and unfiled["title"] == "Not in a project" and not unfiled["notFound"]
+    check("unfiled-is-a-project-dashboard", unfiled["desk"] and unfiled["title"] == "Not in a project" and home_title == "Not in a project" and not unfiled["notFound"]
           and unfiled["inbox"] and unfiled["blocks"] and unfiled["tabs"] == real["tabs"] and len(unfiled["tabs"]) >= 6
           and {"project-documents"} <= set(unfiled["actions"]), unfiled=unfiled, real=real)
     page.goto(f"{origin}/projects/default?tab=runs", wait_until="networkidle")
     page.wait_for_timeout(800)
-    page.get_by_text("All time", exact=False).first.click()  # r-unfiled carries no start time
-    page.wait_for_timeout(300)
-    jobs = page.evaluate("() => document.querySelector('[data-testid=\"desk-runs\"]')?.innerText ?? document.body.innerText")
+    jobs = all_jobs_text(page)
     check("unfiled-job-listed", "poke at the flaky CI job" in jobs and "stranded work from another client" in jobs, jobs=jobs[-700:])
 
     # 3b. Crew serves the synthesized project: its members are the dashboard's jobs.
@@ -139,10 +161,8 @@ with sync_playwright() as p:
     page.goto(f"{origin}/projects/default?tab=runs", wait_until="networkidle")
     page.get_by_test_id("project-desk").wait_for(state="visible", timeout=8000)
     page.wait_for_timeout(800)
-    page.get_by_text("All time", exact=False).first.click()
-    page.wait_for_timeout(300)
+    jobs2 = all_jobs_text(page)
     served = page.evaluate(DASH)
-    jobs2 = page.evaluate("() => document.querySelector('[data-testid=\"desk-runs\"]')?.innerText ?? document.body.innerText")
     check("crew-served-unfiled", served["title"] == "Not in a project" and "poke at the flaky CI job" in jobs2 and not served["notFound"], served=served)
     page.unroute("**/api/v1/projects/default")
 

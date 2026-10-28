@@ -78,8 +78,9 @@ test('the /health page clips at default 5-seat roster and must be scrollable to 
   // The Health page folded into Nerve Center (DES-SYSTEM-VIEW): the rail tile opens it.
   await page.getByTestId('desk-rail-nerve').click();
   await expect(page.getByTestId('nerve-center-page')).toBeVisible();
-  // Nerve Center's tabs: the seat rows are in CLIs, the evidence store in Governance.
-  await page.locator('[data-testid="nc-tab"][data-tab="clis"]').click();
+  // Nerve Center's overview: a helper tile opens its details (the CLIs tab, with the seat rows); the
+  // evidence store is in the Governance tab beside it.
+  await page.locator('[data-testid="nc-tile-open"][data-tab="clis"]').first().click();
   await expect(page.getByTestId('rail-seat-row')).toHaveCount(ROSTER.roster.length);
   // Each row renders as a healthy, keyed seat: a fixture that drifts from the wire contract
   // fails here instead of passing on a count of broken rows.

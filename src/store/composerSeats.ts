@@ -49,8 +49,10 @@ interface ComposerSeatsStore {
   dropped: string[];
   /** The opt-in seats turned ON. */
   picked: string[];
-  /** Turn one seat off (or back on); an opt-in seat toggles its explicit pick. */
-  toggle: (key: string) => void;
+  /** Turn one seat off (or back on); an opt-in seat toggles its explicit pick. `asPick`: toggle the
+   *  explicit pick for any seat that is off by default (PRODUCT-WORKS J4: a signed-out or benched
+   *  helper in the New job wizard). */
+  toggle: (key: string, asPick?: boolean) => void;
 }
 
 /** One composer's saved helper choice, under its own storage keys (studio#840). */
@@ -58,10 +60,10 @@ function createSeatChoice(droppedKey: string, pickedKey: string) {
   const store = create<ComposerSeatsStore>((set) => ({
     dropped: load(droppedKey),
     picked: load(pickedKey),
-    toggle: (key) => {
+    toggle: (key, asPick = false) => {
       // Re-read the stored choice first: another tab may have changed it since this one loaded
       // (codex r2 on #631) — a toggle applies to the latest choice, never overwrites it.
-      if (isOptInKey(key)) {
+      if (asPick || isOptInKey(key)) {
         const cur = load(pickedKey);
         const picked = cur.includes(key) ? cur.filter((k) => k !== key) : [...cur, key];
         save(picked, pickedKey);

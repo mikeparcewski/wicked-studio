@@ -20,7 +20,7 @@ import json
 import os
 import sys
 
-from uxfix_fixture import HIDE_GATE_TOASTS, REPO, ensure_build, set_fixture, start_server
+from uxfix_fixture import HIDE_GATE_TOASTS, REPO, ensure_build, open_more_about, set_fixture, start_server
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4484"))
 W, H = 1440, 700
@@ -118,6 +118,11 @@ with sync_playwright() as p:
     # ── 3. studio#835: the dead seat is named, with no approve that retries it ──────────
     page = new_page(ctx)
     row = gate_row(page, "r-7721b-dead", "3-dead-seat")
+    # ui-v2 gate: the headline names the dead seat; the why (who else could move it) is under More about this.
+    open_more_about(page)
+    page.wait_for_timeout(200)
+    row = page.evaluate(ROW)
+    page.screenshot(path=str(SHOTS / "desk-e2e7721r2-3-dead-seat-more.png"))
     keys = [k for k, _ in row["choices"]]
     check("835-says-why", row["dead"] is not None and "Copilot is out of quota." in row["dead"]
           and "No other helper is in this job" in row["dead"], dead=row["dead"])
@@ -135,9 +140,12 @@ with sync_playwright() as p:
     page.goto(f"{origin}/projects/scratch", wait_until="networkidle")
     page.wait_for_timeout(6000)
     page.screenshot(path=str(SHOTS / "desk-e2e7721r2-4-empty-project.png"))
-    busy = page.evaluate("() => document.querySelectorAll('[data-testid=\"desk-loading\"]').length")
-    listed = page.evaluate("() => !!document.querySelector('[data-testid=\"desk-inbox-list\"]')")
-    check("833-needs-settled", busy == 0 and listed, loading=busy, list=listed)
+    # ui-v2 project home: its Needs you section (project-home-needs) replaces the old inbox list; the skeleton is
+    # project-home-loading (and the old desk-loading, kept so no stale skeleton anywhere passes).
+    busy = page.evaluate("() => document.querySelectorAll('[data-testid=\"desk-loading\"], [data-testid=\"project-home-loading\"]').length")
+    listed = page.evaluate("() => !!document.querySelector('[data-testid=\"project-home-needs\"]')")
+    calm = page.evaluate("() => document.querySelector('[data-testid=\"project-needs-calm\"]')?.innerText ?? null")
+    check("833-needs-settled", busy == 0 and listed and calm == "Nothing here is waiting on you.", loading=busy, list=listed, calm=calm)
     page.close()
 
     # ── 5. studio#836: every Steer rule shows its reach ───────────────────────────────
@@ -154,7 +162,7 @@ with sync_playwright() as p:
       return el ? [el.dataset.reach, el.innerText.trim(), el.offsetWidth > 0] : null;
     })""")
     check("836-reach-on-every-row", len(reach) > 0 and all(x is not None and x[2] for x in reach)
-          and any(x[0] == "everywhere" and x[1] == "Everywhere" for x in reach), reach=reach[:8])
+          and any(x[0] == "everywhere" and x[1] == "applies to every repository" for x in reach), reach=reach[:8])
     hscroll = page.evaluate("() => document.documentElement.scrollWidth > document.documentElement.clientWidth")
     page.close()
 

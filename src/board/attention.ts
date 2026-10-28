@@ -33,9 +33,14 @@ export function waitingCount(rows: readonly NeedRow[]): number {
   return needCount(rows.filter((r) => needSection(r) === 'decision'));
 }
 
+/** The rows that "need you": decisions + failures, never reviews (the badge's set; the landing's card picks from it). */
+export function attentionRows<T extends NeedRow>(rows: readonly T[]): T[] {
+  return rows.filter((r) => { const s = needSection(r); return s === 'decision' || s === 'failure'; });
+}
+
 /** THE "need you" number (the rail and phone badge, the Desk): decisions + failures, never reviews. */
 export function attentionBadge(rows: readonly NeedRow[]): number {
-  return needCount(rows.filter((r) => { const s = needSection(r); return s === 'decision' || s === 'failure'; }));
+  return needCount(attentionRows(rows));
 }
 
 const FAIL_PREFIX = 'fail:';

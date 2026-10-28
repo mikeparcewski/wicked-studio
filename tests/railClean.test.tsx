@@ -5,7 +5,8 @@ import type { SessionView } from '../src/api/types.js';
 /**
  * The calm rail (studio-rail-clean): one-line titles with the full words in the hover title, a fold
  * per group that this viewer's browser remembers (and that survives storage failing), the folded
- * group's needs-you count, and "Show N more" for the rest of a group.
+ * group's needs-you count. The sidebar regroup (ui-v2, 2026-10-26): the groups sit under RECENT, which
+ * folds as one and shows at most five sessions between them, then "All jobs" (the Jobs page).
  */
 
 const RUNS: SessionView[] = Array.from({ length: 8 }, (_, i) => ({
@@ -61,17 +62,33 @@ describe('rows', () => {
   });
 });
 
-describe('Show N more', () => {
-  it('shows the first five, then all, then the first five again', () => {
+describe('Recent: at most five, then All jobs', () => {
+  it('shows five of the eight, the one that needs you among them, then All jobs with how many more', () => {
     rail();
-    expect(within(group()).getAllByTestId('rail-session')).toHaveLength(5);
-    const more = screen.getByTestId('rail-group-more');
-    expect(more).toHaveTextContent('Show 3 more');
-    expect(more).toHaveAttribute('aria-expanded', 'false');
-    fireEvent.click(more);
-    expect(within(group()).getAllByTestId('rail-session')).toHaveLength(8);
-    expect(more).toHaveTextContent('Show fewer');
-    fireEvent.click(more);
+    const rows = within(group()).getAllByTestId('rail-session');
+    expect(rows).toHaveLength(5);
+    expect(rows.some((r) => r.dataset.runId === 'u0')).toBe(true);
+    const all = screen.getByTestId('rail-all-jobs');
+    expect(all).toHaveAttribute('href', '/jobs');
+    expect(all).toHaveTextContent('All jobs · 3 more');
+    expect(screen.queryByTestId('rail-group-more')).toBeNull();
+  });
+
+  it('Recent folds as one (under the page groups), remembered for this viewer', () => {
+    const { unmount } = rail();
+    const toggle = screen.getByTestId('rail-recent-toggle');
+    expect(toggle).toHaveTextContent('Recent');
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    // Below the three page groups.
+    expect(screen.getByTestId('rail-nav').compareDocumentPosition(toggle) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByTestId('rail-group')).toBeNull();
+    expect(screen.queryByTestId('rail-all-jobs')).toBeNull();
+    unmount();
+    rail();
+    expect(screen.getByTestId('rail-recent-toggle')).toHaveAttribute('aria-expanded', 'false');
+    fireEvent.click(screen.getByTestId('rail-recent-toggle'));
     expect(within(group()).getAllByTestId('rail-session')).toHaveLength(5);
   });
 });
@@ -112,34 +129,47 @@ describe('folding a group', () => {
 });
 
 describe('the top of the rail (operator IA 2026-10-13)', () => {
-  it('the wordmark is the one link to the Desk; its name carries the needs-you badge', () => {
+  it('the wordmark is the one link to `/`, named "Home"; the needs-you badge rides it as its description (operator 2026-10-27)', () => {
     rail();
-    const home = screen.getByTestId('desk-rail-home');
+    const home = screen.getByTestId('desk-rail-wordmark');
     expect(home.tagName).toBe('A');
     expect(home).toHaveAttribute('href', '/');
-    expect(home).toHaveAccessibleName('wicked studio — Desk, 1 needs you');
+    expect(home).toHaveAttribute('aria-current', 'page');
+    expect(home).toHaveAccessibleName('Home');
+    expect(home).toHaveAccessibleDescription('1 needs you');
     expect(within(home).getByTestId('desk-rail-badge')).toHaveTextContent('1');
     expect(within(home).getByTestId('desk-rail-brand')).toHaveTextContent('wicked studio');
-    // No separate "Desk" item.
     expect(screen.getByTestId('session-rail').querySelectorAll('a[href="/"]')).toHaveLength(1);
+    // Home is no longer a WORK item.
+    expect(screen.queryByTestId('desk-rail-home')).toBeNull();
   });
 
-  it('a partial count says so: "Desk, 2+ need you"', () => {
+  it('a partial count says so: "2+ need you"', () => {
     settledPhase = 'partial';
     render(<SessionRail runs={RUNS} needRows={[...NEED, { ...NEED[0]!, key: 'fail:u1' }] as never} navigate={() => {}} pathname="/" />);
-    expect(screen.getByTestId('desk-rail-home')).toHaveAccessibleName('wicked studio — Desk, 2+ need you');
+    expect(screen.getByTestId('desk-rail-wordmark')).toHaveAccessibleDescription('2+ need you');
   });
 
-  it('with nothing waiting the link is just "Desk" and carries no badge', () => {
+  it('with nothing waiting the wordmark is just "Home" and carries no badge', () => {
     render(<SessionRail runs={RUNS} needRows={[]} navigate={() => {}} pathname="/" />);
-    expect(screen.getByTestId('desk-rail-home')).toHaveAccessibleName('wicked studio — Desk');
+    expect(screen.getByTestId('desk-rail-wordmark')).toHaveAccessibleName('Home');
+    expect(screen.getByTestId('desk-rail-wordmark')).not.toHaveAttribute('aria-describedby');
     expect(screen.queryByTestId('desk-rail-badge')).toBeNull();
   });
 
-  it('the action row sits where the Desk item was: four equal icons, New job · New project · Chat · Search (New job first, operator 2026-10-26) — each named (DES-SYSTEM-CHAT §1)', () => {
+  it('pressing the wordmark goes Home', () => {
+    const navigate = vi.fn();
+    render(<SessionRail runs={RUNS} needRows={[]} navigate={navigate} pathname="/jobs" />);
+    const home = screen.getByTestId('desk-rail-wordmark');
+    expect(home).not.toHaveAttribute('aria-current');
+    fireEvent.click(home);
+    expect(navigate).toHaveBeenCalledWith('/');
+  });
+
+  it('the action row sits under the wordmark: four equal icons, New job · New project · Chat · Search (New job first, operator 2026-10-26) — each named (DES-SYSTEM-CHAT §1)', () => {
     rail();
     const row = screen.getByTestId('desk-rail-actions');
-    expect(row.previousElementSibling).toBe(screen.getByTestId('desk-rail-home'));
+    expect(row.previousElementSibling).toBe(screen.getByTestId('desk-rail-wordmark'));
     const buttons = [...row.querySelectorAll('button')];
     expect(buttons.map((b) => b.dataset.testid)).toEqual(['desk-rail-new-job', 'desk-rail-new-project', 'desk-rail-chat', 'desk-rail-search']);
     // Icons only: no visible words, every one the same class (equal width), each with a tooltip.

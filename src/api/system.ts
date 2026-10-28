@@ -34,7 +34,18 @@ export interface WireSystemSnapshot {
     id: string; severity: 'red' | 'yellow'; source: 'infra' | 'cli' | 'run' | 'governance';
     title: string; reason: string; remedy: string; blocks: number; target: WireSystemTarget;
     action: { kind: WireSystemActionKind; label: string } | null;
+    /** api-types 0.140.0 (`capabilities.attentionRanked`): one root cause per item, ranked by impact. */
+    kind?: 'prevents' | 'slows'; blockedRunIds?: string[]; waitedSince?: string | null; unitsLeft?: number;
   }[];
+  /** api-types 0.140.0: work nobody resolved, with what it cost. */
+  unresolved?: {
+    id: string; runId: string; title: string; repo?: string | null; workflow?: string | null; status: string; why: 'failed' | 'superseded' | 'parked'; reason: string;
+    supersededBy?: string; since: string | null;
+    cost: { costUsd: number | null; tokens: { input: number; output: number } | null; wallMs: number | null };
+    actions: ('retry' | 'archive' | 'close_superseded')[];
+  }[];
+  unresolvedSpend?: { costUsd: number | null; tokens: { input: number; output: number } | null; costKnown: number };
+  toReview?: number | null;
   clis: {
     cli: string; label: string; state: 'signed_in' | 'signed_out' | 'benched' | 'unknown'; stateReason: string | null;
     benchedUntil?: string; canSignIn: boolean; councilEligible: boolean; workEligible: boolean; version: string | null;
@@ -93,6 +104,32 @@ export interface SystemAttention {
   reason: string | null;
   remedy: string | null;
   action: SystemAction | null;
+  /** (ranked crew) `prevents`: work can't move until someone acts; `slows`: the system slows it. */
+  kind?: 'prevents' | 'slows' | null;
+  /** (ranked crew) The runs this one cause holds. */
+  blockedRunIds?: string[];
+  /** (ranked crew) When the oldest held gate arrived (unix millis), or null. */
+  waitedSince?: number | null;
+  /** (ranked crew) The run the item points at, when it points at one. */
+  runId?: string | null;
+}
+
+/** (crew api-types 0.140.0) One run nobody has resolved, with what it cost. */
+export interface SystemUnresolved {
+  runId: string;
+  title: string;
+  /** The run's repo and workflow (look-alike items are grouped by them); `null` when crew did not say. */
+  repo: string | null;
+  workflow: string | null;
+  status: string;
+  why: 'failed' | 'superseded' | 'parked';
+  reason: string;
+  supersededBy: string | null;
+  since: number | null;
+  costUsd: number | null;
+  tokens: number | null;
+  wallMs: number | null;
+  actions: ('retry' | 'archive' | 'close_superseded')[];
 }
 
 export type CliState = 'signed_in' | 'signed_out' | 'benched' | 'unknown';
@@ -117,6 +154,8 @@ export interface SystemCli {
   tokens: number | null;
   /** Units per day, oldest first. */
   perDay: number[];
+  /** The window the stats cover, in days (crew counts 7), or null with no stats. */
+  statsDays: number | null;
   /** Why there are no stats (no event-log binding, the fold ran out of time). */
   statsNote: string | null;
   versionPin: { pinned: string | null; observed: string | null; matched: boolean | null } | null;
@@ -151,6 +190,14 @@ export interface SystemInfra {
   detail: string | null;
   checkedAt: number | null;
   timeoutMs: number | null;
+  /**
+   * The free-disk reading, when the row carries one (the `disk` row). Crew's `freeDisk` block (core#1138:
+   * the volume's free bytes and the floor below which jobs stop) wins where crew provides it; else the
+   * row's own `freeBytes` / `totalBytes`. `null` when the row says neither.
+   */
+  disk: { freeBytes: number; totalBytes: number | null; floorBytes: number | null } | null;
+  /** The host load, when the row carries one (the `load` row). */
+  load: { load1: number; cores: number | null } | null;
 }
 
 export interface SystemGovernanceCard {
@@ -163,11 +210,29 @@ export interface SystemGovernanceCard {
   remedy: string | null;
   /** The counts behind it, in words ("pass 18 · fail 3"). */
   breakdown: string | null;
+  /** The same counts as numbers (the Report draws them), or null when the wire carries none. */
+  counts: Record<string, number> | null;
+  /** The start of the window crew counted over (unix millis), when it says. */
+  since: number | null;
 }
 
 export interface SystemSnapshot {
   checkedAt: number;
+  /**
+   * The crew follows the one needs-you rule (`capabilities.attentionRanked`, api-types 0.140.0):
+   * `attention` IS the needs-you list, in crew's order, and its length is the number. False against
+   * an older crew, whose attention is a union and whose number is studio's own fold.
+   */
+  ranked?: boolean;
+  /** Crew's own light (with a ranked crew: green only when attention and unresolved are both empty). */
+  level?: 'green' | 'yellow' | 'red' | null;
   attention: SystemAttention[];
+  /** (ranked crew) Work nobody resolved; `[]` from an older crew. */
+  unresolved?: SystemUnresolved[];
+  /** (ranked crew) `unresolved`'s summed cost, `null` when none is known. */
+  unresolvedSpendUsd?: number | null;
+  /** (ranked crew) Pending proposals ("N to review"); `null` unknown or an older crew. */
+  toReview?: number | null;
   clis: SystemCli[];
   runs: SystemRun[];
   infra: SystemInfra[];
@@ -208,6 +273,22 @@ function action(a: Bag, target: Bag): SystemAction | null {
   return { kind, target: t, ord: num(target['gateOrd']), label: str(a['label']) };
 }
 
+/**
+ * A row's free-disk reading. `details.freeDisk` (core#1138's block: `freeBytes`, `volumeBytes`,
+ * `floorBytes`; or plain bytes) is read first, where crew provides it; then the row's `freeBytes` and
+ * `totalBytes`. Nothing measured stays `null`, never 0.
+ */
+export function diskReading(details: unknown): SystemInfra['disk'] {
+  const d = bag(details);
+  const fd = d['freeDisk'];
+  if (typeof fd === 'number' && Number.isFinite(fd)) return { freeBytes: fd, totalBytes: num(d['totalBytes']), floorBytes: null };
+  const f = bag(fd);
+  const free = num(f['freeBytes']);
+  if (free !== null) return { freeBytes: free, totalBytes: num(f['volumeBytes']) ?? num(d['totalBytes']), floorBytes: num(f['floorBytes']) };
+  const own = num(d['freeBytes']);
+  return own === null ? null : { freeBytes: own, totalBytes: num(d['totalBytes']), floorBytes: null };
+}
+
 /** The governance mode per scope, in words ("admitted", or "unscoped: admitted · repo: enforced"). */
 function modeWords(v: unknown): string | null {
   const m = bag(v);
@@ -223,10 +304,17 @@ function modeWords(v: unknown): string | null {
  */
 export function normalizeSnapshot(input: unknown): SystemSnapshot {
   const b = bag(input);
+  const spend = bag(b['unresolvedSpend']);
+  const level = b['level'];
   return {
     checkedAt: when(b['checkedAt']) ?? Date.now(),
+    // The ranked contract's own field; `readTick` also requires the capability.
+    ranked: Array.isArray(b['unresolved']),
+    level: level === 'green' || level === 'yellow' || level === 'red' ? level : null,
     attention: list(b['attention']).map((x, i) => {
       const a = bag(x);
+      const target = bag(a['target']);
+      const kind = a['kind'] === 'prevents' || a['kind'] === 'slows' ? a['kind'] : null;
       return {
         id: str(a['id']) ?? `attention-${i}`,
         level: a['severity'] === 'red' ? 'red' : 'yellow',
@@ -234,9 +322,36 @@ export function normalizeSnapshot(input: unknown): SystemSnapshot {
         text: str(a['title']) ?? 'something needs a look',
         reason: str(a['reason']),
         remedy: str(a['remedy']),
-        action: a['action'] === null || a['action'] === undefined ? null : action(bag(a['action']), bag(a['target'])),
+        action: a['action'] === null || a['action'] === undefined ? null : action(bag(a['action']), target),
+        kind,
+        blockedRunIds: list(a['blockedRunIds']).map(str).filter((id): id is string => id !== null),
+        waitedSince: when(a['waitedSince']),
+        runId: target['kind'] === 'run' ? str(target['runId']) : null,
       };
     }),
+    unresolved: list(b['unresolved']).map((x) => {
+      const u = bag(x);
+      const cost = bag(u['cost']);
+      const tok = bag(cost['tokens']);
+      const why = pick(u['why'], ['failed', 'superseded', 'parked'] as const, 'failed');
+      return {
+        runId: str(u['runId']) ?? '',
+        title: str(u['title']) ?? 'A job',
+        repo: str(u['repo']),
+        workflow: str(u['workflow']),
+        status: str(u['status']) ?? 'unknown',
+        why,
+        reason: str(u['reason']) ?? '',
+        supersededBy: str(u['supersededBy']),
+        since: when(u['since']),
+        costUsd: num(cost['costUsd']),
+        tokens: num(tok['input']) === null && num(tok['output']) === null ? null : (num(tok['input']) ?? 0) + (num(tok['output']) ?? 0),
+        wallMs: num(cost['wallMs']),
+        actions: list(u['actions']).filter((k): k is 'retry' | 'archive' | 'close_superseded' => k === 'retry' || k === 'archive' || k === 'close_superseded'),
+      };
+    }).filter((u) => u.runId !== ''),
+    unresolvedSpendUsd: num(spend['costUsd']),
+    toReview: num(b['toReview']),
     clis: list(b['clis']).map((x) => {
       const c = bag(x);
       const s = c['stats'] === null || c['stats'] === undefined ? null : bag(c['stats']);
@@ -259,6 +374,7 @@ export function normalizeSnapshot(input: unknown): SystemSnapshot {
         fallbacks: s === null ? null : num(s['fallbacks']),
         tokens: tok === null || (num(tok['input']) === null && num(tok['output']) === null) ? null : (num(tok['input']) ?? 0) + (num(tok['output']) ?? 0),
         perDay: s === null ? [] : list(s['perDay']).map((n) => num(n) ?? 0),
+        statsDays: s === null ? null : num(s['days']),
         statsNote: str(c['statsNote']),
         versionPin: pin === null ? null : {
           pinned: str(pin['pinned']),
@@ -299,6 +415,8 @@ export function normalizeSnapshot(input: unknown): SystemSnapshot {
         detail: raw(r['details']),
         checkedAt: when(r['checkedAt']),
         timeoutMs: num(r['timeoutMs']),
+        disk: diskReading(r['details']),
+        load: num(bag(r['details'])['load1']) === null ? null : { load1: num(bag(r['details'])['load1'])!, cores: num(bag(r['details'])['cores']) },
       };
     }),
     governance: list(b['governance']).map((x) => {
@@ -314,6 +432,8 @@ export function normalizeSnapshot(input: unknown): SystemSnapshot {
         detail: str(g['reason']),
         remedy: str(g['remedy']),
         breakdown: br.length === 0 ? null : br.map(([k, n]) => `${k.replace(/_/g, ' ')} ${String(n)}`).join(' · '),
+        counts: br.length === 0 ? null : Object.fromEntries(br) as Record<string, number>,
+        since: when(g['since']),
       };
     }),
   };

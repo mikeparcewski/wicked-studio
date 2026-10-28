@@ -1,3 +1,4 @@
+import { useRankedNeeds } from '../hooks/useRankedNeeds.js';
 import { useEffect, useReducer } from 'react';
 import type { SessionView } from '../api/types.js';
 import { sessionProjectId } from '../hooks/ambientProject.js';
@@ -65,7 +66,11 @@ export function GateNotifications({ onSelect, runId, projectId = null, runs = []
   const [, bump] = useReducer((n: number) => n + 1, 0);
 
   const all = Object.values(gates);
-  const scoped = (runId ? all.filter((g) => g.runId === runId) : all).filter((g) => !hideRuns.has(g.runId));
+  // A ranked crew (api-types 0.140.0) says which runs are held: a superseded gate or an answered ask
+  // is not announced as "waiting", so the strip never counts more than Needs you does.
+  const ranked = useRankedNeeds();
+  const held = ranked === null ? null : new Set(ranked.attention.flatMap((a) => a.blockedRunIds ?? []));
+  const scoped = (runId ? all.filter((g) => g.runId === runId) : all).filter((g) => !hideRuns.has(g.runId) && (held === null || held.has(g.runId)));
 
   // B4 (§7.1): inside a project shell, keep only THIS project's gates as
   // cards. DTO claim first (CREW-UX-2), membership mirror second; a gate we

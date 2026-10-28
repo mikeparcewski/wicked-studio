@@ -153,7 +153,8 @@ with sync_playwright() as p:
             counts[path] += 1
 
     page.on("request", tap)
-    page.goto(f"{origin}/", wait_until="networkidle")
+    # Home v2: the queue is in Needs you in full (/needs).
+    page.goto(f"{origin}/needs", wait_until="networkidle")
     page.get_by_test_id("needs-you-queue").wait_for(state="visible", timeout=15000)
     page.wait_for_timeout(1500)
     cold = dict(counts)
@@ -164,7 +165,7 @@ with sync_playwright() as p:
     page.wait_for_timeout(1500)
     nav(page, "/everything")
     page.wait_for_timeout(1000)
-    nav(page, "/")
+    nav(page, "/needs")
     page.get_by_test_id("needs-you-queue").wait_for(state="visible", timeout=15000)
     page.wait_for_timeout(1500)
     walk = dict(counts)

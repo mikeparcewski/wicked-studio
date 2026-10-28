@@ -302,7 +302,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   const [daemonQe, setDaemonQe] = useState(false);
   // Settings › System: QE acceptance off on this computer (`capabilities.qeAcceptance`) — the service skips it, labelled.
   const [qeOff, setQeOff] = useState(false);
-  const [skipQe, setSkipQe] = useState(false);
+  const [skipQe, setSkipQe] = useState(prefill?.skipQe === true);
   const [skipQeReason, setSkipQeReason] = useState('');
   const [forceQe, setForceQe] = useState(false);
   /** studio#275: the BASE skill posture for the next launch (`GET /health.baseSkill`); `undefined`
@@ -413,7 +413,11 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   // cannot know. A change of that target clears the word: a tick is never carried to another one.
   const qeTarget = selection.plan === null ? launchWorkflow : '';
   const offerQe = daemonQe && qeTarget !== '' && workflowRequiresQe(workflows.find((w) => w.id === qeTarget));
+  // A tick a prefill brought (a refused hand-over's "Skip QE with a reason") stands for the workflow it came with.
+  const qeTargetSeen = useRef(qeTarget);
   useEffect(() => {
+    if (qeTargetSeen.current === qeTarget) return;
+    qeTargetSeen.current = qeTarget;
     setSkipQe(false);
     setSkipQeReason('');
     setForceQe(false);
@@ -1586,7 +1590,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
           className="text-xs rounded-xl px-4 py-2"
           style={{ background: 'var(--status-fail-dim)', border: '1px solid var(--status-fail)', color: 'var(--status-fail)', margin: 0 }}
         >
-          Send is off: no selected seat can take this run — {noSeatReason}. Sign a seat in from Settings or select another
+          Send is off: no selected seat can take this run — {noSeatReason}. Sign a seat in on the Agents page or select another
           seat, then send.
         </p>
       )}
