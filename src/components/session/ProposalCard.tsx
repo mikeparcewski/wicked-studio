@@ -220,7 +220,9 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
     if (reason === '' || sending.current || gate === undefined) return;
     sending.current = true;
     const deliver = { deliver: { branch: (view.session as unknown as { run_branch?: string }).run_branch ?? null, repo: null, card: deliverLine(view, gate) } };
-    commitGateDecision(runId, { approve: true, action: SKIP_QE_ACTION, amend: reason } as unknown as GateAnswer,
+    // crew#1181's offer (`GET /runs/:id/gate .skipQe`, action `skip_qe`, a reason required); the gate's `ord` pins the
+    // answer to this hand-over (a moved gate is a 409, never a skip somewhere else).
+    commitGateDecision(runId, { approve: true, action: SKIP_QE_ACTION, amend: reason, ord: gate.ord } as unknown as GateAnswer,
       { ...deliver, receipt: { kind: 'deliver', chosenLabel: SKIP_QE_SEND } })
       .then((outcome) => { if (outcome === 'sent') setSkip({ open: false, reason: '' }); })
       .catch(() => { /* the refusal is in the shared action state, which the card renders */ })

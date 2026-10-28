@@ -297,6 +297,6 @@ describe('studio#923: a hand-over QE refused takes the skip in place', () => {
     fireEvent.click(send);
     await act(async () => { await flushDecisionsForTest(); });
     expect(confirm).toHaveBeenCalledTimes(1);
-    expect(confirm.mock.calls[0]![1]).toMatchObject({ approve: true, action: 'skip_qe', amend: 'The seats could not install deps; I ran the tests myself.' });
+    expect(confirm.mock.calls[0]![1]).toMatchObject({ approve: true, action: 'skip_qe', amend: 'The seats could not install deps; I ran the tests myself.', ord: 3 });
   });
 });
