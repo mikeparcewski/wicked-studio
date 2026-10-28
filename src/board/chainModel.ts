@@ -90,6 +90,8 @@ function humanize(id: string): string {
 export const STEP_WORD: Readonly<Record<string, string>> = {
   'pa-scope': 'Scope', scope: 'Scope', clarify: 'Clarify',
   design: 'Plan', plan: 'Plan', architecture: 'Plan', 'test-plan': 'Test plan', test_plan: 'Test plan',
+  // (J4 0.16.6) core's bug-fix phases by their own names: reproduce read "Plan" and triage "Research" (their catalog blocks).
+  triage: 'Triage', reproduce: 'Reproduce',
   build: 'Build', implement: 'Build', fix: 'Fix', produce: 'Write',
   'adversarial-review': 'Challenge', critique: 'Review', review: 'Review', 'code-review': 'Review',
   'security-review': 'Security check', security_review: 'Security check',

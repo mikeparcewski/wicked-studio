@@ -57,12 +57,29 @@ describe('the run as a conversation (DES-CHAT-NATIVE-RUN)', () => {
       { type: 'gateDecided', ord: 1, allow: true, ts: 2 },
       { type: 'awaitingHuman', ord: 3, prompt: 'Unit 3 verdict is NOT PASS', ts: 3 },
       { type: 'gateDecided', ord: 3, allow: false, ts: 4 },
+      // The engine passed step 5 itself: nobody approved it, so nothing is said for it.
       { type: 'gateDecided', ord: 5, allow: true, ts: 5 },
     ] as unknown as CoreEvent[];
     expect(decisionMessages(events)).toEqual([
-      { ord: 1, at: 2, text: 'Approved the plan' }, { ord: 3, at: 4, text: 'Sent it back' }, { ord: 5, at: 5, text: 'Approved' },
+      { ord: 1, at: 2, text: 'Approved the plan', by: 'you' }, { ord: 3, at: 4, text: 'Sent it back', by: 'you' },
     ]);
     expect(decisionMessages(null)).toEqual([]);
+  });
+
+  it('(J4 0.16.6) the job\'s own rounds are the job\'s: "The job retried automatically", never your "Sent it back"', () => {
+    // Run 115fabdb ord 6: the floor failed, the engine sent it back itself (the automatic floor round), the no-change
+    // answer failed again and the engine asked you; you answered with your own judgment.
+    const events = [
+      { type: 'gateDecided', ord: 6, allow: false, ts: 10 },
+      { type: 'unitReworkAmended', ord: 6, ts: 11 }, { type: 'resumed', ord: 6, ts: 11 },
+      { type: 'gateDecided', ord: 6, allow: false, ts: 20 },
+      { type: 'gateEscalated', ord: 6, ts: 20 }, { type: 'awaitingHuman', ord: 6, prompt: 'Unit 6 failed its deterministic floor', ts: 20 },
+      { type: 'resumed', ord: 6, ts: 30 }, { type: 'gateDecided', ord: 6, allow: true, ts: 30 },
+    ] as unknown as CoreEvent[];
+    expect(decisionMessages(events)).toEqual([
+      { ord: 6, at: 10, text: 'The job retried automatically', by: 'job' },
+      { ord: 6, at: 30, text: 'Approved', by: 'you' },
+    ]);
   });
 
   it('a step’s output is concise: the verdict header is lifted, long output is cut at a paragraph, never in a fence', () => {

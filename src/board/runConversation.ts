@@ -29,8 +29,11 @@ export interface StepMessage {
 export interface DecisionMessage {
   ord: number;
   at: number;
-  /** What you did, in your words: "Approved the plan", "Approved", "Sent it back". */
+  /** What was done, in words: "Approved the plan", "Approved", "Sent it back", "The job retried automatically". */
   text: string;
+  /** Who acted (J4 0.16.6: the thread said "Sent it back" for the engine's own rounds): you answered a question the job
+   *  asked, or the job decided on its own. */
+  by: 'you' | 'job';
 }
 
 /** The step words the thread uses for a unit key or catalog id (one vocabulary with the chain line). */
@@ -95,23 +98,48 @@ export function planSteps(view: SessionView, chain: ChainModel): string[] {
 
 type Ev = CoreEvent & { ord?: unknown; allow?: unknown; prompt?: unknown; gateKind?: unknown; ts?: unknown };
 
-/** Your answers to the run's gates, from its event log: each `gateDecided` after the question it answered. */
+/**
+ * The run's gate decisions, from its event log, labelled by who made them. A `gateDecided` answers YOU only when it
+ * answers a question the job asked (`awaitingHuman` for that step, still open). The engine decides every other gate
+ * itself: a pass says nothing here (the step's own message does), and a denial the job retries on its own — the
+ * automatic floor round, a no-change answer — is "The job retried automatically", never your "Sent it back". A denial
+ * that stops to ask you is the question itself (the dock), not a message.
+ */
 export function decisionMessages(events: readonly CoreEvent[] | null | undefined): DecisionMessage[] {
   if (events === null || events === undefined) return [];
   const asked = new Map<number, { plan: boolean }>();
   const out: DecisionMessage[] = [];
-  for (const raw of events) {
-    const e = raw as Ev;
+  const list = events as readonly Ev[];
+  for (let i = 0; i < list.length; i++) {
+    const e = list[i]!;
     const ord = typeof e.ord === 'number' ? e.ord : null;
     if (ord === null) continue;
     if (e.type === 'awaitingHuman') {
       const prompt = typeof e.prompt === 'string' ? e.prompt : '';
       asked.set(ord, { plan: e.gateKind === 'plan_approval' || /^\s*approve plan\b/i.test(prompt) });
     } else if (e.type === 'gateDecided') {
-      const q = asked.get(ord);
       const at = typeof e.ts === 'number' ? e.ts : 0;
-      const text = e.allow === true ? (q?.plan === true ? 'Approved the plan' : 'Approved') : (q?.plan === true ? 'Turned the plan down' : 'Sent it back');
-      out.push({ ord, at, text });
+      const q = asked.get(ord);
+      if (q !== undefined) {
+        asked.delete(ord);
+        const text = e.allow === true ? (q.plan ? 'Approved the plan' : 'Approved') : (q.plan ? 'Turned the plan down' : 'Sent it back');
+        out.push({ ord, at, text, by: 'you' });
+        continue;
+      }
+      if (e.allow === true) continue;
+      // What the job did next with this step: retried it on its own, or stopped to ask.
+      for (let j = i + 1; j < list.length; j++) {
+        const n = list[j]!;
+        if (n.ord !== ord) continue;
+        if (n.type === 'awaitingHuman' || n.type === 'gateEscalated' || n.type === 'gateDecided') break;
+        if (n.type === 'unitReworkAmended' || n.type === 'resumed' || n.type === 'unitDispatched') {
+          out.push({ ord, at, text: 'The job retried automatically', by: 'job' });
+          break;
+        }
+      }
+    } else if (e.type === 'unitDispatched' || e.type === 'resumed') {
+      // A question closed by something other than a gate answer (a reassign, a rewind) is not open any more.
+      if (e.type === 'unitDispatched') asked.delete(ord);
     }
   }
   return out;

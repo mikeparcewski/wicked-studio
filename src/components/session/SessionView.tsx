@@ -1,3 +1,5 @@
+import { useSilentStep } from '../../hooks/useSilentStep.js';
+import { silentWords } from '../../board/silentStep.js';
 import { beginChatOpen, chatOpened, useChatFlow } from '../../store/chatFlow.js';
 import { useProjectsStore } from '../../store/projects.js';
 import { Fragment, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from 'react';
@@ -396,7 +398,10 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
   const state: SessionState = mine.some((v) => runState(v) === 'waiting') ? 'waiting'
     : mine.some((v) => runState(v) === 'working') ? 'working'
       : mine.length > 0 ? runState(mine[mine.length - 1]!) : 'quiet';
-  const badge = mine.length > 0 ? headerBadge(mine, state) : null;
+  // (J4 0.16.6) A step silent past crew's quiet mark is not "Working": the header says how long it has said nothing.
+  const silent = useSilentStep(mine.length > 0 ? mine[mine.length - 1] : undefined);
+  const silentRunId = silent !== null ? mine[mine.length - 1]!.session.id : null;
+  const badge = mine.length > 0 ? (state === 'working' && silent !== null ? { word: silentWords(silent), tone: 'gate' as const } : headerBadge(mine, state)) : null;
   // The banner below the header: each thing here that waits on the operator (the Needs-you rows about these runs).
   const gates = useGateStore((s) => s.gates);
   const waiting = useMemo(() => waitingItems(needRows, mine, gates, Date.now()), [needRows, mine, gates]);
@@ -1093,7 +1098,7 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
                 <div key={e.key} data-testid="session-working" data-run-id={e.runId} data-object={`step:${e.runId}:${e.ord}`} className="wk-chat-working">
                   <span aria-hidden className="wk-chat-working-dots"><i /><i /><i /></span>
                   {/* rig 0.15.8: the step in the chain's own word ("Check", never "Verify" beside it). */}
-                  <span data-testid="session-working-text" aria-live="polite"><span className="wk-chat-working-who">{who.role === 'crew' ? 'studio' : who.name}</span> Working on {workingStepWord(e.step)}…</span>
+                  <span data-testid="session-working-text" data-silent={e.runId === silentRunId ? 'true' : 'false'} aria-live="polite"><span className="wk-chat-working-who">{who.role === 'crew' ? 'studio' : who.name}</span> {e.runId === silentRunId && silent !== null ? `${silentWords(silent).replace(/^No/, 'no')} on ${workingStepWord(e.step)}` : `Working on ${workingStepWord(e.step)}…`}</span>
                   {/* rig 0.15.8: the composer says "message a working step from its ⋯" — this is that ⋯. */}
                   <OverflowMenu label={`More for ${workingStepWord(e.step)}`} data-testid="session-working-menu"
                     items={[{ id: 'message', label: MESSAGE_STEP_LABEL, onSelect: () => openSheet({ kind: 'step', runId: e.runId, ord: e.ord }, undefined, { compose: true }) }]} />

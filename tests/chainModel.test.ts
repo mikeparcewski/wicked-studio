@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import type { SessionView } from '../src/api/types.js';
 import type { RunTeamResponse, TeamRow } from '../src/api/teamPlan.js';
-import { blockOf, chainFromTeam, chainFromUnits, chainOf, chainSentence, planStepLabel, stepLabelOf } from '../src/board/chainModel.js';
+import { blockOf, chainFromTeam, chainFromUnits, chainOf, chainSentence, gatePlanLabels, planStepLabel, stepLabelOf } from '../src/board/chainModel.js';
 import { EMPTY_FOLD, foldFrame, foldRows, hydrateFold, teamFrameOf } from '../src/store/teamPlan.js';
 
 /**
@@ -363,5 +363,14 @@ describe('studio#574: planStepLabel — the chain’s rule for an {id, catalog} 
     const ids = ['pa-scope', 'clarify', 'design', 'build', 'adversarial-review', 'test', 'review', 'deliver'];
     const catalogs = ['understand', 'understand', 'design', 'build', 'review', 'test', 'review', 'deliver'];
     expect(ids.map((id, i) => planStepLabel(id, catalogs[i]!))).toStrictEqual(ids.map((id) => stepLabelOf(id)));
+  });
+});
+
+describe('(J4 0.16.6) a bug-fix plan names its own phases', () => {
+  it('core\'s reproduce and triage read as themselves, never "Plan" and "Research"', () => {
+    const prompt = 'Approve plan rev 2 before unit 2 runs (manual mode; band 20-39; manual mode): pa-scope → triage → reproduce → fix → review (floor) → verify → deliver. Floor added: review. Approve, approve with an edited plan, or reject.';
+    expect(gatePlanLabels(prompt)?.labels).toEqual(['Scope', 'Triage', 'Reproduce', 'Fix', 'Review', 'Check', 'Deliver']);
+    expect(planStepLabel('reproduce', 'design')).toBe('Reproduce');
+    expect(planStepLabel('triage', 'understand')).toBe('Triage');
   });
 });

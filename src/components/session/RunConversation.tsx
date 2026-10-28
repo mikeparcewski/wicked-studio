@@ -5,7 +5,7 @@ import { IDLE_GATE_ACTION, useGateActionStore } from '../../board/gateActions.js
 import { finishedDeliveryArm, proposalKindOf, statusSentence } from '../../board/proposalCard.js';
 import type { Responder } from '../../board/responder.js';
 import { builderResponder, gateResponder, isReviewUnit, seatResponder } from '../../board/responder.js';
-import { approvingReviewers, conciseOutput, decisionMessages, finalWords, planSteps, stepMessages, testCountOf, type StepMessage } from '../../board/runConversation.js';
+import { approvingReviewers, conciseOutput, decisionMessages, finalWords, planSteps, stepMessages, testCountOf, type DecisionMessage, type StepMessage } from '../../board/runConversation.js';
 import { isCliSeat, seatLabel } from '../../board/seatNames.js';
 import { jobTitle } from '../../board/deskWords.js';
 import { ORPHANED_LINE, orphanedOf, runState } from '../../board/sessionModel.js';
@@ -136,6 +136,16 @@ function AssistantMessage({ who, runId, suffix = null, testId, children, extra =
       <div className="wk-chat-body">{children}</div>
     </div>
   );
+}
+
+/** A decision the JOB made on its own (an automatic retry round): a quiet line in the flow, never your bubble. */
+function JobLine({ text }: { text: string }): React.ReactElement {
+  return <p data-testid="chat-job-decision" className="wk-chat-quiet wk-chat-job">{text}</p>;
+}
+
+/** One gate decision, said by who made it. */
+function DecisionLine({ d }: { d: DecisionMessage }): React.ReactElement {
+  return d.by === 'job' ? <JobLine text={d.text} /> : <YouBubble text={d.text} testId="chat-you-decision" />;
 }
 
 /** Your answer to one of the run's questions, as your own bubble. */
@@ -315,14 +325,14 @@ export function RunBlock({ view, badge, sessionId, navigate, solo = null }: {
           {null}
         </Docked>
       )}
-      {decisions.filter((d) => d.ord === planOrd).map((d) => <YouBubble key={`d${d.ord}-${d.at}`} text={d.text} testId="chat-you-decision" />)}
+      {decisions.filter((d) => d.ord === planOrd).map((d) => <DecisionLine key={`d${d.ord}-${d.at}`} d={d} />)}
       {/* The plan editor, only when you asked to edit (it is the plan's own artifact). */}
 
 
       {/* 2. One message per finished step, then your answer to a question it raised. */}
       {steps.map((s) => (
         <StepTurn key={s.ord} runId={id} step={s} who={s.cli !== null ? seatResponder(s.cli, roster) : STUDIO} checkWord={checkOf(s)} onOpen={openSteps}
-          answers={decisions.filter((d) => d.ord === s.ord && d.ord !== planOrd).map((d) => d.text)} />
+          answers={decisions.filter((d) => d.ord === s.ord && d.ord !== planOrd)} />
       ))}
 
       {/* 3. A question it is asking now (not the plan, not the hand-over): in the flow, answered here. */}
@@ -394,12 +404,12 @@ export function RunBlock({ view, badge, sessionId, navigate, solo = null }: {
 }
 
 function StepTurn({ runId, step, who, checkWord, onOpen, answers }: {
-  runId: string; step: StepMessage; who: Responder; checkWord: string | null; onOpen: () => void; answers: string[];
+  runId: string; step: StepMessage; who: Responder; checkWord: string | null; onOpen: () => void; answers: readonly DecisionMessage[];
 }): React.ReactElement {
   return (
     <>
       <StepMessageView runId={runId} step={step} who={who} checkWord={checkWord} onOpen={onOpen} />
-      {answers.map((t, i) => <YouBubble key={i} text={t} testId="chat-you-decision" />)}
+      {answers.map((d, i) => <DecisionLine key={i} d={d} />)}
     </>
   );
 }
