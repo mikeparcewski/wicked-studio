@@ -40,7 +40,7 @@ import { qeGateOf, QE_RETRY_LABEL, QE_RETRY_NOTE_LABEL, QE_RETRY_NOTE_TITLE, QE_
 import { waitsForJudge } from './assuranceModel.js';
 import { OPERATOR_JUDGMENT_LABEL, OPERATOR_JUDGMENT_TITLE, REJUDGE_ACTION, REJUDGE_LABEL, rejudgeTitle, type RejudgeOffer } from './rejudge.js';
 import { engineNamesFloorOverride, FLOOR_OVERRIDE_ACTION, FLOOR_OVERRIDE_CONSEQUENCE, FLOOR_OVERRIDE_KEY, FLOOR_OVERRIDE_TITLE, offersDeliverFloorOverride, offersFloorOverride } from './floorOverride.js';
-import { failingOnFace, type FailingOnFace } from './failingChecks.js';
+import { FACE_MAX, failingOnFace, failingSplit, standingFloor, type FailingOnFace, type FailingSplit } from './failingChecks.js';
 import { deliverLift } from '../components/deliverLiftModel.js';
 
 /**
@@ -502,13 +502,30 @@ function withDepth(base: BaseRowModel, input: SessionGateInput): GateRowModel {
   // studio#761: a QE review that recorded no verdict judged nothing — the retry's consequence is its
   // own, and there are no failing criteria to list beside the creator's claims.
   const qeNoVerdict = base.qe?.outcome === 'no-verdict';
+  // rig 0.15.8: the failing tests on the face — this gate's own failed floor only (an earlier unit's
+  // floor is not what this gate asks about).
+  // A refused hand-over's failure is the deliver phase's own re-verify, which emits no gate verdict
+  // (pr-xreview on studio#899): read it off the lift story for this gate's ord.
+  // (J4 0.16.6) A no-change answer re-runs nothing: the engine keeps the unit's last floor on that tree, and the face
+  // names its failures (it named none); the engine's own words split them when no record is in hand.
+  const failingTests = base.refusal !== undefined
+    ? failingOnFace(deliverLift(events, gate.ord)?.reverify ?? null)
+    : raw !== null && repoChecksFailed(raw, gate.ord)
+      ? failingOnFace(standingFloor(events, gate.ord, raw.floor), FACE_MAX, escalationSummaryFor(events, gate.ord) ?? gate.prompt)
+      : raw !== null && raw.ord === gate.ord && raw.outcome === 'fail' ? failingOnFace(raw.floor) : null;
+  const freshCount = failingTests?.split !== undefined ? failingTests.split.fresh.length : null;
   const overrideSuggested = base.recommended !== null && base.choices[base.recommended]?.key === FLOOR_OVERRIDE_KEY;
+  const namedBack = base.recommended !== null && base.choices[base.recommended]?.label === SEND_BACK_NAMED_LABEL ? base.choices[base.recommended]! : null;
   const consequence = qeNoVerdict
     ? 'Only the QE check and its review run again; the earlier steps are kept'
+    : namedBack !== null
+    ? namedBack.title
     : overrideSuggested
     ? FLOOR_OVERRIDE_CONSEQUENCE
     : floorFix
-    ? `A seat other than this phase makes the fix from the ${rec!.items.length > 0 ? `${rec!.items.length} failing check${rec!.items.length === 1 ? '' : 's'}` : 'note'}; only the floor re-runs`
+    ? `A seat other than this phase makes the fix from ${freshCount !== null
+      ? freshCount > 0 ? `the ${freshCount === 1 ? 'test' : `${freshCount} tests`} only this change fails` : 'your note (every failure fails on the base too)'
+      : rec!.items.length > 0 ? `the ${rec!.items.length} failing check${rec!.items.length === 1 ? '' : 's'}` : 'note'}; only the floor re-runs`
     : suggested && rec!.consequence !== '' ? rec!.consequence : null;
   const source = gateSourceLine(gate.gateKind ?? gateFrameFor(events, gate.ord)?.gateKind ?? null);
   const overflow = [...base.overflow];
@@ -522,13 +539,6 @@ function withDepth(base: BaseRowModel, input: SessionGateInput): GateRowModel {
       title: offer.consequence,
     });
   }
-  // rig 0.15.8: the failing tests on the face — this gate's own failed floor only (an earlier unit's
-  // floor is not what this gate asks about).
-  // A refused hand-over's failure is the deliver phase's own re-verify, which emits no gate verdict
-  // (pr-xreview on studio#899): read it off the lift story for this gate's ord.
-  const failingTests = base.refusal !== undefined
-    ? failingOnFace(deliverLift(events, gate.ord)?.reverify ?? null)
-    : raw !== null && raw.ord === gate.ord && raw.outcome === 'fail' ? failingOnFace(raw.floor) : null;
   return {
     ...base, overflow, consequence, source,
     failing: qeNoVerdict ? [] : rec?.items ?? [],
@@ -912,15 +922,29 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
     // rig 0.15.8: when the engine names the operator's override as the way through (a red base it cannot
     // separate from the change), that is the suggestion — a retry or a fix would loop on the base's failures.
     const overrideAt = escInline.findIndex((c) => c.key === FLOOR_OVERRIDE_KEY);
-    const overridePath = overrideAt >= 0 && engineNamesFloorOverride(verdict, summary ?? null);
+    // (J4 0.16.6) Failures only this change has (the engine's per-test split, its structured base comparison, or its
+    // words): the work is what failed, so the face leads with sending them back, named — never the operator's own
+    // judgment, which would override them too.
+    const split = gateFloorSplit(events, gate, verdict);
+    const changeOnly = split !== null && split.fresh.length > 0 ? split.fresh : null;
+    const overridePath = overrideAt >= 0 && changeOnly === null && engineNamesFloorOverride(verdict, summary ?? null);
+    const backAt = changeOnly !== null ? escInline.findIndex((c) => c.key === 'send-back' && c.decision !== null) : -1;
+    if (backAt >= 0) {
+      const n = changeOnly!.length;
+      escInline[backAt] = { ...escInline[backAt]!, label: SEND_BACK_NAMED_LABEL,
+        title: `Send ${n === 1 ? 'the test' : `the ${n} tests`} only this change fails back to the builder, named, so it fixes just ${n === 1 ? 'that' : 'those'}.` };
+    }
     const recommended = deniedUnit ? (deniedUnitJudgedOk(verdict) ? 0 : null)
       : qeNoVerdict ? 0
         : rejudgeOffered ? 0
-          : overridePath ? overrideAt
-            : recommendedChoiceIndex(escInline, rec);
+          : backAt >= 0 ? backAt
+            : overridePath ? overrideAt
+              : changeOnly !== null && escInline[recommendedChoiceIndex(escInline, rec) ?? -1]?.key === FLOOR_OVERRIDE_KEY ? null
+                : recommendedChoiceIndex(escInline, rec);
+    if (backAt >= 0) noteDefault = namedSendBackNote(changeOnly!.slice(0, FACE_MAX * 2));
     // A retry with findings is taken with ITS note (a validator's failing checks are not "the
     // reviewer's"), so the note field opens on the move's own prefill.
-    if (!deniedUnit && !qeNoVerdict && !rejudgeOffered && !overridePath && recommended !== null && rec?.kind === 'retry-findings' && rec.prefill !== null) {
+    if (!deniedUnit && !qeNoVerdict && !rejudgeOffered && !overridePath && backAt < 0 && recommended !== null && rec?.kind === 'retry-findings' && rec.prefill !== null) {
       noteDefault = rec.prefill;
     }
     return { reason, question, choices: escInline, overflow, noteDefault, recommended, detailItems, ...(qe !== null ? { qe } : {}), ...(deadSeat !== null ? { deadSeat } : {}), ...(judgeWait ? { operatorJudgment } : {}), ...(withheld.length > 0 ? { withheldSeats: withheld } : {}) };
@@ -968,4 +992,27 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
   }
 
   return null;
+}
+
+/** The label of the send-back the face leads with when the floor failed on tests only this change has. */
+export const SEND_BACK_NAMED_LABEL = 'Send back with the failing tests named';
+
+/** A failed repo-checks floor's verdict (the only gate the per-test split is about). */
+function repoChecksFailed(verdict: { ord: number | null; outcome: string; denial: { source?: string | null } | null } | null, ord: number): boolean {
+  const source = verdict?.denial?.source;
+  return verdict !== null && verdict.ord === ord && verdict.outcome === 'fail' && (source === 'repo_checks' || source === 'repo_checks_timeout');
+}
+
+/**
+ * (J4 0.16.6) The failed floor's failures told apart for THIS gate: its own floor record, else the one the engine kept
+ * for the unchanged tree, else the engine's words. `null` on any other gate, or when nothing tells them apart.
+ */
+export function gateFloorSplit(events: readonly CoreEvent[], gate: Pick<OpenGate, 'ord' | 'prompt'>, verdict: Parameters<typeof repoChecksFailed>[0] & { floor: Parameters<typeof standingFloor>[2] } | null): FailingSplit | null {
+  if (!repoChecksFailed(verdict, gate.ord)) return null;
+  return failingSplit(standingFloor(events, gate.ord, verdict!.floor), escalationSummaryFor(events, gate.ord) ?? gate.prompt);
+}
+
+/** The note a named send-back opens with: the tests only this change has, and nothing else. */
+export function namedSendBackNote(fresh: readonly string[]): string {
+  return `Fix only the test${fresh.length === 1 ? '' : 's'} this change broke (the others fail on the base too): ${fresh.join(', ')}`;
 }

@@ -2,7 +2,7 @@ import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 
 import type { RosterSeat, SessionView as RunView } from '../../api/types.js';
 import { QeRefusalWarning } from '../QeRefusalWarning.js';
 import { GATE_HASH, IDLE_GATE_ACTION, commitGateDecision, commitGateReassign, useGateActionStore, type GateAnswer } from '../../board/gateActions.js';
-import { FLOOR_FIX_LABEL, sessionGateChoices, soonestBack, type DeadSeat, type GateRowChoice, type GateRowModel } from '../../board/gateRowModel.js';
+import { FLOOR_FIX_LABEL, namedSendBackNote, SEND_BACK_NAMED_LABEL, sessionGateChoices, soonestBack, type DeadSeat, type GateRowChoice, type GateRowModel } from '../../board/gateRowModel.js';
 import { INITIAL_PICK, pickKey, type RowPick } from '../../board/questionRow.js';
 import { repoNameOf, stepNoun } from '../../board/deskWords.js';
 import { api } from '../../api/client.js';
@@ -26,8 +26,8 @@ import { useCapabilities } from '../../store/capabilities.js';
 import { AGENTS_PATH, type Navigate } from '../../hooks/useRoute.js';
 import { useSignInHere } from '../agents/useSignInHere.js';
 import { AssuranceReceipt, AssuranceReceiptTech, QeAcceptanceLabel, ReducedAssuranceLabel } from './AssuranceReceipt.js';
-import { missingSeatsLine, rejudgeOfferOf, type RejudgeOffer } from '../../board/rejudge.js';
-import { testWords } from '../../board/failingChecks.js';
+import { missingSeatsLine, OPERATOR_JUDGMENT_LABEL, rejudgeOfferOf, type RejudgeOffer } from '../../board/rejudge.js';
+import { baseCountOf, testWords } from '../../board/failingChecks.js';
 import { useOfferReply } from './DecisionDock.js';
 import { builderResponder } from '../../board/responder.js';
 import { gateCause, gateQuestion, gateWithLogChoices, judgeSeats, runPoolOf, seatName } from '../../board/gateHeadline.js';
@@ -266,13 +266,22 @@ function RunGateRow({ view, gate, navigate }: { view: RunView; gate: OpenGate | 
     const back = all.find((c) => c.key === 'send-back' && c.decision !== null);
     if (fresh !== null && fresh.length > 0 && back !== undefined) {
       const who = builder?.name ?? 'the builder';
-      return { choice: { ...back, label: fresh.length === 1 ? 'Fix the new failure' : 'Fix the new failures', title: `Send the new ${fresh.length === 1 ? 'failure' : 'failures'} back to ${who} with the test named, so it fixes just that.` },
-        prefill: `Fix only the test${fresh.length === 1 ? '' : 's'} this change broke (the others fail on the base too): ${fresh.join(', ')}` };
+      return { choice: { ...back, label: SEND_BACK_NAMED_LABEL, title: `Send ${fresh.length === 1 ? 'the test' : `the ${fresh.length} tests`} only this change fails back to ${who}, named, so it fixes just ${fresh.length === 1 ? 'that' : 'those'}.` },
+        prefill: namedSendBackNote(fresh) };
     }
     // Never lead with a choice that seats a builder as the judge (it stays under Other options, said as such).
     const promote = all.find((c) => c.key === 'rejudge') ?? all.find((c) => c.reassignCli !== undefined && !(judges?.builders ?? []).includes(c.reassignCli));
     if (promote !== undefined && (judgeWait || model.deadSeat !== undefined)) return { choice: promote };
-    if (judgeWait) return signInLead();
+    if (judgeWait) {
+      // (J4 0.16.6) Never "sign in a second helper" while the live roster has one signed in: a helper of this job that
+      // did not build the work, or one outside it. The engine did not seat it as the judge and crew refuses a re-seat
+      // at this gate, so the way on is the gate's own approve (the operator's judgment), said as such.
+      if (judges?.inJob !== undefined || judges?.outside !== undefined) {
+        const own = all.find((c) => c.key === 'steer' && c.label === OPERATOR_JUDGMENT_LABEL);
+        return own !== undefined ? { choice: own } : null;
+      }
+      return signInLead();
+    }
     return null;
   }, [model, gate, seatRefusal, judgeWait, roster, pool, view, signIn, navigate, fresh, builder, judges]);
   const explain = model === null ? null : (
@@ -289,6 +298,7 @@ function RunGateRow({ view, gate, navigate }: { view: RunView; gate: OpenGate | 
       {judgeWait && (
         <JudgeWaitLine
           offer={rejudge}
+          signedIn={judges?.inJob !== undefined ? seatName(judges.inJob.cli, judges.inJob.label) : judges?.outside !== undefined ? seatName(judges.outside.key, judges.outside.display_name ?? null) : null}
           operatorJudgment={model.operatorJudgment !== false}
           name={(cli) => seatName(cli, roster?.find((r) => r.key === cli)?.display_name ?? null)}
           {...(navigate !== undefined ? { navigate } : {})}
@@ -497,14 +507,18 @@ export function WithheldSeats({ seats, menu = false, onSignIn }: {
  * judgment ("judged by operator"); it never re-runs the check. `offer`: crew's re-judge read, `null`
  * when none was read (an older daemon, or not loaded yet).
  */
-export function JudgeWaitLine({ offer, operatorJudgment = true, name = (s) => s, navigate }: {
+export function JudgeWaitLine({ offer, operatorJudgment = true, name = (s) => s, navigate, signedIn = null }: {
   offer?: RejudgeOffer | null;
+  /** (J4 0.16.6) A helper the live roster has signed in that did not build the work: no "sign one in" then. */
+  signedIn?: string | null;
   /** `false` on a team member's step: its approve re-runs the step with the check, never a judgment. */
   operatorJudgment?: boolean;
   name?: (seat: string) => string;
   navigate?: Navigate;
 }): React.ReactElement {
-  const signIn = navigate !== undefined
+  const signIn = signedIn !== null
+    ? <span data-testid="session-gate-judge-signed-in">{signedIn} is signed in, but this job didn’t seat it as the judge, so signing another helper in won’t help here.</span>
+    : navigate !== undefined
     ? (
       <button type="button" data-testid="session-gate-judge-signin" onClick={() => navigate(AGENTS_PATH)} className="wk-btn wk-btn--secondary">
         Sign another helper in ›
@@ -581,6 +595,12 @@ export function refusalWords(r: DeliverRefusal, at: { branch: string | null; rep
 
 /** (review of the dock) The move a gate's own words name when crew marked no suggestion: one of its choices (a reassign
  *  to a free seat, a re-judge), or an act that is not a gate answer (open sign-in). */
+/** (J4 0.16.6) Every failure of the floor also fails on the base: said in plain words on the face. */
+export function allOnBaseWords(n: number): string {
+  return n === 1 ? 'The one failure also fails on the base, so it isn’t caused by this change.'
+    : `All ${n} failures also fail on the base, so they aren’t caused by this change.`;
+}
+
 type DerivedLead = { choice: GateRowChoice; act?: undefined; prefill?: string } | { act: { key: string; label: string; title: string; onClick: () => void }; choice?: undefined; prefill?: undefined };
 
 function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, retryEvents, depth, refusalLines = null, drift = null, assurance = null, assuranceTech = null, explain = null, unavailable = null, signInModal = null, headline = null, derived = null, extraItems = null, builders = [], builderName = (c) => c }: {
@@ -906,7 +926,7 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
   const leadTitle = lead?.act?.title ?? (primary !== null && primary.title !== '' ? primary.title : null);
   const next = model.consequence ?? leadTitle;
   // One sentence under the headline: the failures in a line, a refused hand-over's reason, a QE review's why.
-  const sentence = split !== undefined && split.onBase.length > 0 ? null : refusalLines?.lead ?? model.qe?.why ?? null;
+  const sentence = split !== undefined ? null : refusalLines?.lead ?? model.qe?.why ?? null;
   const [more, setMore] = [moreOpen, setMoreOpen];
   const choiceButton = (choice: GateRowChoice, i: number, asPrimary: boolean): React.ReactElement => (
     <button
@@ -975,16 +995,31 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
       {sentence !== null && <p data-testid={refusalLines !== null && sentence === refusalLines.lead ? 'session-gate-refusal' : model.qe !== undefined && sentence === model.qe.why ? 'session-gate-qe-why' : 'session-gate-sentence'} {...(model.qe !== undefined && sentence === model.qe.why ? { 'data-qe-outcome': model.qe.outcome } : {})} className="wk-session-gate-detail-item wk-gate2-p">{sentence}</p>}
       {/* rig 0.15.8: what failed, on the face — never only under Technical details. The new failure is highlighted;
           the ones that fail on the base too are under More about this (mockup ui-v2-gate). */}
-      {model.failingTests !== undefined && split !== undefined && split.onBase.length > 0 ? (
-        <div data-testid="session-gate-failing-split" className="wk-gate2-fails">
-          <p data-testid="session-gate-failing-words" className="wk-gate2-p">
-            {split.fresh.length + split.onBase.length} tests failed. {split.onBase.length === 1 ? 'One of them fails' : `${split.onBase.length} of them fail`} on the base too, so {split.onBase.length === 1 ? 'it isn’t' : 'they aren’t'} caused by this change.
-            {split.fresh.length > 0 ? ` ${split.fresh.length === 1 ? 'One is' : `${split.fresh.length} are`} new:` : ' None is new.'}
-          </p>
-          {split.fresh.length > 0 && (
-            <ul data-testid="session-gate-failing-new" className="wk-gate2-new">
-              {split.fresh.map((n) => <li key={n}><span className="wk-gate2-new-t">{testWords(n)}</span>{testWords(n) !== n && <code className="wk-gate2-new-id">{n}</code>}</li>)}
-            </ul>
+      {model.failingTests !== undefined && split !== undefined ? (
+        <div data-testid="session-gate-failing-split" data-fresh={split.fresh.length} data-on-base={baseCountOf(split)} className="wk-gate2-fails">
+          {split.fresh.length > 0 ? (
+            <>
+              {/* (J4 0.16.6) The face leads with what only this change fails, by name; the base's failures stay folded. */}
+              <p data-testid="session-gate-failing-words" className="wk-gate2-p">
+                {split.fresh.length === 1 ? 'Failing only with this change:' : `${split.fresh.length} tests fail only with this change:`}
+              </p>
+              <ul data-testid="session-gate-failing-new" className="wk-gate2-new">
+                {split.fresh.map((n) => <li key={n}><span className="wk-gate2-new-t">{testWords(n)}</span>{testWords(n) !== n && <code className="wk-gate2-new-id">{n}</code>}</li>)}
+              </ul>
+            </>
+          ) : (
+            <p data-testid="session-gate-failing-words" className="wk-gate2-p">{allOnBaseWords(baseCountOf(split))}</p>
+          )}
+          {baseCountOf(split) > 0 && (
+            <div data-testid="session-gate-failing-base" className="wk-gate2-base">
+              {split.fresh.length > 0 && <p className="wk-gate2-label">{baseCountOf(split) === 1 ? 'One more fails on the base too, so it isn’t caused by this change.' : `${baseCountOf(split)} more fail on the base too, so they aren’t caused by this change.`}</p>}
+              {split.onBase.length > 0 && baseOpen && <ul>{split.onBase.map((n) => <li key={n}>{testWords(n)}{testWords(n) !== n && <code className="wk-gate2-new-id">{n}</code>}</li>)}</ul>}
+              {split.onBase.length > 0 && (
+                <button type="button" data-testid="session-gate-failing-toggle" aria-expanded={baseOpen} onClick={() => setBaseOpen((v) => !v)} className="wk-gate2-link">
+                  {baseOpen ? 'Hide the base’s failures' : split.onBase.length === 1 ? 'See the one that fails on the base' : `See the ${split.onBase.length} that fail on the base`}
+                </button>
+              )}
+            </div>
           )}
         </div>
       ) : model.failingTests !== undefined && (
@@ -1114,15 +1149,6 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
         <summary className="wk-gate2-link wk-gate2-about-sum">{more ? 'Less about this' : 'More about this'}</summary>
         <div className="wk-gate2-about-body">
           {explain}
-          {split !== undefined && split.onBase.length > 0 && (
-            <div data-testid="session-gate-failing-base" className="wk-gate2-base">
-              <p className="wk-gate2-label">Also failing on the base (not this change)</p>
-              {baseOpen && <ul>{split.onBase.map((n) => <li key={n}>{testWords(n)}{testWords(n) !== n && <code className="wk-gate2-new-id">{n}</code>}</li>)}</ul>}
-              <button type="button" data-testid="session-gate-failing-toggle" aria-expanded={baseOpen} onClick={() => setBaseOpen((v) => !v)} className="wk-gate2-link">
-                {baseOpen ? `Hide the other ${split.onBase.length}` : `See the other ${split.onBase.length}`}
-              </button>
-            </div>
-          )}
           {model.qe !== undefined && sentence !== model.qe.why && (
             <p data-testid="session-gate-qe-why" data-qe-outcome={model.qe.outcome} className="wk-session-gate-detail-item">{model.qe.why}</p>
           )}

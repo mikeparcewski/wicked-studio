@@ -124,13 +124,20 @@ export function gateCause({ view, gate, events, model, roster, pool = runPoolOf(
   const judgeWait = gate !== undefined && model !== null && waitsForJudge(events, gate.ord, gate.prompt);
   const seatRefusal = gate !== undefined && model !== null && !reduced && creatorSeatRefusal(events, gate.ord, gate.prompt);
   const split = model?.failingTests?.split;
-  const fresh = split !== undefined && split.onBase.length > 0 ? split.fresh : null;
+  const fresh = split !== undefined ? split.fresh : null;
   const judges = gate === undefined ? null : judgeSeats(view, gate.ord, gate.prompt, pool, roster, benched);
+  const broke = fresh !== null && fresh.length > 0
+    ? (fresh.length === 1 ? 'One test this change broke needs fixing before the job can go on' : `${fresh.length} tests this change broke need fixing before the job can go on`)
+    : null;
+  // The failures only this change has come before a missing judge (J4 0.16.6: a fix gate with both led with the judge).
   const headline = seatRefusal ? (judges?.inJob !== undefined ? `${seatName(judges.inJob.cli, judges.inJob.label)} can review this instead`
       : judges?.outside !== undefined ? `${seatName(judges.outside.key, judges.outside.display_name ?? null)} could review this, but isn’t one of this job’s helpers`
         : 'No second helper is free to review this')
-    : judgeWait && model?.qe === undefined ? 'No helper could check this step independently'
-      : fresh !== null && fresh.length > 0 ? (fresh.length === 1 ? 'One test this change broke needs fixing before the job can go on' : `${fresh.length} tests this change broke need fixing before the job can go on`)
+    : broke !== null ? broke
+      : judgeWait && model?.qe === undefined ? (judges?.inJob !== undefined
+        // (J4 0.16.6) The live roster has a helper of this job, not the builder, signed in: say so, never "sign one in".
+        ? `${seatName(judges.inJob.cli, judges.inJob.label)} is signed in but wasn’t used to check this step`
+        : 'No helper could check this step independently')
         : fresh !== null ? 'Every failing test fails on the base too'
           : gate !== undefined ? governanceDenialHeadline(gate.prompt) : null;
   return { seatRefusal, judgeWait, judges, fresh, headline };

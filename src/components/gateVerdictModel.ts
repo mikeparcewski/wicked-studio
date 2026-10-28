@@ -84,6 +84,12 @@ export interface GateFloorCheck {
   /** The same check on the run base (`RepoCheckRun.base.run`) failed too: `true`, passed: `false`, `null`
    *  when the base was not run (or could not be). */
   baseFailed?: boolean | null;
+  /** The failing tests of the same check on the run base (`RepoCheckRun.base.run.failureIds`), `null` when the base
+   *  was not run (or its run names none). With `failureIds` it is the engine's own per-test comparison, structured. */
+  baseFailureIds?: string[] | null;
+  /** The failing tests of the check's own re-runs (`RepoCheckRun.reruns[].failureIds`): a failure that reproduces
+   *  on the retry is the change's (the engine's WICKED-RETRY rule). */
+  rerunFailureIds?: string[];
 }
 
 /** The F-039 floor as `repoChecksEvaluated` reported it. */
@@ -242,7 +248,17 @@ function checkOf(raw: unknown): GateFloorCheck | null {
     regressions: strings(c.regressions),
     failureIds: strings(c.failureIds),
     baseFailed: baseFailedOf(c.base),
+    baseFailureIds: baseFailureIdsOf(c.base),
+    rerunFailureIds: Array.isArray(c['reruns']) ? (c['reruns'] as unknown[]).flatMap((r) => (isRecord(r) ? strings((r as Record<string, unknown>)['failureIds']) : [])) : [],
   };
+}
+
+/** The base run's failing tests (`RepoCheckRun.base.run.failureIds`), or `null` when no base run names any. */
+function baseFailureIdsOf(base: unknown): string[] | null {
+  const run = isRecord(base) ? (base as Record<string, unknown>)['run'] : null;
+  if (!isRecord(run)) return null;
+  const ids = strings((run as Record<string, unknown>)['failureIds']);
+  return ids.length > 0 ? ids : null;
 }
 
 /** Whether the check's run on the base failed (`base.run` — an open object on the pinned api-types). */
