@@ -293,6 +293,22 @@ describe('the gate card, compact (review of the dock)', () => {
     expect(screen.getByTestId('session-gate-choice-consequence').textContent).toBe('');
   });
 
+  it('pr-xreview on #924: Enter / Space on Other options keeps its own activation and never sends the remembered pick', async () => {
+    render(<GateRow view={live()} gate={GATE} navigate={vi.fn()} />);
+    const choices = await screen.findByTestId('session-gate-choices');
+    const primary = choices.querySelector<HTMLElement>(':scope > [data-testid="session-gate-choice"]')!;
+    // A remembered pick: an arrow moved it, so Enter on the ROW would send it.
+    fireEvent.keyDown(primary, { key: 'ArrowRight' });
+    const more = screen.getByTestId('session-gate-more');
+    for (const key of ['Enter', ' ']) {
+      const ev = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true });
+      more.dispatchEvent(ev);
+      expect(ev.defaultPrevented).toBe(false);
+    }
+    expect(useUndoQueue.getState().pending ?? []).toHaveLength(0);
+    expect(useGateActionStore.getState().byGate['r1']?.queued ?? false).toBe(false);
+  });
+
   it('the new failure is highlighted; the ones failing on the base too are counted and folded', () => {
     const f = failingOnFace(floorOf({
       type: 'repoChecksEvaluated', session: 'r1', ord: 2, attempt: 1, passed: false, criterion: 'checks pass', skipped: [],

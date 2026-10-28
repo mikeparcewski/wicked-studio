@@ -130,6 +130,15 @@ describe('jobs in a period', () => {
     expect(flow.map((s) => [s.key, s.values.reduce((a, b) => a + b, 0)])).toEqual([['delivered', 2], ['finished', 1], ['failed', 1], ['stopped', 1]]);
   });
 
+  it('pr-xreview on #924: a hand-over that did not land is not a success, and "delivered" needs a pushed ref', () => {
+    const stranded = job('stranded', { delivery: 'stranded' });
+    // The deliver unit finished, but crew recorded no PR url and no pushed branch.
+    const noRef = { ...job('noref'), units: [{ id: 'noref:deliver', session_id: 'noref', ord: 3, stage: 'build', role: 'neutral', status: 'done', description: 'deliver — open the pull request', phase_ref: 'deliver' }] } as unknown as SessionView;
+    expect(endingOf(stranded)).toBe('failed');
+    expect(endingOf(noRef)).toBe('finished');
+    expect(shippedRows([stranded, noRef], (v) => v.session.id)).toEqual([]);
+  });
+
   it('time to PR is the median start-to-end of the delivered jobs', () => {
     const a = job('a', { delivery: 'delivered', created_at: (NOW - DAY_MS - 2 * H) / 1000 });
     const b = job('b', { delivery: 'delivered', created_at: (NOW - DAY_MS - 4 * H) / 1000 });

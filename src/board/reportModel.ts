@@ -1,6 +1,6 @@
 import type { SessionView } from '../api/types.js';
 import type { SeatRecordResponse } from '../api/seatRecord.js';
-import { deliveryOf } from '../components/delivery.js';
+import { deliveryOf, hasDeliveredRef } from '../components/delivery.js';
 import { median } from './deskPulse.js';
 import { seatDeltas, type Bucket, type SeatDelta } from './deskInsights.js';
 import { createdAtMs } from './windowStats.js';
@@ -191,7 +191,10 @@ export function endingOf(v: SessionView): Ending | null {
   if (s === 'cancelled') return 'stopped';
   if (s !== 'completed') return null;
   const d = deliveryOf(v).state;
-  return d === 'delivered' || d === 'pushed' ? 'delivered' : 'finished';
+  // pr-xreview on #924: a hand-over that did not land (stranded work left on this machine, a refused push) is not a
+  // success, and "Delivered" (shipped, time to PR) is said only over a ref that was actually pushed.
+  if (d === 'stranded' || d === 'failed') return 'failed';
+  return (d === 'delivered' || d === 'pushed') && hasDeliveredRef(v) ? 'delivered' : 'finished';
 }
 
 export function endedAtMs(v: SessionView): number | null {

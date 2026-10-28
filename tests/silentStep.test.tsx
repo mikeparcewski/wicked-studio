@@ -43,3 +43,30 @@ describe('a running step silent past crew\'s quiet mark', () => {
     expect(reassign).toHaveBeenCalledWith('r1');
   });
 });
+
+describe('pr-xreview on #924: a helper streaming output is not silent', () => {
+  it('a live output delta (never logged) resets the clock the run page reads', async () => {
+    const { renderHook } = await import('@testing-library/react');
+    const { useSilentStep } = await import('../src/hooks/useSilentStep.js');
+    const { useRuntimeStore } = await import('../src/store/runtime.js');
+    const { useRunEventStore } = await import('../src/store/events.js');
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      vi.setSystemTime(T0 + 6 * MIN);
+      const v = view();
+      useRunEventStore.setState({ byRun: { r1: [ev('unitDispatched', T0)] } });
+      useRuntimeStore.getState().clear('r1');
+      expect(renderHook(() => useSilentStep(v)).result.current?.minutes).toBe(6);
+      // The helper streams a line now: no structured frame, only the delta.
+      useRuntimeStore.getState().ingest({ type: 'unitOutputDelta', session: 'r1', ord: 2, text: 'still working…' } as unknown as CoreEvent);
+      expect(useRuntimeStore.getState().deltaAt['r1']).toBe(T0 + 6 * MIN);
+      expect(renderHook(() => useSilentStep(v)).result.current).toBeNull();
+      // A reload replays the trail: the replayed delta's own time counts too.
+      useRuntimeStore.getState().clear('r1');
+      useRuntimeStore.getState().hydrateOutputs('r1', [{ type: 'unitOutputDelta', session: 'r1', ord: 2, text: 'x', ts: T0 + 5 * MIN } as unknown as CoreEvent]);
+      expect(renderHook(() => useSilentStep(v)).result.current).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});

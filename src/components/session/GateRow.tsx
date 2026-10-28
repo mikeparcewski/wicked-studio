@@ -986,6 +986,11 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
         if (e.key === 'Escape' && menuOpen) { e.preventDefault(); setMenuOpen(false); menuBtnRef.current?.focus(); return; }
         if (noteOpen !== null) return;
         if ((e.target as HTMLElement).closest('[role="menu"]') !== null) return;
+        // The row's shortcuts are the row's and its choice radios' only: Enter / Space on Other options, a lead act,
+        // More about this or a link keeps its own activation, and never sends the remembered pick
+        // (pr-xreview on #924).
+        const t = e.target as HTMLElement;
+        if (t !== e.currentTarget && t.getAttribute('role') !== 'radio' && t.closest('button, summary, a, input, textarea, select') !== null) return;
         const result = pickKey(pick, e.key, model.choices.length);
         if (!result.handled) return;
         e.preventDefault();

@@ -13,11 +13,15 @@ export function useSilentStep(view: SessionView | undefined): SilentStep | null 
   const id = view?.session.id;
   const events = useRunEventStore((s) => (id === undefined ? undefined : s.byRun[id]));
   const gateOpen = useGateStore((s) => (id === undefined ? false : s.gates[id] !== undefined));
+  // The newest live frame, or the newest output delta (deltas are not logged: a helper streaming text with no other
+  // frame is working, not silent — pr-xreview on #924).
   const liveAt = useRuntimeStore((s) => {
+    const delta = id === undefined ? undefined : s.deltaAt[id];
     const log = id === undefined ? undefined : s.logs[id];
-    if (log === undefined) return null;
-    for (let i = log.length - 1; i >= 0; i--) if (!STALL_TALK.has(log[i]!.type)) return log[i]!.ts;
-    return null;
+    let frame: number | null = null;
+    if (log !== undefined) for (let i = log.length - 1; i >= 0; i--) if (!STALL_TALK.has(log[i]!.type)) { frame = log[i]!.ts; break; }
+    const at = Math.max(frame ?? 0, delta ?? 0);
+    return at === 0 ? null : at;
   });
   const [now, setNow] = useState(Date.now);
   const executing = view?.session.status === 'executing';
