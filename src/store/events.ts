@@ -43,6 +43,18 @@ function fingerprint(event: CoreEvent): string {
   return JSON.stringify(bag);
 }
 
+/**
+ * When this page received each LIVE frame (unix ms). A live `/ws` frame carries no `ts` (the event log stamps the
+ * durable copy), so a message dated by one reads its arrival here; a reload's recorded copy carries its own `ts`.
+ * Keyed by the frame object, so nothing about the frame itself changes (its fingerprint, what plugins are sent).
+ */
+const arrivals = new WeakMap<object, number>();
+
+/** When the page received this live frame, or null for a recorded frame (or one not from the live socket). */
+export function arrivedAt(event: object): number | null {
+  return arrivals.get(event) ?? null;
+}
+
 interface RunEventStore {
   /** Ordered, capped structured frames keyed by run id. */
   byRun: Record<string, CoreEvent[]>;
@@ -70,6 +82,7 @@ export const useRunEventStore = create<RunEventStore>((set, get) => ({
     const session = typeof event.session === 'string' ? event.session : undefined;
     if (session === undefined) return;
     if (IGNORED.has(event.type)) return;
+    if (typeof (event as { ts?: unknown }).ts !== 'number') arrivals.set(event, Date.now());
     set((s) => {
       const prev = s.byRun[session] ?? [];
       const next = [...prev, event];

@@ -1,10 +1,12 @@
 import type { CoreEvent, SessionView } from '../api/types.js';
+import { arrivedAt } from '../store/events.js';
 
 /**
  * Message timestamps (power-mode mockup, operator 2026-10-29: "Claude Code · orchestrator · 14:03" on every thread
  * message, in power mode and phased runs alike). Every time here is unix MILLIS read from what crew recorded: a
  * logged frame's `ts`, a session's `created_at`/`ended_at` (unix seconds on the wire), a gate's arrival. Nothing is
- * derived from "now" for an old run: a message with no recorded time shows no time.
+ * derived from "now" for an old run: a message with no recorded time shows no time. A frame that came over the live
+ * socket (no `ts`) is dated by when this page received it (`arrivedAt`, stamped at ingestion).
  */
 
 /** A message's time: one instant, or a span (a step that ran from `from` to `to`). */
@@ -15,31 +17,35 @@ export interface MessageTime {
 
 type Ev = CoreEvent & { ord?: unknown; ts?: unknown };
 
-const tsOf = (e: Ev): number | null => (typeof e.ts === 'number' && Number.isFinite(e.ts) && e.ts > 0 ? e.ts : null);
+/** A frame's time: its recorded `ts`, else when this page received it live, else none. */
+const tsOf = (e: Ev): number | null => (typeof e.ts === 'number' && Number.isFinite(e.ts) && e.ts > 0 ? e.ts : arrivedAt(e));
 
 /** The frames that end a step's attempt. */
 const STEP_END = new Set(['unitDone', 'stepFailed', 'unitDenied']);
 
 /**
- * Each step's LAST attempt, by ord: from its newest `unitDispatched` to the first frame that ended it after that. A
- * step that ran again (a send-back, a retry) is dated by the attempt whose words the thread shows.
- *
- * `to` is null while the attempt has no ending frame, or when its ending frame came live (live `/ws` frames carry
- * no `ts`; {@link useFirstSeenAt} stamps those).
+ * Each step's newest FINISHED attempt, by ord: from that attempt's `unitDispatched` to the first frame that ended it.
+ * A step that ran again (a send-back, a retry) is dated by the attempt whose words the thread shows; a newer attempt
+ * still running leaves the finished one's span in place. A step with no finished attempt is dated by its newest
+ * dispatch (`ended: false`).
  */
 export function stepTimes(events: readonly CoreEvent[] | null | undefined): Map<number, MessageTime & { ended: boolean }> {
-  const out = new Map<number, MessageTime & { ended: boolean }>();
+  const done = new Map<number, MessageTime & { ended: boolean }>();
+  const open = new Map<number, { from: number | null; ended: boolean }>();
   for (const raw of events ?? []) {
     const e = raw as Ev;
     if (typeof e.ord !== 'number') continue;
     if (e.type === 'unitDispatched') {
-      out.set(e.ord, { from: tsOf(e), to: null, ended: false });
+      open.set(e.ord, { from: tsOf(e), ended: false });
     } else if (STEP_END.has(e.type)) {
-      const cur = out.get(e.ord) ?? { from: null, to: null, ended: false };
+      const cur = open.get(e.ord) ?? { from: null, ended: false };
       if (cur.ended) continue;
-      out.set(e.ord, { from: cur.from, to: tsOf(e), ended: true });
+      open.set(e.ord, { ...cur, ended: true });
+      done.set(e.ord, { from: cur.from, to: tsOf(e), ended: true });
     }
   }
+  const out = new Map(done);
+  for (const [ord, cur] of open) if (!out.has(ord)) out.set(ord, { from: cur.from, to: null, ended: false });
   return out;
 }
 
@@ -88,7 +94,8 @@ export function messageTimeWords(t: MessageTime | null | undefined, now: number 
   const today = new Date(now);
   const day = sameDay(a, today) ? '' : `${a.getDate()} ${MONTHS[a.getMonth()]!} `;
   const start = `${day}${hhmm(a)}`;
-  if (t.from === null || t.to === null) return start;
+  // A span whose end is not after its start (clocks from two sources) is said as its start alone.
+  if (t.from === null || t.to === null || t.to < t.from) return start;
   const b = new Date(t.to);
   const end = sameDay(a, b) ? hhmm(b) : `${b.getDate()} ${MONTHS[b.getMonth()]!} ${hhmm(b)}`;
   return end === hhmm(a) && sameDay(a, b) ? start : `${start}–${end}`;
@@ -98,22 +105,4 @@ export function messageTimeWords(t: MessageTime | null | undefined, now: number 
 export function messageTimeIso(t: MessageTime | null | undefined): string | null {
   const at = t?.from ?? t?.to ?? null;
   return at === null ? null : new Date(at).toISOString();
-}
-
-// ── a live frame's arrival, remembered once per message ──────────────────────────────────────────────────
-const firstSeen = new Map<string, number>();
-
-/** Test seam. */
-export function resetFirstSeen(): void { firstSeen.clear(); }
-
-/**
- * A message whose ending frame came over the live socket (no `ts`) is dated by when this page first saw it end. A
- * reload reads the recorded time instead. `key` names the message; `pending` = there is nothing to stamp yet.
- */
-export function firstSeenAt(key: string, pending: boolean, now: number = Date.now()): number | null {
-  if (pending) return null;
-  const hit = firstSeen.get(key);
-  if (hit !== undefined) return hit;
-  firstSeen.set(key, now);
-  return now;
 }

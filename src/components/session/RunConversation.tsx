@@ -8,7 +8,7 @@ import type { Responder } from '../../board/responder.js';
 import { builderResponder, gateResponder, isReviewUnit, seatResponder } from '../../board/responder.js';
 import { approvingReviewers, conciseOutput, decisionMessages, finalWords, planSteps, stepMessages, testCountOf, type DecisionMessage, type StepMessage } from '../../board/runConversation.js';
 import { isCliSeat, seatLabel } from '../../board/seatNames.js';
-import { askedAt, endedAt, firstSeenAt, stepTimes, type MessageTime } from '../../board/messageTimes.js';
+import { askedAt, endedAt, stepTimes, type MessageTime } from '../../board/messageTimes.js';
 import { jobTitle } from '../../board/deskWords.js';
 import { ORPHANED_LINE, orphanedOf, runState } from '../../board/sessionModel.js';
 import { applyCheckState } from '../../board/checkState.js';
@@ -299,23 +299,24 @@ export function RunBlock({ view, badge, sessionId, navigate, solo = null }: {
     deliveryVerified,
   }) : null;
   const askingWho = gateResponder(view, gate, roster);
-  // Message timestamps: each message says when it was said, from what crew recorded (never "now" for an old run).
+  // Message timestamps: each message says when it was said, from what crew recorded or, for a frame that came over the
+  // live socket, when this page received it (never "now" for an old run).
   const times = useMemo(() => stepTimes(runEvents), [runEvents]);
-  const stepAt = (ord: number, version: string): MessageTime | null => {
+  const stepAt = (ord: number): MessageTime | null => {
     const t = times.get(ord);
-    if (t === undefined) return null;
-    // An ending frame that came live carries no `ts`: dated by when this page first saw the step end.
-    if (t.ended && t.to === null) return { from: t.from, to: firstSeenAt(`${id}\u0000${ord}\u0000${version}`, false) };
-    return { from: t.from, to: t.to };
+    return t === undefined ? null : { from: t.from, to: t.to };
   };
   const createdMs = typeof view.session.created_at === 'number' && view.session.created_at > 0 ? view.session.created_at * 1000 : null;
-  const planAt: MessageTime | null = planOpen && gate !== undefined ? { from: gate.receivedAt, to: null }
-    : plannerUnit !== undefined && times.has(plannerUnit.ord) ? stepAt(plannerUnit.ord, 'plan')
-      : planOrd !== null && askedAt(runEvents, planOrd) !== null ? { from: askedAt(runEvents, planOrd), to: null }
+  // The plan: the scope step's span, else when the plan was asked, else the open question's arrival, else launch —
+  // one order whether the plan question is open or answered, so the time never jumps when you answer it.
+  const planAsked = planOrd !== null ? askedAt(runEvents, planOrd) : null;
+  const planAt: MessageTime | null = plannerUnit !== undefined && times.has(plannerUnit.ord) ? stepAt(plannerUnit.ord)
+    : planAsked !== null ? { from: planAsked, to: null }
+      : planOpen && gate !== undefined ? { from: gate.receivedAt, to: null }
         : createdMs !== null ? { from: createdMs, to: null } : null;
-  const finalAt = isTerminal ? (endedAt(view, runEvents) ?? (runEvents !== null ? firstSeenAt(`${id}\u0000end:${status}`, false) : null)) : null;
+  const finalAt = isTerminal ? endedAt(view, runEvents) : null;
   // What the run made is said with its newest finished step.
-  const madeAt = steps.reduce<number | null>((m, s) => { const t = stepAt(s.ord, s.version)?.to ?? null; return t !== null && (m === null || t > m) ? t : m; }, null);
+  const madeAt = steps.reduce<number | null>((m, s) => { const t = stepAt(s.ord)?.to ?? null; return t !== null && (m === null || t > m) ? t : m; }, null);
   const checkOf = (s: StepMessage): string | null => {
     const step = chain.steps.find((c) => c.id === s.key || c.catalog === s.key);
     return step?.state === 'checked' ? 'Checked' : null;
@@ -357,7 +358,7 @@ export function RunBlock({ view, badge, sessionId, navigate, solo = null }: {
       {steps.map((s) => (
         <Fragment key={s.ord}>
           <StepTurn runId={id} step={s} who={s.cli !== null ? seatResponder(s.cli, roster) : STUDIO} checkWord={checkOf(s)} onOpen={openSteps}
-            answers={decisions.filter((d) => d.ord === s.ord && d.ord !== planOrd)} at={stepAt(s.ord, s.version)} />
+            answers={decisions.filter((d) => d.ord === s.ord && d.ord !== planOrd)} at={stepAt(s.ord)} />
           <RunPluginJumpRows runId={id} ords={[s.ord]} />
           <WorkingDocSteerRows runId={id} ords={[s.ord]} />
         </Fragment>

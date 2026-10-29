@@ -10,7 +10,6 @@ import * as client from '../src/api/client.js';
 import { teamPlanApi } from '../src/api/teamPlan.js';
 import type { WorkUnit } from '../src/api/types.js';
 import { IDLE_GATE_ACTION, useGateActionStore } from '../src/board/gateActions.js';
-import { resetFirstSeen } from '../src/board/messageTimes.js';
 import { RunBlock, resetStepOutputs } from '../src/components/session/RunConversation.js';
 import { resetRunCoverage } from '../src/hooks/useRunCoverage.js';
 import { useRunEventStore } from '../src/store/events.js';
@@ -81,7 +80,6 @@ describe('the run as a conversation, rendered', () => {
   });
 
   it('every message says when it was said: a step as the span it ran, the final message when the run ended', async () => {
-    resetFirstSeen();
     outputs = { build: 'Fixed the currency.', review: 'VERDICT: PASS\n\nLooks right.' };
     const t = (h: number, m: number): number => new Date().setHours(h, m, 0, 0);
     useRunEventStore.setState({ byRun: { [RUN]: [
@@ -103,21 +101,50 @@ describe('the run as a conversation, rendered', () => {
     expect(within(build!).getByTestId('turn-who-at').getAttribute('dateTime')).toBe(new Date(t(14, 16)).toISOString());
   });
 
-  it('a step that ended over the live socket (no ts) is dated when the page saw it end; one with no frames says no time', async () => {
-    resetFirstSeen();
+  it('a step whose frames came live is dated when the page received them, even when the thread opens later (xreview #929)', async () => {
     outputs = { build: 'Done building.', test: 'Tests ran.' };
     const t = (h: number, m: number): number => new Date().setHours(h, m, 0, 0);
-    vi.spyOn(Date, 'now').mockReturnValue(t(14, 30));
-    useRunEventStore.setState({ byRun: { [RUN]: [
-      { type: 'unitDispatched', session: RUN, ord: 1, ts: t(14, 20) },
-      { type: 'unitDone', session: RUN, ord: 1 },
-    ] as never } });
+    const ingest = (frame: Record<string, unknown>, at: number): void => {
+      vi.spyOn(Date, 'now').mockReturnValue(at);
+      useRunEventStore.getState().ingest({ session: RUN, ...frame } as never);
+    };
+    useRunEventStore.setState({ byRun: {} });
+    ingest({ type: 'unitDispatched', ord: 1 }, t(14, 20));
+    ingest({ type: 'unitDone', ord: 1 }, t(14, 25));
+    // The conversation opens much later: the times are the arrivals, never the moment it rendered.
+    vi.spyOn(Date, 'now').mockReturnValue(t(14, 50));
     const view = makeView({ id: RUN, problem: 'Fix it', status: 'executing' } as never,
       [unit('build', 1, 'done', 'claude'), unit('test', 2, 'done', 'codex', 'test')]);
     render(<RunBlock view={view} badge={0} sessionId={`run:${RUN}`} />);
     await waitFor(() => expect(screen.getAllByTestId('chat-step')).toHaveLength(2));
     const [build, test] = screen.getAllByTestId('chat-step');
-    expect(within(build!).getByTestId('turn-who-at')).toHaveTextContent('· 14:20–14:30');
+    expect(within(build!).getByTestId('turn-who-at')).toHaveTextContent('· 14:20–14:25');
     expect(within(test!).queryByTestId('turn-who-at')).toBeNull();
+  });
+
+  it('an old finished run with no recorded end shows no time on its final message, never "now" (xreview #929)', async () => {
+    useRunEventStore.setState({ byRun: { [RUN]: [] } });
+    const view = makeView({ id: RUN, problem: 'Fix it', status: 'completed' } as never, [unit('build', 1, 'done', 'claude')]);
+    render(<RunBlock view={view} badge={0} sessionId={`run:${RUN}`} />);
+    await screen.findByTestId('chat-final');
+    expect(within(screen.getByTestId('chat-final')).queryByTestId('turn-who-at')).toBeNull();
+  });
+
+  it('a plan whose scope step ran twice live says the second attempt\'s span (xreview #929)', async () => {
+    const t = (h: number, m: number): number => new Date().setHours(h, m, 0, 0);
+    const ingest = (frame: Record<string, unknown>, at: number): void => {
+      vi.spyOn(Date, 'now').mockReturnValue(at);
+      useRunEventStore.getState().ingest({ session: RUN, ...frame } as never);
+    };
+    useRunEventStore.setState({ byRun: {} });
+    ingest({ type: 'unitDispatched', ord: 0 }, t(14, 2));
+    ingest({ type: 'unitDone', ord: 0 }, t(14, 5));
+    ingest({ type: 'unitDispatched', ord: 0 }, t(14, 15));
+    ingest({ type: 'unitDone', ord: 0 }, t(14, 20));
+    const view = makeView({ id: RUN, problem: 'Fix it', status: 'executing' } as never,
+      [unit('pa-scope', 0, 'done', 'claude', 'scope'), unit('build', 1, 'pending', null)]);
+    render(<RunBlock view={view} badge={0} sessionId={`run:${RUN}`} />);
+    const plan = await screen.findByTestId('chat-plan');
+    expect(within(plan).getByTestId('turn-who-at')).toHaveTextContent('· 14:15–14:20');
   });
 });

@@ -121,7 +121,10 @@ interface ChatDetail {
 }
 
 type ThreadEntry =
-  | { kind: 'turn'; key: string; at: number; who: 'you' | string; text: string; ok: boolean; citations?: ChatCitations; turnId: string | null; pending?: boolean; kickoff?: boolean }
+  | { kind: 'turn'; key: string; at: number; who: 'you' | string; text: string; ok: boolean; citations?: ChatCitations; turnId: string | null; pending?: boolean; kickoff?: boolean;
+    /** The time its speaker line shows when `at` is only an ordering key (a restored answer placed by step order, the
+     *  kickoff placed before the run): the recorded time, or null for none. Absent: `at` is the recorded time. */
+    clock?: number | null }
   | { kind: 'run'; key: string; at: number; view: RunView }
   | { kind: 'line'; key: string; at: number; line: AskLine }
   | { kind: 'typing'; key: string; at: number; who: string }
@@ -480,7 +483,9 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
         ?? (run !== undefined ? launchedMs(run) + a.ord : a.ord);
       const key = `answer:${a.runId}:${a.ord}`;
       liveOrd.set(key, a.ord);
-      out.push({ kind: 'turn', key, at, who: a.by ?? 'helper', text: a.text, ok: true, turnId: null });
+      // Only a completion row is a recorded time; a placement after the question or by step order is not.
+      const recorded = a.runId === askRunId ? completedAt.get(a.ord) : undefined;
+      out.push({ kind: 'turn', key, at, who: a.by ?? 'helper', text: a.text, ok: true, turnId: null, clock: recorded ?? null });
     }
     // A line marked `under` (a finding on the answer, a help exchange) goes right after the reply bubble
     // of ITS answer step — matched by unit, not by time (codex on ASK-S1 #4): a live reply carries the
@@ -523,7 +528,7 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
     for (const v of mine) {
       const problem = (v.session.problem ?? '').trim();
       if (problem !== '' && !isChatScopeProblem(problem) && (runChatIdOf(v) === null || transcriptLacksYou)) {
-        out.push({ kind: 'turn', key: `kick:${v.session.id}`, at: launchedMs(v) - 1, who: 'you', text: problem, ok: true, turnId: null, kickoff: true });
+        out.push({ kind: 'turn', key: `kick:${v.session.id}`, at: launchedMs(v) - 1, who: 'you', text: problem, ok: true, turnId: null, kickoff: true, clock: launchedMs(v) > 0 ? launchedMs(v) : null });
       }
       if (askBlockHidden && v.session.id === askRunId) {
         if (proposal !== null) out.push({ kind: 'proposal', key: `p:${proposal.proposalId}`, at: proposal.at, view: v, ask: proposal });
@@ -941,7 +946,7 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
         {drawerTurns.length === 0 && <p className="wk-session-grey">Nothing has been said in this run yet.</p>}
         {drawerTurns.map((e) => (
           <div key={e.key} data-testid="run-chat-turn" className="wk-run-chat-turn">
-            <TurnWho who={turnResponder(e.who, roster)} at={e.at} />
+            <TurnWho who={turnResponder(e.who, roster)} at={e.clock !== undefined ? e.clock : e.at} />
             <p className="wk-session-text">{e.text}</p>
           </div>
         ))}
@@ -1109,7 +1114,7 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
             const prev = i === 0 ? leadWho : whoOfEntry(entries[i - 1]!);
             // DES-CHAT-NATIVE-RUN: a run's messages carry their own speakers, and the working line names its helper.
             const label = e.kind !== 'turn' && e.kind !== 'run' && e.kind !== 'working' && (prev === null || responderKey(prev) !== responderKey(who))
-              ? <TurnWho who={who} runId={e.kind === 'proposal' ? e.view.session.id : askRunId} {...(e.kind === 'typing' ? { suffix: 'thinking' } : {})} at={e.kind === 'typing' ? null : e.at} />
+              ? <TurnWho who={who} runId={e.kind === 'proposal' ? e.view.session.id : askRunId} {...(e.kind === 'typing' ? { suffix: 'thinking' } : {})} at={e.kind === 'line' ? e.line.at : e.kind === 'proposal' ? e.at : null} />
               : null;
             const node = (e.kind === 'line'
             ? <AskLineView key={e.key} line={e.line} onSignIn={() => openSheet({ kind: 'session', sessionId }, 'signins')} onRetry={askTeamRetry} />
@@ -1135,7 +1140,7 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
                 className={`wk-session-turn wk-session-turn--${e.who === 'you' ? 'you' : 'helper'}${e.pending ? ' wk-session-turn--pending' : ''}${e.kickoff ? ' wk-session-turn--kickoff' : ''}${e.kickoff && kickoffOpen === e.key ? ' wk-session-turn--kickoff-open' : ''}`}>
                 {/* DES-CHAT-NATIVE-RUN: what started the run is your first message, a bubble like any other; a very long
                     one shows its first lines with Show all (studio#663). */}
-                <TurnWho who={who} runId={askRunId} {...(e.pending ? { suffix: 'answering' } : {})} at={e.pending ? null : e.at} />
+                <TurnWho who={who} runId={askRunId} {...(e.pending ? { suffix: 'answering' } : {})} at={e.pending ? null : e.clock !== undefined ? e.clock : e.at} />
                 {e.who === 'you'
                   ? <>
                     <p id={e.kickoff ? `kickoff-${e.key}` : undefined} className={`wk-session-text${e.ok ? '' : ' wk-session-grey'}`}><OperatorMessage text={e.text} /></p>
