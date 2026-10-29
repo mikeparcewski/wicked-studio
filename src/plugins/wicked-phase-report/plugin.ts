@@ -119,7 +119,10 @@ export function start(): void {
         case 'events.batch': {
           if (pl['gap'] === 'history-unavailable') gap = true;
           const rows = Array.isArray(pl['rows']) ? (pl['rows'] as Row[]) : [];
-          if (foldRows(report, rows) || pl['replay'] === true) draw();
+          // Any batch means the replay has been read (it always comes first, even when empty).
+          const first = !report.loaded;
+          report.loaded = true;
+          if (foldRows(report, rows) || first) draw();
           break;
         }
         case 'host.teardown': port?.close(); port = null; break;

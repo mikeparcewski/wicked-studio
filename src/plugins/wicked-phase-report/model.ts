@@ -15,6 +15,8 @@ export interface CheckInfo { name: string; exitCode: number | null; timedOut: bo
 export interface ChecksRun { ord: number | null; attempt: number | null; floor: string | null; outcome: string | null; passed: boolean; checks: CheckInfo[]; reusedFrom: { phase: string | null; ord: number | null; reused: string[]; fresh: string[] } | null; at: number }
 
 export interface Report {
+  /** The replay has arrived: until then the report says it is reading, never "no events". */
+  loaded: boolean;
   seen: Set<string>;
   startedAt: number | null;
   lastAt: number | null;
@@ -28,7 +30,7 @@ export interface Report {
 }
 
 export function emptyReport(): Report {
-  return { seen: new Set(), startedAt: null, lastAt: null, finished: null, units: new Map(), gates: [], checks: [], costUsd: 0, tokens: 0, usageReports: 0 };
+  return { loaded: false, seen: new Set(), startedAt: null, lastAt: null, finished: null, units: new Map(), gates: [], checks: [], costUsd: 0, tokens: 0, usageReports: 0 };
 }
 
 const str = (v: unknown): string | null => (typeof v === 'string' && v !== '' ? v : null);
@@ -157,6 +159,7 @@ const plural = (n: number, one: string, many = `${one}s`): string => `${n} ${n =
 
 /** The folded line: "Fix · step 6 of 10 · checks: 3 of 4 passed (reused from Fix) · 1 decision open". */
 export function summaryLine(r: Report): string {
+  if (!r.loaded) return 'Reading the job’s events…';
   const ords = planned(r);
   const parts: string[] = [];
   if (r.finished !== null) {

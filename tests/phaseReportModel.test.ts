@@ -12,21 +12,23 @@ const rows: TopicRow[] = (fixture as unknown as CoreEvent[])
   .map((e) => toRow(e, 'run-2410', 0, `s${String(e.seq)}`, names))
   .filter((r): r is TopicRow => r !== null);
 const upTo = (seq: number) => rows.filter((r) => (r.seq ?? 0) <= seq);
+/** A report the replay has reached (the plugin marks it on its first batch). */
+const loaded = () => ({ ...emptyReport(), loaded: true });
 
 describe('the phase report', () => {
   it('folds to the brief’s one line while the job runs', () => {
     // At the fix step's failed floor, waiting on the operator.
-    const r = emptyReport();
+    const r = loaded();
     foldRows(r, upTo(139));
     expect(summaryLine(r)).toBe('Fix · step 6 of 10 · checks: 3 of 4 passed · 1 decision open');
     // At the check step's reused floor.
-    const v = emptyReport();
+    const v = loaded();
     foldRows(v, upTo(184));
     expect(summaryLine(v)).toBe('Check · step 9 of 10 · checks: 3 of 4 passed (reused from Fix) · 1 decision open');
   });
 
   it('says the end, and its dashboard has now, checks, decisions, helpers and time', () => {
-    const r = emptyReport();
+    const r = loaded();
     foldRows(r, rows);
     expect(summaryLine(r)).toBe('Finished · 10 of 10 steps done · checks: 3 of 4 passed (reused from Fix)');
     const d = dashboard(r, Date.now());
@@ -42,8 +44,13 @@ describe('the phase report', () => {
     expect(d.time.sub).toMatch(/^≈ \$\d+\.\d\d · /u);
   });
 
+  it('says it is reading until the replay arrives, never "no events"', () => {
+    expect(summaryLine(emptyReport())).toBe('Reading the job’s events…');
+    expect(summaryLine(loaded())).toBe('No events yet');
+  });
+
   it('a row heard twice changes nothing', () => {
-    const r = emptyReport();
+    const r = loaded();
     expect(foldRows(r, rows)).toBe(true);
     const line = summaryLine(r);
     const cost = r.costUsd;
