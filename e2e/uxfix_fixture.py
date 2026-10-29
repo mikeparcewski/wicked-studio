@@ -225,6 +225,7 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 import chat_native_corpus  # noqa: E402 — e2e/ is on sys.path for every rig (they import this module from there)
+import power_mode_corpus  # noqa: E402 — the power-mode run page (switch `power_mode`)
 
 REPO = Path(__file__).resolve().parent.parent
 SHOTS = REPO / "e2e" / "shots" / "uxfix"
@@ -909,6 +910,11 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          #   Bug run with its steps' outputs and PR #12, a run at its plan approval, a run in progress, a plain chat
          #   Q&A (chat-cn-qa) and an old archived run whose chat crew reclaimed (r-cn-old / chat-cn-gone).
          "chat_native": False,
+         # power_mode — program DES-POWER-MODE (e2e/desk_power_mode_test.py, e2e/power_mode_corpus.py): GET /health says
+         #   capabilities.powerMode; five runs on the api-types 0.149.0 wire (building, at hand-off, paused "this grew",
+         #   phased required, delivered); GET|POST /runs/:id/power and POST /runs/:id/rigor, the pause gate tapped
+         #   (GET /__fixture/power-posts; POST /__fixture {reset_power: true} clears them). Stands alone, like chat_native.
+         "power_mode": False,
          # gate_move — brainstorm-actionable ideas 1+2 (e2e/gate_move_test.py): r-review, paused at an
          #   evaluator NOT PASS escalation (the engine's recorded `VERDICT: FAIL` frames), rides GET
          #   /runs; its events, gate and the creator phase's transcript are served for the card.
@@ -5026,6 +5032,8 @@ def assemble_runs() -> list:
     with state_lock:
         if state["chat_native"] and not state["no_runs"]:
             runs = chat_native_corpus.corpus(NOW0)["runs"]
+        if state["power_mode"] and not state["no_runs"]:
+            runs = power_mode_corpus.corpus(NOW0)["runs"]
     return runs
 
 
@@ -6269,6 +6277,13 @@ class W2Handler(SimpleHTTPRequestHandler):
             if served is not None:
                 self._json(served[0], served[1])
                 return True
+        with state_lock:
+            pm_on = state["power_mode"]
+        if pm_on:
+            served = power_mode_corpus.get(path, NOW0)
+            if served is not None:
+                self._json(served[0], served[1])
+                return True
         # Behaviour 10: GET /standing-orders. Switch off: fall through to the ideas 7/8/13 handler
         # below (its orders, or the unknown-route 404 of a daemon predating the surface).
         if path == "/api/v1/standing-orders":
@@ -6291,6 +6306,8 @@ class W2Handler(SimpleHTTPRequestHandler):
                     caps["walkthroughRoots"] = True  # WT-W1 (api-types 0.74.0)
                 if state["chat_native"]:
                     caps["launchPrimary"] = True  # the Lead agent (crew#1077, api-types 0.128.0)
+                if state["power_mode"]:
+                    caps["powerMode"] = True  # program DES-POWER-MODE (api-types 0.149.0)
             self._json(200, {"status": "ok", "version": "w2-fixture", "ping": "pong", "capabilities": caps})
             return True
         # Idea 15: the delivery freeze switch (crew#694).
@@ -8562,6 +8579,8 @@ class W2Handler(SimpleHTTPRequestHandler):
             with state_lock:
                 rposts = list(reassign_post_log)
             return self._json(200, {"posts": rposts})
+        if path == "/__fixture/power-posts":
+            return self._json(200, {"posts": list(power_mode_corpus.POSTS)})
         if path == "/__fixture/gate-posts":
             with state_lock:
                 posts = list(gate_post_log)
@@ -8932,7 +8951,15 @@ class W2Handler(SimpleHTTPRequestHandler):
                 if d and d["steers"]:
                     d["steers"][-1]["pickedUp"] = {"ord": body.get("ord"), "step": body.get("step"), "at": int(time.time() * 1000)}
             return self._json(200, {"ok": True})
+        with state_lock:
+            pm_post = state["power_mode"]
+        if pm_post:
+            served = power_mode_corpus.post(path, body, NOW0)
+            if served is not None:
+                return self._json(served[0], served[1])
         if path == "/__fixture":
+            if body.get("reset_power"):
+                power_mode_corpus.reset()
             if body.get("reset_working_doc"):
                 with state_lock:
                     working_docs.clear()

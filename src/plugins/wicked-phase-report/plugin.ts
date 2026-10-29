@@ -107,6 +107,23 @@ export function start(): void {
         if (c.reused !== null) run.appendChild(el('p', 'sub', c.reused));
         checks.appendChild(run);
       }
+      // Power mode: the rigor history (intake, then each change) and, once it starts, the hand-off.
+      const rigor = d.rigor !== null ? tile('Rigor history', d.handoff === null) : null;
+      if (rigor !== null && d.rigor !== null) {
+        if (d.rigor.length === 0) rigor.appendChild(el('p', 'sub', 'Not set yet.'));
+        for (const h of d.rigor) {
+          const row = el('div', 'rg');
+          if (h.arrow !== '') row.appendChild(el('span', 'rg-arrow', h.arrow));
+          row.append(el('span', `rg-chip rg-${h.to}`, h.to), el('span', null, h.words));
+          rigor.appendChild(row);
+        }
+      }
+      const handoff = d.handoff !== null ? tile('Hand-off') : null;
+      if (handoff !== null && d.handoff !== null) {
+        const hl = el('ul', 'list');
+        for (const s of d.handoff) { const li = el('li', s.status === 'running' || s.status === 'pending' ? 'open' : null); li.append(el('span', null, s.name), el('span', null, s.status)); hl.appendChild(li); }
+        handoff.appendChild(hl);
+      }
       const decisions = tile('Decisions');
       decisions.appendChild(el('p', 'value', `${d.decisions.open} open · ${d.decisions.answered} answered`));
       const dl = el('ul', 'list');
@@ -124,7 +141,7 @@ export function start(): void {
       helpers.appendChild(hl);
       const time = tile('Time and cost', true);
       time.append(el('p', 'value', d.time.value), el('p', 'sub', d.time.sub));
-      dash.append(now, checks, decisions, helpers, time);
+      dash.append(now, ...(rigor !== null ? [rigor] : []), ...(handoff !== null ? [handoff] : []), checks, decisions, helpers, time);
     }
     drawDoc();
     reportHeight();

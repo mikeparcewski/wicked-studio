@@ -50,6 +50,15 @@ export const RUN_TOPICS: Readonly<Record<string, readonly string[]>> = {
   'wicked.run.checks.evaluated': ['repoChecksEvaluated'],
   'wicked.run.qe.decided': ['qeAcceptanceDecided'],
   'wicked.run.usage.reported': ['cliUsage'],
+  // Power mode (DES-POWER-MODE; api-types 0.149.0's `RunBusType`): the intake plan, every rigor re-score, the checkpoints,
+  // the orchestrator's turns, the hand-off steps and the switch.
+  'wicked.run.intake.planned': ['powerIntakePlanned'],
+  'wicked.run.rigor.rescored': ['rigorRescored'],
+  'wicked.run.checkpoint.reached': ['powerCheckpointReached'],
+  'wicked.run.turn.started': ['powerTurnStarted'],
+  'wicked.run.turn.completed': ['powerTurnCompleted'],
+  'wicked.run.handoff.stepped': ['powerHandoffStepped'],
+  'wicked.run.power.toggled': ['powerToggled'],
 };
 
 const SEGMENT = /^[a-z][a-z0-9_-]{0,40}$/u;
@@ -98,6 +107,10 @@ export function stepIdOf(description: unknown): string | null {
   const head = description.split(/\s+[—-]\s+/u)[0]?.trim() ?? '';
   return /^[a-z][a-z0-9_-]{0,40}$/u.test(head) ? head : null;
 }
+
+const RIGOR_WORDS = new Set(['light', 'standard', 'high', 'highest']);
+const rigorOf = (v: unknown): string | null => (typeof v === 'string' && RIGOR_WORDS.has(v) ? v : null);
+const objOf = (v: unknown): Record<string, unknown> => (typeof v === 'object' && v !== null && !Array.isArray(v) ? v as Record<string, unknown> : {});
 
 function checksOf(v: unknown): Array<Record<string, unknown>> {
   if (!Array.isArray(v)) return [];
@@ -153,6 +166,39 @@ export function toRow(e: CoreEvent, runId: string, at: number, id: string, names
     case 'qeAcceptanceDecided': {
       const qe = (typeof ev['qe'] === 'object' && ev['qe'] !== null ? ev['qe'] : {}) as Record<string, unknown>;
       return { ...base, topic: 'wicked.run.qe.decided', data: { status: word(qe['status']), score: num(qe['score']) } };
+    }
+    // Power mode: rigor words, numbers and seat ids only — never the reasons, summaries or plan text (free text).
+    case 'powerIntakePlanned': {
+      const p = objOf(ev['plan']);
+      return { ...base, topic: 'wicked.run.intake.planned', at: num(p['at']) ?? base.at, data: { rigor: rigorOf(p['rigor']), score: num(p['score']), band: word(p['band']), highRisk: p['highRisk'] === true, estimateMinutes: num(p['estimateMinutes']), mandatoryPhases: Array.isArray(p['mandatoryPhases']) ? p['mandatoryPhases'].length : 0 } };
+    }
+    case 'rigorRescored': {
+      const c = objOf(ev['change']);
+      const by = typeof c['by'] === 'string' ? c['by'] : '';
+      return {
+        ...base, topic: 'wicked.run.rigor.rescored', at: num(c['at']) ?? base.at,
+        data: {
+          seq: num(c['seq']), trigger: word(c['trigger']), from: rigorOf(c['from']), to: rigorOf(c['to']), direction: word(c['direction']),
+          planned: num(c['planned']), actual: num(c['actual']), checkpoint: num(c['checkpoint']), turn: num(c['turn']), paused: c['paused'] === true,
+          byKind: by === 'engine' ? 'engine' : by.startsWith('plugin:') ? 'plugin' : by === '' ? null : 'person',
+        },
+      };
+    }
+    case 'powerCheckpointReached':
+      return { ...base, topic: 'wicked.run.checkpoint.reached', data: { checkpoint: num(ev['checkpoint']), turn: num(ev['turn']), trigger: word(ev['trigger']), rigor: rigorOf(ev['rigor']), picked: num(ev['picked']), paused: ev['paused'] === true } };
+    case 'powerTurnStarted':
+    case 'powerTurnCompleted': {
+      const seat = word(ev['cli']);
+      return { ...base, topic: e.type === 'powerTurnStarted' ? 'wicked.run.turn.started' : 'wicked.run.turn.completed', data: { turn: num(ev['turn']), attempt: num(ev['attempt']), seat, seatName: seat !== null ? (names?.(seat) ?? null) : null, outcome: word(ev['outcome']) } };
+    }
+    case 'powerHandoffStepped': {
+      const st = objOf(ev['step']);
+      const seat = word(st['seat']);
+      return { ...base, topic: 'wicked.run.handoff.stepped', at: num(st['at']) ?? base.at, ord: num(st['ord']), data: { round: num(ev['round']), step: word(st['step']), status: word(st['status']), seat, seatName: seat !== null ? (names?.(seat) ?? null) : null } };
+    }
+    case 'powerToggled': {
+      const t = objOf(ev['toggle']);
+      return { ...base, topic: 'wicked.run.power.toggled', at: num(t['at']) ?? base.at, data: { on: t['on'] === true } };
     }
     case 'cliUsage':
       return { ...base, topic: 'wicked.run.usage.reported', data: { attempt: num(ev['attempt']), costUsd: num(ev['costUsd']), inputTokens: num(ev['inputTokens']), outputTokens: num(ev['outputTokens']) } };

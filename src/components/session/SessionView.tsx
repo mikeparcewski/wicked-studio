@@ -61,6 +61,10 @@ import { executingOrd } from '../../api/run-state.js';
 import { phaseLabel } from '../gateVerdictModel.js';
 import { CREW, responderKey, turnResponder, type Responder } from '../../board/responder.js';
 import { TurnWho } from './TurnWho.js';
+import { PowerSwitchButton, RigorChipButton } from './PowerMode.js';
+import { usePower } from '../../hooks/usePower.js';
+import { powerOf } from '../../api/power.js';
+import { mergePower } from '../../board/powerMode.js';
 import { RunRibbon, RunTab } from './RunTab.js';
 import { useRunHostValue } from './RunHost.js';
 import { HostPanel, useNarrow } from '../editorHost/HostPanel.js';
@@ -74,7 +78,8 @@ import { switchWords, useReplyRoute } from '../../board/replyRoute.js';
 import { useDraftRouter } from '../../hooks/useDraftRouter.js';
 import { useElicitationStore } from '../../store/elicitations.js';
 import { useSystemStore } from '../../store/systemSnapshot.js';
-import { askingResponder, builderResponder } from '../../board/responder.js';
+import { askingResponder, builderResponder, seatResponder } from '../../board/responder.js';
+import { useRunEventStore } from '../../store/events.js';
 import { plainGateQuestion } from '../../board/deskWords.js';
 import { needTone } from '../../board/needTone.js';
 
@@ -406,6 +411,9 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
   // (J4 0.16.6) A step silent past crew's quiet mark is not "Working": the header says how long it has said nothing.
   const silent = useSilentStep(mine.length > 0 ? mine[mine.length - 1] : undefined);
   const silentRunId = silent !== null ? mine[mine.length - 1]!.session.id : null;
+  // Power mode (DES-POWER-MODE §2): the switch beside a run's name and its rigor chip — on a session of one run.
+  const powerRun = mine.length === 1 ? mine[0]! : null;
+  const power = usePower(powerRun);
   const badge = mine.length > 0 ? (state === 'working' && silent !== null ? { word: silentWords(silent), tone: 'gate' as const } : headerBadge(mine, state)) : null;
   // The banner below the header: each thing here that waits on the operator (the Needs-you rows about these runs).
   const gates = useGateStore((s) => s.gates);
@@ -881,6 +889,9 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
   // gate (not an ask turn's, which the composer answers), a run's question, the chat's own gate or question.
   const elicitations = useElicitationStore((s) => s.elicitations);
   const attention = useSystemStore((s) => (s.snapshot?.ranked === true ? s.snapshot.attention : null));
+  // Power mode: a checkpoint pause ("this grew") is a decision too, though no engine gate opens for it.
+  const powerCap = useCapabilities((s) => s.powerMode);
+  const eventsByRun = useRunEventStore((s) => s.byRun);
   const dockItems = useMemo<DockItem[]>(() => {
     const out: DockItem[] = [];
     // The rail's red follows the one dot rule (board/needTone): red when the item blocks other work.
@@ -899,6 +910,12 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
       } else if (el !== undefined) {
         const who = askingResponder(v, roster, el);
         out.push({ key: id, who: who.role === 'seat' ? who.name : null, since: null, question: el.message, tone: blocking(id) ? 'blocking' : 'waiting' });
+      } else if (powerCap) {
+        const p = mergePower(powerOf(v.session), eventsByRun[id]);
+        if (p?.pause != null) {
+          const who = p.orchestrator.cli !== null ? seatResponder(p.orchestrator.cli, roster).name : null;
+          out.push({ key: id, who, since: p.pause.at > 0 ? p.pause.at : null, question: 'This change grew past its plan. How should it go on?', tone: blocking(id) ? 'blocking' : 'waiting' });
+        }
       }
     }
     if (ref.kind === 'chat') {
@@ -907,7 +924,7 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
       if (g !== undefined || el !== undefined) out.push({ key: ref.chatId, who: null, since: g?.receivedAt ?? null, question: g !== undefined ? plainGateQuestion(g.prompt, g.gateKind) : el!.message, tone: 'waiting' });
     }
     return out;
-  }, [mine, gates, elicitations, roster, attention, askBlockHidden, askRunId, ref]);
+  }, [mine, gates, elicitations, roster, attention, askBlockHidden, askRunId, ref, powerCap, eventsByRun]);
   const dockWho = dockItems[0]?.who ?? null;
 
   // H3: the composer's props, shared by the thread's composer and the full-screen chat drawer's (one draft).
@@ -973,6 +990,7 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
           {ready || mine.length > 0 || conversation === 'fresh'
             ? <h1 data-testid="session-title" className="wk-session-title">{title}</h1>
             : <div data-testid="session-title-loading" className="wk-session-title-skeleton"><Skeleton rows={1} variant="line" /></div>}
+          {powerRun !== null && power !== null && <PowerSwitchButton view={powerRun} power={power} />}
           {/* UI-CONTRACT §5: the one status vocabulary (never "Quiet" for a cancelled run); a failed, stopped or cancelled
               run reads red. "Waiting on you" is the banner's, below. */}
           {badge !== null && (
@@ -980,6 +998,7 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
               {badge.word}
             </span>
           )}
+          {powerRun !== null && power !== null && <RigorChipButton view={powerRun} power={power} />}
           {conversation === 'fresh' && mine.length === 0 && (
             <span data-testid="session-status" data-tone="quiet" className="wk-state-badge wk-state-badge--quiet">
               <span data-testid="session-fresh-status">{freshOpening || awaitingOpenRead || (fresh === null) ? 'Starting the chat…'

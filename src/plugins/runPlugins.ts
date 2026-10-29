@@ -55,6 +55,12 @@ const TOPIC_WORDS: Record<string, string> = {
   'wicked.run.checks.evaluated': 'what the checks found, and what was reused',
   'wicked.run.usage.reported': 'time, tokens and cost',
   'wicked.run.qe.decided': 'the QE acceptance decision',
+  'wicked.run.intake.planned': 'the rigor the QE plan set at intake',
+  'wicked.run.rigor.rescored': 'every rigor re-score: up, down or unchanged, and what triggered it',
+  'wicked.run.checkpoint.reached': 'each checkpoint of a power-mode build',
+  'wicked.run.turn.*': 'the orchestrator’s turns: started and finished',
+  'wicked.run.handoff.stepped': 'each hand-off step: checks, review, QE and compliance',
+  'wicked.run.power.toggled': 'when power mode is switched on or off',
 };
 
 const PERMISSION_WORDS: Record<string, string> = {

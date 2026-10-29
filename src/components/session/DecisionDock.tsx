@@ -103,7 +103,7 @@ export function eyebrowWords(item: Pick<DockItem, 'who' | 'since'>, now: number)
 
 const PHONE = '(max-width: 640px)';
 /** A docked renderer's headline (GateRow's question, a plan or hand-over card's, a run's question). */
-const HEADLINE = '[data-testid="session-gate-question"], [data-testid="session-proposal-text"], [data-testid="elicitation-prompt"] p';
+const HEADLINE = '[data-testid="session-gate-question"], [data-testid="session-proposal-text"], [data-testid="elicitation-prompt"] p, [data-testid="power-pause-question"]';
 
 function usePhone(): boolean {
   const [phone, setPhone] = useState(() => typeof window !== 'undefined' && window.matchMedia?.(PHONE).matches === true);

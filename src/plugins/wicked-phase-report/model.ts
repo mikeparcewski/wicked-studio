@@ -14,6 +14,18 @@ export interface GateInfo { ord: number; kind: string; openedAt: number; answere
 export interface CheckInfo { name: string; exitCode: number | null; timedOut: boolean; durationMs: number | null }
 export interface ChecksRun { ord: number | null; attempt: number | null; floor: string | null; outcome: string | null; passed: boolean; checks: CheckInfo[]; reusedFrom: { phase: string | null; ord: number | null; reused: string[]; fresh: string[] } | null; at: number }
 
+/** Power mode (DES-POWER-MODE §8.2): the rigor history, the checkpoints, the orchestrator's turn and the hand-off. */
+export interface RigorRow { seq: number; at: number; trigger: string; from: string | null; to: string; direction: string; planned: number | null; actual: number | null; checkpoint: number | null; byKind: string | null }
+export interface PowerInfo {
+  intake: { rigor: string; score: number | null; at: number } | null;
+  rigor: string | null;
+  history: RigorRow[];
+  checkpoints: Array<{ n: number; at: number; trigger: string | null; rigor: string | null; picked: number; paused: boolean }>;
+  turn: { n: number; seatName: string | null; running: boolean; outcome: string | null; at: number } | null;
+  handoff: { round: number; steps: Map<string, { status: string; seatName: string | null; at: number }> } | null;
+  on: boolean | null;
+}
+
 export interface Report {
   /** The replay has arrived: until then the report says it is reading, never "no events". */
   loaded: boolean;
@@ -27,14 +39,21 @@ export interface Report {
   costUsd: number;
   tokens: number;
   usageReports: number;
+  /** Null until a power-mode row arrives (a phased run never has one). */
+  power: PowerInfo | null;
 }
 
 export function emptyReport(): Report {
-  return { loaded: false, seen: new Set(), startedAt: null, lastAt: null, finished: null, units: new Map(), gates: [], checks: [], costUsd: 0, tokens: 0, usageReports: 0 };
+  return { loaded: false, seen: new Set(), startedAt: null, lastAt: null, finished: null, units: new Map(), gates: [], checks: [], costUsd: 0, tokens: 0, usageReports: 0, power: null };
 }
 
 const str = (v: unknown): string | null => (typeof v === 'string' && v !== '' ? v : null);
 const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+
+function power(r: Report): PowerInfo {
+  r.power ??= { intake: null, rigor: null, history: [], checkpoints: [], turn: null, handoff: null, on: null };
+  return r.power;
+}
 
 function unit(r: Report, ord: number): UnitInfo {
   let u = r.units.get(ord);
@@ -105,6 +124,51 @@ export function foldRows(r: Report, rows: readonly Row[]): boolean {
         });
         break;
       }
+      case 'wicked.run.intake.planned': {
+        const p = power(r);
+        const rigor = str(d['rigor']);
+        if (rigor !== null) { p.intake = { rigor, score: num(d['score']), at: row.at }; p.rigor ??= rigor; }
+        p.on ??= true;
+        break;
+      }
+      case 'wicked.run.rigor.rescored': {
+        const p = power(r);
+        const seq = num(d['seq']);
+        const to = str(d['to']);
+        if (seq === null || to === null || p.history.some((h) => h.seq === seq)) break;
+        p.history.push({ seq, at: row.at, trigger: str(d['trigger']) ?? 'checkpoint', from: str(d['from']), to, direction: str(d['direction']) ?? 'same', planned: num(d['planned']), actual: num(d['actual']), checkpoint: num(d['checkpoint']), byKind: str(d['byKind']) });
+        p.history.sort((a, b) => a.seq - b.seq);
+        p.rigor = p.history.at(-1)!.to;
+        break;
+      }
+      case 'wicked.run.checkpoint.reached': {
+        const p = power(r);
+        const n = num(d['checkpoint']);
+        if (n === null || p.checkpoints.some((c) => c.n === n)) break;
+        p.checkpoints.push({ n, at: row.at, trigger: str(d['trigger']), rigor: str(d['rigor']), picked: num(d['picked']) ?? 0, paused: d['paused'] === true });
+        p.checkpoints.sort((a, b) => a.n - b.n);
+        break;
+      }
+      case 'wicked.run.turn.started':
+      case 'wicked.run.turn.completed': {
+        const p = power(r);
+        const n = num(d['turn']);
+        if (n === null || (p.turn !== null && n < p.turn.n)) break;
+        p.turn = { n, seatName: str(d['seatName']) ?? str(d['seat']), running: row.topic === 'wicked.run.turn.started', outcome: str(d['outcome']), at: row.at };
+        break;
+      }
+      case 'wicked.run.handoff.stepped': {
+        const p = power(r);
+        const round = num(d['round']) ?? 1;
+        const step = str(d['step']);
+        if (step === null) break;
+        if (p.handoff === null || round > p.handoff.round) p.handoff = { round, steps: new Map() };
+        if (round === p.handoff.round) p.handoff.steps.set(step, { status: str(d['status']) ?? 'pending', seatName: str(d['seatName']) ?? str(d['seat']), at: row.at });
+        break;
+      }
+      case 'wicked.run.power.toggled':
+        power(r).on = d['on'] === true;
+        break;
       case 'wicked.run.usage.reported':
         r.costUsd += num(d['costUsd']) ?? 0;
         r.tokens += (num(d['inputTokens']) ?? 0) + (num(d['outputTokens']) ?? 0);
@@ -160,9 +224,46 @@ export function checksWords(c: ChecksRun | undefined, r: Report): string | null 
 
 const plural = (n: number, one: string, many = `${one}s`): string => `${n} ${n === 1 ? one : many}`;
 
+/** A power-mode run's stage: Intake, Building (the orchestrator's turns) or Hand-off. */
+export function powerStage(p: PowerInfo): string {
+  if (p.handoff !== null) return 'Hand-off';
+  if (p.turn !== null || p.checkpoints.length > 0) return 'Building';
+  return 'Intake';
+}
+
+/** One rigor-history line: "14:02 intake, score 34", "14:19 checkpoint 2, score 34 → 58", "14:25 raised by you". */
+export function rigorRowWords(h: RigorRow): string {
+  const what = h.trigger === 'intake' ? 'intake'
+    : h.trigger === 'operator' || h.byKind === 'person' ? 'raised by you'
+      : h.trigger === 'plugin' ? 'raised by a plugin'
+        : h.trigger === 'doc_edit' ? 'a working-document edit'
+          : h.trigger === 'toggle' ? 'power switch'
+            : h.checkpoint !== null ? `checkpoint ${h.checkpoint}` : h.trigger === 'pre_handoff' ? 'before hand-off' : h.trigger.replace(/_/g, ' ');
+  const score = h.trigger === 'intake' ? (h.actual !== null ? `, score ${h.actual}` : '')
+    : h.planned !== null && h.actual !== null && h.planned !== h.actual ? `, score ${h.planned} → ${h.actual}` : '';
+  return `${clock(h.at)} ${what}${score}`;
+}
+
+const HANDOFF_WORDS: Record<string, string> = { rescore: 'Re-score', checks: 'Checks', review: 'Review', security: 'Security', qe: 'QE', compliance: 'Compliance' };
+const HANDOFF_ORDER = ['rescore', 'checks', 'review', 'security', 'qe', 'compliance'];
+
 /** The folded line: "Fix · step 6 of 10 · checks: 3 of 4 passed (reused from Fix) · 1 decision open". */
 export function summaryLine(r: Report): string {
   if (!r.loaded) return 'Reading the job’s events…';
+  // Power mode: "Building · rigor high · checkpoint 2 · checks: 3 passed · 1 decision open".
+  // Only a power BUILD reads this way (an orchestrator turn, a checkpoint or the hand-off): a phased run that had an
+  // intake plan keeps its steps' line.
+  if (r.power !== null && r.finished === null && (r.power.turn !== null || r.power.checkpoints.length > 0 || r.power.handoff !== null)) {
+    const p = r.power;
+    const parts = [powerStage(p)];
+    if (p.rigor !== null) parts.push(`rigor ${p.rigor}${p.intake !== null && p.rigor !== p.intake.rigor ? ' ↑' : ''}`);
+    if (p.checkpoints.length > 0) parts.push(`checkpoint ${p.checkpoints.at(-1)!.n}`);
+    const checks = checksWords(r.checks.at(-1), r);
+    if (checks !== null) parts.push(checks);
+    const open = openGates(r).length;
+    if (open > 0) parts.push(`${plural(open, 'decision')} open`);
+    return parts.join(' · ');
+  }
   const ords = planned(r);
   const parts: string[] = [];
   if (r.finished !== null) {
@@ -204,6 +305,9 @@ export interface Dashboard {
   decisions: { open: number; answered: number; items: Array<{ text: string; when: string; open: boolean }> };
   helpers: Array<{ name: string; steps: string }>;
   time: { value: string; sub: string };
+  /** Power mode only: the rigor history (intake, then each change) and the hand-off's steps. */
+  rigor: Array<{ to: string; arrow: string; words: string }> | null;
+  handoff: Array<{ name: string; status: string }> | null;
 }
 
 export function dashboard(r: Report, nowMs: number): Dashboard {
@@ -262,5 +366,29 @@ export function dashboard(r: Report, nowMs: number): Dashboard {
     value: r.startedAt === null ? '—' : duration(end - r.startedAt),
     sub: r.usageReports === 0 ? 'No usage reported yet' : `≈ $${r.costUsd.toFixed(2)} · ${Math.round(r.tokens / 1000).toLocaleString('en-US')}k tokens`,
   };
-  return { now, checks, decisions, helpers, time };
+  const p = r.power;
+  let rigor: Dashboard['rigor'] = null;
+  let handoff: Dashboard['handoff'] = null;
+  if (p !== null) {
+    const rows = p.history.filter((h) => h.direction !== 'same' || h.trigger === 'intake');
+    rigor = [
+      ...(p.intake !== null && !rows.some((h) => h.trigger === 'intake') ? [{ to: p.intake.rigor, arrow: '', words: `${clock(p.intake.at)} intake${p.intake.score !== null ? `, score ${p.intake.score}` : ''}` }] : []),
+      ...rows.map((h) => ({ to: h.to, arrow: h.trigger === 'intake' ? '' : h.direction === 'up' ? '↑' : h.direction === 'down' ? '↓' : '', words: rigorRowWords(h) })),
+    ];
+    if (p.handoff !== null) {
+      handoff = [...p.handoff.steps.entries()].sort((a, b) => HANDOFF_ORDER.indexOf(a[0]) - HANDOFF_ORDER.indexOf(b[0]))
+        .map(([step, s]) => ({ name: `${HANDOFF_WORDS[step] ?? step}${s.seatName !== null && step !== 'checks' ? ` · ${s.seatName}` : ''}`, status: s.status }));
+    }
+    // "Now", in a power build: the stage, the checkpoint and the orchestrator's turn.
+    if (r.finished === null && open.length === 0 && (p.turn !== null || p.checkpoints.length > 0 || p.handoff !== null)) {
+      const stage = powerStage(p);
+      const cp = p.checkpoints.at(-1);
+      now = {
+        value: [stage, cp !== undefined ? `checkpoint ${cp.n}` : null, p.turn !== null ? `turn ${p.turn.n}` : null].filter((x): x is string => x !== null).join(' · '),
+        sub: p.turn !== null ? `${p.turn.seatName ?? 'The orchestrator'} · orchestrator · ${p.turn.running ? `turn ${p.turn.n} started ${clock(p.turn.at)}` : `turn ${p.turn.n} ended ${clock(p.turn.at)}`}`
+          : p.intake !== null ? `QE plan set rigor ${p.intake.rigor} at ${clock(p.intake.at)}` : 'Starting',
+      };
+    }
+  }
+  return { now, checks, decisions, helpers, time, rigor, handoff };
 }

@@ -47,6 +47,9 @@ import { RunRecordLines, RunStory } from './RunRecord.js';
 import { StrandedCard } from './StrandedCard.js';
 import { RunQuestions } from './ThreadQuestions.js';
 import { TurnWho } from './TurnWho.js';
+import { PowerPauseCard, PowerThread } from './PowerMode.js';
+import { usePower } from '../../hooks/usePower.js';
+import { powerTimeline } from '../../board/powerMode.js';
 
 /**
  * THE RUN AS A CONVERSATION (DES-CHAT-NATIVE-RUN; operator 2026-10-17: "Is that experience really a chat
@@ -254,7 +257,27 @@ export function RunBlock({ view, badge, sessionId, navigate, solo = null }: {
     setEditPlan((v) => !v);
   };
 
-  const steps = useMemo(() => stepMessages(view, runEvents), [view, runEvents]);
+  // Power mode (DES-POWER-MODE): the intake card, the orchestrator's turns, its activity, checkpoints and hand-off.
+  const power = usePower(view);
+  const powerItems = useMemo(() => (power !== null ? powerTimeline(runEvents, power) : []), [power, runEvents]);
+  const intakeOrd = useMemo(() => {
+    for (const e of runEvents ?? NO_EVENTS) { const ev = e as CoreEvent & { ord?: unknown }; if (ev.type === 'powerIntakePlanned' && typeof ev.ord === 'number') return ev.ord; }
+    return null;
+  }, [runEvents]);
+  const powerRun = power !== null && powerItems.length > 0;
+  // A power BUILD (switched on, or an orchestrator already took turns): its intake card stands in for the plan's
+  // message. A phased run with an intake plan keeps its plan's message.
+  const powerBuild = powerRun && power !== null && (power.on || powerItems.some((i) => i.kind === 'turn'));
+  // In a power run the intake card says what intake did, and the orchestrator's turns say what the build did (its one
+  // unit's whole output is not a message too); with no turn words yet, the build unit's message stays.
+  const hiddenOrds = useMemo(() => {
+    const out = new Set<number>();
+    if (!powerRun || power === null) return out;
+    if (intakeOrd !== null) out.add(intakeOrd);
+    if (power.orchestrator.ord !== null && powerItems.some((i) => i.kind === 'turn')) out.add(power.orchestrator.ord);
+    return out;
+  }, [powerRun, power, intakeOrd, powerItems]);
+  const steps = useMemo(() => stepMessages(view, runEvents).filter((s) => !hiddenOrds.has(s.ord)), [view, runEvents, hiddenOrds]);
   const reviewVerdicts = useReviewVerdicts(id, steps, (ord) => { const u = view.units.find((x) => x.ord === ord); return u !== undefined && isReviewUnit(u); });
   const plan = useMemo(() => planSteps(view, chain), [view, chain]);
   const decisions = useMemo(() => decisionMessages(runEvents ?? NO_EVENTS), [runEvents]);
@@ -331,7 +354,7 @@ export function RunBlock({ view, badge, sessionId, navigate, solo = null }: {
       {!soloHead && <p data-testid="chat-run-title" className="wk-chat-run-title wk-session-run-title">{jobTitle(view.session)}{badge > 0 && <span className="wk-chat-chip wk-chat-chip--attn"> Needs you</span>}</p>}
 
       {/* 1. The plan it proposed. */}
-      {(plan.length > 0 || planOpen) && (
+      {((plan.length > 0 && !powerBuild) || planOpen) && (
         <AssistantMessage who={plannerWho} runId={id} at={planAt} testId="chat-plan" extra={{ 'data-open': planOpen ? 'true' : 'false' }}>
           {/* While the plan waits on you, the card IS the message: its one sentence of steps, why, and the buttons. */}
           {(!planOpen || planDocked) && plan.length > 0 && <p data-testid="chat-plan-steps" className="wk-chat-p">I split this into {plan.length} {plan.length === 1 ? 'step' : 'steps'}: {listWords(plan)}.</p>}
@@ -349,8 +372,12 @@ export function RunBlock({ view, badge, sessionId, navigate, solo = null }: {
         </Docked>
       )}
       {decisions.filter((d) => d.ord === planOrd).map((d) => <DecisionLine key={`d${d.ord}-${d.at}`} d={d} />)}
+      {/* Power mode: the intake QE plan opens the run's turns; the build's turns, activity and checkpoints follow the
+          run-thread plugins' blocks (the Phase report sits under the orchestrator's first words in the mockup). */}
+      {powerRun && power !== null && <PowerThread view={view} power={power} items={powerItems} part="intake" />}
       {/* The run-thread plugins' blocks, at the run's first unit (unless pinned to the top). */}
       <RunThreadPlugins runId={id} placement="thread" />
+      {powerRun && power !== null && <PowerThread view={view} power={power} items={powerItems} part="rest" />}
       {/* The plan editor, only when you asked to edit (it is the plan's own artifact). */}
 
 
@@ -370,6 +397,14 @@ export function RunBlock({ view, badge, sessionId, navigate, solo = null }: {
       <WorkingDocSteerRows runId={id} except={steps.map((s) => s.ord)} />
 
       {/* 3. A question it is asking now (not the plan, not the hand-over): in the flow, answered here. */}
+      {/* Power mode: the orchestrator paused at a checkpoint because the change grew ("this grew"). Not an engine gate:
+          the run stays executing and the answer is POST /runs/:id/power/pause. */}
+      {power?.pause != null && !isTerminal && gate === undefined && (
+        <Docked dockKey={id} open marker={<DecisionMarker dockKey={id} who={power.orchestrator.cli !== null ? seatResponder(power.orchestrator.cli, roster).name : null} since={power.pause.at > 0 ? power.pause.at : null} />}
+          dock={<PowerPauseCard view={view} power={power} />}>
+          <PowerPauseCard view={view} power={power} />
+        </Docked>
+      )}
       {gate !== undefined && effectiveKind === null && finished === null && (
         <Docked dockKey={id} open marker={<DecisionMarker dockKey={id} who={builderResponder(view, gate.ord, roster)?.name ?? null} since={gate.receivedAt} />}
           dock={<GateRow view={view} gate={gate} {...(navigate !== undefined ? { navigate } : {})} />}>
