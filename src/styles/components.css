@@ -2045,6 +2045,8 @@ p.wk-run-tab-muted { margin: var(--space-1) 0; }
 button.wk-who-name { background: none; border: 0; padding: 0; cursor: pointer; }
 button.wk-who-name:hover { text-decoration: underline; }
 .wk-who-suffix { font-weight: var(--weight-normal); }
+/* Message timestamps: "Claude Code · Fix · 14:16–14:21" (power-mode mockup). */
+.wk-who-at { font-variant-numeric: tabular-nums; white-space: nowrap; }
 .wk-who--asking, .wk-who--made { margin-top: 6px; }
 .wk-run-gate-actions { display: inline-flex; gap: 6px; }
 /* H3: the full-screen chat drawer's compact thread. */

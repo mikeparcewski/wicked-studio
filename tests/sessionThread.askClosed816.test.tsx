@@ -43,11 +43,13 @@ const CLOSED_RUN = makeView({ id: RUN, status: 'cancelled', problem: 'what does 
 ]);
 
 let outputs: Record<string, string | null> = {};
+let rows: TeamRow[] = ROWS;
 let outputReads: string[] = [];
 
 beforeEach(() => {
   outputs = { 'answer-1': 'SCOPE answer\nThe loop starts at i = 1.', 'answer-2': 'Start it at i = 0.\nPLAN+ {"steps":[]}' };
   outputReads = [];
+  rows = ROWS;
   useCapabilities.setState({ loaded: true, runChatId: true, walkthroughRoots: false, askPath: true });
   useAskThreadStore.setState({ turns: {}, runByChat: {}, runs: new Set(), creatorAccepted: {}, chatClosed: {}, turnGates: {}, replySeq: {}, paByChat: {}, retiredByChat: {}, answerOrds: {} });
   useTeamPlanStore.setState({ byRun: {}, refs: {} });
@@ -61,7 +63,7 @@ beforeEach(() => {
     if (path.startsWith('/chats/')) return ok({ chatId: 'chat-closed', seats: [], scope: null, messages: [] });
     const out = /\/units\/([^/]+)\/output$/.exec(path);
     if (out !== null) { outputReads.push(out[1]!); return ok({ output: outputs[out[1]!] ?? null }); }
-    if (path.endsWith('/team')) return ok({ runId: RUN, teamed: true, transport: 'bus', reason: null, planRev: 2, ended: true, units: [], rows: ROWS });
+    if (path.endsWith('/team')) return ok({ runId: RUN, teamed: true, transport: 'bus', reason: null, planRev: 2, ended: true, units: [], rows });
     if (path.endsWith('/events')) return ok({ events: [] });
     if (path === '/catalog') return ok({ entries: [] });
     return ok({});
@@ -100,6 +102,30 @@ describe('studio#816 — a closed ask keeps its answers', () => {
     const o = order();
     // The finding about answer 1 stays at its own time, BEFORE answer 2 — never moved under it.
     expect(o.indexOf('line:finding')).toBeLessThan(o.findIndex((x) => x.includes('Start it at i = 0.')));
+  });
+});
+
+describe('message timestamps on a closed ask (xreview on studio#929)', () => {
+  const helperTimes = (): (string | null)[] => [...document.querySelectorAll('[data-testid="session-turn"][data-who="helper"]')]
+    .map((t) => t.querySelector('[data-testid="turn-who-at"]')?.textContent ?? null);
+  const hhmm = (ms: number): string => { const d = new Date(ms); return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; };
+
+  it('an answer placed at its step\'s completion row says that time', async () => {
+    render(<SessionPage sessionId="chat-closed" runs={[CLOSED_RUN]} runsLoaded needRows={[]} navigate={() => {}} onAsk={() => {}} />);
+    await screen.findByText(/Start it at i = 0\./);
+    await waitFor(() => expect(helperTimes()).toHaveLength(2));
+    // T0 is another day: the day leads the time ("14 Nov 17:13").
+    const got = helperTimes();
+    expect(got[0]).toMatch(new RegExp(` · \\d+ \\w{3} ${hhmm(T0 + 900)}$`));
+    expect(got[1]).toMatch(new RegExp(` · \\d+ \\w{3} ${hhmm(T0 + 2000)}$`));
+  });
+
+  it('an answer placed only by step order (no completion row) shows no time, never its ordering key', async () => {
+    rows = ROWS.filter((r) => r.event_type !== 'wicked.team.step.completed');
+    render(<SessionPage sessionId="chat-closed" runs={[CLOSED_RUN]} runsLoaded needRows={[]} navigate={() => {}} onAsk={() => {}} />);
+    await screen.findByText(/Start it at i = 0\./);
+    await waitFor(() => expect(helperTimes()).toHaveLength(2));
+    expect(helperTimes()).toEqual([null, null]);
   });
 });
 

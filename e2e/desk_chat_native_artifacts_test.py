@@ -24,6 +24,7 @@ Captures: e2e/shots/desk-chat-native-art-*.png. Env: FEEDBACK_PORT (default 4484
 
 import json
 import os
+import re
 import sys
 import time
 import urllib.request
@@ -132,7 +133,7 @@ with sync_playwright() as p:
         # ── a. a document: the card in the agent's bubble; full screen and back, one frame ────────
         d = doc_run(page, PAGE_DOC, theme, "wicked-page")
         page.screenshot(path=str(SHOTS / f"desk-chat-native-art-doc-{theme}.png"))
-        check(f"{theme}-doc-in-bubble", d["inBubble"] and d["who"] == "studio · made this" and "Version 1" in (d["text"] or "")
+        check(f"{theme}-doc-in-bubble", d["inBubble"] and re.match(r"^studio · made this( · [0-9:–A-Za-z ]+)?$", d["who"] or "") is not None and "Version 1" in (d["text"] or "")
               and d["bubble"]["l"] >= d["thread"]["l"] and d["bubble"]["r"] <= d["thread"]["r"] and d["bubble"]["w"] <= 768
               and d["bubbleBg"] not in (None, "rgba(0, 0, 0, 0)") and not d["hscroll"], where=d)
         page.locator('[data-testid="plugin-card"][data-editor="wicked-page"]').get_by_test_id("plugin-card-full").click()
