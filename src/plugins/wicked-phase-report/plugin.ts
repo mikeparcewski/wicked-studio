@@ -28,8 +28,12 @@ export function start(): void {
   // The working document: null until read; `unsupported` when the service keeps none (an older crew).
   let doc: DocView | null = null;
   let docState: 'reading' | 'ready' | 'unsupported' = 'reading';
-  let editing: SectionId | null = null;
+  interface EditSession { section: SectionId; base: number; opened: string; saving: boolean; conflict: boolean }
+  let edit: EditSession | null = null;
   let docLine: { text: string; bad: boolean } | null = null;
+  let readSeq = 0;
+  let readFailed = false;
+  let writes: Promise<void> = Promise.resolve();
   let seq = 0;
   const pending = new Map<string, (r: { ok: boolean; payload?: Record<string, unknown>; error?: { code: string; message: string } }) => void>();
   const ask = (type: string, payload: unknown): Promise<{ ok: boolean; payload?: Record<string, unknown>; error?: { code: string; message: string } }> => {
@@ -127,53 +131,121 @@ export function start(): void {
   }
 
   // ── the working document (spike 3) ─────────────────────────────────────────────────────────────────
+  //
+  // One editor at a time, as a SESSION: the section, the version it was opened on (the save's base: a refresh never
+  // moves it, so a change made meanwhile is a conflict, never an overwrite), the text it opened with, and whether a
+  // save is in flight. Reads are numbered and only the newest answer is used. Document writes (a save, the plugin's
+  // own Decisions line) run one after another.
 
   async function readDoc(): Promise<void> {
+    readSeq += 1;
+    const mine = readSeq;
     const r = await ask('doc.read', {});
-    if (r.ok && r.payload !== undefined) { doc = r.payload['view'] as DocView; docState = 'ready'; }
-    else if (r.error?.code === 'unavailable' || r.error?.code === 'not_granted') docState = 'unsupported';
+    if (mine !== readSeq) return; // a newer read was started: this answer is stale
+    if (r.ok && r.payload !== undefined) { doc = r.payload['view'] as DocView; docState = 'ready'; readFailed = false; }
+    else if (r.error?.code === 'unsupported' || r.error?.code === 'not_granted') docState = 'unsupported';
+    // A failed read keeps what was shown, says so, and offers a retry (the next change frame retries too).
+    else readFailed = true;
     drawDoc();
     reportHeight();
   }
 
-  async function save(section: SectionId, text: string, origin: 'typed' | 'generated'): Promise<boolean> {
-    const base = doc?.doc?.head ?? -1;
-    const r = await ask('doc.propose_edit', { base, section, text, origin });
-    if (r.ok) {
-      const v = r.payload?.['version'];
-      if (origin === 'typed') docLine = { text: typeof v === 'number' ? `Saved as version ${v}. ${SECTION_EFFECT[section]}` : 'Nothing changed.', bad: false };
-      await readDoc();
-      return true;
-    }
-    if (origin === 'typed') docLine = { text: r.error?.code === 'head_moved' ? 'The document changed meanwhile. Your text is still here: save it again.' : `Not saved: ${r.error?.message ?? 'no answer'}`, bad: true };
-    await readDoc();
-    return false;
+  /** Writes run one after another (two would race the same base). */
+  function serial<T>(f: () => Promise<T>): Promise<T> {
+    const next = writes.then(f, f);
+    writes = next.then(() => undefined, () => undefined);
+    return next;
   }
 
-  /** A decision answered live: the plugin's own line under Decisions, written as itself, once. */
-  async function decisionAnswered(kind: string, at: number): Promise<void> {
-    if (doc === null || doc.doc === null || doc.sections === null) return;
+  /** A person's save from the open editor session. */
+  function saveEdit(session: EditSession, text: string): void {
+    if (session.saving) return;
+    session.saving = true;
+    drawDoc();
+    void serial(async () => {
+      const r = await ask('doc.propose_edit', { base: session.base, section: session.section, text, origin: 'typed' });
+      session.saving = false;
+      if (r.ok) {
+        const v = r.payload?.['version'];
+        docLine = { text: typeof v === 'number' ? `Saved as version ${v}. ${SECTION_EFFECT[session.section]}` : 'Nothing changed.', bad: false };
+        // Close it only if it is still this session and nothing was typed while it saved; otherwise keep the newer text
+        // as the draft, on the version just made.
+        if (edit === session && currentDraft() === text) edit = null;
+        else if (edit === session && typeof v === 'number') session.base = v;
+      } else if (r.error?.code === 'head_moved') {
+        docLine = { text: 'Someone changed the document meanwhile. Your text is kept: check the section’s new text above it, then save again.', bad: true };
+        session.conflict = true;
+      } else {
+        docLine = { text: `Not saved: ${r.error?.message ?? 'no answer'}`, bad: true };
+      }
+      await readDoc();
+      // After a conflict the new head is the base, now that the person can see what changed.
+      if (edit === session && session.conflict && doc?.doc != null) session.base = doc.doc.head;
+      drawDoc();
+      reportHeight();
+    });
+  }
+
+  /** A decision answered live: the plugin's own line under Decisions, written as itself, once (retried once after a
+   *  conflict; it waits for the first read when the document is not read yet). */
+  function decisionAnswered(kind: string, at: number): void {
     const d = new Date(at);
     const line = `${gateWord(kind)} · answered ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-    const next = withDecisionLine(doc.sections.decisions, line);
-    if (next !== null) await save('decisions', next, 'generated');
+    void serial(async () => {
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        if (doc === null) await readDoc();
+        if (doc === null || doc.doc === null || doc.sections === null) return;
+        const next = withDecisionLine(doc.sections.decisions, line);
+        if (next === null) return;
+        const r = await ask('doc.propose_edit', { base: doc.doc.head, section: 'decisions', text: next, origin: 'generated' });
+        await readDoc();
+        if (r.ok || r.error?.code !== 'head_moved') return;
+      }
+    });
   }
+
+  function currentDraft(): string | null {
+    const ta = document.querySelector<HTMLTextAreaElement>('#wd textarea');
+    return ta === null ? null : ta.value;
+  }
+
+  function openEditor(id: SectionId): void {
+    if (edit !== null && edit.section !== id) {
+      // An unsaved change is never thrown away by a click elsewhere.
+      if (currentDraft() !== edit.opened) { docLine = { text: `Save or cancel ${SECTION_LABELS[edit.section]} first.`, bad: true }; drawDoc(); return; }
+    }
+    const text = doc?.sections?.[id] ?? '';
+    edit = { section: id, base: doc?.doc?.head ?? -1, opened: text, saving: false, conflict: false };
+    docLine = null;
+    drawDoc();
+    reportHeight();
+    queueMicrotask(() => document.querySelector<HTMLTextAreaElement>('#wd textarea')?.focus());
+  }
+
+  function closeEditor(): void { edit = null; docLine = null; drawDoc(); reportHeight(); }
 
   function drawDoc(): void {
     const box = $('wd');
     box.hidden = folded;
     if (folded) return;
-    // A section being edited keeps its text area: only the trail and the status line are redrawn under it.
-    if (editing !== null && box.querySelector('textarea') !== null) {
-      drawTrail(box);
-      return;
-    }
+    // The open editor's own text area is kept (its text, caret and focus) and moved into the redrawn section.
+    const keep = edit !== null ? box.querySelector<HTMLTextAreaElement>(`textarea[data-section="${edit.section}"]`) : null;
+    const hadFocus = keep !== null && document.activeElement === keep;
+    const caret = keep !== null ? [keep.selectionStart, keep.selectionEnd] as const : null;
     box.replaceChildren();
     const head = el('div', 'wd-head');
     head.append(el('h3', 'wd-title', 'Working document'));
     if (doc?.doc != null) head.append(el('span', 'wd-ver', `version ${doc.doc.head}`));
     box.append(head, el('p', 'wd-note', STEER_NOTE));
     if (docState === 'unsupported') { box.append(el('p', 'sub', 'This version of studio’s service keeps no working document.')); return; }
+    if (readFailed) {
+      const p = el('p', 'wd-status bad', 'The working document could not be read just now. ');
+      const retry = el('button', 'wd-btn', 'Try again') as HTMLButtonElement;
+      retry.type = 'button';
+      retry.addEventListener('click', () => { void readDoc(); });
+      p.append(retry);
+      box.append(p);
+    }
     if (docState === 'reading') { box.append(el('p', 'sub', 'Reading the working document…')); return; }
     for (const id of SECTIONS) {
       const sec = el('div', 'wd-sec');
@@ -183,56 +255,56 @@ export function start(): void {
       if (who !== null) h.append(el('span', 'wd-who', who));
       sec.append(h);
       const text = doc?.sections?.[id] ?? '';
-      if (editing === id) {
-        const ta = document.createElement('textarea');
-        ta.className = 'wd-input';
-        ta.value = text;
-        ta.rows = Math.min(10, Math.max(3, text.split('\n').length + 1));
-        ta.setAttribute('aria-label', SECTION_LABELS[id]);
-        ta.maxLength = 4_000;
-        const go = (): void => { void save(id, ta.value, 'typed').then((ok) => { if (ok) { editing = null; drawDoc(); reportHeight(); } }); };
-        ta.addEventListener('keydown', (ev) => {
-          if (ev.key === 'Enter' && (ev.metaKey || ev.ctrlKey)) { ev.preventDefault(); go(); }
-          if (ev.key === 'Escape') { ev.preventDefault(); editing = null; docLine = null; drawDoc(); reportHeight(); }
-        });
+      const session = edit;
+      if (session !== null && session.section === id) {
+        // After a conflict, what the section says now, above the person's own text.
+        if (session.conflict && text !== session.opened) sec.append(el('p', 'wd-now', `Now: ${text.trim() === '' ? '(empty)' : text}`));
+        const ta = keep ?? document.createElement('textarea');
+        if (keep === null) {
+          ta.className = 'wd-input';
+          ta.dataset['section'] = id;
+          ta.value = text;
+          ta.setAttribute('aria-label', SECTION_LABELS[id]);
+          ta.maxLength = 4_000;
+          ta.addEventListener('keydown', (ev) => {
+            if (ev.key === 'Enter' && (ev.metaKey || ev.ctrlKey)) { ev.preventDefault(); if (edit !== null) saveEdit(edit, ta.value); }
+            if (ev.key === 'Escape') { ev.preventDefault(); closeEditor(); }
+          });
+        }
+        ta.rows = Math.min(10, Math.max(3, ta.value.split('\n').length + 1));
         const bar = el('div', 'wd-bar');
-        const saveBtn = el('button', 'wd-btn primary', 'Save') as HTMLButtonElement;
+        const saveBtn = el('button', 'wd-btn primary', session.saving ? 'Saving…' : 'Save') as HTMLButtonElement;
         saveBtn.type = 'button';
-        saveBtn.addEventListener('click', go);
+        saveBtn.disabled = session.saving;
+        saveBtn.addEventListener('click', () => { if (edit !== null) saveEdit(edit, ta.value); });
         const cancel = el('button', 'wd-btn', 'Cancel') as HTMLButtonElement;
         cancel.type = 'button';
-        cancel.addEventListener('click', () => { editing = null; docLine = null; drawDoc(); reportHeight(); });
+        cancel.addEventListener('click', closeEditor);
         bar.append(saveBtn, cancel, el('span', 'wd-effect', SECTION_EFFECT[id]));
         sec.append(ta, bar);
-        queueMicrotask(() => ta.focus());
+        if (keep !== null && hadFocus) { ta.focus(); if (caret !== null) ta.setSelectionRange(caret[0], caret[1]); }
       } else {
         const t = el('div', `wd-text${text.trim() === '' ? ' empty' : ''}`, text.trim() === '' ? (id === 'goal' && doc?.doc == null ? 'Not started. Edit a section to start the working document.' : 'Nothing yet.') : text);
         t.tabIndex = 0;
         t.setAttribute('role', 'button');
         t.setAttribute('aria-label', `Edit ${SECTION_LABELS[id]}`);
-        const open = (): void => { editing = id; docLine = null; drawDoc(); reportHeight(); };
-        t.addEventListener('click', open);
-        t.addEventListener('keydown', (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); open(); } });
+        t.addEventListener('click', () => openEditor(id));
+        t.addEventListener('keydown', (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); openEditor(id); } });
         sec.append(t);
       }
       box.append(sec);
     }
-    drawTrail(box);
-  }
-
-  function drawTrail(box: HTMLElement): void {
-    box.querySelector('.wd-status')?.remove();
-    box.querySelector('.wd-trail')?.remove();
     if (docLine !== null) {
-      const s = el('p', `wd-status${docLine.bad ? ' bad' : ''}`, docLine.text);
-      s.setAttribute('role', 'status');
-      box.append(s);
+      const st = el('p', `wd-status${docLine.bad ? ' bad' : ''}`, docLine.text);
+      st.setAttribute('role', 'status');
+      box.append(st);
     }
-    if (doc === null || doc.trail.length === 0) return;
-    const ol = el('ol', 'wd-trail');
-    ol.setAttribute('aria-label', 'Versions');
-    for (const line of trailLines(doc)) ol.append(el('li', null, line));
-    box.append(ol);
+    if (doc !== null && doc.trail.length > 0) {
+      const ol = el('ol', 'wd-trail');
+      ol.setAttribute('aria-label', 'Versions');
+      for (const line of trailLines(doc)) ol.append(el('li', null, line));
+      box.append(ol);
+    }
   }
 
   function hello(e: MessageEvent): void {
@@ -272,7 +344,7 @@ export function start(): void {
             for (const row of rows) {
               if (row.topic !== 'wicked.run.session.resumed') continue;
               const gate = report.gates.find((g) => g.ord === row.ord && g.answeredAt === row.at);
-              if (gate !== undefined) void decisionAnswered(gate.kind, row.at);
+              if (gate !== undefined) decisionAnswered(gate.kind, row.at);
             }
           }
           break;

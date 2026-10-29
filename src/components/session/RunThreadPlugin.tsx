@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../../api/client.js';
-import { EditorHost, type HostAdapter, type HostDoc, type HostLogEntry } from '../../editors/host.js';
-import { ensureWorkingDoc, getWorkingDoc, proposeWorkingDoc, type WorkingDocSectionId } from '../../api/workingDoc.js';
-import { ApiError } from '../../api/errors.js';
+import { EditorHost, type HostAdapter, type HostLogEntry } from '../../editors/host.js';
+import { workingDocSeam } from './workingDocSeam.js';
 import { useWorkingDocs } from '../../store/workingDocs.js';
 import { RunEventFeed, type EventsBatch } from '../../editors/runEvents.js';
 import { readThemeTokens } from '../../editors/theme.js';
@@ -78,39 +77,13 @@ export function RunThreadPlugin({ runId, plugin, placement }: { runId: string; p
   const setDoc = useWorkingDocs((s) => s.set);
   const granted = (id: string): boolean => plugin.permissions.some((p) => p.id === id);
 
-  /** The working document seam the host hands the plugin (spike 3). Crew decides the rest. */
-  const docSeam = useRef<HostDoc>({
-    read: async () => {
-      try {
-        const view = await getWorkingDoc(runId);
-        if (view === null) return { error: 'unavailable', message: 'this version of studio’s service keeps no working document' };
-        setDoc(runId, view);
-        return { view };
-      } catch (e) {
-        return { error: 'unavailable', message: e instanceof Error ? e.message : String(e) };
-      }
-    },
-    propose: async (edit, by) => {
-      try {
-        let base = edit.base;
-        if (base < 0) {
-          // A plugin's own lines never START a working document; a person's first edit does.
-          if (by === 'plugin') return { error: 'refused', message: 'this job has no working document yet' };
-          base = (await ensureWorkingDoc(runId)).doc?.head ?? 0;
-        }
-        const r = await proposeWorkingDoc(runId, {
-          base, author: by, plugin: { id: plugin.id, version: plugin.version },
-          sections: { [edit.section as WorkingDocSectionId]: edit.text },
-        });
-        setDoc(runId, r.view);
-        return { version: r.version, unchanged: r.unchanged, by };
-      } catch (e) {
-        if (e instanceof ApiError && e.status === 409) return { error: 'head_moved', message: 'the working document changed since' };
-        if (e instanceof ApiError && (e.status === 403 || e.status === 400)) return { error: 'refused', message: e.message };
-        return { error: 'unavailable', message: e instanceof Error ? e.message : String(e) };
-      }
-    },
-  });
+  // The run and plugin the seam acts for, read at call time (a block reused for another run never writes the old one).
+  const current = useRef({ runId, plugin });
+  current.current = { runId, plugin };
+  /** The working document seam the host hands the plugin (spike 3; `workingDocSeam.ts`). Crew decides the rest. */
+  const docSeam = useRef(workingDocSeam({ current: () => current.current, land: (r, v) => setDoc(r, v) }));
+  // A suggestion belongs to the run it was made on.
+  useEffect(() => { setProposal(null); setProposalState('idle'); }, [runId]);
 
   useEffect(() => {
     if (frameBox.current === null) return undefined;
@@ -189,7 +162,7 @@ export function RunThreadPlugin({ runId, plugin, placement }: { runId: string; p
     const ev = e as unknown as { type: string; session?: unknown; head?: unknown };
     if (ev.type !== 'workingDocChanged' || ev.session !== runId) return;
     hostRef.current?.docChanged(typeof ev.head === 'number' ? ev.head : null);
-    if (!granted('doc.read')) void getWorkingDoc(runId).then((v) => { if (v !== null) setDoc(runId, v); }).catch(() => undefined);
+    if (!granted('doc.read')) void docSeam.current.read();
   }), [runId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /** The host's own Send for a suggested note: a person's click adds it to "Next and trailing work" as their edit. */
@@ -197,12 +170,8 @@ export function RunThreadPlugin({ runId, plugin, placement }: { runId: string; p
     if (proposal === null) return;
     setProposalState('sending');
     try {
-      const current = useWorkingDocs.getState().byRun[runId];
-      const base = current?.doc?.head ?? (await ensureWorkingDoc(runId)).doc?.head ?? 0;
-      const next = [current?.sections?.next ?? '', proposal].filter((x) => x.trim() !== '').join('\n');
-      const r = await proposeWorkingDoc(runId, { base, author: 'operator', plugin: { id: plugin.id, version: plugin.version }, sections: { next } });
-      setDoc(runId, r.view);
-      hostRef.current?.docChanged(r.version);
+      const view = await docSeam.current.appendToNext(proposal, useWorkingDocs.getState().byRun[runId]);
+      hostRef.current?.docChanged(view.doc?.head ?? null);
       setProposal(null);
     } catch {
       setProposalState('failed');
@@ -309,7 +278,7 @@ export function RunThreadPlugin({ runId, plugin, placement }: { runId: string; p
           </p>
         </div>
       )}
-      <p data-testid="run-plugin-attribution" className="wk-runplugin-foot" title={`It hears ${topics}. It can’t change anything.`}>{attributionLine(plugin)}</p>
+      <p data-testid="run-plugin-attribution" className="wk-runplugin-foot" title={`It hears ${topics}. It writes only its own lines in the working document; what you type there is yours, and it never answers a decision.`}>{attributionLine(plugin)}</p>
     </section>
   );
 }

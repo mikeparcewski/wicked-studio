@@ -153,6 +153,19 @@ with sync_playwright() as p:
     lines = wait_trail(page, lambda ls: any(l.startswith("v2 · You · Next and trailing work") for l in ls))
     check("2b-keyboard-save", any(l.startswith("v2 · You · Next and trailing work") for l in lines) and version_posts[-1].get("author") == "operator", trail=lines)
 
+    # Long text (120 lines) stays reachable: the section scrolls in its own box, and every later section and the
+    # trail can still be reached (the frame has a height cap).
+    f.locator('.wd-sec[data-section="approach"] .wd-text').click()
+    f.locator('.wd-sec[data-section="approach"] textarea').fill("\n".join(f"line {i}" for i in range(1, 121)))
+    f.locator('.wd-sec[data-section="approach"] button.primary').click()
+    wait_trail(page, lambda ls: any(l.startswith("v3 · You · Approach") for l in ls))
+    box = f.locator('.wd-sec[data-section="approach"] .wd-text').evaluate("(e) => ({ sh: e.scrollHeight, ch: e.clientHeight, last: e.textContent.trim().endsWith('line 120') })")
+    f.locator('.wd-trail').scroll_into_view_if_needed()
+    reach = f.locator('main').evaluate("""() => { const t = document.querySelector('.wd-trail').getBoundingClientRect();
+      const n = document.querySelector('.wd-sec[data-section="next"] .wd-text').getBoundingClientRect();
+      return { trailVisible: t.bottom <= innerHeight + 1 && t.top >= -1, nextHeight: Math.round(n.height), docHeight: document.documentElement.scrollHeight, frameHeight: innerHeight }; }""")
+    check("2c-long-text", box["sh"] > box["ch"] and box["last"] and reach["trailVisible"] and reach["nextHeight"] > 0, box=box, reach=reach)
+
     # ── 3. the plugin's own line under Decisions ─────────────────────────────────────────────────────
     if not sockets:
         fail("3-plugin-line", {"why": "studio opened no /ws"})
@@ -160,18 +173,18 @@ with sync_playwright() as p:
     lines = wait_trail(page, lambda ls: any("Phase report (plugin) · Decisions" in l for l in ls))
     plugin_post = next((x for x in version_posts if x.get("author") == "plugin"), {})
     decisions = f.locator('.wd-sec[data-section="decisions"] .wd-text').inner_text()
-    check("3-plugin-line", any(l.startswith("v3 · Phase report (plugin) · Decisions") for l in lines)
+    check("3-plugin-line", any(l.startswith("v4 · Phase report (plugin) · Decisions") for l in lines)
           and list(plugin_post.get("sections", {}).keys()) == ["decisions"] and "answered" in decisions
           and not any("You · Decisions" in l for l in lines), trail=lines, post=plugin_post, decisions=decisions)
 
     # ── 4. picked up by the next step ────────────────────────────────────────────────────────────────
     post("/__fixture/working-doc-pickup", {"runId": RUN, "ord": 7, "step": "review"})
-    send([{"type": "workingDocChanged", "head": 3}])
+    send([{"type": "workingDocChanged", "head": 4}])
     lines = wait_trail(page, lambda ls: any("picked up at Review" in l for l in ls))
     page.wait_for_timeout(400)
     rows = page.locator('[data-testid="working-doc-steer"]').all_inner_texts()
-    check("4-picked-up", any(l.startswith("v2 · You · Next and trailing work") and "picked up at Review" in l for l in lines)
-          and "You edited the working document · Next work · picked up at Review" in rows, trail=lines, rows=rows)
+    check("4-picked-up", any(l.startswith("v3 · You · Approach") and "picked up at Review" in l for l in lines)
+          and "You edited the working document · Approach · picked up at Review" in rows, trail=lines, rows=rows)
     page.locator(BLOCK).first.scroll_into_view_if_needed()
     page.screenshot(path=str(SHOTS / "desk-working-doc-picked-1440.png"))
 

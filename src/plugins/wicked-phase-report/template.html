@@ -16,7 +16,8 @@
     --font-sans: system-ui, sans-serif;
   }
   html, body { margin: 0; padding: 0; background: var(--surface-card); }
-  body { font: 13px/1.45 var(--font-sans), system-ui, sans-serif; color: var(--ink-body); overflow: hidden; }
+  /* The host caps the block's height: anything taller scrolls inside the frame, never clipped. */
+  body { font: 13px/1.45 var(--font-sans), system-ui, sans-serif; color: var(--ink-body); overflow-x: hidden; }
   [hidden] { display: none !important; }
   button.sum {
     all: unset; box-sizing: border-box; display: flex; align-items: center; gap: 8px; width: 100%; min-height: 34px;
@@ -59,7 +60,8 @@
   .wd-sec { padding: 6px 0; border-top: 1px solid var(--border); }
   .wd-sec h4 { margin: 0 0 3px; display: flex; justify-content: space-between; gap: 8px; font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-muted); }
   .wd-who { font-weight: 400; letter-spacing: 0; text-transform: none; }
-  .wd-text { white-space: pre-wrap; color: var(--ink-body); border-radius: 6px; padding: 2px 4px; margin: 0 -4px; cursor: text; min-height: 1.4em; }
+  .wd-text { white-space: pre-wrap; overflow-wrap: anywhere; color: var(--ink-body); border-radius: 6px; padding: 2px 4px; margin: 0 -4px; cursor: text; min-height: 1.4em; max-height: 18em; overflow-y: auto; }
+  .wd-now { margin: 0 0 4px; padding: 4px 6px; border-radius: 6px; background: var(--surface-card); white-space: pre-wrap; font-size: 12px; color: var(--ink-high); max-height: 10em; overflow-y: auto; }
   .wd-text:hover { background: var(--surface-card); }
   .wd-text:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
   .wd-text.empty { color: var(--ink-muted); font-style: italic; }
