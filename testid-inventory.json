@@ -12,8 +12,8 @@
   "studioVersion": "0.13.0",
   "counts": {
     "files": 257,
-    "occurrences": 3505,
-    "static": 2986,
+    "occurrences": 3506,
+    "static": 2987,
     "dynamic": 75,
     "computed": 33
   },
@@ -12184,6 +12184,12 @@
     },
     {
       "testId": "run-plugins-pinned",
+      "files": [
+        "src/components/session/RunThreadPlugin.tsx"
+      ]
+    },
+    {
+      "testId": "run-plugins-pinned-run",
       "files": [
         "src/components/session/RunThreadPlugin.tsx"
       ]
