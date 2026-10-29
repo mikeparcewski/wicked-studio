@@ -82,7 +82,7 @@ with sync_playwright() as p:
     page.add_init_script(
         "document.addEventListener('DOMContentLoaded', () => { const s = document.createElement('style'); "
         f"s.textContent = {json.dumps(HIDE_GATE_TOASTS)}; document.head.appendChild(s); }});"
-        f"if (!localStorage.getItem('studio.visit')) localStorage.setItem('studio.visit', JSON.stringify({{lastSeenAt: {looked_at}, handover: null}}));")
+        f"try {{ if (!localStorage.getItem('studio.visit')) localStorage.setItem('studio.visit', JSON.stringify({{lastSeenAt: {looked_at}, handover: null}})); }} catch (e) {{}}")
 
     # `steering_rules`: GET /governance/rules serves the corpus plus what a Remember lands (S12: "see it" opens that rule).
     set_fixture(origin, sessions=True, run_chat_id=True, decisions=True, decisions_mode="on", steering_rules=True, extra_frames=[], reset_decisions=True)

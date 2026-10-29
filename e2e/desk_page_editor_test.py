@@ -199,7 +199,9 @@ with sync_playwright() as p:
         f"s.textContent = {json.dumps(HIDE_GATE_TOASTS)}; document.head.appendChild(s); }});")
     # Every request a frame other than the shell makes: the plugin frame and the nested page frame.
     frame_requests: list[str] = []
-    page.on("request", lambda r: frame_requests.append(r.url) if r.frame is not None and r.frame != page.main_frame else None)
+    # The run's Phase report block (DES-PLUGIN-EVENTS spike 1) is a frame too: the host loads it from a blob: URL of
+    # studio's own bundle. It is not the page editor, so it is not counted here.
+    page.on("request", lambda r: frame_requests.append(r.url) if r.frame is not None and r.frame != page.main_frame and not r.url.startswith("blob:") else None)
     registry_reads: list[str] = []
     page.on("request", lambda r: registry_reads.append(r.url) if r.url.endswith("/api/v1/editors") else None)
 

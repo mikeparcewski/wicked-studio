@@ -11,3 +11,6 @@ export interface BuiltEditor { id: string; version: string; bytes: number; sha25
 export const EDITORS: EditorDecl[];
 export function externalReferences(html: string): string[];
 export function buildEditors(outDir: string, opts?: { version?: string }): Promise<BuiltEditor[]>;
+
+export declare const RUN_PLUGINS: string[];
+export declare function runPluginHtml(id: string, opts?: { version?: string }): Promise<{ id: string; version: string; html: string; sha256: string }>;

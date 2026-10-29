@@ -940,6 +940,10 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          #   completed) and r-rerun-mid (band 40-69) — plus GET/POST /standing-orders (POSTs tapped at
          #   /__fixture/standing-order-posts; the create route mirrors crew#693's plan-trust refusal).
          "run_page": False,
+         # run_plugin — program DES-PLUGIN-EVENTS spike 1 (e2e/desk_run_plugin_test.py): with run_page on, r-rerun-mid's
+         #   event log is a real rig run's recorded trail (tests/fixtures/runEvents-crew-fix.json, scrubbed), cut at
+         #   seq 139 (the fix step's failed floor, an escalation open): the phase-report block replays it.
+         "run_plugin": False,
          # home_runs — brainstorm-actionable ideas 10, 11, 15 (e2e/wavec_home_runs_test.py): r-reuse, a
          #   completed user-plan run whose units carry their catalog steps, rides GET /runs; GET /presets
          #   serves TEAM_PRESETS and PUT /presets/:name is recorded (GET /__fixture/preset-puts); GET/PUT
@@ -2782,6 +2786,15 @@ def _run_page_events(rid: str) -> list:
     if rid == "r-rerun":
         events.append(e("awaitingHuman", 3, 31 * MIN + 2 * SEC, prompt=RUN_PAGE_PROMPT, gateKind="escalation"))
     return events
+
+
+RUN_PLUGIN_CUT = 139
+
+
+def _run_plugin_events(rid: str) -> list:
+    """A real crew fix run's recorded trail (10 steps, 2 failed floors, reused checks), up to RUN_PLUGIN_CUT."""
+    raw = json.loads((REPO / "tests" / "fixtures" / "runEvents-crew-fix.json").read_text(encoding="utf-8"))
+    return [{**e, "session": rid} for e in raw if e["seq"] <= RUN_PLUGIN_CUT]
 
 
 # ── Fix slice J4/J5: the outcome-partition corpus, behind `j5_runs` ───────────
@@ -7067,6 +7080,8 @@ class W2Handler(SimpleHTTPRequestHandler):
                     events = _trust_events(rid)
                 if state["run_page"] and rid in ("r-rerun", "r-rerun-done"):
                     events = _run_page_events(rid)
+                if state["run_page"] and state["run_plugin"] and rid == "r-rerun-mid":
+                    events = _run_plugin_events(rid)
             # Wave 6: the completed governed test's recorded trail — degraded council, the
             # remote-write fence, the UNGATED gate.
             with state_lock:

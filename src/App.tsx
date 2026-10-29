@@ -63,6 +63,7 @@ import { cmdkObject, trackPointedObject } from './store/sheets.js';
 import { useNeedsClock, useNeedsRows } from './hooks/useNeedsRows.js';
 import { ambientProjectId } from './hooks/ambientProject.js';
 import { useEventStream } from './hooks/useEventStream.js';
+import { publishCoreEvent } from './hooks/eventTap.js';
 import { useVisitClock } from './hooks/useVisitClock.js';
 import { useProjectVisits } from './hooks/useProjectVisits.js';
 import { usePeekJump } from './hooks/usePeekJump.js';
@@ -147,6 +148,8 @@ export function App(): React.ReactElement {
 
   const handleEvent = useCallback(
     (event: CoreEvent) => {
+      // Run-thread plugins (program DES-PLUGIN-EVENTS spike 1) hear the same frames through the tap.
+      publishCoreEvent(event);
       ingestGate(event);
       // Slice BD: terminal frames retire a run's pre-gate annotation draft.
       ingestAnnotation(event);

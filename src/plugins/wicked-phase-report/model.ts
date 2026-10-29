@@ -1,0 +1,266 @@
+/**
+ * The phase report v0 (program DES-POWER-MODE §8, spike 1): a fold of the run-event rows the host delivers
+ * (`events.batch`, protocol 3) into what the block shows: one summary line folded, a compact dashboard expanded.
+ * Pure: the plugin and the unit tests drive it. Idempotent on a row's id, so a row heard twice changes nothing.
+ */
+
+import { stepLabelOf } from '../../board/chainModel.js';
+
+export interface Row { id: string; topic: string; seq: number | null; at: number; ord: number | null; data: Record<string, unknown> }
+
+export type UnitState = 'planned' | 'running' | 'done' | 'denied' | 'failed';
+export interface UnitInfo { ord: number; step: string | null; seat: string | null; seatName: string | null; state: UnitState; startedAt: number | null; finishedAt: number | null }
+export interface GateInfo { ord: number; kind: string; openedAt: number; answeredAt: number | null }
+export interface CheckInfo { name: string; exitCode: number | null; timedOut: boolean; durationMs: number | null }
+export interface ChecksRun { ord: number | null; attempt: number | null; floor: string | null; outcome: string | null; passed: boolean; checks: CheckInfo[]; reusedFrom: { phase: string | null; ord: number | null; reused: string[]; fresh: string[] } | null; at: number }
+
+export interface Report {
+  /** The replay has arrived: until then the report says it is reading, never "no events". */
+  loaded: boolean;
+  seen: Set<string>;
+  startedAt: number | null;
+  lastAt: number | null;
+  finished: { outcome: string; at: number } | null;
+  units: Map<number, UnitInfo>;
+  gates: GateInfo[];
+  checks: ChecksRun[];
+  costUsd: number;
+  tokens: number;
+  usageReports: number;
+}
+
+export function emptyReport(): Report {
+  return { loaded: false, seen: new Set(), startedAt: null, lastAt: null, finished: null, units: new Map(), gates: [], checks: [], costUsd: 0, tokens: 0, usageReports: 0 };
+}
+
+const str = (v: unknown): string | null => (typeof v === 'string' && v !== '' ? v : null);
+const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+
+function unit(r: Report, ord: number): UnitInfo {
+  let u = r.units.get(ord);
+  if (u === undefined) {
+    u = { ord, step: null, seat: null, seatName: null, state: 'planned', startedAt: null, finishedAt: null };
+    r.units.set(ord, u);
+  }
+  return u;
+}
+
+/** Fold rows in place (sorted by `seq`, live rows after). Returns whether anything changed. */
+export function foldRows(r: Report, rows: readonly Row[]): boolean {
+  let changed = false;
+  for (const row of rows) {
+    if (r.seen.has(row.id)) continue;
+    r.seen.add(row.id);
+    changed = true;
+    r.lastAt = Math.max(r.lastAt ?? 0, row.at);
+    if (r.startedAt === null || row.at < r.startedAt) r.startedAt = row.at;
+    const d = row.data;
+    const ord = row.ord;
+    switch (row.topic) {
+      case 'wicked.run.session.started': r.startedAt = row.at; break;
+      case 'wicked.run.session.finished': r.finished = { outcome: str(d['outcome']) ?? 'completed', at: row.at }; break;
+      case 'wicked.run.session.resumed':
+        // A resumed run is running again (studio resumes a failed run under the same id).
+        if (r.finished !== null && row.at >= r.finished.at) r.finished = null;
+        // A resume at a unit answers the decision that unit was waiting on.
+        for (const g of r.gates) if (g.ord === ord && g.answeredAt === null) g.answeredAt = row.at;
+        break;
+      case 'wicked.run.unit.planned':
+        if (ord !== null) { const u = unit(r, ord); u.step = str(d['step']) ?? u.step; }
+        break;
+      case 'wicked.run.unit.assigned':
+        if (ord !== null) { const u = unit(r, ord); u.seat = str(d['seat']); u.seatName = str(d['seatName']); }
+        break;
+      case 'wicked.run.unit.started':
+        if (ord !== null) {
+          if (r.finished !== null && row.at >= r.finished.at) r.finished = null;
+          const u = unit(r, ord);
+          u.state = 'running';
+          u.startedAt ??= row.at;
+          u.finishedAt = null;
+          // A unit starting means every decision before it was answered.
+          for (const g of r.gates) if (g.ord <= ord && g.answeredAt === null && g.openedAt <= row.at) g.answeredAt = row.at;
+        }
+        break;
+      case 'wicked.run.unit.finished':
+        if (ord !== null) {
+          const u = unit(r, ord);
+          const o = str(d['outcome']);
+          u.state = o === 'denied' ? 'denied' : o === 'failed' ? 'failed' : 'done';
+          u.finishedAt = row.at;
+        }
+        break;
+      case 'wicked.run.human.awaited':
+        if (ord !== null) r.gates.push({ ord, kind: str(d['kind']) ?? 'question', openedAt: row.at, answeredAt: null });
+        break;
+      case 'wicked.run.checks.evaluated': {
+        const checks = Array.isArray(d['checks']) ? (d['checks'] as Array<Record<string, unknown>>).map((c) => ({
+          name: str(c['name']) ?? 'check', exitCode: num(c['exitCode']), timedOut: c['timedOut'] === true, durationMs: num(c['durationMs']),
+        })) : [];
+        const ru = d['reusedFrom'] as Record<string, unknown> | null | undefined;
+        const names = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []);
+        r.checks.push({
+          ord, attempt: num(d['attempt']), floor: str(d['floor']), outcome: str(d['outcome']), passed: d['passed'] === true, checks, at: row.at,
+          reusedFrom: ru != null && typeof ru === 'object' ? { phase: str(ru['phase']), ord: num(ru['ord']), reused: names(ru['reused']), fresh: names(ru['fresh']) } : null,
+        });
+        break;
+      }
+      case 'wicked.run.usage.reported':
+        r.costUsd += num(d['costUsd']) ?? 0;
+        r.tokens += (num(d['inputTokens']) ?? 0) + (num(d['outputTokens']) ?? 0);
+        r.usageReports += 1;
+        break;
+      default: break;
+    }
+  }
+  return changed;
+}
+
+// ── words ───────────────────────────────────────────────────────────────────────────────────
+
+export function stepWord(u: Pick<UnitInfo, 'step' | 'ord'> | undefined): string {
+  if (u === undefined) return 'Step';
+  return u.step !== null ? stepLabelOf(u.step) : `Step ${u.ord}`;
+}
+
+const GATE_WORDS: Record<string, string> = {
+  plan_approval: 'Approve the plan', escalation: 'A failed check or review', deliver: 'Deliver', consent: 'Install consent',
+  phase_review: 'Review a step', question: 'A question',
+};
+const STANDALONE_GATES = new Set(['plan_approval', 'deliver', 'consent']);
+export function gateWord(kind: string): string {
+  return GATE_WORDS[kind] ?? kind.replace(/[_-]+/g, ' ').replace(/^./u, (c) => c.toUpperCase());
+}
+
+export function openGates(r: Report): GateInfo[] {
+  return r.finished !== null ? [] : r.gates.filter((g) => g.answeredAt === null);
+}
+
+/** The ords the plan holds, in order (a unit seen only by its start counts too). */
+function planned(r: Report): number[] {
+  return [...r.units.keys()].sort((a, b) => a - b);
+}
+
+/** The unit the run is on now: the newest running one, else the one an open decision is about, else null. */
+export function currentUnit(r: Report): UnitInfo | null {
+  const running = [...r.units.values()].filter((u) => u.state === 'running').sort((a, b) => (b.startedAt ?? 0) - (a.startedAt ?? 0));
+  if (running[0] !== undefined) return running[0];
+  const g = openGates(r).at(-1);
+  return g !== undefined ? r.units.get(g.ord) ?? null : null;
+}
+
+export function checksWords(c: ChecksRun | undefined, r: Report): string | null {
+  if (c === undefined) return null;
+  const total = c.checks.length;
+  const ok = c.checks.filter((x) => x.exitCode === 0 && !x.timedOut).length;
+  const head = total === 0 ? 'no checks found' : ok === total ? `${total} passed` : `${ok} of ${total} passed`;
+  const from = c.reusedFrom?.phase != null ? ` (reused from ${stepLabelOf(c.reusedFrom.phase)})` : c.reusedFrom?.ord != null ? ` (reused from ${stepWord(r.units.get(c.reusedFrom.ord))})` : '';
+  return `checks: ${head}${from}`;
+}
+
+const plural = (n: number, one: string, many = `${one}s`): string => `${n} ${n === 1 ? one : many}`;
+
+/** The folded line: "Fix · step 6 of 10 · checks: 3 of 4 passed (reused from Fix) · 1 decision open". */
+export function summaryLine(r: Report): string {
+  if (!r.loaded) return 'Reading the job’s events…';
+  const ords = planned(r);
+  const parts: string[] = [];
+  if (r.finished !== null) {
+    const done = [...r.units.values()].filter((u) => u.state === 'done').length;
+    parts.push(r.finished.outcome === 'completed' ? 'Finished' : r.finished.outcome === 'cancelled' ? 'Stopped' : 'Failed');
+    if (ords.length > 0) parts.push(`${done} of ${plural(ords.length, 'step')} done`);
+  } else {
+    const now = currentUnit(r);
+    if (now !== null) {
+      parts.push(stepWord(now));
+      const at = ords.indexOf(now.ord);
+      if (at >= 0) parts.push(`step ${at + 1} of ${ords.length}`);
+    } else if (r.startedAt !== null) parts.push(ords.length > 0 ? `Planned · ${plural(ords.length, 'step')}` : 'Starting');
+    else parts.push('No events yet');
+  }
+  const checks = checksWords(r.checks.at(-1), r);
+  if (checks !== null) parts.push(checks);
+  const open = openGates(r).length;
+  if (open > 0) parts.push(`${plural(open, 'decision')} open`);
+  return parts.join(' · ');
+}
+
+export function clock(ms: number | null): string {
+  if (ms === null) return '—';
+  const d = new Date(ms);
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+
+export function duration(ms: number): string {
+  const min = Math.max(0, Math.round(ms / 60_000));
+  if (min < 60) return `${min} min`;
+  const h = Math.floor(min / 60);
+  return `${h} h ${String(min % 60).padStart(2, '0')} min`;
+}
+
+export interface Dashboard {
+  now: { value: string; sub: string };
+  checks: Array<{ title: string; chips: Array<{ name: string; ok: boolean; reused: boolean; note: string | null }>; reused: string | null }>;
+  decisions: { open: number; answered: number; items: Array<{ text: string; when: string; open: boolean }> };
+  helpers: Array<{ name: string; steps: string }>;
+  time: { value: string; sub: string };
+}
+
+export function dashboard(r: Report, nowMs: number): Dashboard {
+  const ords = planned(r);
+  const cur = currentUnit(r);
+  const open = openGates(r);
+  let now: Dashboard['now'];
+  if (r.finished !== null) {
+    now = { value: summaryLine(r).split(' · ')[0] ?? 'Finished', sub: `${plural(ords.length, 'step')} · ${plural(r.gates.length, 'decision')} · ${clock(r.startedAt)}–${clock(r.finished.at)}` };
+  } else if (open.length > 0) {
+    const g = open[open.length - 1]!;
+    now = { value: `Waiting on you · ${gateWord(g.kind)}`, sub: `${stepWord(r.units.get(g.ord))} · since ${clock(g.openedAt)}` };
+  } else if (cur !== null) {
+    const at = ords.indexOf(cur.ord);
+    now = { value: `${stepWord(cur)}${at >= 0 ? ` · step ${at + 1} of ${ords.length}` : ''}`, sub: `${cur.seatName ?? cur.seat ?? 'A helper'} · started ${clock(cur.startedAt)}` };
+  } else {
+    now = { value: r.startedAt === null ? 'No events yet' : 'Starting', sub: r.startedAt === null ? 'The report fills in as the job runs' : `Started ${clock(r.startedAt)}` };
+  }
+  const checks = r.checks.slice(-3).reverse().map((c) => {
+    const reusedSet = new Set(c.reusedFrom?.reused ?? []);
+    const word = c.outcome === 'passed' || c.passed ? 'passed' : c.outcome === 'timed_out' ? 'timed out' : c.outcome === 'not_run' ? 'did not run' : 'failed';
+    return {
+      title: `${c.ord !== null ? stepWord(r.units.get(c.ord) ?? { step: null, ord: c.ord }) : 'Checks'} · ${word} · ${clock(c.at)}`,
+      chips: c.checks.map((x) => ({
+        name: x.name.replace(/_/g, ' '), ok: x.exitCode === 0 && !x.timedOut, reused: reusedSet.has(x.name),
+        note: x.durationMs !== null && x.durationMs >= 60_000 ? duration(x.durationMs) : x.durationMs !== null ? `${Math.max(1, Math.round(x.durationMs / 1000))} s` : null,
+      })),
+      reused: c.reusedFrom !== null
+        ? `Reused from ${c.reusedFrom.phase !== null ? stepLabelOf(c.reusedFrom.phase) : stepWord(r.units.get(c.reusedFrom.ord ?? -1))}: ${c.reusedFrom.reused.join(', ') || 'none'}${c.reusedFrom.fresh.length > 0 ? ` · ran again: ${c.reusedFrom.fresh.join(', ')}` : ''}`
+        : null,
+    };
+  });
+  const decided = r.gates.filter((g) => g.answeredAt !== null);
+  const decisions = {
+    open: open.length,
+    answered: decided.length,
+    items: r.gates.slice(-5).map((g) => ({
+      // A gate that is its own step's name (the plan, delivery) is not said twice.
+      text: STANDALONE_GATES.has(g.kind) ? gateWord(g.kind) : `${gateWord(g.kind)} · ${stepWord(r.units.get(g.ord))}`,
+      when: g.answeredAt !== null ? `answered ${clock(g.answeredAt)}` : open.includes(g) ? `open since ${clock(g.openedAt)}` : clock(g.openedAt),
+      open: open.includes(g),
+    })),
+  };
+  const bySeat = new Map<string, string[]>();
+  for (const u of [...r.units.values()].sort((a, b) => a.ord - b.ord)) {
+    const who = u.seatName ?? u.seat;
+    if (who === null || u.seat === 'bash') continue;
+    const list = bySeat.get(who) ?? [];
+    const w = stepWord(u);
+    if (!list.includes(w)) list.push(w);
+    bySeat.set(who, list);
+  }
+  const helpers = [...bySeat.entries()].map(([name, steps]) => ({ name, steps: steps.join(', ') }));
+  const end = r.finished?.at ?? nowMs;
+  const time = {
+    value: r.startedAt === null ? '—' : duration(end - r.startedAt),
+    sub: r.usageReports === 0 ? 'No usage reported yet' : `≈ $${r.costUsd.toFixed(2)} · ${Math.round(r.tokens / 1000).toLocaleString('en-US')}k tokens`,
+  };
+  return { now, checks, decisions, helpers, time };
+}

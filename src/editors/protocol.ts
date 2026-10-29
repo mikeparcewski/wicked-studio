@@ -12,8 +12,10 @@ export const PROTOCOL = 'wicked.editor';
  *  the `plugin.ready` / `host.hello` payloads and keeps this envelope; it only adds message types, accepted
  *  on a port that negotiated 2. */
 export const PROTOCOL_VERSION = 1;
-/** The protocols this host speaks, lowest first. */
-export const HOST_PROTOCOLS: readonly number[] = [1, 2];
+/** The protocols this host speaks, lowest first. Protocol 3 (program DES-PLUGIN-EVENTS §3.2, spike 1) is protocol 2
+ *  plus OBSERVE: the host posts `events.batch` (run-event rows on the plugin's granted topics) and `host.fold` to a
+ *  run-thread plugin, which may answer `ui.fold`. It adds no request: an observing plugin can read events, never act. */
+export const HOST_PROTOCOLS: readonly number[] = [1, 2, 3];
 
 /** The highest protocol both sides speak, or null. */
 export function negotiate(plugin: readonly number[]): number | null {
@@ -114,11 +116,16 @@ export const EVENTS = {
   'plugin.error': null,
   'options.values': null,
   'ui.height': null,
+  /** Protocol 3: a run-thread plugin asks to fold or unfold its own block (the host owns the state and answers
+   *  with `host.fold`). */
+  'ui.fold': null,
 } as const satisfies Record<string, PermissionId | null>;
 export type EventType = keyof typeof EVENTS;
 
 /** Message types a plugin may send only on a port that negotiated protocol 2. */
 export const V2_ONLY: ReadonlySet<string> = new Set(['theme.set', 'options.values', 'ui.height']);
+/** Message types a plugin may send only on a port that negotiated protocol 3. */
+export const V3_ONLY: ReadonlySet<string> = new Set(['ui.fold']);
 /** Protocol 2 surfaces a v2 `ui.morph` may name (§6), beside the v1 sizes. */
 export const V2_MORPH = ['card', 'full'] as const;
 
@@ -207,6 +214,7 @@ function payloadOk(type: string, p: Record<string, unknown>, protocol: number): 
       return isStr(p['tab'], 32) && Number.isInteger(p['rev']) && (p['rev'] as number) >= 0 && isObj(v) && Object.keys(v).length <= 16;
     }
     case 'ui.height': return isNum(p['px']);
+    case 'ui.fold': return typeof p['folded'] === 'boolean';
     case 'ui.key': return isStr(p['key'], 40);
     case 'ui.typed': return isStr(p['grapheme'], 64);
     case 'ui.status': return isLine(p['line'], LIMITS.statusChars);
@@ -243,6 +251,7 @@ export function parseInbound(data: unknown, protocol = 1): ParseResult {
   if (hasId && id === undefined) return { ok: false, reason: 'bad id' };
   const payload = data['payload'] ?? {};
   if (V2_ONLY.has(type) && protocol < 2) return { ok: false, reason: `${type} needs protocol 2`, ...(id !== undefined ? { id } : {}) };
+  if (V3_ONLY.has(type) && protocol < 3) return { ok: false, reason: `${type} needs protocol 3`, ...(id !== undefined ? { id } : {}) };
   if (type in REQUESTS) {
     if (id === undefined) return { ok: false, reason: `request ${type} has no id` };
     if (!isObj(payload) || !payloadOk(type, payload, protocol)) return { ok: false, reason: `bad ${type} payload`, id };

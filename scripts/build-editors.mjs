@@ -100,6 +100,27 @@ export const EDITORS = [
   },
 ];
 
+/**
+ * The first-party RUN-THREAD plugins (program DES-PLUGIN-EVENTS, spike 1): plugins that observe a run's events and
+ * render one block in its thread. They are NOT editors and are not written under `<outDir>/editors/` (crew's editor
+ * registry would read them as artifact editors). Studio carries each one inside its own bundle
+ * (`virtual:wicked-run-plugins`, vite.config.ts) and frames it from a blob: URL; its manifest is
+ * `src/plugins/<id>/manifest.json` (`inline: "run-thread"`, `observe[]`).
+ */
+export const RUN_PLUGINS = ['wicked-phase-report'];
+
+/** One run-thread plugin as its single self-contained HTML file. */
+export async function runPluginHtml(id, { version } = {}) {
+  const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
+  const v = version ?? pkg.version;
+  const dir = join(root, 'src', 'plugins', id);
+  const script = await bundleScript(join(dir, 'plugin.ts'));
+  const html = readFileSync(join(dir, 'template.html'), 'utf8').replace('__VERSION__', v).replace('__PLUGIN__', () => script);
+  const outside = externalReferences(html);
+  if (outside.length > 0) throw new Error(`build-editors: ${id} loads from outside itself: ${outside.join(', ')}`);
+  return { id, version: v, html, sha256: createHash('sha256').update(html, 'utf8').digest('hex') };
+}
+
 /** A protocol-2 plugin's surfaces declaration, `src/plugins/<id>/surfaces.json`. */
 export function surfacesOf(id) {
   return JSON.parse(readFileSync(join(root, 'src', 'plugins', id, 'surfaces.json'), 'utf8'));
