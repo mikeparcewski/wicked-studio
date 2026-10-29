@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { api } from '../../api/client.js';
+import { RunPluginJumpRows, RunThreadPlugins } from './RunThreadPlugin.js';
 import type { CoreEvent, SessionView as RunView } from '../../api/types.js';
 import { IDLE_GATE_ACTION, useGateActionStore } from '../../board/gateActions.js';
 import { finishedDeliveryArm, proposalKindOf, statusSentence } from '../../board/proposalCard.js';
@@ -326,14 +327,21 @@ export function RunBlock({ view, badge, sessionId, navigate, solo = null }: {
         </Docked>
       )}
       {decisions.filter((d) => d.ord === planOrd).map((d) => <DecisionLine key={`d${d.ord}-${d.at}`} d={d} />)}
+      {/* The run-thread plugins' blocks, at the run's first unit (unless pinned to the top). */}
+      <RunThreadPlugins runId={id} placement="thread" />
       {/* The plan editor, only when you asked to edit (it is the plan's own artifact). */}
 
 
       {/* 2. One message per finished step, then your answer to a question it raised. */}
       {steps.map((s) => (
-        <StepTurn key={s.ord} runId={id} step={s} who={s.cli !== null ? seatResponder(s.cli, roster) : STUDIO} checkWord={checkOf(s)} onOpen={openSteps}
-          answers={decisions.filter((d) => d.ord === s.ord && d.ord !== planOrd)} />
+        <Fragment key={s.ord}>
+          <StepTurn runId={id} step={s} who={s.cli !== null ? seatResponder(s.cli, roster) : STUDIO} checkWord={checkOf(s)} onOpen={openSteps}
+            answers={decisions.filter((d) => d.ord === s.ord && d.ord !== planOrd)} />
+          <RunPluginJumpRows runId={id} ords={[s.ord]} />
+        </Fragment>
       ))}
+      {/* An update about a step that has no message yet (the one running now): its jump row after the last step. */}
+      <RunPluginJumpRows runId={id} except={steps.map((s) => s.ord)} />
 
       {/* 3. A question it is asking now (not the plan, not the hand-over): in the flow, answered here. */}
       {gate !== undefined && effectiveKind === null && finished === null && (

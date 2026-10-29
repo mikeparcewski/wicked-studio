@@ -1,0 +1,13 @@
+{
+  "id": "wicked-phase-report",
+  "title": "Phase report",
+  "protocol": [3],
+  "inline": "run-thread",
+  "observe": [
+    { "topic": "wicked.run.session.*", "why": "to know when the job started, resumed and ended" },
+    { "topic": "wicked.run.unit.*", "why": "to show which step is running, who works on it and how far along the plan it is" },
+    { "topic": "wicked.run.human.awaited", "why": "to count the decisions waiting on you" },
+    { "topic": "wicked.run.checks.evaluated", "why": "to show what the checks found, and when a result was reused from an earlier step" },
+    { "topic": "wicked.run.usage.reported", "why": "to add up the time and the cost" }
+  ]
+}

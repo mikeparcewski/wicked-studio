@@ -1,0 +1,63 @@
+import { describe, expect, it } from 'vitest';
+import type { CoreEvent } from '../src/api/types.js';
+import { toRow, type TopicRow } from '../src/editors/runEvents.js';
+import { dashboard, emptyReport, foldRows, summaryLine } from '../src/plugins/wicked-phase-report/model.js';
+import manifest from '../src/plugins/wicked-phase-report/manifest.json';
+import fixture from './fixtures/runEvents-crew-fix.json';
+
+/** The phase report v0 over a real run's events (a crew fix run on the rig: 10 steps, 2 failed floors, reused checks). */
+
+const names = (cli: string) => ({ claude: 'Claude Code', codex: 'Codex' } as Record<string, string>)[cli] ?? null;
+const rows: TopicRow[] = (fixture as unknown as CoreEvent[])
+  .map((e) => toRow(e, 'run-2410', 0, `s${String(e.seq)}`, names))
+  .filter((r): r is TopicRow => r !== null);
+const upTo = (seq: number) => rows.filter((r) => (r.seq ?? 0) <= seq);
+
+describe('the phase report', () => {
+  it('folds to the brief’s one line while the job runs', () => {
+    // At the fix step's failed floor, waiting on the operator.
+    const r = emptyReport();
+    foldRows(r, upTo(139));
+    expect(summaryLine(r)).toBe('Fix · step 6 of 10 · checks: 3 of 4 passed · 1 decision open');
+    // At the check step's reused floor.
+    const v = emptyReport();
+    foldRows(v, upTo(184));
+    expect(summaryLine(v)).toBe('Check · step 9 of 10 · checks: 3 of 4 passed (reused from Fix) · 1 decision open');
+  });
+
+  it('says the end, and its dashboard has now, checks, decisions, helpers and time', () => {
+    const r = emptyReport();
+    foldRows(r, rows);
+    expect(summaryLine(r)).toBe('Finished · 10 of 10 steps done · checks: 3 of 4 passed (reused from Fix)');
+    const d = dashboard(r, Date.now());
+    expect(d.now.value).toBe('Finished');
+    expect(d.checks[0]?.reused).toBe('Reused from Fix: typecheck, lint, test_targeted · ran again: install');
+    expect(d.checks[0]?.chips.map((c) => `${c.name}${c.ok ? '+' : '-'}${c.reused ? 'R' : ''}`)).toEqual(['install+', 'typecheck+R', 'lint+R', 'test targeted-R']);
+    expect(d.decisions).toMatchObject({ open: 0, answered: 4 });
+    expect(d.helpers).toEqual([
+      { name: 'Claude Code', steps: 'Scope, Plan, Fix' },
+      { name: 'Codex', steps: 'Triage, Reproduce, Review, Security check, Check' },
+    ]);
+    expect(d.time.value).toBe('1 h 19 min');
+    expect(d.time.sub).toMatch(/^≈ \$\d+\.\d\d · /u);
+  });
+
+  it('a row heard twice changes nothing', () => {
+    const r = emptyReport();
+    expect(foldRows(r, rows)).toBe(true);
+    const line = summaryLine(r);
+    const cost = r.costUsd;
+    expect(foldRows(r, rows)).toBe(false);
+    expect(summaryLine(r)).toBe(line);
+    expect(r.costUsd).toBe(cost);
+  });
+
+  it('asks to observe only run topics, each with a reason', () => {
+    expect(manifest.inline).toBe('run-thread');
+    expect(manifest.protocol).toEqual([3]);
+    for (const o of manifest.observe) {
+      expect(o.topic).toMatch(/^wicked\.run\./u);
+      expect(o.why.length).toBeGreaterThan(10);
+    }
+  });
+});

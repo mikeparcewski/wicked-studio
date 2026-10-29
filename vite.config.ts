@@ -81,14 +81,40 @@ function emitEditorBundles(): Plugin {
   };
 }
 
+// Program DES-PLUGIN-EVENTS spike 1: the first-party run-thread plugins ride INSIDE studio's own bundle as one module,
+// `virtual:wicked-run-plugins` (id -> {version, html, sha256}), built from src/plugins/<id>/ the way the editors are. The
+// run-thread slot frames each from a blob: URL, so it needs no route on the daemon and no daemon restart to appear.
+// Tests read a stub (test.alias below): a jsdom frame never runs the plugin.
+function runPluginsModule(): Plugin {
+  const id = 'virtual:wicked-run-plugins';
+  return {
+    name: 'wicked-run-plugins',
+    resolveId(source) { return source === id ? `\0${id}` : null; },
+    async load(resolved) {
+      if (resolved !== `\0${id}`) return null;
+      const { RUN_PLUGINS, runPluginHtml } = await import('./scripts/build-editors.mjs');
+      const out: Record<string, { version: string; html: string; sha256: string }> = {};
+      for (const p of RUN_PLUGINS) {
+        const built = await runPluginHtml(p);
+        out[p] = { version: built.version, html: built.html, sha256: built.sha256 };
+        // A change to any of its files rebuilds it (the dev server re-serves the module).
+        const dir = resolve(process.cwd(), 'src', 'plugins', p);
+        for (const f of readdirSync(dir)) this.addWatchFile(resolve(dir, f));
+      }
+      return `export default ${JSON.stringify(out)};`;
+    },
+  };
+}
+
 export default defineConfig(({ mode }) => ({
-  plugins: [react(), emitTestidInventory(), emitFontLicences(), emitEditorBundles(), editorFrameSrc(loadEnv(mode, process.cwd(), '').VITE_API_HOST)],
+  plugins: [react(), runPluginsModule(), emitTestidInventory(), emitFontLicences(), emitEditorBundles(), editorFrameSrc(loadEnv(mode, process.cwd(), '').VITE_API_HOST)],
   server: { port: 4200, host: '127.0.0.1' },
   preview: { port: 4200 },
   test: {
     environment: 'jsdom',
     globals: true,
     setupFiles: ['./tests/setup.ts'],
+    alias: { 'virtual:wicked-run-plugins': resolve(process.cwd(), 'tests/stubs/runPlugins.ts') },
     maxWorkers: process.env.CI ? undefined : '50%',
     // site/ is the marketing site — its own app with its own deps and a
     // Playwright suite (site/tests/e2e, run by the Site E2E workflow).

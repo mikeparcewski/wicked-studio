@@ -11,9 +11,9 @@
   "version": 1,
   "studioVersion": "0.13.0",
   "counts": {
-    "files": 256,
-    "occurrences": 3489,
-    "static": 2969,
+    "files": 257,
+    "occurrences": 3504,
+    "static": 2985,
     "dynamic": 75,
     "computed": 33
   },
@@ -12090,6 +12090,102 @@
       "testId": "run-panel-toggle",
       "files": [
         "src/components/session/RunTab.tsx"
+      ]
+    },
+    {
+      "testId": "run-plugin",
+      "files": [
+        "src/components/session/RunThreadPlugin.tsx"
+      ]
+    },
+    {
+      "testId": "run-plugin-attribution",
+      "files": [
+        "src/components/session/RunThreadPlugin.tsx"
+      ]
+    },
+    {
+      "testId": "run-plugin-fold",
+      "files": [
+        "src/components/session/RunThreadPlugin.tsx"
+      ]
+    },
+    {
+      "testId": "run-plugin-frame",
+      "files": [
+        "src/components/session/RunThreadPlugin.tsx"
+      ]
+    },
+    {
+      "testId": "run-plugin-grant",
+      "files": [
+        "src/components/session/RunThreadPlugin.tsx"
+      ]
+    },
+    {
+      "testId": "run-plugin-jump",
+      "files": [
+        "src/components/session/RunThreadPlugin.tsx"
+      ]
+    },
+    {
+      "testId": "run-plugin-pin",
+      "files": [
+        "src/components/session/RunThreadPlugin.tsx"
+      ]
+    },
+    {
+      "testId": "run-plugin-row",
+      "files": [
+        "src/components/editors/EditorPluginsSettings.tsx"
+      ]
+    },
+    {
+      "testId": "run-plugin-row-grant",
+      "files": [
+        "src/components/editors/EditorPluginsSettings.tsx"
+      ]
+    },
+    {
+      "testId": "run-plugin-row-topics",
+      "files": [
+        "src/components/editors/EditorPluginsSettings.tsx"
+      ]
+    },
+    {
+      "testId": "run-plugin-title",
+      "files": [
+        "src/components/session/RunThreadPlugin.tsx"
+      ]
+    },
+    {
+      "testId": "run-plugin-torn",
+      "files": [
+        "src/components/session/RunThreadPlugin.tsx"
+      ]
+    },
+    {
+      "testId": "run-plugin-updated",
+      "files": [
+        "src/components/session/RunThreadPlugin.tsx"
+      ]
+    },
+    {
+      "testId": "run-plugins",
+      "files": [
+        "src/components/session/RunThreadPlugin.tsx"
+      ]
+    },
+    {
+      "testId": "run-plugins-pinned",
+      "files": [
+        "src/components/session/RunThreadPlugin.tsx"
+      ]
+    },
+    {
+      "testId": "run-plugins-settings",
+      "files": [
+        "src/components/editors/EditorPluginsSettings.tsx"
       ]
     },
     {

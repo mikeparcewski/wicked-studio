@@ -6,6 +6,7 @@ import {
   EVENTS, LIMITS, MCP_METHODS, REQUESTS, event, negotiate, parseInbound, parseReady, refuse, reply, request, sizeOf,
   type MediaRef, type AnchorRef, type ErrorCode, type PermissionId, type Size,
 } from './protocol.js';
+import type { EventsBatch } from './runEvents.js';
 import { clampCardHeight, parseSurfaces, parseWireSurfaces, sameSurfaces, v1Surfaces, valuesOk, controlValueOk, type FullMode, type Surfaces } from './surfaces.js';
 
 /** Protocol 2's three surfaces (DES-EDITOR-PLUGIN-CONTRACT-001 §4). */
@@ -135,6 +136,17 @@ export interface HostUi {
   cardHeight?(px: number): void;
   /** Another instance of this artifact's group pointed at these anchors: relay them (`host.selection`). */
   selected?(anchors: AnchorRef[]): void;
+  /** Protocol 3: the plugin asked to fold (true) or unfold its own block. The host decides, then says `host.fold`. */
+  fold?(folded: boolean): void;
+}
+
+/** Protocol 3 (observe): the run events one instance may hear. The host subscribes only after a handshake that
+ *  negotiated 3, and posts each batch as `events.batch`; the rows are already filtered to `topics`. */
+export interface HostEvents {
+  runId: string;
+  /** The granted topic patterns, said in `host.hello` so the plugin knows what it will hear. */
+  topics: readonly string[];
+  subscribe(deliver: (batch: EventsBatch) => void): () => void;
 }
 
 export type HostLogEntry =
@@ -174,6 +186,10 @@ export interface HostOptions {
   declared?: unknown;
   /** The registry's sizes, for the v1 mapping. */
   sizes?: readonly string[];
+  /** Protocol 3: the run events this instance observes (a run-thread plugin). Absent = no `events.batch`, ever. */
+  events?: HostEvents;
+  /** The `ui.height` bounds this instance accepts (a folded run-thread block is one line); default the card's. */
+  heightRange?: { min: number; max: number };
   /** The host's real user activation at receipt (`navigator.userActivation.isActive`). */
   activation?: () => boolean;
   /** Whether focus is in this editor's frame (`document.activeElement === frame`). */
@@ -254,6 +270,7 @@ export class EditorHost {
   private pendingMcpState: Record<string, unknown> | null = null;
   private pendingMcpLog: unknown[] = [];
   private unsubscribeMcp: (() => void) | undefined;
+  private unsubscribeEvents: (() => void) | undefined;
   /** Window messages after the handshake: counted against the flood limit, logged only the first few. */
   private ignoredWindow = 0;
   /** One typed character per gesture (§5.10): spent by an accepted `ui.typed`, re-armed only when
@@ -361,14 +378,18 @@ export class EditorHost {
     const v2 = this.protocol >= 2
       ? { surface, ...(tab !== undefined ? { tab } : {}), ...(surface === 'full' && this.decl.full?.modes != null ? { mode: this.o.mode ?? this.decl.full.default } : {}) }
       : {};
+    const observes = this.protocol >= 3 && this.o.events !== undefined;
+    const v3 = observes ? { observe: { runId: this.o.events!.runId, topics: [...this.o.events!.topics] } } : {};
     this.frame.contentWindow?.postMessage(event('host.hello', {
-      protocol: this.protocol, ...v2, artifact: a, size: this.o.size, grants: [...this.grants],
+      protocol: this.protocol, ...v2, ...v3, artifact: a, size: this.o.size, grants: [...this.grants],
       theme: this.o.theme, artifactTheme: null, prefs: this.o.prefs,
       limits: { messageBytes: LIMITS.messageBytes, writeOps: LIMITS.writeOps, writeBytes: LIMITS.writeBytes },
     }), '*', [channel.port2]);
     this.log({ kind: 'handshake', editor: ready.editor, version: ready.version });
     this.o.ui.surfaces?.(this.decl, this.protocol, note);
     this.pingTimer = setInterval(() => this.ping(), LIMITS.pingEveryMs);
+    // Protocol 3: the events start only now, on the port, after `host.hello` (never on the window, never before).
+    if (observes) this.unsubscribeEvents = this.o.events!.subscribe((batch) => this.post(event('events.batch', batch)));
     if (this.pendingMcpState !== null) this.post(event('mcp.state', this.pendingMcpState));
     this.pendingMcpState = null;
     const backlog = this.pendingMcpLog;
@@ -693,7 +714,12 @@ export class EditorHost {
       }
       case 'ui.height':
         if (this.decl?.card.aspect !== 'auto') { this.log({ kind: 'dropped', type, why: 'the card is not aspect:auto' }); return; }
-        this.o.ui.cardHeight?.(clampCardHeight(p['px'] as number));
+        this.o.ui.cardHeight?.(this.o.heightRange !== undefined
+          ? Math.min(this.o.heightRange.max, Math.max(this.o.heightRange.min, Math.round(p['px'] as number)))
+          : clampCardHeight(p['px'] as number));
+        return;
+      case 'ui.fold':
+        this.o.ui.fold?.(p['folded'] === true);
         return;
       case 'checks.contribute':
         this.o.ui.notes((p['checks'] as unknown[]).length);
@@ -747,6 +773,9 @@ export class EditorHost {
   typingRearm(): void { this.typingSpent = false; }
 
   setSize(size: Size): void { this.post(event('host.size', { size })); }
+
+  /** Protocol 3: the run-thread block was folded or unfolded by the host (its chrome, a jump row, a pin). */
+  setFold(folded: boolean): void { if (this.connected && this.protocol >= 3) this.post(event('host.fold', { folded })); }
 
   // ── protocol 2: surfaces (DES-EDITOR-PLUGIN-CONTRACT-001 §6) ─────────────────────────────────────
 
@@ -940,6 +969,8 @@ export class EditorHost {
     this.torn = true;
     this.unsubscribeMcp?.();
     this.unsubscribeMcp = undefined;
+    this.unsubscribeEvents?.();
+    this.unsubscribeEvents = undefined;
     window.removeEventListener('message', this.onWindow);
     window.removeEventListener('blur', this.onHostBlur);
     this.frame.removeEventListener('load', this.onLoad);

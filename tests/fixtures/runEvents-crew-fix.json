@@ -1,0 +1,848 @@
+[
+{
+"type": "sessionStarted",
+"session": "run-2410",
+"seq": 0,
+"ts": 1793231935082
+},
+{
+"type": "unitPlanned",
+"session": "run-2410",
+"seq": 3,
+"ts": 1793232020177,
+"ord": 1,
+"description": "pa-scope \u2014 Fix the issue (a /home/someone/secret path in the intent)",
+"role": "neutral",
+"stage": "recon",
+"gate": "auto",
+"executorType": "agent"
+},
+{
+"type": "unitDistributed",
+"session": "run-2410",
+"seq": 4,
+"ts": 1793232020181,
+"ord": 1,
+"cli": "claude"
+},
+{
+"type": "unitExecuting",
+"session": "run-2410",
+"seq": 7,
+"ts": 1793232024910,
+"ord": 1
+},
+{
+"type": "cliUsage",
+"session": "run-2410",
+"seq": 14,
+"ts": 1793232072945,
+"ord": 1,
+"attempt": 0,
+"costUsd": 0.2416582,
+"inputTokens": 146181,
+"outputTokens": 1552,
+"cacheReadTokens": 91942
+},
+{
+"type": "gateDecided",
+"session": "run-2410",
+"seq": 21,
+"ts": 1793232073308,
+"ord": 1,
+"allow": true
+},
+{
+"type": "unitDone",
+"session": "run-2410",
+"seq": 22,
+"ts": 1793232073308,
+"ord": 1
+},
+{
+"type": "unitPlanned",
+"session": "run-2410",
+"seq": 23,
+"ts": 1793232074116,
+"ord": 2,
+"description": "triage \u2014 Fix the issue (a /home/someone/secret path in the intent)",
+"role": "neutral",
+"stage": "recon",
+"gate": "auto",
+"executorType": "agent"
+},
+{
+"type": "unitPlanned",
+"session": "run-2410",
+"seq": 24,
+"ts": 1793232074116,
+"ord": 3,
+"description": "reproduce \u2014 Fix the issue (a /home/someone/secret path in the intent)",
+"role": "neutral",
+"stage": "test",
+"gate": "auto",
+"executorType": "agent"
+},
+{
+"type": "unitPlanned",
+"session": "run-2410",
+"seq": 25,
+"ts": 1793232074116,
+"ord": 4,
+"description": "design \u2014 Fix the issue (a /home/someone/secret path in the intent)",
+"role": "neutral",
+"stage": "recon",
+"gate": "auto",
+"executorType": "agent"
+},
+{
+"type": "unitPlanned",
+"session": "run-2410",
+"seq": 26,
+"ts": 1793232074116,
+"ord": 5,
+"description": "architecture \u2014 Fix the issue (a /home/someone/secret path in the intent)",
+"role": "neutral",
+"stage": "recon",
+"gate": "auto",
+"executorType": "agent"
+},
+{
+"type": "unitPlanned",
+"session": "run-2410",
+"seq": 27,
+"ts": 1793232074116,
+"ord": 6,
+"description": "fix \u2014 Fix the issue (a /home/someone/secret path in the intent)",
+"role": "creator",
+"stage": "build",
+"gate": "auto",
+"executorType": "agent"
+},
+{
+"type": "unitPlanned",
+"session": "run-2410",
+"seq": 28,
+"ts": 1793232074116,
+"ord": 7,
+"description": "review \u2014 Fix the issue (a /home/someone/secret path in the intent)",
+"role": "evaluator",
+"stage": "review",
+"gate": "auto",
+"executorType": "agent"
+},
+{
+"type": "unitPlanned",
+"session": "run-2410",
+"seq": 29,
+"ts": 1793232074116,
+"ord": 8,
+"description": "security_review \u2014 Fix the issue (a /home/someone/secret path in the intent)",
+"role": "evaluator",
+"stage": "review",
+"gate": "auto",
+"executorType": "agent"
+},
+{
+"type": "unitPlanned",
+"session": "run-2410",
+"seq": 30,
+"ts": 1793232074116,
+"ord": 9,
+"description": "verify \u2014 Fix the issue (a /home/someone/secret path in the intent)",
+"role": "evaluator",
+"stage": "test",
+"gate": "human_confirm_if",
+"executorType": "agent"
+},
+{
+"type": "unitPlanned",
+"session": "run-2410",
+"seq": 31,
+"ts": 1793232074116,
+"ord": 10,
+"description": "deliver \u2014 Fix the issue (a /home/someone/secret path in the intent)",
+"role": "neutral",
+"stage": "build",
+"gate": "auto",
+"executorType": "tool"
+},
+{
+"type": "unitDistributed",
+"session": "run-2410",
+"seq": 32,
+"ts": 1793232074117,
+"ord": 2,
+"cli": "codex"
+},
+{
+"type": "unitDistributed",
+"session": "run-2410",
+"seq": 34,
+"ts": 1793232074118,
+"ord": 3,
+"cli": "codex"
+},
+{
+"type": "unitDistributed",
+"session": "run-2410",
+"seq": 36,
+"ts": 1793232074119,
+"ord": 4,
+"cli": "claude"
+},
+{
+"type": "unitDistributed",
+"session": "run-2410",
+"seq": 38,
+"ts": 1793232074120,
+"ord": 5,
+"cli": "claude"
+},
+{
+"type": "unitDistributed",
+"session": "run-2410",
+"seq": 40,
+"ts": 1793232074124,
+"ord": 6,
+"cli": "claude"
+},
+{
+"type": "unitDistributed",
+"session": "run-2410",
+"seq": 42,
+"ts": 1793232074125,
+"ord": 7,
+"cli": "codex"
+},
+{
+"type": "unitDistributed",
+"session": "run-2410",
+"seq": 44,
+"ts": 1793232074126,
+"ord": 8,
+"cli": "codex"
+},
+{
+"type": "unitDistributed",
+"session": "run-2410",
+"seq": 46,
+"ts": 1793232074126,
+"ord": 9,
+"cli": "codex"
+},
+{
+"type": "unitDistributed",
+"session": "run-2410",
+"seq": 48,
+"ts": 1793232074127,
+"ord": 10,
+"cli": "bash"
+},
+{
+"type": "awaitingHuman",
+"session": "run-2410",
+"seq": 49,
+"ts": 1793232074143,
+"ord": 2,
+"gateKind": "plan_approval",
+"prompt": "Approve plan \u2026 /home/someone/project (must never reach a plugin)"
+},
+{
+"type": "resumed",
+"session": "run-2410",
+"seq": 50,
+"ts": 1793232136402,
+"ord": 2
+},
+{
+"type": "unitExecuting",
+"session": "run-2410",
+"seq": 52,
+"ts": 1793232136866,
+"ord": 2
+},
+{
+"type": "cliUsage",
+"session": "run-2410",
+"seq": 56,
+"ts": 1793232288870,
+"ord": 2,
+"attempt": 0,
+"costUsd": null,
+"inputTokens": 131997,
+"outputTokens": 1755,
+"cacheReadTokens": 88448
+},
+{
+"type": "unitExecuting",
+"session": "run-2410",
+"seq": 60,
+"ts": 1793232289092,
+"ord": 2
+},
+{
+"type": "cliUsage",
+"session": "run-2410",
+"seq": 65,
+"ts": 1793232393183,
+"ord": 2,
+"attempt": 1,
+"costUsd": 0.3121657,
+"inputTokens": 125737,
+"outputTokens": 1012,
+"cacheReadTokens": 113475
+},
+{
+"type": "gateDecided",
+"session": "run-2410",
+"seq": 68,
+"ts": 1793232393210,
+"ord": 2,
+"allow": true
+},
+{
+"type": "unitDone",
+"session": "run-2410",
+"seq": 69,
+"ts": 1793232393210,
+"ord": 2
+},
+{
+"type": "unitExecuting",
+"session": "run-2410",
+"seq": 71,
+"ts": 1793232394051,
+"ord": 3
+},
+{
+"type": "cliUsage",
+"session": "run-2410",
+"seq": 75,
+"ts": 1793232503997,
+"ord": 3,
+"attempt": 0,
+"costUsd": null,
+"inputTokens": 139185,
+"outputTokens": 1596,
+"cacheReadTokens": 112896
+},
+{
+"type": "gateDecided",
+"session": "run-2410",
+"seq": 78,
+"ts": 1793232504168,
+"ord": 3,
+"allow": true
+},
+{
+"type": "unitDone",
+"session": "run-2410",
+"seq": 79,
+"ts": 1793232504168,
+"ord": 3
+},
+{
+"type": "unitExecuting",
+"session": "run-2410",
+"seq": 81,
+"ts": 1793232504570,
+"ord": 4
+},
+{
+"type": "cliUsage",
+"session": "run-2410",
+"seq": 86,
+"ts": 1793232642176,
+"ord": 4,
+"attempt": 0,
+"costUsd": 0.3982337,
+"inputTokens": 151404,
+"outputTokens": 2217,
+"cacheReadTokens": 138900
+},
+{
+"type": "gateDecided",
+"session": "run-2410",
+"seq": 92,
+"ts": 1793232642670,
+"ord": 4,
+"allow": true
+},
+{
+"type": "unitDone",
+"session": "run-2410",
+"seq": 93,
+"ts": 1793232642670,
+"ord": 4
+},
+{
+"type": "unitExecuting",
+"session": "run-2410",
+"seq": 95,
+"ts": 1793232643446,
+"ord": 5
+},
+{
+"type": "cliUsage",
+"session": "run-2410",
+"seq": 100,
+"ts": 1793232777166,
+"ord": 5,
+"attempt": 0,
+"costUsd": 0.48267789999999994,
+"inputTokens": 177239,
+"outputTokens": 1955,
+"cacheReadTokens": 165142
+},
+{
+"type": "gateDecided",
+"session": "run-2410",
+"seq": 105,
+"ts": 1793232777331,
+"ord": 5,
+"allow": true
+},
+{
+"type": "unitDone",
+"session": "run-2410",
+"seq": 106,
+"ts": 1793232777331,
+"ord": 5
+},
+{
+"type": "unitExecuting",
+"session": "run-2410",
+"seq": 108,
+"ts": 1793232777721,
+"ord": 6
+},
+{
+"type": "cliUsage",
+"session": "run-2410",
+"seq": 122,
+"ts": 1793235356974,
+"ord": 6,
+"attempt": 0,
+"costUsd": 0.28481930000000005,
+"inputTokens": 465004,
+"outputTokens": 7092,
+"cacheReadTokens": 422073
+},
+{
+"type": "repoChecksEvaluated",
+"session": "run-2410",
+"seq": 125,
+"ts": 1793235357944,
+"ord": 6,
+"attempt": 0,
+"passed": false,
+"outcome": "failed",
+"floor": "creator",
+"criterion": "the checks pass",
+"skipped": [],
+"checks": [
+{
+"name": "install",
+"argv": [
+"npm",
+"run",
+"install"
+],
+"source": "package.json",
+"exitCode": 0,
+"timedOut": false,
+"spawnError": null,
+"durationMs": 10447,
+"stdoutTail": "at /home/someone/x.ts:1",
+"stderrTail": ""
+},
+{
+"name": "typecheck",
+"argv": [
+"npm",
+"run",
+"typecheck"
+],
+"source": "package.json",
+"exitCode": 0,
+"timedOut": false,
+"spawnError": null,
+"durationMs": 12704,
+"stdoutTail": "at /home/someone/x.ts:1",
+"stderrTail": ""
+},
+{
+"name": "lint",
+"argv": [
+"npm",
+"run",
+"lint"
+],
+"source": "package.json",
+"exitCode": 0,
+"timedOut": false,
+"spawnError": null,
+"durationMs": 10942,
+"stdoutTail": "at /home/someone/x.ts:1",
+"stderrTail": ""
+},
+{
+"name": "test_targeted",
+"argv": [
+"npm",
+"run",
+"test_targeted"
+],
+"source": "package.json",
+"exitCode": 1,
+"timedOut": false,
+"spawnError": null,
+"durationMs": 1129951,
+"stdoutTail": "at /home/someone/x.ts:1",
+"stderrTail": ""
+}
+],
+"env": {
+"home": "/home/someone/worker/home"
+},
+"changed": [
+{
+"path": "src/a.ts",
+"status": "M"
+}
+]
+},
+{
+"type": "gateDecided",
+"session": "run-2410",
+"seq": 136,
+"ts": 1793235358090,
+"ord": 6,
+"allow": false
+},
+{
+"type": "unitDenied",
+"session": "run-2410",
+"seq": 137,
+"ts": 1793235358090,
+"ord": 6
+},
+{
+"type": "awaitingHuman",
+"session": "run-2410",
+"seq": 139,
+"ts": 1793235358100,
+"ord": 6,
+"gateKind": "escalation",
+"prompt": "Approve plan \u2026 /home/someone/project (must never reach a plugin)"
+},
+{
+"type": "resumed",
+"session": "run-2410",
+"seq": 140,
+"ts": 1793235446309,
+"ord": 6
+},
+{
+"type": "gateDecided",
+"session": "run-2410",
+"seq": 141,
+"ts": 1793235446309,
+"ord": 6,
+"allow": true
+},
+{
+"type": "unitDone",
+"session": "run-2410",
+"seq": 142,
+"ts": 1793235446309,
+"ord": 6
+},
+{
+"type": "unitExecuting",
+"session": "run-2410",
+"seq": 144,
+"ts": 1793235446716,
+"ord": 7
+},
+{
+"type": "cliUsage",
+"session": "run-2410",
+"seq": 149,
+"ts": 1793235791393,
+"ord": 7,
+"attempt": 0,
+"costUsd": null,
+"inputTokens": 226994,
+"outputTokens": 1396,
+"cacheReadTokens": 190720
+},
+{
+"type": "gateDecided",
+"session": "run-2410",
+"seq": 152,
+"ts": 1793235793194,
+"ord": 7,
+"allow": true
+},
+{
+"type": "unitDone",
+"session": "run-2410",
+"seq": 153,
+"ts": 1793235793194,
+"ord": 7
+},
+{
+"type": "unitExecuting",
+"session": "run-2410",
+"seq": 155,
+"ts": 1793235793861,
+"ord": 8
+},
+{
+"type": "cliUsage",
+"session": "run-2410",
+"seq": 160,
+"ts": 1793235918478,
+"ord": 8,
+"attempt": 0,
+"costUsd": null,
+"inputTokens": 262364,
+"outputTokens": 1401,
+"cacheReadTokens": 229248
+},
+{
+"type": "gateDecided",
+"session": "run-2410",
+"seq": 163,
+"ts": 1793235919412,
+"ord": 8,
+"allow": true
+},
+{
+"type": "unitDone",
+"session": "run-2410",
+"seq": 164,
+"ts": 1793235919412,
+"ord": 8
+},
+{
+"type": "qeAcceptanceDecided",
+"session": "run-2410",
+"seq": 165,
+"ts": 1793235920772,
+"ord": 9,
+"qe": {
+"status": "required",
+"score": 100,
+"reason": "required: /home/someone"
+}
+},
+{
+"type": "unitExecuting",
+"session": "run-2410",
+"seq": 167,
+"ts": 1793235921292,
+"ord": 9
+},
+{
+"type": "cliUsage",
+"session": "run-2410",
+"seq": 177,
+"ts": 1793236513296,
+"ord": 9,
+"attempt": 0,
+"costUsd": null,
+"inputTokens": 1676801,
+"outputTokens": 6856,
+"cacheReadTokens": 1599232
+},
+{
+"type": "repoChecksEvaluated",
+"session": "run-2410",
+"seq": 179,
+"ts": 1793236514255,
+"ord": 9,
+"attempt": 0,
+"passed": false,
+"outcome": "failed",
+"floor": "verify",
+"criterion": "the checks pass",
+"skipped": [],
+"checks": [
+{
+"name": "install",
+"argv": [
+"npm",
+"run",
+"install"
+],
+"source": "package.json",
+"exitCode": 0,
+"timedOut": false,
+"spawnError": null,
+"durationMs": 6588,
+"stdoutTail": "at /home/someone/x.ts:1",
+"stderrTail": ""
+},
+{
+"name": "typecheck",
+"argv": [
+"npm",
+"run",
+"typecheck"
+],
+"source": "package.json",
+"exitCode": 0,
+"timedOut": false,
+"spawnError": null,
+"durationMs": 12704,
+"stdoutTail": "at /home/someone/x.ts:1",
+"stderrTail": ""
+},
+{
+"name": "lint",
+"argv": [
+"npm",
+"run",
+"lint"
+],
+"source": "package.json",
+"exitCode": 0,
+"timedOut": false,
+"spawnError": null,
+"durationMs": 10942,
+"stdoutTail": "at /home/someone/x.ts:1",
+"stderrTail": ""
+},
+{
+"name": "test_targeted",
+"argv": [
+"npm",
+"run",
+"test_targeted"
+],
+"source": "package.json",
+"exitCode": 1,
+"timedOut": false,
+"spawnError": null,
+"durationMs": 1129951,
+"stdoutTail": "at /home/someone/x.ts:1",
+"stderrTail": ""
+}
+],
+"env": {
+"home": "/home/someone/worker/home"
+},
+"changed": [
+{
+"path": "src/a.ts",
+"status": "M"
+}
+],
+"reusedFrom": {
+"attempt": 0,
+"fresh": [
+"install"
+],
+"ord": 6,
+"phase": "fix",
+"reused": [
+"typecheck",
+"lint",
+"test_targeted"
+]
+}
+},
+{
+"type": "gateDecided",
+"session": "run-2410",
+"seq": 181,
+"ts": 1793236514356,
+"ord": 9,
+"allow": false
+},
+{
+"type": "unitDenied",
+"session": "run-2410",
+"seq": 182,
+"ts": 1793236514356,
+"ord": 9
+},
+{
+"type": "awaitingHuman",
+"session": "run-2410",
+"seq": 184,
+"ts": 1793236514358,
+"ord": 9,
+"gateKind": "escalation",
+"prompt": "Approve plan \u2026 /home/someone/project (must never reach a plugin)"
+},
+{
+"type": "resumed",
+"session": "run-2410",
+"seq": 185,
+"ts": 1793236581953,
+"ord": 9
+},
+{
+"type": "gateDecided",
+"session": "run-2410",
+"seq": 186,
+"ts": 1793236581953,
+"ord": 9,
+"allow": true
+},
+{
+"type": "unitDone",
+"session": "run-2410",
+"seq": 187,
+"ts": 1793236581953,
+"ord": 9
+},
+{
+"type": "awaitingHuman",
+"session": "run-2410",
+"seq": 188,
+"ts": 1793236581970,
+"ord": 10,
+"gateKind": "deliver",
+"prompt": "Approve plan \u2026 /home/someone/project (must never reach a plugin)"
+},
+{
+"type": "resumed",
+"session": "run-2410",
+"seq": 189,
+"ts": 1793236652183,
+"ord": 10
+},
+{
+"type": "unitExecuting",
+"session": "run-2410",
+"seq": 191,
+"ts": 1793236652199,
+"ord": 10
+},
+{
+"type": "gateDecided",
+"session": "run-2410",
+"seq": 200,
+"ts": 1793236679752,
+"ord": 10,
+"allow": true
+},
+{
+"type": "unitDone",
+"session": "run-2410",
+"seq": 201,
+"ts": 1793236679752,
+"ord": 10
+},
+{
+"type": "sessionCompleted",
+"session": "run-2410",
+"seq": 202,
+"ts": 1793236679778
+}
+]

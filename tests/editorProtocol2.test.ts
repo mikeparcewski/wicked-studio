@@ -153,7 +153,9 @@ describe('protocol negotiation and the v2-only messages', () => {
     expect(negotiate([1])).toBe(1);
     expect(negotiate([1, 2])).toBe(2);
     expect(negotiate([2])).toBe(2);
-    expect(negotiate([3])).toBeNull();
+    // Protocol 3 (observe, DES-PLUGIN-EVENTS spike 1) exists now; a protocol this host does not speak still negotiates nothing.
+    expect(negotiate([3])).toBe(3);
+    expect(negotiate([4])).toBeNull();
   });
 
   it('refuses v2-only types on a v1 port, and parses them on a v2 one', () => {
