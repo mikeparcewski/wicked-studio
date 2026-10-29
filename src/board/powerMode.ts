@@ -483,6 +483,9 @@ export { isRigor };
 
 // ── the state as it stands now ─────────────────────────────────────────────────────────────────────────
 
+/** Frames that can only come after a pause was answered: the run moved on. */
+const PAUSE_ENDS: ReadonlySet<string> = new Set(['powerTurnStarted', 'powerHandoffStepped', 'powerToggled', 'unitDispatched', 'resumed', 'gateDecided', 'sessionCompleted', 'sessionFailed', 'runCancelled']);
+
 /**
  * The run's power state, brought up to date by the frames that arrived after the session was read (`rigorRescored`,
  * `powerToggled`, `powerHandoffStepped`, `powerCheckpointReached`) and by the answer to this page's own flip or raise
@@ -512,7 +515,9 @@ export function mergePower(p: PowerState | null, events: readonly CoreEvent[] | 
     } else if (e.type === 'powerCheckpointReached' && typeof e.checkpoint === 'number') {
       checkpoints = Math.max(checkpoints, e.checkpoint);
       if (e.pause !== null && typeof e.pause === 'object') framePause = e.pause as NonNullable<PowerState['pause']>;
-    } else if (e.type === 'powerTurnStarted' && framePause != null) {
+    } else if (framePause != null && PAUSE_ENDS.has(e.type)) {
+      // Anything that moves the run on after the pause ends it (seen on the rig: an answered pause, then the
+      // escalation, then hand-off — no new turn ever started).
       framePause = null;
     } else if (e.type === 'powerIntakePlanned' && plan === null && e.plan !== null && typeof e.plan === 'object') {
       plan = e.plan as RigorPlan;

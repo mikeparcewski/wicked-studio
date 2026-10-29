@@ -115,3 +115,18 @@ describe('the real run, rendered', () => {
     expect(screen.getAllByTestId('run-plugin-updated').map((r) => r.dataset['ord'])).toEqual(['3', '5']);
   });
 });
+
+describe('a pause the frames show, answered since (rig run b6f7968b)', () => {
+  it('ends when the run moves on (the escalation, hand-off), even with no new turn; a paused run is never a silent step', async () => {
+    const { mergePower } = await import('../src/board/powerMode.js');
+    const { silentStep } = await import('../src/board/silentStep.js');
+    const pz = { at: T(17, 58), checkpoint: 4, reasons: ['struggling'], recommended: 'split' as const };
+    const cp = { type: 'powerCheckpointReached', session: RUN, ord: 3, checkpoint: 4, turn: 1, trigger: 'pre_handoff', head: null, picked: 0, rigor: 'highest', paused: true, pause: pz, ts: T(17, 58) };
+    const done = { type: 'powerTurnCompleted', session: RUN, ord: 3, attempt: 0, turn: 1, cli: 'claude', outcome: 'paused', summary: null, ts: T(17, 58) };
+    expect(mergePower({ ...POWER, pause: null }, [cp, done] as never)!.pause).toEqual(pz);
+    const moved = [cp, done, { type: 'gateDecided', session: RUN, ord: 3, allow: true, ts: T(18, 14) }, { type: 'powerHandoffStepped', session: RUN, round: 1, step: STEPS[2], ts: T(18, 14) }];
+    expect(mergePower({ ...POWER, pause: null }, moved as never)!.pause).toBeNull();
+    const paused = makeView({ id: RUN, status: 'executing', unit_ix: 1, power: { ...POWER, pause: pz } } as never, UNITS);
+    expect(silentStep(paused, [{ type: 'unitDispatched', session: RUN, ord: 2, ts: T(10, 0) }] as never, T(18, 0))).toBeNull();
+  });
+});
