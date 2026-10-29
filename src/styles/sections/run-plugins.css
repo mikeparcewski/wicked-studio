@@ -44,3 +44,7 @@
 @media (max-width: 720px) {
   .wk-runplugin-updated { margin-left: 0; }
 }
+.wk-runplugin-proposal { grid-area: foot; margin-top: 6px; padding: 8px 10px; border-radius: var(--radius-md); background: var(--surface-raised); font-size: var(--text-sm); }
+.wk-runplugin-proposal-text { margin: 0; color: var(--ink-body); }
+.wk-runplugin-proposal-who { color: var(--ink-muted); }
+.wk-runplugin-proposal-acts { margin: 6px 0 0; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }

@@ -7,7 +7,7 @@ import { OpenDocumentList } from './OpenDocumentList.js';
 import { VIBE_SOON } from '../../board/comingSoon.js';
 import { mcpInspectPath } from '../../api/mcpInspect.js';
 import { MCP_SERVER_KIND } from '../../api/editors.js';
-import { RUN_PLUGINS, topicWords } from '../../plugins/runPlugins.js';
+import { RUN_PLUGINS, permissionWords, topicWords } from '../../plugins/runPlugins.js';
 
 /**
  * The Plugins page (operator 2026-10-12; was Settings → Developer → Editor plugins, ruling X3, 2026-10-10;
@@ -199,7 +199,7 @@ export function RunPluginList(): React.ReactElement {
   return (
     <section data-testid="run-plugins-settings" aria-labelledby="run-plugins-title" className="wk-card">
       <h2 id="run-plugins-title" className="wk-section-title">Run plugins</h2>
-      <p className="wk-pg-proj-note">Each shows one block in every job’s conversation. It hears only what its row lists, and it can’t change anything.</p>
+      <p className="wk-pg-proj-note">Each shows one block in every job’s conversation. It hears only what its row lists, and it can do only what its row lists: it never answers a decision, and only you send a step anything.</p>
       <ul aria-label="Run plugins">
         {RUN_PLUGINS.map((p) => (
           <li key={p.id} data-testid="run-plugin-row" data-plugin={p.id} className="py-3 border-b last:border-b-0" style={{ borderColor: 'var(--border-subtle)' }}>
@@ -213,6 +213,13 @@ export function RunPluginList(): React.ReactElement {
                 <li key={o.topic} data-topic={o.topic}>Hears {topicWords(o.topic)}, {o.why}.</li>
               ))}
             </ul>
+            {p.permissions.length > 0 && (
+              <ul data-testid="run-plugin-row-permissions" aria-label={`What ${p.title} may do`} style={{ fontSize: 'var(--text-sm)', color: 'var(--ink-body)', marginTop: 4 }}>
+                {p.permissions.map((g) => (
+                  <li key={g.id} data-permission={g.id}>It {permissionWords(g.id)}: {g.why}.</li>
+                ))}
+              </ul>
+            )}
           </li>
         ))}
       </ul>

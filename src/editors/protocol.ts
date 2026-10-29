@@ -38,12 +38,23 @@ export type PermissionId = 'artifact.read' | 'artifact.write' | 'selection.chip'
   | 'checks.contribute' | 'sources.read' | 'media.read' | 'artifact.export' | 'ui.fullscreen' | 'network.media'
   | 'mcp.session'
   /** Protocol 2 `theme.set` (DES-EDITOR-PLUGIN-CONTRACT-001 §6, §7.2): change the artifact's theme tokens. */
-  | 'artifact.theme';
+  | 'artifact.theme'
+  /** Protocol 3, run-thread plugins only (power mode spike 3): read the run's working document. */
+  | 'doc.read'
+  /** Protocol 3: offer an edit of the working document. The HOST decides whose it is: a person's (typed, saved under
+   *  their own click in the frame) or the plugin's own generated lines. */
+  | 'doc.propose_edit'
+  /** Protocol 3: suggest a steering note. Nothing is sent until a person presses the host's own Send. */
+  | 'steer.propose';
 
 export const PERMISSIONS: readonly PermissionId[] = [
   'artifact.read', 'artifact.write', 'selection.chip', 'composer.draft', 'checks.read', 'checks.contribute',
   'sources.read', 'media.read', 'artifact.export', 'ui.fullscreen', 'network.media', 'mcp.session', 'artifact.theme',
+  'doc.read', 'doc.propose_edit', 'steer.propose',
 ];
+
+/** Permissions only a run-thread plugin's manifest can hold (an artifact editor's default set never has them). */
+export const RUN_THREAD_ONLY: ReadonlySet<PermissionId> = new Set<PermissionId>(['doc.read', 'doc.propose_edit', 'steer.propose']);
 
 /** Permissions no default ever grants (core `LEDGER_ONLY_PERMISSIONS`): only the build's own token in
  *  `EDITOR-GRANTS`, which its install consent writes (DES-MCP-INSPECTOR-001 §6). */
@@ -100,6 +111,9 @@ export const REQUESTS = {
   'ui.fullscreen': 'ui.fullscreen',
   'mcp.request': 'mcp.session',
   'theme.set': 'artifact.theme',
+  'doc.read': 'doc.read',
+  'doc.propose_edit': 'doc.propose_edit',
+  'steer.propose': 'steer.propose',
 } as const satisfies Record<string, PermissionId>;
 export type RequestType = keyof typeof REQUESTS;
 
@@ -125,7 +139,11 @@ export type EventType = keyof typeof EVENTS;
 /** Message types a plugin may send only on a port that negotiated protocol 2. */
 export const V2_ONLY: ReadonlySet<string> = new Set(['theme.set', 'options.values', 'ui.height']);
 /** Message types a plugin may send only on a port that negotiated protocol 3. */
-export const V3_ONLY: ReadonlySet<string> = new Set(['ui.fold']);
+export const V3_ONLY: ReadonlySet<string> = new Set(['ui.fold', 'doc.read', 'doc.propose_edit', 'steer.propose']);
+
+/** Most characters of one working-document section (crew's own cap) and of a suggested steering note. */
+export const DOC_LIMITS = { sectionChars: 4_000, steerChars: 600 } as const;
+export const DOC_SECTIONS = ['goal', 'approach', 'decisions', 'constraints', 'questions', 'next'] as const;
 /** Protocol 2 surfaces a v2 `ui.morph` may name (§6), beside the v1 sizes. */
 export const V2_MORPH = ['card', 'full'] as const;
 
@@ -215,6 +233,11 @@ function payloadOk(type: string, p: Record<string, unknown>, protocol: number): 
     }
     case 'ui.height': return isNum(p['px']);
     case 'ui.fold': return typeof p['folded'] === 'boolean';
+    case 'doc.read': return true;
+    case 'doc.propose_edit':
+      return Number.isInteger(p['base']) && (DOC_SECTIONS as readonly string[]).includes(p['section'] as string)
+        && isStr(p['text'], DOC_LIMITS.sectionChars) && (p['origin'] === 'typed' || p['origin'] === 'generated');
+    case 'steer.propose': return isStr(p['text'], DOC_LIMITS.steerChars) && (p['text'] as string).trim() !== '';
     case 'ui.key': return isStr(p['key'], 40);
     case 'ui.typed': return isStr(p['grapheme'], 64);
     case 'ui.status': return isLine(p['line'], LIMITS.statusChars);

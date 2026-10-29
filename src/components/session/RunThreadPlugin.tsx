@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../../api/client.js';
-import { EditorHost, type HostAdapter, type HostLogEntry } from '../../editors/host.js';
+import { EditorHost, type HostAdapter, type HostDoc, type HostLogEntry } from '../../editors/host.js';
+import { ensureWorkingDoc, getWorkingDoc, proposeWorkingDoc, type WorkingDocSectionId } from '../../api/workingDoc.js';
+import { ApiError } from '../../api/errors.js';
+import { useWorkingDocs } from '../../store/workingDocs.js';
 import { RunEventFeed, type EventsBatch } from '../../editors/runEvents.js';
 import { readThemeTokens } from '../../editors/theme.js';
 import { subscribeCoreEvents } from '../../hooks/eventTap.js';
@@ -69,6 +72,45 @@ export function RunThreadPlugin({ runId, plugin, placement }: { runId: string; p
   const [mountKey, setMountKey] = useState(0);
   const [flash, setFlash] = useState<'highlight' | 'pulse' | null>(null);
   const log = useRef<HostLogEntry[]>([]);
+  // A note the plugin suggested for the next step: drawn with the host's own Send, never sent by the plugin.
+  const [proposal, setProposal] = useState<string | null>(null);
+  const [proposalState, setProposalState] = useState<'idle' | 'sending' | 'failed'>('idle');
+  const setDoc = useWorkingDocs((s) => s.set);
+  const granted = (id: string): boolean => plugin.permissions.some((p) => p.id === id);
+
+  /** The working document seam the host hands the plugin (spike 3). Crew decides the rest. */
+  const docSeam = useRef<HostDoc>({
+    read: async () => {
+      try {
+        const view = await getWorkingDoc(runId);
+        if (view === null) return { error: 'unavailable', message: 'this version of studio’s service keeps no working document' };
+        setDoc(runId, view);
+        return { view };
+      } catch (e) {
+        return { error: 'unavailable', message: e instanceof Error ? e.message : String(e) };
+      }
+    },
+    propose: async (edit, by) => {
+      try {
+        let base = edit.base;
+        if (base < 0) {
+          // A plugin's own lines never START a working document; a person's first edit does.
+          if (by === 'plugin') return { error: 'refused', message: 'this job has no working document yet' };
+          base = (await ensureWorkingDoc(runId)).doc?.head ?? 0;
+        }
+        const r = await proposeWorkingDoc(runId, {
+          base, author: by, plugin: { id: plugin.id, version: plugin.version },
+          sections: { [edit.section as WorkingDocSectionId]: edit.text },
+        });
+        setDoc(runId, r.view);
+        return { version: r.version, unchanged: r.unchanged, by };
+      } catch (e) {
+        if (e instanceof ApiError && e.status === 409) return { error: 'head_moved', message: 'the working document changed since' };
+        if (e instanceof ApiError && (e.status === 403 || e.status === 400)) return { error: 'refused', message: e.message };
+        return { error: 'unavailable', message: e instanceof Error ? e.message : String(e) };
+      }
+    },
+  });
 
   useEffect(() => {
     if (frameBox.current === null) return undefined;
@@ -83,7 +125,9 @@ export function RunThreadPlugin({ runId, plugin, placement }: { runId: string; p
       title: `${plugin.title}: this job`,
       size: 'inline',
       surface: 'card',
-      grants: [],
+      // Run-thread requests only, each one its manifest asked for (a built-in plugin is pre-granted them).
+      grants: plugin.permissions.map((p) => p.id),
+      ...(granted('doc.read') || granted('doc.propose_edit') ? { doc: docSeam.current } : {}),
       theme: readThemeTokens(),
       prefs: { reducedMotion: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false, techDetails: false, locale: navigator.language },
       firstParty: plugin.firstParty,
@@ -123,6 +167,7 @@ export function RunThreadPlugin({ runId, plugin, placement }: { runId: string; p
         },
         cardHeight: (px) => setHeight(px),
         fold: (folded) => setFolded(runId, plugin.id, folded),
+        steerProposal: (text) => { setProposal(text.slice(0, 600)); setProposalState('idle'); },
       },
     });
     // Its own name, so "the editor frames on the page" (artifact cards) never counts a run-thread block.
@@ -138,6 +183,31 @@ export function RunThreadPlugin({ runId, plugin, placement }: { runId: string; p
     // One frame per mount; "Reload it" remounts.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [runId, plugin.id, plugin.html, mountKey]);
+
+  // The working document changed (crew's `workingDocChanged` frame): the plugin re-reads it, the thread rows follow.
+  useEffect(() => subscribeCoreEvents((e) => {
+    const ev = e as unknown as { type: string; session?: unknown; head?: unknown };
+    if (ev.type !== 'workingDocChanged' || ev.session !== runId) return;
+    hostRef.current?.docChanged(typeof ev.head === 'number' ? ev.head : null);
+    if (!granted('doc.read')) void getWorkingDoc(runId).then((v) => { if (v !== null) setDoc(runId, v); }).catch(() => undefined);
+  }), [runId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /** The host's own Send for a suggested note: a person's click adds it to "Next and trailing work" as their edit. */
+  const sendProposal = async (): Promise<void> => {
+    if (proposal === null) return;
+    setProposalState('sending');
+    try {
+      const current = useWorkingDocs.getState().byRun[runId];
+      const base = current?.doc?.head ?? (await ensureWorkingDoc(runId)).doc?.head ?? 0;
+      const next = [current?.sections?.next ?? '', proposal].filter((x) => x.trim() !== '').join('\n');
+      const r = await proposeWorkingDoc(runId, { base, author: 'operator', plugin: { id: plugin.id, version: plugin.version }, sections: { next } });
+      setDoc(runId, r.view);
+      hostRef.current?.docChanged(r.version);
+      setProposal(null);
+    } catch {
+      setProposalState('failed');
+    }
+  };
 
   // The host owns the fold: every change of it is said to the plugin.
   useEffect(() => { hostRef.current?.setFold(view.folded); }, [view.folded]);
@@ -227,6 +297,18 @@ export function RunThreadPlugin({ runId, plugin, placement }: { runId: string; p
           <button type="button" className="wk-btn wk-btn--quiet wk-btn--sm" onClick={() => setMountKey((n) => n + 1)}>Reload it</button>
         </p>
       )}
+      {proposal !== null && (
+        <div data-testid="run-plugin-proposal" className="wk-runplugin-proposal" role="group" aria-label={`${plugin.title} suggests a note for the next step`}>
+          <p className="wk-runplugin-proposal-text"><span className="wk-runplugin-proposal-who">{plugin.title} suggests telling the next step:</span> “{proposal}”</p>
+          <p className="wk-runplugin-proposal-acts">
+            <button type="button" data-testid="run-plugin-proposal-send" disabled={proposalState === 'sending'} className="wk-btn wk-btn--secondary wk-btn--sm" onClick={() => { void sendProposal(); }}>
+              {proposalState === 'sending' ? 'Sending…' : 'Send to the next step'}
+            </button>
+            <button type="button" data-testid="run-plugin-proposal-dismiss" className="wk-btn wk-btn--quiet wk-btn--sm" onClick={() => setProposal(null)}>Dismiss</button>
+            {proposalState === 'failed' && <span className="wk-session-grey"> It didn’t go through.</span>}
+          </p>
+        </div>
+      )}
       <p data-testid="run-plugin-attribution" className="wk-runplugin-foot" title={`It hears ${topics}. It can’t change anything.`}>{attributionLine(plugin)}</p>
     </section>
   );
@@ -284,6 +366,44 @@ export function RunPluginJumpRows({ runId, ords, except }: { runId: string; ords
           <span>{p.title} updated{blocks[`${runId}::${p.id}`]?.steps[o] !== undefined ? ` · ${blocks[`${runId}::${p.id}`]!.steps[o]}` : ''}</span>
           <button type="button" data-testid="run-plugin-jump" className="wk-chat-link" aria-label={`Jump to the ${p.title.toLowerCase()} and show it`}
             onClick={() => jump(runId, p.id)}>Jump ↑</button>
+        </p>
+      ))}
+    </>
+  );
+}
+
+const SECTION_WORDS: Record<string, string> = {
+  goal: 'Goal', approach: 'Approach', decisions: 'Decisions', constraints: 'Constraints', questions: 'Open questions', next: 'Next work',
+};
+
+/** One steering note's thread row words: "You edited the working document · Constraints · picked up at Review". */
+export function steerRowWords(by: string, sections: readonly string[], s: { pickedUp: { step: string | null; ord: number | null } | null; error: string | null }): string {
+  const who = by === 'local' ? 'You' : by;
+  const where = s.error !== null ? `not sent: ${s.error}`
+    : s.pickedUp !== null ? `picked up at ${s.pickedUp.step !== null ? stepLabelOf(s.pickedUp.step) : `step ${s.pickedUp.ord ?? '?'}`}`
+    : 'waiting for the next step';
+  return `${who} edited the working document · ${sections.map((x) => SECTION_WORDS[x] ?? x).join(', ')} · ${where}`;
+}
+
+/**
+ * The working document's steering notes in the thread (power mode spike 3), one slim row each, at the step that picked
+ * it up (`ords`), or — not picked up yet, or picked up by a step with no message — after the last step (`except`).
+ */
+export function WorkingDocSteerRows({ runId, ords, except }: { runId: string; ords?: readonly number[]; except?: readonly number[] }): React.ReactElement | null {
+  const view = useWorkingDocs((s) => s.byRun[runId]);
+  if (view === undefined) return null;
+  const rows = view.steers.filter((s) => {
+    const at = s.pickedUp?.ord ?? null;
+    if (ords !== undefined) return at !== null && ords.includes(at);
+    return at === null || !(except ?? []).includes(at);
+  });
+  if (rows.length === 0) return null;
+  return (
+    <>
+      {rows.map((s) => (
+        <p key={s.id} data-testid="working-doc-steer" data-steer={s.id} data-picked={s.pickedUp !== null ? 'true' : 'false'} className="wk-runplugin-updated wk-workingdoc-steer">
+          <span aria-hidden className="wk-hpanel-dot" />
+          <span>{steerRowWords(s.by, s.sections, s)}</span>
         </p>
       ))}
     </>

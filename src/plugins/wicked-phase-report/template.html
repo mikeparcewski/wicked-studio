@@ -50,6 +50,28 @@
   ul.list li span:last-child { color: var(--ink-muted); text-align: right; min-width: 0; }
   ul.list li.open span:first-child { color: var(--ink-high); font-weight: 600; }
   .gap { margin: 0 0 6px; font-size: 12px; color: var(--status-fail); }
+  /* The working document (spike 3) */
+  #wd { border: 1px solid var(--border); border-radius: 10px; background: var(--surface-raised); padding: 10px 12px 12px; margin: 0 0 8px; }
+  .wd-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+  .wd-title { margin: 0; font-size: 14px; color: var(--ink-high); }
+  .wd-ver { font-size: 12px; color: var(--ink-muted); }
+  .wd-note { margin: 2px 0 8px; font-size: 12px; color: var(--ink-muted); }
+  .wd-sec { padding: 6px 0; border-top: 1px solid var(--border); }
+  .wd-sec h4 { margin: 0 0 3px; display: flex; justify-content: space-between; gap: 8px; font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-muted); }
+  .wd-who { font-weight: 400; letter-spacing: 0; text-transform: none; }
+  .wd-text { white-space: pre-wrap; color: var(--ink-body); border-radius: 6px; padding: 2px 4px; margin: 0 -4px; cursor: text; min-height: 1.4em; }
+  .wd-text:hover { background: var(--surface-card); }
+  .wd-text:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .wd-text.empty { color: var(--ink-muted); font-style: italic; }
+  .wd-input { box-sizing: border-box; width: 100%; font: inherit; color: var(--ink-high); background: var(--surface-card); border: 1px solid var(--accent); border-radius: 6px; padding: 6px 8px; resize: vertical; }
+  .wd-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 6px; }
+  .wd-btn { font: inherit; font-size: 12px; padding: 4px 12px; border-radius: 999px; border: 1px solid var(--border); background: transparent; color: var(--ink-body); cursor: pointer; }
+  .wd-btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-fg, #fff); }
+  .wd-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .wd-effect { font-size: 12px; color: var(--ink-muted); }
+  .wd-status { margin: 8px 0 0; font-size: 12px; color: var(--ink-body); }
+  .wd-status.bad { color: var(--status-fail); }
+  .wd-trail { list-style: none; margin: 8px 0 0; padding: 6px 0 0; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 2px; font-size: 12px; color: var(--ink-muted); }
 </style>
 </head>
 <body>
@@ -58,6 +80,7 @@
     <span class="dot" id="dot" aria-hidden="true"></span><span class="sum-text" id="sum-text">Reading the job’s events…</span>
   </button>
   <section id="dash" class="dash" hidden aria-label="Phase report"></section>
+  <section id="wd" hidden aria-label="Working document"></section>
 </main>
 <script>__PLUGIN__</script>
 </body>
