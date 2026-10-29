@@ -5,7 +5,7 @@
 .wk-runplugins, .wk-runplugins-pinned { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
 /* The thread has 20 px of top padding (chat-native.css); a sticky box sticks inside it, so the pinned strip reaches up
    over it (top/margin -20 px, padding 20 px) and nothing that scrolls under it shows above it. */
-.wk-runplugins-pinned { position: sticky; top: -20px; z-index: 5; margin-top: -20px; padding: 20px 0 4px; background: var(--surface-base); }
+.wk-runplugins-pinned { position: sticky; top: -20px; z-index: 5; margin: -20px -10px 0; padding: 20px 10px 4px; background: var(--surface-base); }
 .wk-runplugin {
   display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: 'title tools' 'frame frame' 'foot foot';
   align-items: center; column-gap: 8px; min-width: 0;
