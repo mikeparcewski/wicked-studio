@@ -1,3 +1,4 @@
+import { actorWords } from '../../board/actorWords.js';
 import type { SessionView } from '../../api/types.js';
 import { QE_FORCE_DISCLOSURE, QE_FORCE_LABEL, QE_SKIP_DISCLOSURE, QE_SKIP_LABEL, REDUCED_ASSURANCE_LABEL, REDUCED_OPT_IN_DISCLOSURE, REDUCED_OPT_IN_LABEL, isReduced, qeSkippedText, qeWords, sessionQe, unverifiedDeliveryLine, type DeliveryAssuranceView, type QeDecision, receiptWords, sessionAssurance, type AssuranceReceipt as Receipt } from '../../board/assuranceModel.js';
 import { useRunEvents } from '../../hooks/useRunEvents.js';
@@ -24,9 +25,10 @@ export function AssuranceReceipt({ receipt, passed = null, testId = 'assurance-r
   const w = receiptWords(receipt, passed);
   const judged = (receipt.operatorJudges ?? []).filter((j) => j.floorOverride === undefined);
   const overrides = (receipt.operatorJudges ?? []).filter((j) => j.floorOverride !== undefined);
-  const judgedBy = [...new Set(judged.map((j) => j.by))];
+  // Never an actor id ("local (human)"): the local operator is "you" (operator 2026-10-29).
+  const judgedBy = [...new Set(judged.map((j) => actorWords(j.by)))];
   const judgedGates = judged.length;
-  const overriddenBy = [...new Set(overrides.map((j) => j.by))];
+  const overriddenBy = [...new Set(overrides.map((j) => actorWords(j.by)))];
   const lead = w.kind === 'floor-only' ? 'Only automatic checks ran'
     : w.kind === 'same-seat' ? 'The helper checked its own work'
       : w.kind === 'unchecked' ? 'Nothing was verified'
@@ -49,7 +51,7 @@ export function AssuranceReceipt({ receipt, passed = null, testId = 'assurance-r
         <ul data-testid="assurance-floor-overrides" className="wk-assurance-list">
           {overrides.map((o, i) => (
             <li key={`${o.floorOverride?.resultId ?? ''}-${i}`} data-testid="assurance-floor-override">
-              {o.by}{o.floorOverride?.resultId ? <> at <code>{o.floorOverride.resultId}</code></> : null}
+              {actorWords(o.by)}{o.floorOverride?.resultId ? <> at <code>{o.floorOverride.resultId}</code></> : null}
               {o.note !== null ? <>: <q>{o.note}</q></> : ' (no rationale recorded)'}
             </li>
           ))}
