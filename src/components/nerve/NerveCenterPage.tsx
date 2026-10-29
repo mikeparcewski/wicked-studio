@@ -120,7 +120,8 @@ export function NerveCenterPage({ navigate = defaultNavigate, needCount = 0, fee
     governance: governanceKind === 'ok' ? 'ok' : governanceKind,
   });
 
-  const recheck = (): void => registry.reprobeNow();
+  // Check again re-reads everything, the disk row included: the probes, and crew's /system answer itself.
+  const recheck = (): void => { registry.reprobeNow(); void useSystemStore.getState().refresh({ force: true }); };
   const act = (a: SystemAction): void => {
     if (a.kind === 'recheck') { recheck(); return; }
     if (a.kind === 'sign-in') {

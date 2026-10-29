@@ -174,15 +174,19 @@ export function failedOnBase(c: GateFloorCheck): boolean {
   return (c.classification !== null && ON_BASE.has(c.classification)) || c.preExisting.length > 0 || c.baseFailed === true;
 }
 
-/** The floor record of one unit attempt (`repoChecksEvaluated` for that ord and attempt), newest first. */
+/** The floor record of one unit attempt (`repoChecksEvaluated` for that ord and attempt), newest first. An attempt
+ *  with no record of its own (a rework that left the tree unchanged: "this unit's last floor result on this tree
+ *  stands") is judged on the newest earlier record for that unit. */
 function floorAt(events: readonly CoreEvent[], ord: number, attempt: number | null): GateFloorView | null {
+  let earlier: GateFloorView | null = null;
   for (let i = events.length - 1; i >= 0; i--) {
     const e = events[i]!;
     if (e.type !== 'repoChecksEvaluated' || e.ord !== ord) continue;
     const f = floorOf(e);
     if (attempt === null || f.attempt === null || f.attempt === attempt) return f;
+    if (earlier === null && f.attempt < attempt) earlier = f;
   }
-  return null;
+  return earlier;
 }
 
 export interface OverriddenFloors {
@@ -190,6 +194,10 @@ export interface OverriddenFloors {
   checks: string[];
   /** Every one of them failed on the run's base as well. */
   onBase: boolean;
+  /** The distinct failing tests the runner named in those checks (0 when it named none). */
+  failures?: number;
+  /** The engine could not tell the change's failures from the base's (the base is red too). */
+  unseparated?: boolean;
 }
 
 /**
@@ -209,6 +217,8 @@ export function overriddenFloorsOf(
   }
   if (overrides.length === 0) return null;
   const checks: string[] = [];
+  const failing = new Set<string>();
+  let unseparated = false;
   let onBase = true;
   for (const o of overrides) {
     const at = o.floorOverride!;
@@ -222,13 +232,29 @@ export function overriddenFloorsOf(
     for (const c of failed) {
       if (!checks.includes(c.name)) checks.push(c.name);
       if (!failedOnBase(c)) onBase = false;
+      for (const id of c.failureIds ?? []) { const n = failureName(id); if (n !== '') failing.add(n); }
+      if (c.classification === 'base_red_unseparated' || c.classification === 'unclassified_red_base') unseparated = true;
     }
   }
-  return { checks, onBase };
+  return { checks, onBase, failures: failing.size, unseparated };
 }
 
 function andList(items: readonly string[]): string {
   return items.length <= 1 ? items.join('') : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]!}`;
+}
+
+/**
+ * The final message's sentence for an overridden floor, plainly: what you approved and why it is not the alarm it
+ * sounds like. "You approved 6 failing tests in the test check; the base fails too, so they could not be told apart
+ * from this change." The record keeps "Floor overridden by operator" (the details panel).
+ */
+export function approvedLine(o: OverriddenFloors): string {
+  const what = o.checks.length === 0 ? 'the repository checks' : `the ${andList(o.checks)} check${o.checks.length === 1 ? '' : 's'}`;
+  const n = o.failures ?? 0;
+  const tests = n > 0 ? `${n} failing ${n === 1 ? 'test' : 'tests'} in ${what}` : `${what}, which did not pass`;
+  if (o.onBase && o.unseparated === true) return `You approved ${tests}; the base fails too, so they could not be told apart from this change.`;
+  if (o.onBase) return `You approved ${tests}; ${n === 1 ? 'it fails' : 'they fail'} on the base too.`;
+  return `You approved ${tests}.`;
 }
 
 /** "Overridden by you: test failed on this change and its base." — the one sentence every surface says

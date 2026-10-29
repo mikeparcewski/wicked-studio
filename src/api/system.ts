@@ -195,7 +195,9 @@ export interface SystemInfra {
    * the volume's free bytes and the floor below which jobs stop) wins where crew provides it; else the
    * row's own `freeBytes` / `totalBytes`. `null` when the row says neither.
    */
-  disk: { freeBytes: number; totalBytes: number | null; floorBytes: number | null } | null;
+  /** `availableBytes`: what the volume can still take for important use (macOS counts purgeable space macOS clears on
+   *  demand: Finder's "available"); null where crew does not report it (off macOS, an older crew). */
+  disk: { freeBytes: number; totalBytes: number | null; floorBytes: number | null; availableBytes: number | null } | null;
   /** The host load, when the row carries one (the `load` row). */
   load: { load1: number; cores: number | null } | null;
 }
@@ -281,12 +283,13 @@ function action(a: Bag, target: Bag): SystemAction | null {
 export function diskReading(details: unknown): SystemInfra['disk'] {
   const d = bag(details);
   const fd = d['freeDisk'];
-  if (typeof fd === 'number' && Number.isFinite(fd)) return { freeBytes: fd, totalBytes: num(d['totalBytes']), floorBytes: null };
+  const available = num(d['availableBytes']);
+  if (typeof fd === 'number' && Number.isFinite(fd)) return { freeBytes: fd, totalBytes: num(d['totalBytes']), floorBytes: null, availableBytes: available };
   const f = bag(fd);
   const free = num(f['freeBytes']);
-  if (free !== null) return { freeBytes: free, totalBytes: num(f['volumeBytes']) ?? num(d['totalBytes']), floorBytes: num(f['floorBytes']) };
+  if (free !== null) return { freeBytes: free, totalBytes: num(f['volumeBytes']) ?? num(d['totalBytes']), floorBytes: num(f['floorBytes']), availableBytes: available };
   const own = num(d['freeBytes']);
-  return own === null ? null : { freeBytes: own, totalBytes: num(d['totalBytes']), floorBytes: null };
+  return own === null ? null : { freeBytes: own, totalBytes: num(d['totalBytes']), floorBytes: null, availableBytes: available };
 }
 
 /** The governance mode per scope, in words ("admitted", or "unscoped: admitted · repo: enforced"). */

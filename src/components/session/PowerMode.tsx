@@ -6,7 +6,7 @@ import type { SessionView } from '../../api/types.js';
 import { queueDecision, reportDecision } from '../../board/undoQueue.js';
 import { clockTime } from '../../board/handover.js';
 import {
-  PAUSE_CHOICES, RAISE_WORDS, handoffRow, handoffWords, higherRigors, listWords, pauseOrder, powerSwitch, rigorChip,
+  PAUSE_CHOICES, RAISE_WORDS, changeReason, changedBy, handoffRow, handoffWords, higherRigors, listWords, pauseOrder, powerSwitch, rigorAt, rigorChip, settleHandoff,
   type ActivityRow, type PauseChoice, type PowerItem,
 } from '../../board/powerMode.js';
 import { seatResponder } from '../../board/responder.js';
@@ -95,12 +95,13 @@ export function PowerSwitchButton({ view, power }: { view: SessionView; power: P
 export function rigorHistoryWords(c: RigorChange): string {
   const when = clockTime(c.at);
   const what = c.trigger === 'intake' ? 'intake'
-    : c.trigger === 'operator' ? 'raised by you'
+    : changedBy(c) === 'you' ? 'raised by you'
       : c.trigger === 'plugin' ? `raised by ${c.by.replace(/^plugin:/, '').replace(/@.*$/, '')}`
         : c.trigger === 'doc_edit' ? 'a working-document edit'
           : c.trigger === 'toggle' ? 'power switch'
             : c.checkpoint !== null ? `checkpoint ${c.checkpoint}` : c.trigger === 'pre_handoff' ? 'before hand-off' : c.trigger;
-  const why = c.reasons[0] !== undefined && c.trigger !== 'intake' ? `, ${c.reasons[0]}` : '';
+  const reason = changeReason(c);
+  const why = reason !== null && c.trigger !== 'intake' ? `, ${reason}` : '';
   const score = c.trigger === 'intake' ? `, score ${c.actual}` : c.planned !== c.actual ? `, score ${c.planned} → ${c.actual}` : '';
   return `${when} ${what}${why}${score}`;
 }
@@ -321,13 +322,19 @@ export function PowerThread({ view, power, items, part }: { view: SessionView; p
           }
           case 'toggle':
             return <Mark key={it.key} testId="power-toggle-mark" tone="plain" icon={<Zap size={15} aria-hidden className="wk-dmark-icon" />} head={it.words.split(' · ')[0] ?? ''} tail={it.words.split(' · ').slice(1).join(' · ')} at={it.at} />;
-          case 'handoff':
+          case 'handoff': {
+            // Every row from the step's actual result: a step whose unit finished reads its outcome, and on an ended
+            // run nothing reads Running. The rigor is the one that applied when hand-off's checks ran.
+            const steps = settleHandoff(it.steps, (ord) => view.units.find((u) => u.ord === ord)?.status, !live);
+            const checks = steps.find((st) => st.step === 'checks') ?? null;
+            const applied = rigorAt(power, checks?.at ?? steps.find((st) => st.step !== 'rescore')?.at ?? it.at);
             return (
-              <div key={it.key} data-testid="power-handoff-block" style={{ display: 'contents' }}>
+              <div key={it.key} data-testid="power-handoff-block" data-rigor={applied ?? ''} style={{ display: 'contents' }}>
                 <p className="wk-chat-divider" data-testid="power-handoff-divider">Hand-off{it.round > 1 ? ` · round ${it.round}` : ''}{it.at !== null ? ` · ${clockTime(it.at)}` : ''}</p>
-                <HandoffCard round={it.round} steps={it.steps} rigor={power.rigor} />
+                <HandoffCard round={it.round} steps={steps} rigor={applied} />
               </div>
             );
+          }
           default:
             return null;
         }

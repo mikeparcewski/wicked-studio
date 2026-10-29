@@ -52,7 +52,7 @@ describe('rigor words', () => {
   });
   it('the rigor mark: up with its reason and consequence; down is said as from evidence', () => {
     expect(rigorMarkWords(change(3, 17, 'commit', 'standard', 'high', 34, 58, 2, ['sign-in module touched']))).toEqual({ head: 'Rigor ↑ standard → high', tail: 'sign-in module touched — hand-off now runs the full suite' });
-    expect(rigorMarkWords(change(4, 20, 'operator', 'high', 'highest', 34, 34, null, []))).toEqual({ head: 'Rigor ↑ high → highest', tail: 'raised by you — hand-off adds a security review on its own seat' });
+    expect(rigorMarkWords(change(4, 20, 'operator', 'high', 'highest', 34, 34, null, []))).toEqual({ head: 'Rigor ↑ high → highest', tail: 'you raised it — hand-off adds a security review on its own seat' });
     expect(rigorMarkWords(change(5, 30, 'pre_handoff', 'high', 'standard', 58, 30, 3, ['2 files, no sensitive area'])).tail).toBe('lowered from evidence: 2 files, no sensitive area');
   });
 });

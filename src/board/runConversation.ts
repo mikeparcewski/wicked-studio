@@ -307,8 +307,10 @@ export function finalWords(view: SessionView, steps: { done: number; total: numb
   else if (tested !== null) sentences.push(`${tested}.`);
   else if (reviewed !== null) sentences.push(`Reviewed and approved by ${reviewed}.`);
   else if (checks.nothing) sentences.push('Nothing checked this work.');
+  // A delivery that needed your approval of a failed floor leads with where it went, then what you approved.
+  const leadPr = s === 'completed' && pr !== null && overridden !== null && d.state !== 'stranded' && d.state !== 'failed';
   if (s === 'completed') {
-    if (pr !== null) sentences.push(pr.number !== null ? `Pull request #${pr.number} is open.` : 'A pull request is open.');
+    if (pr !== null && !leadPr) sentences.push(pr.number !== null ? `Pull request #${pr.number} is open.` : 'A pull request is open.');
     else if (d.state === 'pushed') sentences.push(branch !== null ? `The work is on branch ${branch}.` : 'The branch was pushed.');
     else if (d.state === 'stranded') sentences.push('The work hasn’t been pushed anywhere yet: “Deliver — open a PR” on its delivery card pushes it.');
     else if (d.state === 'nothing-to-deliver') sentences.push('There was nothing to deliver.');
@@ -316,6 +318,7 @@ export function finalWords(view: SessionView, steps: { done: number; total: numb
     else if (d.state === 'delivered' && !shipped) sentences.push('No pull request or pushed branch is recorded.');
   }
   // A finished run whose hand-over did not land is not "Done" (J4): it says so first.
-  const lead = s !== 'completed' ? 'Stopped' : d.state === 'stranded' || d.state === 'failed' ? 'Not delivered' : 'Done';
+  const lead = s !== 'completed' ? 'Stopped' : d.state === 'stranded' || d.state === 'failed' ? 'Not delivered'
+    : leadPr ? (pr!.number !== null ? `Delivered as pull request #${pr!.number}` : 'Delivered as a pull request') : 'Done';
   return { lead, line: sentences.join(' '), pr, branch };
 }

@@ -13,7 +13,7 @@ import { jobTitle } from '../../board/deskWords.js';
 import { ORPHANED_LINE, orphanedOf, runState } from '../../board/sessionModel.js';
 import { applyCheckState } from '../../board/checkState.js';
 import { deliveryAssuranceOf, deliveryReceiptOf } from '../../board/assuranceModel.js';
-import { overriddenFloorsOf, overriddenLine } from '../../board/failingChecks.js';
+import { approvedLine, overriddenFloorsOf } from '../../board/failingChecks.js';
 import { wordOf } from '../../board/planDraft.js';
 import { undoDecision } from '../../board/undoQueue.js';
 import type { Navigate } from '../../hooks/useRoute.js';
@@ -308,7 +308,7 @@ export function RunBlock({ view, badge, sessionId, navigate, solo = null }: {
   const finalOverridden = useMemo(() => {
     if (!isTerminal) return null;
     const o = overriddenFloorsOf(deliveryReceiptOf(view, runEvents ?? null), runEvents ?? null, view);
-    return o === null ? null : overriddenLine(o);
+    return o === null ? null : approvedLine(o);
   }, [isTerminal, view, runEvents]);
   // J4: what assured the tree that shipped — crew's record, or this browser's post-hoc hand-over answer.
   const postHoc = usePostHocDeliverStore((st) => st.byRun[id]);
@@ -382,17 +382,19 @@ export function RunBlock({ view, badge, sessionId, navigate, solo = null }: {
 
 
       {/* 2. One message per finished step, then your answer to a question it raised. */}
-      {steps.map((s) => (
+      {steps.map((s, i) => (
         <Fragment key={s.ord}>
           <StepTurn runId={id} step={s} who={s.cli !== null ? seatResponder(s.cli, roster) : STUDIO} checkWord={checkOf(s)} onOpen={openSteps}
             answers={decisions.filter((d) => d.ord === s.ord && d.ord !== planOrd)} at={stepAt(s.ord)} />
-          <RunPluginJumpRows runId={id} ords={[s.ord]} />
+          {/* The last step's row would sit beside the row for later steps: the one row below says both. */}
+          {i < steps.length - 1 && <RunPluginJumpRows runId={id} ords={[s.ord]} />}
           <WorkingDocSteerRows runId={id} ords={[s.ord]} />
         </Fragment>
       ))}
-      {/* An update about a step that has no message yet (the one running now): its jump row after the last step. */}
-      {/* With no step message yet the block itself is right above: no row would point anywhere. */}
-      {steps.length > 0 && <RunPluginJumpRows runId={id} except={steps.map((s) => s.ord)} />}
+      {/* An update about the last step with a message, or a step that has none yet (the one running now, deliver): ONE
+          jump row after the last step, at the newest of them. With no step message yet the block itself is right
+          above: no row would point anywhere. */}
+      {steps.length > 0 && <RunPluginJumpRows runId={id} except={steps.slice(0, -1).map((s) => s.ord)} />}
       {/* Working-document steering notes not picked up yet (or by a step with no message): after the last step. */}
       <WorkingDocSteerRows runId={id} except={steps.map((s) => s.ord)} />
 

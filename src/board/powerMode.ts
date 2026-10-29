@@ -78,7 +78,7 @@ export function rigorChip(p: PowerState, clock: (ms: number) => string): RigorCh
   const planned = p.plan?.rigor ?? (p.history[0]?.from ?? null);
   const raised = planned !== null ? rigorRank(rigor) > rigorRank(planned) : changes.some((c) => c.direction === 'up');
   const at = since?.at ?? p.plan?.at ?? null;
-  const why = since !== null && since.reasons.length > 0 ? `: ${since.reasons[0]!}` : p.plan !== null && since === null ? ` (intake, change score ${p.plan.score})` : '';
+  const why = since !== null && changeReason(since) !== null ? `: ${changedBy(since) === 'you' ? 'you raised it' : changeReason(since)!}` : p.plan !== null && since === null ? ` (intake, change score ${p.plan.score})` : '';
   const title = `Rigor ${rigor}${at !== null ? ` since ${clock(at)}` : ''}${why}. Hand-off: ${handoffWords(rigor, p.plan)}.`;
   return { rigor, raised, title, since };
 }
@@ -195,18 +195,85 @@ export function checkpointWords(cp: PowerCheckpointEvent, change: RigorChange | 
   return parts.join(' · ');
 }
 
-/** "Rigor ↑ standard → high", with its reason and what it changes at hand-off. */
-export function rigorMarkWords(c: RigorChange): { head: string; tail: string } {
+/** Who changed rigor, in the operator's words: the engine, a plugin, or you (any person: crew's `local` actor too). */
+export function changedBy(c: Pick<RigorChange, 'by' | 'trigger'>): 'engine' | 'plugin' | 'you' {
+  if (c.by.startsWith('plugin:') || c.trigger === 'plugin') return 'plugin';
+  if (c.by === 'engine' || c.by === '') return c.trigger === 'operator' ? 'you' : 'engine';
+  return 'you';
+}
+
+/** A change's reason without the engine's own framing ("raised by local: …"): the words a person reads. */
+export function changeReason(c: Pick<RigorChange, 'reasons'>): string | null {
+  const r = c.reasons[0];
+  if (r === undefined) return null;
+  const clean = r.replace(/^\s*(raised|lowered) by [^:]+:\s*/i, '').trim();
+  return clean === '' ? null : clean;
+}
+
+/** What surrounds a rigor change in the run: the checkpoint that paused before it, and whether hand-off ran after. */
+export interface RigorMarkContext {
+  pausedCheckpoint: number | null;
+  handoffRan: boolean;
+}
+
+/** What a raise does at hand-off, said in the past once hand-off ran. */
+export function raiseConsequenceWhen(from: Rigor | null, to: Rigor | null, ran: boolean): string | null {
+  const now = raiseConsequence(from, to);
+  if (now === null || !ran) return now;
+  return now.replace('hand-off now runs', 'hand-off ran').replace('hand-off adds', 'hand-off added');
+}
+
+/**
+ * "Rigor ↑ standard → high · you chose ‘continue at high rigor’ at checkpoint 2 — hand-off ran the full suite".
+ * Never an actor id ("local"): a person is "you".
+ */
+export function rigorMarkWords(c: RigorChange, ctx: RigorMarkContext = { pausedCheckpoint: null, handoffRan: false }): { head: string; tail: string } {
   const arrow = c.direction === 'up' ? '↑' : c.direction === 'down' ? '↓' : '·';
   const head = `Rigor ${arrow} ${c.from ?? 'unset'} → ${c.to ?? 'unset'}`;
-  const reason = c.reasons[0] ?? null;
-  const by = c.trigger === 'operator' ? 'raised by you' : c.trigger === 'plugin' ? `raised by ${c.by.replace(/^plugin:/, '').replace(/@.*$/, '')}` : c.trigger === 'doc_edit' ? 'raised by a working-document edit' : null;
-  const consequence = raiseConsequence(c.from, c.to);
-  const lead = [by, reason].filter((x): x is string => x !== null && x !== '').join(': ');
+  const reason = changeReason(c);
+  const who = changedBy(c);
+  const at = ctx.pausedCheckpoint !== null ? `at checkpoint ${ctx.pausedCheckpoint}` : 'at a checkpoint pause';
+  const lead = who === 'you'
+    ? (reason !== null && /continue at high rigor/i.test(reason) ? `you chose ‘continue at high rigor’ ${at}` : reason !== null ? `you raised it: ${reason}` : 'you raised it')
+    : who === 'plugin' ? `raised by ${c.by.replace(/^plugin:/, '').replace(/@.*$/, '')}${reason !== null ? `: ${reason}` : ''}`
+      : c.trigger === 'doc_edit' ? `raised by a working-document edit${reason !== null ? `: ${reason}` : ''}`
+        : reason;
+  const consequence = raiseConsequenceWhen(c.from, c.to, ctx.handoffRan);
   const tail = c.direction === 'down'
     ? `lowered from evidence${reason !== null ? `: ${reason}` : ''}`
-    : [lead, consequence].filter((x) => x !== null && x !== '').join(' — ');
+    : [lead, consequence].filter((x): x is string => x !== null && x !== '').join(' — ');
   return { head, tail };
+}
+
+/** The rigor in effect at `t`: the newest change at or before it, else the plan's. */
+export function rigorAt(p: Pick<PowerState, 'history' | 'plan' | 'rigor'> | null, t: number | null): Rigor | null {
+  if (p === null) return null;
+  if (t === null) return p.rigor ?? p.plan?.rigor ?? null;
+  let r: Rigor | null = p.plan?.rigor ?? null;
+  for (const c of [...p.history].sort((a, b) => a.at - b.at)) {
+    if (c.at <= t && c.to !== null) r = c.to;
+  }
+  return r ?? p.rigor ?? null;
+}
+
+/**
+ * The hand-off steps as they ended: one row per step (the newest record of it), and, once a step's unit finished
+ * or the run ended, never "running" or "waiting": the unit's own result says passed or failed, and a step that never
+ * got to run on an ended run is skipped.
+ */
+export function settleHandoff(steps: readonly HandoffStep[], unitStatus: (ord: number) => string | undefined, terminal: boolean): HandoffStep[] {
+  const latest = new Map<string, HandoffStep>();
+  for (const st of steps) {
+    const cur = latest.get(st.step);
+    if (cur === undefined || st.at >= cur.at) latest.set(st.step, st);
+  }
+  return orderSteps([...latest.values()].map((st) => {
+    if (st.status !== 'running' && st.status !== 'pending') return st;
+    const u = st.ord !== null ? unitStatus(st.ord) : undefined;
+    if (u === 'done') return { ...st, status: 'passed' as const };
+    if (u === 'rejected' || u === 'failed') return { ...st, status: 'failed' as const };
+    return terminal ? { ...st, status: 'skipped' as const } : st;
+  }));
 }
 
 /**
@@ -218,6 +285,21 @@ export function powerTimeline(events: readonly CoreEvent[] | null | undefined, p
   const list = (events ?? []) as readonly Ev[];
   const changeByCheckpoint = new Map<number, RigorChange>();
   const seenChanges = new Set<number>();
+  // What surrounds each rigor change: the checkpoints that paused, and when hand-off's checks ran.
+  const pausedAt: Array<{ at: number; checkpoint: number }> = [];
+  const checksAt: number[] = [];
+  for (const e of list) {
+    if (e.type === 'powerCheckpointReached' && e.paused === true && typeof e.checkpoint === 'number') pausedAt.push({ at: tsOf(e) ?? (typeof e.at === 'number' ? e.at : 0), checkpoint: e.checkpoint });
+    if (e.type === 'powerHandoffStepped' && e.step !== null && typeof e.step === 'object') {
+      const st = e.step as HandoffStep;
+      if (st.step === 'checks' && (st.status === 'passed' || st.status === 'failed')) checksAt.push(st.at ?? tsOf(e) ?? 0);
+    }
+  }
+  for (const st of p?.handoff?.steps ?? []) if (st.step === 'checks' && (st.status === 'passed' || st.status === 'failed')) checksAt.push(st.at);
+  const markContext = (c: RigorChange): RigorMarkContext => ({
+    pausedCheckpoint: [...pausedAt].reverse().find((x) => x.at <= c.at)?.checkpoint ?? null,
+    handoffRan: checksAt.some((t) => t >= c.at),
+  });
   for (const e of list) {
     if (e.type === 'rigorRescored' && e.change !== null && typeof e.change === 'object') {
       const c = e.change as RigorChange;
@@ -271,7 +353,7 @@ export function powerTimeline(events: readonly CoreEvent[] | null | undefined, p
         if (c === null || typeof c !== 'object' || c.direction === 'same' || c.trigger === 'intake' || c.from === null || c.to === null || seenChanges.has(c.seq)) break;
         seenChanges.add(c.seq);
         flush();
-        const w = rigorMarkWords(c);
+        const w = rigorMarkWords(c, markContext(c));
         out.push({ kind: 'rigor', key: `rigor:${c.seq}`, at: c.at ?? at, change: c, words: w.tail === '' ? w.head : `${w.head} · ${w.tail}` });
         break;
       }
@@ -296,7 +378,8 @@ export function powerTimeline(events: readonly CoreEvent[] | null | undefined, p
           rounds.set(round, r);
           out.push({ kind: 'handoff', key: `handoff:${round}`, at: r.at, round, steps: [] });
         }
-        r.steps.set(step.step, step);
+        const prev = r.steps.get(step.step);
+        if (prev === undefined || (step.at ?? 0) >= (prev.at ?? 0)) r.steps.set(step.step, step);
         break;
       }
       default:
@@ -304,10 +387,12 @@ export function powerTimeline(events: readonly CoreEvent[] | null | undefined, p
     }
   }
   flush();
-  // Each hand-off card holds its round's steps as they stand now (the newest frame per step), in hand-off order.
+  // Each hand-off card holds its round's steps as they stand now: the newest record of each step, from the frames and
+  // the session's state together (either can be the newer one), in hand-off order.
   for (const [round, r] of rounds) {
     const item = out[r.index];
-    if (item?.kind === 'handoff' && item.round === round) item.steps = orderSteps([...r.steps.values()]);
+    const fromState = (p?.handoff?.steps ?? []).filter((st) => (st.round ?? p!.handoff!.round) === round);
+    if (item?.kind === 'handoff' && item.round === round) item.steps = settleHandoff([...r.steps.values(), ...fromState], () => undefined, false);
   }
   // The orchestrator's words from the session's turn log when the trail holds no turn frames (a capped log): each at
   // its end, in time order with the rest.
@@ -324,7 +409,7 @@ export function powerTimeline(events: readonly CoreEvent[] | null | undefined, p
   if (!intake && p?.plan != null) out.unshift({ kind: 'intake', key: 'intake', at: p.plan.at, plan: p.plan });
   // A round the frames never showed (the state has it): drawn from the state.
   if (p?.handoff != null && !rounds.has(p.handoff.round) && p.handoff.steps.length > 0) {
-    out.push({ kind: 'handoff', key: `handoff:${p.handoff.round}`, at: p.handoff.steps[0]!.at, round: p.handoff.round, steps: orderSteps(p.handoff.steps) });
+    out.push({ kind: 'handoff', key: `handoff:${p.handoff.round}`, at: p.handoff.steps[0]!.at, round: p.handoff.round, steps: settleHandoff(p.handoff.steps, () => undefined, false) });
   }
   return out;
 }
@@ -367,7 +452,10 @@ export function handoffRow(s: HandoffStep, rigor: Rigor | null, seatName: (cli: 
       : s.status === 'running' ? ['Running', 'run']
         : s.status === 'skipped' ? ['Skipped', 'skip']
           : ['Waiting', 'wait'];
-  return { step: s.step, who, role, result, tone, what: s.summary, initial: seat !== null && s.step !== 'checks' ? seat.slice(0, 1).toUpperCase() : null };
+  // The re-score's engine summary ("rigor standard at hand-off") can predate a raise; the card says the rigor that applied.
+  const what = s.step === 'rescore' && rigor !== null && (s.summary === null || /^rigor \w+ at hand-off$/i.test(s.summary)) ? `rigor ${rigor} at hand-off` : s.summary;
+  const who2 = s.step === 'checks' ? 'Checks' : who;
+  return { step: s.step, who: who2, role, result, tone, what, initial: seat !== null && s.step !== 'checks' ? seat.slice(0, 1).toUpperCase() : null };
 }
 
 // ── the pause dock ("this grew") ─────────────────────────────────────────────────────────────────────────
