@@ -36,6 +36,7 @@ button.pm-chip { cursor: pointer; }
   border-radius: 12px; background: var(--surface-overlay); box-shadow: inset 0 0 0 1px var(--border-subtle), var(--shadow-overlay);
   font-size: var(--text-sm); color: var(--ink-body);
 }
+.pm-rigor-pop--end { left: auto; right: 0; }
 .pm-rigor-pop h2 { margin: 0 0 6px; font-size: var(--text-xs); letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-muted); font-weight: var(--weight-semi); }
 .pm-rigor-pop .pm-rigor-note { margin: 8px 0 0; font-size: var(--text-xs); color: var(--ink-muted); }
 
@@ -129,4 +130,6 @@ button.pm-chip { cursor: pointer; }
   .pm-intake, .pm-acts, .pm-handoff { margin-left: 0; max-width: 100%; }
   .pm-act-meta { display: none; }
   .wk-session-head .pm-chip, .wk-session-head .pm-power { height: 26px; }
+  /* The header's popovers take the screen's width on a phone (the chips sit anywhere on a wrapped row). */
+  .pm-rigor-pop, .pm-rigor-pop--end { position: fixed; top: 132px; left: 12px; right: 12px; width: auto; }
 }

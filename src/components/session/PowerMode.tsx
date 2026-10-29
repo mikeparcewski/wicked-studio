@@ -144,7 +144,7 @@ export function RigorChipButton({ view, power }: { view: SessionView; power: Pow
         Rigor {chip.rigor}{chip.raised && <b aria-label="raised"> ↑</b>}
       </button>
       {open && (
-        <div id={popId} role="dialog" aria-label="Rigor history" className="pm-rigor-pop">
+        <div id={popId} role="dialog" aria-label="Rigor history" className="pm-rigor-pop pm-rigor-pop--end">
           <h2>Rigor history</h2>
           <RigorHistory power={power} />
           <p className="pm-rigor-note">Hand-off: {handoffWords(chip.rigor, power.plan)}.</p>
