@@ -4,12 +4,13 @@
  *  #2 a step that ran again is read again (no cached words from the failed attempt);
  *  #3 the final message claims an approval only when the review's own words say it passed.
  */
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as client from '../src/api/client.js';
 import { teamPlanApi } from '../src/api/teamPlan.js';
 import type { WorkUnit } from '../src/api/types.js';
 import { IDLE_GATE_ACTION, useGateActionStore } from '../src/board/gateActions.js';
+import { resetFirstSeen } from '../src/board/messageTimes.js';
 import { RunBlock, resetStepOutputs } from '../src/components/session/RunConversation.js';
 import { resetRunCoverage } from '../src/hooks/useRunCoverage.js';
 import { useRunEventStore } from '../src/store/events.js';
@@ -77,5 +78,46 @@ describe('the run as a conversation, rendered', () => {
       [unit('build', 1, 'done', 'claude'), unit('review', 2, 'done', 'codex', 'review', 'evaluator')]);
     render(<RunBlock view={view} badge={0} sessionId={`run:${RUN}`} />);
     await waitFor(() => expect(screen.getByTestId('chat-final-text').textContent).toContain('Reviewed and approved by codex.'));
+  });
+
+  it('every message says when it was said: a step as the span it ran, the final message when the run ended', async () => {
+    resetFirstSeen();
+    outputs = { build: 'Fixed the currency.', review: 'VERDICT: PASS\n\nLooks right.' };
+    const t = (h: number, m: number): number => new Date().setHours(h, m, 0, 0);
+    useRunEventStore.setState({ byRun: { [RUN]: [
+      { type: 'unitDispatched', session: RUN, ord: 1, ts: t(14, 16) },
+      { type: 'unitDone', session: RUN, ord: 1, ts: t(14, 21) },
+      { type: 'unitDispatched', session: RUN, ord: 2, ts: t(15, 1) },
+      { type: 'unitDone', session: RUN, ord: 2, ts: t(15, 4) },
+      { type: 'sessionCompleted', session: RUN, ts: t(16, 14) },
+    ] as never } });
+    const view = makeView({ id: RUN, problem: 'Fix it', status: 'completed' } as never,
+      [unit('build', 1, 'done', 'claude'), unit('review', 2, 'done', 'codex', 'review', 'evaluator')]);
+    render(<RunBlock view={view} badge={0} sessionId={`run:${RUN}`} />);
+    await waitFor(() => expect(screen.getAllByTestId('chat-step')).toHaveLength(2));
+    const [build, review] = screen.getAllByTestId('chat-step');
+    expect(within(build!).getByTestId('turn-who-at')).toHaveTextContent('· 14:16–14:21');
+    expect(within(review!).getByTestId('turn-who-at')).toHaveTextContent('· 15:01–15:04');
+    expect(within(build!).getByTestId('turn-who').textContent).toMatch(/Build · 14:16–14:21$/);
+    expect(within(screen.getByTestId('chat-final')).getByTestId('turn-who-at')).toHaveTextContent('· 16:14');
+    expect(within(build!).getByTestId('turn-who-at').getAttribute('dateTime')).toBe(new Date(t(14, 16)).toISOString());
+  });
+
+  it('a step that ended over the live socket (no ts) is dated when the page saw it end; one with no frames says no time', async () => {
+    resetFirstSeen();
+    outputs = { build: 'Done building.', test: 'Tests ran.' };
+    const t = (h: number, m: number): number => new Date().setHours(h, m, 0, 0);
+    vi.spyOn(Date, 'now').mockReturnValue(t(14, 30));
+    useRunEventStore.setState({ byRun: { [RUN]: [
+      { type: 'unitDispatched', session: RUN, ord: 1, ts: t(14, 20) },
+      { type: 'unitDone', session: RUN, ord: 1 },
+    ] as never } });
+    const view = makeView({ id: RUN, problem: 'Fix it', status: 'executing' } as never,
+      [unit('build', 1, 'done', 'claude'), unit('test', 2, 'done', 'codex', 'test')]);
+    render(<RunBlock view={view} badge={0} sessionId={`run:${RUN}`} />);
+    await waitFor(() => expect(screen.getAllByTestId('chat-step')).toHaveLength(2));
+    const [build, test] = screen.getAllByTestId('chat-step');
+    expect(within(build!).getByTestId('turn-who-at')).toHaveTextContent('· 14:20–14:30');
+    expect(within(test!).queryByTestId('turn-who-at')).toBeNull();
   });
 });

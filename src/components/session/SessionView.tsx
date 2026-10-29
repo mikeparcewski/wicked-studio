@@ -941,7 +941,7 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
         {drawerTurns.length === 0 && <p className="wk-session-grey">Nothing has been said in this run yet.</p>}
         {drawerTurns.map((e) => (
           <div key={e.key} data-testid="run-chat-turn" className="wk-run-chat-turn">
-            <TurnWho who={turnResponder(e.who, roster)} />
+            <TurnWho who={turnResponder(e.who, roster)} at={e.at} />
             <p className="wk-session-text">{e.text}</p>
           </div>
         ))}
@@ -1109,7 +1109,7 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
             const prev = i === 0 ? leadWho : whoOfEntry(entries[i - 1]!);
             // DES-CHAT-NATIVE-RUN: a run's messages carry their own speakers, and the working line names its helper.
             const label = e.kind !== 'turn' && e.kind !== 'run' && e.kind !== 'working' && (prev === null || responderKey(prev) !== responderKey(who))
-              ? <TurnWho who={who} runId={e.kind === 'proposal' ? e.view.session.id : askRunId} {...(e.kind === 'typing' ? { suffix: 'thinking' } : {})} />
+              ? <TurnWho who={who} runId={e.kind === 'proposal' ? e.view.session.id : askRunId} {...(e.kind === 'typing' ? { suffix: 'thinking' } : {})} at={e.kind === 'typing' ? null : e.at} />
               : null;
             const node = (e.kind === 'line'
             ? <AskLineView key={e.key} line={e.line} onSignIn={() => openSheet({ kind: 'session', sessionId }, 'signins')} onRetry={askTeamRetry} />
@@ -1135,7 +1135,7 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
                 className={`wk-session-turn wk-session-turn--${e.who === 'you' ? 'you' : 'helper'}${e.pending ? ' wk-session-turn--pending' : ''}${e.kickoff ? ' wk-session-turn--kickoff' : ''}${e.kickoff && kickoffOpen === e.key ? ' wk-session-turn--kickoff-open' : ''}`}>
                 {/* DES-CHAT-NATIVE-RUN: what started the run is your first message, a bubble like any other; a very long
                     one shows its first lines with Show all (studio#663). */}
-                <TurnWho who={who} runId={askRunId} {...(e.pending ? { suffix: 'answering' } : {})} />
+                <TurnWho who={who} runId={askRunId} {...(e.pending ? { suffix: 'answering' } : {})} at={e.pending ? null : e.at} />
                 {e.who === 'you'
                   ? <>
                     <p id={e.kickoff ? `kickoff-${e.key}` : undefined} className={`wk-session-text${e.ok ? '' : ' wk-session-grey'}`}><OperatorMessage text={e.text} /></p>

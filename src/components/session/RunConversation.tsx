@@ -8,6 +8,7 @@ import type { Responder } from '../../board/responder.js';
 import { builderResponder, gateResponder, isReviewUnit, seatResponder } from '../../board/responder.js';
 import { approvingReviewers, conciseOutput, decisionMessages, finalWords, planSteps, stepMessages, testCountOf, type DecisionMessage, type StepMessage } from '../../board/runConversation.js';
 import { isCliSeat, seatLabel } from '../../board/seatNames.js';
+import { askedAt, endedAt, firstSeenAt, stepTimes, type MessageTime } from '../../board/messageTimes.js';
 import { jobTitle } from '../../board/deskWords.js';
 import { ORPHANED_LINE, orphanedOf, runState } from '../../board/sessionModel.js';
 import { applyCheckState } from '../../board/checkState.js';
@@ -125,15 +126,17 @@ function useReviewVerdicts(runId: string, steps: readonly StepMessage[], isRevie
 // ── the pieces of a conversation ───────────────────────────────────────────────────────────────────────────
 
 /** An assistant turn: a small "who" label, then readable un-boxed text. */
-function AssistantMessage({ who, runId, suffix = null, testId, children, extra = {}, wide = false }: {
+function AssistantMessage({ who, runId, suffix = null, testId, children, extra = {}, wide = false, at = null }: {
   who: Responder; runId: string; suffix?: string | null; testId: string; children: React.ReactNode;
+  /** When it was said (unix ms) or the span the step ran: "Claude Code · Fix · 14:16–14:21". */
+  at?: MessageTime | number | null;
   extra?: Record<string, string>;
   /** A bubble that holds a preview card takes the column's width (the card's own measure). */
   wide?: boolean;
 }): React.ReactElement {
   return (
     <div data-testid={testId} className={`wk-chat-msg wk-chat-msg--assistant${wide ? ' wk-chat-msg--wide' : ''}`} {...extra}>
-      <TurnWho who={who} runId={runId} {...(suffix !== null ? { suffix } : {})} className="wk-chat-who" />
+      <TurnWho who={who} runId={runId} {...(suffix !== null ? { suffix } : {})} at={at} className="wk-chat-who" />
       <div className="wk-chat-body">{children}</div>
     </div>
   );
@@ -158,8 +161,8 @@ function YouBubble({ text, testId }: { text: string; testId: string }): React.Re
   );
 }
 
-function StepMessageView({ runId, step, who, checkWord, onOpen }: {
-  runId: string; step: StepMessage; who: Responder; checkWord: string | null; onOpen: () => void;
+function StepMessageView({ runId, step, who, checkWord, onOpen, at }: {
+  runId: string; step: StepMessage; who: Responder; checkWord: string | null; onOpen: () => void; at: MessageTime | null;
 }): React.ReactElement {
   const raw = useStepOutput(runId, step.key, step.version);
   // studio#479: paths under the home directory read `~/…` in the default layer (the transcript's rule).
@@ -169,7 +172,7 @@ function StepMessageView({ runId, step, who, checkWord, onOpen }: {
   const concise = useMemo(() => (read.state === 'text' ? conciseOutput(read.text) : null), [read]);
   const verdict = concise?.verdict ?? null;
   return (
-    <AssistantMessage who={who} runId={runId} suffix={step.label} testId="chat-step" extra={{ 'data-ord': String(step.ord), 'data-step': step.key, 'data-state': step.state }}>
+    <AssistantMessage who={who} runId={runId} suffix={step.label} at={at} testId="chat-step" extra={{ 'data-ord': String(step.ord), 'data-step': step.key, 'data-state': step.state }}>
       {verdict !== null && (
         <p data-testid="chat-step-verdict" data-verdict={verdict} className={`wk-chat-verdict wk-chat-verdict--${verdict}`}>
           {verdict === 'pass' ? 'Review passed.' : 'Review did not pass.'}
@@ -263,7 +266,8 @@ export function RunBlock({ view, badge, sessionId, navigate, solo = null }: {
     }
     return null;
   }, [runEvents]);
-  const planner = view.units.find((u) => /(^|:)(pa-scope|scope)$/.test(u.id) && typeof u.assigned_cli === 'string' && u.assigned_cli !== '')?.assigned_cli ?? null;
+  const plannerUnit = view.units.find((u) => /(^|:)(pa-scope|scope)$/.test(u.id) && typeof u.assigned_cli === 'string' && u.assigned_cli !== '');
+  const planner = plannerUnit?.assigned_cli ?? null;
   const plannerWho = planner !== null ? seatResponder(planner, roster) : STUDIO;
   const planOpen = !isTerminal && effectiveKind === 'plan';
   // The plan QUESTION itself is open (not only its remembered answer): only then is the editor behind Edit; once the
@@ -295,6 +299,23 @@ export function RunBlock({ view, badge, sessionId, navigate, solo = null }: {
     deliveryVerified,
   }) : null;
   const askingWho = gateResponder(view, gate, roster);
+  // Message timestamps: each message says when it was said, from what crew recorded (never "now" for an old run).
+  const times = useMemo(() => stepTimes(runEvents), [runEvents]);
+  const stepAt = (ord: number, version: string): MessageTime | null => {
+    const t = times.get(ord);
+    if (t === undefined) return null;
+    // An ending frame that came live carries no `ts`: dated by when this page first saw the step end.
+    if (t.ended && t.to === null) return { from: t.from, to: firstSeenAt(`${id}\u0000${ord}\u0000${version}`, false) };
+    return { from: t.from, to: t.to };
+  };
+  const createdMs = typeof view.session.created_at === 'number' && view.session.created_at > 0 ? view.session.created_at * 1000 : null;
+  const planAt: MessageTime | null = planOpen && gate !== undefined ? { from: gate.receivedAt, to: null }
+    : plannerUnit !== undefined && times.has(plannerUnit.ord) ? stepAt(plannerUnit.ord, 'plan')
+      : planOrd !== null && askedAt(runEvents, planOrd) !== null ? { from: askedAt(runEvents, planOrd), to: null }
+        : createdMs !== null ? { from: createdMs, to: null } : null;
+  const finalAt = isTerminal ? (endedAt(view, runEvents) ?? (runEvents !== null ? firstSeenAt(`${id}\u0000end:${status}`, false) : null)) : null;
+  // What the run made is said with its newest finished step.
+  const madeAt = steps.reduce<number | null>((m, s) => { const t = stepAt(s.ord, s.version)?.to ?? null; return t !== null && (m === null || t > m) ? t : m; }, null);
   const checkOf = (s: StepMessage): string | null => {
     const step = chain.steps.find((c) => c.id === s.key || c.catalog === s.key);
     return step?.state === 'checked' ? 'Checked' : null;
@@ -310,7 +331,7 @@ export function RunBlock({ view, badge, sessionId, navigate, solo = null }: {
 
       {/* 1. The plan it proposed. */}
       {(plan.length > 0 || planOpen) && (
-        <AssistantMessage who={plannerWho} runId={id} testId="chat-plan" extra={{ 'data-open': planOpen ? 'true' : 'false' }}>
+        <AssistantMessage who={plannerWho} runId={id} at={planAt} testId="chat-plan" extra={{ 'data-open': planOpen ? 'true' : 'false' }}>
           {/* While the plan waits on you, the card IS the message: its one sentence of steps, why, and the buttons. */}
           {(!planOpen || planDocked) && plan.length > 0 && <p data-testid="chat-plan-steps" className="wk-chat-p">I split this into {plan.length} {plan.length === 1 ? 'step' : 'steps'}: {listWords(plan)}.</p>}
           {planOpen && !planDocked && <ProposalCard view={view} chain={chain} acceptance={acceptance?.summary ?? null} variant="chat" onEdit={toggleEdit} editing={editPlan} />}
@@ -336,7 +357,7 @@ export function RunBlock({ view, badge, sessionId, navigate, solo = null }: {
       {steps.map((s) => (
         <Fragment key={s.ord}>
           <StepTurn runId={id} step={s} who={s.cli !== null ? seatResponder(s.cli, roster) : STUDIO} checkWord={checkOf(s)} onOpen={openSteps}
-            answers={decisions.filter((d) => d.ord === s.ord && d.ord !== planOrd)} />
+            answers={decisions.filter((d) => d.ord === s.ord && d.ord !== planOrd)} at={stepAt(s.ord, s.version)} />
           <RunPluginJumpRows runId={id} ords={[s.ord]} />
           <WorkingDocSteerRows runId={id} ords={[s.ord]} />
         </Fragment>
@@ -351,7 +372,7 @@ export function RunBlock({ view, badge, sessionId, navigate, solo = null }: {
       {gate !== undefined && effectiveKind === null && finished === null && (
         <Docked dockKey={id} open marker={<DecisionMarker dockKey={id} who={builderResponder(view, gate.ord, roster)?.name ?? null} since={gate.receivedAt} />}
           dock={<GateRow view={view} gate={gate} {...(navigate !== undefined ? { navigate } : {})} />}>
-          <AssistantMessage who={askingWho.role === 'seat' ? askingWho : STUDIO} runId={id} suffix="needs your answer" testId="chat-gate">
+          <AssistantMessage who={askingWho.role === 'seat' ? askingWho : STUDIO} runId={id} suffix="needs your answer" at={gate.receivedAt} testId="chat-gate">
             <GateRow view={view} gate={gate} {...(navigate !== undefined ? { navigate } : {})} />
           </AssistantMessage>
         </Docked>
@@ -366,20 +387,20 @@ export function RunBlock({ view, badge, sessionId, navigate, solo = null }: {
           agent's message bubble, each morphing inline → pane → full screen and back (the one ArtifactMorph /
           PluginArtifact mechanism; pointing at a part still puts an "about:" chip on this chat's composer). */}
       <RunArtifacts view={view} composerKey={sessionId} chain={chain} only="made" frame={(who, suffix, cards) => (
-        <AssistantMessage who={who.role === 'seat' ? who : STUDIO} runId={id} suffix={suffix} testId="chat-artifacts" wide>{cards}</AssistantMessage>
+        <AssistantMessage who={who.role === 'seat' ? who : STUDIO} runId={id} suffix={suffix} at={madeAt} testId="chat-artifacts" wide>{cards}</AssistantMessage>
       )} />
 
       {/* 4. The hand-over it asks for, or the one final message once it ended. */}
       {deliverOpen && (
         <Docked dockKey={id} open={gate !== undefined} marker={<DecisionMarker dockKey={id} who={null} since={gate?.receivedAt ?? null} />}
           dock={<ProposalCard view={view} chain={chain} acceptance={acceptance?.summary ?? null} variant="chat" />}>
-          <AssistantMessage who={STUDIO} runId={id} testId="chat-final" extra={{ 'data-kind': 'deliver' }}>
+          <AssistantMessage who={STUDIO} runId={id} at={gate?.receivedAt ?? null} testId="chat-final" extra={{ 'data-kind': 'deliver' }}>
             <ProposalCard view={view} chain={chain} acceptance={acceptance?.summary ?? null} variant="chat" />
           </AssistantMessage>
         </Docked>
       )}
       {words !== null && (
-        <AssistantMessage who={STUDIO} runId={id} testId="chat-final" extra={{ 'data-kind': status }}>
+        <AssistantMessage who={STUDIO} runId={id} at={finalAt} testId="chat-final" extra={{ 'data-kind': status }}>
           <p data-testid="chat-final-text" className="wk-chat-p"><b>{words.lead}.</b>{words.line !== '' && ` ${words.line}`}</p>
           {/* crew's own acceptance words, for whoever wants them verbatim. */}
           {typeof acceptance?.summary?.line === 'string' && <TechDetails data-testid="chat-final-acceptance" summary="What the checks recorded" text={acceptance.summary.line} />}
@@ -415,12 +436,13 @@ export function RunBlock({ view, badge, sessionId, navigate, solo = null }: {
   );
 }
 
-function StepTurn({ runId, step, who, checkWord, onOpen, answers }: {
+function StepTurn({ runId, step, who, checkWord, onOpen, answers, at }: {
   runId: string; step: StepMessage; who: Responder; checkWord: string | null; onOpen: () => void; answers: readonly DecisionMessage[];
+  at: MessageTime | null;
 }): React.ReactElement {
   return (
     <>
-      <StepMessageView runId={runId} step={step} who={who} checkWord={checkWord} onOpen={onOpen} />
+      <StepMessageView runId={runId} step={step} who={who} checkWord={checkWord} onOpen={onOpen} at={at} />
       {answers.map((d, i) => <DecisionLine key={i} d={d} />)}
     </>
   );

@@ -69,7 +69,7 @@ export function RunQuestions({ view }: { view: RunView }): React.ReactElement | 
           else the seat running the step; the stall watchdog's hand-off is crew's. */}
       {elicitation !== undefined && (
         <Docked dockKey={id} open marker={<DecisionMarker dockKey={id} who={askingResponder(view, roster, elicitation).name} since={null} />}>
-          <TurnWho who={askingResponder(view, roster, elicitation)} runId={id} suffix="is asking" className="wk-who--asking" />
+          <TurnWho who={askingResponder(view, roster, elicitation)} runId={id} suffix="is asking" at={Date.parse(elicitation.receivedAt) || null} className="wk-who--asking" />
           <ElicitationPrompt key={elicitation.elicitationId} e={elicitation} />
         </Docked>
       )}
