@@ -138,7 +138,23 @@ export interface HostUi {
   selected?(anchors: AnchorRef[]): void;
   /** Protocol 3: the plugin asked to fold (true) or unfold its own block. The host decides, then says `host.fold`. */
   fold?(folded: boolean): void;
+  /** Protocol 3 `steer.propose`: the plugin suggests a steering note. The host draws it with its OWN Send; nothing is
+   *  sent until a person presses it. */
+  steerProposal?(text: string): void;
 }
+
+/**
+ * Protocol 3 (power mode spike 3): the run's working document, for a run-thread plugin holding `doc.read` /
+ * `doc.propose_edit`. The HOST decides whose an edit is ({@link EditorHost}): `operator` only for typed text the plugin
+ * sends under a real click or key in its own frame; everything else is the plugin's own (`plugin`).
+ */
+export interface HostDoc {
+  read(): Promise<AdapterResult<{ view: unknown }>>;
+  propose(edit: { base: number; section: string; text: string }, by: 'operator' | 'plugin'): Promise<AdapterResult<{ version: number | null; unchanged: boolean; by: 'operator' | 'plugin' }>>;
+}
+
+/** The section a plugin may write as itself (crew's `PLUGIN_SECTIONS`). */
+export const PLUGIN_DOC_SECTIONS: ReadonlySet<string> = new Set(['decisions']);
 
 /** Protocol 3 (observe): the run events one instance may hear. The host subscribes only after a handshake that
  *  negotiated 3, and posts each batch as `events.batch`; the rows are already filtered to `topics`. */
@@ -188,6 +204,8 @@ export interface HostOptions {
   sizes?: readonly string[];
   /** Protocol 3: the run events this instance observes (a run-thread plugin). Absent = no `events.batch`, ever. */
   events?: HostEvents;
+  /** Protocol 3: the run's working document (a run-thread plugin). Absent = `doc.*` answers `unavailable`. */
+  doc?: HostDoc;
   /** The `ui.height` bounds this instance accepts (a folded run-thread block is one line); default the card's. */
   heightRange?: { min: number; max: number };
   /** The host's real user activation at receipt (`navigator.userActivation.isActive`). */
@@ -598,6 +616,22 @@ export class EditorHost {
       }
       case 'ui.fullscreen': return { entered: await this.o.ui.fullscreen() };
       case 'mcp.request': return this.mcpRequest(p);
+      case 'doc.read': return this.o.doc !== undefined ? this.o.doc.read() : { error: 'unavailable', message: 'this block has no working document' };
+      case 'doc.propose_edit': {
+        // Whose words, judged AT RECEIPT (before any await): text the plugin calls `typed` is the operator's only when
+        // a person's own click or key in THIS frame sent it. Anything else — generated lines, or a "typed" claim with
+        // no gesture behind it — is the plugin's, and a plugin writes only its own section.
+        const gesture = (this.o.activation ?? NO_ACTIVATION)() && (this.o.focusInFrame ?? ((f) => document.activeElement === f))(this.frame);
+        const by: 'operator' | 'plugin' = p['origin'] === 'typed' && gesture ? 'operator' : 'plugin';
+        if (this.o.doc === undefined) return { error: 'unavailable', message: 'this block has no working document' };
+        if (by === 'plugin' && !PLUGIN_DOC_SECTIONS.has(String(p['section']))) {
+          return { error: 'refused', message: p['origin'] === 'typed' ? 'an edit is a person’s only when they save it with their own click or key' : `a plugin writes only its own section (${[...PLUGIN_DOC_SECTIONS].join(', ')})` };
+        }
+        return this.o.doc.propose({ base: p['base'] as number, section: String(p['section']), text: String(p['text']) }, by);
+      }
+      case 'steer.propose':
+        this.o.ui.steerProposal?.(String(p['text']).trim());
+        return { shown: this.o.ui.steerProposal !== undefined };
       case 'export.request':
         return a.exportAs !== undefined ? a.exportAs(String(p['format'])) : { error: 'unsupported', message: 'no export for this artifact' };
       case 'theme.set': {
@@ -773,6 +807,9 @@ export class EditorHost {
   typingRearm(): void { this.typingSpent = false; }
 
   setSize(size: Size): void { this.post(event('host.size', { size })); }
+
+  /** Protocol 3: the run's working document changed (a version, a steer, a pickup): the plugin re-reads it. */
+  docChanged(head: number | null): void { if (this.connected && this.protocol >= 3) this.post(event('doc.changed', { head })); }
 
   /** Protocol 3: the run-thread block was folded or unfolded by the host (its chrome, a jump row, a pin). */
   setFold(folded: boolean): void { if (this.connected && this.protocol >= 3) this.post(event('host.fold', { folded })); }

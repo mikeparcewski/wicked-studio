@@ -12,8 +12,8 @@
   "studioVersion": "0.13.0",
   "counts": {
     "files": 257,
-    "occurrences": 3506,
-    "static": 2987,
+    "occurrences": 3511,
+    "static": 2992,
     "dynamic": 75,
     "computed": 33
   },
@@ -12141,6 +12141,24 @@
       ]
     },
     {
+      "testId": "run-plugin-proposal",
+      "files": [
+        "src/components/session/RunThreadPlugin.tsx"
+      ]
+    },
+    {
+      "testId": "run-plugin-proposal-dismiss",
+      "files": [
+        "src/components/session/RunThreadPlugin.tsx"
+      ]
+    },
+    {
+      "testId": "run-plugin-proposal-send",
+      "files": [
+        "src/components/session/RunThreadPlugin.tsx"
+      ]
+    },
+    {
       "testId": "run-plugin-row",
       "files": [
         "src/components/editors/EditorPluginsSettings.tsx"
@@ -12148,6 +12166,12 @@
     },
     {
       "testId": "run-plugin-row-grant",
+      "files": [
+        "src/components/editors/EditorPluginsSettings.tsx"
+      ]
+    },
+    {
+      "testId": "run-plugin-row-permissions",
       "files": [
         "src/components/editors/EditorPluginsSettings.tsx"
       ]
@@ -18019,6 +18043,12 @@
       "testId": "workflows-refused-row",
       "files": [
         "src/components/WorkflowViewer.tsx"
+      ]
+    },
+    {
+      "testId": "working-doc-steer",
+      "files": [
+        "src/components/session/RunThreadPlugin.tsx"
       ]
     },
     {

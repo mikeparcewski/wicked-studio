@@ -1,13 +1,44 @@
 {
   "id": "wicked-phase-report",
   "title": "Phase report",
-  "protocol": [3],
+  "protocol": [
+    3
+  ],
   "inline": "run-thread",
   "observe": [
-    { "topic": "wicked.run.session.*", "why": "to know when the job started, resumed and ended" },
-    { "topic": "wicked.run.unit.*", "why": "to show which step is running, who works on it and how far along the plan it is" },
-    { "topic": "wicked.run.human.awaited", "why": "to count the decisions waiting on you" },
-    { "topic": "wicked.run.checks.evaluated", "why": "to show what the checks found, and when a result was reused from an earlier step" },
-    { "topic": "wicked.run.usage.reported", "why": "to add up the time and the cost" }
+    {
+      "topic": "wicked.run.session.*",
+      "why": "to know when the job started, resumed and ended"
+    },
+    {
+      "topic": "wicked.run.unit.*",
+      "why": "to show which step is running, who works on it and how far along the plan it is"
+    },
+    {
+      "topic": "wicked.run.human.awaited",
+      "why": "to count the decisions waiting on you"
+    },
+    {
+      "topic": "wicked.run.checks.evaluated",
+      "why": "to show what the checks found, and when a result was reused from an earlier step"
+    },
+    {
+      "topic": "wicked.run.usage.reported",
+      "why": "to add up the time and the cost"
+    }
+  ],
+  "permissions": [
+    {
+      "id": "doc.read",
+      "why": "to show the job's working document and who changed what"
+    },
+    {
+      "id": "doc.propose_edit",
+      "why": "to save what you type in it (yours, steering the next step) and to add its own lines under Decisions (labelled as the plugin's)"
+    },
+    {
+      "id": "steer.propose",
+      "why": "to suggest a note for the next step; nothing is sent until you press Send"
+    }
   ]
 }

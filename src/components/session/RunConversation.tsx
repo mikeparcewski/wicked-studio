@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useMemo, useState } from 'react';
 import { api } from '../../api/client.js';
-import { RunPluginJumpRows, RunThreadPlugins } from './RunThreadPlugin.js';
+import { RunPluginJumpRows, RunThreadPlugins, WorkingDocSteerRows } from './RunThreadPlugin.js';
 import type { CoreEvent, SessionView as RunView } from '../../api/types.js';
 import { IDLE_GATE_ACTION, useGateActionStore } from '../../board/gateActions.js';
 import { finishedDeliveryArm, proposalKindOf, statusSentence } from '../../board/proposalCard.js';
@@ -338,11 +338,14 @@ export function RunBlock({ view, badge, sessionId, navigate, solo = null }: {
           <StepTurn runId={id} step={s} who={s.cli !== null ? seatResponder(s.cli, roster) : STUDIO} checkWord={checkOf(s)} onOpen={openSteps}
             answers={decisions.filter((d) => d.ord === s.ord && d.ord !== planOrd)} />
           <RunPluginJumpRows runId={id} ords={[s.ord]} />
+          <WorkingDocSteerRows runId={id} ords={[s.ord]} />
         </Fragment>
       ))}
       {/* An update about a step that has no message yet (the one running now): its jump row after the last step. */}
       {/* With no step message yet the block itself is right above: no row would point anywhere. */}
       {steps.length > 0 && <RunPluginJumpRows runId={id} except={steps.map((s) => s.ord)} />}
+      {/* Working-document steering notes not picked up yet (or by a step with no message): after the last step. */}
+      <WorkingDocSteerRows runId={id} except={steps.map((s) => s.ord)} />
 
       {/* 3. A question it is asking now (not the plan, not the hand-over): in the flow, answered here. */}
       {gate !== undefined && effectiveKind === null && finished === null && (

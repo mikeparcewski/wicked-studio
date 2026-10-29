@@ -944,6 +944,11 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          #   event log is a real rig run's recorded trail (tests/fixtures/runEvents-crew-fix.json, scrubbed), cut at
          #   seq 139 (the fix step's failed floor, an escalation open): the phase-report block replays it.
          "run_plugin": False,
+         # working_doc — power mode spike 3 (e2e/desk_working_doc_test.py): crew's GET|POST /runs/:id/working-doc and
+         #   POST /runs/:id/working-doc/versions, in memory (a person's version makes one steer, queued, not picked
+         #   up; POST /__fixture/working-doc-pickup {runId, ord, step} picks the newest up). Off: those routes 404 the
+         #   way an older daemon does (`not found`).
+         "working_doc": False,
          # home_runs — brainstorm-actionable ideas 10, 11, 15 (e2e/wavec_home_runs_test.py): r-reuse, a
          #   completed user-plan run whose units carry their catalog steps, rides GET /runs; GET /presets
          #   serves TEAM_PRESETS and PUT /presets/:name is recorded (GET /__fixture/preset-puts); GET/PUT
@@ -2789,6 +2794,66 @@ def _run_page_events(rid: str) -> list:
 
 
 RUN_PLUGIN_CUT = 139
+
+# Power mode spike 3: the working documents the fixture keeps (run id -> view), and every version POST (tapped).
+WD_SECTIONS = ["goal", "approach", "decisions", "constraints", "questions", "next"]
+WD_LABELS = {"goal": "Goal", "approach": "Approach", "decisions": "Decisions", "constraints": "Constraints and steering",
+             "questions": "Open questions", "next": "Next and trailing work"}
+WD_STEER = {"goal": "next", "approach": "next", "next": "next", "constraints": "standing"}
+working_docs: dict = {}
+working_doc_posts: list = []
+
+
+def _wd_view(rid: str) -> dict:
+    d = working_docs.get(rid)
+    if d is None:
+        return {"runId": rid, "doc": None, "sections": None, "labels": WD_LABELS, "trail": [], "steers": []}
+    return {"runId": rid, "doc": {"projectId": "default", "docId": f"working-{rid}", "head": d["head"]},
+            "sections": dict(d["sections"]), "labels": WD_LABELS, "trail": list(d["trail"]), "steers": list(d["steers"])}
+
+
+def _wd_create(rid: str) -> None:
+    if rid in working_docs:
+        return
+    sections = {k: "" for k in WD_SECTIONS}
+    sections["goal"] = "fix the northwind importer's date parsing"
+    working_docs[rid] = {"head": 0, "sections": sections, "steers": [],
+                         "trail": [{"version": 0, "parent": None, "author": {"kind": "system", "id": "crew"}, "surface": None,
+                                    "sections": ["goal"], "at": NOW0, "steerId": None}]}
+
+
+def _wd_propose(rid: str, body: dict) -> tuple[int, dict]:
+    working_doc_posts.append({"runId": rid, **body})
+    d = working_docs.get(rid)
+    if d is None:
+        return 404, {"error": "this job has no working document yet"}
+    if body.get("base") != d["head"]:
+        return 409, {"error": "the working document changed since", "head": d["head"]}
+    author = body.get("author")
+    plugin = body.get("plugin") or {}
+    wanted = body.get("sections") or {}
+    if author == "plugin" and any(k != "decisions" for k in wanted):
+        return 403, {"error": "a plugin writes only its own section (decisions)"}
+    changed = [k for k in WD_SECTIONS if k in wanted and wanted[k] != d["sections"][k]]
+    if not changed:
+        return 200, {"version": None, "unchanged": True, "steer": None, "view": _wd_view(rid)}
+    for k in changed:
+        d["sections"][k] = wanted[k]
+    d["head"] += 1
+    at = int(time.time() * 1000)
+    steer = None
+    if author == "operator":
+        kinds = [WD_STEER[k] for k in changed if k in WD_STEER]
+        if kinds:
+            steer = {"id": f"s{d['head']}", "version": d["head"], "sections": [k for k in changed if k in WD_STEER],
+                     "kind": "next" if "next" in kinds else "standing", "note": "…", "at": at, "by": "local",
+                     "queuedAt": at, "pickedUp": None, "error": None}
+            d["steers"].append(steer)
+    who = {"kind": "human", "id": "local"} if author == "operator" else {"kind": "plugin", "id": f"plugin:{plugin.get('id')}@{plugin.get('version')}"}
+    d["trail"].append({"version": d["head"], "parent": d["head"] - 1, "author": who,
+                       "surface": f"plugin:{plugin.get('id')}@{plugin.get('version')}" if author == "operator" and plugin else None,
+                       "sections": changed, "at": at, "steerId": steer["id"] if steer else None})
+    return 200, {"version": d["head"], "unchanged": False, "steer": steer, "view": _wd_view(rid)}
 
 
 def _run_plugin_events(rid: str) -> list:
@@ -8455,6 +8520,14 @@ class W2Handler(SimpleHTTPRequestHandler):
                 return self._terminal_ws(urllib.parse.unquote(ws_path[len("/ws/terminals/"):]))
             return self._ws()
         path = urllib.parse.urlparse(self.path).path
+        wd = re.match(r"^/api/v1/runs/([^/]+)/working-doc$", path)
+        if wd:
+            with state_lock:
+                on = state["working_doc"]
+                view = _wd_view(urllib.parse.unquote(wd.group(1))) if on else None
+            if not on:
+                return self._json(404, {"error": "not found"})
+            return self._json(200, view)
         if path == "/__fixture/container-login-posts":
             with state_lock:
                 posts = list(container_posts)
@@ -8840,7 +8913,30 @@ class W2Handler(SimpleHTTPRequestHandler):
             return None
         if self._container_post(path, body):
             return None
+        wdp = re.match(r"^/api/v1/runs/([^/]+)/working-doc(/versions)?$", path)
+        if wdp:
+            rid = urllib.parse.unquote(wdp.group(1))
+            # Respond OUTSIDE the lock: end_headers takes it (the shell CSP).
+            with state_lock:
+                if not state["working_doc"]:
+                    status, payload = 404, {"error": "not found"}
+                elif wdp.group(2) is None:
+                    _wd_create(rid)
+                    status, payload = 200, _wd_view(rid)
+                else:
+                    status, payload = _wd_propose(rid, body)
+            return self._json(status, payload)
+        if path == "/__fixture/working-doc-pickup":
+            with state_lock:
+                d = working_docs.get(body.get("runId"))
+                if d and d["steers"]:
+                    d["steers"][-1]["pickedUp"] = {"ord": body.get("ord"), "step": body.get("step"), "at": int(time.time() * 1000)}
+            return self._json(200, {"ok": True})
         if path == "/__fixture":
+            if body.get("reset_working_doc"):
+                with state_lock:
+                    working_docs.clear()
+                    working_doc_posts.clear()
             if body.get("reset_container_login"):
                 with state_lock:
                     container_terms.clear()
