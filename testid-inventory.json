@@ -12,8 +12,8 @@
   "studioVersion": "0.13.0",
   "counts": {
     "files": 257,
-    "occurrences": 3504,
-    "static": 2985,
+    "occurrences": 3505,
+    "static": 2986,
     "dynamic": 75,
     "computed": 33
   },
@@ -12118,6 +12118,12 @@
     },
     {
       "testId": "run-plugin-grant",
+      "files": [
+        "src/components/session/RunThreadPlugin.tsx"
+      ]
+    },
+    {
+      "testId": "run-plugin-iframe",
       "files": [
         "src/components/session/RunThreadPlugin.tsx"
       ]

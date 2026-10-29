@@ -173,6 +173,10 @@ export function fingerprint(e: CoreEvent): string {
 
 /** The most rows one `events.batch` carries; a longer replay is sent as several. */
 export const BATCH_ROWS = 200;
+/** How long after the replay a live frame is still checked against it (a frame the log recorded before the read,
+ *  still in flight on the socket). After that every live frame is new: a step re-run emits the SAME content again
+ *  (`unitExecuting` for the same unit), and that is a new emission the plugin must hear. */
+export const REPLAY_OVERLAP_MS = 3_000;
 
 export interface FeedOptions {
   runId: string;
@@ -194,6 +198,7 @@ export class RunEventFeed {
   private recorded = new Map<string, number>();
   private unsubscribe: (() => void) | null = null;
   private liveSeq = 0;
+  private liveSince = 0;
   private readonly types: ReadonlySet<string>;
   private readonly now: () => number;
 
@@ -249,6 +254,7 @@ export class RunEventFeed {
       this.o.deliver({ runId: this.o.runId, replay: true, rows: rows.slice(i, i + BATCH_ROWS), ...(gap !== undefined && i === 0 ? { gap } : {}) });
     }
     this.state = 'live';
+    this.liveSince = this.now();
     const held = this.buffer;
     this.buffer = [];
     for (const e of held) this.onLive(e);
@@ -256,6 +262,7 @@ export class RunEventFeed {
 
   private onLive(e: CoreEvent): void {
     if (e.session !== this.o.runId || !this.types.has(e.type)) return;
+    if (this.recorded.size > 0 && this.now() - this.liveSince > REPLAY_OVERLAP_MS) this.recorded.clear();
     const f = fingerprint(e);
     const n = this.recorded.get(f) ?? 0;
     if (n > 0) { this.recorded.set(f, n - 1); return; } // the replay already delivered this emission

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { CoreEvent } from '../src/api/types.js';
 import {
-  BATCH_ROWS, RUN_TOPICS, RunEventFeed, grantedTopics, sourceTypes, toRow, topicMatches, validPattern, type EventsBatch,
+  BATCH_ROWS, REPLAY_OVERLAP_MS, RUN_TOPICS, RunEventFeed, grantedTopics, sourceTypes, toRow, topicMatches, validPattern, type EventsBatch,
 } from '../src/editors/runEvents.js';
 import fixture from './fixtures/runEvents-crew-fix.json';
 
@@ -11,7 +11,7 @@ const RUN = 'run-2410';
 const events = fixture as unknown as CoreEvent[];
 
 /** Drive a feed by hand: the history answers when told, live frames are pushed. */
-function harness(granted: readonly string[], history: readonly CoreEvent[] | Error = events) {
+function harness(granted: readonly string[], history: readonly CoreEvent[] | Error = events, clock = { t: 1_000 }) {
   const batches: EventsBatch[] = [];
   const asked: string[][] = [];
   let push: (e: CoreEvent) => void = () => undefined;
@@ -25,7 +25,7 @@ function harness(granted: readonly string[], history: readonly CoreEvent[] | Err
     },
     live: (on) => { push = on; return () => { push = () => undefined; }; },
     deliver: (b) => batches.push(b),
-    now: () => 1_000,
+    now: () => clock.t,
   });
   feed.start();
   return { feed, batches, asked, push: (e: CoreEvent) => push(e), release: () => release() };
@@ -105,6 +105,18 @@ describe('the feed', () => {
     h.push({ type: 'unitExecuting', session: RUN, ord: 11 } as unknown as CoreEvent);
     const ids = rowsOf(h.batches).map((r) => r.id);
     expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it('a step re-run (the same content again, after the overlap) is a new emission and is heard', async () => {
+    const clock = { t: 1_000 };
+    const h = harness(['wicked.run.unit.started'], events, clock);
+    h.release();
+    await flush();
+    // ord 2 started twice in the recorded log; the page joined late, so neither live copy ever came.
+    const again = { type: 'unitExecuting', session: RUN, ord: 2 } as unknown as CoreEvent;
+    clock.t += REPLAY_OVERLAP_MS + 1;
+    h.push(again);
+    expect(h.batches.filter((b) => !b.replay).flatMap((b) => b.rows).map((r) => r.ord)).toEqual([2]);
   });
 
   it('asks the log only for the types its grant needs', async () => {

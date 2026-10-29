@@ -34,6 +34,9 @@ const NO_ARTIFACT: HostAdapter = {
   fork: async () => ({ error: 'refused', message: 'an observing plugin cannot write' }),
 };
 
+/** The block's frame, renamed from the editor host's `editor-frame`. */
+const RUN_FRAME_TESTID = /* testid */ 'run-plugin-iframe';
+
 /** The first unit the block sits at: rows about it never get a jump row. */
 const FIRST_ORD = 1;
 
@@ -121,6 +124,9 @@ export function RunThreadPlugin({ runId, plugin, placement }: { runId: string; p
         fold: (folded) => setFolded(runId, plugin.id, folded),
       },
     });
+    // Its own name, so "the editor frames on the page" (artifact cards) never counts a run-thread block.
+    host.frame.setAttribute('data-testid', RUN_FRAME_TESTID);
+    host.frame.classList.add('wk-runplugin-iframe');
     hostRef.current = host;
     host.mount();
     return () => {
