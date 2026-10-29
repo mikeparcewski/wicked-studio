@@ -456,7 +456,9 @@ export function RunBlock({ view, badge, sessionId, navigate, solo = null }: {
       {/* The run's whole record, one fold under its messages (the details panel holds the same, grouped). */}
       {/* A Watchtower "Jump in" (`?jump=`) lands on this run's record: the fold opens on that line. */}
       <details data-testid="chat-run-details" className="wk-chat-details" {...(jump !== null ? { open: true } : {})}>
-        <summary className="wk-chat-details-summary">Details</summary>
+        {/* In a power build the fold's last neighbour is a marker (a checkpoint, a rigor change, a decision), so a bare
+            "Details" read as that marker's: it says whose record it opens. */}
+        <summary className="wk-chat-details-summary">{powerBuild ? 'The job’s record: steps, checks and helpers' : 'Details'}</summary>
         <p data-testid="session-status-sentence" role="status" className="wk-session-status-sentence">
           {statusSentence(view, chain, gate, action)}
           {view.session.archived_at != null && <span data-testid="session-run-archived" className="wk-session-grey"> · Archived</span>}

@@ -276,9 +276,44 @@ def _view(now0: int, rid: str) -> dict | None:
     return None if c is None else dict(c["run"]["session"]["power"], runId=rid)
 
 
+DISPLAY = {"claude": "Claude Code", "codex": "Codex", "pi": "Pi CLI", "agy": "Antigravity", "copilot": "GitHub Copilot CLI"}
+
+
+def _iso(ms: int) -> str:
+    import datetime
+    return datetime.datetime.fromtimestamp(ms / 1000, tz=datetime.timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _system(now0: int) -> dict:
+    """GET /system as crew will answer it once wicked-crew#1206 lands: the paused run waits on you (a decision),
+    every other power run is working; no system trouble."""
+    c = _corpus(now0)
+    runs, attention = [], []
+    for rid, entry in c.items():
+        s = entry["run"]["session"]
+        if s["status"] in ("completed", "failed", "cancelled"):
+            continue
+        paused = s["power"].get("pause") is not None
+        runs.append({"runId": rid, "title": s["problem"][:60], "liveness": "waiting_on_you" if paused else "working",
+                     "phase": "build", "seat": "claude", "lastEventAt": _iso(now0 - MIN),
+                     "reason": "waiting on you: this grew past its plan (checkpoint 3)" if paused else "working: last event 1 min ago",
+                     "gate": None})
+        if paused:
+            attention.append({"id": f"pause:{rid}", "severity": "yellow", "source": "run", "kind": "prevents",
+                              "title": "A power job grew past its plan and waits on you",
+                              "reason": "Split it, switch to phased, continue at high rigor, or stop.", "remedy": None,
+                              "target": {"kind": "run", "runId": rid}, "action": {"kind": "open_run"},
+                              "blockedRunIds": [rid], "waitedSince": s["power"]["pause"]["at"]})
+    return {"checkedAt": _iso(now0), "budgetMs": 2000, "tookMs": 5, "level": "yellow" if attention else "green",
+            "attention": attention, "unresolved": [], "unresolvedSpend": {"usd": 0, "runs": 0}, "toReview": 0,
+            "clis": [], "runs": runs, "infra": [], "governance": []}
+
+
 def get(path: str, now0: int):
     """(status, body) for a power_mode route, or None to fall through to the fixture."""
     parts = path.split("/")
+    if path == "/api/v1/system":
+        return 200, _system(now0)
     if path == "/__fixture/power-posts":
         with _lock:
             return 200, {"posts": list(POSTS)}

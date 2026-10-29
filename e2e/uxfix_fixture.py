@@ -6308,6 +6308,9 @@ class W2Handler(SimpleHTTPRequestHandler):
                     caps["launchPrimary"] = True  # the Lead agent (crew#1077, api-types 0.128.0)
                 if state["power_mode"]:
                     caps["powerMode"] = True  # program DES-POWER-MODE (api-types 0.149.0)
+                    # GET /system answers as crew will once wicked-crew#1206 lands: a paused power run waits on you.
+                    caps["system"] = True
+                    caps["attentionRanked"] = True
             self._json(200, {"status": "ok", "version": "w2-fixture", "ping": "pong", "capabilities": caps})
             return True
         # Idea 15: the delivery freeze switch (crew#694).
@@ -6649,6 +6652,11 @@ class W2Handler(SimpleHTTPRequestHandler):
                           if s["key"] in boxed else s for s in roster]
                 # api-types 0.115.0 (A6): every seat carries crew's coded issues, derived like crew's seatIssues.
                 roster = [s if "issues" in s else {**s, "issues": crew_issues(s)} for s in roster]
+                # power_mode: the display names the live roster carries ("Claude Code", not "claude").
+                with state_lock:
+                    pm_names = state["power_mode"]
+                if pm_names:
+                    roster = [{**s, "display_name": power_mode_corpus.DISPLAY.get(s["key"], s["display_name"])} for s in roster]
                 self._json(200, {"roster": roster, **({"refresh": {"key": refresh, "outcome": "probed"}} if refresh is not None else {})})
             return True
         if path == "/api/v1/roster/record":

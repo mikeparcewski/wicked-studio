@@ -414,7 +414,7 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
   // Power mode (DES-POWER-MODE §2): the switch beside a run's name and its rigor chip — on a session of one run.
   const powerRun = mine.length === 1 ? mine[0]! : null;
   const power = usePower(powerRun);
-  const badge = mine.length > 0 ? (state === 'working' && silent !== null ? { word: silentWords(silent), tone: 'gate' as const } : headerBadge(mine, state)) : null;
+  const badge = mine.length > 0 ? (state === 'working' && powerRun !== null && power?.pause != null ? { word: 'Waiting', tone: 'gate' as const } : state === 'working' && silent !== null ? { word: silentWords(silent), tone: 'gate' as const } : headerBadge(mine, state)) : null;
   // The banner below the header: each thing here that waits on the operator (the Needs-you rows about these runs).
   const gates = useGateStore((s) => s.gates);
   const waiting = useMemo(() => waitingItems(needRows, mine, gates, Date.now()), [needRows, mine, gates]);
@@ -434,6 +434,20 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
     return () => { cancelled = true; };
   }, [ref, runsLoaded, runInIndex, detailTry]);
 
+  // Power mode: a run paused at a checkpoint ("this grew") waits on you, though it stays executing and no engine gate
+  // opens for it — the dock holds its decision, the header says Waiting, and no "working" line runs under it.
+  const powerCap = useCapabilities((s) => s.powerMode);
+  const eventsByRun = useRunEventStore((s) => s.byRun);
+  const pauses = useMemo(() => {
+    const out = new Map<string, { at: number; who: string | null }>();
+    if (!powerCap) return out;
+    for (const v of mine) {
+      if (['completed', 'cancelled', 'failed'].includes(v.session.status)) continue;
+      const p = mergePower(powerOf(v.session), eventsByRun[v.session.id]);
+      if (p?.pause != null) out.set(v.session.id, { at: p.pause.at, who: p.orchestrator.cli !== null ? seatResponder(p.orchestrator.cli, roster).name : null });
+    }
+    return out;
+  }, [powerCap, mine, eventsByRun, roster]);
   const entries = useMemo<ThreadEntry[]>(() => {
     const out: ThreadEntry[] = [];
     const seatAt = new Map<string, number>(); // `${turnId}:${cliKey}` → the reply's index in `out`
@@ -549,7 +563,7 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
     // A chat's own "thinking" line already says it for the answering step.
     if (!out.some((e) => e.kind === 'typing')) {
       for (const v of mine) {
-        if (isHeldRun(v.session)) continue;
+        if (isHeldRun(v.session) || pauses.has(v.session.id)) continue;
         const ord = executingOrd(v.session, v.units);
         if (ord === null) continue;
         const unit = v.units.find((u) => u.ord === ord);
@@ -560,7 +574,7 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
       }
     }
     return out.map((e, i) => ({ e, i })).sort((a, b) => a.e.at - b.e.at || a.i - b.i).map((x) => x.e);
-  }, [messages, conversation, mine, liveTurns, lines, thinking, askBlockHidden, askRunId, askRows, askPathOn, proposal, askAnswers]);
+  }, [messages, conversation, mine, liveTurns, lines, thinking, askBlockHidden, askRunId, askRows, askPathOn, proposal, askAnswers, pauses]);
 
   // DC-S8: the considered line sits under the LAST reply of each turn (one Consideration per turn,
   // whatever the number of seats); it is re-read when the turn gains a reply.
@@ -889,9 +903,6 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
   // gate (not an ask turn's, which the composer answers), a run's question, the chat's own gate or question.
   const elicitations = useElicitationStore((s) => s.elicitations);
   const attention = useSystemStore((s) => (s.snapshot?.ranked === true ? s.snapshot.attention : null));
-  // Power mode: a checkpoint pause ("this grew") is a decision too, though no engine gate opens for it.
-  const powerCap = useCapabilities((s) => s.powerMode);
-  const eventsByRun = useRunEventStore((s) => s.byRun);
   const dockItems = useMemo<DockItem[]>(() => {
     const out: DockItem[] = [];
     // The rail's red follows the one dot rule (board/needTone): red when the item blocks other work.
@@ -910,12 +921,9 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
       } else if (el !== undefined) {
         const who = askingResponder(v, roster, el);
         out.push({ key: id, who: who.role === 'seat' ? who.name : null, since: null, question: el.message, tone: blocking(id) ? 'blocking' : 'waiting' });
-      } else if (powerCap) {
-        const p = mergePower(powerOf(v.session), eventsByRun[id]);
-        if (p?.pause != null) {
-          const who = p.orchestrator.cli !== null ? seatResponder(p.orchestrator.cli, roster).name : null;
-          out.push({ key: id, who, since: p.pause.at > 0 ? p.pause.at : null, question: 'This change grew past its plan. How should it go on?', tone: blocking(id) ? 'blocking' : 'waiting' });
-        }
+      } else if (pauses.has(id)) {
+        const pz = pauses.get(id)!;
+        out.push({ key: id, who: pz.who, since: pz.at > 0 ? pz.at : null, question: 'This change grew past its plan. How should it go on?', tone: blocking(id) ? 'blocking' : 'waiting' });
       }
     }
     if (ref.kind === 'chat') {
@@ -924,7 +932,7 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
       if (g !== undefined || el !== undefined) out.push({ key: ref.chatId, who: null, since: g?.receivedAt ?? null, question: g !== undefined ? plainGateQuestion(g.prompt, g.gateKind) : el!.message, tone: 'waiting' });
     }
     return out;
-  }, [mine, gates, elicitations, roster, attention, askBlockHidden, askRunId, ref, powerCap, eventsByRun]);
+  }, [mine, gates, elicitations, roster, attention, askBlockHidden, askRunId, ref, pauses]);
   const dockWho = dockItems[0]?.who ?? null;
 
   // H3: the composer's props, shared by the thread's composer and the full-screen chat drawer's (one draft).

@@ -14,7 +14,9 @@ against the `power_mode` corpus (e2e/power_mode_corpus.py, the api-types 0.149.0
   4. FLIP: On → Off asks first; "Turn off" POSTs {on: false} to /runs/:id/power; the switch reads Off.
   5. HAND-OFF (r-pm-handoff): "Hand-off · HH:MM", one card: Checks ✓ Passed, the reviewer ✓ Approved, QE Running,
      compliance Waiting.
-  6. THIS GREW (r-pm-pause, executing: a pause is not an engine gate): the decision dock holds the pause card, "Split
+  6. THIS GREW (r-pm-pause, executing: a pause is not an engine gate): the header says Waiting, no "working" line runs,
+     the dock says "Claude Code is waiting", the Nerve Center is not green (GET /system lists the pause as crew will
+     after wicked-crew#1206); the decision dock holds the pause card, "Split
      into lanes" leads, the reasons are listed, Other options lists Switch to phased / Continue at high rigor / Stop;
      Continue POSTs {decision: 'continue_high'} to /runs/:id/power/pause after the undo window, and the card goes.
   7. PHASED REQUIRED (r-pm-phased): the switch is Off and disabled, its tooltip "Phased is required: …"; a click sends
@@ -122,7 +124,9 @@ with sync_playwright() as p:
     check("intake-card", t["intake"] is not None and t["intake"].startswith("QE plan · set at intake")
           and "Rigor standard — targeted tests, a different reviewer and QE acceptance at hand-off" in t["intake"]
           and "Raise rigor" in t["intake"] and "More about this" in t["intake"] and not t["planMsg"], intake=t["intake"])
-    check("turns", len(t["turns"]) == 2 and all(re.fullmatch(r".+ · orchestrator · \d\d:\d\d", w or "") for w in t["turns"]), turns=t["turns"])
+    check("turns", len(t["turns"]) == 2 and all(re.fullmatch(r"Claude Code · orchestrator · \d\d:\d\d", w or "") for w in t["turns"]), turns=t["turns"])
+    rec = page.locator('[data-testid="chat-run-details"] > summary').first.inner_text()
+    check("record-fold", rec == "The job’s record: steps, checks and helpers", fold=rec)
     check("activity", any(a.startswith("Edited src/lib/money.ts +31 −6") for a in t["acts"])
           and any(a.startswith("Tests passed · npm test -- invoices · 19 passed") or a.startswith("Tests passed npm test -- invoices · 19 passed") for a in t["acts"])
           and any(re.match(r"Commit 2 c07d1f3 · Serve /v2/invoice.pdf", a) for a in t["acts"]), acts=t["acts"])
@@ -171,8 +175,21 @@ with sync_playwright() as p:
     reasons = dock.locator('[data-testid="power-pause-reasons"] li').evaluate_all(f"(els) => els.map({TXT})")
     dock.locator('[data-testid="power-pause-more"]').click()
     menu = dock.locator('[data-testid="power-pause-choice"]').evaluate_all("(els) => els.map((e) => e.dataset.choice)")
+    state_p = page.evaluate("""() => ({
+      badge: document.querySelector('[data-testid=session-status]')?.innerText ?? null,
+      working: document.querySelectorAll('[data-testid=session-working]').length,
+      eyebrow: document.querySelector('[data-testid=decision-dock-eyebrow]')?.innerText ?? null,
+      nerve: document.querySelector('[data-testid=desk-rail-nerve]')?.dataset.tone ?? null,
+      nerveWords: document.querySelector('[data-testid=nerve-center-words]')?.innerText ?? null,
+      panel: document.querySelector('[data-testid=run-tab-status]')?.innerText ?? null,
+    })""")
     check("pause-dock", lead.get_attribute("data-choice") == "split" and len(reasons) == 3 and menu == ["split", "switch_phased", "continue_high", "stop"],
           reasons=reasons, menu=menu)
+    # While paused: the header waits, no working line runs, the orchestrator is named, the Nerve Center is not green.
+    check("paused-state", state_p["badge"] == "Waiting" and state_p["working"] == 0
+          and (state_p["eyebrow"] or "").startswith("Your decision · Claude Code is waiting")
+          and state_p["nerve"] not in (None, "green", "ok") and "needs you" in (state_p["nerveWords"] or "")
+          and (state_p["panel"] or "").startswith("Paused at checkpoint 3 — waiting on you"), state=state_p)
     page.screenshot(path=str(SHOTS / "desk-power-mode-pause.png"))
     dock.locator('[data-testid="power-pause-choice"][data-choice="continue_high"]').click()
     # The answer goes out after the undo window (10 s): wait for the tap.
