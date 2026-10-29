@@ -107,6 +107,29 @@ describe('the feed', () => {
     expect(new Set(ids).size).toBe(ids.length);
   });
 
+  it('a step re-run INSIDE the overlap is heard: an old recorded frame can never arrive live again', async () => {
+    // The clock is just after the fixture's last frame; ord 2's starts are far older than the overlap.
+    const last = Math.max(...events.map((e) => (e as unknown as { ts: number }).ts));
+    const clock = { t: last + 2_000 };
+    const h = harness(['wicked.run.unit.started'], events, clock);
+    h.release();
+    await flush();
+    h.push({ type: 'unitExecuting', session: RUN, ord: 2 } as unknown as CoreEvent);
+    expect(h.batches.filter((b) => !b.replay).flatMap((b) => b.rows).map((r) => r.ord)).toEqual([2]);
+  });
+
+  it('a recent recorded frame that raced the replay is still dropped once, inside the overlap', async () => {
+    const recent = [{ type: 'unitExecuting', session: RUN, seq: 1, ts: 10_000, ord: 4 }] as unknown as CoreEvent[];
+    const clock = { t: 10_500 };
+    const h = harness(['wicked.run.unit.started'], recent, clock);
+    h.release();
+    await flush();
+    h.push({ type: 'unitExecuting', session: RUN, ord: 4 } as unknown as CoreEvent);
+    expect(h.batches.filter((b) => !b.replay)).toHaveLength(0);
+    h.push({ type: 'unitExecuting', session: RUN, ord: 4 } as unknown as CoreEvent);
+    expect(h.batches.filter((b) => !b.replay)).toHaveLength(1);
+  });
+
   it('a step re-run (the same content again, after the overlap) is a new emission and is heard', async () => {
     const clock = { t: 1_000 };
     const h = harness(['wicked.run.unit.started'], events, clock);

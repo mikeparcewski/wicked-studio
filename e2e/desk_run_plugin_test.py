@@ -13,7 +13,8 @@ the journey (page.route_web_socket), so a live frame arrives exactly when the jo
      of 10" within 1.5 s, and add one "Phase report updated · Review · Jump ↑" row at that point of the conversation.
   3. JUMP: the row scrolls to the block, unfolds it (the dashboard: Now, Checks, Decisions, Helpers, Time and cost)
      and highlights it.
-  4. PIN / UNPIN (keyboard): Enter on Pin sticks the block to the top of the thread, folded (aria-pressed=true); no
+  4. PIN / UNPIN (keyboard): Enter on Pin sticks the block to the top of the thread, folded (aria-pressed=true), the
+     focus stays on Pin at its new place and nothing flashes for the move; no
      jump rows while pinned; it stays at the thread's top when the thread scrolls; a live frame makes the pinned
      summary pulse. A reload keeps it pinned (per run and
      plugin). Unpin returns it to its place at the first unit.
@@ -154,12 +155,14 @@ with sync_playwright() as p:
     # ── 4. pin / unpin, by keyboard ──────────────────────────────────────────────────────────────────
     page.locator('[data-testid="run-plugin-pin"]').first.focus()
     page.keyboard.press("Enter")
-    page.wait_for_timeout(1500)
+    page.wait_for_timeout(600)
     pinned = page.evaluate("""() => { const b = document.querySelector('[data-testid="run-plugin"]'); const t = document.querySelector('[data-testid="session-thread"]');
+      const strip = b.closest('[data-testid="run-plugins-pinned"]');
       return { placement: b.dataset.placement, folded: b.dataset.folded, pressed: b.querySelector('[data-testid="run-plugin-pin"]').getAttribute('aria-pressed'),
-        sticky: getComputedStyle(b.parentElement).position, jumpRows: document.querySelectorAll('[data-testid="run-plugin-updated"]').length,
+        focusKept: document.activeElement === b.querySelector('[data-testid="run-plugin-pin"]'), flash: b.dataset.flash || null,
+        sticky: strip ? getComputedStyle(strip).position : null, jumpRows: document.querySelectorAll('[data-testid="run-plugin-updated"]').length,
         firstInThread: !!(b.compareDocumentPosition(document.querySelector('[data-testid="session-turn"], [data-testid="session-run"]')) & Node.DOCUMENT_POSITION_FOLLOWING)
-          && b.parentElement.parentElement === t,
+          && strip !== null && strip.parentElement === t,
         stored: localStorage.getItem('wicked.studio.runPlugin.pinned.wicked-phase-report.r-rerun-mid') }; }""")
     # The corpus thread is short: a tall spacer at its end lets it scroll far past the block's own place.
     page.evaluate("() => { const t = document.querySelector('[data-testid=\"session-thread\"]'); const d = document.createElement('div'); d.style.flex = '0 0 2400px'; d.setAttribute('data-journey-spacer', ''); t.appendChild(d); t.scrollTop = t.scrollHeight; }")
@@ -171,7 +174,7 @@ with sync_playwright() as p:
     flash = page.locator(BLOCK).first.get_attribute("data-flash")
     page.screenshot(path=str(SHOTS / "desk-run-plugin-pinned-1440.png"))
     stuck["thread"] = page.evaluate("() => { const t = document.querySelector('[data-testid=\"session-thread\"]'); return [t.scrollTop, t.scrollHeight, t.clientHeight]; }")
-    check("4a-pin", pinned["placement"] == "pinned" and pinned["folded"] == "true" and pinned["pressed"] == "true"
+    check("4a-pin", pinned["placement"] == "pinned" and pinned["folded"] == "true" and pinned["pressed"] == "true" and pinned["focusKept"] and pinned["flash"] is None
           and pinned["sticky"] == "sticky" and pinned["jumpRows"] == 0 and pinned["firstInThread"] and pinned["stored"] == "1"
           and 0 <= stuck["top"] <= 24 and stuck["h"] <= 56 and flash == "pulse", pinned=pinned, stuck=stuck, flash=flash)
     page.reload(wait_until="domcontentloaded")

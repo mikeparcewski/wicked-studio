@@ -29,7 +29,7 @@ import { addAboutChip } from '../../store/composerChips.js';
 import { claimSessionSheet, openSheet, stopRun, useSheets } from '../../store/sheets.js';
 import { stepLabelOf } from '../../board/chainModel.js';
 import { useRunPluginView } from '../../store/runPluginView.js';
-import { RunThreadPlugins, runPluginBlockId } from './RunThreadPlugin.js';
+import { PinnedRunPlugins, runPluginBlockId } from './RunThreadPlugin.js';
 import { OverflowMenu } from '../ui/OverflowMenu.js';
 
 /** The working step in the chain's own word (`walkthrough_review#2` → its step word: a repeat's `#n` is the unit
@@ -698,6 +698,8 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
     const top = Math.max(0, el.scrollTop + target.getBoundingClientRect().top - el.getBoundingClientRect().top - 8);
     setScroll(sessionId, top);
     glide(el, top);
+    // Spent: a later visit to this session never scrolls to an old jump.
+    useRunPluginView.getState().clearJump();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pluginJump]);
   useLayoutEffect(() => {
@@ -1056,7 +1058,7 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
         >
           {/* Run-thread plugins (DES-PLUGIN-EVENTS spike 1): a PINNED block sticks to the top of the thread, under the
               header, folded to its summary (its unpinned place is the run's first unit, in RunBlock). */}
-          {mine.map((v) => <RunThreadPlugins key={`pinned-${v.session.id}`} runId={v.session.id} placement="pinned" />)}
+          <PinnedRunPlugins runIds={mine.map((v) => v.session.id)} />
           {conversation === 'fresh' && liveTurns === undefined && mine.length === 0 && (
             <p data-testid="session-fresh" className="wk-session-grey wk-session-fresh">Ask anything, or say what you want done. Your first message starts this chat; a job starts only when you choose one.</p>
           )}

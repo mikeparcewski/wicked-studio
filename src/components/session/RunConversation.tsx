@@ -341,7 +341,8 @@ export function RunBlock({ view, badge, sessionId, navigate, solo = null }: {
         </Fragment>
       ))}
       {/* An update about a step that has no message yet (the one running now): its jump row after the last step. */}
-      <RunPluginJumpRows runId={id} except={steps.map((s) => s.ord)} />
+      {/* With no step message yet the block itself is right above: no row would point anywhere. */}
+      {steps.length > 0 && <RunPluginJumpRows runId={id} except={steps.map((s) => s.ord)} />}
 
       {/* 3. A question it is asking now (not the plan, not the hand-over): in the flow, answered here. */}
       {gate !== undefined && effectiveKind === null && finished === null && (

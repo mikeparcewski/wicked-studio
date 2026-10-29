@@ -60,6 +60,8 @@ export function foldRows(r: Report, rows: readonly Row[]): boolean {
       case 'wicked.run.session.started': r.startedAt = row.at; break;
       case 'wicked.run.session.finished': r.finished = { outcome: str(d['outcome']) ?? 'completed', at: row.at }; break;
       case 'wicked.run.session.resumed':
+        // A resumed run is running again (studio resumes a failed run under the same id).
+        if (r.finished !== null && row.at >= r.finished.at) r.finished = null;
         // A resume at a unit answers the decision that unit was waiting on.
         for (const g of r.gates) if (g.ord === ord && g.answeredAt === null) g.answeredAt = row.at;
         break;
@@ -71,6 +73,7 @@ export function foldRows(r: Report, rows: readonly Row[]): boolean {
         break;
       case 'wicked.run.unit.started':
         if (ord !== null) {
+          if (r.finished !== null && row.at >= r.finished.at) r.finished = null;
           const u = unit(r, ord);
           u.state = 'running';
           u.startedAt ??= row.at;

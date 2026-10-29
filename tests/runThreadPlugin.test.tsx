@@ -3,7 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../src/api/client.js', () => ({ api: { getRunEvents: vi.fn(async () => ({ events: [] })), listClis: vi.fn(async () => []) } }));
 
-import { RunPluginJumpRows, RunThreadPlugins, attributionLine } from '../src/components/session/RunThreadPlugin.js';
+import { PinnedRunPlugins, RunPluginJumpRows, RunThreadPlugins, attributionLine } from '../src/components/session/RunThreadPlugin.js';
+import { useConnectionStore } from '../src/store/connection.js';
 import { RUN_PLUGINS, topicWords } from '../src/plugins/runPlugins.js';
 import { readPinned, useRunPluginView } from '../src/store/runPluginView.js';
 
@@ -84,5 +85,46 @@ describe('the run-thread plugin slot', () => {
     expect(screen.queryByTestId('run-plugin-updated')).toBeNull();
     act(() => useRunPluginView.getState().heard(RUN, PR, [7], true));
     expect(screen.getByTestId('run-plugin').dataset['flash']).toBe('pulse');
+  });
+
+  it('two runs pinned share ONE sticky strip, stacked, so neither covers the other', () => {
+    useRunPluginView.getState().setPinned('run-a', PR, true);
+    useRunPluginView.getState().setPinned('run-b', PR, true);
+    render(<PinnedRunPlugins runIds={['run-a', 'run-b']} />);
+    expect(screen.getAllByTestId('run-plugins-pinned')).toHaveLength(1);
+    expect(screen.getAllByTestId('run-plugin').map((b) => b.dataset['runId'])).toEqual(['run-a', 'run-b']);
+    window.localStorage.clear();
+  });
+
+  it('nothing pinned draws no strip', () => {
+    const { container } = render(<PinnedRunPlugins runIds={[RUN]} />);
+    expect(container.innerHTML).toBe('');
+  });
+
+  it('an unpinned block counts no pulse, and a remount never replays an old pulse or highlight', () => {
+    act(() => useRunPluginView.getState().heard(RUN, PR, [6], true));
+    expect(useRunPluginView.getState().view(RUN, PR).pulse).toBe(0);
+    act(() => useRunPluginView.getState().jump(RUN, PR));
+    render(<RunThreadPlugins runId={RUN} placement="thread" />);
+    expect(screen.getByTestId('run-plugin').dataset['flash']).toBeUndefined();
+  });
+
+  it('after the socket was lost and came back, the block is rebuilt from the durable log (a new frame)', () => {
+    act(() => useConnectionStore.getState().setStatus('connected'));
+    render(<RunThreadPlugins runId={RUN} placement="thread" />);
+    const first = screen.getByTestId('run-plugin').querySelector('iframe');
+    act(() => useConnectionStore.getState().setStatus('disconnected'));
+    expect(screen.getByTestId('run-plugin').querySelector('iframe')).toBe(first);
+    act(() => useConnectionStore.getState().setStatus('connected'));
+    const second = screen.getByTestId('run-plugin').querySelector('iframe');
+    expect(second).not.toBeNull();
+    expect(second).not.toBe(first);
+  });
+
+  it('a jump is spent once the thread has scrolled to it', () => {
+    useRunPluginView.getState().jump(RUN, PR);
+    expect(useRunPluginView.getState().lastJump).not.toBeNull();
+    useRunPluginView.getState().clearJump();
+    expect(useRunPluginView.getState().lastJump).toBeNull();
   });
 });

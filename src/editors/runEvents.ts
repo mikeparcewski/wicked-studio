@@ -173,10 +173,11 @@ export function fingerprint(e: CoreEvent): string {
 
 /** The most rows one `events.batch` carries; a longer replay is sent as several. */
 export const BATCH_ROWS = 200;
-/** How long after the replay a live frame is still checked against it (a frame the log recorded before the read,
- *  still in flight on the socket). After that every live frame is new: a step re-run emits the SAME content again
- *  (`unitExecuting` for the same unit), and that is a new emission the plugin must hear. */
-export const REPLAY_OVERLAP_MS = 3_000;
+/** The window in which a recorded frame and a live one can be the same emission: only a frame the log stamped this
+ *  recently (it may still be in flight on the socket) is checked against live frames, and only for this long after
+ *  the replay. An older recorded frame can never arrive live again, so a live frame with the same content — a step
+ *  re-run emits `unitExecuting` for the same unit again — is a new emission and is always heard. */
+export const REPLAY_OVERLAP_MS = 15_000;
 
 export interface FeedOptions {
   runId: string;
@@ -242,9 +243,13 @@ export class RunEventFeed {
       .slice()
       .sort((a, b) => (num(a.seq) ?? 0) - (num(b.seq) ?? 0));
     const rows: TopicRow[] = [];
+    const at = this.now();
     for (const e of mine) {
-      const f = fingerprint(e);
-      this.recorded.set(f, (this.recorded.get(f) ?? 0) + 1);
+      const ts = num(e.ts);
+      if (ts === null || at - ts <= REPLAY_OVERLAP_MS) {
+        const f = fingerprint(e);
+        this.recorded.set(f, (this.recorded.get(f) ?? 0) + 1);
+      }
       const s = num(e.seq);
       const row = this.rowOf(e, s !== null ? `s${s}` : `r${rows.length}`);
       if (row !== null) rows.push(row);

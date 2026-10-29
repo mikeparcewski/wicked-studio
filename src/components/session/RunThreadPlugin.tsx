@@ -9,6 +9,7 @@ import { seatLabel } from '../../board/seatNames.js';
 import { stepLabelOf } from '../../board/chainModel.js';
 import { RUN_PLUGINS, topicWords, type RunPlugin } from '../../plugins/runPlugins.js';
 import { useBlockView, useRunPluginView } from '../../store/runPluginView.js';
+import { useConnectionStore } from '../../store/connection.js';
 
 /**
  * THE RUN-THREAD PLUGIN SLOT (program DES-PLUGIN-EVENTS §4 step 1; operator placement 2026-10-28).
@@ -148,22 +149,45 @@ export function RunThreadPlugin({ runId, plugin, placement }: { runId: string; p
     return () => seen.disconnect();
   }, []);
 
-  // A jump row was pressed: the block comes into view, unfolded, highlighted for a moment.
+  // A jump row was pressed: the block comes into view, unfolded, highlighted for a moment. Only a jump made while
+  // THIS block is mounted lights it (a remount — pin, unpin, a new visit — never replays an old one).
+  const seenHighlight = useRef(view.highlight);
   useEffect(() => {
     // The session thread scrolls to it (SessionView: it owns the thread's follow); the block only lights up.
-    if (view.highlight === 0) return undefined;
+    if (view.highlight === seenHighlight.current) return undefined;
+    seenHighlight.current = view.highlight;
     setFlash('highlight');
     const t = setTimeout(() => setFlash(null), 1600);
     return () => clearTimeout(t);
   }, [view.highlight]);
 
-  // Pinned: a live update pulses the summary instead of adding jump rows.
+  // Pinned: a live update pulses the summary instead of adding jump rows (only an update heard while mounted).
+  const seenPulse = useRef(view.pulse);
   useEffect(() => {
-    if (view.pulse === 0 || !view.pinned) return undefined;
+    if (view.pulse === seenPulse.current) return undefined;
+    seenPulse.current = view.pulse;
+    if (!view.pinned) return undefined;
     setFlash('pulse');
     const t = setTimeout(() => setFlash(null), 1200);
     return () => clearTimeout(t);
   }, [view.pulse, view.pinned]);
+
+  // Pin and unpin move the block (it remounts at its other place): the Pin button keeps the keyboard focus.
+  const pinButton = useRef<HTMLButtonElement | null>(null);
+  const takeFocus = useRunPluginView((s) => s.takePinFocus);
+  useEffect(() => { if (takeFocus(runId, plugin.id)) pinButton.current?.focus(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // /ws has no replay: after the socket was lost and came back, the block is rebuilt from the run's durable log, so
+  // nothing that happened while it was down is missing.
+  const connection = useConnectionStore((s) => s.status);
+  const wasUp = useRef(connection === 'connected');
+  const lost = useRef(false);
+  useEffect(() => {
+    if (connection === 'connected') {
+      if (lost.current) { lost.current = false; setMountKey((n) => n + 1); }
+      wasUp.current = true;
+    } else if (wasUp.current) lost.current = true;
+  }, [connection]);
 
   const topics = plugin.granted.map(topicWords).join('; ');
   const pinLabel = view.pinned ? `Unpin ${plugin.title}: back to its place in the conversation` : `Pin ${plugin.title} to the top of the conversation`;
@@ -187,8 +211,8 @@ export function RunThreadPlugin({ runId, plugin, placement }: { runId: string; p
         <span className="wk-tag" data-testid="run-plugin-grant" title={`Built in: it was given these without asking. It hears ${topics}.`}>Built in · pre-granted</span>
       </p>
       <div className="wk-runplugin-tools">
-        <button type="button" data-testid="run-plugin-pin" aria-pressed={view.pinned} aria-label={pinLabel} title={pinLabel}
-          onClick={() => setPinned(runId, plugin.id, !view.pinned)} className="wk-runplugin-btn">
+        <button type="button" ref={pinButton} data-testid="run-plugin-pin" aria-pressed={view.pinned} aria-label={pinLabel} title={pinLabel}
+          onClick={(e) => setPinned(runId, plugin.id, !view.pinned, e.detail === 0 || document.activeElement === e.currentTarget)} className="wk-runplugin-btn">
           <svg aria-hidden viewBox="0 0 16 16" width="14" height="14"><path d="M10.5 1.5 14.5 5.5 12 6.5 9.5 9l.5 3.5-1 1-3-3L3 13.5l-.5-.5L5.5 10l-3-3 1-1L7 6.5 9.5 4z" fill={view.pinned ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" /></svg>
         </button>
         <button type="button" data-testid="run-plugin-fold" aria-expanded={!view.folded} aria-label={foldLabel} title={foldLabel}
@@ -214,8 +238,21 @@ export function RunThreadPlugins({ runId, placement }: { runId: string; placemen
   const shown = useMemo(() => RUN_PLUGINS.filter((p) => (blocks[`${runId}::${p.id}`]?.pinned ?? readPinnedSafe(runId, p.id)) === (placement === 'pinned')), [blocks, runId, placement]);
   if (shown.length === 0) return null;
   return (
-    <div data-testid={placement === 'pinned' ? 'run-plugins-pinned' : 'run-plugins'} className={placement === 'pinned' ? 'wk-runplugins-pinned' : 'wk-runplugins'}>
+    <div data-testid={placement === 'pinned' ? 'run-plugins-pinned-run' : 'run-plugins'} className="wk-runplugins">
       {shown.map((p) => <RunThreadPlugin key={p.id} runId={runId} plugin={p} placement={placement} />)}
+    </div>
+  );
+}
+
+/** The ONE sticky strip at the top of the thread holding every pinned block of the session's runs, stacked: two
+ *  pinned runs never sit in the same place. Nothing pinned = nothing drawn. */
+export function PinnedRunPlugins({ runIds }: { runIds: readonly string[] }): React.ReactElement | null {
+  const blocks = useRunPluginView((s) => s.blocks);
+  const any = runIds.some((r) => RUN_PLUGINS.some((p) => blocks[`${r}::${p.id}`]?.pinned ?? readPinnedSafe(r, p.id)));
+  if (!any) return null;
+  return (
+    <div data-testid="run-plugins-pinned" className="wk-runplugins-pinned">
+      {runIds.map((r) => <RunThreadPlugins key={r} runId={r} placement="pinned" />)}
     </div>
   );
 }

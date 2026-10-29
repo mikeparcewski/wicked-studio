@@ -49,6 +49,19 @@ describe('the phase report', () => {
     expect(summaryLine(loaded())).toBe('No events yet');
   });
 
+  it('a failed run that is resumed is running again, and its new decision is open', () => {
+    const r = loaded();
+    const row = (id: string, topic: string, at: number, ord: number | null, data: Record<string, unknown> = {}) => ({ id, topic, seq: null, at, ord, data });
+    foldRows(r, [
+      row('a', 'wicked.run.unit.planned', 1, 1, { step: 'fix' }), row('b', 'wicked.run.unit.started', 2, 1),
+      row('c', 'wicked.run.unit.finished', 3, 1, { outcome: 'failed' }), row('d', 'wicked.run.session.finished', 4, null, { outcome: 'failed' }),
+    ]);
+    expect(summaryLine(r)).toMatch(/^Failed/u);
+    foldRows(r, [row('e', 'wicked.run.session.resumed', 5, 1), row('f', 'wicked.run.unit.started', 6, 1), row('g', 'wicked.run.human.awaited', 7, 1, { kind: 'escalation' })]);
+    expect(r.finished).toBeNull();
+    expect(summaryLine(r)).toBe('Fix · step 1 of 1 · 1 decision open');
+  });
+
   it('a row heard twice changes nothing', () => {
     const r = loaded();
     expect(foldRows(r, rows)).toBe(true);

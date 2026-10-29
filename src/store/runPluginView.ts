@@ -41,13 +41,20 @@ interface State {
   /** The newest jump: the session thread brings that block into view (it owns the thread's scroll). */
   lastJump: { runId: string; pluginId: string; n: number } | null;
   view(runId: string, pluginId: string): BlockView;
-  setPinned(runId: string, pluginId: string, pinned: boolean): void;
+  /** `keepFocus`: the operator used the keyboard, so the Pin button at the block's new place takes the focus. */
+  setPinned(runId: string, pluginId: string, pinned: boolean, keepFocus?: boolean): void;
+  /** The block's new instance asks once whether its Pin button should take the focus. */
+  takePinFocus(runId: string, pluginId: string): boolean;
+  clearJump(): void;
   setFolded(runId: string, pluginId: string, folded: boolean): void;
   /** Rows arrived about these ords (`live` = not the replay). */
   heard(runId: string, pluginId: string, ords: readonly number[], live: boolean, steps?: Record<number, string>): void;
   /** A jump row was pressed: unfold and highlight. */
   jump(runId: string, pluginId: string): void;
 }
+
+/** The block whose Pin button takes the focus at its new place (one at a time). */
+let pinFocus: string | null = null;
 
 export const useRunPluginView = create<State>((set, get) => {
   const patch = (runId: string, pluginId: string, f: (b: BlockView) => Partial<BlockView>): void => set((s) => {
@@ -59,13 +66,24 @@ export const useRunPluginView = create<State>((set, get) => {
     blocks: {},
     lastJump: null,
     view: (runId, pluginId) => get().blocks[KEY(runId, pluginId)] ?? fresh(runId, pluginId),
-    setPinned: (runId, pluginId, pinned) => { writePinned(runId, pluginId, pinned); patch(runId, pluginId, () => ({ pinned, folded: true })); },
+    setPinned: (runId, pluginId, pinned, keepFocus) => {
+      writePinned(runId, pluginId, pinned);
+      pinFocus = keepFocus === true ? KEY(runId, pluginId) : null;
+      patch(runId, pluginId, () => ({ pinned, folded: true }));
+    },
+    takePinFocus: (runId, pluginId) => {
+      if (pinFocus !== KEY(runId, pluginId)) return false;
+      pinFocus = null;
+      return true;
+    },
+    clearJump: () => set({ lastJump: null }),
     setFolded: (runId, pluginId, folded) => patch(runId, pluginId, () => ({ folded })),
     heard: (runId, pluginId, ords, live, steps) => patch(runId, pluginId, (b) => {
       const add = ords.filter((o) => !b.updatedOrds.includes(o));
       return {
         ...(add.length > 0 ? { updatedOrds: [...b.updatedOrds, ...add].sort((x, y) => x - y) } : {}),
-        ...(live ? { pulse: b.pulse + 1 } : {}),
+        // Only a pinned block pulses, so only a pinned block counts its live updates.
+        ...(live && b.pinned ? { pulse: b.pulse + 1 } : {}),
         ...(steps !== undefined && Object.keys(steps).length > 0 ? { steps: { ...b.steps, ...steps } } : {}),
       };
     }),

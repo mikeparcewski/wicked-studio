@@ -108,6 +108,8 @@ export function start(): void {
     const p = (d.payload ?? {}) as Record<string, unknown>;
     applyTheme(p['theme']);
     port = e.ports[0];
+    // A height measured before the port existed was never sent: the first one on the port always goes.
+    lastHeight = 0;
     port.onmessage = (event: MessageEvent) => {
       const msg = event.data as Envelope | null;
       if (msg?.p !== PROTOCOL || msg.v !== ENVELOPE) return;
