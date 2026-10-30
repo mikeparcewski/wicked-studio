@@ -28,6 +28,7 @@ describe('a pause reaches the plugin as kinds, never its text', () => {
     expect(pauseKinds('2 reverts')).toEqual(['changes_undone']);
     expect(pauseKinds('rigor jumped two bands at once (light -> high)')).toEqual(['rigor_jumped']);
     expect(pauseKinds('the sign-in module was touched')).toEqual(['other']);
+    expect(pauseKinds('the change spread into another product')).toEqual(['spread']);
     const row = rows(paused()).find((r) => r.topic === 'wicked.run.checkpoint.reached' && r.data['checkpoint'] === 3)!;
     expect(row.data['pauseKinds']).toEqual(['longer_than_estimated', 'tests_failing']);
     expect(JSON.stringify(row)).not.toContain('80 min');
@@ -56,6 +57,18 @@ describe('the plugin’s lines in the working document', () => {
     expect(docLines(report(cont)).decisions[0]).toMatch(/· answered: continue as planned · /u);
     const sw = paused([{ type: 'powerToggled', session: 'r-pm', ts: at(23), toggle: { at: at(23), on: false, by: 'local', reason: null, stayPhased: [] } }]);
     expect(docLines(report(sw)).decisions[0]).toMatch(/· you chose: switch to phased steps · /u);
+  });
+
+  it('decisions read in the order they were made', () => {
+    const both = paused([
+      { type: 'awaitingHuman', session: 'r-pm', ts: at(30), ord: 4, gateKind: 'deliver' },
+      { type: 'powerTurnStarted', session: 'r-pm', ts: at(21), ord: 1, attempt: 0, turn: 4, cli: 'claude' },
+      { type: 'resumed', session: 'r-pm', ts: at(31), ord: 4 },
+    ]);
+    const d = docLines(report(both)).decisions;
+    expect(d).toHaveLength(2);
+    expect(d[0]).toMatch(/^Checkpoint 3 pause/u);
+    expect(d[1]).toMatch(/ · answered \d\d:\d\d$/u);
   });
 
   it('an open gate is a question; once answered it is a decision', () => {

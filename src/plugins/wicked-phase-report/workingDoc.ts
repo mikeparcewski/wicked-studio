@@ -108,7 +108,8 @@ export function trailLines(view: DocView, max = 6): string[] {
 
 const PAUSE_KIND_WORDS: Readonly<Record<string, string>> = {
   longer_than_estimated: 'taking much longer than estimated', tests_failing: 'the tests kept failing',
-  changes_undone: 'changes were undone', rigor_jumped: 'rigor jumped two levels at once', other: 'it grew more complex than planned',
+  changes_undone: 'changes were undone', rigor_jumped: 'rigor jumped two levels at once', spread: 'the change spread into another product',
+  other: 'it grew more complex than planned',
 };
 const CHOICE_WORDS: Readonly<Record<PauseChoice, string>> = {
   continue_high: 'continue at high rigor', continue: 'continue as planned', switch_phased: 'switch to phased steps', stop: 'stop the job',
@@ -125,14 +126,15 @@ const why = (kinds: readonly string[]): string => (kinds.length > 0 ? ` (${kinds
 
 /** What the plugin's own lines say now, per section, from the run's events. */
 export function docLines(r: Report): { decisions: string[]; questions: string[]; next: string[] } {
-  const decisions: string[] = [];
+  // Decisions in the order they were made.
+  const made: Array<{ at: number; line: string }> = [];
   const questions: string[] = [];
   const next: string[] = [];
-  for (const g of r.gates) if (g.answeredAt !== null) decisions.push(`${gateWord(g.kind)} · answered ${clockOf(g.answeredAt)}`);
+  for (const g of r.gates) if (g.answeredAt !== null) made.push({ at: g.answeredAt, line: `${gateWord(g.kind)} · answered ${clockOf(g.answeredAt)}` });
   const p = r.power;
   for (const pz of p?.pauses ?? []) {
     if (pz.choice !== null && pz.answeredAt !== null) {
-      decisions.push(`Checkpoint ${pz.n} pause${why(pz.kinds)} · ${pz.byPerson ? 'you chose' : 'answered'}: ${CHOICE_WORDS[pz.choice]} · ${clockOf(pz.answeredAt)}`);
+      made.push({ at: pz.answeredAt, line: `Checkpoint ${pz.n} pause${why(pz.kinds)} · ${pz.byPerson ? 'you chose' : 'answered'}: ${CHOICE_WORDS[pz.choice]} · ${clockOf(pz.answeredAt)}` });
     } else if (r.finished === null) {
       questions.push(`Waiting on you · checkpoint ${pz.n} paused${why(pz.kinds)}: split it, switch to phased steps, continue at high rigor, or stop? · since ${clockOf(pz.at)}`);
     }
@@ -146,6 +148,7 @@ export function docLines(r: Report): { decisions: string[]; questions: string[];
       else if (st.status === 'skipped') next.push(`After hand-off round ${p.handoff.round} · ${w.skipped}`);
     }
   }
+  const decisions = made.sort((a, b) => a.at - b.at).map((d) => d.line);
   return { decisions, questions, next };
 }
 

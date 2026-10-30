@@ -355,17 +355,18 @@ export function start(): void {
       } else {
         const blank = text.trim() === '' && unsaved.length === 0;
         const t = el('div', `wd-text${blank ? ' empty' : ''}`, blank ? (id === 'goal' && doc?.doc == null ? 'Not started. Edit a section to start the working document.' : 'Nothing yet.') : text);
-        for (const line of unsaved) {
-          const g = el('span', 'wd-gen', line);
-          g.title = 'Phase report (plugin): from the job’s events. Not saved in the working document yet.';
-          t.append(g);
-        }
+        for (const line of unsaved) t.append(el('span', 'wd-gen', line));
         t.tabIndex = 0;
         t.setAttribute('role', 'button');
         t.setAttribute('aria-label', `Edit ${SECTION_LABELS[id]}`);
         t.addEventListener('click', () => openEditor(id));
         t.addEventListener('keydown', (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); openEditor(id); } });
         sec.append(t);
+        if (unsaved.length > 0) {
+          sec.append(el('p', 'wd-gen-note', doc?.doc == null
+            ? 'From the job’s events. Not saved: no working document is started yet (a person’s first edit starts it).'
+            : 'From the job’s events. Not saved in the working document yet.'));
+        }
       }
       box.append(sec);
     }

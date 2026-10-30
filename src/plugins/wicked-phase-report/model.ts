@@ -56,7 +56,7 @@ const str = (v: unknown): string | null => (typeof v === 'string' && v !== '' ? 
 const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
 
 /** The pause reasons' kinds a row may carry (closed: `runEvents.ts` maps the engine's reasons to these). */
-export const PAUSE_KINDS: ReadonlySet<string> = new Set(['longer_than_estimated', 'tests_failing', 'changes_undone', 'rigor_jumped', 'other']);
+export const PAUSE_KINDS: ReadonlySet<string> = new Set(['longer_than_estimated', 'tests_failing', 'changes_undone', 'rigor_jumped', 'spread', 'other']);
 
 /** The newest pause takes this answer. A plain "it went on" (the next turn, the hand-off) is refined by a specific
  *  answer that follows it (a person's raise, the switch to phased steps, a stop); a specific answer is never replaced. */

@@ -143,6 +143,7 @@ export function pauseKinds(reason: string): string[] {
     else if (/failed test runs?/i.test(part)) out.push('tests_failing');
     else if (/reverts?/i.test(part)) out.push('changes_undone');
     else if (/rigor jumped/i.test(part)) out.push('rigor_jumped');
+    else if (/spread into another product|spans? \d+ (products|packages)/i.test(part)) out.push('spread');
     else out.push('other');
   }
   return out;

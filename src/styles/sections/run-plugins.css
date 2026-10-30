@@ -17,6 +17,9 @@
 .wk-runplugin--pinned { box-shadow: var(--shadow-card); border-color: var(--border); }
 .wk-runplugin-title { grid-area: title; margin: 0; display: flex; align-items: center; gap: 8px; min-width: 0; font-size: var(--text-sm); font-weight: var(--weight-semi); color: var(--ink-high); }
 .wk-runplugin-title .wk-tag { font-weight: 400; }
+/* A power run's phase block: "Phase report · Build" stays one phrase; the grant tag wraps under it on a phone. */
+.wk-runplugin-title { flex-wrap: wrap; row-gap: 2px; }
+.wk-runplugin-name { white-space: nowrap; }
 .wk-runplugin-tools { grid-area: tools; display: flex; gap: 2px; align-self: start; }
 .wk-runplugin--folded .wk-runplugin-tools { align-self: center; }
 .wk-runplugin-btn {

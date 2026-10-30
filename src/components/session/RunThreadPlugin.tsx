@@ -266,7 +266,7 @@ export function RunThreadPlugin({ runId, plugin, placement, phase = null }: { ru
       className={`wk-runplugin${view.folded ? ' wk-runplugin--folded' : ''}${placement === 'pinned' ? ' wk-runplugin--pinned' : ''}${flash !== null ? ` wk-runplugin--${flash}` : ''}`}
     >
       <p className="wk-runplugin-title" data-testid="run-plugin-title">
-        <span aria-hidden className="wk-hpanel-dot" />{plugin.title}{phase !== null && <span data-testid="run-plugin-phase" className="wk-runplugin-phase"> · {phase.label}</span>}
+        <span aria-hidden className="wk-hpanel-dot" /><span className="wk-runplugin-name">{plugin.title}{phase !== null && <span data-testid="run-plugin-phase" className="wk-runplugin-phase"> · {phase.label}</span>}</span>
         <span className="wk-tag" data-testid="run-plugin-grant" title={`Built in: it was given these without asking. It hears ${topics}.`}>Built in · pre-granted</span>
       </p>
       <div className="wk-runplugin-tools">
