@@ -685,10 +685,17 @@ describe('SteeringPage — ?rule deep link opens the drawer (qe finding: eval ga
 
 });
 
-describe('plainSkip (studio#689 row 49)', () => {
-  it('says why an import entry was skipped in plain words, never the invariant log', async () => {
-    const { plainSkip } = await import('../src/components/SteeringPage.js');
-    expect(plainSkip(1, 'rejected entry 2 – INV-S3: steering rule "POL-301" carries an effect but no non-blank applies_to entry')).toBe('Rule 2 skipped: it doesn’t say where it applies.');
-    expect(plainSkip(0, 'something odd')).toBe('Rule 1 skipped: Studio’s service refused it.');
+describe('plainSkip (studio#689 row 49, studio#934)', () => {
+  it('says why an import entry was skipped in plain words first, then the service’s own reason', async () => {
+    const { plainSkip } = await import('../src/board/steerImport.js');
+    expect(plainSkip(1, 'INV-S3: steering rule "POL-301" carries an effect but no non-blank applies_to entry')).toBe(
+      'Rule 2 skipped: it doesn’t say where it applies. Studio’s service said: INV-S3: steering rule "POL-301" carries an effect but no non-blank applies_to entry.',
+    );
+  });
+
+  it('never swallows a reason it has no plain words for (studio#934)', async () => {
+    const { plainSkip } = await import('../src/board/steerImport.js');
+    expect(plainSkip(0, 'something odd')).toBe('Rule 1 skipped. Studio’s service said: something odd.');
+    expect(plainSkip(0, '')).toBe('Rule 1 skipped. Studio’s service gave no reason.');
   });
 });

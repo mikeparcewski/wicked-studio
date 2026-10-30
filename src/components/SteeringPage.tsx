@@ -1,11 +1,10 @@
 import { planCommit } from '../board/steeringCommit.js';
+import { importRuleFile } from '../board/steerImport.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client.js';
 import {
   authorSteeringRules,
   DEFAULT_STEERING_TYPE,
-  importSteeringRules,
-  importEntryOutcome,
   isSteeringUnsupported,
   policiesPath,
   readMcpFilter,
@@ -61,17 +60,6 @@ import { SteeringTypeFilter } from './SteeringTypeFilter.js';
  * Every management write still goes through crew's API (the governed operator path) — estate MCP
  * stays read-only (AW-11).
  */
-
-/** One skipped import entry, in plain words (the engine's text names invariants like INV-S3). */
-export function plainSkip(index: number, raw: string): string {
-  const why = /applies_to/i.test(raw) ? 'it doesn’t say where it applies'
-    : /\bid\b[^.]*blank/i.test(raw) ? 'it has no id'
-    : /\bid\b.*(exists|duplicate)|duplicate/i.test(raw) ? 'a rule with that id already exists'
-    : /statement/i.test(raw) ? 'it has no statement'
-    : /type/i.test(raw) ? 'its type isn’t one of the seven'
-    : 'Studio’s service refused it';
-  return `Rule ${index + 1} skipped: ${why}.`;
-}
 
 export function SteeringPage({ type, navigate, search = '', runs = [] }: {
   /** The active type FILTER read from `?type=` — `null` is the `All` view (every rule). */
@@ -279,31 +267,11 @@ export function SteeringPage({ type, navigate, search = '', runs = [] }: {
       }
     },
     importDirect: async (doc) => {
-      // .md = one doc entry through the MarkdownAdapter path; .json = a rule batch,
-      // each object its own entry so a half-good batch reports per rule.
-      let entries;
-      try {
-        entries = doc.name.toLowerCase().endsWith('.json')
-          ? (JSON.parse(doc.content) as Record<string, unknown>[]).map((rule) => ({ kind: 'rule' as const, rule }))
-          : [{ kind: 'doc' as const, name: doc.name, content: doc.content }];
-      } catch {
-        return [{ tone: 'fail', text: `${doc.name} is not valid JSON — fix the batch or attach it for analysis instead.` }];
-      }
-      try {
-        const { results } = await importSteeringRules({ type: pageType, entries });
-        void loadRules();
-        const outcomes = results.map((r) => importEntryOutcome(r));
-        const ok = outcomes.filter((o) => o.ok).length;
-        const notes: AssistNote[] = [
-          { tone: ok === outcomes.length ? 'work' : 'gate', text: `${doc.name}: ${ok} of ${outcomes.length} entr${outcomes.length === 1 ? 'y' : 'ies'} imported.` },
-          // studio#689 row 49: a skipped entry says why in plain words, not the engine's invariant log.
-          ...outcomes.map((o, i): AssistNote => ({ tone: o.ok ? 'work' : 'fail', text: o.ok ? o.text : plainSkip(i, o.text) })),
-        ];
-        return notes;
-      } catch (e) {
-        if (isSteeringUnsupported(e)) return [{ tone: 'gate', text: STEERING_UNSUPPORTED_COPY }];
-        throw e;
-      }
+      // ONE import path (board/steerImport): the Steer surface's dialog and this table's assistant
+      // read a refusal the same way, crew's reason included (studio#934).
+      const notes = await importRuleFile(doc, pageType);
+      void loadRules();
+      return notes as AssistNote[];
     },
     onRunResolved: () => {
       void loadRules();
