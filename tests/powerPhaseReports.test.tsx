@@ -126,6 +126,29 @@ describe('Build and Checks share one unit: each phase’s time comes from its ow
     expect(phaseDashboard(r, { phase: 'checks', label: 'Checks', ords: [2] }, clockAt(16, 0)).now.sub).toBe('13:37–14:45 + 14:53–14:56 · 1 h 11 min');
     expect(phaseDashboard(r, { phase: 'build', label: 'Build', ords: [2] }, clockAt(16, 0)).now.sub).toBe('13:27–13:37 + 14:45–14:53 · 17 min');
   });
+  it('the floor’s escalation is the Checks’ decision, and Build’s Time and cost is its own turns and its own usage', () => {
+    // The whole job: started 13:26, the intake's usage on unit 1, finished 15:26 (2 h). None of that is the Build's.
+    const whole = emptyReport();
+    const more = [
+      ...events,
+      e('sessionStarted', clockAt(13, 26, 44)),
+      e('cliUsage', clockAt(13, 27, 55), { ord: 1, attempt: 0, costUsd: 0.28, inputTokens: 247018, outputTokens: 3213 }),
+      e('cliUsage', clockAt(14, 45, 45), { ord: 2, attempt: 0, costUsd: 0.31, inputTokens: 652811, outputTokens: 5899 }),
+      e('cliUsage', clockAt(14, 54, 47), { ord: 2, attempt: 1, costUsd: 0.65, inputTokens: 297335, outputTokens: 1364 }),
+      e('sessionCompleted', clockAt(15, 26, 21)),
+    ];
+    foldRows(whole, (more as unknown as CoreEvent[]).map((x, i) => toRow(x, 'bc', 0, `w${i}`, () => null)).filter((x): x is TopicRow => x !== null));
+    whole.loaded = true;
+    const build = phaseDashboard(whole, { phase: 'build', label: 'Build', ords: [2] }, clockAt(16, 0));
+    const checks = phaseDashboard(whole, { phase: 'checks', label: 'Checks', ords: [2] }, clockAt(16, 0));
+    expect(build.decisions.items).toEqual([]);
+    expect(build.time).toEqual({ value: '17 min', sub: '≈ $0.96 · 957k tokens' });
+    expect(checks.tiles).toContain('decisions');
+    expect(checks.decisions.items).toEqual([{ text: 'A failed check or review', when: 'answered 14:56', open: false }]);
+    // The spans did not move.
+    expect(build.now.sub).toBe('13:27–13:37 + 14:45–14:53 · 17 min');
+    expect(checks.now.sub).toBe('13:37–14:45 + 14:53–14:56 · 1 h 11 min');
+  });
   it('a build still running has an open span', () => {
     const live = emptyReport();
     foldRows(live, (events.slice(0, 3) as unknown as CoreEvent[]).map((x, i) => toRow(x, 'bc', 0, `l${i}`, () => null)).filter((x): x is TopicRow => x !== null));

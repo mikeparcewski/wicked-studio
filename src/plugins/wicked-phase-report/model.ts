@@ -44,6 +44,8 @@ export interface Report {
   costUsd: number;
   tokens: number;
   usageReports: number;
+  /** The same usage, per unit: a shared build's Time and cost reads only its own unit. */
+  usageByOrd: Map<number, { costUsd: number; tokens: number; reports: number }>;
   /** Null until a power-mode row arrives (a phased run never has one). */
   power: PowerInfo | null;
   /** The marks that cut a power build's one unit into its phases (turns, the floor's results, the hand-off's checks). */
@@ -54,7 +56,7 @@ export interface Report {
 export interface Mark { at: number; ord: number | null; kind: 'turn.started' | 'turn.completed' | 'checks' | 'handoff.checks'; outcome: string | null }
 
 export function emptyReport(): Report {
-  return { loaded: false, seen: new Set(), startedAt: null, lastAt: null, finished: null, units: new Map(), gates: [], checks: [], costUsd: 0, tokens: 0, usageReports: 0, power: null, marks: [] };
+  return { loaded: false, seen: new Set(), startedAt: null, lastAt: null, finished: null, units: new Map(), gates: [], checks: [], costUsd: 0, tokens: 0, usageReports: 0, usageByOrd: new Map(), power: null, marks: [] };
 }
 
 const str = (v: unknown): string | null => (typeof v === 'string' && v !== '' ? v : null);
@@ -214,6 +216,13 @@ export function foldRows(r: Report, rows: readonly Row[]): boolean {
         r.costUsd += num(d['costUsd']) ?? 0;
         r.tokens += (num(d['inputTokens']) ?? 0) + (num(d['outputTokens']) ?? 0);
         r.usageReports += 1;
+        if (ord !== null) {
+          const u = r.usageByOrd.get(ord) ?? { costUsd: 0, tokens: 0, reports: 0 };
+          u.costUsd += num(d['costUsd']) ?? 0;
+          u.tokens += (num(d['inputTokens']) ?? 0) + (num(d['outputTokens']) ?? 0);
+          u.reports += 1;
+          r.usageByOrd.set(ord, u);
+        }
         break;
       default: break;
     }
@@ -630,8 +639,12 @@ export function phaseDashboard(r: Report, scope: PhaseScope, nowMs: number): Das
       : rec !== null ? `${rec.seatName !== null ? `${rec.seatName} · ` : ''}${rec.status === 'running' || rec.status === 'pending' ? 'since' : 'at'} ${clock(rec.at)}`
         : 'Not started yet';
   const now = { value: `${scope.label} · ${phaseState(r, scope)}`, sub };
-  const decisions = r.gates.filter((g) => inScope(scope, g.ord));
-  const open = openGates(r).filter((g) => inScope(scope, g.ord));
+  // Build and Checks share one unit: a decision belongs to the phase it paused (the floor's escalation is the Checks').
+  const checksSpans = own !== null ? buildSpans(r, scope.ords[0]!).checks : null;
+  const inChecks = (g: GateInfo): boolean => checksSpans !== null && checksSpans.some((x) => g.openedAt >= x.start && (x.end === null || g.openedAt <= x.end));
+  const ofPhase = (g: GateInfo): boolean => inScope(scope, g.ord) && (checksSpans === null || inChecks(g) === (scope.phase === 'checks'));
+  const decisions = r.gates.filter(ofPhase);
+  const open = openGates(r).filter(ofPhase);
   const scopedDecisions = {
     open: open.length,
     answered: decisions.filter((g) => g.answeredAt !== null).length,
@@ -646,11 +659,22 @@ export function phaseDashboard(r: Report, scope: PhaseScope, nowMs: number): Das
   const seats = scope.ords.map((o) => r.units.get(o)).filter((u): u is UnitInfo => u !== undefined && (u.seatName ?? u.seat) !== null && u.seat !== 'bash').map((u) => u.seatName ?? u.seat!);
   if (seats.length === 0 && rec?.seatName != null) seats.push(rec.seatName);
   const helpers = [...new Set(seats)].map((name) => ({ name, steps: scope.label }));
+  // A shared build's Time and cost is the Build's own: its turns' time and its unit's usage, not the whole job's.
+  let time = all.time;
+  if (own !== null && scope.phase === 'build') {
+    const u = scope.ords.map((o) => r.usageByOrd.get(o)).filter((x) => x !== undefined);
+    const cost = u.reduce((t, x) => t + x.costUsd, 0);
+    const tokens = u.reduce((t, x) => t + x.tokens, 0);
+    time = {
+      value: own.length === 0 ? '—' : duration(spansTotal(own, nowMs)),
+      sub: u.length === 0 ? 'No usage reported yet' : `≈ $${cost.toFixed(2)} · ${Math.round(tokens / 1000).toLocaleString('en-US')}k tokens`,
+    };
+  }
   const tiles = scope.phase === 'intake' ? ['now', 'rigor']
     : scope.phase === 'build' ? ['now', 'rigor', 'decisions', 'time']
-      : scope.phase === 'checks' ? ['now', 'checks']
+      : scope.phase === 'checks' ? (decisions.length > 0 ? ['now', 'checks', 'decisions'] : ['now', 'checks'])
         : scope.phase === 'deliver' ? ['now', 'decisions']
           : ['now', 'helpers', 'decisions'];
   const rigor = scope.phase === 'intake' && all.rigor !== null ? all.rigor.slice(0, 1) : all.rigor;
-  return { ...all, now, checks, decisions: scopedDecisions, helpers, rigor, handoff: null, tiles };
+  return { ...all, now, checks, decisions: scopedDecisions, helpers, rigor, time, handoff: null, tiles };
 }
