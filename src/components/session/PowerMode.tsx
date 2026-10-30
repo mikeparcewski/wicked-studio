@@ -6,7 +6,7 @@ import type { SessionView } from '../../api/types.js';
 import { queueDecision, reportDecision } from '../../board/undoQueue.js';
 import { clockTime } from '../../board/handover.js';
 import {
-  PAUSE_CHOICES, RAISE_WORDS, changeReason, changedBy, handoffRow, handoffWords, higherRigors, listWords, pauseOrder, powerSwitch, rigorAt, rigorChip, settleHandoff,
+  PAUSE_CHOICES, RAISE_WORDS, changeReason, pauseReasonWords, changedBy, handoffRow, handoffWords, higherRigors, listWords, pauseOrder, powerSwitch, rigorAt, rigorChip, settleHandoff,
   type ActivityRow, type PauseChoice, type PowerItem,
 } from '../../board/powerMode.js';
 import { seatResponder } from '../../board/responder.js';
@@ -400,7 +400,7 @@ export function PowerPauseCard({ view, power }: { view: SessionView; power: Powe
       <p className="wk-dock-eyebrow pm-pause-eyebrow" data-testid="power-pause-eyebrow">Paused · this grew{pause !== null ? ` · checkpoint ${pause.checkpoint}` : ''}</p>
       <h2 className="wk-prop-text wk-gate2-q" data-testid="power-pause-question">This change grew past its plan. How should it go on?</h2>
       <p className="wk-prop-why wk-gate2-p">{who} paused at the end of its turn. Recommended: {PAUSE_CHOICES[recommended].label.toLowerCase()}.</p>
-      {reasons.length > 0 && <ul className="pm-pause-reasons" data-testid="power-pause-reasons">{reasons.map((r) => <li key={r}>{r}</li>)}</ul>}
+      {reasons.length > 0 && <ul className="pm-pause-reasons" data-testid="power-pause-reasons">{reasons.map((r) => <li key={r}>{pauseReasonWords(r)}</li>)}</ul>}
       <div className="wk-prop-btns wk-gate2-choices">
         <button type="button" data-testid="power-pause-choice" data-choice={lead} disabled={busy !== null} onClick={() => choose(lead)} title={PAUSE_CHOICES[lead].sub}
           className={`wk-prop-btn wk-gate2-btn ${lead === 'stop' ? 'wk-gate2-btn--secondary' : 'wk-prop-btn--primary wk-gate2-btn--primary'}`}>

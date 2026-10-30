@@ -6,7 +6,7 @@ import { IDLE_GATE_ACTION, useGateActionStore } from '../../board/gateActions.js
 import { finishedDeliveryArm, proposalKindOf, statusSentence } from '../../board/proposalCard.js';
 import type { Responder } from '../../board/responder.js';
 import { builderResponder, gateResponder, isReviewUnit, seatResponder } from '../../board/responder.js';
-import { approvingReviewers, conciseOutput, decisionMessages, finalWords, planSteps, stepMessages, testCountOf, type DecisionMessage, type StepMessage } from '../../board/runConversation.js';
+import { approvingReviewers, conciseOutput, evaluatorFace, decisionMessages, finalWords, planSteps, stepMessages, testCountOf, type DecisionMessage, type StepMessage } from '../../board/runConversation.js';
 import { isCliSeat, seatLabel } from '../../board/seatNames.js';
 import { askedAt, endedAt, stepTimes, type MessageTime } from '../../board/messageTimes.js';
 import { jobTitle } from '../../board/deskWords.js';
@@ -164,8 +164,11 @@ function YouBubble({ text, testId }: { text: string; testId: string }): React.Re
   );
 }
 
-function StepMessageView({ runId, step, who, checkWord, onOpen, at }: {
+function StepMessageView({ runId, step, who, checkWord, onOpen, at, evaluator = null }: {
   runId: string; step: StepMessage; who: Responder; checkWord: string | null; onOpen: () => void; at: MessageTime | null;
+  /** An evaluator's step (review, security, QE): its face is one sentence and one verdict line ("QE: 2 of 2 items
+   *  pass"), the report behind Show all / What it did. The label the verdict line leads with. */
+  evaluator?: string | null;
 }): React.ReactElement {
   const raw = useStepOutput(runId, step.key, step.version);
   // studio#479: paths under the home directory read `~/…` in the default layer (the transcript's rule).
@@ -173,7 +176,8 @@ function StepMessageView({ runId, step, who, checkWord, onOpen, at }: {
   const read = useMemo<OutputRead>(() => (raw.state === 'text' ? { state: 'text', text: showText(raw.text) } : raw.state === 'none' ? { state: 'none', why: showText(raw.why) } : raw), [raw, showText]);
   const [all, setAll] = useState(false);
   const concise = useMemo(() => (read.state === 'text' ? conciseOutput(read.text) : null), [read]);
-  const verdict = concise?.verdict ?? null;
+  const face = useMemo(() => (evaluator !== null && read.state === 'text' ? evaluatorFace(read.text, evaluator) : null), [evaluator, read]);
+  const verdict = face === null ? concise?.verdict ?? null : null;
   return (
     <AssistantMessage who={who} runId={runId} suffix={step.label} at={at} testId="chat-step" extra={{ 'data-ord': String(step.ord), 'data-step': step.key, 'data-state': step.state }}>
       {verdict !== null && (
@@ -183,11 +187,17 @@ function StepMessageView({ runId, step, who, checkWord, onOpen, at }: {
       )}
       {read.state === 'loading' && <p className="wk-chat-quiet" aria-busy="true">Reading what this step did…</p>}
       {read.state === 'none' && <p data-testid="chat-step-none" className="wk-chat-quiet">{step.state === 'rejected' ? 'This step was turned down' : 'Finished'} — {read.why}.</p>}
-      {read.state === 'text' && concise !== null && (
+      {face !== null && !all && (
+        <>
+          <p data-testid="chat-step-verdict" data-verdict={face.tone ?? ''} className={`wk-chat-verdict wk-chat-verdict--${face.tone ?? 'pass'}`}>{face.verdictLine}</p>
+          {face.sentence !== null && <div data-testid="chat-step-face" className="wk-chat-md"><Markdown>{face.sentence}</Markdown></div>}
+        </>
+      )}
+      {read.state === 'text' && concise !== null && (face === null || all) && (
         <div className="wk-chat-md"><Markdown>{all ? read.text : concise.text}</Markdown></div>
       )}
       <p className="wk-chat-actions">
-        {concise?.more === true && (
+        {(face !== null || concise?.more === true) && (
           <button type="button" data-testid="chat-step-more" onClick={() => setAll((a) => !a)} className="wk-chat-link">{all ? 'Show less' : 'Show all'}</button>
         )}
         {checkWord !== null && <span data-testid="chat-step-check" className="wk-chat-chip wk-chat-chip--quiet">{checkWord}</span>}
@@ -345,6 +355,16 @@ export function RunBlock({ view, badge, sessionId, navigate, solo = null }: {
     return step?.state === 'checked' ? 'Checked' : null;
   };
   const openSteps = (): void => openSheet({ kind: 'session', sessionId: `run:${id}` }, 'steps');
+  // An evaluator's step (review, security, QE) speaks as its verdict and one sentence: the label it leads with.
+  const evaluatorLabel = (s: StepMessage): string | null => {
+    const u = view.units.find((x) => x.ord === s.ord);
+    const base = s.key.replace(/#\d+$/, '');
+    if (u === undefined) return null;
+    if (/^(verify|qe|qe_acceptance)$/.test(base) || power?.handoff?.steps.some((h) => h.step === 'qe' && h.ord === s.ord) === true) return 'QE';
+    if (base === 'security_review') return 'Security check';
+    if (isReviewUnit(u) || (u as { role?: unknown }).role === 'evaluator') return s.label;
+    return null;
+  };
   // Audit row 26: a session's only run, titled as the page is, does not repeat the header's title.
   const soloHead = solo !== null && solo === jobTitle(view.session);
 
@@ -385,7 +405,7 @@ export function RunBlock({ view, badge, sessionId, navigate, solo = null }: {
       {steps.map((s, i) => (
         <Fragment key={s.ord}>
           <StepTurn runId={id} step={s} who={s.cli !== null ? seatResponder(s.cli, roster) : STUDIO} checkWord={checkOf(s)} onOpen={openSteps}
-            answers={decisions.filter((d) => d.ord === s.ord && d.ord !== planOrd)} at={stepAt(s.ord)} />
+            answers={decisions.filter((d) => d.ord === s.ord && d.ord !== planOrd)} at={stepAt(s.ord)} evaluator={evaluatorLabel(s)} />
           {/* The last step's row would sit beside the row for later steps: the one row below says both. */}
           {i < steps.length - 1 && <RunPluginJumpRows runId={id} ords={[s.ord]} />}
           <WorkingDocSteerRows runId={id} ords={[s.ord]} />
@@ -476,13 +496,13 @@ export function RunBlock({ view, badge, sessionId, navigate, solo = null }: {
   );
 }
 
-function StepTurn({ runId, step, who, checkWord, onOpen, answers, at }: {
+function StepTurn({ runId, step, who, checkWord, onOpen, answers, at, evaluator = null }: {
   runId: string; step: StepMessage; who: Responder; checkWord: string | null; onOpen: () => void; answers: readonly DecisionMessage[];
-  at: MessageTime | null;
+  at: MessageTime | null; evaluator?: string | null;
 }): React.ReactElement {
   return (
     <>
-      <StepMessageView runId={runId} step={step} who={who} checkWord={checkWord} onOpen={onOpen} at={at} />
+      <StepMessageView runId={runId} step={step} who={who} checkWord={checkWord} onOpen={onOpen} at={at} evaluator={evaluator} />
       {answers.map((d, i) => <DecisionLine key={i} d={d} />)}
     </>
   );

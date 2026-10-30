@@ -156,6 +156,43 @@ export function decisionMessages(events: readonly CoreEvent[] | null | undefined
 }
 
 const ANSI = /\u001b\[[0-9;]*[A-Za-z]/g;
+
+/** A filesystem path outside the repository (home, temp, absolute): never on a message's face. */
+const FS_PATH = /(?:`)?(?:~|\/(?:Users|home|private|tmp|var|Volumes|opt))\/[^\s`'")]+(?:`)?/g;
+
+export interface EvaluatorFace {
+  /** The bubble's one plain sentence (the report's first), with no filesystem path. */
+  sentence: string | null;
+  /** "QE: 2 of 2 items pass", "Review: 1 of 2 items pass", "QE passed". */
+  verdictLine: string | null;
+  tone: 'pass' | 'fail' | null;
+}
+
+/**
+ * An evaluator's (review, security, QE) report as a bubble's face (operator 2026-10-29: "a wall of engine text"): its
+ * first plain sentence and one verdict line from its own `ITEM n: PASS` lines and `VERDICT:`. The rest stays behind
+ * "Show all" / "What it did". Null when the report has neither a verdict nor items (it is read as any step's words).
+ */
+export function evaluatorFace(raw: string, label: string): EvaluatorFace | null {
+  const text = raw.replace(ANSI, '').replace(/\r\n?/g, '\n');
+  const items = [...text.matchAll(/^\s*ITEM\s+\d+\s*:\s*(PASS|FAIL|NOT PASS)\b/gim)].map((m) => m[1]!.toUpperCase() === 'PASS');
+  const verdicts = [...text.matchAll(/^\s*VERDICT:\s*(PASS|FAIL|NOT PASS)\s*$/gim)];
+  const verdict = verdicts.length > 0 ? verdicts[verdicts.length - 1]![1]!.toUpperCase() === 'PASS' : null;
+  if (items.length === 0 && verdict === null) return null;
+  const machine = /^\s*(ITEM\s+\d+|VERDICT|QE-EVIDENCE|ADVICE|Counts|Commands run|#|[-*]\s|\d+\.\s|```)/i;
+  const first = text.split(/\n\s*\n/).map((p) => p.trim()).find((p) => p !== '' && !machine.test(p)) ?? null;
+  let sentence: string | null = null;
+  if (first !== null) {
+    const flat = first.replace(/\s*\n\s*/g, ' ').replace(FS_PATH, '').replace(/\s{2,}/g, ' ').trim();
+    const end = /^(.+?[.!?])(\s|$)/.exec(flat);
+    sentence = (end !== null ? end[1]! : flat).trim() || null;
+  }
+  const passed = items.filter(Boolean).length;
+  const ok = verdict ?? (items.length > 0 && passed === items.length);
+  const verdictLine = items.length > 0 ? `${label}: ${passed} of ${items.length} ${items.length === 1 ? 'item passes' : 'items pass'}`
+    : `${label} ${ok ? 'passed' : 'did not pass'}`;
+  return { sentence, verdictLine, tone: ok ? 'pass' : 'fail' };
+}
 /** A step output's own verdict header ("VERDICT: PASS") — said by the message in words, not shouted. */
 const VERDICT = /^\s*VERDICT:\s*(PASS|FAIL|NOT PASS)\s*$/im;
 

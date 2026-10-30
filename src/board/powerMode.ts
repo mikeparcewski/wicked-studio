@@ -182,6 +182,29 @@ function activityRow(e: PowerActivityEvent, commitN: number): ActivityRow {
   return { kind: 'edit', at, lead: 'Edited', code: e.path ?? (e.paths?.[0] ?? null), added: n(e.added), removed: n(e.removed), tail: null, sha: null, tone: 'plain' };
 }
 
+/**
+ * The engine's pause reasons (core power.rs `sudden_complexity` / `struggle`) in plain words: "struggling: 80 min
+ * against an estimate of 20 min" → "taking much longer than estimated (80 min vs 20)". A reason studio does not know
+ * is said as the engine wrote it, never replaced by a generic label.
+ */
+export function pauseReasonWords(reason: string): string {
+  const one = (r: string): string => {
+    const t = r.trim();
+    let m = /^(\d+) min against an estimate of (\d+) min$/i.exec(t);
+    if (m !== null) return `taking much longer than estimated (${m[1]} min vs ${m[2]})`;
+    m = /^(\d+) failed test runs$/i.exec(t);
+    if (m !== null) return `tests failed ${m[1]} times in a row`;
+    m = /^(\d+) reverts$/i.exec(t);
+    if (m !== null) return `${m[1]} changes were undone`;
+    m = /^rigor jumped two bands at once \((\w+) -> (\w+)\)$/i.exec(t);
+    if (m !== null) return `rigor jumped two levels at once (${m[1]} → ${m[2]})`;
+    return t;
+  };
+  const s = reason.trim();
+  const struggle = /^struggling:\s*(.*)$/i.exec(s);
+  return struggle !== null ? struggle[1]!.split(/;\s*/).filter((x) => x !== '').map(one).join('; ') : one(s);
+}
+
 /** "Checkpoint 2 · commit 2 · picked up your note", "Checkpoint 1 · commit 1 · rigor stays standard (score 34 → 36)". */
 export function checkpointWords(cp: PowerCheckpointEvent, change: RigorChange | null, commits: number): string {
   const parts = [`Checkpoint ${cp.checkpoint}`];
@@ -191,7 +214,10 @@ export function checkpointWords(cp: PowerCheckpointEvent, change: RigorChange | 
   else if (change === null || change.direction === 'same') {
     parts.push(change !== null ? `rigor stays ${cp.rigor} (score ${change.planned} → ${change.actual})` : `rigor stays ${cp.rigor}`);
   }
-  if (cp.paused) parts.push('paused: this grew');
+  if (cp.paused) {
+    const why = (cp.pause?.reasons ?? []).map(pauseReasonWords).filter((x) => x !== '');
+    parts.push(why.length > 0 ? `paused: ${why.join('; ')}` : 'paused for your decision');
+  }
   return parts.join(' · ');
 }
 

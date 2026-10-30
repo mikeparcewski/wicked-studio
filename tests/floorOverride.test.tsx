@@ -191,7 +191,9 @@ describe('floor overridden by operator, on the gate and the delivery', () => {
     expect(screen.getByTestId('assurance-floor-overridden-line').textContent).toMatch(/At 2 gates/);
     const rows = screen.getAllByTestId('assurance-floor-override').map((li) => li.textContent);
     expect(rows).toHaveLength(2);
-    expect(rows[0]).toMatch(/an-operator \(user\) at r-floor:unit-2:attempt-7:repo_checks: load flakes in untouched files/);
-    expect(rows[1]).toMatch(/second-operator \(user\) at r-floor:unit-4:attempt-2:repo_checks: fails on base too/);
+    // Operator 2026-10-29: where it was, in words, never the raw result id.
+    expect(rows[0]).toMatch(/^an-operator \(user\), at step 2’s checks \(attempt 8\): load flakes in untouched files/);
+    expect(rows[1]).toMatch(/^second-operator \(user\), at step 4’s checks \(attempt 3\): fails on base too/);
+    expect(rows.join(' ')).not.toMatch(/r-floor:unit-/);
   });
 });

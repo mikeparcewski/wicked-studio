@@ -130,3 +130,40 @@ describe('a pause the frames show, answered since (rig run b6f7968b)', () => {
     expect(silentStep(paused, [{ type: 'unitDispatched', session: RUN, ord: 2, ts: T(10, 0) }] as never, T(18, 0))).toBeNull();
   });
 });
+
+describe('round 4 on the real run: pause reasons, the receipt, the QE bubble', () => {
+  it('a checkpoint pause says the engine\'s reason in plain words, never a generic label', async () => {
+    const { checkpointWords, pauseReasonWords } = await import('../src/board/powerMode.js');
+    expect(pauseReasonWords('struggling: 80 min against an estimate of 20 min')).toBe('taking much longer than estimated (80 min vs 20)');
+    expect(pauseReasonWords('struggling: 136 min against an estimate of 25 min; 3 failed test runs; 2 reverts'))
+      .toBe('taking much longer than estimated (136 min vs 25); tests failed 3 times in a row; 2 changes were undone');
+    expect(pauseReasonWords('rigor jumped two bands at once (standard -> highest)')).toBe('rigor jumped two levels at once (standard → highest)');
+    expect(pauseReasonWords('the change spread into another product')).toBe('the change spread into another product');
+    const cp = { type: 'powerCheckpointReached' as const, session: RUN, ord: 2, checkpoint: 2, turn: 1, trigger: 'pre_handoff' as const, head: null, picked: 0, rigor: 'standard' as const, paused: true,
+      pause: { at: 0, checkpoint: 2, reasons: ['struggling: 80 min against an estimate of 20 min'], recommended: 'switch_phased' as const } };
+    expect(checkpointWords(cp, null, 0)).toBe('Checkpoint 2 · before hand-off · rigor stays standard · paused: taking much longer than estimated (80 min vs 20)');
+    expect(checkpointWords({ ...cp, pause: null }, null, 0)).not.toMatch(/this grew/);
+  });
+
+  it('an override says where it was, never a result id: "You, at the Fix step\'s checks (attempt 2): <note>"', async () => {
+    const { AssuranceReceipt } = await import('../src/components/session/AssuranceReceipt.js');
+    const fo = (ord: number, attempt: number) => ({ layer: 'repo_checks', resultId: `${RUN}:unit-${ord}:attempt-${attempt}:repo_checks`, label: 'floor overridden by operator', ord, attempt });
+    const { receiptOf } = await import('../src/board/assuranceModel.js');
+    const receipt = receiptOf({ mode: 'full', required: ['judge'], ran: ['repo_checks', 'judge', 'operator_judge'], skipped: [], creator: 'claude', evaluator: 'codex', judge: 'codex', tree: 'd06ab5f', attempt: 1, operatorJudges: [
+      { by: 'local (human)', at: 1, note: 'timing tests', floorOverride: fo(2, 1) },
+      { by: 'local (human)', at: 2, note: 'same three', floorOverride: fo(4, 0) },
+    ] })!;
+    render(<AssuranceReceipt receipt={receipt} units={UNITS} />);
+    const items = screen.getAllByTestId('assurance-floor-override').map((li) => li.textContent);
+    expect(items).toEqual(['You, at the Fix step’s checks (attempt 2): “timing tests”', 'You, at the Verify step’s checks (attempt 1): “same three”'].map((x) => x.replace(/[“”]/g, '')));
+    expect(document.body.textContent).not.toMatch(/unit-2|attempt-1|repo_checks|local/);
+  });
+
+  it('a QE report\'s face is its first plain sentence and one verdict line; no filesystem path', async () => {
+    const { evaluatorFace } = await import('../src/board/runConversation.js');
+    const out = 'Evaluator review of `c0f9396`; read `src/actor.rs`. No repository changes.\n\nVerification: four targeted tests passed.\n\nITEM 1: PASS — a\nITEM 2: PASS — b\nQE-EVIDENCE: /Users/someone/.wicked/walkthroughs/x/evidence/y\nVERDICT: PASS\n';
+    expect(evaluatorFace(out, 'QE')).toEqual({ sentence: 'Evaluator review of `c0f9396`; read `src/actor.rs`.', verdictLine: 'QE: 2 of 2 items pass', tone: 'pass' });
+    expect(evaluatorFace('Saw ~/.wicked/x/y and checked.\n\nVERDICT: FAIL', 'Review')).toEqual({ sentence: 'Saw and checked.', verdictLine: 'Review did not pass', tone: 'fail' });
+    expect(evaluatorFace('Just words, no verdict.', 'QE')).toBeNull();
+  });
+});
