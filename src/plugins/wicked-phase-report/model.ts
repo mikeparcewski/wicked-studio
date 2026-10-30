@@ -645,10 +645,15 @@ export function phaseDashboard(r: Report, scope: PhaseScope, nowMs: number): Das
   const ofPhase = (g: GateInfo): boolean => inScope(scope, g.ord) && (checksSpans === null || inChecks(g) === (scope.phase === 'checks'));
   const decisions = r.gates.filter(ofPhase);
   const open = openGates(r).filter(ofPhase);
+  const items = decisions.map((g) => ({ at: g.openedAt, text: gateWord(g.kind), when: g.answeredAt !== null ? `answered ${clock(g.answeredAt)}` : `open since ${clock(g.openedAt)}`, open: open.includes(g) }));
+  // A checkpoint pause stops the orchestrator's turn: it is the Build's decision.
+  const pauses = scope.phase === 'build' && own !== null ? r.power?.pauses ?? [] : [];
+  for (const pz of pauses) items.push({ at: pz.at, text: `Checkpoint ${pz.n} pause`, when: pz.answeredAt !== null ? `answered ${clock(pz.answeredAt)}` : `open since ${clock(pz.at)}`, open: pz.answeredAt === null });
+  items.sort((a, b) => a.at - b.at);
   const scopedDecisions = {
-    open: open.length,
-    answered: decisions.filter((g) => g.answeredAt !== null).length,
-    items: decisions.slice(-5).map((g) => ({ text: gateWord(g.kind), when: g.answeredAt !== null ? `answered ${clock(g.answeredAt)}` : `open since ${clock(g.openedAt)}`, open: open.includes(g) })),
+    open: items.filter((x) => x.open).length,
+    answered: items.filter((x) => !x.open && x.when.startsWith('answered')).length,
+    items: items.slice(-5).map(({ text, when, open: o }) => ({ text, when, open: o })),
   };
   const checksAll = r.checks.filter((c) => inScope(scope, c.ord));
   const checks = all.checks.filter((_c, i) => {
