@@ -600,7 +600,12 @@ function floorState(r: Report, scope: PhaseScope): string | null {
   if (last === undefined) return null;
   if (openGates(r).some((g) => inScope(scope, g.ord) && g.openedAt >= last.start)) return 'waiting on you';
   const result = r.checks.filter((c) => inScope(scope, c.ord) && c.at >= last.start && (last.end === null || c.at <= last.end)).at(-1);
-  if (result !== undefined) return checksResultWord(result);
+  if (result !== undefined) {
+    const word = checksResultWord(result);
+    // A failed floor the hand-off then counted as passed was approved by a person at its gate.
+    const rec = r.power?.handoff?.steps.get('checks');
+    return word !== 'passed' && rec?.status === 'passed' && rec.at >= result.at ? `${word} · overridden` : word;
+  }
   return last.end === null ? 'running' : null;
 }
 

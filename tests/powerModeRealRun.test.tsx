@@ -108,6 +108,25 @@ describe('the real run, rendered', () => {
     expect(screen.getByTestId('power-rigor-mark').textContent).toContain('you chose ‘continue at high rigor’ at checkpoint 2 — hand-off ran the full suite');
   });
 
+  it('retime 0.16.11: a plan (architecture) step is said before the build, with its own Plan report after its message', async () => {
+    const units = [unit('pa-scope', 1, 'done', 'claude', 'scope'), unit('architecture', 2, 'done', 'claude', 'design'), unit('fix', 3, 'done', 'claude'), unit('review', 4, 'done', 'codex', 'review'), unit('deliver', 5, 'done', 'bash')];
+    const power: PowerState = { ...POWER, orchestrator: { ...POWER.orchestrator, ord: 3 }, handoff: null };
+    useRunEventStore.setState({ byRun: { [RUN]: [
+      EVENTS[0]!,
+      { type: 'powerTurnStarted', session: RUN, ord: 3, attempt: 0, turn: 1, cli: 'claude', ts: T(13, 40), seq: 60 },
+      { type: 'powerTurnCompleted', session: RUN, ord: 3, attempt: 0, turn: 1, cli: 'claude', outcome: 'handoff', summary: 'The fix is in.', ts: T(13, 50), seq: 61 },
+    ] as never } });
+    render(<RunBlock view={makeView({ id: RUN, problem: 'x', status: 'completed', power } as never, units)} badge={0} sessionId={`run:${RUN}`} />);
+    const turn = await screen.findByTestId('power-turn');
+    const plan = document.querySelector('[data-testid=run-plugins-phase][data-phase=plan]');
+    expect(plan).not.toBeNull();
+    const archStep = [...document.querySelectorAll('[data-testid=chat-step]')].find((n) => /Plan|Architecture/u.test(n.textContent ?? ''));
+    expect(archStep).toBeDefined();
+    // Both come before the build's turn, in that order: the message, then its report.
+    expect(archStep!.compareDocumentPosition(plan!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(plan!.compareDocumentPosition(turn) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it('two Phase report update rows next to each other become one', async () => {
     useRunPluginView.setState({ blocks: { [`${RUN}::wicked-phase-report`]: { pinned: false, folded: true, updatedOrds: [3, 4, 5], highlight: 0, pulse: 0, steps: { 3: 'Review', 4: 'Check', 5: 'Deliver' } } } } as never);
     render(<RunBlock view={makeView({ id: RUN, problem: 'x', status: 'completed' } as never, UNITS)} badge={0} sessionId={`run:${RUN}`} />);

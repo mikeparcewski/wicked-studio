@@ -296,6 +296,7 @@ export function RunBlock({ view, badge, sessionId, navigate, solo = null }: {
   // A step phase (the plan step, a hand-off step) reports after its own message.
   const STEP_PHASES: ReadonlySet<string> = new Set(['plan', 'review', 'security', 'qe']);
   const stepPhase = (ord: number): (typeof phases)[number] | null => phases.find((ph) => STEP_PHASES.has(ph.key) && ph.ords.includes(ord)) ?? null;
+  const beforeBuild = (ord: number): boolean => phaseOf('plan')?.ords.includes(ord) === true;
   const reviewVerdicts = useReviewVerdicts(id, steps, (ord) => { const u = view.units.find((x) => x.ord === ord); return u !== undefined && isReviewUnit(u); });
   const plan = useMemo(() => planSteps(view, chain), [view, chain]);
   const decisions = useMemo(() => decisionMessages(runEvents ?? NO_EVENTS), [runEvents]);
@@ -376,6 +377,21 @@ export function RunBlock({ view, badge, sessionId, navigate, solo = null }: {
   // Audit row 26: a session's only run, titled as the page is, does not repeat the header's title.
   const soloHead = solo !== null && solo === jobTitle(view.session);
 
+  // One finished step: its message, your answers to it, its phase report (a step phase's) and its steering rows.
+  const stepNode = (s: (typeof steps)[number]): React.ReactElement => {
+    const i = steps.indexOf(s);
+    return (
+      <Fragment key={s.ord}>
+        <StepTurn runId={id} step={s} who={s.cli !== null ? seatResponder(s.cli, roster) : STUDIO} checkWord={checkOf(s)} onOpen={openSteps}
+          answers={decisions.filter((d) => d.ord === s.ord && d.ord !== planOrd)} at={stepAt(s.ord)} evaluator={evaluatorLabel(s)} />
+        {/* The last step's row would sit beside the row for later steps: the one row below says both. */}
+        {!powerBuild && i < steps.length - 1 && <RunPluginJumpRows runId={id} ords={[s.ord]} />}
+        {/* A step phase's report (the plan step, a hand-off step), after its message. */}
+        {stepPhase(s.ord) !== null && <RunPhasePlugins runId={id} phase={stepPhase(s.ord)!} />}
+        <WorkingDocSteerRows runId={id} ords={[s.ord]} />
+      </Fragment>
+    );
+  };
   return (
     <section data-testid="session-run" data-run-id={id} data-state={state} {...(acceptance !== null ? { 'data-acceptance': 'read' } : {})} className="wk-chat-run wk-session-run">
       {/* Many runs in one chat: each run's turns start with its name, quietly (the header names a solo run). */}
@@ -408,6 +424,8 @@ export function RunBlock({ view, badge, sessionId, navigate, solo = null }: {
           keeps its one block at the first unit. */}
       {phaseOf('intake') !== null && <RunPhasePlugins runId={id} phase={phaseOf('intake')!} />}
       {!powerBuild && <RunThreadPlugins runId={id} placement="thread" />}
+      {/* A power build's plan step (architecture, design) ran before the build: its message and report come first. */}
+      {steps.filter((s) => beforeBuild(s.ord)).map(stepNode)}
       {powerRun && power !== null && <PowerThread view={view} power={power} items={powerItems} part={powerBuild ? 'build' : 'rest'} />}
       {phaseOf('build') !== null && <RunPhasePlugins runId={id} phase={phaseOf('build')!} />}
       {powerBuild && power !== null && <PowerThread view={view} power={power} items={powerItems} part="handoff" />}
@@ -415,18 +433,9 @@ export function RunBlock({ view, badge, sessionId, navigate, solo = null }: {
       {/* The plan editor, only when you asked to edit (it is the plan's own artifact). */}
 
 
-      {/* 2. One message per finished step, then your answer to a question it raised. */}
-      {steps.map((s, i) => (
-        <Fragment key={s.ord}>
-          <StepTurn runId={id} step={s} who={s.cli !== null ? seatResponder(s.cli, roster) : STUDIO} checkWord={checkOf(s)} onOpen={openSteps}
-            answers={decisions.filter((d) => d.ord === s.ord && d.ord !== planOrd)} at={stepAt(s.ord)} evaluator={evaluatorLabel(s)} />
-          {/* The last step's row would sit beside the row for later steps: the one row below says both. */}
-          {!powerBuild && i < steps.length - 1 && <RunPluginJumpRows runId={id} ords={[s.ord]} />}
-          {/* A hand-off step's phase report, after its message. */}
-          {stepPhase(s.ord) !== null && <RunPhasePlugins runId={id} phase={stepPhase(s.ord)!} />}
-          <WorkingDocSteerRows runId={id} ords={[s.ord]} />
-        </Fragment>
-      ))}
+      {/* 2. One message per finished step, then your answer to a question it raised. (A power build's plan step is
+          said before the build, above.) */}
+      {steps.filter((s) => !beforeBuild(s.ord)).map(stepNode)}
       {/* An update about the last step with a message, or a step that has none yet (the one running now, deliver): ONE
           jump row after the last step, at the newest of them. With no step message yet the block itself is right
           above: no row would point anywhere. */}

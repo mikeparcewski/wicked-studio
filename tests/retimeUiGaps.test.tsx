@@ -253,6 +253,12 @@ describe('4. the Checks block resolves from the floor result', () => {
     const r = report(floor1);
     expect(phaseDashboard(r, checks, T0 + 36 * MIN).now.value).toBe('Checks · failed');
   });
+  it('a failed floor the hand-off then passed (a person approved it at its gate) says so', () => {
+    const r = report([...floor1.slice(0, 5), ...ev([
+      { type: 'powerHandoffStepped', round: 1, maxRounds: 3, step: { at: T0 + 40 * MIN, ord: 3, round: 1, seat: 'claude', status: 'passed', step: 'checks', summary: null }, ts: T0 + 40 * MIN },
+    ])]);
+    expect(phaseDashboard(r, checks, T0 + 41 * MIN).now.value).toBe('Checks · failed · overridden');
+  });
   it('while a floor runs with no result yet it is running; a passed floor says passed', () => {
     const running = report(floor1.slice(0, 3));
     expect(phaseDashboard(running, checks, T0 + 5 * MIN).now.value).toBe('Checks · running');
