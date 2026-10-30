@@ -161,7 +161,7 @@ describe('round 4 on the real run: pause reasons, the receipt, the QE bubble', (
 
   it('a QE report\'s face is its first plain sentence and one verdict line; no filesystem path', async () => {
     const { evaluatorFace } = await import('../src/board/runConversation.js');
-    const out = 'Evaluator review of `c0f9396`; read `src/actor.rs`. No repository changes.\n\nVerification: four targeted tests passed.\n\nITEM 1: PASS — a\nITEM 2: PASS — b\nQE-EVIDENCE: /Users/someone/.wicked/walkthroughs/x/evidence/y\nVERDICT: PASS\n';
+    const out = 'Evaluator review of `c0f9396`; read `src/actor.rs`. No repository changes.\n\nVerification: four targeted tests passed.\n\nITEM 1: PASS — a\nITEM 2: PASS — b\nQE-EVIDENCE: /home/someone/.wicked/walkthroughs/x/evidence/y\nVERDICT: PASS\n';
     expect(evaluatorFace(out, 'QE')).toEqual({ sentence: 'Evaluator review of `c0f9396`; read `src/actor.rs`.', verdictLine: 'QE: 2 of 2 items pass', tone: 'pass' });
     expect(evaluatorFace('Saw ~/.wicked/x/y and checked.\n\nVERDICT: FAIL', 'Review')).toEqual({ sentence: 'Saw and checked.', verdictLine: 'Review did not pass', tone: 'fail' });
     expect(evaluatorFace('Just words, no verdict.', 'QE')).toBeNull();
