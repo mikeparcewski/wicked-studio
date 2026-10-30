@@ -1,9 +1,14 @@
+import { actorWords } from '../../board/actorWords.js';
 import type { SessionView } from '../../api/types.js';
 import { QE_FORCE_DISCLOSURE, QE_FORCE_LABEL, QE_SKIP_DISCLOSURE, QE_SKIP_LABEL, REDUCED_ASSURANCE_LABEL, REDUCED_OPT_IN_DISCLOSURE, REDUCED_OPT_IN_LABEL, isReduced, qeSkippedText, qeWords, sessionQe, unverifiedDeliveryLine, type DeliveryAssuranceView, type QeDecision, receiptWords, sessionAssurance, type AssuranceReceipt as Receipt } from '../../board/assuranceModel.js';
 import { useRunEvents } from '../../hooks/useRunEvents.js';
 import { useDisplayText } from '../../hooks/useHomePath.js';
 import { TechDetails } from '../ui/index.js';
-import { FLOOR_OVERRIDDEN_LABEL } from '../../board/floorOverride.js';
+import { FLOOR_OVERRIDDEN_LABEL, overrideWhere } from '../../board/floorOverride.js';
+import { stepWord } from '../../board/runConversation.js';
+
+/** "you" opens a sentence as "You"; a person's own id is said as recorded. */
+const capitalize = (s: string): string => (s === 'you' ? 'You' : s);
 
 /**
  * The assurance receipt, compact (wicked-core#850): one lead line — how the decision was assured
@@ -12,8 +17,10 @@ import { FLOOR_OVERRIDDEN_LABEL } from '../../board/floorOverride.js';
  * required and what ran, who built and checked it (and whether they were separate seats), what was
  * skipped and why, and the tree and attempt. The engine's detail for each skip rides the hover.
  */
-export function AssuranceReceipt({ receipt, passed = null, testId = 'assurance-receipt', tech = 'own' }: {
+export function AssuranceReceipt({ receipt, passed = null, testId = 'assurance-receipt', tech = 'own', units = null }: {
   receipt: Receipt;
+  /** The run's units, so an override says which step it was at ("the Fix step's checks"); null = "step 2". */
+  units?: SessionView['units'] | null;
   /** The decision passed (an approval, a delivery), did not, or is not known. */
   passed?: boolean | null;
   testId?: string;
@@ -24,9 +31,16 @@ export function AssuranceReceipt({ receipt, passed = null, testId = 'assurance-r
   const w = receiptWords(receipt, passed);
   const judged = (receipt.operatorJudges ?? []).filter((j) => j.floorOverride === undefined);
   const overrides = (receipt.operatorJudges ?? []).filter((j) => j.floorOverride !== undefined);
-  const judgedBy = [...new Set(judged.map((j) => j.by))];
+  // Never an actor id ("local (human)"): the local operator is "you" (operator 2026-10-29).
+  const judgedBy = [...new Set(judged.map((j) => actorWords(j.by)))];
   const judgedGates = judged.length;
-  const overriddenBy = [...new Set(overrides.map((j) => j.by))];
+  const overriddenBy = [...new Set(overrides.map((j) => actorWords(j.by)))];
+  const stepOf = (ord: number): string | null => {
+    const u = (units ?? []).find((x) => x.ord === ord);
+    if (u === undefined) return null;
+    const key = u.id.includes(':') ? u.id.slice(u.id.indexOf(':') + 1) : String(u.stage ?? '');
+    return key === '' ? null : stepWord(key);
+  };
   const lead = w.kind === 'floor-only' ? 'Only automatic checks ran'
     : w.kind === 'same-seat' ? 'The helper checked its own work'
       : w.kind === 'unchecked' ? 'Nothing was verified'
@@ -49,7 +63,7 @@ export function AssuranceReceipt({ receipt, passed = null, testId = 'assurance-r
         <ul data-testid="assurance-floor-overrides" className="wk-assurance-list">
           {overrides.map((o, i) => (
             <li key={`${o.floorOverride?.resultId ?? ''}-${i}`} data-testid="assurance-floor-override">
-              {o.by}{o.floorOverride?.resultId ? <> at <code>{o.floorOverride.resultId}</code></> : null}
+              {capitalize(actorWords(o.by))}{o.floorOverride !== undefined ? `, at ${overrideWhere(o.floorOverride, stepOf)}` : ''}
               {o.note !== null ? <>: <q>{o.note}</q></> : ' (no rationale recorded)'}
             </li>
           ))}

@@ -1,3 +1,4 @@
+import { actorWords } from './actorWords.js';
 import type { CoreEvent, SessionView, WorkUnit } from '../api/types.js';
 import { floorOverrideOf, type FloorOverrideView } from './floorOverride.js';
 
@@ -627,8 +628,8 @@ export function receiptWords(r: AssuranceReceipt, passed: boolean | null = null)
   const ownJudges = (r.judge ?? '').split(', ').filter((j) => j !== '' && !fallbackSeats.includes(j) && !j.startsWith('operator:'));
   if (ownJudges.length > 0) seats.push(`judged by ${ownJudges.join(', ')}`);
   // (api-types 0.135.0) A floor the operator overrode is said as such — the engine's label — never as a judge.
-  const overriders = [...new Set((r.operatorJudges ?? []).filter((j) => j.floorOverride !== undefined).map((j) => j.by))];
-  const operators = [...new Set((r.operatorJudges ?? []).filter((j) => j.floorOverride === undefined).map((j) => j.by))];
+  const overriders = [...new Set((r.operatorJudges ?? []).filter((j) => j.floorOverride !== undefined).map((j) => actorWords(j.by)))];
+  const operators = [...new Set((r.operatorJudges ?? []).filter((j) => j.floorOverride === undefined).map((j) => actorWords(j.by)))];
   if (overriders.length > 0) seats.push(`floor overridden by operator (${overriders.join(', ')})`);
   if (operators.length > 0) seats.push(`judged by operator (${operators.join(', ')})`);
   const sep = separationWords(r);

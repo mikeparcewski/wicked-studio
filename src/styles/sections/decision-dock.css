@@ -232,3 +232,8 @@
 .wk-gate2-fails .wk-gate2-base { flex-direction: row; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; margin-top: 0; }
 .wk-gate2-fails .wk-gate2-base > ul { flex-basis: 100%; order: 3; }
 .wk-gate2-fails .wk-gate2-base > .wk-gate2-link { margin-left: 0; padding: 2px 4px; }
+/* Failing tests grouped by file (operator 2026-10-30): the list scrolls inside the dock; its buttons stay in view. */
+.wk-gate2-groups { display: flex; flex-direction: column; gap: 6px; max-height: min(34vh, 280px); overflow-y: auto; overscroll-behavior: contain; }
+.wk-gate2-group-list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; }
+.wk-gate2-group { display: flex; flex-direction: column; gap: 2px; }
+.wk-gate2-group > ul { margin: 0; padding: 0 0 0 12px; list-style: none; display: flex; flex-direction: column; gap: 2px; }

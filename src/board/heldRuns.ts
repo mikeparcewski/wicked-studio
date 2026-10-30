@@ -17,7 +17,18 @@ const NOT_LIVE: ReadonlySet<string> = new Set(['awaiting_human', 'completed', 'f
 
 /** True when App marked this run as held by a Needs-you row. */
 export function isHeldRun(session: SessionView['session']): boolean {
-  return (session as unknown as Record<string, unknown>)[HELD_KEY] === true;
+  return (session as unknown as Record<string, unknown>)[HELD_KEY] === true || isPowerPaused(session);
+}
+
+/**
+ * Power mode (api-types 0.149.0): a run paused at a checkpoint ("this grew") waits on you although it stays
+ * `executing` — the pause is not an engine gate. Only a power-mode crew sends `power`, so an older one never matches.
+ */
+export function isPowerPaused(session: SessionView['session']): boolean {
+  if (NOT_LIVE.has(session.status)) return false;
+  const p = (session as unknown as { power?: { on?: unknown; pause?: unknown } | null }).power;
+  // A pause holds only a run still in power mode (switching to phased answers it).
+  return p !== null && typeof p === 'object' && p.on !== false && p.pause !== null && typeof p.pause === 'object';
 }
 
 /** The runs with every live run in `held` marked; the same array when nothing is held. */

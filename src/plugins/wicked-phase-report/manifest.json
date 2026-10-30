@@ -25,6 +25,30 @@
     {
       "topic": "wicked.run.usage.reported",
       "why": "to add up the time and the cost"
+    },
+    {
+      "topic": "wicked.run.intake.planned",
+      "why": "to show the rigor the QE plan set at intake"
+    },
+    {
+      "topic": "wicked.run.rigor.rescored",
+      "why": "to show the rigor history: each change, what triggered it and the score"
+    },
+    {
+      "topic": "wicked.run.checkpoint.reached",
+      "why": "to show the checkpoints of a power-mode build"
+    },
+    {
+      "topic": "wicked.run.turn.*",
+      "why": "to show which orchestrator turn is running"
+    },
+    {
+      "topic": "wicked.run.handoff.stepped",
+      "why": "to show where the hand-off is: checks, review, QE and compliance"
+    },
+    {
+      "topic": "wicked.run.power.toggled",
+      "why": "to know when power mode is switched on or off"
     }
   ],
   "permissions": [

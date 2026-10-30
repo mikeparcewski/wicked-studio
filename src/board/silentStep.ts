@@ -1,3 +1,4 @@
+import { isPowerPaused } from './heldRuns.js';
 import type { CoreEvent, SessionView } from '../api/types.js';
 
 /**
@@ -36,7 +37,8 @@ export function lastActivityAt(events: readonly CoreEvent[]): number | null {
 /** How long the run's running step has been silent, or null when it is not executing, waits on a question, or spoke in
  *  the last {@link SILENT_AFTER_MS}. `liveAt`: the newest live frame's arrival time (live frames carry no `ts`). */
 export function silentStep(view: SessionView, events: readonly CoreEvent[] | null | undefined, now: number, opts: { gateOpen?: boolean; liveAt?: number | null } = {}): SilentStep | null {
-  if (view.session.status !== 'executing' || opts.gateOpen === true) return null;
+  // A power run paused at a checkpoint waits on you: its quiet is the pause, not a silent step.
+  if (view.session.status !== 'executing' || opts.gateOpen === true || isPowerPaused(view.session)) return null;
   const logged = lastActivityAt(events ?? []);
   const at = Math.max(logged ?? 0, opts.liveAt ?? 0);
   if (at === 0) return null;

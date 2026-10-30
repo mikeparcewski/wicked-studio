@@ -545,7 +545,7 @@ export function RunDelivery({ view, navigate }: Props): React.ReactElement {
         * deliver-ord frame. */}
       {/* EX-04: a post-hoc hand-over superseded the engine's lift — that story is an earlier attempt's. */}
       {lift !== null && recorded?.via !== 'post_hoc' && <DeliverLift view={lift} omitFailure={liftOmitsFailure} />}
-      {receipt !== null && <AssuranceReceipt receipt={receipt} passed={view.session.status === 'completed' && !unverified ? true : null} testId="run-delivery-assurance" />}
+      {receipt !== null && <AssuranceReceipt receipt={receipt} passed={view.session.status === 'completed' && !unverified ? true : null} testId="run-delivery-assurance" units={view.units} />}
       <DeliveryAssuranceLines recorded={recorded} testIdPrefix="run-delivery" />
       {/* crew#720: the credentials-missing state, and the final-codebase zip in every outcome. */}
       <DeliverCredentialsNotice view={view} />

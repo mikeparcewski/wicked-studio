@@ -153,8 +153,9 @@ export interface HostDoc {
   propose(edit: { base: number; section: string; text: string }, by: 'operator' | 'plugin'): Promise<AdapterResult<{ version: number | null; unchanged: boolean; by: 'operator' | 'plugin' }>>;
 }
 
-/** The section a plugin may write as itself (crew's `PLUGIN_SECTIONS`). */
-export const PLUGIN_DOC_SECTIONS: ReadonlySet<string> = new Set(['decisions']);
+/** The sections a plugin may write as itself (crew's `PLUGIN_SECTIONS`): its own lines under Decisions, Open questions
+ *  and Next. Never Goal, Approach or Constraints, and a plugin's text never steers (crew steers a person's edit only). */
+export const PLUGIN_DOC_SECTIONS: ReadonlySet<string> = new Set(['decisions', 'questions', 'next']);
 
 /** Protocol 3 (observe): the run events one instance may hear. The host subscribes only after a handshake that
  *  negotiated 3, and posts each batch as `events.batch`; the rows are already filtered to `topics`. */
@@ -162,6 +163,9 @@ export interface HostEvents {
   runId: string;
   /** The granted topic patterns, said in `host.hello` so the plugin knows what it will hear. */
   topics: readonly string[];
+  /** The part of the run this instance reports on (a power run's phase: its name, label and units), said in
+   *  `host.hello` as `observe.scope`. Absent = the whole run. The rows are the run's, unfiltered: the plugin scopes. */
+  scope?: { phase: string; label: string; ords: readonly number[] };
   subscribe(deliver: (batch: EventsBatch) => void): () => void;
 }
 
@@ -397,7 +401,8 @@ export class EditorHost {
       ? { surface, ...(tab !== undefined ? { tab } : {}), ...(surface === 'full' && this.decl.full?.modes != null ? { mode: this.o.mode ?? this.decl.full.default } : {}) }
       : {};
     const observes = this.protocol >= 3 && this.o.events !== undefined;
-    const v3 = observes ? { observe: { runId: this.o.events!.runId, topics: [...this.o.events!.topics] } } : {};
+    const sc = this.o.events?.scope;
+    const v3 = observes ? { observe: { runId: this.o.events!.runId, topics: [...this.o.events!.topics], ...(sc !== undefined ? { scope: { phase: sc.phase, label: sc.label, ords: [...sc.ords] } } : {}) } } : {};
     this.frame.contentWindow?.postMessage(event('host.hello', {
       protocol: this.protocol, ...v2, ...v3, artifact: a, size: this.o.size, grants: [...this.grants],
       theme: this.o.theme, artifactTheme: null, prefs: this.o.prefs,

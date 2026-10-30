@@ -51,6 +51,10 @@
   ul.list li span:last-child { color: var(--ink-muted); text-align: right; min-width: 0; }
   ul.list li.open span:first-child { color: var(--ink-high); font-weight: 600; }
   .gap { margin: 0 0 6px; font-size: 12px; color: var(--status-fail); }
+  .rg { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 2px 0; font-size: 12px; color: var(--ink-muted); }
+  .rg-arrow { color: var(--ink-muted); }
+  .rg-chip { display: inline-flex; align-items: center; height: 18px; padding: 0 8px; border-radius: 999px; border: 1px solid var(--border); color: var(--ink-body); font-weight: 600; font-size: 11px; }
+  .rg-chip.rg-high, .rg-chip.rg-highest { color: var(--status-warn, #d29922); border-color: color-mix(in srgb, var(--status-warn, #d29922) 55%, transparent); }
   /* The working document (spike 3) */
   #wd { border: 1px solid var(--border); border-radius: 10px; background: var(--surface-raised); padding: 10px 12px 12px; margin: 0 0 8px; }
   .wd-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
@@ -65,6 +69,8 @@
   .wd-text:hover { background: var(--surface-card); }
   .wd-text:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
   .wd-text.empty { color: var(--ink-muted); font-style: italic; }
+  .wd-gen { display: block; color: var(--ink-body); }
+  .wd-gen-note { margin: 2px 0 0; color: var(--ink-muted); font-size: 11px; }
   .wd-input { box-sizing: border-box; width: 100%; font: inherit; color: var(--ink-high); background: var(--surface-card); border: 1px solid var(--accent); border-radius: 6px; padding: 6px 8px; resize: vertical; }
   .wd-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 6px; }
   .wd-btn { font: inherit; font-size: 12px; padding: 4px 12px; border-radius: 999px; border: 1px solid var(--border); background: transparent; color: var(--ink-body); cursor: pointer; }

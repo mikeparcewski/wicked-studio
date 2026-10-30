@@ -11,9 +11,9 @@
   "version": 1,
   "studioVersion": "0.13.0",
   "counts": {
-    "files": 257,
-    "occurrences": 3512,
-    "static": 2993,
+    "files": 259,
+    "occurrences": 3567,
+    "static": 3042,
     "dynamic": 75,
     "computed": 33
   },
@@ -48,6 +48,12 @@
         "src/components/RepoDetailPage.tsx",
         "src/components/RepoGraphModal.tsx",
         "src/components/RepositoriesPanel.tsx"
+      ]
+    },
+    {
+      "testId": "activity-summary",
+      "files": [
+        "src/components/session/LiveActivity.tsx"
       ]
     },
     {
@@ -1884,6 +1890,12 @@
     },
     {
       "testId": "chat-step-check",
+      "files": [
+        "src/components/session/RunConversation.tsx"
+      ]
+    },
+    {
+      "testId": "chat-step-face",
       "files": [
         "src/components/session/RunConversation.tsx"
       ]
@@ -6284,6 +6296,24 @@
       ]
     },
     {
+      "testId": "launch-wizard-power",
+      "files": [
+        "src/components/launch/LaunchWizard.tsx"
+      ]
+    },
+    {
+      "testId": "launch-wizard-power-gates",
+      "files": [
+        "src/components/launch/LaunchWizard.tsx"
+      ]
+    },
+    {
+      "testId": "launch-wizard-power-toggle",
+      "files": [
+        "src/components/launch/LaunchWizard.tsx"
+      ]
+    },
+    {
       "testId": "launch-wizard-progress",
       "files": [
         "src/components/launch/LaunchWizard.tsx"
@@ -6345,6 +6375,12 @@
     },
     {
       "testId": "launch-wizard-review-lead",
+      "files": [
+        "src/components/launch/LaunchWizard.tsx"
+      ]
+    },
+    {
+      "testId": "launch-wizard-review-power",
       "files": [
         "src/components/launch/LaunchWizard.tsx"
       ]
@@ -6587,6 +6623,30 @@
       "testId": "lineage-retry-of",
       "files": [
         "src/components/ProvenanceLine.tsx"
+      ]
+    },
+    {
+      "testId": "live-activity",
+      "files": [
+        "src/components/session/LiveActivity.tsx"
+      ]
+    },
+    {
+      "testId": "live-activity-earlier",
+      "files": [
+        "src/components/session/LiveActivity.tsx"
+      ]
+    },
+    {
+      "testId": "live-activity-row",
+      "files": [
+        "src/components/session/LiveActivity.tsx"
+      ]
+    },
+    {
+      "testId": "live-activity-said",
+      "files": [
+        "src/components/session/LiveActivity.tsx"
       ]
     },
     {
@@ -8032,7 +8092,8 @@
     {
       "testId": "nc-checked",
       "files": [
-        "src/components/nerve/NerveCenterPage.tsx"
+        "src/components/nerve/NerveCenterPage.tsx",
+        "src/components/nerve/NerveOverview.tsx"
       ]
     },
     {
@@ -9681,6 +9742,168 @@
       "testId": "plugins-page",
       "files": [
         "src/components/editors/EditorPluginsSettings.tsx"
+      ]
+    },
+    {
+      "testId": "power-act",
+      "files": [
+        "src/components/session/PowerMode.tsx"
+      ]
+    },
+    {
+      "testId": "power-acts",
+      "files": [
+        "src/components/session/PowerMode.tsx"
+      ]
+    },
+    {
+      "testId": "power-checkpoint",
+      "files": [
+        "src/components/session/PowerMode.tsx"
+      ]
+    },
+    {
+      "testId": "power-handoff",
+      "files": [
+        "src/components/session/PowerMode.tsx"
+      ]
+    },
+    {
+      "testId": "power-handoff-block",
+      "files": [
+        "src/components/session/PowerMode.tsx"
+      ]
+    },
+    {
+      "testId": "power-handoff-divider",
+      "files": [
+        "src/components/session/PowerMode.tsx"
+      ]
+    },
+    {
+      "testId": "power-handoff-result",
+      "files": [
+        "src/components/session/PowerMode.tsx"
+      ]
+    },
+    {
+      "testId": "power-handoff-row",
+      "files": [
+        "src/components/session/PowerMode.tsx"
+      ]
+    },
+    {
+      "testId": "power-intake",
+      "files": [
+        "src/components/session/PowerMode.tsx"
+      ]
+    },
+    {
+      "testId": "power-intake-line",
+      "files": [
+        "src/components/session/PowerMode.tsx"
+      ]
+    },
+    {
+      "testId": "power-intake-more",
+      "files": [
+        "src/components/session/PowerMode.tsx"
+      ]
+    },
+    {
+      "testId": "power-mode-default-toggle",
+      "files": [
+        "src/components/SystemSettings.tsx"
+      ]
+    },
+    {
+      "testId": "power-pause",
+      "files": [
+        "src/components/session/PowerMode.tsx"
+      ]
+    },
+    {
+      "testId": "power-pause-choice",
+      "files": [
+        "src/components/session/PowerMode.tsx"
+      ]
+    },
+    {
+      "testId": "power-pause-error",
+      "files": [
+        "src/components/session/PowerMode.tsx"
+      ]
+    },
+    {
+      "testId": "power-pause-eyebrow",
+      "files": [
+        "src/components/session/PowerMode.tsx"
+      ]
+    },
+    {
+      "testId": "power-pause-more",
+      "files": [
+        "src/components/session/PowerMode.tsx"
+      ]
+    },
+    {
+      "testId": "power-pause-question",
+      "files": [
+        "src/components/session/PowerMode.tsx"
+      ]
+    },
+    {
+      "testId": "power-pause-reasons",
+      "files": [
+        "src/components/session/PowerMode.tsx"
+      ]
+    },
+    {
+      "testId": "power-rigor-mark",
+      "files": [
+        "src/components/session/PowerMode.tsx"
+      ]
+    },
+    {
+      "testId": "power-switch",
+      "files": [
+        "src/components/session/PowerMode.tsx"
+      ]
+    },
+    {
+      "testId": "power-switch-confirm",
+      "files": [
+        "src/components/session/PowerMode.tsx"
+      ]
+    },
+    {
+      "testId": "power-switch-error",
+      "files": [
+        "src/components/session/PowerMode.tsx"
+      ]
+    },
+    {
+      "testId": "power-switch-keep",
+      "files": [
+        "src/components/session/PowerMode.tsx"
+      ]
+    },
+    {
+      "testId": "power-switch-yes",
+      "files": [
+        "src/components/session/PowerMode.tsx"
+      ]
+    },
+    {
+      "testId": "power-toggle-mark",
+      "files": [
+        "src/components/session/PowerMode.tsx"
+      ]
+    },
+    {
+      "testId": "power-turn",
+      "files": [
+        "src/components/session/PowerMode.tsx"
       ]
     },
     {
@@ -11670,6 +11893,54 @@
       ]
     },
     {
+      "testId": "rigor-chip",
+      "files": [
+        "src/components/session/PowerMode.tsx"
+      ]
+    },
+    {
+      "testId": "rigor-history",
+      "files": [
+        "src/components/session/PowerMode.tsx"
+      ]
+    },
+    {
+      "testId": "rigor-history-row",
+      "files": [
+        "src/components/session/PowerMode.tsx"
+      ]
+    },
+    {
+      "testId": "rigor-raise",
+      "files": [
+        "src/components/session/PowerMode.tsx"
+      ]
+    },
+    {
+      "testId": "rigor-raise-done",
+      "files": [
+        "src/components/session/PowerMode.tsx"
+      ]
+    },
+    {
+      "testId": "rigor-raise-error",
+      "files": [
+        "src/components/session/PowerMode.tsx"
+      ]
+    },
+    {
+      "testId": "rigor-raise-menu",
+      "files": [
+        "src/components/session/PowerMode.tsx"
+      ]
+    },
+    {
+      "testId": "rigor-raise-to",
+      "files": [
+        "src/components/session/PowerMode.tsx"
+      ]
+    },
+    {
       "testId": "role-badge",
       "files": [
         "src/components/DecisionsLedger.tsx"
@@ -12135,6 +12406,12 @@
       ]
     },
     {
+      "testId": "run-plugin-phase",
+      "files": [
+        "src/components/session/RunThreadPlugin.tsx"
+      ]
+    },
+    {
       "testId": "run-plugin-pin",
       "files": [
         "src/components/session/RunThreadPlugin.tsx"
@@ -12202,6 +12479,12 @@
     },
     {
       "testId": "run-plugins",
+      "files": [
+        "src/components/session/RunThreadPlugin.tsx"
+      ]
+    },
+    {
+      "testId": "run-plugins-phase",
       "files": [
         "src/components/session/RunThreadPlugin.tsx"
       ]
@@ -13112,6 +13395,18 @@
     },
     {
       "testId": "session-gate-failing-base-words",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
+      "testId": "session-gate-failing-group",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
+      "testId": "session-gate-failing-less",
       "files": [
         "src/components/session/GateRow.tsx"
       ]
@@ -18630,6 +18925,7 @@
         "src/components/report/ReportPage.tsx",
         "src/components/session/AssuranceReceipt.tsx",
         "src/components/session/CodebaseDownload.tsx",
+        "src/components/session/PowerMode.tsx",
         "src/components/session/RunConversation.tsx",
         "src/components/steer/EvaluateSurface.tsx",
         "src/components/steer/SeStat.tsx",

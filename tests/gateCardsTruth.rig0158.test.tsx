@@ -200,7 +200,7 @@ describe('1. a floor the operator overrode is never "passed"', () => {
   it('reads the overridden floor\'s failed checks off its own record, and whether the base failed too', () => {
     const r = deliveryReceiptOf(deliverView(), DELIVER_EVENTS);
     const o = overriddenFloorsOf(r, DELIVER_EVENTS)!;
-    expect(o).toEqual({ checks: ['test'], onBase: true });
+    expect(o).toMatchObject({ checks: ['test'], onBase: true });
     expect(overriddenLine(o)).toBe('Overridden by you: test failed on this change and its base.');
     // a regression the operator overrode is the change's own: no "and its base"
     const reg = [DELIVER_EVENTS[0]!, floorEvent(2, 3, testCheck({ classification: 'regression', regressions: ['x'], base: { run: { exitCode: 0 } } })) as unknown as CoreEvent];
@@ -228,11 +228,12 @@ describe('1. a floor the operator overrode is never "passed"', () => {
   it('the final message says the override, never "The checks passed"', () => {
     const v = deliverView('completed', { delivery: 'delivered', deliverUrl: 'https://github.com/o/r/pull/7' });
     const w = finalWords(v, { done: 3, total: 3 }, { passed: true, tests: null, nothing: false, reviewers: ['Codex'], overridden: 'Overridden by you: test failed on this change and its base.' });
-    expect(w.line).toBe('Overridden by you: test failed on this change and its base. Reviewed and approved by Codex. Pull request #7 is open.');
+    expect(w.lead).toBe('Delivered as pull request #7');
+    expect(w.line).toBe('Overridden by you: test failed on this change and its base. Reviewed and approved by Codex.');
     expect(w.line).not.toContain('The checks passed');
     // an override never hides checks that did not pass
     const failed = finalWords(v, { done: 3, total: 3 }, { passed: false, tests: null, nothing: false, reviewers: [], overridden: 'Overridden by you: test failed on this change and its base.' });
-    expect(failed.line).toBe('Overridden by you: test failed on this change and its base. The checks did not pass. Pull request #7 is open.');
+    expect(failed.line).toBe('Overridden by you: test failed on this change and its base. The checks did not pass.');
   });
 });
 

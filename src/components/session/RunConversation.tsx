@@ -1,19 +1,19 @@
 import { Fragment, useEffect, useMemo, useState } from 'react';
 import { api } from '../../api/client.js';
-import { RunPluginJumpRows, RunThreadPlugins, WorkingDocSteerRows } from './RunThreadPlugin.js';
+import { RunPhasePlugins, RunPluginJumpRows, RunThreadPlugins, WorkingDocSteerRows } from './RunThreadPlugin.js';
 import type { CoreEvent, SessionView as RunView } from '../../api/types.js';
 import { IDLE_GATE_ACTION, useGateActionStore } from '../../board/gateActions.js';
 import { finishedDeliveryArm, proposalKindOf, statusSentence } from '../../board/proposalCard.js';
 import type { Responder } from '../../board/responder.js';
 import { builderResponder, gateResponder, isReviewUnit, seatResponder } from '../../board/responder.js';
-import { approvingReviewers, conciseOutput, decisionMessages, finalWords, planSteps, stepMessages, testCountOf, type DecisionMessage, type StepMessage } from '../../board/runConversation.js';
+import { approvingReviewers, conciseOutput, evaluatorFace, decisionMessages, finalWords, planSteps, stepMessages, testCountOf, type DecisionMessage, type StepMessage } from '../../board/runConversation.js';
 import { isCliSeat, seatLabel } from '../../board/seatNames.js';
 import { askedAt, endedAt, stepTimes, type MessageTime } from '../../board/messageTimes.js';
 import { jobTitle } from '../../board/deskWords.js';
 import { ORPHANED_LINE, orphanedOf, runState } from '../../board/sessionModel.js';
 import { applyCheckState } from '../../board/checkState.js';
 import { deliveryAssuranceOf, deliveryReceiptOf } from '../../board/assuranceModel.js';
-import { overriddenFloorsOf, overriddenLine } from '../../board/failingChecks.js';
+import { approvedLine, overriddenFloorsOf } from '../../board/failingChecks.js';
 import { wordOf } from '../../board/planDraft.js';
 import { undoDecision } from '../../board/undoQueue.js';
 import type { Navigate } from '../../hooks/useRoute.js';
@@ -47,6 +47,10 @@ import { RunRecordLines, RunStory } from './RunRecord.js';
 import { StrandedCard } from './StrandedCard.js';
 import { RunQuestions } from './ThreadQuestions.js';
 import { TurnWho } from './TurnWho.js';
+import { ActivitySummaryLine } from './LiveActivity.js';
+import { PowerPauseCard, PowerThread } from './PowerMode.js';
+import { usePower } from '../../hooks/usePower.js';
+import { powerPhases, powerTimeline } from '../../board/powerMode.js';
 
 /**
  * THE RUN AS A CONVERSATION (DES-CHAT-NATIVE-RUN; operator 2026-10-17: "Is that experience really a chat
@@ -161,8 +165,11 @@ function YouBubble({ text, testId }: { text: string; testId: string }): React.Re
   );
 }
 
-function StepMessageView({ runId, step, who, checkWord, onOpen, at }: {
+function StepMessageView({ runId, step, who, checkWord, onOpen, at, evaluator = null }: {
   runId: string; step: StepMessage; who: Responder; checkWord: string | null; onOpen: () => void; at: MessageTime | null;
+  /** An evaluator's step (review, security, QE): its face is one sentence and one verdict line ("QE: 2 of 2 items
+   *  pass"), the report behind Show all / What it did. The label the verdict line leads with. */
+  evaluator?: string | null;
 }): React.ReactElement {
   const raw = useStepOutput(runId, step.key, step.version);
   // studio#479: paths under the home directory read `~/…` in the default layer (the transcript's rule).
@@ -170,7 +177,8 @@ function StepMessageView({ runId, step, who, checkWord, onOpen, at }: {
   const read = useMemo<OutputRead>(() => (raw.state === 'text' ? { state: 'text', text: showText(raw.text) } : raw.state === 'none' ? { state: 'none', why: showText(raw.why) } : raw), [raw, showText]);
   const [all, setAll] = useState(false);
   const concise = useMemo(() => (read.state === 'text' ? conciseOutput(read.text) : null), [read]);
-  const verdict = concise?.verdict ?? null;
+  const face = useMemo(() => (evaluator !== null && read.state === 'text' ? evaluatorFace(read.text, evaluator) : null), [evaluator, read]);
+  const verdict = face === null ? concise?.verdict ?? null : null;
   return (
     <AssistantMessage who={who} runId={runId} suffix={step.label} at={at} testId="chat-step" extra={{ 'data-ord': String(step.ord), 'data-step': step.key, 'data-state': step.state }}>
       {verdict !== null && (
@@ -180,16 +188,23 @@ function StepMessageView({ runId, step, who, checkWord, onOpen, at }: {
       )}
       {read.state === 'loading' && <p className="wk-chat-quiet" aria-busy="true">Reading what this step did…</p>}
       {read.state === 'none' && <p data-testid="chat-step-none" className="wk-chat-quiet">{step.state === 'rejected' ? 'This step was turned down' : 'Finished'} — {read.why}.</p>}
-      {read.state === 'text' && concise !== null && (
+      {face !== null && !all && (
+        <>
+          <p data-testid="chat-step-verdict" data-verdict={face.tone ?? ''} className={`wk-chat-verdict wk-chat-verdict--${face.tone ?? 'pass'}`}>{face.verdictLine}</p>
+          {face.sentence !== null && <div data-testid="chat-step-face" className="wk-chat-md"><Markdown>{face.sentence}</Markdown></div>}
+        </>
+      )}
+      {read.state === 'text' && concise !== null && (face === null || all) && (
         <div className="wk-chat-md"><Markdown>{all ? read.text : concise.text}</Markdown></div>
       )}
       <p className="wk-chat-actions">
-        {concise?.more === true && (
+        {(face !== null || concise?.more === true) && (
           <button type="button" data-testid="chat-step-more" onClick={() => setAll((a) => !a)} className="wk-chat-link">{all ? 'Show less' : 'Show all'}</button>
         )}
         {checkWord !== null && <span data-testid="chat-step-check" className="wk-chat-chip wk-chat-chip--quiet">{checkWord}</span>}
         <button type="button" data-testid="chat-step-open" onClick={onOpen} className="wk-chat-link">What it did</button>
       </p>
+      <ActivitySummaryLine runId={runId} ord={step.ord} />
     </AssistantMessage>
   );
 }
@@ -254,7 +269,31 @@ export function RunBlock({ view, badge, sessionId, navigate, solo = null }: {
     setEditPlan((v) => !v);
   };
 
-  const steps = useMemo(() => stepMessages(view, runEvents), [view, runEvents]);
+  // Power mode (DES-POWER-MODE): the intake card, the orchestrator's turns, its activity, checkpoints and hand-off.
+  const power = usePower(view);
+  const powerItems = useMemo(() => (power !== null ? powerTimeline(runEvents, power) : []), [power, runEvents]);
+  const intakeOrd = useMemo(() => {
+    for (const e of runEvents ?? NO_EVENTS) { const ev = e as CoreEvent & { ord?: unknown }; if (ev.type === 'powerIntakePlanned' && typeof ev.ord === 'number') return ev.ord; }
+    return null;
+  }, [runEvents]);
+  const powerRun = power !== null && powerItems.length > 0;
+  // A power BUILD (switched on, or an orchestrator already took turns): its intake card stands in for the plan's
+  // message. A phased run with an intake plan keeps its plan's message.
+  const powerBuild = powerRun && power !== null && (power.on || powerItems.some((i) => i.kind === 'turn'));
+  // In a power run the intake card says what intake did, and the orchestrator's turns say what the build did (its one
+  // unit's whole output is not a message too); with no turn words yet, the build unit's message stays.
+  const hiddenOrds = useMemo(() => {
+    const out = new Set<number>();
+    if (!powerRun || power === null) return out;
+    if (intakeOrd !== null) out.add(intakeOrd);
+    if (power.orchestrator.ord !== null && powerItems.some((i) => i.kind === 'turn')) out.add(power.orchestrator.ord);
+    return out;
+  }, [powerRun, power, intakeOrd, powerItems]);
+  const steps = useMemo(() => stepMessages(view, runEvents).filter((s) => !hiddenOrds.has(s.ord)), [view, runEvents, hiddenOrds]);
+  // A power build's phases, each with its own phase report (operator 2026-10-30).
+  const phases = useMemo(() => (powerBuild && power !== null ? powerPhases(view.units, power, runEvents, ['completed', 'cancelled', 'failed'].includes(view.session.status)) : []), [powerBuild, power, view.units, runEvents, view.session.status]);
+  const phaseOf = (key: string): (typeof phases)[number] | null => phases.find((ph) => ph.key === key) ?? null;
+  const stepPhase = (ord: number): (typeof phases)[number] | null => phases.find((ph) => (ph.key === 'review' || ph.key === 'security' || ph.key === 'qe') && ph.ords.includes(ord)) ?? null;
   const reviewVerdicts = useReviewVerdicts(id, steps, (ord) => { const u = view.units.find((x) => x.ord === ord); return u !== undefined && isReviewUnit(u); });
   const plan = useMemo(() => planSteps(view, chain), [view, chain]);
   const decisions = useMemo(() => decisionMessages(runEvents ?? NO_EVENTS), [runEvents]);
@@ -285,7 +324,7 @@ export function RunBlock({ view, badge, sessionId, navigate, solo = null }: {
   const finalOverridden = useMemo(() => {
     if (!isTerminal) return null;
     const o = overriddenFloorsOf(deliveryReceiptOf(view, runEvents ?? null), runEvents ?? null, view);
-    return o === null ? null : overriddenLine(o);
+    return o === null ? null : approvedLine(o);
   }, [isTerminal, view, runEvents]);
   // J4: what assured the tree that shipped — crew's record, or this browser's post-hoc hand-over answer.
   const postHoc = usePostHocDeliverStore((st) => st.byRun[id]);
@@ -322,6 +361,16 @@ export function RunBlock({ view, badge, sessionId, navigate, solo = null }: {
     return step?.state === 'checked' ? 'Checked' : null;
   };
   const openSteps = (): void => openSheet({ kind: 'session', sessionId: `run:${id}` }, 'steps');
+  // An evaluator's step (review, security, QE) speaks as its verdict and one sentence: the label it leads with.
+  const evaluatorLabel = (s: StepMessage): string | null => {
+    const u = view.units.find((x) => x.ord === s.ord);
+    const base = s.key.replace(/#\d+$/, '');
+    if (u === undefined) return null;
+    if (/^(verify|qe|qe_acceptance)$/.test(base) || power?.handoff?.steps.some((h) => h.step === 'qe' && h.ord === s.ord) === true) return 'QE';
+    if (base === 'security_review') return 'Security check';
+    if (isReviewUnit(u) || (u as { role?: unknown }).role === 'evaluator') return s.label;
+    return null;
+  };
   // Audit row 26: a session's only run, titled as the page is, does not repeat the header's title.
   const soloHead = solo !== null && solo === jobTitle(view.session);
 
@@ -331,7 +380,7 @@ export function RunBlock({ view, badge, sessionId, navigate, solo = null }: {
       {!soloHead && <p data-testid="chat-run-title" className="wk-chat-run-title wk-session-run-title">{jobTitle(view.session)}{badge > 0 && <span className="wk-chat-chip wk-chat-chip--attn"> Needs you</span>}</p>}
 
       {/* 1. The plan it proposed. */}
-      {(plan.length > 0 || planOpen) && (
+      {((plan.length > 0 && !powerBuild) || planOpen) && (
         <AssistantMessage who={plannerWho} runId={id} at={planAt} testId="chat-plan" extra={{ 'data-open': planOpen ? 'true' : 'false' }}>
           {/* While the plan waits on you, the card IS the message: its one sentence of steps, why, and the buttons. */}
           {(!planOpen || planDocked) && plan.length > 0 && <p data-testid="chat-plan-steps" className="wk-chat-p">I split this into {plan.length} {plan.length === 1 ? 'step' : 'steps'}: {listWords(plan)}.</p>}
@@ -349,27 +398,52 @@ export function RunBlock({ view, badge, sessionId, navigate, solo = null }: {
         </Docked>
       )}
       {decisions.filter((d) => d.ord === planOrd).map((d) => <DecisionLine key={`d${d.ord}-${d.at}`} d={d} />)}
-      {/* The run-thread plugins' blocks, at the run's first unit (unless pinned to the top). */}
-      <RunThreadPlugins runId={id} placement="thread" />
+      {/* Power mode: the intake QE plan opens the run's turns; the build's turns, activity and checkpoints follow the
+          run-thread plugins' blocks (the Phase report sits under the orchestrator's first words in the mockup). */}
+      {powerRun && power !== null && <PowerThread view={view} power={power} items={powerItems} part="intake" />}
+      {/* Operator 2026-10-30: a power build has one phase report per phase, each the run-thread plugin's own sandboxed
+          instance (protocol 3, events.batch) scoped to that phase, at the end of the phase's messages; a phased run
+          keeps its one block at the first unit. */}
+      {phaseOf('intake') !== null && <RunPhasePlugins runId={id} phase={phaseOf('intake')!} />}
+      {!powerBuild && <RunThreadPlugins runId={id} placement="thread" />}
+      {powerRun && power !== null && <PowerThread view={view} power={power} items={powerItems} part={powerBuild ? 'build' : 'rest'} />}
+      {phaseOf('build') !== null && <RunPhasePlugins runId={id} phase={phaseOf('build')!} />}
+      {powerBuild && power !== null && <PowerThread view={view} power={power} items={powerItems} part="handoff" />}
+      {phaseOf('checks') !== null && powerItems.some((i) => i.kind === 'handoff') && <RunPhasePlugins runId={id} phase={phaseOf('checks')!} />}
       {/* The plan editor, only when you asked to edit (it is the plan's own artifact). */}
 
 
       {/* 2. One message per finished step, then your answer to a question it raised. */}
-      {steps.map((s) => (
+      {steps.map((s, i) => (
         <Fragment key={s.ord}>
           <StepTurn runId={id} step={s} who={s.cli !== null ? seatResponder(s.cli, roster) : STUDIO} checkWord={checkOf(s)} onOpen={openSteps}
-            answers={decisions.filter((d) => d.ord === s.ord && d.ord !== planOrd)} at={stepAt(s.ord)} />
-          <RunPluginJumpRows runId={id} ords={[s.ord]} />
+            answers={decisions.filter((d) => d.ord === s.ord && d.ord !== planOrd)} at={stepAt(s.ord)} evaluator={evaluatorLabel(s)} />
+          {/* The last step's row would sit beside the row for later steps: the one row below says both. */}
+          {!powerBuild && i < steps.length - 1 && <RunPluginJumpRows runId={id} ords={[s.ord]} />}
+          {/* A hand-off step's phase report, after its message. */}
+          {stepPhase(s.ord) !== null && <RunPhasePlugins runId={id} phase={stepPhase(s.ord)!} />}
           <WorkingDocSteerRows runId={id} ords={[s.ord]} />
         </Fragment>
       ))}
-      {/* An update about a step that has no message yet (the one running now): its jump row after the last step. */}
-      {/* With no step message yet the block itself is right above: no row would point anywhere. */}
-      {steps.length > 0 && <RunPluginJumpRows runId={id} except={steps.map((s) => s.ord)} />}
+      {/* An update about the last step with a message, or a step that has none yet (the one running now, deliver): ONE
+          jump row after the last step, at the newest of them. With no step message yet the block itself is right
+          above: no row would point anywhere. */}
+      {!powerBuild && steps.length > 0 && <RunPluginJumpRows runId={id} except={steps.slice(0, -1).map((s) => s.ord)} />}
+      {/* A hand-off step running now has no message yet: its report sits after the last message. */}
+      {phases.filter((ph) => (ph.key === 'review' || ph.key === 'security' || ph.key === 'qe') && !steps.some((s) => ph.ords.includes(s.ord)) && ph.current)
+        .map((ph) => <RunPhasePlugins key={ph.key} runId={id} phase={ph} />)}
       {/* Working-document steering notes not picked up yet (or by a step with no message): after the last step. */}
       <WorkingDocSteerRows runId={id} except={steps.map((s) => s.ord)} />
 
       {/* 3. A question it is asking now (not the plan, not the hand-over): in the flow, answered here. */}
+      {/* Power mode: the orchestrator paused at a checkpoint because the change grew ("this grew"). Not an engine gate:
+          the run stays executing and the answer is POST /runs/:id/power/pause. */}
+      {power?.pause != null && !isTerminal && gate === undefined && (
+        <Docked dockKey={id} open marker={<DecisionMarker dockKey={id} who={power.orchestrator.cli !== null ? seatResponder(power.orchestrator.cli, roster).name : null} since={power.pause.at > 0 ? power.pause.at : null} />}
+          dock={<PowerPauseCard view={view} power={power} />}>
+          <PowerPauseCard view={view} power={power} />
+        </Docked>
+      )}
       {gate !== undefined && effectiveKind === null && finished === null && (
         <Docked dockKey={id} open marker={<DecisionMarker dockKey={id} who={builderResponder(view, gate.ord, roster)?.name ?? null} since={gate.receivedAt} />}
           dock={<GateRow view={view} gate={gate} {...(navigate !== undefined ? { navigate } : {})} />}>
@@ -417,11 +491,15 @@ export function RunBlock({ view, badge, sessionId, navigate, solo = null }: {
           <RecoveryRow view={view} {...(navigate === undefined ? {} : { navigate })} />
         </AssistantMessage>
       )}
+      {/* Deliver's phase report, after the hand-over or the final message. */}
+      {phaseOf('deliver') !== null && (deliverOpen || words !== null || phaseOf('deliver')!.current) && <RunPhasePlugins runId={id} phase={phaseOf('deliver')!} />}
 
       {/* The run's whole record, one fold under its messages (the details panel holds the same, grouped). */}
       {/* A Watchtower "Jump in" (`?jump=`) lands on this run's record: the fold opens on that line. */}
       <details data-testid="chat-run-details" className="wk-chat-details" {...(jump !== null ? { open: true } : {})}>
-        <summary className="wk-chat-details-summary">Details</summary>
+        {/* In a power build the fold's last neighbour is a marker (a checkpoint, a rigor change, a decision), so a bare
+            "Details" read as that marker's: it says whose record it opens. */}
+        <summary className="wk-chat-details-summary">{powerBuild ? 'The job’s record: steps, checks and helpers' : 'Details'}</summary>
         <p data-testid="session-status-sentence" role="status" className="wk-session-status-sentence">
           {statusSentence(view, chain, gate, action)}
           {view.session.archived_at != null && <span data-testid="session-run-archived" className="wk-session-grey"> · Archived</span>}
@@ -437,13 +515,13 @@ export function RunBlock({ view, badge, sessionId, navigate, solo = null }: {
   );
 }
 
-function StepTurn({ runId, step, who, checkWord, onOpen, answers, at }: {
+function StepTurn({ runId, step, who, checkWord, onOpen, answers, at, evaluator = null }: {
   runId: string; step: StepMessage; who: Responder; checkWord: string | null; onOpen: () => void; answers: readonly DecisionMessage[];
-  at: MessageTime | null;
+  at: MessageTime | null; evaluator?: string | null;
 }): React.ReactElement {
   return (
     <>
-      <StepMessageView runId={runId} step={step} who={who} checkWord={checkWord} onOpen={onOpen} at={at} />
+      <StepMessageView runId={runId} step={step} who={who} checkWord={checkWord} onOpen={onOpen} at={at} evaluator={evaluator} />
       {answers.map((d, i) => <DecisionLine key={i} d={d} />)}
     </>
   );

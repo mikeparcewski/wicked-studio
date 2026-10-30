@@ -14,6 +14,7 @@ import { NotificationSettings } from './NotificationSettings.js';
 import { Segmented } from './ui/Segmented.js';
 import { scrollBehavior } from './ui/motion.js';
 import { QE_SETTING_ANCHOR } from '../board/qeRefusal.js';
+import { useCapabilities } from '../store/capabilities.js';
 
 /**
  * Client-side mirror of the daemon's worker_config_root rule (empty or absolute).
@@ -24,7 +25,11 @@ function isAbsolutePathLike(p: string): boolean {
 }
 
 /** The daemon's settings (`deliverIdentityLogin`, `councilSize` and `qeAcceptance` are all typed by api-types 0.120.0). */
-type LocalSettings = Settings;
+type LocalSettings = Settings & {
+  /** "Power mode for new jobs" (api-types 0.149.0, spelled here until studio's pin carries it): the default of a launch's
+   *  `power`. ABSENT = on (the shipped default). */
+  powerModeDefault?: boolean;
+};
 
 /**
  * Client-side mirror of the daemon's deliver-identity rule (crew#549): a GitHub login — letters,
@@ -59,6 +64,8 @@ interface SystemSettingsProps {
 
 export function SystemSettings({ navigate = (p) => { history.pushState(null, '', p); window.dispatchEvent(new PopStateEvent('popstate')); } }: SystemSettingsProps): React.ReactElement {
   const [settings, setSettings] = useState<LocalSettings | null>(null);
+  const powerCap = useCapabilities((s) => s.powerMode);
+  useEffect(() => { void useCapabilities.getState().load(); }, []);
   const [dirty, setDirty] = useState<Partial<LocalSettings>>({});
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -239,6 +246,15 @@ export function SystemSettings({ navigate = (p) => { history.pushState(null, '',
             ? 'Off: jobs that change the application deliver without waiting for a QE check. Each job, its gates and its delivery say it was skipped. A job already started keeps the setting it started with.'
             : 'Jobs that change the application wait for a QE acceptance pass before they deliver.'} />
         </div>
+        {/* DES-POWER-MODE §2: the default of the New job switch; each job's header has the same switch. */}
+        {powerCap && (
+          <Switch label={`Power mode for new jobs: ${merged.powerModeDefault !== false ? 'On' : 'Off'}`} data-testid="power-mode-default-toggle" checked={merged.powerModeDefault !== false}
+            onChange={(checked) => patch('powerModeDefault', checked)}
+            disabled={settings === null ? 'Reading this setting…' : null}
+            hint={merged.powerModeDefault !== false
+              ? 'One orchestrator builds the change with you in its conversation, re-checked at every commit; rigor applies once, at hand-off. Each job\u2019s header and the New job form have the same switch.'
+              : 'Off: new jobs run phased, step by step, with a gate after each phase. Each job\u2019s header and the New job form can still turn it on.'} />
+        )}
         <Switch label="Open a PR when a build run finishes" data-testid="deliver-pr-toggle" checked={deliverPr}
           onChange={(checked) => updateComposerPrefs({ deliverPr: checked })}
           hint="Push the finished branch and open a pull request when a workflow and repository are selected; you decide when to merge." />

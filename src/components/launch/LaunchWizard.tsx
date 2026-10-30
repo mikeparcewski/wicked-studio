@@ -118,6 +118,15 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
   const deliverGateCap = useCapabilities((s) => s.deliverGate);
   const reducedCap = useCapabilities((s) => s.reducedAssurance);
   const leadCap = useCapabilities((s) => s.launchPrimary);
+  const powerCap = useCapabilities((s) => s.powerMode);
+  // Power mode (DES-POWER-MODE §2): the switch is preset from Settings ("Power mode for new jobs", absent = on).
+  const [powerDefault, setPowerDefault] = useState(true);
+  useEffect(() => {
+    if (!powerCap) return undefined;
+    let live = true;
+    api.getSettings().then((r) => { if (live) setPowerDefault((r.settings as { powerModeDefault?: unknown }).powerModeDefault !== false); }, () => {});
+    return () => { live = false; };
+  }, [powerCap]);
   const chatIdOnLaunch = useCapabilities((s) => s.chatIdOnLaunch);
   const [repos, setRepos] = useState<RepoEntry[] | null>(getCachedRepos());
   const [qeCap, setQeCap] = useState(false);
@@ -182,6 +191,9 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
   // Only a seat that can take work may lead: crew refuses a signed-out or benched lead by name.
   const leadable = seats.filter((s) => s.signed_in !== false && seatCanCarry(s));
   const offerLead = leadCap && leadable.length > 1;
+  // Power mode is a build posture: offered for a workflow launch on a daemon that runs it (not Draft epics, not a demo).
+  const offerPower = powerCap && !drafting && !demoing;
+  const powerOn = draft.power ?? powerDefault;
   const lead = launchLead(offerLead ? draft.lead : null, leadable, leadCap);
   const beforeOrd = COMPOSER_DEFAULT_GATE_POSTURE.beforeOrd;
   const autoDeliver = draft.confirmMode === 'none';
@@ -367,6 +379,7 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
         skipQeReason: offerQe && !qeOff && draft.skipQe ? draft.skipQeReason : null,
         chatId,
         primary: lead,
+        power: offerPower ? powerOn : null,
       });
       if (offerQe && force && (qeOff || !draft.skipQe)) body.forceQeAcceptance = true;
       forcedRef.current = body.forceQeAcceptance === true;
@@ -574,8 +587,18 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
                   <span className="wk-field-note">Who leads the job and does every step not handed to another helper. The other helpers watch and check its work.</span>
                 </label>
               )}
+              {offerPower && (
+                <div className="wk-launch-wizard-field pm-launch-power" data-testid="launch-wizard-power">
+                  <Switch label={`Power mode: ${powerOn ? 'On' : 'Off'}`} checked={powerOn} onChange={(v) => update({ power: v })} data-testid="launch-wizard-power-toggle" />
+                  <span className="wk-field-note">{powerOn
+                    ? 'One orchestrator builds it with you in this conversation, re-checked at every commit. Rigor is sized at intake and applied once, at hand-off.'
+                    : 'Phased: one helper per step, with a gate after each step the plan declares.'}{draft.power === null ? ' Preset from Settings.' : ''}</span>
+                </div>
+              )}
               {demoing ? (
                 <p className="wk-field-note" data-testid="launch-wizard-demo-gates">It stops for your yes twice: after the plan (the script and chapters, before anything records) and after the review.</p>
+              ) : offerPower && powerOn ? (
+                <p className="wk-field-note" data-testid="launch-wizard-power-gates">Power mode asks you once, at hand-off, plus anything policy or the QE plan requires.</p>
               ) : (
               <label className="wk-launch-wizard-field">
                 <span className="wk-field-label">Ask me</span>
@@ -741,7 +764,8 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
               <div><dt>Where</dt><dd>{repoName ?? 'No repository'}{projectName !== null ? ` · in ${projectName}` : ''}</dd></div>
               {seats.length > 0 && <div><dt>Helpers</dt><dd>{seats.map(seatLabel).join(', ')}</dd></div>}
               {offerLead && <div data-testid="launch-wizard-review-lead"><dt>Lead agent</dt><dd>{lead === null ? 'Random (picked when it starts)' : seatLabel(leadable.find((s) => s.key === lead)!)}</dd></div>}
-              <div><dt>Ask me</dt><dd>{gatePostureWord(draft.confirmMode, beforeOrd, deliver === 'pr' && deliverGateCap === true)}</dd></div>
+              {offerPower && <div data-testid="launch-wizard-review-power"><dt>Power mode</dt><dd>{powerOn ? 'On: one orchestrator, rigor at hand-off' : 'Off: phased'}</dd></div>}
+              <div><dt>Ask me</dt><dd>{offerPower && powerOn ? 'At hand-off' : gatePostureWord(draft.confirmMode, beforeOrd, deliver === 'pr' && deliverGateCap === true)}</dd></div>
               {deliverVisible && <div><dt>Delivery</dt><dd>{draft.deliverOn ? 'A pull request when done' : 'Stays on its branch'}</dd></div>}
               {offerReduced && draft.reduced && <div><dt>Checks</dt><dd>Reduced assurance (one helper builds and reviews)</dd></div>}
               {offerQe && !qeOff && draft.skipQe && <div><dt>QE acceptance</dt><dd>Skipped: {draft.skipQeReason.trim()}</dd></div>}

@@ -50,6 +50,15 @@ export const RUN_TOPICS: Readonly<Record<string, readonly string[]>> = {
   'wicked.run.checks.evaluated': ['repoChecksEvaluated'],
   'wicked.run.qe.decided': ['qeAcceptanceDecided'],
   'wicked.run.usage.reported': ['cliUsage'],
+  // Power mode (DES-POWER-MODE; api-types 0.149.0's `RunBusType`): the intake plan, every rigor re-score, the checkpoints,
+  // the orchestrator's turns, the hand-off steps and the switch.
+  'wicked.run.intake.planned': ['powerIntakePlanned'],
+  'wicked.run.rigor.rescored': ['rigorRescored'],
+  'wicked.run.checkpoint.reached': ['powerCheckpointReached'],
+  'wicked.run.turn.started': ['powerTurnStarted'],
+  'wicked.run.turn.completed': ['powerTurnCompleted'],
+  'wicked.run.handoff.stepped': ['powerHandoffStepped'],
+  'wicked.run.power.toggled': ['powerToggled'],
 };
 
 const SEGMENT = /^[a-z][a-z0-9_-]{0,40}$/u;
@@ -99,6 +108,10 @@ export function stepIdOf(description: unknown): string | null {
   return /^[a-z][a-z0-9_-]{0,40}$/u.test(head) ? head : null;
 }
 
+const RIGOR_WORDS = new Set(['light', 'standard', 'high', 'highest']);
+const rigorOf = (v: unknown): string | null => (typeof v === 'string' && RIGOR_WORDS.has(v) ? v : null);
+const objOf = (v: unknown): Record<string, unknown> => (typeof v === 'object' && v !== null && !Array.isArray(v) ? v as Record<string, unknown> : {});
+
 function checksOf(v: unknown): Array<Record<string, unknown>> {
   if (!Array.isArray(v)) return [];
   return v.slice(0, 40).flatMap((c) => {
@@ -115,6 +128,25 @@ function reusedOf(v: unknown): Record<string, unknown> | null {
   const r = v as Record<string, unknown>;
   const names = (x: unknown): string[] => (Array.isArray(x) ? x.map((n) => word(n)).filter((n): n is string => n !== null).slice(0, 20) : []);
   return { phase: word(r['phase']), ord: num(r['ord']), attempt: num(r['attempt']), reused: names(r['reused']), fresh: names(r['fresh']) };
+}
+
+/**
+ * A checkpoint pause's reasons (free text from the engine, core power.rs) as CLOSED kinds a plugin may hear: "struggling:
+ * 80 min against an estimate of 20 min; 3 failed test runs" → longer_than_estimated, tests_failing. Never the text.
+ */
+export function pauseKinds(reason: string): string[] {
+  const t = reason.replace(/^struggling:\s*/i, '');
+  const out: string[] = [];
+  for (const part of t.split(/;\s*/)) {
+    if (part.trim() === '') continue;
+    if (/min against an estimate of/i.test(part)) out.push('longer_than_estimated');
+    else if (/failed test runs?/i.test(part)) out.push('tests_failing');
+    else if (/reverts?/i.test(part)) out.push('changes_undone');
+    else if (/rigor jumped/i.test(part)) out.push('rigor_jumped');
+    else if (/spread into another product|spans? \d+ (products|packages)/i.test(part)) out.push('spread');
+    else out.push('other');
+  }
+  return out;
 }
 
 /** One CoreEvent as a row, or null when no topic carries it. `names` turns a seat key into its display name. */
@@ -153,6 +185,43 @@ export function toRow(e: CoreEvent, runId: string, at: number, id: string, names
     case 'qeAcceptanceDecided': {
       const qe = (typeof ev['qe'] === 'object' && ev['qe'] !== null ? ev['qe'] : {}) as Record<string, unknown>;
       return { ...base, topic: 'wicked.run.qe.decided', data: { status: word(qe['status']), score: num(qe['score']) } };
+    }
+    // Power mode: rigor words, numbers and seat ids only — never the reasons, summaries or plan text (free text).
+    case 'powerIntakePlanned': {
+      const p = objOf(ev['plan']);
+      return { ...base, topic: 'wicked.run.intake.planned', at: num(p['at']) ?? base.at, data: { rigor: rigorOf(p['rigor']), score: num(p['score']), band: word(p['band']), highRisk: p['highRisk'] === true, estimateMinutes: num(p['estimateMinutes']), mandatoryPhases: Array.isArray(p['mandatoryPhases']) ? p['mandatoryPhases'].length : 0 } };
+    }
+    case 'rigorRescored': {
+      const c = objOf(ev['change']);
+      const by = typeof c['by'] === 'string' ? c['by'] : '';
+      return {
+        ...base, topic: 'wicked.run.rigor.rescored', at: num(c['at']) ?? base.at,
+        data: {
+          seq: num(c['seq']), trigger: word(c['trigger']), from: rigorOf(c['from']), to: rigorOf(c['to']), direction: word(c['direction']),
+          planned: num(c['planned']), actual: num(c['actual']), checkpoint: num(c['checkpoint']), turn: num(c['turn']), paused: c['paused'] === true,
+          byKind: by === 'engine' ? 'engine' : by.startsWith('plugin:') ? 'plugin' : by === '' ? null : 'person',
+        },
+      };
+    }
+    case 'powerCheckpointReached': {
+      const pause = objOf(ev['pause']);
+      const kinds = Array.isArray(pause['reasons']) ? [...new Set(pause['reasons'].filter((x): x is string => typeof x === 'string').flatMap(pauseKinds))] : [];
+      return { ...base, topic: 'wicked.run.checkpoint.reached', data: { checkpoint: num(ev['checkpoint']), turn: num(ev['turn']), trigger: word(ev['trigger']), rigor: rigorOf(ev['rigor']), picked: num(ev['picked']), paused: ev['paused'] === true, pauseKinds: kinds } };
+    }
+    case 'powerTurnStarted':
+    case 'powerTurnCompleted': {
+      const seat = word(ev['cli']);
+      return { ...base, topic: e.type === 'powerTurnStarted' ? 'wicked.run.turn.started' : 'wicked.run.turn.completed', data: { turn: num(ev['turn']), attempt: num(ev['attempt']), seat, seatName: seat !== null ? (names?.(seat) ?? null) : null, outcome: word(ev['outcome']) } };
+    }
+    case 'powerHandoffStepped': {
+      const st = objOf(ev['step']);
+      const seat = word(st['seat']);
+      return { ...base, topic: 'wicked.run.handoff.stepped', at: num(st['at']) ?? base.at, ord: num(st['ord']), data: { round: num(ev['round']), step: word(st['step']), status: word(st['status']), seat, seatName: seat !== null ? (names?.(seat) ?? null) : null } };
+    }
+    case 'powerToggled': {
+      const t = objOf(ev['toggle']);
+      const by = typeof t['by'] === 'string' ? t['by'] : '';
+      return { ...base, topic: 'wicked.run.power.toggled', at: num(t['at']) ?? base.at, data: { on: t['on'] === true, byKind: by === 'engine' ? 'engine' : by.startsWith('plugin:') ? 'plugin' : by === '' ? null : 'person' } };
     }
     case 'cliUsage':
       return { ...base, topic: 'wicked.run.usage.reported', data: { attempt: num(ev['attempt']), costUsd: num(ev['costUsd']), inputTokens: num(ev['inputTokens']), outputTokens: num(ev['outputTokens']) } };

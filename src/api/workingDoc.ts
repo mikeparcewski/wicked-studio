@@ -10,7 +10,8 @@ import { isRouteUnsupported } from './errors.js';
 export type WorkingDocSectionId = 'goal' | 'approach' | 'decisions' | 'constraints' | 'questions' | 'next';
 export const WORKING_DOC_SECTIONS: readonly WorkingDocSectionId[] = ['goal', 'approach', 'decisions', 'constraints', 'questions', 'next'];
 
-export type WorkingDocAuthor = { kind: 'human'; id: string } | { kind: 'plugin'; id: string } | { kind: 'system'; id: 'crew' };
+/** `agent`: the orchestrator's own Approach and Decisions, written by crew as `agent:<seat>` (it never steers). */
+export type WorkingDocAuthor = { kind: 'human'; id: string } | { kind: 'plugin'; id: string } | { kind: 'system'; id: 'crew' } | { kind: 'agent'; id: string };
 
 export interface WorkingDocTrailEntry {
   version: number;

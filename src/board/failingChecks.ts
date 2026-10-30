@@ -21,7 +21,8 @@ const ON_BASE = new Set(['pre_existing_in_sandbox', 'floor_env_mismatch', 'base_
  *  ` - <message>` cut: a ` - ` inside another runner's test name is part of the name. */
 export function failureName(id: string): string {
   // cargo prints `test <path>` (`test deliver_lift::tests::a_case`): the word is the runner's, not the name.
-  const bare = id.trim().replace(/^(?:FAILED|FAIL|ERROR|✗|×)\s+/, '').replace(/^test\s+(?=[\w:]+$)/, '');
+  // vitest prints a whole file that failed to load as `FAIL tests/a.test.ts [ tests/a.test.ts ]`: the file.
+  const bare = id.trim().replace(/^(?:FAILED|FAIL|ERROR|✗|×)\s+/, '').replace(/^test\s+(?=[\w:]+$)/, '').replace(/^(\S+)\s+\[\s*\1\s*\]$/, '$1');
   return bare.replace(/^(\S*::.*?)\s+-\s+.*$/, '$1').trim();
 }
 
@@ -133,11 +134,36 @@ export function testWords(id: string): string {
   // A vitest / jest id ("src/a.test.ts > GateRow > names tests") already ends in words.
   if (/\s>\s/.test(id)) return id.split(/\s>\s/).pop()!.trim() || id;
   const leaf = id.split('::').pop()?.replace(/\[.*\]$/, '').trim() ?? id;
+  // A file path (a whole test file that failed) is said as the path: never "S/delivery-assurance.test.ts" from
+  // stripping a leading "test" off "tests/…".
+  if (/[\\/]/.test(leaf) || /\.(?:[cm]?[jt]sx?|py|rs|go|rb)$/.test(leaf)) return leaf;
   const bare = leaf.replace(/^test_?/i, '').replace(/_+/g, ' ').trim();
   // A snake_case leaf is a sentence too (Rust: `a_passing_check_that_mutates_source_is_caught`).
   const snake = /^[A-Za-z][A-Za-z0-9]*(?:_[A-Za-z0-9]+){2,}$/.test(leaf);
   if (bare === '' || (bare === leaf && !/^test/i.test(leaf) && !snake)) return id;
   return bare.charAt(0).toUpperCase() + bare.slice(1);
+}
+
+/** Where a failing test lives: its file (vitest/jest `file > suite > name`, a whole file that failed, pytest
+ *  `file::name`) or its module (Rust `mod::tests::name`); the id itself when nothing names one. */
+export function testFile(id: string): string {
+  const name = failureName(id);
+  if (/\s>\s/.test(name)) return name.split(/\s>\s/)[0]!.trim();
+  const parts = name.split('::');
+  if (parts.length >= 2) return parts.slice(0, -1).join('::');
+  return name;
+}
+
+/** Failing tests grouped by where they live, the biggest group first (ties keep their order). */
+export function groupByFile(ids: readonly string[]): Array<{ file: string; tests: string[] }> {
+  const groups = new Map<string, string[]>();
+  for (const id of ids) {
+    const f = testFile(id);
+    const g = groups.get(f) ?? [];
+    g.push(id);
+    groups.set(f, g);
+  }
+  return [...groups.entries()].map(([file, tests]) => ({ file, tests })).sort((a, b) => b.tests.length - a.tests.length);
 }
 
 /** The failing checks of a floor, the ones the floor counts as failed (a pre-existing failure the engine
@@ -174,15 +200,19 @@ export function failedOnBase(c: GateFloorCheck): boolean {
   return (c.classification !== null && ON_BASE.has(c.classification)) || c.preExisting.length > 0 || c.baseFailed === true;
 }
 
-/** The floor record of one unit attempt (`repoChecksEvaluated` for that ord and attempt), newest first. */
+/** The floor record of one unit attempt (`repoChecksEvaluated` for that ord and attempt), newest first. An attempt
+ *  with no record of its own (a rework that left the tree unchanged: "this unit's last floor result on this tree
+ *  stands") is judged on the newest earlier record for that unit. */
 function floorAt(events: readonly CoreEvent[], ord: number, attempt: number | null): GateFloorView | null {
+  let earlier: GateFloorView | null = null;
   for (let i = events.length - 1; i >= 0; i--) {
     const e = events[i]!;
     if (e.type !== 'repoChecksEvaluated' || e.ord !== ord) continue;
     const f = floorOf(e);
     if (attempt === null || f.attempt === null || f.attempt === attempt) return f;
+    if (earlier === null && f.attempt < attempt) earlier = f;
   }
-  return null;
+  return earlier;
 }
 
 export interface OverriddenFloors {
@@ -190,6 +220,14 @@ export interface OverriddenFloors {
   checks: string[];
   /** Every one of them failed on the run's base as well. */
   onBase: boolean;
+  /** The distinct failing tests the runner named in those checks (0 when it named none). */
+  failures?: number;
+  /** The engine could not tell the change's failures from the base's (the base is red too). */
+  unseparated?: boolean;
+  /** Of the named failing tests: those the base fails too, and those that fail only with this change (where the
+   *  engine separated them). */
+  shared?: number;
+  fresh?: number;
 }
 
 /**
@@ -209,6 +247,10 @@ export function overriddenFloorsOf(
   }
   if (overrides.length === 0) return null;
   const checks: string[] = [];
+  const failing = new Set<string>();
+  const shared = new Set<string>();
+  const fresh = new Set<string>();
+  let unseparated = false;
   let onBase = true;
   for (const o of overrides) {
     const at = o.floorOverride!;
@@ -222,13 +264,45 @@ export function overriddenFloorsOf(
     for (const c of failed) {
       if (!checks.includes(c.name)) checks.push(c.name);
       if (!failedOnBase(c)) onBase = false;
+      const onBaseIds = new Set([...c.preExisting, ...(c.baseFailureIds ?? [])].map(failureName));
+      const newIds = new Set(c.regressions.map(failureName));
+      for (const id of c.failureIds ?? []) {
+        const n = failureName(id);
+        if (n === '') continue;
+        failing.add(n);
+        if (newIds.has(n)) fresh.add(n);
+        else if (onBaseIds.has(n)) shared.add(n);
+        // No per-test lists: the check as a whole is the engine's word (red on the base, or not).
+        else if (onBaseIds.size === 0 && newIds.size === 0 && failedOnBase(c)) shared.add(n);
+        else fresh.add(n); // not shown to fail on the base: never claimed as the base's
+      }
+      if (c.classification === 'base_red_unseparated' || c.classification === 'unclassified_red_base') unseparated = true;
     }
   }
-  return { checks, onBase };
+  return { checks, onBase, failures: failing.size, unseparated, shared: shared.size, fresh: fresh.size };
 }
 
 function andList(items: readonly string[]): string {
   return items.length <= 1 ? items.join('') : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]!}`;
+}
+
+/**
+ * The final message's sentence for an overridden floor, plainly: what you approved and why it is not the alarm it
+ * sounds like. "You approved 6 failing tests in the test check; the base fails too, so they could not be told apart
+ * from this change." The record keeps "Floor overridden by operator" (the details panel).
+ */
+export function approvedLine(o: OverriddenFloors): string {
+  const what = o.checks.length === 0 ? 'the repository checks' : `the ${andList(o.checks)} check${o.checks.length === 1 ? '' : 's'}`;
+  const n = o.failures ?? 0;
+  const single = n > 0 ? n === 1 : o.checks.length <= 1;
+  const tests = n > 0 ? `${n} failing ${n === 1 ? 'test' : 'tests'} in ${what}` : `${what}, which did not pass`;
+  if (o.onBase && o.unseparated === true) return `You approved ${tests}; the base fails too, so ${single ? 'it' : 'they'} could not be told apart from this change.`;
+  // Test by test (xreview on studio#933): "on the base too" only of the failures the engine showed on the base.
+  const fresh = o.fresh ?? 0;
+  const shared = o.shared ?? 0;
+  if (n > 0 && fresh > 0) return `You approved ${tests}: ${fresh} ${fresh === 1 ? 'fails' : 'fail'} only with this change${shared > 0 ? `, ${shared} on the base too` : ''}.`;
+  if (o.onBase) return `You approved ${tests}; ${single ? 'it fails' : 'they fail'} on the base too.`;
+  return `You approved ${tests}.`;
 }
 
 /** "Overridden by you: test failed on this change and its base." — the one sentence every surface says
