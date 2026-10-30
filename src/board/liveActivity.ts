@@ -124,6 +124,23 @@ export function activityRows(events: readonly CoreEvent[] | null | undefined, or
   return out;
 }
 
+/** The orchestrator's turn running now at this unit (the newest started turn), or null for a step with no turns: the
+ *  live list of a power build shows that turn's activity, not the whole build's. */
+export function currentTurn(events: readonly CoreEvent[] | null | undefined, ord: number): number | null {
+  const list = (events ?? []) as readonly Ev[];
+  for (let i = list.length - 1; i >= 0; i--) {
+    const e = list[i]!;
+    if (e.ord === ord && e.type === 'unitDispatched') return null;
+    if (e.ord === ord && e.type === 'powerTurnStarted' && typeof e.turn === 'number') return e.turn;
+  }
+  return null;
+}
+
+/** The turn has ended (its message carries the summary line; the live list has nothing more to say). */
+export function turnEnded(events: readonly CoreEvent[] | null | undefined, ord: number, turn: number): boolean {
+  return ((events ?? []) as readonly Ev[]).some((e) => e.ord === ord && e.type === 'powerTurnCompleted' && e.turn === turn);
+}
+
 /** The tool calls the gate judged for a step (or turn): what the summary counts when no `toolActivity` came. */
 function judgedTools(events: readonly CoreEvent[] | null | undefined, ord: number, turn: number | null): ActivityKind[] {
   return scoped(events ?? [], ord, turn).filter((e) => e.type === 'governanceHookFired' && e.decision !== 'deny').map((e) => toolKind(str(e.toolName)));

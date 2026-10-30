@@ -15,8 +15,8 @@
 
 import { PROTOCOL, ENVELOPE, type Envelope } from '../_shared/v2.js';
 import surfaces from './surfaces.json';
-import { dashboard, emptyReport, foldRows, gateWord, openGates, phaseDashboard, phaseSummary, scopeOf, summaryLine, writesDoc, type PhaseScope, type Report, type Row } from './model.js';
-import { SECTION_EFFECT, SECTION_LABELS, SECTIONS, STEER_NOTE, sectionAuthor, trailLines, withDecisionLine, type DocView, type SectionId } from './workingDoc.js';
+import { dashboard, emptyReport, foldRows, openGates, phaseDashboard, phaseSummary, scopeOf, summaryLine, writesDoc, type PhaseScope, type Report, type Row } from './model.js';
+import { SECTION_EFFECT, SECTION_LABELS, SECTIONS, STEER_NOTE, docLines, reconcileSection, sectionAuthor, trailLines, type DocView, type SectionId } from './workingDoc.js';
 
 const ID = 'wicked-phase-report';
 
@@ -165,7 +165,11 @@ export function start(): void {
     const mine = readSeq;
     const r = await ask('doc.read', {});
     if (mine !== readSeq) return; // a newer read was started: this answer is stale
-    if (r.ok && r.payload !== undefined) { doc = r.payload['view'] as DocView; docState = 'ready'; readFailed = false; }
+    if (r.ok && r.payload !== undefined) {
+      doc = r.payload['view'] as DocView; docState = 'ready'; readFailed = false;
+      // A document that exists takes the plugin's lines (a plugin never starts one: a person's first edit does).
+      if (doc.doc !== null) syncDoc();
+    }
     else if (r.error?.code === 'unsupported' || r.error?.code === 'not_granted') docState = 'unsupported';
     // A failed read keeps what was shown, says so, and offers a retry (the next change frame retries too).
     else readFailed = true;
@@ -193,7 +197,7 @@ export function start(): void {
         docLine = { text: typeof v === 'number' ? `Saved as version ${v}. ${SECTION_EFFECT[session.section]}` : 'Nothing changed.', bad: false };
         // Close it only if it is still this session and nothing was typed while it saved; otherwise keep the newer text
         // as the draft, on the version just made.
-        if (edit === session && currentDraft() === text) edit = null;
+        if (edit === session && currentDraft() === text) { edit = null; queueMicrotask(catchUp); }
         else if (edit === session && typeof v === 'number') session.base = v;
       } else if (r.error?.code === 'head_moved') {
         docLine = { text: 'Someone changed the document meanwhile. Your text is kept: check the section’s new text above it, then save again.', bad: true };
@@ -203,29 +207,58 @@ export function start(): void {
       }
       await readDoc();
       // After a conflict the new head is the base, now that the person can see what changed.
-      if (edit === session && session.conflict && doc?.doc != null) session.base = doc.doc.head;
+      if (edit === session && session.conflict && doc?.doc != null) {
+        session.base = doc.doc.head;
+        // Only other sections changed (another person, or the plugin's own lines): nothing to compare, save again.
+        if ((doc.sections?.[session.section] ?? '') === session.opened) {
+          docLine = { text: 'Other sections changed meanwhile, not this one. Your text is kept: press Save again.', bad: true };
+        }
+      }
       drawDoc();
       reportHeight();
     });
   }
 
-  /** A decision answered live: the plugin's own line under Decisions, written as itself, once (retried once after a
-   *  conflict; it waits for the first read when the document is not read yet). */
-  function decisionAnswered(kind: string, at: number): void {
-    if (!writesDoc(scope)) return; // one instance writes the run's lines, never one per phase
-    const d = new Date(at);
-    const line = `${gateWord(kind)} · answered ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  /**
+   * The plugin's own lines in the working document, kept up to date from the run's events, written as itself:
+   * Decisions (each decision answered: gates, checkpoint pauses — who and what), Open questions (what waits on a person
+   * now), Next (what the newest hand-off round left). One instance writes them (never one per phase). While a person has
+   * a section open in the editor it waits (a write would move the version their save is based on), and catches up when
+   * the editor closes. A section the service refuses (an older crew takes Decisions only) is left alone. A conflict is
+   * retried once on the new head. Nothing is written while nothing changed.
+   */
+  let syncQueued = false;
+  let syncAfterEdit = false;
+  const refused = new Set<'decisions' | 'questions' | 'next'>();
+  function syncDoc(): void {
+    // Until the document is read (its first read calls this again) or started, there is nothing to write to.
+    if (!writesDoc(scope) || syncQueued || docState !== 'ready' || doc?.doc == null || !report.loaded) return;
+    if (edit !== null) { syncAfterEdit = true; return; }
+    syncQueued = true;
     void serial(async () => {
-      for (let attempt = 0; attempt < 2; attempt += 1) {
-        if (doc === null) await readDoc();
-        if (doc === null || doc.doc === null || doc.sections === null) return;
-        const next = withDecisionLine(doc.sections.decisions, line);
-        if (next === null) return;
-        const r = await ask('doc.propose_edit', { base: doc.doc.head, section: 'decisions', text: next, origin: 'generated' });
-        await readDoc();
-        if (r.ok || r.error?.code !== 'head_moved') return;
+      syncQueued = false;
+      const wanted = docLines(report);
+      for (const section of ['decisions', 'questions', 'next'] as const) {
+        if (edit !== null) { syncAfterEdit = true; return; }
+        if (refused.has(section)) continue;
+        for (let attempt = 0; attempt < 2; attempt += 1) {
+          if (doc === null || doc.doc === null || doc.sections === null) return;
+          const text = reconcileSection(section, doc.sections[section], wanted[section]);
+          if (text === null) break;
+          const r = await ask('doc.propose_edit', { base: doc.doc.head, section, text, origin: 'generated' });
+          await readDoc();
+          if (r.ok) break;
+          if (r.error?.code !== 'head_moved') { refused.add(section); break; }
+        }
       }
     });
+  }
+
+  /** The plugin's lines for a section that its saved text does not have (shown as not saved yet). */
+  function unsavedLines(id: 'decisions' | 'questions' | 'next', saved: string): string[] {
+    if (!writesDoc(scope) || !report.loaded) return [];
+    const have = saved.split('\n').map((l) => l.trim());
+    return docLines(report)[id].filter((l) => !have.includes(l));
   }
 
   function currentDraft(): string | null {
@@ -246,7 +279,14 @@ export function start(): void {
     queueMicrotask(() => document.querySelector<HTMLTextAreaElement>('#wd textarea')?.focus());
   }
 
-  function closeEditor(): void { edit = null; docLine = null; drawDoc(); reportHeight(); }
+  function closeEditor(): void { edit = null; docLine = null; drawDoc(); reportHeight(); catchUp(); }
+
+  /** The editor closed: the plugin's lines that waited for it are written now. */
+  function catchUp(): void {
+    if (edit !== null || !syncAfterEdit) return;
+    syncAfterEdit = false;
+    syncDoc();
+  }
 
   function drawDoc(): void {
     const box = $('wd');
@@ -276,10 +316,14 @@ export function start(): void {
       const sec = el('div', 'wd-sec');
       sec.dataset['section'] = id;
       const h = el('h4', null, SECTION_LABELS[id]);
-      const who = doc !== null ? sectionAuthor(doc, id) : null;
+      const unsavedHere = id === 'decisions' || id === 'questions' || id === 'next' ? unsavedLines(id, doc?.sections?.[id] ?? '') : [];
+      const who = (doc !== null ? sectionAuthor(doc, id) : null) ?? (unsavedHere.length > 0 ? 'Phase report (plugin)' : null);
       if (who !== null) h.append(el('span', 'wd-who', who));
       sec.append(h);
       const text = doc?.sections?.[id] ?? '';
+      // The plugin's lines from the job's events that the document does not hold yet (none is started, or the service
+      // takes only Decisions from a plugin): shown, marked as not saved, never typed into the person's editor.
+      const unsaved = id === 'decisions' || id === 'questions' || id === 'next' ? unsavedLines(id, text) : [];
       const session = edit;
       if (session !== null && session.section === id) {
         // After a conflict, what the section says now, above the person's own text.
@@ -309,7 +353,13 @@ export function start(): void {
         sec.append(ta, bar);
         if (keep !== null && hadFocus) { ta.focus(); if (caret !== null) ta.setSelectionRange(caret[0], caret[1]); }
       } else {
-        const t = el('div', `wd-text${text.trim() === '' ? ' empty' : ''}`, text.trim() === '' ? (id === 'goal' && doc?.doc == null ? 'Not started. Edit a section to start the working document.' : 'Nothing yet.') : text);
+        const blank = text.trim() === '' && unsaved.length === 0;
+        const t = el('div', `wd-text${blank ? ' empty' : ''}`, blank ? (id === 'goal' && doc?.doc == null ? 'Not started. Edit a section to start the working document.' : 'Nothing yet.') : text);
+        for (const line of unsaved) {
+          const g = el('span', 'wd-gen', line);
+          g.title = 'Phase report (plugin): from the job’s events. Not saved in the working document yet.';
+          t.append(g);
+        }
         t.tabIndex = 0;
         t.setAttribute('role', 'button');
         t.setAttribute('aria-label', `Edit ${SECTION_LABELS[id]}`);
@@ -366,14 +416,8 @@ export function start(): void {
           const first = !report.loaded;
           report.loaded = true;
           if (foldRows(report, rows) || first) draw();
-          // A decision answered while this block is open: the plugin's own line under Decisions (never on replay).
-          if (pl['replay'] !== true) {
-            for (const row of rows) {
-              if (row.topic !== 'wicked.run.session.resumed') continue;
-              const gate = report.gates.find((g) => g.ord === row.ord && g.answeredAt === row.at);
-              if (gate !== undefined) decisionAnswered(gate.kind, row.at);
-            }
-          }
+          // The plugin's own lines in the working document follow the events (the replay too: an open job's past).
+          syncDoc();
           break;
         }
         case 'doc.changed': void readDoc(); break;

@@ -22,6 +22,12 @@ against the `power_mode` corpus (e2e/power_mode_corpus.py, the api-types 0.149.0
   7. PHASED REQUIRED (r-pm-phased): the switch is Off and disabled, its tooltip "Phased is required: …"; a click sends
      nothing.
   8. SETTINGS: "Power mode for new jobs: On".
+  5b. ONE REPORT PER PHASE (operator 2026-10-30): r-pm-handoff has one Phase report block per phase — Intake, Build,
+     Checks, Review, QE — each the run-thread plugin's own sandboxed frame named by its phase; only the current one
+     (QE) is open; r-pm-build has Intake and Build, Build open.
+  6b. THE WORKING DOCUMENT IS FILLED: r-pm-pause's Build block shows the plugin's own line under Open questions
+     ("Waiting on you · checkpoint 3 paused …"), attributed "Phase report (plugin)", marked not saved yet (no document
+     is started on this run).
   9. LOOK: every corpus run at 1440x900 and 390x844, dark and light, no horizontal scroll; 0 page errors.
 
 Captures: e2e/shots/desk-power-mode-*.png. Env: FEEDBACK_PORT (default 4671).
@@ -73,7 +79,7 @@ def new_page(browser, w: int, h: int, theme: str = "dark"):
     page.add_init_script(
         "document.addEventListener('DOMContentLoaded', () => { const s = document.createElement('style'); "
         f"s.textContent = {json.dumps(HIDE_GATE_TOASTS)}; document.head.appendChild(s); }});")
-    set_fixture(origin, appearance={**DEFAULT_APPEARANCE, "theme": theme}, power_mode=True, reset_power=True)
+    set_fixture(origin, appearance={**DEFAULT_APPEARANCE, "theme": theme}, power_mode=True, reset_power=True, working_doc=True, reset_working_doc=True)
     return ctx, page
 
 
@@ -164,6 +170,21 @@ with sync_playwright() as p:
     page.locator('[data-testid="power-handoff"]').scroll_into_view_if_needed()
     page.screenshot(path=str(SHOTS / "desk-power-mode-handoff.png"))
 
+    # ── 5b. one phase report per phase ─────────────────────────────────────────────────────────────
+    BLOCKS = """() => [...document.querySelectorAll('[data-testid=session-thread] [data-testid=run-plugin]')].map((b) => ({
+      phase: b.dataset.phase ?? null, folded: b.dataset.folded, plugin: b.dataset.plugin,
+      sandbox: b.querySelector('iframe')?.getAttribute('sandbox') ?? null }))"""
+    page.wait_for_function("() => document.querySelectorAll('[data-testid=session-thread] [data-testid=run-plugin]').length >= 5", timeout=10000)
+    hb = page.evaluate(BLOCKS)
+    open_run(page, "r-pm-build")
+    page.wait_for_function("() => document.querySelectorAll('[data-testid=session-thread] [data-testid=run-plugin]').length >= 2", timeout=10000)
+    bb = page.evaluate(BLOCKS)
+    check("phase-reports", [b["phase"] for b in hb] == ["intake", "build", "checks", "review", "qe"]
+          and [b["phase"] for b in hb if b["folded"] == "false"] == ["qe"]
+          and all(b["plugin"] == "wicked-phase-report" and b["sandbox"] == "allow-scripts" for b in hb)
+          and [b["phase"] for b in bb] == ["intake", "build"] and [b["phase"] for b in bb if b["folded"] == "false"] == ["build"],
+          handoff=hb, build=bb)
+
     # ── 6. this grew ───────────────────────────────────────────────────────────────────────────
     open_run(page, "r-pm-pause")
     dock = page.locator('[data-testid="decision-dock"] [data-testid="power-pause"]')
@@ -191,6 +212,25 @@ with sync_playwright() as p:
           and state_p["nerve"] not in (None, "green", "ok") and "needs you" in (state_p["nerveWords"] or "")
           and (state_p["panel"] or "").startswith("Paused at checkpoint 3 — waiting on you"), state=state_p)
     page.screenshot(path=str(SHOTS / "desk-power-mode-pause.png"))
+
+    # ── 6b. the working document, filled by the plugin from the run's events ─────────────────────────
+    build = page.locator('[data-testid=session-thread] [data-testid=run-plugin][data-phase=build]')
+    if build.get_attribute("data-folded") == "true":
+        build.locator('[data-testid="run-plugin-fold"]').click()
+    wd = build.frame_locator("iframe").first
+    try:
+        wd.locator('.wd-sec[data-section="questions"] .wd-text:has-text("Waiting on you")').wait_for(timeout=15000)
+    except Exception:  # noqa: BLE001
+        pass
+    q = wd.locator('.wd-sec[data-section="questions"] .wd-text').inner_text()
+    qh = wd.locator('.wd-sec[data-section="questions"] h4').inner_text()
+    tr = wd.locator(".wd-trail li").all_inner_texts()
+    build.scroll_into_view_if_needed()
+    page.screenshot(path=str(SHOTS / "desk-power-mode-working-doc.png"))
+    # No document is started on this run (a person's first edit starts one): the line is shown, marked not saved yet.
+    gen = wd.locator('.wd-sec[data-section="questions"] .wd-gen').count()
+    check("working-doc-filled", q.startswith("Waiting on you · checkpoint 3 paused") and "Phase report (plugin)" in qh and gen == 1,
+          questions=q, head=qh, trail=tr, unsaved=gen)
     dock.locator('[data-testid="power-pause-choice"][data-choice="continue_high"]').click()
     # The answer goes out after the undo window (10 s): wait for the tap.
     page.wait_for_timeout(11500)

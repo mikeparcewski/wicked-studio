@@ -164,6 +164,28 @@ describe('the working-document editor', () => {
     expect(b.$('.wd-sec[data-section="approach"] textarea')).toBeNull();
   });
 
+  it('filled from events: before a document exists its lines show as not saved and nothing is written; once one exists they are saved as the plugin’s', async () => {
+    let started = false;
+    let questions = '';
+    const b = await boot((m) => {
+      if (m.type === 'doc.read') {
+        return started ? { ok: true, payload: { view: view(1, { questions }) } } : { ok: true, payload: { view: { doc: null, sections: null, trail: [], steers: [] } } };
+      }
+      if (m.type === 'doc.propose_edit') { questions = String(m.payload?.['text']); return { ok: true, payload: { version: 2 } }; }
+      return { ok: true, payload: {} };
+    });
+    b.push('events.batch', { runId: 'r', replay: false, rows: [{ id: 'g', topic: 'wicked.run.human.awaited', seq: 1, at: 1_000, ord: 4, data: { kind: 'deliver' } }] });
+    await vi.waitFor(() => expect(b.$('.wd-sec[data-section="questions"] .wd-gen')?.textContent).toMatch(/^Waiting on you · /u));
+    expect(b.$('.wd-sec[data-section="questions"] h4')?.textContent).toMatch(/Phase report \(plugin\)/u);
+    expect(b.edits()).toHaveLength(0);
+    // A person's edit started the document: the plugin's line is saved now, as generated text in its own section.
+    started = true;
+    b.push('doc.changed', { head: 1 });
+    await vi.waitFor(() => expect(b.edits()).toHaveLength(1));
+    expect(b.edits()[0]!.payload).toMatchObject({ section: 'questions', origin: 'generated' });
+    expect(questions).toMatch(/^Waiting on you · .* · since \d\d:\d\d$/u);
+  });
+
   it('the plugin’s own Decisions lines go one at a time, waiting for the first read, retried once after a conflict', async () => {
     let head = 1;
     let decisions = '';

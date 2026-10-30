@@ -11,9 +11,9 @@
   "version": 1,
   "studioVersion": "0.13.0",
   "counts": {
-    "files": 258,
-    "occurrences": 3557,
-    "static": 3033,
+    "files": 259,
+    "occurrences": 3567,
+    "static": 3042,
     "dynamic": 75,
     "computed": 33
   },
@@ -48,6 +48,12 @@
         "src/components/RepoDetailPage.tsx",
         "src/components/RepoGraphModal.tsx",
         "src/components/RepositoriesPanel.tsx"
+      ]
+    },
+    {
+      "testId": "activity-summary",
+      "files": [
+        "src/components/session/LiveActivity.tsx"
       ]
     },
     {
@@ -6620,6 +6626,30 @@
       ]
     },
     {
+      "testId": "live-activity",
+      "files": [
+        "src/components/session/LiveActivity.tsx"
+      ]
+    },
+    {
+      "testId": "live-activity-earlier",
+      "files": [
+        "src/components/session/LiveActivity.tsx"
+      ]
+    },
+    {
+      "testId": "live-activity-row",
+      "files": [
+        "src/components/session/LiveActivity.tsx"
+      ]
+    },
+    {
+      "testId": "live-activity-said",
+      "files": [
+        "src/components/session/LiveActivity.tsx"
+      ]
+    },
+    {
       "testId": "live-output",
       "files": [
         "src/components/LiveNarration.tsx"
@@ -12376,6 +12406,12 @@
       ]
     },
     {
+      "testId": "run-plugin-phase",
+      "files": [
+        "src/components/session/RunThreadPlugin.tsx"
+      ]
+    },
+    {
       "testId": "run-plugin-pin",
       "files": [
         "src/components/session/RunThreadPlugin.tsx"
@@ -12443,6 +12479,12 @@
     },
     {
       "testId": "run-plugins",
+      "files": [
+        "src/components/session/RunThreadPlugin.tsx"
+      ]
+    },
+    {
+      "testId": "run-plugins-phase",
       "files": [
         "src/components/session/RunThreadPlugin.tsx"
       ]
@@ -13353,6 +13395,18 @@
     },
     {
       "testId": "session-gate-failing-base-words",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
+      "testId": "session-gate-failing-group",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
+      "testId": "session-gate-failing-less",
       "files": [
         "src/components/session/GateRow.tsx"
       ]

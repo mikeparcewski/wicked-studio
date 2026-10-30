@@ -3,7 +3,7 @@
 import { act, cleanup, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CoreEvent } from '../src/api/types.js';
-import { activityRows, activitySummary, narration, toolKind } from '../src/board/liveActivity.js';
+import { activityRows, activitySummary, currentTurn, narration, toolKind, turnEnded } from '../src/board/liveActivity.js';
 import { LiveActivity } from '../src/components/session/LiveActivity.js';
 import { useRunEventStore } from '../src/store/events.js';
 import { useRuntimeStore } from '../src/store/runtime.js';
@@ -31,6 +31,19 @@ describe('the model', () => {
   it('only the newest attempt of the step counts', () => {
     const again = ev([...frames, { type: 'unitDispatched', session: R, ord: 2, attempt: 1, ts: T(10) }, tool('c', 'finished', 'Grep', 'formatMoney', 11, true)]);
     expect(activityRows(again, 2).map((r) => r.text)).toEqual(['Searched formatMoney']);
+  });
+  it('a power build lists the turn running now, not the whole build', () => {
+    const turns = ev([
+      { type: 'unitDispatched', session: R, ord: 2, attempt: 0, ts: T(0) },
+      { type: 'powerTurnStarted', session: R, ord: 2, turn: 1, ts: T(1) }, tool('a', 'finished', 'Read', 'src/a.ts', 2, true),
+      { type: 'powerTurnCompleted', session: R, ord: 2, turn: 1, ts: T(3) },
+      { type: 'powerTurnStarted', session: R, ord: 2, turn: 2, ts: T(4) }, tool('b', 'started', 'Edit', 'src/b.ts', 5),
+    ]);
+    expect(currentTurn(turns, 2)).toBe(2);
+    expect(activityRows(turns, 2, currentTurn(turns, 2)).map((r) => r.text)).toEqual(['Editing src/b.ts']);
+    expect(currentTurn(frames, 2)).toBeNull();
+    expect(turnEnded(turns, 2, 2)).toBe(false);
+    expect(turnEnded(turns, 2, 1)).toBe(true);
   });
   it('the summary counts what it did; with no tool frames it counts the calls the gate judged', () => {
     const done = ev([...frames, tool('b', 'finished', 'Bash', 'npm test -- invoices', 20, true), { type: 'powerActivity', session: R, ord: 2, turn: 1, at: T(21), kind: 'commit', sha: 'c07d1f3aa', subject: 'Serve /v2', ts: T(21) }]);

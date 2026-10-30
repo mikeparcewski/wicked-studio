@@ -67,8 +67,8 @@ describe('the plugin, scoped to a phase', () => {
     const r = report();
     expect(phaseSummary(r, scope('intake', 'Intake', [0]))).toMatch(/^Intake · rigor standard \(score 34\)( · \d\d:\d\d–\d\d:\d\d)?$/u);
     expect(phaseSummary(r, scope('build', 'Build', [1]))).toMatch(/^Build · 1 turn · checkpoint 2 · rigor high ↑/u);
-    expect(phaseSummary(r, scope('review', 'Review', [2]))).toMatch(/^Review · approved/u);
-    expect(phaseSummary(r, scope('qe', 'QE', [3]))).toMatch(/^QE · running/u);
+    expect(phaseSummary(r, scope('review', 'Review', [2]))).toMatch(/^Review · Codex · approved/u);
+    expect(phaseSummary(r, scope('qe', 'QE', [3]))).toMatch(/^QE · Pi CLI · running/u);
   });
   it('draws only its phase’s tiles', () => {
     const r = report();
@@ -77,7 +77,14 @@ describe('the plugin, scoped to a phase', () => {
     const review = phaseDashboard(r, scope('review', 'Review', [2]), at(40));
     expect(review.tiles).toEqual(['now', 'helpers', 'decisions']);
     expect(review.now.value).toBe('Review · approved');
+    // With no unit rows yet, the hand-off record names the seat and the time.
+    expect(review.helpers).toEqual([{ name: 'Codex', steps: 'Review' }]);
+    expect(review.now.sub).toMatch(/^Codex · at \d\d:\d\d$/u);
     expect(review.handoff).toBeNull();
+    // The build is the orchestrator's turns: its Now says the turn, never "not started".
+    const build = phaseDashboard(r, scope('build', 'Build', [1]), at(40));
+    expect(build.now.value).toBe('Build · handed off');
+    expect(build.now.sub).toMatch(/^Claude Code · orchestrator · turn 1 ended \d\d:\d\d$/u);
   });
 });
 

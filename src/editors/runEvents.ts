@@ -130,6 +130,24 @@ function reusedOf(v: unknown): Record<string, unknown> | null {
   return { phase: word(r['phase']), ord: num(r['ord']), attempt: num(r['attempt']), reused: names(r['reused']), fresh: names(r['fresh']) };
 }
 
+/**
+ * A checkpoint pause's reasons (free text from the engine, core power.rs) as CLOSED kinds a plugin may hear: "struggling:
+ * 80 min against an estimate of 20 min; 3 failed test runs" → longer_than_estimated, tests_failing. Never the text.
+ */
+export function pauseKinds(reason: string): string[] {
+  const t = reason.replace(/^struggling:\s*/i, '');
+  const out: string[] = [];
+  for (const part of t.split(/;\s*/)) {
+    if (part.trim() === '') continue;
+    if (/min against an estimate of/i.test(part)) out.push('longer_than_estimated');
+    else if (/failed test runs?/i.test(part)) out.push('tests_failing');
+    else if (/reverts?/i.test(part)) out.push('changes_undone');
+    else if (/rigor jumped/i.test(part)) out.push('rigor_jumped');
+    else out.push('other');
+  }
+  return out;
+}
+
 /** One CoreEvent as a row, or null when no topic carries it. `names` turns a seat key into its display name. */
 export function toRow(e: CoreEvent, runId: string, at: number, id: string, names?: (cli: string) => string | null): TopicRow | null {
   const ev = e as unknown as Record<string, unknown>;
@@ -184,8 +202,11 @@ export function toRow(e: CoreEvent, runId: string, at: number, id: string, names
         },
       };
     }
-    case 'powerCheckpointReached':
-      return { ...base, topic: 'wicked.run.checkpoint.reached', data: { checkpoint: num(ev['checkpoint']), turn: num(ev['turn']), trigger: word(ev['trigger']), rigor: rigorOf(ev['rigor']), picked: num(ev['picked']), paused: ev['paused'] === true } };
+    case 'powerCheckpointReached': {
+      const pause = objOf(ev['pause']);
+      const kinds = Array.isArray(pause['reasons']) ? [...new Set(pause['reasons'].filter((x): x is string => typeof x === 'string').flatMap(pauseKinds))] : [];
+      return { ...base, topic: 'wicked.run.checkpoint.reached', data: { checkpoint: num(ev['checkpoint']), turn: num(ev['turn']), trigger: word(ev['trigger']), rigor: rigorOf(ev['rigor']), picked: num(ev['picked']), paused: ev['paused'] === true, pauseKinds: kinds } };
+    }
     case 'powerTurnStarted':
     case 'powerTurnCompleted': {
       const seat = word(ev['cli']);
@@ -198,7 +219,8 @@ export function toRow(e: CoreEvent, runId: string, at: number, id: string, names
     }
     case 'powerToggled': {
       const t = objOf(ev['toggle']);
-      return { ...base, topic: 'wicked.run.power.toggled', at: num(t['at']) ?? base.at, data: { on: t['on'] === true } };
+      const by = typeof t['by'] === 'string' ? t['by'] : '';
+      return { ...base, topic: 'wicked.run.power.toggled', at: num(t['at']) ?? base.at, data: { on: t['on'] === true, byKind: by === 'engine' ? 'engine' : by.startsWith('plugin:') ? 'plugin' : by === '' ? null : 'person' } };
     }
     case 'cliUsage':
       return { ...base, topic: 'wicked.run.usage.reported', data: { attempt: num(ev['attempt']), costUsd: num(ev['costUsd']), inputTokens: num(ev['inputTokens']), outputTokens: num(ev['outputTokens']) } };

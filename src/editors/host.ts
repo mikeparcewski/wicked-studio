@@ -153,8 +153,9 @@ export interface HostDoc {
   propose(edit: { base: number; section: string; text: string }, by: 'operator' | 'plugin'): Promise<AdapterResult<{ version: number | null; unchanged: boolean; by: 'operator' | 'plugin' }>>;
 }
 
-/** The section a plugin may write as itself (crew's `PLUGIN_SECTIONS`). */
-export const PLUGIN_DOC_SECTIONS: ReadonlySet<string> = new Set(['decisions']);
+/** The sections a plugin may write as itself (crew's `PLUGIN_SECTIONS`): its own lines under Decisions, Open questions
+ *  and Next. Never Goal, Approach or Constraints, and a plugin's text never steers (crew steers a person's edit only). */
+export const PLUGIN_DOC_SECTIONS: ReadonlySet<string> = new Set(['decisions', 'questions', 'next']);
 
 /** Protocol 3 (observe): the run events one instance may hear. The host subscribes only after a handshake that
  *  negotiated 3, and posts each batch as `events.batch`; the rows are already filtered to `topics`. */

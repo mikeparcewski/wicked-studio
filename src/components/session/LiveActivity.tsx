@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { BookOpen, CircleCheck, CircleX, GitCommitHorizontal, Loader, Pencil, Search, Sparkles, Terminal, Users } from 'lucide-react';
-import { activityRows, activitySummary, narration, type ActivityKind } from '../../board/liveActivity.js';
+import { activityRows, activitySummary, currentTurn, narration, turnEnded, type ActivityKind } from '../../board/liveActivity.js';
 import { useRunEventStore } from '../../store/events.js';
 import { outputKey, useRuntimeStore } from '../../store/runtime.js';
 
@@ -28,8 +28,12 @@ export function LiveActivity({ runId, ord }: { runId: string; ord: number }): Re
   const [now, setNow] = useState(() => Date.now());
   // Every few seconds: the ages move, and a row that just finished reads as finished.
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 3000); return () => clearInterval(t); }, []);
-  const rows = useMemo(() => activityRows(events, ord), [events, ord]);
-  const said = useMemo(() => narration(output), [output]);
+  // A power build's orchestrator: the turn running now; any other step: its newest attempt. A turn that ended says
+  // itself in one line on its message, so the live list folds away until the next turn starts.
+  const turn = useMemo(() => currentTurn(events, ord), [events, ord]);
+  const ended = turn !== null && turnEnded(events, ord, turn);
+  const rows = useMemo(() => (ended ? [] : activityRows(events, ord, turn)), [events, ord, turn, ended]);
+  const said = useMemo(() => (ended ? null : narration(output)), [output, ended]);
   if (rows.length === 0 && said === null) return null;
   const shown = rows.slice(-SHOWN);
   const earlier = rows.length - shown.length;

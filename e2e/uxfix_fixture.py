@@ -2838,8 +2838,8 @@ def _wd_propose(rid: str, body: dict) -> tuple[int, dict]:
     author = body.get("author")
     plugin = body.get("plugin") or {}
     wanted = body.get("sections") or {}
-    if author == "plugin" and any(k != "decisions" for k in wanted):
-        return 403, {"error": "a plugin writes only its own section (decisions)"}
+    if author == "plugin" and any(k not in ("decisions", "questions", "next") for k in wanted):
+        return 403, {"error": "a plugin writes only its own section (decisions, questions, next)"}
     changed = [k for k in WD_SECTIONS if k in wanted and wanted[k] != d["sections"][k]]
     if not changed:
         return 200, {"version": None, "unchanged": True, "steer": None, "view": _wd_view(rid)}

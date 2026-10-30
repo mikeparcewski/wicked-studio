@@ -6,7 +6,7 @@ import { builtinDefaults } from '../src/editors/model.js';
 import { steerRowWords, WorkingDocSteerRows } from '../src/components/session/RunThreadPlugin.js';
 import { useWorkingDocs } from '../src/store/workingDocs.js';
 import { RUN_PLUGINS } from '../src/plugins/runPlugins.js';
-import { authorWord, steerWords, trailLines, withDecisionLine, type DocView } from '../src/plugins/wicked-phase-report/workingDoc.js';
+import { authorWord, reconcileSection, sectionAuthor, steerWords, trailLines, type DocView } from '../src/plugins/wicked-phase-report/workingDoc.js';
 
 /** Power mode spike 3: the working document through the plugin protocol. The HOST decides whose an edit is. */
 
@@ -99,10 +99,14 @@ describe('the host decides whose an edit is', () => {
   it('generated lines are the plugin’s own even under a gesture, and only in its own section', async () => {
     const h = makeHost({ gesture: true });
     h.port.postMessage(env('doc.propose_edit', { base: 2, section: 'decisions', text: 'Plan approved', origin: 'generated' }, 'g1'));
-    h.port.postMessage(env('doc.propose_edit', { base: 2, section: 'next', text: 'Skip QE', origin: 'generated' }, 'g2'));
+    h.port.postMessage(env('doc.propose_edit', { base: 2, section: 'next', text: 'After hand-off round 1 · the review asked for changes', origin: 'generated' }, 'g2'));
+    h.port.postMessage(env('doc.propose_edit', { base: 2, section: 'constraints', text: 'Skip QE', origin: 'generated' }, 'g3'));
+    h.port.postMessage(env('doc.propose_edit', { base: 2, section: 'approach', text: 'Rewrite it', origin: 'generated' }, 'g4'));
     await tick();
-    expect(h.proposals.map((p) => p.by)).toEqual(['plugin']);
-    expect(h.seen.find((m) => m.re === 'g2')).toMatchObject({ ok: false, error: { code: 'refused' } });
+    // Its own lines go under Decisions, Open questions and Next; never Goal, Approach or Constraints.
+    expect(h.proposals.map((p) => `${p.edit.section}:${p.by}`)).toEqual(['decisions:plugin', 'next:plugin']);
+    expect(h.seen.find((m) => m.re === 'g3')).toMatchObject({ ok: false, error: { code: 'refused' } });
+    expect(h.seen.find((m) => m.re === 'g4')).toMatchObject({ ok: false, error: { code: 'refused' } });
   });
 
   it('a suggested steer is only shown, with the host’s own Send: nothing is written or sent', async () => {
@@ -145,9 +149,29 @@ describe('the words', () => {
     expect(steerWords({ id: 'x', kind: 'next', queuedAt: 1, error: null, pickedUp: null })).toBe('waiting for the next step');
   });
 
-  it('the plugin’s Decisions line is written once', () => {
-    expect(withDecisionLine('Approve the plan · answered 20:02', 'Approve the plan · answered 20:02')).toBeNull();
-    expect(withDecisionLine('', 'Deliver · answered 21:17')).toBe('Deliver · answered 21:17');
+  it('the plugin’s lines are written once; a person’s lines are never touched; its stale questions go', () => {
+    expect(reconcileSection('decisions', 'Approve the plan · answered 20:02', ['Approve the plan · answered 20:02'])).toBeNull();
+    expect(reconcileSection('decisions', '', ['Deliver · answered 21:17'])).toBe('Deliver · answered 21:17');
+    // Decisions only gain lines.
+    expect(reconcileSection('decisions', 'Keep JPY at 0 decimals\nApprove the plan · answered 20:02', [])).toBeNull();
+    // An answered question goes; the person's own question stays where it was.
+    expect(reconcileSection('questions', 'Does the PDF need the symbol?\nWaiting on you · Plan approval · since 20:01', [])).toBe('Does the PDF need the symbol?');
+    expect(reconcileSection('next', 'After hand-off round 1 · the review asked for changes: make them and hand off again', ['After hand-off round 2 · QE acceptance did not pass: fix it and hand off again']))
+      .toBe('After hand-off round 2 · QE acceptance did not pass: fix it and hand off again');
+  });
+
+  it('an agent’s text is labelled with its seat, a section names every writer, and neither a plugin nor an agent steers', () => {
+    expect(authorWord({ kind: 'agent', id: 'agent:claude' })).toBe('Claude Code (agent)');
+    const v: DocView = { ...view, trail: [...view.trail,
+      { version: 3, author: { kind: 'agent', id: 'agent:claude' }, surface: null, sections: ['approach', 'decisions'], at: 0, steerId: null }] };
+    expect(sectionAuthor(v, 'decisions')).toBe('Claude Code (agent), Phase report (plugin)');
+    expect(sectionAuthor(v, 'constraints')).toBe('You');
+    const lines = trailLines(v);
+    expect(lines[0]).toMatch(/^v3 · Claude Code \(agent\) · Approach, Decisions · \d\d:\d\d · not sent to a step$/u);
+    expect(lines[2]).toMatch(/^v1 · Phase report \(plugin\) · Decisions · \d\d:\d\d · not sent to a step$/u);
+    // crew may say an agent's id under another kind: the id decides.
+    expect(trailLines({ ...view, trail: [{ version: 4, author: { kind: 'system', id: 'agent:codex' }, surface: null, sections: ['approach'], at: 0, steerId: null }] })[0])
+      .toMatch(/^v4 · Codex \(agent\)/u);
   });
 
   it('the thread row says who edited which section and where the note stands', () => {

@@ -24,7 +24,12 @@ export interface PowerInfo {
   turn: { n: number; seatName: string | null; running: boolean; outcome: string | null; at: number } | null;
   handoff: { round: number; steps: Map<string, { status: string; seatName: string | null; at: number }> } | null;
   on: boolean | null;
+  /** Each checkpoint pause and how it was answered (closed words only: the reasons' kinds, the choice, a person or not). */
+  pauses: PauseInfo[];
 }
+
+export type PauseChoice = 'continue_high' | 'continue' | 'switch_phased' | 'stop';
+export interface PauseInfo { n: number; at: number; kinds: string[]; choice: PauseChoice | null; byPerson: boolean; answeredAt: number | null }
 
 export interface Report {
   /** The replay has arrived: until then the report says it is reading, never "no events". */
@@ -50,8 +55,23 @@ export function emptyReport(): Report {
 const str = (v: unknown): string | null => (typeof v === 'string' && v !== '' ? v : null);
 const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
 
+/** The pause reasons' kinds a row may carry (closed: `runEvents.ts` maps the engine's reasons to these). */
+export const PAUSE_KINDS: ReadonlySet<string> = new Set(['longer_than_estimated', 'tests_failing', 'changes_undone', 'rigor_jumped', 'other']);
+
+/** The newest pause takes this answer. A plain "it went on" (the next turn, the hand-off) is refined by a specific
+ *  answer that follows it (a person's raise, the switch to phased steps, a stop); a specific answer is never replaced. */
+function answerPause(p: PowerInfo, choice: PauseChoice, byPerson: boolean, at: number): void {
+  const open = p.pauses.at(-1);
+  if (open === undefined || at < open.at) return;
+  const refine = open.choice === 'continue' && !open.byPerson && choice !== 'continue' && (p.checkpoints.at(-1)?.n ?? open.n) === open.n;
+  if (open.choice !== null && !refine) return;
+  open.choice = choice;
+  open.byPerson = byPerson;
+  open.answeredAt = at;
+}
+
 function power(r: Report): PowerInfo {
-  r.power ??= { intake: null, rigor: null, history: [], checkpoints: [], turn: null, handoff: null, on: null };
+  r.power ??= { intake: null, rigor: null, history: [], checkpoints: [], turn: null, handoff: null, on: null, pauses: [] };
   return r.power;
 }
 
@@ -77,7 +97,10 @@ export function foldRows(r: Report, rows: readonly Row[]): boolean {
     const ord = row.ord;
     switch (row.topic) {
       case 'wicked.run.session.started': r.startedAt = row.at; break;
-      case 'wicked.run.session.finished': r.finished = { outcome: str(d['outcome']) ?? 'completed', at: row.at }; break;
+      case 'wicked.run.session.finished':
+        r.finished = { outcome: str(d['outcome']) ?? 'completed', at: row.at };
+        if (r.power != null) answerPause(r.power, d['outcome'] === 'cancelled' ? 'stop' : 'continue', false, row.at);
+        break;
       case 'wicked.run.session.resumed':
         // A resumed run is running again (studio resumes a failed run under the same id).
         if (r.finished !== null && row.at >= r.finished.at) r.finished = null;
@@ -139,6 +162,8 @@ export function foldRows(r: Report, rows: readonly Row[]): boolean {
         p.history.push({ seq, at: row.at, trigger: str(d['trigger']) ?? 'checkpoint', from: str(d['from']), to, direction: str(d['direction']) ?? 'same', planned: num(d['planned']), actual: num(d['actual']), checkpoint: num(d['checkpoint']), byKind: str(d['byKind']) });
         p.history.sort((a, b) => a.seq - b.seq);
         p.rigor = p.history.at(-1)!.to;
+        // A person raising rigor while a pause waits is the pause's answer: continue at high rigor.
+        if (str(d['byKind']) === 'person' && str(d['direction']) === 'up') answerPause(p, 'continue_high', true, row.at);
         break;
       }
       case 'wicked.run.checkpoint.reached': {
@@ -147,6 +172,10 @@ export function foldRows(r: Report, rows: readonly Row[]): boolean {
         if (n === null || p.checkpoints.some((c) => c.n === n)) break;
         p.checkpoints.push({ n, at: row.at, trigger: str(d['trigger']), rigor: str(d['rigor']), picked: num(d['picked']) ?? 0, paused: d['paused'] === true });
         p.checkpoints.sort((a, b) => a.n - b.n);
+        if (d['paused'] === true) {
+          const kinds = Array.isArray(d['pauseKinds']) ? (d['pauseKinds'] as unknown[]).filter((k): k is string => typeof k === 'string' && PAUSE_KINDS.has(k)) : [];
+          p.pauses.push({ n, at: row.at, kinds, choice: null, byPerson: false, answeredAt: null });
+        }
         break;
       }
       case 'wicked.run.turn.started':
@@ -154,6 +183,8 @@ export function foldRows(r: Report, rows: readonly Row[]): boolean {
         const p = power(r);
         const n = num(d['turn']);
         if (n === null || (p.turn !== null && n < p.turn.n)) break;
+        // The orchestrator's next turn after a pause: the pause was answered "continue" (unless it was already).
+        if (row.topic === 'wicked.run.turn.started') answerPause(p, 'continue', false, row.at);
         p.turn = { n, seatName: str(d['seatName']) ?? str(d['seat']), running: row.topic === 'wicked.run.turn.started', outcome: str(d['outcome']), at: row.at };
         break;
       }
@@ -162,12 +193,14 @@ export function foldRows(r: Report, rows: readonly Row[]): boolean {
         const round = num(d['round']) ?? 1;
         const step = str(d['step']);
         if (step === null) break;
+        answerPause(p, 'continue', false, row.at);
         if (p.handoff === null || round > p.handoff.round) p.handoff = { round, steps: new Map() };
         if (round === p.handoff.round) p.handoff.steps.set(step, { status: str(d['status']) ?? 'pending', seatName: str(d['seatName']) ?? str(d['seat']), at: row.at });
         break;
       }
       case 'wicked.run.power.toggled':
         power(r).on = d['on'] === true;
+        if (d['on'] !== true) answerPause(power(r), 'switch_phased', str(d['byKind']) === 'person', row.at);
         break;
       case 'wicked.run.usage.reported':
         r.costUsd += num(d['costUsd']) ?? 0;
@@ -439,6 +472,12 @@ const HANDOFF_STEP: Record<string, string> = { checks: 'checks', review: 'review
 
 /** A phase's state in one word: what its hand-off record or its units say. */
 function phaseState(r: Report, scope: PhaseScope): string {
+  // The build is the orchestrator's turns: working in one, between two, or handed off.
+  if (scope.phase === 'build' && r.power?.turn != null) {
+    if (r.power.turn.running) return 'working';
+    if (r.power.handoff !== null || r.finished !== null) return 'handed off';
+    return 'between turns';
+  }
   const step = HANDOFF_STEP[scope.phase];
   const rec = step !== undefined ? r.power?.handoff?.steps.get(step) : undefined;
   if (rec !== undefined) return rec.status === 'passed' ? (scope.phase === 'review' || scope.phase === 'security' ? 'approved' : 'passed') : rec.status === 'failed' ? (scope.phase === 'review' ? 'changes asked' : 'failed') : rec.status;
@@ -449,6 +488,12 @@ function phaseState(r: Report, scope: PhaseScope): string {
   if (span.failed) return 'did not pass';
   if (span.end !== null) return 'done';
   return span.start === null ? 'not started' : 'running';
+}
+
+/** A hand-off phase's own record (its status, its seat, when it last moved), or null. */
+function stepRec(r: Report, scope: PhaseScope): { status: string; seatName: string | null; at: number } | null {
+  const step = HANDOFF_STEP[scope.phase];
+  return step !== undefined ? r.power?.handoff?.steps.get(step) ?? null : null;
 }
 
 /** The folded line of one phase's block: "Build · 2 turns · checkpoint 2 · rigor high ↑". */
@@ -470,7 +515,8 @@ export function phaseSummary(r: Report, scope: PhaseScope): string {
     parts.push(checksWords(c, r) ?? phaseState(r, scope));
   } else {
     const who = scope.ords.map((o) => r.units.get(o)).find((u) => u?.seatName != null || u?.seat != null);
-    if (who !== undefined && scope.phase !== 'deliver') parts.push(who.seatName ?? who.seat ?? '');
+    const seat = who !== undefined ? who.seatName ?? who.seat : stepRec(r, scope)?.seatName ?? null;
+    if (seat != null && scope.phase !== 'deliver') parts.push(seat);
     parts.push(phaseState(r, scope));
   }
   const span = unitSpan(r, scope);
@@ -482,7 +528,13 @@ export function phaseSummary(r: Report, scope: PhaseScope): string {
 export function phaseDashboard(r: Report, scope: PhaseScope, nowMs: number): Dashboard & { tiles: string[] } {
   const all = dashboard(r, nowMs);
   const span = unitSpan(r, scope);
-  const now = { value: `${scope.label} · ${phaseState(r, scope)}`, sub: span.start === null ? 'Not started yet' : span.end !== null ? `${clock(span.start)}–${clock(span.end)} · ${duration(span.end - span.start)}` : `Since ${clock(span.start)} · ${duration(nowMs - span.start)}` };
+  const t = scope.phase === 'build' ? r.power?.turn ?? null : null;
+  const rec = stepRec(r, scope);
+  const sub = span.start !== null ? (span.end !== null ? `${clock(span.start)}–${clock(span.end)} · ${duration(span.end - span.start)}` : `Since ${clock(span.start)} · ${duration(nowMs - span.start)}`)
+    : t !== null ? `${t.seatName ?? 'The orchestrator'} · orchestrator · turn ${t.n} ${t.running ? `since ${clock(t.at)}` : `ended ${clock(t.at)}`}`
+      : rec !== null ? `${rec.seatName !== null ? `${rec.seatName} · ` : ''}${rec.status === 'running' || rec.status === 'pending' ? 'since' : 'at'} ${clock(rec.at)}`
+        : 'Not started yet';
+  const now = { value: `${scope.label} · ${phaseState(r, scope)}`, sub };
   const decisions = r.gates.filter((g) => inScope(scope, g.ord));
   const open = openGates(r).filter((g) => inScope(scope, g.ord));
   const scopedDecisions = {
@@ -496,8 +548,9 @@ export function phaseDashboard(r: Report, scope: PhaseScope, nowMs: number): Das
     const src = r.checks.slice(-3).reverse()[i];
     return src !== undefined && checksAll.includes(src);
   });
-  const helpers = [...new Set(scope.ords.map((o) => r.units.get(o)).filter((u): u is UnitInfo => u !== undefined && (u.seatName ?? u.seat) !== null && u.seat !== 'bash').map((u) => u.seatName ?? u.seat!))]
-    .map((name) => ({ name, steps: scope.label }));
+  const seats = scope.ords.map((o) => r.units.get(o)).filter((u): u is UnitInfo => u !== undefined && (u.seatName ?? u.seat) !== null && u.seat !== 'bash').map((u) => u.seatName ?? u.seat!);
+  if (seats.length === 0 && rec?.seatName != null) seats.push(rec.seatName);
+  const helpers = [...new Set(seats)].map((name) => ({ name, steps: scope.label }));
   const tiles = scope.phase === 'intake' ? ['now', 'rigor']
     : scope.phase === 'build' ? ['now', 'rigor', 'decisions', 'time']
       : scope.phase === 'checks' ? ['now', 'checks']
