@@ -283,11 +283,17 @@ export function HandoffCard({ round, steps, rigor }: { round: number; steps: rea
 }
 
 /** The power items of the run's thread. `part`: the intake card (it opens the run's turns) or everything after it. */
-export function PowerThread({ view, power, items, part }: { view: SessionView; power: PowerState; items: readonly PowerItem[]; part: 'intake' | 'rest' }): React.ReactElement | null {
+export function PowerThread({ view, power, items, part }: { view: SessionView; power: PowerState; items: readonly PowerItem[]; part: 'intake' | 'build' | 'handoff' | 'rest' }): React.ReactElement | null {
   const roster = useRoster();
   const id = view.session.id;
   const live = !TERMINAL.has(view.session.status);
-  const shown = items.filter((i) => (part === 'intake' ? i.kind === 'intake' : i.kind !== 'intake'));
+  // The build's items run up to the first hand-off card; the hand-off's from it on (each phase's report follows its own).
+  const firstHandoff = items.findIndex((i) => i.kind === 'handoff');
+  const shown = items.filter((it, idx) => (part === 'intake' ? it.kind === 'intake'
+    : it.kind === 'intake' ? false
+      : part === 'rest' ? true
+        : part === 'build' ? firstHandoff < 0 || idx < firstHandoff
+          : firstHandoff >= 0 && idx >= firstHandoff));
   if (shown.length === 0) return null;
   return (
     <>

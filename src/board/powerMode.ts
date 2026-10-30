@@ -596,3 +596,66 @@ export function mergePower(p: PowerState | null, events: readonly CoreEvent[] | 
 function historyTip(p: PowerState): number {
   return p.history.reduce((m, c) => Math.max(m, c.seq), 0) * 1000 + p.toggles.length;
 }
+
+// ── the phases of a power run (one report each, operator 2026-10-30) ─────────────────────────────────────
+
+export interface PowerPhase {
+  key: 'intake' | 'build' | 'checks' | 'review' | 'security' | 'qe' | 'deliver';
+  label: string;
+  ords: number[];
+  current: boolean;
+}
+
+interface UnitLike { id: string; ord: number; status: string; stage?: unknown }
+
+const unitKey = (u: UnitLike): string => (u.id.includes(':') ? u.id.slice(u.id.indexOf(':') + 1) : String(u.stage ?? '')).replace(/#\d+$/, '');
+
+/**
+ * A power run's phases, in order: Intake, Build (the orchestrator), Checks (its floor at hand-off), Review, Security
+ * (when it runs), QE (when it runs), Deliver (when the run has a deliver step). Each names its units; the current one is
+ * the phase the run is in now (the last one once the run ended).
+ */
+export function powerPhases(units: readonly UnitLike[], p: PowerState, events: readonly CoreEvent[] | null | undefined, terminal: boolean): PowerPhase[] {
+  const byKey = (re: RegExp): UnitLike | undefined => [...units].reverse().find((u) => re.test(unitKey(u)));
+  const intakeFrame = (events ?? []).find((e) => e.type === 'powerIntakePlanned') as (CoreEvent & { ord?: unknown }) | undefined;
+  const intakeOrd = typeof intakeFrame?.ord === 'number' ? intakeFrame.ord : byKey(/^(intake|pa-scope|scope)$/)?.ord ?? null;
+  const buildOrd = p.orchestrator.ord;
+  const stepOrd = (step: HandoffStep['step'], re: RegExp): number | null =>
+    p.handoff?.steps.find((s) => s.step === step && s.ord !== null)?.ord ?? byKey(re)?.ord ?? null;
+  const out: Array<Omit<PowerPhase, 'current'>> = [];
+  if (intakeOrd !== null) out.push({ key: 'intake', label: 'Intake', ords: [intakeOrd] });
+  if (buildOrd !== null) out.push({ key: 'build', label: 'Build', ords: [buildOrd] });
+  if (buildOrd !== null) out.push({ key: 'checks', label: 'Checks', ords: [buildOrd] });
+  const review = stepOrd('review', /^(review|critique)$/);
+  if (review !== null) out.push({ key: 'review', label: 'Review', ords: [review] });
+  const security = stepOrd('security', /^security_review$/);
+  if (security !== null) out.push({ key: 'security', label: 'Security', ords: [security] });
+  const qe = stepOrd('qe', /^(verify|qe|qe_acceptance)$/);
+  if (qe !== null) out.push({ key: 'qe', label: 'QE', ords: [qe] });
+  const deliver = byKey(/^deliver$/)?.ord ?? null;
+  if (deliver !== null) out.push({ key: 'deliver', label: 'Deliver', ords: [deliver] });
+  // The current phase: the run's end, else the hand-off step not yet passed, else the build while its unit runs, else
+  // intake while it plans.
+  let current: PowerPhase['key'] | null = null;
+  const statusOf = (ord: number): string | undefined => units.find((u) => u.ord === ord)?.status;
+  if (terminal) current = out.at(-1)?.key ?? null;
+  else {
+    for (const ph of out) {
+      if (ph.key === 'intake') { if (statusOf(ph.ords[0]!) !== 'done') { current = 'intake'; break; } continue; }
+      if (ph.key === 'build') {
+        const handoffStarted = (p.handoff?.steps.length ?? 0) > 0;
+        if (!handoffStarted) { current = 'build'; break; }
+        continue;
+      }
+      if (ph.key === 'checks') {
+        const c = p.handoff?.steps.find((s) => s.step === 'checks');
+        if (c === undefined || (c.status !== 'passed' && c.status !== 'skipped')) { current = 'checks'; break; }
+        continue;
+      }
+      if (ph.key === 'deliver') { current = 'deliver'; break; }
+      const st = statusOf(ph.ords[0]!);
+      if (st !== 'done') { current = ph.key; break; }
+    }
+  }
+  return out.map((ph) => ({ ...ph, current: ph.key === current }));
+}

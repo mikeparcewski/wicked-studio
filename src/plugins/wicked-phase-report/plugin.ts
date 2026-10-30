@@ -15,7 +15,7 @@
 
 import { PROTOCOL, ENVELOPE, type Envelope } from '../_shared/v2.js';
 import surfaces from './surfaces.json';
-import { dashboard, emptyReport, foldRows, gateWord, openGates, summaryLine, type Report, type Row } from './model.js';
+import { dashboard, emptyReport, foldRows, gateWord, openGates, phaseDashboard, phaseSummary, scopeOf, summaryLine, writesDoc, type PhaseScope, type Report, type Row } from './model.js';
 import { SECTION_EFFECT, SECTION_LABELS, SECTIONS, STEER_NOTE, sectionAuthor, trailLines, withDecisionLine, type DocView, type SectionId } from './workingDoc.js';
 
 const ID = 'wicked-phase-report';
@@ -25,6 +25,9 @@ export function start(): void {
   let folded = true;
   let gap = false;
   const report: Report = emptyReport();
+  // The phase this block reports on (`host.hello` → `observe.scope`): a power run has one block per phase; null = the
+  // whole run (a phased run's one block).
+  let scope: PhaseScope | null = null;
   // The working document: null until read; `unsupported` when the service keeps none (an older crew).
   let doc: DocView | null = null;
   let docState: 'reading' | 'ready' | 'unsupported' = 'reading';
@@ -80,14 +83,15 @@ export function start(): void {
     root.className = folded ? 'folded' : 'expanded';
     $('sum').setAttribute('aria-expanded', folded ? 'false' : 'true');
     $('sum').title = folded ? 'Show the phase report' : 'Fold the phase report';
-    $('sum-text').textContent = summaryLine(report);
+    $('sum-text').textContent = scope !== null ? phaseSummary(report, scope) : summaryLine(report);
     const dot = $('dot');
     dot.className = `dot${report.finished !== null ? (report.finished.outcome === 'completed' ? ' done' : ' bad') : openGates(report).length > 0 ? ' wait' : ''}`;
     const dash = $('dash');
     dash.hidden = folded;
     dash.replaceChildren();
     if (!folded) {
-      const d = dashboard(report, Date.now());
+      const d = scope !== null ? phaseDashboard(report, scope, Date.now()) : { ...dashboard(report, Date.now()), tiles: null as string[] | null };
+      const show = (k: string): boolean => d.tiles === null || d.tiles.includes(k);
       if (gap) dash.appendChild(el('p', 'gap tile wide', 'The job’s earlier events could not be read; this shows what happened since.'));
       const now = tile('Now', true);
       now.append(el('p', 'value', d.now.value), el('p', 'sub', d.now.sub));
@@ -141,7 +145,9 @@ export function start(): void {
       helpers.appendChild(hl);
       const time = tile('Time and cost', true);
       time.append(el('p', 'value', d.time.value), el('p', 'sub', d.time.sub));
-      dash.append(now, ...(rigor !== null ? [rigor] : []), ...(handoff !== null ? [handoff] : []), checks, decisions, helpers, time);
+      // A phase's block draws only that phase's tiles.
+      const pick: Array<[string, HTMLElement | null]> = [['now', now], ['rigor', rigor], ['handoff', handoff], ['checks', checks], ['decisions', decisions], ['helpers', helpers], ['time', time]];
+      dash.append(...pick.filter(([k, t]) => t !== null && show(k)).map(([, t]) => t!));
     }
     drawDoc();
     reportHeight();
@@ -206,6 +212,7 @@ export function start(): void {
   /** A decision answered live: the plugin's own line under Decisions, written as itself, once (retried once after a
    *  conflict; it waits for the first read when the document is not read yet). */
   function decisionAnswered(kind: string, at: number): void {
+    if (!writesDoc(scope)) return; // one instance writes the run's lines, never one per phase
     const d = new Date(at);
     const line = `${gateWord(kind)} · answered ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
     void serial(async () => {
@@ -243,8 +250,9 @@ export function start(): void {
 
   function drawDoc(): void {
     const box = $('wd');
-    box.hidden = folded;
-    if (folded) return;
+    // The working document is the run's, shown once: in the run's block, or in a power run's Build block.
+    box.hidden = folded || !writesDoc(scope);
+    if (folded || !writesDoc(scope)) return;
     // The open editor's own text area is kept (its text, caret and focus) and moved into the redrawn section.
     const keep = edit !== null ? box.querySelector<HTMLTextAreaElement>(`textarea[data-section="${edit.section}"]`) : null;
     const hadFocus = keep !== null && document.activeElement === keep;
@@ -329,6 +337,8 @@ export function start(): void {
     if (port !== null || d?.p !== PROTOCOL || d.v !== ENVELOPE || d.type !== 'host.hello' || !e.ports[0]) return;
     const p = (d.payload ?? {}) as Record<string, unknown>;
     applyTheme(p['theme']);
+    const observe = (p['observe'] ?? null) as Record<string, unknown> | null;
+    scope = scopeOf(observe?.['scope']);
     port = e.ports[0];
     // A height measured before the port existed was never sent: the first one on the port always goes.
     lastHeight = 0;

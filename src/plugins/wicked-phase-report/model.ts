@@ -392,3 +392,117 @@ export function dashboard(r: Report, nowMs: number): Dashboard {
   }
   return { now, checks, decisions, helpers, time, rigor, handoff };
 }
+
+// ── one report per phase (operator 2026-10-30) ─────────────────────────────────────────────────────────
+
+/**
+ * The phase one instance reports on, as the host hands it over (`host.hello` → `observe.scope`): a power run has one
+ * block per phase — Intake, Build (the orchestrator), each hand-off step (Checks, Review, Security, QE) and Deliver —
+ * at the end of that phase's messages. Absent = the whole run (a phased run's one block).
+ */
+export interface PhaseScope {
+  phase: 'intake' | 'build' | 'checks' | 'review' | 'security' | 'qe' | 'deliver';
+  label: string;
+  /** The units the phase is made of. */
+  ords: number[];
+}
+
+const PHASES = new Set(['intake', 'build', 'checks', 'review', 'security', 'qe', 'deliver']);
+
+export function scopeOf(v: unknown): PhaseScope | null {
+  if (v === null || typeof v !== 'object') return null;
+  const s = v as Record<string, unknown>;
+  if (typeof s['phase'] !== 'string' || !PHASES.has(s['phase']) || typeof s['label'] !== 'string' || !Array.isArray(s['ords'])) return null;
+  const ords = (s['ords'] as unknown[]).filter((o): o is number => typeof o === 'number' && Number.isFinite(o));
+  return { phase: s['phase'] as PhaseScope['phase'], label: s['label'].slice(0, 40), ords };
+}
+
+/** The one instance that writes the working document's lines (so N blocks never write N copies): the run-level block
+ *  of a phased run, the Build block of a power run. */
+export function writesDoc(scope: PhaseScope | null): boolean {
+  return scope === null || scope.phase === 'build';
+}
+
+function inScope(scope: PhaseScope, ord: number | null): boolean {
+  return ord !== null && scope.ords.includes(ord);
+}
+
+function unitSpan(r: Report, scope: PhaseScope): { start: number | null; end: number | null; running: boolean; failed: boolean } {
+  const us = scope.ords.map((o) => r.units.get(o)).filter((u): u is UnitInfo => u !== undefined);
+  const start = us.reduce<number | null>((m, u) => (u.startedAt !== null && (m === null || u.startedAt < m) ? u.startedAt : m), null);
+  const ends = us.map((u) => u.finishedAt);
+  const end = ends.length > 0 && ends.every((e) => e !== null) ? Math.max(...(ends as number[])) : null;
+  return { start, end, running: us.some((u) => u.state === 'running'), failed: us.some((u) => u.state === 'failed' || u.state === 'denied') };
+}
+
+const HANDOFF_STEP: Record<string, string> = { checks: 'checks', review: 'review', security: 'security', qe: 'qe' };
+
+/** A phase's state in one word: what its hand-off record or its units say. */
+function phaseState(r: Report, scope: PhaseScope): string {
+  const step = HANDOFF_STEP[scope.phase];
+  const rec = step !== undefined ? r.power?.handoff?.steps.get(step) : undefined;
+  if (rec !== undefined) return rec.status === 'passed' ? (scope.phase === 'review' || scope.phase === 'security' ? 'approved' : 'passed') : rec.status === 'failed' ? (scope.phase === 'review' ? 'changes asked' : 'failed') : rec.status;
+  const open = openGates(r).filter((g) => inScope(scope, g.ord));
+  if (open.length > 0) return 'waiting on you';
+  const span = unitSpan(r, scope);
+  if (span.running) return 'running';
+  if (span.failed) return 'did not pass';
+  if (span.end !== null) return 'done';
+  return span.start === null ? 'not started' : 'running';
+}
+
+/** The folded line of one phase's block: "Build · 2 turns · checkpoint 2 · rigor high ↑". */
+export function phaseSummary(r: Report, scope: PhaseScope): string {
+  if (!r.loaded) return 'Reading the job’s events…';
+  const p = r.power;
+  const parts = [scope.label];
+  if (scope.phase === 'intake') {
+    if (p?.intake != null) parts.push(`rigor ${p.intake.rigor}${p.intake.score !== null ? ` (score ${p.intake.score})` : ''}`);
+    else parts.push(phaseState(r, scope));
+  } else if (scope.phase === 'build') {
+    const turns = p?.turn?.n ?? 0;
+    if (turns > 0) parts.push(`${turns} ${turns === 1 ? 'turn' : 'turns'}`);
+    if ((p?.checkpoints.length ?? 0) > 0) parts.push(`checkpoint ${p!.checkpoints.at(-1)!.n}`);
+    if (p?.rigor != null) parts.push(`rigor ${p.rigor}${p.intake !== null && p.rigor !== p.intake.rigor ? ' ↑' : ''}`);
+    if (p?.turn?.running === true) parts.push('working');
+  } else if (scope.phase === 'checks') {
+    const c = r.checks.filter((x) => inScope(scope, x.ord)).at(-1);
+    parts.push(checksWords(c, r) ?? phaseState(r, scope));
+  } else {
+    const who = scope.ords.map((o) => r.units.get(o)).find((u) => u?.seatName != null || u?.seat != null);
+    if (who !== undefined && scope.phase !== 'deliver') parts.push(who.seatName ?? who.seat ?? '');
+    parts.push(phaseState(r, scope));
+  }
+  const span = unitSpan(r, scope);
+  if (span.start !== null) parts.push(span.end !== null ? `${clock(span.start)}–${clock(span.end)}` : `since ${clock(span.start)}`);
+  return parts.filter((x) => x !== '').join(' · ');
+}
+
+/** One phase's dashboard: only what that phase is about. `tiles` says which of the dashboard's tiles to draw. */
+export function phaseDashboard(r: Report, scope: PhaseScope, nowMs: number): Dashboard & { tiles: string[] } {
+  const all = dashboard(r, nowMs);
+  const span = unitSpan(r, scope);
+  const now = { value: `${scope.label} · ${phaseState(r, scope)}`, sub: span.start === null ? 'Not started yet' : span.end !== null ? `${clock(span.start)}–${clock(span.end)} · ${duration(span.end - span.start)}` : `Since ${clock(span.start)} · ${duration(nowMs - span.start)}` };
+  const decisions = r.gates.filter((g) => inScope(scope, g.ord));
+  const open = openGates(r).filter((g) => inScope(scope, g.ord));
+  const scopedDecisions = {
+    open: open.length,
+    answered: decisions.filter((g) => g.answeredAt !== null).length,
+    items: decisions.slice(-5).map((g) => ({ text: gateWord(g.kind), when: g.answeredAt !== null ? `answered ${clock(g.answeredAt)}` : `open since ${clock(g.openedAt)}`, open: open.includes(g) })),
+  };
+  const checksAll = r.checks.filter((c) => inScope(scope, c.ord));
+  const checks = all.checks.filter((_c, i) => {
+    // `all.checks` is the newest three, newest first: keep the ones this phase ran.
+    const src = r.checks.slice(-3).reverse()[i];
+    return src !== undefined && checksAll.includes(src);
+  });
+  const helpers = [...new Set(scope.ords.map((o) => r.units.get(o)).filter((u): u is UnitInfo => u !== undefined && (u.seatName ?? u.seat) !== null && u.seat !== 'bash').map((u) => u.seatName ?? u.seat!))]
+    .map((name) => ({ name, steps: scope.label }));
+  const tiles = scope.phase === 'intake' ? ['now', 'rigor']
+    : scope.phase === 'build' ? ['now', 'rigor', 'decisions', 'time']
+      : scope.phase === 'checks' ? ['now', 'checks']
+        : scope.phase === 'deliver' ? ['now', 'decisions']
+          : ['now', 'helpers', 'decisions'];
+  const rigor = scope.phase === 'intake' && all.rigor !== null ? all.rigor.slice(0, 1) : all.rigor;
+  return { ...all, now, checks, decisions: scopedDecisions, helpers, rigor, handoff: null, tiles };
+}

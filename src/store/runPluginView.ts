@@ -36,8 +36,21 @@ function writePinned(runId: string, pluginId: string, pinned: boolean): void {
 
 const fresh = (runId: string, pluginId: string): BlockView => ({ pinned: readPinned(runId, pluginId), folded: true, updatedOrds: [], highlight: 0, pulse: 0, steps: {} });
 
+/** One phase of a power run (operator 2026-10-30: one report per phase): the plugin's instance for it reports on
+ *  `ords` only, sits at the end of the phase's messages and is open while the phase is the current one. */
+export interface RunPhase {
+  key: 'intake' | 'build' | 'checks' | 'review' | 'security' | 'qe' | 'deliver';
+  label: string;
+  ords: number[];
+  current: boolean;
+}
+
 interface State {
   blocks: Record<string, BlockView>;
+  /** Each phase block's phase, by `runId::viewId` (the pinned strip draws a pinned phase block with its scope). */
+  phases: Record<string, RunPhase>;
+  /** The thread says which phases a power run has (pinned or not), so a block pinned before a reload is drawn. */
+  setPhase(runId: string, viewId: string, phase: RunPhase): void;
   /** The newest jump: the session thread brings that block into view (it owns the thread's scroll). */
   lastJump: { runId: string; pluginId: string; n: number } | null;
   view(runId: string, pluginId: string): BlockView;
@@ -64,6 +77,13 @@ export const useRunPluginView = create<State>((set, get) => {
   });
   return {
     blocks: {},
+    phases: {},
+    setPhase: (runId, viewId, phase) => set((s) => {
+      const k = KEY(runId, viewId);
+      const was = s.phases[k];
+      if (was !== undefined && was.current === phase.current && was.label === phase.label && was.ords.join(',') === phase.ords.join(',')) return s;
+      return { phases: { ...s.phases, [k]: phase } };
+    }),
     lastJump: null,
     view: (runId, pluginId) => get().blocks[KEY(runId, pluginId)] ?? fresh(runId, pluginId),
     setPinned: (runId, pluginId, pinned, keepFocus) => {

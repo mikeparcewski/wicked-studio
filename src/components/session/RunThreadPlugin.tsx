@@ -10,7 +10,7 @@ import { useRoster } from '../../hooks/useRoster.js';
 import { seatLabel } from '../../board/seatNames.js';
 import { stepLabelOf } from '../../board/chainModel.js';
 import { RUN_PLUGINS, topicWords, type RunPlugin } from '../../plugins/runPlugins.js';
-import { useBlockView, useRunPluginView } from '../../store/runPluginView.js';
+import { useBlockView, useRunPluginView, type RunPhase } from '../../store/runPluginView.js';
 import { useConnectionStore } from '../../store/connection.js';
 
 /**
@@ -50,8 +50,16 @@ export function attributionLine(p: Pick<RunPlugin, 'title' | 'version'>): string
   return `From plugin · ${p.title} ${p.version} · observes run events`;
 }
 
-export function RunThreadPlugin({ runId, plugin, placement }: { runId: string; plugin: RunPlugin; placement: 'thread' | 'pinned' }): React.ReactElement {
-  const view = useBlockView(runId, plugin.id);
+export type { RunPhase };
+
+/** The view key of one instance: the plugin's id, and its phase in a power run. */
+export function blockViewId(pluginId: string, phase: Pick<RunPhase, 'key'> | null | undefined): string {
+  return phase != null ? `${pluginId}@${phase.key}` : pluginId;
+}
+
+export function RunThreadPlugin({ runId, plugin, placement, phase = null }: { runId: string; plugin: RunPlugin; placement: 'thread' | 'pinned'; phase?: RunPhase | null }): React.ReactElement {
+  const viewId = blockViewId(plugin.id, phase);
+  const view = useBlockView(runId, viewId);
   const setFolded = useRunPluginView((s) => s.setFolded);
   const setPinned = useRunPluginView((s) => s.setPinned);
   const heard = useRunPluginView((s) => s.heard);
@@ -62,6 +70,10 @@ export function RunThreadPlugin({ runId, plugin, placement }: { runId: string; p
     return seat !== undefined ? seatLabel(seat) : null;
   };
   const frameBox = useRef<HTMLDivElement | null>(null);
+  /** A person folded or opened this block: the current phase no longer decides it. */
+  const touched = useRef(false);
+  const phaseOrds = useRef<number[] | null>(phase?.ords ?? null);
+  phaseOrds.current = phase?.ords ?? null;
   const block = useRef<HTMLElement | null>(null);
   const hostRef = useRef<EditorHost | null>(null);
   const foldedRef = useRef(view.folded);
@@ -109,6 +121,7 @@ export function RunThreadPlugin({ runId, plugin, placement }: { runId: string; p
       events: {
         runId,
         topics: plugin.granted,
+        ...(phase !== null ? { scope: { phase: phase.key, label: phase.label, ords: phase.ords } } : {}),
         subscribe: (deliver) => {
           const feed = new RunEventFeed({
             runId,
@@ -118,10 +131,10 @@ export function RunThreadPlugin({ runId, plugin, placement }: { runId: string; p
             names: (cli) => names.current(cli),
             deliver: (batch: EventsBatch) => {
               deliver(batch);
-              const ords = [...new Set(batch.rows.filter((r) => r.ord !== null && r.ord > FIRST_ORD && !NOT_AN_UPDATE.has(r.topic)).map((r) => r.ord as number))];
+              const ords = [...new Set(batch.rows.filter((r) => r.ord !== null && r.ord > FIRST_ORD && !NOT_AN_UPDATE.has(r.topic) && (phaseOrds.current === null || phaseOrds.current.includes(r.ord))).map((r) => r.ord as number))];
               const steps: Record<number, string> = {};
               for (const r of batch.rows) if (r.topic === 'wicked.run.unit.planned' && r.ord !== null && typeof r.data['step'] === 'string') steps[r.ord] = stepLabelOf(r.data['step']);
-              heard(runId, plugin.id, ords, !batch.replay && batch.rows.length > 0, steps);
+              heard(runId, viewId, ords, !batch.replay && ords.length > 0, steps);
             },
           });
           feed.start();
@@ -139,7 +152,7 @@ export function RunThreadPlugin({ runId, plugin, placement }: { runId: string; p
           queueMicrotask(() => hostRef.current?.setFold(foldedRef.current));
         },
         cardHeight: (px) => setHeight(px),
-        fold: (folded) => setFolded(runId, plugin.id, folded),
+        fold: (folded) => { touched.current = true; setFolded(runId, viewId, folded); },
         steerProposal: (text) => { setProposal(text.slice(0, 600)); setProposalState('idle'); },
       },
     });
@@ -153,9 +166,15 @@ export function RunThreadPlugin({ runId, plugin, placement }: { runId: string; p
       hostRef.current = null;
       URL.revokeObjectURL(url);
     };
-    // One frame per mount; "Reload it" remounts.
+    // One frame per mount; "Reload it" remounts; a phase whose units changed is another scope.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [runId, plugin.id, plugin.html, mountKey]);
+  }, [runId, plugin.id, plugin.html, mountKey, phase?.key, phase?.ords.join(',')]);
+
+  // A phase's block is open while its phase is the current one, folded otherwise — until a person folds or opens it.
+  useEffect(() => {
+    if (phase === null || touched.current) return;
+    setFolded(runId, viewId, !phase.current);
+  }, [phase?.current, runId, viewId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // The working document changed (crew's `workingDocChanged` frame): the plugin re-reads it, the thread rows follow.
   useEffect(() => subscribeCoreEvents((e) => {
@@ -214,7 +233,7 @@ export function RunThreadPlugin({ runId, plugin, placement }: { runId: string; p
   // Pin and unpin move the block (it remounts at its other place): the Pin button keeps the keyboard focus.
   const pinButton = useRef<HTMLButtonElement | null>(null);
   const takeFocus = useRunPluginView((s) => s.takePinFocus);
-  useEffect(() => { if (takeFocus(runId, plugin.id)) pinButton.current?.focus(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (takeFocus(runId, viewId)) pinButton.current?.focus(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // /ws has no replay: after the socket was lost and came back, the block is rebuilt from the run's durable log, so
   // nothing that happened while it was down is missing.
@@ -234,28 +253,29 @@ export function RunThreadPlugin({ runId, plugin, placement }: { runId: string; p
   return (
     <section
       ref={block}
-      id={runPluginBlockId(runId, plugin.id)}
+      id={runPluginBlockId(runId, viewId)}
       data-testid="run-plugin"
       data-plugin={plugin.id}
+      {...(phase !== null ? { 'data-phase': phase.key, 'data-current': phase.current ? 'true' : 'false' } : {})}
       data-run-id={runId}
       data-pinned={view.pinned ? 'true' : 'false'}
       data-folded={view.folded ? 'true' : 'false'}
       data-placement={placement}
       {...(flash !== null ? { 'data-flash': flash } : {})}
-      aria-label={`${plugin.title}, a plugin`}
+      aria-label={`${plugin.title}${phase !== null ? `: ${phase.label}` : ''}, a plugin`}
       className={`wk-runplugin${view.folded ? ' wk-runplugin--folded' : ''}${placement === 'pinned' ? ' wk-runplugin--pinned' : ''}${flash !== null ? ` wk-runplugin--${flash}` : ''}`}
     >
       <p className="wk-runplugin-title" data-testid="run-plugin-title">
-        <span aria-hidden className="wk-hpanel-dot" />{plugin.title}
+        <span aria-hidden className="wk-hpanel-dot" />{plugin.title}{phase !== null && <span data-testid="run-plugin-phase" className="wk-runplugin-phase"> · {phase.label}</span>}
         <span className="wk-tag" data-testid="run-plugin-grant" title={`Built in: it was given these without asking. It hears ${topics}.`}>Built in · pre-granted</span>
       </p>
       <div className="wk-runplugin-tools">
         <button type="button" ref={pinButton} data-testid="run-plugin-pin" aria-pressed={view.pinned} aria-label={pinLabel} title={pinLabel}
-          onClick={(e) => setPinned(runId, plugin.id, !view.pinned, e.detail === 0 || document.activeElement === e.currentTarget)} className="wk-runplugin-btn">
+          onClick={(e) => setPinned(runId, viewId, !view.pinned, e.detail === 0 || document.activeElement === e.currentTarget)} className="wk-runplugin-btn">
           <svg aria-hidden viewBox="0 0 16 16" width="14" height="14"><path d="M10.5 1.5 14.5 5.5 12 6.5 9.5 9l.5 3.5-1 1-3-3L3 13.5l-.5-.5L5.5 10l-3-3 1-1L7 6.5 9.5 4z" fill={view.pinned ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" /></svg>
         </button>
         <button type="button" data-testid="run-plugin-fold" aria-expanded={!view.folded} aria-label={foldLabel} title={foldLabel}
-          onClick={() => setFolded(runId, plugin.id, !view.folded)} className="wk-runplugin-btn">
+          onClick={() => { touched.current = true; setFolded(runId, viewId, !view.folded); }} className="wk-runplugin-btn">
           <svg aria-hidden viewBox="0 0 16 16" width="14" height="14"><path d={view.folded ? 'M4 6l4 4 4-4' : 'M4 10l4-4 4 4'} fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
         </button>
       </div>
@@ -299,11 +319,34 @@ export function RunThreadPlugins({ runId, placement }: { runId: string; placemen
  *  pinned runs never sit in the same place. Nothing pinned = nothing drawn. */
 export function PinnedRunPlugins({ runIds }: { runIds: readonly string[] }): React.ReactElement | null {
   const blocks = useRunPluginView((s) => s.blocks);
+  const known = useRunPluginView((s) => s.phases);
   const any = runIds.some((r) => RUN_PLUGINS.some((p) => blocks[`${r}::${p.id}`]?.pinned ?? readPinnedSafe(r, p.id)));
-  if (!any) return null;
+  // A power run's phase blocks pinned (the block keeps its phase: it is drawn with it in the strip), also after a reload.
+  const phases = runIds.flatMap((r) => RUN_PLUGINS.flatMap((pl) => Object.entries(known)
+    .filter(([k]) => k.startsWith(`${r}::${pl.id}@`))
+    .filter(([k]) => blocks[k]?.pinned ?? readPinnedSafe(r, k.slice(r.length + 2)))
+    .map(([k, ph]) => ({ r, ph, pl, k }))));
+  if (!any && phases.length === 0) return null;
   return (
     <div data-testid="run-plugins-pinned" className="wk-runplugins-pinned">
       {runIds.map((r) => <RunThreadPlugins key={r} runId={r} placement="pinned" />)}
+      {phases.map(({ r, ph, pl, k }) => <RunThreadPlugin key={k} runId={r} plugin={pl} placement="pinned" phase={ph} />)}
+    </div>
+  );
+}
+
+/** A power run's phase report: one instance of each run-thread plugin for this phase, in the thread (unless pinned). */
+export function RunPhasePlugins({ runId, phase }: { runId: string; phase: RunPhase }): React.ReactElement | null {
+  const blocks = useRunPluginView((s) => s.blocks);
+  const setPhase = useRunPluginView((s) => s.setPhase);
+  useEffect(() => {
+    for (const p of RUN_PLUGINS) setPhase(runId, blockViewId(p.id, phase), phase);
+  }, [runId, phase.key, phase.label, phase.current, phase.ords.join(','), setPhase]); // eslint-disable-line react-hooks/exhaustive-deps
+  const shown = RUN_PLUGINS.filter((p) => !(blocks[`${runId}::${blockViewId(p.id, phase)}`]?.pinned ?? readPinnedSafe(runId, blockViewId(p.id, phase))));
+  if (shown.length === 0) return null;
+  return (
+    <div data-testid="run-plugins-phase" data-phase={phase.key} className="wk-runplugins">
+      {shown.map((p) => <RunThreadPlugin key={`${p.id}@${phase.key}`} runId={runId} plugin={p} placement="thread" phase={phase} />)}
     </div>
   );
 }
