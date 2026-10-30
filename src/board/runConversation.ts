@@ -158,7 +158,7 @@ export function decisionMessages(events: readonly CoreEvent[] | null | undefined
 const ANSI = /\u001b\[[0-9;]*[A-Za-z]/g;
 
 /** A filesystem path outside the repository (home, temp, absolute): never on a message's face. */
-const FS_PATH = /(?:`)?(?:~|\/(?:Users|home|private|tmp|var|Volumes|opt))\/[^\s`'")]+(?:`)?/g;
+const FS_PATH = /(?:`)?(?:~|\/(?:Users|home|private|tmp|var|Volumes|opt))\/[^\s`'")\],;:!?]*[^\s`'")\],;:!?.](?:`)?/g;
 
 export interface EvaluatorFace {
   /** The bubble's one plain sentence (the report's first), with no filesystem path. */
@@ -179,18 +179,24 @@ export function evaluatorFace(raw: string, label: string): EvaluatorFace | null 
   const verdicts = [...text.matchAll(/^\s*VERDICT:\s*(PASS|FAIL|NOT PASS)\s*$/gim)];
   const verdict = verdicts.length > 0 ? verdicts[verdicts.length - 1]![1]!.toUpperCase() === 'PASS' : null;
   if (items.length === 0 && verdict === null) return null;
+  // Machine lines (ITEM, VERDICT, evidence, lists, headings) go line by line, so a sentence next to one is still read
+  // and none of them is ever read into the sentence.
   const machine = /^\s*(ITEM\s+\d+|VERDICT|QE-EVIDENCE|ADVICE|Counts|Commands run|#|[-*]\s|\d+\.\s|```)/i;
-  const first = text.split(/\n\s*\n/).map((p) => p.trim()).find((p) => p !== '' && !machine.test(p)) ?? null;
+  const prose = text.split('\n').map((l) => (machine.test(l) ? '' : l)).join('\n');
+  const first = prose.split(/\n\s*\n/).map((p) => p.trim()).find((p) => p !== '') ?? null;
   let sentence: string | null = null;
   if (first !== null) {
-    const flat = first.replace(/\s*\n\s*/g, ' ').replace(FS_PATH, '').replace(/\s{2,}/g, ' ').trim();
+    const flat = first.replace(/\s*\n\s*/g, ' ').replace(FS_PATH, '').replace(/\s{2,}/g, ' ').replace(/\s+([.,;:!?])/g, '$1').trim();
     const end = /^(.+?[.!?])(\s|$)/.exec(flat);
     sentence = (end !== null ? end[1]! : flat).trim() || null;
   }
   const passed = items.filter(Boolean).length;
   const ok = verdict ?? (items.length > 0 && passed === items.length);
-  const verdictLine = items.length > 0 ? `${label}: ${passed} of ${items.length} ${items.length === 1 ? 'item passes' : 'items pass'}`
-    : `${label} ${ok ? 'passed' : 'did not pass'}`;
+  const counted = `${passed} of ${items.length} ${items.length === 1 ? 'item' : 'items'}`;
+  // The verdict leads: a FAIL with every item passing is still said as not passing.
+  const verdictLine = items.length === 0 ? `${label} ${ok ? 'passed' : 'did not pass'}`
+    : ok ? `${label}: ${counted} ${items.length === 1 ? 'passes' : 'pass'}`
+      : `${label} did not pass (${counted} passed)`;
   return { sentence, verdictLine, tone: ok ? 'pass' : 'fail' };
 }
 /** A step output's own verdict header ("VERDICT: PASS") — said by the message in words, not shouted. */

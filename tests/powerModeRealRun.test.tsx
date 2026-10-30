@@ -56,7 +56,7 @@ describe('the real run, as words', () => {
     const settled = settleHandoff(STEPS, () => undefined, true);
     expect(settled.map((s) => `${s.step}:${s.status}`)).toEqual(['rescore:passed', 'checks:passed', 'review:passed', 'qe:passed']);
     const stuck = [st('review', 'running', 'codex', 3, T(14, 56)), st('qe', 'running', 'codex', 4, T(15, 2)), st('compliance', 'pending', null, 9, T(15, 2))];
-    const unitsDone = (ord: number): string | undefined => ({ 3: 'done', 4: 'rejected' } as Record<number, string>)[ord];
+    const unitsDone = (ord: number | null): string | undefined => (ord === null ? undefined : ({ 3: 'done', 4: 'rejected' } as Record<number, string>)[ord]);
     expect(settleHandoff(stuck, unitsDone, true).map((s) => `${s.step}:${s.status}`)).toEqual(['review:passed', 'qe:failed', 'compliance:skipped']);
     expect(settleHandoff(stuck, () => 'executing', false).map((s) => s.status)).toEqual(['running', 'running', 'pending']);
   });

@@ -26,8 +26,9 @@ export function isHeldRun(session: SessionView['session']): boolean {
  */
 export function isPowerPaused(session: SessionView['session']): boolean {
   if (NOT_LIVE.has(session.status)) return false;
-  const p = (session as unknown as { power?: { pause?: unknown } | null }).power;
-  return p !== null && typeof p === 'object' && p.pause !== null && typeof p.pause === 'object';
+  const p = (session as unknown as { power?: { on?: unknown; pause?: unknown } | null }).power;
+  // A pause holds only a run still in power mode (switching to phased answers it).
+  return p !== null && typeof p === 'object' && p.on !== false && p.pause !== null && typeof p.pause === 'object';
 }
 
 /** The runs with every live run in `held` marked; the same array when nothing is held. */

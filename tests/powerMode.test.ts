@@ -133,7 +133,7 @@ describe('the state as it stands now', () => {
   });
   it('a checkpoint frame that opened a pause pauses the run until the next turn starts; this page\'s answer clears it', () => {
     const pz = { at: at(29), checkpoint: 3, reasons: ['grew'], recommended: 'split' as const };
-    const cp = { type: 'powerCheckpointReached', session: 'r', ord: 1, checkpoint: 3, turn: 3, trigger: 'turn', head: null, picked: 0, rigor: 'highest', paused: true, pause: pz };
+    const cp = { type: 'powerCheckpointReached', session: 'r', ord: 1, checkpoint: 3, turn: 3, trigger: 'turn', head: null, picked: 0, rigor: 'highest', paused: true, pause: pz, ts: at(29) };
     expect(mergePower(state(), events([cp]))!.pause).toEqual(pz);
     expect(mergePower(state(), events([cp, { type: 'powerTurnStarted', session: 'r', ord: 1, attempt: 0, turn: 4, cli: 'claude' }]))!.pause).toBeNull();
     const answered = state({ pause: null, history: [...state().history, change(4, 30, 'operator', 'high', 'highest', 34, 34, null)] });

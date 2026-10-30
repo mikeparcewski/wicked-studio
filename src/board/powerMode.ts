@@ -1,4 +1,5 @@
 import type { CoreEvent } from '../api/types.js';
+import { arrivedAt } from '../store/events.js';
 import {
   POWER_EVENT_TYPES, RIGORS, isRigor, rigorRank,
   type HandoffStep, type PowerActivityEvent, type PowerCheckpointEvent, type PowerState, type PowerToggle, type PowerTurnEvent,
@@ -233,7 +234,9 @@ export function changeReason(c: Pick<RigorChange, 'reasons'>): string | null {
   const r = c.reasons[0];
   if (r === undefined) return null;
   const clean = r.replace(/^\s*(raised|lowered) by [^:]+:\s*/i, '').trim();
-  return clean === '' ? null : clean;
+  // Boilerplate that only names who did it ("raised by local", "Raised by you from the job page") says nothing more.
+  if (clean === '' || /^(raised|lowered)( by [\w.:@ ()-]+?)?( from the job page)?\.?$/i.test(clean) || /^from the job page\.?$/i.test(clean)) return null;
+  return clean;
 }
 
 /** What surrounds a rigor change in the run: the checkpoint that paused before it, and whether hand-off ran after. */
@@ -274,9 +277,9 @@ export function rigorMarkWords(c: RigorChange, ctx: RigorMarkContext = { pausedC
 /** The rigor in effect at `t`: the newest change at or before it, else the plan's. */
 export function rigorAt(p: Pick<PowerState, 'history' | 'plan' | 'rigor'> | null, t: number | null): Rigor | null {
   if (p === null) return null;
-  if (t === null) return p.rigor ?? p.plan?.rigor ?? null;
+  if (t === null || p.history.length === 0) return p.rigor ?? p.plan?.rigor ?? null;
   let r: Rigor | null = p.plan?.rigor ?? null;
-  for (const c of [...p.history].sort((a, b) => a.at - b.at)) {
+  for (const c of [...p.history].sort((a, b) => a.at - b.at || a.seq - b.seq)) {
     if (c.at <= t && c.to !== null) r = c.to;
   }
   return r ?? p.rigor ?? null;
@@ -287,7 +290,7 @@ export function rigorAt(p: Pick<PowerState, 'history' | 'plan' | 'rigor'> | null
  * or the run ended, never "running" or "waiting": the unit's own result says passed or failed, and a step that never
  * got to run on an ended run is skipped.
  */
-export function settleHandoff(steps: readonly HandoffStep[], unitStatus: (ord: number) => string | undefined, terminal: boolean): HandoffStep[] {
+export function settleHandoff(steps: readonly HandoffStep[], unitStatus: (ord: number | null, step: HandoffStep['step']) => string | undefined, terminal: boolean, completed = false): HandoffStep[] {
   const latest = new Map<string, HandoffStep>();
   for (const st of steps) {
     const cur = latest.get(st.step);
@@ -295,9 +298,12 @@ export function settleHandoff(steps: readonly HandoffStep[], unitStatus: (ord: n
   }
   return orderSteps([...latest.values()].map((st) => {
     if (st.status !== 'running' && st.status !== 'pending') return st;
-    const u = st.ord !== null ? unitStatus(st.ord) : undefined;
+    // Its unit by ord, else by what the step is (a record with no ord: checks, a corpus, an older engine).
+    const u = unitStatus(st.ord, st.step);
     if (u === 'done') return { ...st, status: 'passed' as const };
     if (u === 'rejected' || u === 'failed') return { ...st, status: 'failed' as const };
+    // A run that completed went through its checks and re-score: they did not stop it.
+    if (completed && (st.step === 'checks' || st.step === 'rescore')) return { ...st, status: 'passed' as const };
     return terminal ? { ...st, status: 'skipped' as const } : st;
   }));
 }
@@ -512,26 +518,47 @@ export { isRigor };
 /** Frames that can only come after a pause was answered: the run moved on. */
 const PAUSE_ENDS: ReadonlySet<string> = new Set(['powerTurnStarted', 'powerHandoffStepped', 'powerToggled', 'unitDispatched', 'resumed', 'gateDecided', 'sessionCompleted', 'sessionFailed', 'runCancelled']);
 
+/** When the state a merge starts from was last true: its newest dated record (a change, a flip, a hand-off step, the
+ *  plan, the pause it holds). A frame newer than this is news; an older one is history the state already folded. */
+function stateAt(p: PowerState): number {
+  let at = p.plan?.at ?? 0;
+  for (const c of p.history) at = Math.max(at, c.at);
+  for (const t of p.toggles) at = Math.max(at, t.at);
+  for (const st of p.handoff?.steps ?? []) at = Math.max(at, st.at);
+  if (p.pause !== null) at = Math.max(at, p.pause.at);
+  return at;
+}
+
 /**
  * The run's power state, brought up to date by the frames that arrived after the session was read (`rigorRescored`,
- * `powerToggled`, `powerHandoffStepped`, `powerCheckpointReached`) and by the answer to this page's own flip or raise
- * (`local`, the route's PowerView), whichever is newest. Rigor only ever moves the way the engine said it did.
+ * `powerToggled`, `powerHandoffStepped`, `powerCheckpointReached`) and by the answer to this page's own flip, raise or
+ * pause answer (`local`, the route's PowerView, received at `localAt`), whichever is newest. Rigor only ever moves the
+ * way the engine said it did.
+ *
+ * The pause (xreview on studio#933): a checkpoint frame's pause counts only when it is NEWER than the state it is
+ * merged over (a frame that came live, or one dated after the state's newest record) — an answered pause in the
+ * recorded trail never comes back on a reload — and any later frame that moves the run on ends it.
  */
-export function mergePower(p: PowerState | null, events: readonly CoreEvent[] | null | undefined, local: PowerState | null = null): PowerState | null {
+export function mergePower(p: PowerState | null, events: readonly CoreEvent[] | null | undefined, local: PowerState | null = null, localAt: number | null = null): PowerState | null {
   let base = p;
   // This page's own answer (a flip, a raise, a pause answered) is the newest word on what it changed.
   const usedLocal = local !== null && (base === null || historyTip(local) >= historyTip(base));
   if (usedLocal) base = { ...local! };
   if (base === null) return null;
+  const since = Math.max(stateAt(base), usedLocal && localAt !== null ? localAt : 0);
   const history = new Map<number, RigorChange>(base.history.map((c) => [c.seq, c]));
   let toggles = base.toggles;
   let checkpoints = base.checkpoints;
   let handoff = base.handoff;
   let plan = base.plan;
-  // A pause the frames show (a checkpoint that opened one), cleared by the next turn starting; else the state's.
   let framePause: PowerState['pause'] | undefined;
   for (const raw of events ?? []) {
     const e = raw as Ev;
+    // Anything that moves the run on after a pause ends it (seen on the rig: an answered pause, then the escalation,
+    // then hand-off — no new turn ever started). Checked on its own: the frame is still folded below.
+    if (framePause != null && PAUSE_ENDS.has(e.type)) framePause = null;
+    // A live frame carries no ts: it is news by definition (when this page received it).
+    const when = tsOf(e) ?? arrivedAt(e) ?? (typeof e.at === 'number' ? e.at : 0);
     if (e.type === 'rigorRescored' && e.change !== null && typeof e.change === 'object') {
       const c = e.change as RigorChange;
       if (typeof c.seq === 'number' && !history.has(c.seq)) history.set(c.seq, c);
@@ -540,18 +567,19 @@ export function mergePower(p: PowerState | null, events: readonly CoreEvent[] | 
       if (!toggles.some((x) => x.at === t.at && x.on === t.on)) toggles = [...toggles, t];
     } else if (e.type === 'powerCheckpointReached' && typeof e.checkpoint === 'number') {
       checkpoints = Math.max(checkpoints, e.checkpoint);
-      if (e.pause !== null && typeof e.pause === 'object') framePause = e.pause as NonNullable<PowerState['pause']>;
-    } else if (framePause != null && PAUSE_ENDS.has(e.type)) {
-      // Anything that moves the run on after the pause ends it (seen on the rig: an answered pause, then the
-      // escalation, then hand-off — no new turn ever started).
-      framePause = null;
+      if (e.pause !== null && typeof e.pause === 'object' && when > since) framePause = e.pause as NonNullable<PowerState['pause']>;
     } else if (e.type === 'powerIntakePlanned' && plan === null && e.plan !== null && typeof e.plan === 'object') {
       plan = e.plan as RigorPlan;
     } else if (e.type === 'powerHandoffStepped' && e.step !== null && typeof e.step === 'object') {
       const round = typeof e.round === 'number' ? e.round : 1;
       const step = e.step as HandoffStep;
       if (handoff === null || round > handoff.round) handoff = { round, maxRounds: handoff?.maxRounds ?? 3, steps: [step] };
-      else if (round === handoff.round) handoff = { ...handoff, steps: [...handoff.steps.filter((s) => s.step !== step.step), step] };
+      else if (round === handoff.round) {
+        // The newest record of a step wins, from either source: a replayed older frame never overwrites a newer
+        // result the session already holds.
+        const prev = handoff.steps.find((s) => s.step === step.step);
+        if (prev === undefined || (step.at ?? 0) >= (prev.at ?? 0)) handoff = { ...handoff, steps: [...handoff.steps.filter((s) => s.step !== step.step), step] };
+      }
     }
   }
   const ordered = [...history.values()].sort((a, b) => a.seq - b.seq);
@@ -561,7 +589,8 @@ export function mergePower(p: PowerState | null, events: readonly CoreEvent[] | 
   const baseNewest = base.toggles.reduce((m, t) => Math.max(m, t.at), -1);
   const on = newest !== undefined && newest.at > baseNewest ? newest.on : base.on;
   const rigor = tip !== undefined && isRigor(tip.to) ? tip.to : base.rigor ?? plan?.rigor ?? null;
-  return { ...base, on, rigor, plan, history: ordered, toggles, checkpoints, handoff, pause: usedLocal || framePause === undefined ? base.pause : framePause };
+  const pause = framePause === undefined ? base.pause : framePause;
+  return { ...base, on, rigor, plan, history: ordered, toggles, checkpoints, handoff, pause: on ? pause : null };
 }
 
 function historyTip(p: PowerState): number {

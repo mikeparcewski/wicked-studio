@@ -325,7 +325,9 @@ export function PowerThread({ view, power, items, part }: { view: SessionView; p
           case 'handoff': {
             // Every row from the step's actual result: a step whose unit finished reads its outcome, and on an ended
             // run nothing reads Running. The rigor is the one that applied when hand-off's checks ran.
-            const steps = settleHandoff(it.steps, (ord) => view.units.find((u) => u.ord === ord)?.status, !live);
+            // An earlier round that a newer one replaced is over too.
+            const lastRound = items.reduce((m, x) => (x.kind === 'handoff' ? Math.max(m, x.round) : m), 0);
+            const steps = settleHandoff(it.steps, (ord, kind) => unitForStep(view, ord, kind)?.status, !live || it.round < lastRound, view.session.status === 'completed');
             const checks = steps.find((st) => st.step === 'checks') ?? null;
             const applied = rigorAt(power, checks?.at ?? steps.find((st) => st.step !== 'rescore')?.at ?? it.at);
             return (
@@ -341,6 +343,15 @@ export function PowerThread({ view, power, items, part }: { view: SessionView; p
       })}
     </>
   );
+}
+
+/** A hand-off step's unit: by ord, else by what the step is (review, security, QE). */
+function unitForStep(view: SessionView, ord: number | null, kind: HandoffStep['step']): SessionView['units'][number] | undefined {
+  if (ord !== null) return view.units.find((u) => u.ord === ord);
+  const keyOf = (u: SessionView['units'][number]): string => (u.id.includes(':') ? u.id.slice(u.id.indexOf(':') + 1) : String(u.stage ?? '')).replace(/#\d+$/, '');
+  const want = kind === 'review' ? /^(review|critique)$/ : kind === 'security' ? /^security_review$/ : kind === 'qe' ? /^(verify|qe|qe_acceptance)$/ : null;
+  if (want === null) return undefined;
+  return [...view.units].reverse().find((u) => want.test(keyOf(u)));
 }
 
 // ── "this grew": the pause dock ──────────────────────────────────────────────────────────────────────

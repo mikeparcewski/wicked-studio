@@ -103,6 +103,7 @@ import { useNotifPrefsStore } from './store/notifPrefs.js';
 import { useComposerPrefsStore } from './store/composerPrefs.js';
 import { useViewPrefsStore } from './store/viewPrefs.js';
 import { useDeliveryFreezeStore } from './store/deliveryFreeze.js';
+import { POWER_CHANGED } from './hooks/usePower.js';
 import { notifyGateIfUnfocused } from './board/desktopNotify.js';
 import { parseSessionId, sessionIdOf, sessionPath } from './board/sessionModel.js';
 import { sizeOf, versionOf } from './board/artifactAddress.js';
@@ -121,6 +122,12 @@ const LIFECYCLE_EVENTS: ReadonlySet<string> = new Set([
   'runCancelled',
   'sessionFailed',
   'sessionCompleted',
+  // Power mode: a checkpoint can pause the run (no engine gate opens) and a turn, a flip or a hand-off step ends the
+  // pause — the run list carries `power.pause`, which every surface reads to say the run waits on you.
+  'powerCheckpointReached',
+  'powerTurnStarted',
+  'powerHandoffStepped',
+  'powerToggled',
 ]);
 
 /** Terminal run states — a run here can no longer be cancelled. */
@@ -133,6 +140,12 @@ const DESK_COMPOSER_PX = 96;
 export function App(): React.ReactElement {
   const { panel, runId, repoId, projectId, artifactId, showLaunch, campaignId, testingPage, artifactKey, navigate, search, pathname } = useRoute();
   const { runs, refresh, loaded: runsLoaded, error: runsError } = useRuns();
+  // This page changed a run's power state (a flip, a raise, a pause answered): re-read the run list.
+  useEffect(() => {
+    const on = (): void => refresh();
+    window.addEventListener(POWER_CHANGED, on);
+    return () => window.removeEventListener(POWER_CHANGED, on);
+  }, [refresh]);
   const navCollapsed = useHostChrome((s) => s.navCollapsed);
   const phone = usePhone();
   const ingestGate = useGateStore((s) => s.ingest);
