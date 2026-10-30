@@ -186,6 +186,37 @@ describe('the working-document editor', () => {
     expect(questions).toMatch(/^Waiting on you · .* · since \d\d:\d\d$/u);
   });
 
+  it('a crew that writes the lines itself (eventLines): the plugin renders them, writes none, and still saves a person’s edit (ui-gaps-2, crew#1224)', async () => {
+    let head = 1;
+    // crew's own line, already in the document; the run also has an open gate the plugin would otherwise write.
+    let questions = 'Waiting on you · Approve the plan · since 10:00';
+    let constraints = '';
+    const b = await boot((m) => {
+      if (m.type === 'doc.read') return { ok: true, payload: { view: { ...view(head, { questions, constraints }), eventLines: true } } };
+      if (m.type === 'doc.propose_edit') {
+        if (m.payload?.['section'] === 'constraints') constraints = String(m.payload?.['text']);
+        else questions = String(m.payload?.['text']);
+        head += 1;
+        return { ok: true, payload: { version: head } };
+      }
+      return { ok: true, payload: {} };
+    });
+    b.push('events.batch', { runId: 'r', replay: false, rows: [{ id: 'g', topic: 'wicked.run.human.awaited', seq: 1, at: 1_000, ord: 4, data: { kind: 'deliver' } }] });
+    b.push('doc.changed', { head: 1 });
+    await tick(); await tick();
+    expect(b.$('.wd-sec[data-section="questions"]')?.textContent).toContain('Waiting on you · Approve the plan · since 10:00');
+    // No "not saved yet" line of its own, and nothing written as the plugin.
+    expect(b.$('.wd-sec[data-section="questions"] .wd-gen')).toBeNull();
+    expect(b.edits()).toHaveLength(0);
+    const ta = b.openSection('constraints');
+    ta.value = 'Keep /v1';
+    b.save('constraints');
+    await vi.waitFor(() => expect(b.edits()).toHaveLength(1));
+    expect(b.edits()[0]!.payload).toMatchObject({ section: 'constraints', origin: 'typed', text: 'Keep /v1' });
+    await tick(); await tick();
+    expect(b.edits()).toHaveLength(1);
+  });
+
   it('the plugin’s own Decisions lines go one at a time, waiting for the first read, retried once after a conflict', async () => {
     let head = 1;
     let decisions = '';
