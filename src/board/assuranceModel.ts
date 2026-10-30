@@ -298,14 +298,19 @@ export function gateReceiptFor(events: readonly CoreEvent[] | null, units: reado
  * The operator's judgment of a gate is written on the unit's persisted receipt AFTER the gate's evaluation
  * (the operator approved a gate no judge could rule on; no new `gateEvaluated` is emitted), so the log's
  * receipt for that attempt lacks it. Carried over from the unit record when it judged the same attempt.
+ * The log's receipt may already carry a judgment of its own (a floor override carried to this unit): the unit
+ * record's LATER judgments join it, once each (ui-gaps-2, run ea73afc0: unit 6's carried override hid its
+ * judge-unavailable approval, and the deliver gate said "at 2 gates" where the engine's receipt had 3).
  */
 function withOperatorJudgment(r: AssuranceReceipt, unit: WorkUnit | undefined): AssuranceReceipt {
-  if (r.operatorJudges !== undefined) return r;
   const own = receiptOf((unit as unknown as { assurance?: unknown } | undefined)?.assurance);
   if (own?.operatorJudges === undefined || own.attempt !== r.attempt) return r;
+  const merged = [...(r.operatorJudges ?? [])];
+  for (const j of own.operatorJudges) if (!merged.some((o) => sameJudgment(o, j))) merged.push(j);
+  if (r.operatorJudges !== undefined && merged.length === r.operatorJudges.length) return r;
   return {
     ...r,
-    operatorJudges: own.operatorJudges,
+    operatorJudges: merged,
     ran: r.ran.includes('operator_judge') ? r.ran : [...r.ran, 'operator_judge'],
     judge: r.judge ?? own.judge,
   };
