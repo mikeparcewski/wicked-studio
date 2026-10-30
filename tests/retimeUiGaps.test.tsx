@@ -103,6 +103,8 @@ describe('1. a running floor is the engine working, not a silent seat', () => {
       useRunEventStore.setState({ byRun: { [R]: floorRunning().slice(0, 4) } });
       render(<SessionPage sessionId={`run:${R}`} runs={[run()]} runsLoaded needRows={[]} navigate={() => {}} onAsk={() => {}} />);
       expect(screen.getByTestId('session-working-floor').textContent).toBe('· Running checks · 12 min');
+      // The floor is the engine's work: the line is studio's, not the idle seat's.
+      expect(screen.getByTestId('session-working-text').textContent).toBe('studio · Running checks · 12 min');
       expect(screen.queryByTestId('silent-step')).toBeNull();
       expect(screen.queryByText('Move it to another helper')).toBeNull();
       expect(document.body.textContent).not.toMatch(/No output for/u);
@@ -221,9 +223,13 @@ describe('3. the Plan (architecture) step has its own phase report', () => {
   it('Intake, Plan, Build, Checks, Review, Deliver; while the plan runs (no turn yet) the Plan is current, never Review', () => {
     const p = state({ orchestrator: { cli: 'claude', ord: null, turns: 0, inTurn: false, sessionRestarts: 0 } as never });
     const ph = powerPhases(units({}), p, [], false);
-    expect(ph.map((x) => `${x.key}:${x.ords.join(',')}`)).toEqual(['intake:1', 'plan:2', 'build:3', 'checks:3', 'review:4', 'deliver:5']);
+    // The build's blocks wait for its first turn; its unit still keeps Review from reading as current.
+    expect(ph.map((x) => `${x.key}:${x.ords.join(',')}`)).toEqual(['intake:1', 'plan:2', 'review:4', 'deliver:5']);
     expect(ph.find((x) => x.current)?.key).toBe('plan');
-    expect(powerPhases(units({ 2: 'done' }), p, [], false).find((x) => x.current)?.key).toBe('build');
+    expect(powerPhases(units({ 2: 'done' }), p, [], false).find((x) => x.current)).toBeUndefined();
+    const building = powerPhases(units({ 2: 'done' }), state(), [], false);
+    expect(building.map((x) => x.key)).toEqual(['intake', 'plan', 'build', 'checks', 'review', 'deliver']);
+    expect(building.find((x) => x.current)?.key).toBe('build');
   });
   it('its block reads as its own step', () => {
     const r = report(ev([

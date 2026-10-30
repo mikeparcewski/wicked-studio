@@ -662,5 +662,8 @@ export function powerPhases(units: readonly UnitLike[], p: PowerState, events: r
       if (st !== 'done') { current = ph.key; break; }
     }
   }
-  return out.map((ph) => ({ ...ph, current: ph.key === current }));
+  // The build's (and its checks') blocks show once its first turn starts: before that, its unit by key only keeps a
+  // later phase from reading as current.
+  const shown = p.orchestrator.ord !== null ? out : out.filter((ph) => ph.key !== 'build' && ph.key !== 'checks');
+  return shown.map((ph) => ({ ...ph, current: ph.key === current }));
 }
