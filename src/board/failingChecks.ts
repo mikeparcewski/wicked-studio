@@ -21,7 +21,8 @@ const ON_BASE = new Set(['pre_existing_in_sandbox', 'floor_env_mismatch', 'base_
  *  ` - <message>` cut: a ` - ` inside another runner's test name is part of the name. */
 export function failureName(id: string): string {
   // cargo prints `test <path>` (`test deliver_lift::tests::a_case`): the word is the runner's, not the name.
-  const bare = id.trim().replace(/^(?:FAILED|FAIL|ERROR|✗|×)\s+/, '').replace(/^test\s+(?=[\w:]+$)/, '');
+  // vitest prints a whole file that failed to load as `FAIL tests/a.test.ts [ tests/a.test.ts ]`: the file.
+  const bare = id.trim().replace(/^(?:FAILED|FAIL|ERROR|✗|×)\s+/, '').replace(/^test\s+(?=[\w:]+$)/, '').replace(/^(\S+)\s+\[\s*\1\s*\]$/, '$1');
   return bare.replace(/^(\S*::.*?)\s+-\s+.*$/, '$1').trim();
 }
 
@@ -133,11 +134,36 @@ export function testWords(id: string): string {
   // A vitest / jest id ("src/a.test.ts > GateRow > names tests") already ends in words.
   if (/\s>\s/.test(id)) return id.split(/\s>\s/).pop()!.trim() || id;
   const leaf = id.split('::').pop()?.replace(/\[.*\]$/, '').trim() ?? id;
+  // A file path (a whole test file that failed) is said as the path: never "S/delivery-assurance.test.ts" from
+  // stripping a leading "test" off "tests/…".
+  if (/[\\/]/.test(leaf) || /\.(?:[cm]?[jt]sx?|py|rs|go|rb)$/.test(leaf)) return leaf;
   const bare = leaf.replace(/^test_?/i, '').replace(/_+/g, ' ').trim();
   // A snake_case leaf is a sentence too (Rust: `a_passing_check_that_mutates_source_is_caught`).
   const snake = /^[A-Za-z][A-Za-z0-9]*(?:_[A-Za-z0-9]+){2,}$/.test(leaf);
   if (bare === '' || (bare === leaf && !/^test/i.test(leaf) && !snake)) return id;
   return bare.charAt(0).toUpperCase() + bare.slice(1);
+}
+
+/** Where a failing test lives: its file (vitest/jest `file > suite > name`, a whole file that failed, pytest
+ *  `file::name`) or its module (Rust `mod::tests::name`); the id itself when nothing names one. */
+export function testFile(id: string): string {
+  const name = failureName(id);
+  if (/\s>\s/.test(name)) return name.split(/\s>\s/)[0]!.trim();
+  const parts = name.split('::');
+  if (parts.length >= 2) return parts.slice(0, -1).join('::');
+  return name;
+}
+
+/** Failing tests grouped by where they live, the biggest group first (ties keep their order). */
+export function groupByFile(ids: readonly string[]): Array<{ file: string; tests: string[] }> {
+  const groups = new Map<string, string[]>();
+  for (const id of ids) {
+    const f = testFile(id);
+    const g = groups.get(f) ?? [];
+    g.push(id);
+    groups.set(f, g);
+  }
+  return [...groups.entries()].map(([file, tests]) => ({ file, tests })).sort((a, b) => b.tests.length - a.tests.length);
 }
 
 /** The failing checks of a floor, the ones the floor counts as failed (a pre-existing failure the engine

@@ -28,7 +28,7 @@ import { AGENTS_PATH, type Navigate } from '../../hooks/useRoute.js';
 import { useSignInHere } from '../agents/useSignInHere.js';
 import { AssuranceReceipt, AssuranceReceiptTech, QeAcceptanceLabel, ReducedAssuranceLabel } from './AssuranceReceipt.js';
 import { missingSeatsLine, OPERATOR_JUDGMENT_LABEL, rejudgeOfferOf, type RejudgeOffer } from '../../board/rejudge.js';
-import { baseCountOf, testPlace, testWords } from '../../board/failingChecks.js';
+import { baseCountOf, failureName, groupByFile, testPlace, testWords } from '../../board/failingChecks.js';
 import { useOfferReply } from './DecisionDock.js';
 import { builderResponder } from '../../board/responder.js';
 import { gateCause, gateQuestion, gateWithLogChoices, judgeSeats, runPoolOf, seatName } from '../../board/gateHeadline.js';
@@ -1011,10 +1011,9 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
               <p data-testid="session-gate-failing-words" className="wk-gate2-p">
                 {split.fresh.length === 1 ? 'Failing only with this change:' : `${split.fresh.length} tests fail only with this change:`}
               </p>
-              <ul data-testid="session-gate-failing-new" className="wk-gate2-new">
-                {/* One line each: the test in words, where it lives as a short tag; the whole id on hover (the dock stays compact). */}
-                {split.fresh.map((n) => <li key={n} title={n}><span className="wk-gate2-new-t">{testWords(n)}</span>{testWords(n) !== n && testPlace(n) !== null && <code className="wk-gate2-new-id">{testPlace(n)}</code>}</li>)}
-              </ul>
+              {/* Operator 2026-10-30 (29 failures buried the buttons): grouped by file, the first five failures, then
+                  "and N more"; the list scrolls inside the dock so its buttons stay in view. */}
+              <FailingGroups ids={split.fresh} />
             </>
           ) : (
             <p data-testid="session-gate-failing-words" className="wk-gate2-p">{allOnBaseWords(baseCountOf(split))}</p>
@@ -1213,3 +1212,45 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
     </div>
   );
 }
+
+/** How many failures the dock shows before "and N more". */
+const FAILING_SHOWN = 5;
+
+/** Failing tests grouped by file: the first {@link FAILING_SHOWN}, the rest behind "and N more". */
+export function FailingGroups({ ids }: { ids: readonly string[] }): React.ReactElement {
+  const [all, setAll] = useState(false);
+  const groups = groupByFile(ids);
+  let left = all ? Number.POSITIVE_INFINITY : FAILING_SHOWN;
+  const shown = groups.flatMap((g) => {
+    if (left <= 0) return [];
+    const tests = g.tests.slice(0, left);
+    left -= tests.length;
+    return [{ file: g.file, tests, total: g.tests.length }];
+  });
+  const hidden = ids.length - shown.reduce((n, g) => n + g.tests.length, 0);
+  return (
+    <div data-testid="session-gate-failing-new" data-count={ids.length} className="wk-gate2-new wk-gate2-groups">
+      <ul className="wk-gate2-group-list">
+        {shown.map((g) => (
+          <li key={g.file} data-testid="session-gate-failing-group" data-file={g.file} className="wk-gate2-group">
+            <code className="wk-gate2-new-id" title={g.file}>{g.file}{g.total > 1 ? ` · ${g.total}` : ''}</code>
+            <ul>
+              {g.tests.map((n) => (
+                <li key={n} title={n}>
+                  <span className="wk-gate2-new-t">{failureName(n) === g.file ? 'the whole file failed' : testWords(failureName(n))}</span>
+                </li>
+              ))}
+            </ul>
+          </li>
+        ))}
+      </ul>
+      {hidden > 0 && (
+        <button type="button" data-testid="session-gate-failing-more" onClick={() => setAll(true)} className="wk-gate2-link">and {hidden} more</button>
+      )}
+      {all && ids.length > FAILING_SHOWN && (
+        <button type="button" data-testid="session-gate-failing-less" onClick={() => setAll(false)} className="wk-gate2-link">Show fewer</button>
+      )}
+    </div>
+  );
+}
+
