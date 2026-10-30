@@ -15,6 +15,7 @@ import { useRoster } from '../../hooks/useRoster.js';
 import { openLaunchWizard } from '../../store/launchWizard.js';
 import { Markdown } from '../Markdown.js';
 import { TurnWho } from './TurnWho.js';
+import { ActivitySummaryLine } from './LiveActivity.js';
 
 /**
  * POWER MODE on the run page (program DES-POWER-MODE; mockup design/mockups/power-mode.html): the header's switch and
@@ -298,7 +299,10 @@ export function PowerThread({ view, power, items, part }: { view: SessionView; p
             return (
               <div key={it.key} data-testid="power-turn" data-turn={it.turn} className="wk-chat-msg wk-chat-msg--assistant">
                 <TurnWho who={seatResponder(it.cli, roster)} runId={id} suffix="orchestrator" at={it.at} className="wk-chat-who" />
-                <div className="wk-chat-body"><div className="wk-chat-md"><Markdown>{it.summary}</Markdown></div></div>
+                <div className="wk-chat-body"><div className="wk-chat-md"><Markdown>{it.summary}</Markdown></div>
+                  {/* What the turn did, in one line, once it ended. */}
+                  {power.orchestrator.ord !== null && <ActivitySummaryLine runId={id} ord={power.orchestrator.ord} turn={it.turn} />}
+                </div>
               </div>
             );
           case 'acts':

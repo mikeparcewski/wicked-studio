@@ -133,3 +133,19 @@ button.pm-chip { cursor: pointer; }
   /* The header's popovers take the screen's width on a phone (the chips sit anywhere on a wrapped row). */
   .pm-rigor-pop, .pm-rigor-pop--end { position: fixed; top: 132px; left: 12px; right: 12px; width: auto; }
 }
+
+/* Live activity (operator 2026-10-30): what a working step is doing now, under its speaker; one line once it ends. */
+.wk-live { margin: 4px 0 0 30px; display: flex; flex-direction: column; gap: 2px; font-size: var(--text-sm); color: var(--ink-muted); }
+.wk-live-list { margin: 0; padding: 0 0 0 8px; list-style: none; border-left: 1px solid var(--border); display: flex; flex-direction: column; gap: 1px; }
+.wk-live-row { display: flex; align-items: center; gap: 8px; min-height: 24px; padding: 1px 6px; border-radius: var(--radius-md); }
+.wk-live-icon { flex-shrink: 0; color: var(--ink-dim); }
+.wk-live-row--running .wk-live-icon { color: var(--accent); animation: wk-live-spin 1.4s linear infinite; }
+.wk-live-row--fail .wk-live-icon { color: var(--status-fail); }
+.wk-live-text { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+.wk-live-ago { flex-shrink: 0; font-size: var(--text-xs); color: var(--ink-dim); font-variant-numeric: tabular-nums; }
+.wk-live-earlier { margin: 0 0 0 14px; font-size: var(--text-xs); color: var(--ink-dim); }
+.wk-live-said { margin: 2px 0 0 14px; font-size: var(--text-xs); color: var(--ink-muted); font-style: italic; overflow-wrap: anywhere; }
+.wk-live-summary { margin: 4px 0 0; font-size: var(--text-xs); color: var(--ink-muted); }
+@keyframes wk-live-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .wk-live-row--running .wk-live-icon { animation: none; } }
+@media (max-width: 767px) { .wk-live { margin-left: 0; } .wk-live-ago { display: none; } }

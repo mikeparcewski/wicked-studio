@@ -62,6 +62,7 @@ import { phaseLabel } from '../gateVerdictModel.js';
 import { CREW, responderKey, turnResponder, type Responder } from '../../board/responder.js';
 import { TurnWho } from './TurnWho.js';
 import { PowerSwitchButton, RigorChipButton } from './PowerMode.js';
+import { LiveActivity } from './LiveActivity.js';
 import { usePower } from '../../hooks/usePower.js';
 import { powerOf } from '../../api/power.js';
 import { mergePower } from '../../board/powerMode.js';
@@ -1149,7 +1150,8 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
               ? <AskTyping key={e.key} who={e.who} />
               : e.kind === 'working'
               ? (
-                <div key={e.key} data-testid="session-working" data-run-id={e.runId} data-object={`step:${e.runId}:${e.ord}`} className="wk-chat-working">
+                <Fragment key={e.key}>
+                <div data-testid="session-working" data-run-id={e.runId} data-object={`step:${e.runId}:${e.ord}`} className="wk-chat-working">
                   <span aria-hidden className="wk-chat-working-dots"><i /><i /><i /></span>
                   {/* rig 0.15.8: the step in the chain's own word ("Check", never "Verify" beside it). */}
                   <span data-testid="session-working-text" data-silent={e.runId === silentRunId ? 'true' : 'false'} aria-live="polite"><span className="wk-chat-working-who">{who.role === 'crew' ? 'studio' : who.name}</span> {e.runId === silentRunId && silent !== null ? `· ${silentWords(silent)} on ${workingStepWord(e.step)}` : `Working on ${workingStepWord(e.step)}…`}</span>
@@ -1157,6 +1159,9 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
                   <OverflowMenu label={`More for ${workingStepWord(e.step)}`} data-testid="session-working-menu"
                     items={[{ id: 'message', label: MESSAGE_STEP_LABEL, onSelect: () => openSheet({ kind: 'step', runId: e.runId, ord: e.ord }, undefined, { compose: true }) }]} />
                 </div>
+                {/* What it is doing right now, live (operator 2026-10-30). */}
+                <LiveActivity runId={e.runId} ord={e.ord} />
+                </Fragment>
               )
               : e.kind === 'proposal'
                 ? <AskProposalBlock key={e.key} view={e.view} ask={e.ask} onBringBack={() => setDraft(sessionId, 'Go ahead with the plan you proposed.')} />

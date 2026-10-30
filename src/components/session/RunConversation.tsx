@@ -47,6 +47,7 @@ import { RunRecordLines, RunStory } from './RunRecord.js';
 import { StrandedCard } from './StrandedCard.js';
 import { RunQuestions } from './ThreadQuestions.js';
 import { TurnWho } from './TurnWho.js';
+import { ActivitySummaryLine } from './LiveActivity.js';
 import { PowerPauseCard, PowerThread } from './PowerMode.js';
 import { usePower } from '../../hooks/usePower.js';
 import { powerTimeline } from '../../board/powerMode.js';
@@ -203,6 +204,7 @@ function StepMessageView({ runId, step, who, checkWord, onOpen, at, evaluator = 
         {checkWord !== null && <span data-testid="chat-step-check" className="wk-chat-chip wk-chat-chip--quiet">{checkWord}</span>}
         <button type="button" data-testid="chat-step-open" onClick={onOpen} className="wk-chat-link">What it did</button>
       </p>
+      <ActivitySummaryLine runId={runId} ord={step.ord} />
     </AssistantMessage>
   );
 }
