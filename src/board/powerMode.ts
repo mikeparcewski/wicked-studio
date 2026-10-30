@@ -147,7 +147,7 @@ export interface ActivityRow {
 
 export type PowerItem =
   | { kind: 'intake'; key: string; at: number | null; plan: RigorPlan }
-  | { kind: 'turn'; key: string; at: number | null; turn: number; cli: string; summary: string; outcome: PowerTurnEvent['outcome'] | null }
+  | { kind: 'turn'; key: string; at: number | null; turn: number; attempt: number | null; cli: string; summary: string; outcome: PowerTurnEvent['outcome'] | null }
   | { kind: 'acts'; key: string; at: number | null; rows: ActivityRow[] }
   | { kind: 'checkpoint'; key: string; at: number | null; checkpoint: number; words: string; picked: number; paused: boolean }
   | { kind: 'rigor'; key: string; at: number | null; change: RigorChange; words: string }
@@ -370,7 +370,7 @@ export function powerTimeline(events: readonly CoreEvent[] | null | undefined, p
         flush();
         const t = e as unknown as PowerTurnEvent;
         const summary = typeof t.summary === 'string' ? t.summary.trim() : '';
-        if (summary !== '') out.push({ kind: 'turn', key: `turn:${t.ord}:${t.attempt}:${t.turn}`, at, turn: t.turn, cli: t.cli, summary, outcome: t.outcome ?? null });
+        if (summary !== '') out.push({ kind: 'turn', key: `turn:${t.ord}:${t.attempt}:${t.turn}`, at, turn: t.turn, attempt: typeof t.attempt === 'number' ? t.attempt : null, cli: t.cli, summary, outcome: t.outcome ?? null });
         break;
       }
       case 'powerCheckpointReached': {
@@ -431,7 +431,7 @@ export function powerTimeline(events: readonly CoreEvent[] | null | undefined, p
   if (!out.some((i) => i.kind === 'turn') && (p?.turnLog ?? []).some((t) => typeof t.summary === 'string' && t.summary.trim() !== '')) {
     for (const t of p!.turnLog!) {
       if (typeof t.summary !== 'string' || t.summary.trim() === '') continue;
-      out.push({ kind: 'turn', key: `turn:log:${t.attempt}:${t.turn}`, at: t.endedAt ?? t.startedAt, turn: t.turn, cli: t.cli, summary: t.summary.trim(), outcome: t.outcome });
+      out.push({ kind: 'turn', key: `turn:log:${t.attempt}:${t.turn}`, at: t.endedAt ?? t.startedAt, turn: t.turn, attempt: typeof t.attempt === 'number' ? t.attempt : null, cli: t.cli, summary: t.summary.trim(), outcome: t.outcome });
     }
     const timed = out.map((it, i) => ({ it, i }));
     timed.sort((a, b) => ((a.it.at ?? -Infinity) - (b.it.at ?? -Infinity)) || a.i - b.i);
@@ -600,7 +600,7 @@ function historyTip(p: PowerState): number {
 // ── the phases of a power run (one report each, operator 2026-10-30) ─────────────────────────────────────
 
 export interface PowerPhase {
-  key: 'intake' | 'build' | 'checks' | 'review' | 'security' | 'qe' | 'deliver';
+  key: 'intake' | 'plan' | 'build' | 'checks' | 'review' | 'security' | 'qe' | 'deliver';
   label: string;
   ords: number[];
   current: boolean;
@@ -611,7 +611,7 @@ interface UnitLike { id: string; ord: number; status: string; stage?: unknown }
 const unitKey = (u: UnitLike): string => (u.id.includes(':') ? u.id.slice(u.id.indexOf(':') + 1) : String(u.stage ?? '')).replace(/#\d+$/, '');
 
 /**
- * A power run's phases, in order: Intake, Build (the orchestrator), Checks (its floor at hand-off), Review, Security
+ * A power run's phases, in order: Intake, Plan (when the plan has an architecture or design step), Build (the orchestrator), Checks (its floor at hand-off), Review, Security
  * (when it runs), QE (when it runs), Deliver (when the run has a deliver step). Each names its units; the current one is
  * the phase the run is in now (the last one once the run ended).
  */
@@ -619,11 +619,16 @@ export function powerPhases(units: readonly UnitLike[], p: PowerState, events: r
   const byKey = (re: RegExp): UnitLike | undefined => [...units].reverse().find((u) => re.test(unitKey(u)));
   const intakeFrame = (events ?? []).find((e) => e.type === 'powerIntakePlanned') as (CoreEvent & { ord?: unknown }) | undefined;
   const intakeOrd = typeof intakeFrame?.ord === 'number' ? intakeFrame.ord : byKey(/^(intake|pa-scope|scope)$/)?.ord ?? null;
-  const buildOrd = p.orchestrator.ord;
+  // Before the orchestrator's first turn the build is its unit by key (a plan step runs first: retime 0.16.11, the
+  // Review block read "not started" as the current phase while the Plan ran).
+  const buildOrd = p.orchestrator.ord ?? byKey(/^(fix|build|implement|power_build)$/)?.ord ?? null;
   const stepOrd = (step: HandoffStep['step'], re: RegExp): number | null =>
     p.handoff?.steps.find((s) => s.step === step && s.ord !== null)?.ord ?? byKey(re)?.ord ?? null;
   const out: Array<Omit<PowerPhase, 'current'>> = [];
   if (intakeOrd !== null) out.push({ key: 'intake', label: 'Intake', ords: [intakeOrd] });
+  // The plan step (architecture, design) is a phase of its own, with its own report (retime 0.16.11: it had none).
+  const plan = byKey(/^(architecture|design|plan)$/)?.ord ?? null;
+  if (plan !== null && plan !== intakeOrd && plan !== buildOrd) out.push({ key: 'plan', label: 'Plan', ords: [plan] });
   if (buildOrd !== null) out.push({ key: 'build', label: 'Build', ords: [buildOrd] });
   if (buildOrd !== null) out.push({ key: 'checks', label: 'Checks', ords: [buildOrd] });
   const review = stepOrd('review', /^(review|critique)$/);

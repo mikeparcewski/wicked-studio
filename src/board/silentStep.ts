@@ -1,4 +1,5 @@
 import { isPowerPaused } from './heldRuns.js';
+import { runningFloor } from './floorRun.js';
 import type { CoreEvent, SessionView } from '../api/types.js';
 
 /**
@@ -39,6 +40,9 @@ export function lastActivityAt(events: readonly CoreEvent[]): number | null {
 export function silentStep(view: SessionView, events: readonly CoreEvent[] | null | undefined, now: number, opts: { gateOpen?: boolean; liveAt?: number | null } = {}): SilentStep | null {
   // A power run paused at a checkpoint waits on you: its quiet is the pause, not a silent step.
   if (view.session.status !== 'executing' || opts.gateOpen === true || isPowerPaused(view.session)) return null;
+  // The engine's checks floor is running (retime 0.16.11): the seat is idle on purpose, the floor is the work. The
+  // silence warning is about a seat's own turn only (the page says "Running checks" instead, `floorRun.ts`).
+  if (runningFloor(events, now) !== null) return null;
   const logged = lastActivityAt(events ?? []);
   const at = Math.max(logged ?? 0, opts.liveAt ?? 0);
   if (at === 0) return null;

@@ -28,6 +28,8 @@ import { IDLE_GATE_ACTION, useGateActionStore } from '../../board/gateActions.js
 import { deliverySummary, outcomeLine, statusSentence } from '../../board/proposalCard.js';
 import { useSilentStep } from '../../hooks/useSilentStep.js';
 import { silentWords } from '../../board/silentStep.js';
+import { useRunningFloor } from '../../hooks/useRunningFloor.js';
+import { floorWords } from '../../board/floorRun.js';
 import { deliveryAssuranceOf, deliveryReceiptOf } from '../../board/assuranceModel.js';
 import { deliveryOf } from '../delivery.js';
 import { useRunCoverage } from '../../hooks/useRunCoverage.js';
@@ -124,6 +126,7 @@ function RunTabDetails({ view, allRuns, sessionId, title, navigate }: { view: Se
   const action = useGateActionStore((s) => s.byGate[id] ?? IDLE_GATE_ACTION);
   // (J4 0.16.6) The step silent past crew's quiet mark: the Now section says so, as the header does.
   const silent = useSilentStep(view);
+  const floor = useRunningFloor(view);
   const coverage = useRunCoverage(view);
   const delivery = deliveryOf(view);
   const recorded = deliveryAssuranceOf(view);
@@ -229,7 +232,7 @@ function RunTabDetails({ view, allRuns, sessionId, title, navigate }: { view: Se
   return (
     <>
       {glance}
-      <Section id="now" {...fold} summary={silent !== null ? silentWords(silent) : chatStatusWord([view]).word}>
+      <Section id="now" {...fold} summary={silent !== null ? silentWords(silent) : floor !== null ? floorWords(floor) : chatStatusWord([view]).word}>
         <div data-testid="run-tab-now" className="wk-run-tab-block">
           <p data-testid="run-tab-status" role="status" className="wk-run-tab-line">{statusSentence(view, chain, gate, action, silent?.minutes ?? null)}</p>
           {(started !== null || ended !== null) && (

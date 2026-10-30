@@ -12,8 +12,8 @@
   "studioVersion": "0.13.0",
   "counts": {
     "files": 259,
-    "occurrences": 3567,
-    "static": 3042,
+    "occurrences": 3568,
+    "static": 3043,
     "dynamic": 75,
     "computed": 33
   },
@@ -14354,6 +14354,12 @@
     },
     {
       "testId": "session-working",
+      "files": [
+        "src/components/session/SessionView.tsx"
+      ]
+    },
+    {
+      "testId": "session-working-floor",
       "files": [
         "src/components/session/SessionView.tsx"
       ]

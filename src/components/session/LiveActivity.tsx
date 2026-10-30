@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { BookOpen, CircleCheck, CircleX, GitCommitHorizontal, Loader, Pencil, Search, Sparkles, Terminal, Users } from 'lucide-react';
-import { activityRows, activitySummary, currentTurn, narration, turnEnded, type ActivityKind } from '../../board/liveActivity.js';
+import { activityRows, activitySummary, currentTurn, narration, turnEndedAt, visibleRows, type ActivityKind, type TurnRef } from '../../board/liveActivity.js';
 import { useRunEventStore } from '../../store/events.js';
 import { outputKey, useRuntimeStore } from '../../store/runtime.js';
 
@@ -29,11 +29,12 @@ export function LiveActivity({ runId, ord }: { runId: string; ord: number }): Re
   // Every few seconds: the ages move, and a row that just finished reads as finished.
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 3000); return () => clearInterval(t); }, []);
   // A power build's orchestrator: the turn running now; any other step: its newest attempt. A turn that ended says
-  // itself in one line on its message, so the live list folds away until the next turn starts.
+  // itself in one line on its message, so the live list folds away once its last calls have been in view a minute.
   const turn = useMemo(() => currentTurn(events, ord), [events, ord]);
-  const ended = turn !== null && turnEnded(events, ord, turn);
-  const rows = useMemo(() => (ended ? [] : activityRows(events, ord, turn)), [events, ord, turn, ended]);
-  const said = useMemo(() => (ended ? null : narration(output)), [output, ended]);
+  const endedAt = turn !== null ? turnEndedAt(events, ord, turn) : null;
+  const all = useMemo(() => activityRows(events, ord, turn), [events, ord, turn]);
+  const rows = visibleRows(all, endedAt, now);
+  const said = useMemo(() => (endedAt !== null ? null : narration(output)), [output, endedAt]);
   if (rows.length === 0 && said === null) return null;
   const shown = rows.slice(-SHOWN);
   const earlier = rows.length - shown.length;
@@ -58,7 +59,7 @@ export function LiveActivity({ runId, ord }: { runId: string; ord: number }): Re
 }
 
 /** A finished step's or turn's activity, in one line: "Read 4 files · ran 7 commands · edited 3 files · 2 commits". */
-export function ActivitySummaryLine({ runId, ord, turn = null }: { runId: string; ord: number; turn?: number | null }): React.ReactElement | null {
+export function ActivitySummaryLine({ runId, ord, turn = null }: { runId: string; ord: number; turn?: number | TurnRef | null }): React.ReactElement | null {
   const events = useRunEventStore((s) => s.byRun[runId]);
   const line = useMemo(() => activitySummary(events, ord, turn), [events, ord, turn]);
   return line === null ? null : <p data-testid="activity-summary" className="wk-live-summary">{line}</p>;

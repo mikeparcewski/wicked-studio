@@ -24,6 +24,15 @@ npm publish dates. Every version listed here exists on
 - **How it works.** The block is the editor-plugin sandbox (`sandbox="allow-scripts"`, the same `wicked.editor` handshake and MessagePort) on a new **protocol 3**: the host sends `events.batch` (rows on the plugin's granted topics, in the `wicked.run.<noun>.<verb>` names the bus mirror will use) and `host.fold`; the plugin may send `ui.fold`. It gets no request at all: every artifact request is refused `not_granted`, and its page has no network. Rows replay the job's durable log first (`GET /runs/:id/events`, only the event types its topics are made from), then follow `/ws` live, each at most once, and carry no prompt, path, log or environment.
 - **Plugins page: Run plugins.** Each run plugin lists what it hears, in plain words with its reason. The built-in one is pre-granted, and says "Built in · pre-granted" there and on its block.
 
+### Fixed
+- **Power-mode re-time UI gaps (crew ea73afc0, core acf30461).**
+  - **A running checks floor is not a silent helper.** While the engine runs the repository's checks, the job page says "Running checks · test · 12 min", read from the floor's own 5-minute lines. The header says "Running checks". It no longer says "No output for N min from Claude Code" or offers "Move it to another helper": that warning is about a helper's own turn only.
+  - **Activity rows say what the command did.** `sed -i`, `perl -i`, `tee`, `cat > file` and a python/node script that rewrites a file are edits ("Edited tests/x.test.ts"). Only a test runner is "Tests passed/failed". A `sed -n` on `tests/…` is a plain command.
+  - **A retry's turn shows its own activity.** Each attempt restarts its turn numbers at 1. The live list and each turn's summary now read that attempt's turn, so a retry's tool calls show while they run, and a retry's summary is no longer a copy of the first turn's. A finished call stays in the list for about a minute after its turn ends.
+  - **The Plan (architecture or design) step has its own phase report**, and it is the current phase while it runs. Before, the Review block read "not started" as the open block.
+  - **The Checks block resolves from the floor's result** ("Checks · failed" once the floor failed), never "running" after the floor ended.
+  - **Working document:** a gate answered by a resume at another step (a review sent back to the build) leaves Open questions. When crew writes the event lines itself (its working-doc view says `eventLines`), the Phase report writes none: it renders them and saves a person's edits.
+
 ## [0.13.0] — 2026-10-28
 
 A minor release: UI v2, the calm-page redesign (#924), with the gate fixes from the J4 re-run on crew 0.16.6.

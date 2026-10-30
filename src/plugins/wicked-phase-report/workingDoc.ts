@@ -36,6 +36,14 @@ export interface DocView {
   sections: Record<SectionId, string> | null;
   trail: TrailEntry[];
   steers: Steer[];
+  /** Crew writes the event-derived Decisions, Open questions and Next lines itself (engine-gaps, 2026-10-30), so a run
+   *  nobody views gets them too. Then this plugin writes none: it renders the document and saves a person's edits. */
+  eventLines?: boolean;
+}
+
+/** The plugin writes its own lines only while crew does not (an older crew: absent). */
+export function pluginWritesLines(view: Pick<DocView, 'eventLines'> | null): boolean {
+  return view?.eventLines !== true;
 }
 
 const SEAT_NAMES: Readonly<Record<string, string>> = {

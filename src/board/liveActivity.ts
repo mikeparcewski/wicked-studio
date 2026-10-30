@@ -25,6 +25,8 @@ export interface LiveRow {
   text: string;
   /** Still going (a started tool call with no finish yet). */
   running: boolean;
+  /** When it finished (unix ms), null while it runs: a finished call stays in view for a while after its turn. */
+  doneAt: number | null;
   ok: boolean | null;
 }
 
@@ -55,8 +57,53 @@ export function toolKind(tool: string | null): ActivityKind {
   return TOOL_KIND[tool.toLowerCase()] ?? 'other';
 }
 
-function looksLikeTests(cmd: string): boolean {
-  return /\b(test|tests|vitest|jest|pytest|cargo\s+(?:nextest|test)|go\s+test|npm\s+(?:run\s+)?test|mocha|rspec)\b/i.test(cmd);
+/**
+ * What a shell command does, from the command itself (retime 0.16.11: `sed -n 266,278p tests/x.test.ts`, `sed -i …` and a
+ * python heredoc that rewrites a file were labelled "Tests passed" because the text mentions `tests/`). The command is
+ * split into its parts (`&&`, `||`, `;`, `|`); each part's program decides:
+ *  - an EDIT: `sed -i`, `perl -i`, a python/node script that writes or rewrites a file (`.write(`, `.replace(`: the
+ *    frame's command is cut at 160 characters, so the write itself is often not in it), `tee`, `cat > file`,
+ *    `git apply`, `patch`;
+ *  - the TESTS: a test runner as the program (`vitest`, `npx jest`, `npm test`, `npm run test:…`, `cargo test`,
+ *    `go test`, `pytest`, `python -m pytest`, `make test`, …).
+ * An edit anywhere makes the command an edit ("edits are edits"); else a test runner makes it the tests; else it is a
+ * plain command (`null`: the tool's kind stands). A mention of `tests/` or `*.test.ts` in an argument is not a test run.
+ */
+export function commandKind(cmd: string): 'edit' | 'test' | null {
+  // (A quoted `|` splits too; a stray fragment is never a runner or an editor in practice.)
+  const parts = cmd.split(/&&|\|\||;|\|/u).map((p) => p.trim()).filter((p) => p !== '');
+  let tests = false;
+  for (const part of parts) {
+    const words = part.split(/\s+/u).filter((w) => !/^[A-Za-z_][A-Za-z0-9_]*=/u.test(w));
+    while (words.length > 0 && /^(?:env|time|timeout|nice|command|exec|sudo|\d+[smh]?)$/u.test(words[0]!)) words.shift();
+    const prog = (words[0] ?? '').replace(/^.*\//u, '');
+    const rest = words.slice(1);
+    if (prog === 'cd' || prog === '') continue;
+    if (prog === 'sed' && rest.some((w) => /^-[a-zA-Z]*i/u.test(w) || w === '--in-place' || w.startsWith('--in-place='))) return 'edit';
+    if (prog === 'perl' && rest.some((w) => /^-[a-zA-Z]*i/u.test(w))) return 'edit';
+    if (prog === 'tee' || prog === 'patch' || prog === 'apply_patch' || (prog === 'git' && rest[0] === 'apply')) return 'edit';
+    // A script's body may hold a `;` or a `|`: read it from its program to the end.
+    if (/^(?:python[0-9.]*|node|ruby|deno|bun)$/u.test(prog) && /\.write(?:_text|FileSync|File)?\(|writeFileSync|open\([^)]*,\s*['"][wa]|\.replace\(/u.test(cmd.slice(Math.max(0, cmd.indexOf(part))))) return 'edit';
+    if (/(?:^|\s)>>?\s*(?!\/dev\/null|&)\S/u.test(part) && /^(?:cat|echo|printf)$/u.test(prog)) return 'edit';
+    const sub = rest[0] ?? '';
+    const runner = /^(?:vitest|jest|mocha|pytest|rspec|ava|tap|nextest|playwright)$/u.test(prog)
+      || (/^(?:npx|pnpx|bunx)$/u.test(prog) && /^(?:vitest|jest|mocha|pytest|playwright|ava|tap)$/u.test(sub))
+      || (/^(?:npm|pnpm|yarn|bun)$/u.test(prog) && (sub === 'test' || sub === 't' || (sub === 'run' && /^test(?::|$)/u.test(rest[1] ?? '')) || /^test:/u.test(sub)))
+      || (prog === 'cargo' && (sub === 'test' || sub === 'nextest'))
+      || (prog === 'go' && sub === 'test')
+      || (/^python[0-9.]*$/u.test(prog) && sub === '-m' && /^(?:pytest|unittest)$/u.test(rest[1] ?? ''))
+      || (prog === 'make' && /^test/u.test(sub));
+    if (runner) tests = true;
+  }
+  return tests ? 'test' : null;
+}
+
+/** The file a shell edit names, when it does: a script's `p='src/x.ts'` or `open('src/x.ts')`, `sed -i`'s last word. */
+export function editedPath(cmd: string): string | null {
+  const named = /\b(?:p|path|f|file)\s*=\s*['"]([^'"\s]+\.[A-Za-z0-9]+)['"]/u.exec(cmd) ?? /open\(\s*['"]([^'"\s]+)['"]/u.exec(cmd);
+  if (named !== null) return named[1]!;
+  const sed = /\bsed\s+(?:-[a-zA-Z]*i\S*|--in-place\S*)\s.*?\s([^\s'"|;&<>]+\.[A-Za-z0-9]+)\s*(?:$|&&|;|\|)/u.exec(cmd);
+  return sed !== null ? sed[1]! : null;
 }
 
 function rowWords(kind: ActivityKind, target: string | null, running: boolean, ok: boolean | null, tool: string | null): string {
@@ -75,37 +122,70 @@ function rowWords(kind: ActivityKind, target: string | null, running: boolean, o
   }
 }
 
+/**
+ * One orchestrator turn. A turn's number restarts at 1 on every attempt of the build (a retry after a failed floor or a
+ * review sent back is attempt 1, 2, …), so a turn is its number AND its attempt (retime 0.16.11: retry turn a2's live
+ * list was empty because attempt 0's turn 1 had ended, and turn a1's summary was a copy of a0's). `attempt: null` (an
+ * engine that sends none) means the newest turn with that number.
+ */
+export interface TurnRef { turn: number; attempt: number | null }
+
+const refOf = (t: number | TurnRef | null): TurnRef | null => (t === null ? null : typeof t === 'number' ? { turn: t, attempt: null } : t);
+const sameTurn = (e: Ev, t: TurnRef): boolean => e.turn === t.turn && (t.attempt === null || e.attempt === undefined || e.attempt === t.attempt);
+
+/** Where one turn's frames are in the log: from its (newest) start to its end, `end` null while it runs. */
+function turnSpan(list: readonly Ev[], ord: number, t: TurnRef): { from: number; end: number | null } | null {
+  let from = -1;
+  for (let i = list.length - 1; i >= 0; i--) {
+    const e = list[i]!;
+    if (e.ord === ord && e.type === 'powerTurnStarted' && sameTurn(e, t)) { from = i; break; }
+  }
+  if (from < 0) return null;
+  for (let i = from + 1; i < list.length; i++) {
+    const e = list[i]!;
+    if (e.ord === ord && e.type === 'powerTurnCompleted' && sameTurn(e, t)) return { from, end: i };
+  }
+  return { from, end: null };
+}
+
 /** The frames of one step's newest attempt (from its last dispatch), or of one orchestrator turn when `turn` is set. */
-function scoped(events: readonly CoreEvent[], ord: number, turn: number | null): Ev[] {
+function scoped(events: readonly CoreEvent[], ord: number, turn: TurnRef | null): Ev[] {
   const list = events as readonly Ev[];
   let from = 0;
   let to = list.length;
-  for (let i = 0; i < list.length; i++) {
-    const e = list[i]!;
-    if (e.ord !== ord) continue;
-    if (turn === null && e.type === 'unitDispatched') from = i;
-    if (turn !== null && e.type === 'powerTurnStarted' && e.turn === turn) from = i;
-    if (turn !== null && e.type === 'powerTurnCompleted' && e.turn === turn) { to = i + 1; break; }
+  if (turn === null) {
+    for (let i = 0; i < list.length; i++) if (list[i]!.ord === ord && list[i]!.type === 'unitDispatched') from = i;
+  } else {
+    const span = turnSpan(list, ord, turn);
+    if (span === null) return [];
+    from = span.from;
+    if (span.end !== null) to = span.end + 1;
   }
   return list.slice(from, to).filter((e) => e.ord === ord);
 }
 
 /** The activity rows of a step (or a turn), oldest first: a started tool call and its finish are one row. */
-export function activityRows(events: readonly CoreEvent[] | null | undefined, ord: number, turn: number | null = null): LiveRow[] {
+export function activityRows(events: readonly CoreEvent[] | null | undefined, ord: number, turn: number | TurnRef | null = null): LiveRow[] {
   const out: LiveRow[] = [];
   const byCall = new Map<string, number>();
   let n = 0;
-  for (const e of scoped(events ?? [], ord, turn)) {
+  for (const e of scoped(events ?? [], ord, refOf(turn))) {
     n += 1;
     if (e.type === 'toolActivity') {
       const tool = str(e.tool);
       const target = str(e.target);
       let kind = (typeof e.kind === 'string' ? e.kind : toolKind(tool)) as ActivityKind;
-      if (kind === 'run' && target !== null && looksLikeTests(target)) kind = 'test';
+      // A shell command is what it does: classified from the command itself, whatever kind the frame guessed.
+      let shown = target;
+      if ((kind === 'run' || kind === 'test') && target !== null) {
+        kind = commandKind(target) ?? 'run';
+        // A shell edit says the file it edits when the command names it, else the command.
+        if (kind === 'edit') shown = editedPath(target) ?? `\`${short(target, 80)}\``;
+      }
       const running = e.state === 'started';
       const ok = typeof e.ok === 'boolean' ? e.ok : null;
       const id = str(e.id);
-      const row: LiveRow = { key: id !== null ? `t:${id}` : `t#${n}`, at: timeOf(e), kind, text: rowWords(kind, target, running, ok, tool), running, ok };
+      const row: LiveRow = { key: id !== null ? `t:${id}` : `t#${n}`, at: timeOf(e), kind, text: rowWords(kind, shown, running, ok, tool), running, ok, doneAt: running ? null : timeOf(e) };
       const at = id !== null ? byCall.get(id) : undefined;
       if (at !== undefined) out[at] = { ...row, at: out[at]!.at };
       else { if (id !== null) byCall.set(id, out.length); out.push(row); }
@@ -118,7 +198,7 @@ export function activityRows(events: readonly CoreEvent[] | null | undefined, or
       const text = k === 'commit'
         ? `Committed ${sha !== null ? sha.slice(0, 7) : ''}${str(e.subject) !== null ? ` · ${short(str(e.subject)!, 70)}` : ''}`.trim()
         : `Edited ${str(e.path) ?? 'a file'}${added !== null ? ` +${added}` : ''}${removed !== null ? ` −${removed}` : ''}`;
-      out.push({ key: `p#${n}`, at: timeOf(e), kind: k, text, running: false, ok: null });
+      out.push({ key: `p#${n}`, at: timeOf(e), kind: k, text, running: false, ok: null, doneAt: timeOf(e) });
     }
   }
   return out;
@@ -126,24 +206,43 @@ export function activityRows(events: readonly CoreEvent[] | null | undefined, or
 
 /** The orchestrator's turn running now at this unit (the newest started turn), or null for a step with no turns: the
  *  live list of a power build shows that turn's activity, not the whole build's. */
-export function currentTurn(events: readonly CoreEvent[] | null | undefined, ord: number): number | null {
+export function currentTurn(events: readonly CoreEvent[] | null | undefined, ord: number): TurnRef | null {
   const list = (events ?? []) as readonly Ev[];
   for (let i = list.length - 1; i >= 0; i--) {
     const e = list[i]!;
     if (e.ord === ord && e.type === 'unitDispatched') return null;
-    if (e.ord === ord && e.type === 'powerTurnStarted' && typeof e.turn === 'number') return e.turn;
+    if (e.ord === ord && e.type === 'powerTurnStarted' && typeof e.turn === 'number') return { turn: e.turn, attempt: typeof e.attempt === 'number' ? e.attempt : null };
   }
   return null;
 }
 
-/** The turn has ended (its message carries the summary line; the live list has nothing more to say). */
-export function turnEnded(events: readonly CoreEvent[] | null | undefined, ord: number, turn: number): boolean {
-  return ((events ?? []) as readonly Ev[]).some((e) => e.ord === ord && e.type === 'powerTurnCompleted' && e.turn === turn);
+/** When the turn ended (its message carries the summary line), or null while it runs. */
+export function turnEndedAt(events: readonly CoreEvent[] | null | undefined, ord: number, turn: number | TurnRef): number | null {
+  const list = (events ?? []) as readonly Ev[];
+  const span = turnSpan(list, ord, refOf(turn)!);
+  if (span === null || span.end === null) return null;
+  return timeOf(list[span.end]!) ?? 0;
+}
+
+/** The turn has ended. */
+export function turnEnded(events: readonly CoreEvent[] | null | undefined, ord: number, turn: number | TurnRef): boolean {
+  return turnEndedAt(events, ord, turn) !== null;
+}
+
+/** How long a finished call stays in the live list after its turn ended (retime 0.16.11: a 39 s call fell between two
+ *  looks 15 s apart). */
+export const KEEP_FINISHED_MS = 60_000;
+
+/** The rows the live list shows: all of a running turn's (the list keeps its newest few), and once the turn ended the
+ *  calls that finished in the last {@link KEEP_FINISHED_MS}, until none is left. */
+export function visibleRows(rows: readonly LiveRow[], endedAt: number | null, now: number): LiveRow[] {
+  if (endedAt === null) return [...rows];
+  return rows.filter((r) => now - (r.doneAt ?? endedAt) < KEEP_FINISHED_MS);
 }
 
 /** The tool calls the gate judged for a step (or turn): what the summary counts when no `toolActivity` came. */
-function judgedTools(events: readonly CoreEvent[] | null | undefined, ord: number, turn: number | null): ActivityKind[] {
-  return scoped(events ?? [], ord, turn).filter((e) => e.type === 'governanceHookFired' && e.decision !== 'deny').map((e) => toolKind(str(e.toolName)));
+function judgedTools(events: readonly CoreEvent[] | null | undefined, ord: number, turn: number | TurnRef | null): ActivityKind[] {
+  return scoped(events ?? [], ord, refOf(turn)).filter((e) => e.type === 'governanceHookFired' && e.decision !== 'deny').map((e) => toolKind(str(e.toolName)));
 }
 
 const plural = (n: number, one: string, many = `${one}s`): string => `${n} ${n === 1 ? one : many}`;
@@ -152,7 +251,7 @@ const plural = (n: number, one: string, many = `${one}s`): string => `${n} ${n =
  * One line for a finished step or turn: "Read 4 files · ran 7 commands · ran the tests twice · edited 3 files · 2
  * commits". Null when nothing was recorded.
  */
-export function activitySummary(events: readonly CoreEvent[] | null | undefined, ord: number, turn: number | null = null): string | null {
+export function activitySummary(events: readonly CoreEvent[] | null | undefined, ord: number, turn: number | TurnRef | null = null): string | null {
   const rows = activityRows(events, ord, turn);
   const tools = rows.some((r) => r.key.startsWith('t')) ? rows.filter((r) => r.key.startsWith('t')).map((r) => r.kind) : judgedTools(events, ord, turn);
   const count = (k: ActivityKind): number => tools.filter((x) => x === k).length;

@@ -1,5 +1,7 @@
 import { useSilentStep } from '../../hooks/useSilentStep.js';
 import { silentWords } from '../../board/silentStep.js';
+import { useRunningFloor } from '../../hooks/useRunningFloor.js';
+import { floorWords } from '../../board/floorRun.js';
 import { beginChatOpen, chatOpened, useChatFlow } from '../../store/chatFlow.js';
 import { useProjectsStore } from '../../store/projects.js';
 import { Fragment, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from 'react';
@@ -412,10 +414,13 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
   // (J4 0.16.6) A step silent past crew's quiet mark is not "Working": the header says how long it has said nothing.
   const silent = useSilentStep(mine.length > 0 ? mine[mine.length - 1] : undefined);
   const silentRunId = silent !== null ? mine[mine.length - 1]!.session.id : null;
+  // The engine's checks floor is running: the seat is idle on purpose; the page says what runs (retime 0.16.11).
+  const floor = useRunningFloor(mine.length > 0 ? mine[mine.length - 1] : undefined);
+  const floorRunId = floor !== null ? mine[mine.length - 1]!.session.id : null;
   // Power mode (DES-POWER-MODE §2): the switch beside a run's name and its rigor chip — on a session of one run.
   const powerRun = mine.length === 1 ? mine[0]! : null;
   const power = usePower(powerRun);
-  const badge = mine.length > 0 ? (state === 'working' && powerRun !== null && power?.pause != null ? { word: 'Waiting', tone: 'gate' as const } : state === 'working' && silent !== null ? { word: silentWords(silent), tone: 'gate' as const } : headerBadge(mine, state)) : null;
+  const badge = mine.length > 0 ? (state === 'working' && powerRun !== null && power?.pause != null ? { word: 'Waiting', tone: 'gate' as const } : state === 'working' && silent !== null ? { word: silentWords(silent), tone: 'gate' as const } : state === 'working' && floor !== null ? { word: 'Running checks', tone: 'run' as const } : headerBadge(mine, state)) : null;
   // The banner below the header: each thing here that waits on the operator (the Needs-you rows about these runs).
   const gates = useGateStore((s) => s.gates);
   const waiting = useMemo(() => waitingItems(needRows, mine, gates, Date.now()), [needRows, mine, gates]);
@@ -1154,7 +1159,7 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
                 <div data-testid="session-working" data-run-id={e.runId} data-object={`step:${e.runId}:${e.ord}`} className="wk-chat-working">
                   <span aria-hidden className="wk-chat-working-dots"><i /><i /><i /></span>
                   {/* rig 0.15.8: the step in the chain's own word ("Check", never "Verify" beside it). */}
-                  <span data-testid="session-working-text" data-silent={e.runId === silentRunId ? 'true' : 'false'} aria-live="polite"><span className="wk-chat-working-who">{who.role === 'crew' ? 'studio' : who.name}</span> {e.runId === silentRunId && silent !== null ? `· ${silentWords(silent)} on ${workingStepWord(e.step)}` : `Working on ${workingStepWord(e.step)}…`}</span>
+                  <span data-testid="session-working-text" data-silent={e.runId === silentRunId ? 'true' : 'false'} aria-live="polite"><span className="wk-chat-working-who">{who.role === 'crew' ? 'studio' : who.name}</span> {e.runId === floorRunId && floor !== null && floor.ord === e.ord ? <span data-testid="session-working-floor">· {floorWords(floor)}</span> : e.runId === silentRunId && silent !== null ? `· ${silentWords(silent)} on ${workingStepWord(e.step)}` : `Working on ${workingStepWord(e.step)}…`}</span>
                   {/* rig 0.15.8: the composer says "message a working step from its ⋯" — this is that ⋯. */}
                   <OverflowMenu label={`More for ${workingStepWord(e.step)}`} data-testid="session-working-menu"
                     items={[{ id: 'message', label: MESSAGE_STEP_LABEL, onSelect: () => openSheet({ kind: 'step', runId: e.runId, ord: e.ord }, undefined, { compose: true }) }]} />

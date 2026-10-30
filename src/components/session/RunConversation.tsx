@@ -293,7 +293,9 @@ export function RunBlock({ view, badge, sessionId, navigate, solo = null }: {
   // A power build's phases, each with its own phase report (operator 2026-10-30).
   const phases = useMemo(() => (powerBuild && power !== null ? powerPhases(view.units, power, runEvents, ['completed', 'cancelled', 'failed'].includes(view.session.status)) : []), [powerBuild, power, view.units, runEvents, view.session.status]);
   const phaseOf = (key: string): (typeof phases)[number] | null => phases.find((ph) => ph.key === key) ?? null;
-  const stepPhase = (ord: number): (typeof phases)[number] | null => phases.find((ph) => (ph.key === 'review' || ph.key === 'security' || ph.key === 'qe') && ph.ords.includes(ord)) ?? null;
+  // A step phase (the plan step, a hand-off step) reports after its own message.
+  const STEP_PHASES: ReadonlySet<string> = new Set(['plan', 'review', 'security', 'qe']);
+  const stepPhase = (ord: number): (typeof phases)[number] | null => phases.find((ph) => STEP_PHASES.has(ph.key) && ph.ords.includes(ord)) ?? null;
   const reviewVerdicts = useReviewVerdicts(id, steps, (ord) => { const u = view.units.find((x) => x.ord === ord); return u !== undefined && isReviewUnit(u); });
   const plan = useMemo(() => planSteps(view, chain), [view, chain]);
   const decisions = useMemo(() => decisionMessages(runEvents ?? NO_EVENTS), [runEvents]);
@@ -429,8 +431,8 @@ export function RunBlock({ view, badge, sessionId, navigate, solo = null }: {
           jump row after the last step, at the newest of them. With no step message yet the block itself is right
           above: no row would point anywhere. */}
       {!powerBuild && steps.length > 0 && <RunPluginJumpRows runId={id} except={steps.slice(0, -1).map((s) => s.ord)} />}
-      {/* A hand-off step running now has no message yet: its report sits after the last message. */}
-      {phases.filter((ph) => (ph.key === 'review' || ph.key === 'security' || ph.key === 'qe') && !steps.some((s) => ph.ords.includes(s.ord)) && ph.current)
+      {/* A step phase running now has no message yet: its report sits after the last message. */}
+      {phases.filter((ph) => STEP_PHASES.has(ph.key) && !steps.some((s) => ph.ords.includes(s.ord)) && ph.current)
         .map((ph) => <RunPhasePlugins key={ph.key} runId={id} phase={ph} />)}
       {/* Working-document steering notes not picked up yet (or by a step with no message): after the last step. */}
       <WorkingDocSteerRows runId={id} except={steps.map((s) => s.ord)} />

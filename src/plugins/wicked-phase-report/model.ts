@@ -111,8 +111,10 @@ export function foldRows(r: Report, rows: readonly Row[]): boolean {
       case 'wicked.run.session.resumed':
         // A resumed run is running again (studio resumes a failed run under the same id).
         if (r.finished !== null && row.at >= r.finished.at) r.finished = null;
-        // A resume at a unit answers the decision that unit was waiting on.
-        for (const g of r.gates) if (g.ord === ord && g.answeredAt === null) g.answeredAt = row.at;
+        // A resume answers the decision the run was waiting on, whatever unit it resumes at: a review sent back resumes
+        // at the creator's unit (retime 0.16.11: ea73afc0's ord-4 escalation resumed at ord 3 in the same second, and
+        // stayed "Waiting on you" under Open questions).
+        for (const g of r.gates) if (g.answeredAt === null && g.openedAt <= row.at) g.answeredAt = row.at;
         break;
       case 'wicked.run.unit.planned':
         if (ord !== null) { const u = unit(r, ord); u.step = str(d['step']) ?? u.step; }
@@ -127,8 +129,8 @@ export function foldRows(r: Report, rows: readonly Row[]): boolean {
           u.state = 'running';
           u.startedAt ??= row.at;
           u.finishedAt = null;
-          // A unit starting means every decision before it was answered.
-          for (const g of r.gates) if (g.ord <= ord && g.answeredAt === null && g.openedAt <= row.at) g.answeredAt = row.at;
+          // A unit starting means every decision opened before it was answered (the run moved on, at any unit).
+          for (const g of r.gates) if (g.answeredAt === null && g.openedAt <= row.at) g.answeredAt = row.at;
         }
         break;
       case 'wicked.run.unit.finished':
@@ -378,7 +380,7 @@ export function dashboard(r: Report, nowMs: number): Dashboard {
   }
   const checks = r.checks.slice(-3).reverse().map((c) => {
     const reusedSet = new Set(c.reusedFrom?.reused ?? []);
-    const word = c.outcome === 'passed' || c.passed ? 'passed' : c.outcome === 'timed_out' ? 'timed out' : c.outcome === 'not_run' ? 'did not run' : 'failed';
+    const word = checksResultWord(c);
     return {
       title: `${c.ord !== null ? stepWord(r.units.get(c.ord) ?? { step: null, ord: c.ord }) : 'Checks'} · ${word} · ${clock(c.at)}`,
       chips: c.checks.map((x) => ({
@@ -447,17 +449,17 @@ export function dashboard(r: Report, nowMs: number): Dashboard {
 
 /**
  * The phase one instance reports on, as the host hands it over (`host.hello` → `observe.scope`): a power run has one
- * block per phase — Intake, Build (the orchestrator), each hand-off step (Checks, Review, Security, QE) and Deliver —
+ * block per phase — Intake, Plan (an architecture or design step, when the plan has one), Build (the orchestrator), each hand-off step (Checks, Review, Security, QE) and Deliver —
  * at the end of that phase's messages. Absent = the whole run (a phased run's one block).
  */
 export interface PhaseScope {
-  phase: 'intake' | 'build' | 'checks' | 'review' | 'security' | 'qe' | 'deliver';
+  phase: 'intake' | 'plan' | 'build' | 'checks' | 'review' | 'security' | 'qe' | 'deliver';
   label: string;
   /** The units the phase is made of. */
   ords: number[];
 }
 
-const PHASES = new Set(['intake', 'build', 'checks', 'review', 'security', 'qe', 'deliver']);
+const PHASES = new Set(['intake', 'plan', 'build', 'checks', 'review', 'security', 'qe', 'deliver']);
 
 export function scopeOf(v: unknown): PhaseScope | null {
   if (v === null || typeof v !== 'object') return null;
@@ -570,6 +572,10 @@ function phaseState(r: Report, scope: PhaseScope): string {
     if (r.power.handoff !== null || r.finished !== null) return 'handed off';
     return 'between turns';
   }
+  // A power build's Checks are its floors: the newest floor's own result says how it ended, never the unit (which runs
+  // on into the next turn: retime 0.16.11, "Checks · running" after floor 1 ended at "3 of 4 passed").
+  const floor = scope.phase === 'checks' ? floorState(r, scope) : null;
+  if (floor !== null) return floor;
   const step = HANDOFF_STEP[scope.phase];
   const rec = step !== undefined ? r.power?.handoff?.steps.get(step) : undefined;
   if (rec !== undefined) return rec.status === 'passed' ? (scope.phase === 'review' || scope.phase === 'security' ? 'approved' : 'passed') : rec.status === 'failed' ? (scope.phase === 'review' ? 'changes asked' : 'failed') : rec.status;
@@ -580,6 +586,22 @@ function phaseState(r: Report, scope: PhaseScope): string {
   if (span.failed) return 'did not pass';
   if (span.end !== null) return 'done';
   return span.start === null ? 'not started' : 'running';
+}
+
+/** The checks result in one word, as the dashboard's run titles say it. */
+export function checksResultWord(c: Pick<ChecksRun, 'outcome' | 'passed'>): string {
+  return c.outcome === 'passed' || c.passed ? 'passed' : c.outcome === 'timed_out' ? 'timed out' : c.outcome === 'not_run' ? 'did not run' : 'failed';
+}
+
+/** A power build's Checks state from its newest floor span: waiting on you, its result, or running while it has none.
+ *  Null when the build has no floor span yet (the hand-off's record, or the unit, says it then). */
+function floorState(r: Report, scope: PhaseScope): string | null {
+  const last = ownSpans(r, scope)?.at(-1);
+  if (last === undefined) return null;
+  if (openGates(r).some((g) => inScope(scope, g.ord) && g.openedAt >= last.start)) return 'waiting on you';
+  const result = r.checks.filter((c) => inScope(scope, c.ord) && c.at >= last.start && (last.end === null || c.at <= last.end)).at(-1);
+  if (result !== undefined) return checksResultWord(result);
+  return last.end === null ? 'running' : null;
 }
 
 /** A hand-off phase's own record (its status, its seat, when it last moved), or null. */

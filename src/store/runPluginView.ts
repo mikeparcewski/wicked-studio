@@ -39,7 +39,7 @@ const fresh = (runId: string, pluginId: string): BlockView => ({ pinned: readPin
 /** One phase of a power run (operator 2026-10-30: one report per phase): the plugin's instance for it reports on
  *  `ords` only, sits at the end of the phase's messages and is open while the phase is the current one. */
 export interface RunPhase {
-  key: 'intake' | 'build' | 'checks' | 'review' | 'security' | 'qe' | 'deliver';
+  key: 'intake' | 'plan' | 'build' | 'checks' | 'review' | 'security' | 'qe' | 'deliver';
   label: string;
   ords: number[];
   current: boolean;

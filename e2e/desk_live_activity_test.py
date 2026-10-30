@@ -138,8 +138,11 @@ with sync_playwright() as p:
     page.wait_for_timeout(1500)
     sums = page.locator('[data-testid="activity-summary"]').all_inner_texts()
     shot(page, "desk-live-activity-ended-1440.png")
+    # The turn's finished calls stay in view about a minute after it ended (retime 0.16.11: a 39 s call fell between two
+    # looks), none of them still "running"; the turn's message carries its one-line summary.
     live_left = page.locator('[data-testid="live-activity"]').count()
-    check("3-ends", any("Read 1 file" in s and "ran the tests once" in s and "edited" in s for s in sums) and live_left == 0, summaries=sums, live=live_left)
+    running_left = page.locator('[data-testid="live-activity-row"][data-running="true"]').count()
+    check("3-ends", any("Read 1 file" in s and "ran the tests once" in s and "edited" in s for s in sums) and live_left == 1 and running_left == 0, summaries=sums, live=live_left, running=running_left)
     ctx.close()
 
     # ── 4. phone ─────────────────────────────────────────────────────────────────────────────────────

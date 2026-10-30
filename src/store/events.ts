@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { CoreEvent } from '../api/types.js';
 import { useStallEscalationStore } from './stallEscalations.js';
+import { isFloorDelta } from '../board/floorLine.js';
 
 /**
  * The raw per-run append log the {@link import('../hooks/useRunModel.js').useRunModel}
@@ -25,6 +26,10 @@ import { useStallEscalationStore } from './stallEscalations.js';
 const CAP = 50000;
 
 const IGNORED: ReadonlySet<string> = new Set(['cliOutputDelta', 'unitOutputDelta', 'heartbeat']);
+
+/** Dropped from the log: output deltas and heartbeats, except the repo-checks floor's own lines (one every 5 min):
+ *  they are the only frames that say a floor is running (`board/floorRun.ts`). */
+const dropped = (e: CoreEvent): boolean => IGNORED.has(e.type) && !isFloorDelta(e as CoreEvent & { text?: unknown });
 
 /**
  * Content identity of a frame, ignoring the two fields only the DURABLE copy
@@ -81,7 +86,7 @@ export const useRunEventStore = create<RunEventStore>((set, get) => ({
   ingest: (event) => {
     const session = typeof event.session === 'string' ? event.session : undefined;
     if (session === undefined) return;
-    if (IGNORED.has(event.type)) return;
+    if (dropped(event)) return;
     if (typeof (event as { ts?: unknown }).ts !== 'number') arrivals.set(event, Date.now());
     set((s) => {
       const prev = s.byRun[session] ?? [];
@@ -94,7 +99,7 @@ export const useRunEventStore = create<RunEventStore>((set, get) => ({
   hydrate: (runId, events) => {
     set((s) => {
       const recorded = events
-        .filter((e) => e.session === runId && !IGNORED.has(e.type))
+        .filter((e) => e.session === runId && !dropped(e))
         .sort((a, b) => (typeof a.seq === 'number' && typeof b.seq === 'number' ? a.seq - b.seq : 0));
       if (recorded.length === 0) return s;
       const live = s.byRun[runId] ?? [];

@@ -10,13 +10,15 @@
  * Spike 3: unfolded, the dashboard is followed by the run's WORKING DOCUMENT (`doc.read`). A person edits a section
  * here and saves it with their own click or key: the plugin offers it as `typed` (`doc.propose_edit`), and the host
  * records it as the person's only because the gesture was real. The Decisions lines this plugin writes for answered
- * decisions are offered as `generated`: the host records them as the plugin's own, and they never steer.
+ * decisions are offered as `generated`: the host records them as the plugin's own, and they never steer. A crew that
+ * writes those lines itself (its view says `eventLines`) gets none from the plugin: it renders them and saves a person's
+ * edits only.
  */
 
 import { PROTOCOL, ENVELOPE, type Envelope } from '../_shared/v2.js';
 import surfaces from './surfaces.json';
 import { dashboard, emptyReport, foldRows, openGates, phaseDashboard, phaseSummary, scopeOf, summaryLine, writesDoc, type PhaseScope, type Report, type Row } from './model.js';
-import { SECTION_EFFECT, SECTION_LABELS, SECTIONS, STEER_NOTE, docLines, reconcileSection, sectionAuthor, trailLines, type DocView, type SectionId } from './workingDoc.js';
+import { SECTION_EFFECT, SECTION_LABELS, SECTIONS, STEER_NOTE, docLines, pluginWritesLines, reconcileSection, sectionAuthor, trailLines, type DocView, type SectionId } from './workingDoc.js';
 
 const ID = 'wicked-phase-report';
 
@@ -233,6 +235,8 @@ export function start(): void {
   function syncDoc(): void {
     // Until the document is read (its first read calls this again) or started, there is nothing to write to.
     if (!writesDoc(scope) || syncQueued || docState !== 'ready' || doc?.doc == null || !report.loaded) return;
+    // Crew writes these lines itself (a run nobody views gets them too): the plugin only renders them.
+    if (!pluginWritesLines(doc)) return;
     if (edit !== null) { syncAfterEdit = true; return; }
     syncQueued = true;
     void serial(async () => {
@@ -240,6 +244,7 @@ export function start(): void {
       const wanted = docLines(report);
       for (const section of ['decisions', 'questions', 'next'] as const) {
         if (edit !== null) { syncAfterEdit = true; return; }
+        if (!pluginWritesLines(doc)) return;
         if (refused.has(section)) continue;
         for (let attempt = 0; attempt < 2; attempt += 1) {
           if (doc === null || doc.doc === null || doc.sections === null) return;
@@ -256,7 +261,7 @@ export function start(): void {
 
   /** The plugin's lines for a section that its saved text does not have (shown as not saved yet). */
   function unsavedLines(id: 'decisions' | 'questions' | 'next', saved: string): string[] {
-    if (!writesDoc(scope) || !report.loaded) return [];
+    if (!writesDoc(scope) || !report.loaded || !pluginWritesLines(doc)) return [];
     const have = saved.split('\n').map((l) => l.trim());
     return docLines(report)[id].filter((l) => !have.includes(l));
   }

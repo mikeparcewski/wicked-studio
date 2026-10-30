@@ -307,7 +307,7 @@ export function PowerThread({ view, power, items, part }: { view: SessionView; p
                 <TurnWho who={seatResponder(it.cli, roster)} runId={id} suffix="orchestrator" at={it.at} className="wk-chat-who" />
                 <div className="wk-chat-body"><div className="wk-chat-md"><Markdown>{it.summary}</Markdown></div>
                   {/* What the turn did, in one line, once it ended. */}
-                  {power.orchestrator.ord !== null && <ActivitySummaryLine runId={id} ord={power.orchestrator.ord} turn={it.turn} />}
+                  {power.orchestrator.ord !== null && <ActivitySummaryLine runId={id} ord={power.orchestrator.ord} turn={{ turn: it.turn, attempt: it.attempt }} />}
                 </div>
               </div>
             );

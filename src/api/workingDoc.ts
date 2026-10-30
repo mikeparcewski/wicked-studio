@@ -45,6 +45,9 @@ export interface WorkingDocView {
   labels: Record<WorkingDocSectionId, string>;
   trail: WorkingDocTrailEntry[];
   steers: WorkingDocSteer[];
+  /** True when crew itself writes the event-derived Decisions / Open questions / Next lines (engine-gaps); absent on an
+   *  older crew, whose lines the phase report plugin writes. */
+  eventLines?: boolean;
 }
 
 export interface ProposeWorkingDoc {

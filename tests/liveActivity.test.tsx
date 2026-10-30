@@ -39,7 +39,7 @@ describe('the model', () => {
       { type: 'powerTurnCompleted', session: R, ord: 2, turn: 1, ts: T(3) },
       { type: 'powerTurnStarted', session: R, ord: 2, turn: 2, ts: T(4) }, tool('b', 'started', 'Edit', 'src/b.ts', 5),
     ]);
-    expect(currentTurn(turns, 2)).toBe(2);
+    expect(currentTurn(turns, 2)).toEqual({ turn: 2, attempt: null });
     expect(activityRows(turns, 2, currentTurn(turns, 2)).map((r) => r.text)).toEqual(['Editing src/b.ts']);
     expect(currentTurn(frames, 2)).toBeNull();
     expect(turnEnded(turns, 2, 2)).toBe(false);
