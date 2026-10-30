@@ -49,7 +49,7 @@ export function importExampleDoc(today: Date = new Date()): string {
  */
 export function plainSkip(index: number, reason: string): string {
   const raw = reason.trim();
-  const why = /not a frontmattered rule doc|frontmatter fence/i.test(raw) ? 'it doesn’t open with the --- frontmatter block the format needs (see “The format” above)'
+  const why = /not a frontmattered rule doc|frontmatter fence/i.test(raw) ? 'it doesn’t start with the frontmatter block the format needs (see “The format” above)'
     : /applies_to/i.test(raw) ? 'it doesn’t say where it applies'
     : /\bid\b[^.]*blank/i.test(raw) ? 'it has no id'
     : /\bid\b.*(exists|duplicate)|duplicate/i.test(raw) ? 'a rule with that id already exists'

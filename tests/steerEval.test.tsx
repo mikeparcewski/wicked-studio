@@ -544,7 +544,7 @@ describe('studio#934 (J7): the import dialog states the format crew takes, and s
     await user.click(screen.getByTestId('steer-import-go'));
     const notes = await screen.findByTestId('steer-import-notes');
     expect(notes).toHaveTextContent('tiny-math-jsdoc.md: 0 of 1 entry imported.');
-    expect(notes).toHaveTextContent(`tiny-math-jsdoc.md skipped: it doesn’t open with the --- frontmatter block the format needs (see “The format” above). Studio’s service said: ${J7_REFUSAL}.`);
+    expect(notes).toHaveTextContent(`tiny-math-jsdoc.md skipped: it doesn’t start with the frontmatter block the format needs (see “The format” above). Studio’s service said: ${J7_REFUSAL}.`);
     expect(notes).not.toHaveTextContent('Studio’s service refused it');
   });
 
