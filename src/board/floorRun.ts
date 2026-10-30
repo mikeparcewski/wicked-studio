@@ -53,7 +53,7 @@ export function runningFloor(events: readonly CoreEvent[] | null | undefined, no
   return { ord: best.ord, check: best.check, since: best.since, minutes: Math.max(0, Math.floor((now - best.since) / 60_000)) };
 }
 
-/** "Running checks · test · 12 min". */
+/** "Running checks · test targeted · 12 min" (a check's id in words, as the Checks block's chips say it). */
 export function floorWords(f: RunningFloor): string {
-  return `Running checks${f.check !== null ? ` · ${f.check}` : ''} · ${f.minutes} min`;
+  return `Running checks${f.check !== null ? ` · ${f.check.replace(/_/gu, ' ')}` : ''} · ${f.minutes} min`;
 }

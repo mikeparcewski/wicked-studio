@@ -56,6 +56,7 @@ describe('1. a running floor is the engine working, not a silent seat', () => {
     const f = runningFloor(floorRunning(), T0 + 12 * MIN)!;
     expect(f).toMatchObject({ ord: 3, check: 'test', minutes: 12, since: T0 });
     expect(floorWords(f)).toBe('Running checks · test · 12 min');
+    expect(floorWords({ ...f, check: 'test_targeted' })).toBe('Running checks · test targeted · 12 min');
     // Joined mid-floor (the first line seen says 15 min in): the start is read back from it.
     expect(runningFloor(ev([floorLine(3, T0 + 15 * MIN, F(15, 'test', 2, 0))]), T0 + 16 * MIN)?.minutes).toBe(16);
     const ended = [...floorRunning(), ...ev([{ type: 'repoChecksEvaluated', ord: 3, attempt: 0, passed: false, ts: T0 + 35 * MIN }])];
