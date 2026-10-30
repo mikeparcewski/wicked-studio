@@ -12,10 +12,12 @@ import { arrivedAt } from '../store/events.js';
  *  - `powerActivity` — power mode's edits and commits, read off git about once a minute;
  *  - `governanceHookFired` — every tool call the gate judged (today these land together when the step ends: they feed
  *    the summary, and the live list too if an engine sends them live);
- *  - the step's own words streaming in (`unitOutputDelta`): its newest line, as what it says it is doing.
+ *  - the step's own words streaming in (`unitOutputDelta`): its newest line, as what it says it is doing;
+ *  - a quiet seat's `toolActivity` state `working` (core#1207, any seat quiet 15 s, codex and pi included): one row,
+ *    "Codex · working · last output 40 s ago", until the seat does something or its turn ends.
  */
 
-export type ActivityKind = 'read' | 'search' | 'run' | 'test' | 'edit' | 'write' | 'commit' | 'skill' | 'task' | 'other';
+export type ActivityKind = 'read' | 'search' | 'run' | 'test' | 'edit' | 'write' | 'commit' | 'skill' | 'task' | 'other' | 'working';
 
 export interface LiveRow {
   key: string;
@@ -28,6 +30,9 @@ export interface LiveRow {
   /** When it finished (unix ms), null while it runs: a finished call stays in view for a while after its turn. */
   doneAt: number | null;
   ok: boolean | null;
+  /** A quiet seat's "still working" row (core#1207: `toolActivity` state `working`, one per 15 s of silence, the same
+   *  id each time): the seat's key, and when it last printed (unix ms), so the row can count the silence up live. */
+  working?: { seat: string; quietSince: number | null };
 }
 
 type Ev = CoreEvent & Record<string, unknown>;
@@ -50,6 +55,17 @@ const TOOL_KIND: Record<string, ActivityKind> = {
   write: 'write', create: 'write',
   skill: 'skill', task: 'task', agent: 'task',
 };
+
+/** "Codex · working · last output 40 s ago": a quiet seat, by its name, and how long it has said nothing (counted from
+ *  `quietSince` when known, else the frame's own words). */
+export function workingWords(seat: string, quietSince: number | null, now: number, said: string | null = null): string {
+  if (quietSince === null) return `${seat} · working${said !== null ? ` · ${said}` : ''}`;
+  const s = Math.max(0, Math.round((now - quietSince) / 1000));
+  return `${seat} · working · last output ${s < 60 ? `${s} s` : `${Math.floor(s / 60)} min`} ago`;
+}
+
+/** A seat key in words when no roster is in hand: "codex" is "Codex". */
+const seatWord = (cli: string): string => { const b = cli.split('#')[0] ?? cli; return b.charAt(0).toUpperCase() + b.slice(1); };
 
 /** A tool's kind from its name ("Read", "Bash", "apply_patch"), or `other`. */
 export function toolKind(tool: string | null): ActivityKind {
@@ -118,7 +134,12 @@ function rowWords(kind: ActivityKind, target: string | null, running: boolean, o
     case 'skill': return `${running ? 'Using' : 'Used'} ${t !== null ? `the ${t} skill` : 'a skill'}`;
     case 'task': return running ? 'Asking a helper' : 'Asked a helper';
     case 'commit': return t !== null ? `Committed ${t}` : 'Committed';
-    default: return `${running ? 'Using' : 'Used'} ${tool ?? 'a tool'}`;
+    default: {
+      // An MCP tool (`mcp__estate__search`, from claude, codex or pi): its server and its name, in words.
+      const mcp = tool !== null ? /^mcp__(.+?)__(.+)$/u.exec(tool) : null;
+      const name = mcp !== null ? `${mcp[1]} ${mcp[2]!.replace(/_/gu, ' ')}` : tool ?? 'a tool';
+      return `${running ? 'Using' : 'Used'} ${name}`;
+    }
   }
 }
 
@@ -169,8 +190,26 @@ export function activityRows(events: readonly CoreEvent[] | null | undefined, or
   const out: LiveRow[] = [];
   const byCall = new Map<string, number>();
   let n = 0;
+  // The newest "still working" frame and the newest other frame: a seat that did something since is not quiet.
+  let workingN = 0;
+  let otherN = 0;
+  let quiet: LiveRow | null = null;
   for (const e of scoped(events ?? [], ord, refOf(turn))) {
     n += 1;
+    if (e.type === 'toolActivity' && (e.state === 'working' || e.kind === 'working')) {
+      workingN = n;
+      const seat = str(e.tool) ?? 'seat';
+      const at = timeOf(e);
+      const silence = num(e.durationMs);
+      // One row, the newest frame's (the same id every 15 s), shown last.
+      quiet = {
+        key: `w:${str(e.id) ?? 'working'}`, at, kind: 'working', running: true, ok: null, doneAt: null,
+        text: workingWords(seatWord(seat), null, 0, str(e.target)),
+        working: { seat, quietSince: at !== null && silence !== null ? at - silence : null },
+      };
+      continue;
+    }
+    if (e.type === 'toolActivity' || e.type === 'powerActivity') otherN = n;
     if (e.type === 'toolActivity') {
       const tool = str(e.tool);
       const target = str(e.target);
@@ -201,6 +240,8 @@ export function activityRows(events: readonly CoreEvent[] | null | undefined, or
       out.push({ key: `p#${n}`, at: timeOf(e), kind: k, text, running: false, ok: null, doneAt: timeOf(e) });
     }
   }
+  // The seat is quiet only while nothing came after its newest "working" frame.
+  if (quiet !== null && workingN > otherN) out.push(quiet);
   return out;
 }
 
@@ -237,7 +278,8 @@ export const KEEP_FINISHED_MS = 60_000;
  *  calls that finished in the last {@link KEEP_FINISHED_MS}, until none is left. */
 export function visibleRows(rows: readonly LiveRow[], endedAt: number | null, now: number): LiveRow[] {
   if (endedAt === null) return [...rows];
-  return rows.filter((r) => now - (r.doneAt ?? endedAt) < KEEP_FINISHED_MS);
+  // A turn that ended is no longer "working".
+  return rows.filter((r) => r.kind !== 'working' && now - (r.doneAt ?? endedAt) < KEEP_FINISHED_MS);
 }
 
 /** The tool calls the gate judged for a step (or turn): what the summary counts when no `toolActivity` came. */
@@ -252,7 +294,8 @@ const plural = (n: number, one: string, many = `${one}s`): string => `${n} ${n =
  * commits". Null when nothing was recorded.
  */
 export function activitySummary(events: readonly CoreEvent[] | null | undefined, ord: number, turn: number | TurnRef | null = null): string | null {
-  const rows = activityRows(events, ord, turn);
+  // A "still working" row is no tool call: it is never counted.
+  const rows = activityRows(events, ord, turn).filter((r) => r.kind !== 'working');
   const tools = rows.some((r) => r.key.startsWith('t')) ? rows.filter((r) => r.key.startsWith('t')).map((r) => r.kind) : judgedTools(events, ord, turn);
   const count = (k: ActivityKind): number => tools.filter((x) => x === k).length;
   const edited = new Set(rows.filter((r) => r.kind === 'edit' || r.kind === 'write').map((r) => r.text.replace(/ [+−].*$/, '').replace(/^(Edited|Wrote) /, '')));
