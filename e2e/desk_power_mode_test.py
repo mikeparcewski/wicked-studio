@@ -124,7 +124,7 @@ with sync_playwright() as p:
     check("intake-card", t["intake"] is not None and t["intake"].startswith("QE plan · set at intake")
           and "Rigor standard — targeted tests, a different reviewer and QE acceptance at hand-off" in t["intake"]
           and "Raise rigor" in t["intake"] and "More about this" in t["intake"] and not t["planMsg"], intake=t["intake"])
-    check("turns", len(t["turns"]) == 2 and all(re.fullmatch(r"Claude Code · orchestrator · \d\d:\d\d", w or "") for w in t["turns"]), turns=t["turns"])
+    check("turns", len(t["turns"]) == 2 and all(re.fullmatch(r"Claude Code · orchestrator · (\d+ \w{3} )?\d\d:\d\d", w or "") for w in t["turns"]), turns=t["turns"])
     rec = page.locator('[data-testid="chat-run-details"] > summary').first.inner_text()
     check("record-fold", rec == "The job’s record: steps, checks and helpers", fold=rec)
     check("activity", any(a.startswith("Edited src/lib/money.ts +31 −6") for a in t["acts"])

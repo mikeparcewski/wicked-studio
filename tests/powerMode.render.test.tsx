@@ -111,7 +111,7 @@ describe('the thread', () => {
     const intake = await screen.findByTestId('power-intake');
     expect(within(intake).getByTestId('power-intake-line').textContent).toBe('Rigor standard — targeted tests, a different reviewer and QE acceptance at hand-off');
     const turn = screen.getByTestId('power-turn');
-    expect(within(turn).getByTestId('turn-who').textContent).toMatch(/^claude · orchestrator · \d\d:\d\d$/);
+    expect(within(turn).getByTestId('turn-who').textContent).toMatch(/^claude · orchestrator · (\d+ \w{3} )?\d\d:\d\d$/);
     expect(screen.getAllByTestId('power-act')).toHaveLength(5);
     expect(screen.getAllByTestId('power-checkpoint').map((m) => m.textContent)).toEqual([
       expect.stringContaining('Checkpoint 1 · commit 1 · rigor stays standard (score 34 → 36)'),
