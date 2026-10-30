@@ -12,8 +12,8 @@
   "studioVersion": "0.13.0",
   "counts": {
     "files": 258,
-    "occurrences": 3555,
-    "static": 3032,
+    "occurrences": 3557,
+    "static": 3033,
     "dynamic": 75,
     "computed": 33
   },
@@ -1884,6 +1884,12 @@
     },
     {
       "testId": "chat-step-check",
+      "files": [
+        "src/components/session/RunConversation.tsx"
+      ]
+    },
+    {
+      "testId": "chat-step-face",
       "files": [
         "src/components/session/RunConversation.tsx"
       ]

@@ -87,7 +87,7 @@ describe('the timeline', () => {
   });
   it('a test run that failed is said as failed', () => {
     expect(checkpointWords({ type: 'powerCheckpointReached', session: 'r', ord: 1, checkpoint: 3, turn: 3, trigger: 'turn', head: null, picked: 0, rigor: 'highest', paused: true }, null, 0))
-      .toBe('Checkpoint 3 · end of turn 3 · rigor stays highest · paused: this grew');
+      .toBe('Checkpoint 3 · end of turn 3 · rigor stays highest · paused for your decision');
     const t = powerTimeline(events([{ type: 'powerActivity', session: 'r', ord: 1, turn: 3, at: at(22), kind: 'test', command: 'npm test -- jpy', passed: 11, failed: 1 }]), null);
     expect((t[0] as unknown as { rows: Array<Record<string, unknown>> }).rows[0]).toMatchObject({ lead: 'Tests failed', tail: '1 failed, 11 passed', tone: 'fail' });
   });
