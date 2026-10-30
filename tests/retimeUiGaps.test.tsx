@@ -45,8 +45,8 @@ const floorRunning = (): CoreEvent[] => ev([
 
 describe('1. a running floor is the engine working, not a silent seat', () => {
   it('reads the floor\'s own lines: the newest of a chunk, its check and minutes; other words are not the floor', () => {
-    expect(floorLineOf(`${F0}${F(5, 'test', 1, 3)}`)).toEqual({ role: 'creator', minutes: 5, check: 'test' });
-    expect(floorLineOf(F0)).toEqual({ role: 'creator', minutes: 0, check: null });
+    expect(floorLineOf(`${F0}${F(5, 'test', 1, 3)}`)).toEqual({ phase: 'checks', role: 'creator', minutes: 5, check: 'test' });
+    expect(floorLineOf(F0)).toEqual({ phase: 'checks', role: 'creator', minutes: 0, check: null });
     expect(floorLineOf("\ndependencies: checking the worktree's node_modules for the seats — 0 min\n")).toBeNull();
     expect(isFloorDelta({ type: 'unitOutputDelta', text: F0 })).toBe(true);
     expect(isFloorDelta({ type: 'unitOutputDelta', text: 'I fixed it.' })).toBe(false);
