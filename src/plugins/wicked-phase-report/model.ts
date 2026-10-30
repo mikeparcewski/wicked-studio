@@ -46,10 +46,15 @@ export interface Report {
   usageReports: number;
   /** Null until a power-mode row arrives (a phased run never has one). */
   power: PowerInfo | null;
+  /** The marks that cut a power build's one unit into its phases (turns, the floor's results, the hand-off's checks). */
+  marks: Mark[];
 }
 
+/** One mark on a power build's timeline. `ord`: the unit it is about (null on a hand-off row without one). */
+export interface Mark { at: number; ord: number | null; kind: 'turn.started' | 'turn.completed' | 'checks' | 'handoff.checks'; outcome: string | null }
+
 export function emptyReport(): Report {
-  return { loaded: false, seen: new Set(), startedAt: null, lastAt: null, finished: null, units: new Map(), gates: [], checks: [], costUsd: 0, tokens: 0, usageReports: 0, power: null };
+  return { loaded: false, seen: new Set(), startedAt: null, lastAt: null, finished: null, units: new Map(), gates: [], checks: [], costUsd: 0, tokens: 0, usageReports: 0, power: null, marks: [] };
 }
 
 const str = (v: unknown): string | null => (typeof v === 'string' && v !== '' ? v : null);
@@ -136,6 +141,7 @@ export function foldRows(r: Report, rows: readonly Row[]): boolean {
         if (ord !== null) r.gates.push({ ord, kind: str(d['kind']) ?? 'question', openedAt: row.at, answeredAt: null });
         break;
       case 'wicked.run.checks.evaluated': {
+        r.marks.push({ at: row.at, ord, kind: 'checks', outcome: d['passed'] === true ? 'passed' : 'failed' });
         const checks = Array.isArray(d['checks']) ? (d['checks'] as Array<Record<string, unknown>>).map((c) => ({
           name: str(c['name']) ?? 'check', exitCode: num(c['exitCode']), timedOut: c['timedOut'] === true, durationMs: num(c['durationMs']),
         })) : [];
@@ -180,6 +186,7 @@ export function foldRows(r: Report, rows: readonly Row[]): boolean {
       }
       case 'wicked.run.turn.started':
       case 'wicked.run.turn.completed': {
+        r.marks.push({ at: row.at, ord, kind: row.topic === 'wicked.run.turn.started' ? 'turn.started' : 'turn.completed', outcome: str(d['outcome']) });
         const p = power(r);
         const n = num(d['turn']);
         if (n === null || (p.turn !== null && n < p.turn.n)) break;
@@ -194,6 +201,7 @@ export function foldRows(r: Report, rows: readonly Row[]): boolean {
         const step = str(d['step']);
         if (step === null) break;
         answerPause(p, 'continue', false, row.at);
+        if (step === 'checks') r.marks.push({ at: row.at, ord, kind: 'handoff.checks', outcome: str(d['status']) });
         if (p.handoff === null || round > p.handoff.round) p.handoff = { round, steps: new Map() };
         if (round === p.handoff.round) p.handoff.steps.set(step, { status: str(d['status']) ?? 'pending', seatName: str(d['seatName']) ?? str(d['seat']), at: row.at });
         break;
@@ -468,6 +476,81 @@ function unitSpan(r: Report, scope: PhaseScope): { start: number | null; end: nu
   return { start, end, running: us.some((u) => u.state === 'running'), failed: us.some((u) => u.state === 'failed' || u.state === 'denied') };
 }
 
+/**
+ * The Build and Checks phases of a power build share its one unit, so their times come from its events, not the unit
+ * (coordinator 2026-10-30, bc2366e1: both read 13:27–14:56):
+ *  - Build: each orchestrator turn, from its start to the hand-off; a pause belongs to the turn it paused, up to its
+ *    answer;
+ *  - Checks: each floor, from the hand-off (or a paused turn's answer) to its result, including the retry floor and a
+ *    decision it waits on, up to the hand-off's checks record (or the next turn).
+ * Returns each phase's spans in order; an open span (still running) ends null.
+ */
+export interface Span { start: number; end: number | null }
+export function buildSpans(r: Report, buildOrd: number): { build: Span[]; checks: Span[] } {
+  const out: { build: Span[]; checks: Span[] } = { build: [], checks: [] };
+  const marks: Array<Mark | { at: number; ord: number; kind: 'pause.answered'; outcome: null }> = r.marks
+    .filter((m) => m.ord === buildOrd || (m.kind === 'handoff.checks' && m.ord === null))
+    .map((m) => m);
+  for (const pz of r.power?.pauses ?? []) if (pz.answeredAt !== null) marks.push({ at: pz.answeredAt, ord: buildOrd, kind: 'pause.answered', outcome: null });
+  marks.sort((a, b) => a.at - b.at);
+  let cur: 'build' | 'checks' | 'afterPause' | null = null;
+  let start = 0;
+  let paused = false;
+  const close = (at: number): void => {
+    if (cur === 'build' || cur === 'checks') out[cur].push({ start, end: at });
+    cur = null;
+  };
+  const open = (ph: 'build' | 'checks', at: number): void => { cur = ph; start = at; };
+  for (const m of marks) {
+    // After a paused turn's answer, the next mark says what ran: another turn (build) or a floor (checks).
+    if (cur === 'afterPause') {
+      const from = start;
+      cur = null;
+      if (m.kind === 'turn.started') open('build', from);
+      else open('checks', from);
+    }
+    switch (m.kind) {
+      case 'turn.started':
+        if (cur !== 'build') { close(m.at); open('build', m.at); }
+        paused = false;
+        break;
+      case 'turn.completed':
+        if (m.outcome === 'handoff') { close(m.at); open('checks', m.at); }
+        else if (m.outcome === 'paused') paused = true; // the pause is the build's, until it is answered
+        else if (m.outcome === 'failed' || m.outcome === 'cap') close(m.at);
+        break;
+      case 'pause.answered':
+        if (cur === 'build' && paused) { close(m.at); cur = 'afterPause'; start = m.at; paused = false; }
+        break;
+      case 'checks':
+        if (cur === null) open('checks', m.at);
+        if (cur === 'checks' && m.outcome === 'passed') close(m.at);
+        break; // a failed floor waits on a decision, then the next turn or a retry: still the checks
+      case 'handoff.checks':
+        if (m.outcome === 'running' || m.outcome === 'pending') { if (cur !== 'checks') { close(m.at); open('checks', m.at); } }
+        else if (cur === 'checks') close(m.at);
+        else if (cur === 'build') close(m.at);
+        break;
+      default: break;
+    }
+  }
+  const last = cur as 'build' | 'checks' | 'afterPause' | null; // set inside the loop's closures
+  if (last === 'build' || last === 'checks') out[last].push({ start, end: r.finished !== null ? Math.max(start, r.finished.at) : null });
+  return out;
+}
+
+/** "13:27–13:37 + 14:45–14:53": a phase's spans, at most three, then "+ N more". */
+export function spansWords(spans: readonly Span[]): string | null {
+  if (spans.length === 0) return null;
+  const one = (x: Span): string => (x.end !== null ? `${clock(x.start)}–${clock(x.end)}` : `since ${clock(x.start)}`);
+  const shown = spans.slice(0, 3).map(one).join(' + ');
+  return spans.length > 3 ? `${shown} + ${spans.length - 3} more` : shown;
+}
+
+function spansTotal(spans: readonly Span[], nowMs: number): number {
+  return spans.reduce((t, x) => t + ((x.end ?? nowMs) - x.start), 0);
+}
+
 const HANDOFF_STEP: Record<string, string> = { checks: 'checks', review: 'review', security: 'security', qe: 'qe' };
 
 /** A phase's state in one word: what its hand-off record or its units say. */
@@ -496,6 +579,12 @@ function stepRec(r: Report, scope: PhaseScope): { status: string; seatName: stri
   return step !== undefined ? r.power?.handoff?.steps.get(step) ?? null : null;
 }
 
+/** Build's and Checks' own spans (they share the build's unit), or null for a phase that has units of its own. */
+function ownSpans(r: Report, scope: PhaseScope): Span[] | null {
+  if ((scope.phase !== 'build' && scope.phase !== 'checks') || scope.ords.length !== 1 || r.power === null) return null;
+  return buildSpans(r, scope.ords[0]!)[scope.phase];
+}
+
 /** The folded line of one phase's block: "Build · 2 turns · checkpoint 2 · rigor high ↑". */
 export function phaseSummary(r: Report, scope: PhaseScope): string {
   if (!r.loaded) return 'Reading the job’s events…';
@@ -519,8 +608,12 @@ export function phaseSummary(r: Report, scope: PhaseScope): string {
     if (seat != null && scope.phase !== 'deliver') parts.push(seat);
     parts.push(phaseState(r, scope));
   }
-  const span = unitSpan(r, scope);
-  if (span.start !== null) parts.push(span.end !== null ? `${clock(span.start)}–${clock(span.end)}` : `since ${clock(span.start)}`);
+  const own = ownSpans(r, scope);
+  if (own !== null) { const w = spansWords(own); if (w !== null) parts.push(w); }
+  else {
+    const span = unitSpan(r, scope);
+    if (span.start !== null) parts.push(span.end !== null ? `${clock(span.start)}–${clock(span.end)}` : `since ${clock(span.start)}`);
+  }
   return parts.filter((x) => x !== '').join(' · ');
 }
 
@@ -530,7 +623,9 @@ export function phaseDashboard(r: Report, scope: PhaseScope, nowMs: number): Das
   const span = unitSpan(r, scope);
   const t = scope.phase === 'build' ? r.power?.turn ?? null : null;
   const rec = stepRec(r, scope);
-  const sub = span.start !== null ? (span.end !== null ? `${clock(span.start)}–${clock(span.end)} · ${duration(span.end - span.start)}` : `Since ${clock(span.start)} · ${duration(nowMs - span.start)}`)
+  const own = ownSpans(r, scope);
+  const sub = own !== null && own.length > 0 ? `${spansWords(own)!} · ${duration(spansTotal(own, nowMs))}`
+    : span.start !== null && own === null ? (span.end !== null ? `${clock(span.start)}–${clock(span.end)} · ${duration(span.end - span.start)}` : `Since ${clock(span.start)} · ${duration(nowMs - span.start)}`)
     : t !== null ? `${t.seatName ?? 'The orchestrator'} · orchestrator · turn ${t.n} ${t.running ? `since ${clock(t.at)}` : `ended ${clock(t.at)}`}`
       : rec !== null ? `${rec.seatName !== null ? `${rec.seatName} · ` : ''}${rec.status === 'running' || rec.status === 'pending' ? 'since' : 'at'} ${clock(rec.at)}`
         : 'Not started yet';

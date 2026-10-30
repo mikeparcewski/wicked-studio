@@ -12,9 +12,9 @@ import type { CoreEvent } from '../src/api/types.js';
 import { powerPhases } from '../src/board/powerMode.js';
 import { PinnedRunPlugins, RunPhasePlugins, blockViewId } from '../src/components/session/RunThreadPlugin.js';
 import { toRow, type TopicRow } from '../src/editors/runEvents.js';
-import { emptyReport, foldRows, phaseDashboard, phaseSummary, scopeOf, writesDoc, type PhaseScope } from '../src/plugins/wicked-phase-report/model.js';
+import { buildSpans, emptyReport, foldRows, phaseDashboard, phaseSummary, scopeOf, spansWords, writesDoc, type PhaseScope } from '../src/plugins/wicked-phase-report/model.js';
 import { useRunPluginView } from '../src/store/runPluginView.js';
-import { at, buildEvents, state, step } from './powerFixtures.js';
+import { at, buildEvents, change, state, step } from './powerFixtures.js';
 
 const units = (status: Record<number, string>) => [
   { id: 'r-pm:intake', ord: 0, status: status[0] ?? 'done', stage: 'intake' },
@@ -84,7 +84,53 @@ describe('the plugin, scoped to a phase', () => {
     // The build is the orchestrator's turns: its Now says the turn, never "not started".
     const build = phaseDashboard(r, scope('build', 'Build', [1]), at(40));
     expect(build.now.value).toBe('Build · handed off');
-    expect(build.now.sub).toMatch(/^Claude Code · orchestrator · turn 1 ended \d\d:\d\d$/u);
+    // Its own time: from the first turn to the hand-off (not the unit's whole span).
+    expect(build.now.sub).toMatch(/^\d\d:\d\d–\d\d:\d\d · 26 min$/u);
+  });
+});
+
+describe('Build and Checks share one unit: each phase’s time comes from its own events (bc2366e1)', () => {
+  // The real run's shape: turn 1 hands off at 13:37, the floor fails at 14:45, a fix turn pauses at checkpoint 2, you
+  // answer at 14:53 (continue at high rigor), the retry floor waits on you at 14:54, you approve at 14:56 and the
+  // hand-off's checks pass.
+  const clockAt = (h: number, m: number, sec = 0): number => new Date(2026, 9, 29, h, m, sec).getTime();
+  const e = (type: string, ts: number, extra: Record<string, unknown> = {}): Record<string, unknown> => ({ type, session: 'bc', ts, ...extra });
+  const events = [
+    e('unitDispatched', clockAt(13, 27, 56), { ord: 2, attempt: 0 }), e('unitExecuting', clockAt(13, 27, 56), { ord: 2 }),
+    e('powerTurnStarted', clockAt(13, 27, 56), { ord: 2, turn: 1, cli: 'claude' }),
+    e('powerCheckpointReached', clockAt(13, 37, 25), { ord: 2, checkpoint: 1, turn: 1, trigger: 'commit', picked: 0, rigor: 'standard', paused: false }),
+    e('powerTurnCompleted', clockAt(13, 37, 25), { ord: 2, turn: 1, cli: 'claude', outcome: 'handoff' }),
+    e('repoChecksEvaluated', clockAt(14, 45, 46), { ord: 2, attempt: 0, passed: false, outcome: 'failed', floor: 'creator', checks: [] }),
+    e('resumed', clockAt(14, 45, 47), { ord: 2 }),
+    e('powerTurnStarted', clockAt(14, 45, 48), { ord: 2, turn: 1, cli: 'claude' }),
+    e('powerCheckpointReached', clockAt(14, 48, 49), { ord: 2, checkpoint: 2, turn: 1, trigger: 'turn', picked: 0, rigor: 'standard', paused: true, pause: { reasons: ['struggling: 80 min against an estimate of 20 min'] } }),
+    e('powerTurnCompleted', clockAt(14, 48, 49), { ord: 2, turn: 1, cli: 'claude', outcome: 'paused' }),
+    e('rigorRescored', clockAt(14, 53, 38), { change: { ...change(4, 0, 'operator', 'standard', 'high', 30, 60, 2, ['continue at high rigor']), at: clockAt(14, 53, 38), by: 'local' } }),
+    e('awaitingHuman', clockAt(14, 54, 48), { ord: 2, gateKind: 'escalation' }),
+    e('resumed', clockAt(14, 56, 9), { ord: 2 }), e('unitDone', clockAt(14, 56, 9), { ord: 2 }),
+    e('powerHandoffStepped', clockAt(14, 56, 14), { round: 1, step: { step: 'checks', ord: 2, status: 'passed', seat: 'claude', summary: null, at: clockAt(14, 56, 14) } }),
+    e('powerHandoffStepped', clockAt(14, 56, 14), { round: 1, step: { step: 'review', ord: 3, status: 'running', seat: 'codex', summary: null, at: clockAt(14, 56, 14) } }),
+  ];
+  const r = emptyReport();
+  foldRows(r, (events as unknown as CoreEvent[]).map((x, i) => toRow(x, 'bc', 0, `s${i}`, () => null)).filter((x): x is TopicRow => x !== null));
+  r.loaded = true;
+
+  it('Build is the turns, the pause up to your answer included; Checks is each floor to its result, the retry too', () => {
+    const sp = buildSpans(r, 2);
+    expect(spansWords(sp.build)).toBe('13:27–13:37 + 14:45–14:53');
+    expect(spansWords(sp.checks)).toBe('13:37–14:45 + 14:53–14:56');
+  });
+  it('the blocks say them, never the unit’s whole span twice', () => {
+    expect(phaseSummary(r, { phase: 'build', label: 'Build', ords: [2] })).toMatch(/ · 13:27–13:37 \+ 14:45–14:53$/u);
+    expect(phaseSummary(r, { phase: 'checks', label: 'Checks', ords: [2] })).toMatch(/ · 13:37–14:45 \+ 14:53–14:56$/u);
+    expect(phaseDashboard(r, { phase: 'checks', label: 'Checks', ords: [2] }, clockAt(16, 0)).now.sub).toBe('13:37–14:45 + 14:53–14:56 · 1 h 11 min');
+    expect(phaseDashboard(r, { phase: 'build', label: 'Build', ords: [2] }, clockAt(16, 0)).now.sub).toBe('13:27–13:37 + 14:45–14:53 · 17 min');
+  });
+  it('a build still running has an open span', () => {
+    const live = emptyReport();
+    foldRows(live, (events.slice(0, 3) as unknown as CoreEvent[]).map((x, i) => toRow(x, 'bc', 0, `l${i}`, () => null)).filter((x): x is TopicRow => x !== null));
+    expect(spansWords(buildSpans(live, 2).build)).toBe('since 13:27');
+    expect(buildSpans(live, 2).checks).toEqual([]);
   });
 });
 
