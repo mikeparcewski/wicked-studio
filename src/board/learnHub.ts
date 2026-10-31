@@ -141,7 +141,7 @@ export type PreviewBlock =
 export function previewAnswer(p: PersonaInput, q: 0 | 1 | 2, person: string | null): PreviewBlock[] {
   const { length: L, warmth: W, pushback: P, initiative: I } = p.dials;
   const has = (h: PersonaHabit): boolean => p.habits.includes(h);
-  const name = has('names') && person !== null && person !== '' ? person.split(/\s+/u)[0]! : null;
+  const name = has('names') ? firstNameOf(person) : null;
   const greet = (warm: string): string => (W === 2 ? `${warm}${name !== null ? `, ${name}` : ''}! ` : name !== null ? `${name}, ` : '');
   const out: PreviewBlock[] = [];
   if (q === 0) {
@@ -320,4 +320,18 @@ export function siteOfEmail(email: string | null | undefined): string | null {
 /** "62% · 21% · 9%" style shares, rounded, for at most `n` languages. */
 export function shareWords(langs: readonly { share: number }[], n = 3): string {
   return langs.slice(0, n).map((l) => `${Math.round(l.share * 100)}%`).join(' · ');
+}
+
+/**
+ * The name first run greets you by, from git's `user.name`: the first word, or for a "Last, First" name the first word
+ * after the comma (seen live on the rig: "Welcome, Parcewski," for "Parcewski, Michael"). Trailing punctuation goes;
+ * nothing usable → null (the greeting then names no one).
+ */
+export function firstNameOf(name: string | null | undefined): string | null {
+  const raw = (name ?? '').trim();
+  if (raw === '') return null;
+  const comma = raw.indexOf(',');
+  const given = comma >= 0 && raw.slice(comma + 1).trim() !== '' ? raw.slice(comma + 1) : raw;
+  const word = given.trim().split(/\s+/u)[0]?.replace(/[.,;:!?]+$/u, '') ?? '';
+  return word !== '' ? word : null;
 }

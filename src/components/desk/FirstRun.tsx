@@ -6,7 +6,7 @@ import { getSetupKnown, putPersona, type SetupKnown } from '../../api/learn.js';
 import type { RepoEntry } from '../../api/types.js';
 import { recordLine } from '../../board/askModel.js';
 import {
-  firstRunOpen, nextSetupAsk, PERSONA_PRESETS, previewAnswer, repoStyleProblem, SETUP_ASKS, shareWords, siteOfEmail,
+  firstNameOf, firstRunOpen, nextSetupAsk, PERSONA_PRESETS, previewAnswer, repoStyleProblem, SETUP_ASKS, shareWords, siteOfEmail,
   STARTER_RULES, starterRule, type SetupAnswer, type SetupAskKey,
 } from '../../board/learnHub.js';
 import type { AgentRow } from '../../board/agentsModel.js';
@@ -56,7 +56,7 @@ export function FirstRun({ navigate, agents, hasRoster, onDone }: {
   const signedOut = agents.filter((a) => !a.usable && a.issues[0]?.code === 'signed_out' && !a.optIn);
   const site = siteOfEmail(k?.git?.email);
   const person = k?.git?.name ?? null;
-  const first = person?.split(/\s+/u)[0] ?? null;
+  const first = firstNameOf(person);
   const answers = fr.answers ?? {};
   const next = nextSetupAsk(fr);
 

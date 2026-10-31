@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  firstRunOpen, learnPlacement, nextSetupAsk, PERSONA_PRESETS, previewAnswer, readFirstRun, rulesYouCareAbout, siteOfEmail,
+  firstNameOf, firstRunOpen, learnPlacement, nextSetupAsk, PERSONA_PRESETS, previewAnswer, readFirstRun, rulesYouCareAbout, siteOfEmail,
   STARTER_RULES, starterRule, styleStations, writingStyleNotes, jobLine, repoStyleProblem,
 } from '../src/board/learnHub.js';
 import { LEARN_ITEM, navCurrent, navGroups, NAV_GROUPS } from '../src/board/navModel.js';
@@ -129,5 +129,17 @@ describe('Style (§3.1)', () => {
     expect(notes).toContain('MEMORY');
     expect(notes).toContain('File no rules');
     expect(notes).toContain('https://eng.example.com/blog');
+  });
+});
+
+// Seen live on :7721 (ui-v3 round 2): git's "Last, First" name greeted as "Welcome, Parcewski," / "Hi Parcewski,.".
+describe('firstNameOf', () => {
+  it('greets by the given name, whichever order git holds it in', () => {
+    expect(firstNameOf('Parcewski, Michael')).toBe('Michael');
+    expect(firstNameOf('Ada Lovelace')).toBe('Ada');
+    expect(firstNameOf('Grace')).toBe('Grace');
+    expect(firstNameOf('Hopper,')).toBe('Hopper');
+    expect(firstNameOf('  ')).toBeNull();
+    expect(firstNameOf(null)).toBeNull();
   });
 });
