@@ -25,7 +25,7 @@ export function requirementsNotGenerated(e: unknown): { workflow: string } | nul
 }
 
 /**
- * How many independent sources support a requirement (crew api-types 0.157.0
+ * How many independent sources support a requirement (crew api-types 0.159.0
  * `RequirementCorroboration`; operator ruling 2026-10-31 "validation by duplication"). Read off the
  * wire tolerantly: an older daemon sends no field, a graph built before it sends `null`.
  */
@@ -39,7 +39,7 @@ export interface Corroboration {
   why?: { code: string; text: string };
 }
 
-/** The share of behaviours a requirements graph maps (api-types 0.157.0 `RequirementsCoverage`). */
+/** The share of behaviours a requirements graph maps (api-types 0.159.0 `RequirementsCoverage`). */
 export interface RequirementsCoverage {
   mappedPct: number;
   minPct: number;

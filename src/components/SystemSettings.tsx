@@ -24,7 +24,7 @@ function isAbsolutePathLike(p: string): boolean {
 }
 
 /** The daemon's settings (`deliverIdentityLogin`, `councilSize` and `qeAcceptance` are all typed by api-types 0.120.0).
- *  `requirementsGraph` is api-types 0.157.0 (operator ruling 2026-10-31), read here ahead of the pin. */
+ *  `requirementsGraph` is api-types 0.159.0 (operator ruling 2026-10-31), read here ahead of the pin. */
 type LocalSettings = Settings & { requirementsGraph?: { minCoveragePct?: number } };
 
 /** The requirements graph's minimum coverage when the daemon has none set (crew and core default). */
