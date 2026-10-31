@@ -148,7 +148,7 @@ export function RequirementsModal({ repoId, repoName, onClose, onNavigateCompone
         style={{ background: T.surface, border: `1px solid ${T.hairlineS}` }}
       >
         {/* Header */}
-        <div className="flex items-center gap-3 px-5 py-3 border-b shrink-0" style={{ borderColor: T.hairline, background: T.canvas2 }}>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-5 py-3 border-b shrink-0" style={{ borderColor: T.hairline, background: T.canvas2 }}>
           <span className="font-mono text-sm font-semibold" style={{ color: T.ink }}>{repoName}</span>
           <span className="font-mono text-[11px] px-2 py-0.5 rounded" style={{ background: T.surface2, color: T.muted }}>
             requirements
@@ -341,12 +341,13 @@ function GraphCoverage({ page }: { page: RequirementsPage }): React.ReactElement
   const counts = corroborationCounts(page);
   if (cov === null && counts === null) return null;
   return (
-    <span className="flex items-center gap-2 min-w-0">
+    // Its own row on a phone (order last, full width); inline beside the counts from `sm` up.
+    <span className="order-last basis-full sm:order-none sm:basis-auto flex flex-wrap items-center gap-x-2 gap-y-1 min-w-0">
       {cov !== null && (
         <span
           data-testid="requirements-coverage"
           data-mapped-pct={cov.mappedPct}
-          className="font-mono text-[11px] px-2 py-0.5 rounded"
+          className="font-mono text-[11px] px-2 py-0.5 rounded whitespace-nowrap"
           style={{ background: 'var(--status-run-dim)', color: T.ink }}
           title={`Built at a minimum of ${cov.minPct}%: ${cov.mapped} of ${cov.behaviorBearing} behaviours mapped${cov.unmapped > 0 ? `; ${cov.unmapped} not mapped yet, and the next run continues from them` : ''}.`}
         >
@@ -460,8 +461,9 @@ function UnconfirmedWhy({ req }: { req: unknown }): React.ReactElement | null {
     <span
       data-testid="requirement-unconfirmed-why"
       data-code={c.why.code}
-      className="block text-[10px] truncate"
-      style={{ color: 'var(--status-warn)' }}
+      className="block text-[10px]"
+      // Two lines, not one: on a phone a one-line clip would cut the reason down to its first word.
+      style={{ color: 'var(--status-warn)', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
       title={c.why.text}
     >
       Unconfirmed: {c.why.text}
