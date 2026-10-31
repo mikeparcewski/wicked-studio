@@ -18,6 +18,7 @@
 @import './components.css';
 @import './sections/desk.css';
 @import './sections/power-mode.css';
+@import './sections/live-chat.css';
 @import './sections/home.css';
 @import './sections/calm-ue.css';
 @import './sections/session.css';

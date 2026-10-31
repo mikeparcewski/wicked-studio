@@ -135,7 +135,7 @@ type ThreadEntry =
     clock?: number | null }
   | { kind: 'run'; key: string; at: number; view: RunView }
   | { kind: 'line'; key: string; at: number; line: AskLine }
-  | { kind: 'typing'; key: string; at: number; who: string }
+  | { kind: 'typing'; key: string; at: number; who: string; ord: number }
   /** A run's step is executing: the helper on it is working now (studio: the thread shows it). */
   | { kind: 'working'; key: string; at: number; who: string; runId: string; ord: number; step: string }
   | { kind: 'proposal'; key: string; at: number; view: RunView; ask: AskProposal };
@@ -541,7 +541,7 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
     if (!streaming) {
       for (const th of thinking) {
         if ((liveTurns ?? []).some((t) => t.who !== 'you' && t.ord === th.ord)) continue;
-        out.push({ kind: 'typing', key: `typing:${th.ord}`, at: th.at, who: th.by });
+        out.push({ kind: 'typing', key: `typing:${th.ord}`, at: th.at, who: th.by, ord: th.ord });
       }
     }
     // What started each run, as the operator's own bubble: a run launched from New job (or a step
@@ -1152,7 +1152,13 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
             const node = (e.kind === 'line'
             ? <AskLineView key={e.key} line={e.line} onSignIn={() => openSheet({ kind: 'session', sessionId }, 'signins')} onRetry={askTeamRetry} />
             : e.kind === 'typing'
-              ? <AskTyping key={e.key} who={e.who} />
+              ? (
+                <Fragment key={e.key}>
+                  <AskTyping who={e.who} />
+                  {/* A chat turn says what it is doing while it works (operator 2026-10-30), not a bare "thinking". */}
+                  {askRunId !== null && <LiveActivity runId={askRunId} ord={e.ord} kind="chat" seat={e.who} label="this answer" />}
+                </Fragment>
+              )
               : e.kind === 'working'
               ? (
                 <Fragment key={e.key}>
@@ -1165,7 +1171,7 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
                     items={[{ id: 'message', label: MESSAGE_STEP_LABEL, onSelect: () => openSheet({ kind: 'step', runId: e.runId, ord: e.ord }, undefined, { compose: true }) }]} />
                 </div>
                 {/* What it is doing right now, live (operator 2026-10-30). */}
-                <LiveActivity runId={e.runId} ord={e.ord} />
+                <LiveActivity runId={e.runId} ord={e.ord} kind={ref.kind === 'chat' ? 'chat' : 'step'} seat={e.who === 'helper' ? null : e.who} label={ref.kind === 'chat' ? 'this step' : 'the job'} />
                 </Fragment>
               )
               : e.kind === 'proposal'

@@ -11,10 +11,10 @@
   "version": 1,
   "studioVersion": "0.13.0",
   "counts": {
-    "files": 259,
-    "occurrences": 3568,
-    "static": 3043,
-    "dynamic": 75,
+    "files": 260,
+    "occurrences": 3588,
+    "static": 3060,
+    "dynamic": 76,
     "computed": 33
   },
   "static": [
@@ -5702,6 +5702,96 @@
       ]
     },
     {
+      "testId": "inflight-check",
+      "files": [
+        "src/components/session/InflightCheck.tsx"
+      ]
+    },
+    {
+      "testId": "inflight-check-by",
+      "files": [
+        "src/components/session/InflightCheck.tsx"
+      ]
+    },
+    {
+      "testId": "inflight-check-commit",
+      "files": [
+        "src/components/session/InflightCheck.tsx"
+      ]
+    },
+    {
+      "testId": "inflight-check-consequence",
+      "files": [
+        "src/components/session/InflightCheck.tsx"
+      ]
+    },
+    {
+      "testId": "inflight-check-doing",
+      "files": [
+        "src/components/session/InflightCheck.tsx"
+      ]
+    },
+    {
+      "testId": "inflight-check-evidence",
+      "files": [
+        "src/components/session/InflightCheck.tsx"
+      ]
+    },
+    {
+      "testId": "inflight-check-later",
+      "files": [
+        "src/components/session/InflightCheck.tsx"
+      ]
+    },
+    {
+      "testId": "inflight-check-note",
+      "files": [
+        "src/components/session/InflightCheck.tsx"
+      ]
+    },
+    {
+      "testId": "inflight-check-progress",
+      "files": [
+        "src/components/session/InflightCheck.tsx"
+      ]
+    },
+    {
+      "testId": "inflight-check-q",
+      "files": [
+        "src/components/session/InflightCheck.tsx"
+      ]
+    },
+    {
+      "testId": "inflight-check-record",
+      "files": [
+        "src/components/session/InflightCheck.tsx"
+      ]
+    },
+    {
+      "testId": "inflight-check-refused",
+      "files": [
+        "src/components/session/InflightCheck.tsx"
+      ]
+    },
+    {
+      "testId": "inflight-check-verdict",
+      "files": [
+        "src/components/session/InflightCheck.tsx"
+      ]
+    },
+    {
+      "testId": "inflight-check-why",
+      "files": [
+        "src/components/session/InflightCheck.tsx"
+      ]
+    },
+    {
+      "testId": "inflight-check-yes",
+      "files": [
+        "src/components/session/InflightCheck.tsx"
+      ]
+    },
+    {
       "testId": "insights-accept",
       "files": [
         "src/components/insights/InsightsPage.tsx"
@@ -6650,6 +6740,12 @@
       ]
     },
     {
+      "testId": "live-meter",
+      "files": [
+        "src/components/session/LiveActivity.tsx"
+      ]
+    },
+    {
       "testId": "live-output",
       "files": [
         "src/components/LiveNarration.tsx"
@@ -6659,6 +6755,12 @@
       "testId": "live-output-label",
       "files": [
         "src/components/LiveNarration.tsx"
+      ]
+    },
+    {
+      "testId": "live-rolling",
+      "files": [
+        "src/components/session/LiveActivity.tsx"
       ]
     },
     {
@@ -18673,6 +18775,12 @@
       "pattern": "graph-stat-*",
       "files": [
         "src/components/RepoDetailPage.tsx"
+      ]
+    },
+    {
+      "pattern": "inflight-check-opt-*",
+      "files": [
+        "src/components/session/InflightCheck.tsx"
       ]
     },
     {

@@ -15,6 +15,8 @@ import { useCapabilities } from '../store/capabilities.js';
 import { Markdown } from './Markdown.js';
 import { NarratorFeed, phaseName } from './NarratorFeed.js';
 import { NowBar } from './NowBar.js';
+import { LiveActivity } from './session/LiveActivity.js';
+import { workingOrdOf } from '../board/liveTurn.js';
 import {
   deriveArtifacts,
   lastNarration,
@@ -220,6 +222,12 @@ function DockRun({ runId }: { runId: string }): React.ReactElement {
             artifacts={artifacts}
             onJumpToLatest={jumpToLatest}
           />
+          {/* What its working step is doing now, its meter, and the in-flight check (operator 2026-10-30). */}
+          {executingUnitOrd !== null && (
+            <div className="wk-assist-live">
+              <LiveActivity runId={runId} ord={executingUnitOrd} kind="chat" seat={byOrd.get(executingUnitOrd)?.assigned_cli ?? null} label="this job" />
+            </div>
+          )}
           {/* The feed scrolls INSIDE this fixed-height block — the dock's thread stays one column. */}
           <div className="flex h-72 flex-col overflow-hidden">
             <NarratorFeed
@@ -307,6 +315,31 @@ function DockChat({ chatId, resumed = false, onResumeProbe, onStatus, answerFoot
   footRef.current = answerFooter;
   const [seats, setSeats] = useState<Record<string, DockSeatState>>({});
   const [msgs, setMsgs] = useState<DockChatMsg[]>([]);
+  /** The chat's ask run (its `path`, once the first message launched it): its working step shows live below. */
+  const [pathRun, setPathRun] = useState<string | null>(null);
+  const [pathPa, setPathPa] = useState<string | null>(null);
+  const pathEvents = useRunEventStore((s) => (pathRun !== null ? s.byRun[pathRun] : undefined));
+  const liveOrd = useMemo(() => workingOrdOf(pathEvents), [pathEvents]);
+  const waiting = msgs.length === 0 || msgs.some((m) => m.pending) || msgs[msgs.length - 1]?.cliKey === 'you';
+  // Until the path is known, read the chat again while it may be answering (a fresh chat has no path at first).
+  useEffect(() => {
+    if (pathRun !== null || !useCapabilities.getState().askPath) return;
+    let live = true;
+    const read = (): void => {
+      api.getChat(chatId)
+        .then((d) => {
+          const path = (d as { path?: { runId?: unknown; pa?: unknown } }).path;
+          if (live && typeof path?.runId === 'string') {
+            setPathRun(path.runId);
+            if (typeof path.pa === 'string') setPathPa(path.pa);
+          }
+        })
+        .catch(() => undefined);
+    };
+    read();
+    const t = waiting ? setInterval(read, 5000) : null;
+    return () => { live = false; if (t !== null) clearInterval(t); };
+  }, [chatId, pathRun, waiting]);
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
   // §11.5: gates/elicitations the daemon keys by THIS chat id must survive the
@@ -517,6 +550,10 @@ function DockChat({ chatId, resumed = false, onResumeProbe, onStatus, answerFoot
           ))
         )}
       </div>
+      {/* Outside the reply box's own scroll, so the check never hides inside it. */}
+      {pathRun !== null && liveOrd !== null && (
+        <LiveActivity runId={pathRun} ord={liveOrd} kind="chat" seat={pathPa} label="this answer" />
+      )}
     </div>
   );
 }
