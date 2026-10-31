@@ -52,7 +52,7 @@ export function miniOf(kinds: readonly string[]): MiniKind {
   return 'list';
 }
 
-/** An editor's look: the wire's (crew's registry, api-types 0.156.0) wins field by field; a built-in editor falls back
+/** An editor's look: the wire's (crew's registry, api-types 0.157.0) wins field by field; a built-in editor falls back
  *  to studio's own copy, so a crew that predates the fields still shows its icon and line. */
 export function editorLooks(e: EditorView): { line: string; visuals: PluginVisuals } {
   const wire = e as EditorView & { description?: unknown; visuals?: unknown };

@@ -2,7 +2,7 @@
  * How a plugin looks on the Plugins page (program DES-LEARN §2): an icon on its colour, a preview image (light and
  * dark), and whether its card may show a small LIVE preview (the plugin's own frame fed only sample events). A
  * built-in run plugin's come from its manifest in studio's bundle; an editor's from crew's registry (`EditorView`
- * `visuals`, api-types 0.156.0: images arrive as `data:` URLs, never a path or a remote URL).
+ * `visuals`, api-types 0.157.0: images arrive as `data:` URLs, never a path or a remote URL).
  */
 
 export interface PluginVisuals {
