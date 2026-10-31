@@ -6509,7 +6509,7 @@ class W2Handler(SimpleHTTPRequestHandler):
             with state_lock:
                 served = (state["requirements"] or {}).get(rid)
             if served is None:
-                # crew's typed answer for a repo whose requirements graph was never generated (api-types 0.153.0).
+                # crew's typed answer for a repo whose requirements graph was never generated (api-types 0.154.0).
                 self._json(404, {"error": "No requirements graph yet for this repository", "code": "notGenerated",
                                  "workflow": "domain-extraction"})
                 return True

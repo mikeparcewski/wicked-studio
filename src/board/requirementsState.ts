@@ -6,7 +6,7 @@ export const DOMAIN_EXTRACTION_ID = 'domain-extraction';
 /**
  * crew's "not generated yet" answer for `GET /repos/:id/requirements`, as a state rather than a
  * refusal (lane repo-page): the 404 carries `code: 'notGenerated'` and the workflow that generates
- * the graph (api-types 0.153.0 `RequirementsNotGenerated`). Returns that workflow, or null when `e`
+ * the graph (api-types 0.154.0 `RequirementsNotGenerated`). Returns that workflow, or null when `e`
  * is anything else (an unknown repository's 404 carries no code and stays an error).
  *
  * A daemon from before the typed answer (crew ≤ 0.16.11) sends only its sentence

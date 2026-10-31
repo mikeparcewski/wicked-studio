@@ -23,7 +23,7 @@ npm publish dates. Every version listed here exists on
   read, in red, "the daemon refused this — requirements_graph.json not generated for this repo yet". It now says "No
   requirements graph yet for this repository", what the view would show, and **Generate it**. Generating takes a
   governed run, so the button starts nothing: it opens New job filled in with the generating workflow (crew names it in
-  its typed 404, `code: notGenerated`, api-types 0.153.0) and the repository, and the operator launches it there. An
+  its typed 404, `code: notGenerated`, api-types 0.154.0) and the repository, and the operator launches it there. An
   older daemon's sentence is read the same way. The empty-corpus case's "Run domain extraction", which launched a run
   directly, now goes the same way.
 - **Recent commits no longer push the repository page down.** The list is a fixed-height card (about six rows) that
