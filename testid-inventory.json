@@ -11,9 +11,9 @@
   "version": 1,
   "studioVersion": "0.13.0",
   "counts": {
-    "files": 257,
-    "occurrences": 3512,
-    "static": 2993,
+    "files": 258,
+    "occurrences": 3517,
+    "static": 2998,
     "dynamic": 75,
     "computed": 33
   },
@@ -10632,6 +10632,12 @@
       ]
     },
     {
+      "testId": "proposal-source-run",
+      "files": [
+        "src/components/ProposalsList.tsx"
+      ]
+    },
+    {
       "testId": "proposals-empty",
       "files": [
         "src/components/ProposalsList.tsx"
@@ -10669,6 +10675,18 @@
     },
     {
       "testId": "proposals-section-refresh",
+      "files": [
+        "src/components/ProposalsSection.tsx"
+      ]
+    },
+    {
+      "testId": "proposals-section-run-filter",
+      "files": [
+        "src/components/ProposalsSection.tsx"
+      ]
+    },
+    {
+      "testId": "proposals-section-show-all",
       "files": [
         "src/components/ProposalsSection.tsx"
       ]
@@ -12053,6 +12071,18 @@
       "testId": "run-inventory-line",
       "files": [
         "src/components/RunInventoryNote.tsx"
+      ]
+    },
+    {
+      "testId": "run-learnings-line",
+      "files": [
+        "src/components/session/RunLearningsLine.tsx"
+      ]
+    },
+    {
+      "testId": "run-learnings-review",
+      "files": [
+        "src/components/session/RunLearningsLine.tsx"
       ]
     },
     {
