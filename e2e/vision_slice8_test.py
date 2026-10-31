@@ -82,7 +82,7 @@ with sync_playwright() as p:
     page.on("console", lambda m: console_errors.append(m.text) if m.type == "error" else None)
     page.on("request", lambda req: request_paths.append(urlparse(req.url).path))
 
-    page.goto(f"{ORIGIN}/theme", wait_until="domcontentloaded")
+    page.goto(f"{ORIGIN}/learn?tab=brand", wait_until="domcontentloaded")
     page.locator('[data-testid="appearance-settings"]').wait_for(timeout=30000)
     page.locator('[data-testid="brand-learn"]').wait_for(timeout=30000)
     page.add_style_tag(content=HIDE_GATE_TOASTS)

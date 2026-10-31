@@ -134,7 +134,7 @@ describe('BrandLearn — the restored /theme extraction flow', () => {
   it('mentions the logo honesty in its copy — the learned shape carries none', () => {
     render(<BrandLearn />);
     expect(screen.getByTestId('brand-learn').textContent)
-      .toMatch(/choose a logo separately above/);
+      .toMatch(/No logo is learned; add one in Settings → Theme/);
   });
 
   it('Learn reuses the existing scratch doc and fires theme.requested at it', async () => {

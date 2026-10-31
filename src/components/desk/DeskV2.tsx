@@ -60,6 +60,9 @@ import { useNeedsSources } from '../../store/needsSources.js';
 import { DeskUnderstand } from './DeskUnderstand.js';
 import { UnderstandPage } from './UnderstandPage.js';
 import { DeskHome } from './DeskHome.js';
+import { FirstRun } from './FirstRun.js';
+import { firstRunOpen } from '../../board/learnHub.js';
+import { useFirstRun } from '../../store/firstRun.js';
 import { DESK_VIEW_PATH, isHostedView, type DeskView, type HostedView } from '../../board/navModel.js';
 import { PAGE_NAMES } from '../../board/pageNames.js';
 import { ReportPage } from '../report/ReportPage.js';
@@ -387,6 +390,22 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
       )}
     </section>
   ) : null;
+  // DES-LEARN §4: on a first run Home is the guided setup; the live "no agent can work" chore still leads it,
+  // because nothing can run. Ignored or finished, Home is Home.
+  const firstRun = useFirstRun((st) => st.state);
+  const firstRunRead = useFirstRun((st) => st.read);
+  // A first run: decided once per visit, after the settings and the jobs are read. A new install (no jobs yet),
+  // a setup already under way, or an explicit resume (`/?setup=1`, from Learn) opens it; an install with history
+  // that never started setup is not a first run. Ignored or finished, it stays closed.
+  const [firstRunOn, setFirstRunOn] = useState<boolean | null>(null);
+  const resumeSetup = new URLSearchParams(search).get('setup') === '1';
+  useEffect(() => {
+    // An explicit resume needs no job count; otherwise "no jobs yet" waits for the jobs to be read.
+    if (firstRunOn !== null || projectId !== undefined || firstRunRead !== 'ok' || (!runsLoaded && !resumeSetup)) return;
+    if (resumeSetup && firstRun.ignoredAt !== undefined) void useFirstRun.getState().ignore(false);
+    setFirstRunOn(firstRun.completedAt === undefined && (resumeSetup || (firstRun.ignoredAt === undefined && (firstRun.answers !== undefined || rawRuns.length === 0))));
+  }, [firstRunOn, projectId, firstRunRead, runsLoaded, resumeSetup, firstRun, rawRuns.length]);
+  const firstRunShown = firstRunOn === true && firstRunOpen(firstRun);
   const homeView = (
     <DeskHome runs={runs} runsShown={runsShown} read={readState === 'failed' ? 'failed' : readState === 'checking' ? 'checking' : 'known'}
       needRows={needRows} settled={readState === 'known' || readState === 'stale' ? settled.phase : 'loading'} count={settled.count} missing={settled.missing}
@@ -396,6 +415,14 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
       handover={handover.since !== null ? <HandoverPanel handover={handover} navigate={navigate} now={now} runs={runs} /> : null}
       states={homeStates}
       ruleLine={<DeskRuleLine navigate={navigate} />} ranked={ranked} />
+  );
+
+  const firstRunHome = projectId !== undefined ? homeView : (
+    <>
+      {firstRunShown && setup.some((c) => c.key === 'agents') ? choresBlock : null}
+      {firstRunOn === true && <FirstRun navigate={navigate} agents={agentsView.rows} hasRoster={agentsView.hasRoster} />}
+      {firstRunShown ? null : homeView}
+    </>
   );
 
   const refineBarOf = (withGroup: boolean): React.ReactElement => (
@@ -471,7 +498,7 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
             second title over them. A project's page keeps the header. */}
         {!(home && (tab === 'work' || tab === 'inbox' || tab === 'runs' || tab === 'report' || tab === 'understand')) && header}
         {tabs}
-        {tab === 'work' ? (home ? homeView : work) : tab === 'inbox' ? inboxView : tab === 'runs' ? runsTab : tab === 'report' ? report : understand}
+        {tab === 'work' ? (home ? firstRunHome : work) : tab === 'inbox' ? inboxView : tab === 'runs' ? runsTab : tab === 'report' ? report : understand}
       </div>
       {signIn !== null && <AgentModal agentKey={signIn.key} onClose={() => setSignIn(null)} />}
     </div>

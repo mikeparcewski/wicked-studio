@@ -191,7 +191,7 @@ with sync_playwright() as p:
         # The slow list (the bridge is coming up): HELD here, released by the main flow after Cancel.
         held_lists.append(route)
     page.route("**/interactive/api/docs*", docs_route)
-    page.goto(f"{origin}/theme", wait_until="networkidle")
+    page.goto(f"{origin}/learn?tab=brand", wait_until="networkidle")  # DES-LEARN §3.4: brand learning moved to Learn → Brand
     page.get_by_test_id("learn-input").wait_for(state="visible", timeout=10000)
     page.get_by_test_id("learn-input").fill("https://example.org/")
     page.get_by_test_id("learn-submit").click()

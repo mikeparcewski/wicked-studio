@@ -24,6 +24,7 @@ import { StateBanner, Skeleton, EmptyState } from '../ui/StateBanner.js';
 import { OverflowMenu } from '../ui/OverflowMenu.js';
 import { DeskV2, deskTabPath, type HostedTab } from './DeskV2.js';
 import { ProjectHome } from './ProjectHome.js';
+import { learnPath } from '../learn/LearnHub.js';
 
 const RUN_KIND = 'crew.run';
 /** At most this many run members the run list does not serve are read one by one. */
@@ -329,6 +330,8 @@ export function ProjectDesk({ projectId, navigate, runs, needRows, now, search, 
         { id: 'documents', label: 'Documents', testId: 'project-documents', onSelect: () => scrollTo('project-documents') },
         ...(isDefault ? [] : [
           { id: 'edit', label: 'Edit name and description', testId: 'project-edit', onSelect: startEdit },
+          // DES-LEARN §3.3: this project's personality (an override of the person's), in Learn.
+          { id: 'personality', label: 'Personality', testId: 'project-personality', onSelect: () => navigate(learnPath('personality', projectId)) },
           { id: 'archive', label: project.status === 'active' ? 'Archive this project' : 'Restore this project', testId: 'project-archive', onSelect: () => void toggleArchive(), disabled: archiveBusy ? 'Saving the project’s status…' : null },
         ]),
       ]} /> : <DeskV2

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { askPage, PageAskButton, pageTextLines, usePageChatHostPage } from '../chat/PageChat.js';
+import { PageAskButton, pageTextLines, usePageChatHostPage } from '../chat/PageChat.js';
 import { Plus } from 'lucide-react';
 import {
   addMemory, AddMemoryApproveError, editMemory, isEraseByIdUnsupported, isMemoryEditUnsupported, isMemoryUnsupported,
@@ -20,6 +20,7 @@ import { StateBanner, TechDetails } from '../ui/index.js';
 import { CalmAction, CalmButton, CalmEmpty, CalmFacts, CalmHead, CalmLoading, CalmNote, CalmRow, CalmRows, CalmSearch, CalmSection } from '../calm/Calm.js';
 import { memoryOrigin, memorySentence, shortDate } from '../../board/calmMemory.js';
 import { useDialogFocus } from '../steer/useDialogFocus.js';
+import { MemoryCaptureAdd, MemoryRetired, MemoryTable } from './MemoryAdd.js';
 
 /**
  * THE MEMORY PAGE (operator 2026-10-17: "memories and steering are separate"). Memory is what
@@ -168,6 +169,8 @@ export function MemoryPage({ search, navigate, address = (p) => p, project = nul
   const [adding, setAdding] = useState<number | null>(null);
   const [editing, setEditing] = useState<{ memory: MemoryItem; token: number } | null>(null);
   const [retiring, setRetiring] = useState<{ memory: MemoryItem; width: 'item' | 'scope'; token: number } | null>(null);
+  // DES-LEARN §6.3: Steering's ways in, opened from the Add menu, shown above the list.
+  const [panel, setPanel] = useState<'chat' | 'import' | 'table' | 'retired' | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
   // ── Pieces (the calm page: title + one sentence + one action; a quiet search; roomy rows) ──────
@@ -179,24 +182,26 @@ export function MemoryPage({ search, navigate, address = (p) => p, project = nul
 
   const sentence = memorySentence({ total, pending, coverage: coverage.kind });
   const addIt = (): void => setAdding(++opened.current);
-  // DES-LEARN §6.3: Add with chat is this page's chat (garden's memory capture): what it would keep is filed as
-  // proposals for you to approve, never written directly.
-  const addWithChat = (): void => askPage('memory', { focus: null });
   usePageChatHostPage('memory', {
     knows: `Knows Memory: ${total !== null ? `${total} kept` : `${memories.length} listed`}${typeof pending === 'number' ? `, ${pending} suggested` : ''}. What it suggests is filed for you to keep.`,
     data: () => pageTextLines(scrollRef.current),
   });
-  const chatItem = { id: 'chat', label: 'Add with chat', testId: 'memory-add-chat', onSelect: addWithChat };
+  const ways = [
+    { id: 'chat', label: 'Add with chat', testId: 'memory-add-chat', onSelect: () => setPanel('chat') },
+    { id: 'import', label: 'Import a doc…', testId: 'memory-add-import', onSelect: () => setPanel('import') },
+    { id: 'table', label: 'Edit as a table', testId: 'memory-add-table', onSelect: () => setPanel('table') },
+    { id: 'retired', label: 'Show retired', testId: 'memory-add-retired', onSelect: () => setPanel('retired') },
+  ];
   const refresh = (): void => { reread(); setReviewTick((t) => t + 1); };
   // One action: review what is waiting when something is; otherwise add a memory. The rest sit in its menu.
   const action = waiting > 0 && view !== 'proposals'
     ? <CalmAction label={`Review ${waiting} ${waiting === 1 ? 'proposal' : 'proposals'}`} testId="memory-view-proposals" onClick={() => go('proposals')}
         menuLabel="More for memory" menuTestId={/* testid */ 'memory-more'}
-        menu={[{ id: 'add', label: 'Add a memory…', testId: 'memory-add', onSelect: addIt }, chatItem, { id: 'refresh', label: 'Refresh', testId: 'memories-refresh', onSelect: refresh }]} />
+        menu={[{ id: 'add', label: 'Add a memory…', testId: 'memory-add', onSelect: addIt }, ...ways, { id: 'refresh', label: 'Refresh', testId: 'memories-refresh', onSelect: refresh }]} />
     : <CalmAction label="Add a memory" testId="memory-add" icon={<Plus size={16} aria-hidden />} onClick={addIt}
         menuLabel="More for memory" menuTestId={/* testid */ 'memory-more'}
         menu={[
-          chatItem,
+          ...ways,
           ...(view === 'proposals' ? [] : [{ id: 'proposals', label: pending === 'unsupported' ? 'Proposals (not available here)' : 'Show proposals', testId: 'memory-view-proposals', onSelect: () => go('proposals'), disabled: pending === 'unsupported' ? 'This crew has no proposal review' : null }]),
           { id: 'refresh', label: 'Refresh', testId: 'memories-refresh', onSelect: refresh },
         ]} />;
@@ -303,7 +308,16 @@ export function MemoryPage({ search, navigate, address = (p) => p, project = nul
       <div className="wk-se-scroll wk-calm" ref={scrollRef}>
         <div className="wk-calm-col">
           <CalmHead title="Memory" sentence={<span data-testid="memory-intro">{sentence}</span>} sentenceTestId={/* testid */ 'memory-sentence'} action={<><PageAskButton kind="memory" testId="memory-page-ask" />{action}</>} />
-          {list}
+          {panel === 'chat' || panel === 'import' ? (
+            <MemoryCaptureAdd key={panel} mode={panel} project={project ?? 'default'}
+              projects={[{ id: 'default', name: 'Unfiled (every project)' }, ...projects.filter((p) => p.id !== 'default').map((p) => ({ id: p.id, name: p.name }))]}
+              onClose={() => setPanel(null)} onKept={() => { reread(); setReviewTick((t) => t + 1); }} />
+          ) : panel === 'table' ? (
+            <MemoryTable memories={memories} onSaved={reread} onClose={() => setPanel(null)} />
+          ) : panel === 'retired' ? (
+            <MemoryRetired onClose={() => setPanel(null)} onBrought={reread} />
+          ) : null}
+          {panel === 'table' || panel === 'retired' ? null : list}
         </div>
       </div>
       {adding !== null && (

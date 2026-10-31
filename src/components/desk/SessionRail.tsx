@@ -4,7 +4,9 @@ import { ChevronRight, FolderPlus, LayoutGrid, MessageSquare, MessageSquarePlus,
 import { useDeliveredNow } from '../../store/postHocDeliver.js';
 import type { SessionView } from '../../api/types.js';
 import { needsByRun, needTextByRun, needsYouWords, railGroups, railRecent, railRowWords } from '../../board/deskModel.js';
-import { BUILD_ITEM, DESK_VIEW_PATH, NAV_GROUPS, navCurrent, type NavItem } from '../../board/navModel.js';
+import { BUILD_ITEM, DESK_VIEW_PATH, navCurrent, navGroups, type NavItem } from '../../board/navModel.js';
+import { learnPlacement } from '../../board/learnHub.js';
+import { useFirstRun } from '../../store/firstRun.js';
 import { useRailCollapsed } from '../../hooks/useRailCollapsed.js';
 import { useNeedsClock, useSettledNeeds } from '../../hooks/useNeedsRows.js';
 import type { NeedRow } from '../../board/needsYou.js';
@@ -98,6 +100,9 @@ export function SessionRail({ runs, needRows, navigate, pathname, runsKnown = tr
   );
   const groups = recent.groups;
   const { collapsed, toggle } = useRailCollapsed();
+  const firstRun = useFirstRun((st) => st.state);
+  const firstRunRead = useFirstRun((st) => st.read);
+  useEffect(() => { if (firstRunRead === 'idle') void useFirstRun.getState().load(); }, [firstRunRead]);
   const [newProjectOpen, setNewProjectOpen] = useState(false);
   // The project New job and Chat start in: the one on screen, never the Unfiled bucket.
   const projects = useProjectsStore((s) => s.projects);
@@ -132,8 +137,12 @@ export function SessionRail({ runs, needRows, navigate, pathname, runsKnown = tr
       className={`wk-rail-link wk-rail-nav-item${item.primary === true ? ' wk-rail-nav-item--primary' : ''}`}>
       {item.primary === true && <span aria-hidden className="wk-rail-nav-mark" />}
       <span className="wk-rail-nav-label">{item.label}</span>
+      {item.mark !== undefined && <span data-testid={`${item.testId}-mark`} className="wk-rail-nav-tag">{item.mark}</span>}
     </a>
   );
+  // DES-LEARN §3.0: Learn sits above Projects until it is used, then below Evaluate (studio.firstRun). Until the
+  // settings are read (or when they can't be) it sits in Insight, unmarked: "Start here" only once it is known.
+  const groupsNav = navGroups(firstRunRead === 'ok' ? learnPlacement(firstRun) : 'insight');
   const siteName = useAppearanceStore((s) => s.appearance.site_name?.trim() || null);
   // studio#512 (S18b): Theme › Logo takes the dot's place — the classic chrome's §3.1 slot, 32 px, contain-fit.
   const logoUrl = useAppearanceStore((s) => s.appearance.logo_url);
@@ -188,7 +197,7 @@ export function SessionRail({ runs, needRows, navigate, pathname, runsKnown = tr
         <MoveProjectStatus />
         {/* The pages, in three groups (board/navModel.ts): they replaced the Desk's tabs and its More menu. */}
         <div className="wk-rail-nav" data-testid="rail-nav">
-          {NAV_GROUPS.map((g) => (
+          {groupsNav.map((g) => (
             <div key={g.id} role="group" aria-labelledby={`rail-sec-${g.id}`} data-testid={`rail-nav-${g.id}`} className="wk-rail-nav-group">
               <p id={`rail-sec-${g.id}`} className="wk-rail-sec">{g.label}</p>
               {g.items.map((item) => navLink(item))}
