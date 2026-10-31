@@ -27,6 +27,7 @@ import { setRetryPrefill } from '../../store/retryPrefill.js';
 import { CalmHead, CalmLoading, CalmRow, CalmRows, CalmSection } from '../calm/Calm.js';
 import { OverflowMenu, type MenuItem } from '../ui/OverflowMenu.js';
 import { DESK_TABS, deskTabPath } from './DeskV2.js';
+import { VoiceMicButton } from '../voice/VoiceMicButton.js';
 
 const NO_ITEMS: readonly SystemAttention[] = [];
 
@@ -151,6 +152,7 @@ export function ProjectHome({ project, projectId, runs, allRuns, needRows, repos
             <label htmlFor={askId} className="sr-only">What do you want done in this project?</label>
             <input id={askId} value={ask} onChange={(e) => setAsk(e.target.value)} placeholder="What do you want done in this project?"
               autoComplete="off" className="wk-home-ask-input" data-testid="project-ask-input" />
+            <VoiceMicButton size="xs" testId="project-ask-voice" />
             <button type="submit" className="wk-calm-btn wk-calm-btn--primary" data-testid="project-ask-start">Start</button>
           </form>}
 

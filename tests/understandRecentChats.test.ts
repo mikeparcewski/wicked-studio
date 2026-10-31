@@ -14,9 +14,12 @@ describe('Recent answers from crew\'s chat history', () => {
         chat('c', 'Convert 5 km', '/mcp', '2026-10-31T09:00:00Z'),
         chat('d', 'New chat', '/understand', '2026-10-31T09:00:00Z'),
         chat('e', 'In a project', '/p/kes/understand', '2026-10-31T06:00:00Z'),
+        chat('f', 'Where is wicked-core riskiest to change? Answer from the code itself and cite t…', '/understand', '2026-10-27T00:00:00Z'),
       ],
     );
-    expect(merged.map((m) => m.chatId)).toEqual(['b', 'a', 'e']);
+    expect(merged.map((m) => m.chatId)).toEqual(['b', 'a', 'e', 'f']);
+    // studio's own grounding line, cut anywhere by crew's 80-character title, is not part of the question.
+    expect(merged[3]!.question).toBe('Where is wicked-core riskiest to change?');
     expect(merged[0]!.question).toBe('Who calls the deliver step?');
     expect(merged[1]!.question).toBe('Read-only question, change nothing: in one short paragraph, where does wicked-c');
   });

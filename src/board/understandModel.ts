@@ -162,10 +162,21 @@ export function askedWithChats(
     if (!/(^|\/)understand(\?|$)/u.test(route)) continue;
     const at = Date.parse(c.createdAt);
     if (!Number.isFinite(at)) continue;
-    const words = c.title.replace(/\s*Answer from the code itself and cite the files you read\.?…?$/u, '').replace(/…$/u, '').trim();
+    const words = withoutGrounding(c.title.replace(/…$/u, '')).trim();
     if (words === '' || words === 'New chat') continue;
     out.set(c.id, { chatId: c.id, question: words, at });
   }
   for (const a of asked) out.set(a.chatId, a);
   return [...out.values()].sort((x, y) => y.at - x.at);
+}
+
+/** Crew's title ends with the question's grounding line, whole or cut anywhere ("… Answer from the code itself and
+ *  cite t"): it is studio's own words, never the question's. */
+function withoutGrounding(title: string): string {
+  const t = title.trimEnd();
+  for (let k = GROUNDING_LINE.length; k >= 6; k -= 1) {
+    const head = GROUNDING_LINE.slice(0, k);
+    if (t.endsWith(head) && /(^|\s)$/u.test(t.slice(0, t.length - k))) return t.slice(0, t.length - k);
+  }
+  return t;
 }

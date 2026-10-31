@@ -12,8 +12,8 @@
   "studioVersion": "0.13.0",
   "counts": {
     "files": 283,
-    "occurrences": 3912,
-    "static": 3324,
+    "occurrences": 3914,
+    "static": 3326,
     "dynamic": 87,
     "computed": 44
   },
@@ -3162,6 +3162,12 @@
     },
     {
       "testId": "desk-ask-start",
+      "files": [
+        "src/components/desk/DeskHome.tsx"
+      ]
+    },
+    {
+      "testId": "desk-ask-voice",
       "files": [
         "src/components/desk/DeskHome.tsx"
       ]
@@ -11163,6 +11169,12 @@
     },
     {
       "testId": "project-ask-start",
+      "files": [
+        "src/components/desk/ProjectHome.tsx"
+      ]
+    },
+    {
+      "testId": "project-ask-voice",
       "files": [
         "src/components/desk/ProjectHome.tsx"
       ]
