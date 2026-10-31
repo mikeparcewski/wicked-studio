@@ -3,10 +3,10 @@ import { CircleCheck, CircleX, FileText, Flag, GitCommitHorizontal, MessageCircl
 import { ApiError } from '../../api/errors.js';
 import { powerApi, rigorRank, type HandoffStep, type PauseDecision, type PowerState, type Rigor, type RigorChange, type RigorPlan } from '../../api/power.js';
 import type { SessionView } from '../../api/types.js';
-import { queueDecision, reportDecision } from '../../board/undoQueue.js';
+import { queueDecision, reportDecision, secondsLeft, undoDecision, useUndoQueue } from '../../board/undoQueue.js';
 import { clockTime } from '../../board/handover.js';
 import {
-  PAUSE_CHOICES, RAISE_WORDS, changeReason, pauseReasonWords, changedBy, handoffRow, handoffWords, higherRigors, listWords, pauseOrder, powerSwitch, rigorAt, rigorChip, settleHandoff,
+  PAUSE_CHOICES, RAISE_WORDS, changeReason, pauseReasonWords, changedBy, handoffRow, handoffWords, higherRigors, listWords, powerSwitch, rigorAt, rigorChip, settleHandoff,
   type ActivityRow, type PauseChoice, type PowerItem,
 } from '../../board/powerMode.js';
 import { seatResponder } from '../../board/responder.js';
@@ -15,6 +15,8 @@ import { useRoster } from '../../hooks/useRoster.js';
 import { openLaunchWizard } from '../../store/launchWizard.js';
 import { Markdown } from '../Markdown.js';
 import { TurnWho } from './TurnWho.js';
+import { AskCard, AskRecord } from '../ask/AskCard.js';
+import type { Ask } from '../../api/ask.js';
 import { ActivitySummaryLine } from './LiveActivity.js';
 
 /**
@@ -368,7 +370,7 @@ function unitForStep(view: SessionView, ord: number | null, kind: HandoffStep['s
 
 /**
  * The orchestrator paused at a checkpoint (`gate_kind: 'power_pause'`): split into lanes, switch to phased, continue at
- * high rigor, or stop. The engine's recommendation leads; the rest are under Other options.
+ * high rigor, or stop, as a guided ask: four cards, the engine's recommendation marked and preselected, Stop asks why.
  */
 export function PowerPauseCard({ view, power }: { view: SessionView; power: PowerState }): React.ReactElement {
   const id = view.session.id;
@@ -376,19 +378,24 @@ export function PowerPauseCard({ view, power }: { view: SessionView; power: Powe
   const roster = useRoster();
   const who = power.orchestrator.cli !== null ? seatResponder(power.orchestrator.cli, roster).name : 'The orchestrator';
   const recommended: PauseChoice = pause?.recommended ?? 'continue_high';
-  const order = pauseOrder(recommended);
-  const [menu, setMenu] = useState(false);
   const [busy, setBusy] = useState<PauseChoice | null>(null);
+  const [queued, setQueued] = useState<{ id: number; reason: string | null } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const pendingPause = useUndoQueue((st) => (queued === null ? null : st.pending.find((p) => p.id === queued.id) ?? null));
+  const [tick, setTick] = useState(Date.now);
+  useEffect(() => {
+    if (pendingPause === null) return;
+    const t = setInterval(() => setTick(Date.now), 250);
+    return () => clearInterval(t);
+  }, [pendingPause]);
   const reasons = pause?.reasons ?? [];
-  const choose = (c: PauseChoice): void => {
-    setMenu(false);
+  const choose = (c: PauseChoice, reason?: string): void => {
     setError(null);
     setBusy(c);
     // The answer is `POST /runs/:id/power/pause` (the pause is not an engine gate), sent after the same 10 s undo
     // window every decision has; Undo sends nothing.
     const send = (decision: PauseDecision, note?: string): void => {
-      queueDecision({
+      const qid = queueDecision({
         verb: decision === 'stop' ? 'stop' : 'approve',
         runIds: [id],
         preview: decision === 'stop' ? 'the job stops here' : decision === 'switch_phased' ? 'the rest goes phased' : decision === 'continue_high' ? 'it continues at high rigor' : 'it finishes the original change; the rest is split off',
@@ -402,10 +409,11 @@ export function PowerPauseCard({ view, power }: { view: SessionView; power: Powe
           } catch (e) {
             setError(errorWords(e));
             reportDecision('failed', `Not sent: ${errorWords(e)}`);
-          } finally { setBusy(null); }
+          } finally { setBusy(null); setQueued(null); }
         },
-        onUndo: () => setBusy(null),
+        onUndo: () => { setBusy(null); setQueued(null); },
       });
+      setQueued({ id: qid, reason: c === 'stop' ? note ?? null : null });
     };
     if (c === 'split') {
       // This job narrows back to what was asked; the rest opens as a new job, prefilled, that starts only on Send.
@@ -413,33 +421,52 @@ export function PowerPauseCard({ view, power }: { view: SessionView; power: Powe
       send('continue', `Split into lanes: finish only the original change here (${reasons.join('; ')}). The rest is its own job now; do not do it in this run.`);
       return;
     }
+    // Stop asks why (DES-GUIDED-CHAT §4): the reason rides the pause decision's note.
+    if (c === 'stop' && reason !== undefined) { send(c, reason); return; }
     send(c);
   };
-  const lead = order[0]!;
+  // (mockup learn-and-panels h) The four ways on as cards, the engine's recommendation marked and preselected.
+  const ask: Ask = {
+    id: `${id}:pause`, host: 'power', from: { kind: 'engine', id: 'engine', label: `${who} paused` },
+    prompt: 'This change grew past its plan. How should it go on?', kind: 'choose', answeredBy: 'person', undoMs: 10_000,
+    default: recommended, record: 'You chose: {label}',
+    options: (['split', 'switch_phased', 'continue_high', 'stop'] as const).map((c) => ({
+      id: c, token: c, label: PAUSE_CHOICES[c].label,
+      consequence: `${PAUSE_CHOICES[c].sub}.${c === 'continue_high' && rigorRank(power.rigor ?? 'standard') < rigorRank('high') ? ' Rigor goes to high.' : ''}`,
+      ...(c === recommended ? { recommended: true } : {}),
+      ...(c === 'stop' ? { tone: 'danger' as const, needsReason: true } : {}),
+    })),
+  };
   return (
     <div data-testid="power-pause" data-recommended={recommended} className="wk-prop wk-prop--ask wk-prop--chat">
       <p className="wk-dock-eyebrow pm-pause-eyebrow" data-testid="power-pause-eyebrow">Paused · this grew{pause !== null ? ` · checkpoint ${pause.checkpoint}` : ''}</p>
       <h2 className="wk-prop-text wk-gate2-q" data-testid="power-pause-question">This change grew past its plan. How should it go on?</h2>
       <p className="wk-prop-why wk-gate2-p">{who} paused at the end of its turn. Recommended: {PAUSE_CHOICES[recommended].label.toLowerCase()}.</p>
       {reasons.length > 0 && <ul className="pm-pause-reasons" data-testid="power-pause-reasons">{reasons.map((r) => <li key={r}>{pauseReasonWords(r)}</li>)}</ul>}
-      <div className="wk-prop-btns wk-gate2-choices">
-        <button type="button" data-testid="power-pause-choice" data-choice={lead} disabled={busy !== null} onClick={() => choose(lead)} title={PAUSE_CHOICES[lead].sub}
-          className={`wk-prop-btn wk-gate2-btn ${lead === 'stop' ? 'wk-gate2-btn--secondary' : 'wk-prop-btn--primary wk-gate2-btn--primary'}`}>
-          {busy === lead ? 'Sending…' : PAUSE_CHOICES[lead].label}
-        </button>
-        <button type="button" aria-haspopup="menu" aria-expanded={menu} data-testid="power-pause-more" onClick={() => setMenu((m) => !m)} className="wk-prop-btn wk-gate2-btn wk-gate2-btn--secondary">
-          Other options <span aria-hidden>▾</span>
-        </button>
-        {menu && (
-          <div role="menu" aria-label="Other options" className="wk-gate2-menu">
-            {order.slice(1).map((c) => (
-              <button key={c} type="button" role="menuitem" data-testid="power-pause-choice" data-choice={c} data-sub={PAUSE_CHOICES[c].sub} disabled={busy !== null}
-                onClick={() => choose(c)} className="wk-prop-btn wk-gate2-mi">{PAUSE_CHOICES[c].label}</button>
-            ))}
-          </div>
-        )}
+      <div className="wk-gate2-decide">
+      {busy !== null ? (
+        // Answered: one plain line where the cards were, with the undo window's countdown (DES-GUIDED-CHAT §3).
+        <AskRecord
+          testId="power-pause-chosen"
+          line={`You chose: ${PAUSE_CHOICES[busy].label}${queued?.reason ? ` · “${queued.reason}”` : ''}`}
+          meta={pendingPause !== null ? (
+            <>
+              <span>Sends in {secondsLeft(pendingPause, tick)} s</span>
+              <button type="button" data-testid="power-pause-undo" onClick={() => { undoDecision(pendingPause.id); setBusy(null); setQueued(null); }} className="wk-btn wk-btn--quiet">Undo</button>
+            </>
+          ) : 'sending'}
+        />
+      ) : <AskCard
+        ask={ask}
+        header={false}
+        busy={busy !== null}
+        testIds={{ root: /* testid */ 'power-pause-ask', option: /* testid */ 'power-pause-choice', confirm: /* testid */ 'power-pause-confirm', send: /* testid */ 'power-pause-confirm', reason: /* testid */ 'power-pause-reason' }}
+        optionProps={(o) => ({ 'data-choice': o.id })}
+        reasonFor={() => ({ label: 'Why stop? (kept with the record)', placeholder: 'One line is enough', send: 'Stop with this reason' })}
+        footnote="You can undo for 10 s after you continue."
+        onAnswer={(a) => { if (a.option !== undefined) choose(a.option as PauseChoice, a.reason); }}
+      />}
       </div>
-      <p className="pm-pause-note">{PAUSE_CHOICES[lead].sub}.{rigorRank(power.rigor ?? 'standard') < rigorRank('high') && lead === 'continue_high' ? ' Rigor goes to high.' : ''}</p>
       {error !== null && <p role="alert" data-testid="power-pause-error" className="pm-pause-note">Not sent: {error}</p>}
     </div>
   );

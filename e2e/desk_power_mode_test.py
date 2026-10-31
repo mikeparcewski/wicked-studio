@@ -194,7 +194,7 @@ with sync_playwright() as p:
         fail("pause-dock", {"why": "the pause card never docked"})
     lead = dock.locator('[data-testid="power-pause-choice"]').first
     reasons = dock.locator('[data-testid="power-pause-reasons"] li').evaluate_all(f"(els) => els.map({TXT})")
-    dock.locator('[data-testid="power-pause-more"]').click()
+    # Guided asks: every way on is a card, the recommendation marked and preselected (no Other options menu).
     menu = dock.locator('[data-testid="power-pause-choice"]').evaluate_all("(els) => els.map((e) => e.dataset.choice)")
     state_p = page.evaluate("""() => ({
       badge: document.querySelector('[data-testid=session-status]')?.innerText ?? null,
@@ -204,7 +204,8 @@ with sync_playwright() as p:
       nerveWords: document.querySelector('[data-testid=nerve-center-words]')?.innerText ?? null,
       panel: document.querySelector('[data-testid=run-tab-status]')?.innerText ?? null,
     })""")
-    check("pause-dock", lead.get_attribute("data-choice") == "split" and len(reasons) == 3 and menu == ["split", "switch_phased", "continue_high", "stop"],
+    check("pause-dock", lead.get_attribute("data-choice") == "split" and lead.get_attribute("aria-checked") == "true"
+          and len(reasons) == 3 and menu == ["split", "switch_phased", "continue_high", "stop"],
           reasons=reasons, menu=menu)
     # While paused: the header waits, no working line runs, the orchestrator is named, the Nerve Center is not green.
     check("paused-state", state_p["badge"] == "Waiting" and state_p["working"] == 0
@@ -232,6 +233,10 @@ with sync_playwright() as p:
     check("working-doc-filled", q.startswith("Waiting on you · checkpoint 3 paused") and "Phase report (plugin)" in qh and gen == 1,
           questions=q, head=qh, trail=tr, unsaved=gen)
     dock.locator('[data-testid="power-pause-choice"][data-choice="continue_high"]').click()
+    dock.locator('[data-testid="power-pause-confirm"]').click()
+    # Answered: the cards collapse to one line with the undo countdown.
+    chosen = (page.locator('[data-testid="power-pause-chosen"]').text_content() or "") if page.locator('[data-testid="power-pause-chosen"]').count() else ""
+    check("pause-answer-collapses", chosen == "You chose: Continue at high rigor", chosen=chosen)
     # The answer goes out after the undo window (10 s): wait for the tap.
     page.wait_for_timeout(11500)
     sent = [x for x in posts() if x["route"] in ("pause", "gate")]

@@ -297,57 +297,71 @@ def run_panel_item_ids(page) -> list:
     return page.locator('[data-testid="host-panel"] [data-testid="run-panel-item"]').evaluate_all("els => els.map(e => e.dataset.item)")
 
 
-# ── The decision dock's user path (mockup ui-v2-gate, 2026-10-27) ───────────────────────────────────────────────────
-# A gate shows ONE recommended move; every other choice is under "Other options ▾" (a menu, hidden while closed, so
-# each choice keeps its one element), and the explanation, the receipt, the watch line and Technical details are under
-# "More about this". On a session page the open decision is portalled into the dock above the composer; the thread
-# keeps a marker. These helpers take the operator's path: open the menu / the fold, then act.
+# ── The decision dock's user path (guided asks: mockup learn-and-panels state h, 2026-10-31) ───────────────────────────
+# Every gate choice is a CARD in one radio group (`session-gate-choices`): the recommended one is marked and preselected,
+# the option you are on says what it does on one line under the cards (`session-gate-consequence`, "If you choose this:
+# …"), and ONE primary sends it (`session-gate-confirm`; a choice that asks for words — send back, steer, the floor
+# override, skip QE, Stop's reason — opens its box `session-gate-note` and sends from `session-gate-send`). Nothing is
+# sent on a pick. The explanation, the receipt, the watch line and Technical details stay under "More about this". On a
+# session page the open decision is portalled into the dock above the composer; the thread keeps a marker.
 
 def _scope(page, scope):
     return scope if scope is not None else page
 
 
 def open_other_options(page, scope=None) -> None:
-    """Open the gate's "Other options" menu (no-op when it is open or the gate has none)."""
-    btn = _scope(page, scope).locator('[data-testid="session-gate-more"]').first
-    if btn.count() == 0:
-        return
-    if btn.get_attribute("aria-expanded") != "true":
-        btn.click()
-    _scope(page, scope).locator('[data-testid="session-gate-menu"]').first.wait_for(state="visible", timeout=5000)
+    """(ui-v2) Opened the gate's "Other options" menu. Every choice is a card on the face now: nothing to open."""
+    return None
 
 
 def close_other_options(page, scope=None) -> None:
-    btn = _scope(page, scope).locator('[data-testid="session-gate-more"]').first
-    if btn.count() > 0 and btn.get_attribute("aria-expanded") == "true":
-        btn.click()
+    return None
 
 
 def gate_choice(page, key: str, scope=None, timeout: int = 10000):
-    """The gate choice `key`, made visible the user's way: the primary is on the face; any other is in Other options."""
+    """The gate choice `key`: its card, on the face."""
     loc = _scope(page, scope).locator(f'[data-testid="session-gate-choice"][data-choice-key="{key}"]').first
-    loc.wait_for(state="attached", timeout=timeout)
-    if not loc.is_visible():
-        open_other_options(page, scope)
     loc.wait_for(state="visible", timeout=timeout)
     return loc
 
 
-def click_gate_choice(page, key: str, scope=None, timeout: int = 10000) -> None:
+def pick_gate_choice(page, key: str, scope=None, timeout: int = 10000) -> None:
+    """Select the card `key` (sends nothing): its consequence shows, and the primary names it."""
     gate_choice(page, key, scope, timeout).click()
 
 
+STOP_REASON = "e2e: stopping this job"
+
+
+def click_gate_choice(page, key: str, scope=None, timeout: int = 10000, reason: str | None = None) -> None:
+    """Take the choice `key` the person's way: pick its card, then press the one primary. A choice that asks for words
+    opens its box: with `reason` (or for Stop, which always asks why) the words are typed and sent; otherwise the box is
+    left open for the caller to fill and send (`session-gate-note`, `session-gate-send`)."""
+    s = _scope(page, scope)
+    gate_choice(page, key, scope, timeout).click()
+    note = s.locator('[data-testid="session-gate-note"]').first
+    page.wait_for_timeout(50)
+    if note.count() > 0 and note.is_visible():
+        if reason is None and key != "stop":
+            return
+        note.fill(reason if reason is not None else STOP_REASON)
+        s.locator('[data-testid="session-gate-send"]').first.click()
+        return
+    s.locator('[data-testid="session-gate-confirm"]').first.click()
+
+
 def choice_consequence(page, key: str, scope=None) -> str:
-    """What a gate choice says it does BEFORE it is taken, where the operator reads it: an item under Other options says
-    it as its own second line (data-sub, drawn by CSS — the S16a-2a pointer line stays quiet while the menu is open);
-    the face's one button says it on the line above the buttons (session-gate-consequence). "" when nothing is drawn."""
+    """What a gate choice says it does BEFORE it is taken, where the person reads it: the line under the cards for the
+    option under the pointer ("If you choose this: …"), without the lead-in. "" when nothing is drawn."""
     loc = gate_choice(page, key, scope)
-    if loc.get_attribute("role") == "menuitem":
-        sub = loc.get_attribute("data-sub") or ""
-        drawn = loc.evaluate("e => getComputedStyle(e, '::after').content")
-        return sub if sub != "" and sub in drawn else ""
-    line = _scope(page, scope).locator('[data-testid="session-gate-consequence"]').first
-    return (line.text_content() or "").strip() if line.count() else ""
+    loc.hover()
+    line = _scope(page, scope).locator(f'[data-testid="session-gate-consequence"][data-option="{key}"]').first
+    try:
+        line.wait_for(state="attached", timeout=3000)
+    except Exception:
+        return ""
+    text = (line.text_content() or "").strip()
+    return text[len("If you choose this:"):].strip() if text.startswith("If you choose this:") else text
 
 
 def open_more_about(page, scope=None) -> None:

@@ -24,6 +24,7 @@
 @import './sections/chat-native.css';
 @import './sections/run-plugins.css';
 @import './sections/decision-dock.css';
+@import './sections/ask-card.css';
 @import './sections/composer.css';
 @import './sections/everything.css';
 @import './sections/steering-testing.css';

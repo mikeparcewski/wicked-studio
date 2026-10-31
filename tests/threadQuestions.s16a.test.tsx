@@ -19,6 +19,7 @@ import { useElicitationStore } from '../src/store/elicitations.js';
 import { useRunEventStore } from '../src/store/events.js';
 import { useGateStore, type OpenGate } from '../src/store/gates.js';
 import { makeView } from './factories.js';
+import { chooseGate } from './askGateHelpers.js';
 
 const NOW = 1_700_000_000_000;
 
@@ -95,7 +96,7 @@ describe('ChatQuestions — the chat\'s own gate at its thread foot', () => {
     const keys = screen.getAllByTestId('session-gate-choice').map((c) => c.dataset['choiceKey']);
     expect(keys).toEqual(['approve', 'steer', 'send-back', 'stop']);
     expect(keys.some((k) => k?.startsWith('reassign'))).toBe(false);
-    fireEvent.click(screen.getAllByTestId('session-gate-choice')[0]!);
+    chooseGate(screen.getAllByTestId('session-gate-choice')[0]!);
     expect(client.api.confirmGate).not.toHaveBeenCalled(); // inside the undo window
     await waitFor(() => expect(client.api.confirmGate).toHaveBeenCalledTimes(1));
     expect(client.api.confirmGate).toHaveBeenCalledWith('chat-2', expect.objectContaining({ approve: true, ord: 2 }));

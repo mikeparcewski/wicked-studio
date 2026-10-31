@@ -171,7 +171,7 @@ describe('2 + 3 on the rendered row', () => {
     expect(failing.textContent).toBe(`Failing: ${IDS.slice(0, 5).map(failureName).join(', ')} +3 more`);
     const suggested = screen.getAllByTestId('session-gate-choice').find((b) => b.dataset['recommended'] === 'true')!;
     expect(suggested.dataset['choiceKey']).toBe(FLOOR_OVERRIDE_KEY);
-    expect(screen.getByTestId('session-gate-consequence').textContent).toBe(FLOOR_OVERRIDE_CONSEQUENCE);
+    expect(screen.getByTestId('session-gate-consequence').textContent).toBe(`If you choose this: ${FLOOR_OVERRIDE_CONSEQUENCE}`);
   });
 });
 

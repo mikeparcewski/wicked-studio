@@ -1,0 +1,105 @@
+/* Guided asks (DES-GUIDED-CHAT; mockup learn-and-panels state h): one card for every question a person answers
+   inline. Part of the conversation, not a bubble with buttons: option cards, the consequence of the option you are on,
+   one primary, and once answered a single plain line. */
+.wk-ask { position: relative; display: flex; flex-direction: column; padding: 16px 18px 18px; border-radius: 18px; background: var(--surface-card);
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--accent) 40%, var(--border)), var(--shadow-raised);
+  animation: wk-ask-grow .45s var(--ease-out); transform-origin: top center; }
+.wk-ask--gate { box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--status-gate) 60%, var(--border)), var(--shadow-raised); }
+/* Inside a host that draws its own frame (a gate row in the dock): no second card. */
+.wk-ask--bare { padding: 0; border-radius: 0; background: transparent; box-shadow: none; animation: none; }
+@keyframes wk-ask-grow { from { opacity: 0; transform: translateY(10px) scale(.98); } to { opacity: 1; transform: none; } }
+.wk-ask-who { display: flex; align-items: center; gap: 8px; margin: 0 0 6px; color: var(--ink-muted); font-size: var(--text-xs); font-weight: var(--weight-semi); }
+.wk-ask-tag { display: inline-flex; align-items: center; height: 20px; padding: 0 8px; border-radius: 999px; font-size: 11px; font-weight: var(--weight-bold);
+  background: color-mix(in oklab, var(--accent) 18%, transparent); color: var(--ink-high); }
+.wk-ask-tag[data-tone="gate"] { background: color-mix(in oklab, var(--status-gate) 22%, transparent); }
+.wk-ask-q { margin: 0 0 4px; color: var(--ink-high); font-size: var(--text-lg); font-weight: var(--weight-semi); line-height: 1.35; }
+.wk-ask-sub { margin: 0 0 12px; color: var(--ink-muted); font-size: var(--text-sm); }
+.wk-ask-q + .wk-ask-opts, .wk-ask-q + .wk-ask-yn, .wk-ask-q + .wk-ask-chips, .wk-ask-q + .wk-ask-scale { margin-top: 10px; }
+
+/* choose: option cards */
+.wk-ask-opts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.wk-ask-opt { position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; min-height: 64px; padding: 12px 14px; border: 0;
+  border-radius: 14px; background: var(--surface-base); box-shadow: inset 0 0 0 1px var(--border); color: var(--ink-body); font: inherit; text-align: left;
+  cursor: pointer; transition: box-shadow .15s, background .15s, transform .15s; }
+.wk-ask-opt:hover:not(:disabled) { box-shadow: inset 0 0 0 1px var(--border-strong); transform: translateY(-1px); }
+.wk-ask-opt:focus-visible { outline: 2px solid transparent; box-shadow: var(--focus-ring); }
+.wk-ask-opt-label { color: var(--ink-high); font-size: var(--text-md); font-weight: var(--weight-semi); padding-right: 92px; }
+.wk-ask-opt-sub { font-size: var(--text-sm); line-height: 1.4; color: var(--ink-muted); }
+.wk-ask-opt-why { color: var(--ink-dim); }
+.wk-ask-opt[aria-checked="true"] { background: color-mix(in oklab, var(--accent) 14%, var(--surface-base)); box-shadow: inset 0 0 0 2px var(--accent); }
+.wk-ask-opt[aria-checked="true"]:focus-visible { box-shadow: inset 0 0 0 2px var(--accent), var(--focus-ring); }
+.wk-ask-opt[data-tone="danger"] .wk-ask-opt-label { color: var(--status-fail); }
+.wk-ask-opt:disabled { opacity: .55; cursor: not-allowed; }
+.wk-ask-rec { position: absolute; right: 10px; top: 10px; padding: 1px 7px; border-radius: 999px; background: var(--accent); color: var(--accent-fg);
+  font-size: 10px; font-weight: var(--weight-bold); letter-spacing: .03em; text-transform: uppercase; }
+.wk-ask-meta { display: inline-flex; padding: 0 6px; border-radius: 6px; background: color-mix(in oklab, var(--ink-high) 8%, transparent); color: var(--ink-muted); font-size: 11px; }
+/* The consequence of the option you are on: room for three lines, so a hover never moves a card under the pointer. */
+.wk-ask-cons { margin: 12px 0 0; min-height: calc(3 * 1.45em + 20px); padding: 10px 12px; border-radius: 10px; background: var(--surface-base); color: var(--ink-body);
+  font-size: var(--text-sm); line-height: 1.45; box-sizing: border-box; }
+.wk-ask-cons:empty { background: transparent; }
+.wk-ask-cons b { color: var(--ink-high); }
+.wk-ask-go { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 14px; }
+.wk-ask-foot { color: var(--ink-muted); font-size: var(--text-xs); }
+.wk-ask-btn--danger { border: 0; background: var(--status-fail); color: var(--accent-fg); }
+.wk-ask-btn--danger:hover:not(:disabled) { background: color-mix(in oklab, var(--status-fail) 82%, var(--ink-high)); }
+
+/* confirm: yes / no halves */
+.wk-ask-yn { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.wk-ask-yn .wk-ask-opt { min-height: 52px; align-items: center; justify-content: center; text-align: center; }
+.wk-ask-yn .wk-ask-opt-label { padding-right: 0; }
+.wk-ask-yn + .wk-ask-cons:empty { display: none; }
+
+/* pick: chips */
+.wk-ask-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.wk-ask-chip { display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 6px 14px 6px 10px; border: 0; border-radius: 999px; background: var(--surface-base);
+  box-shadow: inset 0 0 0 1px var(--border); color: var(--ink-high); font: inherit; font-size: var(--text-sm); cursor: pointer; transition: background .15s, box-shadow .15s; }
+.wk-ask-box { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 6px; box-shadow: inset 0 0 0 1.5px var(--border-strong); color: transparent; }
+.wk-ask-chip small { color: var(--ink-muted); font-size: 11px; }
+.wk-ask-chip[aria-checked="true"] { background: color-mix(in oklab, var(--accent) 16%, var(--surface-base)); box-shadow: inset 0 0 0 2px var(--accent); }
+.wk-ask-chip[aria-checked="true"] .wk-ask-box { background: var(--accent); box-shadow: none; color: var(--accent-fg); }
+.wk-ask-chip:focus-visible { outline: 2px solid transparent; box-shadow: var(--focus-ring); }
+.wk-ask-chip:disabled { opacity: .5; cursor: not-allowed; }
+.wk-ask-why-off { margin: 8px 0 0; color: var(--ink-dim); font-size: var(--text-xs); }
+
+/* scale */
+.wk-ask-scale { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 12px; color: var(--ink-muted); font-size: var(--text-sm); }
+.wk-ask-scale input { width: 100%; accent-color: var(--accent); }
+.wk-ask-scale-v { grid-column: 1 / -1; text-align: center; color: var(--ink-high); font-weight: var(--weight-semi); }
+
+/* text and reasons */
+.wk-ask-text { width: 100%; min-height: 64px; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--border-input); background: var(--surface-base); color: var(--ink-high);
+  font: inherit; font-size: var(--text-sm); resize: vertical; box-sizing: border-box; }
+.wk-ask-text:focus-visible { outline: 2px solid transparent; box-shadow: var(--focus-ring); }
+.wk-ask-text[aria-invalid="true"] { border-color: var(--status-fail); }
+.wk-ask-reason { margin-top: 12px; }
+.wk-ask-reason label { display: block; margin-bottom: 6px; color: var(--ink-high); font-size: var(--text-sm); font-weight: var(--weight-semi); }
+
+/* answered: the record line */
+.wk-ask-record { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-radius: 12px; background: color-mix(in oklab, var(--ink-high) 5%, transparent);
+  color: var(--ink-body); font-size: var(--text-sm); animation: wk-ask-collapse .4s var(--ease-out); }
+.wk-ask-record-ok { color: var(--status-ok); flex-shrink: 0; }
+.wk-ask-record-meta { display: inline-flex; align-items: center; gap: 8px; margin-left: auto; color: var(--ink-dim); font-size: var(--text-xs); white-space: nowrap; }
+@keyframes wk-ask-collapse { from { opacity: 0; transform: scaleY(1.4); } to { opacity: 1; transform: none; } }
+
+@media (prefers-reduced-motion: reduce) { .wk-ask, .wk-ask-record { animation: none; } .wk-ask-opt { transition: none; } }
+@media (max-width: 767px) {
+  .wk-ask { padding: 14px; }
+  .wk-ask--bare { padding: 0; }
+  .wk-ask-opts { grid-template-columns: minmax(0, 1fr); }
+  .wk-ask-q { font-size: var(--text-md); }
+  .wk-ask-opt { min-height: 52px; }
+  .wk-ask-cons { min-height: 0; }
+}
+
+/* A gate's other ways on that are not answers (start again with reduced assurance), and the helpers that cannot take
+   the step now: under the cards, quiet. */
+.wk-gate-ask-more { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; margin-top: 12px; }
+.wk-gate-ask-more .wk-gate2-menu-label { margin: 4px 0 0; }
+.wk-ask-alt { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 8px 12px; border: 1px dashed var(--border-strong); border-radius: 12px;
+  background: transparent; color: var(--ink-high); font: inherit; font-size: var(--text-sm); text-align: left; cursor: pointer; }
+.wk-ask-alt:hover { background: color-mix(in oklab, var(--ink-high) 6%, transparent); }
+.wk-ask-alt:focus-visible { outline: 2px solid transparent; box-shadow: var(--focus-ring); }
+.wk-ask-alt-label { font-weight: var(--weight-semi); }
+.wk-ask-alt-sub { color: var(--ink-muted); font-size: var(--text-xs); line-height: 1.4; }
+/* In the gate row (already a card), the ask draws no second frame and its line leaves room for the foot. */
+.wk-gate2 .wk-ask--bare { margin-top: 12px; }

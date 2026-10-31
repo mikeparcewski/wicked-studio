@@ -61,7 +61,8 @@ describe('studio#568: every wk-session-gate-* class GateRow uses has a rule in t
 
   it('no class the row renders is left unstyled', () => {
     const used = [...new Set(gateRowSrc.match(/wk-session-gate-[a-z0-9-]+/g) ?? [])].sort();
-    expect(used.length).toBeGreaterThan(10);
+    // (guided asks) The choices are AskCard's `wk-ask-*` classes now; the row keeps its own frame and fold classes.
+    expect(used.length).toBeGreaterThan(5);
     const unstyled = used.filter((cls) => !new RegExp(`\\.${cls}(?![a-z0-9-])`).test(componentsCss));
     expect(unstyled).toEqual([]);
   });

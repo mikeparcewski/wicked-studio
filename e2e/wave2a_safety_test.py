@@ -164,6 +164,7 @@ with sync_playwright() as p:
     APPROVE = '[data-testid="session-gate-choice"][data-choice-key="approve"]'
     page.locator(APPROVE).wait_for(state="visible", timeout=15000)
     page.locator(APPROVE).click()
+    page.get_by_test_id("session-gate-confirm").click()
     try:
         page.get_by_test_id("session-gate-chosen").wait_for(state="visible", timeout=3000)
     except Exception:  # noqa: BLE001 — reported by the check below

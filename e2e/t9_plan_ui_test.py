@@ -319,6 +319,7 @@ with sync_playwright() as p:
         raw = """(t) => (document.querySelector('[data-testid="session-gate-raw-prompt"]')?.textContent || '').includes(t)"""
         check("gate-before", page.evaluate(raw, "unit 3"))
         approve.click()
+        page.get_by_test_id("session-gate-confirm").click()  # guided asks: the primary sends the picked card
         page.wait_for_function(raw, arg="unit 4", timeout=25000)
         page.wait_for_function("""() => document.body.innerText.includes('the gate moved')""", timeout=5000)
         posts = gate_posts(origin, "r-team-gate")

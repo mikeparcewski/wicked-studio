@@ -157,29 +157,55 @@ describe('the "this grew" dock (a pause, not an engine gate: POST /runs/:id/powe
   const card = (rec: 'split' | 'switch_phased' | 'continue_high' | 'stop' = 'split') => render(<PowerPauseCard view={view()} power={state({ pause: { ...pause, recommended: rec } })} />);
   const pausePosts = () => posts.filter((p) => p.path === `/runs/${RUN}/power/pause`).map((p) => p.body);
 
-  it('leads with the recommendation; the reasons are listed; the other ways on are under Other options', () => {
+  /** The person's path: the recommended card is preselected; the primary sends it; Stop asks why first. */
+  const answer = async (reason = 'out of scope'): Promise<void> => {
+    await act(async () => { fireEvent.click(screen.getByTestId('power-pause-confirm')); await new Promise((r) => setTimeout(r, 5)); });
+    const box = screen.queryByTestId('power-pause-reason');
+    if (box !== null) {
+      fireEvent.change(box, { target: { value: reason } });
+      await act(async () => { fireEvent.click(screen.getByTestId('power-pause-confirm')); await new Promise((r) => setTimeout(r, 5)); });
+    }
+  };
+
+  it('marks and preselects the recommendation; the reasons are listed; every way on is a card', () => {
     card();
     expect(screen.getByTestId('power-pause-question').textContent).toBe('This change grew past its plan. How should it go on?');
     expect(screen.getByTestId('power-pause-reasons').textContent).toContain('The diff now spans 3 packages');
-    expect(screen.getAllByTestId('power-pause-choice')[0]!.dataset['choice']).toBe('split');
-    fireEvent.click(screen.getByTestId('power-pause-more'));
-    expect(screen.getAllByTestId('power-pause-choice').map((b) => b.dataset['choice'])).toEqual(['split', 'switch_phased', 'continue_high', 'stop']);
+    const cards = screen.getAllByTestId('power-pause-choice');
+    expect(cards.map((b) => b.dataset['choice'])).toEqual(['split', 'switch_phased', 'continue_high', 'stop']);
+    expect(cards[0]!.getAttribute('aria-checked')).toBe('true');
+    expect(cards.slice(1).every((b) => b.getAttribute('aria-checked') === 'false')).toBe(true);
+    expect(screen.queryByTestId('power-pause-more')).toBeNull();
+    expect(screen.getByTestId('power-pause-confirm').textContent).toBe('Split into lanes');
   });
 
-  it('each way on answers the pause route with its decision (after the undo window)', async () => {
+  it('each way on answers the pause route with its decision (after the undo window); Stop carries its reason', async () => {
     for (const rec of ['continue_high', 'switch_phased', 'stop'] as const) {
       posts = [];
       const { unmount } = card(rec);
-      await act(async () => { fireEvent.click(screen.getAllByTestId('power-pause-choice')[0]!); await new Promise((r) => setTimeout(r, 5)); });
-      await waitFor(() => expect(pausePosts()).toEqual([{ decision: rec }]));
+      await answer();
+      await waitFor(() => expect(pausePosts()).toEqual([rec === 'stop' ? { decision: 'stop', note: 'out of scope' } : { decision: rec }]));
       expect(posts.some((p) => p.path === `/runs/${RUN}/gate`)).toBe(false);
       unmount();
     }
   });
 
+  it('answered, the cards collapse to one line with the undo countdown; Undo sends nothing', async () => {
+    setUndoWindowForTest(5_000);
+    posts = [];
+    card('continue_high');
+    await answer();
+    expect(screen.getByTestId('power-pause-chosen').textContent).toBe('You chose: Continue at high rigor');
+    expect(screen.queryAllByTestId('power-pause-choice')).toHaveLength(0);
+    fireEvent.click(screen.getByTestId('power-pause-undo'));
+    expect(screen.getAllByTestId('power-pause-choice')).toHaveLength(4);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(pausePosts()).toEqual([]);
+  });
+
   it('Split opens a New job prefilled with the rest (nothing launched) and tells this run to finish only the original change', async () => {
     card('split');
-    await act(async () => { fireEvent.click(screen.getAllByTestId('power-pause-choice')[0]!); await new Promise((r) => setTimeout(r, 5)); });
+    await answer();
     expect(useLaunchWizard.getState().draft?.intent).toContain('The diff now spans 3 packages');
     await waitFor(() => expect(pausePosts()).toEqual([{ decision: 'continue', note: expect.stringContaining('Split into lanes: finish only the original change here') }]));
     expect(posts.some((p) => p.path === '/runs')).toBe(false);

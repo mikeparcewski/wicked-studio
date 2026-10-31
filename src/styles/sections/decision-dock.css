@@ -152,7 +152,12 @@
   .wk-dock-slot[data-folded="true"] .wk-gate2 > :not(.wk-gate2-q):not(.wk-gate2-decide),
   .wk-dock-slot[data-folded="true"] .wk-gate2-next,
   .wk-dock-slot[data-folded="true"] .wk-gate2-more,
-  .wk-dock-slot[data-folded="true"] .wk-prop > :not(.wk-gate2-q):not(.wk-prop-btns),
+  .wk-dock-slot[data-folded="true"] .wk-prop > :not(.wk-gate2-q):not(.wk-prop-btns):not(.wk-gate2-decide),
+  /* (guided asks) Folded: the option you are on and its primary; every card shows while none is selected. */
+  .wk-dock-slot[data-folded="true"] .wk-ask-opts:has([aria-checked="true"]) > .wk-ask-opt:not([aria-checked="true"]),
+  .wk-dock-slot[data-folded="true"] .wk-ask-cons,
+  .wk-dock-slot[data-folded="true"] .wk-ask-foot,
+  .wk-dock-slot[data-folded="true"] .wk-gate-ask-more,
   .wk-dock-slot[data-folded="true"] .wk-prop-btns > :not(.wk-gate2-btn--primary),
   .wk-dock-slot[data-folded="true"] .wk-who { display: none; }
   .wk-dock-slot[data-folded="true"] .wk-gate2-q { cursor: pointer; }
