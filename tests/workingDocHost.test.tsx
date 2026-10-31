@@ -6,7 +6,7 @@ import { builtinDefaults } from '../src/editors/model.js';
 import { steerRowWords, WorkingDocSteerRows } from '../src/components/session/RunThreadPlugin.js';
 import { useWorkingDocs } from '../src/store/workingDocs.js';
 import { RUN_PLUGINS } from '../src/plugins/runPlugins.js';
-import { authorWord, reconcileSection, sectionAuthor, steerWords, trailLines, type DocView } from '../src/plugins/wicked-phase-report/workingDoc.js';
+import { authorWord, pickedUpStep, reconcileSection, sectionAuthor, steerWords, trailLines, type DocView } from '../src/plugins/wicked-phase-report/workingDoc.js';
 
 /** Power mode spike 3: the working document through the plugin protocol. The HOST decides whose an edit is. */
 
@@ -186,6 +186,25 @@ describe('the words', () => {
     expect(rows.map((r) => r.dataset['steer'])).toEqual(['s1', 's2']);
     expect(rows[0]?.dataset['picked']).toBe('true');
     act(() => undefined);
+  });
+
+  // Seen live on :7721: crew sent the engine's unit id as `pickedUp.step`, and the row read "picked up at Wf 9397a34b
+  // 08c9 … :unit 2". The step is named from the run (the thread's label at that ord), never from a unit id.
+  it('a steer picked up by an engine unit id names the step, never the id', () => {
+    const unitId = { step: 'wf-9397a34b-08c9-484d-a97d-57675423c817:unit-2', ord: 2 };
+    const byOrd = (ord: number): string | null => (ord === 2 ? 'Fix' : null);
+    expect(steerRowWords('local', ['constraints'], { pickedUp: unitId, error: null }, byOrd))
+      .toBe('You edited the working document · Constraints · picked up at Fix');
+    expect(steerRowWords('local', ['constraints'], { pickedUp: unitId, error: null })).toBe('You edited the working document · Constraints · picked up at step 2');
+    expect(pickedUpStep(unitId)).not.toMatch(/wf|unit|9397/iu);
+    expect(pickedUpStep({ step: 'review', ord: 7 })).toBe('Review');
+    expect(pickedUpStep({ step: 'review', ord: 7 }, () => 'Review 2')).toBe('Review 2');
+    expect(steerWords({ id: 'x', kind: 'standing', queuedAt: 1, error: null, pickedUp: { ...unitId, at: 0 } }, byOrd)).toMatch(/^picked up at Fix \d\d:\d\d$/u);
+    useWorkingDocs.getState().set('run-2', { runId: 'run-2', doc: { projectId: 'default', docId: 'w', head: 1 }, sections: null, labels: {} as never, trail: [], steers: [
+      { id: 's9', version: 1, sections: ['constraints'], kind: 'standing', note: 'n', at: 0, by: 'local', queuedAt: 1, pickedUp: { ...unitId, at: 0 }, error: null },
+    ] });
+    render(<WorkingDocSteerRows runId="run-2" ords={[2]} stepOfOrd={byOrd} />);
+    expect(screen.getByTestId('working-doc-steer').textContent).toBe('You edited the working document · Constraints · picked up at Fix');
   });
 
   it('the built-in plugin asks for the doc requests, each with its reason, and only run-thread ones', () => {

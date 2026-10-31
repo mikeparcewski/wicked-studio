@@ -84,20 +84,32 @@ const clock = (ms: number): string => {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 };
 
+/**
+ * The step that picked a steer up, in words. Crew's `pickedUp.step` is sometimes the ENGINE's unit id
+ * ("wf-<run>:unit-2"), not a plan step id: that is never shown. The step is named from the run's own step at `ord`
+ * (`stepOfOrd`, the label the thread gives it), else from a plan step id, else "step N".
+ */
+export function pickedUpStep(p: { ord: number | null; step: string | null }, stepOfOrd: (ord: number) => string | null = () => null): string {
+  const named = p.ord !== null ? stepOfOrd(p.ord) : null;
+  if (named !== null && named !== '') return named;
+  if (p.step !== null && p.step !== '' && !p.step.includes(':')) return stepLabelOf(p.step);
+  return p.ord !== null ? `step ${p.ord}` : 'a step';
+}
+
 /** Where a steer stands: picked up at a step, waiting for the next one, or why it was not sent. */
-export function steerWords(s: Steer | undefined): string | null {
+export function steerWords(s: Steer | undefined, stepOfOrd?: (ord: number) => string | null): string | null {
   if (s === undefined) return null;
   if (s.error !== null) return `not sent: ${s.error}`;
-  if (s.pickedUp !== null) return `picked up at ${s.pickedUp.step !== null ? stepLabelOf(s.pickedUp.step) : `step ${s.pickedUp.ord ?? '?'}`} ${clock(s.pickedUp.at)}`;
+  if (s.pickedUp !== null) return `picked up at ${pickedUpStep(s.pickedUp, stepOfOrd)} ${clock(s.pickedUp.at)}`;
   return 'waiting for the next step';
 }
 
 /** "v3 · You · Constraints and steering · 14:32 · picked up at Review 14:40", newest first. */
-export function trailLines(view: DocView, max = 6): string[] {
+export function trailLines(view: DocView, max = 6, stepOfOrd?: (ord: number) => string | null): string[] {
   return view.trail.slice(-max).reverse().map((t) => {
     const a = kindOf(t.author);
     const parts = [`v${t.version}`, authorWord(a), t.sections.map((s) => SECTION_LABELS[s]).join(', '), clock(t.at)];
-    const s = steerWords(view.steers.find((x) => x.id === t.steerId));
+    const s = steerWords(view.steers.find((x) => x.id === t.steerId), stepOfOrd);
     if (s !== null) parts.push(s);
     // A plugin's or an agent's text is recorded, never sent to a step.
     else if (a.kind === 'plugin' || a.kind === 'agent') parts.push('not sent to a step');

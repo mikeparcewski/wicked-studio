@@ -15,6 +15,7 @@ import { applyCheckState } from '../../board/checkState.js';
 import { deliveryAssuranceOf, deliveryReceiptOf } from '../../board/assuranceModel.js';
 import { approvedLine, overriddenFloorsOf } from '../../board/failingChecks.js';
 import { wordOf } from '../../board/planDraft.js';
+import { stepLabelOf } from '../../board/chainModel.js';
 import { undoDecision } from '../../board/undoQueue.js';
 import type { Navigate } from '../../hooks/useRoute.js';
 import { RunLearningsLine } from './RunLearningsLine.js';
@@ -365,6 +366,16 @@ export function RunBlock({ view, badge, sessionId, navigate, solo = null }: {
     return step?.state === 'checked' ? 'Checked' : null;
   };
   const openSteps = (): void => openSheet({ kind: 'session', sessionId: `run:${id}` }, 'steps');
+  // The step at an ord in the thread's words (a steering row's "picked up at Fix"): its message's label, else the chain's
+  // label for the unit's own step id ("<run>:fix" → fix), else that id in words.
+  const stepOfOrd = (ord: number): string | null => {
+    const msg = steps.find((s) => s.ord === ord);
+    if (msg !== undefined) return msg.label;
+    const u = view.units.find((x) => x.ord === ord);
+    const key = u !== undefined ? u.id.slice(u.id.lastIndexOf(':') + 1) : '';
+    if (key === '') return null;
+    return chain.steps.find((c) => c.id === key || c.catalog === key)?.label ?? stepLabelOf(key);
+  };
   // An evaluator's step (review, security, QE) speaks as its verdict and one sentence: the label it leads with.
   const evaluatorLabel = (s: StepMessage): string | null => {
     const u = view.units.find((x) => x.ord === s.ord);
@@ -389,7 +400,7 @@ export function RunBlock({ view, badge, sessionId, navigate, solo = null }: {
         {!powerBuild && i < steps.length - 1 && <RunPluginJumpRows sessionId={sessionId} runId={id} ords={[s.ord]} />}
         {/* A step phase's report (the plan step, a hand-off step), after its message. */}
         {stepPhase(s.ord) !== null && <RunPhaseRows sessionId={sessionId} runId={id} phase={stepPhase(s.ord)!} live={!isTerminal} />}
-        <WorkingDocSteerRows runId={id} ords={[s.ord]} />
+        <WorkingDocSteerRows runId={id} ords={[s.ord]} stepOfOrd={stepOfOrd} />
       </Fragment>
     );
   };
@@ -443,7 +454,7 @@ export function RunBlock({ view, badge, sessionId, navigate, solo = null }: {
       {phases.filter((ph) => STEP_PHASES.has(ph.key) && !steps.some((s) => ph.ords.includes(s.ord)) && ph.current)
         .map((ph) => <RunPhaseRows key={ph.key} sessionId={sessionId} runId={id} phase={ph} live={!isTerminal} />)}
       {/* Working-document steering notes not picked up yet (or by a step with no message): after the last step. */}
-      <WorkingDocSteerRows runId={id} except={steps.map((s) => s.ord)} />
+      <WorkingDocSteerRows runId={id} except={steps.map((s) => s.ord)} stepOfOrd={stepOfOrd} />
 
       {/* 3. A question it is asking now (not the plan, not the hand-over): in the flow, answered here. */}
       {/* Power mode: the orchestrator paused at a checkpoint because the change grew ("this grew"). Not an engine gate:

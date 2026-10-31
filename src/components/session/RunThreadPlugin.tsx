@@ -10,6 +10,7 @@ import { subscribeCoreEvents } from '../../hooks/eventTap.js';
 import { useRoster } from '../../hooks/useRoster.js';
 import { seatLabel } from '../../board/seatNames.js';
 import { stepLabelOf } from '../../board/chainModel.js';
+import { pickedUpStep } from '../../plugins/wicked-phase-report/workingDoc.js';
 import { pluginSectionOpen, sectionKey, type PluginSection } from '../../board/runPluginPanels.js';
 import { RUN_PLUGINS, topicWords, type RunPlugin } from '../../plugins/runPlugins.js';
 import { useBlockView, useRunPluginView, type RunPhase } from '../../store/runPluginView.js';
@@ -403,10 +404,10 @@ const SECTION_WORDS: Record<string, string> = {
 };
 
 /** One steering note's thread row words: "You edited the working document · Constraints · picked up at Review". */
-export function steerRowWords(by: string, sections: readonly string[], s: { pickedUp: { step: string | null; ord: number | null } | null; error: string | null }): string {
+export function steerRowWords(by: string, sections: readonly string[], s: { pickedUp: { step: string | null; ord: number | null } | null; error: string | null }, stepOfOrd?: (ord: number) => string | null): string {
   const who = by === 'local' ? 'You' : by;
   const where = s.error !== null ? `not sent: ${s.error}`
-    : s.pickedUp !== null ? `picked up at ${s.pickedUp.step !== null ? stepLabelOf(s.pickedUp.step) : `step ${s.pickedUp.ord ?? '?'}`}`
+    : s.pickedUp !== null ? `picked up at ${pickedUpStep(s.pickedUp, stepOfOrd)}`
     : 'waiting for the next step';
   return `${who} edited the working document · ${sections.map((x) => SECTION_WORDS[x] ?? x).join(', ')} · ${where}`;
 }
@@ -415,7 +416,7 @@ export function steerRowWords(by: string, sections: readonly string[], s: { pick
  * The working document's steering notes in the thread (power mode spike 3), one slim row each, at the step that picked
  * it up (`ords`), or — not picked up yet, or picked up by a step with no message — after the last step (`except`).
  */
-export function WorkingDocSteerRows({ runId, ords, except }: { runId: string; ords?: readonly number[]; except?: readonly number[] }): React.ReactElement | null {
+export function WorkingDocSteerRows({ runId, ords, except, stepOfOrd }: { runId: string; ords?: readonly number[]; except?: readonly number[]; stepOfOrd?: (ord: number) => string | null }): React.ReactElement | null {
   const view = useWorkingDocs((s) => s.byRun[runId]);
   if (view === undefined) return null;
   const rows = view.steers.filter((s) => {
@@ -429,7 +430,7 @@ export function WorkingDocSteerRows({ runId, ords, except }: { runId: string; or
       {rows.map((s) => (
         <p key={s.id} data-testid="working-doc-steer" data-steer={s.id} data-picked={s.pickedUp !== null ? 'true' : 'false'} className="wk-runplugin-updated wk-workingdoc-steer">
           <span aria-hidden className="wk-hpanel-dot" />
-          <span>{steerRowWords(s.by, s.sections, s)}</span>
+          <span>{steerRowWords(s.by, s.sections, s, stepOfOrd)}</span>
         </p>
       ))}
     </>

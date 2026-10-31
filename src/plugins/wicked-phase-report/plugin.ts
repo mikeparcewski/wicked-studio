@@ -17,7 +17,7 @@
 
 import { PROTOCOL, ENVELOPE, type Envelope } from '../_shared/v2.js';
 import surfaces from './surfaces.json';
-import { dashboard, emptyReport, foldRows, openGates, panelLine, phaseDashboard, phaseSummary, scopeOf, summaryLine, writesDoc, type PhaseScope, type Report, type Row } from './model.js';
+import { dashboard, emptyReport, foldRows, openGates, panelLine, phaseDashboard, phaseSummary, scopeOf, stepWord, summaryLine, writesDoc, type PhaseScope, type Report, type Row } from './model.js';
 import { SECTION_EFFECT, SECTION_LABELS, SECTIONS, STEER_NOTE, docLines, pluginWritesLines, reconcileSection, sectionAuthor, trailLines, type DocView, type SectionId } from './workingDoc.js';
 
 const ID = 'wicked-phase-report';
@@ -395,7 +395,7 @@ export function start(): void {
     if (doc !== null && doc.trail.length > 0) {
       const ol = el('ol', 'wd-trail');
       ol.setAttribute('aria-label', 'Versions');
-      for (const line of trailLines(doc)) ol.append(el('li', null, line));
+      for (const line of trailLines(doc, 6, (ord) => { const u = report.units.get(ord); return u !== undefined && u.step !== null && !u.step.includes(':') ? stepWord(u) : null; })) ol.append(el('li', null, line));
       box.append(ol);
     }
   }
