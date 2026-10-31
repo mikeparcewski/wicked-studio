@@ -1,0 +1,39 @@
+wicked-design is licensed in three parts.
+
+1. Code, tokens and documentation (everything except fonts/, brand/ and the lockups and icons
+   generated from brand/ into dist/brand/ and dist/icons/): the MIT License below.
+2. The type faces in fonts/*.woff2: the SIL Open Font License 1.1, unmodified files from the
+   @fontsource 5.3.0 packages (latin and latin-ext subsets). Each face's full licence text and
+   copyright line is in licenses/LICENSE-<face>.txt:
+     - Inter (variable): The Inter Project Authors. Same files wicked-studio self-hosts.
+     - JetBrains Mono (variable): The JetBrains Mono Project Authors. Same files wicked-studio self-hosts.
+     - Marcellus (static, 400): Brian J. Bonislawsky (Astigmatic), Reserved Font Name "Marcellus".
+     - Dancing Script (variable): The Dancing Script Project Authors, Reserved Font Name "Dancing Script".
+3. The brand lockup and icons (brand/, dist/brand/, dist/icons/): created by the project owner for
+   the wicked agile brand. The source they were copied from states no licence, and none is granted
+   here yet: they are not covered by part 1. Ask the project owner before using them outside the
+   wicked products.
+
+---
+
+MIT License
+
+Copyright (c) 2026 Michael Parcewski
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

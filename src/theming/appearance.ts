@@ -52,9 +52,18 @@ export function isWickedTheme(t: ThemeId): boolean {
   return t === 'wicked-light' || t === 'wicked-dark';
 }
 
-/** The harbor accent preset, #224A5E (hsl 200 47% 25%), the wicked action colour. Choosing a
- *  wicked theme writes it into the three accent primitives; the picker owns them after that. */
+/** The wicked themes' default accent preset (hsl 200 47% 25%). Choosing a wicked theme writes it into
+ *  the three accent primitives; the picker owns them after that. While the primitives still hold this
+ *  preset, the wicked themes paint the design system's own action colour (the synthesis' near-black /
+ *  near-white, wicked-design via themes/wicked-*.css); any other accent is the user's (Settings →
+ *  Appearance, a learned brand) and drives the action colour, marked `data-accent="custom"`. */
 export const HARBOR_ACCENT = { accent_h: 200, accent_s: 47, accent_l: 25 } as const;
+
+/** True when a wicked theme's accent is the user's own rather than the default preset. */
+export function hasCustomAccent(a: Pick<StudioAppearance, 'accent_h' | 'accent_s' | 'accent_l' | 'theme'>): boolean {
+  return isWickedTheme(a.theme)
+    && !(a.accent_h === HARBOR_ACCENT.accent_h && a.accent_s === HARBOR_ACCENT.accent_s && a.accent_l === HARBOR_ACCENT.accent_l);
+}
 
 /** The ⌘K "Toggle Theme": flip the ground, stay in the family. */
 export function toggledTheme(t: ThemeId): ThemeId {
@@ -159,6 +168,8 @@ export function applyAppearance(a: StudioAppearance): void {
   }
   if (a.theme === 'dark') root.removeAttribute('data-theme');
   else root.setAttribute('data-theme', a.theme);
+  if (hasCustomAccent(a)) root.setAttribute('data-accent', 'custom');
+  else root.removeAttribute('data-accent');
 }
 
 interface AppearanceStore {

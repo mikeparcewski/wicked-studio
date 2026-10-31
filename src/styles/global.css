@@ -14,6 +14,7 @@
 @import './themes/light.css';
 @import './themes/wicked-light.css';
 @import './themes/wicked-dark.css';
+@import './themes/wicked-synthesis.css';
 @import './deck.css';
 @import './components.css';
 @import './sections/desk.css';
@@ -57,8 +58,8 @@ html, body, #root {
   background: var(--surface-base);
   color: var(--ink-body);
   height: 100%;
-  /* §2.8's one sans, resolved from the token: Archivo (S18c), Archivo too under the
-     wicked themes — both self-hosted by fonts.css (no font CDN). */
+  /* §2.8's one sans, resolved from the token: Archivo (S18c) under the classic themes, Inter under
+     the wicked themes (the synthesis) — both self-hosted by fonts.css (no font CDN). */
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
 }

@@ -1,0 +1,89 @@
+/* themes/wicked-synthesis.css: the synthesis' component rules for the default (wicked) themes.
+ *
+ * The design council's synthesis, the operator's pick of 2026-10-31 (program design/DES-THEMES.md). Its
+ * colours come from the generated themes/wicked-*.css (the wicked-design package); this file carries
+ * what tokens cannot say:
+ *   - labels in sentence case (the uppercase rules below are every one in src/styles, deck excluded:
+ *     tests/wickedSynthesis.css.test.ts fails when a new uppercase label is not listed here);
+ *   - messages grouped by spacing, not by a border or shadow;
+ *   - the recessed rail's current item: a 2px ink bar (studio's rail supplies the fill and hover);
+ *   - a gate card keeps a quiet edge (its violet stays on the badge);
+ *   - progress in the running green; voice marks neutral;
+ *   - links underlined, in ink.
+ * Nothing here applies to the classic dark / light themes. */
+
+/* Labels: sentence case, no tracking (the markup's own words, as written). */
+:is([data-theme="wicked-light"], [data-theme="wicked-dark"]) .wk-eyebrow,
+:is([data-theme="wicked-light"], [data-theme="wicked-dark"]) .wk-overlay-head,
+:is([data-theme="wicked-light"], [data-theme="wicked-dark"]) .wk-overlay-subhead,
+:is([data-theme="wicked-light"], [data-theme="wicked-dark"]) .wk-chathist-head,
+:is([data-theme="wicked-light"], [data-theme="wicked-dark"]) .wk-chatscope-kind,
+:is([data-theme="wicked-light"], [data-theme="wicked-dark"]) .wk-runs-col,
+:is([data-theme="wicked-light"], [data-theme="wicked-dark"]) .wk-ask-rec,
+:is([data-theme="wicked-light"], [data-theme="wicked-dark"]) .wk-ue-label,
+:is([data-theme="wicked-light"], [data-theme="wicked-dark"]) .wk-calm-label,
+:is([data-theme="wicked-light"], [data-theme="wicked-dark"]) .wk-calm-pick,
+:is([data-theme="wicked-light"], [data-theme="wicked-dark"]) select.wk-calm-pick:not([multiple]):not([size]),
+:is([data-theme="wicked-light"], [data-theme="wicked-dark"]) .wk-gate2-label,
+:is([data-theme="wicked-light"], [data-theme="wicked-dark"]) .wk-run-glance-label,
+:is([data-theme="wicked-light"], [data-theme="wicked-dark"]) .wk-palette-group,
+:is([data-theme="wicked-light"], [data-theme="wicked-dark"]) .wk-rail-foot .wk-rail-group[data-testid="rail-foot-label"],
+:is([data-theme="wicked-light"], [data-theme="wicked-dark"]) .wk-card-tag,
+:is([data-theme="wicked-light"], [data-theme="wicked-dark"]) .wk-surfaces-h,
+:is([data-theme="wicked-light"], [data-theme="wicked-dark"]) .wk-home-label,
+:is([data-theme="wicked-light"], [data-theme="wicked-dark"]) .wk-jr-label,
+:is([data-theme="wicked-light"], [data-theme="wicked-dark"]) .wk-fr-section,
+:is([data-theme="wicked-light"], [data-theme="wicked-dark"]) .wk-nc-sub-title,
+:is([data-theme="wicked-light"], [data-theme="wicked-dark"]) .wk-plugcard-prev-tag,
+:is([data-theme="wicked-light"], [data-theme="wicked-dark"]) .wk-plugdetail-sec h3,
+:is([data-theme="wicked-light"], [data-theme="wicked-dark"]) .pm-rigor-pop h2,
+:is([data-theme="wicked-light"], [data-theme="wicked-dark"]) .wk-rail-sec,
+:is([data-theme="wicked-light"], [data-theme="wicked-dark"]) .wk-rep-label,
+:is([data-theme="wicked-light"], [data-theme="wicked-dark"]) .wk-runplugin-mark,
+:is([data-theme="wicked-light"], [data-theme="wicked-dark"]) .wk-voice-modal-h,
+:is([data-theme="wicked-light"], [data-theme="wicked-dark"]) .wk-voice-tile h3,
+:is([data-theme="wicked-light"], [data-theme="wicked-dark"]) .wk-voice-line small,
+:is([data-theme="wicked-light"], [data-theme="wicked-dark"]) .wk-voice-mine h3,
+:is([data-theme="wicked-light"], [data-theme="wicked-dark"]) .wk-voice-job-facts dt,
+:is([data-theme="wicked-light"], [data-theme="wicked-dark"]) .wk-voice-job-said small {
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+/* Messages: spacing groups them; no border, no shadow, no fill. */
+:is([data-theme="wicked-light"], [data-theme="wicked-dark"]) :is(.wk-chat-body, .wk-session-turn--helper > .wk-session-text) {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+  padding-left: 0;
+  padding-right: 0;
+}
+
+/* The rail: recessed (--surface-rail sits a step under the page). Studio's rail rules already give the
+   current item the selected fill (--accent-wash, mapped to the synthesis' selected fill) and an inset bar
+   in --accent (ink), with calibrated hover / press steps (e2e/desk_rail_hover). The synthesis' bar is 2px. */
+:is([data-theme="wicked-light"], [data-theme="wicked-dark"]) .wk-rail :is(.wk-rail-session, .wk-rail-link)[aria-current="page"] {
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+/* A gate card: a quiet edge; waiting-on-you stays on its tag. */
+:is([data-theme="wicked-light"], [data-theme="wicked-dark"]) .wk-ask--gate { box-shadow: inset 0 0 0 1px var(--border), var(--shadow-raised); }
+
+/* Progress in the running green on a hairline track; voice marks neutral. */
+:is([data-theme="wicked-light"], [data-theme="wicked-dark"]) .wk-progress-fill--run { background: var(--status-run); }
+:is([data-theme="wicked-light"], [data-theme="wicked-dark"]) .wk-voice-progress span { background: var(--status-run); }
+:is([data-theme="wicked-light"], [data-theme="wicked-dark"]) .wk-voice-wave i { background: var(--ink-high); }
+:is([data-theme="wicked-light"], [data-theme="wicked-dark"]) .wk-voice-wave[data-who="it"] i { background: var(--ink-dim); }
+
+/* Links: ink, underlined. */
+:is([data-theme="wicked-light"], [data-theme="wicked-dark"]) :is(.wk-btn--link, .wk-chat-link, .wk-gate2-link, .wk-run-glance-link) {
+  color: var(--link);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* Hover lifts on cards: studio mixes the accent AND the ink into a hover; under the synthesis the accent
+   IS the ink, so that doubled the lift and the dark card's muted words fell to 4.2:1 (e2e/desk_rail_hover).
+   One ink lift, sized to stay visible (dE_OK >= 0.08) with every word at 4.5:1. */
+[data-theme="wicked-dark"] .wk-pj-card { --pj-card-hover: color-mix(in oklab, var(--ink-high) 12%, var(--surface-card)); }
+[data-theme="wicked-light"] .wk-pj-card { --pj-card-hover: color-mix(in oklab, var(--ink-high) 12%, var(--surface-card)); }

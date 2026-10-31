@@ -148,3 +148,35 @@ describe('resetAccent under a wicked theme', () => {
     }
   });
 });
+
+// The synthesis (2026-10-31): while a wicked theme still holds the default preset it paints the design
+// system's own action colour; a user-picked accent (Settings → Appearance, a learned brand) takes over,
+// marked data-accent="custom" so themes/wicked-*.css switches to the primitives.
+describe('data-accent: the user-picked accent under the wicked themes', () => {
+  it('the default preset under a wicked theme carries no data-accent', () => {
+    useAppearanceStore.getState().chooseTheme('wicked-light');
+    expect(root().hasAttribute('data-accent')).toBe(false);
+    useAppearanceStore.getState().chooseTheme('wicked-dark');
+    expect(root().hasAttribute('data-accent')).toBe(false);
+  });
+
+  it('moving the picker marks the accent custom; reset clears it', () => {
+    useAppearanceStore.getState().chooseTheme('wicked-light');
+    useAppearanceStore.getState().update({ accent_h: 120 });
+    expect(root().getAttribute('data-accent')).toBe('custom');
+    useAppearanceStore.getState().resetAccent();
+    expect(root().hasAttribute('data-accent')).toBe(false);
+  });
+
+  it('the classic themes never carry data-accent', () => {
+    useAppearanceStore.getState().update({ theme: 'light', accent_h: 10 });
+    expect(root().hasAttribute('data-accent')).toBe(false);
+  });
+
+  it('hasCustomAccent is the rule', async () => {
+    const { hasCustomAccent } = await import('../src/theming/appearance.js');
+    expect(hasCustomAccent({ theme: 'wicked-dark', ...HARBOR_ACCENT })).toBe(false);
+    expect(hasCustomAccent({ theme: 'wicked-dark', ...HARBOR_ACCENT, accent_l: 40 })).toBe(true);
+    expect(hasCustomAccent({ theme: 'dark', accent_h: 1, accent_s: 2, accent_l: 3 })).toBe(false);
+  });
+});
