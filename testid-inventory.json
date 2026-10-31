@@ -12,8 +12,8 @@
   "studioVersion": "0.13.0",
   "counts": {
     "files": 258,
-    "occurrences": 3520,
-    "static": 2999,
+    "occurrences": 3528,
+    "static": 3007,
     "dynamic": 75,
     "computed": 33
   },
@@ -11604,9 +11604,27 @@
       ]
     },
     {
+      "testId": "requirement-corroboration",
+      "files": [
+        "src/components/RequirementsModal.tsx"
+      ]
+    },
+    {
       "testId": "requirement-pick",
       "files": [
         "src/components/product/RequirementsBrowser.tsx"
+      ]
+    },
+    {
+      "testId": "requirement-rail-corroboration",
+      "files": [
+        "src/components/RequirementsModal.tsx"
+      ]
+    },
+    {
+      "testId": "requirement-unconfirmed-why",
+      "files": [
+        "src/components/RequirementsModal.tsx"
       ]
     },
     {
@@ -11619,6 +11637,18 @@
       "testId": "requirements-browser",
       "files": [
         "src/components/product/RequirementsBrowser.tsx"
+      ]
+    },
+    {
+      "testId": "requirements-corroboration-counts",
+      "files": [
+        "src/components/RequirementsModal.tsx"
+      ]
+    },
+    {
+      "testId": "requirements-coverage",
+      "files": [
+        "src/components/RequirementsModal.tsx"
       ]
     },
     {
@@ -14113,6 +14143,24 @@
     },
     {
       "testId": "settings-council-size",
+      "files": [
+        "src/components/SystemSettings.tsx"
+      ]
+    },
+    {
+      "testId": "settings-min-coverage",
+      "files": [
+        "src/components/SystemSettings.tsx"
+      ]
+    },
+    {
+      "testId": "settings-min-coverage-invalid",
+      "files": [
+        "src/components/SystemSettings.tsx"
+      ]
+    },
+    {
+      "testId": "settings-min-coverage-unsupported",
       "files": [
         "src/components/SystemSettings.tsx"
       ]

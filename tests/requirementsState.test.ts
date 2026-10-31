@@ -21,3 +21,23 @@ describe('requirementsNotGenerated (lane repo-page)', () => {
     expect(requirementsNotGenerated(null)).toBeNull();
   });
 });
+
+describe('corroboration + coverage readers (operator ruling 2026-10-31)', () => {
+  it('reads a mark and says it in plain words', async () => {
+    const { corroborationOf, corroborationSentence } = await import('../src/board/requirementsState.js');
+    const c = corroborationOf({ corroboration: { status: 'validated', sources: 2, callSites: 2, tests: 0, docs: 0, extraExtractors: 0 } });
+    expect(c?.status).toBe('validated');
+    expect(corroborationSentence(c!)).toBe('Validated by 2 independent sources: 2 callers.');
+    const u = corroborationOf({ corroboration: { status: 'unconfirmed', sources: 1, callSites: 1, tests: 0, docs: 0, extraExtractors: 0, why: { code: 'single_caller', text: 'One caller, and no test or doc touches it.' } } });
+    expect(corroborationSentence(u!)).toBe('One caller, and no test or doc touches it.');
+  });
+  it('an older daemon or an unreadable record reads null, never a guess', async () => {
+    const { corroborationOf, coverageOf, corroborationCounts } = await import('../src/board/requirementsState.js');
+    expect(corroborationOf({})).toBeNull();
+    expect(corroborationOf({ corroboration: null })).toBeNull();
+    expect(corroborationOf({ corroboration: { status: 'validated' } })).toBeNull();
+    expect(coverageOf({ coverage: { mappedPct: 82 } })).toBeNull();
+    expect(corroborationCounts({ corroboration: { validated: 0, unconfirmed: 0 } })).toBeNull();
+    expect(coverageOf({ coverage: { mappedPct: 82, minPct: 80, behaviorBearing: 10, mapped: 8, resolved: 8, unmapped: 2 } })?.mappedPct).toBe(82);
+  });
+});
