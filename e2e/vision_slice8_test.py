@@ -82,26 +82,35 @@ with sync_playwright() as p:
     page.on("console", lambda m: console_errors.append(m.text) if m.type == "error" else None)
     page.on("request", lambda req: request_paths.append(urlparse(req.url).path))
 
+    # DES-LEARN §3.4 split the page in two: "Learn from a brand" lives in Learn → Brand (with a link to the manual
+    # controls), and the manual appearance section stays in Settings → Theme (with a link back). Both are visited.
     page.goto(f"{ORIGIN}/learn?tab=brand", wait_until="domcontentloaded")
-    page.locator('[data-testid="appearance-settings"]').wait_for(timeout=30000)
     page.locator('[data-testid="brand-learn"]').wait_for(timeout=30000)
     page.add_style_tag(content=HIDE_GATE_TOASTS)
-
-    # AC 1 — both surfaces present: the manual appearance section AND the
-    # restored brand-learn section (real wires — see brand_learn_test.py).
-    surface = page.evaluate(
+    learn_side = page.evaluate(
         """() => ({
-             appearance: !!document.querySelector('[data-testid="appearance-settings"]'),
-             hueWheel: !!document.querySelector('[data-testid="hue-wheel"]'),
-             preview: !!document.querySelector('[data-testid="appearance-preview"]'),
              brandLearn: !!document.querySelector('[data-testid="brand-learn"]'),
              learnSubmit: !!document.querySelector('[data-testid="learn-submit"]'),
              learnCopy: (document.body.innerText || '').toLowerCase()
                .includes('learn from a brand'),  // the heading is CSS-uppercased
-             logoHonesty: (document.body.innerText || '')
-               .includes('the logo stays your manual choice'),
+             manualLink: !!document.querySelector('a[href="/system?tab=theme"]'),
+             logoHonesty: (document.body.innerText || '').includes('logo and site name'),
            })"""
     )
+    page.goto(f"{ORIGIN}/system?tab=theme", wait_until="domcontentloaded")
+    page.locator('[data-testid="appearance-settings"]').wait_for(timeout=30000)
+    page.add_style_tag(content=HIDE_GATE_TOASTS)
+
+    # AC 1 — both surfaces present: the manual appearance section AND the brand-learn section (real wires — see
+    # brand_learn_test.py), each linking to the other.
+    surface = {**learn_side, **page.evaluate(
+        """() => ({
+             appearance: !!document.querySelector('[data-testid="appearance-settings"]'),
+             hueWheel: !!document.querySelector('[data-testid="hue-wheel"]'),
+             preview: !!document.querySelector('[data-testid="appearance-preview"]'),
+             learnLink: !!document.querySelector('[data-testid="theme-learn-brand"]'),
+           })"""
+    )}
     report["steps"]["theme_page_whole"] = {
         "ok": all(surface.values()),
         **surface,

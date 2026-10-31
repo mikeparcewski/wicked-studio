@@ -94,13 +94,20 @@ with sync_playwright() as p:
               and rec.get_attribute("aria-checked") == "true" and rec.get_by_test_id("ask-recommended").count() == 1
               and (page.get_by_test_id("session-gate-confirm").text_content() or "").strip() == "Send back", move=move, label=label)
         consequence = text(page, "session-gate-consequence")
+        # The dock keeps the primary in reach (sticky at the surface's foot, asks 8be78ca): measure at the scroll's end,
+        # where the button sits in its own place under the consequence.
+        page.get_by_test_id("session-gate-confirm").evaluate("""(e) => { for (let p = e.parentElement; p; p = p.parentElement) {
+            if (p.scrollHeight > p.clientHeight + 1 && /(auto|scroll)/.test(getComputedStyle(p).overflowY)) p.scrollTop = p.scrollHeight; } }""")
+        page.wait_for_timeout(200)
         # Its consequence is said before it is taken, on the line under the cards (room reserved: a hover never moves a card).
         check("consequence-before-it-is-taken", consequence == "If you choose this: produce reruns with 2 items; critique re-reviews"
               and page.evaluate("""() => { const c = document.querySelector('[data-testid="session-gate-consequence"]');
                   const g = document.querySelector('[data-testid="session-gate-choices"]');
                   const go = document.querySelector('[data-testid="session-gate-confirm"]');
                   return c.getBoundingClientRect().top >= g.getBoundingClientRect().bottom
-                    && c.getBoundingClientRect().bottom <= go.getBoundingClientRect().top; }"""), consequence=consequence)
+                    && c.getBoundingClientRect().bottom <= go.getBoundingClientRect().top; }"""), consequence=consequence,
+              rects=page.evaluate("""() => Object.fromEntries(['session-gate-consequence', 'session-gate-choices', 'session-gate-confirm'].map((t) => {
+                  const r = document.querySelector(`[data-testid="${t}"]`)?.getBoundingClientRect(); return [t, r ? [Math.round(r.top), Math.round(r.bottom)] : null]; }))"""))
         keys = page.evaluate("""() => [...document.querySelectorAll('[data-testid="session-gate-choices"] [data-testid="session-gate-choice"]')]
           .map(e => e.dataset.choiceKey)""")
         check("others-secondary", "request_changes" not in keys and keys.count("send-back") == 1

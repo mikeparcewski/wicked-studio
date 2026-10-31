@@ -115,13 +115,14 @@ with sync_playwright() as p:
     # AC 1 — both sections render; the learn section is INERT until the user acts.
     surface = page.evaluate(
         """() => ({
-             appearance: !!document.querySelector('[data-testid="appearance-settings"]'),
+             // Learn → Brand (DES-LEARN §3.4): the manual wheel, logo and site name stay in Settings → Theme, linked here.
+             appearance: !!document.querySelector('a[href="/system?tab=theme"]'),
              brandLearn: !!document.querySelector('[data-testid="brand-learn"]'),
              sourceUrl: !!document.querySelector('[data-testid="learn-source-url"]'),
              sourcePdf: !!document.querySelector('[data-testid="learn-source-pdf"]'),
              sourceImage: !!document.querySelector('[data-testid="learn-source-image"]'),
              projectPick: !!document.querySelector('[data-testid="learn-project"]'),
-             logoHonesty: (document.body.innerText || '').includes('the logo stays your manual choice'),
+             logoHonesty: (document.body.innerText || '').includes('logo and site name'),
            })"""
     )
     eager = [f"{m} {q}" for m, q in request_log if learn_related(m, q)]
@@ -161,7 +162,8 @@ with sync_playwright() as p:
     # AC 3 — the preview is real: the accent var CHANGED to the mapped hue,
     # the adjustments are disclosed, and nothing has persisted yet.
     accent_preview = accent_h(page)
-    adjustments = page.locator('[data-testid="mapper-adjustments"]').inner_text()
+    # The constraint names sit in the folded Technical details: read the text, shown or not.
+    adjustments = page.locator('[data-testid="mapper-adjustments"]').text_content() or ""
     report["steps"]["preview_is_real"] = {
         "ok": (accent_before == "230" and accent_preview == "217"
                and "contrast-floor" in adjustments and "lightness-clamp" in adjustments),
