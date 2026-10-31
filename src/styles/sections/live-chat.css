@@ -1,0 +1,60 @@
+/* A working turn in words (operator 2026-10-30): its meter and rolling summary over the live list, and the in-flight
+   check as a guided ask (program DES-GUIDED-CHAT, design/mockups/learn-and-panels.html state h: options as tiles, the
+   recommended one preselected and marked, its consequence shown, one commit button, a record line once answered). */
+.wk-live-meter { margin: 0 0 2px; font-size: var(--text-xs); color: var(--ink-muted); font-variant-numeric: tabular-nums; }
+.wk-live-meter-who { color: var(--ink-high); font-weight: var(--weight-semi); }
+.wk-live-rolling { margin: 0 0 4px; font-size: var(--text-sm); color: var(--ink-body); overflow-wrap: anywhere; }
+[data-testid="assist-chat"] .wk-live, .wk-assist-live .wk-live { margin-left: 0; }
+.wk-assist-live { padding: 6px 10px 2px; }
+
+.wk-ask { position: relative; margin: 10px 0 4px; padding: 14px 16px 16px; border-radius: 18px; background: var(--surface-card); color: var(--ink-body);
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--accent) 40%, var(--border)), var(--shadow-raised);
+  animation: wk-ask-grow .45s var(--ease-out); transform-origin: top center; max-width: 720px; }
+.wk-ask[data-tone="warn"] { box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--status-warn) 55%, var(--border)), var(--shadow-raised); }
+.wk-ask[data-tone="fail"] { box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--status-fail) 55%, var(--border)), var(--shadow-raised); }
+.wk-ask-who { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 6px; color: var(--ink-muted); font-size: var(--text-xs); font-weight: var(--weight-semi); }
+.wk-ask-pill { display: inline-flex; align-items: center; height: 20px; padding: 0 8px; border-radius: 999px; font-size: var(--text-xs); font-weight: var(--weight-semi);
+  color: var(--accent); box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--accent) 55%, transparent); background: color-mix(in oklab, var(--accent) 10%, transparent); }
+.wk-ask-pill--ok { color: var(--status-ok); box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--status-ok) 55%, transparent); background: color-mix(in oklab, var(--status-ok) 10%, transparent); }
+.wk-ask-pill--warn { color: var(--status-warn); box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--status-warn) 55%, transparent); background: color-mix(in oklab, var(--status-warn) 10%, transparent); }
+.wk-ask-pill--fail { color: var(--status-fail); box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--status-fail) 55%, transparent); background: color-mix(in oklab, var(--status-fail) 10%, transparent); }
+.wk-ask-q { margin: 0 0 4px; color: var(--ink-high); font-size: var(--text-md, 15px); font-weight: var(--weight-semi); line-height: 1.35; }
+.wk-ask-sub { margin: 0 0 10px; color: var(--ink-muted); font-size: var(--text-sm); line-height: 1.45; }
+.wk-ask-evidence { margin: 0 0 10px; padding-left: 18px; font-size: var(--text-sm); color: var(--ink-body); line-height: 1.45; }
+.wk-ask-why { margin: 0 0 10px; font-size: var(--text-xs); color: var(--ink-muted); }
+.wk-ask-then { margin: 4px 0 8px; color: var(--ink-high); font-size: var(--text-sm); font-weight: var(--weight-semi); }
+.wk-ask-opts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.wk-ask-yn { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.wk-ask-opt { position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; min-height: 64px; padding: 12px 14px; border: 0; border-radius: 14px;
+  background: var(--surface-base); box-shadow: inset 0 0 0 1px var(--border); color: var(--ink-body); font: inherit; text-align: left; cursor: pointer;
+  transition: box-shadow .15s, background .15s, transform .15s; }
+.wk-ask-opt:hover:not(:disabled) { box-shadow: inset 0 0 0 1px var(--border-strong); transform: translateY(-1px); }
+.wk-ask-opt:focus-visible { outline: 2px solid transparent; box-shadow: var(--focus-ring); }
+.wk-ask-opt b { color: var(--ink-high); font-size: var(--text-sm); }
+.wk-ask-opt[data-rec="true"] b { padding-right: 104px; }
+.wk-ask-opt span { font-size: var(--text-xs); line-height: 1.4; color: var(--ink-muted); }
+.wk-ask-opt[aria-checked="true"] { background: color-mix(in oklab, var(--accent) 14%, var(--surface-base)); box-shadow: inset 0 0 0 2px var(--accent); }
+.wk-ask-opt[data-tone="danger"] b { color: var(--status-fail); }
+.wk-ask-opt:disabled { opacity: .6; cursor: progress; }
+.wk-ask-rec { position: absolute; right: 10px; top: 10px; padding: 1px 7px; border-radius: 999px; background: var(--accent); color: var(--accent-fg);
+  font-size: 10px; font-style: normal; font-weight: var(--weight-bold); letter-spacing: .03em; text-transform: uppercase; }
+.wk-ask-cons { margin: 12px 0 0; padding: 10px 12px; border-radius: 10px; background: var(--surface-base); color: var(--ink-body); font-size: var(--text-sm); line-height: 1.45; }
+.wk-ask-cons b { color: var(--ink-high); }
+.wk-ask-text { width: 100%; min-height: 60px; margin-top: 10px; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--border-input, var(--border)); background: var(--surface-base);
+  color: var(--ink-high); font: inherit; font-size: var(--text-sm); resize: vertical; box-sizing: border-box; }
+.wk-ask-go { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 14px; }
+.wk-ask-rmeta { margin-left: auto; color: var(--ink-dim); font-size: var(--text-xs); white-space: nowrap; }
+.wk-ask-go .wk-ask-rmeta { margin-left: 0; }
+.wk-ask-record { display: flex; align-items: center; gap: 10px; margin: 8px 0 4px; padding: 8px 12px; border-radius: 12px; max-width: 720px;
+  background: color-mix(in oklab, var(--ink-high) 5%, transparent); color: var(--ink-body); font-size: var(--text-sm); animation: wk-ask-grow .3s var(--ease-out); }
+.wk-ask-record > svg { flex-shrink: 0; color: var(--status-ok); }
+.wk-ask-record b { color: var(--ink-high); }
+@keyframes wk-ask-grow { from { opacity: 0; transform: translateY(4px) scaleY(.98); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .wk-ask, .wk-ask-record { animation: none; } }
+@media (max-width: 767px) {
+  .wk-ask { padding: 12px 12px 14px; border-radius: 16px; }
+  .wk-ask-opts, .wk-ask-yn { grid-template-columns: minmax(0, 1fr); }
+  .wk-ask-opt { min-height: 52px; }
+  .wk-ask-record { flex-wrap: wrap; }
+  .wk-ask-rmeta { margin-left: 0; white-space: normal; }
+}

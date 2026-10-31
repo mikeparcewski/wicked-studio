@@ -1017,6 +1017,11 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          #   ask_one_seat — the roster has no distinct seat: member.joined{seat:null,status:failed} and, after the
          #   reply, plan.refused NoEligibleSeat (the §4.7 one-seat line).
          "ask_path": False, "ask_one_seat": False,
+         # live-chat (operator 2026-10-30): `ask_hold` keeps an ask turn "thinking" (up to 3 min) after its
+         # claim, having sent the engine frames a working turn sends (a dispatch dated `ask_hold_started_ago_s`
+         # back, tool calls, a live usage total), so a journey sees its live activity and the in-flight check;
+         # POST /__fixture/broadcast sends more frames; POST /__fixture {ask_release: true} lets the turn end.
+         "ask_hold": False, "ask_hold_started_ago_s": 240,
          # sheets — S11 (e2e/desk_sheets_test.py): every run's units name a seat
          #   ("claude" where the corpus left none), so a session shows its helpers; POST
          #   /runs/:id/cancel answers crew's 200 and is recorded (GET /__fixture/cancel-posts).
@@ -1114,6 +1119,9 @@ resumed_runs: set = set()
 # corpus appends to that run's trail — crew writes one per decision; GET /runs/:id/events serves it after the
 # recorded events. Cleared with `reset_gate_posts`.
 walk_gate_decided: dict = {}
+# live-chat: the in-flight checks asked (POST /runs/:id/units/:ord/inspect) and their records.
+inspections: dict = {}
+inspect_post_log: list = []
 # Every POST /runs/:id/inject (a message to the team on a live run; GET /__fixture/inject-posts).
 inject_post_log: list = []
 # S9: every `feedback.submitted` batch the bridge received — {pid, doc, version, items} — so a
@@ -5360,6 +5368,28 @@ def ask_message(chat_id: str, text: str):
                                             seat=None, role="monitor", status="failed", reason="team plan monitors=1",
                                             error="no seat distinct from the PA"))
         time.sleep(0.6)  # the thread shows "<pa> is thinking" here
+        with state_lock:
+            hold, ago = state["ask_hold"], state["ask_hold_started_ago_s"]
+        if hold:
+            now_ms = int(time.time() * 1000)
+            t0 = now_ms - ago * 1000
+            base = {"session": run_id, "ord": ord_, "attempt": 0}
+            for f in (
+                {"type": "unitDispatched", "ts": t0},
+                {"type": "unitExecuting", "ts": t0},
+                {"type": "toolActivity", "at": now_ms - 50_000, "ts": now_ms - 50_000, "id": "h1", "state": "finished", "kind": "read", "tool": "Read", "target": "packages/crew/src/api/routes.ts", "ok": True, "durationMs": 40},
+                {"type": "toolActivity", "at": now_ms - 20_000, "ts": now_ms - 20_000, "id": "h2", "state": "finished", "kind": "read", "tool": "Read", "target": "packages/crew/src/api/server.ts", "ok": True, "durationMs": 30},
+                {"type": "toolActivity", "at": now_ms - 12_000, "ts": now_ms - 12_000, "id": "h3", "state": "finished", "kind": "read", "tool": "Read", "target": "packages/crew/src/api/audit.ts", "ok": True, "durationMs": 30},
+                {"type": "toolActivity", "at": now_ms - 4_000, "ts": now_ms - 4_000, "id": "h4", "state": "started", "kind": "search", "tool": "Grep", "target": "isHumanOperator", "ok": None, "durationMs": None},
+                {"type": "usageProgress", "at": now_ms - 3_000, "ts": now_ms - 3_000, "inputTokens": 412_000, "outputTokens": 3_100, "costUsd": 0.21},
+                {"type": "unitOutputDelta", "text": "Reading how crew decides who may answer a gate."},
+            ):
+                broadcast_chat({**base, **f})
+            for _ in range(900):
+                with state_lock:
+                    if not state["ask_hold"]:
+                        break
+                time.sleep(0.2)
         if n >= 2 and reviewer is not None:
             _ask_emit(chat_id, _ask_row(run_id, "help.requested", t + 600, ord=ord_, attempt=0, by=pa, help_id=f"h-{n}", help_seq=1,
                                         question=ASK_HELP_Q, context=""))
@@ -8602,6 +8632,15 @@ class W2Handler(SimpleHTTPRequestHandler):
             with state_lock:
                 posts = list(resume_post_log)
             return self._json(200, {"posts": posts})
+        parts_g = path.split("/")
+        if len(parts_g) == 8 and parts_g[3] == "runs" and parts_g[5] == "units" and parts_g[7] == "inspections":
+            with state_lock:
+                got = list(inspections.get((urllib.parse.unquote(parts_g[4]), int(parts_g[6])), []))
+            return self._json(200, {"inspections": got})
+        if path == "/__fixture/inspect-posts":
+            with state_lock:
+                got_posts = list(inspect_post_log)
+            return self._json(200, {"posts": got_posts})
         if path == "/__fixture/inject-posts":
             with state_lock:
                 posts = list(inject_post_log)
@@ -8970,7 +9009,46 @@ class W2Handler(SimpleHTTPRequestHandler):
             served = power_mode_corpus.post(path, body, NOW0)
             if served is not None:
                 return self._json(served[0], served[1])
+        if path == "/__fixture/broadcast":
+            # live-chat: frames for every open /ws, as crew fans them out.
+            for f in body.get("frames") or []:
+                broadcast_chat(f)
+            return self._json(200, {"ok": True})
+        # live-chat: crew's in-flight check (POST /runs/:id/units/:ord/inspect, GET …/inspections, api-types 0.155.0):
+        # 202 with the record checking on codex, then 2 s later its answer as a `unitInspection` frame.
+        parts_i = path.split("/")
+        if len(parts_i) == 8 and parts_i[3] == "runs" and parts_i[5] == "units" and parts_i[7] == "inspect":
+            rid, ord_i = urllib.parse.unquote(parts_i[4]), int(parts_i[6])
+            now_ms = int(time.time() * 1000)
+            rec = {"id": f"insp-{now_ms}", "runId": rid, "ord": ord_i, "attempt": 0, "state": "checking", "requestedBy": "human-1",
+                   "requestedAt": now_ms, "finishedAt": None, "workerSeat": "claude", "seat": "codex", "checkRunId": f"chk-{now_ms}",
+                   "source": None, "why": None, "verdict": None, "doing": None, "progress": None, "evidence": [], "action": None,
+                   "note": None, "reading": {}, "cost": None}
+            with state_lock:
+                inspections.setdefault((rid, ord_i), []).insert(0, rec)
+                inspect_post_log.append({"runId": rid, "ord": ord_i})
+
+            def answer() -> None:
+                time.sleep(2.0)
+                done = {**rec, "state": "done", "finishedAt": int(time.time() * 1000), "source": "seat", "verdict": "looping",
+                        "doing": "Reading the same three route files again and searching for the same name",
+                        "progress": "Early: it has not changed anything yet after 4 minutes",
+                        "evidence": ["Read packages/crew/src/api/routes.ts 4 times", "Searched isHumanOperator 5 times, same result"],
+                        "action": "steer", "note": "You have the auth check already: isHumanOperator in watch-routes.ts. Stop searching and answer with it.",
+                        "cost": {"inputTokens": 38_000, "outputTokens": 420, "costUsd": 0.04}}
+                with state_lock:
+                    inspections[(rid, ord_i)][0] = done
+                broadcast_chat({"type": "unitInspection", "session": rid, "ord": ord_i, "inspection": done})
+            threading.Thread(target=answer, daemon=True).start()
+            return self._json(202, {"inspection": rec})
         if path == "/__fixture":
+            if body.get("ask_release"):
+                with state_lock:
+                    state["ask_hold"] = False
+            if body.get("reset_inspections"):
+                with state_lock:
+                    inspections.clear()
+                    inspect_post_log.clear()
             if body.get("reset_power"):
                 power_mode_corpus.reset()
             if body.get("reset_working_doc"):

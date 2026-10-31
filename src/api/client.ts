@@ -544,6 +544,14 @@ export const api = {
    * `target` is either `"all"` (broadcast) or a session-specific discriminator.
    * Used by the manager dashboard's send-to-agents panel (crew#73).
    */
+  /** The in-flight check on a working step (crew `POST /runs/:id/units/:ord/inspect`, api-types 0.153.0): a seat that is
+   *  not the step's own reads its record and says how it is going. A person only; 404 on a crew without it. */
+  inspectUnit: (runId: string, ord: number) =>
+    apiFetch<{ inspection: import('./inspect.js').UnitInspection }>(`/runs/${encodeURIComponent(runId)}/units/${ord}/inspect`, { method: 'POST', body: '{}' }),
+  /** The step's checks, newest first (`GET /runs/:id/units/:ord/inspections`). */
+  getInspections: (runId: string, ord: number) =>
+    apiFetch<{ inspections: import('./inspect.js').UnitInspection[] }>(`/runs/${encodeURIComponent(runId)}/units/${ord}/inspections`),
+
   injectMessage: (runId: string, message: string, target: string) =>
     apiFetch<{ status: string }>(`/runs/${encodeURIComponent(runId)}/inject`, {
       method: 'POST',
