@@ -3,7 +3,7 @@ import { api } from '../../api/client.js';
 import { readErrorKind } from '../../api/errors.js';
 import type { RepoEntry } from '../../api/types.js';
 import { relTime } from '../../board/relTime.js';
-import { EmptyState, OverflowMenu, Segmented, Skeleton, StateBanner, Switch } from '../ui/index.js';
+import { OverflowMenu, Segmented, Skeleton, StateBanner, Switch } from '../ui/index.js';
 import { openLaunchWizard } from '../../store/launchWizard.js';
 import {
   EVERY_HOURS,
@@ -23,63 +23,61 @@ import {
   type TopicRow,
 } from './learnModel.js';
 
+/** "Learn something new": the topic source's add flow, the launch wizard on the learn workflow (operator 2026-10-11,
+ *  reel chapter 60): what / where / options, then Launch, never a typed command. */
+export function startLearnTopic(): void {
+  openLaunchWizard({ workflowId: LEARN_WORKFLOW_ID });
+}
+
 /**
- * Topics to follow (DES-learn-workflow §5-§6; program DES-LEARN §3.5 folds them into Learn → Style as a
- * source kind): what a repository has learned from outside sources (`.wicked/knowledge/<slug>/`), how fresh
- * it is, and when it refreshes. A refresh re-runs the `learn` workflow and proposes only changes in a pull
- * request; nothing lands without a person. Rendered inside Style (`embedded`), no page frame of its own.
+ * Topics to follow AS SOURCES (program DES-LEARN §3.5; operator 2026-10-31: Topics folds into Style as a source kind).
+ * Every repository's learned topics (`.wicked/knowledge/<slug>/`), each a row in Style's source list with its own
+ * refresh schedule, freshness and actions. A refresh re-runs the `learn` workflow and proposes only changes in a pull
+ * request; nothing lands without a person. A topic is added through the source picker's "Topic to follow"
+ * ({@link startLearnTopic}); there is no section of its own.
  */
 export function LearnTopics({ navigate }: { navigate: (p: string) => void; embedded?: boolean }): React.ReactElement {
   const [repos, setRepos] = useState<RepoEntry[] | null>(null);
-  const [repoRef, setRepoRef] = useState<string | null>(null);
-  const [topics, setTopics] = useState<LearnTopic[] | null>(null);
+  const [byRepo, setByRepo] = useState<Record<string, LearnTopic[]> | null>(null);
   const [schedules, setSchedules] = useState<LearnSchedule[] | null>(null);
   const [error, setError] = useState<unknown>(null);
   const [retrying, setRetrying] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [writeError, setWriteError] = useState<string | null>(null);
 
-  // Each load is one generation; only the newest may commit (codex r1: a slow read of repo A must
-  // never land A's topics under repo B).
+  // One read generation at a time: only the newest may commit.
   const generation = useRef(0);
-  const load = useCallback(async (ref: string | null) => {
+  const load = useCallback(async () => {
     const gen = ++generation.current;
     setError(null);
     try {
-      const [r, s] = await Promise.all([repos === null ? api.listRepos() : Promise.resolve({ repos }), learnApi.schedules()]);
-      const pick = ref ?? r.repos[0]?.id ?? null;
-      const t = pick === null ? [] : (await learnApi.topics(pick)).topics;
+      const [r, s] = await Promise.all([api.listRepos(), learnApi.schedules()]);
+      // Every repository's topics, each read on its own: one that fails to read leaves the others listed.
+      const reads = await Promise.allSettled(r.repos.map((x) => learnApi.topics(x.id)));
       if (gen !== generation.current) return;
+      const map: Record<string, LearnTopic[]> = {};
+      r.repos.forEach((x, i) => { const v = reads[i]!; map[x.id] = v.status === 'fulfilled' ? v.value.topics : []; });
+      if (r.repos.length > 0 && reads.every((x) => x.status === 'rejected')) throw (reads[0] as PromiseRejectedResult).reason;
       setRepos(r.repos);
       setSchedules(s.schedules);
-      setRepoRef(pick);
-      setTopics(t);
+      setByRepo(map);
     } catch (e) {
       if (gen === generation.current) setError(e);
     }
-  }, [repos]);
-
-  useEffect(() => {
-    void load(null);
-    // first read only; later reads go through load(repoRef)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => { void load(); }, [load]);
 
   const retry = async (): Promise<void> => {
     setRetrying(true);
-    await load(repoRef);
+    await load();
     setRetrying(false);
   };
 
-  const pickRepo = (id: string): void => {
-    setTopics(null);
-    void load(id);
-  };
-
-  const rows = useMemo(
-    () => (repoRef === null || topics === null || schedules === null ? null : joinRows(repoRef, topics, schedules)),
-    [repoRef, topics, schedules],
-  );
+  const rows = useMemo(() => {
+    if (repos === null || byRepo === null || schedules === null) return null;
+    return repos.flatMap((r) => joinRows(r.id, byRepo[r.id] ?? [], schedules).map((row) => ({ row, repoRef: r.id, repoName: r.name })));
+  }, [repos, byRepo, schedules]);
 
   // One write at a time, page-wide (codex r1): a second control used mid-save would send a body
   // built from the pre-save snapshot and could undo the first.
@@ -97,94 +95,48 @@ export function LearnTopics({ navigate }: { navigate: (p: string) => void; embed
     }
   };
 
-  // "Learn something new" opens the launch wizard for the learn workflow (operator 2026-10-11,
-  // reel chapter 60): the what / where / options steps, then Launch — not a typed command.
-  const startNew = (): void => {
-    openLaunchWizard({ workflowId: LEARN_WORKFLOW_ID });
-  };
-
-  const repoName = repos?.find((r) => r.id === repoRef)?.name ?? null;
-
   return (
     <div data-testid="learn-page" className="wk-learn-topics-body">
-      <div className="wk-learn-topics-head">
-        <p className="wk-learn-quiet">What your helpers learned from outside sources and saved in each repository, with the source of every claim. Refreshes look for what changed and propose it for review.</p>
-        <button type="button" id="learn-topics-new" className="wk-btn wk-btn--secondary wk-btn--sm" data-testid="learn-new" onClick={startNew}>
-          Learn something new
-        </button>
-      </div>
-        {error !== null && (
-          <StateBanner
-            kind={readErrorKind(error)}
-            what="learned topics"
-            error={error instanceof Error ? error.message : String(error)}
-            onRetry={() => void retry()}
-            retrying={retrying}
-            data-testid="learn-error"
-          />
-        )}
-        {repos !== null && repos.length > 0 && (
-          <div className="wk-learn-repo">
-            <label className="wk-field-label" htmlFor="learn-repo">
-              Repository
-            </label>
-            <select
-              id="learn-repo"
-              className="wk-field"
-              data-testid="learn-repo"
-              value={repoRef ?? ''}
-              onChange={(e) => pickRepo(e.target.value)}
-            >
-              {repos.map((r) => (
-                <option key={r.id} value={r.id}>
-                  {r.name}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
-        {writeError !== null && (
-          <p className="wk-field-note wk-field-note--bad" role="alert" data-testid="learn-write-error">
-            {"That change didn't save. Try again."}
-          </p>
-        )}
-        {error === null && rows === null && repos?.length !== 0 && <Skeleton rows={3} data-testid="learn-loading" />}
-        {error === null && repos !== null && repos.length === 0 && (
-          <EmptyState
-            title="No repositories yet."
-            body="Add a repository first; what you learn is saved in it."
-            action={
-              <a className="wk-link" href="/repos/new" onClick={(e) => { e.preventDefault(); navigate('/repos/new'); }}>
-                Add a repository
-              </a>
-            }
-          />
-        )}
-        {error === null && rows !== null && rows.length === 0 && (
-          <EmptyState
-            title={`Nothing learned in ${repoName ?? 'this repository'} yet.`}
-            body="Pick a topic or an event; a helper researches it, walks you through it, and saves what it learned here for review."
-            action={
-              <button type="button" className="wk-btn wk-btn--secondary" onClick={startNew}>
-                Learn something new
-              </button>
-            }
-          />
-        )}
-        {error === null && rows !== null && rows.length > 0 && (
-          <ul className="wk-learn-list" data-testid="learn-topics">
-            {rows.map((row) => (
-              <TopicItem key={row.topic.slug} row={row} repoRef={repoRef!} busy={busy} write={write} />
-            ))}
-          </ul>
-        )}
+      {error !== null && (
+        <StateBanner
+          kind={readErrorKind(error)}
+          what="learned topics"
+          error={error instanceof Error ? error.message : String(error)}
+          onRetry={() => void retry()}
+          retrying={retrying}
+          data-testid="learn-error"
+        />
+      )}
+      {writeError !== null && (
+        <p className="wk-field-note wk-field-note--bad" role="alert" data-testid="learn-write-error">
+          {"That change didn't save. Try again."}
+        </p>
+      )}
+      {error === null && rows === null && <Skeleton rows={2} data-testid="learn-loading" />}
+      {error === null && repos !== null && repos.length === 0 && (
+        <p className="wk-learn-quiet" data-testid="learn-no-repos">
+          Topics are saved in a repository.{' '}
+          <a className="wk-link" href="/repos/new" onClick={(e) => { e.preventDefault(); navigate('/repos/new'); }}>Add a repository</a> first.
+        </p>
+      )}
+      {error === null && rows !== null && rows.length === 0 && repos !== null && repos.length > 0 && (
+        <p className="wk-learn-quiet" data-testid="learn-no-topics">No topics followed yet. Pick “Topic to follow” above: a helper researches it and refreshes it on a schedule.</p>
+      )}
+      {error === null && rows !== null && rows.length > 0 && (
+        <ul className="wk-learn-sources wk-learn-sources--topics" aria-label="Topics to follow" data-testid="learn-topics">
+          {rows.map(({ row, repoRef, repoName }) => (
+            <TopicItem key={`${repoRef}:${row.topic.slug}`} row={row} repoRef={repoRef} repoName={repoName} busy={busy} write={write} />
+          ))}
+        </ul>
+      )}
     </div>
   );
 }
 
-function TopicItem({ row, repoRef, busy, write }: {
+function TopicItem({ row, repoRef, repoName, busy, write }: {
   row: TopicRow;
   repoRef: string;
+  repoName: string;
   busy: string | null;
   write: (key: string, fn: () => Promise<unknown>) => Promise<void>;
 }): React.ReactElement {
@@ -208,12 +160,13 @@ function TopicItem({ row, repoRef, busy, write }: {
   const last = schedule !== null ? lastRunLine(schedule) : null;
   const now = Date.now();
   const meta = [
-    topic.kind === 'event' ? 'Event' : 'Topic',
+    topic.kind === 'event' ? 'Event to follow' : 'Topic to follow',
+    repoName,
     holdsLine(topic),
     topic.refreshedAt !== null ? `refreshed ${relTime(Date.parse(topic.refreshedAt), now)}` : null,
   ].filter((x): x is string => x !== null);
   return (
-    <li className="wk-learn-item wk-card" data-testid={`learn-topic-${topic.slug}`}>
+    <li className="wk-learn-src wk-learn-src--topic" data-kind="topic" data-testid={`learn-topic-${topic.slug}`}>
       <div className="wk-learn-item-head">
         <div className="wk-learn-item-text">
           <div className="wk-list-row-title">{topic.title}</div>

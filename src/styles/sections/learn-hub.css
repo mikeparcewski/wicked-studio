@@ -228,3 +228,14 @@
   color: var(--ink-body); font-size: var(--text-sm); }
 .wk-learn-results:empty { display: none; }
 .wk-learn-results .wk-learn-flow { max-width: 920px; }
+
+/* Topics to follow as sources (operator 2026-10-31): a topic row in Style's source list carries its own schedule. */
+.wk-learn-sources--topics { margin-top: 6px; }
+.wk-learn-src--topic { display: flex; flex-direction: column; align-items: stretch; gap: 6px; }
+.wk-learn-src--topic .wk-learn-item-head { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.wk-learn-src--topic .wk-learn-item-text { flex: 1; min-width: 0; }
+.wk-learn-src--topic .wk-list-row-title { overflow: hidden; color: var(--ink-high); font-size: var(--text-sm); font-weight: var(--weight-semi); text-overflow: ellipsis; white-space: nowrap; }
+.wk-learn-src--topic .wk-list-row-meta { color: var(--ink-muted); font-size: 11px; }
+.wk-learn-src--topic .wk-learn-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.wk-learn-src--topic .wk-learn-next { margin: 0; color: var(--ink-muted); font-size: 11px; }
+.wk-learn-topics-body { display: flex; flex-direction: column; gap: 6px; }

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { BookOpen, FileText, GitBranch, PenLine, X } from 'lucide-react';
+import { FileText, GitBranch, PenLine, X } from 'lucide-react';
 import { api, apiFetch } from '../../api/client.js';
 import { postCapture } from '../../api/capture.js';
 import { getSteeringDraft, keepDraftedRules, type SteeringDraftResponse } from '../../api/learn.js';
@@ -18,7 +18,7 @@ import { useProvenanceStore } from '../../store/provenance.js';
 import { sessionPath } from '../../board/sessionModel.js';
 import { AskCard, AskRecord } from '../ask/AskCard.js';
 import { readFileText } from '../fileText.js';
-import { LearnTopics } from './LearnPage.js';
+import { LearnTopics, startLearnTopic } from './LearnPage.js';
 
 /**
  * Style (DES-LEARN §3.1; mockup c): feed studio how you work. Team docs run the `steering-author` preset (rules,
@@ -175,7 +175,7 @@ export function StyleTab({ navigate }: { navigate: Navigate }): React.ReactEleme
                 placeholder={kind === 'doc' ? 'e.g. ~/handbook/CONTRIBUTING.md or a link' : 'e.g. https://eng.example.com/blog'} onChange={(e) => setText(e.target.value)} />
             )}
             {kind === 'topic' ? (
-              <button type="button" className="wk-btn wk-btn--secondary" data-testid="style-topic-new" onClick={() => document.getElementById('learn-topics-new')?.click()}>Pick a topic…</button>
+              <button type="button" className="wk-btn wk-btn--secondary" data-testid="learn-new" onClick={startLearnTopic}>Learn something new</button>
             ) : (
               <>
                 <button type="submit" className="wk-btn wk-btn--secondary" data-testid="style-add" disabled={text.trim() === ''}>Add</button>
@@ -196,15 +196,13 @@ export function StyleTab({ navigate }: { navigate: Navigate }): React.ReactEleme
               </li>
             ))}
           </ul>
+          {/* Topics to follow are sources too (operator 2026-10-31): listed here, each on its own refresh schedule. */}
+          <LearnTopics navigate={navigate} embedded />
         </div>
         <StylePipeline record={record} launching={launching} sourceCount={sources.length} onLearn={() => void launch()} onReset={startOver}
           launchError={launchError} navigate={navigate} resultsEl={resultsEl} onDecided={(r) => { setRecord(r); void saveRecord(r).catch(() => undefined); }} />
       </div>
       <div ref={setResultsEl} className="wk-learn-results" />
-      <section className="wk-learn-topics" aria-labelledby="learn-topics-h">
-        <h2 id="learn-topics-h" className="wk-learn-h2"><BookOpen size={16} aria-hidden /> Topics to follow</h2>
-        <LearnTopics navigate={navigate} embedded />
-      </section>
     </div>
   );
 }

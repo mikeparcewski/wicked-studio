@@ -32,7 +32,7 @@ vi.mock('../src/api/client.js', async (importOriginal) => {
   return { ...real, api: { ...real.api, listRepos: () => listRepos() as Promise<unknown> } };
 });
 
-const { LearnTopics: LearnPage } = await import('../src/components/learn/LearnPage.js');
+const { LearnTopics: LearnPage, startLearnTopic } = await import('../src/components/learn/LearnPage.js');
 const model = await import('../src/components/learn/learnModel.js');
 const { useComposerSeed } = await import('../src/store/composerSeed.js');
 const { ApiError } = await import('../src/api/errors.js');
@@ -119,36 +119,28 @@ describe('LearnPage', () => {
     await waitFor(() => expect(save).toHaveBeenCalledWith(expect.objectContaining({ everyHours: 24, enabled: false })));
   });
 
-  it('ignores a slow read for a repository the user already left (codex r1)', async () => {
+  it('lists every repository\'s topics as sources, each naming its repository (operator 2026-10-31: Topics fold into Style)', async () => {
     const two = { repos: [...repos.repos, { id: 'r2', name: 'other', root_path: '/o', default_branch: 'main', registered_at: 0 }] };
     listRepos.mockResolvedValue(two);
     schedules.mockResolvedValue({ schedules: [] });
-    let releaseA: (v: unknown) => void = () => undefined;
-    topics.mockImplementation((r: string) =>
-      r === 'r1' ? new Promise((res) => { releaseA = res; }) : Promise.resolve({ repoRef: 'r2', topics: [topic({ slug: 'b-topic', title: 'B topic' })] }));
+    topics.mockImplementation((r: string) => Promise.resolve({ repoRef: r, topics: [topic({ slug: `${r}-topic`, title: `${r} topic` })] }));
     render(<LearnPage navigate={() => undefined} />);
-    await waitFor(() => expect(topics).toHaveBeenCalledWith('r1'));
-    // the select is not rendered until the first load commits; drive a second load directly
-    releaseA({ repoRef: 'r1', topics: [topic({ slug: 'a-topic', title: 'A topic' })] });
-    expect(await screen.findByText('A topic')).toBeTruthy();
-    topics.mockImplementation((r: string) =>
-      r === 'r1' ? new Promise((res) => { releaseA = res; }) : Promise.resolve({ repoRef: 'r2', topics: [topic({ slug: 'b-topic', title: 'B topic' })] }));
-    fireEvent.change(screen.getByTestId('learn-repo'), { target: { value: 'r1' } });
-    fireEvent.change(screen.getByTestId('learn-repo'), { target: { value: 'r2' } });
-    expect(await screen.findByText('B topic')).toBeTruthy();
-    releaseA({ repoRef: 'r1', topics: [topic({ slug: 'a-late', title: 'A late' })] });
-    await new Promise((r) => setTimeout(r, 20));
-    expect(screen.queryByText('A late')).toBeNull();
+    expect(await screen.findByText('r1 topic')).toBeTruthy();
+    expect(screen.getByText('r2 topic')).toBeTruthy();
+    const rows = screen.getAllByTestId(/^learn-topic-/u);
+    expect(rows.map((r) => r.dataset['kind'])).toEqual(['topic', 'topic']);
+    expect(rows[1]!.textContent).toContain('Topic to follow · other');
+    expect(screen.queryByTestId('learn-repo')).toBeNull();
   });
 
-  it('says nothing is learned yet, and "Learn something new" opens the launch wizard for learn', async () => {
+  it('says no topic is followed yet, and the topic source\'s add flow opens the launch wizard for learn', async () => {
     listRepos.mockResolvedValue(repos);
     schedules.mockResolvedValue({ schedules: [] });
     topics.mockResolvedValue({ repoRef: 'r1', topics: [] });
     const navigate = vi.fn();
     render(<LearnPage navigate={navigate} />);
-    expect(await screen.findByText('Nothing learned in demo yet.')).toBeTruthy();
-    fireEvent.click(screen.getByTestId('learn-new'));
+    expect(await screen.findByTestId('learn-no-topics')).toBeTruthy();
+    startLearnTopic();
     expect(useLaunchWizard.getState()).toMatchObject({ open: true, draft: { workflowId: 'learn' } });
     expect(useComposerSeed.getState().seed).toBeNull();
     expect(navigate).not.toHaveBeenCalled();
