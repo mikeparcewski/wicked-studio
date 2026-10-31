@@ -123,6 +123,8 @@
 /* ── The header (operator 2026-10-18): the title, one state badge, and Stop while work is live ────────────── */
 .wk-session-head-body { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 10px; flex: 1 1 auto; min-width: 0; }
 .wk-session-head-body > .wk-session-title { min-width: 0; flex: 0 1 auto; }
+/* domain-graph-3: a job that keeps going says where it got to, its own line under the header (the step's words). */
+.wk-session-progress { flex-shrink: 0; margin-block: 0 8px; font-size: var(--text-sm); color: var(--ink-muted); overflow-wrap: anywhere; }
 /* Desk widths (operator 2026-10-30): the header is one line; the title gives way first (ellipsis), the switch, the
    state and the rigor chip keep their room. A phone stacks it (below). */
 @media (min-width: 768px) {

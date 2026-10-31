@@ -464,6 +464,10 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph }: P
             setRequirementsOpen(false);
             onOpenGraph(symbol);
           }}
+          onOpenRun={(runId) => {
+            setRequirementsOpen(false);
+            onSelectRun(runId);
+          }}
         />
       )}
     </div>

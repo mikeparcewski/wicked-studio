@@ -5,14 +5,19 @@ import { requirementsNotGenerated } from '../src/board/requirementsState.js';
 describe('requirementsNotGenerated (lane repo-page)', () => {
   it('reads crew\'s typed 404 and the workflow it names', () => {
     const e = new ApiError(404, 'No requirements graph yet for this repository', { error: 'x', code: 'notGenerated', workflow: 'map-it' });
-    expect(requirementsNotGenerated(e)).toEqual({ workflow: 'map-it' });
+    expect(requirementsNotGenerated(e)).toEqual({ workflow: 'map-it', share: null });
   });
   it('defaults the workflow when the body names none', () => {
-    expect(requirementsNotGenerated(new ApiError(404, 'x', { code: 'notGenerated' }))).toEqual({ workflow: 'domain-extraction' });
+    expect(requirementsNotGenerated(new ApiError(404, 'x', { code: 'notGenerated' }))).toEqual({ workflow: 'domain-extraction', share: null });
   });
   it('reads an older daemon\'s sentence', () => {
     expect(requirementsNotGenerated(new ApiError(404, 'requirements_graph.json not generated for this repo yet', { error: 'requirements_graph.json not generated for this repo yet' })))
-      .toEqual({ workflow: 'domain-extraction' });
+      .toEqual({ workflow: 'domain-extraction', share: null });
+  });
+  it('carries the share mapped so far when crew counted it (domain-graph-3)', () => {
+    const e = new ApiError(404, 'x', { code: 'notGenerated', workflow: 'domain-extraction',
+      coverage: { mappedPct: 3, minPct: 80, mapped: 300, behaviorBearing: 8109, resolved: 99, unmapped: 7809 } });
+    expect(requirementsNotGenerated(e)).toEqual({ workflow: 'domain-extraction', share: { mappedPct: 3, minPct: 80, mapped: 300, behaviorBearing: 8109 } });
   });
   it('anything else is not this state', () => {
     expect(requirementsNotGenerated(new ApiError(404, 'Repo r1 not found', { error: 'Repo r1 not found' }))).toBeNull();

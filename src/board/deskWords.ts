@@ -1,6 +1,7 @@
 import type { SessionView } from '../api/types.js';
 import { deliverUnit, deliveryOf } from '../components/delivery.js';
 import { humanTitle, onboardTitle } from '../components/runIdentity.js';
+import { REPEAT_QUESTION } from './repeatProgress.js';
 
 /**
  * THE DESK'S WORDS (DES-STUDIO-REBUILD-001 §3; DESIGN-simple §3), from the live reel take of
@@ -39,6 +40,8 @@ function withoutScaffold(text: string): string {
  *  engine's prompt. `undefined` prompt (a late join before the prompt is read) → the plain wait. */
 export function plainGateQuestion(prompt: string | undefined, gateKind: string | undefined): string {
   const p = (prompt ?? '').trim();
+  // domain-graph-3: a job that keeps going asks when its budget is spent (its line leads the row's details).
+  if (gateKind === 'repeat') return REPEAT_QUESTION;
   if (gateKind === 'plan_approval' || /^Approve plan rev \d+/i.test(p)) {
     const list = /\):\s*(.+)$/s.exec(p)?.[1];
     const steps = list === undefined ? 0 : list.split('→').map((s) => s.trim()).filter((s) => s !== '').length;

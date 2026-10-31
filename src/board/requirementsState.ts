@@ -1,4 +1,5 @@
 import { ApiError } from '../api/errors.js';
+import { notGeneratedShare, type MappedShare } from './repeatProgress.js';
 
 /** The preset whose last step (`wicked-core domain-graph`) writes a repository's requirements graph. */
 export const DOMAIN_EXTRACTION_ID = 'domain-extraction';
@@ -13,14 +14,15 @@ export const DOMAIN_EXTRACTION_ID = 'domain-extraction';
  * ("requirements_graph.json not generated for this repo yet"); that sentence is read the same way
  * until those daemons are gone.
  */
-export function requirementsNotGenerated(e: unknown): { workflow: string } | null {
+export function requirementsNotGenerated(e: unknown): { workflow: string; share: MappedShare | null } | null {
   if (!(e instanceof ApiError) || e.status !== 404) return null;
   const body = typeof e.body === 'object' && e.body !== null ? (e.body as Record<string, unknown>) : {};
   if (body['code'] === 'notGenerated') {
     const wf = body['workflow'];
-    return { workflow: typeof wf === 'string' && wf.trim() !== '' ? wf : DOMAIN_EXTRACTION_ID };
+    // domain-graph-3 (crew api-types 0.162.0): how much is mapped so far, when the repository has a store to count.
+    return { workflow: typeof wf === 'string' && wf.trim() !== '' ? wf : DOMAIN_EXTRACTION_ID, share: notGeneratedShare(body) };
   }
-  if (/requirements_graph\.json not generated/.test(e.wire)) return { workflow: DOMAIN_EXTRACTION_ID };
+  if (/requirements_graph\.json not generated/.test(e.wire)) return { workflow: DOMAIN_EXTRACTION_ID, share: null };
   return null;
 }
 

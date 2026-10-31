@@ -240,7 +240,7 @@ export function stepWord(u: Pick<UnitInfo, 'step' | 'ord'> | undefined): string 
 }
 
 const GATE_WORDS: Record<string, string> = {
-  plan_approval: 'Approve the plan', escalation: 'A failed check or review', deliver: 'Deliver', consent: 'Install consent',
+  plan_approval: 'Approve the plan', escalation: 'A failed check or review', deliver: 'Deliver', consent: 'Install consent', repeat: 'Keep going?',
   phase_review: 'Review a step', question: 'A question',
 };
 const STANDALONE_GATES = new Set(['plan_approval', 'deliver', 'consent']);
