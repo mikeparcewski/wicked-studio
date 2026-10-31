@@ -73,6 +73,8 @@ export function MemoryPage({ search, navigate, address = (p) => p, project = nul
   project?: string | null;
 }): React.ReactElement {
   const view = readMemoryView(search);
+  // A run's end card opens the queue on that run's learnings (`?view=proposals&run=<id>`).
+  const runFilter = view === 'proposals' ? (new URLSearchParams(search).get('run') ?? '').trim() || null : null;
   const go = (v: MemoryView): void => navigate(address(memoryPath(v)));
 
   // ── Reads ────────────────────────────────────────────────────────────────────────────────────
@@ -251,7 +253,8 @@ export function MemoryPage({ search, navigate, address = (p) => p, project = nul
       {coverage.kind === 'failed' && <StateBanner kind={coverage.error.kind} what="the memory totals" error={coverage.error.message} onRetry={loadCoverage} />}
       {view === 'proposals' ? (
         <div className="wk-se-proposals wk-calm-proposals" data-testid="memory-proposals">
-          <ProposalsSection kind="memory" heading="Memory proposals" editable revision={proposalsRev} onDecision={() => { setReviewTick((t) => t + 1); reread(); }} />
+          <ProposalsSection kind="memory" heading="Memory proposals" editable revision={proposalsRev} runId={runFilter}
+            onShowAll={() => go('proposals')} onDecision={() => { setReviewTick((t) => t + 1); reread(); }} />
         </div>
       ) : loading && memories.length === 0 ? (
         // A re-read after a write keeps the rows on screen (no flash to the loading shape); the first read shows it.

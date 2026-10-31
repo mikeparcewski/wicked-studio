@@ -17,6 +17,7 @@ import { approvedLine, overriddenFloorsOf } from '../../board/failingChecks.js';
 import { wordOf } from '../../board/planDraft.js';
 import { undoDecision } from '../../board/undoQueue.js';
 import type { Navigate } from '../../hooks/useRoute.js';
+import { RunLearningsLine } from './RunLearningsLine.js';
 import { useRoster } from '../../hooks/useRoster.js';
 import { useDisplayText } from '../../hooks/useHomePath.js';
 import { useRunAcceptance } from '../../hooks/useRunAcceptance.js';
@@ -496,6 +497,7 @@ export function RunBlock({ view, badge, sessionId, navigate, solo = null }: {
             <Chip testId="chat-final-changes" onClick={() => openSheet({ kind: 'session', sessionId: `run:${id}` }, 'changes')}>Changes</Chip>
             <Chip testId="chat-final-evidence" onClick={() => openSheet({ kind: 'session', sessionId: `run:${id}` }, 'evidence')}>Evidence</Chip>
           </p>
+          <RunLearningsLine runId={id} navigate={navigate} />
           <CodebaseDownload view={view} />
           <RecoveryRow view={view} {...(navigate === undefined ? {} : { navigate })} />
         </AssistantMessage>
