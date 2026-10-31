@@ -82,7 +82,7 @@ export function PersonaTab({ navigate, project }: { navigate: Navigate; project:
   };
 
   if (absent) {
-    return <p className="wk-learn-quiet" data-testid="persona-unsupported">This crew can’t keep a personality yet: it needs wicked-crew with the personality routes (api 0.155 or later).</p>;
+    return <p className="wk-learn-quiet" data-testid="persona-unsupported">This crew can’t keep a personality yet: it needs wicked-crew with the personality routes (api 0.159 or later).</p>;
   }
   if (error !== null) return <StateBanner kind={readErrorKind(error)} what="your personality" error={error instanceof Error ? error.message : String(error)} onRetry={load} data-testid="persona-error" />;
   if (data === null) return <Skeleton rows={4} data-testid="persona-loading" />;
