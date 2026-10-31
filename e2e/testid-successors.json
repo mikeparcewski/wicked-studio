@@ -981,6 +981,7 @@
     "run-plugins-pinned-run": "run-plugin-pin",
     "run-plugins-settings": "plugins-grid",
     "editor-plugins-settings": "plugins-grid",
+    "evaluate-import": "evaluate-byo",
     "session-gate-choice-consequence": "session-gate-consequence",
     "session-gate-detail": "session-gate-note",
     "session-gate-menu": "session-gate-choices",

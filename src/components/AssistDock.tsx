@@ -96,7 +96,7 @@ export interface AssistVerbs {
 }
 
 type ThreadItem =
-  | { kind: 'user'; text: string; files: string[] }
+  | { kind: 'user'; text: string; files: string[]; chip?: string }
   | { kind: 'note'; tone: NarrationTone; text: string }
   | { kind: 'run'; runId: string }
   | { kind: 'chat'; chatId: string; resumed?: boolean };
@@ -258,7 +258,12 @@ interface DockChatMsg {
   foot?: string | null;
   /** An operator turn's attached files, by name (a replayed transcript's `attachments`). */
   files?: string[];
+  /** A page chat's operator turn: the item it asked about. */
+  chip?: string;
 }
+
+/** A page chat's follow-up turn, drawn inside its chat block so it sits above its own answer. */
+export interface InlineTurn { id: number; text: string; files: string[]; chip?: string }
 
 /**
  * One launched CHAT session (the retired chat page's seat machinery's wire — `POST /chats` +
@@ -294,8 +299,11 @@ type ResumeProbe = { kind: 'gone' } | { kind: 'ended' } | { kind: 'error'; messa
 /** A chat's kept history (the system chat's past chats): its records, and whether it has ended. */
 export type ChatHistoryLoader = (chatId: string) => Promise<{ records: readonly unknown[]; closed: boolean }>;
 
-function DockChat({ chatId, resumed = false, onResumeProbe, onStatus, answerFooter, loadHistory }: {
+function DockChat({ chatId, resumed = false, onResumeProbe, onStatus, answerFooter, loadHistory, turns }: {
   chatId: string;
+  /** A page chat's follow-ups (AssistDock `inlineTurns`): each joins the block in order, so a question sits
+   *  above its answer. */
+  turns?: readonly InlineTurn[] | undefined;
   resumed?: boolean;
   /** Resumed blocks only: the probe found the session reclaimed, or could not tell. */
   onResumeProbe?: ((outcome: ResumeProbe) => void) | undefined;
@@ -447,6 +455,15 @@ function DockChat({ chatId, resumed = false, onResumeProbe, onStatus, answerFoot
     });
   };
 
+  // A page chat's follow-up joins the block where it was asked: after what has streamed so far.
+  const turnsSeen = useRef(0);
+  useEffect(() => {
+    if (turns === undefined || turns.length <= turnsSeen.current) return;
+    const fresh = turns.slice(turnsSeen.current);
+    turnsSeen.current = turns.length;
+    setMsgs((prev) => [...prev, ...fresh.map((t) => ({ cliKey: 'you', text: t.text, pending: false, ok: true, ...(t.files.length > 0 ? { files: t.files } : {}), ...(t.chip !== undefined ? { chip: t.chip } : {}) }))]);
+  }, [turns]);
+
   useEventStream((ev: CoreEvent) => {
     const frame = ev as { type: string; chat?: string; cliKey?: string; text?: string; ok?: boolean; reason?: string };
     if (frame.chat !== chatId) return;
@@ -520,7 +537,8 @@ function DockChat({ chatId, resumed = false, onResumeProbe, onStatus, answerFoot
         ) : (
           msgs.map((m, i) => (
             // A helper's reply is a bubble on the left (operator 2026-10-16), the operator's own on the right.
-            <div key={i} data-testid="assist-chat-msg" data-agent={m.cliKey} data-pending={m.pending} className="self-start max-w-[92%] rounded-2xl rounded-tl-md px-3 py-2" style={{ background: 'var(--surface-raised)' }}>
+            <div key={i} data-testid="assist-chat-msg" data-agent={m.cliKey} data-pending={m.pending} className={m.cliKey === 'you' ? 'wk-assist-you self-end max-w-[88%] rounded-2xl rounded-tr-md px-3 py-2' : 'self-start max-w-[92%] rounded-2xl rounded-tl-md px-3 py-2'} style={{ background: m.cliKey === 'you' ? 'var(--accent-subtle)' : 'var(--surface-raised)' }}>
+              {m.chip !== undefined && <span className="wk-assist-chip" data-testid="assist-msg-chip">{m.chip}</span>}
               <span className="font-mono text-[10px] font-semibold" style={{ color: 'var(--accent)' }}>
                 {m.cliKey}
               </span>
@@ -562,7 +580,7 @@ function DockChat({ chatId, resumed = false, onResumeProbe, onStatus, answerFoot
 
 const RESUMED_NOTE = 'Resumed your earlier session — its agents are still on the line.';
 
-export function AssistDock({ context, verbs, importable, open, onOpenChange, onError, resumeChatId = null, onExpandChat, onResumeGone, fill = false, typeTarget, initialText = '', sendOnOpen = false, headerProps, headerStart, headerExtra, headerEnd, compactHeader = false, onStatus, allowAttach = true, answerFooter, promptsSend = false, notice, fileMode = false, loadHistory }: {
+export function AssistDock({ context, verbs, importable, open, onOpenChange, onError, resumeChatId = null, onExpandChat, onResumeGone, fill = false, typeTarget, initialText = '', sendOnOpen = false, headerProps, headerStart, headerExtra, headerEnd, compactHeader = false, onStatus, allowAttach = true, answerFooter, promptsSend = false, notice, fileMode = false, loadHistory, variant, threadTail, seed, onSeedTaken, sendChip, composerRef }: {
   context: AssistContext;
   verbs: AssistVerbs;
   /** Which attachments offer the Import-directly fork. Absent ⇒ everything is analysis-only. */
@@ -616,7 +634,21 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
   fileMode?: boolean;
   /** A resumed chat's kept history (the system chat's past chats). */
   loadHistory?: ChatHistoryLoader | undefined;
+  /** `page`: drawn inside a page (DES-LEARN §6.2): the context label is its own line under the header, the
+   *  chat block is not boxed or capped, follow-ups sit above their answers, and the thread follows the tail. */
+  variant?: 'page' | undefined;
+  /** Drawn at the end of the thread (a page chat's "What next?" after an answer). */
+  threadTail?: React.ReactNode;
+  /** Words to put in the box now (a page's "Ask about this"), sent when `send` (the person pressed Ask). */
+  seed?: { nonce: number; text: string; send: boolean } | null | undefined;
+  /** The seed was taken (put in the box, or sent). */
+  onSeedTaken?: ((nonce: number) => void) | undefined;
+  /** The item the next message is about: shown on its bubble. */
+  sendChip?: string | null | undefined;
+  /** The composer's text box (a page chat's "Ask a follow-up" focuses it). */
+  composerRef?: React.MutableRefObject<HTMLTextAreaElement | null> | undefined;
 }): React.ReactElement {
+  const page = variant === 'page';
   const [items, setItems] = useState<ThreadItem[]>(() =>
     resumeChatId !== null
       ? [
@@ -626,6 +658,9 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
       : [],
   );
   const [text, setText] = useState(initialText);
+  /** A page chat's follow-ups, by chat: drawn inside that chat's block. */
+  const [inlineTurns, setInlineTurns] = useState<Record<string, InlineTurn[]>>({});
+  const turnSeq = useRef(0);
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
   /** File mode: the files the next send uploads (removable chips above the input). Each has its own id:
    *  two different files may share a name and a size. */
@@ -635,7 +670,11 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
   const [dragOver, setDragOver] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const threadRef = useRef<HTMLDivElement>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const setTextarea = useCallback((el: HTMLTextAreaElement | null) => {
+    textareaRef.current = el;
+    if (composerRef !== undefined) composerRef.current = el;
+  }, [composerRef]);
 
   // Opened by typing (§5.6 rule 4): the typed letters are already in the box — keep typing there.
   const typedOpen = useRef(initialText !== '');
@@ -688,6 +727,8 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
     ta.style.height = `${Math.min(ta.scrollHeight, 20 * 5)}px`;
   }, [text]);
 
+  const itemsRef = useRef(items);
+  itemsRef.current = items;
   const push = (item: ThreadItem): void => setItems((cur) => [...cur, item]);
   const note = (tone: NarrationTone, textLine: string): void => push({ kind: 'note', tone, text: textLine });
 
@@ -754,8 +795,15 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
     const fileNames = [...documents.map((d) => d.name), ...sentFiles.map((f) => f.name)];
     try {
       // Files ride only in file mode (the system chat); every other surface keeps its two-argument send.
+      const chip = sendChip ?? undefined;
       const launched = await (fileMode ? verbs.send(body, documents, sentFiles) : verbs.send(body, documents));
-      push({ kind: 'user', text: body, files: fileNames });
+      const into = 'chatId' in launched ? launched.chatId : null;
+      // A page chat's follow-up into a chat already on screen joins that chat's block (above its answer).
+      if (page && into !== null && itemsRef.current.some((it) => it.kind === 'chat' && it.chatId === into)) {
+        setInlineTurns((cur) => ({ ...cur, [into]: [...(cur[into] ?? []), { id: (turnSeq.current += 1), text: body, files: fileNames, ...(chip !== undefined ? { chip } : {}) }] }));
+      } else {
+        push({ kind: 'user', text: body, files: fileNames, ...(chip !== undefined ? { chip } : {}) });
+      }
       if ('chatId' in launched) {
         // One chat block per SESSION: a later send into the same warm session streams
         // into the block that already exists — never a duplicate block per message.
@@ -790,6 +838,37 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
     void send();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- once, on mount, with the handed-over text
   }, []);
+
+  // A page's seed (its "Ask about this", or a question pressed there): into the box, or sent when pressed.
+  const onSeedTakenRef = useRef(onSeedTaken);
+  onSeedTakenRef.current = onSeedTaken;
+  useEffect(() => {
+    if (seed === null || seed === undefined) return;
+    onSeedTakenRef.current?.(seed.nonce);
+    setText(seed.text);
+    if (seed.send && seed.text.trim() !== '') {
+      void send(seed.text);
+      return;
+    }
+    const el = textareaRef.current;
+    if (el !== null) {
+      el.focus();
+      el.setSelectionRange(seed.text.length, seed.text.length);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once per seed
+  }, [seed?.nonce]);
+
+  // A page chat follows its tail while an answer streams in, unless the person scrolled up to read.
+  useEffect(() => {
+    const el = threadRef.current;
+    if (!page || el === null || typeof MutationObserver === 'undefined') return undefined;
+    let pinned = true;
+    const onScroll = (): void => { pinned = el.scrollHeight - el.scrollTop - el.clientHeight < 48; };
+    const mo = new MutationObserver(() => { if (pinned) el.scrollTop = el.scrollHeight; });
+    mo.observe(el, { childList: true, subtree: true, characterData: true });
+    el.addEventListener('scroll', onScroll);
+    return () => { mo.disconnect(); el.removeEventListener('scroll', onScroll); };
+  }, [page]);
 
   /** studio#328: a resumed block's probe answered. Reclaimed → drop the resumed block
    *  (and its "still on the line" note), say so, and let the surface forget it; could
@@ -853,7 +932,8 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
       data-testid="assist-dock"
       data-surface={context.surface}
       aria-label={context.title}
-      className={`flex h-full ${fill ? 'w-full min-w-0' : 'w-96 shrink-0'} flex-col overflow-hidden`}
+      data-variant={variant}
+      className={`flex h-full ${fill ? 'w-full min-w-0' : 'w-96 shrink-0'} flex-col overflow-hidden${page ? ' wk-assist--page' : ''}`}
       style={{
         borderLeft: `1px solid ${dragOver ? 'var(--accent)' : 'var(--surface-raised)'}`,
         background: 'var(--surface-rail)',
@@ -870,6 +950,7 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
       <div {...headerProps} data-testid="assist-header" className="wk-assist-header flex shrink-0 items-center gap-2 px-3 py-2" style={{ borderBottom: '1px solid var(--surface-raised)' }}>
         {headerStart}
         <span className="text-[11px] font-semibold" style={{ color: 'var(--ink-high)' }}>{context.title}</span>
+        {!page && (
         <span
           data-testid="assist-context"
           title={context.contextLabel}
@@ -878,6 +959,7 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
         >
           {context.contextLabel}
         </span>
+        )}
         {onExpandChat !== undefined && latestChatId !== null && (
           <button
             type="button"
@@ -911,6 +993,10 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
           </button>
         )}
       </div>
+
+      {page && context.contextLabel !== '' && (
+        <p data-testid="assist-context" className="wk-pagechat-scope">{context.contextLabel}</p>
+      )}
 
       {/* Thread — the ONE scrolling region (run blocks scroll inside themselves). */}
       <div ref={threadRef} data-testid="assist-thread" className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-3 py-3">
@@ -952,6 +1038,7 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
           if (item.kind === 'user') {
             return (
               <div key={i} data-testid="assist-user-msg" className="self-end max-w-[85%] rounded-2xl px-3 py-2" style={{ background: 'var(--accent-subtle)', color: 'var(--ink-high)' }}>
+                {item.chip !== undefined && <span className="wk-assist-chip" data-testid="assist-msg-chip">{item.chip}</span>}
                 <p className="whitespace-pre-wrap text-[11px] leading-relaxed">{item.text}</p>
                 {item.files.length > 0 && (
                   <p className="mt-1 font-mono text-[10px]" style={{ color: 'var(--ink-muted)' }}>
@@ -978,11 +1065,13 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
                 onStatus={onStatus}
                 answerFooter={answerFooter}
                 loadHistory={loadHistory}
+                turns={page ? inlineTurns[item.chatId] : undefined}
               />
             );
           }
           return <DockRun key={item.runId} runId={item.runId} />;
         })}
+        {threadTail}
       </div>
 
       {/* S16a-4g: what the ACTIVE run or chat asks of the human is answered in its session thread;
@@ -1083,7 +1172,7 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
         </>}
         <div className="flex min-w-0 flex-1 items-end gap-2 rounded-2xl px-3 py-2" style={{ background: 'var(--surface-card)', border: '1px solid var(--surface-raised)' }}>
           <textarea
-            ref={textareaRef}
+            ref={setTextarea}
             data-testid="assist-input"
             {...(typeTarget !== undefined ? { 'data-type-target': typeTarget } : {})}
             aria-label={context.placeholder}

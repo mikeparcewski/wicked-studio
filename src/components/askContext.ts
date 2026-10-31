@@ -200,6 +200,17 @@ function diagnosticsSection(diag: DiagnosticsState): string[] {
 
 export { PACK_JOIN, PACK_OPENING, splitAskContext } from '../board/askPack.js';
 
+/** The item a page chat's question is about, as pack lines (none without one). */
+export function focusLines(focus: { label: string; lines: readonly string[] } | null): string[] {
+  if (focus === null) return [];
+  return [`the question is about: ${focus.label}`, ...focus.lines.map((l) => `  ${l}`)];
+}
+
+/** A later page-chat message that owes no full pack but asks about an item: just the item. */
+export function focusPack(focus: { label: string; lines: readonly string[] }, now?: number): string {
+  return [`${PACK_OPENING}${new Date(now ?? Date.now()).toISOString()}]`, ...focusLines(focus)].join('\n');
+}
+
 /**
  * Assemble the pack that rides the first send. Everything in it is something the app
  * actually holds or the wire actually answered — counts from the one runs list, the
@@ -219,6 +230,11 @@ export function buildContextPack(args: {
   pageLabel?: string;
   /** A later message's pack: the diagnostics already rode the first one. */
   omitDiagnostics?: boolean;
+  /** A page chat (DES-LEARN §6.2): what the page on screen shows, in lines — it rides with This page. */
+  pageLines?: readonly string[];
+  /** A page chat: the one item the operator asked about (a number, a chart, a row) and its data. It rides
+   *  whatever the chips say: the question is about it. */
+  focus?: { label: string; lines: readonly string[] } | null;
 }): string {
   const { pathname, runs, liveChatCount, diagnostics } = args;
   const at = new Date(args.now ?? Date.now()).toISOString();
@@ -236,9 +252,11 @@ export function buildContextPack(args: {
       `${PACK_OPENING}${at}]`,
       ...(page ? [
         `where: ${args.pageLabel ?? sectionLabel(pathname)} (${pathname})`,
+        ...(args.pageLines !== undefined && args.pageLines.length > 0 ? ['what this page shows:', ...args.pageLines.map((l) => `  ${l}`)] : []),
         `live chat sessions this client knows about: ${liveChatCount}`,
         ...(args.omitDiagnostics === true ? [] : diagnosticsSection(diagnostics)),
       ] : []),
+      ...focusLines(args.focus ?? null),
       ...(recent ? [runsLine] : []),
       ...scopePackLines(chips, recent ? newest : []),
       'Answer from what you can actually read (the estate/garden tooling reaches the code graph,',

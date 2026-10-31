@@ -13,7 +13,9 @@ import type { CliOption } from './chatCli.js';
  * referent the app does not hold is omitted, never filler.
  */
 
-export type PageKind = 'run' | 'nerve' | 'steering' | 'repo' | 'project' | 'workflows' | 'home' | 'other';
+export type PageKind = 'run' | 'nerve' | 'steering' | 'repo' | 'project' | 'workflows' | 'home' | 'other'
+  // The pages with a chat of their own (DES-LEARN §6.2).
+  | 'understand' | 'report' | 'evaluate' | 'memory' | 'learn';
 
 export interface PageContext {
   kind: PageKind;
@@ -70,6 +72,11 @@ export function pageContext({ pathname, search = '', runs, projects, repos }: Pa
   // Nerve Center (DES-SYSTEM-VIEW) lands on /watch, and /health folds into it.
   if (first === 'watch' || first === 'health') return { ...base, kind: 'nerve', label: 'Nerve Center' };
   if (first === 'steering' || first === 'rules') return { ...base, kind: 'steering', label: 'Steering' };
+  if (first === 'understand') return { ...base, kind: 'understand', label: 'Understand' };
+  if (first === 'report') return { ...base, kind: 'report', label: 'the Report' };
+  if (first === 'testing' && second === 'evals') return { ...base, kind: 'evaluate', label: 'Evaluate' };
+  if (first === 'memory') return { ...base, kind: 'memory', label: 'Memory' };
+  if (first === 'learn') return { ...base, kind: 'learn', label: 'Learn' };
   if (first === 'workflows') return { ...base, kind: 'workflows', label: 'Workflows' };
   if (first === 'repo-detail' && second !== '') {
     const repo = repoNamed(decode(second), repos);
@@ -201,6 +208,31 @@ export function pagePrompts(input: PagePromptInputs): PagePrompt[] {
         { label: 'Which rules would block my next change?', text: 'Which steering rules would block or warn on a typical change here, and why?' },
         ...(ctx.project !== null ? [{ label: `Which rules apply to ${ctx.project.name}?`, text: `Which steering rules apply to the project ${quote(ctx.project.name)}, most severe first?` }] : []),
         { label: 'Where do the rules have gaps?', text: 'Where do the steering rules have gaps: behaviours no rule covers?' },
+      ];
+      break;
+    case 'report':
+      out = [
+        { label: 'What changed most this week?', text: 'Of the numbers on this report, what changed most against the period before, and why?' },
+        { label: 'Which jobs cost the most?', text: 'Which jobs and agents cost the most in this period, and was it worth it?' },
+        { label: 'Why do jobs fail first time?', text: 'Why do steps fail their first check in this period? Name the commonest reasons.' },
+      ];
+      break;
+    case 'evaluate':
+      out = [
+        { label: 'Where are my rules weakest?', text: 'Where are my steering rules weakest, judging by the evaluation results on this page?' },
+        { label: 'What should I run next?', text: 'What should I evaluate next, and why?' },
+      ];
+      break;
+    case 'memory':
+      out = [
+        { label: 'What do helpers remember about me?', text: 'What do my helpers remember about how I like to work? Sum it up.' },
+        { label: 'Which memories look stale?', text: 'Which memories look stale or contradict each other?' },
+      ];
+      break;
+    case 'learn':
+      out = [
+        { label: 'What has studio learned about me?', text: 'What has studio learned about my style so far, and from which sources?' },
+        { label: 'What should I teach it next?', text: 'What should I teach studio next, so its helpers work more like me?' },
       ];
       break;
     case 'workflows':

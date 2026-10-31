@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { PageAskButton, pageTextLines, usePageChatHostPage } from '../chat/PageChat.js';
+import { usePageChat, usePageChatOpen } from '../../store/pageChat.js';
 import { ChevronDown, Plus } from 'lucide-react';
 import { api } from '../../api/client.js';
 import { RULES_PATH, rulePath } from '../../api/decisions.js';
@@ -289,8 +291,23 @@ export function SteerSurface({ pathname, search, navigate: navigateRaw, runs = [
   const openChat = (): void => {
     if (dock === null) setDock({ text: '', key: Date.now() });
     setDockOpen(true);
+    // One chat on the right at a time: the assistant (which writes rules) takes the page chat's place.
+    usePageChat.getState().setOpen('steering', false);
   };
   const closeChat = (): void => setDockOpen(false);
+  // DES-LEARN §6.2: the page's own chat answers questions about the rules on screen; Add with chat stays the
+  // steering assistant, which drafts rules. Opening the page chat steps the assistant aside.
+  const pageChatOpen = usePageChatOpen('steering');
+  useEffect(() => { if (pageChatOpen) setDockOpen(false); }, [pageChatOpen]);
+  const scrollText = useCallback(() => pageTextLines(scrollRef.current), []);
+  usePageChatHostPage('steering', {
+    knows: `Knows this page: ${read.kind === 'ok' ? `${live.length} ${live.length === 1 ? 'rule' : 'rules'} in force` : 'your rules'}${type !== null ? `, showing ${STEERING_TYPE_LABELS[type]}` : ''}, and the last evaluation.`,
+    data: scrollText,
+    onMove: (m) => {
+      if (m === 'steer-assist') { openChat(); return true; }
+      return false;
+    },
+  });
   // A dialog: focus in on open, back to the opener on close; on a phone it covers the page, so the
   // page behind is inert and Tab stays inside (codex r1 #8).
   useDialogFocus(dockOpen, dockRef, { modal: phone, background: scrollRef, prefer: 'textarea', key: dock?.key });
@@ -344,9 +361,12 @@ export function SteerSurface({ pathname, search, navigate: navigateRaw, runs = [
     { id: 'refresh', label: 'Refresh', testId: 'steer-refresh', onSelect: refreshAll },
   ];
   const action = (
+    <>
+    <PageAskButton kind="steering" testId="steer-page-ask" />
     <CalmAction label="Add a rule" testId="steer-add-rule" icon={<Plus size={16} aria-hidden />} onClick={addRule} disabled={read.kind !== 'ok'}
       title={read.kind === 'ok' ? undefined : 'Available once the rules have loaded (a new id must not collide with one in force)'}
       menu={moreMoves} menuLabel="More ways to add and manage rules" menuTestId={/* testid */ 'steer-more'} />
+    </>
   );
 
   // The seven steering types are sub-pages of one layout: a quiet picker stands in for the list's label.

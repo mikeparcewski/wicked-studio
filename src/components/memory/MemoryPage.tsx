@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { askPage, PageAskButton, pageTextLines, usePageChatHostPage } from '../chat/PageChat.js';
 import { Plus } from 'lucide-react';
 import {
   addMemory, AddMemoryApproveError, editMemory, isEraseByIdUnsupported, isMemoryEditUnsupported, isMemoryUnsupported,
@@ -178,15 +179,24 @@ export function MemoryPage({ search, navigate, address = (p) => p, project = nul
 
   const sentence = memorySentence({ total, pending, coverage: coverage.kind });
   const addIt = (): void => setAdding(++opened.current);
+  // DES-LEARN §6.3: Add with chat is this page's chat (garden's memory capture): what it would keep is filed as
+  // proposals for you to approve, never written directly.
+  const addWithChat = (): void => askPage('memory', { focus: null });
+  usePageChatHostPage('memory', {
+    knows: `Knows Memory: ${total !== null ? `${total} kept` : `${memories.length} listed`}${typeof pending === 'number' ? `, ${pending} suggested` : ''}. What it suggests is filed for you to keep.`,
+    data: () => pageTextLines(scrollRef.current),
+  });
+  const chatItem = { id: 'chat', label: 'Add with chat', testId: 'memory-add-chat', onSelect: addWithChat };
   const refresh = (): void => { reread(); setReviewTick((t) => t + 1); };
   // One action: review what is waiting when something is; otherwise add a memory. The rest sit in its menu.
   const action = waiting > 0 && view !== 'proposals'
     ? <CalmAction label={`Review ${waiting} ${waiting === 1 ? 'proposal' : 'proposals'}`} testId="memory-view-proposals" onClick={() => go('proposals')}
         menuLabel="More for memory" menuTestId={/* testid */ 'memory-more'}
-        menu={[{ id: 'add', label: 'Add a memory…', testId: 'memory-add', onSelect: addIt }, { id: 'refresh', label: 'Refresh', testId: 'memories-refresh', onSelect: refresh }]} />
+        menu={[{ id: 'add', label: 'Add a memory…', testId: 'memory-add', onSelect: addIt }, chatItem, { id: 'refresh', label: 'Refresh', testId: 'memories-refresh', onSelect: refresh }]} />
     : <CalmAction label="Add a memory" testId="memory-add" icon={<Plus size={16} aria-hidden />} onClick={addIt}
         menuLabel="More for memory" menuTestId={/* testid */ 'memory-more'}
         menu={[
+          chatItem,
           ...(view === 'proposals' ? [] : [{ id: 'proposals', label: pending === 'unsupported' ? 'Proposals (not available here)' : 'Show proposals', testId: 'memory-view-proposals', onSelect: () => go('proposals'), disabled: pending === 'unsupported' ? 'This crew has no proposal review' : null }]),
           { id: 'refresh', label: 'Refresh', testId: 'memories-refresh', onSelect: refresh },
         ]} />;
@@ -292,7 +302,7 @@ export function MemoryPage({ search, navigate, address = (p) => p, project = nul
     <div className="wk-se wk-mem wk-se--calm" data-testid="memory-page" data-view={view}>
       <div className="wk-se-scroll wk-calm" ref={scrollRef}>
         <div className="wk-calm-col">
-          <CalmHead title="Memory" sentence={<span data-testid="memory-intro">{sentence}</span>} sentenceTestId={/* testid */ 'memory-sentence'} action={action} />
+          <CalmHead title="Memory" sentence={<span data-testid="memory-intro">{sentence}</span>} sentenceTestId={/* testid */ 'memory-sentence'} action={<><PageAskButton kind="memory" testId="memory-page-ask" />{action}</>} />
           {list}
         </div>
       </div>

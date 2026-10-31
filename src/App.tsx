@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { EditorHostPage } from './components/editors/EditorHostPage.js';
 import { useHostChrome } from './editors/hostApi.js';
 import { AskDock } from './components/AskDock.js';
+import { PageChatColumn } from './components/chat/PageChat.js';
 import { endSystemChat, useAskDock, type AskRequest } from './store/askDock.js';
 import { useSearchModal } from './store/searchModal.js';
 import { usePhone } from './hooks/usePhone.js';
@@ -826,6 +827,9 @@ export function App(): React.ReactElement {
         )}
         <div className="flex flex-1 overflow-hidden min-h-0">
           {renderCenter()}
+          {/* DES-LEARN §6.2: the chat of the page on screen (Report, Nerve Center, Evaluate, Steering, Memory,
+              Learn), beside it from 1200 px and a bottom sheet below. Understand draws its own in the page. */}
+          <PageChatColumn runs={shownRuns} navigate={navigate} />
         </div>
       </div>
 
