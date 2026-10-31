@@ -41,3 +41,7 @@ docs/testing/
 # S13: every run of e2e/live_walkthrough_deliver_test.py writes its report here — evidence per run, not source.
 e2e/artifacts/live-walkthrough-deliver-*.json
 dist-live/
+
+# The vendored wicked-design package ships its generated dist/ (tokens.json, tokens.css, icons):
+# studio imports it (src/editors/theme.ts, scripts/gen-wicked-themes.mjs), so it is tracked.
+!src/vendor/wicked-design/dist/

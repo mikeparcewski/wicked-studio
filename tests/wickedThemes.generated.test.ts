@@ -18,6 +18,11 @@ describe('wicked themes come from the vendored design system', () => {
     expect(() => execFileSync('node', ['scripts/gen-wicked-themes.mjs', '--check'], { cwd: process.cwd(), encoding: 'utf8' })).not.toThrow();
   });
 
+  it('the vendored dist/ is tracked by git (the root .gitignore ignores dist/; studio imports these files)', () => {
+    const tracked = execFileSync('git', ['ls-files', 'src/vendor/wicked-design/dist'], { cwd: process.cwd(), encoding: 'utf8' });
+    for (const f of ['tokens.json', 'tokens.css']) expect(tracked).toContain(`src/vendor/wicked-design/dist/${f}`);
+  });
+
   it('the vendored copy names the wicked-web commit it came from', () => {
     expect(vendored.name).toBe('wicked-design');
     expect(vendored.commit).toMatch(/^[0-9a-f]{40}$/);
