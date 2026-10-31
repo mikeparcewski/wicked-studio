@@ -29,7 +29,8 @@ import { RULE_EVAL_WORDS, ruleEvalStatus, storeMatch, type RuleEvalStatus } from
 import { relTime } from '../../board/relTime.js';
 import { fromYourWords, groupOf, rulesSentence } from '../../board/rulesPage.js';
 import { ruleSentence } from '../../board/ruleOrigin.js';
-import { importRuleFile } from '../../board/steerImport.js';
+import { importExampleDoc, importRuleFile } from '../../board/steerImport.js';
+import { CopyButton } from '../CopyButton.js';
 import { effectWord, firesWord, ruleFires, ruleReach, ruleTitle, ruleTypeWord, steerSentence } from '../../board/calmSteer.js';
 import { governedRuns, ruleUsage, usageWindows, USAGE_WINDOW_DAYS } from '../../board/steeringUsage.js';
 import { useGovernanceClaims } from '../../hooks/useGovernanceClaims.js';
@@ -588,6 +589,7 @@ function ImportDialog({ defaultType, background, onClose, onImported }: {
   const [busy, setBusy] = useState(false);
   const [notes, setNotes] = useState<{ tone: string; text: string }[]>([]);
   const [error, setError] = useState<unknown>(null);
+  const example = useMemo(() => importExampleDoc(), []);
   const run = async (): Promise<void> => {
     if (file === null || busy) return;
     setBusy(true); setError(null); setNotes([]);
@@ -608,7 +610,13 @@ function ImportDialog({ defaultType, background, onClose, onImported }: {
     <div className="wk-se-scrim" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div ref={box} role="dialog" aria-modal="true" aria-labelledby="steer-import-title" className="wk-card wk-se-dialog" data-testid="steer-import-dialog">
         <h2 id="steer-import-title" className="wk-se-dialog-title">Import rules</h2>
-        <p className="wk-se-dialog-sub">A markdown doctrine doc (one rule per item under “## Rules”) or a JSON list of rules. Nothing already in force changes unless an id matches.</p>
+        <p className="wk-se-dialog-sub">A markdown rule doc in the format below, or a JSON list of rules. Nothing already in force changes unless an id matches.</p>
+        <details className="wk-se-format" data-testid="steer-import-format">
+          <summary>The format</summary>
+          <p>The doc opens with a <code>---</code> block that gives it an <code>id</code> and a <code>title</code>. Under <code>## Rules</code>, each rule is one item: its id in backticks, a severity (info, warn, error or critical), then the rule. “File them under” sets the type.</p>
+          <pre data-testid="steer-import-example">{example}</pre>
+          <CopyButton command={example} label="copy the example rule doc" />
+        </details>
         <label className="wk-se-field">
           <span>File them under</span>
           <select className="wk-field" value={t} onChange={(e) => setT(e.target.value as SteeringType)} data-testid="steer-import-type">

@@ -15,15 +15,50 @@ import {
 
 export interface ImportNote { tone: 'work' | 'gate' | 'fail'; text: string }
 
-/** One skipped import entry, in plain words (the engine's text names invariants like INV-S3). */
-export function plainSkip(index: number, raw: string): string {
-  const why = /applies_to/i.test(raw) ? 'it doesn’t say where it applies'
+/**
+ * The doc format the import takes, as a copy-paste starting point (studio#934): the dialog used to
+ * say "one rule per item under ## Rules", and a doc written that way was refused because the
+ * service reads a FRONTMATTERED doc (core `crates/wicked-governance/STEERING.md` § Import):
+ * `id` and `title` are required; each rule is `` - `ID` (severity): statement ``, severity one of
+ * info, warn, error, critical. The dialog's "File them under" sets the type, so the example omits
+ * `steering_type`.
+ */
+export function importExampleDoc(today: Date = new Date()): string {
+  return [
+    '---',
+    'id: team-conventions',
+    'title: Team conventions',
+    'status: active',
+    `date: ${today.toISOString().slice(0, 10)}`,
+    '---',
+    '# Team conventions',
+    '',
+    '## Rules',
+    '',
+    '- `DEV-TEAM-1` (warn): Every exported function has a doc comment that says what it returns.',
+    '- `DEV-TEAM-2` (error): No commit adds a secret, token or password to the repository.',
+    '',
+  ].join('\n');
+}
+
+/**
+ * One skipped import entry: plain words where we know the cause (the engine's text names
+ * invariants like INV-S3; studio#689 row 49), and ALWAYS the service's own reason after them
+ * (studio#934). A reason we have no plain words for is shown as the service said it, never
+ * swallowed into a generic refusal.
+ */
+export function plainSkip(index: number, reason: string): string {
+  const raw = reason.trim();
+  const why = /not a frontmattered rule doc|frontmatter fence/i.test(raw) ? 'it doesn’t start with the frontmatter block the format needs (see “The format” above)'
+    : /applies_to/i.test(raw) ? 'it doesn’t say where it applies'
     : /\bid\b[^.]*blank/i.test(raw) ? 'it has no id'
     : /\bid\b.*(exists|duplicate)|duplicate/i.test(raw) ? 'a rule with that id already exists'
     : /statement/i.test(raw) ? 'it has no statement'
-    : /type/i.test(raw) ? 'its type isn’t one of the seven'
-    : 'Studio’s service refused it';
-  return `Rule ${index + 1} skipped: ${why}.`;
+    : /\bsteering_type\b|\btype\b.*\bseven\b/i.test(raw) ? 'its type isn’t one of the seven'
+    : null;
+  const head = `Rule ${index + 1} skipped${why !== null ? `: ${why}` : ''}.`;
+  if (raw === '' || raw === 'unspecified error') return `${head} Studio’s service gave no reason.`;
+  return `${head} Studio’s service said: ${/[.!?]$/.test(raw) ? raw : `${raw}.`}`;
 }
 
 export async function importRuleFile(doc: { name: string; content: string }, type: SteeringType): Promise<ImportNote[]> {
@@ -48,7 +83,10 @@ export async function importRuleFile(doc: { name: string; content: string }, typ
     return [
       { tone: ok === outcomes.length ? 'work' : 'gate', text: `${doc.name}: ${ok} of ${outcomes.length} entr${outcomes.length === 1 ? 'y' : 'ies'} imported.` },
       // studio#689 row 49: a skipped entry says why in plain words, not the engine's invariant log.
-      ...outcomes.map((o, i): ImportNote => ({ tone: o.ok ? 'work' : 'fail', text: o.ok ? o.text : isJson ? plainSkip(i, o.text) : `${doc.name} skipped: ${plainSkip(i, o.text).replace(/^Rule \d+ skipped: /, '')}` })),
+      ...outcomes.map((o, i): ImportNote => ({
+        tone: o.ok ? 'work' : 'fail',
+        text: o.ok ? o.text : isJson ? plainSkip(i, o.reason ?? '') : plainSkip(i, o.reason ?? '').replace(/^Rule \d+ skipped/, `${doc.name} skipped`),
+      })),
     ];
   } catch (e) {
     if (isSteeringUnsupported(e)) return [{ tone: 'gate', text: STEERING_UNSUPPORTED_COPY }];

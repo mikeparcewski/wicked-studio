@@ -138,6 +138,12 @@
 .wk-se-notes { list-style: none; margin: 0; padding: 0; max-height: 40vh; overflow-y: auto; display: flex; flex-direction: column; gap: var(--space-1); font-size: var(--text-sm); }
 .wk-se-notes > li[data-tone="fail"] { color: var(--status-fail); }
 .wk-se-notes > li[data-tone="gate"] { color: var(--status-gate); }
+.wk-se-format { display: flex; flex-direction: column; gap: var(--space-2); font-size: var(--text-sm); color: var(--ink-muted); line-height: var(--leading-body); }
+.wk-se-format > summary { cursor: pointer; color: var(--ink-body); font-weight: var(--weight-semi); width: fit-content; border-radius: var(--radius-sm); }
+.wk-se-format > summary:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-shadow: var(--focus-ring); }
+.wk-se-format > p { margin: var(--space-2) 0 0; }
+.wk-se-format > p code { white-space: nowrap; }
+.wk-se-format > pre { margin: var(--space-2) 0; padding: var(--space-3); border-radius: var(--radius-md); background: var(--surface-base); color: var(--ink-body); font-family: var(--font-mono); font-size: var(--text-xs); line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
 
 /* Evaluate */
 /* What the numbers can and cannot say — a calm card beside the numbers, an amber rail on the left */

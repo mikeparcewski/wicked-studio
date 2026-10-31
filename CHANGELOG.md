@@ -12,6 +12,9 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+### Fixed
+- **Importing a steering rule the way the dialog says now works, and a refusal shows the service's reason (studio#934, J7).** The Import rules dialog said "one rule per item under ## Rules". A doc written that way was refused, because the service reads a frontmattered doc, and studio showed only "Studio’s service refused it". The dialog now says "a markdown rule doc in the format below", and **The format** opens a copyable starting doc: a `---` block with `id` and `title`, then `## Rules` items written as `` - `ID` (severity): statement ``. That example imports as written. A skipped entry now always ends with what the service said ("Studio’s service said: not a frontmattered rule doc — …"). The plain words come first when studio knows the cause. The table view's assistant uses the same import path.
+
 ### Added
 - **Phase reports live in the job's Details panel, as sections a plugin registers (program DES-LEARN §1.2).**
   - **The manifest registers them.** A run plugin's manifest declares `panels: [{slot: "run.details", id, title, instances, order, defaultOpen, summary}]`. The slot list is closed (v1: `run.details`). `order` runs 1–99: Now stays first at 0, the core sections keep 20–60, a tie puts the core section first, and plugins tie-break by id. `instances: "per-phase"` gives one section per phase of a power build. `defaultOpen` is `always`, `never`, `current` (the running phase open, the rest folded) or `while-live`.

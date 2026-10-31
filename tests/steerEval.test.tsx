@@ -509,6 +509,52 @@ describe('codex r4 fixes', () => {
   });
 });
 
+describe('studio#934 (J7): the import dialog states the format crew takes, and shows crew’s reason', () => {
+  const J7_REFUSAL = 'not a frontmattered rule doc — the content must open with a `---` frontmatter fence';
+
+  it('the dialog no longer describes a format crew refuses; it shows a copyable starting doc', async () => {
+    const user = userEvent.setup();
+    wire();
+    render(<SteerSurface pathname="/rules" search="" runs={[]} navigate={vi.fn()} />);
+    await screen.findAllByTestId('rules-row');
+    await more(user, 'steer-import');
+    const dialog = screen.getByTestId('steer-import-dialog');
+    expect(dialog).not.toHaveTextContent('one rule per item under');
+    await user.click(within(dialog).getByText('The format'));
+    const example = screen.getByTestId('steer-import-example').textContent ?? '';
+    // The shape core's MarkdownAdapter reads: a frontmatter fence first, `id` + `title`, then
+    // `## Rules` items as `- \`ID\` (severity): statement`.
+    expect(example.startsWith('---\nid: ')).toBe(true);
+    expect(example).toMatch(/\ntitle: .+\n/);
+    expect(example).toMatch(/\n---\n[\s\S]*\n## Rules\n\n- `[A-Z][A-Z0-9]*-[A-Z0-9-]+` \((info|warn|error|critical)\): \S/);
+    expect(within(dialog).getByRole('button', { name: 'copy the example rule doc' })).toBeInTheDocument();
+  });
+
+  it('a doc in the old described shape is refused with crew’s reason on screen, not “Studio’s service refused it”', async () => {
+    const user = userEvent.setup();
+    wire();
+    render(<SteerSurface pathname="/rules" search="" runs={[]} navigate={vi.fn()} />);
+    await screen.findAllByTestId('rules-row');
+    apiFetch.mockImplementation((path: unknown) => String(path) === '/governance/steering/import'
+      ? Promise.resolve({ results: [{ index: 0, name: 'tiny-math-jsdoc.md', status: 'rejected', error: J7_REFUSAL }], imported: 0, rejected: 1 })
+      : Promise.reject(new ApiError(404, 'Not Found')));
+    await more(user, 'steer-import');
+    const input = screen.getByTestId('steer-import-file').querySelector('input[type=file]') as HTMLInputElement;
+    await user.upload(input, new File(['# tiny-math conventions\n\n## Rules\n\n- Every exported function has a JSDoc block.\n'], 'tiny-math-jsdoc.md', { type: 'text/markdown' }));
+    await user.click(screen.getByTestId('steer-import-go'));
+    const notes = await screen.findByTestId('steer-import-notes');
+    expect(notes).toHaveTextContent('tiny-math-jsdoc.md: 0 of 1 entry imported.');
+    expect(notes).toHaveTextContent(`tiny-math-jsdoc.md skipped: it doesn’t start with the frontmatter block the format needs (see “The format” above). Studio’s service said: ${J7_REFUSAL}.`);
+    expect(notes).not.toHaveTextContent('Studio’s service refused it');
+  });
+
+  it('any other refusal is shown as crew said it', async () => {
+    apiFetch.mockResolvedValue({ results: [{ index: 0, name: 'a.md', status: 'rejected', error: 'frontmatter is missing required `title` (never fabricated)' }] });
+    const notes = await importRuleFile({ name: 'a.md', content: '---\nid: a\n---\n' }, 'development');
+    expect(notes[1]?.text).toBe('a.md skipped. Studio’s service said: frontmatter is missing required `title` (never fabricated).');
+  });
+});
+
 describe('agy r1 fixes', () => {
   it('valid JSON that is not a list says so, and sends nothing', async () => {
     wire();
@@ -519,9 +565,9 @@ describe('agy r1 fixes', () => {
   });
 
   it('a refused doctrine doc is named as the doc, not "Rule 1"', async () => {
-    apiFetch.mockResolvedValue({ results: [{ status: 'rejected', name: 'soc2.md', reason: 'duplicate' }] });
+    apiFetch.mockResolvedValue({ results: [{ status: 'rejected', name: 'soc2.md', error: 'duplicate' }] });
     const notes = await importRuleFile({ name: 'soc2.md', content: '## Rules\n- x' }, 'security');
-    expect(notes[1]?.text).toMatch(/^soc2\.md skipped: /);
+    expect(notes[1]?.text).toBe('soc2.md skipped: a rule with that id already exists. Studio’s service said: duplicate.');
   });
 
   it('turning one filter off keeps the others, and an empty filtered list says it is the filter', async () => {
