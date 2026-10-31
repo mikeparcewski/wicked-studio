@@ -64,7 +64,11 @@
 .wk-hpanel-tab { display: inline-flex; align-items: center; gap: 6px; padding: var(--space-2) 0; border: 0; border-bottom: 2px solid transparent; background: none; color: var(--ink-muted); font: inherit; font-size: var(--text-sm); cursor: pointer; white-space: nowrap; }
 .wk-hpanel-tab--on { color: var(--ink-high); border-bottom-color: var(--ink-high); font-weight: var(--weight-semi); }
 .wk-hpanel-dot { width: 6px; height: 6px; border-radius: var(--radius-full); background: var(--accent); }
-.wk-hpanel-body { flex: 1 1 auto; min-height: 0; overflow: auto; padding: var(--space-4) var(--space-5); display: flex; flex-direction: column; gap: var(--space-3); }
+.wk-hpanel-body { flex: 1 1 auto; min-height: 0; overflow: auto; padding: var(--space-4) var(--space-5); display: flex; flex-direction: column; gap: var(--space-3);
+  /* The panel's scroll container is also its descendants' containing block: an absolutely placed node inside (a
+     plugin section's screen-reader words) must scroll and clip with the panel, never stretch the document (round-3
+     look: the run page's document scrolled to 1000 px at a 700 px window, the shell moving up under it). */
+  position: relative; }
 .wk-hpanel-frame { flex: 1 1 auto; display: flex; min-height: 320px; border: 1px solid var(--border); border-radius: var(--radius-md); overflow: hidden; }
 .wk-hpanel-frame[hidden] { display: none; }
 .wk-hpanel-frame .wk-editor-frame { flex: 1 1 auto; width: 100%; height: 100%; min-height: 0; border: 0; }

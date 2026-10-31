@@ -277,6 +277,19 @@ with sync_playwright() as p:
                 page.screenshot(path=str(SHOTS / f"desk-power-mode-{rid}-{w}-{theme}.png"))
             ctx.close()
     check("look", not any(x["hscroll"] for x in looks), looks=[x for x in looks if x["hscroll"]])
+
+    # Round-3 look on :7721: with every plugin section in the Details panel, the run page's DOCUMENT scrolled (1000 px
+    # at a 700 px window): absolutely placed words inside the sections escaped the panel's scroll container. Only the
+    # panel may scroll; the document stays exactly the window's height.
+    tall = []
+    for theme in ("dark", "light"):
+        ctx, page = new_page(browser, 1440, 700, theme)
+        for rid in ("r-pm-build", "r-pm-done"):
+            open_run(page, rid)
+            page.wait_for_function("() => document.querySelectorAll('[data-testid=run-tab] [data-testid=run-plugin]').length >= 2", timeout=10000)
+            tall.append({"run": rid, "theme": theme, **page.evaluate("() => ({ sh: document.scrollingElement.scrollHeight, ih: window.innerHeight, sections: document.querySelectorAll('[data-testid=run-tab] [data-testid=run-plugin]').length })")})
+        ctx.close()
+    check("document-never-scrolls-1440x700", all(x["sh"] == x["ih"] for x in tall), tall=tall)
     check("no-page-errors", len(errors) == 0, errors=errors[:5])
     browser.close()
 
