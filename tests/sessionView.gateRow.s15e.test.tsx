@@ -18,7 +18,7 @@ import { setUndoWindowForTest, undoDecision, useUndoQueue } from '../src/board/u
 import { GateRow } from '../src/components/session/GateRow.js';
 import { ProposalCard } from '../src/components/session/ProposalCard.js';
 import { RunBlock } from '../src/components/session/SessionView.js';
-import { chooseGate } from './askGateHelpers.js';
+import { chooseGate, takeProposal } from './askGateHelpers.js';
 import { proposalKindOf } from '../src/board/proposalCard.js';
 import { teamPlanApi } from '../src/api/teamPlan.js';
 import { useRunEventStore } from '../src/store/events.js';
@@ -398,6 +398,23 @@ describe('RunBlock — receipt survives unmount+remount through RunBlock routing
     useRunEventStore.setState((s) => ({ byRun: { ...s.byRun, [RUN_REM]: [] } }));
     useGateStore.setState({ gates: {}, approaching: {} });
     useGateActionStore.setState({ byGate: { [RUN_REM]: IDLE_GATE_ACTION } });
+  });
+
+  it('plan gate (guided asks): Approve plan · Change something · Not now · Don’t start as cards, Approve preselected; Don’t start asks why, then rejects', async () => {
+    const confirm = vi.mocked(client.api.confirmGate);
+    const gate: OpenGate = { runId: RUN_REM, ord: 1, prompt: 'Approve plan rev 1.', lifecycle: 'open', receivedAt: NOW, gateKind: 'plan_approval' };
+    useGateStore.setState({ gates: { [RUN_REM]: gate }, approaching: {} });
+    render(<RunBlock view={remountView()} badge={0} sessionId={`run:${RUN_REM}`} />);
+    await waitFor(() => expect(screen.queryByTestId('session-proposal-choices')).not.toBeNull());
+    const labels = [...screen.getByTestId('session-proposal-choices').querySelectorAll('[role="radio"] .wk-ask-opt-label')].map((e) => e.textContent);
+    expect(labels).toEqual(['Approve plan', 'Change something', 'Not now', 'Don’t start']);
+    expect(screen.getByTestId('session-proposal-choices').querySelector('[aria-checked="true"]')!.getAttribute('data-option')).toBe('go');
+    expect(screen.getByTestId('session-proposal-consequence').textContent).toMatch(/^If you choose this: The helpers start on this plan/);
+    fireEvent.click(screen.getByTestId('session-proposal-end'));
+    expect((screen.getByTestId('session-proposal-go') as HTMLButtonElement).disabled).toBe(true);
+    expect(confirm).not.toHaveBeenCalled();
+    takeProposal('session-proposal-end', 'wrong repository');
+    await waitFor(() => expect(confirm).toHaveBeenCalledWith(RUN_REM, expect.objectContaining({ approve: false, amend: 'wrong repository' })));
   });
 
   it('plan gate: RunBlock routes to session-proposal after unmount+remount (receipt kind: plan)', async () => {

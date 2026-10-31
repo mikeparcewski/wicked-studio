@@ -171,6 +171,25 @@ describe('confirm, pick, scale, text', () => {
     expect(screen.getByTestId('ask-count').textContent).toBe('2 picked · at most 2');
   });
 
+  it('pick with multi.min 0: nothing ticked is an answer — "Keep none" sends an empty pick; the default still needs one', () => {
+    const { onAnswer } = renderAsk({ ...PICK, default: [], multi: { min: 0 } });
+    const go = screen.getByTestId('ask-confirm') as HTMLButtonElement;
+    expect(go.disabled).toBe(false);
+    expect(go.textContent).toBe('Keep none');
+    expect(go.dataset['none']).toBe('true');
+    expect(screen.getByTestId('ask-count').textContent).toBe('None picked · that is an answer too');
+    fireEvent.click(go);
+    expect(onAnswer).toHaveBeenCalledWith({ askId: 'k', options: [] });
+    fireEvent.click(screen.getByRole('checkbox', { name: /^develop/ }));
+    expect(go.textContent).toBe('Use develop');
+    fireEvent.click(screen.getByRole('checkbox', { name: /^develop/ }));
+    expect(go.textContent).toBe('Keep none');
+    cleanup();
+    // Without an explicit 0 the bound stays 1.
+    renderAsk({ ...PICK, default: [], multi: {} });
+    expect((screen.getByTestId('ask-confirm') as HTMLButtonElement).disabled).toBe(true);
+  });
+
   it('scale: a slider over named steps with its words and consequence; the answer is the step', () => {
     const { onAnswer } = renderAsk({ id: 's', host: 'learn', from: { kind: 'studio', id: 's', label: 'Learn' }, prompt: 'How strict should the rules start?', kind: 'scale', answeredBy: 'any', record: 'You set: {label}', default: 1,
       scale: { steps: ['Suggest only', 'Should', 'Must'], consequences: ['Advice.', 'Warned.', 'Fails the check.'] } });

@@ -28,7 +28,7 @@ import sys
 import time
 import urllib.request
 
-from uxfix_fixture import DEFAULT_APPEARANCE, HIDE_GATE_TOASTS, REPO, ensure_build, proposal_menu_item, set_fixture, start_server
+from uxfix_fixture import DEFAULT_APPEARANCE, HIDE_GATE_TOASTS, REPO, ensure_build, proposal_menu_item, take_proposal, set_fixture, start_server
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4483"))
 W, H = 1440, 900
@@ -173,11 +173,11 @@ with sync_playwright() as p:
               plan=d["plan"])
         if theme == "light":
             # ui-v2 gate: Edit the plan is under the card's Other options.
-            proposal_menu_item(page, "session-proposal-edit").click()
+            take_proposal(page, "session-proposal-edit")
             page.locator('[data-testid="run-artifacts"]').wait_for(state="visible", timeout=8000)
             page.screenshot(path=str(SHOTS / "desk-chat-native-plan-edit-light.png"))
             check("plan-edit-opens-editor", page.get_by_test_id("session-proposal-edit").get_attribute("aria-expanded") == "true")
-            proposal_menu_item(page, "session-proposal-edit").click()
+            take_proposal(page, "session-proposal-edit")
             before = len(gate_posts("r-cn-plan"))
             page.get_by_test_id("session-proposal-go").click()
             deadline = time.time() + UNDO_S + 8

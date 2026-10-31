@@ -382,17 +382,27 @@ def open_tech_details(page, scope=None) -> None:
 
 
 def proposal_menu_item(page, testid: str, scope=None, timeout: int = 10000):
-    """A plan/hand-over card's secondary move (Not now, End, Edit the plan, Drop the changes), the user's way: in the
-    card's Other options menu since ui-v2 (the in-place card keeps its own buttons on the face)."""
-    s = _scope(page, scope)
-    loc = s.locator(f'[data-testid="{testid}"]').first
-    loc.wait_for(state="attached", timeout=timeout)
-    if not loc.is_visible():
-        btn = s.locator('[data-testid="session-proposal-more"]').first
-        if btn.get_attribute("aria-expanded") != "true":
-            btn.click()
+    """A plan/hand-over card's way on (Not now, End, Change something, Drop the changes): since guided asks, a CARD on the
+    face (no Other options menu). Clicking it SELECTS it; `take_proposal` also presses the primary."""
+    loc = _scope(page, scope).locator(f'[data-testid="{testid}"]').first
     loc.wait_for(state="visible", timeout=timeout)
     return loc
+
+
+PROPOSAL_REASON = "e2e: not this one"
+
+
+def take_proposal(page, testid: str, scope=None, reason: str | None = None, timeout: int = 10000) -> None:
+    """Take the card's way on `testid` the person's way: pick its card, give the reason End / Stop asks for, then press the
+    one primary (`session-proposal-go`; `session-proposal-primary` while crew refuses the delivery)."""
+    s = _scope(page, scope)
+    proposal_menu_item(page, testid, scope, timeout).click()
+    box = s.locator('[data-testid="session-proposal-reason-text"]').first
+    page.wait_for_timeout(50)
+    if box.count() > 0 and box.is_visible():
+        box.fill(reason if reason is not None else PROPOSAL_REASON)
+    primary = s.locator('[data-testid="session-proposal-go"]:not([role="radio"]), [data-testid="session-proposal-primary"]').first
+    primary.click()
 
 
 def open_proposal_more_about(page, scope=None) -> None:

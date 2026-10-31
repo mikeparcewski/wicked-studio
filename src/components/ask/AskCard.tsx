@@ -55,6 +55,10 @@ export interface AskCardProps {
   optionProps?: (o: AskOption, index: number) => Record<string, string | undefined>;
   /** More inside an option's card (a seat's track record). */
   optionExtra?: (o: AskOption) => React.ReactNode;
+  /** More attributes on the primary button, for the selected option (a card's legacy `data-draft`). */
+  confirmProps?: (o: AskOption | null) => Record<string, string | undefined>;
+  /** More inside the primary button, for the selected option (the creator seat's record on Deliver). */
+  confirmExtra?: (o: AskOption | null) => React.ReactNode;
   /** A quiet line under the primary button ("You can undo for 10 s after you continue."). */
   footnote?: React.ReactNode;
   /** More in the button row, after the primary (a move that is not an answer: sign a helper in). */
@@ -104,7 +108,7 @@ export function AskCard(props: AskCardProps): React.ReactElement {
 }
 
 /** Choose one (and confirm, confirm_reason): radio cards, the consequence line, the reason box, the primary. */
-function ChooseBody({ ask, onAnswer, busy = false, start, reasonFor, confirmLabel, optionProps, optionExtra, footnote, aside, leadAct, onSelect, onCancelReason, testIds, reasonId }: AskCardProps): React.ReactElement {
+function ChooseBody({ ask, onAnswer, busy = false, start, reasonFor, confirmLabel, optionProps, optionExtra, confirmProps, confirmExtra, footnote, aside, leadAct, onSelect, onCancelReason, testIds, reasonId }: AskCardProps): React.ReactElement {
   const options = useMemo(() => ask.options ?? [], [ask.options]);
   const enabled = options.filter((o) => o.disabled === undefined);
   const [sel, setSel] = useState<string | null>(() => (start !== undefined ? start : initialOption(ask)));
@@ -141,8 +145,10 @@ function ChooseBody({ ask, onAnswer, busy = false, start, reasonFor, confirmLabe
     if (reasonFor_ === null) return;
     const el = reasonRef.current;
     if (el === null) return;
-    el.focus();
+    el.focus({ preventScroll: true });
     try { el.setSelectionRange(el.value.length, el.value.length); } catch { /* a field that refuses a selection still has focus */ }
+    // Into view above the dock's sticky primary (its room is the box's scroll-margin, ask-card.css).
+    el.scrollIntoView?.({ block: 'nearest' });
   }, [reasonFor_]);
 
   const commit = (o: AskOption | null): void => {
@@ -274,8 +280,10 @@ function ChooseBody({ ask, onAnswer, busy = false, start, reasonFor, confirmLabe
               disabled={busy || current === null || (open && reasonText.trim() === '')}
               onClick={() => commit(current)}
               className={`wk-gate2-btn ${current?.tone === 'danger' ? 'wk-ask-btn--danger' : 'wk-gate2-btn--primary'}`}
+              {...(confirmProps?.(current) ?? {})}
             >
               {busy ? 'Sending…' : confirmWords}
+              {!busy && confirmExtra?.(current)}
             </button>
           )}
           {aside}
@@ -299,8 +307,10 @@ function PickBody({ ask, onAnswer, busy = false, footnote, aside, testIds }: Ask
   const n = picked.length;
   const ok = n >= min && n <= max;
   const first = options.find((o) => o.id === picked[0]);
-  const words = n === 1 && first !== undefined ? `Use ${first.label}` : `Use these ${n}`;
-  const countWords = `${n} picked${n < min ? ` · pick at least ${min}` : ''}${max < usable.length ? ` · at most ${max}` : ''}`;
+  // An ask that allows none (`multi.min: 0`) says so plainly when nothing is ticked: the answer is "keep none".
+  const words = n === 0 ? 'Keep none' : n === 1 && first !== undefined ? `Use ${first.label}` : `Use these ${n}`;
+  const countWords = n === 0 && min === 0 ? 'None picked · that is an answer too'
+    : `${n} picked${n < min ? ` · pick at least ${min}` : ''}${max < usable.length ? ` · at most ${max}` : ''}`;
   return (
     <>
       <div role="group" aria-label={ask.prompt} data-testid={tid(testIds, 'group', /* testid */ 'ask-options')} className="wk-ask-chips">
@@ -336,8 +346,9 @@ function PickBody({ ask, onAnswer, busy = false, footnote, aside, testIds }: Ask
       )}
       <div className="wk-ask-go">
         <button type="button" data-testid={tid(testIds, 'confirm', /* testid */ 'ask-confirm')} disabled={busy || !ok}
+          data-none={n === 0 ? 'true' : undefined}
           onClick={() => onAnswer({ askId: ask.id, options: options.filter((o) => picked.includes(o.id)).map((o) => o.id) })}
-          className="wk-gate2-btn wk-gate2-btn--primary">
+          className={`wk-gate2-btn ${n === 0 ? 'wk-gate2-btn--secondary' : 'wk-gate2-btn--primary'}`}>
           {busy ? 'Sending…' : words}
         </button>
         {usable.length > 1 && usable.length <= max && (

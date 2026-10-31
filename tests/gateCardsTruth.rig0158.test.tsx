@@ -286,9 +286,10 @@ describe('studio#923: a hand-over QE refused takes the skip in place', () => {
     Object.assign(view.session as object, { assurance: { mode: 'full', required: ['qe_acceptance'], qe: { status: 'required', basis: 'diff', score: 100, threshold: 20, reason: 'required', reasons: [], ord: 2, tree: 'abc' } } });
     render(<ProposalCard view={view} chain={CHAIN} acceptance={REFUSED} />);
     expect(screen.getByTestId('session-proposal-text').textContent).toBe('QE hasn’t passed, so this can’t be delivered yet');
-    // Starting the job over is still there, under Other options, named for what it does.
-    fireEvent.click(screen.getByTestId('session-proposal-more'));
-    expect(screen.getByTestId('session-proposal-relaunch-skip-qe').textContent).toBe('Start again with QE skipped…');
+    // Guided asks: every way on is a card. Starting the job over is one, named for what it does; Deliver is one,
+    // disabled, saying why.
+    expect(screen.getByTestId('session-proposal-relaunch-skip-qe').querySelector('.wk-ask-opt-label')!.textContent).toBe('Start again with QE skipped…');
+    expect((screen.getByTestId('session-proposal-go') as HTMLButtonElement).disabled).toBe(true);
     fireEvent.click(screen.getByTestId('session-proposal-skip-qe'));
     const send = screen.getByTestId('session-proposal-skip-qe-send') as HTMLButtonElement;
     expect(send.disabled).toBe(true);

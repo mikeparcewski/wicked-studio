@@ -32,7 +32,7 @@ import sys
 import time
 import urllib.request
 
-from uxfix_fixture import HIDE_GATE_TOASTS, REPO, ensure_build, set_fixture, start_server, OPEN_RUN_DETAILS, proposal_menu_item
+from uxfix_fixture import HIDE_GATE_TOASTS, REPO, ensure_build, set_fixture, start_server, OPEN_RUN_DETAILS, proposal_menu_item, take_proposal
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4348"))
 W, H = 1440, 700
@@ -95,15 +95,15 @@ with sync_playwright() as p:
     # ── 1. the proposal, in one sentence, under the status sentence ───────────────
     text = plan.get_by_test_id("session-proposal-text").inner_text()
     status = page.locator('[data-testid="session-run"][data-run-id="r-ship-plan"] [data-testid="session-status-sentence"]').inner_text()
-    # ui-v2 gate: Approve plan is the face's one move; Not now is the first of its Other options.
-    buttons = [plan.get_by_test_id("session-proposal-go").inner_text(), proposal_menu_item(page, "session-proposal-not-now", plan).inner_text()]
+    # guided asks: Approve plan is the preselected card and the primary; Not now is a card.
+    buttons = [plan.get_by_test_id("session-proposal-go").inner_text(), proposal_menu_item(page, "session-proposal-not-now", plan).locator(".wk-ask-opt-label").inner_text()]
     tech = re.findall(r"\b(?:rev|unit|band|mode|understand)\b", text.lower())
     check("proposal-one-sentence", text.startswith("Here’s the plan:") and "(4 steps)" in text and not tech
           and status.startswith("Waiting on your go for the plan") and buttons == ["Approve plan", "Not now"],
           text=text, status=status, buttons=buttons, tech=tech)
 
     # ── 2. Not now sends nothing; Bring it back ───────────────────────────────────
-    proposal_menu_item(page, "session-proposal-not-now", plan).click()
+    take_proposal(page, "session-proposal-not-now", plan)
     page.wait_for_function(f"() => document.querySelector('{CARD.format('r-ship-plan')}')?.dataset.state === 'no'", timeout=5000)
     no_text = plan.get_by_test_id("session-proposal-no").inner_text()
     page.wait_for_timeout(500)
