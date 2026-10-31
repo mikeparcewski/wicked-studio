@@ -21,3 +21,15 @@ export function chooseGate(choice: HTMLElement | string, words?: string, scope?:
   }
   fireEvent.click(q.getByTestId('session-gate-confirm'));
 }
+
+/**
+ * The plan / hand-over card's way on `testid` (Not now, End, Change something …), taken the person's way (guided asks):
+ * pick its card, give a reason when it asks for one (End / Stop), then press the one primary.
+ */
+export function takeProposal(testid: string, words = 'test reason', scope?: HTMLElement): void {
+  const q = scope !== undefined ? within(scope) : screen;
+  fireEvent.click(q.getByTestId(testid));
+  const box = q.queryByTestId('session-proposal-reason-text');
+  if (box !== null) fireEvent.change(box, { target: { value: words } });
+  fireEvent.click(q.queryByTestId('session-proposal-go') ?? q.getByTestId('session-proposal-primary'));
+}

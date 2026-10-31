@@ -29,7 +29,7 @@ import sys
 import time
 import urllib.request
 
-from uxfix_fixture import HIDE_GATE_TOASTS, REPO, ensure_build, set_fixture, start_server, OPEN_RUN_DETAILS, proposal_menu_item
+from uxfix_fixture import HIDE_GATE_TOASTS, PROPOSAL_REASON, REPO, ensure_build, set_fixture, start_server, OPEN_RUN_DETAILS, take_proposal
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4467"))
 W, H = 1440, 700
@@ -71,9 +71,10 @@ CARD = """() => {
   const txt = (s) => { const el = c && c.querySelector(s); return el ? el.innerText.replace(/\\s+/g, ' ').trim() : null; };
   return { card: !!c, firstCreator: c ? c.dataset.firstCreator : null, state: p ? p.dataset.state : null,
            text: txt('[data-testid="session-proposal-text"]'), why: txt('[data-testid="session-proposal-why"]'),
-           // ui-v2 gate: the face holds the one move + "Other options"; the rest are that menu's items (label only).
-           buttons: c ? [...c.querySelectorAll('.wk-prop-btns button')].filter((b) => !b.closest('[role="menu"]')).map((b) => b.innerText.replace(/\\s*▾\\s*$/, '').trim()) : [],
-           menu: c ? [...c.querySelectorAll('.wk-prop-btns [role="menu"] button')].map((b) => b.textContent.trim()) : [],
+           // Guided asks: every answer is a card (label only); one primary names the selected card.
+           cards: c ? [...c.querySelectorAll('[data-testid="session-proposal-choices"] [role="radio"] .wk-ask-opt-label')].map((b) => b.textContent.trim()) : [],
+           selected: c ? ((c.querySelector('[data-testid="session-proposal-choices"] [aria-checked="true"]') || {}).dataset || {}).option || null : null,
+           primary: txt('[data-testid="session-proposal-go"]:not([role="radio"])'),
            no: txt('[data-testid="session-proposal-no"]'),
            runs: document.querySelectorAll('[data-testid="session-run"]').length,
            chain: [...document.querySelectorAll('[data-testid="chain-step"]')].map((s) => [(s.querySelector('.wk-chain-label') || s).innerText.replace(/\\s+/g, ' ').trim(), s.dataset.state]),
@@ -156,13 +157,13 @@ with sync_playwright() as p:
           c1["card"] and c1["firstCreator"] == "true" and c1["state"] == "ask"
           and c1["text"] == f"Continue in Build? {pa} proposes: Build → Check (required)."
           and c1["why"].startswith("band 20–39 · touches 2 declared paths · 12 dependents · Continue starts the work on")
-          # ui-v2 gate: Continue in Build is the one move on the face; Not now and End are under Other options.
-          and c1["buttons"] == ["Continue in Build", "Other options"] and c1["menu"] == ["Not now", "End"]
+          # Guided asks: Continue in Build, Not now and End are cards; Continue is marked, preselected and the primary.
+          and c1["cards"] == ["Continue in Build", "Not now", "End"] and c1["selected"] == "go" and c1["primary"] == "Continue in Build"
           and c1["runs"] == 0 and c1["chain"] == [] and c1["shape"] is not None and not c1["hscroll"], card=c1)
     run_id = fixture_get(origin, f"/api/v1/chats/{chat_id}")["path"]["runId"]
 
     # ── 2. Not now ────────────────────────────────────────────────────────────────
-    proposal_menu_item(page, "session-proposal-not-now", page.locator('[data-testid="session-ask-proposal"]')).click()
+    take_proposal(page, "session-proposal-not-now", page.locator('[data-testid="session-ask-proposal"]'))
     # The one decision path: a 10 s undo window, then the POST.
     for _ in range(80):
         posts = [g for g in fixture_get(origin, "/__fixture/gate-posts")["posts"] if g["runId"] == run_id]
@@ -229,7 +230,7 @@ with sync_playwright() as p:
         fail("card-2", {"card": page.evaluate(CARD), "posts": fixture_get(origin, "/__fixture/ask-posts")["posts"][-2:], "runBlock": page.evaluate("() => (document.querySelector('[data-testid=\"session-run\"]') || {}).innerText?.slice(0, 600) || null"),
                         "team": fixture_get(origin, f"/api/v1/runs/{fixture_get(origin, f'/api/v1/chats/{chat2}')['path']['runId']}/team")})
     run2 = fixture_get(origin, f"/api/v1/chats/{chat2}")["path"]["runId"]
-    proposal_menu_item(page, "session-proposal-end", page.locator('[data-testid="session-ask-proposal"]')).click()
+    take_proposal(page, "session-proposal-end", page.locator('[data-testid="session-ask-proposal"]'))  # End asks why first
     for _ in range(80):
         posts2 = [g for g in fixture_get(origin, "/__fixture/gate-posts")["posts"] if g["runId"] == run2]
         if posts2:
@@ -246,7 +247,7 @@ with sync_playwright() as p:
     page.wait_for_timeout(400)
     c5 = page.evaluate(CARD)
     page.screenshot(path=str(SHOTS / "desk-ask-path-end.png"))
-    check("end", len(posts2) == 1 and posts2[0]["body"].get("approve") is False
+    check("end", len(posts2) == 1 and posts2[0]["body"].get("approve") is False and posts2[0]["body"].get("amend") == PROPOSAL_REASON
           and ["ended", "Conversation ended"] in c5["lines"] and c5["state_"] in ("done", "blocked", "quiet")
           and c5["runs"] == 0 and c5["state"] == "cancelled", posts=posts2, card=c5)
     page.close()

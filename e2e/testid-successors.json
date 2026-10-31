@@ -977,6 +977,10 @@
     "session-gate-rerun": "session-gate-consequence",
     "session-gate-rerun-confirm": "session-gate-confirm",
     "session-gate-rerun-consequence": "session-gate-consequence",
-    "power-pause-more": "power-pause-choice"
+    "power-pause-more": "power-pause-choice",
+    "session-proposal-more": "session-proposal-choices",
+    "session-proposal-menu": "session-proposal-choices",
+    "session-proposal-skip-qe-form": "session-proposal-skip-qe-reason",
+    "session-proposal-skip-qe-cancel": "session-proposal-choices"
   }
 }

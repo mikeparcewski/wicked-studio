@@ -23,10 +23,11 @@ export function initialPicks(ask: Ask): string[] {
   return opts.filter((o) => ids.includes(o.id) && o.disabled === undefined).map((o) => o.id);
 }
 
-/** A pick ask's bounds, filled: at least 1, at most every option that can be picked. */
+/** A pick ask's bounds, filled: at least `multi.min` (default 1; an explicit 0 lets the person keep none), at most
+ *  every option that can be picked. */
 export function pickBounds(ask: Ask): { min: number; max: number } {
   const usable = (ask.options ?? []).filter((o) => o.disabled === undefined).length;
-  const min = Math.max(1, ask.multi?.min ?? 1);
+  const min = Math.max(0, Math.floor(ask.multi?.min ?? 1));
   return { min, max: Math.max(min, Math.min(usable, ask.multi?.max ?? usable)) };
 }
 
