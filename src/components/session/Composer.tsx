@@ -28,6 +28,7 @@ import { takeComposerSeed, useComposerSeed } from '../../store/composerSeed.js';
 import { SlashMenu, type AtItem } from './SlashMenu.js';
 import { openLaunchWizard } from '../../store/launchWizard.js';
 import { usePhone } from '../../hooks/usePhone.js';
+import { VoiceMicButton } from '../voice/VoiceMicButton.js';
 
 /** Where a send goes besides the words: the project an `@project` chip named, and whether it opens a fresh session. */
 export interface ComposerSend {
@@ -470,6 +471,7 @@ export function Composer({
           placeholder={wfChip !== null ? 'Describe the work to launch' : phone ? shortPlaceholder(placeholder) : placeholder}
           className="wk-desk-input"
         />
+        <VoiceMicButton size="xs" testId={variant === 'desk' ? 'desk-composer-voice' : 'session-composer-voice'} focus={variant === 'session' ? runs[runs.length - 1]?.session.id ?? null : null} />
         <button type="submit" data-testid={variant === 'desk' ? 'desk-composer-send' : 'session-composer-send'} aria-label={wfChip !== null ? 'Launch' : 'Send'} disabled={!canSend} className="wk-desk-send">↑</button>
       </form>
       {(hint || footer !== null) && (
