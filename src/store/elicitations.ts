@@ -34,13 +34,13 @@ export interface OpenElicitation {
   ord?: number;
   /** (C3) The index into `options` the producer recommends: marked and preselected. */
   recommended?: number;
-  /** (guided asks, api-types 0.156.0) A multi-select's bounds: the answer picks several (`content.values`). */
+  /** (guided asks, api-types 0.158.0) A multi-select's bounds: the answer picks several (`content.values`). */
   multi?: ElicitationMulti;
 }
 
 /**
  * How the question is answered, as the wire says it: the producer's recommended option (C3) and a multi-select's
- * bounds (api-types 0.156.0). Kept only when well-formed against `options`; absent otherwise.
+ * bounds (api-types 0.158.0). Kept only when well-formed against `options`; absent otherwise.
  */
 export function answerShapeOf(raw: unknown): Pick<OpenElicitation, 'recommended' | 'multi'> {
   if (raw === null || typeof raw !== 'object') return {};
