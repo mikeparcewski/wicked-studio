@@ -110,8 +110,11 @@
   .wk-home { padding: var(--space-4, 16px) 0 var(--space-10, 40px); }
   .wk-home-col { gap: 40px; }
   .wk-home-title { font-size: 30px; }
-  .wk-home-ask { flex-direction: column; align-items: stretch; padding: 8px; }
-  .wk-home-ask-input { padding: 0 12px; }
+  /* The words on their own row; the mic (its own width) and Start share the row under them. */
+  .wk-home-ask { flex-wrap: wrap; align-items: stretch; padding: 8px; }
+  .wk-home-ask-input { flex: 1 1 100%; padding: 0 12px; }
+  .wk-home-ask > .wk-voice-micbtn { flex: 0 0 auto; align-self: center; min-width: 44px; min-height: 44px; justify-content: center; }
+  .wk-home-ask > button[type='submit'] { flex: 1 1 auto; }
   .wk-home-card { padding: 22px; border-radius: 16px; }
   .wk-home-card-acts .wk-home-btn { flex: 1 1 auto; }
   .wk-home-job { margin: 0 -12px; padding: 14px 12px; }
