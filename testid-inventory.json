@@ -11,10 +11,10 @@
   "version": 1,
   "studioVersion": "0.13.0",
   "counts": {
-    "files": 275,
-    "occurrences": 3851,
-    "static": 3268,
-    "dynamic": 83,
+    "files": 282,
+    "occurrences": 3906,
+    "static": 3312,
+    "dynamic": 87,
     "computed": 43
   },
   "static": [
@@ -1104,6 +1104,12 @@
     },
     {
       "testId": "assist-user-msg",
+      "files": [
+        "src/components/AssistDock.tsx"
+      ]
+    },
+    {
+      "testId": "assist-voice-open",
       "files": [
         "src/components/AssistDock.tsx"
       ]
@@ -19244,6 +19250,265 @@
       ]
     },
     {
+      "testId": "voice-ask-record",
+      "files": [
+        "src/components/voice/VoiceFullScreen.tsx"
+      ]
+    },
+    {
+      "testId": "voice-builder",
+      "files": [
+        "src/components/voice/WidgetPicker.tsx"
+      ]
+    },
+    {
+      "testId": "voice-builder-chart",
+      "files": [
+        "src/components/voice/WidgetPicker.tsx"
+      ]
+    },
+    {
+      "testId": "voice-builder-field",
+      "files": [
+        "src/components/voice/WidgetPicker.tsx"
+      ]
+    },
+    {
+      "testId": "voice-builder-filter",
+      "files": [
+        "src/components/voice/WidgetPicker.tsx"
+      ]
+    },
+    {
+      "testId": "voice-builder-preview",
+      "files": [
+        "src/components/voice/WidgetPicker.tsx"
+      ]
+    },
+    {
+      "testId": "voice-builder-save",
+      "files": [
+        "src/components/voice/WidgetPicker.tsx"
+      ]
+    },
+    {
+      "testId": "voice-builder-title",
+      "files": [
+        "src/components/voice/WidgetPicker.tsx"
+      ]
+    },
+    {
+      "testId": "voice-close",
+      "files": [
+        "src/components/voice/VoiceModal.tsx"
+      ]
+    },
+    {
+      "testId": "voice-engine-missing",
+      "files": [
+        "src/components/voice/VoiceSetup.tsx"
+      ]
+    },
+    {
+      "testId": "voice-exit",
+      "files": [
+        "src/components/voice/VoiceFullScreen.tsx"
+      ]
+    },
+    {
+      "testId": "voice-foot",
+      "files": [
+        "src/components/voice/VoiceFullScreen.tsx"
+      ]
+    },
+    {
+      "testId": "voice-full",
+      "files": [
+        "src/components/voice/VoiceFullScreen.tsx"
+      ]
+    },
+    {
+      "testId": "voice-fwave",
+      "files": [
+        "src/components/voice/VoiceFullScreen.tsx"
+      ]
+    },
+    {
+      "testId": "voice-gates-count",
+      "files": [
+        "src/components/voice/VoiceDashboard.tsx"
+      ]
+    },
+    {
+      "testId": "voice-heard",
+      "files": [
+        "src/components/voice/VoiceModal.tsx"
+      ]
+    },
+    {
+      "testId": "voice-hold",
+      "files": [
+        "src/components/voice/VoiceFullScreen.tsx"
+      ]
+    },
+    {
+      "testId": "voice-make-widget",
+      "files": [
+        "src/components/voice/WidgetPicker.tsx"
+      ]
+    },
+    {
+      "testId": "voice-mic-error",
+      "files": [
+        "src/components/voice/VoiceSetup.tsx"
+      ]
+    },
+    {
+      "testId": "voice-mic-state",
+      "files": [
+        "src/components/voice/VoiceFullScreen.tsx",
+        "src/components/voice/VoiceModal.tsx"
+      ]
+    },
+    {
+      "testId": "voice-modal",
+      "files": [
+        "src/components/voice/VoiceModal.tsx"
+      ]
+    },
+    {
+      "testId": "voice-modal-thread",
+      "files": [
+        "src/components/voice/VoiceModal.tsx"
+      ]
+    },
+    {
+      "testId": "voice-modal-type",
+      "files": [
+        "src/components/voice/VoiceModal.tsx"
+      ]
+    },
+    {
+      "testId": "voice-mode",
+      "files": [
+        "src/components/voice/VoiceFullScreen.tsx"
+      ]
+    },
+    {
+      "testId": "voice-model-consent",
+      "files": [
+        "src/components/voice/VoiceSetup.tsx"
+      ]
+    },
+    {
+      "testId": "voice-model-download",
+      "files": [
+        "src/components/voice/VoiceSetup.tsx"
+      ]
+    },
+    {
+      "testId": "voice-model-downloading",
+      "files": [
+        "src/components/voice/VoiceSetup.tsx"
+      ]
+    },
+    {
+      "testId": "voice-model-failed",
+      "files": [
+        "src/components/voice/VoiceSetup.tsx"
+      ]
+    },
+    {
+      "testId": "voice-my-widgets",
+      "files": [
+        "src/components/voice/WidgetPicker.tsx"
+      ]
+    },
+    {
+      "testId": "voice-open",
+      "files": [
+        "src/components/voice/VoiceMicButton.tsx"
+      ]
+    },
+    {
+      "testId": "voice-picker",
+      "files": [
+        "src/components/voice/WidgetPicker.tsx"
+      ]
+    },
+    {
+      "testId": "voice-picker-close",
+      "files": [
+        "src/components/voice/WidgetPicker.tsx"
+      ]
+    },
+    {
+      "testId": "voice-picker-empty",
+      "files": [
+        "src/components/voice/WidgetPicker.tsx"
+      ]
+    },
+    {
+      "testId": "voice-picker-scrim",
+      "files": [
+        "src/components/voice/WidgetPicker.tsx"
+      ]
+    },
+    {
+      "testId": "voice-read-aloud",
+      "files": [
+        "src/components/voice/VoiceFullScreen.tsx"
+      ]
+    },
+    {
+      "testId": "voice-scrim",
+      "files": [
+        "src/components/voice/VoiceModal.tsx"
+      ]
+    },
+    {
+      "testId": "voice-setup",
+      "files": [
+        "src/components/voice/VoiceSetup.tsx"
+      ]
+    },
+    {
+      "testId": "voice-trans",
+      "files": [
+        "src/components/voice/VoiceFullScreen.tsx"
+      ]
+    },
+    {
+      "testId": "voice-type",
+      "files": [
+        "src/components/voice/VoiceFullScreen.tsx"
+      ]
+    },
+    {
+      "testId": "voice-undo",
+      "files": [
+        "src/components/voice/VoiceFullScreen.tsx"
+      ]
+    },
+    {
+      "testId": "voice-undo-button",
+      "files": [
+        "src/components/voice/VoiceFullScreen.tsx"
+      ]
+    },
+    {
+      "testId": "voice-wave",
+      "files": [
+        "src/components/voice/VoiceWave.tsx"
+      ]
+    },
+    {
+      "testId": "voice-widget-add",
+      "files": [
+        "src/components/voice/VoiceDashboard.tsx"
+      ]
+    },
+    {
       "testId": "walkthrough",
       "files": [
         "src/components/session/WalkthroughEditor.tsx"
@@ -19810,7 +20075,8 @@
         "src/components/FacetAutocomplete.tsx",
         "src/components/SteeringGrid.tsx",
         "src/components/ui/Combobox.tsx",
-        "src/components/ui/FilePick.tsx"
+        "src/components/ui/FilePick.tsx",
+        "src/components/voice/VoiceModal.tsx"
       ]
     },
     {
@@ -20234,6 +20500,30 @@
       "files": [
         "src/components/NarratorFeed.tsx"
       ]
+    },
+    {
+      "pattern": "voice-line-*",
+      "files": [
+        "src/components/voice/VoiceFullScreen.tsx"
+      ]
+    },
+    {
+      "pattern": "voice-widget-*",
+      "files": [
+        "src/components/voice/VoiceDashboard.tsx"
+      ]
+    },
+    {
+      "pattern": "voice-widget-delete-*",
+      "files": [
+        "src/components/voice/WidgetPicker.tsx"
+      ]
+    },
+    {
+      "pattern": "voice-widget-remove-*",
+      "files": [
+        "src/components/voice/VoiceDashboard.tsx"
+      ]
     }
   ],
   "computed": [
@@ -20374,7 +20664,10 @@
         "src/components/ui/StateBanner.tsx",
         "src/components/ui/Switch.tsx",
         "src/components/ui/Tabs.tsx",
-        "src/components/ui/TechDetails.tsx"
+        "src/components/ui/TechDetails.tsx",
+        "src/components/voice/VoiceMicButton.tsx",
+        "src/components/voice/VoiceModal.tsx",
+        "src/components/voice/VoiceWave.tsx"
       ]
     },
     {
