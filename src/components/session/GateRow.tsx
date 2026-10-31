@@ -711,17 +711,16 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
         <AskRecord
           testId="session-gate-chosen"
           className="wk-session-gate-chosen"
-          line={chosen.sentAt !== null
-            ? `You chose: ${chosen.label}, ${formatSentTime(chosen.sentAt)}`
-            : left > 0 ? `You chose: ${chosen.label} · Undo ${left} s` : `You chose: ${chosen.label} · sending`}
+          // (mockup learn-and-panels h) One plain line; while the answer waits, its countdown and Undo at the end.
+          line={chosen.sentAt !== null ? `You chose: ${chosen.label}, ${formatSentTime(chosen.sentAt)}` : `You chose: ${chosen.label}`}
           meta={pending !== null ? (
             <>
-              <span aria-hidden>{left > 0 ? `Sends in ${left} s` : 'sending'}</span>
+              <span data-testid="session-gate-chosen-wait">{left > 0 ? `Sends in ${left} s` : 'Sending'}</span>
               <button type="button" onClick={() => { undoDecision(pending.id); setChosen(null); }} className="wk-btn wk-btn--quiet wk-session-gate-undo">
                 Undo
               </button>
             </>
-          ) : chosen.sentAt !== null ? 'sent' : null}
+          ) : chosen.sentAt !== null ? 'sent' : 'Sending'}
         />
       </div>
     );

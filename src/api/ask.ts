@@ -3,7 +3,7 @@
  * answers inline — a gate, a seat's or MCP server's question, the power-mode pause — rendered by `AskCard` instead of
  * button rows.
  *
- * The shapes are the contract's (`wicked-crew-api-types` 0.153.0: `Ask`, `AskOption`, `AskKind`, `AskAnswer`,
+ * The shapes are the contract's (`wicked-crew-api-types` 0.156.0: `Ask`, `AskOption`, `AskKind`, `AskAnswer`,
  * `AskHost`, `ElicitationMulti`). Studio pins an older contract, so they are mirrored here field for field; swap these
  * for the contract's on the next pin (as `RunInventoryResponse` in `./types.ts`).
  */
@@ -64,10 +64,10 @@ export interface AskAnswer {
   reason?: string;
 }
 
-/** (api-types 0.153.0) A multi-select question's bounds. */
+/** (api-types 0.156.0) A multi-select question's bounds. */
 export interface ElicitationMulti { min: number; max: number }
 
-/** `POST /runs/:id/elicitation` body with a multi-select's `values` (api-types 0.153.0 `ElicitationResponse`). */
+/** `POST /runs/:id/elicitation` body with a multi-select's `values` (api-types 0.156.0 `ElicitationResponse`). */
 export interface ElicitationAnswerBody {
   elicitationId: string;
   action: 'accept' | 'decline' | 'cancel';

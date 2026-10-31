@@ -172,7 +172,7 @@ with sync_playwright() as p:
     except Exception:
         fail("undo-setup", {"why": "chosen state did not appear for undo test"})
 
-    # Fold wording during the undo window must be "You chose: <label> · Undo N s" (with colon)
+    # Fold wording during the undo window: "You chose: <label>" (with colon), then "Sends in N s" and Undo
     chosen_text = page.get_by_test_id("session-gate-chosen").inner_text()
     check("chosen-wording", "You chose: Approve" in chosen_text, got=chosen_text)
 

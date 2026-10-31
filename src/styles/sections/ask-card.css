@@ -21,6 +21,9 @@
 .wk-ask-opt { position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; min-height: 64px; padding: 12px 14px; border: 0;
   border-radius: 14px; background: var(--surface-base); box-shadow: inset 0 0 0 1px var(--border); color: var(--ink-body); font: inherit; text-align: left;
   cursor: pointer; transition: box-shadow .15s, background .15s, transform .15s; }
+/* Five or more ways on (a gate with reassigns, a rerun and an override): denser cards, so the primary stays near. */
+.wk-ask-opts--many { gap: 8px; }
+.wk-ask-opts--many .wk-ask-opt { min-height: 48px; padding: 10px 12px; }
 .wk-ask-opt:hover:not(:disabled) { box-shadow: inset 0 0 0 1px var(--border-strong); transform: translateY(-1px); }
 .wk-ask-opt:focus-visible { outline: 2px solid transparent; box-shadow: var(--focus-ring); }
 .wk-ask-opt-label { color: var(--ink-high); font-size: var(--text-md); font-weight: var(--weight-semi); padding-right: 92px; }
@@ -33,8 +36,8 @@
 .wk-ask-rec { position: absolute; right: 10px; top: 10px; padding: 1px 7px; border-radius: 999px; background: var(--accent); color: var(--accent-fg);
   font-size: 10px; font-weight: var(--weight-bold); letter-spacing: .03em; text-transform: uppercase; }
 .wk-ask-meta { display: inline-flex; padding: 0 6px; border-radius: 6px; background: color-mix(in oklab, var(--ink-high) 8%, transparent); color: var(--ink-muted); font-size: 11px; }
-/* The consequence of the option you are on: room for three lines, so a hover never moves a card under the pointer. */
-.wk-ask-cons { margin: 12px 0 0; min-height: calc(3 * 1.45em + 20px); padding: 10px 12px; border-radius: 10px; background: var(--surface-base); color: var(--ink-body);
+/* The consequence of the option you are on: room for two lines, so a hover never moves a card under the pointer. */
+.wk-ask-cons { margin: 12px 0 0; min-height: calc(2 * 1.45em + 20px); padding: 10px 12px; border-radius: 10px; background: var(--surface-base); color: var(--ink-body);
   font-size: var(--text-sm); line-height: 1.45; box-sizing: border-box; }
 .wk-ask-cons:empty { background: transparent; }
 .wk-ask-cons b { color: var(--ink-high); }
@@ -80,6 +83,9 @@
 .wk-ask-record-ok { color: var(--status-ok); flex-shrink: 0; }
 .wk-ask-record-meta { display: inline-flex; align-items: center; gap: 8px; margin-left: auto; color: var(--ink-dim); font-size: var(--text-xs); white-space: nowrap; }
 @keyframes wk-ask-collapse { from { opacity: 0; transform: scaleY(1.4); } to { opacity: 1; transform: none; } }
+
+/* In the decision dock (which scrolls in itself) the primary stays in reach while the cards and a reason box scroll under it. */
+.wk-dock-surface .wk-ask--bare .wk-ask-go { position: sticky; bottom: 0; z-index: 1; margin-top: 10px; padding: 10px 0 12px; background: var(--surface-raised); }
 
 @media (prefers-reduced-motion: reduce) { .wk-ask, .wk-ask-record { animation: none; } .wk-ask-opt { transition: none; } }
 @media (max-width: 767px) {
