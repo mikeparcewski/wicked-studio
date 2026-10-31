@@ -13,6 +13,29 @@ npm publish dates. Every version listed here exists on
 ## [Unreleased]
 
 ### Added
+- **Voice mode, phase 1: talk to the system, in the browser** (operator-approved mockup learn-and-panels state g, design
+  DES-VOICE). The mic in a composer, or ⌥V from anywhere, opens a centred modal (about 35% of the window; 92% wide on a
+  phone) with a live waveform from the mic. It asks, aloud and on screen, "Do you want to enter voice mode?". Ask it
+  about voice first ("is my voice recorded?") and it answers, then asks again. No, Esc or the close button returns to
+  the page; Yes opens full screen.
+  - **Full screen:** a constrained transcript in the middle, framed by a live system dashboard. Its first question is
+    "How should I listen?": **Streaming** (a partial line with a caret while you speak; it answers when you pause) or
+    **Space bar** (it hears you only while Space or the mic button is held).
+  - **Local speech to text:** recordings go to crew's `POST /voice/transcribe` (whisper.cpp on this machine) as 16 kHz
+    mono WAVs, held in page memory and dropped. If the engine or model is missing, the modal says so; the model is
+    fetched only when you press Download. Replies are read aloud by the browser's speech synthesis (toggle "Captions
+    only"); captions are always on.
+  - **What it does:** questions go to the system chat. "Tell the dark mode job to …" proposes a steer with Send / Not
+    that. A gate arriving is read out and its tile pulses; a spoken answer ("approve it and ship it", "send it back
+    with a note …", "reject it") always stops at an on-screen Confirm (the guided-ask card), then the usual 10 s undo
+    (shown inline), and goes out with `input: "voice"`: "Approved by you · by voice, confirmed".
+  - **Dashboard widgets you can remove, add and make:** machine load, health, helpers, running jobs, waiting decisions
+    and the last 24 h's cost are built in. Each widget has a remove button; Add widget opens a pick-several picker;
+    "Make a metric widget" builds one from any number in `/system` or `/diagnostics`, shown as a number or a chart. A
+    widget is a plugin section in the `voice-dashboard` panel slot; the ones you make are declarative user plugins,
+    saved with your layout per person on crew (`GET|PUT /voice/dashboard`), or in this browser on an older crew.
+  - **Accessibility:** everything is reachable by keyboard (a "type instead" box goes where spoken words go), Esc
+    leaves, reduced motion stills the waveform and the pulse.
 - **Guided asks: every question you answer inline is one card, not a row of buttons in a bubble** (operator-approved mockup learn-and-panels state h, design DES-GUIDED-CHAT). One renderer, `AskCard` (`src/components/ask/`), draws six kinds over one typed `Ask` (`src/api/ask.ts`, mirroring crew-api-types 0.153.0 until the pin moves): choose one, yes / no, pick several, short text, a scale, and confirm-with-reason.
   - **Choose:** option cards in a radio group. The recommended one is marked and preselected. The option you are on (hovered, else selected) says what happens on one line under the cards ("If you choose this: …"), with room kept so a hover never moves a card. Nothing is sent until the one primary button.
   - **Reasons:** a danger option asks why before it goes. Stop now does, and the reason rides the decision into the Decisions ledger. Send back, steer, the floor override and skip QE keep their own boxes. A box opens only when you take the option, so a preselected Send back never sends a prefilled note unread.

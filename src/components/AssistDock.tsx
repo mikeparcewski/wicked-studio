@@ -1,4 +1,5 @@
 import { ExternalLink, Paperclip } from 'lucide-react';
+import { VoiceMicButton } from './voice/VoiceMicButton.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client.js';
 import { apiStatus } from '../api/errors.js';
@@ -1072,6 +1073,7 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
               }
             }}
           />
+          <VoiceMicButton size="xs" testId="assist-voice-open" />
           <button
             type="button"
             data-testid="assist-send"

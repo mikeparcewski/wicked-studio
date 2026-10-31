@@ -1,4 +1,5 @@
 import { defaultOn } from '../store/composerSeats.js';
+import { VoiceMicButton } from './voice/VoiceMicButton.js';
 import { commitGateDecision } from '../board/gateActions.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, ApiError, apiWire } from '../api/client.js';
@@ -2018,6 +2019,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
           rows={1}
         />
 
+        <VoiceMicButton />
         {/* Send button */}
         <button
           type="button"

@@ -37,6 +37,7 @@ import { WorkflowViewer } from './components/WorkflowViewer.js';
 import { ShortcutOverlay } from './components/ShortcutOverlay.js';
 import { PeekCard } from './components/PeekCard.js';
 import { UndoToasts } from './components/UndoToasts.js';
+import { VoiceRoot } from './components/voice/VoiceRoot.js';
 import { LaunchWizard } from './components/launch/LaunchWizard.js';
 import { ConnectionStatus } from './components/ConnectionStatus.js';
 import { SettingsPage } from './components/SettingsPage.js';
@@ -905,6 +906,8 @@ export function App(): React.ReactElement {
       {/* Wave 2a: the peek card (P) and the gate-decision Undo toasts — skins over
           usePeekJump and board/undoQueue. */}
       <PeekCard view={peek} />
+      {/* Voice mode (DES-VOICE): the modal, then full screen; ⌥V or a composer's mic opens it. */}
+      <VoiceRoot />
       <UndoToasts />
 
       {/* The launch wizard (operator 2026-10-11): every start point opens this one modal. */}
