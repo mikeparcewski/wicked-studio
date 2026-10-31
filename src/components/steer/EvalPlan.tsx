@@ -58,7 +58,7 @@ export function EvalRecommended({ history, historyRead, ruleCount, runs, busy, o
               <b className="wk-ep-rec-t">{r.title}</b>
               <p className="wk-ep-rec-why" data-testid="evaluate-rec-why">{r.why}</p>
               <span className="wk-ep-rec-meta">{r.meta}</span>
-              <button type="button" className={`wk-ue-btn wk-ue-btn--${i === 0 ? 'primary' : 'secondary'} wk-ue-btn--sm wk-ep-rec-go`} data-testid="evaluate-rec-run" disabled={busy && r.act.kind !== 'from-jobs' && r.act.kind !== 'bring'} onClick={() => onAct(r)}>
+              <button type="button" className={`wk-btn wk-btn--${i === 0 ? 'primary' : 'secondary'} wk-btn--sm wk-ep-rec-go`} data-testid="evaluate-rec-run" disabled={busy && r.act.kind !== 'from-jobs' && r.act.kind !== 'bring'} onClick={() => onAct(r)}>
                 {r.label}
               </button>
             </li>

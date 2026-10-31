@@ -1,8 +1,8 @@
 /* EVALUATE's plan (DES-LEARN §5; mockup learn-and-panels state e): recommended, bring your own, past runs. */
 .wk-ep-recs { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
-.wk-ep-rec { display: flex; flex-direction: column; gap: 6px; padding: 14px; border-radius: var(--radius-lg); background: var(--surface-card); box-shadow: inset 0 0 0 1px var(--border-subtle); min-width: 0; }
+.wk-ep-rec { display: flex; flex-direction: column; gap: 6px; padding: 14px; border-radius: var(--radius-lg); background: var(--surface-card); box-shadow: inset 0 0 0 1px var(--border); min-width: 0; }
 .wk-ep-rec-t { color: var(--ink-high); font-size: var(--text-md); }
-.wk-ep-rec-why { margin: 0; color: var(--ink-body); font-size: var(--text-sm); line-height: 1.5; flex: 1 1 auto; }
+.wk-ep-rec-why { margin: 0; color: var(--ink-body); font-size: var(--text-sm); line-height: 1.45; flex: 1 1 auto; }
 .wk-ep-rec-meta { color: var(--ink-muted); font-size: var(--text-xs); }
 .wk-ep-rec-go { align-self: flex-start; margin-top: 4px; }
 

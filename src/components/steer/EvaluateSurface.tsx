@@ -116,7 +116,7 @@ function NearestRules({ result, navigate, foreign, rules }: {
 }
 
 /** The run's settings and the import, folded under the list: a roomy summary row with a chevron. */
-function Fold({ title, sub, testId, toggleId, open, onToggle, children }: { title: string; sub: string; testId: string; toggleId: string; open: boolean; onToggle: (open: boolean) => void; children: React.ReactNode }): React.ReactElement {
+function Fold({ title, sub, testId, toggleId, open, onToggle, children }: { title: string; sub: React.ReactNode; testId: string; toggleId: string; open: boolean; onToggle: (open: boolean) => void; children: React.ReactNode }): React.ReactElement {
   return (
     <details className="wk-ue-fold" data-testid={testId} open={open} onToggle={(e) => { const o = (e.currentTarget as HTMLDetailsElement).open; if (o !== open) onToggle(o); }}>
       <summary className="wk-ue-fold-sum" data-testid={toggleId}>
@@ -173,6 +173,8 @@ export function EvaluateSurface({ navigate, title = 'Evaluate', intro = SENTENCE
   const [type, setType] = useState('');
   const [corpus, setCorpus] = useState('');
   const [optionsOpen, setOptionsOpen] = useState(false);
+  const [resultsOpen, setResultsOpen] = useState(false);
+  const [judgesOpen, setJudgesOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [run, setRun] = useState<RunState>({ kind: 'idle' });
   const doRun = async (over?: { type?: string; corpus?: string }): Promise<void> => {
@@ -185,6 +187,7 @@ export function EvaluateSurface({ navigate, title = 'Evaluate', intro = SENTENCE
       const report = await runEvals({ ...(t !== '' ? { type: t } : {}), ...(corpusUsed !== null ? { corpus: corpusUsed } : {}) });
       useEvalReportStore.getState().deposit(report, corpusUsed);
       setRun({ kind: 'idle' });
+      setResultsOpen(true); // a run made here opens its results by steering type
       setHistoryKey((k) => k + 1);
     } catch (e) {
       setRun(isTestingUnsupported(e) ? { kind: 'unsupported' } : { kind: 'failed', error: e });
@@ -369,44 +372,6 @@ export function EvaluateSurface({ navigate, title = 'Evaluate', intro = SENTENCE
 
         <EvalRecommended history={history} historyRead={latest.kind !== 'loading'} ruleCount={rules?.length ?? null} runs={runs} busy={run.kind === 'busy'} onAct={onRec} />
 
-        <section className="wk-ue-sec" aria-labelledby="evaluate-results-title" data-testid="evaluate-results">
-          <div className="wk-ue-sec-head">
-            <h2 id="evaluate-results-title" className="wk-ue-label">Last results</h2>
-            <span className="wk-ue-note">{lastRun}</span>
-          </div>
-          {reading ? (
-            <div aria-busy="true" data-testid="evaluate-results-loading"><Skeleton rows={3} variant="row" /></div>
-          ) : ev === null ? (
-            <p className="wk-ue-quiet" data-testid="evaluate-results-empty">
-              {unread ? 'Couldn’t read the last evaluation. Try again above.' : 'No evaluation yet. Run one to see, for each kind of rule, which bad behaviours it blocks and which slip through.'}
-            </p>
-          ) : results.length === 0 ? (
-            <p className="wk-ue-quiet" data-testid="testing-evals-empty">The last run had no behaviours to replay. Bring your own below, or run the built-in set.</p>
-          ) : (
-            <>
-              <ul className="wk-ue-rows" aria-label="Last results by steering type">
-                {rows.map((r) => (
-                  <li key={r.type}>
-                    <button type="button" className="wk-ue-row" data-testid="evaluate-type-row" data-steering-type={r.type} data-tone={r.tone} onClick={() => setOpen(r.type)}>
-                      <span className="wk-ue-dot" data-tone={r.tone} aria-hidden />
-                      <span className="wk-ue-row-main">
-                        <span className="wk-ue-row-title">{STEERING_TYPE_LABELS[r.type]} rules</span>
-                        <span className="wk-ue-row-sub" data-testid="evaluate-type-words">{r.words}</span>
-                      </span>
-                      <span className="wk-ue-row-meta" data-tone={r.tone === 'fail' || r.tone === 'warn' ? r.tone : undefined} title={absTime(r.source.at)}>{relTime(r.source.at)}</span>
-                      <ChevronRight size={18} aria-hidden className="wk-ue-row-go" />
-                    </button>
-                  </li>
-                ))}
-              </ul>
-              <button type="button" className="wk-ue-linkbtn wk-ue-back" data-testid="evaluate-all-behaviours" onClick={() => setOpen('all')}>
-                See every behaviour in the last run ({results.length})
-              </button>
-            </>
-          )}
-          {ev?.degraded === 'facet-only' && <p data-testid="testing-evals-degraded" className="wk-ue-note"><b>Tags only:</b> {EVAL_FACET_MATCH_EXPLANATION}</p>}
-        </section>
-
         {/* What the numbers can and cannot say (TESTING.md § What an eval measures): beside them, never folded away. */}
         {caveats.length > 0 && (
           <section className="wk-ue-sec" data-testid="evaluate-measures" aria-labelledby="evaluate-measures-title" data-store={store}>
@@ -454,9 +419,48 @@ export function EvaluateSurface({ navigate, title = 'Evaluate', intro = SENTENCE
         <PastRuns history={history} read={latest.kind !== 'loading'} analyzing={analyzing} busy={analyzeBusy} onAnalyze={analyze} />
         {analyzeError !== null && <p className="wk-ue-note" data-tone="fail" role="alert" data-testid="evaluate-analyze-error">Couldn’t read that run: {analyzeError}</p>}
 
-        <SystemJudgments key={judgeKey} />
-
         <div className="wk-ue-folds">
+          {/* Mockup e: Recommended, Bring your own, Past runs; the last run by steering type and the system's own
+              judgments are folded under the list. */}
+          <Fold title="The last run, by steering type" sub={lastRun} testId="evaluate-results-fold" toggleId="evaluate-results-toggle" open={resultsOpen} onToggle={setResultsOpen}>
+          <div data-testid="evaluate-results">
+          {reading ? (
+            <div aria-busy="true" data-testid="evaluate-results-loading"><Skeleton rows={3} variant="row" /></div>
+          ) : ev === null ? (
+            <p className="wk-ue-quiet" data-testid="evaluate-results-empty">
+              {unread ? 'Couldn’t read the last evaluation. Try again above.' : 'No evaluation yet. Run one to see, for each kind of rule, which bad behaviours it blocks and which slip through.'}
+            </p>
+          ) : results.length === 0 ? (
+            <p className="wk-ue-quiet" data-testid="testing-evals-empty">The last run had no behaviours to replay. Bring your own below, or run the built-in set.</p>
+          ) : (
+            <>
+              <ul className="wk-ue-rows" aria-label="Last results by steering type">
+                {rows.map((r) => (
+                  <li key={r.type}>
+                    <button type="button" className="wk-ue-row" data-testid="evaluate-type-row" data-steering-type={r.type} data-tone={r.tone} onClick={() => setOpen(r.type)}>
+                      <span className="wk-ue-dot" data-tone={r.tone} aria-hidden />
+                      <span className="wk-ue-row-main">
+                        <span className="wk-ue-row-title">{STEERING_TYPE_LABELS[r.type]} rules</span>
+                        <span className="wk-ue-row-sub" data-testid="evaluate-type-words">{r.words}</span>
+                      </span>
+                      <span className="wk-ue-row-meta" data-tone={r.tone === 'fail' || r.tone === 'warn' ? r.tone : undefined} title={absTime(r.source.at)}>{relTime(r.source.at)}</span>
+                      <ChevronRight size={18} aria-hidden className="wk-ue-row-go" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+              <button type="button" className="wk-ue-linkbtn wk-ue-back" data-testid="evaluate-all-behaviours" onClick={() => setOpen('all')}>
+                See every behaviour in the last run ({results.length})
+              </button>
+            </>
+          )}
+          {ev?.degraded === 'facet-only' && <p data-testid="testing-evals-degraded" className="wk-ue-note"><b>Tags only:</b> {EVAL_FACET_MATCH_EXPLANATION}</p>}
+          </div>
+
+          </Fold>
+          <Fold title="How well the system judges" sub="What needs you, floor decisions, QE verdicts, who built it" testId="evaluate-judgments-fold" toggleId="evaluate-judgments-toggle" open={judgesOpen} onToggle={setJudgesOpen}>
+            <SystemJudgments key={judgeKey} folded />
+          </Fold>
           <Fold title="What to run" sub={settingsWords} testId="evaluate-options" toggleId="evaluate-options-toggle" open={optionsOpen} onToggle={setOptionsOpen}>
             <div className="wk-ue-fields">
               <label className="wk-ue-field">
