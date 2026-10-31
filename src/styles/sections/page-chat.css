@@ -1,0 +1,112 @@
+/* PAGE CHATS (DES-LEARN §6.2; mockup learn-and-panels state f): the system chat's engine drawn inside a page.
+   A 400 px column beside the page from 1200 px, a bottom sheet below. Understand draws it as the page itself. */
+
+.wk-pagechat { display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+.wk-pagechat[data-variant="column"] {
+  flex: 0 0 400px; width: 400px; height: 100%;
+  border-left: 1px solid var(--border); background: var(--surface-card);
+}
+.wk-pagechat[data-variant="inline"] { height: auto; }
+.wk-pagechat .wk-syschat { display: flex; flex: 1 1 auto; min-height: 0; height: 100%; }
+.wk-pagechat-grab { display: none; }
+
+/* The dock, page variant: roomier type than the floating window, no boxed or capped chat block. */
+.wk-assist--page { background: transparent !important; border-left: 0 !important; }
+.wk-assist--page .wk-assist-header { padding: 14px 16px 10px; border-bottom: 1px solid var(--border-subtle) !important; }
+.wk-assist--page .wk-assist-header > span:first-of-type { font-size: var(--text-md); font-weight: var(--weight-semi); color: var(--ink-high); }
+.wk-pagechat-scope {
+  margin: 0; padding: 8px 16px; color: var(--ink-muted); font-size: var(--text-xs); line-height: 1.45;
+  border-bottom: 1px solid var(--border-subtle); flex-shrink: 0;
+}
+.wk-pagechat-scope b { color: var(--ink-body); font-weight: var(--weight-semi); }
+.wk-assist--page [data-testid="assist-thread"] { padding: 14px 16px; gap: 12px; }
+.wk-assist--page [data-testid="assist-empty"] { font-size: var(--text-sm); color: var(--ink-muted); line-height: 1.5; }
+.wk-assist--page .wk-assist-prompt { font-size: var(--text-xs) !important; padding: 6px 12px !important; }
+.wk-assist--page [data-testid="assist-user-msg"] { max-width: 88%; padding: 8px 12px; border-radius: 14px 14px 4px 14px; }
+.wk-assist--page [data-testid="assist-user-msg"] p { font-size: var(--text-sm); line-height: 1.45; }
+.wk-assist--page [data-testid="assist-chat"] { border: 0 !important; background: transparent !important; padding: 0; overflow: visible; gap: 12px; }
+.wk-assist--page [data-testid="assist-chat"] > div:first-child { display: none; }
+.wk-assist--page [data-testid="assist-chat"] .max-h-72 { max-height: none; overflow: visible; gap: 12px; }
+.wk-assist--page [data-testid="assist-chat-msg"] { background: transparent !important; padding: 0; max-width: 100%; border-radius: 0; }
+.wk-assist--page [data-testid="assist-chat-msg"] .text-\[11px\] { font-size: var(--text-sm); line-height: 1.55; color: var(--ink-body); }
+.wk-assist--page [data-testid="assist-chat-msg"] > span.font-mono { font-family: inherit; font-size: var(--text-xs); color: var(--ink-high); }
+.wk-assist--page [data-testid="assist-chat-msg"].wk-assist-you {
+  align-self: flex-end; max-width: 88%; padding: 8px 12px; border-radius: 14px 14px 4px 14px;
+  background: color-mix(in oklab, var(--accent) 22%, var(--surface-raised)) !important;
+}
+.wk-assist--page [data-testid="assist-chat-msg"].wk-assist-you > span.font-mono { display: none; }
+.wk-assist--page .wk-assist-answer-foot { font-size: 11px; color: var(--ink-muted); }
+.wk-assist--page [data-testid="assist-note"] { font-family: inherit; font-size: var(--text-xs); }
+.wk-assist--page textarea[data-testid="assist-input"] { font-size: var(--text-sm); }
+.wk-assist--page [data-testid="assist-send"] { font-size: var(--text-xs); padding: 6px 12px; }
+
+/* The item a question is about: a chip on its bubble and above the box. */
+.wk-assist-chip, .wk-pagechat-focus {
+  display: inline-flex; align-items: center; gap: 6px; max-width: 100%; margin: 0 0 6px;
+  padding: 2px 8px; border-radius: var(--radius-full);
+  background: color-mix(in oklab, var(--accent) 16%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--accent) 45%, var(--border));
+  color: var(--ink-high); font-size: 11px; font-weight: var(--weight-semi);
+}
+.wk-assist-chip { display: flex; width: fit-content; }
+.wk-pagechat-focus { margin: 0; padding-right: 4px; }
+.wk-pagechat-focus-l { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wk-pagechat-focus button { border: 0; background: none; color: var(--ink-muted); cursor: pointer; padding: 2px 4px; display: inline-flex; border-radius: var(--radius-full); }
+.wk-pagechat-focus button:hover { color: var(--ink-high); }
+.wk-pagechat-focus button:focus-visible { outline: 2px solid var(--accent); }
+
+/* What next: the guided ask after an answer. */
+.wk-pagechat-next { margin-top: 2px; }
+.wk-pagechat-record { margin-top: 2px; }
+.wk-pagechat-headacts { display: inline-flex; align-items: center; gap: 2px; }
+
+/* A page's Ask button and its askable items. */
+.wk-pagechat-askbtn { display: inline-flex; align-items: center; gap: 6px; }
+.wk-pagechat-askbtn[aria-pressed="true"] { box-shadow: inset 0 0 0 1px var(--accent); }
+[data-askable] { position: relative; cursor: pointer; transition: box-shadow .15s; }
+[data-askable]:hover, [data-askable]:focus-visible { box-shadow: inset 0 0 0 1px var(--accent); outline: none; }
+[data-askable]::after {
+  content: 'Ask about this'; position: absolute; right: 10px; top: 10px; padding: 1px 7px; border-radius: 999px;
+  background: var(--accent); color: var(--accent-fg); font-size: 10px; font-weight: var(--weight-semi);
+  opacity: 0; transition: opacity .15s; pointer-events: none;
+}
+[data-askable]:hover::after, [data-askable]:focus-visible::after { opacity: 1; }
+[data-askable][data-asked="true"] { box-shadow: inset 0 0 0 2px var(--accent); }
+
+/* Below 1200 px: the column becomes a bottom sheet over the page. */
+@media (max-width: 1199px) {
+  .wk-pagechat[data-variant="column"] {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 45; width: auto; height: auto; max-height: 72dvh;
+    min-height: 46dvh; border-left: 0; border-top: 1px solid var(--border-strong);
+    border-radius: 18px 18px 0 0; box-shadow: var(--shadow-overlay);
+  }
+  .wk-pagechat-grab { display: block; width: 40px; height: 4px; margin: 8px auto 0; border-radius: 2px; background: var(--border-strong); flex-shrink: 0; }
+  .wk-pagechat[data-variant="column"] .wk-assist-header { padding-top: 8px; }
+}
+@media (prefers-reduced-motion: reduce) { [data-askable], [data-askable]::after { transition: none; } }
+.wk-nc-head-acts { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+/* Understand: the chat is the page. */
+.wk-ue-chat { margin-top: 18px; }
+.wk-ue-chat .wk-pagechat[data-variant="inline"] {
+  height: min(calc(100dvh - 240px), 760px); min-height: 420px;
+  border-radius: var(--radius-lg); background: var(--surface-card); box-shadow: inset 0 0 0 1px var(--border-subtle); overflow: hidden;
+}
+.wk-ue-askwrap[hidden] { display: none; }
+.wk-pagechat-wait { margin: 0; padding: 16px; color: var(--ink-muted); font-size: var(--text-sm); }
+/* In the 400 px column (and the sheet) the choices stack, one per row, as the mockup draws them. */
+.wk-pagechat[data-variant="column"] .wk-ask-opts { grid-template-columns: minmax(0, 1fr); }
+.wk-pagechat-focus { min-height: 30px; }
+.wk-pagechat-focus button { min-height: 24px; min-width: 24px; align-items: center; justify-content: center; }
+/* A phone: the floating chat's bubble keeps its corner, so the page chat leaves room under its composer. */
+@media (max-width: 767px) {
+  .wk-ue-chat { margin-bottom: 72px; }
+  .wk-ue-chat .wk-pagechat[data-variant="inline"] { height: calc(100dvh - 180px); min-height: 380px; }
+}
+/* With a page's chat open the page is narrower: a hosted calm page (Evaluate) keeps a gutter, and a calm
+   header's actions (Nerve Center's Checked · Chat · Check again) wrap instead of running off a phone. */
+.wk-desk2-hosted .wk-ue { padding-left: 24px; padding-right: 24px; }
+@media (max-width: 767px) {
+  .wk-desk2-hosted .wk-ue { padding-left: 16px; padding-right: 16px; }
+  .wk-calm-actions { flex-wrap: wrap; }
+}

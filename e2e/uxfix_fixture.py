@@ -623,6 +623,9 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          # standing chat rigs (uxfix slice 4, feedback slice C) assert a
          # fan-out with NO replies, and must keep seeing exactly that.
          "chat_replies": False,
+         # DES-LEARN §5 (Evaluate, state e): an eval history of three runs (GET /testing/evals[/:id]) and the
+         # corpus import (POST /testing/corpora/import, recorded at GET /__fixture/eval-imports). Default False.
+         "eval_plan": False,
          # Slice L (DES-FEEDBACK-002 §9): the batch-gates corpus — two extra
          # projects each holding one awaiting_human SIMPLE-gate run, so the
          # board has §9.5's "3 simple gates" (with r-q3) beside the complex
@@ -5141,6 +5144,35 @@ ws_chat_queues: list = []
 ask_lock = threading.Lock()
 ask_chats: dict = {}       # chat_id -> {run_id, eligible, primary, pa, reviewer, turns, rows, messages, scope, status}
 ask_posts: list = []       # every POST /chats/:id/messages the ask path received (GET /__fixture/ask-posts)
+eval_imports: list = []    # every POST /testing/corpora/import under `eval_plan` (GET /__fixture/eval-imports)
+
+
+def _eval_plan_runs() -> list:
+    """Three past evaluations (newest first): all types with gaps, a security corpus, a clean testing run."""
+    now = int(time.time())
+    def pt(total, caught, gaps, fp):
+        return {"total": total, "caught": caught, "gaps": gaps, "false_positives": fp}
+    return [
+        {"id": "ev-all", "created_at": now - 9 * 86400, "actor": "operator", "corpus": None, "type_filter": None, "rule_store": "fixture",
+         "summary": pt(64, 56, 6, 2), "per_type": {"development": pt(24, 18, 6, 0), "security": pt(12, 10, 0, 2), "testing": pt(28, 28, 0, 0)}, "degraded": None},
+        {"id": "ev-sec", "created_at": now - 16 * 86400, "actor": "operator", "corpus": "evals:payments-incidents", "type_filter": "security", "rule_store": "fixture",
+         "summary": pt(18, 17, 1, 0), "per_type": {"security": pt(18, 17, 1, 0)}, "degraded": None},
+        {"id": "ev-test", "created_at": now - 21 * 86400, "actor": "operator", "corpus": None, "type_filter": "testing", "rule_store": "fixture",
+         "summary": pt(12, 12, 0, 0), "per_type": {"testing": pt(12, 12, 0, 0)}, "degraded": None},
+    ]
+
+
+def _eval_plan_detail(run_id: str):
+    run = next((r for r in _eval_plan_runs() if r["id"] == run_id), None)
+    if run is None:
+        return None
+    results = []
+    for i, d in enumerate(["A helper pushes straight to main", "A helper commits a token in a test fixture"]):
+        results.append({"sample": {"id": f"gap-{i}", "description": d, "kind": "bad", "steering_type": "development", "signals": {}},
+                        "expected": "deny", "fired": [], "verdict": "gap", "nearest_rules": [{"rule_id": "POL-3", "similarity": 0.41}]})
+    results.append({"sample": {"id": "ok-1", "description": "A helper opens a pull request", "kind": "good", "steering_type": "development", "signals": {}},
+                    "expected": "allow", "fired": [], "verdict": "caught"})
+    return {**run, "results": results}
 ask_seq = [0]
 ask_eid = [5000]
 
@@ -8589,6 +8621,17 @@ class W2Handler(SimpleHTTPRequestHandler):
             with ask_lock:
                 posts = list(ask_posts)
             return self._json(200, {"posts": posts})
+        if path == "/__fixture/eval-imports":
+            with state_lock:
+                got = list(eval_imports)
+            return self._json(200, {"imports": got})
+        with state_lock:
+            eval_plan = state["eval_plan"]
+        if eval_plan and path == "/api/v1/testing/evals":
+            return self._json(200, {"runs": _eval_plan_runs()})
+        if eval_plan and path.startswith("/api/v1/testing/evals/"):
+            detail = _eval_plan_detail(urllib.parse.unquote(path[len("/api/v1/testing/evals/"):]))
+            return self._json(200, detail) if detail is not None else self._json(404, {"error": "no eval run"})
         if path == "/__fixture/launch-posts":
             with state_lock:
                 posts = list(session_launch_log)
@@ -8952,6 +8995,13 @@ class W2Handler(SimpleHTTPRequestHandler):
         body = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
         if path.startswith("/api/v1/mcp-inspect/") and self._mcp_inspect("POST", path, body):
             return None
+        if path == "/api/v1/testing/corpora/import":
+            with state_lock:
+                on = state["eval_plan"]
+                if on:
+                    eval_imports.append(body)
+            if on:
+                return self._json(200, {"imported": len(body.get("samples") or []), "scope": f"evals:{body.get('name')}", "embedded": True})
         if self._container_post(path, body):
             return None
         wdp = re.match(r"^/api/v1/runs/([^/]+)/working-doc(/versions)?$", path)

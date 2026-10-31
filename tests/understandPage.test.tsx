@@ -23,8 +23,17 @@ vi.mock('../src/api/client.js', () => ({
 // The folded views are their own surfaces (with their own tests); here they only need to be reachable.
 vi.mock('../src/components/CoverageView.js', () => ({ CoverageView: () => <div data-testid="coverage-view-stub" /> }));
 vi.mock('../src/components/RepoGraphModal.js', () => ({ RepoGraphModal: ({ repo }: { repo: { name: string } }) => <div data-testid="repo-graph-stub">{repo.name}</div> }));
+// The page chat (DES-LEARN §6.2) has its own tests (pageChat.test.tsx); here it is a stub that shows what the page
+// hands it: its scope chips and its provider (which the page's Recent answers learn the chat id from).
+const chat = vi.hoisted(() => ({ props: null as null | { chips?: Array<{ key: string; on: boolean }>; provider?: { knows: string; onSent?: (t: string, id: string) => void } } }));
+vi.mock('../src/components/chat/PageChat.js', async (orig) => ({
+  ...(await orig<object>()),
+  PageChat: (p: typeof chat.props) => { chat.props = p; return <div data-testid="page-chat-stub">{p?.provider?.knows}</div>; },
+}));
 
 const { UnderstandPage } = await import('../src/components/desk/UnderstandPage.js');
+const { usePageChat } = await import('../src/store/pageChat.js');
+const onRepos = (): string[] => (chat.props?.chips ?? []).filter((c) => c.on && c.key.startsWith('repo:')).map((c) => c.key.slice(5));
 const { clearRepoCache } = await import('../src/store/repoCache.js');
 
 const NOW = Date.UTC(2026, 9, 26, 12, 0, 0);
@@ -43,6 +52,9 @@ beforeEach(() => {
   mocks.members.mockResolvedValue({ members: [{ member_kind: 'crew.repo', member_ref: 'r1' }, { member_kind: 'crew.chat', member_ref: 'c1' }] });
   useCapabilities.setState({ chatList: true, loaded: true });
   useAskDock.setState({ request: null });
+  usePageChat.setState({ open: {}, focus: {}, seed: {}, gen: {} });
+  sessionStorage.clear();
+  chat.props = null;
 });
 afterEach(() => cleanup());
 
@@ -89,7 +101,9 @@ describe('the Understand page', () => {
   it('leads with one question box and three suggestions; the graph and the comparison are folded away', async () => {
     await act(async () => { render(<UnderstandPage project={null} navigate={vi.fn()} now={NOW} compare={<div data-testid="compare-stub" />} />); });
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Understand');
-    expect(screen.getByText('Ask how your code fits together. Answers cite the code they come from.')).toBeInTheDocument();
+    expect(screen.getByText('Ask how your code fits together. Answers cite the code they come from, right here.')).toBeInTheDocument();
+    // Nothing asked yet: the box, not a chat.
+    expect(screen.queryByTestId('understand-chat')).toBeNull();
     // No project and no job this week: nothing is chosen, so the questions name no repository.
     expect(screen.getAllByTestId('understand-suggest').map((b) => b.textContent)).toEqual(suggestedQuestions([]));
     expect(screen.getByTestId('understand-recent-empty')).toHaveTextContent('Nothing asked yet');
@@ -100,26 +114,36 @@ describe('the Understand page', () => {
     expect(mocks.messages).not.toHaveBeenCalled();
   });
 
-  it('a suggestion fills the box (nothing sent); Ask sends the operator’s question into a new chat and lists it', async () => {
+  it('a suggestion fills the box (nothing sent); Ask sends the question into a new chat ON THE PAGE and lists it', async () => {
     await act(async () => { render(<UnderstandPage project="proj-1" navigate={vi.fn()} now={NOW} compare={null} />); });
     fireEvent.click(screen.getAllByTestId('understand-suggest')[0]!);
     expect(screen.getByTestId('understand-ask-input')).toHaveValue('How is wicked-core put together?');
-    expect(useAskDock.getState().request).toBeNull();
+    expect(usePageChat.getState().seed.understand ?? null).toBeNull();
     mocks.messages.mockRejectedValue(new ApiError(404, 'Not Found'));
     await act(async () => { fireEvent.submit(screen.getByTestId('understand-ask')); });
-    const req = useAskDock.getState().request!;
-    expect(req.seedText).toBe(questionMessage('How is wicked-core put together?'));
-    expect(req.projectId).toBe('proj-1');
-    expect(req.send?.chatId).toBe(readAsked()[0]!.chatId);
+    // The question is the first message of a NEW page chat (sent: the operator pressed Ask on it); the floating
+    // chat is not used.
+    expect(usePageChat.getState().seed.understand).toMatchObject({ text: questionMessage('How is wicked-core put together?'), send: true });
+    expect(usePageChat.getState().gen.understand).toBe(1);
+    expect(useAskDock.getState().request).toBeNull();
+    expect(screen.getByTestId('understand-chat')).toBeInTheDocument();
+    expect(screen.getByTestId('understand-ask')).not.toBeVisible();
     expect(screen.getByTestId('understand-ask-input')).toHaveValue('');
+    // The chat opened (its id) and the question is listed under Recent answers.
+    await act(async () => { chat.props!.provider!.onSent!(questionMessage('How is wicked-core put together?'), 'c-new'); });
     const row = screen.getByTestId('understand-answer');
     // The row shows the operator's words, never the grounding line or the chat id.
     expect(row).toHaveTextContent('How is wicked-core put together?');
     expect(row).not.toHaveTextContent(GROUNDING_LINE);
-    expect(row).not.toHaveTextContent(req.send!.chatId);
-    // Just asked, not opened yet: it reads as being answered.
+    expect(row).not.toHaveTextContent('c-new');
+    expect(readAsked()[0]!.chatId).toBe('c-new');
+    // Just asked: it reads as being answered.
     expect(within(row).getByTestId('understand-answer-sub')).toHaveTextContent('Answering now…');
-    expect(row).toHaveAttribute('href', `/s/${req.send!.chatId}`);
+    expect(row).toHaveAttribute('href', '/s/c-new');
+    // New question: the box again, and the next question starts a new chat.
+    fireEvent.click(screen.getByTestId('understand-new-question'));
+    expect(screen.queryByTestId('understand-chat')).toBeNull();
+    expect(screen.getByTestId('understand-ask')).toBeVisible();
   });
 
   it('crew#1157: Ask runs analyze on the project’s repositories on its page, the week’s most active one elsewhere; the questions name only those', async () => {
@@ -130,12 +154,12 @@ describe('the Understand page', () => {
     fireEvent.change(screen.getByTestId('understand-ask-input'), { target: { value: 'Who calls deliver?' } });
     mocks.messages.mockRejectedValue(new ApiError(404, 'Not Found'));
     await act(async () => { fireEvent.submit(screen.getByTestId('understand-ask')); });
-    let req = useAskDock.getState().request!;
-    expect(req.send?.workflow).toBe('analyze');
-    expect(req.send?.repos).toEqual([{ id: 'r1', name: 'wicked-core' }]);
-    expect(req.projectId).toBe('proj-1');
+    // The page chat runs analyze (PAGE_CHAT_SPECS.understand.workflow) on exactly the chosen repositories.
+    expect(onRepos()).toEqual(['r1']);
+    expect(screen.getByTestId('page-chat-stub')).toHaveTextContent('Reads wicked-core · read-only');
     cleanup();
-    useAskDock.setState({ request: null });
+    sessionStorage.clear();
+    chat.props = null;
     const day = 86_400;
     const at = (d: number) => NOW / 1000 - d * day;
     const runs = [
@@ -152,15 +176,14 @@ describe('the Understand page', () => {
     expect(screen.getAllByTestId('understand-suggest').map((b) => b.textContent)).toEqual(suggestedQuestions(['wicked-core', 'wicked-crew']));
     fireEvent.change(screen.getByTestId('understand-ask-input'), { target: { value: 'Who calls deliver?' } });
     await act(async () => { fireEvent.submit(screen.getByTestId('understand-ask')); });
-    req = useAskDock.getState().request!;
-    expect(req.send?.repos).toEqual([{ id: 'r1', name: 'wicked-core' }, { id: 'r2', name: 'wicked-crew' }]);
-    expect(req.projectId).toBeNull();
+    expect(onRepos()).toEqual(['r1', 'r2']);
   });
 
   it('an empty Ask sends nothing', async () => {
     await act(async () => { render(<UnderstandPage project={null} navigate={vi.fn()} now={NOW} compare={null} />); });
     await act(async () => { fireEvent.submit(screen.getByTestId('understand-ask')); });
-    expect(useAskDock.getState().request).toBeNull();
+    expect(usePageChat.getState().seed.understand ?? null).toBeNull();
+    expect(screen.queryByTestId('understand-chat')).toBeNull();
   });
 
   it('Recent answers: what each answer found; an old chat the daemon no longer has is forgotten', async () => {
@@ -177,8 +200,11 @@ describe('the Understand page', () => {
     expect(rows[0]).toHaveTextContent('14 callers across 3 crates.');
     expect(rows[0]).toHaveAttribute('data-state', 'answered');
     expect(readAsked().map((q) => q.chatId)).toEqual(['c-1']);
+    // An answer reopens in place, in the page's chat (its kept history replays there).
     fireEvent.click(rows[0]!);
-    expect(navigate).toHaveBeenCalledWith('/s/c-1');
+    expect(navigate).not.toHaveBeenCalled();
+    expect(JSON.parse(sessionStorage.getItem('wicked.pagechat.understand.session')!)).toMatchObject({ chatId: 'c-1', seeded: true });
+    expect(screen.getByTestId('understand-chat')).toBeInTheDocument();
   });
 
   it('a crew without the chat list reads nothing and says where the answer is', async () => {

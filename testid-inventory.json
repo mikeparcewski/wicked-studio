@@ -11,10 +11,10 @@
   "version": 1,
   "studioVersion": "0.13.0",
   "counts": {
-    "files": 260,
-    "occurrences": 3616,
-    "static": 3068,
-    "dynamic": 75,
+    "files": 262,
+    "occurrences": 3668,
+    "static": 3110,
+    "dynamic": 77,
     "computed": 43
   },
   "static": [
@@ -1044,6 +1044,12 @@
     },
     {
       "testId": "assist-input",
+      "files": [
+        "src/components/AssistDock.tsx"
+      ]
+    },
+    {
+      "testId": "assist-msg-chip",
       "files": [
         "src/components/AssistDock.tsx"
       ]
@@ -4628,9 +4634,45 @@
       ]
     },
     {
+      "testId": "evaluate-analysis-open",
+      "files": [
+        "src/components/steer/EvalPlan.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-analyze",
+      "files": [
+        "src/components/steer/EvalPlan.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-analyze-error",
+      "files": [
+        "src/components/steer/EvaluateSurface.tsx"
+      ]
+    },
+    {
       "testId": "evaluate-back",
       "files": [
         "src/components/steer/EvaluateSurface.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-behaviour",
+      "files": [
+        "src/components/steer/EvalPlan.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-byo",
+      "files": [
+        "src/components/steer/EvalPlan.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-byo-panel",
+      "files": [
+        "src/components/steer/EvalPlan.tsx"
       ]
     },
     {
@@ -4694,9 +4736,15 @@
       ]
     },
     {
-      "testId": "evaluate-import",
+      "testId": "evaluate-job",
       "files": [
-        "src/components/steer/EvaluateSurface.tsx"
+        "src/components/steer/EvalPlan.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-job-read",
+      "files": [
+        "src/components/steer/EvalPlan.tsx"
       ]
     },
     {
@@ -4832,9 +4880,75 @@
       ]
     },
     {
+      "testId": "evaluate-page-ask",
+      "files": [
+        "src/components/steer/EvaluateSurface.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-past",
+      "files": [
+        "src/components/steer/EvalPlan.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-past-empty",
+      "files": [
+        "src/components/steer/EvalPlan.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-past-run",
+      "files": [
+        "src/components/steer/EvalPlan.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-paste-split",
+      "files": [
+        "src/components/steer/EvalPlan.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-paste-text",
+      "files": [
+        "src/components/steer/EvalPlan.tsx"
+      ]
+    },
+    {
       "testId": "evaluate-read-error",
       "files": [
         "src/components/steer/EvaluateSurface.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-rec",
+      "files": [
+        "src/components/steer/EvalPlan.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-rec-none",
+      "files": [
+        "src/components/steer/EvalPlan.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-rec-run",
+      "files": [
+        "src/components/steer/EvalPlan.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-rec-why",
+      "files": [
+        "src/components/steer/EvalPlan.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-recommended",
+      "files": [
+        "src/components/steer/EvalPlan.tsx"
       ]
     },
     {
@@ -4859,6 +4973,36 @@
       "testId": "evaluate-results-loading",
       "files": [
         "src/components/steer/EvaluateSurface.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-review",
+      "files": [
+        "src/components/steer/EvalPlan.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-review-done",
+      "files": [
+        "src/components/steer/EvalPlan.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-review-import",
+      "files": [
+        "src/components/steer/EvalPlan.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-review-name",
+      "files": [
+        "src/components/steer/EvalPlan.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-review-unmarked",
+      "files": [
+        "src/components/steer/EvalPlan.tsx"
       ]
     },
     {
@@ -6680,6 +6824,12 @@
       ]
     },
     {
+      "testId": "learn-page-ask",
+      "files": [
+        "src/components/learn/LearnPage.tsx"
+      ]
+    },
+    {
       "testId": "learn-path-toggle",
       "files": [
         "src/components/BrandLearn.tsx"
@@ -7940,6 +8090,12 @@
       ]
     },
     {
+      "testId": "memory-add-chat",
+      "files": [
+        "src/components/memory/MemoryPage.tsx"
+      ]
+    },
+    {
       "testId": "memory-add-dialog",
       "files": [
         "src/components/memory/MemoryPage.tsx"
@@ -8043,6 +8199,12 @@
     },
     {
       "testId": "memory-page",
+      "files": [
+        "src/components/memory/MemoryPage.tsx"
+      ]
+    },
+    {
+      "testId": "memory-page-ask",
       "files": [
         "src/components/memory/MemoryPage.tsx"
       ]
@@ -8231,6 +8393,13 @@
       "testId": "nc-back",
       "files": [
         "src/components/nerve/NerveCenterPage.tsx"
+      ]
+    },
+    {
+      "testId": "nc-chat",
+      "files": [
+        "src/components/nerve/NerveCenterPage.tsx",
+        "src/components/nerve/NerveOverview.tsx"
       ]
     },
     {
@@ -9304,6 +9473,66 @@
       "testId": "overflow-menu",
       "files": [
         "src/components/ui/OverflowMenu.tsx"
+      ]
+    },
+    {
+      "testId": "page-ask",
+      "files": [
+        "src/components/chat/PageChat.tsx"
+      ]
+    },
+    {
+      "testId": "page-chat",
+      "files": [
+        "src/components/chat/PageChat.tsx"
+      ]
+    },
+    {
+      "testId": "page-chat-close",
+      "files": [
+        "src/components/chat/PageChat.tsx"
+      ]
+    },
+    {
+      "testId": "page-chat-engine",
+      "files": [
+        "src/components/AskDock.tsx"
+      ]
+    },
+    {
+      "testId": "page-chat-focus",
+      "files": [
+        "src/components/chat/PageChat.tsx"
+      ]
+    },
+    {
+      "testId": "page-chat-focus-clear",
+      "files": [
+        "src/components/chat/PageChat.tsx"
+      ]
+    },
+    {
+      "testId": "page-chat-new",
+      "files": [
+        "src/components/chat/PageChat.tsx"
+      ]
+    },
+    {
+      "testId": "page-chat-next",
+      "files": [
+        "src/components/chat/PageChat.tsx"
+      ]
+    },
+    {
+      "testId": "page-chat-record",
+      "files": [
+        "src/components/chat/PageChat.tsx"
+      ]
+    },
+    {
+      "testId": "page-chat-wait",
+      "files": [
+        "src/components/chat/PageChat.tsx"
       ]
     },
     {
@@ -11654,6 +11883,12 @@
     },
     {
       "testId": "report-agents-table",
+      "files": [
+        "src/components/report/ReportPage.tsx"
+      ]
+    },
+    {
+      "testId": "report-ask",
       "files": [
         "src/components/report/ReportPage.tsx"
       ]
@@ -15997,6 +16232,12 @@
       ]
     },
     {
+      "testId": "steer-page-ask",
+      "files": [
+        "src/components/steer/SteerSurface.tsx"
+      ]
+    },
+    {
       "testId": "steer-prefill",
       "files": [
         "src/components/ChatInput.tsx"
@@ -17756,6 +17997,12 @@
       ]
     },
     {
+      "testId": "understand-chat",
+      "files": [
+        "src/components/desk/UnderstandPage.tsx"
+      ]
+    },
+    {
       "testId": "understand-compare",
       "files": [
         "src/components/desk/UnderstandPage.tsx"
@@ -17793,6 +18040,12 @@
     },
     {
       "testId": "understand-graph-repo",
+      "files": [
+        "src/components/desk/UnderstandPage.tsx"
+      ]
+    },
+    {
+      "testId": "understand-new-question",
       "files": [
         "src/components/desk/UnderstandPage.tsx"
       ]
@@ -18808,9 +19061,21 @@
       ]
     },
     {
+      "pattern": "evaluate-byo-*",
+      "files": [
+        "src/components/steer/EvalPlan.tsx"
+      ]
+    },
+    {
       "pattern": "evaluate-judgments-scope-*",
       "files": [
         "src/components/steer/SystemJudgments.tsx"
+      ]
+    },
+    {
+      "pattern": "evaluate-mark-*",
+      "files": [
+        "src/components/steer/EvalPlan.tsx"
       ]
     },
     {
@@ -19083,6 +19348,7 @@
         "src/components/calm/Calm.tsx",
         "src/components/charts/CategoryBars.tsx",
         "src/components/charts/Chart.tsx",
+        "src/components/chat/PageChat.tsx",
         "src/components/dashboardKit.tsx",
         "src/components/desk/DeskHome.tsx",
         "src/components/desk/DeskParts.tsx",

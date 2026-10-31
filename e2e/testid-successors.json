@@ -970,6 +970,7 @@
     "evaluate-coverage-chart": "evaluate-type-row",
     "evaluate-run": "testing-evals-run",
     "evaluate-options-toggle": "evaluate-options",
+    "evaluate-import": "evaluate-byo",
     "session-gate-choice-consequence": "session-gate-consequence",
     "session-gate-detail": "session-gate-note",
     "session-gate-menu": "session-gate-choices",

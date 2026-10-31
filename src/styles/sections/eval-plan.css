@@ -1,0 +1,58 @@
+/* EVALUATE's plan (DES-LEARN §5; mockup learn-and-panels state e): recommended, bring your own, past runs. */
+.wk-ep-recs { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.wk-ep-rec { display: flex; flex-direction: column; gap: 6px; padding: 14px; border-radius: var(--radius-lg); background: var(--surface-card); box-shadow: inset 0 0 0 1px var(--border-subtle); min-width: 0; }
+.wk-ep-rec-t { color: var(--ink-high); font-size: var(--text-md); }
+.wk-ep-rec-why { margin: 0; color: var(--ink-body); font-size: var(--text-sm); line-height: 1.5; flex: 1 1 auto; }
+.wk-ep-rec-meta { color: var(--ink-muted); font-size: var(--text-xs); }
+.wk-ep-rec-go { align-self: flex-start; margin-top: 4px; }
+
+.wk-ep-byo { display: grid; gap: 12px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.wk-ep-tile { display: flex; flex-direction: column; gap: 6px; padding: 14px; text-align: left; border: 0; border-radius: var(--radius-lg); background: var(--surface-card); box-shadow: inset 0 0 0 1px var(--border-subtle); color: inherit; font: inherit; cursor: pointer; min-width: 0; }
+.wk-ep-tile b { color: var(--ink-high); font-size: var(--text-sm); }
+.wk-ep-tile span { color: var(--ink-muted); font-size: var(--text-xs); line-height: 1.45; }
+.wk-ep-tile:hover { box-shadow: inset 0 0 0 1px var(--accent); }
+.wk-ep-tile:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.wk-ep-tile[aria-pressed="true"] { box-shadow: inset 0 0 0 2px var(--accent); }
+.wk-ep-panel { margin-top: 12px; padding: 16px; border-radius: var(--radius-lg); background: var(--surface-card); box-shadow: inset 0 0 0 1px var(--border-subtle); display: flex; flex-direction: column; gap: 10px; }
+.wk-ep-textarea { width: 100%; min-height: 140px; resize: vertical; font-family: var(--font-mono); font-size: 12px; }
+.wk-ep-acts { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.wk-ep-joblist, .wk-ep-rows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.wk-ep-joblist { max-height: 320px; overflow-y: auto; }
+.wk-ep-job { display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: 10px; align-items: baseline; padding: 8px 4px; border-bottom: 1px solid var(--border-subtle); cursor: pointer; }
+.wk-ep-job-t { color: var(--ink-high); font-size: var(--text-sm); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wk-ep-job-s { grid-column: 2; color: var(--ink-muted); font-size: var(--text-xs); }
+.wk-ep-job-s[data-tone="fail"] { color: var(--status-fail); }
+.wk-ep-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; gap: 10px; align-items: center; padding: 10px 2px; border-bottom: 1px solid var(--border-subtle); }
+.wk-ep-row[data-keep="false"] .wk-ep-row-main { opacity: .5; text-decoration: line-through; }
+.wk-ep-row-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.wk-ep-row-t { color: var(--ink-high); font-size: var(--text-sm); overflow-wrap: anywhere; }
+.wk-ep-row-s { color: var(--ink-muted); font-size: var(--text-xs); }
+.wk-ep-mark { display: inline-flex; border-radius: var(--radius-full); box-shadow: inset 0 0 0 1px var(--border); overflow: hidden; }
+.wk-ep-markbtn { border: 0; background: transparent; color: var(--ink-muted); font: inherit; font-size: var(--text-xs); padding: 4px 10px; cursor: pointer; }
+.wk-ep-markbtn[aria-pressed="true"][data-mark="good"] { background: color-mix(in oklab, var(--status-ok) 26%, transparent); color: var(--ink-high); }
+.wk-ep-markbtn[aria-pressed="true"][data-mark="bad"] { background: color-mix(in oklab, var(--status-fail) 26%, transparent); color: var(--ink-high); }
+.wk-ep-markbtn:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.wk-ep-markbtn:disabled { cursor: default; opacity: .5; }
+.wk-ep-type { max-width: 150px; font-size: var(--text-xs); }
+.wk-ep-save { display: flex; gap: 12px; align-items: flex-end; justify-content: space-between; flex-wrap: wrap; }
+.wk-ep-name { flex: 1 1 220px; max-width: 360px; }
+
+.wk-ep-runs { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.wk-ep-run { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 14px 4px; border-bottom: 1px solid var(--border-subtle); }
+.wk-ep-run-main { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.wk-ep-run-t { color: var(--ink-high); font-size: var(--text-sm); font-weight: var(--weight-semi); }
+.wk-ep-run-s { color: var(--ink-muted); font-size: var(--text-xs); }
+.wk-ep-pills { display: flex; flex-wrap: wrap; gap: 6px; }
+.wk-ep-pill { padding: 1px 8px; border-radius: var(--radius-full); font-size: 11px; font-weight: var(--weight-semi); box-shadow: inset 0 0 0 1px currentColor; }
+.wk-ep-pill[data-tone="ok"] { color: var(--status-ok); }
+.wk-ep-pill[data-tone="fail"] { color: var(--status-fail); }
+.wk-ep-pill[data-tone="warn"] { color: var(--status-warn); }
+.wk-ep-open { padding: 2px 8px; border-radius: var(--radius-md); color: var(--ink-muted); font-size: var(--text-xs); box-shadow: inset 0 0 0 1px var(--border); border: 1px dashed var(--border-strong); }
+
+@media (max-width: 767px) {
+  .wk-ep-recs, .wk-ep-byo { grid-template-columns: minmax(0, 1fr); }
+  .wk-ep-row { grid-template-columns: auto minmax(0, 1fr); }
+  .wk-ep-mark, .wk-ep-type { grid-column: 2; justify-self: start; }
+  .wk-ep-run { grid-template-columns: auto minmax(0, 1fr); }
+  .wk-ep-run > button, .wk-ep-run > .wk-ep-open { grid-column: 2; justify-self: start; }
+}

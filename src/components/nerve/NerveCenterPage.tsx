@@ -1,4 +1,5 @@
 import { InsightsLine } from '../insights/InsightsLine.js';
+import { PageAskButton, pageTextLines, useAskableItems, usePageChatHostPage } from '../chat/PageChat.js';
 import { useEffect, useRef, useState } from 'react';
 import type { SystemAction, SystemAttention, SystemCli, SystemGovernanceCard, SystemInfra, SystemRun } from '../../api/system.js';
 import { gateOpenPath } from '../../board/gateActions.js';
@@ -122,6 +123,20 @@ export function NerveCenterPage({ navigate = defaultNavigate, needCount = 0, fee
 
   // Check again re-reads everything, the disk row included: the probes, and crew's /system answer itself.
   const recheck = (): void => { registry.reprobeNow(); void useSystemStore.getState().refresh({ force: true }); };
+  // DES-LEARN §6.2: the page's chat about system state (the diagnostics ride its first message as they do the
+  // system chat's; this adds what the page shows).
+  const pageRef = useRef<HTMLDivElement | null>(null);
+  const helperCount = system ? snapshot.clis.length : registry.roster?.length ?? 0;
+  const findings = state.attention.length;
+  usePageChatHostPage('nerve', {
+    knows: `Knows system state: ${state.words.toLowerCase()}, ${helperCount} ${helperCount === 1 ? 'helper' : 'helpers'}, ${findings} ${findings === 1 ? 'finding' : 'findings'}${answeredAt !== null ? `, checked ${clock(answeredAt)}` : ''}.`,
+    data: () => pageTextLines(pageRef.current),
+    onMove: (m) => {
+      if (m === 'recheck') { recheck(); return true; }
+      return false;
+    },
+  });
+  const askable = useAskableItems('nerve', pageRef);
   const act = (a: SystemAction): void => {
     if (a.kind === 'recheck') { recheck(); return; }
     if (a.kind === 'sign-in') {
@@ -240,7 +255,7 @@ export function NerveCenterPage({ navigate = defaultNavigate, needCount = 0, fee
   // and the tiles. Each tile opens the tabbed detail below (`?tab=`), which keeps everything it showed.
   if (readNerveTab(search) === null && new URLSearchParams(search).get('filter') === null) {
     return (
-      <div data-testid="nerve-center-page" data-view="overview" data-mode={mode} data-tone={state.tone} className="wk-calm wk-ncv">
+      <div data-testid="nerve-center-page" data-view="overview" data-mode={mode} data-tone={state.tone} className="wk-calm wk-ncv" ref={pageRef} onClick={askable.onClick} onKeyDown={askable.onKeyDown}>
         <div className="wk-calm-col">
           <NerveOverview state={state} snapshot={system ? snapshot : null} registry={registry} reading={reading} needCount={needCount} runs={runs}
             search={search} navigate={navigate} onRecheck={recheck} onAct={act} notes={upgradeNotes} />
@@ -251,7 +266,7 @@ export function NerveCenterPage({ navigate = defaultNavigate, needCount = 0, fee
   }
 
   return (
-    <div data-testid="nerve-center-page" data-view="detail" data-mode={mode} data-tone={state.tone} data-tab={tab} className="wk-desk-scroll wk-nc-page wk-measure">
+    <div data-testid="nerve-center-page" data-view="detail" data-mode={mode} data-tone={state.tone} data-tab={tab} className="wk-desk-scroll wk-nc-page wk-measure" ref={pageRef}>
       <header className="wk-nc-head">
         <a href="/watch" data-testid="nc-back" className="wk-link wk-nc-back"
           onClick={(e) => { if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return; e.preventDefault(); navigate('/watch'); }}>
@@ -259,9 +274,12 @@ export function NerveCenterPage({ navigate = defaultNavigate, needCount = 0, fee
         </a>
         <div className="wk-nc-head-row">
           <h1 className="wk-desk-hello">{PAGE_NAMES.watch}</h1>
-          <button type="button" data-testid="nc-recheck" className="wk-btn wk-btn--secondary wk-btn--sm wk-nc-recheck" disabled={reading} onClick={recheck}>
-            {reading ? 'Checking…' : 'Re-check'}
-          </button>
+          <span className="wk-nc-head-acts">
+            <PageAskButton kind="nerve" label="Chat about system state" testId="nc-chat" small />
+            <button type="button" data-testid="nc-recheck" className="wk-btn wk-btn--secondary wk-btn--sm wk-nc-recheck" disabled={reading} onClick={recheck}>
+              {reading ? 'Checking…' : 'Re-check'}
+            </button>
+          </span>
         </div>
         <div className="wk-nc-verdict-row">
           <span data-testid="nc-verdict" data-tone={state.tone} className="wk-nc-verdict">

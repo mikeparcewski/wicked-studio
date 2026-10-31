@@ -42,6 +42,10 @@ import { ChatCliPicker } from './chat/ChatCliPicker.js';
 import { ChatScopeChips, type ScopeCandidate } from './chat/ChatScopeChips.js';
 import { ChatHistoryRail } from './chat/ChatHistoryRail.js';
 import { History } from 'lucide-react';
+import { ASK_SESSION_KEY } from '../store/askSession.js';
+import { PAGE_CHAT_SPECS, pageChatRules, pageChatSessionKey, type PageChatKind, type PageFocus } from '../board/pageChat.js';
+import { pageChatEpoch } from '../store/pageChat.js';
+import { focusPack } from './askContext.js';
 import { CHAT_ATTACHMENT_LIMITS, type ChatAttachmentError, type ChatStartedOn } from '../api/chatHistory-wire.js';
 
 /**
@@ -156,7 +160,35 @@ export function answerFooterWords(cli: string, sources: number): string {
   return `Answered by ${cli} · saw ${sources} source${sources === 1 ? '' : 's'}`;
 }
 
-export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoffTaken, sendProjectId, sendFresh = false, sendPrimary, sendChatId, sendOpenChatId, sendWorkflow, sendRepos, startProjectId, startText, startFresh = false }: {
+/**
+ * A PAGE CHAT (DES-LEARN §6.2): this dock drawn inside a page instead of the floating window. It keeps its own
+ * conversation (per page), tells the chat what the page shows, asks about the item the person clicked, and
+ * follows each answer with the page's guided "What next?" (the `threadTail`, drawn by `PageChat`).
+ */
+export interface PageChatBinding {
+  kind: PageChatKind;
+  /** The scope line: "Knows this page: 4 numbers, the throughput chart, 35 jobs behind them." */
+  knows: string;
+  /** What the page shows, as pack lines, read at send time. */
+  data: () => string[];
+  /** The item the next question is about. */
+  focus: PageFocus | null;
+  /** A message was sent (its words, its chat): the page clears the focus it carried. */
+  onSent: (text: string, chatId: string) => void;
+  /** The chat's scope (Understand: the repositories chosen); absent: the page's defaults. */
+  chips?: ScopeChip[];
+  seed?: { nonce: number; text: string; send: boolean } | null;
+  onSeedTaken?: (nonce: number) => void;
+  threadTail?: React.ReactNode;
+  onStatus?: (status: 'ready' | 'thinking' | 'answered', chatId: string | null) => void;
+  composerRef?: React.MutableRefObject<HTMLTextAreaElement | null>;
+  /** The header's end: New, close. */
+  headerEnd?: React.ReactNode;
+  /** The focus chip above the box (removable). */
+  focusChip?: React.ReactNode;
+}
+
+export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoffTaken, sendProjectId, sendFresh = false, sendPrimary, sendChatId, sendOpenChatId, sendWorkflow, sendRepos, startProjectId, startText, startFresh = false, page }: {
   runs: SessionView[];
   pathname: string;
   /** Collapsing the dock closes Ask entirely — the launcher bubble/shortcut reopen it. */
@@ -194,7 +226,13 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
   startText?: string;
   /** Open a FRESH chat (the Desk's Chat): the stored chat is not resumed. */
   startFresh?: boolean;
+  /** Drawn inside a page as its own chat (DES-LEARN §6.2). */
+  page?: PageChatBinding;
 }): React.ReactElement {
+  // Each page chat keeps its own conversation; the system chat keeps the one it always had.
+  const sessKey = page !== undefined ? pageChatSessionKey(page.kind) : ASK_SESSION_KEY;
+  const pageRef = useRef(page);
+  pageRef.current = page;
   // The letters that opened the dock (type-to-composer, §5.6 rule 4): read on mount, cleared
   // in an effect (a StrictMode double initializer must not read an already-emptied seed).
   const [typedSeed] = useState(peekTypedSeed);
@@ -222,8 +260,9 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
   // The floating window's chrome (drag handle, minimize / full size / close) — absent in a bare render.
   const chrome = useChatChrome();
   // A send that settles after Close ended this chat must not re-persist it.
-  const [epoch] = useState(systemChatEpoch);
-  const ended = (): boolean => systemChatEpoch() !== epoch;
+  const epochNow = (): number => (pageRef.current !== undefined ? pageChatEpoch(pageRef.current.kind) : systemChatEpoch());
+  const [epoch] = useState(epochNow);
+  const ended = (): boolean => epochNow() !== epoch;
 
   // The diagnostics read — presence-gated: absence is an ANSWER (older crew), never an error.
   useEffect(() => {
@@ -281,18 +320,18 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
   // is honoured by a chat opened in it (before the composer's first send that IS its chat).
   const [resumed] = useState(() => {
     if ((sendText !== undefined && (sendFresh || sendProjectId !== undefined)) || (sendText === undefined && (startProjectId !== undefined || startFresh))) {
-      forgetAskSession();
+      forgetAskSession(undefined, sessKey);
       return null;
     }
     if (sendText !== undefined && sendChatId !== undefined) {
-      const stored = readAskSession();
+      const stored = readAskSession(sessKey);
       if (stored !== null && stored.chatId === sendChatId) return stored;
       // The chat on screen, opened elsewhere: its context pack rode its own first send.
       const session: AskSession = { chatId: sendChatId, title: '', seeded: true, scope: null };
-      writeAskSession(session);
+      writeAskSession(session, sessKey);
       return session;
     }
-    return readAskSession();
+    return readAskSession(sessKey);
   });
   /** The live chat session this dock opened — later sends reuse its warm seats. */
   const chatIdRef = useRef<string | null>(resumed?.chatId ?? null);
@@ -307,7 +346,7 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
   const seededRef = useRef(resumed?.seeded === true);
   /** crew#1157: the read-only workflow a NEW chat opened by this dock runs, decided at the open (`null`
    *  = a plain chat: none asked, or this crew does not run it). */
-  const workflowAsk = useRef<string | undefined>(resumed === null ? sendWorkflow : undefined);
+  const workflowAsk = useRef<string | undefined>(resumed === null ? sendWorkflow ?? (page !== undefined ? PAGE_CHAT_SPECS[page.kind].workflow : undefined) : undefined);
   const [workflowRun, setWorkflowRun] = useState<string | null>(null);
   /** The repository the analysis could not ground (no code graph): "Index this repository". */
   const [indexOffer, setIndexOffer] = useState<{ repoId: string; name: string; state: 'offer' | 'starting' | 'started' | 'failed' } | null>(null);
@@ -326,6 +365,8 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
     // A past chat reopened from history whose choices this browser never saw: nothing is claimed as
     // chosen — every chip starts off, and the user turns on what the chat may see now.
     if (resumed?.chipsUnknown === true) return defaultScopeChips(ctx).map((c) => ({ ...c, on: false }));
+    // A page chat reads what its page chose (Understand: the repositories asked about); else the page's defaults.
+    if (resumed === null && page !== undefined) return page.chips ?? null;
     // crew#1157: an analysis question (Understand's Ask) reads exactly the repositories it was asked about.
     if (resumed === null && sendWorkflow !== undefined) {
       const pid = sendProjectId ?? null;
@@ -363,7 +404,7 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
   const cliRef = useRef(cli);
   cliRef.current = cli;
   const cliLabel = cli === null ? null : cliName(cli, roster);
-  useEffect(() => { useChatWindow.getState().setCli(cliLabel); }, [cliLabel]);
+  useEffect(() => { if (pageRef.current === undefined) useChatWindow.getState().setCli(cliLabel); }, [cliLabel]);
 
   // ASK-S1 (Amendment 6 decision 5: studio renders ONE thread): on the chat's own session page the
   // session thread shows every turn as it happens, so once a send is accepted the dock steps aside
@@ -374,7 +415,7 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
   const stepAside = useCallback((chatId: string) => {
-    if (!useCapabilities.getState().askPath) return;
+    if (pageRef.current !== undefined || !useCapabilities.getState().askPath) return;
     const m = /^\/s\/([^/]+)/.exec(pathnameRef.current);
     if (m !== null && decodeURIComponent(m[1]!) === chatId) onCloseRef.current();
   }, []);
@@ -398,7 +439,7 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
       ...(cliRef.current !== null ? { cli: cliRef.current } : {}),
       ...(lastPackRef.current !== null ? { packSig: lastPackRef.current } : {}),
       ...(diagSentRef.current ? { diagSent: true } : {}),
-    });
+    }, sessKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `ended` reads the module epoch
   }, []);
 
@@ -411,10 +452,18 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
     // What this turn's answer will say it saw: the chips on when it was sent.
     sentSourcesRef.current = chosenChips(chipsNow).length;
     const sig = `${chipsSignature(chipsNow)}@${packInputs.current.pathname}`;
-    if (seededRef.current && lastPackRef.current === sig) return { message: text, sig, diag: false };
+    const pg = pageRef.current;
+    const focus = pg?.focus ?? null;
+    if (seededRef.current && lastPackRef.current === sig) {
+      // A page chat's question about an item carries that item, even when the page itself already rode.
+      return { message: focus !== null ? `${text}${PACK_JOIN}${focusPack(focus)}` : text, sig, diag: false };
+    }
     const diag = !diagSentRef.current && chipsNow.some((c) => c.kind === 'page' && c.on);
-    const pack = buildContextPack({ ...packInputs.current, chips: chipsNow, omitDiagnostics: !diag });
-    return { message: `${text}${PACK_JOIN}${pack}`, sig, diag };
+    const pack = buildContextPack({
+      ...packInputs.current, chips: chipsNow, omitDiagnostics: !diag,
+      ...(pg !== undefined ? { pageLines: pg.data(), focus } : {}),
+    });
+    return { message: `${text}${PACK_JOIN}${pack}${pg !== undefined ? `\n${pageChatRules(pg.kind)}` : ''}`, sig, diag };
   }, []);
   /** A message landed: the pack it carried is what the chat has seen. */
   const packLanded = useCallback((id: string, out: { sig: string; diag: boolean }) => {
@@ -444,6 +493,7 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
             if (ended()) throw new Error('This chat was closed; nothing was sent.');
             deposit(id, text, await (ids === undefined ? api.sendChatMessage(id, out.message) : api.sendChatMessage(id, out.message, undefined, ids)).catch(plainSendRefusal(id)));
             packLanded(id, out);
+            pageRef.current?.onSent(text, id);
             stepAside(id);
             return { chatId: id };
           } catch (sendErr) {
@@ -459,7 +509,7 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
             if (!gone) throw sendErr;
             // Reclaimed (idle reaper, pool cap, a daemon restart) — forget it and open a
             // fresh session for this question below.
-            forgetAskSession(id);
+            forgetAskSession(id, sessKey);
             chatIdRef.current = null;
             seededRef.current = false;
             lastPackRef.current = null;
@@ -544,7 +594,7 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
             cliRef.current = pick;
             // Persist for the tab — a close/reopen (or reload) resumes THIS session.
             titleRef.current = text;
-            if (!ended()) writeAskSession({ chatId: id, title: text, seeded: false, ...scopeField(scopeRef.current), chips: chosen, cli: pick });
+            if (!ended()) writeAskSession({ chatId: id, title: text, seeded: false, ...scopeField(scopeRef.current), chips: chosen, cli: pick }, sessKey);
             // The session is live — make it findable on the rail (the J4 live row) and on
             // /chats, labelled with where it came from and what was asked (studio#323 R2).
             useLiveChatsStore.getState().upsert(id, ready, { origin: 'ask', title: text });
@@ -558,6 +608,7 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
         if (ended()) throw new Error('This chat was closed; nothing was sent.');
         deposit(id, text, await (ids === undefined ? api.sendChatMessage(id, out.message) : api.sendChatMessage(id, out.message, undefined, ids)).catch(plainSendRefusal(id)));
         packLanded(id, out);
+        pageRef.current?.onSent(text, id);
         stepAside(id);
         return { chatId: id };
       },
@@ -595,7 +646,11 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
   const answerFooter = useCallback((key: string, replayed?: boolean) => (replayed === true
     ? `Answered by ${cliName(key, getCachedRoster())}`
     : answerFooterWords(cliName(key, getCachedRoster()), sentSourcesRef.current)), []);
-  const onStatus = useCallback((s: 'ready' | 'thinking' | 'answered') => { useChatWindow.getState().setStatus(s); }, []);
+  const onStatus = useCallback((s: 'ready' | 'thinking' | 'answered') => {
+    const pg = pageRef.current;
+    if (pg !== undefined) pg.onStatus?.(s, chatIdRef.current);
+    else useChatWindow.getState().setStatus(s);
+  }, []);
 
   const resolvedScope = openedScope === undefined ? '' : describeResolvedScope(openedScope, { projects });
   const notice = !capsLoaded ? undefined
@@ -647,8 +702,8 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
   );
 
   return (
-    <div ref={bodyRef} data-testid="system-chat" data-past-chats={chatList && historyOpen ? (wide ? 'column' : 'overlay') : undefined} className="wk-syschat">
-      {chatList && historyOpen && (
+    <div ref={bodyRef} data-testid={page !== undefined ? 'page-chat-engine' : 'system-chat'} data-past-chats={page === undefined && chatList && historyOpen ? (wide ? 'column' : 'overlay') : undefined} className="wk-syschat">
+      {page === undefined && chatList && historyOpen && (
         <ChatHistoryRail
           currentId={shownId}
           // A column stays beside the reopened chat; an overlay steps aside to show it.
@@ -657,7 +712,36 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
         />
       )}
       <AssistDock
-        context={{
+        context={page !== undefined ? {
+          surface: `page-${page.kind}`,
+          title: `${workflowRun !== null ? 'Analysis' : 'Chat'} · ${PAGE_CHAT_SPECS[page.kind].title}`,
+          contextLabel: page.knows,
+          placeholder: PAGE_CHAT_SPECS[page.kind].placeholder,
+          hint: PAGE_CHAT_SPECS[page.kind].hint,
+          prompts,
+          composerControls: (
+            <>
+              {indexOffer !== null && (
+                <p className="wk-syschat-index" data-testid="analysis-index-offer" data-state={indexOffer.state}>
+                  <span>{indexOffer.name} is not indexed yet, so this answer reads the files directly.</span>{' '}
+                  {indexOffer.state === 'started' ? <span data-testid="analysis-index-started">Indexing started. Ask again when it finishes.</span> : (
+                    <button type="button" className="wk-ue-btn wk-ue-btn--secondary wk-ue-btn--sm" data-testid="analysis-index-repo" disabled={indexOffer.state === 'starting'}
+                      onClick={() => {
+                        setIndexOffer({ ...indexOffer, state: 'starting' });
+                        api.rerunOnboarding(indexOffer.repoId).then(
+                          () => setIndexOffer((o) => (o === null ? o : { ...o, state: 'started' })),
+                          () => setIndexOffer((o) => (o === null ? o : { ...o, state: 'failed' })),
+                        );
+                      }}>
+                      {indexOffer.state === 'starting' ? 'Starting…' : indexOffer.state === 'failed' ? 'Could not start. Try again' : 'Index this repository'}
+                    </button>
+                  )}
+                </p>
+              )}
+              {page.focusChip}
+            </>
+          ),
+        } : {
           surface: 'ask',
           title: workflowRun !== null ? 'Analysis' : 'Chat',
           contextLabel: resolvedScope === '' ? `Seeing: ${ctx.label}` : `Seeing: ${ctx.label} · ${resolvedScope}`,
@@ -719,7 +803,7 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
         onResumeGone={(chatId) => {
           // studio#328: the daemon reclaimed it — forget the stored id so no reopen
           // repeats the dead session, and the next send opens a fresh one.
-          forgetAskSession(chatId);
+          forgetAskSession(chatId, sessKey);
           useLiveChatsStore.getState().remove(chatId);
           if (chatIdRef.current === chatId) {
             chatIdRef.current = null;
@@ -732,9 +816,13 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
           }
         }}
         fill
-        typeTarget="ask"
-        initialText={handoff ?? (typedSeed !== '' ? typedSeed : startText ?? '')}
-        sendOnOpen={handoff !== undefined && handoff.trim() !== ''}
+        typeTarget={page !== undefined ? 'page' : 'ask'}
+        initialText={page !== undefined ? '' : handoff ?? (typedSeed !== '' ? typedSeed : startText ?? '')}
+        sendOnOpen={page === undefined && handoff !== undefined && handoff.trim() !== ''}
+        {...(page !== undefined ? {
+          variant: 'page' as const, threadTail: page.threadTail, seed: page.seed ?? null, onSeedTaken: page.onSeedTaken,
+          sendChip: page.focus?.label ?? null, composerRef: page.composerRef,
+        } : {})}
         onExpandChat={
           navigate === undefined
             ? undefined
@@ -750,17 +838,17 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
         onOpenChange={(next) => {
           if (!next) onClose();
         }}
-        headerProps={chrome?.dragProps}
+        headerProps={page !== undefined ? undefined : chrome?.dragProps}
         headerExtra={picker}
         compactHeader
-        headerEnd={chrome?.controls}
+        headerEnd={page !== undefined ? page.headerEnd : chrome?.controls}
         onStatus={onStatus}
         // Uploads ride crew's attachments route; without it the paperclip stays away rather than attach a
         // file the send would drop.
         allowAttach={chatAttachments}
         fileMode={chatAttachments}
         loadHistory={loadHistory}
-        headerStart={chatList ? (
+        headerStart={chatList && page === undefined ? (
           <button
             type="button"
             data-testid="chat-history-toggle"

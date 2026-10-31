@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { PageAskButton, pageTextLines, usePageChatHostPage } from '../chat/PageChat.js';
 import { api } from '../../api/client.js';
 import { readErrorKind } from '../../api/errors.js';
 import type { RepoEntry } from '../../api/types.js';
@@ -104,15 +105,25 @@ export function LearnPage({ navigate }: { navigate: (p: string) => void }): Reac
 
   const repoName = repos?.find((r) => r.id === repoRef)?.name ?? null;
 
+  // DES-LEARN §6.2: the page's chat knows the topics this repository learned.
+  const pageRef = useRef<HTMLDivElement | null>(null);
+  usePageChatHostPage('learn', {
+    knows: `Knows Learn: ${topics === null ? 'the learned topics' : `${topics.length} learned ${topics.length === 1 ? 'topic' : 'topics'}`}${repoName !== null ? ` in ${repoName}` : ''}.`,
+    data: () => pageTextLines(pageRef.current),
+  });
+
   return (
-    <div className="flex-1 overflow-auto" data-testid="learn-page">
+    <div className="flex-1 overflow-auto" data-testid="learn-page" ref={pageRef}>
       <PageFrame
         title="Learn"
         intro="What your helpers learned from outside sources and saved in each repository, with the source of every claim. Refreshes look for what changed and propose it for review."
         actions={
-          <button type="button" className="wk-btn wk-btn--primary" data-testid="learn-new" onClick={startNew}>
-            Learn something new
-          </button>
+          <>
+            <PageAskButton kind="learn" testId="learn-page-ask" small />
+            <button type="button" className="wk-btn wk-btn--primary" data-testid="learn-new" onClick={startNew}>
+              Learn something new
+            </button>
+          </>
         }
       >
         {error !== null && (

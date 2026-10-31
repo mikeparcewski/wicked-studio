@@ -16,6 +16,7 @@ import { useRowHeadlines } from '../../hooks/useRowHeadlines.js';
 import { needTone } from '../../board/needTone.js';
 import { useEffect, useState } from 'react';
 import { useSystemStore } from '../../store/systemSnapshot.js';
+import { PageAskButton } from '../chat/PageChat.js';
 
 /** "Checked just now" / "Checked 3 min ago": when crew's answer this page shows was read (Check again re-reads it). */
 export function checkedWords(at: number | null, now: number): string | null {
@@ -146,7 +147,7 @@ export function NerveOverview({ state, snapshot, registry, reading, needCount, s
           <span className="wk-ncv-lead" data-tone={sentence.tone}>{sentence.lead}</span>
           {sentence.rest !== '' && <> <span>{sentence.rest}</span></>}
         </>}
-        action={<><CheckedStamp /><CalmButton testId="nc-recheck" disabled={reading} onClick={onRecheck}>{reading ? 'Checking…' : 'Check again'}</CalmButton></>}
+        action={<><CheckedStamp /><PageAskButton kind="nerve" label="Chat about system state" testId="nc-chat" small /><CalmButton testId="nc-recheck" disabled={reading} onClick={onRecheck}>{reading ? 'Checking…' : 'Check again'}</CalmButton></>}
       />
 
       {(waitLine !== null || tidy !== null) && (
@@ -160,7 +161,7 @@ export function NerveOverview({ state, snapshot, registry, reading, needCount, s
         <CalmSection label="Slowing work now" data-testid="nc-slowing">
           <ul className="wk-ncv-slow-list">
             {slowing.map((a) => (
-              <li key={a.id} className="wk-ncv-slow" data-testid="nc-slow" data-id={a.id} data-level={a.level}>
+              <li key={a.id} className="wk-ncv-slow" data-testid="nc-slow" data-id={a.id} data-level={a.level} data-askable={rowHeadline(a, causes.get(a.id) ?? null)} data-ask-key={`slow:${a.id}`} tabIndex={0}>
                 <span aria-hidden className="wk-calm-dot" data-tone={needTone(a)} />
                 <span className="wk-ncv-slow-text">
                   <span className="wk-ncv-slow-title"><span className="sr-only">{a.level === 'red' ? 'Stopping work: ' : 'Slowing work: '}</span>{rowHeadline(a, causes.get(a.id) ?? null)}</span>

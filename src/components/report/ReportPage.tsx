@@ -18,6 +18,7 @@ import type { Navigate } from '../../hooks/useRoute.js';
 import { agentColor, StackedBars } from '../charts/Chart.js';
 import { Segmented, Skeleton } from '../ui/index.js';
 import { ago } from '../AgeStamp.js';
+import { PageAskButton, pageTextLines, useAskableItems, usePageChatHostPage } from '../chat/PageChat.js';
 
 /**
  * THE REPORT (ui-v2; the `report` entry of design/mockups/desk-pages-redesign + the operator's
@@ -105,8 +106,18 @@ export function ReportPage({ runs, runsShown, now, navigate, projectId, agentNam
   const goLast7 = (): void => setKind('7');
   const limits = customLimits(now);
 
+  // DES-LEARN §6.2: the page's chat knows what it shows; every number, chart and row is askable.
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const pw = periodWords(period, now);
+  usePageChatHostPage('report', {
+    knows: `Knows this page: ${pw.toLowerCase()}: the 4 headline numbers, throughput, quality, cost, by repository, by agent and shipped; ${count(jobs.length, 'job')} behind them.`,
+    data: () => [`period: ${pw}`, ...pageTextLines(rootRef.current)],
+  });
+  const askable = useAskableItems('report', rootRef, () => [`period: ${pw}`]);
+  const ask = (label: string): { 'data-askable': string; tabIndex: number } => ({ 'data-askable': `${label} · ${pw}`, tabIndex: 0 });
+
   return (
-    <div className="wk-rep" data-testid="report-page">
+    <div className="wk-rep" data-testid="report-page" ref={rootRef} onClick={askable.onClick} onKeyDown={askable.onKeyDown}>
       <div className="wk-rep-col">
         <header className="wk-rep-head">
           <div className="wk-rep-hello">
@@ -115,6 +126,7 @@ export function ReportPage({ runs, runsShown, now, navigate, projectId, agentNam
             <InsightsLine navigate={navigate} testId="report-insights-line" />
           </div>
           <div className="wk-rep-period">
+            <PageAskButton kind="report" testId="report-ask" />
             <Segmented label="Period" data-testid="report-period" value={kind}
               options={[{ value: '7', label: '7 days', testId: 'report-period-7' }, { value: '30', label: '30 days', testId: 'report-period-30' }, { value: 'custom', label: 'Custom', testId: 'report-period-custom' }]}
               onChange={setKind} />
@@ -140,17 +152,17 @@ export function ReportPage({ runs, runsShown, now, navigate, projectId, agentNam
         <section className="wk-rep-sec" aria-labelledby="report-h-headline">
           <h2 id="report-h-headline" className="wk-rep-label">{periodWords(period, now)}</h2>
           <ul className="wk-rep-tiles" data-testid="report-headline">
-            <Tile testId="report-tile-finished" label="jobs finished" loading={!runsShown} value={String(jobs.length)} change={finishedChange}
+            <Tile period={pw} testId="report-tile-finished" label="jobs finished" loading={!runsShown} value={String(jobs.length)} change={finishedChange}
               note={undated > 0 ? `${undated} ended with no end time and ${undated === 1 ? 'is' : 'are'} left out` : null} />
-            <Tile testId="report-tile-firstpass" label="passed first time" loading={!noSpend && !recordRead}
+            <Tile period={pw} testId="report-tile-firstpass" label="passed first time" loading={!noSpend && !recordRead}
               value={fp === null ? null : fp.rate === null ? '—' : fp.gated < 20 ? `${fp.passed} of ${fp.gated}` : `${Math.round(fp.rate * 100)}%`}
               change={fp !== null && fp.gated < 20 ? null : fpChange}
               note={noSpend ? 'counted per project: work in no project has no record of its own' : fp === null ? 'Couldn’t read the agent record for this period'
                 : fp.rate === null ? 'no checked steps in this period' : fp.gated < 20 ? 'checked steps that passed first try (too few to compare)' : `of ${fp.gated} checked steps`}
 />
-            <Tile testId="report-tile-ttp" label="median time to PR" loading={!runsShown} value={ttp.minutes === null ? '—' : durationWords(ttp.minutes)} change={ttpChange}
+            <Tile period={pw} testId="report-tile-ttp" label="median time to PR" loading={!runsShown} value={ttp.minutes === null ? '—' : durationWords(ttp.minutes)} change={ttpChange}
               note={ttp.n === 0 ? 'no pull request opened in this period' : `start to PR, over ${count(ttp.n, 'delivered job')}`} />
-            <Tile testId="report-tile-spend" label="spend" loading={!noSpend && !recordRead}
+            <Tile period={pw} testId="report-tile-spend" label="spend" loading={!noSpend && !recordRead}
               value={spend === null ? null : `${spend.partial ? '≥ ' : ''}${moneyWords(spend.usd)}`} change={spendChange}
               note={noSpend ? 'spend is counted per project' : now7 === null ? 'Couldn’t read spend for this period' : spend === null ? 'usage recorded, no price reported' : spend.partial ? 'priced usage only: some agents report no price' : null}
 />
@@ -158,7 +170,7 @@ export function ReportPage({ runs, runsShown, now, navigate, projectId, agentNam
         </section>
 
         {/* 2. Throughput */}
-        <section className="wk-rep-sec" aria-labelledby="report-h-flow" data-testid="report-throughput">
+        <section className="wk-rep-sec" aria-labelledby="report-h-flow" data-testid="report-throughput" {...ask('Throughput')} data-ask-key="throughput">
           <SecHead id="report-h-flow" label="Throughput" meta={`jobs finished per ${per}, by how they ended`} />
           {!runsShown ? <Skeleton rows={3} variant="line" /> : jobs.length === 0 ? <p className="wk-rep-quiet">No job finished in this period.</p> : (
             <ChartFigure summary={`${count(jobs.length, 'job')} finished: ${flow.filter((s) => sumOf(s.values) > 0).map((s) => `${sumOf(s.values)} ${ENDING_WORDS[s.key]}`).join(', ')}.`}
@@ -174,7 +186,7 @@ export function ReportPage({ runs, runsShown, now, navigate, projectId, agentNam
         <section className="wk-rep-sec" aria-labelledby="report-h-quality" data-testid="report-quality">
           <SecHead id="report-h-quality" label="Quality" />
           <div className="wk-rep-trio">
-            <div className="wk-rep-block" data-testid="report-qe">
+            <div className="wk-rep-block" data-testid="report-qe" {...ask('QE acceptance')} data-ask-key="qe">
               <h3 className="wk-rep-block-title">QE acceptance</h3>
               {!runsShown || qe.tally === null ? <Skeleton rows={2} variant="line" /> : qe.tally.recorded === 0 ? (
                 <p className="wk-rep-quiet">{jobs.length === 0 ? 'No job finished in this period.' : qe.failed > 0 && qe.tally.read === 0 ? 'Couldn’t read the verdicts.' : 'No QE verdict recorded for these jobs.'}</p>
@@ -186,7 +198,7 @@ export function ReportPage({ runs, runsShown, now, navigate, projectId, agentNam
                 </>
               )}
             </div>
-            <div className="wk-rep-block" data-testid="report-floors">
+            <div className="wk-rep-block" data-testid="report-floors" {...ask('Floor outcomes')} data-ask-key="floors">
               <h3 className="wk-rep-block-title">Floor outcomes</h3>
               <SevenDay isLast7={isLast7} mode={systemMode} snapshotRead={snapshot !== null} error={systemError} onLast7={goLast7} what="floor outcomes">
                 {(() => {
@@ -212,7 +224,7 @@ export function ReportPage({ runs, runsShown, now, navigate, projectId, agentNam
                 })()}
               </SevenDay>
             </div>
-            <div className="wk-rep-block" data-testid="report-gates">
+            <div className="wk-rep-block" data-testid="report-gates" {...ask('Gates answered')} data-ask-key="gates">
               <h3 className="wk-rep-block-title">Gates answered</h3>
               <SevenDay isLast7={isLast7} mode={systemMode} snapshotRead={snapshot !== null} error={systemError} onLast7={goLast7} what="gates answered">
                 {(() => {
@@ -237,7 +249,7 @@ export function ReportPage({ runs, runsShown, now, navigate, projectId, agentNam
         </section>
 
         {/* 4. Cost */}
-        <section id="desk-focus-spend" className="wk-rep-sec" aria-labelledby="report-h-cost" data-testid="report-cost">
+        <section id="desk-focus-spend" className="wk-rep-sec" aria-labelledby="report-h-cost" data-testid="report-cost" {...ask('Cost')} data-ask-key="cost">
           <SecHead id="report-h-cost" label="Cost" meta={`spend per ${per}, by agent`} />
           {noSpend ? <p className="wk-rep-quiet">Spend is counted per project, so work in no project has none of its own.</p>
             : !recordRead ? <Skeleton rows={3} variant="line" />
@@ -264,7 +276,7 @@ export function ReportPage({ runs, runsShown, now, navigate, projectId, agentNam
         </section>
 
         {/* 5. By repository */}
-        <section className="wk-rep-sec" aria-labelledby="report-h-repos" data-testid="report-repos">
+        <section className="wk-rep-sec" aria-labelledby="report-h-repos" data-testid="report-repos" {...ask('Jobs by repository')} data-ask-key="repos">
           <SecHead id="report-h-repos" label="By repository" meta="jobs that finished in this period" />
           {!runsShown ? <Skeleton rows={3} variant="line" /> : repos.length === 0 ? <p className="wk-rep-quiet">No job finished in this period.</p> : (
             <SortTable<RepoRow> caption="Jobs finished by repository" testId="report-repos-table" rows={repos} rowKey={(r) => r.key} initial="jobs"
@@ -280,7 +292,7 @@ export function ReportPage({ runs, runsShown, now, navigate, projectId, agentNam
         </section>
 
         {/* 6. By agent */}
-        <section className="wk-rep-sec" aria-labelledby="report-h-agents" data-testid="report-agents">
+        <section className="wk-rep-sec" aria-labelledby="report-h-agents" data-testid="report-agents" {...ask('Steps by agent')} data-ask-key="agents">
           <SecHead id="report-h-agents" label="By agent" meta="steps each agent took in this period" />
           {noSpend ? <p className="wk-rep-quiet">The agent record is counted per project, so work in no project has none of its own.</p>
             : !recordRead ? <Skeleton rows={3} variant="line" />
@@ -309,7 +321,7 @@ export function ReportPage({ runs, runsShown, now, navigate, projectId, agentNam
           {!runsShown ? <Skeleton rows={3} variant="line" /> : shipped.length === 0 ? <p className="wk-rep-quiet">Nothing was delivered in this period.</p> : (
             <ul className="wk-rep-rows">
               {shipped.map((s) => (
-                <li key={s.runId} className="wk-rep-row" data-testid="report-shipped-row" data-kind={s.kind}>
+                <li key={s.runId} className="wk-rep-row" data-testid="report-shipped-row" data-kind={s.kind} {...ask(`Shipped: ${s.title}`)} data-ask-key={`shipped:${s.runId}`}>
                   <span className="wk-rep-dot" data-kind={s.kind} aria-hidden />
                   <span className="wk-rep-row-body">
                     <a className="wk-rep-row-title" href={pathOfRun(s.runId)} onClick={(e) => { e.preventDefault(); navigate(pathOfRun(s.runId)); }}>{s.title}</a>
@@ -369,12 +381,15 @@ function SecHead({ id, label, meta }: { id: string; label: string; meta?: string
   );
 }
 
-function Tile({ label, value, change, note, loading, testId }: {
+function Tile({ label, value, change, note, loading, testId, period }: {
   label: string; value: string | null; change: Change | null; note: string | null; loading: boolean; testId: string;
+  /** The period in words: the tile is askable with it (DES-LEARN §6.2). */
+  period?: string;
 }): React.ReactElement {
   const Arrow = change?.dir === 'up' ? ArrowUp : change?.dir === 'down' ? ArrowDown : Minus;
+  const askable = period !== undefined && !loading ? { 'data-askable': `${value ?? '—'} ${label} · ${period}`, 'data-ask-key': testId, tabIndex: 0 } : {};
   return (
-    <li className="wk-rep-tile" data-testid={testId}>
+    <li className="wk-rep-tile" data-testid={testId} {...askable}>
       <span className="wk-rep-tile-value" aria-busy={loading ? 'true' : undefined}>{loading ? '…' : value ?? '—'}</span>
       <span className="wk-rep-tile-label">{label}</span>
       {!loading && change !== null && (
