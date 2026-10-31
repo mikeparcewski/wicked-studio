@@ -39,6 +39,7 @@ import type {
 
 import { ApiError, apiStatus } from './errors.js';
 import type { GuidanceUpdate } from './guidance.js';
+import type { ElicitationAnswerBody } from './ask.js';
 import type { ChatAttachmentUploadResponse, ChatCloseResponse, ChatHistoryPage, ChatMessagesResponse } from './chatHistory-wire.js';
 
 export type * from './types.js';
@@ -396,7 +397,7 @@ export const api = {
   },
 
   /** Answer an open elicitation. A 409 means our elicitationId was stale (DES-002 v0.22). */
-  respondToElicitation: (id: string, body: ElicitationResponse) =>
+  respondToElicitation: (id: string, body: ElicitationResponse | ElicitationAnswerBody) =>
     apiFetch<{ status: string }>(`/runs/${encodeURIComponent(id)}/elicitation`, {
       method: 'POST',
       body: JSON.stringify(body),

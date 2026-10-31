@@ -11,11 +11,11 @@
   "version": 1,
   "studioVersion": "0.13.0",
   "counts": {
-    "files": 264,
-    "occurrences": 3636,
-    "static": 3094,
+    "files": 265,
+    "occurrences": 3684,
+    "static": 3119,
     "dynamic": 76,
-    "computed": 33
+    "computed": 43
   },
   "static": [
     {
@@ -742,6 +742,30 @@
       ]
     },
     {
+      "testId": "ask-card",
+      "files": [
+        "src/components/ask/AskCard.tsx"
+      ]
+    },
+    {
+      "testId": "ask-confirm",
+      "files": [
+        "src/components/ask/AskCard.tsx"
+      ]
+    },
+    {
+      "testId": "ask-consequence",
+      "files": [
+        "src/components/ask/AskCard.tsx"
+      ]
+    },
+    {
+      "testId": "ask-count",
+      "files": [
+        "src/components/ask/AskCard.tsx"
+      ]
+    },
+    {
       "testId": "ask-launcher",
       "files": [
         "src/components/AskLauncher.tsx"
@@ -778,10 +802,118 @@
       ]
     },
     {
+      "testId": "ask-option",
+      "files": [
+        "src/components/ask/AskCard.tsx"
+      ]
+    },
+    {
+      "testId": "ask-option-meta",
+      "files": [
+        "src/components/ask/AskCard.tsx"
+      ]
+    },
+    {
+      "testId": "ask-option-why",
+      "files": [
+        "src/components/ask/AskCard.tsx"
+      ]
+    },
+    {
+      "testId": "ask-options",
+      "files": [
+        "src/components/ask/AskCard.tsx"
+      ]
+    },
+    {
+      "testId": "ask-options-off",
+      "files": [
+        "src/components/ask/AskCard.tsx"
+      ]
+    },
+    {
       "testId": "ask-panel",
       "files": [
         "src/components/AskLauncher.tsx",
         "src/components/chat/ChatWindow.tsx"
+      ]
+    },
+    {
+      "testId": "ask-question",
+      "files": [
+        "src/components/ask/AskCard.tsx"
+      ]
+    },
+    {
+      "testId": "ask-reason",
+      "files": [
+        "src/components/ask/AskCard.tsx"
+      ]
+    },
+    {
+      "testId": "ask-reason-label",
+      "files": [
+        "src/components/ask/AskCard.tsx"
+      ]
+    },
+    {
+      "testId": "ask-reason-text",
+      "files": [
+        "src/components/ask/AskCard.tsx"
+      ]
+    },
+    {
+      "testId": "ask-recommended",
+      "files": [
+        "src/components/ask/AskCard.tsx"
+      ]
+    },
+    {
+      "testId": "ask-record",
+      "files": [
+        "src/components/ask/AskCard.tsx"
+      ]
+    },
+    {
+      "testId": "ask-record-row",
+      "files": [
+        "src/components/ask/AskCard.tsx"
+      ]
+    },
+    {
+      "testId": "ask-scale",
+      "files": [
+        "src/components/ask/AskCard.tsx"
+      ]
+    },
+    {
+      "testId": "ask-scale-value",
+      "files": [
+        "src/components/ask/AskCard.tsx"
+      ]
+    },
+    {
+      "testId": "ask-select-all",
+      "files": [
+        "src/components/ask/AskCard.tsx"
+      ]
+    },
+    {
+      "testId": "ask-send",
+      "files": [
+        "src/components/ask/AskCard.tsx"
+      ]
+    },
+    {
+      "testId": "ask-skip",
+      "files": [
+        "src/components/ask/AskCard.tsx"
+      ]
+    },
+    {
+      "testId": "ask-text",
+      "files": [
+        "src/components/ask/AskCard.tsx"
       ]
     },
     {
@@ -4382,6 +4514,18 @@
       "testId": "editor-torn",
       "files": [
         "src/components/editors/EditorHostPage.tsx"
+      ]
+    },
+    {
+      "testId": "elicitation-decline",
+      "files": [
+        "src/components/ElicitationPrompt.tsx"
+      ]
+    },
+    {
+      "testId": "elicitation-error",
+      "files": [
+        "src/components/ElicitationPrompt.tsx"
       ]
     },
     {
@@ -10066,7 +10210,25 @@
       ]
     },
     {
+      "testId": "power-pause-ask",
+      "files": [
+        "src/components/session/PowerMode.tsx"
+      ]
+    },
+    {
       "testId": "power-pause-choice",
+      "files": [
+        "src/components/session/PowerMode.tsx"
+      ]
+    },
+    {
+      "testId": "power-pause-chosen",
+      "files": [
+        "src/components/session/PowerMode.tsx"
+      ]
+    },
+    {
+      "testId": "power-pause-confirm",
       "files": [
         "src/components/session/PowerMode.tsx"
       ]
@@ -10084,19 +10246,25 @@
       ]
     },
     {
-      "testId": "power-pause-more",
-      "files": [
-        "src/components/session/PowerMode.tsx"
-      ]
-    },
-    {
       "testId": "power-pause-question",
       "files": [
         "src/components/session/PowerMode.tsx"
       ]
     },
     {
+      "testId": "power-pause-reason",
+      "files": [
+        "src/components/session/PowerMode.tsx"
+      ]
+    },
+    {
       "testId": "power-pause-reasons",
+      "files": [
+        "src/components/session/PowerMode.tsx"
+      ]
+    },
+    {
+      "testId": "power-pause-undo",
       "files": [
         "src/components/session/PowerMode.tsx"
       ]
@@ -13535,6 +13703,12 @@
       ]
     },
     {
+      "testId": "session-gate-ask",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
       "testId": "session-gate-assurance",
       "files": [
         "src/components/session/GateRow.tsx"
@@ -13553,12 +13727,6 @@
       ]
     },
     {
-      "testId": "session-gate-choice-consequence",
-      "files": [
-        "src/components/session/GateRow.tsx"
-      ]
-    },
-    {
       "testId": "session-gate-choice-default",
       "files": [
         "src/components/session/GateRow.tsx"
@@ -13572,6 +13740,18 @@
     },
     {
       "testId": "session-gate-chosen",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
+      "testId": "session-gate-chosen-wait",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
+      "testId": "session-gate-confirm",
       "files": [
         "src/components/session/GateRow.tsx"
       ]
@@ -13638,12 +13818,6 @@
     },
     {
       "testId": "session-gate-deliver-consent",
-      "files": [
-        "src/components/session/GateRow.tsx"
-      ]
-    },
-    {
-      "testId": "session-gate-detail",
       "files": [
         "src/components/session/GateRow.tsx"
       ]
@@ -13769,18 +13943,6 @@
       ]
     },
     {
-      "testId": "session-gate-menu",
-      "files": [
-        "src/components/session/GateRow.tsx"
-      ]
-    },
-    {
-      "testId": "session-gate-more",
-      "files": [
-        "src/components/session/GateRow.tsx"
-      ]
-    },
-    {
       "testId": "session-gate-more-about",
       "files": [
         "src/components/session/GateRow.tsx"
@@ -13788,6 +13950,12 @@
     },
     {
       "testId": "session-gate-note",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
+      "testId": "session-gate-note-label",
       "files": [
         "src/components/session/GateRow.tsx"
       ]
@@ -13842,24 +14010,6 @@
     },
     {
       "testId": "session-gate-refusal-changed",
-      "files": [
-        "src/components/session/GateRow.tsx"
-      ]
-    },
-    {
-      "testId": "session-gate-rerun",
-      "files": [
-        "src/components/session/GateRow.tsx"
-      ]
-    },
-    {
-      "testId": "session-gate-rerun-confirm",
-      "files": [
-        "src/components/session/GateRow.tsx"
-      ]
-    },
-    {
-      "testId": "session-gate-rerun-consequence",
       "files": [
         "src/components/session/GateRow.tsx"
       ]
@@ -19199,9 +19349,21 @@
       ]
     },
     {
+      "expression": "open ? tid(testIds, 'send', /* testid */ 'ask-send') : tid(testIds, 'confirm', /* testid */ 'ask-confirm')",
+      "files": [
+        "src/components/ask/AskCard.tsx"
+      ]
+    },
+    {
       "expression": "openTestId",
       "files": [
         "src/components/calm/Calm.tsx"
+      ]
+    },
+    {
+      "expression": "reasonCfg.labelTestId ?? tid(testIds, 'reasonLabel', /* testid */ 'ask-reason-label')",
+      "files": [
+        "src/components/ask/AskCard.tsx"
       ]
     },
     {
@@ -19239,6 +19401,7 @@
         "src/components/WhatWhere.tsx",
         "src/components/agents/AgentsPage.tsx",
         "src/components/agents/SetupPanel.tsx",
+        "src/components/ask/AskCard.tsx",
         "src/components/calm/Calm.tsx",
         "src/components/charts/CategoryBars.tsx",
         "src/components/charts/Chart.tsx",
@@ -19389,6 +19552,54 @@
         "src/components/SteeringRuleDrawer.tsx",
         "src/components/SteeringRuleForm.tsx",
         "src/components/session/DeckReview.tsx"
+      ]
+    },
+    {
+      "expression": "tid(props.testIds, 'root', /* testid */ 'ask-card')",
+      "files": [
+        "src/components/ask/AskCard.tsx"
+      ]
+    },
+    {
+      "expression": "tid(testIds, 'confirm', /* testid */ 'ask-confirm')",
+      "files": [
+        "src/components/ask/AskCard.tsx"
+      ]
+    },
+    {
+      "expression": "tid(testIds, 'consequence', /* testid */ 'ask-consequence')",
+      "files": [
+        "src/components/ask/AskCard.tsx"
+      ]
+    },
+    {
+      "expression": "tid(testIds, 'group', /* testid */ 'ask-options')",
+      "files": [
+        "src/components/ask/AskCard.tsx"
+      ]
+    },
+    {
+      "expression": "tid(testIds, 'option', /* testid */ 'ask-option')",
+      "files": [
+        "src/components/ask/AskCard.tsx"
+      ]
+    },
+    {
+      "expression": "tid(testIds, 'option', /* testid */ 'ask-scale')",
+      "files": [
+        "src/components/ask/AskCard.tsx"
+      ]
+    },
+    {
+      "expression": "tid(testIds, 'reason', /* testid */ 'ask-reason-text')",
+      "files": [
+        "src/components/ask/AskCard.tsx"
+      ]
+    },
+    {
+      "expression": "tid(testIds, 'reason', /* testid */ 'ask-text')",
+      "files": [
+        "src/components/ask/AskCard.tsx"
       ]
     },
     {

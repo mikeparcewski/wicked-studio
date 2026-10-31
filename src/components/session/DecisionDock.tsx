@@ -103,7 +103,7 @@ export function eyebrowWords(item: Pick<DockItem, 'who' | 'since'>, now: number)
 
 const PHONE = '(max-width: 640px)';
 /** A docked renderer's headline (GateRow's question, a plan or hand-over card's, a run's question). */
-const HEADLINE = '[data-testid="session-gate-question"], [data-testid="session-proposal-text"], [data-testid="elicitation-prompt"] p, [data-testid="power-pause-question"]';
+const HEADLINE = '[data-testid="session-gate-question"], [data-testid="session-proposal-text"], [data-testid="elicitation-prompt"] [data-testid="ask-question"], [data-testid="power-pause-question"]';
 
 function usePhone(): boolean {
   const [phone, setPhone] = useState(() => typeof window !== 'undefined' && window.matchMedia?.(PHONE).matches === true);
@@ -168,7 +168,9 @@ export function DecisionDockFrame({ items, children, composer, now = Date.now() 
     // No cleanup cancel: `landed` is already set, so a re-run (StrictMode) must not drop the one focus.
     let frames = 0;
     const tryFocus = (): void => {
-      const field = slot.querySelector<HTMLElement>('[data-testid="elicitation-prompt"] :is(input, textarea, select, button)');
+      // A guided ask marks where a person starts (its selected card, its text box); else the question's first control.
+      const field = slot.querySelector<HTMLElement>('[data-testid="elicitation-prompt"] [data-ask-focus]')
+        ?? slot.querySelector<HTMLElement>('[data-testid="elicitation-prompt"] :is(input, textarea, select, button)');
       const active = document.activeElement;
       if (field !== null) {
         if (!(active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement)) field.focus({ preventScroll: true });

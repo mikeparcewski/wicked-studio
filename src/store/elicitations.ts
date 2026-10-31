@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { CoreEvent } from '../api/types.js';
 import { isAwaitingPinned } from './awaitingPins.js';
+import type { ElicitationMulti } from '../api/ask.js';
 
 /**
  * A browser-side open-elicitation record, keyed by run id (DES-002).
@@ -31,6 +32,26 @@ export interface OpenElicitation {
   seat?: string;
   /** (ask) The asking unit's ordinal — the frame's additive `ord`. */
   ord?: number;
+  /** (C3) The index into `options` the producer recommends: marked and preselected. */
+  recommended?: number;
+  /** (guided asks, api-types 0.158.0) A multi-select's bounds: the answer picks several (`content.values`). */
+  multi?: ElicitationMulti;
+}
+
+/**
+ * How the question is answered, as the wire says it: the producer's recommended option (C3) and a multi-select's
+ * bounds (api-types 0.158.0). Kept only when well-formed against `options`; absent otherwise.
+ */
+export function answerShapeOf(raw: unknown): Pick<OpenElicitation, 'recommended' | 'multi'> {
+  if (raw === null || typeof raw !== 'object') return {};
+  const { options, recommended, multi } = raw as { options?: unknown; recommended?: unknown; multi?: unknown };
+  if (!Array.isArray(options) || options.length === 0) return {};
+  const int = (v: unknown): v is number => typeof v === 'number' && Number.isInteger(v);
+  const m = multi !== null && typeof multi === 'object' ? multi as { min?: unknown; max?: unknown } : null;
+  return {
+    ...(int(recommended) && recommended >= 0 && recommended < options.length ? { recommended } : {}),
+    ...(m !== null && int(m.min) && int(m.max) && m.min >= 1 && m.min <= m.max && m.max <= options.length ? { multi: { min: m.min, max: m.max } } : {}),
+  };
 }
 
 /**
@@ -147,6 +168,7 @@ export const useElicitationStore = create<ElicitationStore>((set, get) => ({
         options: Array.isArray(event.options) ? event.options : null,
         receivedAt: new Date().toISOString(),
         ...askerOf(event),
+        ...answerShapeOf(event),
       });
       return;
     }

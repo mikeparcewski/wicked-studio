@@ -121,7 +121,7 @@ describe('the floor-failure gate row', () => {
 
   it('renders, requires the rationale, and submits the judgment with it', async () => {
     renderRow();
-    const own = await screen.findByText(OPERATOR_JUDGMENT_LABEL, { selector: `[data-choice-key="${FLOOR_OVERRIDE_KEY}"]` });
+    const own = await screen.findByText(OPERATOR_JUDGMENT_LABEL, { selector: `[data-choice-key="${FLOOR_OVERRIDE_KEY}"] b` });
     fireEvent.click(own);
     const note = await screen.findByTestId('session-gate-note') as HTMLTextAreaElement;
     // The consequence comes first, then the box — which opens empty and is required.
@@ -150,10 +150,10 @@ describe('the floor-failure gate row', () => {
 
   it("never pre-fills the rationale with another choice's draft", async () => {
     renderRow();
-    const retry = await screen.findByText(/Retry this step with a note/, { selector: '[data-choice-key="steer"]' });
+    const retry = await screen.findByText(/Retry this step with a note/, { selector: '[data-choice-key="steer"] b' });
     fireEvent.click(retry);
     fireEvent.change(await screen.findByTestId('session-gate-note'), { target: { value: 'try again' } });
-    fireEvent.click(screen.getByText(OPERATOR_JUDGMENT_LABEL, { selector: `[data-choice-key="${FLOOR_OVERRIDE_KEY}"]` }));
+    fireEvent.click(screen.getByText(OPERATOR_JUDGMENT_LABEL, { selector: `[data-choice-key="${FLOOR_OVERRIDE_KEY}"] b` }));
     await waitFor(() => expect(screen.getByTestId('session-gate-floor-override-consequence')).toBeTruthy());
     expect((screen.getByTestId('session-gate-note') as HTMLTextAreaElement).value).toBe('');
   });

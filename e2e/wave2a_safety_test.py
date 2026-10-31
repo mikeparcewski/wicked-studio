@@ -12,7 +12,7 @@ REAL 10 s window throughout. Against the `wave1` corpus with a SIMPLE gate waiti
             the notice says a new gate opened — the old decision is never applied to the new gate.
   ord       fresh page, a, no interference: exactly ONE POST after 10 s, body {approve:true, ord:3}.
   card      on /s/run%3Ab1 (S16a-2a: the session's gate row), Approve: the row folds to "You chose:
-            Approve · Undo N s" with no choice left to take, so a second key answers nothing (no
+            Approve" (Sends in N s · Undo) with no choice left to take, so a second key answers nothing (no
             POST); Undo re-arms Approve.
 
 On the Desk (the one shell since S18d) the board is the Desk: the
@@ -164,14 +164,17 @@ with sync_playwright() as p:
     APPROVE = '[data-testid="session-gate-choice"][data-choice-key="approve"]'
     page.locator(APPROVE).wait_for(state="visible", timeout=15000)
     page.locator(APPROVE).click()
+    page.get_by_test_id("session-gate-confirm").click()
     try:
         page.get_by_test_id("session-gate-chosen").wait_for(state="visible", timeout=3000)
     except Exception:  # noqa: BLE001 — reported by the check below
         pass
     chosen = page.get_by_test_id("session-gate-chosen").text_content() or "" if page.get_by_test_id("session-gate-chosen").count() else ""
-    # The row's undo fold is its queued state: "You chose: Approve · Undo N s", the choices gone.
-    check("card-queued-state", chosen.startswith("You chose: Approve · Undo ")
-          and page.locator(APPROVE).count() == 0, chosen=chosen)
+    # The row's undo fold is its queued state (guided asks): "You chose: Approve", then "Sends in N s" and Undo at the
+    # end of the line, the choices gone.
+    wait_words = page.get_by_test_id("session-gate-chosen-wait").text_content() or "" if page.get_by_test_id("session-gate-chosen-wait").count() else ""
+    check("card-queued-state", chosen == "You chose: Approve" and wait_words.startswith("Sends in ")
+          and page.locator(APPROVE).count() == 0, chosen=chosen, wait=wait_words)
     page.get_by_test_id("session-gate-row").focus()
     page.keyboard.press("1")
     page.wait_for_timeout(500)

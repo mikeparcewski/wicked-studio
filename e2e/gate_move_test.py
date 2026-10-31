@@ -88,13 +88,19 @@ with sync_playwright() as p:
         page.locator('[data-testid="session-gate-choice"][data-recommended="true"]').wait_for(timeout=10000)
         rec = page.locator('[data-testid="session-gate-choice"][data-recommended="true"]')
         move = rec.get_attribute("data-choice-key")
-        label = (rec.text_content() or "").replace("suggested", "").strip()
-        check("move-named-on-the-primary-button", move == "send-back" and label == "Send back", move=move, label=label)
+        # Guided asks: the move is a card, marked Recommended and preselected; the one primary names it.
+        label = (rec.locator(".wk-ask-opt-label").text_content() or "").strip()
+        check("move-named-on-the-primary-button", move == "send-back" and label == "Send back"
+              and rec.get_attribute("aria-checked") == "true" and rec.get_by_test_id("ask-recommended").count() == 1
+              and (page.get_by_test_id("session-gate-confirm").text_content() or "").strip() == "Send back", move=move, label=label)
         consequence = text(page, "session-gate-consequence")
-        check("consequence-above-the-button", consequence == "produce reruns with 2 items; critique re-reviews"
+        # Its consequence is said before it is taken, on the line under the cards (room reserved: a hover never moves a card).
+        check("consequence-before-it-is-taken", consequence == "If you choose this: produce reruns with 2 items; critique re-reviews"
               and page.evaluate("""() => { const c = document.querySelector('[data-testid="session-gate-consequence"]');
-                  const b = document.querySelector('[data-testid="session-gate-choice"][data-recommended="true"]');
-                  return c.getBoundingClientRect().bottom <= b.getBoundingClientRect().top; }"""), consequence=consequence)
+                  const g = document.querySelector('[data-testid="session-gate-choices"]');
+                  const go = document.querySelector('[data-testid="session-gate-confirm"]');
+                  return c.getBoundingClientRect().top >= g.getBoundingClientRect().bottom
+                    && c.getBoundingClientRect().bottom <= go.getBoundingClientRect().top; }"""), consequence=consequence)
         keys = page.evaluate("""() => [...document.querySelectorAll('[data-testid="session-gate-choices"] [data-testid="session-gate-choice"]')]
           .map(e => e.dataset.choiceKey)""")
         check("others-secondary", "request_changes" not in keys and keys.count("send-back") == 1

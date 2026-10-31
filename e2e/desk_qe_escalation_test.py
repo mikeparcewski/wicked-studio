@@ -95,9 +95,10 @@ with sync_playwright() as p:
 
         # 3. The retry is suggested; nothing sends the build back.
         keys = page.evaluate("""() => [...document.querySelectorAll('[data-testid="session-gate-choice"]')].map(e => e.dataset.choiceKey)""")
-        labels = page.evaluate("""() => [...document.querySelectorAll('[data-testid="session-gate-choice"]')].map(e => e.textContent.trim())""")
+        labels = page.evaluate("""() => [...document.querySelectorAll('[data-testid="session-gate-choice"] .wk-ask-opt-label')].map(e => e.textContent.trim())""")
         first = page.locator(CHOICE).first
         check("retry-suggested-first", keys[:1] == ["retry"] and first.get_attribute("data-recommended") == "true"
+              and first.get_attribute("aria-checked") == "true"
               and (first.text_content() or "").strip().startswith("Retry the QE review"), keys=keys, labels=labels)
         check("no-send-back-or-rerun", "send-back" not in keys and "rerun" not in keys
               and not any(l.startswith("Rerun from") or l == "Send back" for l in labels), keys=keys, labels=labels)
@@ -113,6 +114,7 @@ with sync_playwright() as p:
 
         # 4. The retry is the engine's approve at the QE unit — nothing else rides it.
         first.click()
+        page.get_by_test_id("session-gate-confirm").click()  # guided asks: the primary sends the selected card
         deadline = time.monotonic() + 25
         while not gate_posts(origin) and time.monotonic() < deadline:
             page.wait_for_timeout(200)

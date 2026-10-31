@@ -18,6 +18,7 @@ import { setUndoWindowForTest, undoDecision, useUndoQueue } from '../src/board/u
 import { GateRow } from '../src/components/session/GateRow.js';
 import { ProposalCard } from '../src/components/session/ProposalCard.js';
 import { RunBlock } from '../src/components/session/SessionView.js';
+import { chooseGate } from './askGateHelpers.js';
 import { proposalKindOf } from '../src/board/proposalCard.js';
 import { teamPlanApi } from '../src/api/teamPlan.js';
 import { useRunEventStore } from '../src/store/events.js';
@@ -67,7 +68,7 @@ describe('GateRow — def gate', () => {
     const confirm = vi.mocked(client.api.confirmGate);
     const gate = plainGate();
     render(<GateRow view={view()} gate={gate} />);
-    fireEvent.click(screen.getAllByTestId('session-gate-choice')[0]!); // Approve
+    chooseGate(screen.getAllByTestId('session-gate-choice')[0]!); // Approve: selected (preselected), then sent
     await new Promise<void>((r) => setTimeout(r, 50));
     expect(confirm).toHaveBeenCalledWith(RUN, expect.objectContaining({ approve: true }));
   });
@@ -88,9 +89,13 @@ describe('GateRow — def gate', () => {
     const gate = plainGate();
     render(<GateRow view={view()} gate={gate} />);
     const choices = screen.getAllByTestId('session-gate-choice');
-    fireEvent.click(choices[choices.length - 1]!); // Stop
+    // Stop asks why (DES-GUIDED-CHAT §4) before it is taken: nothing goes without the reason.
+    fireEvent.click(choices[choices.length - 1]!);
+    expect((screen.getByTestId('session-gate-send') as HTMLButtonElement).disabled).toBe(true);
+    expect(confirm).not.toHaveBeenCalled();
+    chooseGate(choices[choices.length - 1]!, 'wrong repo');
     await new Promise<void>((r) => setTimeout(r, 50));
-    expect(confirm).toHaveBeenCalledWith(RUN, expect.objectContaining({ approve: false }));
+    expect(confirm).toHaveBeenCalledWith(RUN, expect.objectContaining({ approve: false, amend: 'wrong repo' }));
   });
 });
 
@@ -430,7 +435,7 @@ describe('RunBlock — receipt survives unmount+remount through RunBlock routing
     const { unmount } = render(<RunBlock view={remountView()} badge={0} sessionId={`run:${RUN_REM}`} />);
     await waitFor(() => expect(screen.queryByTestId('session-gate-row')).not.toBeNull());
 
-    fireEvent.click(screen.getAllByTestId('session-gate-choice')[0]!); // Approve — no note needed
+    chooseGate(screen.getAllByTestId('session-gate-choice')[0]!); // Approve — no note needed
     await waitFor(() => {
       const st = useGateActionStore.getState().byGate[RUN_REM];
       expect(st?.answered).toBe('approved');
@@ -452,7 +457,7 @@ describe('GateRow — fold stays visible after gate clears', () => {
   it('session-gate-chosen remains after gate prop becomes undefined (same instance)', async () => {
     const gate = plainGate();
     const { rerender } = render(<GateRow view={view()} gate={gate} />);
-    fireEvent.click(screen.getAllByTestId('session-gate-choice')[0]!); // Approve — no note needed
+    chooseGate(screen.getAllByTestId('session-gate-choice')[0]!); // Approve — no note needed
     // Wait for the decision to send (undo window = 0 in beforeEach)
     await new Promise<void>((r) => setTimeout(r, 50));
     // Simulate RunBlock keeping GateRow mounted but passing gate=undefined after clearGate
@@ -467,7 +472,7 @@ describe('GateRow — fold stays visible after gate clears', () => {
     useGateActionStore.setState({ byGate: { [RUN]: IDLE_GATE_ACTION } });
 
     const { unmount } = render(<GateRow view={view()} gate={gate} />);
-    fireEvent.click(screen.getAllByTestId('session-gate-choice')[0]!); // Approve
+    chooseGate(screen.getAllByTestId('session-gate-choice')[0]!); // Approve
     // Wait for commitGateDecision to complete and store receipt to be written.
     await waitFor(() => {
       const st = useGateActionStore.getState().byGate[RUN];
@@ -492,14 +497,13 @@ describe('GateRow — overflow disabled choice cannot be sent', () => {
     // 5 choices: first 4 inline (all known), 5th in overflow (unknown engine value → disabled)
     const gate = plainGate({ choices: ['approve', 'reject', 'request_changes', 'extend', 'custom-unknown'] });
     render(<GateRow view={view()} gate={gate} />);
-    // (mockup ui-v2-gate) Every choice past the primary is under Other options ▾; the unknown one is there, disabled.
-    fireEvent.click(screen.getByTestId('session-gate-more'));
-    const menu = screen.getByTestId('session-gate-menu');
-    const overflowBtns = [...menu.querySelectorAll('[data-testid="session-gate-choice"]')].filter((b) => (b as HTMLButtonElement).disabled);
+    // (guided asks) Every choice is a card; the unknown one is shown, disabled, with why.
+    const overflowBtns = screen.getAllByTestId('session-gate-choice').filter((b) => (b as HTMLButtonElement).disabled);
     expect(overflowBtns.length).toBe(1);
     const btn = overflowBtns[0] as HTMLButtonElement;
     expect(btn.disabled).toBe(true);
     fireEvent.click(btn);
+    expect(btn.getAttribute('aria-checked')).toBe('false');
     await new Promise<void>((r) => setTimeout(r, 50));
     expect(confirm).not.toHaveBeenCalled();
   });
@@ -567,7 +571,7 @@ describe('GateRow — a denied unit (studio#573): Approve is on the row and sugg
     const gate = plainGate({ ord: 2, gateKind: 'escalation', prompt: DENIED_PROMPT_573 });
     useGateStore.setState({ gates: { [RUN]: gate } });
     render(<GateRow view={view()} gate={gate} />);
-    fireEvent.click(screen.getAllByTestId('session-gate-choice')[0]!);
+    chooseGate(screen.getAllByTestId('session-gate-choice')[0]!);
     await waitFor(() => expect(client.api.confirmGate).toHaveBeenCalled());
     const body = (client.api.confirmGate as unknown as { mock: { calls: unknown[][] } }).mock.calls[0]![1] as Record<string, unknown>;
     expect(body['approve']).toBe(true);

@@ -980,6 +980,14 @@
     "run-plugins-pinned": "run-plugin-pin",
     "run-plugins-pinned-run": "run-plugin-pin",
     "run-plugins-settings": "plugins-grid",
-    "editor-plugins-settings": "plugins-grid"
+    "editor-plugins-settings": "plugins-grid",
+    "session-gate-choice-consequence": "session-gate-consequence",
+    "session-gate-detail": "session-gate-note",
+    "session-gate-menu": "session-gate-choices",
+    "session-gate-more": "session-gate-choices",
+    "session-gate-rerun": "session-gate-consequence",
+    "session-gate-rerun-confirm": "session-gate-confirm",
+    "session-gate-rerun-consequence": "session-gate-consequence",
+    "power-pause-more": "power-pause-choice"
   }
 }
