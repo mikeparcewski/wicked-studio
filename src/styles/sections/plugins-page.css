@@ -117,7 +117,7 @@ button.wk-plugcard:focus-visible { outline: 2px solid transparent; box-shadow: v
 .wk-mini-page span { background: linear-gradient(180deg, color-mix(in oklab, var(--ink-high) 22%, transparent) 0 8px, transparent 8px 16px, color-mix(in oklab, var(--ink-high) 12%, transparent) 16px 22px, transparent 22px);
   box-shadow: inset 0 0 0 2px var(--plug-c); }
 .wk-mini-video { position: relative; background: color-mix(in oklab, var(--plug-c) 22%, var(--surface-card)); box-shadow: inset 0 0 0 1px var(--border-subtle); color: var(--plug-c); }
-.wk-mini-video svg { width: 34px; height: 34px; padding: 8px 6px 8px 10px; border-radius: 999px; background: var(--plug-c); color: #fff; box-sizing: content-box; }
+.wk-mini-video svg { width: 34px; height: 34px; padding: 8px 6px 8px 10px; border-radius: 999px; background: var(--plug-c); color: var(--surface-card); box-sizing: content-box; }
 .wk-mini-video::after { content: ''; position: absolute; left: 8%; right: 8%; bottom: 10px; height: 4px; border-radius: 2px;
   background: linear-gradient(90deg, var(--plug-c) 0 38%, color-mix(in oklab, var(--ink-high) 18%, transparent) 38%); }
 .wk-mini-doc { box-shadow: inset 0 0 0 1px var(--border-subtle); }
