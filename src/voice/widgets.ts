@@ -16,8 +16,9 @@
  */
 
 import type { VoicePanelDecl, VoiceWidgetManifest } from '../api/voice.js';
+import { parsePanels } from '../board/runPluginPanels.js';
 
-export const VOICE_SLOT = 'voice-dashboard';
+export const VOICE_SLOT = 'voice-dashboard' as const;
 
 /** The built-in widgets, as manifests: the six the mockup frames the transcript with. */
 export type BuiltinWidgetId = 'builtin.load' | 'builtin.health' | 'builtin.helpers' | 'builtin.jobs' | 'builtin.gates' | 'builtin.spend';
@@ -50,21 +51,11 @@ export const DEFAULT_LAYOUT: readonly string[] = BUILTIN_WIDGETS.map((w) => w.id
 export type DashboardWidget = { kind: 'builtin'; id: string; title: string; description: string; side: 'left' | 'right'; order: number }
   | { kind: 'user'; id: string; title: string; description: string; side: 'left' | 'right'; order: number; manifest: VoiceWidgetManifest };
 
-const PANEL_ID = /^[a-z][a-z0-9-]{0,31}$/u;
-
-/** A manifest's `voice-dashboard` section, strictly (the run-panel parser's rules): malformed → null. */
+/** A manifest's `voice-dashboard` section, read by the one panel parser (`board/runPluginPanels.ts`, its rules and its
+ *  closed slot list): malformed → null. */
 export function voicePanelOf(raw: unknown): VoicePanelDecl | null {
-  if (!Array.isArray(raw)) return null;
-  for (const p of raw.slice(0, 4)) {
-    if (typeof p !== 'object' || p === null) continue;
-    const r = p as Record<string, unknown>;
-    if (r['slot'] !== VOICE_SLOT) continue;
-    if (typeof r['id'] !== 'string' || !PANEL_ID.test(r['id'])) continue;
-    if (typeof r['title'] !== 'string' || r['title'].trim() === '' || r['title'].length > 40 || /[\r\n<>]/u.test(r['title'])) continue;
-    if (!Number.isInteger(r['order'])) continue;
-    return { slot: VOICE_SLOT, id: r['id'], title: r['title'].trim(), order: Math.min(99, Math.max(1, r['order'] as number)) };
-  }
-  return null;
+  const p = parsePanels(raw).find((x) => x.slot === VOICE_SLOT);
+  return p !== undefined ? { slot: VOICE_SLOT, id: p.id, title: p.title, order: p.order } : null;
 }
 
 /** The widgets on the dashboard, in the person's order (unknown ids dropped; nothing saved = the six built-ins). */

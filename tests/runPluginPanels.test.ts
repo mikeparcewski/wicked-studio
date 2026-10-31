@@ -4,6 +4,8 @@ import {
   type PanelDecl,
 } from '../src/board/runPluginPanels.js';
 import type { RunPhase } from '../src/store/runPluginView.js';
+import { voicePanelOf } from '../src/voice/widgets.js';
+import { slotWords } from '../src/components/editors/PluginsPage.js';
 
 /** The `panels[]` manifest contract and the Details panel's order (program DES-LEARN §1.2). */
 
@@ -88,5 +90,18 @@ describe('open or folded', () => {
     // Touching an old run moves it to the newest place.
     m = rememberPluginOpen(m, 'r5', 'a:b', false);
     expect(Object.keys(m).at(-1)).toBe('r5');
+  });
+});
+
+// ui-v3 integration: voice mode's dashboard widgets register through the same manifest contract.
+describe('the voice-dashboard slot', () => {
+  it('is one closed slot the one parser reads; the run panel never draws it', () => {
+    const raw = [{ slot: 'voice-dashboard', id: 'main', title: 'Disk free', order: 70 }, { slot: 'elsewhere', id: 'x', title: 'X', order: 1 }];
+    const panels = parsePanels(raw);
+    expect(panels.map((p) => [p.slot, p.id, p.order])).toEqual([['voice-dashboard', 'main', 70]]);
+    expect(pluginSections([{ id: 'u.disk', title: 'Disk', panels }], [])).toEqual([]);
+    expect(voicePanelOf(raw)).toEqual({ slot: 'voice-dashboard', id: 'main', title: 'Disk free', order: 70 });
+    expect(voicePanelOf([{ slot: 'run.details', id: 'phase', title: 'P', order: 1 }])).toBeNull();
+    expect(slotWords(panels[0]!)).toBe("Voice mode's dashboard · a widget (order 70)");
   });
 });

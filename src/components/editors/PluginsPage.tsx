@@ -185,6 +185,7 @@ function PluginTile({ card, selected, onPick }: { card: PluginCardModel; selecte
 
 /** A run plugin's panel slot, in words: "Job details · after Now, before Plan and steps · one per phase · the running phase open". */
 export function slotWords(p: PanelDecl): string {
+  if (p.slot === 'voice-dashboard') return `Voice mode's dashboard · a widget (order ${p.order})`;
   const before = (Object.entries(CORE_ORDER) as Array<[string, number]>).find(([, o]) => o >= p.order)?.[0] ?? null;
   const NAMES: Record<string, string> = { plan: 'Plan and steps', changes: 'Changes and delivery', checks: 'Checks and evidence', agents: 'Agents and spend', record: 'Record' };
   const place = before !== null && before !== 'now' ? `after Now, before ${NAMES[before] ?? before}` : 'after every core section';

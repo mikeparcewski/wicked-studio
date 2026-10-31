@@ -142,7 +142,7 @@ export function RunPluginSection({ runId, plugin, section, live }: { runId: stri
         runId,
         topics: plugin.granted,
         ...(phase !== null ? { scope: { phase: phase.key, label: phase.label, ords: phase.ords } } : {}),
-        panel: { slot: section.panel.slot, id: section.panel.id },
+        panel: { slot: 'run.details', id: section.panel.id }, // pluginSections keeps run.details only
         subscribe: (deliver) => {
           const feed = new RunEventFeed({
             runId,

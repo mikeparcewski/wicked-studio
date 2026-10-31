@@ -7,7 +7,8 @@
  *   { "slot": "run.details", "id": "phase", "title": "{phase}", "instances": "per-phase",
  *     "order": 10, "defaultOpen": "current", "summary": "plugin" }
  *
- *  - `slot`: a closed list. v1 has one, `run.details` (the run page's Details panel). Anything else is dropped.
+ *  - `slot`: a closed list: `run.details` (the run page's Details panel) and `voice-dashboard` (a widget on voice mode's
+ *    dashboard, lane voice: `voice/widgets.ts` reads its entries through this parser). Anything else is dropped.
  *  - `order` 1-99: Now is 0 and always first; the core sections sit at 20-60 and a plugin cannot move them. A tie with
  *    a core section puts the core one first; plugins tie-break by id, then by the phase's place in the run.
  *  - `instances`: `single`, or `per-phase` (one section per phase a power run has; a run without phases gets one).
@@ -20,7 +21,7 @@
 
 import type { RunPhase } from '../store/runPluginView.js';
 
-export const PANEL_SLOTS = ['run.details'] as const;
+export const PANEL_SLOTS = ['run.details', 'voice-dashboard'] as const;
 export type PanelSlot = (typeof PANEL_SLOTS)[number];
 
 export interface PanelDecl {
