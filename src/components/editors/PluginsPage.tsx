@@ -143,7 +143,9 @@ function Preview({ card, place }: { card: PluginCardModel; place: 'card' | 'deta
   const live = card.run !== undefined && card.visuals.live;
   const tag = live ? (place === 'details' ? 'Live · sample events' : 'Live preview') : card.kind === 'soon' ? null : 'Preview';
   return (
-    <div className="wk-plugcard-prev" data-testid={place === 'card' ? 'plugin-tile-preview' : 'plugin-details-preview'} data-preview={live ? 'live' : image !== null ? 'image' : 'mini'}>
+    <div className="wk-plugcard-prev" data-testid={place === 'card' ? 'plugin-tile-preview' : 'plugin-details-preview'} data-preview={live ? 'live' : image !== null ? 'image' : 'mini'}
+      // The miniature is drawn in the plugin's own colour mixed with the theme's surfaces, so it reads on either ground.
+      style={card.visuals.color !== null ? ({ '--plug': card.visuals.color } as React.CSSProperties) : undefined}>
       {live ? <PluginLivePreview plugin={card.run!} scale={place === 'card' ? 0.5 : 0.62} testId={place === 'card' ? 'plugin-tile-live' : 'plugin-details-live'} />
         : image !== null ? <img src={image} alt="" className="wk-plugcard-img" />
           : <Mini kind={card.mini} />}

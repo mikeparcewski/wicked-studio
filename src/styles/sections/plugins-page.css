@@ -102,3 +102,25 @@ button.wk-plugcard:focus-visible { outline: 2px solid transparent; box-shadow: v
   .wk-plugcard { transition: none; }
   button.wk-plugcard:hover { transform: none; }
 }
+
+/* Miniatures for both grounds (operator 2026-10-31: "the card images must look good in both dark and light"). Every
+   colour is a theme token, or the plugin's own colour (--plug) mixed into the theme's surfaces: nothing assumes a
+   light or a dark background. */
+.wk-plugcard-prev { --plug-c: var(--plug, var(--accent)); background: color-mix(in oklab, var(--plug-c) 7%, var(--surface-base)); }
+.wk-mini-slide .wk-mini-strip i:first-child { box-shadow: inset 0 0 0 2px var(--plug-c); }
+.wk-mini-big { background: var(--surface-card); box-shadow: inset 0 0 0 1px var(--border-subtle), 0 1px 0 color-mix(in oklab, var(--ink-high) 6%, transparent); }
+.wk-mini-big::before { content: ''; position: absolute; inset: 0 0 auto 0; height: 22%; border-radius: 6px 6px 0 0; background: color-mix(in oklab, var(--plug-c) 70%, var(--surface-card)); }
+.wk-mini-big::after { left: 10%; top: 38%; width: 58%; height: 9%; background: color-mix(in oklab, var(--ink-high) 45%, transparent);
+  box-shadow: 0 16px 0 -1px color-mix(in oklab, var(--ink-high) 22%, transparent), 0 30px 0 -1px color-mix(in oklab, var(--ink-high) 22%, transparent); }
+.wk-mini-page { background: var(--surface-card); }
+.wk-mini-page b { background: color-mix(in oklab, var(--plug-c) 55%, var(--surface-card)); }
+.wk-mini-page span { background: linear-gradient(180deg, color-mix(in oklab, var(--ink-high) 22%, transparent) 0 8px, transparent 8px 16px, color-mix(in oklab, var(--ink-high) 12%, transparent) 16px 22px, transparent 22px);
+  box-shadow: inset 0 0 0 2px var(--plug-c); }
+.wk-mini-video { position: relative; background: color-mix(in oklab, var(--plug-c) 22%, var(--surface-card)); box-shadow: inset 0 0 0 1px var(--border-subtle); color: var(--plug-c); }
+.wk-mini-video svg { width: 34px; height: 34px; padding: 8px 6px 8px 10px; border-radius: 999px; background: var(--plug-c); color: #fff; box-sizing: content-box; }
+.wk-mini-video::after { content: ''; position: absolute; left: 8%; right: 8%; bottom: 10px; height: 4px; border-radius: 2px;
+  background: linear-gradient(90deg, var(--plug-c) 0 38%, color-mix(in oklab, var(--ink-high) 18%, transparent) 38%); }
+.wk-mini-doc { box-shadow: inset 0 0 0 1px var(--border-subtle); }
+.wk-mini-doc i:first-child { background: color-mix(in oklab, var(--plug-c) 75%, var(--ink-high)); }
+.wk-mini-bars i { background: color-mix(in oklab, var(--plug-c) 85%, var(--surface-card)); }
+.wk-mini-bars i:nth-child(odd) { background: color-mix(in oklab, var(--plug-c) 40%, var(--surface-card)); }
