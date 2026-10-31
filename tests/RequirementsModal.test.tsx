@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { useProvenanceStore } from '../src/store/provenance.js';
+import { ApiError } from '../src/api/errors.js';
+import { resetLaunchWizard, useLaunchWizard } from '../src/store/launchWizard.js';
 import { RequirementsModal } from '../src/components/RequirementsModal.js';
 import type { RequirementDetail, RequirementsPage } from '../src/api/types.js';
 
@@ -59,6 +60,7 @@ describe('RequirementsModal', () => {
     getRequirement.mockReset().mockResolvedValue({ requirement: detail });
     patchRequirement.mockReset();
     launchRun.mockReset();
+    resetLaunchWizard();
   });
 
   it('lists requirements from the server and shows corpus counts', async () => {
@@ -125,16 +127,15 @@ describe('RequirementsModal', () => {
   // FINDING-065. Measured on `agent-frameworks-autogpt`: 42,925 indexed nodes, zero of them
   // carrying a requirement, so the API answers 200 `{corpus: 0}` and the modal said
   // "No requirements match." That sentence claims a corpus was searched and the filters
-  // excluded it. Nothing was searched, and the one action that would help — run extraction —
-  // appeared nowhere.
+  // excluded it. Nothing was searched, and the one action that would help appeared nowhere.
   describe('empty corpus vs empty result', () => {
-    it('says extraction has not run when there is nothing to search', async () => {
+    it('says nothing was extracted when there is nothing to search, and offers Generate it', async () => {
       listRequirements.mockResolvedValue(page([], 0, 0));
       render(<RequirementsModal repoId="r1" repoName="repo" onClose={() => {}} />);
       expect(
-        await screen.findByText('No requirements have been extracted for this repo.'),
+        await screen.findByText('No requirements have been extracted for this repository'),
       ).toBeInTheDocument();
-      expect(screen.getByText(/Run domain extraction/)).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Generate it' })).toBeInTheDocument();
       expect(screen.queryByText('No requirements match.')).not.toBeInTheDocument();
     });
 
@@ -142,9 +143,7 @@ describe('RequirementsModal', () => {
       listRequirements.mockResolvedValue(page([], 0, 3));
       render(<RequirementsModal repoId="r1" repoName="repo" onClose={() => {}} />);
       expect(await screen.findByText('No requirements match.')).toBeInTheDocument();
-      expect(
-        screen.queryByText('No requirements have been extracted for this repo.'),
-      ).not.toBeInTheDocument();
+      expect(screen.queryByTestId('requirements-not-generated')).not.toBeInTheDocument();
     });
   });
 
@@ -157,68 +156,53 @@ describe('RequirementsModal', () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
-  // studio#229 — empty corpus must offer a "Run domain extraction" button that launches a run
-  it('"Run domain extraction" button appears on empty corpus and launches the workflow (studio#229)', async () => {
-    const user = userEvent.setup();
-    listRequirements.mockResolvedValue(page([], 0, 0));
-    launchRun.mockResolvedValue({ runId: 'run-42' });
-    render(<RequirementsModal repoId="r1" repoName="my-repo" onClose={() => {}} />);
+  // Lane repo-page: on the rig, Repositories → wicked-crew → Requirements read "the daemon refused
+  // this — requirements_graph.json not generated for this repo yet" in red. Not generated is a
+  // state: it is said plainly, with what the view would show, and "Generate it".
+  describe('no requirements graph yet', () => {
+    const notGenerated = new ApiError(404, 'No requirements graph yet for this repository', {
+      error: 'No requirements graph yet for this repository',
+      code: 'notGenerated',
+      workflow: 'domain-extraction',
+    });
 
-    const btn = await screen.findByRole('button', { name: /Run domain extraction/i });
-    expect(btn).toBeInTheDocument();
-    await user.click(btn);
-    expect(launchRun).toHaveBeenCalledWith(
-      expect.objectContaining({ repoRef: 'r1', workflow: 'domain-extraction' }),
-    );
-  });
+    it('says there is no graph yet and what it would show, never a refusal', async () => {
+      listRequirements.mockRejectedValue(notGenerated);
+      render(<RequirementsModal repoId="r1" repoName="wicked-crew" onClose={() => {}} />);
+      expect(await screen.findByText('No requirements graph yet for this repository')).toBeInTheDocument();
+      expect(screen.getByText(/this lists what wicked-crew does as requirements/)).toBeInTheDocument();
+      expect(screen.queryByText(/refused/)).not.toBeInTheDocument();
+      // Nothing to search before the graph exists.
+      expect(screen.queryByPlaceholderText(/Search requirements/)).not.toBeInTheDocument();
+    });
 
-  // studio#324 round 2, Defect 2 — the guard must outlive the POST. launchRun resolves in
-  // tens of ms while the extraction runs for minutes; resetting on `finally` re-enables the
-  // button and a second click spawns a DUPLICATE run. After a successful launch the button
-  // must stay disabled, the run must be named, and provenance recorded.
-  // Expected run id ('run-77') comes from the launchRun mock, not from the component.
-  it('a second click after a successful launch does not start a second run (studio#324 D2)', async () => {
-    const user = userEvent.setup();
-    listRequirements.mockResolvedValue(page([], 0, 0));
-    launchRun.mockResolvedValue({ runId: 'run-77' });
-    render(<RequirementsModal repoId="r1" repoName="my-repo" onClose={() => {}} />);
+    it('reads an older daemon\'s sentence the same way', async () => {
+      listRequirements.mockRejectedValue(new ApiError(404, 'requirements_graph.json not generated for this repo yet'));
+      render(<RequirementsModal repoId="r1" repoName="wicked-crew" onClose={() => {}} />);
+      expect(await screen.findByText('No requirements graph yet for this repository')).toBeInTheDocument();
+    });
 
-    const btn = await screen.findByRole('button', { name: /Run domain extraction/i });
-    await user.click(btn);
-    await waitFor(() => expect(screen.getByText(/run-77/)).toBeInTheDocument());
+    it('another failure is still said as one', async () => {
+      listRequirements.mockRejectedValue(new ApiError(500, 'disk on fire'));
+      render(<RequirementsModal repoId="r1" repoName="wicked-crew" onClose={() => {}} />);
+      expect(await screen.findByText(/disk on fire/)).toBeInTheDocument();
+      expect(screen.queryByTestId('requirements-not-generated')).not.toBeInTheDocument();
+    });
 
-    // Try again once the POST has settled — this is exactly when the old guard re-armed.
-    // getByRole THROWS if the button is gone — a conditional click here would let a regression that
-    // unmounts the button skip the action under test and pass on the call count alone.
-    const after = screen.getByRole('button', { name: /Extraction launched/i });
-    expect(after).toBeDisabled();
-    await user.click(after);
-    expect(launchRun).toHaveBeenCalledTimes(1);
-    expect(useProvenanceStore.getState().launchedHere['run-77']).toBe(true);
-  });
-
-  // Defect 4 — button must be disabled while the launch is in flight (spam guard) and
-  // surface a failure rather than swallowing it with `void`.
-  it('"Run domain extraction" button is disabled while launching and surfaces failure', async () => {
-    const user = userEvent.setup();
-    listRequirements.mockResolvedValue(page([], 0, 0));
-    let rejectLaunch!: (e: Error) => void;
-    launchRun.mockReturnValue(new Promise<{ runId: string }>((_res, rej) => { rejectLaunch = rej; }));
-    render(<RequirementsModal repoId="r1" repoName="my-repo" onClose={() => {}} />);
-
-    const btn = await screen.findByRole('button', { name: /Run domain extraction/i });
-    await user.click(btn);
-
-    // Button becomes disabled (shows "Launching…") and a second click is guarded.
-    expect(btn).toBeDisabled();
-    expect(btn).toHaveTextContent('Launching…');
-    expect(launchRun).toHaveBeenCalledTimes(1);
-
-    // Reject the launch: the error must surface in the UI.
-    rejectLaunch(new Error('daemon unavailable'));
-    await waitFor(() => expect(screen.getByText('daemon unavailable')).toBeInTheDocument());
-    // Button is re-enabled after failure.
-    expect(btn).not.toBeDisabled();
+    it('Generate it opens New job filled in for this repository and starts nothing itself', async () => {
+      const user = userEvent.setup();
+      const onClose = vi.fn();
+      listRequirements.mockRejectedValue(notGenerated);
+      render(<RequirementsModal repoId="r1" repoName="wicked-crew" onClose={onClose} />);
+      await user.click(await screen.findByRole('button', { name: 'Generate it' }));
+      expect(onClose).toHaveBeenCalledTimes(1);
+      const { open, draft } = useLaunchWizard.getState();
+      expect(open).toBe(true);
+      expect(draft?.workflowId).toBe('domain-extraction');
+      expect(draft?.contextRepo).toBe('r1');
+      expect(draft?.intent).toMatch(/^Map the domain of wicked-crew/);
+      expect(launchRun).not.toHaveBeenCalled();
+    });
   });
 
   // Defect 5 — Escape with the edit rail open must close the rail, not the whole modal.

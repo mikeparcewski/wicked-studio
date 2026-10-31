@@ -18,6 +18,18 @@ npm publish dates. Every version listed here exists on
 - **How it works.** The block is the editor-plugin sandbox (`sandbox="allow-scripts"`, the same `wicked.editor` handshake and MessagePort) on a new **protocol 3**: the host sends `events.batch` (rows on the plugin's granted topics, in the `wicked.run.<noun>.<verb>` names the bus mirror will use) and `host.fold`; the plugin may send `ui.fold`. It gets no request at all: every artifact request is refused `not_granted`, and its page has no network. Rows replay the job's durable log first (`GET /runs/:id/events`, only the event types its topics are made from), then follow `/ws` live, each at most once, and carry no prompt, path, log or environment.
 - **Plugins page: Run plugins.** Each run plugin lists what it hears, in plain words with its reason. The built-in one is pre-granted, and says "Built in · pre-granted" there and on its block.
 
+### Fixed
+- **A repository with no requirements graph says so, and offers to generate it.** Repositories → a repo → Requirements
+  read, in red, "the daemon refused this — requirements_graph.json not generated for this repo yet". It now says "No
+  requirements graph yet for this repository", what the view would show, and **Generate it**. Generating takes a
+  governed run, so the button starts nothing: it opens New job filled in with the generating workflow (crew names it in
+  its typed 404, `code: notGenerated`, api-types 0.153.0) and the repository, and the operator launches it there. An
+  older daemon's sentence is read the same way. The empty-corpus case's "Run domain extraction", which launched a run
+  directly, now goes the same way.
+- **Recent commits no longer push the repository page down.** The list is a fixed-height card (about six rows) that
+  scrolls inside; **Show all** opens the full history in a dialog (crew's `git-history?limit=`, up to 500; an older
+  daemon gives its 20).
+
 ## [0.13.0] — 2026-10-28
 
 A minor release: UI v2, the calm-page redesign (#924), with the gate fixes from the J4 re-run on crew 0.16.6.

@@ -493,7 +493,7 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
                   <option value="">Choose a repository…</option>
                   {(repos ?? []).map((r) => <option key={r.id} value={r.id}>{r.name ?? r.id}</option>)}
                 </select>
-                <span className="wk-field-note">The code this job reads and changes{draft.contextRepo !== null && repoRef === defaultRepo && repoRef !== null ? ' (the one this session already works in)' : ''}.</span>
+                <span className="wk-field-note">The code this job reads and changes{draft.contextRepo !== null && repoRef === defaultRepo && repoRef !== null ? ' (the one you started from)' : ''}.</span>
               </label>
               <label className="wk-launch-wizard-field">
                 <span className="wk-field-label">Project</span>

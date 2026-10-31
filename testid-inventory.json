@@ -11,9 +11,9 @@
   "version": 1,
   "studioVersion": "0.13.0",
   "counts": {
-    "files": 257,
-    "occurrences": 3512,
-    "static": 2993,
+    "files": 258,
+    "occurrences": 3520,
+    "static": 2999,
     "dynamic": 75,
     "computed": 33
   },
@@ -11058,6 +11058,30 @@
       ]
     },
     {
+      "testId": "repo-commits",
+      "files": [
+        "src/components/RepoDetailPage.tsx"
+      ]
+    },
+    {
+      "testId": "repo-commits-all",
+      "files": [
+        "src/components/RepoDetailPage.tsx"
+      ]
+    },
+    {
+      "testId": "repo-commits-all-note",
+      "files": [
+        "src/components/RepoDetailPage.tsx"
+      ]
+    },
+    {
+      "testId": "repo-commits-show-all",
+      "files": [
+        "src/components/RepoDetailPage.tsx"
+      ]
+    },
+    {
       "testId": "repo-detail-error",
       "files": [
         "src/components/RepoDetailPage.tsx"
@@ -11616,6 +11640,12 @@
       ]
     },
     {
+      "testId": "requirements-generate",
+      "files": [
+        "src/components/RequirementsModal.tsx"
+      ]
+    },
+    {
       "testId": "requirements-loading",
       "files": [
         "src/components/product/RequirementsBrowser.tsx"
@@ -11625,6 +11655,12 @@
       "testId": "requirements-next",
       "files": [
         "src/components/product/RequirementsBrowser.tsx"
+      ]
+    },
+    {
+      "testId": "requirements-not-generated",
+      "files": [
+        "src/components/RequirementsModal.tsx"
       ]
     },
     {
@@ -18607,6 +18643,7 @@
         "src/components/ProvenanceLine.tsx",
         "src/components/QeOffNote.tsx",
         "src/components/QeRefusalWarning.tsx",
+        "src/components/RepoDetailPage.tsx",
         "src/components/RepoFindings.tsx",
         "src/components/RunSparkline.tsx",
         "src/components/SkillChips.tsx",

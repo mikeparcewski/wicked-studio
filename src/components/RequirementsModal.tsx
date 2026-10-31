@@ -12,7 +12,9 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { api } from '../api/client.js';
 import type { RequirementSummary, RequirementDetail, RequirementsPage, RequirementPatch } from '../api/types.js';
 import { useModalEscape } from './Modal.js';
-import { useProvenanceStore } from '../store/provenance.js';
+import { openLaunchWizard } from '../store/launchWizard.js';
+import { DOMAIN_EXTRACTION_ID, requirementsNotGenerated } from '../board/requirementsState.js';
+import { workflowLabel } from '../board/workflowNames.js';
 
 const T = {
   canvas: 'var(--surface-base)',
@@ -49,13 +51,10 @@ export function RequirementsModal({ repoId, repoName, onClose, onNavigateCompone
   const [offset, setOffset] = useState(0);
   const [page, setPage] = useState<RequirementsPage | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  // Lane repo-page: no requirements graph yet is a state with its own panel, never a red refusal.
+  // Holds the workflow that generates it (crew's typed 404 names it).
+  const [notGenerated, setNotGenerated] = useState<{ workflow: string } | null>(null);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
-  const [extracting, setExtracting] = useState(false);
-  const [extractError, setExtractError] = useState<string | null>(null);
-  // The run a successful launch started. The guard must outlive the POST: `launchRun` resolves
-  // in tens of ms while the extraction runs for minutes, so re-enabling on settle let a second
-  // click spawn a duplicate run (studio#324 D2). Once launched, the button stays disabled.
-  const [extractRunId, setExtractRunId] = useState<string | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const fetchPage = useCallback(
@@ -69,8 +68,13 @@ export function RequirementsModal({ repoId, repoName, onClose, onNavigateCompone
         .then((p) => {
           setPage(p);
           setLoadError(null);
+          setNotGenerated(null);
         })
-        .catch((e: unknown) => setLoadError(e instanceof Error ? e.message : String(e)));
+        .catch((e: unknown) => {
+          const missing = requirementsNotGenerated(e);
+          setNotGenerated(missing);
+          setLoadError(missing !== null ? null : e instanceof Error ? e.message : String(e));
+        });
     },
     [repoId],
   );
@@ -114,6 +118,18 @@ export function RequirementsModal({ repoId, repoName, onClose, onNavigateCompone
   }, [selectedKey, onClose]);
   useModalEscape(handleEscape);
 
+  /** Generating needs a governed run, so this never starts one: it opens New job filled in with the
+   *  generating workflow and this repository, and the operator launches it there (lane repo-page). */
+  function generate(workflow: string): void {
+    onClose();
+    openLaunchWizard({
+      workflowId: workflow,
+      intent: `Map the domain of ${repoName}: the requirements its code implements, grouped by domain, and how much of the code they cover.`,
+      contextRepo: repoId,
+      composerKey: `repo:${repoId}`,
+    });
+  }
+
   const totalPages = page !== null ? Math.max(1, Math.ceil(page.total / PAGE_SIZE)) : 1;
   const pageNo = Math.floor(offset / PAGE_SIZE) + 1;
 
@@ -147,7 +163,8 @@ export function RequirementsModal({ repoId, repoName, onClose, onNavigateCompone
           </button>
         </div>
 
-        {/* Toolbar: search (server-side) + risk filter */}
+        {/* Toolbar: search (server-side) + risk filter. Nothing to search before the graph exists. */}
+        {notGenerated === null && (
         <div className="flex items-center gap-3 px-5 py-2.5 border-b shrink-0" style={{ borderColor: T.hairline }}>
           <input
             type="text"
@@ -198,11 +215,14 @@ export function RequirementsModal({ repoId, repoName, onClose, onNavigateCompone
             ))}
           </div>
         </div>
+        )}
 
         {/* Body: list + edit rail */}
         <div className="flex-1 flex overflow-hidden">
           <div className="flex-1 overflow-y-auto">
-            {loadError !== null ? (
+            {notGenerated !== null ? (
+              <NotGenerated repoName={repoName} workflow={notGenerated.workflow} onGenerate={generate} />
+            ) : loadError !== null ? (
               <p className="text-[12px] font-mono p-6" style={{ color: T.deny }}>{loadError}</p>
             ) : page === null ? (
               <p className="text-[12px] font-mono p-6" style={{ color: T.faint }}>Loading…</p>
@@ -212,49 +232,7 @@ export function RequirementsModal({ repoId, repoName, onClose, onNavigateCompone
               // has never run, that sentence is false and it hides the only action that would
               // help. `corpus === 0` means there is nothing to search at all, so no filter can be
               // responsible and the distinction is decidable here (FINDING-065).
-              <div className="p-6 space-y-2">
-                <p className="text-[12px] font-mono" style={{ color: T.ink }}>
-                  No requirements have been extracted for this repo.
-                </p>
-                <button
-                  type="button"
-                  disabled={extracting || extractRunId !== null}
-                  className="text-[12px] font-mono font-semibold rounded px-3 py-1.5 disabled:opacity-50"
-                  style={{ color: T.accent, border: `1px solid ${T.accent}` }}
-                  onClick={() => {
-                    if (extracting || extractRunId !== null) return;
-                    setExtracting(true);
-                    setExtractError(null);
-                    api.launchRun({
-                      repoRef: repoId,
-                      workflow: 'domain-extraction',
-                      problem: `Run domain extraction for ${repoName}`,
-                    })
-                      .then(({ runId }) => {
-                        // Same provenance witness ChatInput records for a launch from studio.
-                        useProvenanceStore.getState().markLaunchedHere(runId);
-                        setExtractRunId(runId);
-                      })
-                      // A failed launch re-arms the button so the operator can retry.
-                      .catch((e: unknown) => setExtractError(e instanceof Error ? e.message : String(e)))
-                      .finally(() => setExtracting(false));
-                  }}
-                >
-                  {extracting
-                    ? 'Launching…'
-                    : extractRunId !== null
-                      ? 'Extraction launched'
-                      : 'Run domain extraction'}
-                </button>
-                {extractRunId !== null && (
-                  <p className="text-[11px] font-mono" style={{ color: T.faint }}>
-                    Domain extraction is running as {extractRunId}. Reopen this view once it completes to see the extracted requirements.
-                  </p>
-                )}
-                {extractError !== null && (
-                  <p className="text-[11px] font-mono" style={{ color: T.deny }}>{extractError}</p>
-                )}
-              </div>
+              <NotGenerated repoName={repoName} workflow={DOMAIN_EXTRACTION_ID} onGenerate={generate} empty />
             ) : page.items.length === 0 ? (
               <p className="text-[12px] font-mono p-6" style={{ color: T.faint }}>No requirements match.</p>
             ) : (
@@ -270,7 +248,7 @@ export function RequirementsModal({ repoId, repoName, onClose, onNavigateCompone
               </div>
             )}
             {/* Pagination */}
-            {page !== null && page.total > PAGE_SIZE && (
+            {notGenerated === null && page !== null && page.total > PAGE_SIZE && (
               <div className="flex items-center justify-center gap-4 py-3">
                 <button
                   type="button"
@@ -306,6 +284,38 @@ export function RequirementsModal({ repoId, repoName, onClose, onNavigateCompone
             />
           )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * No requirements to show yet, said plainly with what this view would show and how to get it
+ * (lane repo-page). `empty`: a graph was generated but holds no requirements (FINDING-065).
+ */
+function NotGenerated({ repoName, workflow, onGenerate, empty = false }: {
+  repoName: string;
+  workflow: string;
+  onGenerate: (workflow: string) => void;
+  empty?: boolean;
+}): React.ReactElement {
+  return (
+    <div data-testid="requirements-not-generated" data-state={empty ? 'empty' : 'not-generated'} className="wk-req-none">
+      <h3 className="wk-req-none-title">
+        {empty ? 'No requirements have been extracted for this repository' : 'No requirements graph yet for this repository'}
+      </h3>
+      <p className="wk-req-none-body">
+        Once it is generated, this lists what {repoName} does as requirements, grouped by business domain: each one with
+        the code that implements it, its business rules, and whether it carries risk. You can search, filter and edit
+        them here.
+      </p>
+      <div className="wk-req-none-actions">
+        <button type="button" data-testid="requirements-generate" className="wk-btn wk-btn--primary" onClick={() => onGenerate(workflow)}>
+          Generate it
+        </button>
+        <span className="wk-field-note">
+          Opens a new {workflowLabel(workflow)} job for this repository, filled in. Nothing starts until you launch it.
+        </span>
       </div>
     </div>
   );
