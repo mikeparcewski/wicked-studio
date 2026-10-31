@@ -145,3 +145,27 @@ export function suggestedQuestions(repoNames: readonly string[]): string[] {
     `What changed in ${a} this week?`,
   ];
 }
+
+/**
+ * Recent answers from crew's chat history too (round-3 look: a page chat asked from Understand in another browser, or
+ * before this one remembered anything, left the list at "Nothing asked yet"). The chats started on Understand
+ * (`startedOn.route` `/understand`, a project's too), in flight or finished, merged with the ones this browser
+ * remembers (whose words win: crew's title is cut at 80 characters), newest first, one row per chat.
+ */
+export function askedWithChats(
+  asked: readonly AskedQuestion[],
+  chats: ReadonlyArray<{ id: string; title: string; startedOn: { route: string } | null; createdAt: string }> | null,
+): AskedQuestion[] {
+  const out = new Map<string, AskedQuestion>();
+  for (const c of chats ?? []) {
+    const route = c.startedOn?.route ?? '';
+    if (!/(^|\/)understand(\?|$)/u.test(route)) continue;
+    const at = Date.parse(c.createdAt);
+    if (!Number.isFinite(at)) continue;
+    const words = c.title.replace(/\s*Answer from the code itself and cite the files you read\.?…?$/u, '').replace(/…$/u, '').trim();
+    if (words === '' || words === 'New chat') continue;
+    out.set(c.id, { chatId: c.id, question: words, at });
+  }
+  for (const a of asked) out.set(a.chatId, a);
+  return [...out.values()].sort((x, y) => y.at - x.at);
+}

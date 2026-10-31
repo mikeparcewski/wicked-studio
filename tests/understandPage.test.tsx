@@ -15,9 +15,11 @@ const mocks = vi.hoisted(() => ({
   messages: vi.fn(),
   listRepos: vi.fn(),
   members: vi.fn(),
+  // Crew's chat history (Recent answers lists Understand's chats from it too): none by default.
+  history: vi.fn(() => Promise.resolve({ chats: [], items: [] })),
 }));
 vi.mock('../src/api/client.js', () => ({
-  api: { getChatMessages: mocks.messages, listRepos: mocks.listRepos, listProjectMembers: mocks.members },
+  api: { getChatMessages: mocks.messages, listRepos: mocks.listRepos, listProjectMembers: mocks.members, listChatHistory: mocks.history },
   apiBase: () => '/api/v1',
 }));
 // The folded views are their own surfaces (with their own tests); here they only need to be reachable.

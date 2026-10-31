@@ -8,7 +8,8 @@ import { pageChatSessionKey } from '../../board/pageChat.js';
 import { readAskSession } from '../../store/askSession.js';
 import { usePageChat } from '../../store/pageChat.js';
 import { askPage, PageChat } from '../chat/PageChat.js';
-import { answerLine, forgetAsked, questionMessage, readAsked, rememberAsked, suggestedQuestions, type AnswerLine, type AskedQuestion } from '../../board/understandModel.js';
+import { answerLine, askedWithChats, forgetAsked, questionMessage, readAsked, rememberAsked, suggestedQuestions, type AnswerLine, type AskedQuestion } from '../../board/understandModel.js';
+import type { ChatHistoryEntry } from '../../api/chatHistory-wire.js';
 import { relTime } from '../../board/relTime.js';
 import { sessionPath } from '../../board/sessionModel.js';
 import type { Navigate } from '../../hooks/useRoute.js';
@@ -64,7 +65,15 @@ export function UnderstandPage({ project, navigate, now, compare, runs = [] }: {
     return () => { live = false; };
   }, []);
 
-  const recent = asked.slice(0, RECENT_SHOWN);
+  // Crew's own record of the chats started here (in flight or finished), merged with this browser's.
+  const [chats, setChats] = useState<ChatHistoryEntry[] | null>(null);
+  useEffect(() => {
+    if (!chatList) return undefined;
+    let live = true;
+    api.listChatHistory({ limit: 50, status: 'all' }).then((r) => { if (live) setChats(r.items ?? []); }, () => undefined);
+    return () => { live = false; };
+  }, [chatList, asked]);
+  const recent = useMemo(() => askedWithChats(asked, chats).slice(0, RECENT_SHOWN), [asked, chats]);
   const answers = useAnswers(recent, chatList, (id) => setAsked(forgetAsked(id)));
   // crew#1157: the repositories the question is about (the analysis chat's scope). `null` = the
   // default for this page until the operator picks.
