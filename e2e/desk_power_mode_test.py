@@ -22,9 +22,10 @@ against the `power_mode` corpus (e2e/power_mode_corpus.py, the api-types 0.149.0
   7. PHASED REQUIRED (r-pm-phased): the switch is Off and disabled, its tooltip "Phased is required: …"; a click sends
      nothing.
   8. SETTINGS: "Power mode for new jobs: On".
-  5b. ONE REPORT PER PHASE (operator 2026-10-30): r-pm-handoff has one Phase report block per phase — Intake, Build,
-     Checks, Review, QE — each the run-thread plugin's own sandboxed frame named by its phase; only the current one
-     (QE) is open; r-pm-build has Intake and Build, Build open.
+  5b. ONE REPORT PER PHASE (operator 2026-10-30; DES-LEARN §1.2: in the Details panel, not the thread): r-pm-handoff
+     has one Phase report section per phase in the Details panel — Intake, Build, Checks, Review, QE, Deliver — each the
+     run plugin's own sandboxed frame titled by its phase; only the current one (QE) is open; the thread holds none, only
+     the slim "Phase report · <phase> … · Show in Details" rows; r-pm-build has Intake and Build, Build open.
   6b. THE WORKING DOCUMENT IS FILLED: r-pm-pause's Build block shows the plugin's own line under Open questions
      ("Waiting on you · checkpoint 3 paused …"), attributed "Phase report (plugin)", marked not saved yet (no document
      is started on this run).
@@ -171,19 +172,22 @@ with sync_playwright() as p:
     page.screenshot(path=str(SHOTS / "desk-power-mode-handoff.png"))
 
     # ── 5b. one phase report per phase ─────────────────────────────────────────────────────────────
-    BLOCKS = """() => [...document.querySelectorAll('[data-testid=session-thread] [data-testid=run-plugin]')].map((b) => ({
+    BLOCKS = """() => [...document.querySelectorAll('[data-testid=run-tab] [data-testid=run-plugin]')].map((b) => ({
       phase: b.dataset.phase ?? null, folded: b.dataset.folded, plugin: b.dataset.plugin,
       sandbox: b.querySelector('iframe')?.getAttribute('sandbox') ?? null }))"""
-    page.wait_for_function("() => document.querySelectorAll('[data-testid=session-thread] [data-testid=run-plugin]').length >= 5", timeout=10000)
+    page.wait_for_function("() => document.querySelectorAll('[data-testid=run-tab] [data-testid=run-plugin]').length >= 5", timeout=10000)
     hb = page.evaluate(BLOCKS)
+    rows_h = page.evaluate("() => ({ inThread: document.querySelectorAll('[data-testid=session-thread] [data-testid=run-plugin]').length, rows: [...document.querySelectorAll('[data-testid=session-thread] [data-testid=run-plugin-updated]')].map((r) => r.dataset.phase) })")
     open_run(page, "r-pm-build")
-    page.wait_for_function("() => document.querySelectorAll('[data-testid=session-thread] [data-testid=run-plugin]').length >= 2", timeout=10000)
+    page.wait_for_function("() => document.querySelectorAll('[data-testid=run-tab] [data-testid=run-plugin]').length >= 2", timeout=10000)
     bb = page.evaluate(BLOCKS)
-    check("phase-reports", [b["phase"] for b in hb] == ["intake", "build", "checks", "review", "qe"]
+    # The panel lists every phase the run has, a later one folded ("not started", as the mockup's Hand-off at intake).
+    check("phase-reports", [b["phase"] for b in hb] == ["intake", "build", "checks", "review", "qe", "deliver"]
           and [b["phase"] for b in hb if b["folded"] == "false"] == ["qe"]
           and all(b["plugin"] == "wicked-phase-report" and b["sandbox"] == "allow-scripts" for b in hb)
-          and [b["phase"] for b in bb] == ["intake", "build"] and [b["phase"] for b in bb if b["folded"] == "false"] == ["build"],
-          handoff=hb, build=bb)
+          and [b["phase"] for b in bb][:2] == ["intake", "build"] and [b["phase"] for b in bb if b["folded"] == "false"] == ["build"]
+          and rows_h["inThread"] == 0 and rows_h["rows"][:2] == ["intake", "build"],
+          handoff=hb, build=bb, thread=rows_h)
 
     # ── 6. this grew ───────────────────────────────────────────────────────────────────────────
     open_run(page, "r-pm-pause")
@@ -214,7 +218,7 @@ with sync_playwright() as p:
     page.screenshot(path=str(SHOTS / "desk-power-mode-pause.png"))
 
     # ── 6b. the working document, filled by the plugin from the run's events ─────────────────────────
-    build = page.locator('[data-testid=session-thread] [data-testid=run-plugin][data-phase=build]')
+    build = page.locator('[data-testid=run-tab] [data-testid=run-plugin][data-phase=build]')
     if build.get_attribute("data-folded") == "true":
         build.locator('[data-testid="run-plugin-fold"]').click()
     wd = build.frame_locator("iframe").first

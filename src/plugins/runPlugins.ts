@@ -8,6 +8,9 @@
 
 import bundles from 'virtual:wicked-run-plugins';
 import phaseReport from './wicked-phase-report/manifest.json';
+import phaseReportIcon from './wicked-phase-report/icon.svg?raw';
+import { parsePanels, type PanelDecl } from '../board/runPluginPanels.js';
+import { parseVisuals, svgDataUrl, type PluginVisuals } from './visuals.js';
 import { validPattern } from '../editors/runEvents.js';
 import { RUN_THREAD_ONLY, type PermissionId } from '../editors/protocol.js';
 
@@ -20,8 +23,14 @@ export interface RunPlugin {
   title: string;
   version: string;
   protocol: number[];
-  /** Where it renders: one block in a run's thread. */
+  /** What it is: a plugin of a run (it observes a run's events). Where it renders is `panels`. */
   inline: 'run-thread';
+  /** The sections it registers (DES-LEARN §1.2): today the run's Details panel only. */
+  panels: PanelDecl[];
+  /** One line for its card on the Plugins page. */
+  description: string;
+  /** Its icon, colour and preview for the Plugins page. */
+  visuals: PluginVisuals;
   /** What it asked to observe (each with its reason), as the consent and the Plugins page show it. */
   observe: ObserveGrant[];
   /** The topic patterns granted: a built-in plugin is pre-granted what its manifest names (valid patterns only). */
@@ -36,17 +45,28 @@ export interface RunPlugin {
   sha256: string;
 }
 
-function builtIn(m: { id: string; title: string; protocol: number[]; inline: string; observe: ObserveGrant[]; permissions?: Array<{ id: string; why: string }> }): RunPlugin | null {
+/** A built-in plugin's files its manifest names, bundled with it (`visuals.icon`). */
+const FILES: Record<string, Record<string, string>> = { 'wicked-phase-report': { 'icon.svg': phaseReportIcon } };
+
+interface Manifest {
+  id: string; title: string; protocol: number[]; inline: string; observe: ObserveGrant[]; permissions?: Array<{ id: string; why: string }>;
+  panels?: unknown; description?: string; visuals?: { icon?: string; color?: string; live?: boolean };
+}
+
+function builtIn(m: Manifest): RunPlugin | null {
   const b = bundles[m.id];
   if (b === undefined || m.inline !== 'run-thread') return null;
+  const icon = m.visuals?.icon !== undefined ? FILES[m.id]?.[m.visuals.icon] : undefined;
   return {
     id: m.id, title: m.title, version: b.version, protocol: m.protocol, inline: 'run-thread', observe: m.observe,
+    panels: parsePanels(m.panels), description: typeof m.description === 'string' ? m.description.slice(0, 160) : '',
+    visuals: parseVisuals({ ...m.visuals, icon: icon !== undefined ? svgDataUrl(icon) : undefined }),
     granted: m.observe.map((o) => o.topic).filter(validPattern), grantedBy: 'built-in', firstParty: true, html: b.html, sha256: b.sha256,
     permissions: (m.permissions ?? []).filter((p): p is RunPermission => RUN_THREAD_ONLY.has(p.id as PermissionId)),
   };
 }
 
-export const RUN_PLUGINS: readonly RunPlugin[] = [builtIn(phaseReport)].filter((p): p is RunPlugin => p !== null);
+export const RUN_PLUGINS: readonly RunPlugin[] = [builtIn(phaseReport as Manifest)].filter((p): p is RunPlugin => p !== null);
 
 const TOPIC_WORDS: Record<string, string> = {
   'wicked.run.session.*': 'when the job starts, resumes and ends',

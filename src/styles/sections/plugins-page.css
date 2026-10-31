@@ -1,0 +1,104 @@
+/* The Plugins page as cards (program DES-LEARN §2, mockup learn-and-panels state b): a grid of cards (preview, icon on
+   its colour, title and tag, one line, where it shows), a filter, and one card's details beside the grid (a sheet from
+   the right below 1200 px). */
+.wk-plugpage-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; margin-bottom: var(--space-4); }
+.wk-plugpage-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; align-items: start; }
+.wk-plugpage-layout[data-detail='true'] { grid-template-columns: minmax(0, 1fr) 400px; }
+.wk-plugpage-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 16px; min-width: 0; }
+.wk-plugpage-cell { display: flex; min-width: 0; }
+.wk-plugcard {
+  display: flex; flex-direction: column; width: 100%; min-width: 0; padding: 0; border: 0; border-radius: var(--radius-lg); overflow: hidden;
+  background: var(--surface-card); box-shadow: inset 0 0 0 1px var(--border); color: inherit; font: inherit; text-align: left; cursor: pointer;
+  transition: box-shadow var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out);
+}
+button.wk-plugcard:hover { box-shadow: inset 0 0 0 1px var(--border-strong), var(--shadow-raised); transform: translateY(-1px); }
+button.wk-plugcard:focus-visible { outline: 2px solid transparent; box-shadow: var(--focus-ring); }
+.wk-plugcard[aria-pressed='true'] { box-shadow: inset 0 0 0 2px var(--accent); }
+.wk-plugcard--soon { cursor: default; }
+.wk-plugcard--off .wk-plugcard-prev { opacity: .45; }
+.wk-plugcard-prev { position: relative; aspect-ratio: 16 / 9; flex: 0 0 auto; background: var(--surface-base); border-bottom: 1px solid var(--border-subtle); overflow: hidden; }
+.wk-plugcard > .wk-plugcard-prev { margin: 1px 1px 0; border-radius: calc(var(--radius-lg) - 1px) calc(var(--radius-lg) - 1px) 0 0; }
+.wk-plugcard-prev-tag {
+  position: absolute; right: 8px; top: 8px; padding: 1px 7px; border-radius: var(--radius-full); background: color-mix(in srgb, var(--surface-base) 80%, transparent);
+  color: var(--ink-muted); font-size: 10px; font-weight: var(--weight-semi); letter-spacing: .04em; text-transform: uppercase;
+}
+.wk-plugcard-prev-tag[data-live='true'] { color: var(--status-ok); }
+.wk-plugcard-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.wk-plugcard-live { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+.wk-plugcard-live-frame { transform-origin: 0 0; padding: 10px 12px; box-sizing: border-box; }
+.wk-plugcard-live-frame iframe { display: block; width: 100%; height: 100%; border: 0; background: transparent; }
+.wk-plugcard-body { display: flex; gap: 12px; padding: 12px 14px 14px; min-width: 0; }
+.wk-plugcard-icon {
+  flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; border-radius: 10px; background: var(--accent); color: var(--accent-fg);
+  font-weight: var(--weight-bold); font-size: var(--text-md);
+}
+.wk-plugcard-words { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.wk-plugcard-title { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; color: var(--ink-high); font-size: var(--text-md); font-weight: var(--weight-semi); }
+.wk-plugcard-title .wk-tag { font-weight: var(--weight-normal); }
+.wk-plugcard-line { color: var(--ink-body); font-size: var(--text-sm); line-height: 1.4; }
+.wk-plugcard-where { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.wk-plugcard-where span { padding: 1px 7px; border-radius: var(--radius-full); background: var(--surface-raised); color: var(--ink-muted); font-size: 11px; }
+
+/* Miniatures: CSS-only pictures of what each plugin draws (a card with no preview image). */
+.wk-mini { position: absolute; inset: 12px; display: grid; gap: 6px; }
+.wk-mini-tiles { grid-template-columns: 1fr 1fr; grid-template-rows: auto 1fr 1fr; }
+.wk-mini-now { grid-column: span 2; height: 10px; border-radius: 4px; background: linear-gradient(90deg, var(--status-run) 0 6%, transparent 6% 9%, color-mix(in srgb, var(--ink-high) 22%, transparent) 9% 80%, transparent 80%); }
+.wk-mini-t { position: relative; border-radius: 6px; background: var(--surface-card); box-shadow: inset 0 0 0 1px var(--border-subtle); }
+.wk-mini-t::before { content: ''; position: absolute; left: 8px; top: 8px; width: 40%; height: 5px; border-radius: 3px; background: color-mix(in srgb, var(--ink-high) 22%, transparent); }
+.wk-mini-t::after { content: ''; position: absolute; left: 8px; top: 18px; width: 60%; height: 8px; border-radius: 3px; background: color-mix(in srgb, var(--ink-high) 50%, transparent); }
+.wk-mini-t[data-tone='ok']::after { background: var(--status-ok); width: 30%; }
+.wk-mini-t[data-tone='fail']::after { background: var(--status-fail); width: 45%; }
+.wk-mini-bars { display: flex; align-items: flex-end; gap: 6%; padding: 6px 4px 0; border-bottom: 1px solid var(--border); }
+.wk-mini-bars i { flex: 1; border-radius: 3px 3px 0 0; background: var(--status-ok); }
+.wk-mini-bars i:nth-child(odd) { background: color-mix(in srgb, var(--accent) 80%, var(--ink-high)); }
+.wk-mini-slide { grid-template-columns: 1fr 3fr; }
+.wk-mini-strip { display: grid; gap: 4px; }
+.wk-mini-strip i { border-radius: 3px; background: var(--surface-card); box-shadow: inset 0 0 0 1px var(--border-subtle); }
+.wk-mini-strip i:first-child { box-shadow: inset 0 0 0 2px var(--accent); }
+.wk-mini-big { position: relative; border-radius: 6px; background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 50%, var(--surface-card)), var(--surface-card)); }
+.wk-mini-big::after { content: ''; position: absolute; left: 12%; top: 30%; width: 60%; height: 12%; border-radius: 3px; background: color-mix(in srgb, var(--ink-high) 70%, transparent); box-shadow: 0 14px 0 -2px color-mix(in srgb, var(--ink-high) 30%, transparent); }
+.wk-mini-doc { display: flex; flex-direction: column; gap: 6px; padding: 10px 14%; border-radius: 4px; background: var(--surface-card); }
+.wk-mini-doc i { height: 5px; border-radius: 3px; background: color-mix(in srgb, var(--ink-high) 22%, transparent); }
+.wk-mini-doc i:first-child { height: 9px; width: 55%; background: color-mix(in srgb, var(--ink-high) 55%, transparent); }
+.wk-mini-doc i.hl { width: 70%; background: color-mix(in srgb, var(--spark) 60%, transparent); }
+.wk-mini-page { display: grid; grid-template-rows: 12px 1fr; border-radius: 6px; overflow: hidden; background: var(--surface-card); box-shadow: inset 0 0 0 1px var(--border); }
+.wk-mini-page b { background: var(--surface-raised); }
+.wk-mini-page span { margin: 10px; border-radius: 4px; background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 45%, transparent) 0 40%, transparent 40%); box-shadow: inset 0 0 0 1px var(--border-subtle); }
+.wk-mini-video { display: flex; align-items: center; justify-content: center; border-radius: 6px; background: linear-gradient(160deg, var(--surface-raised), var(--surface-base)); color: var(--ink-high); }
+.wk-mini-list { display: flex; flex-direction: column; gap: 6px; padding: 4px 0; }
+.wk-mini-list i { position: relative; height: 14px; border-radius: 4px; background: var(--surface-card); box-shadow: inset 0 0 0 1px var(--border-subtle); }
+.wk-mini-list i::before { content: ''; position: absolute; left: 6px; top: 4px; width: 26px; height: 6px; border-radius: 3px; background: var(--status-ok); }
+.wk-mini-soon { display: flex; align-items: center; justify-content: center; border: 1.5px dashed var(--border); border-radius: 6px; color: var(--ink-dim); font-size: var(--text-sm); }
+
+/* One plugin's details. */
+.wk-plugdetail {
+  position: sticky; top: 0; align-self: start; display: flex; flex-direction: column; gap: 14px; min-width: 0; padding: 16px;
+  border-radius: var(--radius-lg); background: var(--surface-card); box-shadow: inset 0 0 0 1px var(--border); max-height: calc(100dvh - 120px); overflow-y: auto;
+}
+.wk-plugdetail-head { display: flex; align-items: center; gap: 10px; }
+.wk-plugdetail-name { flex: 1 1 auto; min-width: 0; }
+.wk-plugdetail-name h2 { margin: 0; color: var(--ink-high); font-size: var(--text-lg); }
+.wk-plugdetail-name p { margin: 2px 0 0; color: var(--ink-muted); font-size: var(--text-xs); overflow-wrap: anywhere; }
+.wk-plugdetail .wk-plugcard-prev { border: 1px solid var(--border-subtle); border-radius: var(--radius-md); }
+.wk-plugdetail-line { margin: 0; color: var(--ink-body); font-size: var(--text-sm); }
+.wk-plugdetail-switch { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px; border-radius: var(--radius-md); background: var(--surface-base); color: var(--ink-high); font-size: var(--text-sm); }
+.wk-plugdetail-muted { color: var(--ink-muted); font-size: var(--text-xs); }
+.wk-plugdetail-bad { margin: 0; color: var(--status-fail); font-size: var(--text-sm); }
+.wk-plugdetail-sec h3 { margin: 0 0 6px; color: var(--ink-muted); font-size: 11px; font-weight: var(--weight-semi); letter-spacing: .05em; text-transform: uppercase; }
+.wk-plugdetail-grants { display: flex; flex-direction: column; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.wk-plugdetail-grants li { display: grid; grid-template-columns: 16px minmax(0, 1fr); gap: 8px; color: var(--ink-body); font-size: var(--text-sm); line-height: 1.4; }
+.wk-plugdetail-grants li > svg { margin-top: 3px; color: var(--status-ok); }
+.wk-plugdetail-grants li.wk-plugdetail-never > svg { color: var(--status-fail); }
+.wk-plugdetail-grants code { color: var(--ink-muted); font-size: 11px; overflow-wrap: anywhere; }
+.wk-plugdetail-manifest { margin: 0; padding: 10px 12px; max-height: 260px; overflow: auto; border-radius: var(--radius-md); background: var(--surface-base); color: var(--ink-body); font-family: var(--font-mono); font-size: 11px; line-height: 1.5; white-space: pre; }
+@media (max-width: 1199px) {
+  .wk-plugpage-layout[data-detail='true'] { grid-template-columns: minmax(0, 1fr); }
+  .wk-plugdetail { position: fixed; inset: 0 0 0 auto; z-index: 40; width: min(420px, 100vw); max-height: none; border-radius: 0; box-shadow: var(--shadow-overlay); }
+}
+@media (max-width: 767px) {
+  .wk-plugpage-grid { grid-template-columns: minmax(0, 1fr); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .wk-plugcard { transition: none; }
+  button.wk-plugcard:hover { transform: none; }
+}

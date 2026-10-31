@@ -4,10 +4,8 @@ import { openLaunchWizard } from '../../store/launchWizard.js';
 import { EmptyState, PageFrame, Skeleton, StateBanner } from '../ui/index.js';
 import { PAGE_NAMES } from '../../board/pageNames.js';
 import { OpenDocumentList } from './OpenDocumentList.js';
-import { VIBE_SOON } from '../../board/comingSoon.js';
 import { mcpInspectPath } from '../../api/mcpInspect.js';
 import { MCP_SERVER_KIND } from '../../api/editors.js';
-import { RUN_PLUGINS, permissionWords, topicWords } from '../../plugins/runPlugins.js';
 
 /**
  * The Plugins page (operator 2026-10-12; was Settings → Developer → Editor plugins, ruling X3, 2026-10-10;
@@ -190,89 +188,8 @@ export function EditorTestPagePicker({ navigate }: { navigate: (p: string) => vo
   );
 }
 
-/**
- * The run plugins (program DES-PLUGIN-EVENTS spike 1): plugins that observe a job's events and show one block in its
- * conversation. The consent words: what each hears, in plain words with its own reason, and how it was granted — a
- * built-in one is pre-granted, and says so.
- */
-export function RunPluginList(): React.ReactElement {
-  return (
-    <section data-testid="run-plugins-settings" aria-labelledby="run-plugins-title" className="wk-card">
-      <h2 id="run-plugins-title" className="wk-section-title">Run plugins</h2>
-      <p className="wk-pg-proj-note">Each shows one block in every job’s conversation. It hears only what its row lists, and it can do only what its row lists: it never answers a decision, and only you send a step anything.</p>
-      <ul aria-label="Run plugins">
-        {RUN_PLUGINS.map((p) => (
-          <li key={p.id} data-testid="run-plugin-row" data-plugin={p.id} className="py-3 border-b last:border-b-0" style={{ borderColor: 'var(--border-subtle)' }}>
-            <p className="flex flex-wrap items-center gap-2" style={{ fontSize: 'var(--text-md)', color: 'var(--ink-high)', fontWeight: 600 }}>
-              <span>{p.title}</span>
-              <span data-testid="run-plugin-row-grant" className="wk-tag">Built in · pre-granted</span>
-            </p>
-            <p style={{ fontSize: 'var(--text-xs)', color: 'var(--ink-body)', marginTop: 2 }}>Version {p.version} · one block in each job’s conversation</p>
-            <ul data-testid="run-plugin-row-topics" aria-label={`What ${p.title} hears`} style={{ fontSize: 'var(--text-sm)', color: 'var(--ink-body)', marginTop: 4 }}>
-              {p.observe.map((o) => (
-                <li key={o.topic} data-topic={o.topic}>Hears {topicWords(o.topic)}, {o.why}.</li>
-              ))}
-            </ul>
-            {p.permissions.length > 0 && (
-              <ul data-testid="run-plugin-row-permissions" aria-label={`What ${p.title} may do`} style={{ fontSize: 'var(--text-sm)', color: 'var(--ink-body)', marginTop: 4 }}>
-                {p.permissions.map((g) => (
-                  <li key={g.id} data-permission={g.id}>It {permissionWords(g.id)}: {g.why}.</li>
-                ))}
-              </ul>
-            )}
-          </li>
-        ))}
-      </ul>
-    </section>
-  );
-}
-
 /** Open the launch wizard for the editor-plugin workflow (the one start point for a new job). */
 export function startCreateEditorPlugin(): void {
   openLaunchWizard({ workflowId: CREATE_EDITOR_WORKFLOW_ID });
 }
 
-/**
- * THE PLUGINS PAGE (operator ruling 2026-10-12: editor plugins move out of Configuration onto their
- * own Workspace page), `/plugins`: what the Developer section did — the list, each opening in the
- * editor test page, Create an editor plugin (the launch wizard on `editor-plugin`) and the test page.
- * The open-in-editor door is `openHref` (above): the test page, or `/mcp/inspect` for an MCP inspector.
- */
-export function PluginsPage({ navigate }: { navigate: (p: string) => void }): React.ReactElement {
-  return (
-    <PageFrame
-      data-testid="plugins-page"
-      title={PAGE_NAMES.plugins}
-      intro="Editor plugins open what studio makes, such as pages and documents, in a sandbox: each can do only what its row lists."
-      actions={<>
-        <a href="/editors/dev" className="wk-btn wk-btn--secondary" data-testid="editor-plugins-devhost" onClick={(ev) => { ev.preventDefault(); navigate('/editors/dev'); }}>
-          Open the editor test page
-        </a>
-        <a href={mcpInspectPath()} className="wk-btn wk-btn--secondary" data-testid="editor-plugins-mcp-inspect" onClick={(ev) => { ev.preventDefault(); navigate(mcpInspectPath()); }}>
-          Open the MCP inspector
-        </a>
-        <button type="button" className="wk-btn wk-btn--primary" data-testid="editor-plugins-create" onClick={() => startCreateEditorPlugin()}>
-          Create an editor plugin
-        </button>
-      </>}
-    >
-      <RunPluginList />
-      <section data-testid="editor-plugins-settings" aria-labelledby="plugins-list-title" className="wk-card">
-        <h2 id="plugins-list-title" className="wk-section-title">Editor plugins</h2>
-        <p className="wk-pg-proj-note">
-          Built-in ones ship with studio. One you create appears here once its job passes studio’s checks and you approve the install.
-        </p>
-        <EditorPluginList navigate={navigate} />
-        <ul aria-label="Coming soon" className="wk-plugin-soon-list">
-          <li data-testid="plugin-coming-soon" data-plugin="vibe" aria-disabled="true" className="wk-plugin-soon">
-            <p className="flex flex-wrap items-center gap-2" style={{ fontSize: 'var(--text-md)', color: 'var(--ink-body)', fontWeight: 600 }}>
-              <span>{VIBE_SOON.name}</span>
-              <span className="wk-tag" data-testid="plugin-coming-soon-tag">Coming soon</span>
-            </p>
-            <p style={{ fontSize: 'var(--text-sm)', color: 'var(--ink-dim)', marginTop: 2 }}>{VIBE_SOON.line}</p>
-          </li>
-        </ul>
-      </section>
-    </PageFrame>
-  );
-}

@@ -24,7 +24,7 @@ import { RunRawView } from './components/RunRawView.js';
 import { SkillsPage } from './components/SkillsPage.js';
 import { ProjectRequirementsPage } from './components/product/ProjectRequirementsPage.js';
 import { CampaignsRedirect, RouteRedirect } from './components/RouteRedirect.js';
-import { PluginsPage } from './components/editors/EditorPluginsSettings.js';
+import { PluginsPage } from './components/editors/PluginsPage.js';
 import { McpInspectPage } from './components/editors/McpInspectPage.js';
 import { AGENTS_PATH, AgentsPage } from './components/agents/AgentsPage.js';
 import { useFirstUseLanding } from './components/agents/useFirstUseLanding.js';

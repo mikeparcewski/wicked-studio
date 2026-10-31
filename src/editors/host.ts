@@ -3,8 +3,8 @@ import type { WriteVerb } from '../board/artifactMorph.js';
 import { changedBy, chipsFor, elementLabel, type Chip, type VersionKind } from './model.js';
 import { chapterInventoryOf, checkOps, inventoryOf, themeTokensOf, type Inventory, type WireItem } from './ops.js';
 import {
-  EVENTS, LIMITS, MCP_METHODS, REQUESTS, event, negotiate, parseInbound, parseReady, refuse, reply, request, sizeOf,
-  type MediaRef, type AnchorRef, type ErrorCode, type PermissionId, type Size,
+  EVENTS, LIMITS, MCP_METHODS, PANEL_SUMMARY_CHARS, REQUESTS, event, negotiate, parseInbound, parseReady, refuse, reply, request, sizeOf,
+  type MediaRef, type PanelTone, type AnchorRef, type ErrorCode, type PermissionId, type Size,
 } from './protocol.js';
 import type { EventsBatch } from './runEvents.js';
 import { clampCardHeight, parseSurfaces, parseWireSurfaces, sameSurfaces, v1Surfaces, valuesOk, controlValueOk, type FullMode, type Surfaces } from './surfaces.js';
@@ -141,6 +141,8 @@ export interface HostUi {
   /** Protocol 3 `steer.propose`: the plugin suggests a steering note. The host draws it with its OWN Send; nothing is
    *  sent until a person presses it. */
   steerProposal?(text: string): void;
+  /** Protocol 3 `panel.summary`, from a plugin shown as a panel section (`events.panel`): its folded heading's line. */
+  panelSummary?(summary: { text: string; tone: PanelTone }): void;
 }
 
 /**
@@ -166,6 +168,10 @@ export interface HostEvents {
   /** The part of the run this instance reports on (a power run's phase: its name, label and units), said in
    *  `host.hello` as `observe.scope`. Absent = the whole run. The rows are the run's, unfiltered: the plugin scopes. */
   scope?: { phase: string; label: string; ords: readonly number[] };
+  /** The panel section this instance is the body of (DES-LEARN §1.2), said in `host.hello` as `observe.panel`: the
+   *  host draws the section's chrome (fold, pin, title, summary), so the plugin draws only the body and says its
+   *  folded line with `panel.summary`. Absent = a block of its own (it draws its own summary line). */
+  panel?: { slot: 'run.details'; id: string };
   subscribe(deliver: (batch: EventsBatch) => void): () => void;
 }
 
@@ -402,7 +408,7 @@ export class EditorHost {
       : {};
     const observes = this.protocol >= 3 && this.o.events !== undefined;
     const sc = this.o.events?.scope;
-    const v3 = observes ? { observe: { runId: this.o.events!.runId, topics: [...this.o.events!.topics], ...(sc !== undefined ? { scope: { phase: sc.phase, label: sc.label, ords: [...sc.ords] } } : {}) } } : {};
+    const v3 = observes ? { observe: { runId: this.o.events!.runId, topics: [...this.o.events!.topics], ...(sc !== undefined ? { scope: { phase: sc.phase, label: sc.label, ords: [...sc.ords] } } : {}), ...(this.o.events?.panel !== undefined ? { panel: { slot: this.o.events.panel.slot, id: this.o.events.panel.id } } : {}) } } : {};
     this.frame.contentWindow?.postMessage(event('host.hello', {
       protocol: this.protocol, ...v2, ...v3, artifact: a, size: this.o.size, grants: [...this.grants],
       theme: this.o.theme, artifactTheme: null, prefs: this.o.prefs,
@@ -759,6 +765,11 @@ export class EditorHost {
         return;
       case 'ui.fold':
         this.o.ui.fold?.(p['folded'] === true);
+        return;
+      case 'panel.summary':
+        // Only a section's body has a heading to put it in: a block drawing its own line has nothing to say it with.
+        if (this.o.events?.panel === undefined) { this.log({ kind: 'dropped', type, why: 'not shown as a panel section' }); return; }
+        this.o.ui.panelSummary?.({ text: String(p['text']).slice(0, PANEL_SUMMARY_CHARS), tone: (p['tone'] as PanelTone | undefined) ?? 'none' });
         return;
       case 'checks.contribute':
         this.o.ui.notes((p['checks'] as unknown[]).length);

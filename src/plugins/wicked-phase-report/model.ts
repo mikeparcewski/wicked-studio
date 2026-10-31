@@ -622,7 +622,7 @@ function ownSpans(r: Report, scope: PhaseScope): Span[] | null {
 }
 
 /** The folded line of one phase's block: "Build · 2 turns · checkpoint 2 · rigor high ↑". */
-export function phaseSummary(r: Report, scope: PhaseScope): string {
+export function phaseSummary(r: Report, scope: PhaseScope, opts: { times?: boolean } = {}): string {
   if (!r.loaded) return 'Reading the job’s events…';
   const p = r.power;
   const parts = [scope.label];
@@ -645,7 +645,8 @@ export function phaseSummary(r: Report, scope: PhaseScope): string {
     parts.push(phaseState(r, scope));
   }
   const own = ownSpans(r, scope);
-  if (own !== null) { const w = spansWords(own); if (w !== null) parts.push(w); }
+  if (opts.times === false) { /* a panel heading: the state only, the times are in the body */ }
+  else if (own !== null) { const w = spansWords(own); if (w !== null) parts.push(w); }
   else {
     const span = unitSpan(r, scope);
     if (span.start !== null) parts.push(span.end !== null ? `${clock(span.start)}–${clock(span.end)}` : `since ${clock(span.start)}`);
@@ -709,4 +710,24 @@ export function phaseDashboard(r: Report, scope: PhaseScope, nowMs: number): Das
           : ['now', 'helpers', 'decisions'];
   const rigor = scope.phase === 'intake' && all.rigor !== null ? all.rigor.slice(0, 1) : all.rigor;
   return { ...all, now, checks, decisions: scopedDecisions, helpers, rigor, time, handoff: null, tiles };
+}
+
+/** A panel section's heading line (DES-LEARN §1.2 `panel.summary`): the section's title already names the phase, so
+ *  the line is what follows it ("3 turns · checkpoint 3 · working"), with the dot's tone. */
+export function panelLine(r: Report, scope: PhaseScope | null): { text: string; tone: 'none' | 'run' | 'wait' | 'ok' | 'fail' } {
+  if (scope === null) {
+    const tone = !r.loaded ? 'none' : r.finished !== null ? (r.finished.outcome === 'completed' ? 'ok' : 'fail') : openGates(r).length > 0 ? 'wait' : 'run';
+    return { text: summaryLine(r), tone };
+  }
+  const full = phaseSummary(r, scope, { times: false });
+  const lead = `${scope.label} · `;
+  const text = full.startsWith(lead) ? full.slice(lead.length) : full === scope.label ? '' : full;
+  if (!r.loaded) return { text, tone: 'none' };
+  const state = phaseState(r, scope);
+  const tone = /^(working|running)$/.test(state) ? 'run'
+    : state === 'waiting on you' ? 'wait'
+      : /^(passed|approved|done|handed off)$/.test(state) || /\bpassed\b/.test(state) ? 'ok'
+        : /^(failed|did not pass|changes asked)$/.test(state) || /\bfailed\b/.test(state) ? 'fail'
+          : 'none';
+  return { text, tone };
 }

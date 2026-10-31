@@ -23,6 +23,7 @@
 @import './sections/session.css';
 @import './sections/chat-native.css';
 @import './sections/run-plugins.css';
+@import './sections/plugins-page.css';
 @import './sections/decision-dock.css';
 @import './sections/composer.css';
 @import './sections/everything.css';

@@ -5,11 +5,20 @@
  */
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { PluginsPage } from '../src/components/editors/EditorPluginsSettings.js';
+import { PluginsPage } from '../src/components/editors/PluginsPage.js';
 import { documentsFor, openDocumentHref, OPEN_DOCUMENT_ROWS } from '../src/components/editors/OpenDocumentList.js';
 import { madeRows, readEverythingQuery } from '../src/board/everythingModel.js';
 import { useDocsCache } from '../src/store/docsCache.js';
 import { VIBE_SOON } from '../src/board/comingSoon.js';
+
+/** A plugin's card on the Plugins page, once the list is read. */
+async function tileOf(id: string): Promise<HTMLElement> {
+  return waitFor(() => {
+    const t = screen.getAllByTestId('plugin-tile').find((x) => x.dataset['plugin'] === id);
+    if (t === undefined) throw new Error(`no card for ${id}`);
+    return t;
+  });
+}
 
 const SHA = 'a'.repeat(64);
 const BUILT_IN = {
@@ -74,9 +83,11 @@ describe('the Plugins page: the built-in Document editor opens real documents', 
     const f = stub(() => json(INDEX));
     const navigate = vi.fn();
     render(<PluginsPage navigate={navigate} />);
+    // A card opens its details: the documents it opens are there (program DES-LEARN §2).
+    fireEvent.click(await tileOf('wicked-page'));
     await waitFor(() => expect(screen.getAllByTestId('plugin-document')).toHaveLength(2));
+    expect(within(screen.getByTestId('plugin-details')).getByTestId('plugin-details-title').textContent).toBe('Document');
     const builtIn = screen.getAllByTestId('editor-plugin-row').find((r) => r.dataset.editor === 'wicked-page')!;
-    expect(within(builtIn).getByText('Document')).toBeTruthy();
     const docs = within(builtIn).getAllByTestId('plugin-document');
     expect(docs.map((d) => d.dataset.doc)).toEqual(['launch-page', 'loose-notes']);
     fireEvent.click(docs[0]!);
@@ -87,6 +98,7 @@ describe('the Plugins page: the built-in Document editor opens real documents', 
     // The sample page is still there, as the quieter way in.
     expect(within(builtIn).getByTestId('editor-plugin-open').className).toContain('wk-btn--quiet');
     // An installed editor keeps only its test-page link: no document door is offered for it.
+    fireEvent.click((await tileOf('acme-terms')));
     const installed = screen.getAllByTestId('editor-plugin-row').find((r) => r.dataset.editor === 'acme-terms')!;
     expect(within(installed).queryByTestId('plugin-documents')).toBeNull();
     // Reads only.
@@ -98,6 +110,7 @@ describe('the Plugins page: the built-in Document editor opens real documents', 
     stub(() => json({ docs: many, unreachable: [] }));
     const navigate = vi.fn();
     render(<PluginsPage navigate={navigate} />);
+    fireEvent.click(await tileOf('wicked-page'));
     await waitFor(() => expect(screen.getAllByTestId('plugin-document')).toHaveLength(OPEN_DOCUMENT_ROWS));
     const all = screen.getByTestId('plugin-documents-all');
     expect(all.textContent).toBe(`See all ${OPEN_DOCUMENT_ROWS + 2} in Everything made`);
@@ -109,6 +122,7 @@ describe('the Plugins page: the built-in Document editor opens real documents', 
     stub(() => json({ docs: [], unreachable: [] }));
     const navigate = vi.fn();
     render(<PluginsPage navigate={navigate} />);
+    fireEvent.click(await tileOf('wicked-page'));
     await waitFor(() => expect(screen.getByTestId('plugin-documents-empty')).toBeTruthy());
     expect(screen.getByTestId('plugin-documents-empty').textContent).toContain('No documents for it yet.');
     fireEvent.click(screen.getByTestId('plugin-documents-new'));
@@ -118,6 +132,7 @@ describe('the Plugins page: the built-in Document editor opens real documents', 
     useDocsCache.setState({ byProject: {}, census: 'opened', index: 'untried' });
     stub(() => json({ message: 'Route GET:/api/v1/interactive/docs not found', error: 'Not Found', statusCode: 404 }, 404));
     render(<PluginsPage navigate={navigate} />);
+    fireEvent.click(await tileOf('wicked-page'));
     await waitFor(() => expect(screen.getByTestId('plugin-documents-empty').textContent).toContain('doesn’t list every document'));
     fireEvent.click(screen.getByTestId('plugin-documents-all'));
     expect(navigate).toHaveBeenLastCalledWith('/everything?tab=made');
@@ -125,7 +140,7 @@ describe('the Plugins page: the built-in Document editor opens real documents', 
 });
 
 describe('the Plugins page: the app builder is coming soon', () => {
-  it('one plain row, disabled, with its one line and nothing to click', async () => {
+  it('one card, disabled, with its one line and nothing to click', async () => {
     stub(() => json(INDEX));
     render(<PluginsPage navigate={vi.fn()} />);
     const soon = await screen.findByTestId('plugin-coming-soon');

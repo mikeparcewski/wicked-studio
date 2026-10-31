@@ -118,7 +118,8 @@ describe('the real run, rendered', () => {
     ] as never } });
     render(<RunBlock view={makeView({ id: RUN, problem: 'x', status: 'completed', power } as never, units)} badge={0} sessionId={`run:${RUN}`} />);
     const turn = await screen.findByTestId('power-turn');
-    const plan = document.querySelector('[data-testid=run-plugins-phase][data-phase=plan]');
+    // The plan's phase report is a row in the thread now (its section is in the Details panel).
+    const plan = document.querySelector('[data-testid=run-plugin-updated][data-phase=plan]');
     expect(plan).not.toBeNull();
     const archStep = [...document.querySelectorAll('[data-testid=chat-step]')].find((n) => /Plan|Architecture/u.test(n.textContent ?? ''));
     expect(archStep).toBeDefined();
@@ -128,7 +129,7 @@ describe('the real run, rendered', () => {
   });
 
   it('two Phase report update rows next to each other become one', async () => {
-    useRunPluginView.setState({ blocks: { [`${RUN}::wicked-phase-report`]: { pinned: false, folded: true, updatedOrds: [3, 4, 5], highlight: 0, pulse: 0, steps: { 3: 'Review', 4: 'Check', 5: 'Deliver' } } } } as never);
+    useRunPluginView.setState({ blocks: { [`${RUN}::wicked-phase-report:phase`]: { pinned: false, updatedOrds: [3, 4, 5], highlight: 0, pulse: 0, steps: { 3: 'Review', 4: 'Check', 5: 'Deliver' }, summary: null } } } as never);
     render(<RunBlock view={makeView({ id: RUN, problem: 'x', status: 'completed' } as never, UNITS)} badge={0} sessionId={`run:${RUN}`} />);
     await waitFor(() => expect(screen.getAllByTestId('run-plugin-updated').length).toBeGreaterThan(0));
     expect(screen.getAllByTestId('run-plugin-updated').map((r) => r.dataset['ord'])).toEqual(['3', '5']);

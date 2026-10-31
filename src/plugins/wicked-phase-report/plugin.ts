@@ -17,7 +17,7 @@
 
 import { PROTOCOL, ENVELOPE, type Envelope } from '../_shared/v2.js';
 import surfaces from './surfaces.json';
-import { dashboard, emptyReport, foldRows, openGates, phaseDashboard, phaseSummary, scopeOf, summaryLine, writesDoc, type PhaseScope, type Report, type Row } from './model.js';
+import { dashboard, emptyReport, foldRows, openGates, panelLine, phaseDashboard, phaseSummary, scopeOf, summaryLine, writesDoc, type PhaseScope, type Report, type Row } from './model.js';
 import { SECTION_EFFECT, SECTION_LABELS, SECTIONS, STEER_NOTE, docLines, pluginWritesLines, reconcileSection, sectionAuthor, trailLines, type DocView, type SectionId } from './workingDoc.js';
 
 const ID = 'wicked-phase-report';
@@ -30,9 +30,14 @@ export function start(): void {
   // The phase this block reports on (`host.hello` → `observe.scope`): a power run has one block per phase; null = the
   // whole run (a phased run's one block).
   let scope: PhaseScope | null = null;
+  // Shown as a section of the run's Details panel (`observe.panel`, DES-LEARN §1.2): the host draws the section's fold,
+  // title and pin, so this frame draws only the body, and says its folded line with `panel.summary`.
+  let inPanel = false;
+  let saidSummary = '';
   // The working document: null until read; `unsupported` when the service keeps none (an older crew).
   let doc: DocView | null = null;
   let docState: 'reading' | 'ready' | 'unsupported' = 'reading';
+  let docGranted = true;
   interface EditSession { section: SectionId; base: number; opened: string; saving: boolean; conflict: boolean }
   let edit: EditSession | null = null;
   let docLine: { text: string; bad: boolean } | null = null;
@@ -82,7 +87,13 @@ export function start(): void {
 
   function draw(): void {
     const root = $('root');
-    root.className = folded ? 'folded' : 'expanded';
+    root.className = `${folded ? 'folded' : 'expanded'}${inPanel ? ' in-panel' : ''}`;
+    $('sum').hidden = inPanel;
+    if (inPanel && port !== null) {
+      const line = panelLine(report, scope);
+      const said = `${line.tone}\u0000${line.text}`;
+      if (said !== saidSummary) { saidSummary = said; send('panel.summary', { text: line.text.slice(0, 80), tone: line.tone }); }
+    }
     $('sum').setAttribute('aria-expanded', folded ? 'false' : 'true');
     $('sum').title = folded ? 'Show the phase report' : 'Fold the phase report';
     $('sum-text').textContent = scope !== null ? phaseSummary(report, scope) : summaryLine(report);
@@ -296,8 +307,9 @@ export function start(): void {
   function drawDoc(): void {
     const box = $('wd');
     // The working document is the run's, shown once: in the run's block, or in a power run's Build block.
-    box.hidden = folded || !writesDoc(scope);
-    if (folded || !writesDoc(scope)) return;
+    // Not granted `doc.read` (a preview on sample events): there is no document to show, nor to say is missing.
+    box.hidden = folded || !writesDoc(scope) || !docGranted;
+    if (folded || !writesDoc(scope) || !docGranted) return;
     // The open editor's own text area is kept (its text, caret and focus) and moved into the redrawn section.
     const keep = edit !== null ? box.querySelector<HTMLTextAreaElement>(`textarea[data-section="${edit.section}"]`) : null;
     const hadFocus = keep !== null && document.activeElement === keep;
@@ -395,6 +407,9 @@ export function start(): void {
     applyTheme(p['theme']);
     const observe = (p['observe'] ?? null) as Record<string, unknown> | null;
     scope = scopeOf(observe?.['scope']);
+    const panel = observe?.['panel'];
+    inPanel = typeof panel === 'object' && panel !== null && (panel as Record<string, unknown>)['slot'] === 'run.details';
+    saidSummary = '';
     port = e.ports[0];
     // A height measured before the port existed was never sent: the first one on the port always goes.
     lastHeight = 0;
@@ -433,7 +448,8 @@ export function start(): void {
     };
     port.start();
     draw();
-    if (Array.isArray(p['grants']) && (p['grants'] as unknown[]).includes('doc.read')) void readDoc();
+    docGranted = Array.isArray(p['grants']) && (p['grants'] as unknown[]).includes('doc.read');
+    if (docGranted) void readDoc();
     else { docState = 'unsupported'; drawDoc(); }
   }
 

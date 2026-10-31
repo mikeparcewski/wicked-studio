@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useMemo, useState } from 'react';
 import { api } from '../../api/client.js';
-import { RunPhasePlugins, RunPluginJumpRows, RunThreadPlugins, WorkingDocSteerRows } from './RunThreadPlugin.js';
+import { RunPhaseRows, RunPluginJumpRows, WorkingDocSteerRows } from './RunThreadPlugin.js';
 import type { CoreEvent, SessionView as RunView } from '../../api/types.js';
 import { IDLE_GATE_ACTION, useGateActionStore } from '../../board/gateActions.js';
 import { finishedDeliveryArm, proposalKindOf, statusSentence } from '../../board/proposalCard.js';
@@ -385,9 +385,9 @@ export function RunBlock({ view, badge, sessionId, navigate, solo = null }: {
         <StepTurn runId={id} step={s} who={s.cli !== null ? seatResponder(s.cli, roster) : STUDIO} checkWord={checkOf(s)} onOpen={openSteps}
           answers={decisions.filter((d) => d.ord === s.ord && d.ord !== planOrd)} at={stepAt(s.ord)} evaluator={evaluatorLabel(s)} />
         {/* The last step's row would sit beside the row for later steps: the one row below says both. */}
-        {!powerBuild && i < steps.length - 1 && <RunPluginJumpRows runId={id} ords={[s.ord]} />}
+        {!powerBuild && i < steps.length - 1 && <RunPluginJumpRows sessionId={sessionId} runId={id} ords={[s.ord]} />}
         {/* A step phase's report (the plan step, a hand-off step), after its message. */}
-        {stepPhase(s.ord) !== null && <RunPhasePlugins runId={id} phase={stepPhase(s.ord)!} />}
+        {stepPhase(s.ord) !== null && <RunPhaseRows sessionId={sessionId} runId={id} phase={stepPhase(s.ord)!} live={!isTerminal} />}
         <WorkingDocSteerRows runId={id} ords={[s.ord]} />
       </Fragment>
     );
@@ -416,20 +416,18 @@ export function RunBlock({ view, badge, sessionId, navigate, solo = null }: {
         </Docked>
       )}
       {decisions.filter((d) => d.ord === planOrd).map((d) => <DecisionLine key={`d${d.ord}-${d.at}`} d={d} />)}
-      {/* Power mode: the intake QE plan opens the run's turns; the build's turns, activity and checkpoints follow the
-          run-thread plugins' blocks (the Phase report sits under the orchestrator's first words in the mockup). */}
+      {/* Power mode: the intake QE plan opens the run's turns; the build's turns, activity and checkpoints follow. */}
       {powerRun && power !== null && <PowerThread view={view} power={power} items={powerItems} part="intake" />}
-      {/* Operator 2026-10-30: a power build has one phase report per phase, each the run-thread plugin's own sandboxed
-          instance (protocol 3, events.batch) scoped to that phase, at the end of the phase's messages; a phased run
-          keeps its one block at the first unit. */}
-      {phaseOf('intake') !== null && <RunPhasePlugins runId={id} phase={phaseOf('intake')!} />}
-      {!powerBuild && <RunThreadPlugins runId={id} placement="thread" />}
+      {/* Operator 2026-10-30: a power build has one phase report per phase, each a section of the run's Details panel
+          (the run plugin's own sandboxed instance, protocol 3); the thread keeps one slim "Phase report · <phase>
+          updated · Show in Details" row at the end of each phase's messages (DES-LEARN §1.2). */}
+      {phaseOf('intake') !== null && <RunPhaseRows sessionId={sessionId} runId={id} phase={phaseOf('intake')!} live={!isTerminal} />}
       {/* A power build's plan step (architecture, design) ran before the build: its message and report come first. */}
       {steps.filter((s) => beforeBuild(s.ord)).map(stepNode)}
       {powerRun && power !== null && <PowerThread view={view} power={power} items={powerItems} part={powerBuild ? 'build' : 'rest'} />}
-      {phaseOf('build') !== null && <RunPhasePlugins runId={id} phase={phaseOf('build')!} />}
+      {phaseOf('build') !== null && <RunPhaseRows sessionId={sessionId} runId={id} phase={phaseOf('build')!} live={!isTerminal} />}
       {powerBuild && power !== null && <PowerThread view={view} power={power} items={powerItems} part="handoff" />}
-      {phaseOf('checks') !== null && powerItems.some((i) => i.kind === 'handoff') && <RunPhasePlugins runId={id} phase={phaseOf('checks')!} />}
+      {phaseOf('checks') !== null && powerItems.some((i) => i.kind === 'handoff') && <RunPhaseRows sessionId={sessionId} runId={id} phase={phaseOf('checks')!} live={!isTerminal} />}
       {/* The plan editor, only when you asked to edit (it is the plan's own artifact). */}
 
 
@@ -439,10 +437,10 @@ export function RunBlock({ view, badge, sessionId, navigate, solo = null }: {
       {/* An update about the last step with a message, or a step that has none yet (the one running now, deliver): ONE
           jump row after the last step, at the newest of them. With no step message yet the block itself is right
           above: no row would point anywhere. */}
-      {!powerBuild && steps.length > 0 && <RunPluginJumpRows runId={id} except={steps.slice(0, -1).map((s) => s.ord)} />}
+      {!powerBuild && steps.length > 0 && <RunPluginJumpRows sessionId={sessionId} runId={id} except={steps.slice(0, -1).map((s) => s.ord)} />}
       {/* A step phase running now has no message yet: its report sits after the last message. */}
       {phases.filter((ph) => STEP_PHASES.has(ph.key) && !steps.some((s) => ph.ords.includes(s.ord)) && ph.current)
-        .map((ph) => <RunPhasePlugins key={ph.key} runId={id} phase={ph} />)}
+        .map((ph) => <RunPhaseRows key={ph.key} sessionId={sessionId} runId={id} phase={ph} live={!isTerminal} />)}
       {/* Working-document steering notes not picked up yet (or by a step with no message): after the last step. */}
       <WorkingDocSteerRows runId={id} except={steps.map((s) => s.ord)} />
 
@@ -503,7 +501,7 @@ export function RunBlock({ view, badge, sessionId, navigate, solo = null }: {
         </AssistantMessage>
       )}
       {/* Deliver's phase report, after the hand-over or the final message. */}
-      {phaseOf('deliver') !== null && (deliverOpen || words !== null || phaseOf('deliver')!.current) && <RunPhasePlugins runId={id} phase={phaseOf('deliver')!} />}
+      {phaseOf('deliver') !== null && (deliverOpen || words !== null || phaseOf('deliver')!.current) && <RunPhaseRows sessionId={sessionId} runId={id} phase={phaseOf('deliver')!} live={!isTerminal} />}
 
       {/* The run's whole record, one fold under its messages (the details panel holds the same, grouped). */}
       {/* A Watchtower "Jump in" (`?jump=`) lands on this run's record: the fold opens on that line. */}

@@ -11,9 +11,9 @@
   "version": 1,
   "studioVersion": "0.13.0",
   "counts": {
-    "files": 259,
-    "occurrences": 3568,
-    "static": 3043,
+    "files": 261,
+    "occurrences": 3593,
+    "static": 3056,
     "dynamic": 75,
     "computed": 33
   },
@@ -4252,13 +4252,15 @@
     {
       "testId": "editor-plugin-elsewhere",
       "files": [
-        "src/components/editors/EditorPluginsSettings.tsx"
+        "src/components/editors/EditorPluginsSettings.tsx",
+        "src/components/editors/PluginsPage.tsx"
       ]
     },
     {
       "testId": "editor-plugin-internet",
       "files": [
-        "src/components/editors/EditorPluginsSettings.tsx"
+        "src/components/editors/EditorPluginsSettings.tsx",
+        "src/components/editors/PluginsPage.tsx"
       ]
     },
     {
@@ -4270,19 +4272,22 @@
     {
       "testId": "editor-plugin-open",
       "files": [
-        "src/components/editors/EditorPluginsSettings.tsx"
+        "src/components/editors/EditorPluginsSettings.tsx",
+        "src/components/editors/PluginsPage.tsx"
       ]
     },
     {
       "testId": "editor-plugin-permissions",
       "files": [
-        "src/components/editors/EditorPluginsSettings.tsx"
+        "src/components/editors/EditorPluginsSettings.tsx",
+        "src/components/editors/PluginsPage.tsx"
       ]
     },
     {
       "testId": "editor-plugin-row",
       "files": [
-        "src/components/editors/EditorPluginsSettings.tsx"
+        "src/components/editors/EditorPluginsSettings.tsx",
+        "src/components/editors/PluginsPage.tsx"
       ]
     },
     {
@@ -4294,25 +4299,27 @@
     {
       "testId": "editor-plugins-create",
       "files": [
-        "src/components/editors/EditorPluginsSettings.tsx"
+        "src/components/editors/PluginsPage.tsx"
       ]
     },
     {
       "testId": "editor-plugins-devhost",
       "files": [
-        "src/components/editors/EditorPluginsSettings.tsx"
+        "src/components/editors/PluginsPage.tsx"
       ]
     },
     {
       "testId": "editor-plugins-empty",
       "files": [
-        "src/components/editors/EditorPluginsSettings.tsx"
+        "src/components/editors/EditorPluginsSettings.tsx",
+        "src/components/editors/PluginsPage.tsx"
       ]
     },
     {
       "testId": "editor-plugins-error",
       "files": [
-        "src/components/editors/EditorPluginsSettings.tsx"
+        "src/components/editors/EditorPluginsSettings.tsx",
+        "src/components/editors/PluginsPage.tsx"
       ]
     },
     {
@@ -4324,25 +4331,21 @@
     {
       "testId": "editor-plugins-loading",
       "files": [
-        "src/components/editors/EditorPluginsSettings.tsx"
+        "src/components/editors/EditorPluginsSettings.tsx",
+        "src/components/editors/PluginsPage.tsx"
       ]
     },
     {
       "testId": "editor-plugins-mcp-inspect",
       "files": [
-        "src/components/editors/EditorPluginsSettings.tsx"
-      ]
-    },
-    {
-      "testId": "editor-plugins-settings",
-      "files": [
-        "src/components/editors/EditorPluginsSettings.tsx"
+        "src/components/editors/PluginsPage.tsx"
       ]
     },
     {
       "testId": "editor-plugins-unsupported",
       "files": [
-        "src/components/editors/EditorPluginsSettings.tsx"
+        "src/components/editors/EditorPluginsSettings.tsx",
+        "src/components/editors/PluginsPage.tsx"
       ]
     },
     {
@@ -9673,13 +9676,85 @@
     {
       "testId": "plugin-coming-soon",
       "files": [
-        "src/components/editors/EditorPluginsSettings.tsx"
+        "src/components/editors/PluginsPage.tsx"
       ]
     },
     {
       "testId": "plugin-coming-soon-tag",
       "files": [
-        "src/components/editors/EditorPluginsSettings.tsx"
+        "src/components/editors/PluginsPage.tsx"
+      ]
+    },
+    {
+      "testId": "plugin-details",
+      "files": [
+        "src/components/editors/PluginsPage.tsx"
+      ]
+    },
+    {
+      "testId": "plugin-details-close",
+      "files": [
+        "src/components/editors/PluginsPage.tsx"
+      ]
+    },
+    {
+      "testId": "plugin-details-hears",
+      "files": [
+        "src/components/editors/PluginsPage.tsx"
+      ]
+    },
+    {
+      "testId": "plugin-details-live",
+      "files": [
+        "src/components/editors/PluginsPage.tsx"
+      ]
+    },
+    {
+      "testId": "plugin-details-manifest",
+      "files": [
+        "src/components/editors/PluginsPage.tsx"
+      ]
+    },
+    {
+      "testId": "plugin-details-may",
+      "files": [
+        "src/components/editors/PluginsPage.tsx"
+      ]
+    },
+    {
+      "testId": "plugin-details-preview",
+      "files": [
+        "src/components/editors/PluginsPage.tsx"
+      ]
+    },
+    {
+      "testId": "plugin-details-slot",
+      "files": [
+        "src/components/editors/PluginsPage.tsx"
+      ]
+    },
+    {
+      "testId": "plugin-details-switch",
+      "files": [
+        "src/components/editors/PluginsPage.tsx"
+      ]
+    },
+    {
+      "testId": "plugin-details-switch-error",
+      "files": [
+        "src/components/editors/PluginsPage.tsx"
+      ]
+    },
+    {
+      "testId": "plugin-details-switch-row",
+      "files": [
+        "src/components/editors/PluginsPage.tsx"
+      ]
+    },
+    {
+      "testId": "plugin-details-title",
+      "files": [
+        "src/components/editors/PluginsPage.tsx"
       ]
     },
     {
@@ -9732,6 +9807,60 @@
       ]
     },
     {
+      "testId": "plugin-tile",
+      "files": [
+        "src/components/editors/PluginsPage.tsx"
+      ]
+    },
+    {
+      "testId": "plugin-tile-icon",
+      "files": [
+        "src/components/editors/PluginsPage.tsx"
+      ]
+    },
+    {
+      "testId": "plugin-tile-line",
+      "files": [
+        "src/components/editors/PluginsPage.tsx"
+      ]
+    },
+    {
+      "testId": "plugin-tile-live",
+      "files": [
+        "src/components/editors/PluginsPage.tsx"
+      ]
+    },
+    {
+      "testId": "plugin-tile-off",
+      "files": [
+        "src/components/editors/PluginsPage.tsx"
+      ]
+    },
+    {
+      "testId": "plugin-tile-preview",
+      "files": [
+        "src/components/editors/PluginsPage.tsx"
+      ]
+    },
+    {
+      "testId": "plugin-tile-source",
+      "files": [
+        "src/components/editors/PluginsPage.tsx"
+      ]
+    },
+    {
+      "testId": "plugin-tile-title",
+      "files": [
+        "src/components/editors/PluginsPage.tsx"
+      ]
+    },
+    {
+      "testId": "plugin-tile-where",
+      "files": [
+        "src/components/editors/PluginsPage.tsx"
+      ]
+    },
+    {
       "testId": "plugin-torn",
       "files": [
         "src/components/editorHost/PluginCard.tsx",
@@ -9739,9 +9868,21 @@
       ]
     },
     {
+      "testId": "plugins-filter",
+      "files": [
+        "src/components/editors/PluginsPage.tsx"
+      ]
+    },
+    {
+      "testId": "plugins-grid",
+      "files": [
+        "src/components/editors/PluginsPage.tsx"
+      ]
+    },
+    {
       "testId": "plugins-page",
       "files": [
-        "src/components/editors/EditorPluginsSettings.tsx"
+        "src/components/editors/PluginsPage.tsx"
       ]
     },
     {
@@ -12406,12 +12547,6 @@
       ]
     },
     {
-      "testId": "run-plugin-phase",
-      "files": [
-        "src/components/session/RunThreadPlugin.tsx"
-      ]
-    },
-    {
       "testId": "run-plugin-pin",
       "files": [
         "src/components/session/RunThreadPlugin.tsx"
@@ -12436,27 +12571,9 @@
       ]
     },
     {
-      "testId": "run-plugin-row",
+      "testId": "run-plugin-summary",
       "files": [
-        "src/components/editors/EditorPluginsSettings.tsx"
-      ]
-    },
-    {
-      "testId": "run-plugin-row-grant",
-      "files": [
-        "src/components/editors/EditorPluginsSettings.tsx"
-      ]
-    },
-    {
-      "testId": "run-plugin-row-permissions",
-      "files": [
-        "src/components/editors/EditorPluginsSettings.tsx"
-      ]
-    },
-    {
-      "testId": "run-plugin-row-topics",
-      "files": [
-        "src/components/editors/EditorPluginsSettings.tsx"
+        "src/components/session/RunThreadPlugin.tsx"
       ]
     },
     {
@@ -12475,36 +12592,6 @@
       "testId": "run-plugin-updated",
       "files": [
         "src/components/session/RunThreadPlugin.tsx"
-      ]
-    },
-    {
-      "testId": "run-plugins",
-      "files": [
-        "src/components/session/RunThreadPlugin.tsx"
-      ]
-    },
-    {
-      "testId": "run-plugins-phase",
-      "files": [
-        "src/components/session/RunThreadPlugin.tsx"
-      ]
-    },
-    {
-      "testId": "run-plugins-pinned",
-      "files": [
-        "src/components/session/RunThreadPlugin.tsx"
-      ]
-    },
-    {
-      "testId": "run-plugins-pinned-run",
-      "files": [
-        "src/components/session/RunThreadPlugin.tsx"
-      ]
-    },
-    {
-      "testId": "run-plugins-settings",
-      "files": [
-        "src/components/editors/EditorPluginsSettings.tsx"
       ]
     },
     {
@@ -18924,6 +19011,7 @@
         "src/components/desk/DeskHome.tsx",
         "src/components/desk/DeskParts.tsx",
         "src/components/desk/UnderstandPage.tsx",
+        "src/components/editors/PluginLivePreview.tsx",
         "src/components/everything/FinishedRunMenu.tsx",
         "src/components/insights/InsightsLine.tsx",
         "src/components/memory/MemoryPage.tsx",
