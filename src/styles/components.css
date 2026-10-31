@@ -2065,3 +2065,9 @@ button.wk-who-name:hover { text-decoration: underline; }
 /* The run panel's actions row: the run's own actions (Draft update, Archive) at the row's size, not a card's. */
 .wk-run-tab-actions .wk-prop-btn { min-height: var(--control-h-sm); padding: var(--space-1) var(--space-2); border-radius: var(--radius-sm); font-size: var(--text-sm); }
 .wk-rp-item-body .wk-sheet-section > button { align-self: flex-start; }
+/* Requirements: none generated yet (lane repo-page) — what the view would show and how to get it. */
+.wk-req-none { padding: var(--space-6); max-width: 44rem; display: flex; flex-direction: column; gap: var(--space-3); }
+.wk-req-none-title { margin: 0; font-size: var(--text-md); font-weight: var(--weight-semi); color: var(--ink-high); }
+.wk-req-none-body { margin: 0; font-size: var(--text-sm); line-height: 1.5; color: var(--ink-body); }
+.wk-req-none-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); }
+.wk-req-none-actions .wk-field-note { margin: 0; }

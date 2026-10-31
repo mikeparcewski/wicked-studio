@@ -268,3 +268,7 @@
 /* Build & settings on a phone: the calm row puts its meta under the words; a lone chevron there reads as
    litter, and the whole row is the link anyway. */
 @media (max-width: 767px) { .wk-calm-row-meta:has(> .wk-build-chev) { display: none; } }
+/* Recent commits (lane repo-page): about six rows, then the list scrolls inside its card. */
+.wk-pg-repo-commits--capped { max-height: 17.5rem; /* six rows and the top of a seventh, so it reads as scrollable */ overflow-y: auto; overscroll-behavior: contain; padding-right: var(--space-2); }
+.wk-pg-repo-commits--capped:focus-visible { outline: 2px solid transparent; box-shadow: var(--focus-ring); border-radius: var(--radius-sm); }
+.wk-pg-repo-allnote { margin: 0 0 var(--space-3); }

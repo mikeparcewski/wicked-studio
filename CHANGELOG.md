@@ -51,6 +51,16 @@ npm publish dates. Every version listed here exists on
   - **A quiet helper says it is working.** When a helper sends no output for 15 s, the engine sends a "working" frame (core#1207). The live list shows one row, "Codex · working · last output 40 s ago", counted up live. The row goes away when the helper does something or its turn ends, and the turn summary never counts it. Codex's and Pi's commands, file changes and reads show as rows, the same as Claude Code's. An MCP call reads "Used estate search".
   - **The judge before the checks is shown.** Between a hand-off and the checks, a judge reviews the change (core#1211). The page now says "studio · A judge seat is reviewing the change · 1 min", and the header says "Judge reviewing", where before there was 1.5 min of silence. It shows no silence warning and offers no reassign.
   - **The deliver gate counts every gate the judge could not rule on.** A step whose receipt already carried a floor override hid the operator's later judgment at the same step. The card said "At 2 gates the judge could not rule" where the engine's own receipt had 3.
+- **A repository with no requirements graph says so, and offers to generate it.** Repositories → a repo → Requirements
+  read, in red, "the daemon refused this — requirements_graph.json not generated for this repo yet". It now says "No
+  requirements graph yet for this repository", what the view would show, and **Generate it**. Generating takes a
+  governed run, so the button starts nothing: it opens New job filled in with the generating workflow (crew names it in
+  its typed 404, `code: notGenerated`, api-types 0.154.0) and the repository, and the operator launches it there. An
+  older daemon's sentence is read the same way. The empty-corpus case's "Run domain extraction", which launched a run
+  directly, now goes the same way.
+- **Recent commits no longer push the repository page down.** The list is a fixed-height card (about six rows) that
+  scrolls inside; **Show all** opens the full history in a dialog (crew's `git-history?limit=`, up to 500; an older
+  daemon gives its 20).
 
 ## [0.13.0] — 2026-10-28
 

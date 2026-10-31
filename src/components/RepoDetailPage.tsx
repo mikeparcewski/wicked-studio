@@ -6,6 +6,7 @@ import { CommitCadence } from './CommitCadence.js';
 import { HotspotsView } from './HotspotsView.js';
 import { LanguageBar } from './LanguageBar.js';
 import { RequirementsModal } from './RequirementsModal.js';
+import { Modal } from './Modal.js';
 import type { CodeGraphData, GitCommit, GitContributor, RepoEntry, SessionView } from '../api/types.js';
 import { statusWord } from '../board/statusWords.js';
 import { relTime } from '../board/relTime.js';
@@ -72,6 +73,7 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph }: P
   const [error, setError] = useState<unknown>(null);
   const [reload, setReload] = useState(0);
   const [expanded, setExpanded] = useState(false);
+  const [allCommitsOpen, setAllCommitsOpen] = useState(false);
   const [onboarding, setOnboarding] = useState(false);
   const [rerunError, setRerunError] = useState<unknown>(null);
   const entryOnboardError = useHistoryEntryValue('onboardError');
@@ -87,6 +89,7 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph }: P
     setLoading(true);
     setError(null);
     setExpanded(false);
+    setAllCommitsOpen(false);
     setCommits(null);
     setContributors(null);
     // Core data drives the page-level loading state; git sections load independently
@@ -407,32 +410,22 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph }: P
               <CommitCadence commits={commits} />
             </Section>
 
+            {/* Lane repo-page: a fixed-height list (about 6 rows, scrolls inside) so the commits never push the
+                page down; "Show all" opens the full list. */}
             <Section title="Recent commits">
               {commits === null ? (
                 <Skeleton rows={6} />
               ) : commits.length === 0 ? (
                 <p className="wk-pg-repo-empty">No commits yet.</p>
               ) : (
-                <ul className="wk-pg-repo-commits">
-                  {commits.map((c) => (
-                    <li key={c.sha} className="wk-pg-repo-commit">
-                      {repo.git_url && /^https:\/\//i.test(repo.git_url) ? (
-                        <a
-                          href={`${repo.git_url.replace(/\.git$/, '')}/commit/${c.sha}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="wk-link wk-pg-repo-sha"
-                        >
-                          {c.shortSha}
-                        </a>
-                      ) : (
-                        <span className="wk-pg-repo-sha">{c.shortSha}</span>
-                      )}
-                      <span className="wk-pg-repo-commit-msg" title={c.message}>{c.message}</span>
-                      <span className="wk-pg-repo-commit-meta">{c.author} · {c.date}</span>
-                    </li>
-                  ))}
-                </ul>
+                <>
+                  <CommitList commits={commits} gitUrl={repo.git_url} capped data-testid="repo-commits" />
+                  {commits.length > VISIBLE_COMMITS && (
+                    <button type="button" data-testid="repo-commits-show-all" onClick={() => setAllCommitsOpen(true)} className="wk-link wk-pg-repo-more">
+                      Show all
+                    </button>
+                  )}
+                </>
               )}
             </Section>
 
@@ -459,6 +452,9 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph }: P
           </div>
         </div>
       </PageFrame>
+      {allCommitsOpen && (
+        <AllCommits repoId={repoId} repoName={repo.name} gitUrl={repo.git_url} first={commits ?? []} onClose={() => setAllCommitsOpen(false)} />
+      )}
       {requirementsOpen && repo && (
         <RequirementsModal
           repoId={repoId}
@@ -490,6 +486,74 @@ function RunRow({ view, onSelect }: { view: SessionView; onSelect: (id: string) 
         </span>
       </span>
     </button>
+  );
+}
+
+/** Rows the Recent commits card shows before it scrolls; past this it offers "Show all". */
+const VISIBLE_COMMITS = 6;
+/** How many commits "Show all" asks crew for (`?limit=`, crew caps it at 500). */
+export const ALL_COMMITS_LIMIT = 500;
+
+/** Commits, newest first: the short sha (a link when the remote is on the web), the first line, who and when.
+ *  `capped`: the card's fixed height with its own scroll. */
+function CommitList({ commits, gitUrl, capped = false, 'data-testid': testId }: {
+  commits: readonly GitCommit[];
+  gitUrl: string | null | undefined;
+  capped?: boolean;
+  'data-testid'?: string;
+}): React.ReactElement {
+  const web = gitUrl && /^https:\/\//i.test(gitUrl) ? gitUrl.replace(/\.git$/, '') : null;
+  return (
+    <ul
+      className={capped ? 'wk-pg-repo-commits wk-pg-repo-commits--capped' : 'wk-pg-repo-commits'}
+      data-testid={testId}
+      data-count={commits.length}
+      {...(capped ? { tabIndex: 0, 'aria-label': 'Recent commits' } : {})}
+    >
+      {commits.map((c) => (
+        <li key={c.sha} className="wk-pg-repo-commit">
+          {web !== null ? (
+            <a href={`${web}/commit/${c.sha}`} target="_blank" rel="noopener noreferrer" className="wk-link wk-pg-repo-sha">
+              {c.shortSha}
+            </a>
+          ) : (
+            <span className="wk-pg-repo-sha">{c.shortSha}</span>
+          )}
+          <span className="wk-pg-repo-commit-msg" title={c.message}>{c.message}</span>
+          <span className="wk-pg-repo-commit-meta">{c.author} · {c.date}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/** "Show all": the full history crew gives (up to ALL_COMMITS_LIMIT). The page's own commits show at once while
+ *  the longer list loads; a failed read keeps them and says so. */
+function AllCommits({ repoId, repoName, gitUrl, first, onClose }: {
+  repoId: string;
+  repoName: string;
+  gitUrl: string | null | undefined;
+  first: readonly GitCommit[];
+  onClose: () => void;
+}): React.ReactElement {
+  const [all, setAll] = useState<readonly GitCommit[] | null>(null);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    let live = true;
+    api.getRepoGitHistory(repoId, ALL_COMMITS_LIMIT)
+      .then(({ commits: c }) => { if (live) setAll(c); })
+      .catch(() => { if (live) setFailed(true); });
+    return () => { live = false; };
+  }, [repoId]);
+  const shown = all ?? first;
+  const note = all === null
+    ? (failed ? `Couldn’t load more; showing the latest ${first.length}.` : `Loading the full history… showing the latest ${first.length}.`)
+    : `The latest ${all.length} commit${all.length === 1 ? '' : 's'}, newest first.`;
+  return (
+    <Modal title={`${repoName} · commits`} onClose={onClose}>
+      <p className="wk-field-note wk-pg-repo-allnote" data-testid="repo-commits-all-note">{note}</p>
+      <CommitList commits={shown} gitUrl={gitUrl} data-testid="repo-commits-all" />
+    </Modal>
   );
 }
 

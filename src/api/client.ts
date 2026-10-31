@@ -608,8 +608,11 @@ export const api = {
     apiFetch<import('./types.js').BlastRadius>(`/repos/${encodeURIComponent(repoId)}/graph/blast-radius?name=${encodeURIComponent(name)}`),
 
   /** Git commit history for a repo (last 20 commits via git log). */
-  getRepoGitHistory: (repoId: string) =>
-    apiFetch<{ commits: import('./types.js').GitCommit[] }>(`/repos/${encodeURIComponent(repoId)}/git-history`),
+  /** `limit`: crew's `?limit=` (1..500; the daemon's default is 20). A daemon from before it ignores it. */
+  getRepoGitHistory: (repoId: string, limit?: number) =>
+    apiFetch<{ commits: import('./types.js').GitCommit[] }>(
+      `/repos/${encodeURIComponent(repoId)}/git-history${limit === undefined ? '' : `?limit=${limit}`}`,
+    ),
 
   /** R3: where a delivering launch on this repo would push (crew's deliver-gate origin
    *  preflight). `null` when the daemon cannot say — an older crew without the route, or any

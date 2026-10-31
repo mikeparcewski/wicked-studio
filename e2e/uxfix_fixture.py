@@ -6529,7 +6529,9 @@ class W2Handler(SimpleHTTPRequestHandler):
             with state_lock:
                 served = (state["requirements"] or {}).get(rid)
             if served is None:
-                self._json(404, {"error": f"no requirements for {rid}"})
+                # crew's typed answer for a repo whose requirements graph was never generated (api-types 0.154.0).
+                self._json(404, {"error": "No requirements graph yet for this repository", "code": "notGenerated",
+                                 "workflow": "domain-extraction"})
                 return True
             qs = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
             offset = int((qs.get("offset") or ["0"])[0])
@@ -6583,10 +6585,13 @@ class W2Handler(SimpleHTTPRequestHandler):
             elif leaf == "graph":
                 self._json(200, {"graph": REPO_GRAPH})
             elif leaf == "git-history":
+                # crew's `?limit=` (default 20): the page reads the latest 20, "Show all" asks for more.
+                qs = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+                limit = int((qs.get("limit") or ["20"])[0])
                 self._json(200, {"commits": [
                     {"sha": f"{i:07x}{'0' * 33}", "shortSha": f"{i:07x}",
                      "message": msg, "author": "Mika Ellis", "date": date}
-                    for i, (date, msg) in enumerate(REPO_COMMITS)
+                    for i, (date, msg) in enumerate(REPO_COMMITS[:limit])
                 ]})
             else:
                 self._json(200, {"contributors": REPO_CONTRIBUTORS})
