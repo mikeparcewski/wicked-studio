@@ -403,9 +403,11 @@ const SECTION_WORDS: Record<string, string> = {
   goal: 'Goal', approach: 'Approach', decisions: 'Decisions', constraints: 'Constraints', questions: 'Open questions', next: 'Next work',
 };
 
-/** One steering note's thread row words: "You edited the working document · Constraints · picked up at Review". */
-export function steerRowWords(by: string, sections: readonly string[], s: { pickedUp: { step: string | null; ord: number | null } | null; error: string | null }, stepOfOrd?: (ord: number) => string | null): string {
-  const who = by === 'local' ? 'You' : by;
+/** One steering note's thread row words: "You edited the working document · Constraints · picked up at Review"
+ *  ("You (by voice) edited …" when it was said). */
+export function steerRowWords(by: string, sections: readonly string[], s: { pickedUp: { step: string | null; ord: number | null } | null; error: string | null; input?: 'voice' }, stepOfOrd?: (ord: number) => string | null): string {
+  // (crew api-types 0.161.0) An edit said by voice and confirmed on screen says so.
+  const who = `${by === 'local' ? 'You' : by}${s.input === 'voice' ? ' (by voice)' : ''}`;
   const where = s.error !== null ? `not sent: ${s.error}`
     : s.pickedUp !== null ? `picked up at ${pickedUpStep(s.pickedUp, stepOfOrd)}`
     : 'waiting for the next step';

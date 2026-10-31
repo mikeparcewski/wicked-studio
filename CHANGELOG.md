@@ -16,6 +16,31 @@ npm publish dates. Every version listed here exists on
 - **Importing a steering rule the way the dialog says now works, and a refusal shows the service's reason (studio#934, J7).** The Import rules dialog said "one rule per item under ## Rules". A doc written that way was refused, because the service reads a frontmattered doc, and studio showed only "Studio’s service refused it". The dialog now says "a markdown rule doc in the format below", and **The format** opens a copyable starting doc: a `---` block with `id` and `title`, then `## Rules` items written as `` - `ID` (severity): statement ``. That example imports as written. A skipped entry now always ends with what the service said ("Studio’s service said: not a frontmattered rule doc — …"). The plain words come first when studio knows the cause. The table view's assistant uses the same import path.
 
 ### Added
+- **Voice: "show me this job", then "tell it …"** (lane voice-jobs, on voice mode phase 1). On the voice dashboard:
+  - **Which job.** "Show me this job" is the job in view, else the run page voice was opened from, else the only
+    running one. A name ("the webhook retries job") is fuzzy-matched against running and recent jobs (title words,
+    plurals, a prefix, one letter off). Several close matches ask which with a guided choose-one ("the second one",
+    a name, or a tap). "Show me the other one" swaps; "close it" closes; "pin it" keeps it there when another job
+    needs you, and across voice sessions. A decision arriving brings its job into view unless another is pinned.
+  - **The live tile.** A large tile beside the transcript (a short one above it on a phone): the job's state, phase,
+    rigor (power mode), its newest repository checks, the newest line it said, a decision waiting, and the run page's
+    own live activity (tool calls, edits, the quiet seat's working row, the step's meter).
+  - **"Tell it …".** Mapped to one action without a model where the words say it: a steer note ("tell it to keep the
+    old URL working"), a Constraint or Next for its working document, stop (a reason said, or asked for), raise rigor
+    (one level, or the level said; a phased job says it has none), answer its open decision (the existing confirm and
+    10 s undo), or check on it (crew's in-flight analyzer; its suggested steer or stop is offered, never taken). Words
+    that match none of these, said while a job is in view, get ONE cheap classification by the system chat. Every
+    action is confirmed on screen (Confirm / Not that, by voice or tap) before anything is sent, and goes through the
+    same human-operator routes as a click: inject with `input: "voice"` (an older crew gets the plain note), the
+    working-document version with `input: "voice"`, the ordinary Stop with its 10 s undo and `{reason, input}`, the
+    rigor raise with the words heard as its reason.
+  - **The thread says "You (by voice)"** on a note or working-document edit crew stamped as said by voice (crew
+    api-types 0.161.0).
+  - Tests: `tests/voice.jobs.test.ts` (reference resolution: focused, only running, fuzzy, ambiguous; intent mapping;
+    the tile's facts; the thread rows), `tests/voice.jobsFlow.test.tsx` (fake mic + stub STT: show, pick, swap, close,
+    and every action confirmed before it is sent), journey `desk_voice_jobs` (Chromium's fake capture device, a stub
+    transcribe route: "show me the webhook retries job" then "tell it to keep the old URL working" → one inject with
+    `input: "voice"` only after "confirm").
 - **Phase reports live in the job's Details panel, as sections a plugin registers (program DES-LEARN §1.2).**
   - **The manifest registers them.** A run plugin's manifest declares `panels: [{slot: "run.details", id, title, instances, order, defaultOpen, summary}]`. The slot list is closed (v1: `run.details`). `order` runs 1–99: Now stays first at 0, the core sections keep 20–60, a tie puts the core section first, and plugins tie-break by id. `instances: "per-phase"` gives one section per phase of a power build. `defaultOpen` is `always`, `never`, `current` (the running phase open, the rest folded) or `while-live`.
   - **The host draws the chrome; the plugin draws the body.** Studio draws the fold, the phase's title, a "Plugin" mark, Pin and the attribution line. The body is the same sandboxed plugin on protocol 3 (`events.batch`), one instance per phase. A new `panel.summary {text, tone}` message gives the folded heading its line ("checkpoint 3 · rigor high · working"); `host.hello`'s `observe.panel` tells the plugin it is a section body, so it hides its own summary line.

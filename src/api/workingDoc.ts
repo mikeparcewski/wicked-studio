@@ -36,6 +36,8 @@ export interface WorkingDocSteer {
   error: string | null;
   supersededBy?: string | null;
   renewals?: number;
+  /** (crew api-types 0.161.0) Said by voice: the thread row says "You (by voice)". */
+  input?: 'voice';
 }
 
 export interface WorkingDocView {
@@ -55,6 +57,8 @@ export interface ProposeWorkingDoc {
   sections: Partial<Record<WorkingDocSectionId, string>>;
   author: 'operator' | 'plugin';
   plugin?: { id: string; version: string };
+  /** (crew api-types 0.161.0) A person's edit said by voice and confirmed on screen; an older crew ignores it. */
+  input?: 'voice';
 }
 
 export interface ProposeWorkingDocResult {

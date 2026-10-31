@@ -106,7 +106,7 @@ export function cmdkObject(): ObjectRef | null {
  * Stop a run — after 10 s with Undo (DESIGN-interaction rule 4; DESIGN-simple §4 "Stop it (10 s
  * undo)"). Undo inside the window sends nothing; after it, one `POST /runs/:id/cancel`.
  */
-export function stopRun(runIds: readonly string[], label: string): number | null {
+export function stopRun(runIds: readonly string[], label: string, why?: { reason?: string; input?: 'voice' }): number | null {
   // A run already in its Stop window is not queued again: one cancel at most (codex on S11).
   const pending = useSheets.getState().stopping;
   const ids = runIds.filter((id) => pending[id] === undefined);
@@ -129,7 +129,7 @@ export function stopRun(runIds: readonly string[], label: string): number | null
       clear();
       const failed: string[] = [];
       for (const id of ids) {
-        try { await api.cancelRun(id); } catch (e) { failed.push(`${id}: ${e instanceof Error ? e.message : String(e)}`); }
+        try { await (why !== undefined ? api.cancelRun(id, why) : api.cancelRun(id)); } catch (e) { failed.push(`${id}: ${e instanceof Error ? e.message : String(e)}`); }
       }
       if (failed.length === 0) reportDecision('sent', `Stopped ${label}.`);
       else reportDecision('failed', `Not stopped: ${failed.join('; ')}`);

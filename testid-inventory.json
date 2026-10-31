@@ -11,9 +11,9 @@
   "version": 1,
   "studioVersion": "0.13.0",
   "counts": {
-    "files": 282,
-    "occurrences": 3899,
-    "static": 3310,
+    "files": 283,
+    "occurrences": 3909,
+    "static": 3320,
     "dynamic": 87,
     "computed": 44
   },
@@ -19337,6 +19337,66 @@
       "testId": "voice-hold",
       "files": [
         "src/components/voice/VoiceFullScreen.tsx"
+      ]
+    },
+    {
+      "testId": "voice-job",
+      "files": [
+        "src/components/voice/JobPreview.tsx"
+      ]
+    },
+    {
+      "testId": "voice-job-checks",
+      "files": [
+        "src/components/voice/JobPreview.tsx"
+      ]
+    },
+    {
+      "testId": "voice-job-close",
+      "files": [
+        "src/components/voice/JobPreview.tsx"
+      ]
+    },
+    {
+      "testId": "voice-job-gates",
+      "files": [
+        "src/components/voice/JobPreview.tsx"
+      ]
+    },
+    {
+      "testId": "voice-job-phase",
+      "files": [
+        "src/components/voice/JobPreview.tsx"
+      ]
+    },
+    {
+      "testId": "voice-job-pin",
+      "files": [
+        "src/components/voice/JobPreview.tsx"
+      ]
+    },
+    {
+      "testId": "voice-job-rigor",
+      "files": [
+        "src/components/voice/JobPreview.tsx"
+      ]
+    },
+    {
+      "testId": "voice-job-said",
+      "files": [
+        "src/components/voice/JobPreview.tsx"
+      ]
+    },
+    {
+      "testId": "voice-job-state",
+      "files": [
+        "src/components/voice/JobPreview.tsx"
+      ]
+    },
+    {
+      "testId": "voice-job-title",
+      "files": [
+        "src/components/voice/JobPreview.tsx"
       ]
     },
     {
