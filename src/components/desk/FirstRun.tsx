@@ -150,7 +150,10 @@ export function FirstRun({ navigate, agents, hasRoster, onDone }: {
     );
   }
 
-  const live = next === null ? null : asks[next];
+  // The asks are built from what was read: wait for the repositories, the facts and the roster, so an ask never
+  // opens with its options (or its preselection) missing.
+  const readsIn = repos !== null && known !== null && hasRoster;
+  const live = next === null || !readsIn ? null : asks[next];
   return (
     <div className="wk-fr-grid" data-testid="first-run">
       <div>
@@ -166,14 +169,15 @@ export function FirstRun({ navigate, agents, hasRoster, onDone }: {
           <p className="wk-fr-section">What we already know</p>
           <Known known={known} repos={repos} agents={agents} hasRoster={hasRoster} ready={ready.length} />
           <p className="wk-fr-section">What we’d like to know</p>
-          {SETUP_ASKS.map((key, i) => {
+          {SETUP_ASKS.map((key) => {
             const a = answers[key];
             if (a !== undefined) return <AskRecord key={key} line={a.line} testId={`first-run-record-${key}`} />;
-            if (key !== next || live === null) return null;
+            if (key !== next) return null;
+            if (live === null) return <p key={key} className="wk-learn-quiet" data-testid="first-run-reading" role="status">Reading what’s on this computer…</p>;
             return (
               <div key={key} className={phone ? 'wk-fr-live' : undefined} data-testid="first-run-live">
                 <div className={key === 'repos' ? 'wk-ask-rows' : undefined}>
-                  <AskCard ask={live} tag={`Setup · ${i + 1} of 6`} busy={busy} onAnswer={(x) => void answer(key, live, x)} testIds={{ root: `first-run-ask-${key}` }} />
+                  <AskCard key={(live.options ?? []).map((o) => o.id).join('|')} ask={live} tag="Setup" busy={busy} onAnswer={(x) => void answer(key, live, x)} testIds={{ root: `first-run-ask-${key}` }} />
                 </div>
               </div>
             );

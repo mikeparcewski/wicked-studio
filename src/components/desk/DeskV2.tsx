@@ -400,7 +400,8 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
   const [firstRunOn, setFirstRunOn] = useState<boolean | null>(null);
   const resumeSetup = new URLSearchParams(search).get('setup') === '1';
   useEffect(() => {
-    if (firstRunOn !== null || projectId !== undefined || firstRunRead !== 'ok' || !runsLoaded) return;
+    // An explicit resume needs no job count; otherwise "no jobs yet" waits for the jobs to be read.
+    if (firstRunOn !== null || projectId !== undefined || firstRunRead !== 'ok' || (!runsLoaded && !resumeSetup)) return;
     if (resumeSetup && firstRun.ignoredAt !== undefined) void useFirstRun.getState().ignore(false);
     setFirstRunOn(firstRun.completedAt === undefined && (resumeSetup || (firstRun.ignoredAt === undefined && (firstRun.answers !== undefined || rawRuns.length === 0))));
   }, [firstRunOn, projectId, firstRunRead, runsLoaded, resumeSetup, firstRun, rawRuns.length]);

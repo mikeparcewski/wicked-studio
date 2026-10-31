@@ -130,7 +130,8 @@ with sync_playwright() as p:
     badge = r["badge"]
     check("order",
           r["order"] == want
-          and r["dests"] == ["page:home", "page:projects", "page:jobs", "page:repos", "page:report", "page:understand", "page:evaluate",
+          # DES-LEARN §3.0: a fresh fixture has never used Learn, so it leads Work, above Projects.
+          and r["dests"] == ["page:home", "page:learn", "page:projects", "page:jobs", "page:repos", "page:report", "page:understand", "page:evaluate",
                              "page:steering", "page:memory", "page:agents", "page:build", "watch"]
           and not r["bell"] and r["homeLinks"] == 1 and r["nerveLast"]
           # The wordmark is the link Home; its description says the badge (the fixture has gates waiting).

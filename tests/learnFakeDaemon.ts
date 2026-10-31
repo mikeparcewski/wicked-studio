@@ -7,7 +7,7 @@ import { vi } from 'vitest';
 export type Handler = (body: unknown, path: string) => unknown | Promise<unknown>;
 export interface FakeDaemon {
   calls: { method: string; path: string; body: unknown }[];
-  on: (route: string, h: Handler | unknown) => void;
+  on: (route: string, h: Handler | Record<string, unknown> | readonly unknown[]) => void;
   sent: (route: string) => unknown[];
 }
 

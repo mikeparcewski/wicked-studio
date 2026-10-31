@@ -5348,6 +5348,12 @@
       ]
     },
     {
+      "testId": "first-run-reading",
+      "files": [
+        "src/components/desk/FirstRun.tsx"
+      ]
+    },
+    {
       "testId": "first-run-row",
       "files": [
         "src/components/desk/FirstRun.tsx"

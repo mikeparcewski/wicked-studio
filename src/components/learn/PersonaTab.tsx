@@ -40,7 +40,9 @@ export function PersonaTab({ navigate, project }: { navigate: Navigate; project:
   const base: PersonaInput = saved ?? (project !== null ? data?.user ?? DEFAULT_PERSONA : DEFAULT_PERSONA);
   const [draft, setDraft] = useState<PersonaInput | null>(null);
   // A new scope (or the first read) starts the form from what that scope holds.
-  useEffect(() => { setDraft(null); setNote(null); }, [scope, data]);
+  useEffect(() => { setDraft(null); }, [scope, data]);
+  // A note answers the last save or removal; a different scope starts without one.
+  useEffect(() => { setNote(null); }, [scope]);
   const form = draft ?? base;
   const set = (patch: Partial<PersonaInput>): void => setDraft({ ...form, ...patch });
   const [q, setQ] = useState<0 | 1 | 2>(0);
@@ -108,7 +110,7 @@ export function PersonaTab({ navigate, project }: { navigate: Navigate; project:
       <div className="wk-learn-persona">
         <div className="wk-learn-pform">
           <div className="wk-learn-name">
-            <span className="wk-learn-av" aria-hidden style={{ background: form.colour }}>{initial}</span>
+            <span className="wk-learn-av" aria-hidden style={{ background: form.colour, color: 'white' }}>{initial}</span>
             <input type="text" value={form.name} maxLength={40} aria-label="Your orchestrator’s name" data-testid="persona-name"
               onChange={(e) => set({ name: e.target.value.replace(/[\r\n]/gu, ' ') })} />
             <span className="wk-learn-swatches" role="group" aria-label="Colour">
@@ -155,12 +157,12 @@ export function PersonaTab({ navigate, project }: { navigate: Navigate; project:
           <h3>How <span data-testid="persona-preview-name">{form.name.trim() || 'your orchestrator'}</span> would answer</h3>
           <div className="wk-learn-prompts" role="group" aria-label="Sample question">
             {PREVIEW_QUESTIONS.map((text, i) => (
-              <button key={text} type="button" className="wk-chat-chip" aria-pressed={q === i} data-testid="persona-question" onClick={() => setQ(i as 0 | 1 | 2)}>{text.replace(/\.$/u, '').replace(/ What now\?$/u, '')}</button>
+              <button key={text} type="button" className="wk-chat-chip" aria-pressed={q === i} data-testid="persona-question" onClick={() => setQ(i as 0 | 1 | 2)}>{text.replace(/ What now\?$/u, '').replace(/\.$/u, '')}</button>
             ))}
           </div>
           <div className="wk-learn-you">{PREVIEW_QUESTIONS[q]}</div>
           <div className="wk-learn-it">
-            <span className="wk-learn-av wk-learn-av--sm" aria-hidden style={{ background: form.colour }}>{initial}</span>
+            <span className="wk-learn-av wk-learn-av--sm" aria-hidden style={{ background: form.colour, color: 'white' }}>{initial}</span>
             <div className="wk-learn-answer" data-testid="persona-answer">{answer.map((b, i) => <PreviewPart key={`${q}-${i}`} b={b} />)}</div>
           </div>
           {(saved !== null || (project !== null && data.user !== null)) && (

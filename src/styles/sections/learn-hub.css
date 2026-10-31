@@ -35,9 +35,9 @@
 .wk-learn-src { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 8px 10px; border-radius: var(--radius-md);
   background: var(--surface-card); box-shadow: inset 0 0 0 1px var(--border-subtle); animation: wk-learn-in .35s var(--ease-out); }
 .wk-learn-src-ic { display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 8px; color: var(--ink-high); }
-.wk-learn-src[data-kind="doc"] .wk-learn-src-ic { background: color-mix(in oklab, #3b82f6 30%, transparent); }
-.wk-learn-src[data-kind="repo"] .wk-learn-src-ic { background: color-mix(in oklab, #22c55e 28%, transparent); }
-.wk-learn-src[data-kind="writing"] .wk-learn-src-ic { background: color-mix(in oklab, #f59e0b 30%, transparent); }
+.wk-learn-src[data-kind="doc"] .wk-learn-src-ic { background: var(--status-run-dim); }
+.wk-learn-src[data-kind="repo"] .wk-learn-src-ic { background: var(--status-ok-dim); }
+.wk-learn-src[data-kind="writing"] .wk-learn-src-ic { background: var(--status-warn-dim); }
 .wk-learn-src-w { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .wk-learn-src-name { overflow: hidden; color: var(--ink-high); font-size: var(--text-sm); font-weight: var(--weight-semi); text-overflow: ellipsis; white-space: nowrap; }
 .wk-learn-src-sub { color: var(--ink-muted); font-size: 11px; }
@@ -49,7 +49,7 @@
   background: var(--surface-raised); color: var(--ink-muted); font-size: var(--text-sm); font-weight: var(--weight-bold); }
 .wk-learn-st[data-s="run"] { box-shadow: inset 0 0 0 2px var(--accent); }
 .wk-learn-st[data-s="run"] .wk-learn-st-ic { background: var(--accent); color: var(--accent-fg); animation: wk-learn-pulse 1.4s var(--ease-out) infinite; }
-.wk-learn-st[data-s="done"] .wk-learn-st-ic { background: var(--status-ok); color: #06210f; }
+.wk-learn-st[data-s="done"] .wk-learn-st-ic { background: var(--status-ok); color: var(--surface-base); }
 @keyframes wk-learn-pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.12); } }
 .wk-learn-ticker { display: flex; flex-direction: column; justify-content: flex-end; min-height: 96px; max-height: 150px; margin: 0; padding: 10px 12px; overflow: hidden;
   border-radius: var(--radius-md); background: var(--surface-base); color: var(--ink-muted); font: 12px/1.6 var(--font-mono); list-style: none; }
@@ -80,7 +80,8 @@
 .wk-learn-tile > span { color: var(--ink-muted); font-size: var(--text-xs); line-height: 1.4; }
 .wk-learn-tick { position: absolute; top: 12px; right: 12px; display: flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 50%;
   border: 1.5px solid var(--border-strong); color: transparent; }
-.wk-learn-tile[aria-pressed="true"] .wk-learn-tick { border-color: var(--accent); background: var(--accent); color: var(--accent-fg); }
+.wk-learn-tile > .wk-learn-tick { color: transparent; }
+.wk-learn-tile[aria-pressed="true"] > .wk-learn-tick { border-color: var(--accent); background: var(--accent); color: var(--accent-fg); }
 .wk-learn-pill { align-self: flex-start; padding: 1px 8px; border-radius: 999px; background: color-mix(in oklab, var(--ink-high) 8%, transparent); color: var(--ink-muted) !important; font-size: 11px !important; }
 .wk-learn-res-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin: 18px 0 8px; }
 .wk-learn-rules { margin: 0; padding: 0; list-style: none; }
@@ -99,7 +100,7 @@
 .wk-learn-persona { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 22px; align-items: start; }
 .wk-learn-pform { display: flex; flex-direction: column; gap: 16px; }
 .wk-learn-name { display: flex; align-items: center; gap: 12px; }
-.wk-learn-av { display: flex; flex-shrink: 0; align-items: center; justify-content: center; width: 44px; height: 44px; border-radius: 14px; color: #fff; font-size: var(--text-lg);
+.wk-learn-av { display: flex; flex-shrink: 0; align-items: center; justify-content: center; width: 44px; height: 44px; border-radius: 14px; color: var(--accent-fg); font-size: var(--text-lg);
   font-weight: var(--weight-bold); transition: background .2s; }
 .wk-learn-av--sm { width: 30px; height: 30px; border-radius: 9px; font-size: var(--text-sm); }
 .wk-learn-name input { flex: 1; min-width: 0; height: 40px; padding: 0 12px; border-radius: var(--radius-md); border: 1px solid var(--border-input); background: var(--surface-base);
@@ -225,3 +226,5 @@
 .wk-learn-dot--off { background: var(--ink-dim); }
 .wk-learn-resume { margin: -6px 0 14px; padding: 8px 12px; border-radius: var(--radius-md); background: color-mix(in oklab, var(--accent) 8%, var(--surface-card));
   color: var(--ink-body); font-size: var(--text-sm); }
+.wk-learn-results:empty { display: none; }
+.wk-learn-results .wk-learn-flow { max-width: 920px; }

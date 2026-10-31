@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { BookOpen, FileText, GitBranch, PenLine, X } from 'lucide-react';
 import { api, apiFetch } from '../../api/client.js';
 import { postCapture } from '../../api/capture.js';
@@ -63,6 +64,8 @@ export function StyleTab({ navigate }: { navigate: Navigate }): React.ReactEleme
   const [launching, setLaunching] = useState(false);
   const [launchError, setLaunchError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
+  // The review sits full width under the sources and the pipeline (mockup c), rendered into this slot.
+  const [resultsEl, setResultsEl] = useState<HTMLDivElement | null>(null);
 
   useEffect(() => {
     api.listRepos().then((r) => setRepos(r.repos), () => setRepos([]));
@@ -194,8 +197,9 @@ export function StyleTab({ navigate }: { navigate: Navigate }): React.ReactEleme
           </ul>
         </div>
         <StylePipeline record={record} launching={launching} sourceCount={sources.length} onLearn={() => void launch()} onReset={startOver}
-          launchError={launchError} navigate={navigate} onDecided={(r) => { setRecord(r); void saveRecord(r).catch(() => undefined); }} />
+          launchError={launchError} navigate={navigate} resultsEl={resultsEl} onDecided={(r) => { setRecord(r); void saveRecord(r).catch(() => undefined); }} />
       </div>
+      <div ref={setResultsEl} className="wk-learn-results" />
       <section className="wk-learn-topics" aria-labelledby="learn-topics-h">
         <h2 id="learn-topics-h" className="wk-learn-h2"><BookOpen size={16} aria-hidden /> Topics to follow</h2>
         <LearnTopics navigate={navigate} embedded />
@@ -205,9 +209,11 @@ export function StyleTab({ navigate }: { navigate: Navigate }): React.ReactEleme
 }
 
 /** The four stations, the ticker, and once drafted the two pick-several asks. */
-function StylePipeline({ record, launching, sourceCount, onLearn, onReset, launchError, navigate, onDecided }: {
+function StylePipeline({ record, launching, sourceCount, onLearn, onReset, launchError, navigate, onDecided, resultsEl }: {
   record: StyleRecord | null; launching: boolean; sourceCount: number; onLearn: () => void; onReset: () => void;
   launchError: string | null; navigate: Navigate; onDecided: (r: StyleRecord) => void;
+  /** Where the review renders (full width under the grid); absent = in place. */
+  resultsEl?: HTMLElement | null;
 }): React.ReactElement {
   const jobs = useMemo(() => record?.jobs ?? [], [record]);
   const [runs, setRuns] = useState<Record<string, SessionView>>({});
@@ -301,6 +307,7 @@ function StylePipeline({ record, launching, sourceCount, onLearn, onReset, launc
     }
   };
 
+  const place = (node: React.ReactElement): React.ReactNode => (resultsEl !== undefined && resultsEl !== null ? createPortal(node, resultsEl) : node);
   const tickerLines = jobs.length === 0
     ? [sourceCount === 0 ? 'Add a source to start.' : `Ready. ${sourceCount} ${sourceCount === 1 ? 'source' : 'sources'}. Press Learn my style.`]
     : [...jobs.map((j) => jobLine(j, runs[j.runId])), ...(allSettled ? [`Done · ${memories.length + ruleOptions.length} suggestions. Nothing is kept until you decide.`] : [])];
@@ -333,7 +340,7 @@ function StylePipeline({ record, launching, sourceCount, onLearn, onReset, launc
         </p>
       )}
       {fail !== null && <p className="wk-learn-quiet wk-learn-bad" role="alert" data-testid="style-decide-error">{fail}</p>}
-      {(memAsk !== null || rulesAsk !== null || memDone || rulesDone) && (
+      {(memAsk !== null || rulesAsk !== null || memDone || rulesDone) && place(
         <div className="wk-learn-flow wk-ask-rows" data-testid="style-results">
           {memDone ? <AskRecord line={decided.memories!} testId="style-memories-record" /> : memAsk !== null && (
             <AskCard ask={memAsk} tag="Memories" busy={busy === 'memories'} onAnswer={(a) => void decide('memories', a)} testIds={{ root: 'style-memories' }} />
@@ -341,7 +348,7 @@ function StylePipeline({ record, launching, sourceCount, onLearn, onReset, launc
           {rulesDone ? <AskRecord line={decided.rules!} testId="style-rules-record" /> : rulesAsk !== null && (
             <AskCard ask={rulesAsk} tag="Rules" busy={busy === 'rules'} onAnswer={(a) => void decide('rules', a)} testIds={{ root: 'style-rules' }} />
           )}
-        </div>
+        </div>,
       )}
       {allSettled && memAsk === null && ruleOptions.length === 0 && !memDone && !rulesDone && (
         <p className="wk-learn-quiet" data-testid="style-nothing">The jobs finished without a suggestion. Try a richer source: a CONTRIBUTING file, a repository with history, a few posts.</p>

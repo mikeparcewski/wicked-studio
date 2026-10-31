@@ -107,7 +107,7 @@ with sync_playwright() as p:
     page.on("response", lambda res: readback_statuses.append(res.status)
             if urlparse(res.url).path == READBACK else None)
 
-    page.goto(f"{ORIGIN}/theme", wait_until="domcontentloaded")
+    page.goto(f"{ORIGIN}/learn?tab=brand", wait_until="domcontentloaded")
     page.locator('[data-testid="brand-learn"]').wait_for(timeout=30000)
     page.add_style_tag(content=HIDE_GATE_TOASTS)
     page.wait_for_timeout(1200)  # give any eager wire time to (wrongly) fire
