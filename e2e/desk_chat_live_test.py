@@ -188,6 +188,8 @@ with sync_playwright() as p:
         except Exception:  # noqa: BLE001
             fail(f"3-verdict-{tag}", page.evaluate(LOOK))
         page.wait_for_timeout(500)
+        # The shared AskCard: Steer (recommended, preselected) opens its prefilled note once taken; nothing is sent.
+        page.get_by_test_id("inflight-check-opt-steer").click()
         verdict = page.evaluate(LOOK)
         shot(page, f"desk-chat-live-verdict-{tag}.png", '[data-testid="inflight-check"]')
         posts = get(origin, "/__fixture/inspect-posts")["posts"]

@@ -147,6 +147,10 @@ describe('a working chat turn, live', () => {
     expect(screen.getByTestId('inflight-check-opt-steer').getAttribute('aria-checked')).toBe('true');
     expect(screen.getByTestId('inflight-check-opt-steer').textContent).toContain('Recommended');
     expect(injectMessage).not.toHaveBeenCalled();
+    // The shared AskCard (ui-v3 integration): taking Steer opens its note, prefilled with the suggested one.
+    expect(screen.queryByTestId('inflight-check-note')).toBeNull();
+    fireEvent.click(screen.getByTestId('inflight-check-opt-steer'));
+    expect(screen.getByTestId('inflight-check-commit').textContent).toBe('Send the note to Claude');
     const box = screen.getByTestId('inflight-check-note') as HTMLTextAreaElement;
     expect(box.value).toBe('Read the failing assertion first.');
     fireEvent.change(box, { target: { value: 'Read the failing assertion, then fix the rounding.' } });

@@ -12,8 +12,8 @@
   "studioVersion": "0.13.0",
   "counts": {
     "files": 282,
-    "occurrences": 3906,
-    "static": 3312,
+    "occurrences": 3902,
+    "static": 3309,
     "dynamic": 87,
     "computed": 43
   },
@@ -6101,18 +6101,6 @@
       ]
     },
     {
-      "testId": "inflight-check-commit",
-      "files": [
-        "src/components/session/InflightCheck.tsx"
-      ]
-    },
-    {
-      "testId": "inflight-check-consequence",
-      "files": [
-        "src/components/session/InflightCheck.tsx"
-      ]
-    },
-    {
       "testId": "inflight-check-doing",
       "files": [
         "src/components/session/InflightCheck.tsx"
@@ -6126,12 +6114,6 @@
     },
     {
       "testId": "inflight-check-later",
-      "files": [
-        "src/components/session/InflightCheck.tsx"
-      ]
-    },
-    {
-      "testId": "inflight-check-note",
       "files": [
         "src/components/session/InflightCheck.tsx"
       ]

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { CircleCheck } from 'lucide-react';
 import { api } from '../../api/client.js';
+import type { Ask, AskAnswer } from '../../api/ask.js';
+import { AskCard, AskRecord } from '../ask/AskCard.js';
 import { apiStatus } from '../../api/errors.js';
 import { inspectionOf, type InspectAction, type InspectVerdict, type UnitInspection } from '../../api/inspect.js';
 import { checkAfterMs, costWords, elapsedWords, tokenWords, type TurnKind } from '../../board/liveTurn.js';
@@ -15,8 +16,9 @@ import { stopRun } from '../../store/sheets.js';
  * the step's record, read-only, and answers progressing / looping / stuck / wasteful, with what it is doing, how far
  * along, the evidence, and one recommended action. The person chooses through the same ask: let it run, steer it
  * with the suggested note (editable, sent as a message to the step's seat), or stop it (the ordinary Stop, with its
- * undo). Nothing happens on its own. The visual language is the guided ask's (program DES-GUIDED-CHAT: options as
- * tiles, the recommended one preselected and marked, the consequence shown, one commit button, a record line after).
+ * undo). Nothing happens on its own. Both questions are the shared guided ask (`AskCard`, program DES-GUIDED-CHAT): the
+ * recommended action preselected and marked, its consequence shown, the steer note in the card's reason box (opened
+ * when you take Steer, prefilled with the suggested note), and an `AskRecord` line once answered.
  */
 
 /** "Not now" or "Let it run": the ask comes back after another threshold, per step attempt (kept across remounts). */
@@ -47,13 +49,12 @@ export function InflightCheck({ runId, ord, attempt, kind, startedAt, now, seatN
 }): React.ReactElement | null {
   const key = `${runId}:${ord}:${attempt}`;
   const threshold = checkAfterMs(kind);
+  const minutes = Math.round(threshold / 60_000);
   const elapsed = now - startedAt;
   const [record, setRecord] = useState<UnitInspection | null>(null);
   const [asking, setAsking] = useState(false);
   const [refusal, setRefusal] = useState<string | null>(null);
   const [snoozeAt, setSnoozeAt] = useState<number>(() => snoozed.get(key) ?? 0);
-  const [choice, setChoice] = useState<InspectAction | null>(null);
-  const [note, setNote] = useState('');
   const [chosen, setChosen] = useState<Chosen | null>(null);
 
   // A check asked earlier on this attempt (a reload, another tab) is shown as it stands, once the turn is long enough
@@ -90,14 +91,6 @@ export function InflightCheck({ runId, ord, attempt, kind, startedAt, now, seatN
     return () => clearInterval(t);
   }, [checking, runId, ord, record?.id]);
 
-  // The recommended action is the one preselected (DES-GUIDED-CHAT: recommended, not automatic).
-  useEffect(() => {
-    if (record?.state === 'done' && choice === null) {
-      setChoice(record.action ?? 'let_run');
-      setNote(record.note ?? '');
-    }
-  }, [record, choice]);
-
   const ask = useCallback(() => {
     setAsking(true);
     setRefusal(null);
@@ -120,24 +113,24 @@ export function InflightCheck({ runId, ord, attempt, kind, startedAt, now, seatN
     setSnoozeAt(at);
   }, [elapsed, threshold, key]);
 
-  const commit = useCallback(() => {
-    if (choice === null) return;
-    if (choice === 'let_run') {
+  /** The person's answer to the verdict's ask (AskCard): let it run, steer with the note, or stop. */
+  const answer = useCallback((a: AskAnswer) => {
+    if (a.option === 'let_run') {
       snooze();
       setChosen({ action: 'let_run', at: Date.now() });
       return;
     }
-    if (choice === 'stop') {
+    if (a.option === 'stop') {
       stopRun([runId], label);
       setChosen({ action: 'stop', at: Date.now() });
       return;
     }
-    const body = note.trim();
+    const body = (a.reason ?? '').trim();
     if (body === '') return;
     api.injectMessage(runId, body, seatKey ?? 'all')
       .then(() => setChosen({ action: 'steer', at: Date.now(), note: body }))
       .catch((e: unknown) => setChosen({ action: 'steer', at: Date.now(), note: body, error: e instanceof Error ? e.message : String(e) }));
-  }, [choice, note, runId, seatKey, label, snooze]);
+  }, [runId, seatKey, label, snooze]);
 
   const cost = useMemo(() => {
     const c = record?.cost;
@@ -147,27 +140,25 @@ export function InflightCheck({ runId, ord, attempt, kind, startedAt, now, seatN
 
   // ── the answer ──
   if (chosen !== null) {
-    const words = chosen.action === 'let_run'
-      ? <>You chose: <b>Let it run</b></>
+    const line = chosen.action === 'let_run'
+      ? 'You chose: Let it run'
       : chosen.action === 'stop'
-        ? <>You chose: <b>Stop {label}</b> · undo it on the notice above</>
+        ? `You chose: Stop ${label} · undo it on the notice above`
         : chosen.error !== undefined
-          ? <>The note could not be sent: {chosen.error}</>
-          : <>You sent {seatName} a note: <b>“{chosen.note}”</b></>;
+          ? `The note could not be sent: ${chosen.error}`
+          : `You sent ${seatName} a note: “${chosen.note}”`;
     return (
-      <p data-testid="inflight-check-record" data-action={chosen.action} className="wk-ask-record" role="status">
-        <CircleCheck size={16} aria-hidden /> <span>{words}</span>
-        {chosen.action === 'let_run' && <span className="wk-ask-rmeta">· studio asks again in {Math.round(threshold / 60_000)} min</span>}
-      </p>
+      <AskRecord line={line} testId="inflight-check-record" className="wk-inflight-record"
+        {...(chosen.action === 'let_run' ? { meta: `studio asks again in ${minutes} min` } : {})} />
     );
   }
 
   if (record !== null && record.state === 'checking') {
     return (
-      <p data-testid="inflight-check" data-state="checking" className="wk-ask-record wk-ask-record--busy" role="status" aria-live="polite">
+      <p data-testid="inflight-check" data-state="checking" className="wk-ask-record wk-inflight-record" role="status" aria-live="polite">
         <span aria-hidden className="wk-chat-working-dots"><i /><i /><i /></span>
         <span>Checking with <b>{record.seat ?? 'another agent'}</b> · it only reads{cost !== null ? ` · ${cost} so far` : ''}</span>
-        <span className="wk-ask-rmeta">{elapsedWords(now - record.requestedAt)}</span>
+        <span className="wk-ask-record-meta">{elapsedWords(now - record.requestedAt)}</span>
       </p>
     );
   }
@@ -175,16 +166,24 @@ export function InflightCheck({ runId, ord, attempt, kind, startedAt, now, seatN
   if (record !== null && record.state === 'done' && record.verdict !== null) {
     const v = VERDICT[record.verdict];
     const rec = record.action ?? 'let_run';
-    const options: Array<{ id: InspectAction; label: string; sub: string; consequence: string; danger?: boolean }> = [
-      { id: 'let_run', label: 'Let it run', sub: `check again in ${Math.round(threshold / 60_000)} min`, consequence: `${seatName} keeps going as it is. Studio offers another check after ${Math.round(threshold / 60_000)} more minutes.` },
-      { id: 'steer', label: 'Steer it', sub: 'send it a note', consequence: `${seatName} reads your note at its next step and keeps working. Edit the note below before it goes.` },
-      { id: 'stop', label: `Stop ${label}`, sub: 'its work so far is kept', consequence: `${label.charAt(0).toUpperCase() + label.slice(1)} stops where it is. You can undo it for 10 s.`, danger: true },
-    ];
-    const sel = options.find((o) => o.id === choice) ?? options[0]!;
+    const verdictAsk: Ask = {
+      id: `inflight:${key}:${record.id}`,
+      host: 'chat',
+      from: { kind: 'studio', id: 'studio', label: 'studio asks' },
+      prompt: 'What now?',
+      kind: 'choose',
+      options: [
+        { id: 'let_run', token: 'let_run', label: 'Let it run', sub: `check again in ${minutes} min`, consequence: `${seatName} keeps going as it is. Studio offers another check after ${minutes} more minutes.`, recommended: rec === 'let_run' },
+        { id: 'steer', token: 'steer', label: 'Steer it', sub: 'send it a note', consequence: `${seatName} reads your note at its next step and keeps working. Edit the note before it goes.`, needsReason: true, recommended: rec === 'steer' },
+        { id: 'stop', token: 'stop', label: `Stop ${label}`, sub: 'its work so far is kept', consequence: `${label.charAt(0).toUpperCase() + label.slice(1)} stops where it is. You can undo it for 10 s.`, tone: 'danger', recommended: rec === 'stop' },
+      ],
+      answeredBy: 'person',
+      record: 'You chose: {label}',
+    };
     return (
-      <section data-testid="inflight-check" data-state="done" data-verdict={record.verdict} data-source={record.source ?? ''} className="wk-ask" data-tone={v.tone} aria-label="How it is going">
+      <section data-testid="inflight-check" data-state="done" data-verdict={record.verdict} data-source={record.source ?? ''} className="wk-ask wk-inflight" data-tone={v.tone} aria-label="How it is going">
         <p className="wk-ask-who">
-          <span data-testid="inflight-check-verdict" className={`wk-ask-pill wk-ask-pill--${v.tone}`}>{v.word}</span>
+          <span data-testid="inflight-check-verdict" className={`wk-inflight-pill wk-inflight-pill--${v.tone}`}>{v.word}</span>
           <span data-testid="inflight-check-by">
             {record.source === 'seat' ? `${record.seat ?? 'Another agent'} checked · read only` : 'Crew’s own reading of the record'}
             {cost !== null ? ` · this check: ${cost}` : ''}
@@ -193,54 +192,51 @@ export function InflightCheck({ runId, ord, attempt, kind, startedAt, now, seatN
         {record.doing !== null && <p data-testid="inflight-check-doing" className="wk-ask-q">{record.doing}</p>}
         {record.progress !== null && <p data-testid="inflight-check-progress" className="wk-ask-sub">{record.progress}</p>}
         {record.evidence.length > 0 && (
-          <ul data-testid="inflight-check-evidence" className="wk-ask-evidence">
+          <ul data-testid="inflight-check-evidence" className="wk-inflight-evidence">
             {record.evidence.slice(0, 4).map((e, i) => <li key={i}>{e}</li>)}
           </ul>
         )}
-        {record.why !== null && <p data-testid="inflight-check-why" className="wk-ask-why">{record.why}</p>}
-        <p className="wk-ask-then">What now?</p>
-        <div role="radiogroup" aria-label="What now?" className="wk-ask-opts">
-          {options.map((o) => (
-            <button key={o.id} type="button" role="radio" aria-checked={choice === o.id} data-testid={`inflight-check-opt-${o.id}`} data-tone={o.danger === true ? 'danger' : undefined}
-              onClick={() => { setChoice(o.id); if (o.id === 'steer' && note === '') setNote(record.note ?? ''); }} data-rec={o.id === rec ? 'true' : undefined} className="wk-ask-opt">
-              <b>{o.label}</b>
-              <span>{o.sub}</span>
-              {o.id === rec && <i className="wk-ask-rec">Recommended</i>}
-            </button>
-          ))}
-        </div>
-        <p data-testid="inflight-check-consequence" className="wk-ask-cons"><b>If you choose this:</b> {sel.consequence}</p>
-        {choice === 'steer' && (
-          <textarea data-testid="inflight-check-note" aria-label={`Note to ${seatName}`} rows={2} value={note} onChange={(e) => setNote(e.target.value)}
-            placeholder={`Say what ${seatName} should do differently`} className="wk-ask-text" />
-        )}
-        <div className="wk-ask-go">
-          <button type="button" data-testid="inflight-check-commit" disabled={choice === 'steer' && note.trim() === ''} onClick={commit}
-            className={`wk-btn ${choice === 'stop' ? 'wk-stop-btn' : 'wk-btn--primary'}`}>
-            {choice === 'steer' ? `Send the note to ${seatName}` : sel.label}
-          </button>
-          <span className="wk-ask-rmeta">Nothing happens until you choose.</span>
-        </div>
+        {record.why !== null && <p data-testid="inflight-check-why" className="wk-inflight-why">{record.why}</p>}
+        <p className="wk-inflight-then">What now?</p>
+        <AskCard
+          ask={verdictAsk}
+          header={false}
+          onAnswer={answer}
+          reasonFor={(o) => (o.id === 'steer'
+            ? { label: `Note to ${seatName}`, placeholder: `Say what ${seatName} should do differently`, prefill: record.note ?? '', send: `Send the note to ${seatName}` }
+            : { label: 'Why? (kept with the record)' })}
+          optionProps={(o) => ({ 'data-testid': `inflight-check-opt-${o.id}` })}
+          footnote="Nothing happens until you choose."
+          testIds={{ group: 'inflight-check-options', consequence: 'inflight-check-consequence', confirm: 'inflight-check-commit', send: 'inflight-check-commit', reason: 'inflight-check-note' }}
+        />
       </section>
     );
   }
 
   // ── the ask ──
   if (elapsed < threshold || elapsed < snoozeAt) return null;
+  const checkAsk: Ask = {
+    id: `inflight:${key}:ask`,
+    host: 'chat',
+    from: { kind: 'studio', id: 'studio', label: 'studio asks' },
+    prompt: 'Check on it?',
+    kind: 'confirm',
+    options: [
+      { id: 'yes', token: 'yes', label: asking ? 'Asking…' : 'Check on it', sub: 'about a minute, a few cents', recommended: true, consequence: `Another agent reads what ${seatName} has done so far. It only reads.` },
+      { id: 'later', token: 'later', label: 'Not now', sub: `ask again in ${minutes} min` },
+    ],
+    answeredBy: 'person',
+    record: 'You chose: {label}',
+  };
   return (
-    <section data-testid="inflight-check" data-state="ask" className="wk-ask" aria-label="Check on it?">
-      <p className="wk-ask-who"><span className="wk-ask-pill">Check</span> studio asks</p>
+    <section data-testid="inflight-check" data-state="ask" className="wk-ask wk-inflight" aria-label="Check on it?">
+      <p className="wk-ask-who"><span className="wk-ask-tag" data-tone="accent">Check</span> studio asks</p>
       <p data-testid="inflight-check-q" className="wk-ask-q">This has been running {elapsedWords(elapsed).replace(/ \d+ s$/, '')} · Check on it?</p>
       <p className="wk-ask-sub">Another agent reads what {seatName} has done so far and says whether it is progressing, looping, stuck or wasting tokens. It only reads: nothing changes unless you choose.</p>
-      <div className="wk-ask-yn">
-        <button type="button" data-testid="inflight-check-yes" aria-checked="true" role="radio" data-rec="true" disabled={asking} onClick={ask} className="wk-ask-opt">
-          <b>{asking ? 'Asking…' : 'Check on it'}</b><span>about a minute, a few cents</span><i className="wk-ask-rec">Recommended</i>
-        </button>
-        <button type="button" data-testid="inflight-check-later" aria-checked="false" role="radio" onClick={snooze} className="wk-ask-opt">
-          <b>Not now</b><span>ask again in {Math.round(threshold / 60_000)} min</span>
-        </button>
-      </div>
-      {refusal !== null && <p data-testid="inflight-check-refused" role="alert" className="wk-ask-why">{refusal}</p>}
+      <AskCard ask={checkAsk} header={false} busy={asking} onAnswer={(a) => (a.option === 'yes' ? ask() : snooze())}
+        optionProps={(o) => ({ 'data-testid': o.id === 'yes' ? 'inflight-check-yes' : 'inflight-check-later' })}
+        testIds={{ group: 'inflight-check-options', consequence: 'inflight-check-consequence' }} />
+      {refusal !== null && <p data-testid="inflight-check-refused" role="alert" className="wk-inflight-why">{refusal}</p>}
     </section>
   );
 }
