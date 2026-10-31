@@ -185,11 +185,9 @@ describe('a page chat', () => {
     await waitFor(() => expect(sendChatMessage).toHaveBeenCalledTimes(1));
     expect(String(sendChatMessage.mock.calls[0]![1])).toContain('Remember: ');
     frame({ type: 'chatReply', chat: (openChat.mock.calls[0]![0] as { chatId: string }).chatId, cliKey: 'claude', text: 'I’d remember two things.', ok: true });
-    let next = await screen.findByTestId('page-chat-next');
-    await waitFor(() => expect(within(screen.getByTestId('page-chat-next')).getAllByTestId('ask-option')[0]).toHaveAttribute('data-ask-option', 'remember'));
-    next = screen.getByTestId('page-chat-next');
-    await user.click(within(next).getByTestId('ask-confirm'));
+    // DES-LEARN §6.3 (operator 2026-10-31): what it would keep IS the next question, the pick-several straight away.
     const keep = await screen.findByText('Which should helpers remember?');
+    expect(screen.queryByText('What next?')).toBeNull();
     await user.click(within(keep.closest('[data-testid="ask-card"]') as HTMLElement).getByTestId('ask-confirm'));
     await waitFor(() => expect(fileProposal).toHaveBeenCalledTimes(2));
     expect(fileProposal.mock.calls.map((c) => (c[0] as { content: string }).content)).toEqual(['Releases cut on Thursdays.', 'Hotfixes need a second reviewer.']);
