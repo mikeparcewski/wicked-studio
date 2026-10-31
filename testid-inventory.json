@@ -12,8 +12,8 @@
   "studioVersion": "0.13.0",
   "counts": {
     "files": 264,
-    "occurrences": 3626,
-    "static": 3084,
+    "occurrences": 3628,
+    "static": 3086,
     "dynamic": 76,
     "computed": 33
   },
@@ -16060,7 +16060,19 @@
       ]
     },
     {
+      "testId": "steer-import-example",
+      "files": [
+        "src/components/steer/SteerSurface.tsx"
+      ]
+    },
+    {
       "testId": "steer-import-file",
+      "files": [
+        "src/components/steer/SteerSurface.tsx"
+      ]
+    },
+    {
+      "testId": "steer-import-format",
       "files": [
         "src/components/steer/SteerSurface.tsx"
       ]
