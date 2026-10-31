@@ -15,6 +15,7 @@ import {
 import type { Navigate } from '../../hooks/useRoute.js';
 import { useFirstRun } from '../../store/firstRun.js';
 import { useProvenanceStore } from '../../store/provenance.js';
+import { sessionPath } from '../../board/sessionModel.js';
 import { AskCard, AskRecord } from '../ask/AskCard.js';
 import { readFileText } from '../fileText.js';
 import { LearnTopics } from './LearnPage.js';
@@ -329,14 +330,14 @@ function StylePipeline({ record, launching, sourceCount, onLearn, onReset, launc
         </button>
         {jobs.length > 0 && <button type="button" className="wk-btn wk-btn--quiet" data-testid="style-reset" onClick={onReset}>Start over</button>}
         <span className="wk-learn-quiet" data-testid="style-runline">
-          {jobs.length === 0 ? 'Runs as jobs you can watch in Jobs.' : <>Running as {jobs.length} {jobs.length === 1 ? 'job' : 'jobs'}: {jobs.map((j, i) => <a key={j.runId} className="wk-link" href={`/runs/${j.runId}`} onClick={(e) => { e.preventDefault(); navigate(`/runs/${j.runId}`); }}>{i > 0 ? ', ' : ''}{STYLE_JOB_WORDS[j.kind]}</a>)}</>}
+          {jobs.length === 0 ? 'Runs as jobs you can watch in Jobs.' : <>Running as {jobs.length} {jobs.length === 1 ? 'job' : 'jobs'}: {jobs.map((j, i) => <a key={j.runId} className="wk-link" href={sessionPath(j.runId)} onClick={(e) => { e.preventDefault(); navigate(sessionPath(j.runId)); }}>{i > 0 ? ', ' : ''}{STYLE_JOB_WORDS[j.kind]}</a>)}</>}
         </span>
       </div>
       {launchError !== null && <p className="wk-learn-quiet wk-learn-bad" role="alert" data-testid="style-launch-error">{launchError}</p>}
       {waitingElsewhere.length > 0 && (
         <p className="wk-learn-quiet" data-testid="style-waiting">
           {waitingElsewhere.length === 1 ? 'A job is waiting for you before it can go on: ' : `${waitingElsewhere.length} jobs are waiting for you before they can go on: `}
-          {waitingElsewhere.map((r) => <a key={r.session.id} className="wk-link" href={`/runs/${r.session.id}`} onClick={(e) => { e.preventDefault(); navigate(`/runs/${r.session.id}`); }}>open it</a>)}
+          {waitingElsewhere.map((r) => <a key={r.session.id} className="wk-link" href={sessionPath(r.session.id)} onClick={(e) => { e.preventDefault(); navigate(sessionPath(r.session.id)); }}>open it</a>)}
         </p>
       )}
       {fail !== null && <p className="wk-learn-quiet wk-learn-bad" role="alert" data-testid="style-decide-error">{fail}</p>}

@@ -2,9 +2,9 @@
  * The Learn wire (program DES-LEARN; mockup learn-and-panels states c, d, f-memory): the orchestrator's
  * personality, the first run's facts, and a steering-author run's drafted rules.
  *
- * The shapes are the contract's (`wicked-crew-api-types` 0.159.0: `Persona*`, `SetupKnown`,
+ * The shapes are the contract's (`wicked-crew-api-types` 0.160.0: `Persona*`, `SetupKnown`,
  * `SteeringDraftResponse`, `GateDecision.keepRules`). Studio pins an older contract, so they are mirrored
- * here field for field; swap these for the contract's on the next pin. A daemon before 0.159.0 answers
+ * here field for field; swap these for the contract's on the next pin. A daemon before 0.160.0 answers
  * these routes with Fastify's bare 404, which {@link isLearnRouteAbsent} names so callers say so.
  */
 
@@ -83,7 +83,7 @@ export function getSteeringDraft(runId: string): Promise<SteeringDraftResponse> 
   return apiFetch<SteeringDraftResponse>(`/governance/steering/author/${encodeURIComponent(runId)}/draft`);
 }
 
-/** Approve a steering-author run's propose gate, landing only the kept rule ids (crew 0.159.0). */
+/** Approve a steering-author run's propose gate, landing only the kept rule ids (crew 0.160.0). */
 export function keepDraftedRules(runId: string, keepRules: readonly string[]): Promise<{ status: string; landing?: { outcome: string; ruleIds: string[]; declinedIds?: string[]; error?: string } }> {
   return apiFetch(`/runs/${encodeURIComponent(runId)}/gate`, {
     method: 'POST',
@@ -91,7 +91,7 @@ export function keepDraftedRules(runId: string, keepRules: readonly string[]): P
   });
 }
 
-/** A daemon from before these routes (crew < 0.159.0): Fastify's bare unknown-route 404. */
+/** A daemon from before these routes (crew < 0.160.0): Fastify's bare unknown-route 404. */
 export function isLearnRouteAbsent(e: unknown): boolean {
   return isRouteAbsent(e);
 }
