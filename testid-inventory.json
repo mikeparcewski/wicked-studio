@@ -12,8 +12,8 @@
   "studioVersion": "0.13.0",
   "counts": {
     "files": 260,
-    "occurrences": 3615,
-    "static": 3067,
+    "occurrences": 3616,
+    "static": 3068,
     "dynamic": 75,
     "computed": 43
   },
@@ -13455,6 +13455,12 @@
     },
     {
       "testId": "session-gate-chosen",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
+      "testId": "session-gate-chosen-wait",
       "files": [
         "src/components/session/GateRow.tsx"
       ]

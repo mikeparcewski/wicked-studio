@@ -3,7 +3,7 @@
  * workers (default, marked, never preselected) / Also install into my CLIs / Decline — and each
  * shows the files it writes, `~/` form, the operator's own files said so.
  */
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as client from '../src/api/client.js';
 import type { CoreEvent } from '../src/api/types.js';
