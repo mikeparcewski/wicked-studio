@@ -13,7 +13,15 @@ import { api } from '../api/client.js';
 import type { RequirementSummary, RequirementDetail, RequirementsPage, RequirementPatch } from '../api/types.js';
 import { useModalEscape } from './Modal.js';
 import { openLaunchWizard } from '../store/launchWizard.js';
-import { DOMAIN_EXTRACTION_ID, requirementsNotGenerated } from '../board/requirementsState.js';
+import {
+  DOMAIN_EXTRACTION_ID,
+  corroborationCounts,
+  corroborationOf,
+  corroborationSentence,
+  coverageLabel,
+  coverageOf,
+  requirementsNotGenerated,
+} from '../board/requirementsState.js';
 import { workflowLabel } from '../board/workflowNames.js';
 
 const T = {
@@ -140,7 +148,7 @@ export function RequirementsModal({ repoId, repoName, onClose, onNavigateCompone
         style={{ background: T.surface, border: `1px solid ${T.hairlineS}` }}
       >
         {/* Header */}
-        <div className="flex items-center gap-3 px-5 py-3 border-b shrink-0" style={{ borderColor: T.hairline, background: T.canvas2 }}>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-5 py-3 border-b shrink-0" style={{ borderColor: T.hairline, background: T.canvas2 }}>
           <span className="font-mono text-sm font-semibold" style={{ color: T.ink }}>{repoName}</span>
           <span className="font-mono text-[11px] px-2 py-0.5 rounded" style={{ background: T.surface2, color: T.muted }}>
             requirements
@@ -152,6 +160,7 @@ export function RequirementsModal({ repoId, repoName, onClose, onNavigateCompone
                 : `${page.total} matching · ${page.corpus} total`}
             </span>
           )}
+          {page !== null && <GraphCoverage page={page} />}
           <button
             type="button"
             onClick={onClose}
@@ -321,6 +330,61 @@ function NotGenerated({ repoName, workflow, onGenerate, empty = false }: {
   );
 }
 
+/**
+ * The graph's coverage label and how its items are corroborated (operator ruling 2026-10-31): a
+ * graph is built once a minimum share of the code is mapped, so it says how much it covers
+ * ("82% of behaviours mapped"), and how many items several independent sources support.
+ * Nothing renders for a graph (or a daemon) from before these fields.
+ */
+function GraphCoverage({ page }: { page: RequirementsPage }): React.ReactElement | null {
+  const cov = coverageOf(page);
+  const counts = corroborationCounts(page);
+  if (cov === null && counts === null) return null;
+  return (
+    // Its own row on a phone (order last, full width); inline beside the counts from `sm` up.
+    <span className="order-last basis-full sm:order-none sm:basis-auto flex flex-wrap items-center gap-x-2 gap-y-1 min-w-0">
+      {cov !== null && (
+        <span
+          data-testid="requirements-coverage"
+          data-mapped-pct={cov.mappedPct}
+          className="font-mono text-[11px] px-2 py-0.5 rounded whitespace-nowrap"
+          style={{ background: 'var(--status-run-dim)', color: T.ink }}
+          title={`Built at a minimum of ${cov.minPct}%: ${cov.mapped} of ${cov.behaviorBearing} behaviours mapped${cov.unmapped > 0 ? `; ${cov.unmapped} not mapped yet, and the next run continues from them` : ''}.`}
+        >
+          {coverageLabel(cov)}
+          <span style={{ color: T.muted }}> · minimum {cov.minPct}%</span>
+        </span>
+      )}
+      {counts !== null && (
+        <span data-testid="requirements-corroboration-counts" className="font-mono text-[11px] truncate" style={{ color: T.faint }}>
+          {counts.validated} validated · {counts.unconfirmed} unconfirmed
+        </span>
+      )}
+    </span>
+  );
+}
+
+/** An item's mark: validated (with its count of independent sources) or unconfirmed. */
+function CorroborationMark({ req }: { req: unknown }): React.ReactElement | null {
+  const c = corroborationOf(req);
+  if (c === null) return null;
+  const validated = c.status === 'validated';
+  return (
+    <span
+      data-testid="requirement-corroboration"
+      data-status={c.status}
+      className="text-[9px] uppercase font-mono px-1.5 py-0.5 rounded shrink-0"
+      style={{
+        background: validated ? 'var(--status-ok-dim)' : 'var(--status-warn-dim)',
+        color: validated ? 'var(--status-ok)' : 'var(--status-warn)',
+      }}
+      title={corroborationSentence(c)}
+    >
+      {validated ? `validated · ${c.sources}` : 'unconfirmed'}
+    </span>
+  );
+}
+
 function summaryOf(d: RequirementDetail): RequirementSummary {
   return {
     key: d.key,
@@ -359,7 +423,9 @@ function RequirementRow({
           <span className="block text-[11px] truncate" style={{ color: T.muted }}>{req.statement.trim()}</span>
         )}
         <span className="block text-[10px] font-mono truncate" style={{ color: T.faint }}>{req.domain}</span>
+        <UnconfirmedWhy req={req} />
       </span>
+      <CorroborationMark req={req} />
       {req.edited && (
         <span className="text-[9px] uppercase font-mono px-1.5 py-0.5 rounded shrink-0" style={{ background: T.surface2, color: T.link }}>
           edited
@@ -384,6 +450,24 @@ function RequirementRow({
         {req.status}
       </span>
     </button>
+  );
+}
+
+/** The reason an item is unconfirmed, shown on the item itself (operator ruling 2026-10-31). */
+function UnconfirmedWhy({ req }: { req: unknown }): React.ReactElement | null {
+  const c = corroborationOf(req);
+  if (c === null || c.status !== 'unconfirmed' || c.why === undefined) return null;
+  return (
+    <span
+      data-testid="requirement-unconfirmed-why"
+      data-code={c.why.code}
+      className="block text-[10px]"
+      // Two lines, not one: on a phone a one-line clip would cut the reason down to its first word.
+      style={{ color: 'var(--status-warn)', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
+      title={c.why.text}
+    >
+      Unconfirmed: {c.why.text}
+    </span>
   );
 }
 
@@ -565,6 +649,7 @@ function RequirementEditRail({
               </ol>
             </div>
           )}
+          <RailCorroboration detail={detail} />
           <div className="text-[10px] font-mono flex gap-3 flex-wrap" style={{ color: T.faint }}>
             <span>{detail.ruleCount} rules</span>
             <span>{detail.componentCount} components</span>
@@ -616,6 +701,21 @@ function RequirementEditRail({
           </div>
         </div>
       ) : null}
+    </div>
+  );
+}
+
+function RailCorroboration({ detail }: { detail: unknown }): React.ReactElement | null {
+  const c = corroborationOf(detail);
+  if (c === null) return null;
+  return (
+    <div data-testid="requirement-rail-corroboration" data-status={c.status}>
+      <span className="text-[10px] font-mono uppercase" style={{ color: T.faint }}>
+        {c.status === 'validated' ? 'Validated' : 'Unconfirmed'}
+      </span>
+      <p className="text-[11px] mt-1" style={{ color: c.status === 'validated' ? T.ink : 'var(--status-warn)' }}>
+        {corroborationSentence(c)}
+      </p>
     </div>
   );
 }

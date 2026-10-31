@@ -54,6 +54,76 @@ const detail: RequirementDetail = {
   legacyComponents: [],
 };
 
+describe('RequirementsModal — coverage label and corroboration (operator ruling 2026-10-31)', () => {
+  beforeEach(() => {
+    getRequirement.mockReset();
+    patchRequirement.mockReset();
+    resetLaunchWizard();
+  });
+
+  const validated = {
+    ...row,
+    corroboration: { status: 'validated', sources: 3, callSites: 1, tests: 1, docs: 1, extraExtractors: 0 },
+  };
+  const unconfirmed = {
+    ...row,
+    key: 'billing::REQ-2',
+    reqId: 'REQ-2',
+    title: 'Settle invoices',
+    corroboration: {
+      status: 'unconfirmed',
+      sources: 0,
+      callSites: 0,
+      tests: 0,
+      docs: 0,
+      extraExtractors: 0,
+      why: { code: 'unindexed_file', text: 'src/actor.rs names it, but the code index skipped that file, so callers there are not counted.' },
+    },
+  };
+
+  it('labels the graph with its coverage and counts, and marks each item', async () => {
+    listRequirements.mockReset().mockResolvedValue({
+      ...page([validated, unconfirmed] as unknown as RequirementsPage['items'], 2, 2),
+      coverage: { mappedPct: 82, minPct: 80, behaviorBearing: 100, mapped: 82, resolved: 70, unmapped: 18 },
+      corroboration: { validated: 1, unconfirmed: 1 },
+    });
+    render(<RequirementsModal repoId="r1" repoName="repo" onClose={() => {}} />);
+    const label = await screen.findByTestId('requirements-coverage');
+    expect(label).toHaveTextContent('82% of behaviours mapped · minimum 80%');
+    expect(label).toHaveAttribute('title', expect.stringContaining('18 not mapped yet'));
+    expect(screen.getByTestId('requirements-corroboration-counts')).toHaveTextContent('1 validated · 1 unconfirmed');
+    const marks = screen.getAllByTestId('requirement-corroboration');
+    expect(marks.map((m) => [m.dataset['status'], m.textContent])).toEqual([
+      ['validated', 'validated · 3'],
+      ['unconfirmed', 'unconfirmed'],
+    ]);
+    expect(marks[0]).toHaveAttribute('title', 'Validated by 3 independent sources: 1 caller, 1 test, 1 doc.');
+    // The reason is ON the item, not only in a tooltip.
+    const why = screen.getByTestId('requirement-unconfirmed-why');
+    expect(why).toHaveAttribute('data-code', 'unindexed_file');
+    expect(why).toHaveTextContent('Unconfirmed: src/actor.rs names it, but the code index skipped that file');
+  });
+
+  it('the edit rail says why an item is unconfirmed', async () => {
+    listRequirements.mockReset().mockResolvedValue(page([unconfirmed] as unknown as RequirementsPage['items'], 1, 1));
+    getRequirement.mockResolvedValue({ requirement: { ...detail, ...unconfirmed } });
+    render(<RequirementsModal repoId="r1" repoName="repo" onClose={() => {}} />);
+    fireEvent.click(await screen.findByText('Settle invoices'));
+    const rail = await screen.findByTestId('requirement-rail-corroboration');
+    expect(rail).toHaveAttribute('data-status', 'unconfirmed');
+    expect(rail).toHaveTextContent('Unconfirmed');
+    expect(rail).toHaveTextContent('src/actor.rs names it');
+  });
+
+  it('a graph or daemon from before the fields shows no label and no marks', async () => {
+    listRequirements.mockReset().mockResolvedValue(page([row]));
+    render(<RequirementsModal repoId="r1" repoName="repo" onClose={() => {}} />);
+    await screen.findByText('Totals include tax');
+    expect(screen.queryByTestId('requirements-coverage')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('requirement-corroboration')).not.toBeInTheDocument();
+  });
+});
+
 describe('RequirementsModal', () => {
   beforeEach(() => {
     listRequirements.mockReset().mockResolvedValue(page([row]));
