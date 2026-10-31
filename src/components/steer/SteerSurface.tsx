@@ -573,7 +573,7 @@ export function SteerSurface({ pathname, search, navigate: navigateRaw, runs = [
 }
 
 /** Import rule files: a markdown doctrine doc or a JSON batch, filed under one steering type. */
-function ImportDialog({ defaultType, background, onClose, onImported }: {
+export function ImportDialog({ defaultType, background, onClose, onImported }: {
   defaultType: SteeringType;
   /** The page behind: inert while the dialog is open (codex r2 #8). */
   background: React.RefObject<HTMLElement | null>;

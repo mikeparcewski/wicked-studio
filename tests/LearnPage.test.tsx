@@ -32,7 +32,7 @@ vi.mock('../src/api/client.js', async (importOriginal) => {
   return { ...real, api: { ...real.api, listRepos: () => listRepos() as Promise<unknown> } };
 });
 
-const { LearnPage } = await import('../src/components/learn/LearnPage.js');
+const { LearnTopics: LearnPage } = await import('../src/components/learn/LearnPage.js');
 const model = await import('../src/components/learn/learnModel.js');
 const { useComposerSeed } = await import('../src/store/composerSeed.js');
 const { ApiError } = await import('../src/api/errors.js');

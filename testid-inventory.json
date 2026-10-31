@@ -11,10 +11,10 @@
   "version": 1,
   "studioVersion": "0.13.0",
   "counts": {
-    "files": 260,
-    "occurrences": 3616,
-    "static": 3068,
-    "dynamic": 75,
+    "files": 268,
+    "occurrences": 3731,
+    "static": 3175,
+    "dynamic": 80,
     "computed": 43
   },
   "static": [
@@ -1196,6 +1196,18 @@
       "testId": "brand-learn",
       "files": [
         "src/components/BrandLearn.tsx"
+      ]
+    },
+    {
+      "testId": "brand-tab",
+      "files": [
+        "src/components/learn/BrandTab.tsx"
+      ]
+    },
+    {
+      "testId": "brand-theme-link",
+      "files": [
+        "src/components/learn/BrandTab.tsx"
       ]
     },
     {
@@ -5294,6 +5306,78 @@
       ]
     },
     {
+      "testId": "first-run",
+      "files": [
+        "src/components/desk/FirstRun.tsx"
+      ]
+    },
+    {
+      "testId": "first-run-error",
+      "files": [
+        "src/components/desk/FirstRun.tsx"
+      ]
+    },
+    {
+      "testId": "first-run-flow",
+      "files": [
+        "src/components/desk/FirstRun.tsx"
+      ]
+    },
+    {
+      "testId": "first-run-hidden",
+      "files": [
+        "src/components/desk/FirstRun.tsx"
+      ]
+    },
+    {
+      "testId": "first-run-ignore",
+      "files": [
+        "src/components/desk/FirstRun.tsx"
+      ]
+    },
+    {
+      "testId": "first-run-known",
+      "files": [
+        "src/components/desk/FirstRun.tsx"
+      ]
+    },
+    {
+      "testId": "first-run-live",
+      "files": [
+        "src/components/desk/FirstRun.tsx"
+      ]
+    },
+    {
+      "testId": "first-run-row",
+      "files": [
+        "src/components/desk/FirstRun.tsx"
+      ]
+    },
+    {
+      "testId": "first-run-row-words",
+      "files": [
+        "src/components/desk/FirstRun.tsx"
+      ]
+    },
+    {
+      "testId": "first-run-save-failed",
+      "files": [
+        "src/components/desk/FirstRun.tsx"
+      ]
+    },
+    {
+      "testId": "first-run-setup",
+      "files": [
+        "src/components/desk/FirstRun.tsx"
+      ]
+    },
+    {
+      "testId": "first-run-undo",
+      "files": [
+        "src/components/desk/FirstRun.tsx"
+      ]
+    },
+    {
       "testId": "floor-marker",
       "files": [
         "src/components/LaunchPreview.tsx"
@@ -5990,6 +6074,30 @@
       ]
     },
     {
+      "testId": "known-agents",
+      "files": [
+        "src/components/desk/FirstRun.tsx"
+      ]
+    },
+    {
+      "testId": "known-git",
+      "files": [
+        "src/components/desk/FirstRun.tsx"
+      ]
+    },
+    {
+      "testId": "known-languages",
+      "files": [
+        "src/components/desk/FirstRun.tsx"
+      ]
+    },
+    {
+      "testId": "known-repos",
+      "files": [
+        "src/components/desk/FirstRun.tsx"
+      ]
+    },
+    {
       "testId": "kpi-repair",
       "files": [
         "src/components/ReplayMove.tsx"
@@ -6656,6 +6764,12 @@
       ]
     },
     {
+      "testId": "learn-hub",
+      "files": [
+        "src/components/learn/LearnHub.tsx"
+      ]
+    },
+    {
       "testId": "learn-input",
       "files": [
         "src/components/BrandLearn.tsx"
@@ -6704,15 +6818,117 @@
       ]
     },
     {
+      "testId": "learn-rule",
+      "files": [
+        "src/components/learn/RulesTab.tsx"
+      ]
+    },
+    {
+      "testId": "learn-rules",
+      "files": [
+        "src/components/learn/RulesTab.tsx"
+      ]
+    },
+    {
+      "testId": "learn-rules-author",
+      "files": [
+        "src/components/learn/RulesTab.tsx"
+      ]
+    },
+    {
+      "testId": "learn-rules-chat",
+      "files": [
+        "src/components/learn/RulesTab.tsx"
+      ]
+    },
+    {
+      "testId": "learn-rules-count",
+      "files": [
+        "src/components/learn/RulesTab.tsx"
+      ]
+    },
+    {
+      "testId": "learn-rules-empty",
+      "files": [
+        "src/components/learn/RulesTab.tsx"
+      ]
+    },
+    {
+      "testId": "learn-rules-error",
+      "files": [
+        "src/components/learn/RulesTab.tsx"
+      ]
+    },
+    {
+      "testId": "learn-rules-evaluate",
+      "files": [
+        "src/components/learn/RulesTab.tsx"
+      ]
+    },
+    {
+      "testId": "learn-rules-import",
+      "files": [
+        "src/components/learn/RulesTab.tsx"
+      ]
+    },
+    {
+      "testId": "learn-rules-list",
+      "files": [
+        "src/components/learn/RulesTab.tsx"
+      ]
+    },
+    {
+      "testId": "learn-rules-loading",
+      "files": [
+        "src/components/learn/RulesTab.tsx"
+      ]
+    },
+    {
+      "testId": "learn-rules-note",
+      "files": [
+        "src/components/learn/RulesTab.tsx"
+      ]
+    },
+    {
+      "testId": "learn-setup-resume",
+      "files": [
+        "src/components/learn/LearnHub.tsx"
+      ]
+    },
+    {
+      "testId": "learn-setup-resume-link",
+      "files": [
+        "src/components/learn/LearnHub.tsx"
+      ]
+    },
+    {
+      "testId": "learn-starter",
+      "files": [
+        "src/components/learn/RulesTab.tsx"
+      ]
+    },
+    {
       "testId": "learn-status",
       "files": [
         "src/components/BrandLearn.tsx"
       ]
     },
     {
+      "testId": "learn-style",
+      "files": [
+        "src/components/learn/StyleTab.tsx"
+      ]
+    },
+    {
       "testId": "learn-submit",
       "files": [
         "src/components/BrandLearn.tsx"
+      ]
+    },
+    {
+      "testId": "learn-tabs",
+      "files": [
+        "src/components/learn/LearnHub.tsx"
       ]
     },
     {
@@ -7940,13 +8156,44 @@
       ]
     },
     {
+      "testId": "memory-add-chat",
+      "files": [
+        "src/components/memory/MemoryPage.tsx"
+      ]
+    },
+    {
+      "testId": "memory-add-close",
+      "files": [
+        "src/components/memory/MemoryAdd.tsx"
+      ]
+    },
+    {
       "testId": "memory-add-dialog",
       "files": [
         "src/components/memory/MemoryPage.tsx"
       ]
     },
     {
+      "testId": "memory-add-import",
+      "files": [
+        "src/components/memory/MemoryPage.tsx"
+      ]
+    },
+    {
       "testId": "memory-add-project",
+      "files": [
+        "src/components/memory/MemoryAdd.tsx",
+        "src/components/memory/MemoryPage.tsx"
+      ]
+    },
+    {
+      "testId": "memory-add-record",
+      "files": [
+        "src/components/memory/MemoryAdd.tsx"
+      ]
+    },
+    {
+      "testId": "memory-add-retired",
       "files": [
         "src/components/memory/MemoryPage.tsx"
       ]
@@ -7958,9 +8205,40 @@
       ]
     },
     {
-      "testId": "memory-add-text",
+      "testId": "memory-add-send",
+      "files": [
+        "src/components/memory/MemoryAdd.tsx"
+      ]
+    },
+    {
+      "testId": "memory-add-table",
       "files": [
         "src/components/memory/MemoryPage.tsx"
+      ]
+    },
+    {
+      "testId": "memory-add-text",
+      "files": [
+        "src/components/memory/MemoryAdd.tsx",
+        "src/components/memory/MemoryPage.tsx"
+      ]
+    },
+    {
+      "testId": "memory-add-thread",
+      "files": [
+        "src/components/memory/MemoryAdd.tsx"
+      ]
+    },
+    {
+      "testId": "memory-add-turn",
+      "files": [
+        "src/components/memory/MemoryAdd.tsx"
+      ]
+    },
+    {
+      "testId": "memory-add-working",
+      "files": [
+        "src/components/memory/MemoryAdd.tsx"
       ]
     },
     {
@@ -8003,6 +8281,18 @@
       "testId": "memory-full",
       "files": [
         "src/components/memory/MemoryPage.tsx"
+      ]
+    },
+    {
+      "testId": "memory-import-files",
+      "files": [
+        "src/components/memory/MemoryAdd.tsx"
+      ]
+    },
+    {
+      "testId": "memory-import-pick",
+      "files": [
+        "src/components/memory/MemoryAdd.tsx"
       ]
     },
     {
@@ -8084,6 +8374,48 @@
       ]
     },
     {
+      "testId": "memory-retired",
+      "files": [
+        "src/components/memory/MemoryAdd.tsx"
+      ]
+    },
+    {
+      "testId": "memory-retired-back",
+      "files": [
+        "src/components/memory/MemoryAdd.tsx"
+      ]
+    },
+    {
+      "testId": "memory-retired-bring",
+      "files": [
+        "src/components/memory/MemoryAdd.tsx"
+      ]
+    },
+    {
+      "testId": "memory-retired-close",
+      "files": [
+        "src/components/memory/MemoryAdd.tsx"
+      ]
+    },
+    {
+      "testId": "memory-retired-empty",
+      "files": [
+        "src/components/memory/MemoryAdd.tsx"
+      ]
+    },
+    {
+      "testId": "memory-retired-erased",
+      "files": [
+        "src/components/memory/MemoryAdd.tsx"
+      ]
+    },
+    {
+      "testId": "memory-retired-row",
+      "files": [
+        "src/components/memory/MemoryAdd.tsx"
+      ]
+    },
+    {
       "testId": "memory-row",
       "files": [
         "src/components/memory/MemoryPage.tsx"
@@ -8099,6 +8431,42 @@
       "testId": "memory-sentence",
       "files": [
         "src/components/memory/MemoryPage.tsx"
+      ]
+    },
+    {
+      "testId": "memory-table",
+      "files": [
+        "src/components/memory/MemoryAdd.tsx"
+      ]
+    },
+    {
+      "testId": "memory-table-close",
+      "files": [
+        "src/components/memory/MemoryAdd.tsx"
+      ]
+    },
+    {
+      "testId": "memory-table-note",
+      "files": [
+        "src/components/memory/MemoryAdd.tsx"
+      ]
+    },
+    {
+      "testId": "memory-table-row",
+      "files": [
+        "src/components/memory/MemoryAdd.tsx"
+      ]
+    },
+    {
+      "testId": "memory-table-save",
+      "files": [
+        "src/components/memory/MemoryAdd.tsx"
+      ]
+    },
+    {
+      "testId": "memory-table-text",
+      "files": [
+        "src/components/memory/MemoryAdd.tsx"
       ]
     },
     {
@@ -8145,6 +8513,12 @@
     },
     {
       "testId": "nav-jobs",
+      "files": [
+        "src/board/navModel.ts"
+      ]
+    },
+    {
+      "testId": "nav-learn",
       "files": [
         "src/board/navModel.ts"
       ]
@@ -9485,6 +9859,120 @@
       ]
     },
     {
+      "testId": "persona-answer",
+      "files": [
+        "src/components/learn/PersonaTab.tsx"
+      ]
+    },
+    {
+      "testId": "persona-colour",
+      "files": [
+        "src/components/learn/PersonaTab.tsx"
+      ]
+    },
+    {
+      "testId": "persona-error",
+      "files": [
+        "src/components/learn/PersonaTab.tsx"
+      ]
+    },
+    {
+      "testId": "persona-habit",
+      "files": [
+        "src/components/learn/PersonaTab.tsx"
+      ]
+    },
+    {
+      "testId": "persona-loading",
+      "files": [
+        "src/components/learn/PersonaTab.tsx"
+      ]
+    },
+    {
+      "testId": "persona-name",
+      "files": [
+        "src/components/learn/PersonaTab.tsx"
+      ]
+    },
+    {
+      "testId": "persona-preview",
+      "files": [
+        "src/components/learn/PersonaTab.tsx"
+      ]
+    },
+    {
+      "testId": "persona-preview-name",
+      "files": [
+        "src/components/learn/PersonaTab.tsx"
+      ]
+    },
+    {
+      "testId": "persona-question",
+      "files": [
+        "src/components/learn/PersonaTab.tsx"
+      ]
+    },
+    {
+      "testId": "persona-remove-override",
+      "files": [
+        "src/components/learn/PersonaTab.tsx"
+      ]
+    },
+    {
+      "testId": "persona-save",
+      "files": [
+        "src/components/learn/PersonaTab.tsx"
+      ]
+    },
+    {
+      "testId": "persona-scope",
+      "files": [
+        "src/components/learn/PersonaTab.tsx"
+      ]
+    },
+    {
+      "testId": "persona-scope-me",
+      "files": [
+        "src/components/learn/PersonaTab.tsx"
+      ]
+    },
+    {
+      "testId": "persona-scope-note",
+      "files": [
+        "src/components/learn/PersonaTab.tsx"
+      ]
+    },
+    {
+      "testId": "persona-scope-project",
+      "files": [
+        "src/components/learn/PersonaTab.tsx"
+      ]
+    },
+    {
+      "testId": "persona-status",
+      "files": [
+        "src/components/learn/PersonaTab.tsx"
+      ]
+    },
+    {
+      "testId": "persona-tab",
+      "files": [
+        "src/components/learn/PersonaTab.tsx"
+      ]
+    },
+    {
+      "testId": "persona-told",
+      "files": [
+        "src/components/learn/PersonaTab.tsx"
+      ]
+    },
+    {
+      "testId": "persona-unsupported",
+      "files": [
+        "src/components/learn/PersonaTab.tsx"
+      ]
+    },
+    {
       "testId": "phase-catalog-error",
       "files": [
         "src/components/PhasePicker.tsx"
@@ -10516,6 +11004,12 @@
     },
     {
       "testId": "project-open-repo",
+      "files": [
+        "src/components/desk/ProjectDesk.tsx"
+      ]
+    },
+    {
+      "testId": "project-personality",
       "files": [
         "src/components/desk/ProjectDesk.tsx"
       ]
@@ -17077,6 +17571,144 @@
       ]
     },
     {
+      "testId": "style-add",
+      "files": [
+        "src/components/learn/StyleTab.tsx"
+      ]
+    },
+    {
+      "testId": "style-decide-error",
+      "files": [
+        "src/components/learn/StyleTab.tsx"
+      ]
+    },
+    {
+      "testId": "style-drop",
+      "files": [
+        "src/components/learn/StyleTab.tsx"
+      ]
+    },
+    {
+      "testId": "style-file",
+      "files": [
+        "src/components/learn/StyleTab.tsx"
+      ]
+    },
+    {
+      "testId": "style-go",
+      "files": [
+        "src/components/learn/StyleTab.tsx"
+      ]
+    },
+    {
+      "testId": "style-input",
+      "files": [
+        "src/components/learn/StyleTab.tsx"
+      ]
+    },
+    {
+      "testId": "style-kind",
+      "files": [
+        "src/components/learn/StyleTab.tsx"
+      ]
+    },
+    {
+      "testId": "style-launch-error",
+      "files": [
+        "src/components/learn/StyleTab.tsx"
+      ]
+    },
+    {
+      "testId": "style-memories-record",
+      "files": [
+        "src/components/learn/StyleTab.tsx"
+      ]
+    },
+    {
+      "testId": "style-nothing",
+      "files": [
+        "src/components/learn/StyleTab.tsx"
+      ]
+    },
+    {
+      "testId": "style-pipeline",
+      "files": [
+        "src/components/learn/StyleTab.tsx"
+      ]
+    },
+    {
+      "testId": "style-repo",
+      "files": [
+        "src/components/learn/StyleTab.tsx"
+      ]
+    },
+    {
+      "testId": "style-reset",
+      "files": [
+        "src/components/learn/StyleTab.tsx"
+      ]
+    },
+    {
+      "testId": "style-results",
+      "files": [
+        "src/components/learn/StyleTab.tsx"
+      ]
+    },
+    {
+      "testId": "style-rules-record",
+      "files": [
+        "src/components/learn/StyleTab.tsx"
+      ]
+    },
+    {
+      "testId": "style-runline",
+      "files": [
+        "src/components/learn/StyleTab.tsx"
+      ]
+    },
+    {
+      "testId": "style-source",
+      "files": [
+        "src/components/learn/StyleTab.tsx"
+      ]
+    },
+    {
+      "testId": "style-source-remove",
+      "files": [
+        "src/components/learn/StyleTab.tsx"
+      ]
+    },
+    {
+      "testId": "style-sources",
+      "files": [
+        "src/components/learn/StyleTab.tsx"
+      ]
+    },
+    {
+      "testId": "style-station",
+      "files": [
+        "src/components/learn/StyleTab.tsx"
+      ]
+    },
+    {
+      "testId": "style-ticker",
+      "files": [
+        "src/components/learn/StyleTab.tsx"
+      ]
+    },
+    {
+      "testId": "style-topic-new",
+      "files": [
+        "src/components/learn/StyleTab.tsx"
+      ]
+    },
+    {
+      "testId": "style-waiting",
+      "files": [
+        "src/components/learn/StyleTab.tsx"
+      ]
+    },
+    {
       "testId": "surfaces-mock-chat",
       "files": [
         "src/components/editorHost/EditorSurfacesView.tsx"
@@ -17627,6 +18259,18 @@
       "testId": "testing-solo-runs",
       "files": [
         "src/components/CampaignsPage.tsx"
+      ]
+    },
+    {
+      "testId": "theme-brand-link",
+      "files": [
+        "src/components/ThemePage.tsx"
+      ]
+    },
+    {
+      "testId": "theme-learn-brand",
+      "files": [
+        "src/components/ThemePage.tsx"
       ]
     },
     {
@@ -18621,6 +19265,12 @@
       ]
     },
     {
+      "pattern": "*-mark",
+      "files": [
+        "src/components/desk/SessionRail.tsx"
+      ]
+    },
+    {
       "pattern": "*-more",
       "files": [
         "src/components/ui/Tabs.tsx"
@@ -18820,6 +19470,12 @@
       ]
     },
     {
+      "pattern": "first-run-record-*",
+      "files": [
+        "src/components/desk/FirstRun.tsx"
+      ]
+    },
+    {
       "pattern": "graph-stat-*",
       "files": [
         "src/components/RepoDetailPage.tsx"
@@ -18886,6 +19542,12 @@
       ]
     },
     {
+      "pattern": "learn-panel-*",
+      "files": [
+        "src/components/learn/LearnHub.tsx"
+      ]
+    },
+    {
       "pattern": "learn-source-*",
       "files": [
         "src/components/BrandLearn.tsx"
@@ -18919,6 +19581,18 @@
       "pattern": "match-theme-*",
       "files": [
         "src/components/editorPorts/MatchTheme.tsx"
+      ]
+    },
+    {
+      "pattern": "memory-*",
+      "files": [
+        "src/components/memory/MemoryAdd.tsx"
+      ]
+    },
+    {
+      "pattern": "persona-dial-*",
+      "files": [
+        "src/components/learn/PersonaTab.tsx"
       ]
     },
     {

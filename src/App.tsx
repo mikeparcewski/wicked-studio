@@ -16,7 +16,7 @@ import { NotFoundPage } from './components/NotFoundPage.js';
 import { SkipLink } from './components/SkipLink.js';
 import { ProjectDesk } from './components/desk/ProjectDesk.js';
 import { RepositoriesPanel } from './components/RepositoriesPanel.js';
-import { LearnPage } from './components/learn/LearnPage.js';
+import { LearnHub } from './components/learn/LearnHub.js';
 import { RepoDetailPage } from './components/RepoDetailPage.js';
 import { RepoGraphModal } from './components/RepoGraphModal.js';
 import { RightPanel } from './components/RightPanel.js';
@@ -698,7 +698,7 @@ export function App(): React.ReactElement {
     // `/insights` — Run insights (crew DES-RUNS-REVIEW-001): the first-party plugin over every review of recent work.
     if (panel === 'insights') return <InsightsPage navigate={navigate} />;
     if (panel === 'learn') {
-      return <LearnPage navigate={navigate} />;
+      return <LearnHub navigate={navigate} search={search} />;
     }
     if (panel === 'plugins') {
       return (

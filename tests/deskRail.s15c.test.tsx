@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 
 /**
@@ -19,8 +19,11 @@ vi.mock('../src/api/client.js', () => ({
 }));
 
 const { SessionRail } = await import('../src/components/desk/SessionRail.js');
-const { BUILD_ITEM, NAV_GROUPS } = await import('../src/board/navModel.js');
+const { BUILD_ITEM, NAV_GROUPS, navGroups } = await import('../src/board/navModel.js');
+const { useFirstRun, resetFirstRun } = await import('../src/store/firstRun.js');
 
+// DES-LEARN §3.0: Learn's place depends on studio.firstRun; these cases read it as used (below Evaluate).
+beforeEach(() => { resetFirstRun(); useFirstRun.setState({ read: 'ok', state: { learnUsedAt: 1 } }); });
 afterEach(cleanup);
 
 function rail(pathname = '/'): ReturnType<typeof render> {
@@ -31,7 +34,7 @@ describe('the rail, top to bottom', () => {
   it('wordmark · New job · New project · the nine pages in three groups · Build & settings · Nerve Center', () => {
     rail();
     const nav = screen.getByTestId('session-rail');
-    const pages = ['nav-projects', 'nav-jobs', 'nav-repos', 'nav-report', 'nav-understand', 'nav-evaluate', 'nav-steering', 'nav-memory', 'nav-agents'];
+    const pages = ['nav-projects', 'nav-jobs', 'nav-repos', 'nav-report', 'nav-understand', 'nav-evaluate', 'nav-learn', 'nav-steering', 'nav-memory', 'nav-agents'];
     const ids = ['desk-rail-wordmark', 'desk-rail-new-job', 'desk-rail-new-project', ...pages, 'desk-rail-build', 'desk-rail-nerve'];
     const order = [...nav.querySelectorAll('[data-testid]')].map((e) => e.getAttribute('data-testid') ?? '').filter((id) => ids.includes(id));
     expect(order).toEqual(ids);
@@ -39,7 +42,7 @@ describe('the rail, top to bottom', () => {
     expect(NAV_GROUPS.map((g) => [g.label, g.items.map((i) => i.label)])).toEqual([
       ['Work', ['Projects', 'Jobs', 'Repositories']], ['Insight', ['Report', 'Understand', 'Evaluate']], ['Govern', ['Steering', 'Memory', 'Agents']],
     ]);
-    for (const g of NAV_GROUPS) {
+    for (const g of navGroups('insight')) {
       const group = screen.getByRole('group', { name: g.label });
       expect(group.querySelector('.wk-rail-sec')).toHaveTextContent(g.label);
       expect([...group.querySelectorAll('a')].map((a) => a.textContent)).toEqual(g.items.map((i) => i.label));
@@ -69,7 +72,7 @@ describe('the rail, top to bottom', () => {
   it('the rail entries carry the skin contract\'s nav-dest marks', () => {
     rail();
     const dests = [...screen.getByTestId('session-rail').querySelectorAll('[data-nav-dest]')].map((e) => e.getAttribute('data-nav-dest'));
-    expect(dests).toEqual(['page:home', 'page:projects', 'page:jobs', 'page:repos', 'page:report', 'page:understand', 'page:evaluate', 'page:steering', 'page:memory', 'page:agents', 'page:build', 'watch']);
+    expect(dests).toEqual(['page:home', 'page:projects', 'page:jobs', 'page:repos', 'page:report', 'page:understand', 'page:evaluate', 'page:learn', 'page:steering', 'page:memory', 'page:agents', 'page:build', 'watch']);
   });
 
   it.each([
@@ -92,5 +95,23 @@ describe('the rail, top to bottom', () => {
     const hrefs = [...NAV_GROUPS.flatMap((g) => g.items), BUILD_ITEM].map((d) => d.path);
     for (const old of ['/chats', '/work', '/execute', '/vibe', '/demo', '/testing/campaigns', '/product', '/settings']) expect(hrefs).not.toContain(old);
     expect(hrefs.some((h) => h.includes('?tab='))).toBe(false);
+  });
+});
+
+describe('Learn in the rail (DES-LEARN §3.0)', () => {
+  it('never used: first in Work, above Projects, marked "Start here"', () => {
+    useFirstRun.setState({ read: 'ok', state: {} });
+    rail();
+    const work = screen.getByRole('group', { name: 'Work' });
+    expect([...work.querySelectorAll('a')].map((a) => a.getAttribute('data-testid'))).toEqual(['nav-learn', 'nav-projects', 'nav-jobs', 'nav-repos']);
+    expect(screen.getByTestId('nav-learn-mark')).toHaveTextContent('Start here');
+    expect(screen.getByTestId('nav-learn')).toHaveAttribute('href', '/learn');
+  });
+
+  it('used: last in Insight, below Evaluate, with no mark', () => {
+    rail();
+    const insight = screen.getByRole('group', { name: 'Insight' });
+    expect([...insight.querySelectorAll('a')].map((a) => a.getAttribute('data-testid'))).toEqual(['nav-report', 'nav-understand', 'nav-evaluate', 'nav-learn']);
+    expect(screen.queryByTestId('nav-learn-mark')).toBeNull();
   });
 });

@@ -33,7 +33,7 @@ export function SettingsPage({ navigate, search }: { navigate: Navigate; search:
         onChange={(id) => { if (id !== tab) navigate(settingsPath(id as SettingsTab)); }}
       />
       <div id="settings-panel" role="tabpanel" aria-labelledby={`settings-tab-${tab}`} data-testid="settings-panel" data-tab={tab}>
-        {tab === 'general' ? <SystemSettings navigate={navigate} /> : <ThemeSettings />}
+        {tab === 'general' ? <SystemSettings navigate={navigate} /> : <ThemeSettings navigate={navigate} />}
       </div>
     </PageFrame>
   );

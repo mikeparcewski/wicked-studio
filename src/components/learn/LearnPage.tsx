@@ -3,7 +3,7 @@ import { api } from '../../api/client.js';
 import { readErrorKind } from '../../api/errors.js';
 import type { RepoEntry } from '../../api/types.js';
 import { relTime } from '../../board/relTime.js';
-import { EmptyState, OverflowMenu, PageFrame, Segmented, Skeleton, StateBanner, Switch } from '../ui/index.js';
+import { EmptyState, OverflowMenu, Segmented, Skeleton, StateBanner, Switch } from '../ui/index.js';
 import { openLaunchWizard } from '../../store/launchWizard.js';
 import {
   EVERY_HOURS,
@@ -24,11 +24,12 @@ import {
 } from './learnModel.js';
 
 /**
- * The learn page (`/learn`, DES-learn-workflow §5-§6): what a repository has learned from outside
- * sources (`.wicked/knowledge/<slug>/`), how fresh it is, and when it refreshes. A refresh re-runs
- * the `learn` workflow and proposes only changes in a pull request; nothing lands without a person.
+ * Topics to follow (DES-learn-workflow §5-§6; program DES-LEARN §3.5 folds them into Learn → Style as a
+ * source kind): what a repository has learned from outside sources (`.wicked/knowledge/<slug>/`), how fresh
+ * it is, and when it refreshes. A refresh re-runs the `learn` workflow and proposes only changes in a pull
+ * request; nothing lands without a person. Rendered inside Style (`embedded`), no page frame of its own.
  */
-export function LearnPage({ navigate }: { navigate: (p: string) => void }): React.ReactElement {
+export function LearnTopics({ navigate }: { navigate: (p: string) => void; embedded?: boolean }): React.ReactElement {
   const [repos, setRepos] = useState<RepoEntry[] | null>(null);
   const [repoRef, setRepoRef] = useState<string | null>(null);
   const [topics, setTopics] = useState<LearnTopic[] | null>(null);
@@ -105,16 +106,13 @@ export function LearnPage({ navigate }: { navigate: (p: string) => void }): Reac
   const repoName = repos?.find((r) => r.id === repoRef)?.name ?? null;
 
   return (
-    <div className="flex-1 overflow-auto" data-testid="learn-page">
-      <PageFrame
-        title="Learn"
-        intro="What your helpers learned from outside sources and saved in each repository, with the source of every claim. Refreshes look for what changed and propose it for review."
-        actions={
-          <button type="button" className="wk-btn wk-btn--primary" data-testid="learn-new" onClick={startNew}>
-            Learn something new
-          </button>
-        }
-      >
+    <div data-testid="learn-page" className="wk-learn-topics-body">
+      <div className="wk-learn-topics-head">
+        <p className="wk-learn-quiet">What your helpers learned from outside sources and saved in each repository, with the source of every claim. Refreshes look for what changed and propose it for review.</p>
+        <button type="button" id="learn-topics-new" className="wk-btn wk-btn--secondary wk-btn--sm" data-testid="learn-new" onClick={startNew}>
+          Learn something new
+        </button>
+      </div>
         {error !== null && (
           <StateBanner
             kind={readErrorKind(error)}
@@ -180,7 +178,6 @@ export function LearnPage({ navigate }: { navigate: (p: string) => void }): Reac
             ))}
           </ul>
         )}
-      </PageFrame>
     </div>
   );
 }
