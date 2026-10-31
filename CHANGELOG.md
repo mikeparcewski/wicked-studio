@@ -14,7 +14,7 @@ npm publish dates. Every version listed here exists on
 
 ### Added
 - **A requirements graph says how much of the code it covers, and each item whether it is corroborated** (operator
-  ruling 2026-10-31; crew api-types 0.156.0, read ahead of the pin and absent on an older daemon). Repositories → a
+  ruling 2026-10-31; crew api-types 0.157.0, read ahead of the pin and absent on an older daemon). Repositories → a
   repo → Requirements: the header shows "82% of behaviours mapped · minimum 80%" (the hover says how many are not
   mapped yet and that the next run continues from them) and "N validated · M unconfirmed". Each item carries
   **validated · 3** (its count of independent sources: callers, tests, docs, agreeing extractors) or **unconfirmed**,
