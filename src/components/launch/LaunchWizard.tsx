@@ -1,4 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { launchChatId } from './launchChatId.js';
 import { api, apiWire } from '../../api/client.js';
 import { qeRefusalOf } from '../../board/qeRefusal.js';
 import { goToPath, QeRefusalWarning } from '../QeRefusalWarning.js';
@@ -353,7 +354,7 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
     setError(null);
     try {
       const key = draft.composerKey;
-      const chatId = chatIdOnLaunch && key !== null && key !== 'desk' && !key.startsWith('run:') ? key : null;
+      const chatId = launchChatId(key, chatIdOnLaunch);
       const body = workflowLaunchBody({
         workflowId: draft.workflowId,
         intent: draft.intent,
