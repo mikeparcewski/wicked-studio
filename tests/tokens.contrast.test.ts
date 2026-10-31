@@ -59,6 +59,9 @@ function hslRgb(h: number, s: number, l: number): RGB {
  *  `calc(var(--_accent-l) ± N%)`, or the accent-fg `clamp(8%, calc((T% - var(--_accent-l)) * 100), 98%)`
  *  (with a fixed saturation). */
 function accentColour(v: string, p: { accent_h: number; accent_s: number; accent_l: number }): RGB {
+  // The wicked themes' default accent is the design system's own hex (the synthesis, 2026-10-31);
+  // the hsl() grammar below is the user's accent (data-accent="custom").
+  if (/^#[0-9a-f]{6}$/i.test(v)) return hex(v);
   const m = /^hsl\(var\(--_accent-h\)\s+(var\(--_accent-s\)|[\d.]+%)\s+(.+)\)$/.exec(v);
   if (m === null) throw new Error(`unparsed accent ${v}`);
   const s = m[1]!.startsWith('var') ? p.accent_s : Number(m[1]!.replace('%', ''));
@@ -127,12 +130,12 @@ describe('token contrast (council M16) — measured, not estimated', () => {
     for (const [surface, sVar] of SURFACES) {
       const bg = color(decl(css, sVar)).rgb;
       for (const tok of ['--accent', '--accent-dim'] as const) {
-        it(`${theme}: ${tok.slice(2)} (harbor) as text on ${surface} clears 4.5:1`, () => {
+        it(`${theme}: ${tok.slice(2)} (the default) as text on ${surface} clears 4.5:1`, () => {
           expect(ratio(accentColour(decl(css, tok), HARBOR), bg)).toBeGreaterThanOrEqual(4.5);
         });
       }
     }
-    it(`${theme}: accent-fg on the harbor accent clears 4.5:1`, () => {
+    it(`${theme}: accent-fg on the default accent clears 4.5:1`, () => {
       expect(ratio(accentColour(decl(css, '--accent-fg'), HARBOR), accent)).toBeGreaterThanOrEqual(4.5);
     });
     for (const st of ['gate', 'fail', 'run', 'warn'] as const) {
@@ -146,19 +149,31 @@ describe('token contrast (council M16) — measured, not estimated', () => {
   }
 });
 
-// Light-theme contrast pass (2026-10-13, operator: "white version is faded"): body copy on cards reads
-// at 7:1 (AAA), the quietest labels at 4.5:1 everywhere (checked above).
+// Light-theme contrast pass (2026-10-13, operator: "white version is faded"): copy on cards reads at
+// 7:1 (AAA). The synthesis the operator picked on 2026-10-31 (design council, DES-THEMES rev 3) keeps that
+// for body, secondary and title ink; its quietest ink (#66665f, timestamps and quiet labels) is AA:
+// 5.0-5.8:1 on every surface, checked above at 4.5:1. Shipped as approved; flagged in the lane report.
 describe('wicked-light reads at AAA for copy on cards', () => {
   const card = color(decl(wickedLight, '--_surface-2')).rgb;
-  for (const ink of ['--_ink-faint', '--_ink-soft', '--_ink-strong', '--_ink-max'] as const) {
+  for (const ink of ['--_ink-soft', '--_ink-strong', '--_ink-max'] as const) {
     it(`${ink} on the card clears 7:1`, () => {
       expect(ratio(over(color(decl(wickedLight, ink)), card), card)).toBeGreaterThanOrEqual(7);
     });
   }
   for (const surface of ['--_surface-0', '--_surface-1', '--_surface-2', '--_surface-3'] as const) {
-    it(`the quietest ink (ink-faint) clears 6:1 on ${surface}`, () => {
+    it(`the quietest ink (ink-faint) clears 5:1 on ${surface}`, () => {
       const bg = color(decl(wickedLight, surface)).rgb;
-      expect(ratio(over(color(decl(wickedLight, '--_ink-faint')), bg), bg)).toBeGreaterThanOrEqual(6);
+      expect(ratio(over(color(decl(wickedLight, '--_ink-faint')), bg), bg)).toBeGreaterThanOrEqual(5);
+    });
+  }
+});
+
+describe('a user-picked accent still drives the wicked themes', () => {
+  for (const [theme, css] of [['wicked-light', wickedLight], ['wicked-dark', wickedDark]] as const) {
+    it(`${theme}: a [data-accent="custom"] block derives the accent from the primitives`, () => {
+      const block = css.slice(css.indexOf(`[data-theme="${theme}"][data-accent="custom"]`));
+      expect(block).toMatch(/--accent:\s+hsl\(var\(--_accent-h\)/);
+      expect(block).toMatch(/--accent-fg:\s+hsl\(/);
     });
   }
 });

@@ -1,0 +1,16 @@
+{
+  "name": "wicked-design",
+  "version": "0.1.0",
+  "commit": "183840274dc21fbbd8348f4dd1b7eeb34df48a26",
+  "files": [
+    "index.css",
+    "fonts.css",
+    "dist",
+    "fonts",
+    "brand",
+    "licenses",
+    "GUIDE.md",
+    "README.md",
+    "LICENSE"
+  ]
+}

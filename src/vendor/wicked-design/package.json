@@ -1,0 +1,46 @@
+{
+  "name": "wicked-design",
+  "version": "0.1.0",
+  "description": "The wicked design system: tokens (CSS custom properties, light and dark from one source, plus JSON), the brand lockup and icons, and the type faces with their licences.",
+  "type": "module",
+  "license": "SEE LICENSE IN LICENSE",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mikeparcewski/wicked-web.git",
+    "directory": "packages/design-system"
+  },
+  "exports": {
+    ".": "./index.css",
+    "./index.css": "./index.css",
+    "./tokens.css": "./dist/tokens.css",
+    "./tokens.json": "./dist/tokens.json",
+    "./fonts.css": "./fonts.css",
+    "./fonts/*": "./fonts/*",
+    "./brand/*": "./brand/*",
+    "./icons/*": "./dist/icons/*",
+    "./lockup/*": "./dist/brand/*",
+    "./dist/*": "./dist/*",
+    "./licenses/*": "./licenses/*",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.css",
+    "fonts.css",
+    "dist",
+    "fonts",
+    "brand",
+    "licenses",
+    "GUIDE.md",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "check": "node scripts/build.mjs --check",
+    "test": "node scripts/build.mjs --check && node --test test/tokens.test.mjs test/scripts.test.mjs",
+    "vendor": "node scripts/vendor.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

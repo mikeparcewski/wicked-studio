@@ -1,0 +1,204 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>wicked-design specimen</title>
+<link rel="stylesheet" href="../index.css">
+<style>
+body{margin:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(380px,1fr));font-family:var(--font-sans)}
+.pane{background:var(--surface-base);color:var(--ink-body);padding:var(--space-8);display:flex;flex-direction:column;gap:var(--space-4)}
+.lock{color:var(--ink-high)} h1{font-size:var(--text-3xl);letter-spacing:var(--tracking-display);color:var(--ink-high);font-weight:var(--weight-heading);line-height:var(--leading-tight);margin:0}
+.title{font-size:var(--text-title);font-weight:var(--weight-heading);letter-spacing:var(--tracking-display);color:var(--ink-high);margin:0}
+.serif{font-family:var(--font-serif);font-size:28px;color:var(--ink-high);letter-spacing:.06em}
+.brandline{display:flex;align-items:baseline;gap:10px;margin:0}.brandline small{font-size:var(--text-xs);color:var(--ink-dim)}
+.choice{display:flex;gap:10px;align-items:center;padding:8px 12px;border-radius:var(--radius-lg);background:var(--accent-subtle);box-shadow:inset 0 0 0 1.5px var(--highlight);color:var(--ink-high);font-size:var(--text-sm)}
+.choice small{color:var(--ink-muted);margin-left:6px}.choice.off{background:var(--surface-card);box-shadow:inset 0 0 0 1px var(--border);color:var(--ink-muted)}
+.chk{display:inline-flex;width:18px;height:18px;border-radius:5px;align-items:center;justify-content:center;background:var(--accent);color:var(--accent-fg);font-size:12px}
+.off .chk{background:transparent;box-shadow:inset 0 0 0 1.5px var(--border-input)}
+.prog{display:flex;align-items:center;gap:10px}.bar{flex:1;height:6px;border-radius:9999px;background:var(--border-subtle);overflow:hidden}.bar i{display:block;height:100%;background:var(--status-run)}.pct{font-size:var(--text-sm);color:var(--ink-body);font-variant-numeric:tabular-nums}
+.eyebrow{font-size:var(--text-label);font-weight:var(--weight-label);color:var(--ink-muted);margin:0}
+.body{font-size:var(--text-body);line-height:var(--leading-body);margin:0}.muted{color:var(--ink-muted)}.dim{color:var(--ink-dim)}code{font-family:var(--font-mono);font-size:var(--text-sm)}
+.script{font-family:var(--font-script);font-size:30px;color:var(--accent-primary);line-height:1}
+.row{display:flex;gap:var(--space-2);flex-wrap:wrap;align-items:center}
+button,input{font:inherit;font-size:var(--text-sm);height:var(--control-h);padding:0 var(--control-px);border-radius:var(--radius-md)}
+.primary{background:var(--accent);color:var(--accent-fg);border:0;box-shadow:var(--shadow-button)}
+.secondary{background:var(--surface-card);color:var(--ink-high);border:1px solid var(--border)}
+input{background:var(--surface-card);color:var(--ink-body);border:1px solid var(--border-input)} button:focus-visible,input:focus{outline:2px solid transparent;box-shadow:var(--focus-ring)}
+.brand button:focus-visible{outline:2px solid transparent;box-shadow:var(--focus-ring-on-brand)}
+.pill{font-size:var(--text-xs);padding:2px 10px;border-radius:var(--radius-full);font-weight:var(--weight-semi)}
+.gate{color:var(--status-gate);background:var(--status-gate-dim)}.fail{color:var(--status-fail);background:var(--status-fail-dim)}.run{color:var(--status-run);background:var(--status-run-dim)}.warn{color:var(--status-warn);background:var(--status-warn-dim)}
+.card{background:var(--surface-card);box-shadow:inset 0 0 0 1px var(--border-subtle),var(--shadow-card);border-radius:var(--radius-lg);padding:var(--space-4);color:var(--ink-body)}
+.raised{margin-top:var(--space-3);background:var(--surface-raised);box-shadow:var(--shadow-raised);border-radius:var(--radius-md);padding:var(--space-2) var(--space-3);width:max-content}
+.brand{background:var(--surface-brand);color:var(--ink-on-brand);border-radius:var(--radius-xl);padding:var(--space-5);display:flex;justify-content:space-between;align-items:center}
+.bact{background:var(--brand-action);color:var(--brand-action-fg);border:0}
+.icons{display:flex;gap:var(--space-4);color:var(--ink-high)} figure{margin:0;text-align:center;font-size:var(--text-2xs);color:var(--ink-dim)}
+h3{font-size:var(--text-label);font-weight:var(--weight-label);color:var(--ink-dim);margin:var(--space-2) 0 0}
+.sw{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:var(--space-2)}
+.sw div{display:grid;grid-template-columns:28px 1fr;column-gap:8px;font-size:var(--text-2xs);align-items:center}
+.sw i{grid-row:span 2;width:28px;height:28px;border-radius:var(--radius-sm);box-shadow:0 0 0 1px var(--border)}
+.sw b{font-family:var(--font-mono);font-weight:500;color:var(--ink-body)} .sw span{color:var(--ink-dim)}
+</style></head><body>
+<section data-theme="light" class="pane">
+  <div class="lock"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 60" width="300" height="50">
+          <!-- Cable-Stayed / Wave Horizon Geometric Mark -->
+          <g transform="translate(2, 5)">
+            <path d="M 18 2 L 4 38 L 32 38 Z" fill="none" stroke="var(--ink-primary)" stroke-width="2"></path>
+            <line x1="18" y1="2" x2="18" y2="38" stroke="var(--ink-primary)" stroke-width="1.5"></line>
+            <path d="M 0 38 Q 10 31 18 38 T 36 38" fill="none" stroke="var(--accent-primary)" stroke-width="2.5" stroke-linecap="round"></path>
+            <polygon points="18,0 22,7 14,7" fill="var(--accent-wicked)"></polygon>
+          </g>
+
+          <!-- "WICKED" in Custom High-Contrast Wicked Serif -->
+          <g transform="translate(48, 7) scale(0.22)" fill="var(--ink-primary)">
+            <!-- W -->
+            <path d="M 10 20 L 58 20 L 46 32 L 70 130 L 98 45 L 88 20 L 122 20 L 114 34 L 138 130 L 165 42 C 170 26 160 20 148 20 L 188 20 C 178 32 172 48 164 75 L 138 175 L 120 175 L 96 85 L 70 175 L 52 175 L 22 45 C 18 30 12 24 2 14 Z"></path>
+            <!-- I -->
+            <path d="M 196 20 L 246 20 L 233 34 L 233 161 L 246 175 L 196 175 L 209 161 L 209 34 Z"></path>
+            <!-- C -->
+            <path d="M 345 55 L 338 20 C 322 25 310 20 295 22 C 260 28 248 65 252 105 C 256 148 282 178 320 176 C 342 175 356 162 366 142 L 358 135 C 348 150 335 160 318 158 C 292 155 278 130 278 98 C 278 62 292 38 318 38 C 332 38 340 46 345 55 Z"></path>
+            <!-- K -->
+            <path d="M 372 20 L 420 20 L 408 34 L 408 92 L 455 38 C 462 30 458 24 448 20 L 488 20 L 472 36 L 428 86 L 478 155 C 486 166 496 168 508 160 C 498 178 480 182 464 172 L 418 102 L 408 112 L 408 161 L 420 175 L 372 175 L 384 161 L 384 34 Z"></path>
+            <!-- E -->
+            <path d="M 505 20 L 595 20 L 600 50 L 588 36 L 540 36 L 540 88 L 578 88 L 588 76 L 588 112 L 578 100 L 540 100 L 540 158 L 592 158 L 605 140 L 598 175 L 505 175 L 516 161 L 516 34 Z"></path>
+            <!-- D -->
+            <path d="M 612 20 L 675 20 C 722 20 750 52 750 98 C 750 144 720 175 672 175 L 612 175 L 624 161 L 624 34 L 605 16 Z M 648 38 L 648 157 L 670 157 C 704 157 724 134 724 98 C 724 62 704 38 670 38 Z"></path>
+          </g>
+
+          <!-- "agile" in Flowing Wicked Script -->
+          <g transform="translate(222, 6) scale(0.36)">
+            <path d="M 45 45 C 20 45 12 68 25 82 C 38 94 58 80 65 55 L 60 85 C 60 92 75 90 88 75
+                     C 92 50 125 42 135 60 C 120 42 95 55 98 78 C 102 95 128 85 135 60 L 122 118 C 115 142 85 145 78 128 C 72 115 95 102 145 80
+                     L 168 48 L 160 85 C 158 92 175 90 190 72
+                     L 215 12 C 222 -2 205 5 198 35 L 188 82 C 186 92 205 92 222 75
+                     C 235 78 262 65 258 50 C 254 38 232 45 228 68 C 224 90 255 95 285 75" fill="none" stroke="var(--accent-primary)" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"></path>
+            <polygon points="168,22 186,14 176,34" fill="var(--accent-wicked)"></polygon>
+          </g>
+        </svg></div>
+  <p class="eyebrow">Light theme · wicked-design</p>
+  <h1>A little clarity. A lot of momentum.</h1>
+  <h2 class="title">Needs you · 3 decisions</h2>
+  <div class="choice" data-fixture="selection"><span class="chk" aria-hidden="true">✓</span><span>acme/payments-api <small>chosen: the check and the edge</small></span></div>
+  <div class="choice off" data-fixture="not-chosen"><span class="chk" aria-hidden="true"></span><span>acme/infra <small>not chosen: muted, never struck through</small></span></div>
+  <div class="prog" data-fixture="progress"><span class="bar"><i style="width:58%"></i></span><span class="pct">58%</span></div>
+  <p class="body">Body copy in the sans at 14px. <span class="muted">Muted secondary copy.</span> <span class="dim">Dim label, 2 min ago.</span> <code>run 4f2a · main</code></p>
+  <p class="brandline" data-fixture="brand"><span class="serif">WICKED</span> <span class="script">agile</span> <small>brand moments only: the serif and script never set UI text</small></p>
+  <div class="row"><button class="primary">Approve plan</button><button class="secondary">Ask a question</button><input placeholder="Type here"></div>
+  <div class="row"><span class="pill gate">waiting on you</span><span class="pill fail">failed</span><span class="pill run">running</span><span class="pill warn">warning</span></div>
+  <div class="card">A card on the page<div class="raised">raised</div></div>
+  <div class="brand"><span>On the brand panel</span><button class="bact">Review evidence</button></div>
+  <div class="icons"><figure><svg width="44" height="44" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" fill="none">
+  <path d="M 35 105 C 35 65 75 50 105 70 C 115 50 90 35 75 40 C 105 25 135 45 130 80 C 125 110 90 125 55 115 L 40 125 L 48 105" fill="none" stroke="currentColor" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <polygon points="105,70 122,62 112,84" fill="currentColor"/>
+</svg>
+<figcaption>wave</figcaption></figure><figure><svg width="44" height="44" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" fill="none">
+  <path d="M 80 125 L 80 38 M 50 105 L 50 52 L 110 52 L 110 105" fill="none" stroke="currentColor" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <polygon points="80,22 69,42 91,42" fill="currentColor"/>
+  <polygon points="50,36 41,52 59,52" fill="currentColor"/>
+  <polygon points="110,36 101,52 119,52" fill="currentColor"/>
+  <path d="M 38 125 Q 80 110 122 125" fill="none" stroke="currentColor" stroke-width="5.5" stroke-linecap="round"/>
+</svg>
+<figcaption>trident</figcaption></figure><figure><svg width="44" height="44" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" fill="none">
+  <path d="M 35 115 C 55 55 85 35 115 30 C 102 60 105 90 125 115 Z" fill="none" stroke="currentColor" stroke-width="5.5" stroke-linejoin="round"/>
+  <path d="M 28 118 Q 60 106 85 118 T 135 118" fill="none" stroke="currentColor" stroke-width="5.5" stroke-linecap="round"/>
+</svg>
+<figcaption>fin</figcaption></figure><figure><svg width="44" height="44" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" fill="none">
+  <path d="M 30 102 Q 80 87 130 102" fill="none" stroke="currentColor" stroke-width="5.5" stroke-linecap="round"/>
+  <path d="M 52 97 L 82 28 L 100 44 L 88 54 L 108 97 Z" fill="currentColor"/>
+  <path d="M 40 118 Q 80 106 120 118" fill="none" stroke="currentColor" stroke-width="5.5" stroke-linecap="round"/>
+</svg>
+<figcaption>retro</figcaption></figure><figure><svg width="44" height="44" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" fill="none">
+  <path d="M 80 25 C 104 55 104 95 92 128 L 68 128 C 56 95 56 55 80 25 Z" fill="none" stroke="currentColor" stroke-width="5.5" stroke-linejoin="round"/>
+  <line x1="63" y1="65" x2="97" y2="65" stroke="currentColor" stroke-width="5.5" stroke-linecap="round"/>
+  <line x1="62" y1="90" x2="98" y2="90" stroke="currentColor" stroke-width="5.5" stroke-linecap="round"/>
+</svg>
+<figcaption>backlog</figcaption></figure><figure><svg width="44" height="44" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" fill="none">
+  <path d="M 45 125 C 40 80 65 75 65 45 C 65 28 95 28 95 50 C 95 75 115 85 115 125" fill="none" stroke="currentColor" stroke-width="5.5" stroke-linecap="round"/>
+  <circle cx="54" cy="85" r="4.5" fill="currentColor"/>
+  <circle cx="57" cy="65" r="4.5" fill="currentColor"/>
+  <circle cx="103" cy="72" r="4.5" fill="currentColor"/>
+  <circle cx="107" cy="92" r="4.5" fill="currentColor"/>
+</svg>
+<figcaption>kraken</figcaption></figure></div>
+  <h3>surface</h3><div class="sw"><div><i style="background:var(--surface-base)"></i><b>--surface-base</b><span>council</span></div><div><i style="background:var(--surface-rail)"></i><b>--surface-rail</b><span>council</span></div><div><i style="background:var(--surface-card)"></i><b>--surface-card</b><span>council</span></div><div><i style="background:var(--surface-raised)"></i><b>--surface-raised</b><span>council</span></div><div><i style="background:var(--surface-overlay)"></i><b>--surface-overlay</b><span>council</span></div><div><i style="background:var(--surface-brand)"></i><b>--surface-brand</b><span>council</span></div><div><i style="background:var(--surface-brand-raised)"></i><b>--surface-brand-raised</b><span>council</span></div></div><h3>ink</h3><div class="sw"><div><i style="background:var(--ink-dim)"></i><b>--ink-dim</b><span>council</span></div><div><i style="background:var(--ink-muted)"></i><b>--ink-muted</b><span>council</span></div><div><i style="background:var(--ink-body)"></i><b>--ink-body</b><span>council</span></div><div><i style="background:var(--ink-high)"></i><b>--ink-high</b><span>council</span></div><div><i style="background:var(--ink-on-brand)"></i><b>--ink-on-brand</b><span>council</span></div><div><i style="background:var(--ink-on-brand-muted)"></i><b>--ink-on-brand-muted</b><span>council</span></div></div><h3>border</h3><div class="sw"><div><i style="background:var(--border-subtle)"></i><b>--border-subtle</b><span>council</span></div><div><i style="background:var(--border)"></i><b>--border</b><span>council</span></div><div><i style="background:var(--border-strong)"></i><b>--border-strong</b><span>council</span></div><div><i style="background:var(--border-input)"></i><b>--border-input</b><span>council</span></div></div><h3>accent</h3><div class="sw"><div><i style="background:var(--accent)"></i><b>--accent</b><span>council</span></div><div><i style="background:var(--accent-hover)"></i><b>--accent-hover</b><span>council</span></div><div><i style="background:var(--accent-dim)"></i><b>--accent-dim</b><span>council</span></div><div><i style="background:var(--accent-subtle)"></i><b>--accent-subtle</b><span>council</span></div><div><i style="background:var(--accent-wash)"></i><b>--accent-wash</b><span>council</span></div><div><i style="background:var(--accent-fg)"></i><b>--accent-fg</b><span>council</span></div><div><i style="background:var(--link)"></i><b>--link</b><span>council</span></div><div><i style="background:var(--highlight)"></i><b>--highlight</b><span>council</span></div><div><i style="background:var(--focus)"></i><b>--focus</b><span>council</span></div><div><i style="background:var(--focus-edge)"></i><b>--focus-edge</b><span>council</span></div><div><i style="background:var(--focus-on-brand)"></i><b>--focus-on-brand</b><span>council</span></div><div><i style="background:var(--brand-action)"></i><b>--brand-action</b><span>council</span></div><div><i style="background:var(--brand-action-fg)"></i><b>--brand-action-fg</b><span>council</span></div></div><h3>brand</h3><div class="sw"><div><i style="background:var(--ink-primary)"></i><b>--ink-primary</b><span>brand</span></div><div><i style="background:var(--accent-primary)"></i><b>--accent-primary</b><span>brand</span></div><div><i style="background:var(--accent-wicked)"></i><b>--accent-wicked</b><span>web</span></div><div><i style="background:var(--accent-wicked-ink)"></i><b>--accent-wicked-ink</b><span>web</span></div></div><h3>status</h3><div class="sw"><div><i style="background:var(--status-gate)"></i><b>--status-gate</b><span>council</span></div><div><i style="background:var(--status-gate-dim)"></i><b>--status-gate-dim</b><span>council</span></div><div><i style="background:var(--status-fail)"></i><b>--status-fail</b><span>council</span></div><div><i style="background:var(--status-fail-dim)"></i><b>--status-fail-dim</b><span>council</span></div><div><i style="background:var(--status-fail-fg)"></i><b>--status-fail-fg</b><span>council</span></div><div><i style="background:var(--status-run)"></i><b>--status-run</b><span>council</span></div><div><i style="background:var(--status-run-dim)"></i><b>--status-run-dim</b><span>council</span></div><div><i style="background:var(--status-warn)"></i><b>--status-warn</b><span>council</span></div><div><i style="background:var(--status-warn-dim)"></i><b>--status-warn-dim</b><span>council</span></div><div><i style="background:var(--status-ok)"></i><b>--status-ok</b><span>studio</span></div><div><i style="background:var(--status-ok-dim)"></i><b>--status-ok-dim</b><span>studio</span></div><div><i style="background:var(--status-done)"></i><b>--status-done</b><span>studio</span></div><div><i style="background:var(--status-done-dim)"></i><b>--status-done-dim</b><span>studio</span></div></div><h3>plane</h3><div class="sw"><div><i style="background:var(--plane-experience)"></i><b>--plane-experience</b><span>derived</span></div><div><i style="background:var(--plane-control)"></i><b>--plane-control</b><span>derived</span></div><div><i style="background:var(--plane-capability)"></i><b>--plane-capability</b><span>derived</span></div><div><i style="background:var(--plane-foundation)"></i><b>--plane-foundation</b><span>derived</span></div></div>
+</section>
+<section data-theme="dark" class="pane">
+  <div class="lock"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 60" width="300" height="50">
+          <!-- Cable-Stayed / Wave Horizon Geometric Mark -->
+          <g transform="translate(2, 5)">
+            <path d="M 18 2 L 4 38 L 32 38 Z" fill="none" stroke="var(--ink-primary)" stroke-width="2"></path>
+            <line x1="18" y1="2" x2="18" y2="38" stroke="var(--ink-primary)" stroke-width="1.5"></line>
+            <path d="M 0 38 Q 10 31 18 38 T 36 38" fill="none" stroke="var(--accent-primary)" stroke-width="2.5" stroke-linecap="round"></path>
+            <polygon points="18,0 22,7 14,7" fill="var(--accent-wicked)"></polygon>
+          </g>
+
+          <!-- "WICKED" in Custom High-Contrast Wicked Serif -->
+          <g transform="translate(48, 7) scale(0.22)" fill="var(--ink-primary)">
+            <!-- W -->
+            <path d="M 10 20 L 58 20 L 46 32 L 70 130 L 98 45 L 88 20 L 122 20 L 114 34 L 138 130 L 165 42 C 170 26 160 20 148 20 L 188 20 C 178 32 172 48 164 75 L 138 175 L 120 175 L 96 85 L 70 175 L 52 175 L 22 45 C 18 30 12 24 2 14 Z"></path>
+            <!-- I -->
+            <path d="M 196 20 L 246 20 L 233 34 L 233 161 L 246 175 L 196 175 L 209 161 L 209 34 Z"></path>
+            <!-- C -->
+            <path d="M 345 55 L 338 20 C 322 25 310 20 295 22 C 260 28 248 65 252 105 C 256 148 282 178 320 176 C 342 175 356 162 366 142 L 358 135 C 348 150 335 160 318 158 C 292 155 278 130 278 98 C 278 62 292 38 318 38 C 332 38 340 46 345 55 Z"></path>
+            <!-- K -->
+            <path d="M 372 20 L 420 20 L 408 34 L 408 92 L 455 38 C 462 30 458 24 448 20 L 488 20 L 472 36 L 428 86 L 478 155 C 486 166 496 168 508 160 C 498 178 480 182 464 172 L 418 102 L 408 112 L 408 161 L 420 175 L 372 175 L 384 161 L 384 34 Z"></path>
+            <!-- E -->
+            <path d="M 505 20 L 595 20 L 600 50 L 588 36 L 540 36 L 540 88 L 578 88 L 588 76 L 588 112 L 578 100 L 540 100 L 540 158 L 592 158 L 605 140 L 598 175 L 505 175 L 516 161 L 516 34 Z"></path>
+            <!-- D -->
+            <path d="M 612 20 L 675 20 C 722 20 750 52 750 98 C 750 144 720 175 672 175 L 612 175 L 624 161 L 624 34 L 605 16 Z M 648 38 L 648 157 L 670 157 C 704 157 724 134 724 98 C 724 62 704 38 670 38 Z"></path>
+          </g>
+
+          <!-- "agile" in Flowing Wicked Script -->
+          <g transform="translate(222, 6) scale(0.36)">
+            <path d="M 45 45 C 20 45 12 68 25 82 C 38 94 58 80 65 55 L 60 85 C 60 92 75 90 88 75
+                     C 92 50 125 42 135 60 C 120 42 95 55 98 78 C 102 95 128 85 135 60 L 122 118 C 115 142 85 145 78 128 C 72 115 95 102 145 80
+                     L 168 48 L 160 85 C 158 92 175 90 190 72
+                     L 215 12 C 222 -2 205 5 198 35 L 188 82 C 186 92 205 92 222 75
+                     C 235 78 262 65 258 50 C 254 38 232 45 228 68 C 224 90 255 95 285 75" fill="none" stroke="var(--accent-primary)" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"></path>
+            <polygon points="168,22 186,14 176,34" fill="var(--accent-wicked)"></polygon>
+          </g>
+        </svg></div>
+  <p class="eyebrow">Dark theme · wicked-design</p>
+  <h1>A little clarity. A lot of momentum.</h1>
+  <h2 class="title">Needs you · 3 decisions</h2>
+  <div class="choice" data-fixture="selection"><span class="chk" aria-hidden="true">✓</span><span>acme/payments-api <small>chosen: the check and the edge</small></span></div>
+  <div class="choice off" data-fixture="not-chosen"><span class="chk" aria-hidden="true"></span><span>acme/infra <small>not chosen: muted, never struck through</small></span></div>
+  <div class="prog" data-fixture="progress"><span class="bar"><i style="width:58%"></i></span><span class="pct">58%</span></div>
+  <p class="body">Body copy in the sans at 14px. <span class="muted">Muted secondary copy.</span> <span class="dim">Dim label, 2 min ago.</span> <code>run 4f2a · main</code></p>
+  <p class="brandline" data-fixture="brand"><span class="serif">WICKED</span> <span class="script">agile</span> <small>brand moments only: the serif and script never set UI text</small></p>
+  <div class="row"><button class="primary">Approve plan</button><button class="secondary">Ask a question</button><input placeholder="Type here"></div>
+  <div class="row"><span class="pill gate">waiting on you</span><span class="pill fail">failed</span><span class="pill run">running</span><span class="pill warn">warning</span></div>
+  <div class="card">A card on the page<div class="raised">raised</div></div>
+  <div class="brand"><span>On the brand panel</span><button class="bact">Review evidence</button></div>
+  <div class="icons"><figure><svg width="44" height="44" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" fill="none">
+  <path d="M 35 105 C 35 65 75 50 105 70 C 115 50 90 35 75 40 C 105 25 135 45 130 80 C 125 110 90 125 55 115 L 40 125 L 48 105" fill="none" stroke="currentColor" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <polygon points="105,70 122,62 112,84" fill="currentColor"/>
+</svg>
+<figcaption>wave</figcaption></figure><figure><svg width="44" height="44" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" fill="none">
+  <path d="M 80 125 L 80 38 M 50 105 L 50 52 L 110 52 L 110 105" fill="none" stroke="currentColor" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <polygon points="80,22 69,42 91,42" fill="currentColor"/>
+  <polygon points="50,36 41,52 59,52" fill="currentColor"/>
+  <polygon points="110,36 101,52 119,52" fill="currentColor"/>
+  <path d="M 38 125 Q 80 110 122 125" fill="none" stroke="currentColor" stroke-width="5.5" stroke-linecap="round"/>
+</svg>
+<figcaption>trident</figcaption></figure><figure><svg width="44" height="44" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" fill="none">
+  <path d="M 35 115 C 55 55 85 35 115 30 C 102 60 105 90 125 115 Z" fill="none" stroke="currentColor" stroke-width="5.5" stroke-linejoin="round"/>
+  <path d="M 28 118 Q 60 106 85 118 T 135 118" fill="none" stroke="currentColor" stroke-width="5.5" stroke-linecap="round"/>
+</svg>
+<figcaption>fin</figcaption></figure><figure><svg width="44" height="44" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" fill="none">
+  <path d="M 30 102 Q 80 87 130 102" fill="none" stroke="currentColor" stroke-width="5.5" stroke-linecap="round"/>
+  <path d="M 52 97 L 82 28 L 100 44 L 88 54 L 108 97 Z" fill="currentColor"/>
+  <path d="M 40 118 Q 80 106 120 118" fill="none" stroke="currentColor" stroke-width="5.5" stroke-linecap="round"/>
+</svg>
+<figcaption>retro</figcaption></figure><figure><svg width="44" height="44" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" fill="none">
+  <path d="M 80 25 C 104 55 104 95 92 128 L 68 128 C 56 95 56 55 80 25 Z" fill="none" stroke="currentColor" stroke-width="5.5" stroke-linejoin="round"/>
+  <line x1="63" y1="65" x2="97" y2="65" stroke="currentColor" stroke-width="5.5" stroke-linecap="round"/>
+  <line x1="62" y1="90" x2="98" y2="90" stroke="currentColor" stroke-width="5.5" stroke-linecap="round"/>
+</svg>
+<figcaption>backlog</figcaption></figure><figure><svg width="44" height="44" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" fill="none">
+  <path d="M 45 125 C 40 80 65 75 65 45 C 65 28 95 28 95 50 C 95 75 115 85 115 125" fill="none" stroke="currentColor" stroke-width="5.5" stroke-linecap="round"/>
+  <circle cx="54" cy="85" r="4.5" fill="currentColor"/>
+  <circle cx="57" cy="65" r="4.5" fill="currentColor"/>
+  <circle cx="103" cy="72" r="4.5" fill="currentColor"/>
+  <circle cx="107" cy="92" r="4.5" fill="currentColor"/>
+</svg>
+<figcaption>kraken</figcaption></figure></div>
+  <h3>surface</h3><div class="sw"><div><i style="background:var(--surface-base)"></i><b>--surface-base</b><span>council</span></div><div><i style="background:var(--surface-rail)"></i><b>--surface-rail</b><span>council</span></div><div><i style="background:var(--surface-card)"></i><b>--surface-card</b><span>council</span></div><div><i style="background:var(--surface-raised)"></i><b>--surface-raised</b><span>council</span></div><div><i style="background:var(--surface-overlay)"></i><b>--surface-overlay</b><span>council</span></div><div><i style="background:var(--surface-brand)"></i><b>--surface-brand</b><span>council</span></div><div><i style="background:var(--surface-brand-raised)"></i><b>--surface-brand-raised</b><span>council</span></div></div><h3>ink</h3><div class="sw"><div><i style="background:var(--ink-dim)"></i><b>--ink-dim</b><span>council</span></div><div><i style="background:var(--ink-muted)"></i><b>--ink-muted</b><span>council</span></div><div><i style="background:var(--ink-body)"></i><b>--ink-body</b><span>council</span></div><div><i style="background:var(--ink-high)"></i><b>--ink-high</b><span>council</span></div><div><i style="background:var(--ink-on-brand)"></i><b>--ink-on-brand</b><span>council</span></div><div><i style="background:var(--ink-on-brand-muted)"></i><b>--ink-on-brand-muted</b><span>council</span></div></div><h3>border</h3><div class="sw"><div><i style="background:var(--border-subtle)"></i><b>--border-subtle</b><span>council</span></div><div><i style="background:var(--border)"></i><b>--border</b><span>council</span></div><div><i style="background:var(--border-strong)"></i><b>--border-strong</b><span>council</span></div><div><i style="background:var(--border-input)"></i><b>--border-input</b><span>council</span></div></div><h3>accent</h3><div class="sw"><div><i style="background:var(--accent)"></i><b>--accent</b><span>council</span></div><div><i style="background:var(--accent-hover)"></i><b>--accent-hover</b><span>council</span></div><div><i style="background:var(--accent-dim)"></i><b>--accent-dim</b><span>council</span></div><div><i style="background:var(--accent-subtle)"></i><b>--accent-subtle</b><span>council</span></div><div><i style="background:var(--accent-wash)"></i><b>--accent-wash</b><span>council</span></div><div><i style="background:var(--accent-fg)"></i><b>--accent-fg</b><span>council</span></div><div><i style="background:var(--link)"></i><b>--link</b><span>council</span></div><div><i style="background:var(--highlight)"></i><b>--highlight</b><span>council</span></div><div><i style="background:var(--focus)"></i><b>--focus</b><span>council</span></div><div><i style="background:var(--focus-edge)"></i><b>--focus-edge</b><span>council</span></div><div><i style="background:var(--focus-on-brand)"></i><b>--focus-on-brand</b><span>council</span></div><div><i style="background:var(--brand-action)"></i><b>--brand-action</b><span>council</span></div><div><i style="background:var(--brand-action-fg)"></i><b>--brand-action-fg</b><span>council</span></div></div><h3>brand</h3><div class="sw"><div><i style="background:var(--ink-primary)"></i><b>--ink-primary</b><span>brand</span></div><div><i style="background:var(--accent-primary)"></i><b>--accent-primary</b><span>brand</span></div><div><i style="background:var(--accent-wicked)"></i><b>--accent-wicked</b><span>web</span></div><div><i style="background:var(--accent-wicked-ink)"></i><b>--accent-wicked-ink</b><span>web</span></div></div><h3>status</h3><div class="sw"><div><i style="background:var(--status-gate)"></i><b>--status-gate</b><span>council</span></div><div><i style="background:var(--status-gate-dim)"></i><b>--status-gate-dim</b><span>council</span></div><div><i style="background:var(--status-fail)"></i><b>--status-fail</b><span>council</span></div><div><i style="background:var(--status-fail-dim)"></i><b>--status-fail-dim</b><span>council</span></div><div><i style="background:var(--status-fail-fg)"></i><b>--status-fail-fg</b><span>council</span></div><div><i style="background:var(--status-run)"></i><b>--status-run</b><span>council</span></div><div><i style="background:var(--status-run-dim)"></i><b>--status-run-dim</b><span>council</span></div><div><i style="background:var(--status-warn)"></i><b>--status-warn</b><span>council</span></div><div><i style="background:var(--status-warn-dim)"></i><b>--status-warn-dim</b><span>council</span></div><div><i style="background:var(--status-ok)"></i><b>--status-ok</b><span>studio</span></div><div><i style="background:var(--status-ok-dim)"></i><b>--status-ok-dim</b><span>studio</span></div><div><i style="background:var(--status-done)"></i><b>--status-done</b><span>studio</span></div><div><i style="background:var(--status-done-dim)"></i><b>--status-done-dim</b><span>studio</span></div></div><h3>plane</h3><div class="sw"><div><i style="background:var(--plane-experience)"></i><b>--plane-experience</b><span>web</span></div><div><i style="background:var(--plane-control)"></i><b>--plane-control</b><span>web</span></div><div><i style="background:var(--plane-capability)"></i><b>--plane-capability</b><span>web</span></div><div><i style="background:var(--plane-foundation)"></i><b>--plane-foundation</b><span>web</span></div></div>
+</section>
+</body></html>

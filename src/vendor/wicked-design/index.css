@@ -1,0 +1,3 @@
+/* wicked-design: the faces, then the tokens. Import this once at the app root. */
+@import "./fonts.css";
+@import "./dist/tokens.css";
