@@ -128,7 +128,8 @@ with sync_playwright() as pw:
         check(f"2-add-with-chat-is-page-chat-{w}", page.locator('[data-testid="memory-chat"]').count() == 0
               and page.locator('[data-testid="page-chat"][data-kind="memory"]').count() == 1)
         page.screenshot(path=str(SHOTS / f"desk-memory-add-chat-{w}.png"))
-        page.keyboard.press("Escape")
+        page.get_by_test_id("page-chat-close").click()
+        page.locator('[data-testid="page-chat"][data-kind="memory"]').wait_for(state="detached", timeout=10000)
         # 3. Import a doc
         menu(page, "memory-add-import")
         page.locator('[data-testid="memory-import"] input[type="file"]').set_input_files(files=[{"name": "notes.md", "mimeType": "text/markdown", "buffer": b"# Release notes\nWe cut on Thursdays."}])

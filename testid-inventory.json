@@ -12,8 +12,8 @@
   "studioVersion": "0.13.0",
   "counts": {
     "files": 283,
-    "occurrences": 3909,
-    "static": 3320,
+    "occurrences": 3912,
+    "static": 3324,
     "dynamic": 87,
     "computed": 44
   },
@@ -3311,6 +3311,12 @@
       ]
     },
     {
+      "testId": "desk-composer-voice",
+      "files": [
+        "src/components/session/Composer.tsx"
+      ]
+    },
+    {
       "testId": "desk-feed",
       "files": [
         "src/components/desk/Desk.tsx"
@@ -4835,6 +4841,12 @@
       ]
     },
     {
+      "testId": "evaluate-judgments-fold",
+      "files": [
+        "src/components/steer/EvaluateSurface.tsx"
+      ]
+    },
+    {
       "testId": "evaluate-judgments-options",
       "files": [
         "src/components/steer/SystemJudgments.tsx"
@@ -4986,6 +4998,12 @@
     },
     {
       "testId": "evaluate-results-empty",
+      "files": [
+        "src/components/steer/EvaluateSurface.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-results-fold",
       "files": [
         "src/components/steer/EvaluateSurface.tsx"
       ]
@@ -7015,6 +7033,18 @@
     {
       "testId": "learn-new",
       "files": [
+        "src/components/learn/StyleTab.tsx"
+      ]
+    },
+    {
+      "testId": "learn-no-repos",
+      "files": [
+        "src/components/learn/LearnPage.tsx"
+      ]
+    },
+    {
+      "testId": "learn-no-topics",
+      "files": [
         "src/components/learn/LearnPage.tsx"
       ]
     },
@@ -7046,12 +7076,6 @@
       "testId": "learn-project",
       "files": [
         "src/components/BrandLearn.tsx"
-      ]
-    },
-    {
-      "testId": "learn-repo",
-      "files": [
-        "src/components/learn/LearnPage.tsx"
       ]
     },
     {
@@ -14372,6 +14396,12 @@
       ]
     },
     {
+      "testId": "session-composer-voice",
+      "files": [
+        "src/components/session/Composer.tsx"
+      ]
+    },
+    {
       "testId": "session-failed-resume",
       "files": [
         "src/components/session/RunConversation.tsx"
@@ -18242,12 +18272,6 @@
     },
     {
       "testId": "style-ticker",
-      "files": [
-        "src/components/learn/StyleTab.tsx"
-      ]
-    },
-    {
-      "testId": "style-topic-new",
       "files": [
         "src/components/learn/StyleTab.tsx"
       ]
