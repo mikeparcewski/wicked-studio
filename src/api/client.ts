@@ -283,8 +283,12 @@ export const api = {
   },
 
   /** Cancel a running or paused run (the distinct third action, §11.1). */
-  cancelRun: (id: string) =>
-    apiFetch<{ status: string }>(`/runs/${encodeURIComponent(id)}/cancel`, { method: 'POST' }),
+  /** (crew api-types 0.161.0 `CancelRunRequest`) `reason` and `input` ride the `run.cancelled` audit line; with neither,
+   *  the POST stays bodiless (an older crew reads no body). */
+  cancelRun: (id: string, body?: { reason?: string; input?: 'voice' }) =>
+    apiFetch<{ status: string }>(`/runs/${encodeURIComponent(id)}/cancel`, body !== undefined && (body.reason !== undefined || body.input !== undefined)
+      ? { method: 'POST', body: JSON.stringify(body) }
+      : { method: 'POST' }),
 
   /**
    * Upsert the run's ONE durable operator guidance note (CREW-UX-7, crew#312 —
@@ -553,10 +557,10 @@ export const api = {
   getInspections: (runId: string, ord: number) =>
     apiFetch<{ inspections: import('./inspect.js').UnitInspection[] }>(`/runs/${encodeURIComponent(runId)}/units/${ord}/inspections`),
 
-  injectMessage: (runId: string, message: string, target: string) =>
+  injectMessage: (runId: string, message: string, target: string, opts?: { input?: 'voice' }) =>
     apiFetch<{ status: string }>(`/runs/${encodeURIComponent(runId)}/inject`, {
       method: 'POST',
-      body: JSON.stringify({ message, target }),
+      body: JSON.stringify(opts?.input !== undefined ? { message, target, input: opts.input } : { message, target }),
     }),
 
   // ── Workflow viewer + domain-model browser (crew#44) ─────────────────────────

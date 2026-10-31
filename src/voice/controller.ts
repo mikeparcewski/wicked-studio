@@ -20,7 +20,13 @@
 
 import type { Ask, AskAnswer } from '../api/ask.js';
 import { api } from '../api/client.js';
-import { ApiError } from '../api/errors.js';
+import { ApiError, apiStatus } from '../api/errors.js';
+import { ensureWorkingDoc, getWorkingDoc, proposeWorkingDoc, type WorkingDocSectionId } from '../api/workingDoc.js';
+import { powerApi, powerOf } from '../api/power.js';
+import type { UnitInspection } from '../api/inspect.js';
+import { jobTitle } from '../board/deskWords.js';
+import { stopRun } from '../store/sheets.js';
+import { actionWords, CLASSIFY_PROMPT, nextRigor, otherJob, parseJobWords, readClass, resolveJob, type JobAction, type JobRef, type Rigor } from './jobs.js';
 import type { RosterSeat } from '../api/types.js';
 import { downloadVoiceModel, getVoiceStatus, isVoiceUnsupported, voiceErrorCode, type VoiceStatus } from '../api/voice.js';
 import { defaultSelection } from '../board/chatOpen.js';
@@ -33,7 +39,7 @@ import { useSystemStore } from '../store/systemSnapshot.js';
 import type { SystemSnapshot } from '../api/system.js';
 import { loadDashboard, readDashboardData, useDashStore } from './dashboardStore.js';
 import { INITIAL_VOICE, lineId, useVoiceStore, type ListenMode, type VoiceAskContext, type VoiceLine } from '../store/voice.js';
-import { isLeave, matchJob, parseConfirm, parseEntry, parseGateAnswer, parseMode, parseSteer } from './intent.js';
+import { isLeave, parseConfirm, parseEntry, parseGateAnswer, parseMode } from './intent.js';
 import { BrowserMic, BrowserSpeaker, crewStt, type MicSource, type Speaker, type SttEngine } from './io.js';
 import { Vad } from './vad.js';
 
@@ -45,8 +51,21 @@ export interface VoiceDeps {
   speaker: Speaker;
   /** Ask the system chat one question; resolves with the reply's words. */
   ask: (question: string) => Promise<string>;
-  /** Send a steer note to a running job. */
+  /** Send a steer note to a running job (said by voice: `input: "voice"`). */
   steer: (runId: string, text: string) => Promise<void>;
+  /** Add to a job's working document (Constraints or Next), as the person, said by voice. */
+  editDoc: (runId: string, section: 'constraints' | 'next', text: string) => Promise<void>;
+  /** Stop a job through the ordinary Stop (10 s undo), with the reason. */
+  stop: (runId: string, title: string, reason: string | null) => void;
+  /** The job's rigor now, or `power: false` when it runs phased (no rigor to raise). */
+  rigorOf: (runId: string) => Promise<{ power: boolean; rigor: Rigor | null; why: string | null }>;
+  raiseRigor: (runId: string, to: Rigor, reason: string) => Promise<void>;
+  /** Check on the job's current step (crew's in-flight analyzer); resolves once the check is done. */
+  inspect: (runId: string) => Promise<UnitInspection>;
+  /** One cheap classification of words that matched nothing (the system chat, asked for one word). */
+  classify: (words: string, title: string) => Promise<string>;
+  /** Recent jobs (finished ones too), for "show me the … job". */
+  recent: () => Promise<JobRef[]>;
   /** Answer a gate (through the undo window). */
   decide: (runId: string, decision: GateAnswer, receipt: string) => Promise<string>;
   /** End the voice session's chat (history kept). */
@@ -102,12 +121,77 @@ async function askSystemChat(question: string): Promise<string> {
   });
 }
 
+/** The step a job is on now: the system read's, else the run's own cursor. */
+async function currentOrd(runId: string): Promise<number | null> {
+  const raw = useDashStore.getState().raw.system as { runs?: Array<{ runId?: unknown; unitOrd?: unknown }> } | null;
+  const ord = raw?.runs?.find((r) => r.runId === runId)?.unitOrd;
+  if (typeof ord === 'number') return ord;
+  const { run } = await api.getRun(runId);
+  const live = run.units.find((u) => u.status === 'distributed');
+  return live?.ord ?? run.units[run.session.unit_ix]?.ord ?? null;
+}
+
+/** Ask crew to check on the job's current step and wait (at most ~5 min) for the answer. */
+async function inspectNow(runId: string): Promise<UnitInspection> {
+  const ord = await currentOrd(runId);
+  if (ord === null) throw new Error('It is not working on a step right now, so there is nothing to check.');
+  let rec = (await api.inspectUnit(runId, ord)).inspection;
+  for (let i = 0; i < 60 && rec.state !== 'done'; i++) {
+    await new Promise((r) => setTimeout(r, 5000));
+    const mine = (await api.getInspections(runId, ord)).inspections.find((x) => x.id === rec.id);
+    if (mine !== undefined) rec = mine;
+  }
+  if (rec.state !== 'done') throw new Error('The check is still running; its answer will show on the job’s page.');
+  return rec;
+}
+
 const defaults = (): VoiceDeps => ({
   mic: () => new BrowserMic(),
   stt: crewStt,
   speaker: new BrowserSpeaker(),
   ask: askSystemChat,
-  steer: async (runId, text) => { await api.injectMessage(runId, text, 'all'); },
+  steer: async (runId, text) => {
+    try {
+      await api.injectMessage(runId, text, 'all', { input: 'voice' });
+    } catch (e) {
+      // A crew older than api-types 0.161.0 refuses the unknown field (400): the note still goes, unlabelled.
+      if (apiStatus(e) !== 400) throw e;
+      await api.injectMessage(runId, text, 'all');
+    }
+  },
+  editDoc: async (runId, section, text) => {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      let view = await getWorkingDoc(runId);
+      if (view === null) throw new Error('This version of studio’s service has no working documents.');
+      if (view.doc === null) view = await ensureWorkingDoc(runId);
+      if (view.doc === null || view.sections === null) throw new Error('The job’s working document could not be made.');
+      const now = view.sections[section as WorkingDocSectionId].trim();
+      try {
+        await proposeWorkingDoc(runId, { base: view.doc.head, author: 'operator', input: 'voice', sections: { [section]: now === '' ? text : `${now}\n${text}` } });
+        return;
+      } catch (e) {
+        // Someone else edited it meanwhile: read it again and add to what is there now, once.
+        if (apiStatus(e) !== 409 || attempt === 1) throw e;
+      }
+    }
+  },
+  stop: (runId, title, reason) => { stopRun([runId], `“${title}”`, reason !== null ? { reason, input: 'voice' } : { input: 'voice' }); },
+  rigorOf: async (runId) => {
+    const { run } = await api.getRun(runId);
+    const p = powerOf(run.session);
+    if (p === null || !p.on) return { power: false, rigor: null, why: p?.refusedReason ?? null };
+    return { power: true, rigor: p.rigor, why: null };
+  },
+  raiseRigor: async (runId, to, reason) => { await powerApi.raise(runId, to, reason); },
+  inspect: inspectNow,
+  classify: async (words, title) => askSystemChat(CLASSIFY_PROMPT(words, title)),
+  recent: async () => {
+    const { runs } = await api.listRuns();
+    return runs
+      .filter((r) => ['completed', 'failed', 'cancelled'].includes(String(r.session.status)))
+      .slice(0, 20)
+      .map((r) => ({ runId: r.session.id, title: jobTitle(r.session), running: false }));
+  },
   decide: async (runId, decision, receipt) => commitGateDecision(runId, decision, { receipt: { kind: 'row', chosenLabel: receipt } }),
   endChat: () => {
     const id = chatId;
@@ -304,13 +388,32 @@ export async function hear(raw: string, how: 'spoken' | 'typed' = 'spoken'): Pro
       await itSays('Say “streaming” or “space bar”, or tap one.');
       return;
     }
-    if (ctx.kind === 'gate' || ctx.kind === 'steer') {
+    if (ctx.kind === 'gate' || ctx.kind === 'steer' || ctx.kind === 'job') {
       const c = parseConfirm(text);
       if (c !== null) { answerAsk(open.id, { askId: open.ask.ask.id, option: c === 'confirm' ? 'yes' : 'no' }); return; }
-      await itSays(ctx.kind === 'gate' ? 'Say “confirm” or “not that”, or tap one. Nothing is sent until you confirm.' : 'Say “send” or “not that”, or tap one.');
+      // A new instruction while a confirm is open replaces it (nothing was sent); anything else is asked again.
+      if (parseJobWords(text) === null) {
+        await itSays(ctx.kind === 'gate' ? 'Say “confirm” or “not that”, or tap one. Nothing is sent until you confirm.' : 'Say “confirm” or “not that”, or tap one. Nothing is sent until you confirm.');
+        return;
+      }
+      patchLine(open.id, { record: 'Not sent · you said something else' });
+      set({ openAsk: null });
+    }
+    if (ctx.kind === 'pickJob') {
+      const runIds = ctx.runIds;
+      const picked = pickFrom(text, runIds);
+      if (picked !== null) { answerAsk(open.id, { askId: open.ask.ask.id, option: picked }); return; }
+      if (parseConfirm(text) === 'cancel') { answerAsk(open.id, { askId: open.ask.ask.id, option: 'none' }); return; }
+      await itSays('Say its name, or “the first one”, “the second one”, or tap one.');
+      return;
+    }
+    if (ctx.kind === 'stopReason') {
+      answerAsk(open.id, { askId: open.ask.ask.id, option: 'reason', text });
       return;
     }
   }
+
+  if (await hearJobWords(text)) return;
 
   // A decision read out, or the only one waiting: a spoken answer proposes it, never sends it.
   const gates = Object.values(useGateStore.getState().gates);
@@ -319,10 +422,263 @@ export async function hear(raw: string, how: 'spoken' | 'typed' = 'spoken'): Pro
   if (words !== null && target !== undefined) { await proposeGate(target, text, words); return; }
   if (words !== null && gates.length > 1) { await itSays(`${gates.length} decisions are waiting. Open one and say your answer there, or tell me which job.`); return; }
 
-  const steer = parseSteer(text);
-  if (steer !== null) { await proposeSteer(steer.job, steer.message); return; }
+  // Words that matched nothing, said while a job is in view: one cheap classification, then the same confirm.
+  const shown = S.getState().preview;
+  if (shown !== null && !QUESTION_WORDS.test(text.trim().toLowerCase())) {
+    const job = jobRefs().find((j) => j.runId === shown.runId) ?? { runId: shown.runId, title: titleOf(shown.runId), running: true };
+    let kind: ReturnType<typeof readClass> = null;
+    try { kind = readClass(await deps.classify(text, job.title)); } catch { kind = null; }
+    if (kind === 'steer') { await proposeJobAction(job, { kind: 'steer', note: capFirst(text) }, text); return; }
+    if (kind === 'stop') { await proposeJobAction(job, { kind: 'stop', reason: null }, text); return; }
+    if (kind === 'rigor') { await proposeJobAction(job, { kind: 'rigor', to: null }, text); return; }
+    if (kind === 'check') { await proposeJobAction(job, { kind: 'check' }, text); return; }
+  }
 
   await askChat(text);
+}
+
+const QUESTION_WORDS = /\?$|^(what|how|is|are|does|do|can|could|will|why|where|who|when|which|tell me about)\b/;
+const capFirst = (t: string): string => { const x = t.trim().replace(/[.!]+$/, ''); return x.charAt(0).toUpperCase() + x.slice(1); };
+
+// ── Jobs: "show me this job", "tell it …" ───────────────────────────────────────────────────────
+
+let recentCache: { at: number; jobs: JobRef[] } | null = null;
+
+/** Running jobs (the system read) and the recent ones last read; a job in both is running. */
+function jobRefs(): JobRef[] {
+  const running = (snapshotNow()?.runs ?? []).map((r) => ({ runId: r.runId, title: r.title, running: true }));
+  const ids = new Set(running.map((j) => j.runId));
+  return [...running, ...(recentCache?.jobs ?? []).filter((j) => !ids.has(j.runId))];
+}
+
+async function jobsForNaming(): Promise<JobRef[]> {
+  if (recentCache === null || deps.now() - recentCache.at > 60_000) {
+    try { recentCache = { at: deps.now(), jobs: await deps.recent() }; } catch { recentCache ??= { at: deps.now(), jobs: [] }; }
+  }
+  return jobRefs();
+}
+
+function titleOf(runId: string): string {
+  return jobRefs().find((j) => j.runId === runId)?.title ?? gateLabel(runId);
+}
+
+const focused = (): string | null => S.getState().preview?.runId ?? S.getState().pageFocus;
+
+const ORDINALS: Record<string, number> = { first: 0, one: 0, '1': 0, second: 1, two: 1, '2': 1, third: 2, three: 2, '3': 2, fourth: 3, four: 3, '4': 3, last: -1 };
+
+/** A spoken pick among offered jobs: "the second one", "two", or (part of) its name. */
+function pickFrom(text: string, runIds: readonly string[]): string | null {
+  const t = text.toLowerCase().replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
+  const m = /^(?:the\s+)?(first|second|third|fourth|last|[1-4])(?:\s+(?:one|job|run))?$/.exec(t) ?? /^(?:number\s+)?(one|two|three|four)$/.exec(t);
+  if (m !== null) {
+    const i = ORDINALS[m[1]!]!;
+    const id = i === -1 ? runIds.at(-1) : runIds[i];
+    if (id !== undefined) return id;
+  }
+  const offered = runIds.map((id) => jobRefs().find((j) => j.runId === id) ?? { runId: id, title: titleOf(id), running: true });
+  const r = resolveJob(text, offered, null);
+  return r.kind === 'one' && r.how === 'named' ? r.job.runId : null;
+}
+
+const PIN_KEY = 'studio.voice.pinnedJob';
+
+function savePin(runId: string | null): void {
+  try { if (runId === null) localStorage.removeItem(PIN_KEY); else localStorage.setItem(PIN_KEY, runId); } catch { /* private mode */ }
+}
+
+function savedPin(): string | null {
+  try { return localStorage.getItem(PIN_KEY); } catch { return null; }
+}
+
+/** One line about a job, for the spoken "here it is". */
+function describeJob(runId: string): string {
+  const r = snapshotNow()?.runs.find((x) => x.runId === runId);
+  const gate = useGateStore.getState().gates[runId];
+  if (r === undefined) return 'It isn’t running now; this is its last state.';
+  const state = r.liveness === 'waiting_on_you' ? 'waiting on you' : r.liveness === 'stalled' ? 'stalled' : r.liveness === 'held' ? 'held' : r.liveness === 'quiet' ? 'quiet' : 'working';
+  return `${r.phase !== null ? `${r.phase.charAt(0).toUpperCase()}${r.phase.slice(1)} phase, ` : ''}${state}${gate !== undefined ? ', with a decision waiting' : ''}.`;
+}
+
+/** Open (or swap) the live preview. */
+export function showJob(runId: string, opts: { quiet?: boolean; pinned?: boolean } = {}): void {
+  const cur = S.getState().preview;
+  const pinned = opts.pinned ?? (cur?.runId === runId ? cur.pinned : false);
+  set({ preview: { runId, pinned } });
+  if (pinned) savePin(runId);
+  else if (savedPin() === runId || cur?.pinned === true) savePin(null);
+  if (opts.quiet !== true) void itSays(`Here’s “${titleOf(runId)}”. ${describeJob(runId)} You can say “tell it …”, “stop it”, “check on it”, or “close it”.`);
+}
+
+export function closeJob(): void {
+  const cur = S.getState().preview;
+  if (cur === null) return;
+  if (cur.pinned) savePin(null);
+  set({ preview: null });
+}
+
+export function pinJob(on: boolean): void {
+  const cur = S.getState().preview;
+  if (cur === null) return;
+  set({ preview: { ...cur, pinned: on } });
+  savePin(on ? cur.runId : null);
+}
+
+/** "show me …", "the other one", "close it", "pin it", "tell it …": true when the words were about a job. */
+async function hearJobWords(text: string): Promise<boolean> {
+  const w = parseJobWords(text);
+  if (w === null) return false;
+  if (w.kind === 'close') {
+    if (S.getState().preview === null) await itSays('No job is open.');
+    else { const t = titleOf(S.getState().preview!.runId); closeJob(); await itSays(`Closed “${t}”.`); }
+    return true;
+  }
+  if (w.kind === 'pin') {
+    if (S.getState().preview === null) { await itSays('No job is open to pin. Say “show me” and its name first.'); return true; }
+    pinJob(w.on);
+    await itSays(w.on ? 'Pinned. It stays here, even when another job needs you.' : 'Unpinned.');
+    return true;
+  }
+  const jobs = await jobsForNaming();
+  if (w.kind === 'other') {
+    const next = otherJob(S.getState().preview?.runId ?? null, S.getState().lastChoice, jobs);
+    if (next === null) { await itSays(jobs.some((j) => j.running) ? 'There’s no other running job.' : 'No job is running.'); return true; }
+    showJob(next.runId);
+    return true;
+  }
+  // A gate answer that names no job, with no job in view, is the waiting decision's (the gate logic after this).
+  if (w.kind === 'act' && w.action.kind === 'gate' && w.job === '' && S.getState().preview === null) return false;
+  const r = resolveJob(w.job, jobs, focused());
+  if (r.kind === 'none') { await itSays(r.why); return true; }
+  if (r.kind === 'choose') {
+    const then = w.kind === 'show' ? { kind: 'show' as const } : { kind: 'act' as const, action: w.action };
+    openPick(r.jobs, r.why, then, text);
+    return true;
+  }
+  if (w.kind === 'show') { showJob(r.job.runId); return true; }
+  await proposeJobAction(r.job, w.action, text);
+  return true;
+}
+
+function openPick(jobs: readonly JobRef[], why: string, then: { kind: 'show' } | { kind: 'act'; action: JobAction }, heard: string): void {
+  set({ lastChoice: jobs.map((j) => j.runId) });
+  const ask: Ask = {
+    id: `voice-pick-${lineId()}`, host: 'chat',
+    from: { kind: 'studio', id: 'voice', label: `Which job? · heard by voice · “${heard}”` },
+    prompt: why, kind: 'choose', answeredBy: 'person', record: 'You chose: {label}',
+    options: [
+      ...jobs.map((j, i) => ({ id: j.runId, label: j.title, sub: j.running ? (snapshotNow()?.runs.find((r) => r.runId === j.runId)?.phase ?? 'running') : 'finished', token: j.runId, ...(i === 0 ? { recommended: true } : {}) })),
+      { id: 'none', label: 'None of these', token: 'none', tone: 'neutral' as const },
+    ],
+  };
+  openAsk(ask, { kind: 'pickJob', runIds: jobs.map((j) => j.runId), then, heard });
+  void say(`${why} ${jobs.map((j, i) => `${['First', 'Second', 'Third', 'Fourth'][i]}: ${j.title}.`).join(' ')}`);
+}
+
+/** One action on one job → an on-screen confirm (always). Rigor and stop may ask first. */
+async function proposeJobAction(job: JobRef, action: JobAction, heard: string): Promise<void> {
+  if (action.kind === 'gate') {
+    const gate = useGateStore.getState().gates[job.runId];
+    if (gate === undefined) { await itSays(`“${job.title}” has no decision waiting.`); return; }
+    if (S.getState().preview?.runId !== job.runId) showJob(job.runId, { quiet: true });
+    await proposeGate(gate, heard, action.words);
+    return;
+  }
+  if (!job.running && action.kind !== 'check') {
+    await itSays(`“${job.title}” has finished, so there’s nothing to ${action.kind === 'stop' ? 'stop' : 'steer'}.`);
+    return;
+  }
+  if (action.kind === 'check' && !job.running) { await itSays(`“${job.title}” has finished, so there’s nothing to check on.`); return; }
+  if (S.getState().preview?.runId !== job.runId) showJob(job.runId, { quiet: true });
+  if (action.kind === 'stop' && action.reason === null) {
+    const ask: Ask = {
+      id: `voice-stopwhy-${lineId()}`, host: 'chat',
+      from: { kind: 'studio', id: 'voice', label: `Stop · heard by voice · ${job.title}` },
+      prompt: `Why stop “${job.title}”? Say the reason, or tap Stop without a reason.`,
+      kind: 'choose', answeredBy: 'person', record: 'Reason: {label}',
+      options: [
+        { id: 'none', label: 'Stop without a reason', token: 'none', tone: 'neutral' },
+        { id: 'cancel', label: 'Don’t stop it', token: 'cancel', tone: 'neutral' },
+      ],
+    };
+    openAsk(ask, { kind: 'stopReason', runId: job.runId, title: job.title });
+    await say(`Why stop ${job.title}? Say the reason, or say no reason.`);
+    return;
+  }
+  let rigorNow: Rigor | null = null;
+  if (action.kind === 'rigor') {
+    let r: Awaited<ReturnType<VoiceDeps['rigorOf']>>;
+    try { r = await deps.rigorOf(job.runId); } catch (e) { await itSays(`I couldn’t read its rigor: ${e instanceof Error ? e.message : String(e)}`); return; }
+    if (!r.power) { await itSays(`“${job.title}” runs phased, so it has no rigor to raise. You can steer it, stop it, or check on it.`); return; }
+    rigorNow = r.rigor;
+    const to = action.to ?? nextRigor(r.rigor);
+    if (to === null) { await itSays(`“${job.title}” is already at the highest rigor.`); return; }
+    if (r.rigor !== null && ['light', 'standard', 'high', 'highest'].indexOf(to) <= ['light', 'standard', 'high', 'highest'].indexOf(r.rigor)) {
+      await itSays(`“${job.title}” is already at ${r.rigor}. Rigor can only go up.`);
+      return;
+    }
+    action = { kind: 'rigor', to };
+  }
+  const w = actionWords(action, job.title, { rigor: rigorNow });
+  const tone = action.kind === 'stop' ? 'danger' as const : 'primary' as const;
+  const ask: Ask = {
+    id: `voice-job-${job.runId}-${lineId()}`, host: 'chat',
+    from: { kind: 'studio', id: 'voice', label: `${ACTION_LABEL[action.kind]} · heard by voice · ${job.title}` },
+    prompt: w.prompt, detail: `${w.detail} Nothing is sent until you confirm.`,
+    kind: 'confirm', answeredBy: 'person', record: w.record,
+    options: [
+      { id: 'yes', label: w.confirm, token: 'confirm', tone, recommended: true },
+      { id: 'no', label: 'Not that', token: 'cancel', tone: 'neutral' },
+    ],
+  };
+  openAsk(ask, { kind: 'job', runId: job.runId, title: job.title, action, heard });
+  await say(`${w.prompt} Say confirm, or not that.`);
+}
+
+const ACTION_LABEL: Record<JobAction['kind'], string> = { steer: 'Steer', doc: 'Working document', stop: 'Stop', rigor: 'Rigor', gate: 'Decision', check: 'Check on it' };
+
+/** A confirmed job action, sent. Resolves with the record line. */
+async function runJobAction(lineIdOf: number, ctx: Extract<VoiceAskContext, { kind: 'job' }>): Promise<void> {
+  const { runId, title, action } = ctx;
+  const done = (record: string): void => patchLine(lineIdOf, { record });
+  const fail = (e: unknown): void => done(`Not sent: ${e instanceof Error ? e.message : String(e)}`);
+  switch (action.kind) {
+    case 'steer':
+      done(`Sending to ${title}…`);
+      try { await deps.steer(runId, action.note); done(`Sent to ${title} · by voice`); void say('Sent.'); } catch (e) { fail(e); }
+      return;
+    case 'doc':
+      done(`Adding to ${title}’s working document…`);
+      try { await deps.editDoc(runId, action.section, action.text); done(actionWords(action, title).record); void say('Added.'); } catch (e) { fail(e); }
+      return;
+    case 'stop':
+      deps.stop(runId, title, action.reason === null || action.reason.trim() === '' ? null : action.reason);
+      done(`Stopping ${title} in 10 s · by voice, confirmed (Undo below)`);
+      void say('Confirmed. It stops in 10 seconds unless you undo it.');
+      return;
+    case 'rigor':
+      if (action.to === null) return;
+      done(`Raising ${title}’s rigor…`);
+      try { await deps.raiseRigor(runId, action.to, `Asked by voice: “${ctx.heard}”`); done(actionWords(action, title).record); void say(`Rigor raised to ${action.to}.`); } catch (e) { fail(e); }
+      return;
+    case 'check': {
+      done(`Checking on ${title}…`);
+      const gen = generation;
+      let rec: UnitInspection;
+      try { rec = await deps.inspect(runId); } catch (e) { if (gen === generation) done(`Not checked: ${e instanceof Error ? e.message : String(e)}`); return; }
+      if (gen !== generation) return;
+      done(`Checked ${title} · by voice`);
+      const verdict = rec.verdict === null ? 'It could not tell' : { progressing: 'It’s progressing', looping: 'It looks like it’s looping', stuck: 'It looks stuck', wasteful: 'It’s wasting tokens' }[rec.verdict];
+      const words = `${verdict}.${rec.doing !== null ? ` ${rec.doing}` : ''}${rec.progress !== null ? ` ${rec.progress}` : ''}`;
+      await itSays(words);
+      // The check's recommended move is offered, never taken: the same confirm.
+      const job = { runId, title, running: true };
+      if (rec.action === 'steer' && rec.note !== null && rec.note.trim() !== '') await proposeJobAction(job, { kind: 'steer', note: rec.note.trim() }, 'the check’s suggestion');
+      else if (rec.action === 'stop') await proposeJobAction(job, { kind: 'stop', reason: rec.why ?? `The check found it ${rec.verdict ?? 'not progressing'}` }, 'the check’s suggestion');
+      return;
+    }
+    case 'gate':
+      return;
+  }
 }
 
 async function hearInModal(text: string): Promise<void> {
@@ -378,29 +734,6 @@ async function proposeGate(gate: OpenGate, heard: string, words: NonNullable<Ret
   await say(`${q} Say confirm, or not that.`);
 }
 
-async function proposeSteer(jobWords: string, message: string): Promise<void> {
-  const runs = (snapshotNow()?.runs ?? []).filter((r) => r.liveness !== 'held');
-  const job = matchJob(jobWords, runs);
-  if (job === null) {
-    const names = runs.map((r) => r.title).slice(0, 4).join('; ');
-    await itSays(runs.length === 0 ? 'No job is running, so there is nothing to steer.' : `I couldn’t tell which job you mean. Running now: ${names}.`);
-    return;
-  }
-  const ask: Ask = {
-    id: `voice-steer-${job.runId}-${lineId()}`, host: 'chat',
-    from: { kind: 'studio', id: 'voice', label: `Steer · heard by voice · ${job.title}` },
-    prompt: `Send to “${job.title}”: “${message}”?`,
-    detail: 'It lands at the job’s next checkpoint, like a typed note.',
-    kind: 'confirm', answeredBy: 'person', record: `Sent to ${job.title} · by voice`,
-    options: [
-      { id: 'yes', label: 'Send', token: 'send', tone: 'primary', recommended: true },
-      { id: 'no', label: 'Not that', token: 'cancel', tone: 'neutral' },
-    ],
-  };
-  openAsk(ask, { kind: 'steer', runId: job.runId, title: job.title, message });
-  await say(`Send that to ${job.title}? Say send, or not that.`);
-}
-
 async function askChat(question: string): Promise<void> {
   const id = pushLine({ who: 'it', text: '…', partial: true });
   const gen = generation;
@@ -443,6 +776,32 @@ export function answerAsk(lineIdOf: number, answer: AskAnswer): void {
     void say('Confirmed. It sends in 10 seconds unless you undo it.');
     return;
   }
+  if (context.kind === 'pickJob') {
+    const pick = answer.option ?? 'none';
+    if (pick === 'none' || !context.runIds.includes(pick)) { patchLine(lineIdOf, { record: 'None of these' }); void say('Okay. Say its name when you know it.'); return; }
+    const job = jobRefs().find((j) => j.runId === pick) ?? { runId: pick, title: titleOf(pick), running: true };
+    patchLine(lineIdOf, { record: `You chose: ${job.title}` });
+    if (context.then.kind === 'show') showJob(pick);
+    else void proposeJobAction(job, context.then.action, context.heard);
+    return;
+  }
+  if (context.kind === 'stopReason') {
+    if (answer.option === 'cancel' || (answer.option === 'reason' && parseConfirm(answer.text ?? '') === 'cancel' && !/^no reason\b/i.test(answer.text ?? ''))) {
+      patchLine(lineIdOf, { record: 'Not stopped · you said not that' });
+      return;
+    }
+    const said = answer.option === 'reason' ? (answer.text ?? '').trim().replace(/^(?:because|since|the reason is)\s+/i, '') : '';
+    const reason = said === '' || /^(?:no reason|none|nothing|no|skip|without a reason)\b/i.test(said) ? null : capFirst(said);
+    patchLine(lineIdOf, { record: reason !== null ? `Reason: ${reason}` : 'No reason given' });
+    const job = { runId: context.runId, title: context.title, running: true };
+    void proposeJobAction(job, { kind: 'stop', reason: reason ?? '' }, said);
+    return;
+  }
+  if (context.kind === 'job') {
+    if (answer.option !== 'yes') { patchLine(lineIdOf, { record: 'Not sent · you said not that' }); void say('Okay, nothing was sent.'); return; }
+    void runJobAction(lineIdOf, context);
+    return;
+  }
   if (context.kind === 'steer') {
     if (answer.option !== 'yes') { patchLine(lineIdOf, { record: 'Not sent · you said not that' }); return; }
     patchLine(lineIdOf, { record: `Sending to ${context.title}…` });
@@ -468,6 +827,9 @@ function watchGates(): void {
       const title = snapshotNow()?.runs.find((r) => r.runId === g.runId)?.title ?? 'A job';
       const question = plainGateQuestion(g.prompt, g.gateKind);
       set({ awaitingGate: g.runId });
+      // The job that needs you comes into view, unless the person pinned another one there.
+      const shown = S.getState().preview;
+      if (shown === null || (!shown.pinned && shown.runId !== g.runId)) showJob(g.runId, { quiet: true });
       void itSays(`${title} is waiting on you: ${question} You can say approve, or send it back with a note.`);
     }
   });
@@ -475,11 +837,16 @@ function watchGates(): void {
 
 // ── Open, enter, choose, leave ─────────────────────────────────────────────────────────────────
 
-/** Open the modal (the composer's mic, or ⌥V). */
-export async function openVoice(): Promise<void> {
+/** The run page a composer is on ("this job" before anything is previewed): set while it is mounted. */
+let pageRun: string | null = null;
+export function setVoicePageFocus(runId: string | null): void { pageRun = runId; }
+
+/** Open the modal (the composer's mic, or ⌥V). `focus`: the job the mic was pressed on. */
+export async function openVoice(opts: { focus?: string | null } = {}): Promise<void> {
   if (S.getState().phase !== 'off') return;
   generation += 1;
-  set({ ...INITIAL_VOICE, phase: 'ask', readAloud: savedReadAloud(), heard: null });
+  recentCache = null;
+  set({ ...INITIAL_VOICE, phase: 'ask', readAloud: savedReadAloud(), heard: null, pageFocus: opts.focus ?? pageRun });
   // The dashboard's first read starts now, so full screen opens on the live system (and says what it sees).
   void loadDashboard().then(() => readDashboardData());
   await refreshStatus();
@@ -550,6 +917,13 @@ function enterFull(): void {
   deps.speaker.cancel();
   set({ phase: 'full', heard: null, lines: [], openAsk: null });
   watchGates();
+  // A job pinned last time is shown again while it is still running.
+  const pinned = savedPin();
+  if (pinned !== null) {
+    const snap = snapshotNow();
+    if (snap === null || snap.runs.some((r) => r.runId === pinned)) set({ preview: { runId: pinned, pinned: true } });
+    else savePin(null);
+  }
   pushLine({ who: 'it', text: describeNow() });
   openAsk(MODE_ASK, { kind: 'mode' });
   void say(`${describeNow()} How should I listen? Streaming, or space bar?`);

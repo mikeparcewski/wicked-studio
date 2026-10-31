@@ -1,5 +1,6 @@
 import { defaultOn } from '../store/composerSeats.js';
 import { VoiceMicButton } from './voice/VoiceMicButton.js';
+import { setVoicePageFocus } from '../voice/controller.js';
 import { commitGateDecision } from '../board/gateActions.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, ApiError, apiWire } from '../api/client.js';
@@ -151,6 +152,12 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   // clear in the commit effect below. Run-selected composers (steer/inject)
   // never consume it.
   const [prefill] = useState<RetryPrefill | null>(() => (runId ? null : peekRetryPrefill()));
+  // Voice mode: on a run page, "this job" is this run until another one is shown.
+  useEffect(() => {
+    if (!runId) return undefined;
+    setVoicePageFocus(runId);
+    return () => setVoicePageFocus(null);
+  }, [runId]);
   useEffect(() => {
     if (prefill !== null) clearRetryPrefill();
   }, [prefill]);
@@ -2019,7 +2026,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
           rows={1}
         />
 
-        <VoiceMicButton />
+        <VoiceMicButton focus={runId ?? null} />
         {/* Send button */}
         <button
           type="button"

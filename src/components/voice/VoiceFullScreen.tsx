@@ -9,6 +9,7 @@ import { dashboardWidgets, sides } from '../../voice/widgets.js';
 import { useShallow } from 'zustand/react/shallow';
 import { useVoiceStore, withoutWave, type VoiceLine } from '../../store/voice.js';
 import { AddWidgetButton, Widget } from './VoiceDashboard.js';
+import { JobPreview } from './JobPreview.js';
 import { TypeInstead } from './VoiceModal.js';
 import { VoiceSetup } from './VoiceSetup.js';
 import { LiveWave } from './VoiceWave.js';
@@ -60,6 +61,7 @@ export function VoiceFullScreen(): React.ReactElement {
       aria-modal="true"
       aria-label="Voice mode"
       data-testid="voice-full"
+      data-preview={v.preview !== null ? 'true' : undefined}
       onKeyDown={(e) => {
         if (e.key === 'Escape' && !picking) { e.preventDefault(); e.stopPropagation(); closeVoice(); return; }
         if (e.key === ' ' && v.mode === 'space' && !typing(e.target) && !picking) { e.preventDefault(); if (!e.repeat) holdToTalk(true); }
@@ -116,6 +118,7 @@ export function VoiceFullScreen(): React.ReactElement {
         {right.map((w) => <Widget key={w.id} w={w} />)}
         <AddWidgetButton onOpen={() => setPicking(true)} />
       </aside>
+      {v.preview !== null && <JobPreview key={v.preview.runId} runId={v.preview.runId} pinned={v.preview.pinned} />}
       {picking && <WidgetPicker onClose={() => setPicking(false)} />}
     </div>
   );
@@ -128,8 +131,8 @@ function Line({ l }: { l: VoiceLine }): React.ReactElement {
       <small>{who}</small>
       {l.text !== '' && <span className="wk-voice-text">{l.text}</span>}
       {l.ask !== undefined && (l.record !== undefined
-        ? <><AskRecord line={l.record} testId="voice-ask-record" />{l.ask.context.kind === 'gate' && <VoiceUndo runId={l.ask.context.runId} />}</>
-        : <div className="wk-voice-ask"><AskCard ask={l.ask.ask} {...(l.ask.ask.host === 'gate' ? { tag: 'Gate' } : {})} onAnswer={(a) => answerAsk(l.id, a)} testIds={{ root: `voice-ask-${l.ask.context.kind}` }} /></div>)}
+        ? <><AskRecord line={l.record} testId="voice-ask-record" />{(l.ask.context.kind === 'gate' || (l.ask.context.kind === 'job' && l.ask.context.action.kind === 'stop')) && <VoiceUndo runId={l.ask.context.runId} />}</>
+        : <div className="wk-voice-ask"><AskCard ask={l.ask.ask} {...(l.ask.ask.host === 'gate' ? { tag: 'Gate' } : {})} onAnswer={(a) => answerAsk(l.id, a)} testIds={{ root: `voice-ask-${l.ask.context.kind === 'job' ? l.ask.context.action.kind : l.ask.context.kind}` }} /></div>)}
     </div>
   );
 }
