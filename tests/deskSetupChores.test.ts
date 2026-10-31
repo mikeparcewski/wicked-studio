@@ -33,6 +33,19 @@ describe('setupChores', () => {
     expect(setupChores(agents(['a', 'b'], 2), { state: 'unknown' }, PATHS)).toEqual([]);
   });
 
+  // Round-3 look on :7721: Home said "Your memory is empty — Build memory" while Memory said 6 proposals were waiting
+  // and estate held a code graph for every repository.
+  it('memory with nothing kept says what is actually missing: proposals to keep, or no repository indexed', () => {
+    const empty = { state: 'ok' as const, total: 0 };
+    const withProposals = setupChores(agents(['a', 'b'], 2), { ...empty, pending: 6, indexedRepos: 6 }, { ...PATHS, proposals: '/memory?view=proposals' });
+    expect(withProposals).toMatchObject([{ key: 'memory-empty', title: 'Nothing is kept in memory yet — 6 memories wait for you to keep', action: { label: 'Review them', path: '/memory?view=proposals' } }]);
+    expect(withProposals[0]!.title).not.toMatch(/memory is empty/u);
+    // Repositories indexed and nothing waiting: helpers have the code; no item.
+    expect(setupChores(agents(['a', 'b'], 2), { ...empty, pending: 0, indexedRepos: 6 }, PATHS)).toEqual([]);
+    // Nothing indexed and nothing waiting: build it.
+    expect(setupChores(agents(['a', 'b'], 2), { ...empty, pending: 0, indexedRepos: 0 }, PATHS)).toMatchObject([{ action: { label: 'Build memory' } }]);
+  });
+
   it('an unread roster claims nothing about agents', () => {
     expect(setupChores(agents([], 0, false), { state: 'unknown' }, PATHS)).toEqual([]);
   });

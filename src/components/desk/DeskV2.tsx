@@ -237,7 +237,7 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
   const setup = useMemo(() => (projectId !== undefined ? [] : setupChores(
     { known: agentsView.hasRoster, usable: agentsView.rows.filter((r) => r.usable), total: agentsView.rows.length },
     memory,
-    { agents: deskTabPath('agents', `${AGENTS_PATH}?setup=1`), memory: deskTabPath('repositories') },
+    { agents: deskTabPath('agents', `${AGENTS_PATH}?setup=1`), memory: deskTabPath('repositories'), proposals: '/memory?view=proposals' },
   )), [projectId, agentsView.hasRoster, agentsView.rows, memory]);
   const leadWithSignIn = noSignedInHelper(roster) && chores.length > 0 && !setup.some((c) => c.key === 'agents');
   const [choresOpen, setChoresOpen] = useState(false);

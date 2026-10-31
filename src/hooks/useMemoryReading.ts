@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
+import { api } from '../api/client.js';
 import { isMemoryUnsupported, memoryCoverage } from '../api/memory.js';
+import { listProposals, proposalKind } from '../api/proposals.js';
 import type { MemoryReading } from '../board/deskModel.js';
 
 /**
@@ -23,9 +25,17 @@ export function useMemoryReading(enabled: boolean, refreshKey: unknown = null): 
   useEffect(() => {
     if (!enabled) return undefined;
     let live = true;
+    // With the coverage: the memory proposals waiting (the Memory page's own count) and the repositories estate has a
+    // code graph for, so the Desk says what is actually missing. A side read that fails is left out (never "none").
+    const pending = listProposals({ state: 'pending' }).then((ps) => ps.filter((p) => proposalKind(p) === 'memory').length, () => undefined);
+    const indexed = api.listRepos().then((r) => r.repos.filter((x) => typeof (x as { code_graph_db?: unknown }).code_graph_db === 'string' && (x as { code_graph_db: string }).code_graph_db !== '').length, () => undefined);
     memoryCoverage().then(
       // A coverage answer without a total says nothing about emptiness.
-      (c) => { if (live) setReading(typeof c.total === 'number' && Number.isFinite(c.total) ? { state: 'ok', total: c.total } : { state: 'unknown' }); },
+      async (c) => {
+        if (!(typeof c.total === 'number' && Number.isFinite(c.total))) { if (live) setReading({ state: 'unknown' }); return; }
+        const [p, r] = await Promise.all([pending, indexed]);
+        if (live) setReading({ state: 'ok', total: c.total, ...(p !== undefined ? { pending: p } : {}), ...(r !== undefined ? { indexedRepos: r } : {}) });
+      },
       (e: unknown) => {
         if (!live) return;
         setReading(isMemoryUnsupported(e) ? { state: 'unknown' } : { state: 'down', reason: e instanceof Error ? e.message : String(e) });

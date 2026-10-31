@@ -415,7 +415,9 @@ export function noSignedInHelper(roster: readonly RosterSeat[] | null): boolean 
  *
  *  - no agent able to work (signed in, eligible, not benched — the Agents tab's own "usable") → set them up;
  *  - exactly one able agent → a job needs a second to review its work (evaluator ≠ creator);
- *  - memory (`GET /memory/coverage`) holds nothing → build it; the read failed → it is not reachable.
+ *  - memory (`GET /memory/coverage`) holds nothing: proposals wait → keep them; no repository indexed in estate →
+ *    build it; repositories indexed and nothing waiting → no item (helpers have the code). The read failed → it is
+ *    not reachable.
  *    A daemon without the route says nothing (unknown is never "empty").
  */
 export interface SetupChore {
@@ -426,9 +428,11 @@ export interface SetupChore {
   action: { label: string; path: string };
 }
 
-export type MemoryReading = { state: 'ok'; total: number } | { state: 'down'; reason: string } | { state: 'unknown' };
+/** `pending`: memory proposals waiting to be kept (the Memory page's own count); `indexedRepos`: repositories with a
+ *  code graph in estate. Either absent = not read (never read as none). */
+export type MemoryReading = { state: 'ok'; total: number; pending?: number; indexedRepos?: number } | { state: 'down'; reason: string } | { state: 'unknown' };
 
-export function setupChores(agents: { known: boolean; usable: readonly { name: string }[]; total: number }, memory: MemoryReading, paths: { agents: string; memory: string }): SetupChore[] {
+export function setupChores(agents: { known: boolean; usable: readonly { name: string }[]; total: number }, memory: MemoryReading, paths: { agents: string; memory: string; proposals?: string }): SetupChore[] {
   const out: SetupChore[] = [];
   if (agents.known && agents.usable.length === 0) {
     out.push({
@@ -445,7 +449,17 @@ export function setupChores(agents: { known: boolean; usable: readonly { name: s
       action: { label: 'Sign in another', path: paths.agents },
     });
   }
-  if (memory.state === 'ok' && memory.total === 0) {
+  // Round-3 look: Home said "Your memory is empty" while Memory said 6 proposals were waiting and estate held every
+  // repository's graph. The item says what is actually missing, from the same reads Memory and the repositories use.
+  if (memory.state === 'ok' && memory.total === 0 && (memory.pending ?? 0) > 0) {
+    const n = memory.pending!;
+    out.push({
+      key: 'memory-empty', tone: 'gate',
+      title: `Nothing is kept in memory yet — ${n} ${n === 1 ? 'memory waits' : 'memories wait'} for you to keep`,
+      line: 'Helpers suggested what to remember; nothing is saved until you keep it.',
+      action: { label: 'Review them', path: paths.proposals ?? paths.memory },
+    });
+  } else if (memory.state === 'ok' && memory.total === 0 && (memory.indexedRepos ?? 0) === 0) {
     out.push({
       key: 'memory-empty', tone: 'gate',
       title: 'Your memory is empty — helpers start without your project’s history',
