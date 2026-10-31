@@ -44,11 +44,13 @@ export function importExampleDoc(today: Date = new Date()): string {
 /**
  * One skipped import entry: plain words where we know the cause (the engine's text names
  * invariants like INV-S3; studio#689 row 49), and ALWAYS the service's own reason after them
- * (studio#934). A reason we have no plain words for is shown as the service said it, never
- * swallowed into a generic refusal.
+ * (studio#934), less its leading invariant code. A reason we have no plain words for is shown as the
+ * service said it, never swallowed into a generic refusal.
  */
 export function plainSkip(index: number, reason: string): string {
-  const raw = reason.trim();
+  // The service's reason is shown, its invariant code is not (studio#689 row 49): "INV-C1: rule id must not be blank"
+  // reads "rule id must not be blank".
+  const raw = reason.trim().replace(/^INV-[A-Z]+\d+:\s*/u, '');
   const why = /not a frontmattered rule doc|frontmatter fence/i.test(raw) ? 'it doesn’t start with the frontmatter block the format needs (see “The format” above)'
     : /applies_to/i.test(raw) ? 'it doesn’t say where it applies'
     : /\bid\b[^.]*blank/i.test(raw) ? 'it has no id'

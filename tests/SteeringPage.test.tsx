@@ -689,8 +689,10 @@ describe('plainSkip (studio#689 row 49, studio#934)', () => {
   it('says why an import entry was skipped in plain words first, then the service’s own reason', async () => {
     const { plainSkip } = await import('../src/board/steerImport.js');
     expect(plainSkip(1, 'INV-S3: steering rule "POL-301" carries an effect but no non-blank applies_to entry')).toBe(
-      'Rule 2 skipped: it doesn’t say where it applies. Studio’s service said: INV-S3: steering rule "POL-301" carries an effect but no non-blank applies_to entry.',
+      'Rule 2 skipped: it doesn’t say where it applies. Studio’s service said: steering rule "POL-301" carries an effect but no non-blank applies_to entry.',
     );
+    // ui-v3 integration: #934 shows the service's reason, #689 row 49 keeps the invariant code out of it.
+    expect(plainSkip(1, 'INV-C1: rule id must not be blank')).toBe('Rule 2 skipped: it has no id. Studio’s service said: rule id must not be blank.');
   });
 
   it('never swallows a reason it has no plain words for (studio#934)', async () => {
