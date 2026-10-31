@@ -1,53 +1,52 @@
-/* Run-thread plugins (program DES-PLUGIN-EVENTS spike 1; operator placement 2026-10-28): one sandboxed block per
-   plugin at the run's first unit. Folded = one line (the plugin's summary + the host's pin and fold); unfolded = the
-   host's title row, the plugin's dashboard, and the host's attribution line at the foot. Pinned = sticky at the top of
-   the thread, folded. */
-.wk-runplugins, .wk-runplugins-pinned { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
-/* The thread has 20 px of top padding (chat-native.css); a sticky box sticks inside it, so the pinned strip reaches up
-   over it (top/margin -20 px, padding 20 px) and nothing that scrolls under it shows above it. */
-.wk-runplugins-pinned { position: sticky; top: -20px; z-index: 5; margin: -20px -10px 0; padding: 20px 10px 4px; background: var(--surface-base); }
-.wk-runplugin {
-  display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: 'title tools' 'frame frame' 'foot foot';
-  align-items: center; column-gap: 8px; min-width: 0;
-  padding: 6px 8px 8px 14px; border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); background: var(--surface-card);
-  transition: border-color 160ms ease, box-shadow 160ms ease;
+/* Run plugins in the run's Details panel (program DES-LEARN §1.2; operator 2026-10-30): each section a plugin registers
+   is a fold like the panel's own (`.wk-rp-section`, components.css), with the host's chrome: the title, a "Plugin"
+   mark, the plugin's one-line summary, and Pin (to the top of the panel). Its body is the plugin's sandboxed frame and
+   the host's attribution line. The thread keeps one slim row per update ("Show in Details"). */
+.wk-runplugin { transition: background-color 160ms ease, box-shadow 160ms ease; scroll-margin-top: 8px; }
+.wk-runplugin-heading { display: flex; align-items: center; gap: 2px; }
+.wk-runplugin-heading .wk-rp-toggle { flex: 1 1 auto; min-width: 0; align-items: center; }
+.wk-runplugin-mark {
+  flex: 0 0 auto; display: inline-flex; align-items: center; gap: 3px; height: 18px; padding: 0 7px; border-radius: var(--radius-full);
+  box-shadow: inset 0 0 0 1px var(--border); color: var(--ink-muted); font-size: 10px; font-weight: var(--weight-semi); letter-spacing: .06em; text-transform: uppercase;
 }
-.wk-runplugin--folded { grid-template-areas: 'frame tools'; padding-block: 3px; }
-.wk-runplugin--folded .wk-runplugin-title, .wk-runplugin--folded .wk-runplugin-foot { display: none; }
-.wk-runplugin--pinned { box-shadow: var(--shadow-card); border-color: var(--border); }
-.wk-runplugin-title { grid-area: title; margin: 0; display: flex; align-items: center; gap: 8px; min-width: 0; font-size: var(--text-sm); font-weight: var(--weight-semi); color: var(--ink-high); }
-.wk-runplugin-title .wk-tag { font-weight: 400; }
-/* A power run's phase block: "Phase report · Build" stays one phrase; the grant tag wraps under it on a phone. */
-.wk-runplugin-title { flex-wrap: wrap; row-gap: 2px; }
-.wk-runplugin-name { white-space: nowrap; }
-.wk-runplugin-tools { grid-area: tools; display: flex; gap: 2px; align-self: start; }
-.wk-runplugin--folded .wk-runplugin-tools { align-self: center; }
+.wk-runplugin-summary { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; justify-content: flex-end; gap: 6px; color: var(--ink-muted); font-weight: var(--weight-normal); font-size: var(--text-sm); }
+.wk-runplugin-summary-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wk-runplugin-dot { flex: 0 0 auto; width: 7px; height: 7px; border-radius: 50%; background: var(--ink-muted); }
+.wk-runplugin-dot[data-tone='run'] { background: var(--status-ok); box-shadow: 0 0 0 3px color-mix(in srgb, var(--status-ok) 22%, transparent); }
+.wk-runplugin-dot[data-tone='wait'] { background: var(--status-gate); }
+.wk-runplugin-dot[data-tone='ok'] { background: var(--status-ok); }
+.wk-runplugin-dot[data-tone='fail'] { background: var(--status-fail); }
+.wk-runplugin--pinned { background: color-mix(in srgb, var(--accent) 5%, transparent); }
 .wk-runplugin-btn {
-  display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; padding: 0; border: 0; border-radius: var(--radius-md);
+  flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; padding: 0; border: 0; border-radius: var(--radius-md);
   background: transparent; color: var(--ink-muted); cursor: pointer;
 }
 .wk-runplugin-btn:hover { background: var(--surface-raised); color: var(--ink-high); }
 .wk-runplugin-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; color: var(--ink-high); }
 .wk-runplugin-btn[aria-pressed='true'] { color: var(--accent); }
-.wk-runplugin-frame { grid-area: frame; display: flex; min-width: 0; overflow: hidden; }
+.wk-runplugin-body { padding-left: var(--space-4); }
+.wk-runplugin-frame { display: flex; min-width: 0; overflow: hidden; }
 .wk-runplugin-frame .wk-editor-frame { flex: 1 1 auto; width: 100%; height: 100%; min-height: 0; border: 0; background: var(--surface-card); }
-.wk-runplugin-foot { grid-area: foot; margin: 4px 0 0; font-size: var(--text-xs); color: var(--ink-muted); }
-.wk-runplugin-torn { grid-area: frame; margin: 0; font-size: var(--text-sm); color: var(--ink-muted); }
-.wk-runplugin--highlight { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 28%, transparent); }
-.wk-runplugin--pulse { animation: wk-runplugin-pulse 1.2s ease-out 1; }
+.wk-runplugin-foot { margin: 6px 0 0; font-size: var(--text-xs); color: var(--ink-muted); }
+.wk-runplugin-torn { margin: 0; font-size: var(--text-sm); color: var(--ink-muted); }
+.wk-runplugin--highlight { background: color-mix(in srgb, var(--accent) 10%, transparent); box-shadow: inset 3px 0 0 var(--accent); }
+.wk-runplugin--pulse .wk-runplugin-heading { animation: wk-runplugin-pulse 1.2s ease-out 1; }
 @keyframes wk-runplugin-pulse {
-  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 55%, transparent); border-color: var(--accent); }
-  100% { box-shadow: 0 0 0 10px transparent; }
+  0% { background: color-mix(in srgb, var(--accent) 22%, transparent); }
+  100% { background: transparent; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .wk-runplugin--pulse { animation: none; border-color: var(--accent); }
+  .wk-runplugin, .wk-runplugin--pulse .wk-runplugin-heading { animation: none; transition: none; }
 }
-/* "Phase report updated · Jump ↑": slim, quiet, at the step the update is about. */
-.wk-runplugin-updated { display: flex; align-items: center; gap: 8px; margin: -12px 0 0 30px; font-size: var(--text-sm); color: var(--ink-muted); }
+/* "Phase report · Build updated · Show in Details": slim, quiet, at the step the update is about. */
+.wk-runplugin-updated { display: flex; align-items: center; gap: 8px; min-width: 0; margin: -12px 0 0 30px; font-size: var(--text-sm); color: var(--ink-muted); }
+.wk-runplugin-updated-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wk-runplugin-updated .wk-chat-link { flex: 0 0 auto; }
+.wk-runplugin-updated .wk-hpanel-dot[data-tone='done'] { background: var(--ink-muted); }
 @media (max-width: 720px) {
   .wk-runplugin-updated { margin-left: 0; }
 }
-.wk-runplugin-proposal { grid-area: foot; margin-top: 6px; padding: 8px 10px; border-radius: var(--radius-md); background: var(--surface-raised); font-size: var(--text-sm); }
+.wk-runplugin-proposal { margin-top: 6px; padding: 8px 10px; border-radius: var(--radius-md); background: var(--surface-raised); font-size: var(--text-sm); }
 .wk-runplugin-proposal-text { margin: 0; color: var(--ink-body); }
 .wk-runplugin-proposal-who { color: var(--ink-muted); }
 .wk-runplugin-proposal-acts { margin: 6px 0 0; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }

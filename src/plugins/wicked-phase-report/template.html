@@ -32,6 +32,13 @@
   .dot.bad { background: var(--status-fail); }
   .dash { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 4px 0 8px; }
   @media (max-width: 520px) { .dash { grid-template-columns: minmax(0, 1fr); } }
+  /* A section of the Details panel (the host draws the heading): two tiles a row down to a narrow panel. */
+  .in-panel .dash { padding-top: 0; }
+  /* Two tiles a row are narrow: a list row's words and its time wrap instead of running past the tile's edge. */
+  .in-panel ul.list li { flex-wrap: wrap; column-gap: 6px; }
+  .in-panel ul.list li span:first-child { flex: 0 1 auto; min-width: 0; overflow-wrap: anywhere; }
+  .in-panel ul.list li span:last-child { margin-left: auto; }
+  @media (min-width: 300px) and (max-width: 520px) { .in-panel .dash { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
   .tile { border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; background: var(--surface-raised); min-width: 0; }
   .tile.wide { grid-column: 1 / -1; }
   .label { display: block; font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-muted); margin-bottom: 4px; }

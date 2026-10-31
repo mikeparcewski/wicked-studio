@@ -969,6 +969,17 @@
     "evaluate-coverage": "evaluate-results",
     "evaluate-coverage-chart": "evaluate-type-row",
     "evaluate-run": "testing-evals-run",
-    "evaluate-options-toggle": "evaluate-options"
+    "evaluate-options-toggle": "evaluate-options",
+    "run-plugin-phase": "run-plugin-title",
+    "run-plugin-row": "plugin-tile",
+    "run-plugin-row-grant": "plugin-tile-source",
+    "run-plugin-row-topics": "plugin-details-hears",
+    "run-plugin-row-permissions": "plugin-details-may",
+    "run-plugins": "run-plugin",
+    "run-plugins-phase": "run-plugin-updated",
+    "run-plugins-pinned": "run-plugin-pin",
+    "run-plugins-pinned-run": "run-plugin-pin",
+    "run-plugins-settings": "plugins-grid",
+    "editor-plugins-settings": "plugins-grid"
   }
 }

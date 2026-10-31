@@ -10,10 +10,13 @@ vi.mock('../src/api/client.js', () => ({ api: { getRunEvents: vi.fn(async () => 
 
 import type { CoreEvent } from '../src/api/types.js';
 import { powerPhases } from '../src/board/powerMode.js';
-import { PinnedRunPlugins, RunPhasePlugins, blockViewId } from '../src/components/session/RunThreadPlugin.js';
+import { RunPluginSection } from '../src/components/session/RunThreadPlugin.js';
+import { panelLine } from '../src/plugins/wicked-phase-report/model.js';
+import { RUN_PLUGINS } from '../src/plugins/runPlugins.js';
+import { panelRows, pluginSections } from '../src/board/runPluginPanels.js';
 import { toRow, type TopicRow } from '../src/editors/runEvents.js';
 import { buildSpans, emptyReport, foldRows, phaseDashboard, phaseSummary, scopeOf, spansWords, writesDoc, type PhaseScope } from '../src/plugins/wicked-phase-report/model.js';
-import { useRunPluginView } from '../src/store/runPluginView.js';
+import { readPinned, resetRunPluginView } from '../src/store/runPluginView.js';
 import { at, buildEvents, change, state, step } from './powerFixtures.js';
 
 const units = (status: Record<number, string>) => [
@@ -159,18 +162,20 @@ describe('Build and Checks share one unit: each phase’s time comes from its ow
   });
 });
 
-describe('the phase blocks in the thread', () => {
+describe('the phase sections in the Details panel', () => {
   beforeEach(() => {
     if (typeof URL.createObjectURL !== 'function') Object.assign(URL, { createObjectURL: () => 'blob:test', revokeObjectURL: () => undefined });
     window.localStorage.clear();
-    useRunPluginView.setState({ blocks: {}, phases: {} });
+    resetRunPluginView();
   });
   afterEach(() => { document.body.innerHTML = ''; });
 
   const phases = powerPhases(units({ 1: 'done', 2: 'executing' }), state({ handoff: { round: 1, maxRounds: 2, steps: [step('checks', 'passed', null, null, 33), step('review', 'running', 'codex', null, 34)] } }), events, false);
+  const plugin = RUN_PLUGINS[0]!;
+  const sections = pluginSections([plugin], phases);
 
-  it('one sandboxed plugin frame per phase, each named by its phase; the current phase open, the rest folded', async () => {
-    render(<>{phases.map((p) => <RunPhasePlugins key={p.key} runId="r-pm" phase={p} />)}</>);
+  it('one sandboxed plugin frame per phase, each titled by its phase, between Now and the core sections; the current phase open', async () => {
+    render(<>{sections.map((s) => <RunPluginSection key={s.key} runId="r-pm" plugin={plugin} section={s} live />)}</>);
     await act(async () => { await Promise.resolve(); });
     const blocks = screen.getAllByTestId('run-plugin');
     expect(blocks.map((b) => b.dataset['phase'])).toEqual(['intake', 'build', 'checks', 'review', 'qe', 'deliver']);
@@ -178,25 +183,34 @@ describe('the phase blocks in the thread', () => {
       expect(b.dataset['plugin']).toBe('wicked-phase-report');
       expect(b.querySelector('iframe')?.getAttribute('sandbox')).toBe('allow-scripts');
     }
-    expect(blocks.filter((b) => b.dataset['folded'] === 'false').map((b) => b.dataset['phase'])).toEqual(['review']);
-    expect(screen.getAllByTestId('run-plugin-phase').map((x) => x.textContent)).toEqual([' · Intake', ' · Build', ' · Checks', ' · Review', ' · QE', ' · Deliver']);
+    expect(blocks.filter((b) => b.dataset['open'] === 'true').map((b) => b.dataset['phase'])).toEqual(['review']);
+    expect(screen.getAllByTestId('run-plugin-title').map((x) => x.textContent)).toEqual(['Intake', 'Build', 'Checks', 'Review', 'QE', 'Deliver']);
+    const order = panelRows(sections, () => false).map((r) => (r.kind === 'core' ? r.id : r.section.phase!.key));
+    expect(order).toEqual(['now', 'intake', 'build', 'checks', 'review', 'qe', 'deliver', 'plan', 'changes', 'checks', 'agents', 'record']);
   });
 
-  it('a pinned phase block moves to the pinned strip with its phase, and is still there after a reload', async () => {
-    const review = phases.find((p) => p.key === 'review')!;
-    const view = render(<><PinnedRunPlugins runIds={['r-pm']} /><RunPhasePlugins runId="r-pm" phase={review} /></>);
+  it('a pinned phase section is remembered for its run, and leads the panel after a reload', async () => {
+    const review = sections.find((s) => s.phase?.key === 'review')!;
+    const view = render(<RunPluginSection runId="r-pm" plugin={plugin} section={review} live />);
     await act(async () => { await Promise.resolve(); });
     act(() => { screen.getByTestId('run-plugin-pin').click(); });
-    expect(screen.getByTestId('run-plugin').dataset['placement']).toBe('pinned');
-    expect(screen.getByTestId('run-plugin').dataset['phase']).toBe('review');
+    expect(screen.getByTestId('run-plugin').dataset['pinned']).toBe('true');
     view.unmount();
-    // A reload: the store is new, the pin is remembered in this browser.
-    useRunPluginView.setState({ blocks: {}, phases: {} });
-    render(<><PinnedRunPlugins runIds={['r-pm']} /><RunPhasePlugins runId="r-pm" phase={review} /></>);
-    await act(async () => { await Promise.resolve(); });
-    const b = screen.getByTestId('run-plugin');
-    expect(b.dataset['placement']).toBe('pinned');
-    expect(b.dataset['phase']).toBe('review');
-    expect(blockViewId('wicked-phase-report', review)).toBe('wicked-phase-report@review');
+    resetRunPluginView();
+    expect(readPinned('r-pm', 'wicked-phase-report:phase:review')).toBe(true);
+    const rows = panelRows(sections, (k) => readPinned('r-pm', k));
+    expect(rows[0]).toMatchObject({ kind: 'plugin', section: { key: 'wicked-phase-report:phase:review' } });
+  });
+
+  it('the heading’s line is the phase summary without the phase’s name or its times, with a tone', () => {
+    const r = emptyReport();
+    foldRows(r, events.map((x, i) => toRow(x, 'r-pm', 0, `s${i}`, () => null)).filter((x): x is TopicRow => x !== null));
+    r.loaded = true;
+    const intake = scopeOf({ phase: 'intake', label: 'Intake', ords: [0] })!;
+    expect(phaseSummary(r, intake)).toMatch(/^Intake · /u);
+    const line = panelLine(r, intake);
+    expect(line.text).not.toMatch(/^Intake/u);
+    expect(line.text).not.toMatch(/\d\d:\d\d/u);
+    expect(['none', 'run', 'wait', 'ok', 'fail']).toContain(line.tone);
   });
 });

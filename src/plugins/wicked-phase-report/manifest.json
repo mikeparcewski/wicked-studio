@@ -5,6 +5,23 @@
     3
   ],
   "inline": "run-thread",
+  "description": "One section per phase in a job’s Details: what is happening, checks, rigor and the working document.",
+  "panels": [
+    {
+      "slot": "run.details",
+      "id": "phase",
+      "title": "{phase}",
+      "instances": "per-phase",
+      "order": 10,
+      "defaultOpen": "current",
+      "summary": "plugin"
+    }
+  ],
+  "visuals": {
+    "icon": "icon.svg",
+    "color": "#4f46e5",
+    "live": true
+  },
   "observe": [
     {
       "topic": "wicked.run.session.*",

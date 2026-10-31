@@ -1,24 +1,25 @@
 #!/usr/bin/env python3
 """
-desk_run_plugin_test.py — a plugin observes run events it doesn't own and renders a live block in the run thread
-(program DES-PLUGIN-EVENTS spike 1; operator placement 2026-10-28). Against the `run_page` corpus with `run_plugin`
-on: r-rerun-mid's event log is a real rig run's recorded trail, cut at the fix step's failed floor. `/ws` is played by
-the journey (page.route_web_socket), so a live frame arrives exactly when the journey sends it.
+desk_run_plugin_test.py — a plugin observes run events it doesn't own and renders a live SECTION in the run's Details
+panel (program DES-PLUGIN-EVENTS spike 1; DES-LEARN §1.2, operator 2026-10-30: phase reports move from the thread to the
+right panel, as plugin-registered sections). Against the `run_page` corpus with `run_plugin` on: r-rerun-mid's event
+log is a real rig run's recorded trail, cut at the fix step's failed floor. `/ws` is played by the journey
+(page.route_web_socket), so a live frame arrives exactly when the journey sends it.
 
-  1. MOUNT + REPLAY: one sandboxed block (`sandbox="allow-scripts"`) at the run's first unit, folded to one line that
-     the plugin drew from the REPLAY alone ("Fix · step 6 of 10 · checks: 3 of 4 passed · 1 decision open"); the
-     host's attribution line ("From plugin · Phase report <v> · observes run events") and its grant label. The replay
-     asked the log only for the types the plugin's topics are made from (no qeAcceptanceDecided, no gateDecided).
-  2. LIVE: three live frames (the decision answered, Fix done, Review started) move the summary to "Review · step 7
-     of 10" within 1.5 s, and add one "Phase report updated · Review · Jump ↑" row at that point of the conversation.
-  3. JUMP: the row scrolls to the block, unfolds it (the dashboard: Now, Checks, Decisions, Helpers, Time and cost)
-     and highlights it.
-  4. PIN / UNPIN (keyboard): Enter on Pin sticks the block to the top of the thread, folded (aria-pressed=true), the
-     focus stays on Pin at its new place and nothing flashes for the move; no
-     jump rows while pinned; it stays at the thread's top when the thread scrolls; a live frame makes the pinned
-     summary pulse. A reload keeps it pinned (per run and
-     plugin). Unpin returns it to its place at the first unit.
-  5. PHONE (390x844): the block fits the width (no horizontal scroll), its buttons are 28 px targets. 0 page errors.
+  1. MOUNT + REPLAY: one sandboxed section (`sandbox="allow-scripts"`) in the Details panel, between Now and Plan and
+     steps (its manifest's order 10), open while the run is live; none in the thread. Its heading carries the line the
+     plugin said from the REPLAY alone (`panel.summary`: "Fix · step 6 of 10 · checks: 3 of 4 passed · 1 decision
+     open"), the host's Plugin mark and its attribution line. The replay asked the log only for the types the plugin's
+     topics are made from (no qeAcceptanceDecided, no gateDecided).
+  2. LIVE: three live frames (the decision answered, Fix done, Review started) move the heading to "Review · step 7 of
+     10" within 1.5 s, and add one "Phase report updated · Review · Show in Details" row in the thread.
+  3. SHOW IN DETAILS: with the section folded, the row opens it (the dashboard: Now, Checks, Decisions, Helpers, Time
+     and cost), lights it and brings it into view in the panel; what is open is remembered for this run.
+  4. PIN / UNPIN (keyboard): Enter on Pin moves the section to the top of the panel (before Now), aria-pressed=true,
+     the focus stays on Pin at its new place; a live frame makes the pinned heading pulse. A reload keeps it pinned
+     (per run and section) and keeps a folded section folded. Unpin returns it to its place after Now.
+  5. PHONE (390x844): Show in Details opens the panel as its overlay with the section open; it fits the width (no
+     horizontal scroll), its buttons are 28 px targets. 0 page errors.
 
 Captures: e2e/shots/desk-run-plugin-*.png. Env: FEEDBACK_PORT (default 4661).
 """
@@ -33,7 +34,9 @@ from uxfix_fixture import DEFAULT_APPEARANCE, HIDE_GATE_TOASTS, REPO, ensure_bui
 PORT = int(os.environ.get("FEEDBACK_PORT", "4661"))
 SHOTS = REPO / "e2e" / "shots"
 RUN = "r-rerun-mid"
-BLOCK = '[data-testid="run-plugin"]'
+SECTION = '[data-testid="run-tab"] [data-testid="run-plugin"]'
+KEY = "wicked-phase-report:phase"
+PIN_STORE = f"wicked.studio.runPanel.pinned.{KEY}.{RUN}"
 
 report: dict = {"ok": False, "steps": {}}
 
@@ -76,7 +79,9 @@ def new_page(browser, w: int, h: int, theme: str = "light"):
 
 
 def summary(page) -> str:
-    return page.frame_locator(f"{BLOCK} iframe").first.locator("#sum-text").inner_text(timeout=10000)
+    """The section heading's line: the plugin's own `panel.summary`, drawn by the host."""
+    loc = page.locator(f"{SECTION} [data-testid=run-plugin-summary] .wk-runplugin-summary-text").first
+    return loc.inner_text(timeout=10000) if loc.count() else ""
 
 
 def wait_summary(page, prefix: str, within_ms: int) -> tuple[str, int]:
@@ -98,9 +103,9 @@ def send(frames: list[dict]) -> None:
 def open_run(page) -> None:
     page.goto(f"{origin}/s/run%3A{RUN}", wait_until="domcontentloaded")
     try:
-        page.locator(BLOCK).first.wait_for(state="visible", timeout=20000)
+        page.locator(SECTION).first.wait_for(state="attached", timeout=20000)
     except Exception:  # noqa: BLE001
-        fail("mount", {"why": "the run-thread block never showed"})
+        fail("mount", {"why": "the panel section never showed"})
 
 
 with sync_playwright() as p:
@@ -111,98 +116,104 @@ with sync_playwright() as p:
 
     # ── 1. mount + replay ────────────────────────────────────────────────────────────────────────────
     text, _ = wait_summary(page, "Fix · step 6 of 10", 8000)
-    blk = page.locator(BLOCK).first
-    attrs = blk.evaluate("""(b) => ({ placement: b.dataset.placement, folded: b.dataset.folded, pinned: b.dataset.pinned,
-      sandbox: b.querySelector('iframe')?.getAttribute('sandbox'), frames: document.querySelectorAll('[data-testid="run-plugin"]').length,
-      attribution: b.querySelector('[data-testid="run-plugin-attribution"]')?.textContent,
-      grant: b.querySelector('[data-testid="run-plugin-grant"]')?.textContent,
-      afterPlan: (() => { const plan = document.querySelector('[data-testid="chat-plan"]'); return plan === null || !!(plan.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING); })(),
-      beforeSteps: [...document.querySelectorAll('[data-testid="session-run"] [data-testid="chat-step"]')].every((s) => !!(b.compareDocumentPosition(s) & Node.DOCUMENT_POSITION_FOLLOWING)) })""")
+    sec = page.locator(SECTION).first
+    attrs = sec.evaluate("""(s) => {
+      const rows = [...document.querySelectorAll('[data-testid="run-tab"] [data-testid="run-panel-section"], [data-testid="run-tab"] [data-testid="run-plugin"]')];
+      const ids = rows.map((r) => r.dataset.section ?? r.dataset.sectionKey);
+      return { key: s.dataset.sectionKey, open: s.dataset.open, pinned: s.dataset.pinned,
+        sandbox: s.querySelector('iframe')?.getAttribute('sandbox'), frames: document.querySelectorAll('[data-testid="run-plugin"]').length,
+        inThread: document.querySelectorAll('[data-testid="session-thread"] [data-testid="run-plugin"]').length,
+        order: ids.slice(0, 3), title: s.querySelector('[data-testid="run-plugin-title"]')?.textContent,
+        attribution: s.querySelector('[data-testid="run-plugin-attribution"]')?.textContent,
+        mark: s.querySelector('[data-testid="run-plugin-grant"]')?.textContent?.trim(),
+        tone: s.querySelector('[data-testid="run-plugin-summary"]')?.dataset.tone,
+        ownLine: (() => { try { return s.querySelector('iframe').contentDocument?.getElementById('sum')?.hidden ?? null; } catch { return null; } })() }; }""")
     # The plugin's replay is the typed read (the page's own backfill reads the whole log for its own panels).
     typed = [u for u in history_urls if "type=" in u]
     types = sorted({t for u in typed for t in u.split("type=")[1].split("&")[0].replace("%2C", ",").split(",")})
     check("1-mount-replay", text == "Fix · step 6 of 10 · checks: 3 of 4 passed · 1 decision open"
-          and attrs["placement"] == "thread" and attrs["folded"] == "true" and attrs["pinned"] == "false"
-          and attrs["sandbox"] == "allow-scripts" and attrs["frames"] == 1 and attrs["afterPlan"] and attrs["beforeSteps"]
+          and attrs["key"] == KEY and attrs["open"] == "true" and attrs["pinned"] == "false"
+          and attrs["sandbox"] == "allow-scripts" and attrs["frames"] == 1 and attrs["inThread"] == 0
+          and attrs["order"] == ["now", KEY, "plan"] and attrs["title"] == "Phase report" and attrs["mark"] == "Plugin" and attrs["tone"] == "wait"
           and (attrs["attribution"] or "").startswith("From plugin · Phase report ") and (attrs["attribution"] or "").endswith(" · observes run events")
-          and attrs["grant"] == "Built in · pre-granted"
           and len(typed) == 1 and "qeAcceptanceDecided" not in types and "gateDecided" not in types and "repoChecksEvaluated" in types,
           summary=text, attrs=attrs, types=types)
-    blk.scroll_into_view_if_needed()
-    page.screenshot(path=str(SHOTS / "desk-run-plugin-folded-1440.png"))
+    page.screenshot(path=str(SHOTS / "desk-run-plugin-panel-1440.png"))
 
     # ── 2. live ──────────────────────────────────────────────────────────────────────────────────────
     if not sockets:
         fail("2-live", {"why": "studio opened no /ws"})
     send([{"type": "resumed", "ord": 6}, {"type": "unitDone", "ord": 6}, {"type": "unitExecuting", "ord": 7}])
     text, ms = wait_summary(page, "Review · step 7 of 10", 1500)
-    rows = page.locator('[data-testid="run-plugin-updated"]')
+    rows = page.locator('[data-testid="session-thread"] [data-testid="run-plugin-updated"]')
     row_texts = rows.all_inner_texts()
     check("2-live", ms >= 0 and ms <= 1500 and text == "Review · step 7 of 10 · checks: 3 of 4 passed"
-          and any(t.startswith("Phase report updated · Review") for t in row_texts), summary=text, ms=ms, rows=row_texts)
+          and any(t.startswith("Phase report updated · Review") and t.endswith("Show in Details") for t in row_texts), summary=text, ms=ms, rows=row_texts)
 
-    # ── 3. jump ──────────────────────────────────────────────────────────────────────────────────────
+    # ── 3. show in details ───────────────────────────────────────────────────────────────────────────
+    sec.locator('[data-testid="run-plugin-fold"]').click()
+    page.wait_for_timeout(300)
+    folded = sec.get_attribute("data-open")
     page.locator('[data-testid="run-plugin-updated"][data-ord="7"] [data-testid="run-plugin-jump"]').click()
     page.wait_for_timeout(900)
-    j = blk.evaluate("""(b) => { const r = b.getBoundingClientRect(); return { folded: b.dataset.folded, flash: b.dataset.flash || null,
-      inView: r.top >= 0 && r.top < innerHeight - 40, height: Math.round(r.height) }; }""")
-    tiles = page.frame_locator(f"{BLOCK} iframe").first.locator(".tile .label").all_inner_texts()
-    check("3-jump", j["folded"] == "false" and j["flash"] == "highlight" and j["inView"] and j["height"] > 300
+    j = sec.evaluate("""(s) => { const r = s.getBoundingClientRect(); const p = document.querySelector('[data-testid="host-panel"]').getBoundingClientRect();
+      return { open: s.dataset.open, flash: s.dataset.flash || null, inPanel: r.left >= p.left - 1 && r.right <= p.right + 1,
+        inView: r.top >= 0 && r.top < innerHeight - 40, height: Math.round(r.height),
+        stored: JSON.parse(localStorage.getItem('studio.runPanel.pluginOpen.v1') || '{}') }; }""")
+    tiles = page.frame_locator(f"{SECTION} iframe").first.locator(".tile .label").all_inner_texts()
+    check("3-show-in-details", folded == "false" and j["open"] == "true" and j["flash"] == "highlight" and j["inPanel"] and j["inView"] and j["height"] > 300
+          and j["stored"].get(RUN, {}).get(KEY) is True
           and [t.upper() for t in tiles] == ["NOW", "CHECKS", "DECISIONS", "HELPERS", "TIME AND COST"], jump=j, tiles=tiles)
     page.wait_for_timeout(1700)
-    page.screenshot(path=str(SHOTS / "desk-run-plugin-expanded-1440.png"))
+    page.screenshot(path=str(SHOTS / "desk-run-plugin-shown-1440.png"))
 
     # ── 4. pin / unpin, by keyboard ──────────────────────────────────────────────────────────────────
     page.locator('[data-testid="run-plugin-pin"]').first.focus()
     page.keyboard.press("Enter")
     page.wait_for_timeout(600)
-    pinned = page.evaluate("""() => { const b = document.querySelector('[data-testid="run-plugin"]'); const t = document.querySelector('[data-testid="session-thread"]');
-      const strip = b.closest('[data-testid="run-plugins-pinned"]');
-      return { placement: b.dataset.placement, folded: b.dataset.folded, pressed: b.querySelector('[data-testid="run-plugin-pin"]').getAttribute('aria-pressed'),
-        focusKept: document.activeElement === b.querySelector('[data-testid="run-plugin-pin"]'), flash: b.dataset.flash || null,
-        sticky: strip ? getComputedStyle(strip).position : null, jumpRows: document.querySelectorAll('[data-testid="run-plugin-updated"]').length,
-        firstInThread: !!(b.compareDocumentPosition(document.querySelector('[data-testid="session-turn"], [data-testid="session-run"]')) & Node.DOCUMENT_POSITION_FOLLOWING)
-          && strip !== null && strip.parentElement === t,
-        stored: localStorage.getItem('wicked.studio.runPlugin.pinned.wicked-phase-report.r-rerun-mid') }; }""")
-    # The corpus thread is short: a tall spacer at its end lets it scroll far past the block's own place.
-    page.evaluate("() => { const t = document.querySelector('[data-testid=\"session-thread\"]'); const d = document.createElement('div'); d.style.flex = '0 0 2400px'; d.setAttribute('data-journey-spacer', ''); t.appendChild(d); t.scrollTop = t.scrollHeight; }")
-    page.wait_for_timeout(400)
-    stuck = page.evaluate("""() => { const b = document.querySelector('[data-testid="run-plugin"]').getBoundingClientRect();
-      const t = document.querySelector('[data-testid="session-thread"]').getBoundingClientRect(); return { top: Math.round(b.top - t.top), h: Math.round(b.height) }; }""")
+    order_js = """() => [...document.querySelectorAll('[data-testid="run-tab"] [data-testid="run-panel-section"], [data-testid="run-tab"] [data-testid="run-plugin"]')].map((r) => r.dataset.section ?? r.dataset.sectionKey).slice(0, 3)"""
+    pinned = page.evaluate("""(store) => { const s = document.querySelector('[data-testid="run-tab"] [data-testid="run-plugin"]');
+      return { pinned: s.dataset.pinned, pressed: s.querySelector('[data-testid="run-plugin-pin"]').getAttribute('aria-pressed'),
+        focusKept: document.activeElement === s.querySelector('[data-testid="run-plugin-pin"]'), stored: localStorage.getItem(store) }; }""", PIN_STORE)
+    pinned["order"] = page.evaluate(order_js)
     send([{"type": "unitDone", "ord": 7}, {"type": "unitExecuting", "ord": 8}])
     page.wait_for_timeout(250)
-    flash = page.locator(BLOCK).first.get_attribute("data-flash")
+    flash = page.locator(SECTION).first.get_attribute("data-flash")
     page.screenshot(path=str(SHOTS / "desk-run-plugin-pinned-1440.png"))
-    stuck["thread"] = page.evaluate("() => { const t = document.querySelector('[data-testid=\"session-thread\"]'); return [t.scrollTop, t.scrollHeight, t.clientHeight]; }")
-    check("4a-pin", pinned["placement"] == "pinned" and pinned["folded"] == "true" and pinned["pressed"] == "true" and pinned["focusKept"] and pinned["flash"] is None
-          and pinned["sticky"] == "sticky" and pinned["jumpRows"] == 0 and pinned["firstInThread"] and pinned["stored"] == "1"
-          and 0 <= stuck["top"] <= 24 and stuck["h"] <= 56 and flash == "pulse", pinned=pinned, stuck=stuck, flash=flash)
+    check("4a-pin", pinned["pinned"] == "true" and pinned["pressed"] == "true" and pinned["focusKept"] and pinned["stored"] == "1"
+          and pinned["order"] == [KEY, "now", "plan"] and flash == "pulse", pinned=pinned, flash=flash)
+    # Folded and pinned, then a reload: both are remembered for this run.
+    page.locator(SECTION).first.locator('[data-testid="run-plugin-fold"]').click()
     page.reload(wait_until="domcontentloaded")
-    page.locator(BLOCK).first.wait_for(state="visible", timeout=20000)
-    after = page.locator(BLOCK).first.get_attribute("data-placement")
+    page.locator(SECTION).first.wait_for(state="attached", timeout=20000)
     replay_again, _ = wait_summary(page, "Fix · step 6 of 10", 8000)
-    check("4b-pin-kept", after == "pinned" and replay_again.startswith("Fix · step 6 of 10"), placement=after, summary=replay_again)
+    kept = {"order": page.evaluate(order_js), "open": page.locator(SECTION).first.get_attribute("data-open")}
+    check("4b-pin-kept", kept["order"][0] == KEY and kept["open"] == "false" and replay_again.startswith("Fix · step 6 of 10"), kept=kept, summary=replay_again)
     page.locator('[data-testid="run-plugin-pin"]').first.focus()
     page.keyboard.press("Enter")
-    page.wait_for_timeout(1200)
-    back = page.evaluate("""() => { const b = document.querySelector('[data-testid="run-plugin"]'); return { placement: b.dataset.placement,
-      pressed: b.querySelector('[data-testid="run-plugin-pin"]').getAttribute('aria-pressed'),
-      stored: localStorage.getItem('wicked.studio.runPlugin.pinned.wicked-phase-report.r-rerun-mid') }; }""")
-    check("4c-unpin", back["placement"] == "thread" and back["pressed"] == "false" and back["stored"] is None, back=back)
+    page.wait_for_timeout(800)
+    back = {"order": page.evaluate(order_js), "pressed": page.locator('[data-testid="run-plugin-pin"]').first.get_attribute("aria-pressed"),
+            "stored": page.evaluate("(k) => localStorage.getItem(k)", PIN_STORE)}
+    check("4c-unpin", back["order"] == ["now", KEY, "plan"] and back["pressed"] == "false" and back["stored"] is None, back=back)
     ctx.close()
 
     # ── 5. phone ─────────────────────────────────────────────────────────────────────────────────────
     ctx, page = new_page(browser, 390, 844, theme="dark")
     open_run(page)
     wait_summary(page, "Fix · step 6 of 10", 8000)
-    page.locator('[data-testid="run-plugin-fold"]').first.click()
-    page.wait_for_timeout(1200)
-    page.locator(BLOCK).first.scroll_into_view_if_needed()
-    phone = page.evaluate("""() => { const b = document.querySelector('[data-testid="run-plugin"]').getBoundingClientRect();
-      const btns = [...document.querySelectorAll('.wk-runplugin-btn')].map((x) => Math.round(x.getBoundingClientRect().width));
-      return { left: Math.round(b.left), right: Math.round(b.right), vw: innerWidth, hscroll: document.documentElement.scrollWidth > innerWidth, btns }; }""")
-    page.screenshot(path=str(SHOTS / "desk-run-plugin-expanded-390.png"))
-    check("5-phone", phone["left"] >= 0 and phone["right"] <= phone["vw"] and not phone["hscroll"] and all(w >= 28 for w in phone["btns"]), phone=phone)
+    send([{"type": "resumed", "ord": 6}, {"type": "unitDone", "ord": 6}, {"type": "unitExecuting", "ord": 7}])
+    page.locator('[data-testid="run-plugin-jump"]').first.wait_for(state="visible", timeout=8000)
+    page.screenshot(path=str(SHOTS / "desk-run-plugin-thread-390.png"))
+    page.locator('[data-testid="run-plugin-jump"]').first.click()
+    page.wait_for_timeout(1500)
+    phone = page.evaluate("""() => { const s = document.querySelector('[data-testid="run-tab"] [data-testid="run-plugin"]'); const b = s.getBoundingClientRect();
+      const btns = [...s.querySelectorAll('.wk-runplugin-btn')].map((x) => Math.round(x.getBoundingClientRect().width));
+      const panel = document.querySelector('[data-testid="host-panel"]');
+      return { overlay: panel?.dataset.narrow ?? null, open: s.dataset.open, left: Math.round(b.left), right: Math.round(b.right), vw: innerWidth,
+        hscroll: document.documentElement.scrollWidth > innerWidth, btns }; }""")
+    page.screenshot(path=str(SHOTS / "desk-run-plugin-shown-390.png"))
+    check("5-phone", phone["overlay"] == "true" and phone["open"] == "true" and phone["left"] >= 0 and phone["right"] <= phone["vw"]
+          and not phone["hscroll"] and all(w >= 28 for w in phone["btns"]), phone=phone)
     ctx.close()
     browser.close()
 

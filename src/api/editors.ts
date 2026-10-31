@@ -41,3 +41,8 @@ export function editorFor(editors: readonly EditorView[], kind: string, size: 'i
 
 /** The kind an MCP inspector plugin claims (DES-MCP-INSPECTOR-001 §5). */
 export const MCP_SERVER_KIND = 'mcp-server';
+
+/** `POST /editors/:id/enabled` (human-only): switch an editor on or off. Answers the editor as it is now. */
+export async function setEditorEnabled(id: string, enabled: boolean): Promise<EditorView> {
+  return apiFetch<EditorView>(`/editors/${encodeURIComponent(id)}/enabled`, { method: 'POST', body: JSON.stringify({ enabled }) });
+}

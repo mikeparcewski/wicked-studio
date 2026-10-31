@@ -5,14 +5,14 @@ and the app builder is shown as coming soon (operator 2026-10-12, lane editors-d
 the Desk, against the in-process fixture with the daemon-wide document index on: project `notes`, a
 page-style doc `launch-page`, an unstyled doc `loose-notes` and a written doc `q4-brief`.
 
-  1. LIST: /plugins shows the built-in row named "Document", listing the documents it opens
+  1. LIST: /plugins shows the editors as cards (DES-LEARN §2); the built-in Page card opens its details, listing the documents it opens
      (launch-page, loose-notes) and not the written one (q4-brief), with the honest "written documents
      open in studio's own editor; decks open in Slides" line.
   2. OPEN: a click on launch-page opens THAT document full size (the `open=` address opens full screen)
      in the plugin frame (the hash-pinned bundle, kind `page`), on the Made list's `open=` address — not the editor test page's sample;
      picking version 1 in its version list shows version 1 (no address to write there).
   3. ESC from full screen comes back to the card (DES §7.3); Esc on the card closes it back to the list.
-  4. SOON (Plugins): "Vibe — app builder · Coming soon" is one row with no link or button.
+  4. SOON (Plugins): "Vibe — app builder · Coming soon" is one card with no link or button.
   5. SOON (New job): the grid ends with the same entry as a tile that is not a button.
   6. 0 page errors.
 
@@ -79,11 +79,14 @@ with sync_playwright() as p:
 
     # ── 1. the built-in row lists the documents it opens ───────────────────────────────────────
     page.goto(f"{origin}/plugins", wait_until="networkidle")
-    row = page.locator('[data-testid="editor-plugin-row"][data-editor="wicked-page"]')
+    tile = page.locator('[data-testid="plugin-tile"][data-plugin="wicked-page"]')
+    tile.wait_for(state="visible", timeout=15000)
+    tile.click()
+    row = page.locator('[data-testid="plugin-details"] [data-testid="editor-plugin-row"][data-editor="wicked-page"]')
     row.wait_for(state="visible", timeout=15000)
     row.locator('[data-testid="plugin-document"]').first.wait_for(state="visible", timeout=15000)
     names = row.locator('[data-testid="plugin-document"]').evaluate_all("els => els.map(e => e.dataset.doc)")
-    title = row.locator("p").first.inner_text()
+    title = page.get_by_test_id("plugin-details-title").inner_text()
     page.screenshot(path=str(SHOTS / "desk-plugins-document-list.png"))
     check("built-in-row-lists-its-documents",
           title.startswith("Page") and "launch-page" in names and "loose-notes" in names and "q4-brief" not in names

@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
-desk_working_doc_test.py — the run's WORKING DOCUMENT in the Phase report block, and steering from it (power mode
-spike 3). Against the `run_page` corpus with `run_plugin` (r-rerun-mid's trail) and `working_doc` (crew's working-doc
+desk_working_doc_test.py — the run's WORKING DOCUMENT in the Phase report section of the run's Details panel (DES-LEARN
+§1.2: the phase report moved there from the thread), and steering from it (power mode spike 3). Against the `run_page` corpus with `run_plugin` (r-rerun-mid's trail) and `working_doc` (crew's working-doc
 routes, in memory). `/ws` is played by the journey.
 
-  1. UNFOLDED, the block shows the dashboard and then the Working document: six sections, the note "Edits steer the
+  1. OPEN (a live run's section is), the section shows the dashboard and then the Working document: six sections, the note "Edits steer the
      next step. They can raise rigor, never lower it.", Goal waiting to be started.
   2. A PERSON'S EDIT: click Constraints and steering, type, press Save (a real click in the frame). crew is sent
      `author: 'operator'` with the plugin as the surface; the trail reads "v1 · You · Constraints and steering · …
@@ -17,7 +17,8 @@ routes, in memory). `/ws` is played by the journey.
      `author: 'plugin'` and shown in the trail as "Phase report (plugin)", never as You.
   4. PICKED UP: the next step picks the note up (crew's workingDocChanged on /ws): the trail and the thread row say
      "picked up at Review".
-  5. PINNED AND EXPANDED: the document is there too. PHONE (390x844): the editor fits the width. An OLDER SERVICE (no
+  5. PINNED (to the top of the panel) AND OPEN: the document is there too. PHONE (390x844): the Details overlay holds
+     it and the editor fits the width. An OLDER SERVICE (no
      working-doc routes): the block says it keeps no working document, and nothing is written. 0 page errors.
 
 Captures: e2e/shots/desk-working-doc-*.png. Env: FEEDBACK_PORT (default 4662).
@@ -35,7 +36,7 @@ from uxfix_fixture import DEFAULT_APPEARANCE, HIDE_GATE_TOASTS, REPO, ensure_bui
 PORT = int(os.environ.get("FEEDBACK_PORT", "4662"))
 SHOTS = REPO / "e2e" / "shots"
 RUN = "r-rerun-mid"
-BLOCK = '[data-testid="run-plugin"]'
+BLOCK = '[data-testid="run-tab"] [data-testid="run-plugin"]'
 
 report: dict = {"ok": False, "steps": {}}
 
@@ -87,13 +88,23 @@ def frame(page):
     return page.frame_locator(f"{BLOCK} iframe").first
 
 
+def ensure_open(page) -> None:
+    """The section open (a live run's opens by itself; a remembered fold is undone)."""
+    if page.locator(BLOCK).first.get_attribute("data-open") != "true":
+        page.locator(f'{BLOCK} [data-testid="run-plugin-fold"]').first.click()
+
+
 def open_expanded(page) -> None:
     page.goto(f"{origin}/s/run%3A{RUN}", wait_until="domcontentloaded")
     try:
-        page.locator(BLOCK).first.wait_for(state="visible", timeout=20000)
+        page.locator(BLOCK).first.wait_for(state="attached", timeout=20000)
     except Exception:  # noqa: BLE001
-        fail("mount", {"why": "the run-thread block never showed"})
-    page.locator('[data-testid="run-plugin-fold"]').first.click()
+        fail("mount", {"why": "the panel section never showed"})
+    # A phone: the Details panel is an overlay, opened from its handle.
+    if page.viewport_size["width"] < 1200:
+        page.get_by_test_id("run-details-handle").click()
+        page.wait_for_timeout(600)
+    ensure_open(page)
     try:
         frame(page).locator("#wd .wd-sec").first.wait_for(state="visible", timeout=15000)
     except Exception:  # noqa: BLE001
@@ -212,14 +223,14 @@ with sync_playwright() as p:
     page.screenshot(path=str(SHOTS / "desk-working-doc-picked-1440.png"))
 
     # ── 5a. pinned and expanded ──────────────────────────────────────────────────────────────────────
-    page.locator('[data-testid="run-plugin-pin"]').first.click()
+    page.locator(f'{BLOCK} [data-testid="run-plugin-pin"]').first.click()
     page.wait_for_timeout(800)
-    page.locator('[data-testid="run-plugin-fold"]').first.click()
+    ensure_open(page)
     frame(page).locator("#wd .wd-sec").first.wait_for(state="visible", timeout=15000)
     pinned_doc = frame(page).locator(".wd-sec").count()
     page.screenshot(path=str(SHOTS / "desk-working-doc-pinned-1440.png"))
-    check("5a-pinned-expanded", page.locator(BLOCK).first.get_attribute("data-placement") == "pinned" and pinned_doc == 6, sections=pinned_doc)
-    page.locator('[data-testid="run-plugin-pin"]').first.click()
+    check("5a-pinned-expanded", page.locator(BLOCK).first.get_attribute("data-pinned") == "true" and pinned_doc == 6, sections=pinned_doc)
+    page.locator(f'{BLOCK} [data-testid="run-plugin-pin"]').first.click()
     ctx.close()
 
     # ── 5b. phone ────────────────────────────────────────────────────────────────────────────────────
@@ -227,7 +238,7 @@ with sync_playwright() as p:
     open_expanded(page)
     frame(page).locator('.wd-sec[data-section="approach"] .wd-text').click()
     page.wait_for_timeout(300)
-    phone = page.evaluate("""() => { const b = document.querySelector('[data-testid="run-plugin"]').getBoundingClientRect();
+    phone = page.evaluate("""() => { const b = document.querySelector('[data-testid="run-tab"] [data-testid="run-plugin"]').getBoundingClientRect();
       return { left: Math.round(b.left), right: Math.round(b.right), vw: innerWidth, hscroll: document.documentElement.scrollWidth > innerWidth }; }""")
     ta = frame(page).locator('.wd-sec[data-section="approach"] textarea').evaluate("(t) => ({ w: Math.round(t.getBoundingClientRect().width), vw: document.documentElement.clientWidth })")
     frame(page).locator('.wd-sec[data-section="approach"]').scroll_into_view_if_needed()
@@ -239,8 +250,8 @@ with sync_playwright() as p:
     n_before = len(version_posts)
     ctx, page = new_page(browser, 1440, 900, working_doc=False)
     page.goto(f"{origin}/s/run%3A{RUN}", wait_until="domcontentloaded")
-    page.locator(BLOCK).first.wait_for(state="visible", timeout=20000)
-    page.locator('[data-testid="run-plugin-fold"]').first.click()
+    page.locator(BLOCK).first.wait_for(state="attached", timeout=20000)
+    ensure_open(page)
     frame(page).locator("#wd").wait_for(state="visible", timeout=15000)
     page.wait_for_timeout(800)
     said = frame(page).locator("#wd").inner_text()
