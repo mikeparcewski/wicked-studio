@@ -197,7 +197,14 @@ export function failingLine(f: FailingOnFace): string {
 
 /** Whether a failed check failed on the base too (the engine compared, or ran the base and it failed). */
 export function failedOnBase(c: GateFloorCheck): boolean {
-  return (c.classification !== null && ON_BASE.has(c.classification)) || c.preExisting.length > 0 || c.baseFailed === true;
+  return (c.classification !== null && ON_BASE.has(c.classification)) || c.preExisting.length > 0 || c.baseFailed === true
+    || c.baseCleared === true || (c.baseFlakyIds ?? []).length > 0;
+}
+
+/** The engine ran the base and it was clean: it passed on its first pass, nothing flaky, not a red-base class. Only
+ *  then is a head failure the base did not show the change's. */
+function cleanBase(c: GateFloorCheck): boolean {
+  return c.baseFailed === false && !failedOnBase(c);
 }
 
 /** The floor record of one unit attempt (`repoChecksEvaluated` for that ord and attempt), newest first. An attempt
@@ -224,10 +231,12 @@ export interface OverriddenFloors {
   failures?: number;
   /** The engine could not tell the change's failures from the base's (the base is red too). */
   unseparated?: boolean;
-  /** Of the named failing tests: those the base fails too, and those that fail only with this change (where the
-   *  engine separated them). */
+  /** Of the named failing tests: those the base fails too (its failing or flaky sets, or the engine's pre-existing
+   *  list), those that fail only with this change (the engine's `regressions`, or a head failure a clean base run did
+   *  not show), and those it could not tell apart (a red or retried base that did not name them). */
   shared?: number;
   fresh?: number;
+  unknown?: number;
 }
 
 /**
@@ -250,6 +259,7 @@ export function overriddenFloorsOf(
   const failing = new Set<string>();
   const shared = new Set<string>();
   const fresh = new Set<string>();
+  const unknown = new Set<string>();
   let unseparated = false;
   let onBase = true;
   for (const o of overrides) {
@@ -264,22 +274,30 @@ export function overriddenFloorsOf(
     for (const c of failed) {
       if (!checks.includes(c.name)) checks.push(c.name);
       if (!failedOnBase(c)) onBase = false;
-      const onBaseIds = new Set([...c.preExisting, ...(c.baseFailureIds ?? [])].map(failureName));
-      const newIds = new Set(c.regressions.map(failureName));
+      const onBaseIds = new Set([...c.preExisting, ...(c.baseFailureIds ?? []), ...(c.baseFlakyIds ?? [])].map(failureName));
+      // A regression measured against a base that passed only on its own re-run is not change-only: the base failed
+      // its first pass too (run 9397a34b, attempt 1: 42 "regressions", the base cleared on retry under the same load).
+      const newIds = new Set(c.baseCleared === true ? [] : c.regressions.map(failureName));
+      const clean = cleanBase(c);
       for (const id of c.failureIds ?? []) {
         const n = failureName(id);
         if (n === '') continue;
         failing.add(n);
         if (newIds.has(n)) fresh.add(n);
         else if (onBaseIds.has(n)) shared.add(n);
-        // No per-test lists: the check as a whole is the engine's word (red on the base, or not).
-        else if (onBaseIds.size === 0 && newIds.size === 0 && failedOnBase(c)) shared.add(n);
-        else fresh.add(n); // not shown to fail on the base: never claimed as the base's
+        // No per-test lists: the check as a whole is the engine's word (red on the base).
+        else if (onBaseIds.size === 0 && newIds.size === 0 && (c.classification !== null && ON_BASE.has(c.classification) || c.preExisting.length > 0)) shared.add(n);
+        // A clean base run did not show it: the change's. Anything else was never told apart: neither claimed.
+        else if (clean) fresh.add(n);
+        else unknown.add(n);
       }
       if (c.classification === 'base_red_unseparated' || c.classification === 'unclassified_red_base') unseparated = true;
     }
   }
-  return { checks, onBase, failures: failing.size, unseparated, shared: shared.size, fresh: fresh.size };
+  // A test told apart in one record and not in another keeps the most definite word: the change's, then the base's.
+  for (const n of fresh) { shared.delete(n); unknown.delete(n); }
+  for (const n of shared) unknown.delete(n);
+  return { checks, onBase, failures: failing.size, unseparated, shared: shared.size, fresh: fresh.size, unknown: unknown.size };
 }
 
 function andList(items: readonly string[]): string {
@@ -296,11 +314,18 @@ export function approvedLine(o: OverriddenFloors): string {
   const n = o.failures ?? 0;
   const single = n > 0 ? n === 1 : o.checks.length <= 1;
   const tests = n > 0 ? `${n} failing ${n === 1 ? 'test' : 'tests'} in ${what}` : `${what}, which did not pass`;
-  if (o.onBase && o.unseparated === true) return `You approved ${tests}; the base fails too, so ${single ? 'it' : 'they'} could not be told apart from this change.`;
-  // Test by test (xreview on studio#933): "on the base too" only of the failures the engine showed on the base.
+  // Test by test (xreview on studio#933; run 9397a34b): "only with this change" only of the change-only set, "on the
+  // base" only of the failures the engine showed there; the rest are said to be untold.
   const fresh = o.fresh ?? 0;
   const shared = o.shared ?? 0;
-  if (n > 0 && fresh > 0) return `You approved ${tests}: ${fresh} ${fresh === 1 ? 'fails' : 'fail'} only with this change${shared > 0 ? `, ${shared} on the base too` : ''}.`;
+  const unknown = o.unknown ?? 0;
+  if (n > 0 && fresh > 0) {
+    return `You approved ${tests}: ${fresh} ${fresh === 1 ? 'fails' : 'fail'} only with this change${shared > 0 ? `, ${shared} on the base too` : ''}${unknown > 0 ? `, ${unknown} could not be told apart` : ''}.`;
+  }
+  if (n > 0 && shared > 0 && unknown > 0 && o.onBase) {
+    return `You approved ${tests}: ${shared} also ${shared === 1 ? 'fails' : 'fail'} on the base, and the base is red, so the other ${unknown} could not be told apart from this change.`;
+  }
+  if (o.onBase && o.unseparated === true) return `You approved ${tests}; the base fails too, so ${single ? 'it' : 'they'} could not be told apart from this change.`;
   if (o.onBase) return `You approved ${tests}; ${single ? 'it fails' : 'they fail'} on the base too.`;
   return `You approved ${tests}.`;
 }
