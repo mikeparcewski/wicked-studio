@@ -44,7 +44,7 @@ function ProposalCard({ proposal, deciding, onApprove, onReject, editable }: {
   const tier = kind === 'memory' ? memoryPayload(proposal).tier : null;
   // A worker's proposal carries the engine-stamped `run_agent` (crew's own learnings say `crew`); older ones `agent`.
   const agent = proposal.provenance['run_agent'] ?? proposal.provenance.agent ?? proposal.provenance.helper;
-  const proposer = agent === 'crew' ? 'crew, from the run\u2019s record' : agent;
+  const proposer = agent === 'crew' ? 'crew (from the run\u2019s record)' : agent;
   const fromRun = proposal.provenance['run_id'];
   // One disclosure for every internal: the proposal id, provenance and tags (studio#689 row 47).
   const details = [
@@ -75,7 +75,7 @@ function ProposalCard({ proposal, deciding, onApprove, onReject, editable }: {
       )}
       <p data-testid="proposal-provenance" className="wk-gk-muted">
         Proposed by {proposer ?? 'a helper'}
-        {fromRun !== undefined && fromRun !== '' && <> · <a data-testid="proposal-source-run" href={sessionPath(`run:${fromRun}`)}>from this run</a></>}
+        {fromRun !== undefined && fromRun !== '' && <> · <a data-testid="proposal-source-run" className="wk-link" href={sessionPath(`run:${fromRun}`)}>Open its run</a></>}
       </p>
       <div data-testid="proposal-facets"><TechDetails text={details} /></div>
       <div className="wk-gk-actions">

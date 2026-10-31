@@ -42,7 +42,7 @@ export function RunLearningsLine({ runId, navigate }: { runId: string; navigate?
       {learnings.proposed > 0 && (
         <>
           {' · '}
-          <a data-testid="run-learnings-review" href={href} onClick={(e) => { if (navigate !== undefined) { e.preventDefault(); navigate(href); } }}>Review</a>
+          <a data-testid="run-learnings-review" className="wk-link" href={href} onClick={(e) => { if (navigate !== undefined) { e.preventDefault(); navigate(href); } }}>Review</a>
         </>
       )}
     </p>

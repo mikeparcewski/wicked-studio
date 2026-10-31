@@ -89,9 +89,9 @@ describe('the Memory queue, from a run', () => {
     render(<ProposalsSection kind="memory" heading="Memory proposals" />);
     const cards = await screen.findAllByTestId('proposal-card');
     expect(cards).toHaveLength(2);
-    expect(cards[0]!.querySelector('[data-testid="proposal-provenance"]')).toHaveTextContent('Proposed by codex · from this run');
+    expect(cards[0]!.querySelector('[data-testid="proposal-provenance"]')).toHaveTextContent('Proposed by codex · Open its run');
     expect(cards[0]!.querySelector('[data-testid="proposal-source-run"]')).toHaveAttribute('href', '/s/run%3Arun-1');
-    expect(cards[1]!.querySelector('[data-testid="proposal-provenance"]')).toHaveTextContent('Proposed by crew, from the run’s record');
+    expect(cards[1]!.querySelector('[data-testid="proposal-provenance"]')).toHaveTextContent('Proposed by crew (from the run’s record)');
   });
 
   it('narrows to one run\'s learnings, with a way back to every proposal', async () => {
