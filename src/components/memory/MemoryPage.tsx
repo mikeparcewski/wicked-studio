@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { PageAskButton, pageTextLines, usePageChatHostPage } from '../chat/PageChat.js';
+import { askPage, PageAskButton, pageTextLines, usePageChatHostPage } from '../chat/PageChat.js';
 import { Plus } from 'lucide-react';
 import {
   addMemory, AddMemoryApproveError, editMemory, isEraseByIdUnsupported, isMemoryEditUnsupported, isMemoryUnsupported,
@@ -170,7 +170,7 @@ export function MemoryPage({ search, navigate, address = (p) => p, project = nul
   const [editing, setEditing] = useState<{ memory: MemoryItem; token: number } | null>(null);
   const [retiring, setRetiring] = useState<{ memory: MemoryItem; width: 'item' | 'scope'; token: number } | null>(null);
   // DES-LEARN §6.3: Steering's ways in, opened from the Add menu, shown above the list.
-  const [panel, setPanel] = useState<'chat' | 'import' | 'table' | 'retired' | null>(null);
+  const [panel, setPanel] = useState<'import' | 'table' | 'retired' | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
   // ── Pieces (the calm page: title + one sentence + one action; a quiet search; roomy rows) ──────
@@ -187,7 +187,9 @@ export function MemoryPage({ search, navigate, address = (p) => p, project = nul
     data: () => pageTextLines(scrollRef.current),
   });
   const ways = [
-    { id: 'chat', label: 'Add with chat', testId: 'memory-add-chat', onSelect: () => setPanel('chat') },
+    // DES-LEARN §6.3 (operator 2026-10-31): Add with chat IS this page's chat, the dynamic one: what it would keep ends
+    // in a pick-several, filed for your approval. Never a separate panel.
+    { id: 'chat', label: 'Add with chat', testId: 'memory-add-chat', onSelect: () => { setPanel(null); askPage('memory', { focus: null }); } },
     { id: 'import', label: 'Import a doc…', testId: 'memory-add-import', onSelect: () => setPanel('import') },
     { id: 'table', label: 'Edit as a table', testId: 'memory-add-table', onSelect: () => setPanel('table') },
     { id: 'retired', label: 'Show retired', testId: 'memory-add-retired', onSelect: () => setPanel('retired') },
@@ -308,8 +310,8 @@ export function MemoryPage({ search, navigate, address = (p) => p, project = nul
       <div className="wk-se-scroll wk-calm" ref={scrollRef}>
         <div className="wk-calm-col">
           <CalmHead title="Memory" sentence={<span data-testid="memory-intro">{sentence}</span>} sentenceTestId={/* testid */ 'memory-sentence'} action={<><PageAskButton kind="memory" testId="memory-page-ask" />{action}</>} />
-          {panel === 'chat' || panel === 'import' ? (
-            <MemoryCaptureAdd key={panel} mode={panel} project={project ?? 'default'}
+          {panel === 'import' ? (
+            <MemoryCaptureAdd key={panel} mode="import" project={project ?? 'default'}
               projects={[{ id: 'default', name: 'Unfiled (every project)' }, ...projects.filter((p) => p.id !== 'default').map((p) => ({ id: p.id, name: p.name }))]}
               onClose={() => setPanel(null)} onKept={() => { reread(); setReviewTick((t) => t + 1); }} />
           ) : panel === 'table' ? (

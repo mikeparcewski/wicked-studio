@@ -121,29 +121,21 @@ with sync_playwright() as pw:
         items = [t.strip() for t in page.locator('[role="menuitem"]').all_inner_texts()]
         check(f"1-menu-{w}", all(x in items for x in ["Add with chat", "Import a doc…", "Edit as a table", "Show retired"]), items=items)
         page.keyboard.press("Escape")
-        # 2. Add with chat
+        # 2. Add with chat IS the page's chat (DES-LEARN §6.3, operator 2026-10-31): it opens the Memory page chat (the
+        #    dynamic one that ends in a pick-several), never a panel of its own.
         menu(page, "memory-add-chat")
-        page.get_by_test_id("memory-add-text").fill("We cut releases on Thursdays and freeze merges after 3pm that day.")
-        page.get_by_test_id("memory-add-send").click()
-        ask = page.get_by_test_id("memory-add-ask")
-        ask.wait_for(timeout=20000)
-        cap = [s["body"] for s in sent if s["path"] == "/projects/default/capture"]
-        check(f"2a-capture-{w}", len(cap) == 1 and "freeze merges after 3pm" in cap[0]["notes"])
+        page.locator('[data-testid="page-chat"][data-kind="memory"]').wait_for(timeout=15000)
+        check(f"2-add-with-chat-is-page-chat-{w}", page.locator('[data-testid="memory-chat"]').count() == 0
+              and page.locator('[data-testid="page-chat"][data-kind="memory"]').count() == 1)
         page.screenshot(path=str(SHOTS / f"desk-memory-add-chat-{w}.png"))
-        ask.get_by_test_id("ask-option").nth(1).click()
-        ask.get_by_test_id("ask-confirm").click()
-        page.get_by_test_id("memory-add-record").wait_for(timeout=15000)
-        dec = sorted(s["path"] for s in sent if s["path"].startswith("/proposals/cap-1"))
-        check(f"2b-kept-{w}", dec == ["/proposals/cap-1-1/approve", "/proposals/cap-1-2/reject"], dec=dec,
-              line=page.get_by_test_id("memory-add-record").inner_text())
-        page.get_by_test_id("memory-add-close").click()
+        page.keyboard.press("Escape")
         # 3. Import a doc
         menu(page, "memory-add-import")
         page.locator('[data-testid="memory-import"] input[type="file"]').set_input_files(files=[{"name": "notes.md", "mimeType": "text/markdown", "buffer": b"# Release notes\nWe cut on Thursdays."}])
         page.get_by_test_id("memory-add-send").click()
         page.get_by_test_id("memory-add-ask").wait_for(timeout=20000)
         cap = [s["body"] for s in sent if s["path"] == "/projects/default/capture"]
-        check(f"3-import-{w}", len(cap) == 2 and cap[1]["files"][0]["name"] == "notes.md" and "Thursdays" in cap[1]["files"][0]["text"])
+        check(f"3-import-{w}", len(cap) == 1 and cap[0]["files"][0]["name"] == "notes.md" and "Thursdays" in cap[0]["files"][0]["text"])
         page.get_by_test_id("memory-add-close").click()
         # 4. Edit as a table
         menu(page, "memory-add-table")

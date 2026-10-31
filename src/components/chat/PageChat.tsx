@@ -184,7 +184,8 @@ export function PageChat({ kind, runs, navigate, variant, chips, onClose, provid
         const last = [...r.messages].reverse().find((m) => (m as { kind?: string }).kind !== 'user' && typeof (m as { text?: unknown }).text === 'string') as { text?: string } | undefined;
         const remember = rememberLines(typeof last?.text === 'string' ? last.text : '');
         pendingRemember.current = remember;
-        if (answers.current === n) setTail({ kind: 'ask', ask: nextAsk({ ...base, remember }, n) });
+        // What it would keep IS the next question (DES-LEARN §6.3): the pick-several straight away.
+        if (answers.current === n) setTail({ kind: 'ask', ask: remember.length > 0 ? rememberAsk(remember, n) : nextAsk({ ...base, remember }, n) });
       }, () => { if (answers.current === n) setTail({ kind: 'ask', ask: nextAsk(base, n) }); });
       return;
     }
