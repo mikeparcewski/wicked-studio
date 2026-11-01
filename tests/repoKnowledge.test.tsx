@@ -235,12 +235,21 @@ describe('the knowledge store: bounded reads and the minute', () => {
       if (opts?.signal !== undefined) signals.push(opts.signal);
       return id.startsWith('stuck') ? new Promise(() => {}) : Promise.resolve({ kinds: CREW_KINDS });
     });
-    mocks.reqs.mockResolvedValue({ coverage: COV, graphBuild: null });
+    // The requirements read of the first one stalls too, and is aborted the same way.
+    mocks.reqs.mockImplementation((id: string, _p: unknown, opts?: { signal?: AbortSignal }) => {
+      if (opts?.signal !== undefined) signals.push(opts.signal);
+      return id === 'stuck1' ? new Promise(() => {}) : Promise.resolve({ coverage: COV, graphBuild: null });
+    });
     useRepoKnowledge.getState().ensure(['stuck1', 'stuck2', 'stuck3', 'ok']);
     expect(mocks.kinds).toHaveBeenCalledTimes(MAX_IN_FLIGHT);
+    expect(signals).toHaveLength(6);
+    expect(new Set(signals).size).toBe(6);
+    expect(signals.some((sg) => sg.aborted)).toBe(false);
     await act(async () => { await vi.advanceTimersByTimeAsync(READ_TIMEOUT_MS + 10); });
     expect(useRepoKnowledge.getState().reads['stuck1']!.kinds).toEqual({ state: 'failed' });
-    expect(signals.slice(0, 3).every((sg) => sg.aborted)).toBe(true);
+    // Every read that had not answered is aborted: the three stalled kinds reads and stuck1's requirements read.
+    expect(signals.filter((sg) => sg.aborted)).toHaveLength(4);
+    expect(useRepoKnowledge.getState().reads['stuck1']!.reqs).toEqual({ state: 'failed' });
     await act(async () => { await vi.advanceTimersByTimeAsync(10); });
     expect(useRepoKnowledge.getState().reads['ok']!.kinds.state).toBe('ok');
   });

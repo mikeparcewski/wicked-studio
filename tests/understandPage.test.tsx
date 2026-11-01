@@ -27,7 +27,7 @@ vi.mock('../src/api/client.js', () => ({
 }));
 // The folded views are their own surfaces (with their own tests); here they only need to be reachable.
 vi.mock('../src/components/CoverageView.js', () => ({ CoverageView: () => <div data-testid="coverage-view-stub" /> }));
-vi.mock('../src/components/RepoGraphModal.js', () => ({ RepoGraphModal: ({ repo, initialView }: { repo: { name: string }; initialView?: string }) => <div data-testid="repo-graph-stub" data-view={initialView ?? 'code'}>{repo.name}</div> }));
+vi.mock('../src/components/RepoGraphModal.js', () => ({ RepoGraphModal: ({ repo, initialView, onClose }: { repo: { name: string }; initialView?: string; onClose: () => void }) => <div data-testid="repo-graph-stub" data-view={initialView ?? 'code'}>{repo.name}<button type="button" data-testid="repo-graph-stub-close" onClick={onClose}>x</button></div> }));
 // The page chat (DES-LEARN §6.2) has its own tests (pageChat.test.tsx); here it is a stub that shows what the page
 // hands it: its scope chips and its provider (which the page's Recent answers learn the chat id from).
 const chat = vi.hoisted(() => ({ props: null as null | { chips?: Array<{ key: string; on: boolean }>; provider?: { knows: string; onSent?: (t: string, id: string) => void } } }));
@@ -378,6 +378,12 @@ describe('the Understand page', () => {
     expect(screen.getAllByTestId('understand-graph-repo').map((r) => r.getAttribute('data-repo-id'))).toEqual(['r1']);
     await act(async () => { fireEvent.click(screen.getByTestId('understand-answer')); });
     expect(screen.getAllByTestId('understand-graph-repo').map((r) => r.getAttribute('data-repo-id'))).toEqual(['r2']);
+    // On a wide screen the reopened conversation has the focus (its box, or the question box while it loads).
+    await act(async () => { await new Promise((r) => setTimeout(r, 5)); });
+    expect(screen.getByTestId('understand-side')).not.toContainElement(document.activeElement as HTMLElement);
+    // A follow-up in that conversation keeps its scope (the resumed chat recorded no chips of its own).
+    await act(async () => { chat.props!.provider!.onSent!('And the callers?', 'c-9'); });
+    expect(screen.getAllByTestId('understand-graph-repo').map((r) => r.getAttribute('data-repo-id'))).toEqual(['r2']);
     // Nothing is cut off, so there is no "All N repositories".
     expect(screen.queryByTestId('understand-graph-all')).toBeNull();
     // A new question goes back to the page's choice.
@@ -405,6 +411,28 @@ describe('the Understand page', () => {
     await act(async () => { chat.props!.provider!.onSent!(questionMessage('Who calls deliver?'), 'c-r2'); });
     expect(readAsked()[0]).toMatchObject({ chatId: 'c-r2', repos: ['r2'] });
     expect(screen.getAllByTestId('understand-graph-repo').map((r) => r.getAttribute('data-repo-id'))).toEqual(['r2']);
+  });
+
+  it('every repository chip turned off in the chat records "all of them", not the page’s choice', async () => {
+    await act(async () => { render(<UnderstandPage project="proj-1" navigate={vi.fn()} now={NOW} compare={null} />); });
+    fireEvent.change(screen.getByTestId('understand-ask-input'), { target: { value: 'Q?' } });
+    mocks.messages.mockRejectedValue(new ApiError(404, 'Not Found'));
+    await act(async () => { fireEvent.submit(screen.getByTestId('understand-ask')); });
+    sessionStorage.setItem('wicked.pagechat.understand.session', JSON.stringify({ chatId: 'c-all', title: 'Q', seeded: false,
+      chips: [{ key: 'repo:r1', kind: 'repo', label: 'wicked-core', ref: 'r1', on: false }] }));
+    await act(async () => { chat.props!.provider!.onSent!(questionMessage('Q?'), 'c-all'); });
+    expect(readAsked()[0]).toMatchObject({ chatId: 'c-all', repos: [] });
+    expect(screen.getAllByTestId('understand-graph-repo').map((r) => r.getAttribute('data-repo-id'))).toEqual(['r1', 'r2']);
+  });
+
+  it('a graph opened from the drawer gives the focus back to the drawer’s button when it closes', async () => {
+    mockNarrow(true);
+    await act(async () => { render(<UnderstandPage project={null} navigate={vi.fn()} now={NOW} compare={null} />); });
+    await act(async () => { fireEvent.click(screen.getByTestId('understand-side-toggle')); });
+    await act(async () => { fireEvent.click(screen.getAllByTestId('understand-graph-open')[0]!); });
+    expect(screen.getByTestId('understand-page')).toHaveAttribute('data-side', 'closed');
+    await act(async () => { fireEvent.click(screen.getByTestId('repo-graph-stub-close')); await new Promise((r) => setTimeout(r, 5)); });
+    expect(document.activeElement).toBe(screen.getByTestId('understand-side-toggle'));
   });
 
   it('the drawer yields to a higher layer: with the shortcut overlay open Escape is not the drawer’s', async () => {

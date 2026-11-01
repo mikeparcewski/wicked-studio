@@ -194,15 +194,17 @@ export function UnderstandPage({ project, navigate, now, compare, runs = [] }: {
     data: () => [],
     onSent: (_text: string, chatId: string) => {
       setOpenChat(chatId);
-      // The scope the chat actually opened with (the chat persists its chips before this is called; they may have been
-      // changed in the chat after a failed open), else the page's choice.
-      const kept = readAskSession(pageChatSessionKey('understand'));
-      const sent = kept?.chatId === chatId ? repoIdsOf(kept.chips) : null;
-      const repos = sent ?? scopeRepos.map((r) => r.id);
-      setOpenScope(repos);
       const question = pendingQuestion.current;
       pendingQuestion.current = null;
-      if (question !== null && !asked.some((x) => x.chatId === chatId)) setAsked(rememberAsked({ chatId, question, at: Date.now(), repos }));
+      // A follow-up in the same conversation keeps the scope it already has (a reopened one's, recorded with it).
+      if (question === null) return;
+      // A new question: the scope the chat actually opened with (the chat persists its chips before this is called; they
+      // may have been changed in the chat after a failed open; all of them off = every repository), else the page's.
+      const kept = readAskSession(pageChatSessionKey('understand'));
+      const chatRepoChips = kept?.chatId === chatId ? (kept.chips ?? []).filter((c) => c.kind === 'repo') : [];
+      const repos = chatRepoChips.length > 0 ? repoIdsOf(chatRepoChips) ?? [] : scopeRepos.map((r) => r.id);
+      setOpenScope(repos);
+      if (!asked.some((x) => x.chatId === chatId)) setAsked(rememberAsked({ chatId, question, at: Date.now(), repos }));
     },
     onMove: (m: string) => {
       if (m !== 'graph') return false;
