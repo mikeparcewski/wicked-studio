@@ -125,7 +125,8 @@ with sync_playwright() as p:
     check("on-run-header", "run b1" in t and "base a41c9e2" in t and "seats claude, codex" in t, text=t)
     color = hdr.evaluate("(el) => getComputedStyle(el).color")
     size = hdr.evaluate("(el) => parseFloat(getComputedStyle(el).fontSize)")
-    check("on-small-grey-type", size <= 12.5, color=color, font_size=size)
+    # The tech line is ids and hashes, so it is code: the type scale's one code size (13), never body (14).
+    check("on-small-grey-type", size <= 13, color=color, font_size=size)
     no_hscroll("on-session-no-hscroll")
     page.screenshot(path=str(SHOTS / "tech-details-on.png"))
     no_hscroll("on-run-page-no-hscroll")
