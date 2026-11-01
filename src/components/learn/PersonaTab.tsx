@@ -39,7 +39,8 @@ export function PersonaTab({ navigate, project }: { navigate: Navigate; project:
       // A write landed meanwhile: this answer is older than it, so it is not used, and the read is made again (it may
       // be the one that tells another scope's inherited personality; codex r5 on #937).
       (d) => { if (writes.current === at) setData(d); else load(); },
-      (e: unknown) => { if (writes.current !== at) return; if (isLearnRouteAbsent(e)) setAbsent(true); else setError(e); },
+      // Likewise a read that failed after a write landed is made again; only a current read's failure is shown.
+      (e: unknown) => { if (writes.current !== at) { load(); return; } if (isLearnRouteAbsent(e)) setAbsent(true); else setError(e); },
     );
   };
   useEffect(() => { load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps -- the first read, once

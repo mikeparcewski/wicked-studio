@@ -18,7 +18,7 @@
 import { PROTOCOL, ENVELOPE, type Envelope } from '../_shared/v2.js';
 import surfaces from './surfaces.json';
 import { dashboard, emptyReport, foldRows, openGates, panelLine, phaseDashboard, phaseSummary, scopeOf, stepWord, summaryLine, writesDoc, type PhaseScope, type Report, type Row } from './model.js';
-import { SECTION_EFFECT, SECTION_LABELS, SECTIONS, STEER_NOTE, docLines, handoffRound, ownQuestionLines, pluginWritesLines, represents, reconcileSection, sectionAuthor, trailLines, type DocView, type SectionId } from './workingDoc.js';
+import { SECTION_EFFECT, SECTION_LABELS, SECTIONS, STEER_NOTE, docLines, ownQuestionLines, pluginWritesLines, represents, reconcileSection, sectionAuthor, trailLines, type DocView, type SectionId } from './workingDoc.js';
 
 const ID = 'wicked-phase-report';
 
@@ -241,6 +241,8 @@ export function start(): void {
    * retried once on the new head. Nothing is written while nothing changed.
    */
   let syncQueued = false;
+  /** The Next lines this plugin wrote, word for word, while open: the only ones it may take back. */
+  const wroteNext = new Set<string>();
   let syncAfterEdit = false;
   const refused = new Set<'decisions' | 'questions' | 'next'>();
   function syncDoc(): void {
@@ -259,10 +261,12 @@ export function start(): void {
         if (refused.has(section)) continue;
         for (let attempt = 0; attempt < 2; attempt += 1) {
           if (doc === null || doc.doc === null || doc.sections === null) return;
-          const text = reconcileSection(section, doc.sections[section], wanted[section], ownQuestionLines(report), handoffRound(report));
+          const text = reconcileSection(section, doc.sections[section], wanted[section], ownQuestionLines(report), [...wroteNext]);
           if (text === null) break;
           const r = await ask('doc.propose_edit', { base: doc.doc.head, section, text, origin: 'generated' });
           await readDoc();
+          // The follow-ups it wrote are the only Next lines it may take back later (reconcileSection).
+          if (r.ok && section === 'next') for (const l of wanted.next) wroteNext.add(l);
           if (r.ok) break;
           if (r.error?.code !== 'head_moved') { refused.add(section); break; }
         }

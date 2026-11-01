@@ -108,7 +108,10 @@ describe('PersonaTab save', () => {
     fireEvent.change(nameBox(), { target: { value: 'New Alpha' } });
     fireEvent.click(saveButton());
     await waitFor(() => expect(screen.getByText(/Saved as version 4/)).toBeTruthy());
+    // the late read is older than the save: it is read again, and the new answer holds the save
+    getPersonas.mockResolvedValueOnce(response('Ada', 1, { a: saved('New Alpha', 4) }));
     await act(async () => { lateRead(response('Ada', 1)); });
+    await waitFor(() => expect(getPersonas).toHaveBeenCalledTimes(3));
     expect(nameBox().value).toBe('New Alpha');
   });
 
@@ -181,5 +184,28 @@ describe('PersonaTab save', () => {
     expect(nameBox().value).toBe('Bobby');
     rerender(<PersonaTab navigate={() => {}} project="a" />);
     await waitFor(() => expect(nameBox().value).toBe('Grace'));
+  });
+
+  it('an invalidated read that FAILS is made again too; its fresh answer shows (codex r6)', async () => {
+    getPersonas.mockResolvedValueOnce(response('Ada', 1, { a: saved('Alpha bot', 3), b: saved('Bob', 4) }));
+    removePersonaOverride.mockResolvedValue({ removed: true });
+    let fail!: (e: unknown) => void;
+    const { rerender } = render(<PersonaTab navigate={() => {}} project="a" />);
+    await waitFor(() => expect(nameBox().value).toBe('Alpha bot'));
+    getPersonas.mockReturnValueOnce(new Promise((_r, rej) => { fail = rej; }));
+    fireEvent.click(screen.getByTestId('persona-remove-override'));
+    await waitFor(() => expect(nameBox().value).toBe('Ada'));
+    rerender(<PersonaTab navigate={() => {}} project="b" />);
+    putPersona.mockResolvedValue({ scope: 'project:b', persona: saved('Bobby', 5), voice: 'v' });
+    await waitFor(() => expect(nameBox().value).toBe('Bob'));
+    fireEvent.change(nameBox(), { target: { value: 'Bobby' } });
+    fireEvent.click(saveButton());
+    await waitFor(() => expect(screen.getByText(/Saved as version 5/)).toBeTruthy());
+    getPersonas.mockResolvedValueOnce(response('Grace', 2, { b: saved('Bobby', 5) }));
+    await act(async () => { fail(new Error('network blip')); });
+    await waitFor(() => expect(getPersonas).toHaveBeenCalledTimes(3));
+    rerender(<PersonaTab navigate={() => {}} project="a" />);
+    await waitFor(() => expect(nameBox().value).toBe('Grace'));
+    expect(screen.queryByTestId('persona-error')).toBeNull();
   });
 });
