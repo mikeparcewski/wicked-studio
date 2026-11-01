@@ -122,12 +122,45 @@ export function coverageBreakdown(c: RequirementsCoverage): string {
 }
 
 /**
- * Whether a listed requirement is a placeholder rather than a real requirement: its statement is the engine's risk
- * floor ("[RISK] devDependencies: empty statement (model could not state a rule)", or a statement below the
- * confidence threshold). A placeholder is unconfirmed by definition, so it never shows as validated.
+ * Whether a listed requirement is a placeholder rather than a real requirement. The engine decides it (real = a
+ * validated requirement, or a rule at or above the resolve threshold, 0.75), and crew sends that verdict as
+ * `placeholder` on each item; a daemon from before the field is read off the statement, the engine's risk floor
+ * ("[RISK] devDependencies: empty statement …"), which misses plain rules below the threshold. A placeholder is
+ * unconfirmed by definition, so it never shows as validated.
  */
-export function isPlaceholder(req: { statement: string }): boolean {
+export function isPlaceholder(req: { statement: string; placeholder?: unknown }): boolean {
+  if (typeof req.placeholder === 'boolean') return req.placeholder;
   return /^\[RISK\]/u.test(req.statement.trim());
+}
+
+/** Which graph build the list is, against the store the header counts (crew api-types 0.165.0 `page.graphBuild`). */
+export interface GraphBuild {
+  generation: number;
+  coverage: RequirementsCoverage | null;
+  behind: boolean;
+}
+
+/** A page's `graphBuild`, or null when absent or malformed (then the view claims nothing about it). */
+export function graphBuildOf(page: unknown): GraphBuild | null {
+  const g = (page as { graphBuild?: unknown } | null)?.graphBuild as Record<string, unknown> | null | undefined;
+  if (g === null || g === undefined || typeof g !== 'object') return null;
+  if (typeof g['behind'] !== 'boolean' || !isCount(g['generation'])) return null;
+  return { generation: g['generation'], coverage: coverageOf(g), behind: g['behind'] };
+}
+
+/** One sentence when the list does not hold what the header counts; null otherwise. */
+export function graphBuildNote(live: RequirementsCoverage, b: GraphBuild | null): string | null {
+  if (b === null || !b.behind) return null;
+  const next = live.realPct >= live.minPct
+    ? 'build the graph to list them'
+    : `the graph is built at ${live.minPct}% real, or when you lower this repository's minimum at the job's ask`;
+  if (b.coverage === null) {
+    return `This list is a graph built before real requirements were counted. The ${count(live.real)} real requirements mapped now are kept, not listed: ${next}.`;
+  }
+  if (b.coverage.real < live.real) {
+    return `This list is the graph as last built (${count(b.coverage.real)} real). ${count(live.real - b.coverage.real)} real requirements mapped since are kept, not listed: ${next}.`;
+  }
+  return `The repository changed since this graph was built: ${next.replace('list them', 'list what it holds now')}.`;
 }
 
 /** What a placeholder is, said wherever the count shows: unconfirmed, never progress. */

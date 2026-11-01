@@ -18,6 +18,8 @@ import {
   corroborationOf,
   corroborationSentence,
   coverageOf,
+  graphBuildNote,
+  graphBuildOf,
   isPlaceholder,
   PLACEHOLDER_NOTE,
   requirementsNotGenerated,
@@ -426,8 +428,17 @@ function NotGenerated({ repoName, workflow, onGenerate, empty = false, share = n
 function GraphCoverage({ page }: { page: RequirementsPage }): React.ReactElement | null {
   const cov = coverageOf(page);
   if (cov === null) return null;
+  // When the list is an older graph build than the store the header counts, it says so (crew 0.165.0 graphBuild).
+  const behind = graphBuildNote(cov, graphBuildOf(page));
   // Its own row under the title row, at every width: the breakdown is a sentence, not a chip.
-  return <div className="order-last basis-full min-w-0"><RequirementsCoverageSummary coverage={cov} inline /></div>;
+  return (
+    <div className="order-last basis-full min-w-0">
+      <RequirementsCoverageSummary coverage={cov} inline />
+      {behind !== null && (
+        <p data-testid="requirements-graph-behind" className="text-xs mt-1" style={{ color: 'var(--status-warn)' }}>{behind}</p>
+      )}
+    </div>
+  );
 }
 
 /** An item's mark: validated (with its count of independent sources) or unconfirmed. */

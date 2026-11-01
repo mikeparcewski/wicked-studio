@@ -85,3 +85,41 @@ describe('a placeholder in the list (operator 2026-11-01)', () => {
     expect(isPlaceholder({ statement: 'The workspace requires Node.js 22.12.0 or newer.' })).toBe(false);
   });
 });
+
+describe('the list against the header: an older graph build (crew api-types 0.165.0 graphBuild)', () => {
+  // wicked-crew on the rig, 2026-11-01: 61% real, the list a graph built before real requirements were counted
+  const live = { realPct: 61, minPct: 80, behaviorBearing: 5786, real: 3585, placeholders: 2174, unmapped: 27, notProduct: 2380 };
+  it('reads graphBuild, and claims nothing when it is absent or malformed', async () => {
+    const { graphBuildOf } = await import('../src/board/requirementsState.js');
+    expect(graphBuildOf({ graphBuild: { generation: 2, coverage: null, behind: true } })).toEqual({ generation: 2, coverage: null, behind: true });
+    expect(graphBuildOf({})).toBeNull();
+    expect(graphBuildOf({ graphBuild: null })).toBeNull();
+    expect(graphBuildOf({ graphBuild: { generation: 2, behind: 'yes' } })).toBeNull();
+    expect(graphBuildOf({ graphBuild: { generation: -1, coverage: null, behind: true } })).toBeNull();
+  });
+  it('says the three cases in one sentence each, and nothing when the list is current', async () => {
+    const { graphBuildNote } = await import('../src/board/requirementsState.js');
+    expect(graphBuildNote(live, { generation: 2, coverage: null, behind: true })).toBe(
+      'This list is a graph built before real requirements were counted. The 3,585 real requirements mapped now are kept, not listed: '
+      + "the graph is built at 80% real, or when you lower this repository's minimum at the job's ask.");
+    expect(graphBuildNote(live, { generation: 3, coverage: { ...live, real: 1383, realPct: 23 }, behind: true })).toBe(
+      'This list is the graph as last built (1,383 real). 2,202 real requirements mapped since are kept, not listed: '
+      + "the graph is built at 80% real, or when you lower this repository's minimum at the job's ask.");
+    expect(graphBuildNote({ ...live, realPct: 85 }, { generation: 3, coverage: { ...live, realPct: 85 }, behind: true })).toBe(
+      'The repository changed since this graph was built: build the graph to list what it holds now.');
+    expect(graphBuildNote({ ...live, realPct: 85 }, { generation: 3, coverage: null, behind: true })).toBe(
+      'This list is a graph built before real requirements were counted. The 3,585 real requirements mapped now are kept, not listed: build the graph to list them.');
+    expect(graphBuildNote(live, { generation: 2, coverage: live, behind: false })).toBeNull();
+    expect(graphBuildNote(live, null)).toBeNull();
+  });
+});
+
+describe('a placeholder follows the engine when crew says so', () => {
+  it('the item\'s own placeholder flag wins; the risk floor only stands in for a daemon without it', async () => {
+    const { isPlaceholder } = await import('../src/board/requirementsState.js');
+    // a plain rule at confidence 0.7: the engine counts it a placeholder, the statement does not show it
+    expect(isPlaceholder({ statement: 'Raising rigor is refused unless the actor is a human operator.', placeholder: true })).toBe(true);
+    expect(isPlaceholder({ statement: 'Raising rigor is refused unless the actor is a human operator.' })).toBe(false);
+    expect(isPlaceholder({ statement: '[RISK] x: empty statement (model could not state a rule)', placeholder: false })).toBe(false);
+  });
+});

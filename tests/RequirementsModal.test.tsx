@@ -141,6 +141,25 @@ describe('RequirementsModal — coverage label and corroboration (operator rulin
     }
   });
 
+  it('says when the list is an older graph build than the numbers above it, and nothing when it is current', async () => {
+    const live = { realPct: 61, minPct: 80, behaviorBearing: 5786, real: 3585, placeholders: 2174, unmapped: 27, notProduct: 2380 };
+    listRequirements.mockReset().mockResolvedValue({
+      ...page([validated] as unknown as RequirementsPage['items'], 1, 1), coverage: live,
+      graphBuild: { generation: 2, coverage: null, behind: true },
+    });
+    const { unmount } = render(<RequirementsModal repoId="r1" repoName="wicked-crew" onClose={() => {}} />);
+    expect(await screen.findByTestId('requirements-graph-behind')).toHaveTextContent(
+      'This list is a graph built before real requirements were counted. The 3,585 real requirements mapped now are kept, not listed');
+    unmount();
+    listRequirements.mockReset().mockResolvedValue({
+      ...page([validated] as unknown as RequirementsPage['items'], 1, 1), coverage: { ...live, realPct: 100, real: 3, behaviorBearing: 3, placeholders: 0, unmapped: 0 },
+      graphBuild: { generation: 2, coverage: { ...live, realPct: 100, real: 3, behaviorBearing: 3, placeholders: 0, unmapped: 0 }, behind: false },
+    });
+    render(<RequirementsModal repoId="r2" repoName="pi-governance" onClose={() => {}} />);
+    await screen.findByTestId('requirements-coverage');
+    expect(screen.queryByTestId('requirements-graph-behind')).not.toBeInTheDocument();
+  });
+
   it('the range under the list counts the list shown, not the corpus', async () => {
     listRequirements.mockReset().mockResolvedValue({
       ...page([validated] as unknown as RequirementsPage['items'], 7285, 7300),

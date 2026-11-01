@@ -12,8 +12,8 @@
   "studioVersion": "0.13.0",
   "counts": {
     "files": 284,
-    "occurrences": 3938,
-    "static": 3344,
+    "occurrences": 3939,
+    "static": 3345,
     "dynamic": 90,
     "computed": 44
   },
@@ -13136,6 +13136,12 @@
     },
     {
       "testId": "requirements-generate",
+      "files": [
+        "src/components/RequirementsModal.tsx"
+      ]
+    },
+    {
+      "testId": "requirements-graph-behind",
       "files": [
         "src/components/RequirementsModal.tsx"
       ]
