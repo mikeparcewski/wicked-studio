@@ -31,8 +31,8 @@ answer HITL gates, browse projects/evidence/coverage, watch live CoreEvents.
   Removing a testid fails `tests/testidRemovals.test.ts` unless `e2e/testid-successors.json`
   names its successor.
 - `site/` — the marketing site: its own app/deps, excluded from vitest.
-- `wicked-worktrees/` — gitignored checkouts created by governed runs inside
-  this repo; never edit or clean them by hand.
+- `wicked-worktrees/` — checkouts created by governed runs inside this repo (the engine
+  excludes them through `.git/info/exclude`, not `.gitignore`); never edit or clean them by hand.
 
 Ecosystem-wide context and the PR merge protocol: `../CLAUDE.md` at the
 wicked workspace root (when working inside the multi-repo checkout).

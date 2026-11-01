@@ -21,16 +21,23 @@ reasoning in a scrollback you'll never read. wicked-studio flips that:
 - **Start with a chat.** **New job → Start with chat**: describe what you want, the chat proposes a
   plan, and nothing starts until you confirm it. (Tick "Don't show this again" to go straight to
   chat next time.)
-- **Sign your agents in once.** The **Agents** tab signs each agent in, inside a container. Jobs run
+- **Sign your agents in once.** The **Agents** page signs each agent in, inside a container. Jobs run
   every agent in a hardened sandbox (crew needs a container runtime: Rancher Desktop, Docker,
   Podman, Colima or OrbStack). Credentials stay in a broker; the sandbox only ever sees placeholders.
-- **Rules and memory, kept apart.** **Steer** holds your rules, each with an explicit reach
-  (everywhere, one project, or one repo). **Memory** is its own tab: what happened and what you told
-  it, with your own memories applying across projects. Agents suggest both; you approve.
+- **Rules and memory, kept apart.** **Steering** holds your rules, each with an explicit reach
+  (everywhere, one project, or one repo). **Memory** is its own page: what happened and what you told
+  it, with your own memories applying across projects. Agents suggest both; you approve. A finished
+  job says what it learned ("3 learnings proposed · 2 waiting for you"), and each proposal in
+  Memory's queue names the job it came from.
+- **Teach it how you work.** **Learn** (marked "Start here" in the sidebar until you use it) reads
+  your team docs, showcase repos and writing into suggested rules and memories, offers starter
+  rules, sets the orchestrator's **Personality** (tone only; never rigor, gates or checks; one for
+  you, overridable per project) and learns your brand colours. Nothing is kept until you accept it.
 - **Direct, don't babysit.** Launch runs across many repos and projects at once, then let them
   work. Attention comes to *you* when a run hits a gate — you don't sit watching one terminal.
-- **Approve what matters.** Human-in-the-loop gates surface the real decisions (approve, approve
-  with a steer, or reject) — with keyboard batch triage when several pile up.
+- **Approve what matters.** Human-in-the-loop gates surface the real decisions as one guided card:
+  every choice the gate offers, the recommended one marked, and what happens if you take it, then
+  one button and a 10 s undo. Keyboard batch triage helps when several pile up.
 - **"Done" is proven, not claimed — and the gate says how.** By default a run requires a distinct
   evaluator and a judge: review goes to a seat other than the creator's. When no such seat exists, the
   run stops at a gate that says why. You can then sign a second seat in, or relaunch with **reduced
@@ -57,37 +64,71 @@ reasoning in a scrollback you'll never read. wicked-studio flips that:
   transcripts, diffs, and a downloadable evidence bundle. Studio shows you the gate outcomes; it never
   grades the work itself.
 - **Understand the code first.** Onboard a repo and studio builds its graph — then blast-radius
-  for any symbol, hotspots, the domain/requirements view, and a searchable map of what calls what.
+  for any symbol, hotspots, a searchable map of what calls what, and the requirements view. Ask
+  **Understand** a question and it runs a read-only analysis over the repositories you choose, with
+  a cited answer.
 
 ## What you can do
 
 - **Run governed agents on your repos** — register a local path or clone a URL; studio builds the
   code graph, then you launch runs (ask / balanced / autonomous), pick which agent seats join, and
-  bind a repo with optional PR delivery.
+  bind a repo with optional PR delivery. On a crew with **power mode**, it is on for new jobs unless
+  Settings says otherwise (a switch on New job and beside the job's name), and one orchestrator
+  builds the whole change: the job page shows its rigor (with ↑ when it rose since intake), its
+  checkpoints, and, when the change grows past its plan, a pause that offers to split it into lanes,
+  switch to phased, continue at high rigor or stop.
 - **Steer runs live** — the Desk (the one shell) puts what needs you first; every run or chat
-  opens as a **session** (`/s/:id`): one thread with the live record, gate rows you answer in place
-  (approve / steer / reject), elicitation prompts, pre-gate guidance notes, and lifecycle controls
-  (cancel, inject a message, retry). The pre-session addresses (`/runs/:id`, `/work`, `/p/:id/…`,
+  opens as a **session** (`/s/:id`): one thread with the live record, gate cards you answer in place,
+  elicitation prompts, pre-gate guidance notes, and lifecycle controls (cancel, inject a message,
+  retry). While a step works, the thread lists what it is doing (tool calls, edits, the seat's
+  meter) and folds to one summary line when it ends; every message says when it was said. A step
+  that runs long offers **Check on it?**: a seat that is not the step's own reads its record and
+  recommends letting it run, steering or stopping, and acts on none of it. The job's Details panel
+  holds a **Phase report**, one section per phase (a plugin section), and the thread keeps one slim row per
+  update with "Show in Details". The pre-session addresses (`/runs/:id`, `/work`, `/p/:id/…`,
   `/chat/…`) were retired and show the not-found page.
 - **See the evidence** — per-step transcripts, a worktree file + diff viewer, and one-click
   evidence-bundle download for any run.
 - **Explore your codebase** — graph view with focus navigation, blast radius, hotspots, and the
-  domain graph with coverage.
-- **Plan the product** — the **Product** view (rail → Product, `/product?project=<id>`) answers
-  "what are we building" where the Desk answers "what is executing". It lists a project's
-  requirements across every one of its repositories, grouped by repo and searchable; a repo that
-  could not be read is named with the reason. Choose up to 40 requirements and an optional steer,
-  and **Draft epics** launches a governed draft → review → approve run that opens in its session;
-  its plan and gate are answered there. Coverage and the domain model stay on the project page.
-  Publishing the drafted epics is not offered yet.
+  domain graph.
+- **See how much of the code is mapped to requirements** — Repositories → a repo → Requirements
+  heads the list with "80% real requirements · minimum 80%" and its parts (real, placeholders,
+  unmapped, not product code). A placeholder is never counted toward the share and never shows as
+  validated; a real one carries **validated** (with its count of independent sources) or
+  **unconfirmed** with why. When the list is an older graph build than the header's numbers, it says
+  so. A repo with no requirements graph yet offers **Generate it**, which opens New job filled in
+  with the generating workflow. The minimum is a setting (Settings → General → Code graph,
+  default 80%).
+- **Plan the product** — a project's page has a Requirements section (its count across the
+  project's repositories) and a full list at `/projects/:id/requirements`, grouped by repo and
+  searchable. Choose up to 40 requirements and **Draft epics** opens New job on the Draft epics
+  workflow with them. The old Product address (`/product?project=<id>`) opens that project's page
+  at its Requirements section. Publishing the drafted epics is not offered yet.
 - **Ask several seats at once** — a chat can hold more than one warm CLI seat; each answers in the
   thread, and the daemon checks every path, `path:line` and commit a reply cites against the repo.
-- **Govern the work** — author steering rules and policies, browse the decisions ledger, and review
-  what the platform has learned about your repos.
+- **Govern the work** — author steering rules and policies (or import a markdown rule doc; a
+  refused entry shows crew's reason), browse the decisions ledger, and review what the platform has
+  learned about your repos. **Evaluate** runs your rules against example behaviours: it recommends
+  what to run and why, takes your own behaviours (a file, a pasted transcript, or past jobs' steps),
+  and lists every past run with what it caught, what slipped through and its false alarms, plus
+  **Analyze this run**.
+- **Chat with any page** — the icon beside the title of Understand, Report, Nerve Center, Evaluate,
+  Steering, Memory, Learn, Agents, Repositories and Jobs opens that page's own chat, drawn in the page
+  with the page's data. Click a number or chart on Report to ask about it.
+- **Talk to it** — when crew has voice, a mic sits beside Send in every composer (and beside Start on
+  Home); ⌥V opens voice mode from anywhere. Speech is transcribed by crew on your machine
+  (whisper.cpp; the model downloads only when you say so). Ask questions, say "show me this job" for
+  a live tile, or "tell it to …" to steer, stop, raise rigor or answer its decision; every action is
+  confirmed on screen before it is sent, and the thread marks it "You (by voice)". The voice
+  dashboard's widgets can be removed, added and made from any system number.
 - **Work in projects** — group repos, runs, chats, and docs; "See everything" (`/everything`) lists
   them, filterable by project, and a project's address (`/p/:id`) opens its scoped Sessions list;
   deep-linkable
   routes throughout.
+- **Make it yours** — three themes (Wicked Dark, the default; Wicked Light; and **Ambient**, a quiet
+  mood on your chosen ground that follows the work: a tint while jobs run, warm when something needs
+  you, red when something failed). Text is set in Wicked Sans; the plugins page shows every plugin
+  as a card (job-detail sections and editors) with what it may do.
 - **Plus** governed terminals, a Cmd+K command palette, document & video creation modes, and
   desktop notifications when a run needs you.
 
@@ -157,7 +198,7 @@ npm run dev                    # vite on http://127.0.0.1:4200, pointed at :7701
 ```
 
 `npm test` (vitest + testing-library), `npm run typecheck`, `npm run lint`, `npm run build`
-(tsc + vite → `dist/`). CI runs all four on ubuntu / macos / windows for every PR.
+(tsc + vite → `dist/`). CI runs all four on ubuntu for every PR, and the e2e journeys in two shards.
 
 ### Standalone build
 
@@ -174,15 +215,17 @@ uses `VITE_API_HOST` (host:port, no scheme) fixed at build time. The daemon's lo
 any `localhost` / `127.0.0.1` origin, so a standalone studio drives a local daemon out of the box.
 `e2e/studio_standalone_test.py` is the scripted proof of this mode.
 
-### Editor plugins
+### Plugins
 
 Artifact editors are plugins: one self-contained HTML file per editor, run in a sandboxed frame with no network
-and talking to studio's plugin host over one MessagePort (`wicked.editor/1`, `src/editors/`). Settings →
-Developer → Editor plugins lists the editors the daemon serves (built in, or installed by a run). It links each
-one to the **editor test page** (`/editors/dev`), which opens it in the real host over a sample page. **Create an
-editor plugin** puts `/workflow-editor-plugin` in the Desk composer. That workflow scaffolds the editor with the
-`wicked-garden-editor-scaffold` skill, runs its conformance cases, and installs it after a consent gate. It also
-opens a pull request. `/editors/conformance` is the conformance host that `e2e/editor_conformance_test.py` drives
+and talking to studio's plugin host over one MessagePort (the `wicked.editor` envelope, protocols 1 to 3,
+`src/editors/`). A **run plugin** uses the same sandbox on protocol 3: the host sends it the job's events on the
+topics it was granted (`events.batch`), and it draws a section of the job's Details panel; the built-in Phase
+report is one. The **Plugins** page (`/plugins`, under Build & settings) shows every plugin as a card with what
+it hears and may do, and links to the **editor test page** (`/editors/dev`), which opens an editor in the real
+host over a sample page. **Create a plugin** opens New job on the `editor-plugin` workflow. That workflow
+scaffolds the editor with the `wicked-garden-editor-scaffold` skill, runs its conformance cases, and installs it
+after a consent gate. It also opens a pull request. `/editors/conformance` is the conformance host that `e2e/editor_conformance_test.py` drives
 in CI; it has no nav or ⌘K entry.
 
 ### How crew ships this UI
@@ -201,7 +244,7 @@ The repo also carries a `data-testid` selector contract (`testid-inventory.json`
 1. Fork and branch.
 2. `npm install && npm run dev` — SPA on `:4200`, daemon on `:7701`.
 3. `npm test && npm run typecheck && npm run lint` before committing.
-4. Open a PR; CI runs all four gates on ubuntu / macos / windows.
+4. Open a PR; CI runs the four gates and the e2e journeys.
 
 Keep the wire-contract boundary intact: all crew interaction goes through `/api/v1` and `/ws`, never
 a crew-source import — if a type is missing, it lands in `wicked-crew-api-types` first.
