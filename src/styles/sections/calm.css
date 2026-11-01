@@ -24,7 +24,7 @@
 :root:not([data-theme]) .wk-calm { --calm-primary-hover: color-mix(in oklab, var(--accent) 60%, var(--surface-base)); --calm-primary-press: color-mix(in oklab, var(--accent) 50%, var(--surface-base)); }
 [data-theme="light"] .wk-calm { --calm-primary-hover: color-mix(in oklab, var(--accent) 74%, var(--surface-base)); --calm-primary-press: color-mix(in oklab, var(--accent) 64%, var(--surface-base)); }
 .wk-calm { flex: 1 1 auto; min-height: 0; min-width: 0; overflow-y: auto; display: flex; flex-direction: row; align-items: flex-start; justify-content: center; padding: 56px 40px 80px; }
-.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;  top: 0; left: 0; }
 .wk-calm-col { width: 100%; max-width: 840px; display: flex; flex-direction: column; gap: 40px; min-width: 0; }
 
 .wk-calm-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; }
