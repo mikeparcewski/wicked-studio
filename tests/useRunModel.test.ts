@@ -503,3 +503,21 @@ describe('useRunModel — P2 decisions-full events (EVT-001/012/013)', () => {
     expect(model.units[0]?.outputGoverned).toBe(true);
   });
 });
+
+// domain-graph-3 (codex on the studio branch): replaying a loop's earlier page must not leave the next page's
+// units marked done — `stepRepeated` re-arms its range, and the next page's lifecycle moves them again.
+describe('useRunModel — a loop that sends the run back for another pass', () => {
+  it('re-arms the range on stepRepeated, so the replayed earlier page does not mark the new one done', () => {
+    const view = makeView({ status: 'executing', unit_ix: 0 }, [0, 1, 2].map((ord) =>
+      makeUnit({ id: `run-1:u${ord}`, ord, status: ord === 0 ? 'distributed' : 'pending' })));
+    const events: CoreEvent[] = [
+      { type: 'unitDone', session: 'run-1', ord: 0 },
+      { type: 'unitDone', session: 'run-1', ord: 1 },
+      { type: 'unitDone', session: 'run-1', ord: 2 },
+      { type: 'stepRepeated', session: 'run-1', ord: 2, fromOrd: 0, pass: 1, line: 'Mapping x · page 2' },
+      { type: 'unitExecuting', session: 'run-1', ord: 0 },
+    ];
+    const model = mergeRunModel(view, events);
+    expect(model.units.map((u) => u.status)).toEqual(['distributed', 'pending', 'pending']);
+  });
+});

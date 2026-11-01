@@ -10,9 +10,13 @@ const listRequirements = vi.fn();
 const getRequirement = vi.fn();
 const patchRequirement = vi.fn();
 const launchRun = vi.fn();
+const listRuns = vi.fn().mockResolvedValue({ runs: [] });
+const getRunEvents = vi.fn().mockResolvedValue({ events: [] });
 
 vi.mock('../src/api/client.js', () => ({
   api: {
+    listRuns: (...a: unknown[]) => listRuns(...a),
+    getRunEvents: (...a: unknown[]) => getRunEvents(...a),
     listRequirements: (...a: unknown[]) => listRequirements(...a),
     getRequirement: (...a: unknown[]) => getRequirement(...a),
     patchRequirement: (...a: unknown[]) => patchRequirement(...a),
@@ -257,6 +261,83 @@ describe('RequirementsModal', () => {
       render(<RequirementsModal repoId="r1" repoName="wicked-crew" onClose={() => {}} />);
       expect(await screen.findByText(/disk on fire/)).toBeInTheDocument();
       expect(screen.queryByTestId('requirements-not-generated')).not.toBeInTheDocument();
+    });
+
+    // domain-graph-3: the share mapped so far is said in the view, and a job still mapping it leads with its own
+    // progress line (and the launch button gives way to it).
+    it('says how much is mapped so far against the target, and offers to keep mapping', async () => {
+      listRequirements.mockRejectedValue(new ApiError(404, 'No requirements graph yet for this repository', {
+        error: 'No requirements graph yet for this repository', code: 'notGenerated', workflow: 'domain-extraction',
+        coverage: { mappedPct: 3, minPct: 80, behaviorBearing: 8109, mapped: 300, resolved: 99, unmapped: 7809 },
+      }));
+      render(<RequirementsModal repoId="r1" repoName="wicked-crew" onClose={() => {}} />);
+      const share = await screen.findByTestId('requirements-mapped-share');
+      expect(share).toHaveTextContent('3% of behaviours mapped · target 80%');
+      expect(screen.getByRole('button', { name: 'Keep mapping' })).toBeInTheDocument();
+    });
+
+    it('a job mapping it now leads with its progress line and opens from here', async () => {
+      const user = userEvent.setup();
+      const onOpenRun = vi.fn();
+      listRequirements.mockRejectedValue(notGenerated);
+      // the daemon lists actionable runs first: the newest live job is chosen by when it started, whatever its status
+      listRuns.mockResolvedValueOnce({ runs: [
+        { session: { id: 'older-live', repo_ref: 'r1', workflow_id: 'domain-extraction', status: 'awaiting_human', created_at: 5 }, units: [] },
+        { session: { id: 'old', repo_ref: 'r1', workflow_id: 'domain-extraction', status: 'cancelled', created_at: 9 }, units: [] },
+        { session: { id: 'job-1', repo_ref: 'r1', workflow_id: 'domain-extraction', status: 'distributing', created_at: 7 }, units: [] },
+        { session: { id: 'other', repo_ref: 'r2', workflow_id: 'domain-extraction', status: 'executing', created_at: 8 }, units: [] },
+      ] });
+      getRunEvents.mockResolvedValueOnce({ events: [
+        { type: 'stepRepeated', session: 'job-1', ord: 11, fromOrd: 7, pass: 3, line: 'Mapping wicked-crew · 3% → 9% → 15% → 21% · target 80% · page 4 · about 3 h left' },
+      ] });
+      render(<RequirementsModal repoId="r1" repoName="wicked-crew" onClose={() => {}} onOpenRun={onOpenRun} />);
+      const job = await screen.findByTestId('requirements-mapping-job');
+      expect(job).toHaveTextContent('Mapping wicked-crew · 3% → 9% → 15% → 21% · target 80% · page 4 · about 3 h left');
+      expect(getRunEvents).toHaveBeenCalledWith('job-1', ['stepRepeated', 'awaitingHuman', 'resumed', 'unitExecuting']);
+      expect(screen.queryByRole('button', { name: /Generate it|Keep mapping/ })).not.toBeInTheDocument();
+      await user.click(screen.getByTestId('requirements-open-mapping-job'));
+      expect(onOpenRun).toHaveBeenCalledWith('job-1');
+    });
+
+    it('with no job seen mapping, the view reads the requirements once and stands', async () => {
+      listRequirements.mockReset();
+      listRequirements.mockRejectedValueOnce(notGenerated); // the read just before the job built the graph
+      listRequirements.mockResolvedValue(page([row]));
+      listRuns.mockResolvedValueOnce({ runs: [] }); // …and the job list read just after it ended
+      render(<RequirementsModal repoId="r1" repoName="wicked-crew" onClose={() => {}} />);
+      expect(await screen.findByTestId('requirements-not-generated')).toBeInTheDocument();
+      // no job was seen mapping, so nothing more is read: the panel stands
+      await waitFor(() => expect(listRuns).toHaveBeenCalled());
+      expect(listRequirements).toHaveBeenCalledTimes(1);
+    });
+
+    it('a watched job that ends triggers one more read, and the graph shows', async () => {
+      listRequirements.mockReset();
+      listRequirements.mockRejectedValueOnce(notGenerated).mockRejectedValueOnce(notGenerated);
+      listRequirements.mockResolvedValue(page([row]));
+      listRuns
+        .mockResolvedValueOnce({ runs: [{ session: { id: 'job-1', repo_ref: 'r1', workflow_id: 'domain-extraction', status: 'executing', created_at: 1 }, units: [] }] })
+        .mockResolvedValueOnce({ runs: [{ session: { id: 'job-1', repo_ref: 'r1', workflow_id: 'domain-extraction', status: 'completed', created_at: 1 }, units: [] }] });
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      try {
+        render(<RequirementsModal repoId="r1" repoName="wicked-crew" onClose={() => {}} />);
+        expect(await screen.findByTestId('requirements-mapping-job')).toBeInTheDocument();
+        await vi.advanceTimersByTimeAsync(30_000); // the half-minute refresh: still no graph, the job has ended
+        expect(await screen.findByText('Totals include tax')).toBeInTheDocument();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('a job list that cannot be read is said, with a way to check again, and does not hide the launch', async () => {
+      const user = userEvent.setup();
+      listRequirements.mockRejectedValue(notGenerated);
+      listRuns.mockRejectedValueOnce(new Error('daemon away'));
+      render(<RequirementsModal repoId="r1" repoName="wicked-crew" onClose={() => {}} />);
+      expect(await screen.findByTestId('requirements-mapping-unknown')).toHaveTextContent('Could not check whether a job is mapping wicked-crew now.');
+      expect(screen.getByRole('button', { name: 'Generate it' })).toBeInTheDocument();
+      await user.click(screen.getByTestId('requirements-mapping-retry'));
+      await waitFor(() => expect(screen.queryByTestId('requirements-mapping-unknown')).not.toBeInTheDocument());
     });
 
     it('Generate it opens New job filled in for this repository and starts nothing itself', async () => {

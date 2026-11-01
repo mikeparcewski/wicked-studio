@@ -12,8 +12,8 @@
   "studioVersion": "0.13.0",
   "counts": {
     "files": 283,
-    "occurrences": 3914,
-    "static": 3326,
+    "occurrences": 3920,
+    "static": 3332,
     "dynamic": 87,
     "computed": 44
   },
@@ -13087,6 +13087,30 @@
       ]
     },
     {
+      "testId": "requirements-mapped-share",
+      "files": [
+        "src/components/RequirementsModal.tsx"
+      ]
+    },
+    {
+      "testId": "requirements-mapping-job",
+      "files": [
+        "src/components/RequirementsModal.tsx"
+      ]
+    },
+    {
+      "testId": "requirements-mapping-retry",
+      "files": [
+        "src/components/RequirementsModal.tsx"
+      ]
+    },
+    {
+      "testId": "requirements-mapping-unknown",
+      "files": [
+        "src/components/RequirementsModal.tsx"
+      ]
+    },
+    {
       "testId": "requirements-next",
       "files": [
         "src/components/product/RequirementsBrowser.tsx"
@@ -13094,6 +13118,12 @@
     },
     {
       "testId": "requirements-not-generated",
+      "files": [
+        "src/components/RequirementsModal.tsx"
+      ]
+    },
+    {
+      "testId": "requirements-open-mapping-job",
       "files": [
         "src/components/RequirementsModal.tsx"
       ]
@@ -15017,6 +15047,12 @@
       "testId": "session-passage-unreadable",
       "files": [
         "src/components/session/SourceChips.tsx"
+      ]
+    },
+    {
+      "testId": "session-progress-line",
+      "files": [
+        "src/components/session/SessionView.tsx"
       ]
     },
     {

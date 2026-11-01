@@ -81,6 +81,7 @@ import { useElicitationStore } from '../../store/elicitations.js';
 import { useSystemStore } from '../../store/systemSnapshot.js';
 import { askingResponder, builderResponder, seatResponder } from '../../board/responder.js';
 import { useRunEventStore } from '../../store/events.js';
+import { headlineProgress } from '../../board/repeatProgress.js';
 import { plainGateQuestion } from '../../board/deskWords.js';
 import { needTone } from '../../board/needTone.js';
 
@@ -442,6 +443,10 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
   // opens for it — the dock holds its decision, the header says Waiting, and no "working" line runs under it.
   const powerCap = useCapabilities((s) => s.powerMode);
   const eventsByRun = useRunEventStore((s) => s.byRun);
+  // domain-graph-3: a job that keeps going (page after page) says where it got to in its headline — the step's own
+  // line, "Mapping wicked-crew · 3% → 12% → 19% · target 80% · page 4 · about 2 h left" — not only in its details.
+  // Only a run still going says it, the newest first (a finished one's badge says it ended).
+  const progressLine = useMemo(() => headlineProgress(mine, eventsByRun), [mine, eventsByRun]);
   const pauses = useMemo(() => {
     const out = new Map<string, { at: number; who: string | null }>();
     if (!powerCap) return out;
@@ -1028,6 +1033,9 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
           </span>
         )}
       </header>
+      {/* domain-graph-3: a job that keeps going says where it got to, on its own line under the header (the header row
+          stays one line at desk widths). */}
+      {progressLine !== null && <p data-testid="session-progress-line" className="wk-session-progress wk-measure wk-measure--thread">{progressLine}</p>}
       {/* Operator 2026-10-18: what waits on you is a banner below the header, in the page's flow (the thread reflows). */}
       {/* What the dock already holds is not said again above the thread. */}
       {ready && <NeedsBanner items={waiting.filter((w) => !dockItems.some((d) => d.key === w.runId))} onJump={jumpToItem} />}

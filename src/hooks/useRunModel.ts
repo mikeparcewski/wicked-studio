@@ -373,6 +373,13 @@ export function mergeRunModel(snapshot: SessionView, events: readonly CoreEvent[
       case 'unitDone':
         if (ord !== undefined) ensureUnit(ord).status = 'done';
         break;
+      // domain-graph-3: a loop step sent the run back for another pass — every unit from `fromOrd` through `ord`
+      // runs again, so the previous pass's `unitDone`s no longer stand.
+      case 'stepRepeated':
+        if (ord !== undefined && typeof ev.fromOrd === 'number') {
+          for (let o = ev.fromOrd; o <= ord; o++) ensureUnit(o).status = o === ev.fromOrd ? 'distributed' : 'pending';
+        }
+        break;
       case 'unitDenied':
         if (ord !== undefined) ensureUnit(ord).status = 'rejected';
         break;

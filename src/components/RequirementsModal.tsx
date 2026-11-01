@@ -23,6 +23,7 @@ import {
   requirementsNotGenerated,
 } from '../board/requirementsState.js';
 import { workflowLabel } from '../board/workflowNames.js';
+import { isLiveStatus, mappedShareLine, repeatLineOf, type MappedShare } from '../board/repeatProgress.js';
 
 const T = {
   canvas: 'var(--surface-base)',
@@ -48,9 +49,39 @@ interface Props {
   onClose: () => void;
   /** Navigate to a component symbol in the code graph (requirement → code). */
   onNavigateComponent?: (symbol: string) => void;
+  /** Open a job's page (the domain-extraction job mapping this repository). */
+  onOpenRun?: (runId: string) => void;
 }
 
-export function RequirementsModal({ repoId, repoName, onClose, onNavigateComponent }: Props): React.ReactElement {
+/** A domain-extraction job mapping the repository, as the requirements view knows it: `undefined` while it is being
+ *  looked up, `null` when none is going, `'unknown'` when the daemon could not say. */
+type MappingJob = { runId: string; line: string | null } | null | 'unknown' | undefined;
+
+/** How often the view re-reads the share and the job while a job is mapping (a page takes minutes). */
+const MAPPING_REFRESH_MS = 30_000;
+
+/** The newest domain-extraction job for `repoId` that is still going, with its progress line (null before its first
+ *  page finished); `null` when none is; `'unknown'` when the job list could not be read. */
+async function liveMappingJob(repoId: string): Promise<MappingJob> {
+  let runs: Awaited<ReturnType<typeof api.listRuns>>['runs'];
+  try {
+    ({ runs } = await api.listRuns());
+  } catch {
+    return 'unknown';
+  }
+  const live = runs
+    .filter((v) => v.session.repo_ref === repoId
+      && (v.session as { workflow_id?: unknown }).workflow_id === DOMAIN_EXTRACTION_ID
+      && isLiveStatus(v.session.status))
+    .sort((a, b) => (b.session.created_at ?? 0) - (a.session.created_at ?? 0));
+  const run = live[0];
+  if (run === undefined) return null;
+  const { events } = await api.getRunEvents(run.session.id, ['stepRepeated', 'awaitingHuman', 'resumed', 'unitExecuting'])
+    .catch(() => ({ events: [] }));
+  return { runId: run.session.id, line: repeatLineOf(events) };
+}
+
+export function RequirementsModal({ repoId, repoName, onClose, onNavigateComponent, onOpenRun }: Props): React.ReactElement {
   const [query, setQuery] = useState('');
   const [risk, setRisk] = useState<'all' | 'risk' | 'no-risk'>('all');
   // Functional by default: statements extracted from lockfiles/manifests/data fixtures
@@ -61,7 +92,22 @@ export function RequirementsModal({ repoId, repoName, onClose, onNavigateCompone
   const [loadError, setLoadError] = useState<string | null>(null);
   // Lane repo-page: no requirements graph yet is a state with its own panel, never a red refusal.
   // Holds the workflow that generates it (crew's typed 404 names it).
-  const [notGenerated, setNotGenerated] = useState<{ workflow: string } | null>(null);
+  const [notGenerated, setNotGenerated] = useState<{ workflow: string; share: MappedShare | null } | null>(null);
+  // domain-graph-3: a domain-extraction job for this repository that is still going, and its own progress line.
+  // `undefined` while it is being looked up: the launch button waits for the answer, so it never flashes up beside a
+  // job that is already mapping.
+  const [mapping, setMapping] = useState<MappingJob>(undefined);
+  const [mappingAsk, setMappingAsk] = useState(0);
+  useEffect(() => { setMapping(undefined); }, [repoId]);
+  useEffect(() => {
+    if (notGenerated === null) {
+      setMapping(undefined);
+      return;
+    }
+    let live = true;
+    void liveMappingJob(repoId).then((m) => { if (live) setMapping(m); });
+    return () => { live = false; };
+  }, [notGenerated, repoId, mappingAsk]);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -86,6 +132,22 @@ export function RequirementsModal({ repoId, repoName, onClose, onNavigateCompone
     },
     [repoId],
   );
+
+  // domain-graph-3: while a job is mapping, the share, the job's line and a graph it builds are read again every
+  // half minute (the view never shows an opening snapshot as live).
+  const mappingLive = mapping !== null && mapping !== undefined && mapping !== 'unknown';
+  useEffect(() => {
+    if (!mappingLive) return;
+    const t = setInterval(() => fetchPage(query, risk, category, offset), MAPPING_REFRESH_MS);
+    return () => clearInterval(t);
+  }, [mappingLive, fetchPage, query, risk, category, offset]);
+  // …and once more when the job it watched ends (codex r2 on the branch): the read that saw no graph may have come just
+  // before the job built it, and the view must not keep saying there is none.
+  const wasMapping = useRef(false);
+  useEffect(() => {
+    if (wasMapping.current && mapping === null) fetchPage(query, risk, category, offset);
+    wasMapping.current = mappingLive;
+  }, [mapping, mappingLive, fetchPage, query, risk, category, offset]);
 
   // One debounced (250ms) server fetch covers search, filter, and pagination changes.
   useEffect(() => {
@@ -230,7 +292,7 @@ export function RequirementsModal({ repoId, repoName, onClose, onNavigateCompone
         <div className="flex-1 flex overflow-hidden">
           <div className="flex-1 overflow-y-auto">
             {notGenerated !== null ? (
-              <NotGenerated repoName={repoName} workflow={notGenerated.workflow} onGenerate={generate} />
+              <NotGenerated repoName={repoName} workflow={notGenerated.workflow} onGenerate={generate} share={notGenerated.share} mapping={mapping} onOpenRun={onOpenRun} onRetryMapping={() => setMappingAsk((n) => n + 1)} />
             ) : loadError !== null ? (
               <p className="text-[12px] font-mono p-6" style={{ color: T.deny }}>{loadError}</p>
             ) : page === null ? (
@@ -302,30 +364,62 @@ export function RequirementsModal({ repoId, repoName, onClose, onNavigateCompone
  * No requirements to show yet, said plainly with what this view would show and how to get it
  * (lane repo-page). `empty`: a graph was generated but holds no requirements (FINDING-065).
  */
-function NotGenerated({ repoName, workflow, onGenerate, empty = false }: {
+function NotGenerated({ repoName, workflow, onGenerate, empty = false, share = null, mapping, onOpenRun, onRetryMapping }: {
   repoName: string;
   workflow: string;
   onGenerate: (workflow: string) => void;
   empty?: boolean;
+  /** domain-graph-3: how much is mapped so far against the target (crew's notGenerated answer). */
+  share?: MappedShare | null;
+  /** domain-graph-3: the domain-extraction job mapping it now and its own progress line (`undefined` while looked
+   *  up, `'unknown'` when the daemon could not say). */
+  mapping?: MappingJob;
+  onOpenRun?: ((runId: string) => void) | undefined;
+  onRetryMapping?: (() => void) | undefined;
 }): React.ReactElement {
   return (
     <div data-testid="requirements-not-generated" data-state={empty ? 'empty' : 'not-generated'} className="wk-req-none">
       <h3 className="wk-req-none-title">
         {empty ? 'No requirements have been extracted for this repository' : 'No requirements graph yet for this repository'}
       </h3>
+      {share !== null && share.mapped > 0 && (
+        <p data-testid="requirements-mapped-share" data-mapped-pct={share.mappedPct} className="wk-req-none-share">
+          {mappedShareLine(share)}
+          <span style={{ color: T.muted }}> · the graph is built once the target is reached; what is mapped is kept</span>
+        </p>
+      )}
+      {mapping === 'unknown' && (
+        <p data-testid="requirements-mapping-unknown" className="wk-req-none-share">
+          Could not check whether a job is mapping {repoName} now.
+          {onRetryMapping !== undefined && (
+            <>{' '}<button type="button" data-testid="requirements-mapping-retry" className="wk-link" onClick={onRetryMapping}>Check again</button></>
+          )}
+        </p>
+      )}
+      {mapping !== null && mapping !== undefined && mapping !== 'unknown' && (
+        <p data-testid="requirements-mapping-job" className="wk-req-none-share">
+          {mapping.line ?? `A job is mapping ${repoName} now.`}
+          {onOpenRun !== undefined && (
+            <>{' '}<button type="button" data-testid="requirements-open-mapping-job" className="wk-link" onClick={() => onOpenRun(mapping.runId)}>Open the job</button></>
+          )}
+        </p>
+      )}
       <p className="wk-req-none-body">
         Once it is generated, this lists what {repoName} does as requirements, grouped by business domain: each one with
         the code that implements it, its business rules, and whether it carries risk. You can search, filter and edit
         them here.
       </p>
-      <div className="wk-req-none-actions">
-        <button type="button" data-testid="requirements-generate" className="wk-btn wk-btn--primary" onClick={() => onGenerate(workflow)}>
-          Generate it
-        </button>
-        <span className="wk-field-note">
-          Opens a new {workflowLabel(workflow)} job for this repository, filled in. Nothing starts until you launch it.
-        </span>
-      </div>
+      {(mapping === null || mapping === 'unknown' || empty) && (
+        <div className="wk-req-none-actions">
+          <button type="button" data-testid="requirements-generate" className="wk-btn wk-btn--primary" onClick={() => onGenerate(workflow)}>
+            {share !== null && share.mapped > 0 ? 'Keep mapping' : 'Generate it'}
+          </button>
+          <span className="wk-field-note">
+            Opens a new {workflowLabel(workflow)} job for this repository, filled in. It maps page after page until the
+            target, and asks before it spends more. Nothing starts until you launch it.
+          </span>
+        </div>
+      )}
     </div>
   );
 }

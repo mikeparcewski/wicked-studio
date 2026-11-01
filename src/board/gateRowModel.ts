@@ -35,6 +35,7 @@ import {
 } from '../components/gateVerdictModel.js';
 import type { ReassignCandidate, RunBench } from '../components/gateVerdictModel.js';
 import type { GateAnswer } from './gateActions.js';
+import { repeatChoicesOf, repeatLineOf, REPEAT_QUESTION } from './repeatProgress.js';
 import type { RerunOffer } from '../components/rerunModel.js';
 import { qeGateOf, QE_RETRY_LABEL, QE_RETRY_NOTE_LABEL, QE_RETRY_NOTE_TITLE, QE_RETRY_TITLE, type QeGate } from './qeEscalation.js';
 import { waitsForJudge } from './assuranceModel.js';
@@ -561,6 +562,16 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
   // consent and runs the phase; Decline cancels the run without running it. Never preselected —
   // consent is the operator's decision every time.
   const kind = gate.gateKind ?? (events === null ? undefined : gateFrameFor(events, gate.ord)?.gateKind ?? undefined);
+  // domain-graph-3: a job that keeps going (a domain-extraction run mapping page after page) asks when its budget
+  // is spent: the step's own choices (map more, lower the target for the repository) and Stop. Its line says where
+  // it got to; nothing is preselected.
+  if (kind === 'repeat') {
+    const choices = repeatChoicesOf(gate, events);
+    if (choices !== null) {
+      const line = repeatLineOf(events);
+      return { reason: 'choices', question: REPEAT_QUESTION, choices: choices.slice(0, 4), overflow: choices.slice(4), noteDefault: '', recommended: null, detailItems: [line ?? shownPrompt(gate.prompt)] };
+    }
+  }
   if (kind === 'consent') {
     // core#820: the engine's install choices, each with its file list; the default is marked, and
     // nothing is preselected.
