@@ -36,11 +36,13 @@ export function PersonaTab({ navigate, project }: { navigate: Navigate; project:
     setError(null);
     const at = writes.current;
     getPersonas().then(
-      (d) => { if (writes.current === at) setData(d); },
+      // A write landed meanwhile: this answer is older than it, so it is not used, and the read is made again (it may
+      // be the one that tells another scope's inherited personality; codex r5 on #937).
+      (d) => { if (writes.current === at) setData(d); else load(); },
       (e: unknown) => { if (writes.current !== at) return; if (isLearnRouteAbsent(e)) setAbsent(true); else setError(e); },
     );
   };
-  useEffect(load, []);
+  useEffect(() => { load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps -- the first read, once
   useEffect(() => { getSetupKnown().then((k) => setPerson(k.git?.name ?? null), () => setPerson(null)); }, []);
 
   const saved = data === null ? null : project !== null ? data.projects[project] ?? null : data.user;

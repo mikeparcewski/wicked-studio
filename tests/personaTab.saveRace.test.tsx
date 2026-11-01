@@ -159,4 +159,27 @@ describe('PersonaTab save', () => {
     rerender(<PersonaTab navigate={() => {}} project={null} />);
     await waitFor(() => expect(nameBox().value).toBe('Grace'));
   });
+
+  it('a save in ANOTHER project while a removal\u2019s read is out: the read is made again, and both show (codex r5)', async () => {
+    getPersonas.mockResolvedValueOnce(response('Ada', 1, { a: saved('Alpha bot', 3), b: saved('Bob', 4) }));
+    removePersonaOverride.mockResolvedValue({ removed: true });
+    let first!: (v: unknown) => void;
+    const { rerender } = render(<PersonaTab navigate={() => {}} project="a" />);
+    await waitFor(() => expect(nameBox().value).toBe('Alpha bot'));
+    getPersonas.mockReturnValueOnce(new Promise((r) => { first = r; }));
+    fireEvent.click(screen.getByTestId('persona-remove-override'));
+    await waitFor(() => expect(nameBox().value).toBe('Ada'));
+    rerender(<PersonaTab navigate={() => {}} project="b" />);
+    await waitFor(() => expect(nameBox().value).toBe('Bob'));
+    putPersona.mockResolvedValue({ scope: 'project:b', persona: saved('Bobby', 5), voice: 'v' });
+    fireEvent.change(nameBox(), { target: { value: 'Bobby' } });
+    fireEvent.click(saveButton());
+    await waitFor(() => expect(screen.getByText(/Saved as version 5/)).toBeTruthy());
+    // the removal's read lands late (older than B's save): it is read again, and the daemon now says Grace and Bobby
+    getPersonas.mockResolvedValueOnce(response('Grace', 2, { b: saved('Bobby', 5) }));
+    await act(async () => { first(response('Grace', 2, { b: saved('Bob', 4) })); });
+    expect(nameBox().value).toBe('Bobby');
+    rerender(<PersonaTab navigate={() => {}} project="a" />);
+    await waitFor(() => expect(nameBox().value).toBe('Grace'));
+  });
 });
