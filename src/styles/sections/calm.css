@@ -12,7 +12,7 @@
   --calm-hover-ctl: color-mix(in oklab, var(--calm-tint) 20%, transparent);
   --calm-press-ctl: color-mix(in oklab, var(--calm-tint) 28%, transparent);
   --calm-hover-edge: color-mix(in oklab, var(--calm-tint) 60%, transparent);
-  --calm-primary-hover: color-mix(in oklab, var(--accent) 58%, var(--ink-high));
+  --calm-primary-hover: var(--primary-hover);
   --calm-primary-press: color-mix(in oklab, var(--accent) 46%, var(--ink-high));
   /* Link words: the accent pulled toward the ink, so they read at AA on every theme's ground (the classic dark accent alone is ~2:1). */
   --calm-link: color-mix(in oklab, var(--accent) 50%, var(--ink-high));

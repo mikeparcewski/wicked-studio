@@ -87,6 +87,10 @@
   --mood-run: #8fbac4;
   --nc-ok-bg: #1a1a1a; --nc-ok-fg: #ededea; --nc-ok-edge: #2e2e2e;
   --nc-ok-hover: #262625; --nc-ok-press: #262625;
+  /* The primary button's hover, a visible step off the accent with its words still AA (operator 2026-11-01: New job
+     barely moved in Wicked Dark, where the package's accent-hover #ffffff is 0.055 off #ededea). Dark steps DOWN to
+     the package's accent-dim (dE 0.092, words 11.8:1); light uses its accent-hover (dE 0.107, words 12.3:1). */
+  --primary-hover: #cfcfca;
   --font-sans: 'Wicked Sans', 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --text-md: var(--text-body);                 /* body copy: the scale's body (tokens.css) */
   --radius-sm: 6px; --radius-md: 6px; --radius-lg: 8px; --radius-xl: 12px;
@@ -99,4 +103,5 @@
   --accent-hover:  hsl(var(--_accent-h) var(--_accent-s) calc(var(--_accent-l) + 46%));
   --accent-fg:     hsl(var(--_accent-h) 30% clamp(8%, calc((18% - var(--_accent-l)) * 100), 98%));
   --accent-wash:   color-mix(in oklab, var(--accent) 12%, transparent);
+  --primary-hover: color-mix(in oklab, var(--accent) 60%, hsl(from var(--accent-fg) h 0% calc(100 - l)));
 }

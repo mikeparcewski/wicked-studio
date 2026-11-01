@@ -77,6 +77,9 @@
      lightness clamps to one end or the other around 58%, so a customized accent stays legible. */
   --accent-fg:     hsl(var(--_accent-h) 30% clamp(8%, calc((58% - var(--_accent-l)) * 100), 98%));
   --accent-hover:  hsl(var(--_accent-h) var(--_accent-s) calc(var(--_accent-l) + 5%));
+  /* A primary button's hover: a step AWAY from its own words (darker under light words, lighter under dark ones), so
+     the words keep their contrast. The wicked themes set it to a design-package token (gen-wicked-themes.mjs). */
+  --primary-hover: color-mix(in oklab, var(--accent) 60%, hsl(from var(--accent-fg) h 0% calc(100 - l)));
   --accent-wash:   color-mix(in oklab, var(--accent) 12%, transparent);   /* selected / tinted fills */
 
   /* Signal yellow, the spark (DESIGN-simple §1a): a small mark only, never text or a fill — the

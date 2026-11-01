@@ -88,13 +88,20 @@ describe('RequirementsModal — coverage label and corroboration (operator rulin
   it('labels the graph with its coverage and counts, and marks each item', async () => {
     listRequirements.mockReset().mockResolvedValue({
       ...page([validated, unconfirmed] as unknown as RequirementsPage['items'], 2, 2),
-      coverage: { mappedPct: 82, minPct: 80, behaviorBearing: 100, mapped: 82, resolved: 70, unmapped: 18 },
+      coverage: { realPct: 54, minPct: 80, behaviorBearing: 5786, real: 3182, placeholders: 2577, unmapped: 27, notProduct: 2380 },
       corroboration: { validated: 1, unconfirmed: 1 },
     });
     render(<RequirementsModal repoId="r1" repoName="repo" onClose={() => {}} />);
     const label = await screen.findByTestId('requirements-coverage');
-    expect(label).toHaveTextContent('82% of behaviours mapped · minimum 80%');
-    expect(label).toHaveAttribute('title', expect.stringContaining('18 not mapped yet'));
+    expect(label).toHaveAttribute('data-real-pct', '54');
+    expect(screen.getByTestId('requirements-coverage-headline')).toHaveTextContent('54% real requirements · minimum 80%');
+    expect(screen.getByTestId('requirements-coverage-breakdown')).toHaveTextContent(
+      '3,182 real · 2,577 placeholders (unconfirmed) · 27 unmapped · 2,380 not product code');
+    // placeholders are marked unconfirmed, never counted as progress
+    const ph = label.querySelector('[data-part="placeholders"]')!;
+    expect(ph).toHaveAttribute('data-unconfirmed', 'true');
+    expect(ph).toHaveAttribute('title', expect.stringContaining('do not count toward the share'));
+    expect(label).not.toHaveTextContent(/\bmapped\b/);
     expect(screen.getByTestId('requirements-corroboration-counts')).toHaveTextContent('1 validated · 1 unconfirmed');
     const marks = screen.getAllByTestId('requirement-corroboration');
     expect(marks.map((m) => [m.dataset['status'], m.textContent])).toEqual([
@@ -263,16 +270,21 @@ describe('RequirementsModal', () => {
       expect(screen.queryByTestId('requirements-not-generated')).not.toBeInTheDocument();
     });
 
-    // domain-graph-3: the share mapped so far is said in the view, and a job still mapping it leads with its own
+    // domain-graph-3: the real share so far is said in the view, and a job still mapping it leads with its own
     // progress line (and the launch button gives way to it).
-    it('says how much is mapped so far against the target, and offers to keep mapping', async () => {
+    it('says the real share so far against the minimum, and offers to keep mapping', async () => {
       listRequirements.mockRejectedValue(new ApiError(404, 'No requirements graph yet for this repository', {
         error: 'No requirements graph yet for this repository', code: 'notGenerated', workflow: 'domain-extraction',
-        coverage: { mappedPct: 3, minPct: 80, behaviorBearing: 8109, mapped: 300, resolved: 99, unmapped: 7809 },
+        coverage: { realPct: 3, minPct: 80, behaviorBearing: 8109, real: 300, placeholders: 7700, unmapped: 109, notProduct: 40 },
       }));
       render(<RequirementsModal repoId="r1" repoName="wicked-crew" onClose={() => {}} />);
-      const share = await screen.findByTestId('requirements-mapped-share');
-      expect(share).toHaveTextContent('3% of behaviours mapped · target 80%');
+      const share = await screen.findByTestId('requirements-real-share');
+      expect(screen.getByTestId('requirements-real-share-headline')).toHaveTextContent(
+        '3% real requirements · minimum 80% · the graph is built once the minimum is reached; the real requirements found so far are kept');
+      expect(screen.getByTestId('requirements-real-share-breakdown')).toHaveTextContent('300 real · 7,700 placeholders (unconfirmed) · 109 unmapped · 40 not product code');
+      // the bar fills the real share only, with the minimum ticked
+      expect(share.querySelector<HTMLElement>('.wk-reqcov-fill')!.style.width).toBe('3%');
+      expect(share.querySelector<HTMLElement>('.wk-reqcov-min')!.style.left).toBe('80%');
       expect(screen.getByRole('button', { name: 'Keep mapping' })).toBeInTheDocument();
     });
 

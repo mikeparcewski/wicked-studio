@@ -18,12 +18,13 @@ import {
   corroborationCounts,
   corroborationOf,
   corroborationSentence,
-  coverageLabel,
   coverageOf,
   requirementsNotGenerated,
+  type RequirementsCoverage,
 } from '../board/requirementsState.js';
 import { workflowLabel } from '../board/workflowNames.js';
-import { isLiveStatus, mappedShareLine, repeatLineOf, type MappedShare } from '../board/repeatProgress.js';
+import { isLiveStatus, repeatLineOf } from '../board/repeatProgress.js';
+import { RequirementsCoverageSummary } from './RequirementsCoverageSummary.js';
 
 const T = {
   canvas: 'var(--surface-base)',
@@ -92,7 +93,7 @@ export function RequirementsModal({ repoId, repoName, onClose, onNavigateCompone
   const [loadError, setLoadError] = useState<string | null>(null);
   // Lane repo-page: no requirements graph yet is a state with its own panel, never a red refusal.
   // Holds the workflow that generates it (crew's typed 404 names it).
-  const [notGenerated, setNotGenerated] = useState<{ workflow: string; share: MappedShare | null } | null>(null);
+  const [notGenerated, setNotGenerated] = useState<{ workflow: string; share: RequirementsCoverage | null } | null>(null);
   // domain-graph-3: a domain-extraction job for this repository that is still going, and its own progress line.
   // `undefined` while it is being looked up: the launch button waits for the answer, so it never flashes up beside a
   // job that is already mapping.
@@ -216,7 +217,7 @@ export function RequirementsModal({ repoId, repoName, onClose, onNavigateCompone
             requirements
           </span>
           {page !== null && (
-            <span className="font-mono text-xs" style={{ color: T.faint }}>
+            <span className="text-xs tabular-nums" style={{ color: T.faint }}>
               {page.total === page.corpus
                 ? `${page.corpus} total`
                 : `${page.total} matching · ${page.corpus} total`}
@@ -369,8 +370,8 @@ function NotGenerated({ repoName, workflow, onGenerate, empty = false, share = n
   workflow: string;
   onGenerate: (workflow: string) => void;
   empty?: boolean;
-  /** domain-graph-3: how much is mapped so far against the target (crew's notGenerated answer). */
-  share?: MappedShare | null;
+  /** The real share so far against the minimum (crew's notGenerated answer, api-types 0.164.0). */
+  share?: RequirementsCoverage | null;
   /** domain-graph-3: the domain-extraction job mapping it now and its own progress line (`undefined` while looked
    *  up, `'unknown'` when the daemon could not say). */
   mapping?: MappingJob;
@@ -382,11 +383,13 @@ function NotGenerated({ repoName, workflow, onGenerate, empty = false, share = n
       <h3 className="wk-req-none-title">
         {empty ? 'No requirements have been extracted for this repository' : 'No requirements graph yet for this repository'}
       </h3>
-      {share !== null && share.mapped > 0 && (
-        <p data-testid="requirements-mapped-share" data-mapped-pct={share.mappedPct} className="wk-req-none-share">
-          {mappedShareLine(share)}
-          <span style={{ color: T.muted }}> · the graph is built once the target is reached; what is mapped is kept</span>
-        </p>
+      {share !== null && share.behaviorBearing > 0 && (
+        <RequirementsCoverageSummary
+          coverage={share}
+          testId="requirements-real-share"
+          bar
+          note="the graph is built once the minimum is reached; the real requirements found so far are kept"
+        />
       )}
       {mapping === 'unknown' && (
         <p data-testid="requirements-mapping-unknown" className="wk-req-none-share">
@@ -412,7 +415,7 @@ function NotGenerated({ repoName, workflow, onGenerate, empty = false, share = n
       {(mapping === null || mapping === 'unknown' || empty) && (
         <div className="wk-req-none-actions">
           <button type="button" data-testid="requirements-generate" className="wk-btn wk-btn--primary" onClick={() => onGenerate(workflow)}>
-            {share !== null && share.mapped > 0 ? 'Keep mapping' : 'Generate it'}
+            {share !== null && share.real > 0 ? 'Keep mapping' : 'Generate it'}
           </button>
           <span className="wk-field-note">
             Opens a new {workflowLabel(workflow)} job for this repository, filled in. It maps page after page until the
@@ -425,36 +428,25 @@ function NotGenerated({ repoName, workflow, onGenerate, empty = false, share = n
 }
 
 /**
- * The graph's coverage label and how its items are corroborated (operator ruling 2026-10-31): a
- * graph is built once a minimum share of the code is mapped, so it says how much it covers
- * ("82% of behaviours mapped"), and how many items several independent sources support.
- * Nothing renders for a graph (or a daemon) from before these fields.
+ * The graph's real-requirements share and how its items are corroborated (operator ruling 2026-10-31; domain-real WIRE
+ * 2026-11-01): a graph is built once a minimum share of the behaviour has REAL requirements, so it says that share and
+ * what the rest is (placeholders, unconfirmed; unmapped; not product code), and how many items several independent
+ * sources support. Nothing renders for a graph (or a daemon) from before these fields.
  */
 function GraphCoverage({ page }: { page: RequirementsPage }): React.ReactElement | null {
   const cov = coverageOf(page);
   const counts = corroborationCounts(page);
   if (cov === null && counts === null) return null;
   return (
-    // Its own row on a phone (order last, full width); inline beside the counts from `sm` up.
-    <span className="order-last basis-full sm:order-none sm:basis-auto flex flex-wrap items-center gap-x-2 gap-y-1 min-w-0">
-      {cov !== null && (
-        <span
-          data-testid="requirements-coverage"
-          data-mapped-pct={cov.mappedPct}
-          className="font-mono text-xs px-2 py-0.5 rounded whitespace-nowrap"
-          style={{ background: 'var(--status-run-dim)', color: T.ink }}
-          title={`Built at a minimum of ${cov.minPct}%: ${cov.mapped} of ${cov.behaviorBearing} behaviours mapped${cov.unmapped > 0 ? `; ${cov.unmapped} not mapped yet, and the next run continues from them` : ''}.`}
-        >
-          {coverageLabel(cov)}
-          <span style={{ color: T.muted }}> · minimum {cov.minPct}%</span>
-        </span>
-      )}
+    // Its own row under the title row, at every width: the breakdown is a sentence, not a chip.
+    <div className="order-last basis-full flex flex-wrap items-baseline gap-x-3 gap-y-1 min-w-0">
+      {cov !== null && <RequirementsCoverageSummary coverage={cov} inline />}
       {counts !== null && (
-        <span data-testid="requirements-corroboration-counts" className="font-mono text-xs truncate" style={{ color: T.faint }}>
-          {counts.validated} validated · {counts.unconfirmed} unconfirmed
+        <span data-testid="requirements-corroboration-counts" className="text-xs tabular-nums" style={{ color: T.faint }}>
+          {counts.validated.toLocaleString('en-US')} validated · {counts.unconfirmed.toLocaleString('en-US')} unconfirmed
         </span>
       )}
-    </span>
+    </div>
   );
 }
 

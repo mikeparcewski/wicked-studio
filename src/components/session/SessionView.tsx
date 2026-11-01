@@ -951,7 +951,7 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
     started: entries.length > 0,
     navigate,
     ariaLabel: 'Ask or tell studio what to do next',
-    placeholder: 'Ask about this, or tell studio what to do next — / adds a step, @ names a project or a helper',
+    placeholder: "Ask about this, or say what's next — / adds a step, @ a helper",
     variant: 'session' as const,
   };
   // H3 (HOST-API §6): full screen's chat drawer is this run's own thread, compact — its conversation turns,

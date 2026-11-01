@@ -8,7 +8,7 @@ import { describe, expect, it } from 'vitest';
 import type { CoreEvent } from '../src/api/types.js';
 import { plainGateQuestion } from '../src/board/deskWords.js';
 import { sessionGateChoices } from '../src/board/gateRowModel.js';
-import { headlineProgress, mappedShareLine, notGeneratedShare, pagesDoneOf, repeatChoicesOf, repeatLineOf, REPEAT_QUESTION } from '../src/board/repeatProgress.js';
+import { headlineProgress, pagesDoneOf, repeatChoicesOf, repeatLineOf, REPEAT_QUESTION } from '../src/board/repeatProgress.js';
 import type { OpenGate } from '../src/store/gates.js';
 import { makeUnit } from './factories.js';
 
@@ -50,16 +50,6 @@ describe('the progress line', () => {
     expect(headlineProgress([runs[0]!], { old: line('old run') })).toBeNull();
     // the newest live run has no line yet: the older live run's line does not stand in for it
     expect(headlineProgress(runs, { old: line('old run'), 'live-a': line('a') })).toBeNull();
-  });
-
-  it('the requirements view reads the share from crew\'s notGenerated answer, and only a well-formed one', () => {
-    const body = { code: 'notGenerated', workflow: 'domain-extraction', coverage: { mappedPct: 3, minPct: 80, mapped: 300, behaviorBearing: 8109, resolved: 99, unmapped: 7809 } };
-    const share = notGeneratedShare(body)!;
-    expect(mappedShareLine(share)).toBe('3% of behaviours mapped · target 80%');
-    expect(mappedShareLine({ mappedPct: 0, minPct: 80, mapped: 40, behaviorBearing: 10000 })).toBe('Under 1% of behaviours mapped · target 80%');
-    expect(notGeneratedShare({ code: 'notGenerated' })).toBeNull();
-    expect(notGeneratedShare({ coverage: { ...body.coverage, minPct: 0 } })).toBeNull();
-    expect(notGeneratedShare({ coverage: { ...body.coverage, mappedPct: '3' } })).toBeNull();
   });
 });
 

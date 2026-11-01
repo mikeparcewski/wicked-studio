@@ -27,13 +27,15 @@ const CUSTOM_ACCENT = {
   --accent-subtle: hsl(var(--_accent-h) calc(var(--_accent-s) * 0.6) calc(var(--_accent-l) + 64%));
   --accent-hover:  hsl(var(--_accent-h) var(--_accent-s) calc(var(--_accent-l) - 6%));
   --accent-fg:     hsl(var(--_accent-h) 30% clamp(8%, calc((58% - var(--_accent-l)) * 100), 98%));
-  --accent-wash:   color-mix(in oklab, var(--accent) 12%, transparent);`,
+  --accent-wash:   color-mix(in oklab, var(--accent) 12%, transparent);
+  --primary-hover: color-mix(in oklab, var(--accent) 60%, hsl(from var(--accent-fg) h 0% calc(100 - l)));`,
   dark: `  --accent:        hsl(var(--_accent-h) var(--_accent-s) calc(var(--_accent-l) + 40%));
   --accent-dim:    hsl(var(--_accent-h) var(--_accent-s) calc(var(--_accent-l) + 34%));
   --accent-subtle: hsl(var(--_accent-h) calc(var(--_accent-s) * 0.6) calc(var(--_accent-l) - 8%));
   --accent-hover:  hsl(var(--_accent-h) var(--_accent-s) calc(var(--_accent-l) + 46%));
   --accent-fg:     hsl(var(--_accent-h) 30% clamp(8%, calc((18% - var(--_accent-l)) * 100), 98%));
-  --accent-wash:   color-mix(in oklab, var(--accent) 12%, transparent);`,
+  --accent-wash:   color-mix(in oklab, var(--accent) 12%, transparent);
+  --primary-hover: color-mix(in oklab, var(--accent) 60%, hsl(from var(--accent-fg) h 0% calc(100 - l)));`,
 };
 
 export function genThemeCss(tokens, vendored, theme) {
@@ -72,6 +74,10 @@ ${pkg}
   --mood-run: ${theme === 'light' ? '#2f5f6b' : '#8fbac4'};
   --nc-ok-bg: ${t['surface-card']}; --nc-ok-fg: ${t['ink-high']}; --nc-ok-edge: ${t.border};
   --nc-ok-hover: ${t['accent-subtle']}; --nc-ok-press: ${t['accent-subtle']};
+  /* The primary button's hover, a visible step off the accent with its words still AA (operator 2026-11-01: New job
+     barely moved in Wicked Dark, where the package's accent-hover #ffffff is 0.055 off #ededea). Dark steps DOWN to
+     the package's accent-dim (dE 0.092, words 11.8:1); light uses its accent-hover (dE 0.107, words 12.3:1). */
+  --primary-hover: ${theme === 'dark' ? t['accent-dim'] : t['accent-hover']};
   --font-sans: 'Wicked Sans', 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --text-md: var(--text-body);                 /* body copy: the scale's body (tokens.css) */
   --radius-sm: ${s['radius-sm']}; --radius-md: ${s['radius-md']}; --radius-lg: ${s['radius-lg']}; --radius-xl: ${s['radius-xl']};

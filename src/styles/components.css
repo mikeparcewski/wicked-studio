@@ -75,7 +75,7 @@
   color: var(--accent-fg);
   box-shadow: var(--shadow-primary);
 }
-.wk-btn--primary:hover:not(:disabled) { background: var(--accent-hover); }
+.wk-btn--primary:hover:not(:disabled) { background: var(--primary-hover); }
 .wk-btn--primary:active:not(:disabled) { box-shadow: var(--shadow-button); }
 .wk-btn--primary:focus-visible { box-shadow: var(--focus-ring); }
 
@@ -2069,5 +2069,16 @@ button.wk-who-name:hover { text-decoration: underline; }
 .wk-req-none-title { margin: 0; font-size: var(--text-md); font-weight: var(--weight-semi); color: var(--ink-high); }
 .wk-req-none-body { margin: 0; font-size: var(--text-sm); line-height: 1.5; color: var(--ink-body); }
 .wk-req-none-share { margin: 0; font-size: var(--text-sm); line-height: 1.5; color: var(--ink-high); overflow-wrap: anywhere; }
+/* Real-requirements coverage (domain-real WIRE 2026-11-01): the share counts real requirements only; placeholders are
+   marked unconfirmed in the warn ink, and the bar fills the real share with the minimum ticked. */
+.wk-reqcov { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.wk-reqcov--inline { flex-direction: row; flex-wrap: wrap; align-items: baseline; column-gap: 12px; row-gap: 2px; }
+.wk-reqcov-head { margin: 0; font-size: var(--text-body); font-weight: var(--weight-strong); color: var(--ink-high); font-variant-numeric: tabular-nums; }
+.wk-reqcov-note { font-weight: var(--weight-regular); color: var(--ink-muted); }
+.wk-reqcov-parts { margin: 0; font-size: var(--text-caption); color: var(--ink-muted); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.wk-reqcov-unconfirmed { color: var(--status-warn); text-decoration: underline dotted; text-underline-offset: 3px; cursor: help; }
+.wk-reqcov-bar { position: relative; height: 6px; border-radius: var(--radius-full); background: var(--surface-raised); }
+.wk-reqcov-fill { display: block; height: 100%; border-radius: inherit; background: var(--status-ok); }
+.wk-reqcov-min { position: absolute; top: -3px; bottom: -3px; width: 2px; margin-left: -1px; background: var(--ink-muted); }
 .wk-req-none-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); }
 .wk-req-none-actions .wk-field-note { margin: 0; }

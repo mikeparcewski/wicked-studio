@@ -994,6 +994,7 @@
     "session-proposal-menu": "session-proposal-choices",
     "session-proposal-skip-qe-form": "session-proposal-skip-qe-reason",
     "session-proposal-skip-qe-cancel": "session-proposal-choices",
-    "learn-repo": "learn-topics"
+    "learn-repo": "learn-topics",
+    "requirements-mapped-share": "requirements-real-share"
   }
 }

@@ -67,31 +67,6 @@ export function pagesDoneOf(events: readonly CoreEvent[] | null | undefined): nu
   return 0;
 }
 
-/** The requirements read's coverage (crew's `RequirementsCoverage`), as far as this line needs it. */
-export interface MappedShare {
-  mappedPct: number;
-  minPct: number;
-  mapped: number;
-  behaviorBearing: number;
-}
-
-/** "3% of behaviours mapped · target 80%" — the share so far against the target in force ("under 1%" when some is
- * mapped and the whole percentage rounds to 0). */
-export function mappedShareLine(c: MappedShare): string {
-  const pct = c.mappedPct === 0 && c.mapped > 0 ? 'Under 1%' : `${c.mappedPct}%`;
-  return `${pct} of behaviours mapped · target ${c.minPct}%`;
-}
-
-/** The coverage a `notGenerated` answer carries (crew api-types 0.162.0), or null. */
-export function notGeneratedShare(body: unknown): MappedShare | null {
-  const c = (body as { coverage?: unknown } | null)?.coverage as Record<string, unknown> | undefined;
-  if (c === undefined || c === null || typeof c !== 'object') return null;
-  const n = (k: string): number | null => (typeof c[k] === 'number' && Number.isInteger(c[k]) && (c[k] as number) >= 0 ? (c[k] as number) : null);
-  const [mappedPct, minPct, mapped, behaviorBearing] = [n('mappedPct'), n('minPct'), n('mapped'), n('behaviorBearing')];
-  if (mappedPct === null || minPct === null || mapped === null || behaviorBearing === null || mappedPct > 100 || minPct < 1 || minPct > 100) return null;
-  return { mappedPct, minPct, mapped, behaviorBearing };
-}
-
 /** The newest `awaitingHuman` frame for a gate's step. */
 function frameOf(gate: OpenGate, events: readonly CoreEvent[] | null): Record<string, unknown> | null {
   const list = events ?? [];
@@ -105,12 +80,12 @@ function frameOf(gate: OpenGate, events: readonly CoreEvent[] | null): Record<st
 /** The ask's headline: the step's own line says where it got to; the question is whether to go on. */
 export const REPEAT_QUESTION = 'The budget for this job is spent — keep going?';
 
-const STOP_TITLE = 'End the job here. What it mapped so far is kept, and a later run continues from it.';
+const STOP_TITLE = 'End the job here. The real requirements found so far are kept, and a later run continues from them.';
 
 /**
  * A `repeat` ask's answers, from its frame, each with the label the step gave it: its own choices (`consent:<id>`
  * tokens — "Map up to 20 more pages", "Lower the target to 23% for wicked-crew and build the graph"), or `approve`
- * ("Run it again") when it offered none, and `reject` (stop: the run ends and what it mapped is kept). Nothing is
+ * ("Run it again") when it offered none, and `reject` (stop: the run ends and the real requirements found so far are kept). Nothing is
  * preselected; the step's recommendation is marked. Null when the frame names no answer (the row keeps its generic
  * approve / stop).
  */

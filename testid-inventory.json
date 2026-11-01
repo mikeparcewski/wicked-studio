@@ -11,10 +11,10 @@
   "version": 1,
   "studioVersion": "0.13.0",
   "counts": {
-    "files": 283,
-    "occurrences": 3931,
-    "static": 3342,
-    "dynamic": 88,
+    "files": 284,
+    "occurrences": 3936,
+    "static": 3343,
+    "dynamic": 90,
     "computed": 44
   },
   "static": [
@@ -4385,6 +4385,12 @@
       "testId": "doc-subject-retry",
       "files": [
         "src/components/DocSubjectPicker.tsx"
+      ]
+    },
+    {
+      "testId": "domain-graph-coverage",
+      "files": [
+        "src/components/RepoGraphModal.tsx"
       ]
     },
     {
@@ -13101,7 +13107,7 @@
     {
       "testId": "requirements-coverage",
       "files": [
-        "src/components/RequirementsModal.tsx"
+        "src/components/RequirementsCoverageSummary.tsx"
       ]
     },
     {
@@ -13132,12 +13138,6 @@
       "testId": "requirements-loading",
       "files": [
         "src/components/product/RequirementsBrowser.tsx"
-      ]
-    },
-    {
-      "testId": "requirements-mapped-share",
-      "files": [
-        "src/components/RequirementsModal.tsx"
       ]
     },
     {
@@ -13180,6 +13180,12 @@
       "testId": "requirements-prev",
       "files": [
         "src/components/product/RequirementsBrowser.tsx"
+      ]
+    },
+    {
+      "testId": "requirements-real-share",
+      "files": [
+        "src/components/RequirementsModal.tsx"
       ]
     },
     {
@@ -20180,6 +20186,12 @@
       ]
     },
     {
+      "pattern": "*-breakdown",
+      "files": [
+        "src/components/RequirementsCoverageSummary.tsx"
+      ]
+    },
+    {
       "pattern": "*-button",
       "files": [
         "src/components/ui/OverflowMenu.tsx"
@@ -20247,6 +20259,12 @@
       "pattern": "*-force-disclosure",
       "files": [
         "src/components/session/AssuranceReceipt.tsx"
+      ]
+    },
+    {
+      "pattern": "*-headline",
+      "files": [
+        "src/components/RequirementsCoverageSummary.tsx"
       ]
     },
     {
@@ -20808,6 +20826,7 @@
         "src/components/QeRefusalWarning.tsx",
         "src/components/RepoDetailPage.tsx",
         "src/components/RepoFindings.tsx",
+        "src/components/RequirementsCoverageSummary.tsx",
         "src/components/RunSparkline.tsx",
         "src/components/SkillChips.tsx",
         "src/components/SkillFindings.tsx",

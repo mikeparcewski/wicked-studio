@@ -1,5 +1,4 @@
 import { ApiError } from '../api/errors.js';
-import { notGeneratedShare, type MappedShare } from './repeatProgress.js';
 
 /** The preset whose last step (`wicked-core domain-graph`) writes a repository's requirements graph. */
 export const DOMAIN_EXTRACTION_ID = 'domain-extraction';
@@ -14,13 +13,13 @@ export const DOMAIN_EXTRACTION_ID = 'domain-extraction';
  * ("requirements_graph.json not generated for this repo yet"); that sentence is read the same way
  * until those daemons are gone.
  */
-export function requirementsNotGenerated(e: unknown): { workflow: string; share: MappedShare | null } | null {
+export function requirementsNotGenerated(e: unknown): { workflow: string; share: RequirementsCoverage | null } | null {
   if (!(e instanceof ApiError) || e.status !== 404) return null;
   const body = typeof e.body === 'object' && e.body !== null ? (e.body as Record<string, unknown>) : {};
   if (body['code'] === 'notGenerated') {
     const wf = body['workflow'];
-    // domain-graph-3 (crew api-types 0.162.0): how much is mapped so far, when the repository has a store to count.
-    return { workflow: typeof wf === 'string' && wf.trim() !== '' ? wf : DOMAIN_EXTRACTION_ID, share: notGeneratedShare(body) };
+    // crew api-types 0.164.0: the real share so far, when the repository has a store to count.
+    return { workflow: typeof wf === 'string' && wf.trim() !== '' ? wf : DOMAIN_EXTRACTION_ID, share: coverageOf(body) };
   }
   if (/requirements_graph\.json not generated/.test(e.wire)) return { workflow: DOMAIN_EXTRACTION_ID, share: null };
   return null;
@@ -41,14 +40,20 @@ export interface Corroboration {
   why?: { code: string; text: string };
 }
 
-/** The share of behaviours a requirements graph maps (api-types 0.159.0 `RequirementsCoverage`). */
+/**
+ * How much of a repository's behaviour REAL requirements cover (crew api-types 0.164.0 `RequirementsCoverage`;
+ * domain-real WIRE 2026-11-01). `real + placeholders + unmapped == behaviorBearing`; `notProduct` (tests, data,
+ * manifests, docs) is left out of it. `realPct` counts real requirements only: a placeholder is unconfirmed and is
+ * never shown as progress.
+ */
 export interface RequirementsCoverage {
-  mappedPct: number;
+  realPct: number;
   minPct: number;
   behaviorBearing: number;
-  mapped: number;
-  resolved: number;
+  real: number;
+  placeholders: number;
   unmapped: number;
+  notProduct: number;
 }
 
 const isCount = (v: unknown): v is number => typeof v === 'number' && Number.isInteger(v) && v >= 0;
@@ -75,14 +80,49 @@ export function corroborationOf(item: unknown): Corroboration | null {
   return out;
 }
 
-/** A page's coverage label, or null when the daemon or the graph predates it. */
-export function coverageOf(page: unknown): RequirementsCoverage | null {
-  const c = (page as { coverage?: unknown } | null)?.coverage as Record<string, unknown> | null | undefined;
+const COVERAGE_KEYS = ['realPct', 'minPct', 'behaviorBearing', 'real', 'placeholders', 'unmapped', 'notProduct'] as const;
+
+/**
+ * The coverage a requirements read carries (a page's `coverage`, or the `coverage` of crew's notGenerated 404), or
+ * null when the daemon or the graph predates it, or sends the retired `mappedPct` shape.
+ */
+export function coverageOf(holder: unknown): RequirementsCoverage | null {
+  const c = (holder as { coverage?: unknown } | null)?.coverage as Record<string, unknown> | null | undefined;
   if (c === null || c === undefined || typeof c !== 'object') return null;
-  const keys = ['mappedPct', 'minPct', 'behaviorBearing', 'mapped', 'resolved', 'unmapped'] as const;
-  if (!keys.every((k) => isCount(c[k]))) return null;
-  return Object.fromEntries(keys.map((k) => [k, c[k]])) as unknown as RequirementsCoverage;
+  if (!COVERAGE_KEYS.every((k) => isCount(c[k]))) return null;
+  const out = Object.fromEntries(COVERAGE_KEYS.map((k) => [k, c[k]])) as unknown as RequirementsCoverage;
+  if (out.realPct > 100 || out.minPct < 1 || out.minPct > 100) return null;
+  return out;
 }
+
+const count = (n: number): string => n.toLocaleString('en-US');
+
+/** "54% real requirements · minimum 80%" ("Under 1%" when some are real and the whole percentage rounds to 0). */
+export function coverageHeadline(c: RequirementsCoverage): string {
+  const pct = c.realPct === 0 && c.real > 0 ? 'Under 1%' : `${c.realPct}%`;
+  return `${pct} real requirements · minimum ${c.minPct}%`;
+}
+
+export interface CoveragePart {
+  key: 'real' | 'placeholders' | 'unmapped' | 'notProduct';
+  text: string;
+}
+
+/** "3,182 real · 2,577 placeholders · 27 unmapped · 2,380 not product code": real always, the rest when there are any. */
+export function coverageParts(c: RequirementsCoverage): CoveragePart[] {
+  const parts: CoveragePart[] = [{ key: 'real', text: `${count(c.real)} real` }];
+  if (c.placeholders > 0) parts.push({ key: 'placeholders', text: `${count(c.placeholders)} ${c.placeholders === 1 ? 'placeholder' : 'placeholders'}` });
+  if (c.unmapped > 0) parts.push({ key: 'unmapped', text: `${count(c.unmapped)} unmapped` });
+  if (c.notProduct > 0) parts.push({ key: 'notProduct', text: `${count(c.notProduct)} not product code` });
+  return parts;
+}
+
+export function coverageBreakdown(c: RequirementsCoverage): string {
+  return coverageParts(c).map((p) => p.text).join(' · ');
+}
+
+/** What a placeholder is, said wherever the count shows: unconfirmed, never progress. */
+export const PLACEHOLDER_NOTE = 'Placeholders are unconfirmed: no real requirement has been stated for them yet, so they do not count toward the share.';
 
 /** The corpus-wide validated / unconfirmed counts, or null when the daemon sends none. */
 export function corroborationCounts(page: unknown): { validated: number; unconfirmed: number } | null {
@@ -91,11 +131,6 @@ export function corroborationCounts(page: unknown): { validated: number; unconfi
   if (!isCount(c['validated']) || !isCount(c['unconfirmed'])) return null;
   if (c['validated'] + c['unconfirmed'] === 0) return null;
   return { validated: c['validated'], unconfirmed: c['unconfirmed'] };
-}
-
-/** "82% of behaviours mapped" — the graph's coverage label. */
-export function coverageLabel(c: RequirementsCoverage): string {
-  return `${c.mappedPct}% of behaviours mapped`;
 }
 
 const plural = (n: number, one: string, many: string): string => `${n} ${n === 1 ? one : many}`;

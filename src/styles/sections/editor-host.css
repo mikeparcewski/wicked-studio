@@ -12,7 +12,7 @@
 .wk-host-btn:hover:not(:disabled) { color: var(--ink-high); border-color: var(--ink-dim); }
 .wk-host-btn:disabled { opacity: 0.5; cursor: default; }
 .wk-host-btn--primary { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); font-weight: var(--weight-semi); }
-.wk-host-btn--primary:hover:not(:disabled) { background: var(--accent-hover); color: var(--accent-fg); }
+.wk-host-btn--primary:hover:not(:disabled) { background: var(--primary-hover); color: var(--accent-fg); }
 .wk-host-btn[aria-pressed='true'] { background: var(--accent-wash); border-color: var(--accent); color: var(--ink-high); }
 .wk-seg { display: inline-flex; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); overflow: hidden; }
 .wk-seg-btn { padding: 5px 12px; border: 0; background: var(--surface-card); color: var(--ink-muted); font: inherit; font-size: var(--text-sm); cursor: pointer; }

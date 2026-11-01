@@ -71,10 +71,7 @@
 .wk-ue-btn:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-shadow: var(--focus-ring); }
 .wk-ue-btn:disabled { cursor: default; opacity: 0.6; }
 .wk-ue-btn--primary { border: 0; background: var(--accent); color: var(--accent-fg); }
-.wk-ue-btn--primary:hover:not(:disabled) {
-  /* Toward its own words' colour: the one direction that always moves off the accent, whatever it is. */
-  background: color-mix(in oklab, var(--accent) 80%, var(--accent-fg)); color: var(--accent-fg); transform: translateY(-1px);
-}
+.wk-ue-btn--primary:hover:not(:disabled) { background: var(--primary-hover); color: var(--accent-fg); transform: translateY(-1px); }
 .wk-ue-btn--primary:active:not(:disabled) { background: color-mix(in oklab, var(--accent) 72%, var(--accent-fg)); transform: none; }
 .wk-ue-btn--secondary { border: 1px solid var(--border-strong); background: transparent; color: var(--ink-high); font-weight: var(--weight-strong); }
 .wk-ue-btn--secondary:hover:not(:disabled) {

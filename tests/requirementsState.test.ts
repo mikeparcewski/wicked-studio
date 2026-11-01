@@ -14,16 +14,41 @@ describe('requirementsNotGenerated (lane repo-page)', () => {
     expect(requirementsNotGenerated(new ApiError(404, 'requirements_graph.json not generated for this repo yet', { error: 'requirements_graph.json not generated for this repo yet' })))
       .toEqual({ workflow: 'domain-extraction', share: null });
   });
-  it('carries the share mapped so far when crew counted it (domain-graph-3)', () => {
+  it('carries the real share so far when crew counted it (api-types 0.164.0)', () => {
     const e = new ApiError(404, 'x', { code: 'notGenerated', workflow: 'domain-extraction',
-      coverage: { mappedPct: 3, minPct: 80, mapped: 300, behaviorBearing: 8109, resolved: 99, unmapped: 7809 } });
-    expect(requirementsNotGenerated(e)).toEqual({ workflow: 'domain-extraction', share: { mappedPct: 3, minPct: 80, mapped: 300, behaviorBearing: 8109 } });
+      coverage: { realPct: 3, minPct: 80, behaviorBearing: 8109, real: 300, placeholders: 7700, unmapped: 109, notProduct: 40 } });
+    expect(requirementsNotGenerated(e)).toEqual({ workflow: 'domain-extraction',
+      share: { realPct: 3, minPct: 80, behaviorBearing: 8109, real: 300, placeholders: 7700, unmapped: 109, notProduct: 40 } });
   });
   it('anything else is not this state', () => {
     expect(requirementsNotGenerated(new ApiError(404, 'Repo r1 not found', { error: 'Repo r1 not found' }))).toBeNull();
     expect(requirementsNotGenerated(new ApiError(500, 'boom', { code: 'notGenerated' }))).toBeNull();
     expect(requirementsNotGenerated(new Error('requirements_graph.json not generated'))).toBeNull();
     expect(requirementsNotGenerated(null)).toBeNull();
+  });
+});
+
+// wicked-crew on the rig, 2026-11-01 (domain-real WIRE): 5,786 behaviour-bearing, 54% real.
+const LIVE = { realPct: 54, minPct: 80, behaviorBearing: 5786, real: 3182, placeholders: 2577, unmapped: 27, notProduct: 2380 };
+
+describe('the real-requirements label (domain-real WIRE 2026-11-01)', () => {
+  it('says the real share against the minimum, and what the rest is', async () => {
+    const { coverageHeadline, coverageBreakdown } = await import('../src/board/requirementsState.js');
+    expect(coverageHeadline(LIVE)).toBe('54% real requirements · minimum 80%');
+    expect(coverageBreakdown(LIVE)).toBe('3,182 real · 2,577 placeholders · 27 unmapped · 2,380 not product code');
+  });
+  it('leaves out the parts there are none of; real is always said', async () => {
+    const { coverageHeadline, coverageBreakdown } = await import('../src/board/requirementsState.js');
+    // pi-governance on the rig: 3 of 3 real, 117 not product code
+    const pi = { realPct: 100, minPct: 80, behaviorBearing: 3, real: 3, placeholders: 0, unmapped: 0, notProduct: 117 };
+    expect(coverageHeadline(pi)).toBe('100% real requirements · minimum 80%');
+    expect(coverageBreakdown(pi)).toBe('3 real · 117 not product code');
+    expect(coverageBreakdown({ ...pi, real: 0, realPct: 0, placeholders: 1, notProduct: 0 })).toBe('0 real · 1 placeholder');
+  });
+  it('placeholders are never progress: only real counts, so a share that rounds to 0 with some real says under 1%', async () => {
+    const { coverageHeadline } = await import('../src/board/requirementsState.js');
+    expect(coverageHeadline({ ...LIVE, realPct: 0, real: 40, placeholders: 5700 })).toBe('Under 1% real requirements · minimum 80%');
+    expect(coverageHeadline({ ...LIVE, realPct: 0, real: 0, placeholders: 5786 })).toBe('0% real requirements · minimum 80%');
   });
 });
 
@@ -41,8 +66,12 @@ describe('corroboration + coverage readers (operator ruling 2026-10-31)', () => 
     expect(corroborationOf({})).toBeNull();
     expect(corroborationOf({ corroboration: null })).toBeNull();
     expect(corroborationOf({ corroboration: { status: 'validated' } })).toBeNull();
-    expect(coverageOf({ coverage: { mappedPct: 82 } })).toBeNull();
+    // the retired shape (mappedPct / mapped / resolved) is not read as the new one
+    expect(coverageOf({ coverage: { mappedPct: 82, minPct: 80, behaviorBearing: 10, mapped: 8, resolved: 8, unmapped: 2 } })).toBeNull();
     expect(corroborationCounts({ corroboration: { validated: 0, unconfirmed: 0 } })).toBeNull();
-    expect(coverageOf({ coverage: { mappedPct: 82, minPct: 80, behaviorBearing: 10, mapped: 8, resolved: 8, unmapped: 2 } })?.mappedPct).toBe(82);
+    expect(coverageOf({ coverage: { ...LIVE, realPct: 101 } })).toBeNull();
+    expect(coverageOf({ coverage: { ...LIVE, minPct: 0 } })).toBeNull();
+    expect(coverageOf({ coverage: { ...LIVE, real: '3182' } })).toBeNull();
+    expect(coverageOf({ coverage: LIVE })).toEqual(LIVE);
   });
 });

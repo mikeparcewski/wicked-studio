@@ -34,13 +34,8 @@
 .wk-jr-btn:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-shadow: var(--focus-ring); }
 .wk-jr-btn:disabled { cursor: default; opacity: 0.6; }
 .wk-jr-btn--primary { border: 0; background: var(--accent); color: var(--accent-fg); }
-/* Primary hover moves AWAY from its own text (darker under light words, lighter under dark ones), so
-   the words keep their contrast; the first line is the fallback where relative colours are unknown. */
-.wk-jr-btn--primary:hover:not(:disabled) {
-  background: color-mix(in oklab, var(--accent) 58%, var(--ink-high));
-  background: color-mix(in oklab, var(--accent) 60%, hsl(from var(--accent-fg) h 0% calc(100 - l)));
-  color: var(--accent-fg); transform: translateY(-1px);
-}
+/* Primary hover: the --primary-hover token (tokens.css; the wicked themes set it from the design package). */
+.wk-jr-btn--primary:hover:not(:disabled) { background: var(--primary-hover); color: var(--accent-fg); transform: translateY(-1px); }
 .wk-jr-btn--primary:active:not(:disabled) {
   background: color-mix(in oklab, var(--accent) 46%, var(--ink-high));
   background: color-mix(in oklab, var(--accent) 48%, hsl(from var(--accent-fg) h 0% calc(100 - l)));

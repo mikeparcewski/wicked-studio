@@ -1,7 +1,9 @@
 import { TechDetails } from './ui/TechDetails.js';
 import { useState, useEffect, useMemo } from 'react';
 import { api } from '../api/client.js';
-import type { RepoEntry, CodeGraphNode, CodeGraphEdge, CodeGraphData, DomainGraph, DomainCoverage } from '../api/types.js';
+import type { RepoEntry, CodeGraphNode, CodeGraphEdge, CodeGraphData, DomainGraph } from '../api/types.js';
+import { coverageOf, requirementsNotGenerated, type RequirementsCoverage } from '../board/requirementsState.js';
+import { RequirementsCoverageSummary } from './RequirementsCoverageSummary.js';
 import { CytoGraph } from './CytoGraph.js';
 import { HotspotsView } from './HotspotsView.js';
 import { useModalEscape } from './Modal.js';
@@ -244,7 +246,7 @@ function NodeDetailPanel({
   );
 }
 
-function DomainGraphView({ graph }: { graph: DomainGraph }): React.ReactElement {
+function DomainGraphView({ graph, coverage }: { graph: DomainGraph; coverage: RequirementsCoverage | null }): React.ReactElement {
   // A real GRAPH, not a listing (operator feedback): domains are nodes in the path
   // hierarchy (the only edge material the current artifact carries — requirement
   // `dependencies`/`entities` are empty at this fidelity), sized by requirement
@@ -330,6 +332,11 @@ function DomainGraphView({ graph }: { graph: DomainGraph }): React.ReactElement 
   }
   return (
     <div className="h-full flex flex-col">
+      {coverage !== null && (
+        <div className="px-4 py-2 shrink-0 border-b" style={{ borderColor: T.hairline }}>
+          <RequirementsCoverageSummary coverage={coverage} testId="domain-graph-coverage" inline />
+        </div>
+      )}
       <div className="flex items-center gap-3 px-4 py-2 shrink-0 border-b" style={{ borderColor: T.hairline }}>
         <span className="text-xs shrink-0" style={{ color: T.muted }}>
           {nodes.length} domains · {[...reqCounts.values()].reduce((a, b) => a + b, 0)} requirements
@@ -451,7 +458,9 @@ export function RepoGraphModal({ repo, onClose, onSelectRun, initialFocus }: Pro
   const [loading, setLoading] = useState(true);
   const [codeData, setCodeData] = useState<CodeGraphData | null>(null);
   const [domainData, setDomainData] = useState<DomainGraph | null>(null);
-  const [domainCoverage, setDomainCoverage] = useState<DomainCoverage | null>(null);
+  // The real-requirements share (domain-real WIRE 2026-11-01), read off the requirements read: the domain graph's own
+  // `coverage` counts placeholders as covered, so it is not shown.
+  const [domainCoverage, setDomainCoverage] = useState<RequirementsCoverage | null>(null);
   const [domainLoading, setDomainLoading] = useState(false);
   const [annotating, setAnnotating] = useState(false);
   const [annotateError, setAnnotateError] = useState<string | null>(null);
@@ -500,9 +509,13 @@ export function RepoGraphModal({ repo, onClose, onSelectRun, initialFocus }: Pro
     setDomainLoading(true);
     api
       .getRepoDomainGraph(repo.id)
-      .then(({ graph, coverage }) => { setDomainData(graph); setDomainCoverage(coverage); })
-      .catch(() => { setDomainData(null); setDomainCoverage(null); })
+      .then(({ graph }) => { setDomainData(graph); })
+      .catch(() => { setDomainData(null); })
       .finally(() => setDomainLoading(false));
+    api
+      .listRequirements(repo.id, { limit: 1 })
+      .then((page) => setDomainCoverage(coverageOf(page)))
+      .catch((e: unknown) => setDomainCoverage(requirementsNotGenerated(e)?.share ?? null));
   }, [graphType, domainData, repo.id]);
 
   function handleHotspotSelect(node: CodeGraphNode): void {
@@ -734,42 +747,13 @@ export function RepoGraphModal({ repo, onClose, onSelectRun, initialFocus }: Pro
                     The domain map needs every part of the code linked to a requirement first. Run the
                     domain extraction workflow for this repository, then re-run onboarding to build it.
                   </p>
-                  {domainCoverage ? (
-                    <div className="rounded-lg p-4 flex flex-col gap-2 border" style={{ border: `1px solid ${T.hairline}` }}>
-                      <div className="flex justify-between items-baseline">
-                        <span className="text-xs" style={{ color: T.muted }}>Annotation coverage</span>
-                        {/* 0/0 is undefined, not 100% (FINDING-009). The engine documents coverage
-                            as "vacuously 1.0 when behavior_bearing == 0", so an unannotated repo
-                            rendered here as a full green bar reading 100.0%. */}
-                        <span className="text-xs font-bold" style={{ color: T.ink }}>
-                          {domainCoverage.behavior_bearing === 0
-                            ? 'not extracted'
-                            : domainCoverage.coverage < 1 && domainCoverage.coverage * 100 >= 99.95
-                              ? '<100%'
-                              : `${(domainCoverage.coverage * 100).toFixed(1)}%`}
-                        </span>
-                      </div>
-                      <div className="w-full h-1.5 rounded-full overflow-hidden" style={{ background: T.surface }}>
-                        <div
-                          className="h-full rounded-full"
-                          style={{
-                            width:
-                              domainCoverage.behavior_bearing === 0
-                                ? '0%'
-                                : `${Math.max(domainCoverage.coverage * 100, 0.5)}%`,
-                            background: T.ok,
-                          }}
-                        />
-                      </div>
-                      <div className="flex gap-4 mt-1 text-xs tabular-nums" style={{ color: T.faint }}>
-                        <span>{domainCoverage.resolved.toLocaleString()} resolved</span>
-                        <span>{domainCoverage.behavior_bearing.toLocaleString()} behavior-bearing</span>
-                        <span>{domainCoverage.total.toLocaleString()} total</span>
-                      </div>
+                  {domainCoverage !== null && domainCoverage.behaviorBearing > 0 ? (
+                    <div className="rounded-lg p-4 border" style={{ border: `1px solid ${T.hairline}` }}>
+                      <RequirementsCoverageSummary coverage={domainCoverage} testId="domain-graph-coverage" bar />
                     </div>
                   ) : (
                     <p className="text-xs" style={{ color: T.faint }}>
-                      No coverage data — run onboarding first, or re-run the annotation workflow below after a graph re-index.
+                      No requirements counted yet. Run the domain extraction workflow for this repository first.
                     </p>
                   )}
                   <button
@@ -792,7 +776,7 @@ export function RepoGraphModal({ repo, onClose, onSelectRun, initialFocus }: Pro
                 </div>
               </div>
             ) : (
-              <DomainGraphView graph={domainData} />
+              <DomainGraphView graph={domainData} coverage={domainCoverage} />
             )
           ) : codeEmpty ? (
             <div className="flex items-center justify-center h-full">
