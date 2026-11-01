@@ -15,7 +15,7 @@ const cap = (w: string): string => (w === '' ? w : w.charAt(0).toUpperCase() + w
 
 /**
  * The Not accepted list (Memory and Steer): the rejected proposals the store kept, read back from
- * `GET /proposals` (every state; `board/notAccepted.ts` says what is left out and why). Read only: crew
+ * `GET /proposals` (every state; `board/notAccepted.ts` says how edited originals and copies are told). Read only: crew
  * has no way to reopen a rejected proposal. A failed re-read keeps the rows on screen and says so.
  */
 export function NotAcceptedList({ kind, revision = 0, projectName }: {
@@ -66,7 +66,8 @@ export function NotAcceptedList({ kind, revision = 0, projectName }: {
     const words = kind === 'memory' ? memoryPayload(p).content : policyPayload(p).rule;
     const text = words ?? (kind === 'memory' ? 'A memory with no words' : 'A rule with no words');
     const agent = p.provenance['run_agent'] ?? p.provenance['agent'] ?? p.provenance['helper'];
-    const by = agent === undefined || agent === '' ? 'a helper' : agent === 'crew' ? 'crew' : agent;
+    // Who filed it, only when the record says (an operator's own Add files with no attribution).
+    const by = agent === undefined || agent === '' ? null : agent;
     const run = p.provenance['run_id'];
     const project = p.facets['project'];
     const where = project !== undefined && project !== '' ? projectName?.(project) ?? `Project ${project}` : null;
@@ -81,7 +82,8 @@ export function NotAcceptedList({ kind, revision = 0, projectName }: {
     return (
       <CalmRow key={p.id} data-testid="not-accepted-row" data={{ 'proposal-id': p.id, kind }} tone="quiet"
         title={<span data-testid="not-accepted-text">{text}</span>} titleAttr={text}
-        sub={<span data-testid="not-accepted-line">{[what, copy !== null ? 'an edited copy of it was accepted' : copyOf !== null ? 'an edited copy' : `proposed by ${by}`, where].filter((x): x is string => x !== null).join(' · ')}</span>}
+        sub={<span data-testid="not-accepted-line">{[what, copyOf !== null ? 'an edited copy' : null, by !== null ? `proposed by ${by}` : null, where,
+          copy !== null ? 'named as the original of an accepted edit' : null].filter((x): x is string => x !== null).join(' · ')}</span>}
         meta={proposed === null ? 'Not accepted' : `Proposed ${shortDate(proposed)}`}
         openTestId={/* testid */ 'not-accepted-open'} openLabel={`${shortContent(text)}: show details`}
         details={(
@@ -89,10 +91,10 @@ export function NotAcceptedList({ kind, revision = 0, projectName }: {
             <p>{text}</p>
             <CalmFacts facts={[
               { k: 'State', v: 'Rejected' },
-              ...(copy !== null ? [{ k: 'Edited copy', v: 'An accepted proposal names this one as the original it was edited from (its id is under Technical details).' }] : []),
+              ...(copy !== null ? [{ k: 'Edited copy', v: 'An accepted memory proposal names this one as the original it was edited from (its id is under Technical details). Crew rejects the original when you accept an edit.' }] : []),
               ...(copyOf !== null ? [{ k: 'Edited from', v: 'Another proposal (its id is under Technical details). Crew rejects an edited copy itself when approving it failed.' }] : []),
               ...(proposed !== null ? [{ k: 'Proposed', v: relTime(proposed) }] : []),
-              { k: 'Proposed by', v: by },
+              { k: 'Proposed by', v: by ?? 'Not recorded' },
               ...(where !== null ? [{ k: 'For', v: where }] : []),
               ...(run !== undefined && run !== '' ? [{ k: 'Run', v: <a className="wk-link" data-testid="not-accepted-run" href={sessionPath(`run:${run}`)}>Open its run</a> }] : []),
             ]} />

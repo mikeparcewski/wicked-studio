@@ -484,7 +484,7 @@ export function SteerSurface({ pathname, search, navigate: navigateRaw, runs = [
       {filterNotes}
       {view === 'proposals' ? (
         <div className="wk-se-proposals wk-calm-proposals" data-testid="governance-review-inbox">
-          <ProposalsSection kind="policy" heading="Rule proposals" onDecision={() => { setReviewTick((t) => t + 1); void load(); }} />
+          <ProposalsSection kind="policy" heading="Rule proposals" onDecision={() => { setReviewTick((t) => t + 1); setRejectedRev((r) => r + 1); void load(); }} />
         </div>
       ) : view === 'not-accepted' ? (
         <NotAcceptedList kind="policy" revision={rejectedRev} projectName={projectName} />

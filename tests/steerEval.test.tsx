@@ -711,4 +711,25 @@ describe('Steer header and pills (operator 2026-11-01)', () => {
     at = '/rules'; view.rerender(draw());
     expect(checked()).toBe('Active');
   });
+
+  it('a kept search shown again never takes focus from the pills (review r3)', async () => {
+    wire();
+    const user = userEvent.setup();
+    let at = '/rules';
+    const draw = (): React.ReactElement => {
+      const [path, qs = ''] = at.split('?');
+      return <SteerSurface pathname={path!} search={qs === '' ? '' : `?${qs}`} runs={[]} navigate={go} />;
+    };
+    const go = vi.fn((to: string) => { at = to; view.rerender(draw()); });
+    const view = render(draw());
+    await screen.findAllByTestId('rules-row');
+    await user.click(screen.getByTestId('steer-search-open'));
+    await user.type(screen.getByTestId('steer-search'), 'auth');
+    screen.getByTestId('steer-view-live').focus();
+    await user.keyboard('{ArrowLeft}');
+    expect(screen.getByTestId('steer-view-not-accepted')).toHaveFocus();
+    await user.keyboard('{ArrowRight}');
+    expect(screen.getByTestId('steer-view-live')).toHaveFocus();
+    expect(screen.getByTestId('steer-search')).toHaveValue('auth');
+  });
 });

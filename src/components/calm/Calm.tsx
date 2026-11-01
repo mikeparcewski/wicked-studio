@@ -179,9 +179,11 @@ export function CalmSearch({ value, onChange, onSubmit, placeholder, label, test
   buttonTestId?: string | undefined;
 }): React.ReactElement {
   const [open, setOpen] = useState(startOpen || value !== '');
+  // Focus moves into the field only when someone pressed Search, never when a kept search is shown again.
+  const [pressed, setPressed] = useState(false);
   if (!open) {
     return (
-      <button type="button" className="wk-calm-quiet-btn" onClick={() => setOpen(true)} aria-label={label} data-testid={buttonTestId}>
+      <button type="button" className="wk-calm-quiet-btn" onClick={() => { setPressed(true); setOpen(true); }} aria-label={label} data-testid={buttonTestId}>
         <Search size={15} aria-hidden /> <span>Search</span>
       </button>
     );
@@ -192,7 +194,7 @@ export function CalmSearch({ value, onChange, onSubmit, placeholder, label, test
         <Search size={15} aria-hidden className="wk-calm-search-icon" />
         {/* autoFocus: the field opened because someone pressed Search. */}
         <input type="search" className="wk-calm-search-input" placeholder={placeholder} aria-label={label} data-testid={testId}
-          value={value} spellCheck={false} autoFocus={!startOpen}
+          value={value} spellCheck={false} autoFocus={pressed}
           onChange={(e) => onChange(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter' && onSubmit !== undefined) { e.preventDefault(); onSubmit(); } if (e.key === 'Escape' && value === '') setOpen(false); }} />
       </span>

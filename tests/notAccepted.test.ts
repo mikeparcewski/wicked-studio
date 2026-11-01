@@ -34,6 +34,9 @@ describe('notAccepted', () => {
       p('policy-copy', 'approved', 'policy:testing', { edited_from: 'orig' }, 3),
     ];
     expect([...notAccepted(all, 'memory').replacedBy]).toEqual([]);
+    // Crew edits memory proposals only: on a policy page, nothing is named an accepted edit's original.
+    const rules = [p('r-orig', 'rejected', 'policy:security', {}, 1), p('r-copy', 'approved', 'policy:testing', { edited_from: 'r-orig' }, 2)];
+    expect([...notAccepted(rules, 'policy').replacedBy]).toEqual([]);
   });
   it('reads edited_from defensively', () => {
     expect(editedFrom(p('a', 'approved', 'memory', { edited_from: 'x' }))).toBe('x');

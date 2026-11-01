@@ -10,7 +10,7 @@ memory proposal, one policy proposal) and proves the user's path end to end:
      memories, newest first; a kind card narrows the list; a search re-reads the wire.
   2. Proposals: only the MEMORY proposal is here; Edit → Approve with this edit approves it with the
      edited words, and the new memory is listed with them. Not accepted (the third pill, operator
-     2026-11-01) lists the original crew rejected for the edit, and says an edited copy of it was accepted.
+     2026-11-01) lists the original crew rejected for the edit, named as the original of an accepted edit.
   3. Add a memory (the header ⋯ menu's first item; no header button): files a proposal and approves
      it in one step (the dialog says so); the memory is listed; then Retire removes exactly it.
   4. Steer shows rules and POLICY proposals only: no memory link, no header button (Add a rule is the
@@ -163,7 +163,7 @@ with sync_playwright() as p:
     note.wait_for(state="visible", timeout=10000)
     approved_note = note.inner_text()
     card.wait_for(state="detached", timeout=10000)
-    # Not accepted: the store keeps the original crew rejected for the edit; the row says an edited copy was accepted.
+    # Not accepted: the store keeps the original crew rejected for the edit; the row says what the record names it.
     page.get_by_test_id("memory-view-not-accepted").click()
     page.locator('[data-testid="not-accepted-row"]').first.wait_for(state="visible", timeout=10000)
     na_rows = page.locator('[data-testid="not-accepted-row"]').evaluate_all(
@@ -171,7 +171,7 @@ with sync_playwright() as p:
     not_accepted_at = page.evaluate(ADDR)["at"]
     page.wait_for_timeout(300)
     page.screenshot(path=str(SHOTS / "desk-memory-not-accepted.png"))
-    check("not-accepted-memory", [r[0] for r in na_rows] == ["pm-1"] and "an edited copy of it was accepted" in na_rows[0][1]
+    check("not-accepted-memory", [r[0] for r in na_rows] == ["pm-1"] and "named as the original of an accepted edit" in na_rows[0][1]
           and not_accepted_at == "/memory?view=not-accepted", rows=na_rows, at=not_accepted_at)
     page.get_by_test_id("memory-view-memories").click()
     settled(page)

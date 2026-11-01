@@ -482,8 +482,8 @@ describe('MemoryPage — Not accepted (what was turned down, kept by the store)'
     page('?view=not-accepted');
     const rows = await screen.findAllByTestId('not-accepted-row');
     expect(rows.map((r) => r.getAttribute('data-proposal-id'))).toEqual(['orig', 'rj1', 'wd', 'rj0']);
-    expect(within(rows[0]!).getByTestId('not-accepted-line')).toHaveTextContent('Memory · an edited copy of it was accepted');
-    expect(within(rows[2]!).getByTestId('not-accepted-line')).toHaveTextContent('Memory · an edited copy');
+    expect(within(rows[0]!).getByTestId('not-accepted-line')).toHaveTextContent('Memory · proposed by codex · Wicked · named as the original of an accepted edit');
+    expect(within(rows[2]!).getByTestId('not-accepted-line')).toHaveTextContent('Memory · an edited copy · proposed by codex');
     expect(screen.getByTestId('memory-view-not-accepted')).toHaveAttribute('aria-checked', 'true');
     // One read of every state (the fold needs the approved copies to know which originals they replaced).
     expect(calls).toContain('/proposals');
@@ -510,7 +510,7 @@ describe('MemoryPage — Not accepted (what was turned down, kept by the store)'
     expect(rows.map((r) => r.getAttribute('data-proposal-id'))).toEqual(['pm1']);
   });
 
-  it('an accept-with-edit in Proposed lists the original under Not accepted, saying an edited copy of it was accepted', async () => {
+  it('an accept-with-edit in Proposed lists the original under Not accepted, named as the original of an accepted edit', async () => {
     wire([], [PM]);
     const view = page('?view=proposals');
     const user = userEvent.setup();
@@ -523,7 +523,31 @@ describe('MemoryPage — Not accepted (what was turned down, kept by the store)'
     view.rerender(<MemoryPage search="?view=not-accepted" navigate={navigate} address={(p) => `/?tab=memory&at=${encodeURIComponent(p)}`} />);
     const rows = await screen.findAllByTestId('not-accepted-row');
     expect(rows.map((r) => r.getAttribute('data-proposal-id'))).toEqual(['pm1']);
-    expect(within(rows[0]!).getByTestId('not-accepted-line')).toHaveTextContent('an edited copy of it was accepted');
+    expect(within(rows[0]!).getByTestId('not-accepted-line')).toHaveTextContent('named as the original of an accepted edit');
+  });
+
+  it('a reject still in flight when Not accepted opens shows up once it lands (review r3)', async () => {
+    wire([M1], [PM]);
+    const base = apiFetch.getMockImplementation()!;
+    let land!: () => void;
+    apiFetch.mockImplementation((path: unknown, init?: { body?: string; method?: string }) =>
+      (/\/reject$/.test(String(path)) ? new Promise((r) => { land = () => r(base(path, init)); }) : base(path, init)));
+    const view = page('?view=proposals');
+    const user = userEvent.setup();
+    await user.click(within(await screen.findByTestId('proposal-card')).getByTestId('proposal-reject'));
+    view.rerender(<MemoryPage search="?view=not-accepted" navigate={navigate} address={(p) => `/?tab=memory&at=${encodeURIComponent(p)}`} />);
+    await screen.findByTestId('not-accepted-empty');
+    await act(async () => { land(); await Promise.resolve(); });
+    expect((await screen.findAllByTestId('not-accepted-row')).map((r) => r.getAttribute('data-proposal-id'))).toEqual(['pm1']);
+  });
+
+  it('says nothing about who filed a proposal the record does not name', async () => {
+    wire([M1], [{ ...PM, id: 'mine', provenance: {}, state: 'rejected' }]);
+    page('?view=not-accepted');
+    const row = await screen.findByTestId('not-accepted-row');
+    expect(within(row).getByTestId('not-accepted-line').textContent).toBe('Memory');
+    await userEvent.setup().click(within(row).getByTestId('not-accepted-open'));
+    expect(row).toHaveTextContent('Proposed byNot recorded');
   });
 
   it('a failed read says so (never the empty verdict) and Try again recovers; a failed refresh keeps the rows', async () => {
