@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 
 /**
  * wicked-web chrome (Topbar) — theme toggle (#themeBtn ↔ data-theme on <html>,
- * persisted under localStorage 'wa-theme') and the ecosystem dropdown
+ * persisted under localStorage 'wa-theme-v3', written only on a click) and the ecosystem dropdown
  * (#projectsBtn → #projectsMenu), which lists studio as a first-class
  * experience-plane product with a SITE link.
  */
@@ -10,24 +10,26 @@ test.describe('site chrome (wicked-web topbar)', () => {
   test('theme toggle flips data-theme on <html> and persists across reload', async ({ page }) => {
     await page.goto('/');
     const html = page.locator('html');
-    await expect(html).toHaveAttribute('data-theme', 'light');
+    await expect(html).toHaveAttribute('data-theme', 'dark');
+    // loading a page persists nothing: only a click writes the choice
+    expect(await page.evaluate(() => localStorage.getItem('wa-theme-v3'))).toBeNull();
 
     await page.locator('#themeBtn').click();
-    await expect(html).toHaveAttribute('data-theme', 'dark');
+    await expect(html).toHaveAttribute('data-theme', 'light');
     await expect
-      .poll(() => page.evaluate(() => localStorage.getItem('wa-theme')))
-      .toBe('dark');
+      .poll(() => page.evaluate(() => localStorage.getItem('wa-theme-v3')))
+      .toBe('light');
 
     // Persists: the no-flash init re-applies the stored theme on reload.
     await page.reload();
-    await expect(html).toHaveAttribute('data-theme', 'dark');
+    await expect(html).toHaveAttribute('data-theme', 'light');
 
     // And toggles back.
     await page.locator('#themeBtn').click();
-    await expect(html).toHaveAttribute('data-theme', 'light');
+    await expect(html).toHaveAttribute('data-theme', 'dark');
     await expect
-      .poll(() => page.evaluate(() => localStorage.getItem('wa-theme')))
-      .toBe('light');
+      .poll(() => page.evaluate(() => localStorage.getItem('wa-theme-v3')))
+      .toBe('dark');
   });
 
   test('ecosystem dropdown opens, lists studio as a site, closes on Escape', async ({ page }) => {
