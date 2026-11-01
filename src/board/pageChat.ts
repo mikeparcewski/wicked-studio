@@ -9,9 +9,9 @@ import type { Ask, AskOption } from '../api/ask.js';
  * chat, the same citation check, the same history. Each page keeps its own conversation.
  */
 
-export type PageChatKind = 'understand' | 'report' | 'nerve' | 'evaluate' | 'steering' | 'memory' | 'learn';
+export type PageChatKind = 'understand' | 'report' | 'nerve' | 'evaluate' | 'steering' | 'memory' | 'learn' | 'agents' | 'repos' | 'jobs';
 
-export const PAGE_CHAT_KINDS: readonly PageChatKind[] = ['understand', 'report', 'nerve', 'evaluate', 'steering', 'memory', 'learn'];
+export const PAGE_CHAT_KINDS: readonly PageChatKind[] = ['understand', 'report', 'nerve', 'evaluate', 'steering', 'memory', 'learn', 'agents', 'repos', 'jobs'];
 
 /** The item a question is about: a number, a chart, a row, a past evaluation. */
 export interface PageFocus {
@@ -62,6 +62,18 @@ export const PAGE_CHAT_SPECS: Record<PageChatKind, PageChatSpec> = {
   learn: {
     title: 'Learn', placeholder: 'Ask about what studio has learned…',
     hint: 'Ask what studio has learned about your style, rules and brand, and what to teach it next.',
+  },
+  agents: {
+    title: 'Agents', placeholder: 'Ask about your agents…',
+    hint: 'Ask about your agents: who is signed in, how each has done, which to use for what. The chat sees this page.',
+  },
+  repos: {
+    title: 'Repositories', placeholder: 'Ask about your repositories…',
+    hint: 'Ask about your repositories: what each holds, how fresh its graph is, where work has gone. The chat sees this page.',
+  },
+  jobs: {
+    title: 'Jobs', placeholder: 'Ask about your jobs…',
+    hint: 'Ask about your jobs: what is running, what failed and why, what is waiting on you. The chat sees this page.',
   },
 };
 
@@ -156,7 +168,16 @@ export function nextOptions(ctx: NextContext): AskOption[] {
         ? [opt('remember', 'Choose what to keep', `Lists the ${ctx.remember!.length} ${ctx.remember!.length === 1 ? 'memory' : 'memories'} it would keep; what you pick is filed for your approval.`, { recommended: true }), FOLLOW, NONE]
         : [{ ...FOLLOW, recommended: true }, NONE];
     case 'learn':
+    case 'repos':
       return [{ ...FOLLOW, recommended: true }, NONE];
+    case 'agents':
+      return [{ ...FOLLOW, recommended: true }, NONE];
+    case 'jobs':
+      return [
+        { ...FOLLOW, recommended: true },
+        opt('new-job', 'Start a job about it', 'Opens New job with the question written in; nothing starts until you start it.'),
+        NONE,
+      ];
   }
 }
 

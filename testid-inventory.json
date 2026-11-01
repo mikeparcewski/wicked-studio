@@ -12,8 +12,8 @@
   "studioVersion": "0.13.0",
   "counts": {
     "files": 283,
-    "occurrences": 3920,
-    "static": 3332,
+    "occurrences": 3924,
+    "static": 3336,
     "dynamic": 87,
     "computed": 44
   },
@@ -280,6 +280,12 @@
     },
     {
       "testId": "agents-page",
+      "files": [
+        "src/components/agents/AgentsPage.tsx"
+      ]
+    },
+    {
+      "testId": "agents-page-ask",
       "files": [
         "src/components/agents/AgentsPage.tsx"
       ]
@@ -6326,6 +6332,12 @@
       "testId": "insights-trends",
       "files": [
         "src/plugins/wicked-insights/plugin.ts"
+      ]
+    },
+    {
+      "testId": "jobs-page-ask",
+      "files": [
+        "src/components/desk/DeskRuns.tsx"
       ]
     },
     {
@@ -12979,6 +12991,12 @@
       ]
     },
     {
+      "testId": "repos-page-ask",
+      "files": [
+        "src/components/RepositoriesPanel.tsx"
+      ]
+    },
+    {
       "testId": "repos-range",
       "files": [
         "src/components/RepositoriesPanel.tsx"
@@ -19017,6 +19035,12 @@
     },
     {
       "testId": "understand-ask-send",
+      "files": [
+        "src/components/desk/UnderstandPage.tsx"
+      ]
+    },
+    {
+      "testId": "understand-ask-voice",
       "files": [
         "src/components/desk/UnderstandPage.tsx"
       ]

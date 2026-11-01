@@ -147,7 +147,8 @@ export function NerveOverview({ state, snapshot, registry, reading, needCount, s
           <span className="wk-ncv-lead" data-tone={sentence.tone}>{sentence.lead}</span>
           {sentence.rest !== '' && <> <span>{sentence.rest}</span></>}
         </>}
-        action={<><CheckedStamp /><PageAskButton kind="nerve" label="Chat about system state" testId="nc-chat" small /><CalmButton testId="nc-recheck" disabled={reading} onClick={onRecheck}>{reading ? 'Checking…' : 'Check again'}</CalmButton></>}
+        titleAside={<PageAskButton kind="nerve" testId="nc-chat" />}
+        action={<><CheckedStamp /><CalmButton testId="nc-recheck" disabled={reading} onClick={onRecheck}>{reading ? 'Checking…' : 'Check again'}</CalmButton></>}
       />
 
       {(waitLine !== null || tidy !== null) && (

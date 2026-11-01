@@ -273,9 +273,8 @@ export function NerveCenterPage({ navigate = defaultNavigate, needCount = 0, fee
           <span aria-hidden>←</span> {PAGE_NAMES.watch}
         </a>
         <div className="wk-nc-head-row">
-          <h1 className="wk-desk-hello">{PAGE_NAMES.watch}</h1>
+          <div className="wk-pagetitle"><h1 className="wk-desk-hello">{PAGE_NAMES.watch}</h1><PageAskButton kind="nerve" testId="nc-chat" /></div>
           <span className="wk-nc-head-acts">
-            <PageAskButton kind="nerve" label="Chat about system state" testId="nc-chat" small />
             <button type="button" data-testid="nc-recheck" className="wk-btn wk-btn--secondary wk-btn--sm wk-nc-recheck" disabled={reading} onClick={recheck}>
               {reading ? 'Checking…' : 'Re-check'}
             </button>

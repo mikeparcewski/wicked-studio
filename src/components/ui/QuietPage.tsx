@@ -6,9 +6,9 @@ import { useRef } from 'react';
  * page's one filter, designed loading rows and a designed empty state.
  */
 
-export function QuietHead({ title, sentence, testId, action, id, level = 1 }: {
-  /** `testId` = the live sentence's testid. */
-  title: string; sentence: string; testId?: string; action?: React.ReactNode; id?: string;
+export function QuietHead({ title, sentence, testId, action, id, level = 1, titleAside }: {
+  /** `testId` = the live sentence's testid. `titleAside`: beside the title, the page chat's icon. */
+  title: string; sentence: string; testId?: string; action?: React.ReactNode; id?: string; titleAside?: React.ReactNode;
   /** 2 when the page sits under another page's title (a project's page names the project). */
   level?: 1 | 2;
 }): React.ReactElement {
@@ -16,7 +16,7 @@ export function QuietHead({ title, sentence, testId, action, id, level = 1 }: {
   return (
     <header className="wk-jr-head">
       <div className="wk-jr-hello">
-        <H className="wk-jr-title" {...(id !== undefined ? { id } : {})}>{title}</H>
+        <div className="wk-pagetitle"><H className="wk-jr-title" {...(id !== undefined ? { id } : {})}>{title}</H>{titleAside}</div>
         <p className="wk-jr-sentence" aria-live="polite" {...(testId !== undefined ? { 'data-testid': testId } : {})}>{sentence}</p>
       </div>
       {action}

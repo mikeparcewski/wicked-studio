@@ -60,7 +60,7 @@ export function LearnHub({ navigate, search }: { navigate: Navigate; search: str
   return (
     <div className="flex-1 overflow-auto" data-testid="learn-hub" ref={pageRef}>
       <PageFrame title="Learn" intro="Teach studio how you and your team work. Everything it learns arrives as a suggestion; nothing is kept until you accept it."
-        actions={<PageAskButton kind="learn" testId="learn-page-ask" small />}>
+        titleAside={<PageAskButton kind="learn" testId="learn-page-ask" />}>
         <SetupResume navigate={navigate} />
         <div className="wk-learn-tabs">
           <Tabs tabs={TABS} active={tab} onChange={(id) => navigate(learnPath(id as LearnTabId, id === 'personality' ? project : null))}

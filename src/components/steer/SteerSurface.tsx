@@ -362,7 +362,6 @@ export function SteerSurface({ pathname, search, navigate: navigateRaw, runs = [
   ];
   const action = (
     <>
-    <PageAskButton kind="steering" testId="steer-page-ask" />
     <CalmAction label="Add a rule" testId="steer-add-rule" icon={<Plus size={16} aria-hidden />} onClick={addRule} disabled={read.kind !== 'ok'}
       title={read.kind === 'ok' ? undefined : 'Available once the rules have loaded (a new id must not collide with one in force)'}
       menu={moreMoves} menuLabel="More ways to add and manage rules" menuTestId={/* testid */ 'steer-more'} />
@@ -525,7 +524,7 @@ export function SteerSurface({ pathname, search, navigate: navigateRaw, runs = [
     <div className="wk-se wk-se--calm" data-testid="steer-surface" data-steering-type={type ?? 'all'}>
       <div className="wk-se-scroll wk-calm" ref={scrollRef}>
         <div className="wk-calm-col">
-          <CalmHead title={title ?? 'Steering'} sentence={sentence} sentenceTestId={/* testid */ 'steer-sentence'} action={action} />
+          <CalmHead title={title ?? 'Steering'} titleAside={<PageAskButton kind="steering" testId="steer-page-ask" />} sentence={sentence} sentenceTestId={/* testid */ 'steer-sentence'} action={action} />
           {list}
           {health}
         </div>

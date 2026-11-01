@@ -121,12 +121,11 @@ export function ReportPage({ runs, runsShown, now, navigate, projectId, agentNam
       <div className="wk-rep-col">
         <header className="wk-rep-head">
           <div className="wk-rep-hello">
-            <h1 className="wk-rep-title">Report</h1>
+            <div className="wk-pagetitle"><h1 className="wk-rep-title">Report</h1><PageAskButton kind="report" testId="report-ask" /></div>
             <p className="wk-rep-lede" data-testid="report-lede">{lede}</p>
             <InsightsLine navigate={navigate} testId="report-insights-line" />
           </div>
           <div className="wk-rep-period">
-            <PageAskButton kind="report" testId="report-ask" />
             <Segmented label="Period" data-testid="report-period" value={kind}
               options={[{ value: '7', label: '7 days', testId: 'report-period-7' }, { value: '30', label: '30 days', testId: 'report-period-30' }, { value: 'custom', label: 'Custom', testId: 'report-period-custom' }]}
               onChange={setKind} />

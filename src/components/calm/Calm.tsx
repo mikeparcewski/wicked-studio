@@ -28,8 +28,10 @@ export function CalmPage({ children, 'data-testid': testId, className }: {
 }
 
 /** The title, the one sentence, and the page's one action (with its menu, when it has one). */
-export function CalmHead({ title, sentence, action, sentenceTestId, titleTestId }: {
+export function CalmHead({ title, sentence, action, sentenceTestId, titleTestId, titleAside }: {
   title: string;
+  /** Beside the title: the page chat's icon (`PageAskButton`), the one entry to the page's chat. */
+  titleAside?: React.ReactNode;
   sentence: React.ReactNode;
   action?: React.ReactNode | undefined;
   sentenceTestId?: string | undefined;
@@ -38,7 +40,7 @@ export function CalmHead({ title, sentence, action, sentenceTestId, titleTestId 
   return (
     <header className="wk-calm-head">
       <div className="wk-calm-hello">
-        <h1 className="wk-calm-title" data-testid={titleTestId}>{title}</h1>
+        <div className="wk-pagetitle"><h1 className="wk-calm-title" data-testid={titleTestId}>{title}</h1>{titleAside}</div>
         <p className="wk-calm-sentence" data-testid={sentenceTestId} aria-live="polite">{sentence}</p>
       </div>
       {action !== undefined && action !== null && <div className="wk-calm-actions">{action}</div>}

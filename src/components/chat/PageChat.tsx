@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { MessageSquarePlus, Sparkles, X } from 'lucide-react';
+import { MessageCircle, MessageSquarePlus, X } from 'lucide-react';
 import type { AskAnswer } from '../../api/ask.js';
 import { api } from '../../api/client.js';
 import { fileProposal } from '../../api/proposals.js';
@@ -49,6 +49,11 @@ export function askPage(kind: PageChatKind, opts: { focus?: PageFocus | null; te
 /** An item's data as a focus: its visible words, cut to fit. */
 export function focusOfElement(el: HTMLElement, key: string, label: string, extra: readonly string[] = []): PageFocus {
   return { key, label, lines: [...extra, ...textLines(el.innerText ?? el.textContent ?? '', ITEM_TEXT_CAP)] };
+}
+
+/** Host a page's chat whose data is the visible words of the page's root (`[data-testid=rootTestId]`). */
+export function usePageChatFor(kind: PageChatKind, knows: string, rootTestId: string): void {
+  usePageChatHostPage(kind, { knows, data: () => pageTextLines(document.querySelector<HTMLElement>(`[data-testid="${rootTestId}"]`)) });
 }
 
 /** A whole page's visible words as pack lines (the header Ask: "a chat over all the page's data"). */
@@ -107,14 +112,20 @@ export function questionAbout(label: string): string {
   return `What’s behind ${label.replace(/\s*·.*$/u, '')}?`;
 }
 
-/** The page's header Ask (an icon button): opens the chat over all of the page's data. */
-export function PageAskButton({ kind, label = 'Ask', testId = 'page-ask', small = false }: { kind: PageChatKind; label?: string; testId?: string; small?: boolean }): React.ReactElement {
+/**
+ * THE PAGE CHAT'S ONE ENTRY (operator, round 4): a single icon right beside the page title, the same icon, place and
+ * behaviour on every page that has a chat. It opens (or closes) the page's inline chat over all of the page's data.
+ * There is no Ask button among a page's filters or actions.
+ */
+export function PageAskButton({ kind, testId = 'page-ask' }: { kind: PageChatKind; testId?: string }): React.ReactElement {
   const open = usePageChatOpen(kind);
+  const name = PAGE_CHAT_SPECS[kind].title;
   return (
-    <button type="button" className={`wk-ue-btn wk-ue-btn--secondary${small ? ' wk-ue-btn--sm' : ''} wk-pagechat-askbtn`} data-testid={testId} aria-pressed={open}
+    <button type="button" className="wk-pagechat-titlebtn" data-testid={testId} aria-pressed={open}
+      aria-label={open ? `Close the chat about ${name}` : `Chat about ${name}`}
       onClick={() => (open ? usePageChat.getState().setOpen(kind, false) : askPage(kind, { focus: null }))}
-      title={open ? 'Close this page’s chat' : 'Ask about everything on this page'}>
-      <Sparkles size={15} aria-hidden /> {label}
+      title={open ? 'Close this page’s chat' : 'Chat about everything on this page'}>
+      <MessageCircle size={18} aria-hidden />
     </button>
   );
 }

@@ -309,7 +309,7 @@ export function MemoryPage({ search, navigate, address = (p) => p, project = nul
     <div className="wk-se wk-mem wk-se--calm" data-testid="memory-page" data-view={view}>
       <div className="wk-se-scroll wk-calm" ref={scrollRef}>
         <div className="wk-calm-col">
-          <CalmHead title="Memory" sentence={<span data-testid="memory-intro">{sentence}</span>} sentenceTestId={/* testid */ 'memory-sentence'} action={<><PageAskButton kind="memory" testId="memory-page-ask" />{action}</>} />
+          <CalmHead title="Memory" titleAside={<PageAskButton kind="memory" testId="memory-page-ask" />} sentence={<span data-testid="memory-intro">{sentence}</span>} sentenceTestId={/* testid */ 'memory-sentence'} action={action} />
           {panel === 'import' ? (
             <MemoryCaptureAdd key={panel} mode="import" project={project ?? 'default'}
               projects={[{ id: 'default', name: 'Unfiled (every project)' }, ...projects.filter((p) => p.id !== 'default').map((p) => ({ id: p.id, name: p.name }))]}

@@ -362,10 +362,10 @@ export function EvaluateSurface({ navigate, title = 'Evaluate', intro = SENTENCE
       <div className="wk-ue-col">
         <header className="wk-ue-head">
           <div className="wk-ue-head-words">
-            <h1 className="wk-ue-title">{title}</h1>
+            <div className="wk-pagetitle"><h1 className="wk-ue-title">{title}</h1><PageAskButton kind="evaluate" testId="evaluate-page-ask" /></div>
             <p className="wk-ue-sentence">{intro}</p>
           </div>
-          <div className="wk-ue-head-acts"><PageAskButton kind="evaluate" testId="evaluate-page-ask" />{runButton}</div>
+          <div className="wk-ue-head-acts">{runButton}</div>
         </header>
         {runNotes}
         {summaryLine}

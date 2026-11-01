@@ -23,6 +23,7 @@ import { ProjectSwitcher } from './ProjectSwitcher.js';
 import { RepoFindings } from './RepoFindings.js';
 import { useNeedsSources } from '../store/needsSources.js';
 import type { Navigate } from '../hooks/useRoute.js';
+import { PageAskButton, usePageChatFor } from './chat/PageChat.js';
 
 type SourceMode = 'local' | 'remote';
 
@@ -130,6 +131,7 @@ const CAPTURE_TONE: Record<string, 'quiet' | 'run' | 'fail'> = {
 };
 
 export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, ambientProject = null }: Props): React.ReactElement {
+  usePageChatFor('repos', 'Knows Repositories: each registered repository, its code graph and its work.', 'repos-page');
   const [repos, setRepos] = useState<RepoEntry[]>([]);
   const [runs, setRuns] = useState<SessionView[]>([]);
   const [loading, setLoading] = useState(true);
@@ -455,6 +457,7 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
         <div className="wk-jr-col">
           <QuietHead
             title="Repositories"
+            titleAside={<PageAskButton kind="repos" testId="repos-page-ask" />}
             sentence={sentence}
             testId="repos-sentence"
             action={(

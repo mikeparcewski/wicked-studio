@@ -15,6 +15,7 @@ import { AgentModal } from './AgentModal.js';
 import { useAgentLogin } from './agentLogin.js';
 import { SetupPanel } from './SetupPanel.js';
 import { useAgentRows } from './useAgentRows.js';
+import { PageAskButton, usePageChatFor } from '../chat/PageChat.js';
 
 /**
  * THE AGENTS PAGE (`/agents`, DES-seats-page §3; the calm pages mockup, 2026-10-26): a title, one
@@ -97,6 +98,7 @@ function AgentLine({ r, open }: { r: AgentRow; open: (key: string) => void }): R
 export function AgentsPanel({ search, navigate, basePath = AGENTS_PATH }: {
   search: string; navigate: Navigate; basePath?: string;
 }): React.ReactElement {
+  usePageChatFor('agents', 'Knows Agents: who is signed in, ready and how each has done this week.', 'agents-panel');
   const v = useAgentRows();
   const [, tick] = useState(0);
   const [retrying, setRetrying] = useState(false);
@@ -232,7 +234,7 @@ export function AgentsPanel({ search, navigate, basePath = AGENTS_PATH }: {
 
   return (
     <div data-testid="agents-panel" className="wk-agents-panel wk-calm-col">
-      <CalmHead title="Agents" sentence={sentence} sentenceTestId={/* testid */ 'agents-sentence'} action={v.hasRoster && v.rows.length > 0 ? undefined : null} />
+      <CalmHead title="Agents" titleAside={<PageAskButton kind="agents" testId="agents-page-ask" />} sentence={sentence} sentenceTestId={/* testid */ 'agents-sentence'} action={v.hasRoster && v.rows.length > 0 ? undefined : null} />
       {body}
       {fix !== null && known && <AgentModal agentKey={fix} onClose={close} />}
     </div>
