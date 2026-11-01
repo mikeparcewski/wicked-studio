@@ -10,7 +10,7 @@ memory proposal, one policy proposal) and proves the user's path end to end:
      memories, newest first; a kind card narrows the list; a search re-reads the wire.
   2. Proposals: only the MEMORY proposal is here; Edit → Approve with this edit approves it with the
      edited words, and the new memory is listed with them. Not accepted (the third pill, operator
-     2026-11-01) lists nothing for it: crew rejected the original only because the edit replaced it.
+     2026-11-01) lists the original crew rejected for the edit, and says an edited copy of it was accepted.
   3. Add a memory (the header ⋯ menu's first item; no header button): files a proposal and approves
      it in one step (the dialog says so); the memory is listed; then Retire removes exactly it.
   4. Steer shows rules and POLICY proposals only: no memory link, no header button (Add a rule is the
@@ -163,14 +163,16 @@ with sync_playwright() as p:
     note.wait_for(state="visible", timeout=10000)
     approved_note = note.inner_text()
     card.wait_for(state="detached", timeout=10000)
-    # Not accepted: the original crew rejected for the edit is not a turn-down; it is said, not listed.
+    # Not accepted: the store keeps the original crew rejected for the edit; the row says an edited copy was accepted.
     page.get_by_test_id("memory-view-not-accepted").click()
-    page.get_by_test_id("not-accepted-empty").wait_for(state="visible", timeout=10000)
-    not_accepted = page.get_by_test_id("not-accepted-empty").inner_text()
+    page.locator('[data-testid="not-accepted-row"]').first.wait_for(state="visible", timeout=10000)
+    na_rows = page.locator('[data-testid="not-accepted-row"]').evaluate_all(
+        "els => els.map(e => [e.dataset.proposalId, e.querySelector('[data-testid=not-accepted-line]').textContent])")
     not_accepted_at = page.evaluate(ADDR)["at"]
+    page.wait_for_timeout(300)
     page.screenshot(path=str(SHOTS / "desk-memory-not-accepted.png"))
-    check("not-accepted-memory", "No memory proposal was turned down." in not_accepted and "accepted with an edit" in not_accepted
-          and not_accepted_at == "/memory?view=not-accepted", text=not_accepted, at=not_accepted_at)
+    check("not-accepted-memory", [r[0] for r in na_rows] == ["pm-1"] and "an edited copy of it was accepted" in na_rows[0][1]
+          and not_accepted_at == "/memory?view=not-accepted", rows=na_rows, at=not_accepted_at)
     page.get_by_test_id("memory-view-memories").click()
     settled(page)
     page.wait_for_function(f"() => [...document.querySelectorAll('[data-testid=\"memory-content\"]')].some(e => e.textContent === {json.dumps(EDITED)})", timeout=10000)

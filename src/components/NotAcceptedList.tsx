@@ -59,10 +59,8 @@ export function NotAcceptedList({ kind, revision = 0, projectName }: {
     return <StateBanner data-testid="not-accepted-error" kind={readErrorKind(read.error)} what="the proposals that were turned down"
       error={read.error instanceof Error ? read.error.message : String(read.error)} onRetry={load} />;
   }
-  const { rows, replaced } = folded ?? { rows: [], replaced: 0 };
-  const replacedLine = replaced > 0
-    ? `${replaced} ${replaced === 1 ? 'proposal' : 'proposals'} you accepted with an edit ${replaced === 1 ? 'is' : 'are'} not listed: ${replaced === 1 ? 'its' : 'their'} edited words were kept.`
-    : null;
+  const rows = folded?.rows ?? [];
+  const replacedBy = folded?.replacedBy ?? new Map<string, string>();
 
   const row = (p: Proposal): React.ReactElement => {
     const words = kind === 'memory' ? memoryPayload(p).content : policyPayload(p).rule;
@@ -79,10 +77,11 @@ export function NotAcceptedList({ kind, revision = 0, projectName }: {
       : 'Memory';
     const proposed = typeof p.created_at === 'number' && p.created_at > 0 ? p.created_at * 1000 : null;
     const copyOf = editedFrom(p);
+    const copy = replacedBy.get(p.id) ?? null;
     return (
       <CalmRow key={p.id} data-testid="not-accepted-row" data={{ 'proposal-id': p.id, kind }} tone="quiet"
         title={<span data-testid="not-accepted-text">{text}</span>} titleAttr={text}
-        sub={<span data-testid="not-accepted-line">{[what, copyOf !== null ? 'an edited copy' : `proposed by ${by}`, where].filter((x): x is string => x !== null).join(' · ')}</span>}
+        sub={<span data-testid="not-accepted-line">{[what, copy !== null ? 'an edited copy of it was accepted' : copyOf !== null ? 'an edited copy' : `proposed by ${by}`, where].filter((x): x is string => x !== null).join(' · ')}</span>}
         meta={proposed === null ? 'Not accepted' : `Proposed ${shortDate(proposed)}`}
         openTestId={/* testid */ 'not-accepted-open'} openLabel={`${shortContent(text)}: show details`}
         details={(
@@ -90,6 +89,7 @@ export function NotAcceptedList({ kind, revision = 0, projectName }: {
             <p>{text}</p>
             <CalmFacts facts={[
               { k: 'State', v: 'Rejected' },
+              ...(copy !== null ? [{ k: 'Edited copy', v: 'An accepted proposal names this one as the original it was edited from (its id is under Technical details).' }] : []),
               ...(copyOf !== null ? [{ k: 'Edited from', v: 'Another proposal (its id is under Technical details). Crew rejects an edited copy itself when approving it failed.' }] : []),
               ...(proposed !== null ? [{ k: 'Proposed', v: relTime(proposed) }] : []),
               { k: 'Proposed by', v: by },
@@ -97,6 +97,7 @@ export function NotAcceptedList({ kind, revision = 0, projectName }: {
               ...(run !== undefined && run !== '' ? [{ k: 'Run', v: <a className="wk-link" data-testid="not-accepted-run" href={sessionPath(`run:${run}`)}>Open its run</a> }] : []),
             ]} />
             <TechDetails text={[`proposal_id: ${p.id}`, `kind_type: ${p.kind_type}`, ...(copyOf !== null ? [`edited_from: ${copyOf}`] : []),
+              ...(copy !== null ? [`accepted_copy: ${copy}`] : []),
               ...Object.entries(p.provenance).map(([k, v]) => `${k}: ${String(v)}`),
               ...Object.entries(p.facets).map(([k, v]) => `${k}: ${String(v)}`)]} />
           </>
@@ -113,12 +114,12 @@ export function NotAcceptedList({ kind, revision = 0, projectName }: {
       )}
       {rows.length === 0 ? (
         <CalmEmpty data-testid="not-accepted-empty" title={`No ${noun} proposal was turned down.`}
-          body={<p>{`When you reject a proposed ${noun}, it is kept and listed here for review.`}{replacedLine !== null ? ` ${replacedLine}` : ''}</p>} />
+          body={<p>{`When you reject a proposed ${noun}, it is kept and listed here for review.`}</p>} />
       ) : (
         <>
           <CalmRows data-testid="not-accepted-list" label={`${cap(noun)} proposals not accepted`}>{rows.map(row)}</CalmRows>
           <p className="wk-calm-foot" data-testid="not-accepted-count" data-count={rows.length}>
-            {`${rows.length} not accepted`}{replacedLine !== null ? ` · ${replacedLine}` : ''}
+            {`${rows.length} not accepted`}
           </p>
         </>
       )}

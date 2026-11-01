@@ -193,24 +193,27 @@ export function SteerSurface({ pathname, search, navigate: navigateRaw, runs = [
   const projectName = (id: string | undefined): string | null => (id === undefined ? null : projects.find((p) => p.id === id)?.name ?? null);
 
   // ── Page state ───────────────────────────────────────────────────────────────────────────────
-  // `/steering/proposals` (Needs you's Review, ⌘K) opens on the Proposals view.
+  // Each pill has an address, so a reload or Back lands on it (review r2): Proposed is `/steering/proposals`
+  // (Needs you's Review, ⌘K), Not accepted is `?view=not-accepted`; Active (and Retired, from the ⋯ menu) is
+  // the rules address without either.
   const askedProposals = pathname === steerProposalsPath();
-  // `?view=not-accepted` opens (and a reload or Back keeps) the Not accepted list.
   const askedNotAccepted = query.get('view') === NOT_ACCEPTED;
   const [view, setView] = useState<ListView>(askedNotAccepted ? 'not-accepted' : askedProposals ? 'proposals' : 'live');
-  useEffect(() => { if (askedProposals && !askedNotAccepted) setView('proposals'); }, [askedProposals, askedNotAccepted]);
   useEffect(() => {
     if (askedNotAccepted) setView('not-accepted');
-    else setView((v) => (v === 'not-accepted' ? (askedProposals ? 'proposals' : 'live') : v));
+    else if (askedProposals) setView('proposals');
+    else setView((v) => (v === 'not-accepted' || v === 'proposals' ? 'live' : v));
   }, [askedNotAccepted, askedProposals]);
-  /** A pill: Not accepted is written to the address (`?view=not-accepted`); leaving it takes it back out. */
   const pickView = (v: ListView): void => {
     setView(v);
-    if ((v === 'not-accepted') === askedNotAccepted) return;
+    if (v === 'proposals') { if (!askedProposals || askedNotAccepted) navigate(steerProposalsPath()); return; }
+    // Leaving Proposed's own address for the rules; the page's other filters stay in the query.
+    const base = askedProposals ? RULES_PATH : pathname;
     const n = new URLSearchParams(search);
     if (v === 'not-accepted') n.set('view', NOT_ACCEPTED); else n.delete('view');
     const qs = n.toString();
-    navigate(`${pathname}${qs === '' ? '' : `?${qs}`}`);
+    const target = `${base}${qs === '' ? '' : `?${qs}`}`;
+    if (target !== `${pathname}${search}`) navigate(target);
   };
   const [q, setQ] = useState('');
   const [facet, setFacet] = useState<string | null>(null);

@@ -304,6 +304,7 @@ with sync_playwright() as p:
                   for g in by_group.values()),
           **{g: {k: v for k, v in d.items() if k != "rows"} | {"rows": d["rows"][:6]} for g, d in by_group.items()})
     page.get_by_test_id("desk-runs-group-active").click()
+    page.wait_for_timeout(400)
     page.screenshot(path=str(SHOTS / "jobs-repos-jobs-by-project.png"))
     ctx.close()
 

@@ -17,8 +17,8 @@ import userEvent from '@testing-library/user-event';
  *    count read first); a crew that cannot erase by id deletes nothing and never falls back;
  *  - the Proposals view reviews MEMORY proposals only, approve as filed or with an edit;
  *  - the pills (Active / Proposed / Not accepted) move on the page's address; Add a memory is the ⋯
- *    menu's first item (operator 2026-11-01), and Not accepted lists the rejected memory proposals the
- *    store kept, minus an accepted edit's original and a withdrawn edit copy.
+ *    menu's first item (operator 2026-11-01), and Not accepted lists every rejected memory proposal the
+ *    store kept, hiding none: an accepted edit's original and a rejected edited copy are listed and say so.
  */
 
 const apiFetch = vi.fn();
@@ -477,24 +477,25 @@ describe('MemoryPage — Not accepted (what was turned down, kept by the store)'
   const WITHDRAWN: Proposal = { ...REJ, id: 'wd', payload: { content: 'stray copy', edited_from: 'pm1' }, created_at: 1_700_000_030 };
   const REJ_POLICY: Proposal = { ...PP, id: 'rp', state: 'rejected' };
 
-  it('lists the rejected memory proposals newest first, read only; leaves out (and counts) accepted-edit originals', async () => {
+  it('lists every rejected memory proposal newest first, read only; edited originals and copies say what they are', async () => {
     const { calls } = wire([M1], [PM, REJ_OLD, REJ, EDIT_ORIG, EDIT_COPY, WITHDRAWN, REJ_POLICY]);
     page('?view=not-accepted');
     const rows = await screen.findAllByTestId('not-accepted-row');
-    expect(rows.map((r) => r.getAttribute('data-proposal-id'))).toEqual(['rj1', 'wd', 'rj0']);
-    expect(within(rows[1]!).getByTestId('not-accepted-line')).toHaveTextContent('Memory · an edited copy');
+    expect(rows.map((r) => r.getAttribute('data-proposal-id'))).toEqual(['orig', 'rj1', 'wd', 'rj0']);
+    expect(within(rows[0]!).getByTestId('not-accepted-line')).toHaveTextContent('Memory · an edited copy of it was accepted');
+    expect(within(rows[2]!).getByTestId('not-accepted-line')).toHaveTextContent('Memory · an edited copy');
     expect(screen.getByTestId('memory-view-not-accepted')).toHaveAttribute('aria-checked', 'true');
     // One read of every state (the fold needs the approved copies to know which originals they replaced).
     expect(calls).toContain('/proposals');
-    expect(within(rows[0]!).getByTestId('not-accepted-text')).toHaveTextContent('always squash-merge on Fridays');
-    expect(within(rows[0]!).getByTestId('not-accepted-line')).toHaveTextContent('Memory · proposed by codex · Wicked');
-    expect(screen.getByTestId('not-accepted-count')).toHaveTextContent('3 not accepted · 1 proposal you accepted with an edit is not listed');
+    expect(within(rows[1]!).getByTestId('not-accepted-text')).toHaveTextContent('always squash-merge on Fridays');
+    expect(within(rows[1]!).getByTestId('not-accepted-line')).toHaveTextContent('Memory · proposed by codex · Wicked');
+    expect(screen.getByTestId('not-accepted-count')).toHaveTextContent('4 not accepted');
     // Read only: no approve / reject / edit on a turned-down row, and no search over the memories.
-    expect(within(rows[0]!).queryByRole('button', { name: /approve|reject/i })).toBeNull();
+    expect(within(rows[1]!).queryByRole('button', { name: /approve|reject/i })).toBeNull();
     expect(screen.queryByTestId('memories-search-open')).toBeNull();
     const user = userEvent.setup();
-    await user.click(within(rows[0]!).getByTestId('not-accepted-open'));
-    expect(within(rows[0]!).getByTestId('not-accepted-run')).toHaveAttribute('href', expect.stringContaining('run-9'));
+    await user.click(within(rows[1]!).getByTestId('not-accepted-open'));
+    expect(within(rows[1]!).getByTestId('not-accepted-run')).toHaveAttribute('href', expect.stringContaining('run-9'));
   });
 
   it('a proposal rejected in Proposed shows up under Not accepted', async () => {
@@ -509,7 +510,7 @@ describe('MemoryPage — Not accepted (what was turned down, kept by the store)'
     expect(rows.map((r) => r.getAttribute('data-proposal-id'))).toEqual(['pm1']);
   });
 
-  it('an accept-with-edit in Proposed is not a turn-down: Not accepted stays empty and says why', async () => {
+  it('an accept-with-edit in Proposed lists the original under Not accepted, saying an edited copy of it was accepted', async () => {
     wire([], [PM]);
     const view = page('?view=proposals');
     const user = userEvent.setup();
@@ -520,9 +521,9 @@ describe('MemoryPage — Not accepted (what was turned down, kept by the store)'
     await user.click(within(card).getByTestId('proposal-approve-edited'));
     await screen.findByTestId('proposals-section-note');
     view.rerender(<MemoryPage search="?view=not-accepted" navigate={navigate} address={(p) => `/?tab=memory&at=${encodeURIComponent(p)}`} />);
-    const empty = await screen.findByTestId('not-accepted-empty');
-    expect(empty).toHaveTextContent('No memory proposal was turned down.');
-    expect(empty).toHaveTextContent('1 proposal you accepted with an edit is not listed: its edited words were kept.');
+    const rows = await screen.findAllByTestId('not-accepted-row');
+    expect(rows.map((r) => r.getAttribute('data-proposal-id'))).toEqual(['pm1']);
+    expect(within(rows[0]!).getByTestId('not-accepted-line')).toHaveTextContent('an edited copy of it was accepted');
   });
 
   it('a failed read says so (never the empty verdict) and Try again recovers; a failed refresh keeps the rows', async () => {

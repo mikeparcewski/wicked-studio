@@ -19,12 +19,14 @@ npm publish dates. Every version listed here exists on
   - **Steer:** the header's Add a rule button is gone; Add a rule is the first item in the ⋯ menu (disabled until the
     rules have loaded). The pills gain Not accepted. The pills (here and on Memory) are one tab stop; the arrow keys
     move between them.
-  - **Not accepted** lists the rejected proposals. The store keeps a rejected proposal (estate marks it
-    `rejected`), and crew's `GET /proposals` returns it. Not listed: an original that crew rejected because you
-    accepted an edited copy (the foot line counts these). A rejected edited copy is listed and labelled as one: crew
-    also rejects a copy itself when approving it failed, and the wire can't tell the two apart. The list is
-    read-only, because crew can't reopen a rejected proposal. `?view=not-accepted` opens it on either page. No crew
-    change is needed.
+  - **Not accepted** lists every rejected proposal the store kept. Estate marks a rejected proposal `rejected` and
+    never deletes it, and crew's `GET /proposals` returns it. Nothing is hidden, because the wire doesn't record who
+    rejected a proposal or why. Two kinds of row say what they are:
+    - an original that crew rejected because you accepted an edited copy: "an edited copy of it was accepted";
+    - an edited copy: crew also rejects a copy itself when approving it failed.
+
+    The list is read-only, because crew can't reopen a rejected proposal. `?view=not-accepted` opens it on either
+    page, and Steer's Proposed pill opens `/steering/proposals`. No crew change is needed.
   - **Jobs:** each row's line starts with the job's project, or "No project" for an unfiled job. A project picker in
     the list head (All projects / each project / No project, with counts for the list as shown) replaces the
     Project select that was hidden under Search and filter.

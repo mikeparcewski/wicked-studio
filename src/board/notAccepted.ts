@@ -5,18 +5,20 @@ import { proposalKind, type Proposal } from '../api/proposals.js';
  * Accepted for review as well"): the proposals that were rejected, read back from the queue.
  *
  * The store keeps a rejected proposal (estate marks it `rejected`, it never deletes it), so this is a
- * fold over `GET /proposals` (every state). One kind of rejected row is provably not a turn-down and is
- * left out (and counted): the ORIGINAL of an accepted edit. Crew's accept-with-edit (`api/capture.ts`)
- * approves an edited copy whose payload names the original in `edited_from`, then rejects the original;
- * its words were accepted, in the edited form. Every other rejected row is listed. That includes an
- * edited copy that was rejected (crew withdraws one when its approve fails, or a person rejected it);
- * the wire can't tell those apart, so the row says it is an edited copy rather than guessing why.
+ * fold over `GET /proposals` (every state). Every rejected proposal of the page's kind is listed; none is
+ * hidden, because the wire carries no record of who rejected one or why (review r2). What the rows do
+ * carry is said on them:
+ *  - an ORIGINAL that an approved proposal of the same kind names in `payload.edited_from`: crew's
+ *    accept-with-edit (`api/capture.ts`) approves an edited copy that names its original, then rejects
+ *    the original. `replacedBy` maps it to that copy;
+ *  - an edited COPY (it names an original itself): crew rejects one when approving it failed, or a
+ *    person rejected it. {@link editedFrom} reads it.
  */
 export interface NotAccepted {
-  /** The rejected proposals listed, newest first. */
+  /** The rejected proposals of the kind, newest first. */
   rows: Proposal[];
-  /** Originals left out because an approved edited copy replaced them. */
-  replaced: number;
+  /** A listed original → the approved copy (same kind) that names it in `edited_from`. */
+  replacedBy: ReadonlyMap<string, string>;
 }
 
 /** The proposal an edited copy was made from (`payload.edited_from`), or null. */
@@ -27,18 +29,14 @@ export function editedFrom(p: Proposal): string | null {
 }
 
 export function notAccepted(all: readonly Proposal[], kind: 'memory' | 'policy'): NotAccepted {
-  const replacedIds = new Set<string>();
+  const copies = new Map<string, string>();
   for (const p of all) {
-    const from = p.state === 'approved' ? editedFrom(p) : null;
-    if (from !== null) replacedIds.add(from);
+    const from = p.state === 'approved' && proposalKind(p) === kind ? editedFrom(p) : null;
+    if (from !== null && !copies.has(from)) copies.set(from, p.id);
   }
-  let replaced = 0;
-  const rows: Proposal[] = [];
-  for (const p of all) {
-    if (p.state !== 'rejected' || proposalKind(p) !== kind) continue;
-    if (replacedIds.has(p.id)) { replaced += 1; continue; }
-    rows.push(p);
-  }
-  rows.sort((a, b) => (b.created_at ?? 0) - (a.created_at ?? 0) || a.id.localeCompare(b.id));
-  return { rows, replaced };
+  const rows = all.filter((p) => p.state === 'rejected' && proposalKind(p) === kind)
+    .sort((a, b) => (b.created_at ?? 0) - (a.created_at ?? 0) || a.id.localeCompare(b.id));
+  const replacedBy = new Map<string, string>();
+  for (const p of rows) { const copy = copies.get(p.id); if (copy !== undefined) replacedBy.set(p.id, copy); }
+  return { rows, replacedBy };
 }

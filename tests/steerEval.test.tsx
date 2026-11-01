@@ -684,4 +684,31 @@ describe('Steer header and pills (operator 2026-11-01)', () => {
     render(<SteerSurface pathname="/rules" search="?view=not-accepted" runs={[]} navigate={vi.fn()} />);
     expect(screen.getByTestId('steer-view-not-accepted')).toHaveAttribute('aria-checked', 'true');
   });
+
+  it('every pill has an address: from /steering/proposals, Not accepted then Active lands on the rules (review r2)', async () => {
+    wire();
+    const user = userEvent.setup();
+    // A host that follows navigate, as the router does.
+    let at = '/steering/proposals';
+    const draw = (): React.ReactElement => {
+      const [path, qs = ''] = at.split('?');
+      return <SteerSurface pathname={path!} search={qs === '' ? '' : `?${qs}`} runs={[]} navigate={go} />;
+    };
+    const go = vi.fn((to: string) => { at = to; view.rerender(draw()); });
+    const view = render(draw());
+    const checked = (): string | null => within(screen.getByTestId('steer-view')).getAllByRole('radio').find((r) => r.getAttribute('aria-checked') === 'true')?.textContent ?? null;
+    expect(checked()).toMatch(/^Proposed/);
+    await user.click(screen.getByTestId('steer-view-not-accepted'));
+    expect(at).toBe('/rules?view=not-accepted');
+    expect(checked()).toBe('Not accepted');
+    await user.click(screen.getByTestId('steer-view-live'));
+    expect(at).toBe('/rules');
+    expect(checked()).toBe('Active');
+    await user.click(screen.getByTestId('steer-view-proposals'));
+    expect(at).toBe('/steering/proposals');
+    expect(checked()).toMatch(/^Proposed/);
+    // Back from Proposed (the address the router restores) is Active again.
+    at = '/rules'; view.rerender(draw());
+    expect(checked()).toBe('Active');
+  });
 });

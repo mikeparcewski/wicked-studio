@@ -13,10 +13,10 @@ describe('notAccepted', () => {
       p('m-pending', 'pending', 'memory'), p('m-approved', 'approved', 'memory'),
       p('r1', 'rejected', 'policy:security', { rule: 'x' }, 5), p('r2', 'rejected', 'policy', { rule: 'y' }, 6), p('k', 'rejected', 'knowledge'),
     ];
-    expect(notAccepted(all, 'memory')).toEqual({ rows: [all[1], all[0]], replaced: 0 });
+    expect(notAccepted(all, 'memory').rows).toEqual([all[1], all[0]]);
     expect(notAccepted(all, 'policy').rows.map((x) => x.id)).toEqual(['r2', 'r1']);
   });
-  it('leaves out (and counts) an accepted edit\'s original; a rejected edited copy is listed, the wire can\'t say who rejected it', () => {
+  it('hides nothing: an accepted edit\'s original is listed and mapped to its copy; a rejected copy is listed too', () => {
     const all = [
       p('orig', 'rejected', 'memory', { content: 'serial tests' }, 1),
       p('copy', 'approved', 'memory', { content: 'tests with --runInBand', edited_from: 'orig' }, 2),
@@ -24,11 +24,16 @@ describe('notAccepted', () => {
       p('still-pending', 'pending', 'memory'),
       p('real', 'rejected', 'memory', { content: 'turned down' }, 4),
     ];
-    expect(notAccepted(all, 'memory')).toEqual({ rows: [all[4], all[2]], replaced: 1 });
+    const out = notAccepted(all, 'memory');
+    expect(out.rows.map((x) => x.id)).toEqual(['real', 'stray', 'orig']);
+    expect([...out.replacedBy]).toEqual([['orig', 'copy']]);
   });
-  it('a rejected copy naming an original does not make that original "replaced"', () => {
-    const all = [p('orig', 'rejected', 'memory', {}, 1), p('copy', 'rejected', 'memory', { edited_from: 'orig' }, 2)];
-    expect(notAccepted(all, 'memory')).toEqual({ rows: [all[1], all[0]], replaced: 0 });
+  it('only an APPROVED copy of the SAME kind maps an original (a rejected copy, or a policy naming a memory, does not)', () => {
+    const all = [
+      p('orig', 'rejected', 'memory', {}, 1), p('rej-copy', 'rejected', 'memory', { edited_from: 'orig' }, 2),
+      p('policy-copy', 'approved', 'policy:testing', { edited_from: 'orig' }, 3),
+    ];
+    expect([...notAccepted(all, 'memory').replacedBy]).toEqual([]);
   });
   it('reads edited_from defensively', () => {
     expect(editedFrom(p('a', 'approved', 'memory', { edited_from: 'x' }))).toBe('x');

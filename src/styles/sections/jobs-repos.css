@@ -61,6 +61,10 @@
 .wk-jr-sec-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 8px; min-height: 40px; }
 .wk-jr-label { margin: 0; font-size: var(--text-body); font-weight: var(--weight-strong);   color: var(--ink-muted); }
 .wk-jr-tools { display: flex; align-items: center; gap: 10px; }
+/* Jobs' project picker: a long project name ends in an ellipsis instead of pushing the filters out of view. */
+.wk-jr-sec-head .wk-calm-typepick { min-width: 0; }
+.wk-jr-sec-head select.wk-calm-pick { max-width: 360px; text-overflow: ellipsis; }
+.wk-jr-tools { flex-shrink: 0; }
 
 /* The one filter: two words in a quiet track; the chosen one filled. */
 .wk-jr-seg { display: inline-flex; gap: 2px; padding: 3px; border-radius: 11px; background: color-mix(in oklab, var(--ink-high) 6%, transparent); }
