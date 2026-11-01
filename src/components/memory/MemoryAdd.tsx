@@ -42,6 +42,9 @@ export function MemoryCaptureAdd({ mode, project, projects, onClose, onKept }: {
   const send = async (): Promise<void> => {
     const words = text.trim();
     if (sending || (words === '' && files.length === 0)) return;
+    // What this capture sends: the box and the picker stay usable while it is out, so only these are cleared after.
+    const sentText = text;
+    const sentFiles = files;
     setSending(true);
     const id = (seq.current += 1);
     const you = words !== '' ? words : `Attached ${files.map((f) => f.name).join(', ')}`;
@@ -51,12 +54,13 @@ export function MemoryCaptureAdd({ mode, project, projects, onClose, onKept }: {
         notes: mode === 'chat'
           ? `The person is telling you what helpers should remember. File each durable thing as a MEMORY (not a rule, not an intent unless they ask for work).\n\n${words}`
           : `Read the attached document(s) and file each durable thing helpers should remember as a MEMORY.${words !== '' ? `\n\nThe person adds: ${words}` : ''}`,
-        ...(files.length > 0 ? { files: await Promise.all(files.map((f) => toCaptureFile(f))) } : {}),
+        ...(sentFiles.length > 0 ? { files: await Promise.all(sentFiles.map((f) => toCaptureFile(f))) } : {}),
       };
       const { runId } = await postCapture(where, body);
       setTurns((t) => t.map((x) => (x.id === id ? { ...x, runId } : x)));
-      setText('');
-      setFiles([]);
+      // Clear only what went out (codex on #937): words typed and files picked since then are the next capture's.
+      setText((cur) => (cur === sentText ? '' : cur));
+      setFiles((cur) => cur.filter((f) => !sentFiles.includes(f)));
     } catch (e) {
       setTurns((t) => t.map((x) => (x.id === id ? { ...x, error: e instanceof Error ? e.message : String(e) } : x)));
     } finally {
@@ -179,13 +183,34 @@ export function MemoryTable({ memories, onSaved, onClose }: { memories: readonly
     setNote(null);
     let ok = 0;
     const failed: string[] = [];
+    // What this save sends, and what came of it: the table stays editable while it runs (codex on #937).
+    const sent: Record<string, string> = Object.fromEntries(changed.map((m) => [m.id, edits[m.id]!]));
+    const replacedBy: Record<string, string> = {};
+    const failedIds = new Set<string>();
     for (const m of changed) {
-      try { await editMemory({ memory_id: m.id, content: edits[m.id]!.trim() }); ok += 1; } catch (e) {
+      try {
+        const r = await editMemory({ memory_id: m.id, content: sent[m.id]!.trim() });
+        replacedBy[m.id] = r.memory_id;
+        ok += 1;
+      } catch (e) {
+        failedIds.add(m.id);
         failed.push(isMemoryEditUnsupported(e) ? 'this crew cannot edit a memory' : e instanceof Error ? e.message : String(e));
       }
     }
     setBusy(false);
-    setEdits({});
+    // Clear only what was saved. A failed row keeps its draft; a row changed again during the save keeps the newer
+    // words, moved to the memory's new id (an edit retires the old memory and files a new one); other rows are untouched.
+    setEdits((cur) => {
+      const next = { ...cur };
+      for (const [id, words] of Object.entries(sent)) {
+        if (failedIds.has(id)) continue;
+        const now = next[id];
+        delete next[id];
+        const newId = replacedBy[id];
+        if (now !== undefined && now !== words && newId !== undefined) next[newId] = now;
+      }
+      return next;
+    });
     setNote(failed.length === 0 ? { tone: 'ok', text: `Saved ${ok} ${ok === 1 ? 'change' : 'changes'}.` } : { tone: 'fail', text: `Saved ${ok}; ${failed.length} did not: ${[...new Set(failed)].join('; ')}` });
     onSaved();
   };
