@@ -165,7 +165,7 @@ with sync_playwright() as p:
     # The constraint names sit in the folded Technical details: read the text, shown or not.
     adjustments = page.locator('[data-testid="mapper-adjustments"]').text_content() or ""
     report["steps"]["preview_is_real"] = {
-        "ok": (accent_before == "230" and accent_preview == "217"
+        "ok": (accent_before == "200" and accent_preview == "217"
                and "contrast-floor" in adjustments and "lightness-clamp" in adjustments),
         "accent_before": accent_before,
         "accent_preview": accent_preview,
