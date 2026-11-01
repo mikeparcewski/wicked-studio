@@ -586,7 +586,7 @@ export const api = {
     }),
 
   /** Server-side requirements search: tokenized AND-match + risk/domain filters + pagination. */
-  listRequirements: (repoId: string, params: { q?: string; risk?: 'risk' | 'no-risk'; category?: 'functional' | 'config-data'; domain?: string; offset?: number; limit?: number }) => {
+  listRequirements: (repoId: string, params: { q?: string; risk?: 'risk' | 'no-risk'; category?: 'functional' | 'config-data'; domain?: string; offset?: number; limit?: number }, opts: { signal?: AbortSignal } = {}) => {
     const qs = new URLSearchParams();
     if (params.q) qs.set('q', params.q);
     if (params.risk) qs.set('risk', params.risk);
@@ -594,7 +594,7 @@ export const api = {
     if (params.domain) qs.set('domain', params.domain);
     qs.set('offset', String(params.offset ?? 0));
     qs.set('limit', String(params.limit ?? 50));
-    return apiFetch<import('./types.js').RequirementsPage>(`/repos/${encodeURIComponent(repoId)}/requirements?${qs.toString()}`);
+    return apiFetch<import('./types.js').RequirementsPage>(`/repos/${encodeURIComponent(repoId)}/requirements?${qs.toString()}`, opts.signal !== undefined ? { signal: opts.signal } : undefined);
   },
   getRequirement: (repoId: string, key: string) =>
     apiFetch<{ requirement: import('./types.js').RequirementDetail }>(`/repos/${encodeURIComponent(repoId)}/requirements/${encodeURIComponent(key)}`),
@@ -667,9 +667,10 @@ export const api = {
 
   /** A repo's code-graph summary — node counts by kind, over that repo's OWN store (#122). Repo-scoped
    *  only; the daemon 404s an unknown repo and 400s a missing one. */
-  getGraphKindsForRepo: (repoRef: string) =>
+  getGraphKindsForRepo: (repoRef: string, opts: { signal?: AbortSignal } = {}) =>
     apiFetch<{ kinds: import('./types.js').GraphKind[] }>(
       `/governance/graph?repo=${encodeURIComponent(repoRef)}`,
+      opts.signal !== undefined ? { signal: opts.signal } : undefined,
     ),
 
   /** All recorded governance claims (decisions) from the conformance store. */

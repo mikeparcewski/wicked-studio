@@ -9,7 +9,8 @@ import { readAskSession } from '../../store/askSession.js';
 import { usePageChat } from '../../store/pageChat.js';
 import { askPage, PageChat } from '../chat/PageChat.js';
 import { answerLine, askedWithChats, forgetAsked, graphLinkRepos, questionMessage, readAsked, rememberAsked, suggestedQuestions, type AnswerLine, type AskedQuestion } from '../../board/understandModel.js';
-import { knowledgeMarks } from '../../board/repoKnowledge.js';
+import { knowledgeMarks, type KnowMark } from '../../board/repoKnowledge.js';
+import type { ScopeChip } from '../../board/chatScopes.js';
 import { knowledgeOf, useRepoKnowledgeFor } from '../../store/repoKnowledge.js';
 import type { ChatHistoryEntry } from '../../api/chatHistory-wire.js';
 import { relTime } from '../../board/relTime.js';
@@ -154,9 +155,7 @@ export function UnderstandPage({ project, navigate, now, compare, runs = [] }: {
    *  not recorded (the page's own choice stands in). */
   const [openScope, setOpenScope] = useState<string[] | null>(() => {
     const kept = readAskSession(pageChatSessionKey('understand'));
-    const fromChips = (kept?.chips ?? []).filter((c) => c.kind === 'repo' && c.on).map((c) => c.ref ?? c.key.replace(/^repo:/, ''));
-    if (fromChips.length > 0) return fromChips;
-    return readAsked().find((a) => a.chatId === kept?.chatId)?.repos ?? null;
+    return repoIdsOf(kept?.chips) ?? readAsked().find((a) => a.chatId === kept?.chatId)?.repos ?? null;
   });
   const pendingQuestion = useRef<string | null>(null);
   const scopeRepos = useMemo(() => (repos ?? []).filter((r) => chosen.includes(r.id)).map((r) => ({ id: r.id, name: r.name })), [repos, chosen]);
@@ -187,7 +186,7 @@ export function UnderstandPage({ project, navigate, now, compare, runs = [] }: {
     setOpenChat(a.chatId);
     setOpenScope(a.repos ?? null);
     setPane('chat');
-    closeSide('content');
+    if (drawer) closeSide('content'); else focusContent();
   };
   const provider = {
     knows: scopeRepos.length === 0 ? (onProject ? 'Reads this project’s repositories · read-only' : 'Reads all repositories · read-only')
@@ -195,9 +194,15 @@ export function UnderstandPage({ project, navigate, now, compare, runs = [] }: {
     data: () => [],
     onSent: (_text: string, chatId: string) => {
       setOpenChat(chatId);
+      // The scope the chat actually opened with (the chat persists its chips before this is called; they may have been
+      // changed in the chat after a failed open), else the page's choice.
+      const kept = readAskSession(pageChatSessionKey('understand'));
+      const sent = kept?.chatId === chatId ? repoIdsOf(kept.chips) : null;
+      const repos = sent ?? scopeRepos.map((r) => r.id);
+      setOpenScope(repos);
       const question = pendingQuestion.current;
       pendingQuestion.current = null;
-      if (question !== null && !asked.some((x) => x.chatId === chatId)) setAsked(rememberAsked({ chatId, question, at: Date.now(), repos: scopeRepos.map((r) => r.id) }));
+      if (question !== null && !asked.some((x) => x.chatId === chatId)) setAsked(rememberAsked({ chatId, question, at: Date.now(), repos }));
     },
     onMove: (m: string) => {
       if (m !== 'graph') return false;
@@ -212,13 +217,15 @@ export function UnderstandPage({ project, navigate, now, compare, runs = [] }: {
   // scrim out (focus back to its button); voice mode opening, or the window growing past it, closes it.
   const focusAfter = useRef<'toggle' | 'content' | null>(null);
   const closeSide = (to: 'toggle' | 'content' | null = 'toggle'): void => { focusAfter.current = to; setSideOpen(false); };
-  /** Focus what the main column now shows: a pane's way back, else the conversation. */
+  /** Focus what the main column now shows: a pane's way back, else the conversation's box, else the question box. */
   const focusContent = (): void => {
     setTimeout(() => {
       const root = mainRef.current;
-      const back = root?.querySelector<HTMLElement>('[data-testid="understand-back"]');
-      const target = back ?? root?.querySelector<HTMLElement>('[data-testid="assist-input"]') ?? root?.querySelector<HTMLElement>('[data-testid="understand-chat"]');
-      target?.focus();
+      const pick = (sel: string): HTMLElement | null => {
+        const el = root?.querySelector<HTMLElement>(sel) ?? null;
+        return el !== null && el.closest('[hidden]') === null ? el : null;
+      };
+      (pick('[data-testid="understand-back"]') ?? pick('[data-testid="assist-input"]') ?? pick('[data-testid="understand-ask-input"]'))?.focus();
     }, 0);
   };
   const showPane = (next: 'chat' | 'compare' | 'coverage'): void => {
@@ -414,7 +421,11 @@ export function UnderstandPage({ project, navigate, now, compare, runs = [] }: {
           </ul>
         </section>
       </aside>
-      {graphOf !== null && <RepoGraphModal key={`${graphOf.repo.id}:${graphOf.view}`} repo={graphOf.repo} initialView={graphOf.view} onClose={() => setGraphOf(null)} />}
+      {graphOf !== null && (
+        <RepoGraphModal key={`${graphOf.repo.id}:${graphOf.view}`} repo={graphOf.repo} initialView={graphOf.view}
+          // Opened from the drawer (now closed): focus goes back to its button, the control still on screen.
+          onClose={() => { setGraphOf(null); if (narrow) setTimeout(() => toggleRef.current?.focus(), 0); }} />
+      )}
     </div>
   );
 }
@@ -456,10 +467,12 @@ function RepoGraphLinks({ repos, failed, scope, runs, now, navigate, sectionRef,
                   <button type="button" className="wk-uc-graphbtn" data-testid="understand-graph-open" data-tone={code.tone} title={code.title} aria-label={label(code)} onClick={() => onOpen(r, 'code')}>
                     <span className="wk-know-dot" aria-hidden /><Network size={14} aria-hidden />Code graph
                     <span className="wk-uc-graphval" data-testid="understand-graph-value">{code.value}</span>
+                    {flagOf(code) !== null && <span className="wk-know-flag" data-testid="understand-graph-flag">{flagOf(code)}</span>}
                   </button>
                   <button type="button" className="wk-uc-graphbtn" data-testid="understand-graph-req" data-tone={req.tone} title={req.title} aria-label={label(req)} onClick={() => onOpen(r, 'domain')}>
                     <span className="wk-know-dot" aria-hidden /><Share2 size={14} aria-hidden />Requirements graph
                     <span className="wk-uc-graphval" data-testid="understand-graph-value">{req.value}</span>
+                    {flagOf(req) !== null && <span className="wk-know-flag" data-testid="understand-graph-flag">{flagOf(req)}</span>}
                   </button>
                 </span>
               </li>
@@ -472,6 +485,19 @@ function RepoGraphLinks({ repos, failed, scope, runs, now, navigate, sectionRef,
       )}
     </section>
   );
+}
+
+/** The word that says what a mark's colour says (never the colour alone): its own flag, or "old" for an index older
+ *  than a week (amber; Repositories says the age on the row's own line). */
+function flagOf(m: KnowMark): string | null {
+  if (m.flag !== undefined) return m.flag;
+  return m.id === 'code' && m.tone === 'warn' ? 'old' : null;
+}
+
+/** A chat's chosen repositories from its scope chips; null when it has none recorded or none chosen. */
+function repoIdsOf(chips: readonly ScopeChip[] | undefined): string[] | null {
+  const ids = (chips ?? []).filter((c) => c.kind === 'repo' && c.on).map((c) => c.ref ?? c.key.replace(/^repo:/, ''));
+  return ids.length > 0 ? ids : null;
 }
 
 type SubState = 'answered' | 'pending' | 'none' | 'unknown';

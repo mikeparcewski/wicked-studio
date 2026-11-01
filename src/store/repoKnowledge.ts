@@ -15,10 +15,12 @@ export const FRESH_MS = 60_000;
 /** A read that has not answered by then counts as failed (unknown): its slot is freed for the next repository. */
 export const READ_TIMEOUT_MS = 20_000;
 
-function bounded<T>(read: Promise<T>, failed: T): Promise<T> {
+/** A read bounded by {@link READ_TIMEOUT_MS}: past it the request is aborted (its connection freed) and it reads as failed. */
+function bounded<T>(read: (signal: AbortSignal) => Promise<T>, failed: T): Promise<T> {
+  const ctl = new AbortController();
   let t: ReturnType<typeof setTimeout> | undefined;
-  const late = new Promise<T>((res) => { t = setTimeout(() => res(failed), READ_TIMEOUT_MS); });
-  return Promise.race([read, late]).finally(() => clearTimeout(t));
+  const late = new Promise<T>((res) => { t = setTimeout(() => { ctl.abort(); res(failed); }, READ_TIMEOUT_MS); });
+  return Promise.race([read(ctl.signal), late]).finally(() => clearTimeout(t));
 }
 
 const LOADING: RepoKnowledgeRead = { kinds: { state: 'loading' }, reqs: { state: 'loading' } };
@@ -36,18 +38,18 @@ let running = 0;
 let gen = 0;
 const pending = new Set<string>();
 
-async function readKinds(id: string): Promise<KindsRead> {
+async function readKinds(id: string, signal: AbortSignal): Promise<KindsRead> {
   try {
-    const { kinds } = await api.getGraphKindsForRepo(id);
+    const { kinds } = await api.getGraphKindsForRepo(id, { signal });
     return kindsRead(Array.isArray(kinds) ? kinds : []);
   } catch {
     return { state: 'failed' };
   }
 }
 
-async function readReqs(id: string): Promise<ReqsRead> {
+async function readReqs(id: string, signal: AbortSignal): Promise<ReqsRead> {
   try {
-    const page = await api.listRequirements(id, { limit: 1 });
+    const page = await api.listRequirements(id, { limit: 1 }, { signal });
     return { state: 'ok', coverage: coverageOf(page), build: graphBuildOf(page) };
   } catch (e) {
     const none = requirementsNotGenerated(e);
@@ -61,7 +63,7 @@ export const useRepoKnowledge = create<State>((set, get) => {
       const id = queue.shift()!;
       running += 1;
       const mine = gen;
-      void Promise.all([bounded(readKinds(id), { state: 'failed' } as KindsRead), bounded(readReqs(id), { state: 'failed' } as ReqsRead)]).then(([kinds, reqs]) => {
+      void Promise.all([bounded((sig) => readKinds(id, sig), { state: 'failed' } as KindsRead), bounded((sig) => readReqs(id, sig), { state: 'failed' } as ReqsRead)]).then(([kinds, reqs]) => {
         if (mine !== gen) return;
         // A read that failed is shown (unknown) but not kept as fresh: the next page that asks reads it again.
         const failed = kinds.state === 'failed' || reqs.state === 'failed';

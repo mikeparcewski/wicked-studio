@@ -115,8 +115,10 @@
 .wk-uc-graphbtn[data-tone="gate"] .wk-know-dot { background: var(--status-gate); }
 .wk-uc-graphbtn[data-tone="none"] .wk-know-dot { background: transparent; box-shadow: inset 0 0 0 1.5px var(--ink-dim); }
 .wk-uc-graphbtn[data-tone="unknown"] .wk-know-dot { background: transparent; box-shadow: inset 0 0 0 1.5px var(--ink-dim); opacity: 0.6; }
-/* The state in words beside the name (never colour alone): "46k symbols", "build 3 · 38 domains", "not built". */
-.wk-uc-graphval { font-weight: var(--weight-regular); color: var(--ink-muted); }
+/* The state in words beside the name (never colour alone): "46k symbols", "build 3 · 38 domains", "not built".
+   Name and state each stay whole; when both do not fit, the state goes under the name. */
+.wk-uc-graphbtn { max-width: 100%; flex-wrap: wrap; justify-content: flex-start; text-align: left; row-gap: 2px; padding-top: 4px; padding-bottom: 4px; border-radius: 15px; white-space: nowrap; }
+.wk-uc-graphval { font-weight: var(--weight-regular); color: var(--ink-muted); white-space: nowrap; }
 .wk-uc-all { align-self: flex-start; }
 
 /* More: two quiet rows. */

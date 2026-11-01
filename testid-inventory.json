@@ -12,8 +12,8 @@
   "studioVersion": "0.13.0",
   "counts": {
     "files": 285,
-    "occurrences": 3954,
-    "static": 3359,
+    "occurrences": 3956,
+    "static": 3360,
     "dynamic": 90,
     "computed": 44
   },
@@ -19186,6 +19186,12 @@
     },
     {
       "testId": "understand-graph-empty",
+      "files": [
+        "src/components/desk/UnderstandPage.tsx"
+      ]
+    },
+    {
+      "testId": "understand-graph-flag",
       "files": [
         "src/components/desk/UnderstandPage.tsx"
       ]

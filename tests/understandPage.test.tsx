@@ -296,6 +296,9 @@ describe('the Understand page', () => {
     fireEvent.click(screen.getByTestId('understand-back'));
     expect(screen.queryByTestId('understand-coverage')).toBeNull();
     expect(screen.getByTestId('understand-ask')).toBeVisible();
+    // Back on the empty chat: the question box has the focus.
+    await act(async () => { await new Promise((r) => setTimeout(r, 5)); });
+    expect(document.activeElement).toBe(screen.getByTestId('understand-ask-input'));
   });
 
   it('under 1024 px the sidebar is a modal drawer: focus in, the page inert, Escape back to its button; a reopened answer, voice mode or a wider window closes it', async () => {
@@ -391,6 +394,19 @@ describe('the Understand page', () => {
     expect(readAsked()[0]).toMatchObject({ chatId: 'c-new', repos: ['r1'] });
   });
 
+  it('the scope recorded is the one the chat actually opened with (changed in the chat after a failed open)', async () => {
+    await act(async () => { render(<UnderstandPage project="proj-1" navigate={vi.fn()} now={NOW} compare={null} />); });
+    fireEvent.change(screen.getByTestId('understand-ask-input'), { target: { value: 'Who calls deliver?' } });
+    mocks.messages.mockRejectedValue(new ApiError(404, 'Not Found'));
+    await act(async () => { fireEvent.submit(screen.getByTestId('understand-ask')); });
+    // The chat persisted its own chips (r2) before telling the page it sent.
+    sessionStorage.setItem('wicked.pagechat.understand.session', JSON.stringify({ chatId: 'c-r2', title: 'Q', seeded: false,
+      chips: [{ key: 'repo:r2', kind: 'repo', label: 'wicked-crew', ref: 'r2', on: true }, { key: 'repo:r1', kind: 'repo', label: 'wicked-core', ref: 'r1', on: false }] }));
+    await act(async () => { chat.props!.provider!.onSent!(questionMessage('Who calls deliver?'), 'c-r2'); });
+    expect(readAsked()[0]).toMatchObject({ chatId: 'c-r2', repos: ['r2'] });
+    expect(screen.getAllByTestId('understand-graph-repo').map((r) => r.getAttribute('data-repo-id'))).toEqual(['r2']);
+  });
+
   it('the drawer yields to a higher layer: with the shortcut overlay open Escape is not the drawer’s', async () => {
     mockNarrow(true);
     await act(async () => { render(<UnderstandPage project={null} navigate={vi.fn()} now={NOW} compare={null} />); });
@@ -405,13 +421,23 @@ describe('the Understand page', () => {
     // (Tab containment needs layout: the journey desk_page_chat tabs through the drawer in a browser.)
   });
 
+  it('a behind requirements graph and an old index say so in words on their links', async () => {
+    mocks.reqs.mockImplementation(async () => ({ total: 1, coverage: { realPct: 90, minPct: 80, behaviorBearing: 10, real: 9, placeholders: 1, unmapped: 0, notProduct: 0 }, graphBuild: { generation: 2, coverage: null, behind: true } }));
+    const runs = [{ session: { id: 'o1', repo_ref: 'r1', workflow_id: 'onboarding', status: 'completed', created_at: NOW / 1000 - 10 * 86_400 } }] as unknown as SessionView[];
+    await act(async () => { render(<UnderstandPage project="proj-1" navigate={vi.fn()} now={NOW} compare={null} runs={runs} />); });
+    await vi.waitFor(() => expect(screen.getAllByTestId('understand-graph-flag').map((f) => f.textContent)).toEqual(['old', 'behind']));
+  });
+
   it('a graph link names its repository and its state for a screen reader; the graph opens outside the sidebar', async () => {
     await act(async () => { render(<UnderstandPage project={null} navigate={vi.fn()} now={NOW} compare={null} />); });
     await vi.waitFor(() => expect(screen.getAllByTestId('understand-graph-open')[0]).toHaveAttribute('data-tone', 'ok'));
     const [first] = screen.getAllByTestId('understand-graph-open');
     expect(first!.getAttribute('aria-label')).toMatch(/^wicked-core: Code graph: 24 nodes in 4 files, .*\. Open it$/);
-    // Its state in words too, never the dot's colour alone.
+    // Its state in words too, never the dot's colour alone (a behind build says "behind").
     expect(first).toHaveTextContent('Code graph24 symbols');
+    const req = screen.getAllByTestId('understand-graph-req')[0]!;
+    expect(req).toHaveTextContent('build 2');
+    expect(req.querySelector('[data-testid="understand-graph-flag"]')).toBeNull();
     fireEvent.click(first!);
     expect(screen.getByTestId('understand-side')).not.toContainElement(screen.getByTestId('repo-graph-stub'));
   });

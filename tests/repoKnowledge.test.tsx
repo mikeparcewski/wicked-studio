@@ -228,14 +228,19 @@ describe('the knowledge store: bounded reads and the minute', () => {
   beforeEach(() => { resetRepoKnowledge(); mocks.kinds.mockReset(); mocks.reqs.mockReset(); });
   afterEach(() => { vi.useRealTimers(); cleanup(); });
 
-  it('a read that never answers counts as failed after the timeout and frees its slot', async () => {
+  it('a read that never answers is aborted after the timeout (its connection freed), counts as failed and frees its slot', async () => {
     vi.useFakeTimers();
-    mocks.kinds.mockImplementation((id: string) => (id.startsWith('stuck') ? new Promise(() => {}) : Promise.resolve({ kinds: CREW_KINDS })));
+    const signals: AbortSignal[] = [];
+    mocks.kinds.mockImplementation((id: string, opts?: { signal?: AbortSignal }) => {
+      if (opts?.signal !== undefined) signals.push(opts.signal);
+      return id.startsWith('stuck') ? new Promise(() => {}) : Promise.resolve({ kinds: CREW_KINDS });
+    });
     mocks.reqs.mockResolvedValue({ coverage: COV, graphBuild: null });
     useRepoKnowledge.getState().ensure(['stuck1', 'stuck2', 'stuck3', 'ok']);
     expect(mocks.kinds).toHaveBeenCalledTimes(MAX_IN_FLIGHT);
     await act(async () => { await vi.advanceTimersByTimeAsync(READ_TIMEOUT_MS + 10); });
     expect(useRepoKnowledge.getState().reads['stuck1']!.kinds).toEqual({ state: 'failed' });
+    expect(signals.slice(0, 3).every((sg) => sg.aborted)).toBe(true);
     await act(async () => { await vi.advanceTimersByTimeAsync(10); });
     expect(useRepoKnowledge.getState().reads['ok']!.kinds.state).toBe('ok');
   });
