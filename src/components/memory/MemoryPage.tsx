@@ -278,7 +278,7 @@ export function MemoryPage({ search, navigate, address = (p) => p, project = nul
       {view === 'proposals' ? (
         <div className="wk-se-proposals wk-calm-proposals" data-testid="memory-proposals">
           <ProposalsSection kind="memory" heading="Memory proposals" editable revision={proposalsRev} runId={runFilter}
-            onShowAll={() => go('proposals')} onDecision={() => { setReviewTick((t) => t + 1); setRejectedRev((r) => r + 1); reread(); }} />
+            onShowAll={() => go('proposals')} onDecision={() => { setReviewTick((t) => t + 1); reread(); }} onSettled={() => setRejectedRev((r) => r + 1)} />
         </div>
       ) : view === 'not-accepted' ? (
         <NotAcceptedList kind="memory" revision={rejectedRev} projectName={projectName} />

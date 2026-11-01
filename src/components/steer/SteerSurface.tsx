@@ -206,12 +206,13 @@ export function SteerSurface({ pathname, search, navigate: navigateRaw, runs = [
   }, [askedNotAccepted, askedProposals]);
   const pickView = (v: ListView): void => {
     setView(v);
-    if (v === 'proposals') { if (!askedProposals || askedNotAccepted) navigate(steerProposalsPath()); return; }
-    // Leaving Proposed's own address for the rules; the page's other filters stay in the query.
-    const base = askedProposals ? RULES_PATH : pathname;
+    // The page's filters (type, MCP, unused) ride every pill's address, so Add a rule keeps the type and
+    // Active comes back filtered as it was (review r4); only `view` changes.
     const n = new URLSearchParams(search);
     if (v === 'not-accepted') n.set('view', NOT_ACCEPTED); else n.delete('view');
     const qs = n.toString();
+    // Proposed lives at its own path; leaving it goes to the rules list (the filtered one when a filter rides along).
+    const base = v === 'proposals' ? steerProposalsPath() : askedProposals ? (qs === '' ? RULES_PATH : policiesPath()) : pathname;
     const target = `${base}${qs === '' ? '' : `?${qs}`}`;
     if (target !== `${pathname}${search}`) navigate(target);
   };
@@ -484,7 +485,7 @@ export function SteerSurface({ pathname, search, navigate: navigateRaw, runs = [
       {filterNotes}
       {view === 'proposals' ? (
         <div className="wk-se-proposals wk-calm-proposals" data-testid="governance-review-inbox">
-          <ProposalsSection kind="policy" heading="Rule proposals" onDecision={() => { setReviewTick((t) => t + 1); setRejectedRev((r) => r + 1); void load(); }} />
+          <ProposalsSection kind="policy" heading="Rule proposals" onDecision={() => { setReviewTick((t) => t + 1); void load(); }} onSettled={() => setRejectedRev((r) => r + 1)} />
         </div>
       ) : view === 'not-accepted' ? (
         <NotAcceptedList kind="policy" revision={rejectedRev} projectName={projectName} />

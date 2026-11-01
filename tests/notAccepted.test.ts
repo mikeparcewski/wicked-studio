@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { editedFrom, notAccepted } from '../src/board/notAccepted.js';
 import type { Proposal } from '../src/api/proposals.js';
 
-/** The Not accepted fold (operator 2026-11-01): what a person turned down, from every proposal the store kept. */
+/** The Not accepted fold (operator 2026-11-01): every rejected proposal the store kept, labelled from the record. */
 const p = (id: string, state: Proposal['state'], kind_type: string, payload: Record<string, unknown> = {}, created_at = 1): Proposal =>
   ({ id, kind_type, payload, facets: {}, provenance: {}, state, created_at });
 

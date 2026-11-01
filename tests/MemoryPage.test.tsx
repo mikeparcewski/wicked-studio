@@ -541,6 +541,31 @@ describe('MemoryPage — Not accepted (what was turned down, kept by the store)'
     expect((await screen.findAllByTestId('not-accepted-row')).map((r) => r.getAttribute('data-proposal-id'))).toEqual(['pm1']);
   });
 
+  it('a failed accept-with-edit in flight when Not accepted opens shows its withdrawn copy once it settles (review r4)', async () => {
+    wire([M1], [PM]);
+    const base = apiFetch.getMockImplementation()!;
+    let fail!: () => void;
+    apiFetch.mockImplementation((path: unknown, init?: { body?: string; method?: string }) => {
+      if (!/\/approve$/.test(String(path))) return base(path, init);
+      // crew's approveEdited: the copy is filed, its approve fails, crew withdraws (rejects) the copy and answers the error.
+      return new Promise((_, reject) => { fail = () => {
+        void base('/proposals', { method: 'POST', body: JSON.stringify({ content: 'edited words' }) })
+          .then(({ id }: { id: string }) => base(`/proposals/${id}/reject`, { method: 'POST' }))
+          .then(() => reject(new ApiError(502, 'estate unreachable')));
+      }; });
+    });
+    const view = page('?view=proposals');
+    const user = userEvent.setup();
+    const card = await screen.findByTestId('proposal-card');
+    await user.click(within(card).getByTestId('proposal-edit'));
+    await user.type(within(card).getByTestId('proposal-edit-text'), ' (edited)');
+    await user.click(within(card).getByTestId('proposal-approve-edited'));
+    view.rerender(<MemoryPage search="?view=not-accepted" navigate={navigate} address={(p) => `/?tab=memory&at=${encodeURIComponent(p)}`} />);
+    await screen.findByTestId('not-accepted-empty');
+    await act(async () => { fail(); await new Promise((r) => setTimeout(r, 0)); });
+    expect((await screen.findAllByTestId('not-accepted-row')).map((r) => r.getAttribute('data-proposal-id'))).toEqual(['pref-2']);
+  });
+
   it('says nothing about who filed a proposal the record does not name', async () => {
     wire([M1], [{ ...PM, id: 'mine', provenance: {}, state: 'rejected' }]);
     page('?view=not-accepted');

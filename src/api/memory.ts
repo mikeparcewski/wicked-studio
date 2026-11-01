@@ -31,7 +31,7 @@ import { approveProposal, fileProposal } from './proposals.js';
 // ── The page's addresses ─────────────────────────────────────────────────────────────────────
 
 /** The Memory page's views (its pills): the memories kept, the memory proposals waiting on review, and
- *  the ones a person turned down (operator 2026-11-01: "Not Accepted for review"). */
+ *  every rejected memory proposal the store kept (operator 2026-11-01: "Not Accepted for review"). */
 export type MemoryView = 'memories' | 'proposals' | 'not-accepted';
 
 export const MEMORY_PATH = '/memory';
