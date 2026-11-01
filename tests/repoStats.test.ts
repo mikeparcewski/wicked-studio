@@ -179,3 +179,13 @@ describe('the newest onboard and capture, whatever order GET /runs lists them in
     expect(repoCapture([capOld, capNew], 'r')).toMatchObject({ state: 'failed', run: { session: { id: 'cap-new' } } });
   });
 });
+
+describe('a materialized workflow (workflow_id wf-…) is read by its resolved name (round 10)', () => {
+  it('an onboarding or capture run stamped with run_identity.name counts as one', () => {
+    const ident = (name: string) => ({ kind: 'workflow', name, user_plan: false, system: false });
+    const onb = makeView({ id: 'wf-onb', repo_ref: 'r', workflow_id: 'wf-1', status: 'completed', run_identity: ident(ONBOARDING_WORKFLOW_ID) } as never);
+    const cap = makeView({ id: 'wf-cap', repo_ref: 'r', workflow_id: 'wf-2', status: 'executing', run_identity: ident(CAPTURE_LEARNINGS_WORKFLOW_ID) } as never);
+    expect(repoOnboard([onb], 'r')).toMatchObject({ state: 'ready', run: { session: { id: 'wf-onb' } } });
+    expect(repoCapture([cap], 'r')).toMatchObject({ state: 'capturing' });
+  });
+});

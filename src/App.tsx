@@ -560,7 +560,7 @@ export function App(): React.ReactElement {
       void api.listRepos().then(({ repos }) => {
         const r = repos.find((x) => x.id === repoId);
         if (r) setGraphModalRepo(r);
-      });
+      }, () => undefined);
     },
     [repoId],
   );

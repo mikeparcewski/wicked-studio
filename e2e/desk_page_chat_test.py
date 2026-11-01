@@ -165,6 +165,12 @@ with sync_playwright() as pw:
     side.wait_for(state="visible", timeout=5_000)
     page.screenshot(path=str(SHOTS / "desk-page-chat-understand-side-390.png"))
     focus_in = page.evaluate("() => document.querySelector('[data-testid=understand-side]').contains(document.activeElement)")
+    # Focus stays in the drawer: twenty Tabs and five Shift+Tabs never leave it.
+    stays = []
+    for k in range(25):
+        page.keyboard.press("Shift+Tab" if k >= 20 else "Tab")
+        stays.append(page.evaluate("() => document.querySelector('[data-testid=understand-side]').contains(document.activeElement)"))
+    check("understand-drawer-holds-focus", all(stays), stays=stays)
     page.keyboard.press("Escape")
     page.wait_for_timeout(300)
     back_on_toggle = page.evaluate("() => document.activeElement?.dataset?.testid") == "understand-side-toggle"
@@ -175,6 +181,17 @@ with sync_playwright() as pw:
                docScroll: document.scrollingElement.scrollHeight - document.scrollingElement.clientHeight };
     }""")
     check("understand-side-drawer", hidden_first and focus_in and back_on_toggle and not side.is_visible())
+    # Opened from Compare (a wide view on a desktop), the drawer still shows: never an empty modal.
+    tid(page, "understand-side-toggle").click()
+    tid(page, "understand-compare-toggle").click()
+    page.wait_for_timeout(300)
+    tid(page, "understand-side-toggle").click()
+    page.wait_for_timeout(300)
+    on_compare = page.evaluate("() => getComputedStyle(document.querySelector('[data-testid=understand-side]')).display")
+    page.keyboard.press("Escape")
+    page.wait_for_timeout(200)
+    tid(page, "understand-back").click()
+    check("understand-drawer-on-compare", on_compare == "flex", display=on_compare)
     check("understand-phone-composer-in-view", 0 <= phone["vh"] - phone["sendBottom"] < 160 and phone["sendRight"] <= phone["vw"]
           and phone["docScroll"] == 0, phone=phone)
     page.set_viewport_size({"width": 1440, "height": 900})

@@ -15,9 +15,12 @@
   /* One row the height of the page: a tall sidebar or pane scrolls inside instead of pushing the composer out. */
   grid-template-rows: minmax(0, 1fr); justify-content: stretch; align-items: stretch;
 }
-/* Compare side by side and Coverage are wide views: they take the whole width (Back to the chat returns). */
-.wk-ue.wk-uc:not([data-pane="chat"]) { grid-template-columns: minmax(0, 1fr); }
-.wk-ue.wk-uc:not([data-pane="chat"]) .wk-uc-side { display: none; }
+/* Compare side by side and Coverage are wide views: from 1024 px they take the whole width (Back to the chat returns);
+   under it the sidebar is a drawer anyway, and its header button still opens it. */
+@media (min-width: 1024px) {
+  .wk-ue.wk-uc:not([data-pane="chat"]) { grid-template-columns: minmax(0, 1fr); }
+  .wk-ue.wk-uc:not([data-pane="chat"]) .wk-uc-side { display: none; }
+}
 .wk-uc-main { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
 .wk-uc-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-shrink: 0; padding: 0 24px 8px 0; }
 .wk-uc-title { margin: 0; font-size: var(--text-title); line-height: 1.15; font-weight: var(--weight-strong); color: var(--ink-high); letter-spacing: var(--tracking-title); }
@@ -96,7 +99,7 @@
 }
 .wk-uc-graph-name:hover { text-decoration: underline; text-underline-offset: 3px; }
 .wk-uc-graph-name:focus-visible { outline: 2px solid transparent; box-shadow: var(--focus-ring); }
-.wk-uc-graph-links { display: flex; flex-wrap: wrap; gap: 6px; }
+.wk-uc-graph-links { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
 .wk-uc-graphbtn {
   display: inline-flex; align-items: center; gap: 6px; min-height: 30px; padding: 0 10px; border-radius: 999px;
   border: 1px solid var(--border-subtle); background: transparent; color: var(--ue-link); font-family: inherit;
@@ -109,7 +112,11 @@
 .wk-uc-graphbtn[data-tone="run"] .wk-know-dot { background: var(--status-run); }
 .wk-uc-graphbtn[data-tone="warn"] .wk-know-dot { background: var(--status-warn); }
 .wk-uc-graphbtn[data-tone="fail"] .wk-know-dot { background: var(--status-fail); }
-.wk-uc-graphbtn[data-tone="none"] .wk-know-dot, .wk-uc-graphbtn[data-tone="unknown"] .wk-know-dot { background: transparent; box-shadow: inset 0 0 0 1.5px var(--ink-dim); }
+.wk-uc-graphbtn[data-tone="gate"] .wk-know-dot { background: var(--status-gate); }
+.wk-uc-graphbtn[data-tone="none"] .wk-know-dot { background: transparent; box-shadow: inset 0 0 0 1.5px var(--ink-dim); }
+.wk-uc-graphbtn[data-tone="unknown"] .wk-know-dot { background: transparent; box-shadow: inset 0 0 0 1.5px var(--ink-dim); opacity: 0.6; }
+/* The state in words beside the name (never colour alone): "46k symbols", "build 3 · 38 domains", "not built". */
+.wk-uc-graphval { font-weight: var(--weight-regular); color: var(--ink-muted); }
 .wk-uc-all { align-self: flex-start; }
 
 /* More: two quiet rows. */

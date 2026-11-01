@@ -1,6 +1,8 @@
 import type { GraphKind, RepoEntry, SessionView } from '../api/types.js';
 import { relTime } from './relTime.js';
-import { ONBOARDING_WORKFLOW_ID, repoGraphGap, repoOnboard, type RepoGraphGap, type RepoOnboard } from './repoStats.js';
+import { ONBOARDING_WORKFLOW_ID, repoGraphGap, repoOnboard, runWorkflow, type RepoGraphGap, type RepoOnboard } from './repoStats.js';
+
+export { runWorkflow };
 import { DOMAIN_EXTRACTION_ID, type GraphBuild, type RequirementsCoverage } from './requirementsState.js';
 import { statusWord } from './statusWords.js';
 
@@ -94,16 +96,6 @@ function newestFirst(runs: readonly SessionView[]): SessionView[] {
   return [...runs].sort((a, b) => (secs(b.session.created_at) ?? 0) - (secs(a.session.created_at) ?? 0));
 }
 
-/**
- * A run's workflow: the resolved preset or workflow name (`run_identity.name`) when the daemon stamps one (a
- * materialized definition's `workflow_id` is `wf-<id>`), else its `workflow_id`.
- */
-export function runWorkflow(v: SessionView): string {
-  const id = (v.session as { run_identity?: { kind?: string; name?: string | null } }).run_identity;
-  if ((id?.kind === 'preset' || id?.kind === 'workflow') && typeof id.name === 'string' && id.name !== '') return id.name;
-  return v.session.workflow_id ?? '';
-}
-
 function runTone(v: SessionView): MarkTone {
   const t = statusWord(v).tone;
   return t === 'quiet' ? 'none' : t;
@@ -154,7 +146,7 @@ function reqsMark(reqs: ReqsRead): KnowMark {
   }
   // Nothing extracted yet, though the repository has behaviour to cover: still none, with the count in the title.
   if (reqs.state === 'none' && c.real === 0) {
-    return { ...base, value: 'none yet', title: `Requirements: not extracted yet (0 of ${c.behaviorBearing.toLocaleString('en-US')} behaviours). A domain extraction job states them`, tone: 'none' };
+    return { ...base, value: 'none yet', title: `Requirements: not extracted yet (0 of ${c.behaviorBearing.toLocaleString('en-US')} behaviours${c.placeholders > 0 ? `, ${plural(c.placeholders, 'placeholder')}` : ''}). A domain extraction job states them`, tone: 'none' };
   }
   const pct = c.realPct === 0 && c.real > 0 ? '<1%' : `${c.realPct}%`;
   const met = c.realPct >= c.minPct;
@@ -219,9 +211,7 @@ function runsMark(id: 'domain-runs' | 'runs', label: string, runs: readonly Sess
 export function knowledgeMarks(repo: Pick<RepoEntry, 'id' | 'findings'>, runs: readonly SessionView[] | null, read: RepoKnowledgeRead, now: number): KnowMark[] {
   const mine = (runs ?? []).filter((v) => v.session.repo_ref === repo.id && v.session.archived_at == null);
   const onboards = mine.filter((v) => runWorkflow(v) === ONBOARDING_WORKFLOW_ID);
-  // repoOnboard reads `workflow_id` and takes the first verdict it meets: a materialized onboarding run is handed to
-  // it under its resolved name, newest first (whatever order the run list came in).
-  const onboard = repoOnboard(newestFirst(onboards).map((v) => ({ ...v, session: { ...v.session, workflow_id: ONBOARDING_WORKFLOW_ID } })), repo.id);
+  const onboard = repoOnboard(onboards, repo.id);
   const lastIndexed = newestFirst(onboards).find((v) => v.session.status === 'completed') ?? null;
   const domain = runs === null ? null : mine.filter((v) => runWorkflow(v) === DOMAIN_EXTRACTION_ID);
   const other = runs === null ? null : mine.filter((v) => runWorkflow(v) !== DOMAIN_EXTRACTION_ID && runWorkflow(v) !== ONBOARDING_WORKFLOW_ID);

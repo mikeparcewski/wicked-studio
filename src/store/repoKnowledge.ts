@@ -12,6 +12,14 @@ import { coverageOf, graphBuildOf, requirementsNotGenerated } from '../board/req
  */
 export const MAX_IN_FLIGHT = 3;
 export const FRESH_MS = 60_000;
+/** A read that has not answered by then counts as failed (unknown): its slot is freed for the next repository. */
+export const READ_TIMEOUT_MS = 20_000;
+
+function bounded<T>(read: Promise<T>, failed: T): Promise<T> {
+  let t: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<T>((res) => { t = setTimeout(() => res(failed), READ_TIMEOUT_MS); });
+  return Promise.race([read, late]).finally(() => clearTimeout(t));
+}
 
 const LOADING: RepoKnowledgeRead = { kinds: { state: 'loading' }, reqs: { state: 'loading' } };
 
@@ -53,7 +61,7 @@ export const useRepoKnowledge = create<State>((set, get) => {
       const id = queue.shift()!;
       running += 1;
       const mine = gen;
-      void Promise.all([readKinds(id), readReqs(id)]).then(([kinds, reqs]) => {
+      void Promise.all([bounded(readKinds(id), { state: 'failed' } as KindsRead), bounded(readReqs(id), { state: 'failed' } as ReqsRead)]).then(([kinds, reqs]) => {
         if (mine !== gen) return;
         // A read that failed is shown (unknown) but not kept as fresh: the next page that asks reads it again.
         const failed = kinds.state === 'failed' || reqs.state === 'failed';
@@ -93,9 +101,9 @@ export const useRepoKnowledge = create<State>((set, get) => {
 });
 
 /**
- * The reads for these repositories (loading until each answers). While the page stays open they are asked for again
- * every {@link FRESH_MS}: a fresh one is not read again, an expired or failed one is (a job that maps or indexes
- * the repository shows within a minute; a failed read retries).
+ * The reads for these repositories (loading until each answers). While the page stays open they are read again every
+ * {@link FRESH_MS} (a job that maps or indexes the repository shows within about a minute; a failed read retries).
+ * Another page asking within the minute reuses them.
  */
 export function useRepoKnowledgeFor(ids: readonly string[]): Record<string, RepoKnowledgeRead> {
   const reads = useRepoKnowledge((s) => s.reads);
@@ -103,7 +111,8 @@ export function useRepoKnowledgeFor(ids: readonly string[]): Record<string, Repo
   useEffect(() => {
     if (ids.length === 0) return undefined;
     useRepoKnowledge.getState().ensure(ids);
-    const t = setInterval(() => useRepoKnowledge.getState().ensure(ids), FRESH_MS);
+    // Each minute the page's repositories are read again (a repository still being read is not asked twice).
+    const t = setInterval(() => useRepoKnowledge.getState().ensure(ids, true), FRESH_MS);
     return () => clearInterval(t);
   }, [key]); // eslint-disable-line react-hooks/exhaustive-deps
   return reads;

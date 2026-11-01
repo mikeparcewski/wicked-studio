@@ -22,6 +22,7 @@ import { RepoGraphModal } from '../RepoGraphModal.js';
 import { Skeleton } from '../ui/index.js';
 import { VoiceMicButton } from '../voice/VoiceMicButton.js';
 import { isTopModal, useLayerStore } from '../../store/layers.js';
+import { isShortcutsPaletteOpen } from '../../hooks/useGlobalShortcuts.js';
 import { useVoiceStore } from '../../store/voice.js';
 
 /** Below this the sidebar is a drawer (understand-chat.css uses the same width). */
@@ -86,6 +87,8 @@ export function UnderstandPage({ project, navigate, now, compare, runs = [] }: {
   const narrow = useNarrow();
   /** The sidebar under 1024 px: a drawer behind the header's button (always shown from 1024 px). */
   const [sideOpen, setSideOpen] = useState(false);
+  /** The sidebar is open as a modal drawer (under 1024 px). */
+  const drawer = narrow && sideOpen;
   /** A repository's graph, opened from the sidebar (drawn outside it, so a drawer closing never hides it). */
   const [graphOf, setGraphOf] = useState<{ repo: RepoEntry; view: 'code' | 'domain' } | null>(null);
   /** The main column: the chat, or one of the sidebar's More views. */
@@ -147,6 +150,14 @@ export function UnderstandPage({ project, navigate, now, compare, runs = [] }: {
   const [inline, setInline] = useState(() => readAskSession(pageChatSessionKey('understand')) !== null);
   /** The conversation on screen (Recent answers marks it): the one reopened or just asked, or the page's kept one. */
   const [openChat, setOpenChat] = useState<string | null>(() => readAskSession(pageChatSessionKey('understand'))?.chatId ?? null);
+  /** The repositories the open conversation is about (its graph links): recorded when it was asked, kept with it. `null` =
+   *  not recorded (the page's own choice stands in). */
+  const [openScope, setOpenScope] = useState<string[] | null>(() => {
+    const kept = readAskSession(pageChatSessionKey('understand'));
+    const fromChips = (kept?.chips ?? []).filter((c) => c.kind === 'repo' && c.on).map((c) => c.ref ?? c.key.replace(/^repo:/, ''));
+    if (fromChips.length > 0) return fromChips;
+    return readAsked().find((a) => a.chatId === kept?.chatId)?.repos ?? null;
+  });
   const pendingQuestion = useRef<string | null>(null);
   const scopeRepos = useMemo(() => (repos ?? []).filter((r) => chosen.includes(r.id)).map((r) => ({ id: r.id, name: r.name })), [repos, chosen]);
   const pname = onProject ? project : null;
@@ -158,6 +169,7 @@ export function UnderstandPage({ project, navigate, now, compare, runs = [] }: {
     pendingQuestion.current = question;
     setInline(true);
     setOpenChat(null);
+    setOpenScope(scopeRepos.map((r) => r.id));
     askPage('understand', { text: questionMessage(question), send: true, fresh: true });
     setQ('');
   };
@@ -165,6 +177,7 @@ export function UnderstandPage({ project, navigate, now, compare, runs = [] }: {
     usePageChat.getState().fresh('understand');
     setInline(false);
     setOpenChat(null);
+    setOpenScope(null);
     setPane('chat');
     setTimeout(() => inputRef.current?.focus(), 0);
   };
@@ -172,8 +185,9 @@ export function UnderstandPage({ project, navigate, now, compare, runs = [] }: {
     usePageChat.getState().resume('understand', a.chatId, a.question);
     setInline(true);
     setOpenChat(a.chatId);
+    setOpenScope(a.repos ?? null);
     setPane('chat');
-    closeSide(null);
+    closeSide('content');
   };
   const provider = {
     knows: scopeRepos.length === 0 ? (onProject ? 'Reads this project’s repositories · read-only' : 'Reads all repositories · read-only')
@@ -183,7 +197,7 @@ export function UnderstandPage({ project, navigate, now, compare, runs = [] }: {
       setOpenChat(chatId);
       const question = pendingQuestion.current;
       pendingQuestion.current = null;
-      if (question !== null && !asked.some((x) => x.chatId === chatId)) setAsked(rememberAsked({ chatId, question, at: Date.now() }));
+      if (question !== null && !asked.some((x) => x.chatId === chatId)) setAsked(rememberAsked({ chatId, question, at: Date.now(), repos: scopeRepos.map((r) => r.id) }));
     },
     onMove: (m: string) => {
       if (m !== 'graph') return false;
@@ -196,9 +210,21 @@ export function UnderstandPage({ project, navigate, now, compare, runs = [] }: {
   const pick = (s: string): void => { setQ(s); inputRef.current?.focus(); };
   // The drawer (under 1024 px) is a modal: the modal rung, the page behind inert, focus in and contained, Escape or the
   // scrim out (focus back to its button); voice mode opening, or the window growing past it, closes it.
-  const focusAfter = useRef<'toggle' | null>(null);
-  const closeSide = (to: 'toggle' | null = 'toggle'): void => { focusAfter.current = to; setSideOpen(false); };
-  const drawer = narrow && sideOpen;
+  const focusAfter = useRef<'toggle' | 'content' | null>(null);
+  const closeSide = (to: 'toggle' | 'content' | null = 'toggle'): void => { focusAfter.current = to; setSideOpen(false); };
+  /** Focus what the main column now shows: a pane's way back, else the conversation. */
+  const focusContent = (): void => {
+    setTimeout(() => {
+      const root = mainRef.current;
+      const back = root?.querySelector<HTMLElement>('[data-testid="understand-back"]');
+      const target = back ?? root?.querySelector<HTMLElement>('[data-testid="assist-input"]') ?? root?.querySelector<HTMLElement>('[data-testid="understand-chat"]');
+      target?.focus();
+    }, 0);
+  };
+  const showPane = (next: 'chat' | 'compare' | 'coverage'): void => {
+    setPane(next);
+    if (drawer) closeSide('content'); else focusContent();
+  };
   useEffect(() => { if (!narrow && sideOpen) setSideOpen(false); }, [narrow, sideOpen]);
   const voiceOn = useVoiceStore((st) => st.phase !== 'off');
   useEffect(() => { if (voiceOn && sideOpen) closeSide(null); }, [voiceOn, sideOpen]);
@@ -210,11 +236,15 @@ export function UnderstandPage({ project, navigate, now, compare, runs = [] }: {
     main?.setAttribute('inert', '');
     sideRef.current?.querySelector<HTMLElement>(FOCUSABLE)?.focus();
     const onKey = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape' && isTopModal(id)) { e.stopPropagation(); closeSide('toggle'); return; }
+      // The shortcut overlay and the palette sit above the drawer: they take Escape and the keyboard first (Modal.tsx's chain).
+      if (useLayerStore.getState().shortcutOverlayOpen || isShortcutsPaletteOpen() || !isTopModal(id)) return;
+      if (e.key === 'Escape') { e.stopPropagation(); closeSide('toggle'); return; }
       if (e.key !== 'Tab' || sideRef.current === null) return;
       const els = [...sideRef.current.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((el) => el.offsetParent !== null || el === document.activeElement);
       if (els.length === 0) return;
       const a = els[0]!; const z = els[els.length - 1]!;
+      // Focus outside the drawer's controls (on the drawer itself, a heading, the page) comes back in.
+      if (!els.includes(document.activeElement as HTMLElement)) { e.preventDefault(); (e.shiftKey ? z : a).focus(); return; }
       if (e.shiftKey && document.activeElement === a) { e.preventDefault(); z.focus(); }
       else if (!e.shiftKey && document.activeElement === z) { e.preventDefault(); a.focus(); }
     };
@@ -230,14 +260,11 @@ export function UnderstandPage({ project, navigate, now, compare, runs = [] }: {
       main?.removeAttribute('inert');
       const to = focusAfter.current; focusAfter.current = null;
       if (to === 'toggle') tg?.focus();
+      else if (to === 'content') focusContent();
     };
   }, [drawer]);
-  // The repositories a conversation is about: the open chat's own scope (kept with it), else the page's choice.
-  const graphScope = useMemo(() => {
-    const kept = inline ? readAskSession(pageChatSessionKey('understand')) : null;
-    const repoChips = (kept?.chatId === openChat ? kept?.chips ?? [] : []).filter((c) => c.kind === 'repo' && c.on);
-    return repoChips.length > 0 ? repoChips.map((c) => c.ref ?? c.key.replace(/^repo:/, '')) : scopeRepos.map((r) => r.id);
-  }, [inline, openChat, scopeRepos]);
+  // The repositories a conversation is about: the open chat's own (recorded with it), else the page's choice.
+  const graphScope = useMemo(() => (inline && openScope !== null ? openScope : scopeRepos.map((r) => r.id)), [inline, openScope, scopeRepos]);
   // The open conversation, marked in Recent answers.
   const openChatId = inline ? openChat : null;
 
@@ -261,7 +288,7 @@ export function UnderstandPage({ project, navigate, now, compare, runs = [] }: {
 
         {pane !== 'chat' && (
           <div className="wk-uc-back">
-            <button type="button" className="wk-ue-link wk-ue-linkbtn wk-ue-back" data-testid="understand-back" onClick={() => setPane('chat')}>
+            <button type="button" className="wk-ue-link wk-ue-linkbtn wk-ue-back" data-testid="understand-back" onClick={() => showPane('chat')}>
               <ArrowLeft size={14} aria-hidden />Back to the chat
             </button>
           </div>
@@ -369,18 +396,18 @@ export function UnderstandPage({ project, navigate, now, compare, runs = [] }: {
         </section>
 
         <RepoGraphLinks repos={repos} failed={reposFailed} scope={graphScope} runs={runs} now={now} navigate={navigate} sectionRef={graphsRef}
-          onOpen={(repo, view) => { setGraphOf({ repo, view }); }} />
+          onOpen={(repo, view) => { if (drawer) closeSide(null); setGraphOf({ repo, view }); }} />
 
         <section className="wk-uc-sec" aria-labelledby={moreId}>
           <h2 id={moreId} className="wk-uc-label">More</h2>
           <ul className="wk-uc-more">
             <li>
-              <button type="button" className="wk-uc-morebtn" data-testid="understand-compare-toggle" aria-pressed={pane === 'compare'} onClick={() => { setPane(pane === 'compare' ? 'chat' : 'compare'); closeSide(null); }}>
+              <button type="button" className="wk-uc-morebtn" data-testid="understand-compare-toggle" aria-pressed={pane === 'compare'} onClick={() => showPane(pane === 'compare' ? 'chat' : 'compare')}>
                 <Columns3 size={16} aria-hidden /><span>Compare side by side</span>
               </button>
             </li>
             <li>
-              <button type="button" className="wk-uc-morebtn" data-testid="understand-coverage-toggle" aria-pressed={pane === 'coverage'} onClick={() => { setPane(pane === 'coverage' ? 'chat' : 'coverage'); closeSide(null); }}>
+              <button type="button" className="wk-uc-morebtn" data-testid="understand-coverage-toggle" aria-pressed={pane === 'coverage'} onClick={() => showPane(pane === 'coverage' ? 'chat' : 'coverage')}>
                 <ListChecks size={16} aria-hidden /><span>Coverage</span>
               </button>
             </li>
@@ -428,9 +455,11 @@ function RepoGraphLinks({ repos, failed, scope, runs, now, navigate, sectionRef,
                 <span className="wk-uc-graph-links">
                   <button type="button" className="wk-uc-graphbtn" data-testid="understand-graph-open" data-tone={code.tone} title={code.title} aria-label={label(code)} onClick={() => onOpen(r, 'code')}>
                     <span className="wk-know-dot" aria-hidden /><Network size={14} aria-hidden />Code graph
+                    <span className="wk-uc-graphval" data-testid="understand-graph-value">{code.value}</span>
                   </button>
                   <button type="button" className="wk-uc-graphbtn" data-testid="understand-graph-req" data-tone={req.tone} title={req.title} aria-label={label(req)} onClick={() => onOpen(r, 'domain')}>
                     <span className="wk-know-dot" aria-hidden /><Share2 size={14} aria-hidden />Requirements graph
+                    <span className="wk-uc-graphval" data-testid="understand-graph-value">{req.value}</span>
                   </button>
                 </span>
               </li>

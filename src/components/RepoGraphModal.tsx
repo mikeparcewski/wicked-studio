@@ -730,7 +730,7 @@ export function RepoGraphModal({ repo, onClose, onSelectRun, initialFocus, initi
 
         {/* ── Content ────────────────────────────────────────────────────── */}
         <div className="flex-1 overflow-hidden" style={{ background: T.blue }}>
-          {loading ? (
+          {loading && graphType === 'code' ? (
             <div className="flex items-center justify-center h-full">
               <span className="text-sm" style={{ color: T.muted }}>Loading…</span>
             </div>

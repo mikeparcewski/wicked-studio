@@ -18,6 +18,8 @@ export interface AskedQuestion {
   question: string;
   /** Unix ms. */
   at: number;
+  /** The repositories it was asked about (the page's choice when sent); absent = all of them, or not recorded. */
+  repos?: string[];
 }
 
 export const ASKED_KEY = 'studio.understand.asked';

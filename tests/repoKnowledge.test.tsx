@@ -34,7 +34,7 @@ vi.mock('../src/components/RequirementsModal.js', () => ({
   RequirementsModal: ({ repoName }: { repoName: string }) => <div data-testid="requirements-stub">{repoName}</div>,
 }));
 
-const { useRepoKnowledge, resetRepoKnowledge, MAX_IN_FLIGHT, FRESH_MS } = await import('../src/store/repoKnowledge.js');
+const { useRepoKnowledge, useRepoKnowledgeFor, resetRepoKnowledge, MAX_IN_FLIGHT, FRESH_MS, READ_TIMEOUT_MS } = await import('../src/store/repoKnowledge.js');
 const { RepositoriesPanel } = await import('../src/components/RepositoriesPanel.js');
 const { resetRepoLanguages } = await import('../src/hooks/useRepoLanguages.js');
 
@@ -96,7 +96,9 @@ describe('what we know (pure)', () => {
     expect(byId(knowledgeMarks(repo('crew'), [], known({ reqs: { state: 'none', share } }), NOW)).reqs).toMatchObject({ value: '9% real', tone: 'warn' });
     const zeroShare = byId(knowledgeMarks(repo('crew'), [], known({ reqs: { state: 'none', share: { ...COV, realPct: 0, real: 0, placeholders: 0 } } }), NOW)).reqs!;
     expect(zeroShare).toMatchObject({ value: 'none yet', tone: 'none' });
-    expect(zeroShare.title).toContain('0 of 4,333 behaviours');
+    expect(zeroShare.title).toContain('0 of 4,333 behaviours)');
+    const zeroWithPlaceholders = byId(knowledgeMarks(repo('crew'), [], known({ reqs: { state: 'none', share: { ...COV, realPct: 0, real: 0, placeholders: 12 } } }), NOW)).reqs!;
+    expect(zeroWithPlaceholders.title).toContain('0 of 4,333 behaviours, 12 placeholders');
     // A build of 0 is "not built", whatever the requirements say.
     const zero = byId(knowledgeMarks(repo('crew'), [], known({ reqs: { state: 'ok', coverage: COV, build: { generation: 0, coverage: null, behind: true } } }), NOW));
     expect(zero.reqgraph).toMatchObject({ value: 'not built', tone: 'none' });
@@ -219,6 +221,35 @@ describe('the knowledge store', () => {
     while (release.length > 0) { await act(async () => { release.shift()?.(); await Promise.resolve(); }); }
     await vi.waitFor(() => expect(order).toHaveLength(6));
     expect(order.filter((id) => id === 'l6')).toHaveLength(1);
+  });
+});
+
+describe('the knowledge store: bounded reads and the minute', () => {
+  beforeEach(() => { resetRepoKnowledge(); mocks.kinds.mockReset(); mocks.reqs.mockReset(); });
+  afterEach(() => { vi.useRealTimers(); cleanup(); });
+
+  it('a read that never answers counts as failed after the timeout and frees its slot', async () => {
+    vi.useFakeTimers();
+    mocks.kinds.mockImplementation((id: string) => (id.startsWith('stuck') ? new Promise(() => {}) : Promise.resolve({ kinds: CREW_KINDS })));
+    mocks.reqs.mockResolvedValue({ coverage: COV, graphBuild: null });
+    useRepoKnowledge.getState().ensure(['stuck1', 'stuck2', 'stuck3', 'ok']);
+    expect(mocks.kinds).toHaveBeenCalledTimes(MAX_IN_FLIGHT);
+    await act(async () => { await vi.advanceTimersByTimeAsync(READ_TIMEOUT_MS + 10); });
+    expect(useRepoKnowledge.getState().reads['stuck1']!.kinds).toEqual({ state: 'failed' });
+    await act(async () => { await vi.advanceTimersByTimeAsync(10); });
+    expect(useRepoKnowledge.getState().reads['ok']!.kinds.state).toBe('ok');
+  });
+
+  it('a page that stays open reads its repositories again every minute', async () => {
+    vi.useFakeTimers();
+    mocks.kinds.mockResolvedValue({ kinds: CREW_KINDS });
+    mocks.reqs.mockResolvedValue({ coverage: COV, graphBuild: null });
+    function Probe(): null { useRepoKnowledgeFor(['a']); return null; }
+    render(<Probe />);
+    await act(async () => { await vi.advanceTimersByTimeAsync(1_500); });
+    expect(mocks.kinds).toHaveBeenCalledTimes(1);
+    await act(async () => { await vi.advanceTimersByTimeAsync(FRESH_MS); });
+    expect(mocks.kinds).toHaveBeenCalledTimes(2);
   });
 });
 
