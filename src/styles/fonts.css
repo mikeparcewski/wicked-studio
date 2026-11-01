@@ -132,4 +132,4 @@
 }
 
 /* The default wordmark only: the brand face, never synthesised bold (one weight ships). */
-.wk-wordmark { font-family: var(--font-display); font-synthesis: none; letter-spacing: 0.01em; }
+.wk-wordmark { font-family: var(--font-display); font-synthesis: none; letter-spacing: 0.01em; text-transform: capitalize; }
