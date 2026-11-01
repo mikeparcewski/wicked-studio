@@ -218,7 +218,7 @@ const studioVersion = __WICKED_STUDIO_VERSION__;
           <ul class="agent-chips" role="list">
             {AGENTS.map((a) => <li>{a}</li>)}
           </ul>
-          <p>Sign each one in once on the Agents page. Jobs run them in containers; credentials stay in a broker and the sandbox sees placeholders (a Claude subscription seat gets its sign-in token; a step that leaks it fails, and the delivery is blocked).</p>
+          <p>Sign each one in once on the Agents page. Jobs run them in containers; credentials stay in a broker and the sandbox sees placeholders (a Claude subscription seat gets its sign-in token; if a step writes it into the work, the step fails and delivery is blocked).</p>
         </div>
         <div class="reach-card">
           <h3>A project spans repos</h3>
