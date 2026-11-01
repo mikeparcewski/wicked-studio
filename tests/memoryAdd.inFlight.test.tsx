@@ -132,4 +132,46 @@ describe('a table save clears only what it saved', () => {
     fireEvent.click(screen.getByTestId('memory-table-save'));
     await waitFor(() => expect(editMemory).toHaveBeenLastCalledWith({ memory_id: 'm1c', content: 'v4' }));
   });
+
+  it('a multi-row save publishes each row as it answers: words typed on its new memory are not overwritten (codex r3)', async () => {
+    const m2 = deferred<{ memory_id: string; retired: string }>();
+    editMemory.mockImplementation(({ memory_id }: { memory_id: string }) =>
+      memory_id === 'm1' ? Promise.resolve({ memory_id: 'm1b', retired: 'm1' }) : m2.promise);
+    const { rerender } = render(<MemoryTable memories={[mem('m1', 'a1'), mem('m2', 'b1')]} onSaved={() => {}} onClose={() => {}} />);
+    const rows = (): HTMLTextAreaElement[] => screen.getAllByTestId('memory-table-text') as HTMLTextAreaElement[];
+    fireEvent.change(rows()[0]!, { target: { value: 'a2' } });
+    fireEvent.change(rows()[1]!, { target: { value: 'b2' } });
+    fireEvent.click(screen.getByTestId('memory-table-save'));
+    await waitFor(() => expect(editMemory).toHaveBeenCalledWith({ memory_id: 'm2', content: 'b2' }));
+    // m1 answered, m2 still out: typed on the row (still listed as m1), then a refresh lists m1b and more is typed
+    fireEvent.change(rows()[0]!, { target: { value: 'a2x' } });
+    rerender(<MemoryTable memories={[mem('m1b', 'a2'), mem('m2', 'b1')]} onSaved={() => {}} onClose={() => {}} />);
+    expect(rows()[0]!.value).toBe('a2x');
+    fireEvent.change(rows()[0]!, { target: { value: 'a3' } });
+    await act(async () => { m2.resolve({ memory_id: 'm2b', retired: 'm2' }); await m2.promise; });
+    expect(rows()[0]!.value).toBe('a3');
+    expect(rows()[1]!.value).toBe('b2');
+  });
+
+  it('refreshes landing out of order keep the chain: a late, older list still edits the newest memory (agy r3)', async () => {
+    editMemory.mockResolvedValueOnce({ memory_id: 'm1b', retired: 'm1' }).mockResolvedValueOnce({ memory_id: 'm1c', retired: 'm1b' });
+    const { rerender } = render(<MemoryTable memories={[mem('m1', 'v1')]} onSaved={() => {}} onClose={() => {}} />);
+    const box = (): HTMLTextAreaElement => screen.getByTestId('memory-table-text') as HTMLTextAreaElement;
+    fireEvent.change(box(), { target: { value: 'v2' } });
+    fireEvent.click(screen.getByTestId('memory-table-save'));
+    await waitFor(() => expect(editMemory).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.getByTestId('memory-table-note').textContent).toBe('Saved 1 change.'));
+    fireEvent.change(box(), { target: { value: 'v3' } });
+    fireEvent.click(screen.getByTestId('memory-table-save'));
+    await waitFor(() => expect(editMemory).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.getByTestId('memory-table-save').textContent).toBe('Save changes'));
+    // the newer list lands first, then the older one
+    rerender(<MemoryTable memories={[mem('m1c', 'v3')]} onSaved={() => {}} onClose={() => {}} />);
+    rerender(<MemoryTable memories={[mem('m1b', 'v2')]} onSaved={() => {}} onClose={() => {}} />);
+    expect(box().value).toBe('v3');
+    fireEvent.change(box(), { target: { value: 'v4' } });
+    editMemory.mockResolvedValueOnce({ memory_id: 'm1d', retired: 'm1c' });
+    fireEvent.click(screen.getByTestId('memory-table-save'));
+    await waitFor(() => expect(editMemory).toHaveBeenLastCalledWith({ memory_id: 'm1c', content: 'v4' }));
+  });
 });

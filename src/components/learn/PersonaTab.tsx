@@ -29,9 +29,16 @@ export function PersonaTab({ navigate, project }: { navigate: Navigate; project:
   const scope: PersonaScope = project !== null ? `project:${project}` : 'user';
   const projectName = project === null ? null : projects.find((p) => p.id === project)?.name ?? project;
 
+  // Every save or removal bumps this: a read that began before one of them answers with older state and is dropped,
+  // so it never overwrites what the save or removal put in (codex + agy r3 on #937).
+  const writes = useRef(0);
   const load = (): void => {
     setError(null);
-    getPersonas().then(setData, (e: unknown) => { if (isLearnRouteAbsent(e)) setAbsent(true); else setError(e); });
+    const at = writes.current;
+    getPersonas().then(
+      (d) => { if (writes.current === at) setData(d); },
+      (e: unknown) => { if (writes.current !== at) return; if (isLearnRouteAbsent(e)) setAbsent(true); else setError(e); },
+    );
   };
   useEffect(load, []);
   useEffect(() => { getSetupKnown().then((k) => setPerson(k.git?.name ?? null), () => setPerson(null)); }, []);
@@ -47,7 +54,11 @@ export function PersonaTab({ navigate, project }: { navigate: Navigate; project:
   // A note answers the last save or removal; a different scope starts without one.
   useEffect(() => { setNote(null); }, [scope]);
   const form = draft ?? base;
-  const set = (patch: Partial<PersonaInput>): void => setDraft({ ...inputOf(form), ...patch });
+  // A draft back at what the scope holds is no draft: the form follows the saved personality again.
+  const set = (patch: Partial<PersonaInput>): void => {
+    const next = { ...inputOf(form), ...patch };
+    setDraft(sameInput(next, base) ? null : next);
+  };
   const [q, setQ] = useState<0 | 1 | 2>(0);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<{ tone: 'ok' | 'fail'; text: string } | null>(null);
@@ -66,12 +77,14 @@ export function PersonaTab({ navigate, project }: { navigate: Navigate; project:
     const sent = inputOf(form);
     setBusy(true);
     setNote(null);
+    writes.current += 1;
     try {
       const r = await putPersona(at, { ...sent, name: sent.name.trim() });
+      writes.current += 1;
       setData((d) => withSaved(d, at, r.persona, r.voice));
       void useFirstRun.getState().markLearnUsed();
       if (scopeNow.current !== at) return;
-      setDraft((cur) => (cur !== null && sameInput(cur, sent) ? null : cur));
+      setDraft((cur) => (cur !== null && (sameInput(cur, sent) || sameInput(cur, r.persona)) ? null : cur));
       setNote({ tone: 'ok', text: `Saved as version ${r.persona.version}. The next chat uses it.` });
     } catch (e) {
       if (scopeNow.current === at) setNote({ tone: 'fail', text: e instanceof Error ? e.message : String(e) });
@@ -85,8 +98,10 @@ export function PersonaTab({ navigate, project }: { navigate: Navigate; project:
     const at = scope;
     const before = draft;
     setBusy(true);
+    writes.current += 1;
     try {
       await removePersonaOverride(id);
+      writes.current += 1;
       setData((d) => withoutOverride(d, id));
       // The project now inherits the person's personality as the daemon holds it now (another tab may have saved it):
       // read it again (codex r2 on #937); a kept draft is never touched by that read.

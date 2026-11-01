@@ -93,4 +93,35 @@ describe('PersonaTab save', () => {
     expect(nameBox().value).toBe('New Bob');
     expect(screen.queryByText(/uses yours again/)).toBeNull();
   });
+
+  it('a removal\u2019s read that lands after a later save does not undo the save (codex + agy r3)', async () => {
+    getPersonas.mockResolvedValueOnce(response('Ada', 1, { a: saved('Alpha bot', 3) }));
+    removePersonaOverride.mockResolvedValue({ removed: true });
+    let lateRead!: (v: unknown) => void;
+    render(<PersonaTab navigate={() => {}} project="a" />);
+    await waitFor(() => expect(nameBox().value).toBe('Alpha bot'));
+    getPersonas.mockReturnValueOnce(new Promise((r) => { lateRead = r; }));
+    fireEvent.click(screen.getByTestId('persona-remove-override'));
+    await waitFor(() => expect(nameBox().value).toBe('Ada'));
+    // a new override is saved while the removal's read is still out
+    putPersona.mockResolvedValue({ scope: 'project:a', persona: saved('New Alpha', 4), voice: 'v' });
+    fireEvent.change(nameBox(), { target: { value: 'New Alpha' } });
+    fireEvent.click(saveButton());
+    await waitFor(() => expect(screen.getByText(/Saved as version 4/)).toBeTruthy());
+    await act(async () => { lateRead(response('Ada', 1)); });
+    expect(nameBox().value).toBe('New Alpha');
+  });
+
+  it('a draft typed back to the saved personality is no draft: the form follows the next read (agy r3)', async () => {
+    getPersonas.mockResolvedValueOnce(response('Ada', 1, { a: saved('Alpha bot', 3) }));
+    removePersonaOverride.mockResolvedValue({ removed: true });
+    render(<PersonaTab navigate={() => {}} project="a" />);
+    await waitFor(() => expect(nameBox().value).toBe('Alpha bot'));
+    fireEvent.change(nameBox(), { target: { value: 'Alpha botx' } });
+    fireEvent.change(nameBox(), { target: { value: 'Alpha bot' } });
+    expect(saveButton().disabled).toBe(true);
+    getPersonas.mockResolvedValueOnce(response('Grace', 2));
+    fireEvent.click(screen.getByTestId('persona-remove-override'));
+    await waitFor(() => expect(nameBox().value).toBe('Grace'));
+  });
 });

@@ -360,6 +360,55 @@ describe('voice mode', () => {
     expect(decided).toEqual([]);
   });
 
+  it('a card replaced WHILE the words are being spoken: the words answer nothing (codex r3)', async () => {
+    await enterFull();
+    await speak('space bar');
+    await act(async () => { useGateStore.setState({ gates: { 'r-hook': { runId: 'r-hook', ord: 2, prompt: 'Approve the review', lifecycle: 'open', receivedAt: 1 } } }); });
+    await holdAndSay('approve it');
+    await waitFor(() => expect(screen.getByTestId('voice-ask-gate')).toBeTruthy());
+    const full = screen.getByTestId('voice-full');
+    heard.push('confirm');
+    await act(async () => { fireEvent.keyDown(full, { key: ' ' }); });
+    // mid-sentence: card A goes, the run reaches delivery, card B opens
+    await act(async () => { await hear('not that', 'typed'); });
+    await act(async () => { useGateStore.setState({ gates: { 'r-hook': { runId: 'r-hook', ord: 9, prompt: 'Approve delivery?', lifecycle: 'open', receivedAt: 2, gateKind: 'deliver' } } }); });
+    await act(async () => { await hear('approve it', 'typed'); });
+    await act(async () => { fireEvent.keyUp(full, { key: ' ' }); await new Promise((r) => setTimeout(r, 0)); });
+    await waitFor(() => expect(said.some((t) => /answered nothing/.test(t))).toBe(true));
+    expect(decided).toEqual([]);
+  });
+
+  it('a card dismissed while its "confirm" waits: the words do nothing (agy r3)', async () => {
+    await enterFull();
+    await speak('space bar');
+    await act(async () => { useGateStore.setState({ gates: { 'r-hook': { runId: 'r-hook', ord: 2, prompt: 'Approve the review', lifecycle: 'open', receivedAt: 1 } } }); });
+    await holdAndSay('approve it');
+    await waitFor(() => expect(screen.getByTestId('voice-ask-gate')).toBeTruthy());
+    let release!: (t: string) => void;
+    setVoiceDeps({ stt: { transcribe: async () => { heard.shift(); return new Promise<string>((r) => { release = r; }); } } });
+    await holdAndSay('confirm');
+    await act(async () => { await hear('not that', 'typed'); });
+    expect(useVoiceStore.getState().openAsk).toBeNull();
+    await act(async () => { release('approve it'); await new Promise((r) => setTimeout(r, 0)); });
+    await waitFor(() => expect(said.some((t) => /question was on screen that is gone now/.test(t))).toBe(true));
+    expect(decided).toEqual([]);
+    // nothing new was proposed from the stale words either
+    expect(useVoiceStore.getState().openAsk).toBeNull();
+  });
+
+  it('"leave voice" still leaves when a card opened while it was being transcribed (codex r3)', async () => {
+    await enterFull();
+    await speak('space bar');
+    await act(async () => { useGateStore.setState({ gates: { 'r-hook': { runId: 'r-hook', ord: 2, prompt: 'Approve the review', lifecycle: 'open', receivedAt: 1 } } }); });
+    let release!: (t: string) => void;
+    setVoiceDeps({ stt: { transcribe: async () => { heard.shift(); return new Promise<string>((r) => { release = r; }); } } });
+    await holdAndSay('leave voice');
+    await act(async () => { await hear('approve it', 'typed'); });
+    await waitFor(() => expect(useVoiceStore.getState().openAsk).not.toBeNull());
+    await act(async () => { release('leave voice'); await new Promise((r) => setTimeout(r, 0)); });
+    await waitFor(() => expect(useVoiceStore.getState().phase).toBe('off'));
+  });
+
   it('typing reaches everything: words typed go where spoken words go', async () => {
     render(<VoiceRoot />);
     await act(async () => { await openVoice(); });

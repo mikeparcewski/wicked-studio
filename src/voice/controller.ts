@@ -302,7 +302,7 @@ function onFrame(level: number, bars: number[]): void {
   set({ bars, speaking: level > 0.02 ? 'you' : s.speaking === 'you' ? 'idle' : s.speaking });
   if (!listensByPause()) return;
   const ev = vad.feed(level, deps.now());
-  if (ev === 'start') { mic?.record(); startPartials(); }
+  if (ev === 'start') { recordingAsk = S.getState().openAsk; mic?.record(); startPartials(); }
   if (ev === 'end') { stopPartials(); void finishTurn(); }
 }
 
@@ -338,6 +338,8 @@ async function partial(): Promise<void> {
 /** Finished recordings not yet turned into text, oldest first: kept until transcribed or reported lost. The queue is
  *  the current voice session's: opening or closing voice empties it. */
 const finals: Array<{ wav: Blob; ask: number | null }> = [];
+/** The question on screen when the current recording STARTED: words are for the card they were begun under. */
+let recordingAsk: number | null = null;
 const BUSY_NOTE = 'The speech engine is busy. Holding on to what you said…';
 /** The session whose queue is being drained, or null. */
 let drainingGen: number | null = null;
@@ -349,8 +351,10 @@ const BUSY_WAIT_MS = 1500;
 async function finishTurn(): Promise<void> {
   const wav = mic?.take() ?? null;
   if (wav === null) return;
-  // The question on screen when it was said: words meant for one card never answer another (codex r2 on #937).
-  finals.push({ wav, ask: S.getState().openAsk });
+  // The question words were said under: the one on screen when the recording started, and still on screen when it
+  // ended. A card that came or went mid-sentence leaves the words for no card (-1 never matches one).
+  const endAsk = S.getState().openAsk;
+  finals.push({ wav, ask: recordingAsk === endAsk ? endAsk : -1 });
   set({ transcribing: true });
   await drainFinals();
 }
@@ -402,12 +406,15 @@ async function drainFinals(): Promise<void> {
         void sayError(failure);
         continue;
       }
-      // Said while a different question was on screen (it was answered or replaced while this waited): it answers
-      // nothing, rather than confirming whatever card is up now.
+      // Words act only under the question they were said under: one answered, replaced, opened or closed while they
+      // were spoken or waited answers nothing (codex + agy r2/r3 on #937), never whatever card is up now. Leaving
+      // voice always works.
       const askNow = S.getState().openAsk;
-      if (askNow !== null && askNow !== item.ask && (text ?? '') !== '') {
+      if (askNow !== item.ask && (text ?? '') !== '' && !isLeave(text ?? '')) {
         dropPartial();
-        void itSays('That was said while another question was on screen, so it answered nothing. Say it again.');
+        void itSays(askNow === null
+          ? 'That was said while a question was on screen that is gone now, so it did nothing. Say it again.'
+          : 'That was said while another question was on screen, so it answered nothing. Say it again.');
         continue;
       }
       void hear(text ?? '').catch(() => undefined);
@@ -1020,6 +1027,7 @@ export function holdToTalk(down: boolean): void {
     if (s.holding) return;
     deps.speaker.cancel();
     set({ holding: true, speaking: 'you' });
+    recordingAsk = S.getState().openAsk;
     mic.record();
     return;
   }
