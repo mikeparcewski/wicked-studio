@@ -174,21 +174,33 @@ function CaptureTurn({ turn, onDecided }: { turn: Turn; onDecided: (line: string
 /** Edit as a table: every memory's words in one editable column; Save changes edits the changed ones. */
 export function MemoryTable({ memories, onSaved, onClose }: { memories: readonly MemoryItem[]; onSaved: () => void; onClose: () => void }): React.ReactElement {
   const [edits, setEdits] = useState<Record<string, string>>({});
-  // An edit retires the memory and files a new one. Until the list is read again the row on screen keeps the old id:
-  // it shows the saved words, and further typing (and a further save) goes to the new memory (codex + agy on #937).
+  // An edit retires the memory and files a new one: retired id → its replacement and the words saved. Until the list
+  // is read again a row on screen may still carry a retired id; it follows the chain to the live memory, shows the
+  // saved words, and further typing and saving go there (codex + agy on #937, a chain across two saves and a refresh).
   const [replaced, setReplaced] = useState<Record<string, { id: string; words: string }>>({});
+  const resolve = (id: string): { id: string; words: string | null } => {
+    let cur = id;
+    let words: string | null = null;
+    for (let hops = 0; replaced[cur] !== undefined && hops < 32; hops++) {
+      words = replaced[cur]!.words;
+      cur = replaced[cur]!.id;
+    }
+    return { id: cur, words };
+  };
   useEffect(() => {
-    // Rows the refreshed list no longer has are gone: their aliases go with them.
+    // Keep only the links some row on screen still needs to reach its live memory.
     setReplaced((cur) => {
-      const ids = new Set(memories.map((m) => m.id));
-      const kept = Object.entries(cur).filter(([row]) => ids.has(row));
-      return kept.length === Object.keys(cur).length ? cur : Object.fromEntries(kept);
+      const needed = new Set<string>();
+      for (const m of memories) {
+        for (let id = m.id, hops = 0; cur[id] !== undefined && hops < 32; id = cur[id]!.id, hops++) needed.add(id);
+      }
+      return Object.keys(cur).every((k) => needed.has(k)) ? cur : Object.fromEntries(Object.entries(cur).filter(([k]) => needed.has(k)));
     });
   }, [memories]);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<{ tone: 'ok' | 'fail'; text: string } | null>(null);
-  const liveId = (m: MemoryItem): string => replaced[m.id]?.id ?? m.id;
-  const baseOf = (m: MemoryItem): string => replaced[m.id]?.words ?? m.content;
+  const liveId = (m: MemoryItem): string => resolve(m.id).id;
+  const baseOf = (m: MemoryItem): string => resolve(m.id).words ?? m.content;
   const draftOf = (m: MemoryItem): string | undefined => edits[liveId(m)];
   const changed = memories.filter((m) => { const d = draftOf(m); return d !== undefined && d.trim() !== '' && d.trim() !== baseOf(m); });
   const save = async (): Promise<void> => {
@@ -199,7 +211,6 @@ export function MemoryTable({ memories, onSaved, onClose }: { memories: readonly
     const failed: string[] = [];
     // What this save sends, and what came of it: the table stays editable while it runs (codex on #937).
     const sent: Record<string, string> = Object.fromEntries(changed.map((m) => [liveId(m), draftOf(m)!]));
-    const rowOf: Record<string, string> = Object.fromEntries(changed.map((m) => [liveId(m), m.id]));
     const replacedBy: Record<string, string> = {};
     const failedIds = new Set<string>();
     for (const id of Object.keys(sent)) {
@@ -228,7 +239,7 @@ export function MemoryTable({ memories, onSaved, onClose }: { memories: readonly
     });
     setReplaced((cur) => {
       const next = { ...cur };
-      for (const [id, newId] of Object.entries(replacedBy)) next[rowOf[id]!] = { id: newId, words: sent[id]!.trim() };
+      for (const [id, newId] of Object.entries(replacedBy)) next[id] = { id: newId, words: sent[id]!.trim() };
       return next;
     });
     setNote(failed.length === 0 ? { tone: 'ok', text: `Saved ${ok} ${ok === 1 ? 'change' : 'changes'}.` } : { tone: 'fail', text: `Saved ${ok}; ${failed.length} did not: ${[...new Set(failed)].join('; ')}` });

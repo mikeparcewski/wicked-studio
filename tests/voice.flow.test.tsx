@@ -9,7 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { VoiceRoot } from '../src/components/voice/VoiceRoot.js';
 import { normalizeSnapshot } from '../src/api/system.js';
 import type { MicFrame, MicSource } from '../src/voice/io.js';
-import { closeVoice, holdToTalk, openVoice, resetVoice, resetVoiceDeps, setVoiceDeps } from '../src/voice/controller.js';
+import { closeVoice, hear, holdToTalk, openVoice, resetVoice, resetVoiceDeps, setVoiceDeps } from '../src/voice/controller.js';
 import { resetDashStore, useDashStore } from '../src/voice/dashboardStore.js';
 import { useVoiceStore } from '../src/store/voice.js';
 import { useGateStore } from '../src/store/gates.js';
@@ -278,6 +278,8 @@ describe('voice mode', () => {
     await holdAndSay('What is running right now?');
     await waitFor(() => expect(said.some((t) => /stayed busy, so I lost what you just said\. Please say it again/.test(t))).toBe(true));
     expect(asked).toEqual([]);
+    // the 'holding on' notice does not outlive the attempt (agy r2)
+    expect(useVoiceStore.getState().heard).not.toBe('The speech engine is busy. Holding on to what you said…');
   });
 
   it('words transcribed after voice closed act on nothing, and the next session keeps its own recording (codex + agy on the fix)', async () => {
@@ -329,6 +331,33 @@ describe('voice mode', () => {
     await waitFor(() => expect(asked).toEqual(['What is running right now?']));
     await holdAndSay('leave voice');
     await waitFor(() => expect(useVoiceStore.getState().phase).toBe('off'));
+  });
+
+  it('a "confirm" held by a busy engine while its card is replaced answers nothing (codex r2 on #937)', async () => {
+    await enterFull();
+    await speak('space bar');
+    await act(async () => { useGateStore.setState({ gates: { 'r-hook': { runId: 'r-hook', ord: 2, prompt: 'Approve the review', lifecycle: 'open', receivedAt: 1 } } }); });
+    await holdAndSay('approve it');
+    await waitFor(() => expect(screen.getByTestId('voice-ask-gate')).toBeTruthy());
+    let calls = 0;
+    let retry!: () => void;
+    setVoiceDeps({
+      stt: { transcribe: async () => { calls += 1; if (calls === 1) throw new ApiError(429, 'voice busy', { code: 'voice_busy' }); return heard.shift() ?? ''; } },
+      wait: () => new Promise<void>((r) => { retry = r; }),
+    });
+    await holdAndSay('confirm');
+    await waitFor(() => expect(calls).toBe(1));
+    // while it waits: card A is dismissed by typing, the run moves to delivery, and a new card B is opened by typing
+    const cardA = useVoiceStore.getState().openAsk;
+    expect(cardA).not.toBeNull();
+    await act(async () => { await hear('not that', 'typed'); });
+    await act(async () => { useGateStore.setState({ gates: { 'r-hook': { runId: 'r-hook', ord: 9, prompt: 'Approve delivery?', lifecycle: 'open', receivedAt: 2, gateKind: 'deliver' } } }); });
+    await act(async () => { await hear('approve it', 'typed'); });
+    await waitFor(() => expect(useVoiceStore.getState().openAsk).not.toBeNull());
+    expect(useVoiceStore.getState().openAsk).not.toBe(cardA);
+    await act(async () => { retry(); await new Promise((r) => setTimeout(r, 0)); });
+    await waitFor(() => expect(said.some((t) => /said while another question was on screen/.test(t))).toBe(true));
+    expect(decided).toEqual([]);
   });
 
   it('typing reaches everything: words typed go where spoken words go', async () => {

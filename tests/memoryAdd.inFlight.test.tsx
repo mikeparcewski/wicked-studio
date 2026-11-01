@@ -108,4 +108,28 @@ describe('a table save clears only what it saved', () => {
     expect((screen.getByTestId('memory-table-text') as HTMLTextAreaElement).value).toBe('deploy Thursdays only');
     expect(screen.getByTestId('memory-table-save').textContent).toBe('Save changes');
   });
+
+  it('a refresh that lands during a second save keeps the chain: the row shows and edits the newest memory (codex + agy r2)', async () => {
+    editMemory.mockResolvedValueOnce({ memory_id: 'm1b', retired: 'm1' });
+    const { rerender } = render(<MemoryTable memories={[mem('m1', 'v1')]} onSaved={() => {}} onClose={() => {}} />);
+    const box = (): HTMLTextAreaElement => screen.getByTestId('memory-table-text') as HTMLTextAreaElement;
+    fireEvent.change(box(), { target: { value: 'v2' } });
+    fireEvent.click(screen.getByTestId('memory-table-save'));
+    await waitFor(() => expect(screen.getByTestId('memory-table-note').textContent).toBe('Saved 1 change.'));
+    // save two goes out on the new memory, from the row still showing m1
+    const second = deferred<{ memory_id: string; retired: string }>();
+    editMemory.mockReturnValueOnce(second.promise);
+    fireEvent.change(box(), { target: { value: 'v3' } });
+    fireEvent.click(screen.getByTestId('memory-table-save'));
+    expect(editMemory).toHaveBeenLastCalledWith({ memory_id: 'm1b', content: 'v3' });
+    // the first refresh lands now: the row is m1b
+    rerender(<MemoryTable memories={[mem('m1b', 'v2')]} onSaved={() => {}} onClose={() => {}} />);
+    fireEvent.change(box(), { target: { value: 'v4' } });
+    await act(async () => { second.resolve({ memory_id: 'm1c', retired: 'm1b' }); await second.promise; });
+    // the newest words stay on screen, and the next save goes to m1c
+    expect(box().value).toBe('v4');
+    editMemory.mockResolvedValueOnce({ memory_id: 'm1d', retired: 'm1c' });
+    fireEvent.click(screen.getByTestId('memory-table-save'));
+    await waitFor(() => expect(editMemory).toHaveBeenLastCalledWith({ memory_id: 'm1c', content: 'v4' }));
+  });
 });

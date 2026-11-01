@@ -13,7 +13,7 @@ import { powerPhases } from '../src/board/powerMode.js';
 import { silentStep } from '../src/board/silentStep.js';
 import { toRow, type TopicRow } from '../src/editors/runEvents.js';
 import { emptyReport, foldRows, phaseDashboard, phaseSummary, type PhaseScope } from '../src/plugins/wicked-phase-report/model.js';
-import { docLines, pluginWritesLines } from '../src/plugins/wicked-phase-report/workingDoc.js';
+import { docLines, ownQuestionLines, pluginWritesLines, reconcileSection } from '../src/plugins/wicked-phase-report/workingDoc.js';
 import { LiveActivity } from '../src/components/session/LiveActivity.js';
 import { SessionPage } from '../src/components/session/SessionView.js';
 import { useRunningFloor } from '../src/hooks/useRunningFloor.js';
@@ -285,6 +285,23 @@ describe('6. working document lines', () => {
     expect(docLines(r).questions).toEqual([]);
     expect(docLines(r).decisions).toHaveLength(1);
   });
+  it('the plugin owns exactly the question lines it wrote for this run: an answered gate\u2019s goes, a person\u2019s edit of it stays (codex r2 on #937)', () => {
+    const r = report(ev([
+      { type: 'unitExecuting', ord: 4, ts: T0 },
+      { type: 'awaitingHuman', ord: 4, gateKind: 'escalation', ts: T0 + 1000 },
+      { type: 'resumed', ord: 4, ts: T0 + 1100 },
+      { type: 'unitExecuting', ord: 5, ts: T0 + 1400 },
+      { type: 'awaitingHuman', ord: 5, gateKind: 'deliver', ts: T0 + 2000 },
+    ]));
+    const own = ownQuestionLines(r);
+    const [answered, open] = own;
+    expect(own).toHaveLength(2);
+    expect(docLines(r).questions).toEqual([open]);
+    // the answered gate's generated line is taken out; the person's edit of the open one is theirs, kept beside it
+    const saved = `${answered}\n${open} (Sam signs off)\nShould the PDF carry the symbol?`;
+    expect(reconcileSection('questions', saved, docLines(r).questions, own)).toBe(`${open} (Sam signs off)\nShould the PDF carry the symbol?`);
+  });
+
   it('an open gate is still an open question', () => {
     const r = report(ev([{ type: 'unitExecuting', ord: 4, ts: T0 }, { type: 'awaitingHuman', ord: 4, gateKind: 'escalation', ts: T0 + 1000 }]));
     expect(docLines(r).questions).toHaveLength(1);

@@ -88,6 +88,9 @@ export function PersonaTab({ navigate, project }: { navigate: Navigate; project:
     try {
       await removePersonaOverride(id);
       setData((d) => withoutOverride(d, id));
+      // The project now inherits the person's personality as the daemon holds it now (another tab may have saved it):
+      // read it again (codex r2 on #937); a kept draft is never touched by that read.
+      load();
       if (scopeNow.current !== at) return;
       // The form clears unless the person changed it while the removal was out.
       setDraft((cur) => (cur === null || (before !== null && sameInput(cur, before)) ? null : cur));

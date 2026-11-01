@@ -32,7 +32,7 @@ function deferred<T>(): { promise: Promise<T>; resolve: (v: T) => void } {
 const nameBox = (): HTMLInputElement => screen.getByTestId('persona-name') as HTMLInputElement;
 const saveButton = (): HTMLButtonElement => screen.getByTestId('persona-save') as HTMLButtonElement;
 
-afterEach(() => { cleanup(); vi.clearAllMocks(); });
+afterEach(() => { cleanup(); vi.clearAllMocks(); getPersonas.mockReset(); putPersona.mockReset(); removePersonaOverride.mockReset(); });
 
 describe('PersonaTab save', () => {
   it('a name typed while the save is out survives its answer, still unsaved', async () => {
@@ -53,16 +53,30 @@ describe('PersonaTab save', () => {
     expect(saveButton().disabled).toBe(true);
   });
 
-  it('with nothing typed since, the form settles to the saved personality, with no second read', async () => {
+  it('with nothing typed since, the form settles to the saved personality from the save\u2019s own answer', async () => {
     getPersonas.mockResolvedValueOnce(response('Ada', 1));
+    // the daemon answers with the saved personality as it keeps it (here: the name trimmed)
     putPersona.mockResolvedValue({ scope: 'user', persona: saved('Grace', 2), voice: 'v' });
     render(<PersonaTab navigate={() => {}} project={null} />);
     await screen.findByTestId('persona-name');
-    fireEvent.change(nameBox(), { target: { value: 'Grace' } });
+    fireEvent.change(nameBox(), { target: { value: 'Grace  ' } });
     fireEvent.click(saveButton());
-    await waitFor(() => expect(saveButton().disabled).toBe(true));
+    await waitFor(() => expect(screen.getByText(/Saved as version 2/)).toBeTruthy());
+    expect(saveButton().textContent).not.toMatch(/Saving/);
     expect(nameBox().value).toBe('Grace');
+    expect(saveButton().disabled).toBe(true);
     expect(getPersonas).toHaveBeenCalledTimes(1);
+  });
+
+  it('removing an override shows the personality the project inherits now, read again', async () => {
+    getPersonas.mockResolvedValueOnce(response('Ada', 1, { a: saved('Alpha bot', 3) }));
+    removePersonaOverride.mockResolvedValue({ removed: true });
+    render(<PersonaTab navigate={() => {}} project="a" />);
+    await waitFor(() => expect(nameBox().value).toBe('Alpha bot'));
+    // another tab saved the person's personality as Grace meanwhile
+    getPersonas.mockResolvedValueOnce(response('Grace', 2));
+    fireEvent.click(screen.getByTestId('persona-remove-override'));
+    await waitFor(() => expect(nameBox().value).toBe('Grace'));
   });
 
   it('a removal that finishes after the person moved to another project leaves that project’s input alone', async () => {

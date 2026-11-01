@@ -337,7 +337,8 @@ async function partial(): Promise<void> {
 
 /** Finished recordings not yet turned into text, oldest first: kept until transcribed or reported lost. The queue is
  *  the current voice session's: opening or closing voice empties it. */
-const finals: Blob[] = [];
+const finals: Array<{ wav: Blob; ask: number | null }> = [];
+const BUSY_NOTE = 'The speech engine is busy. Holding on to what you said…';
 /** The session whose queue is being drained, or null. */
 let drainingGen: number | null = null;
 /** How often, and how long apart, a busy speech engine is asked again for one recording. */
@@ -348,7 +349,8 @@ const BUSY_WAIT_MS = 1500;
 async function finishTurn(): Promise<void> {
   const wav = mic?.take() ?? null;
   if (wav === null) return;
-  finals.push(wav);
+  // The question on screen when it was said: words meant for one card never answer another (codex r2 on #937).
+  finals.push({ wav, ask: S.getState().openAsk });
   set({ transcribing: true });
   await drainFinals();
 }
@@ -367,7 +369,8 @@ async function drainFinals(): Promise<void> {
   drainingGen = gen;
   try {
     while (finals.length > 0) {
-      const wav = finals[0]!;
+      const item = finals[0]!;
+      const wav = item.wav;
       let text: string | null = null;
       let failure: string | null = null;
       for (let tries = 1; ; tries++) {
@@ -377,7 +380,7 @@ async function drainFinals(): Promise<void> {
           if (gen !== generation) return;
           if (voiceErrorCode(e) === 'voice_busy') {
             if (tries < BUSY_TRIES) {
-              if (tries === 1) set({ heard: 'The speech engine is busy. Holding on to what you said…' });
+              if (tries === 1) set({ heard: BUSY_NOTE });
               await deps.wait(BUSY_WAIT_MS * tries);
               if (gen !== generation) return;
               continue;
@@ -391,14 +394,23 @@ async function drainFinals(): Promise<void> {
       }
       // Voice closed (or opened again) while this was being transcribed: its words act on nothing now.
       if (gen !== generation) return;
-      if (finals[0] === wav) finals.shift();
+      if (finals[0] === item) finals.shift();
       set({ transcribing: finals.length > 0 });
+      if (S.getState().heard === BUSY_NOTE) set({ heard: null });
       if (failure !== null) {
         dropPartial();
         void sayError(failure);
         continue;
       }
-      void hear(text ?? '');
+      // Said while a different question was on screen (it was answered or replaced while this waited): it answers
+      // nothing, rather than confirming whatever card is up now.
+      const askNow = S.getState().openAsk;
+      if (askNow !== null && askNow !== item.ask && (text ?? '') !== '') {
+        dropPartial();
+        void itSays('That was said while another question was on screen, so it answered nothing. Say it again.');
+        continue;
+      }
+      void hear(text ?? '').catch(() => undefined);
     }
   } finally {
     if (drainingGen === gen) drainingGen = null;
