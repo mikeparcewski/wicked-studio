@@ -172,8 +172,23 @@ export function docLines(r: Report): { decisions: string[]; questions: string[];
   return { decisions, questions, next };
 }
 
-/** The plugin's own lines in a section (the ones it may take back): an open question or a hand-off follow-up. */
-const MINE: Readonly<Record<'questions' | 'next', RegExp>> = { questions: /^Waiting on you · /u, next: /^After hand-off round \d+ · /u };
+const escapeRe = (t: string): string => t.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
+const CLOCK = '(?:\\d{2}:\\d{2}|—)';
+const PAUSE_ASK = escapeRe(': split it, switch to phased steps, continue at high rigor, or stop? · since ');
+const HANDOFF_PHRASES = Object.values(HANDOFF_WORDS).flatMap((w) => [w.failed, w.skipped]).map(escapeRe).join('|');
+
+/**
+ * The plugin's own lines in a section (the ones it may take back): an open question or a hand-off follow-up, WHOLE, as
+ * the plugin writes them. A line a person edited no longer matches and is theirs from then on: a prefix alone is not
+ * ownership (codex on #937: an edited "After hand-off round 1 · …" line was taken back and rewritten).
+ */
+const MINE: Readonly<Record<'questions' | 'next', readonly RegExp[]>> = {
+  questions: [
+    new RegExp(`^Waiting on you · [^·]+ · since ${CLOCK}$`, 'u'),
+    new RegExp(`^Waiting on you · checkpoint \\d+ paused(?: \\([^)]*\\))?${PAUSE_ASK}${CLOCK}$`, 'u'),
+  ],
+  next: [new RegExp(`^After hand-off round \\d+ · (?:${HANDOFF_PHRASES})$`, 'u')],
+};
 
 /**
  * A section's new text with the plugin's lines brought up to date, or null when nothing changes. A person's lines stay
@@ -182,8 +197,9 @@ const MINE: Readonly<Record<'questions' | 'next', RegExp>> = { questions: /^Wait
  */
 export function reconcileSection(section: 'decisions' | 'questions' | 'next', current: string, wanted: readonly string[]): string | null {
   const lines = current.split('\n').map((l) => l.trim()).filter((l) => l !== '');
-  const kept = section === 'decisions' ? lines : lines.filter((l) => !MINE[section].test(l) || wanted.includes(l));
-  const add = wanted.filter((w) => !kept.includes(w));
+  const kept = section === 'decisions' ? lines : lines.filter((l) => !MINE[section].some((re) => re.test(l)) || wanted.includes(l));
+  // A person's edit that kept the line's words ("After hand-off round 1 · … — check the retry path first") stands for it.
+  const add = wanted.filter((w) => !kept.some((k) => k === w || k.startsWith(w)));
   const out = [...kept, ...add];
   return out.join('\n') === lines.join('\n') ? null : out.join('\n');
 }

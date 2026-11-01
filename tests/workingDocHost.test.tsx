@@ -160,6 +160,24 @@ describe('the words', () => {
       .toBe('After hand-off round 2 · QE acceptance did not pass: fix it and hand off again');
   });
 
+  it('a line the person edited is theirs: never taken back, never written again beside it (codex on #937)', () => {
+    const gen = 'After hand-off round 1 · the review asked for changes: make them and hand off again';
+    const edited = `${gen} — keep the retry path; Sam owns the copy`;
+    // still wanted: the edit stands for it, nothing is added
+    expect(reconcileSection('next', edited, [gen])).toBeNull();
+    // no longer wanted (the round passed): the edit stays, the new line is added after it
+    const round2 = 'After hand-off round 2 · QE acceptance did not pass: fix it and hand off again';
+    expect(reconcileSection('next', edited, [round2])).toBe(`${edited}\n${round2}`);
+    // the write sequence codex saw (generated, typed, generated) no longer happens
+    expect(reconcileSection('next', 'After hand-off round 1 · the review asked for changes — ask Sam first', [gen]))
+      .toBe(`After hand-off round 1 · the review asked for changes — ask Sam first\n${gen}`);
+    // an edited open question stays once its gate is answered; the plugin's own exact line still goes
+    expect(reconcileSection('questions', 'Waiting on you · Plan approval · since 20:01 (Sam to decide)\nWaiting on you · Deliver · since 21:00', []))
+      .toBe('Waiting on you · Plan approval · since 20:01 (Sam to decide)');
+    expect(reconcileSection('questions', 'Waiting on you · checkpoint 2 paused (the tests kept failing): split it, switch to phased steps, continue at high rigor, or stop? · since 20:05', []))
+      .toBe('');
+  });
+
   it('an agent’s text is labelled with its seat, a section names every writer, and neither a plugin nor an agent steers', () => {
     expect(authorWord({ kind: 'agent', id: 'agent:claude' })).toBe('Claude Code (agent)');
     const v: DocView = { ...view, trail: [...view.trail,
