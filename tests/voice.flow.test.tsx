@@ -13,6 +13,7 @@ import { closeVoice, holdToTalk, openVoice, resetVoice, resetVoiceDeps, setVoice
 import { resetDashStore, useDashStore } from '../src/voice/dashboardStore.js';
 import { useVoiceStore } from '../src/store/voice.js';
 import { useGateStore } from '../src/store/gates.js';
+import { ApiError } from '../src/api/errors.js';
 
 /** A fake microphone: the test speaks into it frame by frame; a turn's audio is a stand-in blob. */
 class FakeMic implements MicSource {
@@ -252,6 +253,31 @@ describe('voice mode', () => {
     expect(mic.stops).toBe(1);
     expect(ended).toBe(1);
     expect(mic.live).toBe(false);
+  });
+
+  it('a busy speech engine keeps the recording and asks again; nothing said is silently dropped (codex on #937)', async () => {
+    const busy = (): ApiError => new ApiError(429, 'voice busy', { code: 'voice_busy' });
+    let calls = 0;
+    const waits: number[] = [];
+    await enterFull();
+    await speak('space bar');
+    setVoiceDeps({
+      stt: { transcribe: async () => { calls += 1; if (calls <= 2) throw busy(); return heard.shift() ?? ''; } },
+      wait: async (ms) => { waits.push(ms); },
+    });
+    await holdAndSay('What is running right now?');
+    await waitFor(() => expect(asked).toEqual(['What is running right now?']));
+    expect(calls).toBe(3);
+    expect(waits).toEqual([1500, 3000]);
+  });
+
+  it('when the engine stays busy, the person is told the words were lost and asked to say them again', async () => {
+    await enterFull();
+    await speak('space bar');
+    setVoiceDeps({ stt: { transcribe: async () => { throw new ApiError(429, 'voice busy', { code: 'voice_busy' }); } }, wait: async () => undefined });
+    await holdAndSay('What is running right now?');
+    await waitFor(() => expect(said.some((t) => /stayed busy, so I lost what you just said\. Please say it again/.test(t))).toBe(true));
+    expect(asked).toEqual([]);
   });
 
   it('typing reaches everything: words typed go where spoken words go', async () => {

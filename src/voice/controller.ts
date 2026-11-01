@@ -72,6 +72,8 @@ export interface VoiceDeps {
   /** End the voice session's chat (history kept). */
   endChat: () => void;
   now: () => number;
+  /** Wait before asking a busy speech engine again (tests make it instant). */
+  wait: (ms: number) => Promise<void>;
 }
 
 let chatId: string | null = null;
@@ -200,6 +202,7 @@ const defaults = (): VoiceDeps => ({
     if (id !== null) void api.endChat(id).catch(() => api.closeChat(id).catch(() => undefined));
   },
   now: () => Date.now(),
+  wait: (ms) => new Promise((r) => { setTimeout(r, ms); }),
 });
 
 let deps: VoiceDeps = defaults();
@@ -314,9 +317,10 @@ function stopPartials(): void {
   partialTimer = null;
 }
 
-/** A streaming partial: the turn so far, shown as a muted line with a caret. A busy engine just skips a beat. */
+/** A streaming partial: the turn so far, shown as a muted line with a caret. A busy engine just skips a beat, and a
+ *  finished recording waiting its turn goes first (the engine takes one at a time, and one waiting). */
 async function partial(): Promise<void> {
-  if (partialBusy || mic === null) return;
+  if (partialBusy || mic === null || finals.length > 0) return;
   const wav = mic.peek();
   if (wav === null) return;
   partialBusy = true;
@@ -331,27 +335,71 @@ async function partial(): Promise<void> {
   } catch { /* a skipped partial says nothing; the final transcription reports */ } finally { partialBusy = false; }
 }
 
-/** The turn ended (a pause, or Space released): transcribe it and act on it. */
+/** Finished recordings not yet turned into text, oldest first: kept until transcribed or reported lost. */
+const finals: Blob[] = [];
+let draining = false;
+/** How often, and how long apart, a busy speech engine is asked again for one recording. */
+const BUSY_TRIES = 4;
+const BUSY_WAIT_MS = 1500;
+
+/** The turn ended (a pause, or Space released): queue its recording, then transcribe each in turn and act on it. */
 async function finishTurn(): Promise<void> {
   const wav = mic?.take() ?? null;
   if (wav === null) return;
+  finals.push(wav);
+  await drainFinals();
+}
+
+/**
+ * Turn the queued recordings into text, one at a time. crew's speech engine takes one transcription and one waiting
+ * (429 voice_busy past that): a busy answer keeps the recording and asks again a little later; when the engine stays
+ * busy the person is told the words were lost and asked to say them again, never silently dropped (codex on #937).
+ */
+async function drainFinals(): Promise<void> {
+  if (draining) return;
+  draining = true;
   const gen = generation;
-  set({ transcribing: true });
-  let text = '';
   try {
-    text = (await deps.stt.transcribe(wav)).trim();
-  } catch (e) {
-    if (gen !== generation) return;
-    set({ transcribing: false });
-    dropPartial();
-    const code = voiceErrorCode(e);
-    if (code === 'voice_busy') return;
-    await sayError(`I couldn’t turn that into text: ${e instanceof Error ? e.message : String(e)}`);
-    return;
+    while (finals.length > 0) {
+      if (gen !== generation) return;
+      const wav = finals[0]!;
+      set({ transcribing: true });
+      let text: string | null = null;
+      let failure: string | null = null;
+      for (let tries = 1; ; tries++) {
+        try {
+          text = (await deps.stt.transcribe(wav)).trim();
+          break;
+        } catch (e) {
+          if (gen !== generation) return;
+          if (voiceErrorCode(e) === 'voice_busy') {
+            if (tries < BUSY_TRIES) {
+              if (tries === 1) set({ heard: 'The speech engine is busy. Holding on to what you said…' });
+              await deps.wait(BUSY_WAIT_MS * tries);
+              if (gen !== generation) return;
+              continue;
+            }
+            failure = 'The speech engine stayed busy, so I lost what you just said. Please say it again.';
+          } else {
+            failure = `I couldn’t turn that into text: ${e instanceof Error ? e.message : String(e)}`;
+          }
+          break;
+        }
+      }
+      finals.shift();
+      set({ transcribing: finals.length > 0 });
+      if (failure !== null) {
+        dropPartial();
+        await sayError(failure);
+        continue;
+      }
+      await hear(text ?? '');
+    }
+  } finally {
+    draining = false;
+    // A session that started while this one was draining has its own recordings: they go next.
+    if (gen !== generation && finals.length > 0) void drainFinals();
   }
-  if (gen !== generation) return;
-  set({ transcribing: false });
-  await hear(text);
 }
 
 function dropPartial(): void {
@@ -855,6 +903,7 @@ export function setVoicePageFocus(runId: string | null): void { pageRun = runId;
 export async function openVoice(opts: { focus?: string | null } = {}): Promise<void> {
   if (S.getState().phase !== 'off') return;
   generation += 1;
+  finals.length = 0;
   recentCache = null;
   set({ ...INITIAL_VOICE, phase: 'ask', readAloud: savedReadAloud(), heard: null, pageFocus: opts.focus ?? pageRun });
   // The dashboard's first read starts now, so full screen opens on the live system (and says what it sees).
@@ -967,6 +1016,7 @@ export function holdToTalk(down: boolean): void {
 /** Leave voice mode (No, Esc, "leave voice", the button). The mic is released and nothing is kept. */
 export function closeVoice(): void {
   generation += 1;
+  finals.length = 0;
   stopPartials();
   vad.reset();
   mic?.stop();
