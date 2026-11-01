@@ -84,8 +84,8 @@ reasoning in a scrollback you'll never read. wicked-studio flips that:
   meter) and folds to one summary line when it ends; every message says when it was said. A step
   that runs long offers **Check on it?**: a seat that is not the step's own reads its record and
   recommends letting it run, steering or stopping, and acts on none of it. The job's Details panel
-  holds a **Phase report**, one section per phase (a plugin section), and the thread keeps one slim row per
-  update with "Show in Details". The pre-session addresses (`/runs/:id`, `/work`, `/p/:id/…`,
+  holds a **Phase report** (a plugin section; one per phase in a power build, one for the whole job
+  otherwise), and the thread keeps one slim row per update with "Show in Details". The pre-session addresses (`/runs/:id`, `/work`, `/p/:id/…`,
   `/chat/…`) were retired and show the not-found page.
 - **See the evidence** — per-step transcripts, a worktree file + diff viewer, and one-click
   evidence-bundle download for any run.
@@ -112,9 +112,9 @@ reasoning in a scrollback you'll never read. wicked-studio flips that:
   what to run and why, takes your own behaviours (a file, a pasted transcript, or past jobs' steps),
   and lists every past run with what it caught, what slipped through and its false alarms, plus
   **Analyze this run**.
-- **Chat with any page** — the icon beside the title of Understand, Report, Nerve Center, Evaluate,
-  Steering, Memory, Learn, Agents, Repositories and Jobs opens that page's own chat, drawn in the page
-  with the page's data. Click a number or chart on Report to ask about it.
+- **Chat with any page** — the icon beside the title of Report, Nerve Center, Evaluate, Steering,
+  Memory, Learn, Agents, Repositories and Jobs opens that page's own chat, drawn in the page with the
+  page's data; on Understand, the question box is the chat. Click a number or chart on Report to ask about it.
 - **Talk to it** — when crew has voice, a mic sits beside Send in every composer (and beside Start on
   Home); ⌥V opens voice mode from anywhere. Speech is transcribed by crew on your machine
   (whisper.cpp; the model downloads only when you say so). Ask questions, say "show me this job" for
@@ -125,7 +125,7 @@ reasoning in a scrollback you'll never read. wicked-studio flips that:
   them, filterable by project, and a project's address (`/p/:id`) opens its scoped Sessions list;
   deep-linkable
   routes throughout.
-- **Make it yours** — three themes (Wicked Dark, the default; Wicked Light; and **Ambient**, a quiet
+- **Make it yours** — three themes (Wicked Light, Wicked Dark, and **Ambient**, a quiet
   mood on your chosen ground that follows the work: a tint while jobs run, warm when something needs
   you, red when something failed). Text is set in Wicked Sans; the plugins page shows every plugin
   as a card (job-detail sections and editors) with what it may do.
