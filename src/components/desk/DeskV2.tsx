@@ -192,6 +192,7 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
 
   // The refine bar's choices: only what the data holds.
   const live = useMemo(() => runs.filter((v) => v.session.archived_at == null), [runs]);
+  const projectIdsKnown = useMemo(() => projects.map((p) => p.id), [projects]);
   const projectOpts = useMemo(() => [...new Set(live.map(projectOf))].map((id) => ({ value: id, label: projectName(id) })).sort((a, b) => a.label.localeCompare(b.label)), [live, projectName]);
   const agentOpts = useMemo(() => [...new Set([...displaySeats(roster).map((s) => s.key), ...live.flatMap(agentsOf)])].map((k) => ({ value: k, label: agentName(k) })).sort((a, b) => a.label.localeCompare(b.label)), [roster, live, agentName]);
   const workflowOpts = useMemo(() => {
@@ -425,12 +426,13 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
     </>
   );
 
-  const refineBarOf = (withGroup: boolean): React.ReactElement => (
+  // Jobs shows its own project picker in the list head (withProject false), so its refine bar has none.
+  const refineBarOf = (withGroup: boolean, withProject = true): React.ReactElement => (
       <div className="wk-refine" role="group" aria-label="Refine every chart below" data-testid="desk-refine">
       <Segmented label="Time range" data-testid="desk-range" value={String(refine.days) as `${RangeDays}`}
         options={RANGES.map((d) => ({ value: String(d) as `${RangeDays}`, label: `${d} days`, testId: `desk-range-${d}` }))}
         onChange={(v) => set('days', Number(v) as RangeDays)} />
-      {projectId === undefined && <RefineSelect label="Project" all="All projects" value={refine.project} options={projectOpts} onChange={(v) => set('project', v)} testId="desk-refine-project" />}
+      {projectId === undefined && withProject && <RefineSelect label="Project" all="All projects" value={refine.project} options={projectOpts} onChange={(v) => set('project', v)} testId="desk-refine-project" />}
       <RefineSelect label="Agent" all="All agents" value={refine.agent} options={agentOpts} onChange={(v) => set('agent', v)} testId="desk-refine-agent" />
       <RefineSelect label="Workflow" all="All workflows" value={refine.workflow} options={workflowOpts} onChange={(v) => set('workflow', v)} testId="desk-refine-workflow" />
       {refined(refine) && <button type="button" className="wk-btn wk-btn--quiet wk-btn--sm" data-testid="desk-refine-reset" onClick={() => setRefine((r) => ({ ...DEFAULT_REFINE, days: r.days, groupBy: r.groupBy }))}>Clear filters</button>}
@@ -451,7 +453,8 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
   );
 
   const runsTab = (
-    <DeskRuns {...(runActions !== undefined ? { rowActions: runActions } : {})} runs={runs} runsShown={runsShown} refine={refine} refineBar={refineBarOf(false)} now={now} navigate={navigate} pathOf={pathOfRun}
+    <DeskRuns {...(runActions !== undefined ? { rowActions: runActions } : {})} runs={runs} runsShown={runsShown} refine={refine} refineBar={refineBarOf(false, false)} now={now} navigate={navigate} pathOf={pathOfRun}
+      projectIds={projectIdsKnown} onProject={(v) => set('project', v)}
       holds={runHolds} onNewJob={() => startNewJob(projectId ?? null)}
       onClearRefine={() => setRefine((r) => ({ ...DEFAULT_REFINE, days: r.days, groupBy: r.groupBy }))}
       {...(tabbed ? { panelId: panelId('runs'), labelledBy: tabId('runs') } : {})}

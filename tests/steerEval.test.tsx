@@ -14,7 +14,7 @@ import { useEvalReportStore } from '../src/store/evalReport.js';
 import { useSteerDraft } from '../src/store/steerDraft.js';
 import { importRuleFile } from '../src/board/steerImport.js';
 
-/** The calm page keeps every way to add or manage behind Add a rule's menu: open it, then pick the move. */
+/** The calm page keeps every way to add or manage behind the header's ⋯ menu (Add a rule first): open it, then pick the move. */
 async function more(user: ReturnType<typeof userEvent.setup>, testId: string): Promise<void> {
   await user.click(await screen.findByTestId('steer-more-button'));
   await user.click(await screen.findByTestId(testId));
@@ -219,7 +219,14 @@ describe('codex r1 fixes', () => {
     wire();
     render(<SteerSurface pathname="/rules" search="" runs={[]} navigate={vi.fn()} />);
     await screen.findByTestId('rules-error');
-    expect(screen.getByTestId('steer-add-rule')).toBeDisabled();
+    // Add a rule is the ⋯ menu's first item: disabled (with its reason) until the rules have loaded.
+    await userEvent.setup().click(screen.getByTestId('steer-more-button'));
+    const add = screen.getByTestId('steer-add-rule');
+    expect(screen.getAllByRole('menuitem')[0]).toBe(add);
+    expect(add).toHaveAttribute('aria-disabled', 'true');
+    expect(add).toHaveTextContent('Once the rules have loaded');
+    await userEvent.setup().click(add);
+    expect(screen.queryByTestId('steering-form-id')).toBeNull();
   });
 
   it('#2 a run from another rule store puts no eval badge on this daemon’s rules; the daemon’s own run does', async () => {
@@ -349,7 +356,7 @@ describe('codex r2 fixes', () => {
     expect(await screen.findByTestId('steer-refresh-failed')).toBeInTheDocument();
     expect(screen.getAllByTestId('rules-row')).toHaveLength(1);
     // The create form still knows PAT-100 is taken.
-    await user.click(screen.getByTestId('steer-add-rule'));
+    await more(user, 'steer-add-rule');
     const id = await screen.findByTestId('steering-form-id');
     await user.clear(id);
     await user.type(id, 'PAT-100');
@@ -363,11 +370,11 @@ describe('codex r2 fixes', () => {
     const user = userEvent.setup();
     render(<SteerSurface pathname="/rules" search="" runs={[]} navigate={vi.fn()} />);
     await screen.findAllByTestId('rules-row');
-    await user.click(screen.getByTestId('steer-add-rule'));
+    await more(user, 'steer-add-rule');
     await user.type(await screen.findByTestId('steering-form-statement'), 'First rule statement');
     await user.click(screen.getByTestId('steering-form-save'));
     await user.click(screen.getByTestId('steering-form-cancel'));
-    await user.click(screen.getByTestId('steer-add-rule'));
+    await more(user, 'steer-add-rule');
     await user.type(await screen.findByTestId('steering-form-statement'), 'Second draft');
     resolveSave({ rule: rule('PAT-001') });
     await waitFor(() => expect(listConformanceRules.mock.calls.length).toBeGreaterThan(1));
@@ -610,5 +617,47 @@ describe('agy r1 fixes', () => {
     render(<SteerSurface pathname="/rules" search="" runs={[]} navigate={vi.fn()} />);
     await waitFor(() => expect(screen.getByTestId('steer-stat-eval')).toHaveTextContent('Couldn’t read the last eval'));
     expect(screen.getByTestId('steer-stat-eval')).not.toHaveTextContent('None yet');
+  });
+});
+
+describe('Steer header and pills (operator 2026-11-01)', () => {
+  it('has no Add a rule button in the head: Add a rule is the ⋯ menu\'s first item and opens the form', async () => {
+    wire();
+    const user = userEvent.setup();
+    render(<SteerSurface pathname="/rules" search="" runs={[]} navigate={vi.fn()} />);
+    await screen.findAllByTestId('rules-row');
+    expect(screen.queryByRole('button', { name: 'Add a rule' })).toBeNull();
+    await user.click(screen.getByTestId('steer-more-button'));
+    const items = screen.getAllByRole('menuitem');
+    expect(items[0]).toHaveTextContent('Add a rule…');
+    expect(items[0]).toHaveAttribute('data-testid', 'steer-add-rule');
+    await user.click(items[0]!);
+    expect(await screen.findByTestId('steering-form-id')).toBeInTheDocument();
+  });
+
+  it('Not accepted lists the rejected RULE proposals the store kept (never memory ones), read only', async () => {
+    const rejected = { id: 'rp1', kind_type: 'policy:security', payload: { rule: 'never push to main', severity: 'error' }, facets: {}, provenance: { run_agent: 'claude' }, state: 'rejected', created_at: 1_700_000_000 };
+    const memory = { ...rejected, id: 'rm1', kind_type: 'memory', payload: { content: 'a memory' } };
+    const pending = { ...rejected, id: 'pp1', state: 'pending' };
+    wire();
+    const base = apiFetch.getMockImplementation()!;
+    apiFetch.mockImplementation((path: unknown, init?: unknown) => {
+      const p = String(path);
+      if (p === '/proposals') return Promise.resolve({ proposals: [rejected, memory, pending] });
+      if (p === '/proposals?state=pending') return Promise.resolve({ proposals: [pending] });
+      return base(path, init);
+    });
+    const user = userEvent.setup();
+    render(<SteerSurface pathname="/rules" search="" runs={[]} navigate={vi.fn()} />);
+    await screen.findAllByTestId('rules-row');
+    const pills = screen.getByTestId('steer-view');
+    await waitFor(() => expect(within(pills).getAllByRole('radio').map((r) => r.textContent)).toEqual(['Active', 'Proposed (1)', 'Not accepted']));
+    await user.click(screen.getByTestId('steer-view-not-accepted'));
+    const rows = await screen.findAllByTestId('not-accepted-row');
+    expect(rows.map((r) => r.getAttribute('data-proposal-id'))).toEqual(['rp1']);
+    expect(within(rows[0]!).getByTestId('not-accepted-text')).toHaveTextContent('never push to main');
+    expect(within(rows[0]!).getByTestId('not-accepted-line')).toHaveTextContent('Security rule, error · proposed by claude');
+    expect(screen.queryByTestId('steer-search-open')).toBeNull();
+    expect(screen.queryByTestId('steer-show-all')).toBeNull();
   });
 });

@@ -15,7 +15,10 @@ import userEvent from '@testing-library/user-event';
  *  - a write that lands late never closes a newer dialog or re-reads an old search;
  *  - Retire removes ONE memory (`/memory/retire-item`) or a scope SUBTREE (`/memory/retire`, the
  *    count read first); a crew that cannot erase by id deletes nothing and never falls back;
- *  - the Proposals view reviews MEMORY proposals only, approve as filed or with an edit.
+ *  - the Proposals view reviews MEMORY proposals only, approve as filed or with an edit;
+ *  - the pills (Active / Proposed / Not accepted) move on the page's address; Add a memory is the ⋯
+ *    menu's first item (operator 2026-11-01), and Not accepted lists the rejected memory proposals the
+ *    store kept, minus an accepted edit's original and a withdrawn edit copy.
  */
 
 const apiFetch = vi.fn();
@@ -34,7 +37,8 @@ const M2: MemoryItem = { id: 'm2', content: 'overwritten .node module → silent
 const PM: Proposal = { id: 'pm1', kind_type: 'memory', payload: { content: 'tests run with --runInBand on CI', tier: 'semantic' }, facets: {}, provenance: { agent: 'claude' }, state: 'pending', created_at: 1_700_000_000 };
 const PP: Proposal = { id: 'pp1', kind_type: 'policy:testing', payload: { rule: 'every PR runs the journeys', severity: 'warn' }, facets: {}, provenance: {}, state: 'pending', created_at: 1_700_000_000 };
 
-/** A stateful wire: memories, coverage over them, retire, edit, proposals (file / approve / reject). */
+/** A stateful wire: memories, coverage over them, retire, edit, proposals (file / approve / reject; a decided
+ *  proposal stays in the store with its state, as estate keeps it, and `?state=` filters). */
 function wire(initial: MemoryItem[], proposals: Proposal[] = []): { calls: string[]; bodies: Record<string, unknown[]> } {
   let rows = [...initial];
   let queue = [...proposals];
@@ -79,16 +83,19 @@ function wire(initial: MemoryItem[], proposals: Proposal[] = []): { calls: strin
     }
     const approve = /^\/proposals\/([^/]+)\/approve$/.exec(s);
     if (approve !== null) {
-      const p = queue.find((x) => x.id === decodeURIComponent(approve[1]!));
+      const p = queue.find((x) => x.id === decodeURIComponent(approve[1]!) && x.state === 'pending');
       if (p === undefined) return Promise.reject(new ApiError(404, 'not pending'));
-      queue = queue.filter((x) => x !== p);
+      queue = queue.map((x) => (x === p ? { ...x, state: 'approved' } : x));
       const content = typeof body?.content === 'string' ? body.content : (p.payload as { content: string }).content;
       rows = [...rows, { id: `proposal:${p.id}`, content, tier: 'semantic', scope: '', facets: p.facets, created_at: 1_700_000_400 }];
       return Promise.resolve({ outcome: 'promoted', active_id: `proposal:${p.id}` });
     }
     const reject = /^\/proposals\/([^/]+)\/reject$/.exec(s);
-    if (reject !== null) { queue = queue.filter((x) => x.id !== decodeURIComponent(reject[1]!)); return Promise.resolve({ ok: true }); }
-    if (s.startsWith('/proposals')) return Promise.resolve({ proposals: queue });
+    if (reject !== null) { queue = queue.map((x) => (x.id === decodeURIComponent(reject[1]!) ? { ...x, state: 'rejected' } : x)); return Promise.resolve({ ok: true }); }
+    if (s.startsWith('/proposals')) {
+      const state = new URLSearchParams(s.split('?')[1] ?? '').get('state');
+      return Promise.resolve({ proposals: state === null ? queue : queue.filter((x) => x.state === state) });
+    }
     return Promise.reject(new ApiError(404, 'Not Found'));
   });
   return { calls, bodies };
@@ -102,6 +109,13 @@ async function openRowMenu(row: HTMLElement, item: string): Promise<void> {
   const user = userEvent.setup();
   await user.click(within(row).getByTestId('memory-actions-button'));
   await user.click(screen.getByRole('menuitem', { name: item }));
+}
+/** Add a memory is the header ⋯ menu's first item (no header button; operator 2026-11-01). */
+async function openAdd(user: ReturnType<typeof userEvent.setup>): Promise<void> {
+  await user.click(screen.getByTestId('memory-more-button'));
+  const items = screen.getAllByRole('menuitem');
+  expect(items[0]).toHaveTextContent('Add a memory…');
+  await user.click(screen.getByTestId('memory-add'));
 }
 /** The search is quiet until asked for: open it (once), then type and search. */
 async function search(user: ReturnType<typeof userEvent.setup>, words: string): Promise<void> {
@@ -124,8 +138,12 @@ describe('MemoryPage — the store, read honestly', () => {
     const rows = await screen.findAllByTestId('memory-row');
     expect(rows.map((r) => r.getAttribute('data-memory-id'))).toEqual(['m1', 'm2']);
     await waitFor(() => expect(screen.getByTestId('memory-sentence')).toHaveTextContent('Your agents remember 2 things'));
-    // Only MEMORY proposals are this page's to review: the one action says how many.
-    await waitFor(() => expect(screen.getByTestId('memory-view-proposals')).toHaveTextContent('Review 1 proposal'));
+    // Only MEMORY proposals are this page's to review: the Proposed pill says how many.
+    await waitFor(() => expect(screen.getByTestId('memory-view-proposals')).toHaveTextContent('Proposed (1)'));
+    expect(screen.getByTestId('memory-view-memories')).toHaveAttribute('aria-checked', 'true');
+    // No header button: the head holds only the ⋯ menu.
+    expect(screen.queryByRole('button', { name: /^Review \d/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Add a memory' })).toBeNull();
     expect(screen.getByTestId('memory-sentence')).toHaveTextContent('1 proposal is waiting for you.');
     await user.click(screen.getByTestId('memories-search-open'));
     const kinds = [...screen.getByTestId('memory-kind').querySelectorAll('option')].map((o) => [o.getAttribute('value'), o.textContent]);
@@ -226,7 +244,7 @@ describe('MemoryPage — Add a memory (a proposal you approve as you add it)', (
     page();
     const user = userEvent.setup();
     await screen.findAllByTestId('memory-row');
-    await user.click(screen.getByTestId('memory-add'));
+    await openAdd(user);
     const dialog = await screen.findByTestId('memory-add-dialog');
     expect(dialog).toHaveTextContent('files it as a memory proposal and you approve it in the same step');
     expect(within(dialog).getByTestId('memory-add-save')).toBeDisabled();
@@ -248,7 +266,7 @@ describe('MemoryPage — Add a memory (a proposal you approve as you add it)', (
     page();
     const user = userEvent.setup();
     await screen.findByTestId('memories-empty');
-    await user.click(screen.getByTestId('memory-add'));
+    await openAdd(user);
     await user.type(await screen.findByTestId('memory-add-text'), 'remember this');
     await user.click(screen.getByTestId('memory-add-save'));
     const note = await screen.findByTestId('memories-note');
@@ -353,12 +371,12 @@ describe('MemoryPage — late answers (codex r1)', () => {
     page();
     const user = userEvent.setup();
     await screen.findAllByTestId('memory-row');
-    await user.click(screen.getByTestId('memory-add'));
+    await openAdd(user);
     await user.type(await screen.findByTestId('memory-add-text'), 'first words');
     await user.click(screen.getByTestId('memory-add-save'));
     await waitFor(() => expect(releaseApprove).toBeTypeOf('function'));
     await user.click(screen.getByTestId('memory-add-cancel'));
-    await user.click(screen.getByTestId('memory-add'));
+    await openAdd(user);
     await user.type(await screen.findByTestId('memory-add-text'), 'second draft');
     await act(async () => { releaseApprove(); await Promise.resolve(); });
     await screen.findByTestId('memories-note');
@@ -423,17 +441,74 @@ describe('MemoryPage — the Proposals view (memory proposals only)', () => {
     expect(bodies['/proposals/pm1/approve']).toEqual([{ content: 'CI runs the tests with --runInBand' }]);
   });
 
-  it('the view switch and the proposals tile move on the page\'s own address', async () => {
+  it('the pills move on the page\'s own address: Active, Proposed, Not accepted', async () => {
     wire([M1], [PM]);
     page();
     const user = userEvent.setup();
     await screen.findAllByTestId('memory-row');
-    // The one action reviews what is waiting; Back returns to everything learned.
-    await user.click(await screen.findByRole('button', { name: 'Review 1 proposal' }));
+    const pills = screen.getByTestId('memory-view');
+    expect(within(pills).getAllByRole('radio').map((r) => r.textContent)).toEqual(['Active', 'Proposed (1)', 'Not accepted']);
+    await user.click(screen.getByTestId('memory-view-proposals'));
     expect(navigate).toHaveBeenLastCalledWith('/?tab=memory&at=%2Fmemory%3Fview%3Dproposals');
+    await user.click(screen.getByTestId('memory-view-not-accepted'));
+    expect(navigate).toHaveBeenLastCalledWith('/?tab=memory&at=%2Fmemory%3Fview%3Dnot-accepted');
     cleanup();
     page('?view=proposals');
-    await user.click(await screen.findByTestId('memory-view-memories'));
+    expect(await screen.findByTestId('memory-view-proposals')).toHaveAttribute('aria-checked', 'true');
+    await user.click(screen.getByTestId('memory-view-memories'));
     expect(navigate).toHaveBeenLastCalledWith('/?tab=memory&at=%2Fmemory');
+  });
+});
+
+describe('MemoryPage — Not accepted (what was turned down, kept by the store)', () => {
+  const REJ: Proposal = { id: 'rj1', kind_type: 'memory', payload: { content: 'always squash-merge on Fridays' }, facets: { project: 'p-wicked' }, provenance: { run_agent: 'codex', run_id: 'run-9' }, state: 'rejected', created_at: 1_700_000_050 };
+  const REJ_OLD: Proposal = { ...REJ, id: 'rj0', payload: { content: 'an older one' }, facets: {}, provenance: {}, created_at: 1_700_000_010 };
+  // An accept-with-edit: the original is rejected, the approved copy names it.
+  const EDIT_ORIG: Proposal = { ...REJ, id: 'orig', payload: { content: 'tests run serially' } };
+  const EDIT_COPY: Proposal = { ...REJ, id: 'copy', payload: { content: 'tests run with --runInBand', edited_from: 'orig' }, state: 'approved' };
+  // A withdrawn copy (its approve failed): rejected, carries edited_from; its original is still pending.
+  const WITHDRAWN: Proposal = { ...REJ, id: 'wd', payload: { content: 'stray copy', edited_from: 'pm1' } };
+  const REJ_POLICY: Proposal = { ...PP, id: 'rp', state: 'rejected' };
+
+  it('lists the rejected memory proposals newest first, read only; leaves out accepted-edit originals and withdrawn copies', async () => {
+    const { calls } = wire([M1], [PM, REJ_OLD, REJ, EDIT_ORIG, EDIT_COPY, WITHDRAWN, REJ_POLICY]);
+    page('?view=not-accepted');
+    const rows = await screen.findAllByTestId('not-accepted-row');
+    expect(rows.map((r) => r.getAttribute('data-proposal-id'))).toEqual(['rj1', 'rj0']);
+    expect(screen.getByTestId('memory-view-not-accepted')).toHaveAttribute('aria-checked', 'true');
+    // One read of every state (the fold needs the approved copies to know which originals they replaced).
+    expect(calls).toContain('/proposals');
+    expect(within(rows[0]!).getByTestId('not-accepted-text')).toHaveTextContent('always squash-merge on Fridays');
+    expect(within(rows[0]!).getByTestId('not-accepted-line')).toHaveTextContent('Memory · proposed by codex · Wicked');
+    expect(screen.getByTestId('not-accepted-count')).toHaveTextContent('2 not accepted · 1 proposal you accepted with an edit is not listed');
+    // Read only: no approve / reject / edit on a turned-down row, and no search over the memories.
+    expect(within(rows[0]!).queryByRole('button', { name: /approve|reject/i })).toBeNull();
+    expect(screen.queryByTestId('memories-search-open')).toBeNull();
+    const user = userEvent.setup();
+    await user.click(within(rows[0]!).getByTestId('not-accepted-open'));
+    expect(within(rows[0]!).getByTestId('not-accepted-run')).toHaveAttribute('href', expect.stringContaining('run-9'));
+  });
+
+  it('a proposal rejected in Proposed shows up under Not accepted', async () => {
+    wire([M1], [PM]);
+    const view = page('?view=proposals');
+    const user = userEvent.setup();
+    const card = await screen.findByTestId('proposal-card');
+    await user.click(within(card).getByTestId('proposal-reject'));
+    await waitFor(() => expect(screen.queryByTestId('proposal-card')).toBeNull());
+    view.rerender(<MemoryPage search="?view=not-accepted" navigate={navigate} address={(p) => `/?tab=memory&at=${encodeURIComponent(p)}`} />);
+    const rows = await screen.findAllByTestId('not-accepted-row');
+    expect(rows.map((r) => r.getAttribute('data-proposal-id'))).toEqual(['pm1']);
+  });
+
+  it('nothing turned down is said plainly; an older crew is said honestly, never an empty list', async () => {
+    wire([M1], [PM]);
+    page('?view=not-accepted');
+    expect(await screen.findByTestId('not-accepted-empty')).toHaveTextContent('No memory proposal was turned down.');
+    cleanup();
+    apiFetch.mockImplementation((path: unknown) => (String(path).startsWith('/proposals') ? Promise.reject(new ApiError(404, 'Not Found')) : Promise.resolve({ memories: [], total: 0, by_tier: {} })));
+    page('?view=not-accepted');
+    expect(await screen.findByTestId('not-accepted-unsupported')).toBeInTheDocument();
+    expect(screen.queryByTestId('not-accepted-empty')).toBeNull();
   });
 });

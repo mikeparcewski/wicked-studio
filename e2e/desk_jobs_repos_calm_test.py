@@ -14,6 +14,8 @@ shipped theme (wicked-dark, wicked-light, dark, light), on the in-process fixtur
      button move dE_OK >= 0.08 (OKLab) from rest when hovered, composited over the page by the browser.
   5. VISIBLE FOCUS: a row reached by keyboard wears the focus ring (a box-shadow).
   6. A PHONE (390x844): neither page scrolls sideways.
+  6b. BY PROJECT (operator 2026-11-01): Jobs' list head has a project picker (All projects, each project, No
+     project last); each row's line leads with its project ("No project" when unfiled); No project keeps those.
   7. 0 page errors.
 
 Captures: e2e/shots/jobs-repos-{jobs,repos}-<theme>.png (1440x700) and -phone (390x844, wicked-dark).
@@ -225,6 +227,24 @@ with sync_playwright() as p:
         page.mouse.move(*PARK)
         page.evaluate("() => document.activeElement && document.activeElement.blur()")
         page.screenshot(path=str(SHOTS / f"jobs-repos-jobs-{theme}.png"))
+        # BY PROJECT (operator 2026-11-01): the list head picks a project; each row's line leads with its project,
+        # "No project" for an unfiled job, and picking No project keeps exactly those.
+        pick = page.get_by_test_id("desk-runs-project")
+        options = pick.locator("option").evaluate_all("os => os.map(o => [o.value, o.textContent])")
+        lines = page.locator('[data-testid="desk-runs-row"]').evaluate_all(
+            "rs => rs.map(r => [r.dataset.project, r.querySelector('[data-testid=desk-runs-line]').textContent])")
+        led = all((ln.startswith("No project · ") if proj == "default" else not ln.startswith("No project")) for proj, ln in lines)
+        pick.select_option("default")
+        page.wait_for_timeout(200)
+        only = page.locator('[data-testid="desk-runs-row"]').evaluate_all("rs => rs.map(r => r.dataset.project)")
+        unfiled = sum(1 for proj, _ in lines if proj == "default")
+        pick.select_option("all")
+        page.wait_for_timeout(200)
+        back = page.get_by_test_id("desk-runs-row").count()
+        check(f"{theme}:jobs-by-project", pick.is_visible() and options[0][0] == "all" and options[-1][0] == "default"
+              and options[-1][1].startswith("No project (") and led and all(p == "default" for p in only)
+              and (len(only) == unfiled or len(lines) >= 40) and back == len(lines),
+              options=options, lines=lines[:4], only=only, back=back)
 
         # ── Repositories ──
         page.goto(f"{origin}/repos", wait_until="networkidle")

@@ -30,19 +30,21 @@ import { approveProposal, fileProposal } from './proposals.js';
 
 // ── The page's addresses ─────────────────────────────────────────────────────────────────────
 
-/** The Memory page's views: the memories kept, and the memory proposals waiting on review. */
-export type MemoryView = 'memories' | 'proposals';
+/** The Memory page's views (its pills): the memories kept, the memory proposals waiting on review, and
+ *  the ones a person turned down (operator 2026-11-01: "Not Accepted for review"). */
+export type MemoryView = 'memories' | 'proposals' | 'not-accepted';
 
 export const MEMORY_PATH = '/memory';
 
-/** The Memory page's address — bare for the memories, `?view=proposals` for the proposals. */
+/** The Memory page's address: bare for the memories, `?view=proposals` / `?view=not-accepted` for the others. */
 export function memoryPath(view: MemoryView = 'memories'): string {
-  return view === 'proposals' ? `${MEMORY_PATH}?view=proposals` : MEMORY_PATH;
+  return view === 'memories' ? MEMORY_PATH : `${MEMORY_PATH}?view=${view}`;
 }
 
-/** The view a Memory address names (anything but `proposals` is the memories). */
+/** The view a Memory address names (anything unknown is the memories). */
 export function readMemoryView(search: string): MemoryView {
-  return new URLSearchParams(search).get('view') === 'proposals' ? 'proposals' : 'memories';
+  const v = new URLSearchParams(search).get('view');
+  return v === 'proposals' || v === 'not-accepted' ? v : 'memories';
 }
 
 // ── The memory item (from the contract package) ───────────────────────────────────────────────

@@ -1,9 +1,9 @@
-import { useId, useMemo, useState } from 'react';
+import { useCallback, useId, useMemo, useState } from 'react';
 import { Search, SlidersHorizontal, X } from 'lucide-react';
 import type { SessionView } from '../../api/types.js';
 import { workflowLabel, type Refine } from '../../board/deskInsights.js';
 import {
-  durationWords, JOB_GROUPS, jobLine, jobsSentence, RUN_STATUS_FILTERS, runsView,
+  durationWords, JOB_GROUPS, jobLine, jobsSentence, projectChoices, projectWord, RUN_STATUS_FILTERS, runsView,
   type JobGroup, type NeedHold, type RunStatusFilter,
 } from '../../board/deskRuns.js';
 import { absTime, relTime } from '../../board/relTime.js';
@@ -16,13 +16,15 @@ const PAGE = 40;
 
 /**
  * THE JOBS PAGE (the Desk's Runs view, calm v2; styles/sections/jobs-repos.css). A title, one sentence
- * of live state and New job; the one filter (Active / Finished); then one roomy row per job: a status
- * dot, the job's title, one muted line (repo · agent · step x of y) and its status word. A row opens
- * its run. Search, the refine bar (range, project, agent, workflow), a finer status and All time live
- * behind "Search and filter"; a row's own actions (a project's page: Remove from project) behind its ⋯.
+ * of live state and New job; the list's head: the project picker (every-project view; operator
+ * 2026-11-01: "display (and allow for filtering) by project") and the one filter (Active / Finished);
+ * then one roomy row per job: a status dot, the job's title, one muted line (project · repo · agent ·
+ * step x of y; an unfiled job says No project) and its status word. A row opens its run. Search, the
+ * refine bar (range, agent, workflow), a finer status and All time live behind "Search and filter"; a
+ * row's own actions (a project's page: Remove from project) behind its ⋯.
  * Real data only: the run list App already keeps live over `/ws`.
  */
-export function DeskRuns({ runs, runsShown, refine, refineBar, now, navigate, pathOf, agentName, projectName, title, showProject, panelId, labelledBy, rowActions, holds, onNewJob, onClearRefine }: {
+export function DeskRuns({ runs, runsShown, refine, refineBar, now, navigate, pathOf, agentName, projectName, title, showProject, panelId, labelledBy, rowActions, holds, onNewJob, onClearRefine, projectIds, onProject }: {
   /** A row's own actions (a project's page: Remove from project), or none. */
   rowActions?: (runId: string, title: string) => readonly MenuItem[];
   panelId?: string;
@@ -46,6 +48,10 @@ export function DeskRuns({ runs, runsShown, refine, refineBar, now, navigate, pa
   onNewJob?: () => void;
   /** Clears the refine bar's project, agent and workflow (they live with the Desk, shared with Report). */
   onClearRefine?: () => void;
+  /** Every project studio knows (ids), offered by the project picker even before a job is filed in one. */
+  projectIds?: readonly string[];
+  /** Sets the Desk's shared project filter (null = every project); with `showProject`, the list head shows the picker. */
+  onProject?: (id: string | null) => void;
 }): React.ReactElement {
   usePageChatFor('jobs', 'Knows Jobs: what is running, what finished and how each ended.', 'desk-runs');
   const [group, setGroup] = useState<JobGroup>('active');
@@ -55,8 +61,16 @@ export function DeskRuns({ runs, runsShown, refine, refineBar, now, navigate, pa
   const [allTime, setAllTime] = useState(false);
   const [tools, setTools] = useState(false);
   const toolsId = useId();
-  const view = useMemo(() => runsView(runs, refine, { group, status, query, now, title, names: { project: projectName, agent: agentName }, allTime, ...(holds !== undefined ? { holds } : {}) }),
-    [runs, refine, group, status, query, now, title, projectName, agentName, allTime, holds]);
+  // An unfiled job is "No project" on this page, in its line, its picker and its search alike.
+  const nameOf = useCallback((id: string): string => projectWord(id, projectName), [projectName]);
+  const view = useMemo(() => runsView(runs, refine, { group, status, query, now, title, names: { project: nameOf, agent: agentName }, allTime, ...(holds !== undefined ? { holds } : {}) }),
+    [runs, refine, group, status, query, now, title, nameOf, agentName, allTime, holds]);
+  // The picker's counts: the list as shown, over every project.
+  const picking = showProject && onProject !== undefined;
+  const everyProject = useMemo(() => (picking ? runsView(runs, { ...refine, project: null }, { group, status, query, now, title, names: { project: nameOf, agent: agentName }, allTime, ...(holds !== undefined ? { holds } : {}) }).rows : null),
+    [picking, runs, refine, group, status, query, now, title, nameOf, agentName, allTime, holds]);
+  const choices = useMemo(() => (everyProject === null ? [] : projectChoices(everyProject, [...(projectIds ?? []), ...(refine.project !== null ? [refine.project] : [])], projectName)),
+    [everyProject, projectIds, refine.project, projectName]);
   const s = view.stats;
   const win = `the last ${refine.days} days`;
   const rows = view.rows.slice(0, shown);
@@ -66,7 +80,7 @@ export function DeskRuns({ runs, runsShown, refine, refineBar, now, navigate, pa
   const ago = (ms: number): string => relTime(ms, now);
   // What narrows the list beyond the one filter, said once so a short list never looks like "that's all".
   const narrowed = [
-    refine.project !== null && showProject ? projectName(refine.project) : null,
+    refine.project !== null && showProject ? projectWord(refine.project, projectName) : null,
     refine.agent !== null ? agentName(refine.agent) : null,
     refine.workflow !== null ? workflowLabel(refine.workflow) : null,
     query.trim() !== '' ? `“${query.trim()}”` : null,
@@ -86,7 +100,20 @@ export function DeskRuns({ runs, runsShown, refine, refineBar, now, navigate, pa
 
         <section className="wk-jr-sec" aria-labelledby="desk-runs-title" data-testid="desk-runs-list" data-group={group}>
           <div className="wk-jr-sec-head">
-            <h2 id="desk-runs-title" className="wk-jr-label">{listLabel}</h2>
+            {picking && everyProject !== null ? (
+              <>
+                <h2 id="desk-runs-title" className="wk-sr-only">{`${listLabel} jobs`}</h2>
+                <label className="wk-calm-typepick">
+                  <span className="wk-sr-only">Project</span>
+                  <select className="wk-calm-pick" data-testid="desk-runs-project" aria-label="Project" value={refine.project ?? 'all'}
+                    data-active={refine.project !== null ? 'true' : undefined}
+                    onChange={(e) => { onProject?.(e.target.value === 'all' ? null : e.target.value); setShown(PAGE); }}>
+                    <option value="all">{`All projects (${everyProject.length})`}</option>
+                    {choices.map((c) => <option key={c.value} value={c.value}>{`${c.label} (${c.count})`}</option>)}
+                  </select>
+                </label>
+              </>
+            ) : <h2 id="desk-runs-title" className="wk-jr-label">{listLabel}</h2>}
             <div className="wk-jr-tools">
               <QuietFilter label="Show" value={group} onChange={pickGroup} data-testid="desk-runs-group"
                 options={JOB_GROUPS.map((g) => ({ ...g, testId: `desk-runs-group-${g.value}` }))} />
@@ -148,7 +175,7 @@ export function DeskRuns({ runs, runsShown, refine, refineBar, now, navigate, pa
                   .filter((x): x is string => x !== null).join(' · ');
                 const acts = rowActions?.(r.id, r.title) ?? [];
                 return (
-                  <li key={r.id} className="wk-jr-item" data-testid="desk-runs-row" data-run-id={r.id} data-outcome={r.outcome} data-word={r.word}>
+                  <li key={r.id} className="wk-jr-item" data-testid="desk-runs-row" data-run-id={r.id} data-project={r.project} data-outcome={r.outcome} data-word={r.word}>
                     <div className="wk-jr-row-wrap">
                       <a href={path} onClick={go(path)} data-testid="desk-runs-open" className="wk-jr-row" title={when === '' ? r.title : `${r.title}\n${when}`}>
                         <span aria-hidden className="wk-jr-dot" data-tone={r.tone} />
@@ -183,8 +210,8 @@ function JobsEmpty({ group, stats, narrowed, any, win, onClear, onFinished, onNe
   onClear: () => void; onFinished: () => void; onNewJob: (() => void) | undefined;
 }): React.ReactElement {
   if (narrowed) {
-    return <QuietEmpty data-testid="desk-runs-empty" title="No job matches this search or status."
-      actions={<button type="button" className="wk-jr-btn wk-jr-btn--secondary wk-jr-btn--sm" onClick={onClear}>Clear the search and status</button>} />;
+    return <QuietEmpty data-testid="desk-runs-empty" title="No job matches these filters."
+      actions={<button type="button" className="wk-jr-btn wk-jr-btn--secondary wk-jr-btn--sm" onClick={onClear}>Clear the filters</button>} />;
   }
   const start = onNewJob !== undefined ? <button type="button" className="wk-jr-btn wk-jr-btn--primary wk-jr-btn--sm" onClick={onNewJob}>Start a job</button> : null;
   if (!any) {

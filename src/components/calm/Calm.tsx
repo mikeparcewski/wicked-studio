@@ -77,6 +77,24 @@ export function CalmAction({ label, onClick, disabled, title, testId, icon, menu
   );
 }
 
+/**
+ * The header's action when the page has no one primary move (Memory, Steer: operator 2026-11-01, "drop it
+ * as a button and go to the 3 dot dropdown"): only the quiet ⋯ menu, its first item the main way to add.
+ */
+export function CalmMenu({ menu, menuLabel, menuTestId }: {
+  menu: readonly MenuItem[];
+  menuLabel: string;
+  menuTestId?: string | undefined;
+}): React.ReactElement {
+  return (
+    <span className="wk-calm-action wk-calm-action--menu">
+      <span className="wk-calm-menu">
+        <OverflowMenu label={menuLabel} items={menu} {...(menuTestId !== undefined ? { 'data-testid': menuTestId } : {})} />
+      </span>
+    </span>
+  );
+}
+
 /** A secondary button in the calm look (outlined, the same height as the primary). */
 export function CalmButton({ children, onClick, disabled, testId, title, ariaLabel, tone = 'secondary' }: {
   children: React.ReactNode; onClick: () => void; disabled?: boolean | undefined; testId?: string | undefined; title?: string | undefined; ariaLabel?: string | undefined;

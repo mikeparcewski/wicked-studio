@@ -9,17 +9,19 @@ memory proposal, one policy proposal) and proves the user's path end to end:
   1. Desk → the Memory tab: the page renders the store's totals (GET /memory/coverage) and lists the
      memories, newest first; a kind card narrows the list; a search re-reads the wire.
   2. Proposals: only the MEMORY proposal is here; Edit → Approve with this edit approves it with the
-     edited words, and the new memory is listed with them.
-  3. Add a memory: files a proposal and approves it in one step (the dialog says so); the memory is
-     listed; then Retire removes exactly it.
-  4. Steer shows rules and POLICY proposals only: no memory link, the proposals tile counts the
-     policy proposal, its Proposals view has the rule proposals and no memory section.
+     edited words, and the new memory is listed with them. Not accepted (the third pill, operator
+     2026-11-01) lists nothing for it: crew rejected the original only because the edit replaced it.
+  3. Add a memory (the header ⋯ menu's first item; no header button): files a proposal and approves
+     it in one step (the dialog says so); the memory is listed; then Retire removes exactly it.
+  4. Steer shows rules and POLICY proposals only: no memory link, no header button (Add a rule is the
+     ⋯ menu's first item), the Proposed pill counts the policy proposal, its Proposals view has the
+     rule proposals and no memory section; rejecting it lists it under Not accepted.
   5. The old addresses land where they live now: /steering/memories → the Memory tab;
      /proposals?type=memory → Memory's proposals; /steering/dashboard → Steer's Proposals view.
   6. ⌘K reaches the Memory page.
   7. 0 page errors, no horizontal scroll.
 
-Captures: e2e/shots/desk-memory-{light,dark}.png, desk-memory-proposals.png, desk-memory-add.png,
+Captures: e2e/shots/desk-memory-{light,dark}.png, desk-memory-proposals.png, desk-memory-add.png, desk-memory-not-accepted.png, desk-memory-steer-not-accepted.png,
 desk-memory-steer-{light,dark}.png. Env: FEEDBACK_PORT (default 4531).
 """
 
@@ -116,9 +118,12 @@ with sync_playwright() as p:
     tab.click()
     page.wait_for_function("() => location.pathname === '/memory'", timeout=8000)
     settled(page)
-    # The calm page (2026-10-26): one sentence with the store's total, and ONE action that reviews what waits.
+    # The calm page: one sentence with the store's total; the pills (Active / Proposed / Not accepted) over the
+    # list; the head holds only the ⋯ menu (operator 2026-11-01: no Review or Add button).
     page.wait_for_function("() => /remember 2 things/.test(document.querySelector('[data-testid=\"memory-sentence\"]')?.textContent ?? '')", timeout=10000)
-    page.wait_for_function("() => /Review 1 proposal/.test(document.querySelector('[data-testid=\"memory-view-proposals\"]')?.textContent ?? '')", timeout=10000)
+    page.wait_for_function("() => /Proposed \\(1\\)/.test(document.querySelector('[data-testid=\"memory-view-proposals\"]')?.textContent ?? '')", timeout=10000)
+    head_buttons = page.locator('[data-testid="memory-page"] .wk-calm-head .wk-calm-btn').count()
+    pills = page.get_by_test_id("memory-view").get_by_role("radio").all_inner_texts()
     first = rows(page)
     total = page.get_by_test_id("memory-sentence").inner_text()
     review = page.get_by_test_id("memory-view-proposals").inner_text()
@@ -126,9 +131,10 @@ with sync_playwright() as p:
     page.screenshot(path=str(SHOTS / "desk-memory-light.png"))
     check("browse", tabs.index("Memory") == tabs.index("Steering") + 1
           and [r["id"] for r in first] == ["mem-ops", "mem-mac"]
-          and "remember 2 things" in total and "1 proposal is waiting" in total and review == "Review 1 proposal"
+          and "remember 2 things" in total and "1 proposal is waiting" in total and review == "Proposed (1)"
+          and pills == ["Active", "Proposed (1)", "Not accepted"] and head_buttons == 0
           and page.evaluate(ADDR)["tab"] == "memory" and no_hscroll(page),
-          tabs=tabs, rows=first, total=total, review=review)
+          tabs=tabs, rows=first, total=total, review=review, pills=pills, head_buttons=head_buttons)
     # The kind and tag filters sit with the quiet search.
     page.get_by_test_id("memories-search-open").click()
     page.get_by_test_id("memory-kind").select_option("episodic")
@@ -157,6 +163,14 @@ with sync_playwright() as p:
     note.wait_for(state="visible", timeout=10000)
     approved_note = note.inner_text()
     card.wait_for(state="detached", timeout=10000)
+    # Not accepted: the original crew rejected for the edit is not a turn-down; it is said, not listed.
+    page.get_by_test_id("memory-view-not-accepted").click()
+    page.get_by_test_id("not-accepted-empty").wait_for(state="visible", timeout=10000)
+    not_accepted = page.get_by_test_id("not-accepted-empty").inner_text()
+    not_accepted_at = page.evaluate(ADDR)["at"]
+    page.screenshot(path=str(SHOTS / "desk-memory-not-accepted.png"))
+    check("not-accepted-memory", "No memory proposal was turned down." in not_accepted and "accepted with an edit" in not_accepted
+          and not_accepted_at == "/memory?view=not-accepted", text=not_accepted, at=not_accepted_at)
     page.get_by_test_id("memory-view-memories").click()
     settled(page)
     page.wait_for_function(f"() => [...document.querySelectorAll('[data-testid=\"memory-content\"]')].some(e => e.textContent === {json.dumps(EDITED)})", timeout=10000)
@@ -165,7 +179,9 @@ with sync_playwright() as p:
           and EDITED in [r["content"] for r in rows(page)],
           ids=ids, at=at, note=approved_note)
 
-    # ── 3. Add a memory, then retire it ───────────────────────────────────────────────
+    # ── 3. Add a memory (the ⋯ menu's first item), then retire it ─────────────────────
+    page.get_by_test_id("memory-more-button").click()
+    first_item = page.get_by_role("menuitem").first.inner_text()
     page.get_by_test_id("memory-add").click()
     dialog = page.get_by_test_id("memory-add-dialog")
     dialog.wait_for(state="visible", timeout=8000)
@@ -178,7 +194,8 @@ with sync_playwright() as p:
     added_note = page.get_by_test_id("memories-note").inner_text()
     page.wait_for_function(f"() => [...document.querySelectorAll('[data-testid=\"memory-content\"]')].some(e => e.textContent === {json.dumps(ADDED)})", timeout=10000)
     added = next(r for r in rows(page) if r["content"] == ADDED)
-    check("add", honest and added_note.startswith("Added: ") and added["tier"] == "semantic", note=added_note, added=added)
+    check("add", honest and first_item == "Add a memory…" and added_note.startswith("Added: ") and added["tier"] == "semantic",
+          first_item=first_item, note=added_note, added=added)
     row = page.locator(f'[data-testid="memory-row"][data-memory-id="{added["id"]}"]')
     row.get_by_test_id("memory-actions-button").click()
     page.get_by_role("menuitem", name="Retire", exact=True).click()
@@ -195,6 +212,11 @@ with sync_playwright() as p:
     page.wait_for_function("() => /\\d/.test(document.querySelector('[data-testid=\"steer-view-proposals\"]')?.textContent ?? '')", timeout=10000)
     steer_review = page.get_by_test_id("steer-view-proposals").inner_text()
     memory_link = page.get_by_test_id("steer-memories").count()
+    steer_head_buttons = page.locator('[data-testid="steer-surface"] .wk-calm-head .wk-calm-btn').count()
+    page.get_by_test_id("steer-more-button").click()
+    steer_first = page.get_by_role("menuitem").first
+    steer_first_item = (steer_first.inner_text(), steer_first.get_attribute("data-testid"))
+    page.keyboard.press("Escape")
     page.wait_for_timeout(300)
     page.screenshot(path=str(SHOTS / "desk-memory-steer-light.png"))
     page.get_by_test_id("steer-view-proposals").click()
@@ -204,8 +226,18 @@ with sync_playwright() as p:
     kinds = page.locator('[data-testid="proposals-section"]').evaluate_all("els => els.map(e => e.dataset.kind)")
     policy_cards = page.locator('[data-testid="proposal-card"]').evaluate_all("els => els.map(e => e.dataset.proposalId)")
     check("steer", memory_link == 0 and "1" in steer_review and "Memory" not in page.get_by_test_id("steer-rules").inner_text()
-          and kinds == ["policy"] and policy_cards == ["pp-1"],
-          review=steer_review, kinds=kinds, cards=policy_cards)
+          and kinds == ["policy"] and policy_cards == ["pp-1"]
+          and steer_head_buttons == 0 and steer_first_item == ("Add a rule…", "steer-add-rule"),
+          review=steer_review, kinds=kinds, cards=policy_cards, head_buttons=steer_head_buttons, first_item=steer_first_item)
+    # Reject the rule proposal: the store keeps it, and Not accepted lists it for review.
+    page.locator('[data-testid="proposal-card"][data-proposal-id="pp-1"]').get_by_test_id("proposal-reject").click()
+    page.locator('[data-testid="proposal-card"][data-proposal-id="pp-1"]').wait_for(state="detached", timeout=10000)
+    page.get_by_test_id("steer-view-not-accepted").click()
+    page.locator('[data-testid="not-accepted-row"]').first.wait_for(state="visible", timeout=10000)
+    turned_down = page.locator('[data-testid="not-accepted-row"]').evaluate_all("els => els.map(e => e.dataset.proposalId)")
+    page.wait_for_timeout(300)
+    page.screenshot(path=str(SHOTS / "desk-memory-steer-not-accepted.png"))
+    check("not-accepted-steer", turned_down == ["pp-1"], turned_down=turned_down)
 
     # ── 5. The old addresses land where they live now ─────────────────────────────────
     landed = {}

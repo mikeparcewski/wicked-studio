@@ -122,3 +122,54 @@ describe('Jobs page', () => {
     expect(screen.queryByTestId('desk-runs-empty')).not.toBeInTheDocument();
   });
 });
+
+describe('Jobs by project (operator 2026-11-01: "display (and allow for filtering) by project")', () => {
+  function stateful(extra: Partial<ReturnType<typeof props>> = {}) {
+    const base = props();
+    const runs = [...base.runs, deskRun('loose', { project_id: null, status: 'executing' }), deskRun('crew', { project_id: 'crew', status: 'executing' })];
+    let refine = DEFAULT_REFINE;
+    const onProject = vi.fn((id: string | null) => { refine = { ...refine, project: id }; view.rerender(<DeskRuns {...base} {...extra} runs={runs} refine={refine} projectIds={['studio', 'crew', 'empty']} onProject={onProject} />); });
+    const view = render(<DeskRuns {...base} {...extra} runs={runs} refine={refine} projectIds={['studio', 'crew', 'empty']} onProject={onProject} />);
+    return { onProject };
+  }
+  const pickOptions = (): string[] => [...screen.getByTestId('desk-runs-project').querySelectorAll('option')].map((o) => o.textContent ?? '');
+
+  it('each row leads with its project; a job filed nowhere says No project', () => {
+    stateful();
+    const line = (id: string): string => within(screen.getAllByTestId('desk-runs-row').find((r) => r.dataset.runId === id)!).getByTestId('desk-runs-line').textContent ?? '';
+    expect(line('working')).toMatch(/^Studio Desk · /);
+    expect(line('loose')).toMatch(/^No project · /);
+    expect(line('crew')).toMatch(/^Crew Engine · /);
+    expect(screen.getAllByTestId('desk-runs-row').find((r) => r.dataset.runId === 'loose')).toHaveAttribute('data-project', 'default');
+  });
+
+  it('the list head picks a project, with counts for the list as shown; No project selects the unfiled jobs', () => {
+    const { onProject } = stateful();
+    // Active: working + waiting (studio), loose (none), crew. "empty" is known but holds no job; No project is last.
+    expect(pickOptions()).toEqual(['All projects (4)', 'Crew Engine (1)', 'Crew Engine (0)', 'Studio Desk (2)', 'No project (1)']);
+    fireEvent.change(screen.getByTestId('desk-runs-project'), { target: { value: 'default' } });
+    expect(onProject).toHaveBeenLastCalledWith('default');
+    expect(rowIds()).toEqual(['loose']);
+    expect(screen.getByTestId('desk-runs-filtered')).toHaveTextContent('Showing only No project');
+    fireEvent.change(screen.getByTestId('desk-runs-project'), { target: { value: 'studio' } });
+    expect(rowIds()).toEqual(['working', 'waiting']);
+    fireEvent.change(screen.getByTestId('desk-runs-project'), { target: { value: 'all' } });
+    expect(onProject).toHaveBeenLastCalledWith(null);
+    expect(rowIds()).toHaveLength(4);
+  });
+
+  it('a project picked that holds no job says the filters match nothing, and Clear clears them', () => {
+    stateful();
+    fireEvent.change(screen.getByTestId('desk-runs-project'), { target: { value: 'empty' } });
+    expect(rowIds()).toEqual([]);
+    expect(screen.getByTestId('desk-runs-empty')).toHaveTextContent('No job matches these filters.');
+  });
+
+  it('a project\'s own page shows no picker and no project in the line', () => {
+    stateful({ showProject: false });
+    expect(screen.queryByTestId('desk-runs-project')).toBeNull();
+    expect(screen.getByRole('heading', { level: 2, name: 'Active' })).toBeVisible();
+    const working = screen.getAllByTestId('desk-runs-row').find((r) => r.dataset.runId === 'working')!;
+    expect(within(working).getByTestId('desk-runs-line').textContent).not.toMatch(/Studio Desk/);
+  });
+});
