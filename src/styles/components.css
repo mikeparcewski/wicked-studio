@@ -903,7 +903,7 @@ select:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-
    terminal, the diff, keycaps and technical details. Shared components (the bell, the handover, the
    health rows) set mono inline for the other skins, so the desk skin overrides it here — except for
    code, keycaps and a technical handle (<Tech>, shown only with "Show technical details" on). */
-:is([data-testid="session-rail"], [data-testid="desk"]) :not(code, pre, kbd, samp, [data-tech], [data-tech] *) {
+:is([data-testid="session-rail"], [data-testid="desk"]) :not(code, pre, kbd, samp, [data-tech], [data-tech] *, .wk-wordmark, .wk-wordmark *) {
   font-family: var(--font-sans) !important;
 }
 /* Focus that survives every mode (council M3), for the Desk's own controls. */

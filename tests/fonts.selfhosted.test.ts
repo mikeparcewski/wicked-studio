@@ -74,6 +74,9 @@ describe('fonts are self-hosted', () => {
     const uses = [...all.matchAll(/([^{}]+)\{[^}]*var\(--font-display\)/gu)].map((m) => m[1]!.replace(/\/\*[\s\S]*?\*\//gu, '').trim());
     expect(uses).toEqual(['.wk-wordmark']);
     expect(all.replace(/@font-face\s*\{[^}]*\}/gu, '')).not.toMatch(/font-family:[^;]*Wicked (Sans|Serif|Script)/u);
+    // The rail's catch-all text-face rule (every descendant of the rail and the desk) must leave the wordmark alone, or
+    // its higher specificity sets the wordmark in Inter (seen live on :7721, round 4).
+    expect(all).toMatch(/\[data-testid="desk"\]\) :not\([^)]*\.wk-wordmark, \.wk-wordmark \*\)/u);
   });
 
   it('each font family ships its OFL licence beside the files', () => {
