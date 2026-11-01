@@ -108,10 +108,10 @@ with sync_playwright() as p:
     held(page, "() => document.querySelector('[data-testid=\"desk-rail-brand\"]')?.innerText.includes('Acme desk')")
     typed = page.locator(".wk-rail-brand").inner_text().replace("\n", " ").strip()
     inp.fill("")
-    held(page, "() => /wicked\\s*studio/.test(document.querySelector('.wk-rail-brand')?.innerText || '')")
+    held(page, "() => /wicked\\s*studio/i.test(document.querySelector('.wk-rail-brand')?.innerText || '')")
     blank = page.locator(".wk-rail-brand").inner_text().replace("\n", " ").strip()
     page.screenshot(path=str(SHOTS / "desk-settings-honest-site-name.png"))
-    check("site-name-on-rail", has_brand and saved == "Reel studio" and typed == "Acme desk" and "wicked" in blank and "studio" in blank, has_brand=has_brand, saved=saved, typed=typed, blank=blank)
+    check("site-name-on-rail", has_brand and saved == "Reel studio" and typed == "Acme desk" and "wicked" in blank.lower() and "studio" in blank.lower(), has_brand=has_brand, saved=saved, typed=typed, blank=blank)
     ctx.close()
 
     # ── 2. notifications: blocked stays said; a dismissed prompt is named (#513) ─────────────

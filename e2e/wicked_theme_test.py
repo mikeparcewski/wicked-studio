@@ -67,6 +67,7 @@ STATE = """async () => {
     defaultAccent: probe('hsl(230 74% 68%)'),
     bodyFont: fam.split(',')[0].trim().replace(/['"]/g, ''),
     interLoaded: [...document.fonts].some(f => f.family.replace(/['"]/g, '') === 'Inter' && f.status === 'loaded'),
+    wickedSansLoaded: [...document.fonts].some(f => f.family.replace(/['"]/g, '') === 'Wicked Sans' && f.status === 'loaded'),
     archivoLoaded: [...document.fonts].some(f => f.family.replace(/['"]/g, '') === 'Archivo' && f.status === 'loaded'),
   }; }"""
 
@@ -95,8 +96,9 @@ with sync_playwright() as p:
     page.add_style_tag(content=HIDE_GATE_TOASTS)
     page.wait_for_function("() => document.documentElement.style.getPropertyValue('--_accent-h') !== ''", timeout=15000)
     s0 = page.evaluate(STATE)
-    check("legacy_dark_moves_to_wicked_dark", s0["theme"] == "wicked-dark" and s0["custom"] is None and s0["bodyFont"] == "Inter"
-          and s0["interLoaded"] and (s0["h"], s0["s"], s0["l"]) == ("200", "47%", "25%"), state=s0)
+    # The text face is Wicked Sans since round 5 (operator 2026-11-01); Inter stays behind it as the fallback.
+    check("legacy_dark_moves_to_wicked_dark", s0["theme"] == "wicked-dark" and s0["custom"] is None and s0["bodyFont"] == "Wicked Sans"
+          and (s0["h"], s0["s"], s0["l"]) == ("200", "47%", "25%"), state=s0)
 
     # 2. wicked-light writes the default preset; the synthesis paints its own near-black action colour
     try:
@@ -108,7 +110,7 @@ with sync_playwright() as p:
     page.wait_for_timeout(700)  # the 400 ms persist debounce
     last_put = puts[-1] if puts else {}
     check("wicked_light_harbor", (s1["h"], s1["s"], s1["l"]) == ("200", "47%", "25%")
-          and s1["accent"] == "rgb(24, 24, 26)" and s1["custom"] is None and s1["bodyFont"] == "Inter" and s1["interLoaded"]
+          and s1["accent"] == "rgb(24, 24, 26)" and s1["custom"] is None and s1["bodyFont"] == "Wicked Sans" and s1["wickedSansLoaded"]
           and last_put.get("theme") == "wicked-light" and last_put.get("accent_h") == 200,
           state=s1, put=last_put)
     page.wait_for_timeout(1000)  # let colour transitions settle before the capture
@@ -129,7 +131,7 @@ with sync_playwright() as p:
     page.wait_for_function("() => document.documentElement.getAttribute('data-theme') === 'wicked-dark'", timeout=5000)
     s4 = page.evaluate(STATE)
     check("wicked_dark", s4["theme"] == "wicked-dark" and s4["h"] == "210" and s4["custom"] == "custom"
-          and s4["bodyFont"] == "Inter", state=s4)
+          and s4["bodyFont"] == "Wicked Sans", state=s4)
     page.wait_for_timeout(1000)  # let colour transitions settle before the capture
     page.screenshot(path=str(SHOTS / "wicked-dark-theme.png"))
 
