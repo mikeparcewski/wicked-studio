@@ -15,7 +15,9 @@ export type ListenMode = 'stream' | 'space';
 export type VoiceAskContext =
   | { kind: 'entry' }
   | { kind: 'mode' }
-  | { kind: 'gate'; runId: string; heard: string; decision: { approve: boolean; action?: 'request_changes' | 'reject'; amend?: string }; record: string }
+  /** `ord` + `receivedAt`: the gate instance the spoken answer was for; Confirm sends nothing once the run's gate is
+   *  another instance (codex on #937: a stale card approved a later gate, delivery included). */
+  | { kind: 'gate'; runId: string; ord: number; receivedAt: number; heard: string; decision: { approve: boolean; action?: 'request_changes' | 'reject'; amend?: string }; record: string }
   | { kind: 'steer'; runId: string; title: string; message: string }
   /** "show me …" / "tell … to …" named several jobs: pick one, then `then` happens to it. */
   | { kind: 'pickJob'; runIds: string[]; then: { kind: 'show' } | { kind: 'act'; action: JobAction }; heard: string }

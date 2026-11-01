@@ -258,12 +258,23 @@ export function commitGateDecision(
     notice?: { preview: string; sent: string };
     /** Gate kind and chosen label for the receipt stored in GateActionState (Rule 5: remount). */
     receipt?: { kind: 'plan' | 'deliver' | 'row'; chosenLabel: string };
+    /** The gate instance the decision was made on, when the caller showed it earlier (a voice Confirm card): the
+     *  decision is refused unsent ('cancelled') unless the run's gate is still that instance, and that instance's
+     *  ord is the one sent (codex on #937: a stale card otherwise answered the CURRENT gate, delivery included). */
+    expect?: { ord: number; receivedAt: number };
   } = {},
 ): Promise<DecisionOutcome> {
   const cur = useGateActionStore.getState().byGate[runId] ?? IDLE_GATE_ACTION;
   if (cur.queued || cur.busy || cur.answered !== null) {
     reportDecision('not-sent', dropNotice(runId, cur));
     return Promise.resolve('dropped');
+  }
+  if (opts.expect !== undefined) {
+    const open = useGateStore.getState().gates[runId];
+    if (open === undefined || !sameInstance(open, opts.expect)) {
+      reportDecision('not-sent', `Not sent: the gate on ${gateLabel(runId)} has moved on since you answered it.`);
+      return Promise.resolve('cancelled');
+    }
   }
   patch(runId, { queued: true, ...NO_ERROR });
   // studio#368: a deliver gate's approve pushes — the host names the branch and repo when it knows
@@ -279,8 +290,8 @@ export function commitGateDecision(
   // The gate this decision was made on — watched while queued, and sent so the daemon can refuse
   // a decision that outlived its gate (409 gate_changed).
   const gateNow = useGateStore.getState().gates[runId];
-  const ord = gateNow?.ord;
-  const at = gateNow?.receivedAt;
+  const ord = opts.expect?.ord ?? gateNow?.ord;
+  const at = opts.expect?.receivedAt ?? gateNow?.receivedAt;
   return new Promise<DecisionOutcome>((resolve, reject) => {
     const id = queueDecision({
       verb,

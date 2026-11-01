@@ -66,8 +66,9 @@ export interface VoiceDeps {
   classify: (words: string, title: string) => Promise<string>;
   /** Recent jobs (finished ones too), for "show me the … job". */
   recent: () => Promise<JobRef[]>;
-  /** Answer a gate (through the undo window). */
-  decide: (runId: string, decision: GateAnswer, receipt: string) => Promise<string>;
+  /** Answer a gate (through the undo window), for the gate instance the answer was heard for (`expect`): refused
+   *  unsent when the run's gate is another instance by then. */
+  decide: (runId: string, decision: GateAnswer, receipt: string, expect: { ord: number; receivedAt: number }) => Promise<string>;
   /** End the voice session's chat (history kept). */
   endChat: () => void;
   now: () => number;
@@ -192,7 +193,7 @@ const defaults = (): VoiceDeps => ({
       .slice(0, 20)
       .map((r) => ({ runId: r.session.id, title: jobTitle(r.session), running: false }));
   },
-  decide: async (runId, decision, receipt) => commitGateDecision(runId, decision, { receipt: { kind: 'row', chosenLabel: receipt } }),
+  decide: async (runId, decision, receipt, expect) => commitGateDecision(runId, decision, { receipt: { kind: 'row', chosenLabel: receipt }, expect }),
   endChat: () => {
     const id = chatId;
     chatId = null;
@@ -730,7 +731,7 @@ async function proposeGate(gate: OpenGate, heard: string, words: NonNullable<Ret
       { id: 'no', label: 'Not that', token: 'cancel', tone: 'neutral' },
     ],
   };
-  openAsk(ask, { kind: 'gate', runId: gate.runId, heard, decision, record });
+  openAsk(ask, { kind: 'gate', runId: gate.runId, ord: gate.ord, receivedAt: gate.receivedAt, heard, decision, record });
   await say(`${q} Say confirm, or not that.`);
 }
 
@@ -766,11 +767,20 @@ export function answerAsk(lineIdOf: number, answer: AskAnswer): void {
   }
   if (context.kind === 'gate') {
     if (answer.option !== 'yes') { patchLine(lineIdOf, { record: 'Not sent · you said not that' }); void say('Okay, nothing was sent.'); return; }
+    // The card is for ONE gate instance: once the run's gate is another (answered elsewhere, the run moved on, the
+    // same ord asked again), confirming it sends nothing rather than answering whatever is open now.
+    const now = useGateStore.getState().gates[context.runId];
+    if (now === undefined || now.ord !== context.ord || now.receivedAt !== context.receivedAt) {
+      patchLine(lineIdOf, { record: 'Not sent · that gate has moved on' });
+      set({ awaitingGate: null });
+      void say('That gate has moved on; nothing was sent.');
+      return;
+    }
     patchLine(lineIdOf, { record: `${context.record} · sending in 10 s (Undo below)` });
     set({ awaitingGate: null });
     const decision = { ...context.decision, input: 'voice' } as GateAnswer;
-    void deps.decide(context.runId, decision, context.record).then(
-      (outcome) => patchLine(lineIdOf, { record: outcome === 'sent' ? context.record : outcome === 'undone' ? 'Undone · nothing was sent' : `Not sent (${outcome})` }),
+    void deps.decide(context.runId, decision, context.record, { ord: context.ord, receivedAt: context.receivedAt }).then(
+      (outcome) => patchLine(lineIdOf, { record: outcome === 'sent' ? context.record : outcome === 'undone' ? 'Undone · nothing was sent' : outcome === 'cancelled' ? 'Not sent · that gate has moved on' : `Not sent (${outcome})` }),
       (e: unknown) => patchLine(lineIdOf, { record: `Not sent: ${e instanceof Error ? e.message : String(e)}` }),
     );
     void say('Confirmed. It sends in 10 seconds unless you undo it.');

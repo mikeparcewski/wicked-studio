@@ -34,6 +34,7 @@ const said: string[] = [];
 const asked: string[] = [];
 const steered: Array<[string, string]> = [];
 const decided: Array<[string, unknown]> = [];
+const expects: unknown[] = [];
 let ended = 0;
 let puts: unknown[] = [];
 
@@ -82,7 +83,7 @@ async function holdAndSay(words: string): Promise<void> {
 
 beforeEach(() => {
   status = STATUS; modelPosts.length = 0;
-  clock = 0; heard = []; said.length = 0; asked.length = 0; steered.length = 0; decided.length = 0; ended = 0; puts = [];
+  clock = 0; heard = []; said.length = 0; asked.length = 0; steered.length = 0; decided.length = 0; expects.length = 0; ended = 0; puts = [];
   mic = new FakeMic();
   vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => respond(url, init)));
   setVoiceDeps({
@@ -91,7 +92,7 @@ beforeEach(() => {
     speaker: { available: true, say: async (t) => { said.push(t); }, cancel: () => undefined },
     ask: async (q) => { asked.push(q); return 'Two jobs. Dark mode is on build; the webhook retries wait on you.'; },
     steer: async (runId, text) => { steered.push([runId, text]); },
-    decide: async (runId, d) => { decided.push([runId, d]); return 'sent'; },
+    decide: async (runId, d, _receipt, expectGate) => { decided.push([runId, d]); expects.push(expectGate); return 'sent'; },
     endChat: () => { ended += 1; },
     now: () => clock,
   });
@@ -205,6 +206,30 @@ describe('voice mode', () => {
     await holdAndSay('confirm');
     await waitFor(() => expect(decided).toEqual([['r-hook', { approve: true, input: 'voice' }]]));
     await waitFor(() => expect(screen.getAllByTestId('voice-ask-record').at(-1)?.textContent).toBe('Approved by you · by voice, confirmed'));
+  });
+
+  it('a Confirm card is for its own gate: once the run moved on to another, confirming sends nothing (codex on #937)', async () => {
+    await enterFull();
+    await speak('space bar');
+    await act(async () => { useGateStore.setState({ gates: { 'r-hook': { runId: 'r-hook', ord: 2, prompt: 'Approve the review', lifecycle: 'open', receivedAt: 1 } } }); });
+    await holdAndSay('approve it');
+    await waitFor(() => expect(screen.getByTestId('voice-ask-gate')).toBeTruthy());
+    // another tab answers the review; the run reaches its delivery gate while this card is still on screen
+    await act(async () => { useGateStore.setState({ gates: { 'r-hook': { runId: 'r-hook', ord: 9, prompt: 'Approve delivery?', lifecycle: 'open', receivedAt: 2, gateKind: 'deliver' } } }); });
+    await holdAndSay('confirm');
+    await waitFor(() => expect(screen.getAllByTestId('voice-ask-record').at(-1)?.textContent).toBe('Not sent · that gate has moved on'));
+    expect(decided).toEqual([]);
+    expect(said.some((t) => /That gate has moved on; nothing was sent/.test(t))).toBe(true);
+  });
+
+  it('a confirmed answer names the gate instance it was heard for', async () => {
+    await enterFull();
+    await speak('space bar');
+    await act(async () => { useGateStore.setState({ gates: { 'r-hook': { runId: 'r-hook', ord: 2, prompt: 'Approve the review', lifecycle: 'open', receivedAt: 7 } } }); });
+    await holdAndSay('approve it');
+    await waitFor(() => expect(screen.getByTestId('voice-ask-gate')).toBeTruthy());
+    await holdAndSay('confirm');
+    await waitFor(() => expect(expects).toEqual([{ ord: 2, receivedAt: 7 }]));
   });
 
   it('"not that" sends nothing; a send-back without a note asks for one', async () => {
