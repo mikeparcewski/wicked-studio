@@ -1040,6 +1040,7 @@ export function holdToTalk(down: boolean): void {
 export function closeVoice(): void {
   generation += 1;
   finals.length = 0;
+  recordingAsk = null;
   stopPartials();
   vad.reset();
   mic?.stop();

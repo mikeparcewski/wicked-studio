@@ -282,6 +282,21 @@ describe('voice mode', () => {
     expect(useVoiceStore.getState().heard).not.toBe('The speech engine is busy. Holding on to what you said…');
   });
 
+  it('an old session\u2019s "leave voice" landing late does not close the new session (codex r4)', async () => {
+    await enterFull();
+    await speak('space bar');
+    let releaseOld!: (t: string) => void;
+    setVoiceDeps({ stt: { transcribe: async () => { heard.shift(); return new Promise<string>((r) => { releaseOld = r; }); } } });
+    await holdAndSay('leave voice');
+    await act(async () => { closeVoice(); });
+    setVoiceDeps({ stt: { transcribe: async () => heard.shift() ?? '' } });
+    await act(async () => { await openVoice(); });
+    await speak('yes');
+    await waitFor(() => expect(useVoiceStore.getState().phase).toBe('full'));
+    await act(async () => { releaseOld('leave voice'); await new Promise((r) => setTimeout(r, 0)); });
+    expect(useVoiceStore.getState().phase).toBe('full');
+  });
+
   it('words transcribed after voice closed act on nothing, and the next session keeps its own recording (codex + agy on the fix)', async () => {
     await enterFull();
     await speak('space bar');

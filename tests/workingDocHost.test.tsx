@@ -156,7 +156,7 @@ describe('the words', () => {
     expect(reconcileSection('decisions', 'Keep JPY at 0 decimals\nApprove the plan · answered 20:02', [])).toBeNull();
     // An answered question goes; the person's own question stays where it was.
     expect(reconcileSection('questions', 'Does the PDF need the symbol?\nWaiting on you · Plan approval · since 20:01', [], ['Waiting on you · Plan approval · since 20:01'])).toBe('Does the PDF need the symbol?');
-    expect(reconcileSection('next', 'After hand-off round 1 · the review asked for changes: make them and hand off again', ['After hand-off round 2 · QE acceptance did not pass: fix it and hand off again']))
+    expect(reconcileSection('next', 'After hand-off round 1 · the review asked for changes: make them and hand off again', ['After hand-off round 2 · QE acceptance did not pass: fix it and hand off again'], [], 2))
       .toBe('After hand-off round 2 · QE acceptance did not pass: fix it and hand off again');
   });
 
@@ -168,6 +168,11 @@ describe('the words', () => {
     // no longer wanted (the round passed): the edit stays, the new line is added after it
     const round2 = 'After hand-off round 2 · QE acceptance did not pass: fix it and hand off again';
     expect(reconcileSection('next', edited, [round2])).toBe(`${edited}\n${round2}`);
+    // an edit into ANOTHER of the plugin's phrases, in this round, is the person's too (codex r4): kept, not swapped back
+    const skipped = 'After hand-off round 1 · the review was skipped';
+    expect(reconcileSection('next', skipped, [gen], [], 1)).toBe(`${skipped}\n${gen}`);
+    // and a follow-up of an earlier round, word for word, is the plugin's stale line: taken out
+    expect(reconcileSection('next', `${gen}\nCall Sam`, [], [], 2)).toBe('Call Sam');
     // the write sequence codex saw (generated, typed, generated) no longer happens
     expect(reconcileSection('next', 'After hand-off round 1 · the review asked for changes — ask Sam first', [gen]))
       .toBe(`After hand-off round 1 · the review asked for changes — ask Sam first\n${gen}`);

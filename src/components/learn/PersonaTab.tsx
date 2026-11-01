@@ -29,8 +29,8 @@ export function PersonaTab({ navigate, project }: { navigate: Navigate; project:
   const scope: PersonaScope = project !== null ? `project:${project}` : 'user';
   const projectName = project === null ? null : projects.find((p) => p.id === project)?.name ?? project;
 
-  // Every save or removal bumps this: a read that began before one of them answers with older state and is dropped,
-  // so it never overwrites what the save or removal put in (codex + agy r3 on #937).
+  // Every save or removal that LANDS bumps this: a read that began before it answers with older state and is dropped,
+  // so it never overwrites what the write put in (codex + agy r3 on #937); a write that failed invalidates nothing.
   const writes = useRef(0);
   const load = (): void => {
     setError(null);
@@ -54,10 +54,11 @@ export function PersonaTab({ navigate, project }: { navigate: Navigate; project:
   // A note answers the last save or removal; a different scope starts without one.
   useEffect(() => { setNote(null); }, [scope]);
   const form = draft ?? base;
-  // A draft back at what the scope holds is no draft: the form follows the saved personality again.
+  // A draft back at what the scope holds is no draft: the form follows the saved personality again. Not while a save or
+  // removal is out, though: then that value is the person's answer to it (codex r4 on #937).
   const set = (patch: Partial<PersonaInput>): void => {
     const next = { ...inputOf(form), ...patch };
-    setDraft(sameInput(next, base) ? null : next);
+    setDraft(!busy && sameInput(next, base) ? null : next);
   };
   const [q, setQ] = useState<0 | 1 | 2>(0);
   const [busy, setBusy] = useState(false);
@@ -77,7 +78,6 @@ export function PersonaTab({ navigate, project }: { navigate: Navigate; project:
     const sent = inputOf(form);
     setBusy(true);
     setNote(null);
-    writes.current += 1;
     try {
       const r = await putPersona(at, { ...sent, name: sent.name.trim() });
       writes.current += 1;
@@ -98,7 +98,6 @@ export function PersonaTab({ navigate, project }: { navigate: Navigate; project:
     const at = scope;
     const before = draft;
     setBusy(true);
-    writes.current += 1;
     try {
       await removePersonaOverride(id);
       writes.current += 1;

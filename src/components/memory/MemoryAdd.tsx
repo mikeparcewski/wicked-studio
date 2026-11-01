@@ -181,7 +181,10 @@ export function MemoryTable({ memories, onSaved, onClose }: { memories: readonly
   const resolve = (id: string): { id: string; words: string | null } => {
     let cur = id;
     let words: string | null = null;
-    for (let hops = 0; replaced[cur] !== undefined && hops < 32; hops++) {
+    // To the end of the chain, however long; an id seen twice (never expected) stops it rather than loop.
+    const seen = new Set<string>();
+    while (replaced[cur] !== undefined && !seen.has(cur)) {
+      seen.add(cur);
       words = replaced[cur]!.words;
       cur = replaced[cur]!.id;
     }

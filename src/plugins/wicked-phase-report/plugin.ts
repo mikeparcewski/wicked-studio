@@ -18,7 +18,7 @@
 import { PROTOCOL, ENVELOPE, type Envelope } from '../_shared/v2.js';
 import surfaces from './surfaces.json';
 import { dashboard, emptyReport, foldRows, openGates, panelLine, phaseDashboard, phaseSummary, scopeOf, stepWord, summaryLine, writesDoc, type PhaseScope, type Report, type Row } from './model.js';
-import { SECTION_EFFECT, SECTION_LABELS, SECTIONS, STEER_NOTE, docLines, ownQuestionLines, pluginWritesLines, represents, reconcileSection, sectionAuthor, trailLines, type DocView, type SectionId } from './workingDoc.js';
+import { SECTION_EFFECT, SECTION_LABELS, SECTIONS, STEER_NOTE, docLines, handoffRound, ownQuestionLines, pluginWritesLines, represents, reconcileSection, sectionAuthor, trailLines, type DocView, type SectionId } from './workingDoc.js';
 
 const ID = 'wicked-phase-report';
 
@@ -259,7 +259,7 @@ export function start(): void {
         if (refused.has(section)) continue;
         for (let attempt = 0; attempt < 2; attempt += 1) {
           if (doc === null || doc.doc === null || doc.sections === null) return;
-          const text = reconcileSection(section, doc.sections[section], wanted[section], ownQuestionLines(report));
+          const text = reconcileSection(section, doc.sections[section], wanted[section], ownQuestionLines(report), handoffRound(report));
           if (text === null) break;
           const r = await ask('doc.propose_edit', { base: doc.doc.head, section, text, origin: 'generated' });
           await readDoc();

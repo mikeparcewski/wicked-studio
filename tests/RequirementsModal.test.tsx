@@ -187,6 +187,24 @@ describe('RequirementsModal — coverage label and corroboration (operator rulin
     expect(within(filters).getByText('Functional')).toBeInTheDocument();
   });
 
+  it('a not-product or unindexed row says so; a view on Config & data moves to Functional when the corpus has none (r4)', async () => {
+    const np = { ...validated, key: 'x::REQ-7', reqId: 'REQ-7', title: 'fixtures', uncounted: 'not_product' };
+    const ui = { ...validated, key: 'x::REQ-8', reqId: 'REQ-8', title: 'skipped', uncounted: 'unindexed' };
+    listRequirements.mockReset().mockResolvedValueOnce({ ...page([np, ui] as unknown as RequirementsPage['items'], 2, 2), categories: { functional: 2, configData: 3 } });
+    render(<RequirementsModal repoId="r1" repoName="repo" onClose={() => {}} />);
+    await screen.findByText('fixtures');
+    const marks = screen.getAllByTestId('requirement-not-counted');
+    expect(marks.map((m) => m.getAttribute('title'))).toEqual([
+      'Not product code (a test, data, a manifest or a doc): the coverage share does not count it.',
+      'In a file the code index skipped: the coverage share does not count it.',
+    ]);
+    listRequirements.mockResolvedValue({ ...page([] as unknown as RequirementsPage['items'], 0, 2), categories: { functional: 2, configData: 0 } });
+    fireEvent.click(within(screen.getByRole('group', { name: 'Category filter' })).getByText('Config & data'));
+    await waitFor(() => expect(within(screen.getByRole('group', { name: 'Category filter' })).queryByText('Config & data')).not.toBeInTheDocument());
+    await waitFor(() => expect(within(screen.getByRole('group', { name: 'Category filter' })).getByText('Functional')).toHaveAttribute('aria-pressed', 'true'));
+    await waitFor(() => expect(listRequirements).toHaveBeenLastCalledWith('r1', expect.objectContaining({ category: 'functional' })));
+  });
+
   it('crew 0.167.0 fields absent (an older daemon) or zero: nothing extra, and Config & data stays', async () => {
     listRequirements.mockReset().mockResolvedValue({ ...page([validated] as unknown as RequirementsPage['items'], 1, 1) });
     const { unmount } = render(<RequirementsModal repoId="r1" repoName="repo" onClose={() => {}} />);

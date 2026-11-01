@@ -124,4 +124,39 @@ describe('PersonaTab save', () => {
     fireEvent.click(screen.getByTestId('persona-remove-override'));
     await waitFor(() => expect(nameBox().value).toBe('Grace'));
   });
+
+  it('typing back to the old value while a save is out keeps that as the person\u2019s answer (codex r4)', async () => {
+    getPersonas.mockResolvedValueOnce(response('Ada', 1));
+    const put = deferred<unknown>();
+    putPersona.mockReturnValue(put.promise);
+    render(<PersonaTab navigate={() => {}} project={null} />);
+    await screen.findByTestId('persona-name');
+    fireEvent.change(nameBox(), { target: { value: 'Grace' } });
+    fireEvent.click(saveButton());
+    fireEvent.change(nameBox(), { target: { value: 'Ada' } });
+    await act(async () => { put.resolve({ scope: 'user', persona: saved('Grace', 2), voice: 'v' }); });
+    await waitFor(() => expect(screen.getByText(/Saved as version 2/)).toBeTruthy());
+    expect(nameBox().value).toBe('Ada');
+    expect(saveButton().disabled).toBe(false);
+  });
+
+  it('a save that fails does not throw away the read a removal started (codex r4)', async () => {
+    getPersonas.mockResolvedValueOnce(response('Ada', 1, { a: saved('Alpha bot', 3) }));
+    removePersonaOverride.mockResolvedValue({ removed: true });
+    let read!: (v: unknown) => void;
+    const { rerender } = render(<PersonaTab navigate={() => {}} project="a" />);
+    await waitFor(() => expect(nameBox().value).toBe('Alpha bot'));
+    getPersonas.mockReturnValueOnce(new Promise((r) => { read = r; }));
+    fireEvent.click(screen.getByTestId('persona-remove-override'));
+    await waitFor(() => expect(nameBox().value).toBe('Ada'));
+    putPersona.mockRejectedValue(new Error('disk full'));
+    fireEvent.change(nameBox(), { target: { value: 'Alpha again' } });
+    fireEvent.click(saveButton());
+    await waitFor(() => expect(screen.getByText(/disk full/)).toBeTruthy());
+    // another tab had renamed the person's personality: the removal's read lands now and is used
+    await act(async () => { read(response('Grace', 2)); });
+    // "You, everywhere" shows the personality the daemon holds now
+    rerender(<PersonaTab navigate={() => {}} project={null} />);
+    await waitFor(() => expect(nameBox().value).toBe('Grace'));
+  });
 });

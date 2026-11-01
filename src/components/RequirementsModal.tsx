@@ -180,6 +180,10 @@ export function RequirementsModal({ repoId, repoName, onClose, onNavigateCompone
     setCategory(c);
     setOffset(0);
   }
+  // The corpus no longer holds config and data (its filter is gone): a view still on it moves to Functional.
+  useEffect(() => {
+    if (!hasConfigData && page !== null && category === 'config-data') setCategoryFilter('functional');
+  }, [hasConfigData, page, category]);
 
   // Patch a row in place after the edit rail saves (no full refetch needed).
   function absorbUpdate(updated: RequirementDetail): void {

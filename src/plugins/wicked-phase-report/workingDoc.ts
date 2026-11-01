@@ -175,7 +175,12 @@ export function docLines(r: Report): { decisions: string[]; questions: string[];
 const escapeRe = (t: string): string => t.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
 const HANDOFF_PHRASES = Object.values(HANDOFF_WORDS).flatMap((w) => [w.failed, w.skipped]).map(escapeRe).join('|');
 /** A hand-off follow-up, WHOLE, as the plugin writes it: the round number is the only part that varies. */
-const NEXT_MINE = new RegExp(`^After hand-off round \\d+ · (?:${HANDOFF_PHRASES})$`, 'u');
+const NEXT_MINE = new RegExp(`^After hand-off round (\\d+) · (?:${HANDOFF_PHRASES})$`, 'u');
+
+/** The hand-off round the run is in, or null before any. */
+export function handoffRound(r: Report): number | null {
+  return r.power?.handoff?.round ?? null;
+}
 
 /**
  * Every open-question line the plugin has written or would write for this run, exactly: one per decision and per
@@ -202,9 +207,16 @@ export function represents(saved: string, generated: string): boolean {
  */
 export function reconcileSection(
   section: 'decisions' | 'questions' | 'next', current: string, wanted: readonly string[], ownQuestions: readonly string[] = [],
+  round: number | null = null,
 ): string | null {
   const lines = current.split('\n').map((l) => l.trim()).filter((l) => l !== '');
-  const mine = (l: string): boolean => (section === 'next' ? NEXT_MINE.test(l) : ownQuestions.includes(l));
+  // A Next line the plugin may take back: a follow-up of an EARLIER hand-off round, word for word (this round's lines
+  // are the wanted ones). A line in this round's words that is not wanted now is a person's edit (codex r4 on #937).
+  const mineNext = (l: string): boolean => {
+    const m = NEXT_MINE.exec(l);
+    return m !== null && round !== null && Number(m[1]) < round;
+  };
+  const mine = (l: string): boolean => (section === 'next' ? mineNext(l) : ownQuestions.includes(l));
   const kept = section === 'decisions' ? lines : lines.filter((l) => !mine(l) || wanted.includes(l));
   // A person's edit that kept the line's words ("After hand-off round 1 · … — check the retry path first") stands for it.
   const add = wanted.filter((w) => !kept.some((k) => represents(k, w)));
