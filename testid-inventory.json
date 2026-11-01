@@ -11,10 +11,10 @@
   "version": 1,
   "studioVersion": "0.13.0",
   "counts": {
-    "files": 284,
-    "occurrences": 3939,
-    "static": 3345,
-    "dynamic": 90,
+    "files": 285,
+    "occurrences": 3960,
+    "static": 3366,
+    "dynamic": 93,
     "computed": 44
   },
   "static": [
@@ -6485,6 +6485,120 @@
       ]
     },
     {
+      "testId": "launch-catalog",
+      "files": [
+        "src/components/launch/WorkflowCatalog.tsx"
+      ]
+    },
+    {
+      "testId": "launch-catalog-cat",
+      "files": [
+        "src/components/launch/WorkflowCatalog.tsx"
+      ]
+    },
+    {
+      "testId": "launch-catalog-clear-filters",
+      "files": [
+        "src/components/launch/WorkflowCatalog.tsx"
+      ]
+    },
+    {
+      "testId": "launch-catalog-clear-search",
+      "files": [
+        "src/components/launch/WorkflowCatalog.tsx"
+      ]
+    },
+    {
+      "testId": "launch-catalog-count",
+      "files": [
+        "src/components/launch/WorkflowCatalog.tsx"
+      ]
+    },
+    {
+      "testId": "launch-catalog-empty",
+      "files": [
+        "src/components/launch/WorkflowCatalog.tsx"
+      ]
+    },
+    {
+      "testId": "launch-catalog-filters",
+      "files": [
+        "src/components/launch/WorkflowCatalog.tsx"
+      ]
+    },
+    {
+      "testId": "launch-catalog-filters-toggle",
+      "files": [
+        "src/components/launch/WorkflowCatalog.tsx"
+      ]
+    },
+    {
+      "testId": "launch-catalog-fit",
+      "files": [
+        "src/components/launch/WorkflowCatalog.tsx"
+      ]
+    },
+    {
+      "testId": "launch-catalog-loading",
+      "files": [
+        "src/components/launch/WorkflowCatalog.tsx"
+      ]
+    },
+    {
+      "testId": "launch-catalog-noresults",
+      "files": [
+        "src/components/launch/WorkflowCatalog.tsx"
+      ]
+    },
+    {
+      "testId": "launch-catalog-older",
+      "files": [
+        "src/components/launch/WorkflowCatalog.tsx"
+      ]
+    },
+    {
+      "testId": "launch-catalog-repo",
+      "files": [
+        "src/components/launch/WorkflowCatalog.tsx"
+      ]
+    },
+    {
+      "testId": "launch-catalog-results",
+      "files": [
+        "src/components/launch/WorkflowCatalog.tsx"
+      ]
+    },
+    {
+      "testId": "launch-catalog-search",
+      "files": [
+        "src/components/launch/WorkflowCatalog.tsx"
+      ]
+    },
+    {
+      "testId": "launch-catalog-section",
+      "files": [
+        "src/components/launch/WorkflowCatalog.tsx"
+      ]
+    },
+    {
+      "testId": "launch-catalog-soon-tag",
+      "files": [
+        "src/components/launch/WorkflowCatalog.tsx"
+      ]
+    },
+    {
+      "testId": "launch-catalog-soon-toggle",
+      "files": [
+        "src/components/launch/WorkflowCatalog.tsx"
+      ]
+    },
+    {
+      "testId": "launch-catalog-top",
+      "files": [
+        "src/components/launch/WorkflowCatalog.tsx"
+      ]
+    },
+    {
       "testId": "launch-confirm",
       "files": [
         "src/components/ChatInput.tsx"
@@ -6690,12 +6804,6 @@
     },
     {
       "testId": "launch-wizard-blocker",
-      "files": [
-        "src/components/launch/LaunchWizard.tsx"
-      ]
-    },
-    {
-      "testId": "launch-wizard-cards",
       "files": [
         "src/components/launch/LaunchWizard.tsx"
       ]
@@ -6911,6 +7019,12 @@
       ]
     },
     {
+      "testId": "launch-wizard-repo-note",
+      "files": [
+        "src/components/launch/LaunchWizard.tsx"
+      ]
+    },
+    {
       "testId": "launch-wizard-requirements",
       "files": [
         "src/components/launch/LaunchWizard.tsx"
@@ -6959,6 +7073,24 @@
       ]
     },
     {
+      "testId": "launch-wizard-shape",
+      "files": [
+        "src/components/launch/LaunchWizard.tsx"
+      ]
+    },
+    {
+      "testId": "launch-wizard-shape-inputs",
+      "files": [
+        "src/components/launch/LaunchWizard.tsx"
+      ]
+    },
+    {
+      "testId": "launch-wizard-shape-needs",
+      "files": [
+        "src/components/launch/LaunchWizard.tsx"
+      ]
+    },
+    {
       "testId": "launch-wizard-signin",
       "files": [
         "src/components/launch/LaunchWizard.tsx"
@@ -6977,15 +7109,9 @@
       ]
     },
     {
-      "testId": "launch-wizard-soon",
-      "files": [
-        "src/components/launch/LaunchWizard.tsx"
-      ]
-    },
-    {
       "testId": "launch-wizard-start-chat",
       "files": [
-        "src/components/launch/LaunchWizard.tsx"
+        "src/components/launch/WorkflowCatalog.tsx"
       ]
     },
     {
@@ -20544,6 +20670,24 @@
       ]
     },
     {
+      "pattern": "launch-catalog-fit-*",
+      "files": [
+        "src/components/launch/WorkflowCatalog.tsx"
+      ]
+    },
+    {
+      "pattern": "launch-catalog-soon-*",
+      "files": [
+        "src/components/launch/WorkflowCatalog.tsx"
+      ]
+    },
+    {
+      "pattern": "launch-catalog-top-*",
+      "files": [
+        "src/components/launch/WorkflowCatalog.tsx"
+      ]
+    },
+    {
       "pattern": "launch-entity-*",
       "files": [
         "src/components/ContextPopover.tsx"
@@ -20564,7 +20708,7 @@
     {
       "pattern": "launch-wizard-workflow-*",
       "files": [
-        "src/components/launch/LaunchWizard.tsx"
+        "src/components/launch/WorkflowCatalog.tsx"
       ]
     },
     {

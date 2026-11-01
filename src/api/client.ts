@@ -86,6 +86,9 @@ export const terminalWsUrl = (id: string): string =>
 /** The largest gate-answer body sent with `keepalive` (under the browser's 64 KiB shared budget). */
 export const KEEPALIVE_MAX_BYTES = 48 * 1024;
 
+/** The catalog route New job reads (wf-catalog WIRE). */
+export const WORKFLOW_CATALOG_PATH = '/workflows/catalog';
+
 export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   // Only advertise a JSON body when we actually send one — Fastify v5 rejects
   // an empty body with Content-Type: application/json (FST_ERR_CTP_EMPTY_JSON_BODY),
@@ -570,6 +573,13 @@ export const api = {
   // absent on an older daemon; `refusedWorkflowsOf` reads either shape.
   listWorkflows: () =>
     apiFetch<{ workflows: import('./types.js').WorkflowDef[]; unavailable?: import('./wave6-wire.js').RefusedWorkflow[] }>('/workflows'),
+
+  /**
+   * (launch-modal, wf-catalog WIRE) The workflow catalog for New job: categories, each workflow's
+   * metadata and this operator's usage. Read as `unknown` (`catalogFromWire` parses it); an older
+   * daemon answers 404 and New job falls back to `listWorkflows`.
+   */
+  getWorkflowCatalog: () => apiFetch<unknown>(WORKFLOW_CATALOG_PATH),
 
   /** One workflow definition by id; 404 if unknown. */
   getWorkflow: (id: string) => apiFetch<{ workflow: import('./types.js').WorkflowDef }>(`/workflows/${encodeURIComponent(id)}`),

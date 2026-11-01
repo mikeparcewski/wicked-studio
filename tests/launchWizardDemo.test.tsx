@@ -10,6 +10,7 @@ import type { RosterSeat, WorkflowDef } from '../src/api/types.js';
 import { LaunchWizard } from '../src/components/launch/LaunchWizard.js';
 import { demoBlocker, demoUrlProblem } from '../src/board/demoLaunch.js';
 import { DEMO_VIDEO_ID, openLaunchWizard, resetLaunchWizard, useLaunchWizard } from '../src/store/launchWizard.js';
+import { resetWorkflowCatalog } from '../src/store/workflowCatalog.js';
 import { resetComposerSeats, useLaunchSeats } from '../src/store/composerSeats.js';
 import { resetPlanCatalog } from '../src/store/planCatalog.js';
 import { clearRepoCache } from '../src/store/repoCache.js';
@@ -47,6 +48,7 @@ beforeEach(() => {
   setCachedWorkflows(WF);
   clearRepoCache();
   resetLaunchWizard();
+  resetWorkflowCatalog();
   useProjectsStore.setState({ projects: [
     { id: 'default', name: 'Unfiled', status: 'active' },
     { id: 'upload-endpoint', name: 'Upload endpoint', status: 'active' },
@@ -67,7 +69,7 @@ describe('the Demo video job (studio#664)', () => {
     const navigate = vi.fn();
     render(<LaunchWizard navigate={navigate} />);
     act(() => openLaunchWizard({}));
-    fireEvent.click(screen.getByTestId(`launch-wizard-workflow-${DEMO_VIDEO_ID}`));
+    fireEvent.click(await screen.findByTestId(`launch-wizard-workflow-${DEMO_VIDEO_ID}`));
     expect(step()).toBe('demo');
     expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent('New job: Demo video');
     expect(document.activeElement).toBe(screen.getByTestId('launch-wizard-demo-url'));

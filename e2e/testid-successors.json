@@ -997,6 +997,8 @@
     "learn-repo": "learn-topics",
     "requirements-mapped-share": "requirements-real-share",
     "requirements-corroboration-counts": "requirements-coverage",
-    "session-gate-choice-default": "ask-option-meta"
+    "session-gate-choice-default": "ask-option-meta",
+    "launch-wizard-cards": "launch-catalog-results",
+    "launch-wizard-soon": "launch-catalog-soon-*"
   }
 }

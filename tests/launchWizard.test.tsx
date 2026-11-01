@@ -10,6 +10,7 @@ import type { RepoEntry, RosterSeat, WorkflowDef } from '../src/api/types.js';
 import { Composer } from '../src/components/session/Composer.js';
 import { LaunchWizard } from '../src/components/launch/LaunchWizard.js';
 import { openLaunchWizard, resetLaunchWizard, useLaunchWizard } from '../src/store/launchWizard.js';
+import { resetWorkflowCatalog } from '../src/store/workflowCatalog.js';
 import { useComposerChips } from '../src/store/composerChips.js';
 import { resetComposerSeats, useLaunchSeats } from '../src/store/composerSeats.js';
 import { resetPlanCatalog } from '../src/store/planCatalog.js';
@@ -76,6 +77,7 @@ beforeEach(() => {
   setCachedWorkflows(WF);
   clearRepoCache();
   resetLaunchWizard();
+  resetWorkflowCatalog();
   useComposerChips.setState({ byComposer: {} });
   useCapabilities.setState({ launchPrimary: false });
 });
@@ -127,7 +129,7 @@ describe('launch wizard', () => {
     render(<Harness />);
     act(() => { openLaunchWizard({}); });
     expect((await screen.findByTestId('launch-wizard-step')).dataset.step).toBe('workflow');
-    fireEvent.click(screen.getByTestId('launch-wizard-workflow-mcp-server'));
+    fireEvent.click(await screen.findByTestId('launch-wizard-workflow-mcp-server'));
     expect(screen.getByTestId('launch-wizard-step').dataset.step).toBe('what');
   });
 

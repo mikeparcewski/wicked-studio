@@ -24,6 +24,7 @@ import { resetChatFlow, useChatFlow } from '../src/store/chatFlow.js';
 import { useSessionDrafts } from '../src/store/sessionDrafts.js';
 import { DEFAULT_COMPOSER_PREFS, resetComposerPrefsPersistence, useComposerPrefsStore } from '../src/store/composerPrefs.js';
 import { DEMO_VIDEO_ID, isGenericNewJob, openLaunchWizard, resetLaunchWizard, useLaunchWizard } from '../src/store/launchWizard.js';
+import { resetWorkflowCatalog } from '../src/store/workflowCatalog.js';
 import { clearCachedWorkflows, setCachedWorkflows } from '../src/store/workflowCache.js';
 
 vi.mock('../src/components/Terminal.js', () => ({ Terminal: () => <div data-testid="mock-terminal" /> }));
@@ -32,6 +33,7 @@ const WF = [{ id: 'feature', phases: [{ id: 'build', executes_code: true }] }] a
 
 beforeEach(() => {
   resetLaunchWizard();
+  resetWorkflowCatalog();
   useAskDock.setState({ request: null });
   resetChatFlow();
   useComposerPrefsStore.setState({ prefs: DEFAULT_COMPOSER_PREFS, loaded: true, persist: 'unknown' });
@@ -129,16 +131,15 @@ describe('the picker\'s checkbox', () => {
   });
 });
 
-describe('the picker\'s first card, "Start with chat"', () => {
-  it('is first and focused, and goes to the chat flow in the draft\'s project with its words; the preference is untouched', () => {
+describe('the picker\'s "Talk it through first" (was the first card, "Start with chat")', () => {
+  it('sits beside the search, and goes to the chat flow in the draft\'s project with its words; the preference is untouched', () => {
     render(<LaunchWizard navigate={() => {}} />);
     act(() => { openLaunchWizard({ projectId: 'p1', intent: 'why is login slow?' }); });
-    const grid = screen.getByTestId('launch-wizard-cards');
-    const first = grid.querySelector('button');
-    expect(first?.dataset.testid).toBe('launch-wizard-start-chat');
-    expect(first).toHaveTextContent('Start with chat');
-    expect(first?.dataset.autofocus).toBe('true');
-    fireEvent.click(screen.getByTestId('launch-wizard-start-chat'));
+    const chat = screen.getByTestId('launch-wizard-start-chat');
+    expect(chat).toHaveTextContent('Talk it through first');
+    // Focus starts in the search box, beside it.
+    expect(document.activeElement).toBe(screen.getByTestId('launch-catalog-search'));
+    fireEvent.click(chat);
     expect(screen.queryByTestId('launch-wizard')).toBeNull();
     expect(chatFlowOpen()).toMatchObject({ projectId: 'p1', seed: 'why is login slow?' });
     expect(useComposerPrefsStore.getState().prefs.startInChat).toBe(false);

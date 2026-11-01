@@ -7,7 +7,7 @@ import type { RepoEntry } from '../../api/types.js';
 import { gatePostureWord, launchLead, workflowLaunchBody } from '../../board/launchModel.js';
 import { qeAcceptanceSetting, workflowRequiresQe } from '../../board/assuranceModel.js';
 import { QeOffNote } from '../QeOffNote.js';
-import { workflowItems, WORKFLOWS_LOADING_LINE } from '../../board/workflowCommand.js';
+import { workflowItems } from '../../board/workflowCommand.js';
 import { sessionPath } from '../../board/sessionModel.js';
 import { seatLabel, userSeats } from '../../board/seatNames.js';
 import { seatCanCarry, seatStanding } from '../gateVerdictModel.js';
@@ -29,7 +29,7 @@ import { useProvenanceStore } from '../../store/provenance.js';
 import { fetchReposCached, getCachedRepos } from '../../store/repoCache.js';
 import { useWorkflowDefs } from '../../store/workflowCache.js';
 import { workflowLabel } from '../../board/workflowNames.js';
-import { DEMO_VIDEO_ID, DRAFT_EPICS_ID, START_CHAT_ID, useLaunchWizard, withJobKind, type LaunchDraft } from '../../store/launchWizard.js';
+import { DEMO_VIDEO_ID, DRAFT_EPICS_ID, useLaunchWizard, withJobKind, type LaunchDraft } from '../../store/launchWizard.js';
 import { openChatFlow } from '../../store/chatFlow.js';
 import { useComposerPrefsStore } from '../../store/composerPrefs.js';
 import { launchDemo } from '../../api/demo.js';
@@ -38,12 +38,13 @@ import { UNFILED_MOUNT } from '../../api/interactive.js';
 import { VIBE_SOON } from '../../board/comingSoon.js';
 import { composeProduct } from '../../api/product.js';
 import { COMPOSE_MAX, RequirementsBrowser, reqKey, type ChosenRequirement } from '../product/RequirementsBrowser.js';
-import { workflowPurpose } from '../../board/workflowPurpose.js';
-import { hasWorkflowArt, WorkflowArt } from './WorkflowArt.js';
+import { catalogFromDefs, needsLine, needsRepo, withStudioKinds, type CatalogEntry, type CatalogView } from '../../board/workflowCatalog.js';
+import { useWorkflowCatalog } from '../../store/workflowCatalog.js';
+import { WorkflowCatalog } from './WorkflowCatalog.js';
 
 type Step = 'workflow' | 'what' | 'where' | 'options' | 'requirements' | 'demo' | 'review';
 const STEP_TITLE: Record<Step, string> = {
-  workflow: 'Choose the kind of job',
+  workflow: 'Choose a workflow',
   what: 'The work',
   where: 'Where does it work?',
   options: 'How should it run?',
@@ -53,8 +54,16 @@ const STEP_TITLE: Record<Step, string> = {
 };
 /** "Draft epics" (operator 2026-10-12): a project's requirements become epics, features and stories. */
 const DRAFT_EPICS_LINE = 'Turn requirements into epics and stories';
-const START_CHAT_LINE = 'Talk it through first, then start a job';
 const INSTRUCTIONS_MAX = 500;
+/** Studio's own kinds in the catalog (launched through their own routes), and the app builder that is coming. */
+const studioEntry = (e: Pick<CatalogEntry, 'id' | 'title' | 'category' | 'gets' | 'needs' | 'status' | 'tags'>): CatalogEntry => ({
+  launchId: e.id, summary: '', inputs: [], time: null, cost: null, synonyms: [], order: 0, artKey: e.id, launches: 0, lastUsedAt: null, ...e,
+});
+const STUDIO_KINDS: readonly CatalogEntry[] = [
+  studioEntry({ id: DEMO_VIDEO_ID, title: 'Demo video', category: 'create', gets: DEMO_VIDEO_LINE, needs: ['url'], status: 'ready', tags: ['demo', 'video', 'recording', 'walkthrough'] }),
+  studioEntry({ id: DRAFT_EPICS_ID, title: 'Draft epics', category: 'more', gets: DRAFT_EPICS_LINE, needs: ['project', 'requirements'], status: 'ready', tags: ['epics', 'stories', 'backlog', 'requirements', 'planning'] }),
+  studioEntry({ id: 'vibe', title: VIBE_SOON.name, category: 'create', gets: VIBE_SOON.line, needs: [], status: 'soon', tags: ['app', 'builder', 'dashboard', 'ui'] }),
+];
 /**
  * THE LAUNCH WIZARD (operator 2026-10-11 15:15Z: "someone just starts a new job by selecting a
  * workflow and we do the wizard in a modal"). Mounted once by the app shell; opened through
@@ -107,7 +116,15 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
   const presets = Array.isArray(presetsState) ? presetsState : null;
   // The wizard reads the kinds of job itself: it can open from a page with no composer to warm them (the Desk).
   useEffect(() => { loadPresets(draft.projectId ?? null); }, [draft.projectId]);
-  const rows = useMemo(() => workflowItems('', defs, presets), [defs, presets]);
+  const rows = useMemo(() => workflowItems('', defs, presets, Number.POSITIVE_INFINITY), [defs, presets]);
+  // The catalog (crew's, or today's list on an older daemon), with studio's own kinds added.
+  const catalogLoad = useWorkflowCatalog();
+  const catalog: CatalogView | null = useMemo(() => {
+    if (catalogLoad.state === 'ready') return withStudioKinds(catalogLoad.view, STUDIO_KINDS);
+    if (catalogLoad.state === 'loading' || defs === null) return null;
+    return withStudioKinds(catalogFromDefs(defs, presets), STUDIO_KINDS);
+  }, [catalogLoad, defs, presets]);
+  const [now] = useState(() => Date.now());
   const roster = useRoster();
   // A greyed helper's Sign in opens its sign-in modal over the wizard; closing it re-reads the roster,
   // and the helpers below re-derive from it (a helper that signed in is picked by default again).
@@ -156,10 +173,12 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
   }, []);
 
   const row = rows.find((r) => r.workflowId === draft.workflowId) ?? null;
+  const entry = draft.workflowId === null ? null : (catalog?.entries.find((e) => e.launchId === draft.workflowId) ?? null);
+  // A workflow the catalog says works without a repository does not ask for one; any other keeps
+  // today's rule (an unknown workflow, a preset, an older daemon's list: a repository is required).
+  const repoRequired = entry === null ? true : needsRepo(entry);
+  const jobName = entry?.title ?? workflowLabel(row?.key ?? draft.workflowId ?? '');
   const def = (defs ?? []).find((d) => d.id === draft.workflowId) ?? null;
-  // A named def that runs no code is not a delivering launch; an unknown one (a preset) may deliver.
-  // A demo video never delivers (crew launches it with `deliver: 'none'`) and its gates are the preset's own.
-  const deliverVisible = draft.workflowId !== null && !demoing && (def === null ? true : def.phases.some((p) => p.executes_code));
   const offerQe = qeCap && !demoing && workflowRequiresQe(def);
 
   // Where: the user's pick, else the repository the opening context names, else a sole repository.
@@ -170,6 +189,10 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
     return list.length === 1 ? list[0]?.id ?? null : null;
   }, [repos, draft.contextRepo]);
   const repoRef = draft.repoRef !== null ? (draft.repoRef === '' ? null : draft.repoRef) : defaultRepo;
+  // A named def that runs no code is not a delivering launch; an unknown one (a preset) may deliver.
+  // A demo video never delivers (crew launches it with `deliver: 'none'`) and its gates are the preset's own.
+  // A job with no repository has nothing to deliver a pull request to.
+  const deliverVisible = draft.workflowId !== null && !demoing && repoRef !== null && (def === null ? true : def.phases.some((p) => p.executes_code));
   const repoName = repoRef === null ? null : ((repos ?? []).find((r) => r.id === repoRef)?.name ?? repoRef);
   // The unfiled mount (`default`) is "not in a project" wherever the wizard shows the choice.
   const filedProject = draft.projectId === UNFILED_MOUNT ? null : draft.projectId;
@@ -222,7 +245,7 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
     : step === 'demo' ? demoProblem
     : step === 'workflow' ? (draft.workflowId === null ? 'Choose the kind of job.' : null)
       : step === 'what' ? (draft.intent.trim() === '' ? 'Say what you want done.' : null)
-        : step === 'where' ? (repoRef === null ? 'Choose the repository this works in.' : null)
+        : step === 'where' ? (repoRequired && repoRef === null ? 'Choose the repository this works in.' : null)
           : step === 'options' ? (eligible.length > 0 && seats.length === 0 ? 'Turn on at least one helper.'
             : offerQe && !qeOff && draft.skipQe && draft.skipQeReason.trim() === '' ? 'Say why QE acceptance is skipped.' : null)
             : null;
@@ -232,7 +255,7 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
     : demoing ? (demoProblem ?? (eligible.length > 0 && seats.length === 0 ? 'Turn on at least one helper.' : null))
     : draft.workflowId === null ? 'Choose the kind of job.'
       : draft.intent.trim() === '' ? 'Say what you want done.'
-        : repoRef === null ? 'Choose the repository this works in.'
+        : repoRequired && repoRef === null ? 'Choose the repository this works in.'
           : eligible.length > 0 && seats.length === 0 ? 'Turn on at least one helper.'
             : offerQe && !qeOff && draft.skipQe && draft.skipQeReason.trim() === '' ? 'Say why QE acceptance is skipped.' : null;
   const order: Step[] = drafting ? ['workflow', 'requirements', 'review']
@@ -256,18 +279,20 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
     el?.focus();
     autoFocused.current = el ?? null;
   }, [step]);
-  // The catalog may arrive after the first card (Draft epics) took focus: focus then moves to the
-  // card the step names (the first, or the job already picked) — only while focus is still where the
-  // wizard put it (codex r1: a card the user has moved to keeps its focus when presets arrive).
-  const cardCount = step === 'workflow' ? rows.length : -1;
+  // The catalog may arrive after focus went to the search box: focus then moves to what the step
+  // names (the job already picked) — only while focus is still where the wizard put it (codex r1:
+  // a card the user has moved to keeps its focus when the catalog arrives).
+  const catalogCount = step === 'workflow' ? (catalog?.entries.length ?? -1) : -2;
   useEffect(() => {
-    if (cardCount < 0) return;
+    if (catalogCount < 0) return;
     const active = document.activeElement;
     if (active !== autoFocused.current && active !== document.body && active !== dialogRef.current) return;
-    const el = dialogRef.current?.querySelector<HTMLElement>('[data-testid="launch-wizard-cards"] [data-autofocus="true"]') ?? null;
-    el?.focus();
+    const el = dialogRef.current?.querySelector<HTMLElement>('[data-testid="launch-catalog"] [data-autofocus="true"]') ?? null;
+    if (el === null || el === active) return;
+    el.focus();
+    el.scrollIntoView?.({ block: 'nearest' });
     autoFocused.current = el;
-  }, [cardCount]);
+  }, [catalogCount]);
   const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>): void => {
     if (e.key !== 'Tab') return;
     const nodes = [...(dialogRef.current?.querySelectorAll<HTMLElement>('button:not([disabled]), select, textarea, input, a[href], summary') ?? [])];
@@ -278,38 +303,10 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
     else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
   };
 
-  // The kinds of job, in the catalog's order, then Draft epics (studio's own): one card each.
-  const cards = [
-    ...rows.map((r) => ({ key: r.cmd, id: r.workflowId, artKey: r.key, name: workflowLabel(r.key), line: workflowPurpose(r.key, r.line) })),
-    { key: DEMO_VIDEO_ID, id: DEMO_VIDEO_ID, artKey: DEMO_VIDEO_ID, name: 'Demo video', line: DEMO_VIDEO_LINE },
-    { key: DRAFT_EPICS_ID, id: DRAFT_EPICS_ID, artKey: DRAFT_EPICS_ID, name: 'Draft epics', line: DRAFT_EPICS_LINE },
-  ];
   const pickCard = (id: string): void => {
     // codex r1: another kind of job starts its own options; studio#767: and its own words.
     if (id !== draft.workflowId) update(withJobKind(draft, id));
     setStep(id === DRAFT_EPICS_ID ? 'requirements' : id === DEMO_VIDEO_ID ? 'demo' : 'what');
-  };
-  // Arrow keys move across the grid (as many across as the layout shows), Home/End to the ends;
-  // Enter and Space pick (the cards are buttons).
-  const onCardKey = (e: React.KeyboardEvent<HTMLDivElement>): void => {
-    const grid = e.currentTarget;
-    const btns = [...grid.querySelectorAll<HTMLButtonElement>('button')];
-    const at = btns.indexOf(document.activeElement as HTMLButtonElement);
-    if (at < 0) return;
-    const top = btns[0]?.offsetTop ?? 0;
-    const across = Math.max(1, btns.filter((b) => b.offsetTop === top).length);
-    const last = btns.length - 1;
-    // Up from the top row and Down from the bottom row stay put (codex r1: never a sideways move);
-    // Down into a shorter last row lands on its last card.
-    const down = Math.floor(at / across) < Math.floor(last / across) ? Math.min(at + across, last) : at;
-    const to = e.key === 'ArrowRight' ? Math.min(at + 1, last) : e.key === 'ArrowLeft' ? Math.max(at - 1, 0)
-      : e.key === 'ArrowDown' ? down : e.key === 'ArrowUp' ? (at - across >= 0 ? at - across : at)
-        : e.key === 'Home' ? 0 : e.key === 'End' ? last : null;
-    if (to === null) return;
-    e.preventDefault();
-    const next = btns[to];
-    next?.focus();
-    next?.scrollIntoView?.({ block: 'nearest' });
   };
 
   const launch = async (): Promise<void> => {
@@ -399,7 +396,7 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
     }
   };
 
-  const title = drafting ? 'New job: Draft epics' : demoing ? 'New job: Demo video' : draft.workflowId !== null ? `New job: ${workflowLabel(row?.key ?? draft.workflowId)}` : 'New job';
+  const title = drafting ? 'New job: Draft epics' : demoing ? 'New job: Demo video' : draft.workflowId !== null ? `New job: ${jobName}` : 'New job';
   return (
     <div className="wk-launch-wizard-scrim" data-testid="launch-wizard-scrim" onMouseDown={(e) => { if (e.target === e.currentTarget) close(); }}>
       <div
@@ -423,58 +420,14 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
 
         <div className="wk-launch-wizard-body" data-testid="launch-wizard-step" data-step={step}>
           {step === 'workflow' && (
-            <fieldset className="wk-launch-wizard-fieldset">
-              <legend className="wk-field-label">The kind of job</legend>
-              {defs === null && <p className="wk-field-note">{WORKFLOWS_LOADING_LINE}</p>}
-              {/* The card grid (operator 2026-10-12): 4 across, 3 rows in view, the rest scroll inside. The
-                  frame is a size container, so a row is a third of the room the modal leaves it. */}
-              <div className="wk-launch-wizard-cards-frame">
-                <div className="wk-launch-wizard-cards" data-testid="launch-wizard-cards" onKeyDown={onCardKey}>
-                  {/* Chat first (operator 2026-10-16): not a workflow — a conversation on its own page, where
-                      a job can still be started from what is said. Focus starts here unless a job is picked. */}
-                  <button
-                    type="button"
-                    data-testid="launch-wizard-start-chat"
-                    data-autofocus={draft.workflowId !== null && cards.some((x) => x.id === draft.workflowId) ? undefined : 'true'}
-                    data-art={START_CHAT_ID}
-                    aria-pressed={false}
-                    className="wk-launch-wizard-choice wk-launch-wizard-card wk-launch-wizard-card--chat"
-                    onClick={startChat}
-                  >
-                    <span className="wk-launch-wizard-card-art"><WorkflowArt workflowKey={START_CHAT_ID} /></span>
-                    <span className="wk-launch-wizard-choice-name">Start with chat</span>
-                    <span className="wk-launch-wizard-choice-line" title={START_CHAT_LINE}>{START_CHAT_LINE}</span>
-                  </button>
-                  {cards.map((c) => {
-                    const on = c.id === DRAFT_EPICS_ID ? drafting : draft.workflowId === c.id;
-                    const autofocus = on && draft.workflowId !== null;
-                    return (
-                      <button
-                        key={c.key}
-                        type="button"
-                        data-testid={`launch-wizard-workflow-${c.id}`}
-                        data-autofocus={autofocus ? 'true' : undefined}
-                        data-art={hasWorkflowArt(c.artKey) ? c.artKey : 'fallback'}
-                        aria-pressed={on}
-                        className={`wk-launch-wizard-choice wk-launch-wizard-card${on ? ' wk-launch-wizard-choice--on' : ''}`}
-                        onClick={() => pickCard(c.id)}
-                      >
-                        <span className="wk-launch-wizard-card-art"><WorkflowArt workflowKey={c.artKey} /></span>
-                        <span className="wk-launch-wizard-choice-name">{c.name}</span>
-                        <span className="wk-launch-wizard-choice-line" title={c.line}>{c.line}</span>
-                      </button>
-                    );
-                  })}
-                  {/* The app builder (operator 2026-10-12): shown, not offered — a card that is not a button. */}
-                  <div data-testid="launch-wizard-soon" data-job="vibe" aria-disabled="true" role="group" aria-label={`${VIBE_SOON.name}, coming soon`} className="wk-launch-wizard-choice wk-launch-wizard-card wk-launch-wizard-card--soon">
-                    <span className="wk-launch-wizard-card-art"><WorkflowArt workflowKey="vibe" /></span>
-                    <span className="wk-tag">Coming soon</span>
-                    <span className="wk-launch-wizard-choice-name">{VIBE_SOON.name}</span>
-                    <span className="wk-launch-wizard-choice-line" title={VIBE_SOON.line}>{VIBE_SOON.line}</span>
-                  </div>
-                </div>
-              </div>
-            </fieldset>
+            <WorkflowCatalog
+              view={catalog}
+              pickedId={draft.workflowId}
+              intent={draft.intent}
+              now={now}
+              onPick={(e) => pickCard(e.launchId)}
+              onChat={startChat}
+            />
           )}
 
           {step === 'what' && (
@@ -489,8 +442,24 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
                 placeholder="Describe the outcome, the way you would to a teammate"
                 onChange={(e) => update({ intent: e.target.value })}
               />
-              <span className="wk-field-note">{row?.line !== undefined && row.line !== '' ? `This job: ${row.line}` : 'The helpers plan the steps from this; you approve the plan before work starts.'}</span>
+              <span className="wk-field-note">The helpers plan the steps from this; you approve the plan before work starts.</span>
             </label>
+          )}
+          {step === 'what' && entry !== null && (
+            <div className="wk-launch-shape" data-testid="launch-wizard-shape">
+              <p className="wk-launch-shape-line"><span className="wk-launch-shape-key">You get</span> {entry.gets}</p>
+              <p className="wk-launch-shape-line" data-testid="launch-wizard-shape-needs"><span className="wk-launch-shape-key">It needs</span> {needsLine(entry).replace(/^Needs /, '')}{entry.needs.length === 0 ? '' : '. The next steps ask for it.'}</p>
+              {(entry.time !== null || entry.cost !== null) && (
+                <p className="wk-launch-shape-line"><span className="wk-launch-shape-key">Usually</span> {[entry.time, entry.cost].filter(Boolean).join(' · ')}</p>
+              )}
+              {entry.inputs.filter((i) => i.key !== 'intent' && i.key !== 'repo').length > 0 && (
+                <ul className="wk-launch-shape-inputs" data-testid="launch-wizard-shape-inputs" aria-label="Say these in your words">
+                  {entry.inputs.filter((i) => i.key !== 'intent' && i.key !== 'repo').map((i) => (
+                    <li key={i.key}><span className="wk-launch-shape-key">{i.label}{i.required ? '' : ' (optional)'}</span>{i.help !== null ? ` ${i.help}` : ''}</li>
+                  ))}
+                </ul>
+              )}
+            </div>
           )}
 
           {step === 'where' && (
@@ -504,10 +473,12 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
                   value={repoRef ?? ''}
                   onChange={(e) => update({ repoRef: e.target.value })}
                 >
-                  <option value="">Choose a repository…</option>
+                  <option value="">{repoRequired ? 'Choose a repository…' : 'No repository'}</option>
                   {(repos ?? []).map((r) => <option key={r.id} value={r.id}>{r.name ?? r.id}</option>)}
                 </select>
-                <span className="wk-field-note">The code this job reads and changes{draft.contextRepo !== null && repoRef === defaultRepo && repoRef !== null ? ' (the one you started from)' : ''}.</span>
+                <span className="wk-field-note" data-testid="launch-wizard-repo-note">{repoRequired
+                  ? <>The code this job reads and changes{draft.contextRepo !== null && repoRef === defaultRepo && repoRef !== null ? ' (the one you started from)' : ''}.</>
+                  : 'Optional. This workflow works without a repository; pick one if it should read your code.'}</span>
               </label>
               <label className="wk-launch-wizard-field">
                 <span className="wk-field-label">Project</span>
@@ -760,7 +731,7 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
 
           {step === 'review' && !drafting && !demoing && (
             <dl className="wk-launch-wizard-review" data-testid="launch-wizard-review">
-              <div><dt>Job</dt><dd>{workflowLabel(row?.key ?? draft.workflowId ?? '')}</dd></div>
+              <div><dt>Job</dt><dd>{jobName}</dd></div>
               <div><dt>What</dt><dd className="wk-launch-wizard-review-intent">{draft.intent.trim()}</dd></div>
               <div><dt>Where</dt><dd>{repoName ?? 'No repository'}{projectName !== null ? ` · in ${projectName}` : ''}</dd></div>
               {seats.length > 0 && <div><dt>Helpers</dt><dd>{seats.map(seatLabel).join(', ')}</dd></div>}
@@ -789,7 +760,7 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
         </div>
 
         <footer className="wk-launch-wizard-foot">
-          {step === 'workflow' && <p className="wk-field-note wk-launch-wizard-keys" data-testid="launch-wizard-keys">Arrow keys move between the jobs; Enter picks one.</p>}
+          {step === 'workflow' && <p className="wk-field-note wk-launch-wizard-keys" data-testid="launch-wizard-keys">Type to search. Arrow keys move between workflows, Enter picks one and Esc closes.</p>}
           {step === 'workflow' && (
             <div className="wk-launch-wizard-skip" data-testid="launch-wizard-skip">
               <label className="wk-launch-wizard-skip-label">
