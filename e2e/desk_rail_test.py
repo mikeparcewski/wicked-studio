@@ -140,7 +140,8 @@ with sync_playwright() as p:
           # Projects is WORK's one primary entry: a stronger weight than its siblings and an accent mark.
           and r["primaries"] == ["nav-projects"] and r["primaryMark"]
           and (r["primaryWeight"] or 0) > (r["jobsWeight"] or 0)
-          and r["secs"] == ["WORK", "INSIGHT", "GOVERN", "RECENT"]
+          # The section labels' case is the theme's (the Wicked synthesis sets them in sentence case).
+          and [x.upper() for x in r["secs"]] == ["WORK", "INSIGHT", "GOVERN", "RECENT"]
           and 1 <= r["sessions"] <= 5 and r["allJobs"] == "/jobs"
           and all(w not in r["text"] for w in ("Everything else", "Product", "Workspace", "General settings", "Configuration", "MCP tools", "Skills"))
           # DES-SYSTEM-CHAT §1: four equal icon buttons (no words), New job · New project · Chat · Search.
@@ -184,10 +185,11 @@ with sync_playwright() as p:
     page.screenshot(path=str(SHOTS / "desk-rail-hover.png"))
     page.mouse.move(W // 2, 20)
     check("sidebar-measured", rest["page"] == 13 and rest["contrast"] >= 4.5
-          and rest["labelTransform"] == "uppercase" and rest["label"] is not None and rest["label"] <= 11 and (rest["labelSpacing"] or 0) > 0
+          # Section labels stay small; their case and tracking are the theme's (the Wicked synthesis: sentence case).
+          and rest["label"] is not None and rest["label"] <= 11
           # DES-SYSTEM-VIEW: Nerve Center is larger than every other rail item.
           and rest["nerve"] is not None and rest["nerve"] > max(rest["session"] or 0, rest["page"])
-          # Hover: the page's fill moves off the rail by a visible step, an accent tint (blue leads), AA words.
+          # Hover: the page's fill moves off the rail by a visible step (a monochrome step in the synthesis), AA words.
           and (rest["dE"] or 0) < 0.01 and (hov["dE"] or 0) >= 0.08 and (hov["hoverContrast"] or 0) >= 4.5,
           rest=rest, hover={k: hov[k] for k in ("fill", "rail", "dE", "hoverContrast")})
 

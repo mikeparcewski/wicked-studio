@@ -88,16 +88,15 @@ with sync_playwright() as p:
     page.on("request", lambda r: puts.append(json.loads(r.post_data or "{}").get("studio.appearance") or {})
             if r.method == "PUT" and r.url.endswith("/api/v1/settings") else None)
 
-    # 1. the default theme is unchanged
+    # 1. a stored pre-pair dark (the fixture's old default: dark, 230/74/68) opens as Wicked Dark on the Wicked preset,
+    #    in Inter (operator 2026-10-31: Wicked Dark and Wicked Light are the only themes; dark / light users move across)
     page.goto(f"{origin}/theme", wait_until="domcontentloaded")
     page.get_by_test_id("appearance-settings").wait_for(timeout=30000)
     page.add_style_tag(content=HIDE_GATE_TOASTS)
     page.wait_for_function("() => document.documentElement.style.getPropertyValue('--_accent-h') !== ''", timeout=15000)
     s0 = page.evaluate(STATE)
-    # S18c moved the Desk's face into styles/tokens.css (--font-sans Archivo): the default body font.
-    face, face_loaded = "Archivo", s0["archivoLoaded"]
-    check("default_unchanged", s0["theme"] is None and s0["bodyFont"] == face and face_loaded
-          and s0["accent"] == s0["defaultAccent"], state=s0)
+    check("legacy_dark_moves_to_wicked_dark", s0["theme"] == "wicked-dark" and s0["custom"] is None and s0["bodyFont"] == "Inter"
+          and s0["interLoaded"] and (s0["h"], s0["s"], s0["l"]) == ("200", "47%", "25%"), state=s0)
 
     # 2. wicked-light writes the default preset; the synthesis paints its own near-black action colour
     try:
