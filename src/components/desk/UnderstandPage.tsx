@@ -193,18 +193,18 @@ export function UnderstandPage({ project, navigate, now, compare, runs = [] }: {
       : `Reads ${scopeRepos.map((r) => r.name).join(', ')} · read-only`,
     data: () => [],
     onSent: (_text: string, chatId: string) => {
-      setOpenChat(chatId);
       const question = pendingQuestion.current;
       pendingQuestion.current = null;
-      // A follow-up in the same conversation keeps the scope it already has (a reopened one's, recorded with it).
-      if (question === null) return;
-      // A new question: the scope the chat actually opened with (the chat persists its chips before this is called; they
-      // may have been changed in the chat after a failed open; all of them off = every repository), else the page's.
+      // A follow-up in the conversation on screen keeps the scope it already has (a reopened one's, recorded with it).
+      const sameChat = chatId === openChat;
+      setOpenChat(chatId);
+      if (sameChat && question === null) return;
+      // A new conversation (asked here, or the chat's own New chat): the repositories its chat chose (it persists its
+      // chips before this is called; they may have changed after a failed open), else the page's choice.
       const kept = readAskSession(pageChatSessionKey('understand'));
-      const chatRepoChips = kept?.chatId === chatId ? (kept.chips ?? []).filter((c) => c.kind === 'repo') : [];
-      const repos = chatRepoChips.length > 0 ? repoIdsOf(chatRepoChips) ?? [] : scopeRepos.map((r) => r.id);
+      const repos = (kept?.chatId === chatId ? repoIdsOf(kept.chips) : null) ?? scopeRepos.map((r) => r.id);
       setOpenScope(repos);
-      if (!asked.some((x) => x.chatId === chatId)) setAsked(rememberAsked({ chatId, question, at: Date.now(), repos }));
+      if (question !== null && !asked.some((x) => x.chatId === chatId)) setAsked(rememberAsked({ chatId, question, at: Date.now(), repos }));
     },
     onMove: (m: string) => {
       if (m !== 'graph') return false;
@@ -227,7 +227,8 @@ export function UnderstandPage({ project, navigate, now, compare, runs = [] }: {
         const el = root?.querySelector<HTMLElement>(sel) ?? null;
         return el !== null && el.closest('[hidden]') === null ? el : null;
       };
-      (pick('[data-testid="understand-back"]') ?? pick('[data-testid="assist-input"]') ?? pick('[data-testid="understand-ask-input"]'))?.focus();
+      (pick('[data-testid="understand-back"]') ?? pick('[data-testid="assist-input"]') ?? pick('[data-testid="understand-ask-input"]')
+        ?? pick('[data-testid="understand-chat"]'))?.focus();
     }, 0);
   };
   const showPane = (next: 'chat' | 'compare' | 'coverage'): void => {
@@ -321,7 +322,7 @@ export function UnderstandPage({ project, navigate, now, compare, runs = [] }: {
 
         {/* Kept mounted while another pane shows: its draft, attachments and an answer on its way survive. */}
         {inline && (
-          <div className="wk-ue-chat wk-uc-chat" data-testid="understand-chat" hidden={pane !== 'chat'}>
+          <div className="wk-ue-chat wk-uc-chat" data-testid="understand-chat" hidden={pane !== 'chat'} tabIndex={-1}>
             <PageChat kind="understand" runs={runs as SessionView[]} navigate={navigate} variant="inline" chips={chips} provider={provider} />
           </div>
         )}

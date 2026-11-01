@@ -33,7 +33,7 @@ vi.mock('../src/components/RepoGraphModal.js', () => ({ RepoGraphModal: ({ repo,
 const chat = vi.hoisted(() => ({ props: null as null | { chips?: Array<{ key: string; on: boolean }>; provider?: { knows: string; onSent?: (t: string, id: string) => void } } }));
 vi.mock('../src/components/chat/PageChat.js', async (orig) => ({
   ...(await orig<object>()),
-  PageChat: (p: typeof chat.props) => { chat.props = p; return <div data-testid="page-chat-stub">{p?.provider?.knows}<input data-testid="page-chat-draft" defaultValue="" /></div>; },
+  PageChat: (p: typeof chat.props) => { chat.props = p; return <div data-testid="page-chat-stub">{p?.provider?.knows}<input data-testid="page-chat-draft" defaultValue="" /><textarea data-testid="assist-input" /></div>; },
 }));
 
 const { UnderstandPage } = await import('../src/components/desk/UnderstandPage.js');
@@ -376,11 +376,12 @@ describe('the Understand page', () => {
     mocks.messages.mockResolvedValue({ chat: { id: 'c-9', status: 'closed' }, messages: [seat('An answer.')], attachments: [] });
     await act(async () => { render(<UnderstandPage project="proj-1" navigate={vi.fn()} now={NOW} compare={null} />); });
     expect(screen.getAllByTestId('understand-graph-repo').map((r) => r.getAttribute('data-repo-id'))).toEqual(['r1']);
+    screen.getByTestId('understand-answer').focus();
     await act(async () => { fireEvent.click(screen.getByTestId('understand-answer')); });
     expect(screen.getAllByTestId('understand-graph-repo').map((r) => r.getAttribute('data-repo-id'))).toEqual(['r2']);
-    // On a wide screen the reopened conversation has the focus (its box, or the question box while it loads).
+    // On a wide screen the reopened conversation's box has the focus.
     await act(async () => { await new Promise((r) => setTimeout(r, 5)); });
-    expect(screen.getByTestId('understand-side')).not.toContainElement(document.activeElement as HTMLElement);
+    expect(document.activeElement).toBe(screen.getByTestId('assist-input'));
     // A follow-up in that conversation keeps its scope (the resumed chat recorded no chips of its own).
     await act(async () => { chat.props!.provider!.onSent!('And the callers?', 'c-9'); });
     expect(screen.getAllByTestId('understand-graph-repo').map((r) => r.getAttribute('data-repo-id'))).toEqual(['r2']);
@@ -413,16 +414,17 @@ describe('the Understand page', () => {
     expect(screen.getAllByTestId('understand-graph-repo').map((r) => r.getAttribute('data-repo-id'))).toEqual(['r2']);
   });
 
-  it('every repository chip turned off in the chat records "all of them", not the page’s choice', async () => {
+  it('a new conversation started in the chat (its New chat) takes its own scope, not the one before it', async () => {
+    rememberAsked({ chatId: 'c-9', question: 'About crew?', at: NOW - 1000, repos: ['r2'] });
+    mocks.messages.mockResolvedValue({ chat: { id: 'c-9', status: 'closed' }, messages: [seat('An answer.')], attachments: [] });
     await act(async () => { render(<UnderstandPage project="proj-1" navigate={vi.fn()} now={NOW} compare={null} />); });
-    fireEvent.change(screen.getByTestId('understand-ask-input'), { target: { value: 'Q?' } });
-    mocks.messages.mockRejectedValue(new ApiError(404, 'Not Found'));
-    await act(async () => { fireEvent.submit(screen.getByTestId('understand-ask')); });
-    sessionStorage.setItem('wicked.pagechat.understand.session', JSON.stringify({ chatId: 'c-all', title: 'Q', seeded: false,
-      chips: [{ key: 'repo:r1', kind: 'repo', label: 'wicked-core', ref: 'r1', on: false }] }));
-    await act(async () => { chat.props!.provider!.onSent!(questionMessage('Q?'), 'c-all'); });
-    expect(readAsked()[0]).toMatchObject({ chatId: 'c-all', repos: [] });
-    expect(screen.getAllByTestId('understand-graph-repo').map((r) => r.getAttribute('data-repo-id'))).toEqual(['r1', 'r2']);
+    await act(async () => { fireEvent.click(screen.getByTestId('understand-answer')); });
+    expect(screen.getAllByTestId('understand-graph-repo').map((r) => r.getAttribute('data-repo-id'))).toEqual(['r2']);
+    // The chat's New chat opens c-10 with the page's own choice (r1, recorded in its chips).
+    sessionStorage.setItem('wicked.pagechat.understand.session', JSON.stringify({ chatId: 'c-10', title: 'Q', seeded: false,
+      chips: [{ key: 'repo:r1', kind: 'repo', label: 'wicked-core', ref: 'r1', on: true }] }));
+    await act(async () => { chat.props!.provider!.onSent!('Something else?', 'c-10'); });
+    expect(screen.getAllByTestId('understand-graph-repo').map((r) => r.getAttribute('data-repo-id'))).toEqual(['r1']);
   });
 
   it('a graph opened from the drawer gives the focus back to the drawer’s button when it closes', async () => {
