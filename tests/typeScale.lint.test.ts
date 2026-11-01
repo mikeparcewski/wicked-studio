@@ -50,6 +50,15 @@ describe('studio CSS uses the scale only', () => {
   });
 });
 
+describe('times are meta text', () => {
+  it('a turn\'s time (· 08:40) is sans caption with tabular digits, not body size', () => {
+    const css = readFileSync(join(ROOT, 'src/styles/components.css'), 'utf8');
+    const rule = /\.wk-who-at\s*\{([^}]*)\}/u.exec(css)?.[1] ?? '';
+    expect(rule).toMatch(/font-size:\s*var\(--text-caption\)/u);
+    expect(rule).toMatch(/font-variant-numeric:\s*tabular-nums/u);
+  });
+});
+
 describe('studio TSX uses the scale only', () => {
   const files = walk(join(ROOT, 'src'), /\.(tsx|ts)$/u);
   it('no arbitrary text-[Npx], tracking-* or uppercase classes; inline type styles are tokens', () => {

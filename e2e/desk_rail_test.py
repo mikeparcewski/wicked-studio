@@ -11,8 +11,8 @@ Against the in-process fixture (wave-1 + wave-2b corpus):
      (the sessions by project, at most five, then All jobs) · Build & settings · the Nerve Center tile
      pinned last. Home carries the needs-you badge and its name says it. No Workspace group, no More,
      no "General settings"; no Notifications entry (no bell, no "notifications" nav-dest).
-  1b. MEASURED: the section labels are small caps (uppercase, letter-spaced, <= 11px), the pages 13px
-     at >= 4.5:1, and Nerve Center larger than every other item; HOVER on a page is a visible accent
+  1b. MEASURED: the section labels are caption size (<= 12px, the type scale's caption), the pages 14px
+     (body) at >= 4.5:1, and Nerve Center larger than every other item; HOVER on a page is a visible accent
      tint (dE_OK >= 0.08 from its rest fill, words still >= 4.5:1).
   2. NEW PROJECT: the button opens the New project modal; Escape closes it.
   3. RETIRED /settings: the address REPLACES itself with /system, the Settings page on its General
@@ -149,8 +149,8 @@ with sync_playwright() as p:
           and (r["nerveWords"] or "").strip() != "" and r["nerveTone"] in ("green", "yellow", "red"),
           **{k: v for k, v in r.items() if k != "text"})
 
-    # ── 1b. the sidebar MEASURED in the browser: small-caps labels, 13px pages at AA, Nerve Center the
-    #        largest item; and hover on a page is a visible ACCENT tint (operator 2026-10-26).
+    # ── 1b. the sidebar MEASURED in the browser: caption labels, 14px pages at AA, Nerve Center the
+    #        largest item (the type scale: pages body 14, labels caption 12, Nerve Center lead 16); and hover on a page is a visible ACCENT tint (operator 2026-10-26).
     MEASURE = """(hovered) => {
       const px = (el) => el ? parseFloat(getComputedStyle(el).fontSize) : null;
       // Any CSS colour (oklch, color-mix…) to sRGB through a 1×1 canvas; alpha < 0.5 counts as transparent.
@@ -184,9 +184,9 @@ with sync_playwright() as p:
     hov = page.evaluate(MEASURE, "nav-report")
     page.screenshot(path=str(SHOTS / "desk-rail-hover.png"))
     page.mouse.move(W // 2, 20)
-    check("sidebar-measured", rest["page"] == 13 and rest["contrast"] >= 4.5
+    check("sidebar-measured", rest["page"] == 14 and rest["contrast"] >= 4.5
           # Section labels stay small; their case and tracking are the theme's (the Wicked synthesis: sentence case).
-          and rest["label"] is not None and rest["label"] <= 11
+          and rest["label"] is not None and rest["label"] <= 12
           # DES-SYSTEM-VIEW: Nerve Center is larger than every other rail item.
           and rest["nerve"] is not None and rest["nerve"] > max(rest["session"] or 0, rest["page"])
           # Hover: the page's fill moves off the rail by a visible step (a monochrome step in the synthesis), AA words.

@@ -196,7 +196,7 @@ with sync_playwright() as p:
         s = shape(page, '[data-testid="desk-runs"]', "Jobs")
         rows = rows_of(page, '[data-testid="desk-runs-row"]')
         words = page.get_by_test_id("desk-runs-word").all_inner_texts()
-        check(f"{theme}:jobs-pattern", 600 <= s["col"] <= MAX_COL and s["title"] == "32px" and s["sentence"] != ""
+        check(f"{theme}:jobs-pattern", 600 <= s["col"] <= MAX_COL and s["title"] == "28px" and s["sentence"] != ""
               and s["visibleFilters"] == 1 and s["primary"] == 1 and len(rows) > 0
               and all(r["h"] >= MIN_ROW and r["dot"] and r["title"] and r["sub"] for r in rows)
               and all(w in ("Working", "Waiting on you", "Needs a decision", "Finished", "Answered", "Failed", "Stopped", "Unknown") for w in words),
@@ -230,7 +230,7 @@ with sync_playwright() as p:
         page.get_by_test_id("repo-card").first.wait_for(state="visible", timeout=15000)
         s = shape(page, '[data-testid="repos-page"]', "Repositories")
         rows = rows_of(page, '[data-testid="repo-card"]')
-        check(f"{theme}:repos-pattern", 600 <= s["col"] <= MAX_COL and s["title"] == "32px" and s["sentence"] != "" and s["primary"] == 1
+        check(f"{theme}:repos-pattern", 600 <= s["col"] <= MAX_COL and s["title"] == "28px" and s["sentence"] != "" and s["primary"] == 1
               and s["visibleFilters"] == 0 and len(rows) > 0 and all(r["h"] >= MIN_ROW and r["dot"] and r["title"] and r["sub"] for r in rows),
               shape=s, rows=rows[:3])
         check(f"{theme}:repos-no-ids", not any(FACE_IDS.search(r["text"]) for r in rows), faces=[r["text"] for r in rows][:6])

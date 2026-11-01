@@ -32,7 +32,7 @@
   background: var(--nc-fg); color: var(--nc-bg);
 }
 .wk-nc-text { display: flex; flex-direction: column; min-width: 0; line-height: 1.2; }
-.wk-nc-name { font-size: var(--text-body); font-weight: var(--weight-bold);  }
+.wk-nc-name { font-size: var(--text-lead); font-weight: var(--weight-strong); }
 .wk-nc-words { font-size: var(--text-xs); font-weight: var(--weight-semi); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* Red pulses ONCE when the tile turns red (the animation starts when the attribute starts matching)
    and never keeps animating. */
