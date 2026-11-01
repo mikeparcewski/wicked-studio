@@ -63,7 +63,7 @@ describe('what we know (pure)', () => {
   it('folds node kinds into the graph size, its files and its domains', () => {
     expect(kindsRead(CREW_KINDS)).toEqual({ state: 'ok', nodes: 46_477, files: 901, domains: 38, reqGraph: true });
     expect(kindsRead([])).toEqual({ state: 'ok', nodes: 0, files: 0, domains: 0, reqGraph: false });
-    expect([compactCount(980), compactCount(1234), compactCount(46_477), compactCount(2_340_000)]).toEqual(['980', '1.2k', '46k', '2.3M']);
+    expect([compactCount(980), compactCount(1234), compactCount(46_477), compactCount(999_499), compactCount(999_500), compactCount(2_340_000)]).toEqual(['980', '1.2k', '46k', '999k', '1M', '2.3M']);
   });
 
   it('a fully known repository: five marks, each linked to the thing itself', () => {
@@ -102,20 +102,59 @@ describe('what we know (pure)', () => {
     expect(zero.reqgraph).toMatchObject({ value: 'not built', tone: 'none' });
   });
 
-  it('a failed read is unknown, never none; the engine’s findings outrank a finished index; an index in flight links its run', () => {
+  it('a failed read is unknown, never none, whatever else answered; the engine’s findings outrank a finished index; an index in flight links its run', () => {
     const failed = byId(knowledgeMarks(repo('crew'), RUNS, { kinds: { state: 'failed' }, reqs: { state: 'failed' } }, NOW));
     expect(failed.code).toMatchObject({ value: 'unknown', tone: 'unknown' });
     expect(failed.reqs).toMatchObject({ value: 'unknown', tone: 'unknown' });
     expect(failed.reqgraph).toMatchObject({ value: 'unknown', tone: 'unknown' });
+    // No onboarding run on record does not turn a failed size read into "not built".
+    expect(byId(knowledgeMarks(repo('crew'), [], { kinds: { state: 'failed' }, reqs: { state: 'failed' } }, NOW)).code).toMatchObject({ value: 'unknown', tone: 'unknown' });
+    // The requirements read failed while the graph's kinds answered without a requirements_graph node: unknown.
+    const noReqNode = kindsRead([{ kind: 'File', count: 3 }, { kind: 'Function', count: 9 }]);
+    expect(byId(knowledgeMarks(repo('crew'), RUNS, { kinds: noReqNode, reqs: { state: 'failed' } }, NOW)).reqgraph).toMatchObject({ value: 'unknown', tone: 'unknown' });
+    // An older service (no graphBuild) and a failed kinds read: unknown; and while the kinds are still read: reading.
+    const old = { state: 'ok' as const, coverage: COV, build: null };
+    expect(byId(knowledgeMarks(repo('crew'), RUNS, { kinds: { state: 'failed' }, reqs: old }, NOW)).reqgraph).toMatchObject({ value: 'unknown' });
+    expect(byId(knowledgeMarks(repo('crew'), RUNS, { kinds: { state: 'loading' }, reqs: old }, NOW)).reqgraph).toMatchObject({ value: '…' });
+    // The run list could not be read: its marks are unknown (and lead nowhere), the code graph's age is not on record.
+    const noRuns = byId(knowledgeMarks(repo('crew'), null, known(), NOW));
+    expect(noRuns['domain-runs']).toMatchObject({ value: 'unknown', tone: 'unknown', target: { kind: 'none' } });
+    expect(noRuns.runs).toMatchObject({ value: 'unknown', tone: 'unknown' });
+    expect(noRuns.code!.title).toContain('when could not be read');
     const gap = byId(knowledgeMarks(repo('crew', [{ code: 'code_graph_root_unresolvable', message: 'No code graph root resolved.', path: null }]), RUNS, known(), NOW));
     expect(gap.code).toMatchObject({ value: 'no place to keep one', tone: 'fail' });
     const indexing = [makeView({ id: 'onb-now', repo_ref: 'crew', workflow_id: 'onboarding', status: 'executing', created_at: S - 60 })];
     expect(byId(knowledgeMarks(repo('crew'), indexing, known(), NOW)).code).toMatchObject({ value: 'indexing now', tone: 'run', target: { kind: 'run', runId: 'onb-now' } });
     // Never indexed and nothing in the store: not built (an honest none, from an answered read).
     expect(byId(knowledgeMarks(repo('crew'), [], known({ kinds: kindsRead([]) }), NOW)).code).toMatchObject({ value: 'not built', tone: 'none' });
-    // An index older than a week reads as old.
-    const old = [makeView({ id: 'onb-old', repo_ref: 'crew', workflow_id: 'onboarding', status: 'completed', created_at: S - 10 * 86_400 })];
-    expect(byId(knowledgeMarks(repo('crew'), old, known(), NOW)).code).toMatchObject({ tone: 'warn' });
+    // An index older than a week reads amber.
+    const stale = [makeView({ id: 'onb-old', repo_ref: 'crew', workflow_id: 'onboarding', status: 'completed', created_at: S - 10 * 86_400 })];
+    expect(byId(knowledgeMarks(repo('crew'), stale, known(), NOW)).code).toMatchObject({ tone: 'warn' });
+  });
+
+  it('a failed re-index never makes the old graph read fresh: it says so and links the failed job', () => {
+    const runs = [
+      makeView({ id: 'onb-ok', repo_ref: 'crew', workflow_id: 'onboarding', status: 'completed', created_at: S - 10 * 86_400 }),
+      makeView({ id: 'onb-bad', repo_ref: 'crew', workflow_id: 'onboarding', status: 'failed', created_at: S - 120 }),
+    ];
+    const code = byId(knowledgeMarks(repo('crew'), runs, known(), NOW)).code!;
+    expect(code).toMatchObject({ value: '46k symbols', tone: 'fail', flag: 're-index failed', target: { kind: 'run', runId: 'onb-bad' } });
+    expect(code.title).toContain('indexed 1 week ago');
+    // No graph at all and the only index failed: indexing failed.
+    expect(byId(knowledgeMarks(repo('crew'), runs.slice(1), known({ kinds: kindsRead([]) }), NOW)).code).toMatchObject({ value: 'indexing failed', tone: 'fail' });
+  });
+
+  it('a materialized workflow (workflow_id wf-…) is counted by its resolved name', () => {
+    const ident = (name: string) => ({ kind: 'workflow', name, user_plan: false, system: false });
+    const runs = [
+      makeView({ id: 'wf-dom', repo_ref: 'crew', workflow_id: 'wf-1234', status: 'completed', created_at: S - 60, run_identity: ident('domain-extraction') } as never),
+      makeView({ id: 'wf-onb', repo_ref: 'crew', workflow_id: 'wf-5678', status: 'executing', created_at: S - 30, run_identity: ident('onboarding') } as never),
+      makeView({ id: 'bug', repo_ref: 'crew', workflow_id: 'bug', status: 'completed', created_at: S - 90 }),
+    ];
+    const m = byId(knowledgeMarks(repo('crew'), runs, known(), NOW));
+    expect(m['domain-runs']).toMatchObject({ value: '1', target: { kind: 'run', runId: 'wf-dom' } });
+    expect(m.runs).toMatchObject({ value: '1', target: { kind: 'run', runId: 'bug' } });
+    expect(m.code).toMatchObject({ value: 'indexing now', target: { kind: 'run', runId: 'wf-onb' } });
   });
 });
 
@@ -153,12 +192,33 @@ describe('the knowledge store', () => {
     release.shift()?.();
   });
 
-  it('a failed read lands as failed (the marks say unknown)', async () => {
+  it('a failed read lands as failed (the marks say unknown) and is not kept as fresh: the next ask reads it again', async () => {
     mocks.kinds.mockRejectedValue(new Error('engine down'));
     mocks.reqs.mockRejectedValue(new ApiError(500, 'boom'));
     useRepoKnowledge.getState().ensure(['x']);
     await vi.waitFor(() => expect(useRepoKnowledge.getState().reads['x']!.kinds.state).toBe('failed'));
     expect(useRepoKnowledge.getState().reads['x']!.reqs).toEqual({ state: 'failed' });
+    expect(useRepoKnowledge.getState().at['x']).toBeUndefined();
+    mocks.kinds.mockResolvedValue({ kinds: CREW_KINDS });
+    useRepoKnowledge.getState().ensure(['x']);
+    await vi.waitFor(() => expect(useRepoKnowledge.getState().reads['x']!.kinds.state).toBe('ok'));
+    expect(mocks.kinds).toHaveBeenCalledTimes(2);
+  });
+
+  it('the page asking now goes first: a repository still queued for the list jumps ahead (asked once, however often named)', async () => {
+    const order: string[] = [];
+    const release: Array<() => void> = [];
+    mocks.kinds.mockImplementation((id: string) => { order.push(id); return new Promise((res) => { release.push(() => res({ kinds: [] })); }); });
+    mocks.reqs.mockResolvedValue({ coverage: COV, graphBuild: null });
+    useRepoKnowledge.getState().ensure(['l1', 'l2', 'l3', 'l4', 'l5', 'l6']);
+    useRepoKnowledge.getState().ensure(['l6', 'l6']);
+    expect(order).toEqual(['l1', 'l2', 'l3']);
+    await act(async () => { release.shift()?.(); await Promise.resolve(); });
+    await vi.waitFor(() => expect(order).toHaveLength(4));
+    expect(order[3]).toBe('l6');
+    while (release.length > 0) { await act(async () => { release.shift()?.(); await Promise.resolve(); }); }
+    await vi.waitFor(() => expect(order).toHaveLength(6));
+    expect(order.filter((id) => id === 'l6')).toHaveLength(1);
   });
 });
 

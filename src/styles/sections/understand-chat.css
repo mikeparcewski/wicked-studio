@@ -12,8 +12,12 @@
 
 .wk-ue.wk-uc {
   flex: 1 1 auto; min-height: 0; padding: 0; display: grid; grid-template-columns: minmax(0, 1fr) 320px;
-  justify-content: stretch; align-items: stretch;
+  /* One row the height of the page: a tall sidebar or pane scrolls inside instead of pushing the composer out. */
+  grid-template-rows: minmax(0, 1fr); justify-content: stretch; align-items: stretch;
 }
+/* Compare side by side and Coverage are wide views: they take the whole width (Back to the chat returns). */
+.wk-ue.wk-uc:not([data-pane="chat"]) { grid-template-columns: minmax(0, 1fr); }
+.wk-ue.wk-uc:not([data-pane="chat"]) .wk-uc-side { display: none; }
 .wk-uc-main { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
 .wk-uc-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-shrink: 0; padding: 0 24px 8px 0; }
 .wk-uc-title { margin: 0; font-size: var(--text-title); line-height: 1.15; font-weight: var(--weight-strong); color: var(--ink-high); letter-spacing: var(--tracking-title); }
@@ -38,6 +42,7 @@
 
 /* Asked: the page chat fills the column, unboxed, its header, thread and composer on the same measure. */
 .wk-ue-chat.wk-uc-chat { margin: 0; flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+.wk-ue-chat.wk-uc-chat[hidden] { display: none; }
 .wk-uc-chat .wk-pagechat[data-variant="inline"] {
   flex: 1 1 auto; height: auto; min-height: 0; border-radius: 0; background: transparent; box-shadow: none; overflow: hidden;
 }
@@ -120,6 +125,7 @@
 .wk-uc-morebtn svg { color: var(--ink-muted); flex-shrink: 0; }
 
 .wk-uc-scrim { display: none; }
+.wk-uc-sideclose { align-self: flex-end; margin: -8px -8px -16px 0; }
 
 /* Under 1024 px: one column; the sidebar is a drawer from the right, behind the header's button. */
 @media (max-width: 1023px) {
@@ -129,16 +135,20 @@
   .wk-uc-head, .wk-uc-body, .wk-uc-composer { padding-right: 0; }
   .wk-uc-chat .wk-assist--page > * { padding-left: 0; padding-right: 0; }
   .wk-uc-side { display: none; }
+  /* Above the top bar and the Ask bubble (40), under voice mode (45): ⌥V from the drawer closes it anyway. */
   .wk-uc[data-side="open"] .wk-uc-side {
-    display: flex; position: fixed; top: 0; right: 0; bottom: 0; z-index: 60; width: min(340px, 88vw); padding: 20px;
+    display: flex; position: fixed; top: 0; right: 0; bottom: 0; z-index: 44; width: min(340px, 88vw); padding: 20px;
     background: var(--surface-card); border-left: 1px solid var(--border-strong); box-shadow: var(--shadow-overlay);
   }
-  .wk-uc[data-side="open"] .wk-uc-scrim { display: block; position: fixed; inset: 0; z-index: 59; background: color-mix(in oklab, black 40%, transparent); }
+  .wk-uc[data-side="open"] .wk-uc-scrim { display: block; position: fixed; inset: 0; z-index: 43; background: var(--scrim, color-mix(in oklab, black 40%, transparent)); }
 }
 @media (max-width: 767px) {
   .wk-uc-title, .wk-uc-hello-title { font-size: var(--text-section); }
   .wk-uc-composer { padding-bottom: 16px; }
   /* The floating chat's bubble keeps its corner (components.css, council M1): both composers leave it a gutter. */
   .wk-uc-composer, .wk-uc-chat .wk-assist--page > div:has(> div > [data-testid="assist-input"]) { padding-right: var(--fab-clear) !important; }
+  /* The chat's box as the empty state's: the words on their own row, the mic and Send under them. */
+  .wk-uc-chat div:has(> [data-testid="assist-input"]) { flex-wrap: wrap; justify-content: flex-end; row-gap: 8px; }
+  .wk-uc-chat [data-testid="assist-input"] { flex: 1 1 100%; }
 }
 @media (prefers-reduced-motion: reduce) { .wk-uc-row, .wk-uc-graphbtn, .wk-uc-morebtn { transition: none; } }

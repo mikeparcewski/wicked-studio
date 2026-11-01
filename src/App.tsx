@@ -929,6 +929,7 @@ export function App(): React.ReactElement {
       {/* Repo graph modal — opened from RepoDetailPage */}
       {graphModalRepo !== null && (
         <RepoGraphModal
+          key={`${graphModalRepo.id}:${graphModalView}`}
           repo={graphModalRepo}
           initialFocus={graphModalFocus}
           initialView={graphModalView}

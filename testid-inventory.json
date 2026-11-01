@@ -12,8 +12,8 @@
   "studioVersion": "0.13.0",
   "counts": {
     "files": 285,
-    "occurrences": 3950,
-    "static": 3356,
+    "occurrences": 3952,
+    "static": 3358,
     "dynamic": 90,
     "computed": 44
   },
@@ -19179,6 +19179,12 @@
       ]
     },
     {
+      "testId": "understand-graph-all",
+      "files": [
+        "src/components/desk/UnderstandPage.tsx"
+      ]
+    },
+    {
       "testId": "understand-graph-empty",
       "files": [
         "src/components/desk/UnderstandPage.tsx"
@@ -19246,6 +19252,12 @@
     },
     {
       "testId": "understand-side",
+      "files": [
+        "src/components/desk/UnderstandPage.tsx"
+      ]
+    },
+    {
+      "testId": "understand-side-close",
       "files": [
         "src/components/desk/UnderstandPage.tsx"
       ]

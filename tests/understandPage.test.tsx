@@ -33,11 +33,24 @@ vi.mock('../src/components/RepoGraphModal.js', () => ({ RepoGraphModal: ({ repo,
 const chat = vi.hoisted(() => ({ props: null as null | { chips?: Array<{ key: string; on: boolean }>; provider?: { knows: string; onSent?: (t: string, id: string) => void } } }));
 vi.mock('../src/components/chat/PageChat.js', async (orig) => ({
   ...(await orig<object>()),
-  PageChat: (p: typeof chat.props) => { chat.props = p; return <div data-testid="page-chat-stub">{p?.provider?.knows}</div>; },
+  PageChat: (p: typeof chat.props) => { chat.props = p; return <div data-testid="page-chat-stub">{p?.provider?.knows}<input data-testid="page-chat-draft" defaultValue="" /></div>; },
 }));
 
 const { UnderstandPage } = await import('../src/components/desk/UnderstandPage.js');
 const { usePageChat } = await import('../src/store/pageChat.js');
+const { useVoiceStore } = await import('../src/store/voice.js');
+
+/** window.matchMedia for Understand's 1023 px drawer query, switchable mid-test. */
+function mockNarrow(on: boolean): { set: (v: boolean) => void } {
+  let narrow = on;
+  const listeners = new Set<() => void>();
+  window.matchMedia = ((q: string) => ({
+    get matches() { return q.includes('1023') ? narrow : false; }, media: q, onchange: null,
+    addEventListener: (_: string, l: () => void) => listeners.add(l), removeEventListener: (_: string, l: () => void) => listeners.delete(l),
+    addListener: () => {}, removeListener: () => {}, dispatchEvent: () => false,
+  })) as unknown as typeof window.matchMedia;
+  return { set: (v) => { narrow = v; listeners.forEach((l) => l()); } };
+}
 const onRepos = (): string[] => (chat.props?.chips ?? []).filter((c) => c.on && c.key.startsWith('repo:')).map((c) => c.key.slice(5));
 const { clearRepoCache } = await import('../src/store/repoCache.js');
 const { resetRepoKnowledge } = await import('../src/store/repoKnowledge.js');
@@ -67,7 +80,8 @@ beforeEach(() => {
   mocks.reqs.mockReset();
   mocks.reqs.mockImplementation(async () => ({ total: 1, coverage: { realPct: 90, minPct: 80, behaviorBearing: 10, real: 9, placeholders: 1, unmapped: 0, notProduct: 0 }, graphBuild: { generation: 2, coverage: null, behind: false } }));
 });
-afterEach(() => cleanup());
+const realMatchMedia = window.matchMedia;
+afterEach(() => { cleanup(); window.matchMedia = realMatchMedia; useVoiceStore.setState({ phase: 'off' }); });
 
 describe('Understand words (pure)', () => {
   it('remembers questions newest first, one per chat, and forgets a gone chat', () => {
@@ -155,6 +169,8 @@ describe('the Understand page', () => {
     // Just asked: it reads as being answered.
     expect(within(row).getByTestId('understand-answer-sub')).toHaveTextContent('Answering now…');
     expect(row).toHaveAttribute('href', '/s/c-new');
+    // It is the conversation on screen: marked in the sidebar.
+    expect(row).toHaveAttribute('aria-current', 'true');
     // New question: the box again, and the next question starts a new chat.
     fireEvent.click(screen.getByTestId('understand-new-question'));
     expect(screen.queryByTestId('understand-chat')).toBeNull();
@@ -277,21 +293,29 @@ describe('the Understand page', () => {
     expect(screen.getByTestId('understand-ask')).toBeVisible();
   });
 
-  it('a phone: the sidebar is behind the header button; Escape closes it, a reopened answer closes it, and the chat’s graph move opens it', async () => {
+  it('under 1024 px the sidebar is a modal drawer: focus in, the page inert, Escape back to its button; a reopened answer, voice mode or a wider window closes it', async () => {
+    const narrow = mockNarrow(true);
     rememberAsked({ chatId: 'c-1', question: 'Q?', at: NOW });
     mocks.messages.mockResolvedValue({ chat: { id: 'c-1', status: 'closed' }, messages: [seat('An answer.')], attachments: [] });
     await act(async () => { render(<UnderstandPage project={null} navigate={vi.fn()} now={NOW} compare={null} />); });
     const page = screen.getByTestId('understand-page');
     const toggle = screen.getByTestId('understand-side-toggle');
+    const side = screen.getByTestId('understand-side');
     expect(page).toHaveAttribute('data-side', 'closed');
-    expect(toggle).toHaveAttribute('aria-controls', screen.getByTestId('understand-side').id);
-    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute('aria-controls', side.id);
+    await act(async () => { fireEvent.click(toggle); });
     expect(page).toHaveAttribute('data-side', 'open');
     expect(toggle).toHaveAttribute('aria-expanded', 'true');
-    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(side).toHaveAttribute('role', 'dialog');
+    expect(side).toHaveAttribute('aria-modal', 'true');
+    expect(document.activeElement).toBe(screen.getByTestId('understand-side-close'));
+    expect(page.querySelector('.wk-uc-main')).toHaveAttribute('inert');
+    await act(async () => { fireEvent.keyDown(document, { key: 'Escape' }); });
     expect(page).toHaveAttribute('data-side', 'closed');
-    fireEvent.click(toggle);
+    expect(page.querySelector('.wk-uc-main')).not.toHaveAttribute('inert');
+    expect(document.activeElement).toBe(toggle);
     // Reopening an answer shows it in the main column, closes the drawer and marks the row as the open one.
+    await act(async () => { fireEvent.click(toggle); });
     await act(async () => { fireEvent.click(screen.getByTestId('understand-answer')); });
     expect(page).toHaveAttribute('data-side', 'closed');
     expect(screen.getByTestId('understand-chat')).toBeInTheDocument();
@@ -300,6 +324,63 @@ describe('the Understand page', () => {
     // The chat's "explore the graph" next move: the drawer opens on the graph links.
     await act(async () => { (chat.props!.provider as unknown as { onMove: (m: string) => boolean }).onMove('graph'); });
     expect(page).toHaveAttribute('data-side', 'open');
+    // Voice mode (⌥V from anywhere) closes it: voice draws under nothing.
+    await act(async () => { useVoiceStore.setState({ phase: 'ask' }); });
+    expect(page).toHaveAttribute('data-side', 'closed');
+    await act(async () => { useVoiceStore.setState({ phase: 'off' }); });
+    // Growing past 1024 px closes it too.
+    await act(async () => { fireEvent.click(toggle); });
+    await act(async () => { narrow.set(false); });
+    expect(page).toHaveAttribute('data-side', 'closed');
+  });
+
+  it('on a wide screen the chat’s graph move points at the sidebar (no drawer)', async () => {
+    mockNarrow(false);
+    rememberAsked({ chatId: 'c-1', question: 'Q?', at: NOW });
+    mocks.messages.mockResolvedValue({ chat: { id: 'c-1', status: 'closed' }, messages: [seat('An answer.')], attachments: [] });
+    await act(async () => { render(<UnderstandPage project={null} navigate={vi.fn()} now={NOW} compare={null} />); });
+    await act(async () => { fireEvent.click(screen.getByTestId('understand-answer')); });
+    await act(async () => { (chat.props!.provider as unknown as { onMove: (m: string) => boolean }).onMove('graph'); await new Promise((r) => setTimeout(r, 5)); });
+    expect(screen.getByTestId('understand-page')).toHaveAttribute('data-side', 'closed');
+    expect(document.activeElement).toBe(screen.getByTestId('understand-graph'));
+  });
+
+  it('Compare and Coverage keep the conversation mounted: its draft survives the trip', async () => {
+    rememberAsked({ chatId: 'c-1', question: 'Q?', at: NOW });
+    mocks.messages.mockResolvedValue({ chat: { id: 'c-1', status: 'closed' }, messages: [seat('An answer.')], attachments: [] });
+    await act(async () => { render(<UnderstandPage project={null} navigate={vi.fn()} now={NOW} compare={<div data-testid="compare-stub" />} />); });
+    await act(async () => { fireEvent.click(screen.getByTestId('understand-answer')); });
+    fireEvent.change(screen.getByTestId('page-chat-draft'), { target: { value: 'And who calls that?' } });
+    fireEvent.click(screen.getByTestId('understand-compare-toggle'));
+    expect(screen.getByTestId('understand-chat')).not.toBeVisible();
+    fireEvent.click(screen.getByTestId('understand-coverage-toggle'));
+    fireEvent.click(screen.getByTestId('understand-back'));
+    expect(screen.getByTestId('understand-chat')).toBeVisible();
+    expect(screen.getByTestId('page-chat-draft')).toHaveValue('And who calls that?');
+    // The row is marked only while the chat is what the column shows.
+    expect(screen.getByTestId('understand-answer')).toHaveAttribute('aria-current', 'true');
+  });
+
+  it('an open conversation’s graph links follow its own scope, not the page’s current choice', async () => {
+    sessionStorage.setItem('wicked.pagechat.understand.session', JSON.stringify({ chatId: 'c-9', title: 'Q', seeded: true,
+      chips: [{ key: 'repo:r2', kind: 'repo', label: 'wicked-crew', ref: 'r2', on: true }] }));
+    await act(async () => { render(<UnderstandPage project="proj-1" navigate={vi.fn()} now={NOW} compare={null} />); });
+    // The page's own choice is r1 (the project's repository), the open chat's is r2.
+    expect(screen.getAllByTestId('understand-graph-repo').map((r) => r.getAttribute('data-repo-id'))).toEqual(['r2']);
+    // Nothing is cut off, so there is no "All N repositories".
+    expect(screen.queryByTestId('understand-graph-all')).toBeNull();
+    // A new question goes back to the page's choice.
+    await act(async () => { fireEvent.click(screen.getByTestId('understand-new-question')); });
+    expect(screen.getAllByTestId('understand-graph-repo').map((r) => r.getAttribute('data-repo-id'))).toEqual(['r1']);
+  });
+
+  it('a graph link names its repository and its state for a screen reader; the graph opens outside the sidebar', async () => {
+    await act(async () => { render(<UnderstandPage project={null} navigate={vi.fn()} now={NOW} compare={null} />); });
+    await vi.waitFor(() => expect(screen.getAllByTestId('understand-graph-open')[0]).toHaveAttribute('data-tone', 'ok'));
+    const [first] = screen.getAllByTestId('understand-graph-open');
+    expect(first!.getAttribute('aria-label')).toMatch(/^wicked-core: Code graph: 24 nodes in 4 files, .*\. Open it$/);
+    fireEvent.click(first!);
+    expect(screen.getByTestId('understand-side')).not.toContainElement(screen.getByTestId('repo-graph-stub'));
   });
 });
 

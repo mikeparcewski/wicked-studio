@@ -65,6 +65,7 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph }: P
   const [requirementsOpen, setRequirementsOpen] = useState(false);
   const [repo, setRepo] = useState<RepoEntry | null>(null);
   const [runs, setRuns] = useState<SessionView[]>([]);
+  const [runsFailed, setRunsFailed] = useState(false);
   const [graph, setGraph] = useState<CodeGraphData | null>(null);
   // studio#461: a failed graph read is its own state, never "not indexed".
   const [graphFailed, setGraphFailed] = useState<string | null>(null);
@@ -103,14 +104,16 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph }: P
       api.listRepos().then(({ repos }) => repos.find(r => r.id === repoId) ?? null),
       api.listRuns().then(({ runs: rs }) =>
         rs.filter((v: SessionView) => v.session.repo_ref === repoId)
-      ).catch(() => [] as SessionView[]),
+      ).catch(() => null),
       api.getRepoGraph(repoId)
         .then(({ graph: g }) => ({ g, failed: null as string | null }))
         .catch((e: unknown) => ({ g: null, failed: e instanceof Error && e.message !== '' ? e.message : 'Studio’s service did not answer' })),
     ]).then(([r, rs, gr]) => {
       if (cancelled) return;
       setRepo(r);
-      setRuns(rs);
+      // A failed run list: the page lists none, and What we know says its run marks are unknown (not none).
+      setRuns(rs ?? []);
+      setRunsFailed(rs === null);
       setGraph(gr.g);
       setGraphFailed(gr.failed);
     }).catch((err: unknown) => {
@@ -324,7 +327,7 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph }: P
           <KnowMarks
             variant="band"
             testId="repo-know"
-            marks={knowledgeMarks(repo, runs, knowledgeOf(knowledge, repo.id), Date.now())}
+            marks={knowledgeMarks(repo, runsFailed ? null : runs, knowledgeOf(knowledge, repo.id), Date.now())}
             onOpen={(t) => {
               if (t.kind === 'code-graph') onOpenGraph();
               else if (t.kind === 'req-graph') onOpenGraph(undefined, 'domain');

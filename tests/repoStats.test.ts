@@ -165,3 +165,17 @@ describe('repoFleetModels — one fold per card, attention-ordered', () => {
     expect(fleet.filter((m) => matchesRepoChip(m, 'all'))).toHaveLength(4);
   });
 });
+
+describe('the newest onboard and capture, whatever order GET /runs lists them in (round 10)', () => {
+  // On the rig a repository's re-index two days ago came AFTER its first index sixteen days ago in the run list,
+  // so the row said "index is 16 days old" while the graph had been rebuilt.
+  it('reads the newest by its start, not by its place in the list', () => {
+    const day = 86_400;
+    const older = makeView({ id: 'onb-old', repo_ref: 'r', workflow_id: ONBOARDING_WORKFLOW_ID, status: 'failed', created_at: 1_000_000 });
+    const newer = makeView({ id: 'onb-new', repo_ref: 'r', workflow_id: ONBOARDING_WORKFLOW_ID, status: 'completed', created_at: 1_000_000 + 14 * day });
+    expect(repoOnboard([older, newer], 'r')).toMatchObject({ state: 'ready', run: { session: { id: 'onb-new' } } });
+    const capOld = makeView({ id: 'cap-old', repo_ref: 'r', workflow_id: CAPTURE_LEARNINGS_WORKFLOW_ID, status: 'completed', created_at: 1_000_000 });
+    const capNew = makeView({ id: 'cap-new', repo_ref: 'r', workflow_id: CAPTURE_LEARNINGS_WORKFLOW_ID, status: 'failed', created_at: 1_000_000 + day });
+    expect(repoCapture([capOld, capNew], 'r')).toMatchObject({ state: 'failed', run: { session: { id: 'cap-new' } } });
+  });
+});

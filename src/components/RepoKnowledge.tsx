@@ -32,7 +32,7 @@ export function KnowMarks({ marks, onOpen, variant = 'strip', repoName, testId =
             {m.target.kind === 'none' ? (
               <span {...common} data-link="false">{body}</span>
             ) : (
-              <button type="button" {...common} data-link="true" aria-label={`${repoName !== undefined ? `${repoName}: ` : ''}${m.title}. Open it`}
+              <button type="button" {...common} data-link="true" aria-label={`${repoName !== undefined ? `${repoName}: ` : ''}${m.title.replace(/\.$/, '')}. Open it`}
                 onClick={() => onOpen(m.target, m)}>
                 {body}
               </button>

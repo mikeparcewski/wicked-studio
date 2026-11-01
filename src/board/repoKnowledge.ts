@@ -1,6 +1,6 @@
 import type { GraphKind, RepoEntry, SessionView } from '../api/types.js';
 import { relTime } from './relTime.js';
-import { repoGraphGap, repoOnboard, type RepoGraphGap, type RepoOnboard } from './repoStats.js';
+import { ONBOARDING_WORKFLOW_ID, repoGraphGap, repoOnboard, type RepoGraphGap, type RepoOnboard } from './repoStats.js';
 import { DOMAIN_EXTRACTION_ID, type GraphBuild, type RequirementsCoverage } from './requirementsState.js';
 import { statusWord } from './statusWords.js';
 
@@ -77,11 +77,11 @@ export interface KnowMark {
 
 const DAY_MS = 86_400_000;
 
-/** 46477 -> "46k", 1234 -> "1.2k", 980 -> "980". */
+/** 46477 -> "46k", 1234 -> "1.2k", 980 -> "980", 999_500 -> "1M". */
 export function compactCount(n: number): string {
   if (n < 1000) return String(n);
   if (n < 10_000) return `${(Math.floor(n / 100) / 10).toString()}k`;
-  if (n < 1_000_000) return `${Math.round(n / 1000)}k`;
+  if (n < 999_500) return `${Math.round(n / 1000)}k`;
   return `${(Math.round(n / 100_000) / 10).toString()}M`;
 }
 const plural = (n: number, one: string, many = `${one}s`): string => `${n.toLocaleString('en-US')} ${n === 1 ? one : many}`;
@@ -94,15 +94,26 @@ function newestFirst(runs: readonly SessionView[]): SessionView[] {
   return [...runs].sort((a, b) => (secs(b.session.created_at) ?? 0) - (secs(a.session.created_at) ?? 0));
 }
 
+/**
+ * A run's workflow: the resolved preset or workflow name (`run_identity.name`) when the daemon stamps one (a
+ * materialized definition's `workflow_id` is `wf-<id>`), else its `workflow_id`.
+ */
+export function runWorkflow(v: SessionView): string {
+  const id = (v.session as { run_identity?: { kind?: string; name?: string | null } }).run_identity;
+  if ((id?.kind === 'preset' || id?.kind === 'workflow') && typeof id.name === 'string' && id.name !== '') return id.name;
+  return v.session.workflow_id ?? '';
+}
+
 function runTone(v: SessionView): MarkTone {
   const t = statusWord(v).tone;
   return t === 'quiet' ? 'none' : t;
 }
 
-function codeMark(onboard: RepoOnboard, gap: RepoGraphGap | null, kinds: KindsRead, now: number): KnowMark {
+function codeMark(onboard: RepoOnboard, lastIndexed: SessionView | null, gap: RepoGraphGap | null, kinds: KindsRead, runsKnown: boolean, now: number): KnowMark {
   const base = { id: 'code' as const, label: 'Code graph' };
-  const at = onboard.run === null ? null : startedAt(onboard.run);
-  const when = at === null ? 'when is not on record' : `indexed ${relTime(at, now)}`;
+  // When the graph was built: the newest onboarding run that FINISHED (a later failed one built nothing).
+  const at = lastIndexed === null ? null : startedAt(lastIndexed);
+  const when = at === null ? (runsKnown ? 'when is not on record' : 'when could not be read') : `indexed ${relTime(at, now)}`;
   if (onboard.state === 'onboarding' && onboard.run !== null) {
     return { ...base, value: 'indexing now', title: 'Code graph: an indexing job is building it now', tone: 'run', target: { kind: 'run', runId: onboard.run.session.id } };
   }
@@ -111,24 +122,24 @@ function codeMark(onboard: RepoOnboard, gap: RepoGraphGap | null, kinds: KindsRe
     return { ...base, value: v, title: `Code graph: ${gap.finding.message}`, tone: 'fail', target: { kind: 'code-graph' } };
   }
   if (kinds.state === 'loading') return { ...base, value: '…', title: 'Code graph: reading…', tone: 'unknown', target: { kind: 'code-graph' } };
-  if (kinds.state === 'ok' && kinds.nodes > 0) {
+  // A failed read is unknown, whatever the runs say.
+  if (kinds.state === 'failed') return { ...base, value: 'unknown', title: 'Code graph: its size could not be read just now', tone: 'unknown', target: { kind: 'code-graph' } };
+  const failedRun = onboard.state === 'failed' ? onboard.run : null;
+  if (kinds.nodes > 0) {
+    const size = `${kinds.nodes.toLocaleString('en-US')} nodes in ${plural(kinds.files, 'file')}`;
+    // The newest indexing job failed: the graph is the older one, and the failure is said (and linked).
+    if (failedRun !== null) {
+      return { ...base, value: `${compactCount(kinds.nodes)} symbols`, flag: 're-index failed', tone: 'fail',
+        title: `Code graph: ${size}, ${when}. The newest indexing job failed.`, target: { kind: 'run', runId: failedRun.session.id } };
+    }
     // Older than a week: amber (the row's own line already says how old).
     const stale = at !== null && now - at > 7 * DAY_MS;
-    return {
-      ...base,
-      value: `${compactCount(kinds.nodes)} symbols`,
-      title: `Code graph: ${kinds.nodes.toLocaleString('en-US')} nodes in ${plural(kinds.files, 'file')}, ${when}`,
-      tone: stale ? 'warn' : 'ok',
-      target: { kind: 'code-graph' },
-    };
+    return { ...base, value: `${compactCount(kinds.nodes)} symbols`, title: `Code graph: ${size}, ${when}`, tone: stale ? 'warn' : 'ok', target: { kind: 'code-graph' } };
   }
-  if (onboard.state === 'failed' && onboard.run !== null) {
-    return { ...base, value: 'indexing failed', title: `Code graph: the last indexing job failed (${when})`, tone: 'fail', target: { kind: 'run', runId: onboard.run.session.id } };
+  if (failedRun !== null) {
+    return { ...base, value: 'indexing failed', title: 'Code graph: the last indexing job failed', tone: 'fail', target: { kind: 'run', runId: failedRun.session.id } };
   }
-  if (kinds.state === 'failed' && onboard.state !== 'never') {
-    return { ...base, value: 'unknown', title: 'Code graph: its size could not be read just now', tone: 'unknown', target: { kind: 'code-graph' } };
-  }
-  return { ...base, value: 'not built', title: 'Code graph: not built yet. Indexing the repository builds it.', tone: 'none', target: { kind: 'code-graph' } };
+  return { ...base, value: 'not built', title: 'Code graph: not built yet. Indexing the repository builds it', tone: 'none', target: { kind: 'code-graph' } };
 }
 
 function reqsMark(reqs: ReqsRead): KnowMark {
@@ -138,12 +149,12 @@ function reqsMark(reqs: ReqsRead): KnowMark {
   const c = reqs.state === 'ok' ? reqs.coverage : reqs.share;
   if (c === null) {
     return reqs.state === 'none'
-      ? { ...base, value: 'none yet', title: 'Requirements: not extracted yet. A domain extraction job states them.', tone: 'none' }
+      ? { ...base, value: 'none yet', title: 'Requirements: not extracted yet. A domain extraction job states them', tone: 'none' }
       : { ...base, value: 'listed', title: 'Requirements: listed (this service does not count the real share)', tone: 'ok' };
   }
   // Nothing extracted yet, though the repository has behaviour to cover: still none, with the count in the title.
   if (reqs.state === 'none' && c.real === 0) {
-    return { ...base, value: 'none yet', title: `Requirements: not extracted yet (0 of ${c.behaviorBearing.toLocaleString('en-US')} behaviours). A domain extraction job states them.`, tone: 'none' };
+    return { ...base, value: 'none yet', title: `Requirements: not extracted yet (0 of ${c.behaviorBearing.toLocaleString('en-US')} behaviours). A domain extraction job states them`, tone: 'none' };
   }
   const pct = c.realPct === 0 && c.real > 0 ? '<1%' : `${c.realPct}%`;
   const met = c.realPct >= c.minPct;
@@ -161,25 +172,31 @@ function reqGraphMark(reqs: ReqsRead, kinds: KindsRead): KnowMark {
   const base = { id: 'reqgraph' as const, label: 'Requirements graph', target: { kind: 'req-graph' } as MarkTarget };
   const domains = kinds.state === 'ok' ? kinds.domains : null;
   const dom = domains === null || domains === 0 ? '' : ` · ${plural(domains, 'domain')}`;
-  if (reqs.state === 'loading' || (reqs.state !== 'ok' && kinds.state === 'loading')) return { ...base, value: '…', title: 'Requirements graph: reading…', tone: 'unknown' };
+  const unknown: KnowMark = { ...base, value: 'unknown', title: 'Requirements graph: could not be read just now', tone: 'unknown' };
+  const reading: KnowMark = { ...base, value: '…', title: 'Requirements graph: reading…', tone: 'unknown' };
+  if (reqs.state === 'loading') return reading;
   const build = reqs.state === 'ok' ? reqs.build : null;
   if (build !== null) {
-    if (build.generation === 0) return { ...base, value: 'not built', title: 'Requirements graph: not built yet. A domain extraction job builds it once the real share reaches the minimum.', tone: 'none' };
+    if (build.generation === 0) return { ...base, value: 'not built', title: 'Requirements graph: not built yet. A domain extraction job builds it once the real share reaches the minimum', tone: 'none' };
     return {
       ...base,
       value: `build ${build.generation}${dom}`,
-      title: `Requirements graph: build ${build.generation}${dom}${build.behind ? '. It is behind: requirements were mapped since it was built.' : ', up to date'}`,
+      title: `Requirements graph: build ${build.generation}${dom}${build.behind ? '. It is behind: requirements were mapped since it was built' : ', up to date'}`,
       tone: build.behind ? 'warn' : 'ok',
       ...(build.behind ? { flag: 'behind' } : {}),
     };
   }
-  // An older service sends no build: the store's own requirements_graph node says whether one exists.
+  // No build on the wire (an older service, or the requirements read failed): the store's own requirements_graph
+  // node says one exists; its absence proves nothing unless both reads answered.
   if (kinds.state === 'ok' && kinds.reqGraph) return { ...base, value: `built${dom}`, title: `Requirements graph: built${dom}`, tone: 'ok' };
-  if (reqs.state === 'failed' && kinds.state !== 'ok') return { ...base, value: 'unknown', title: 'Requirements graph: could not be read just now', tone: 'unknown' };
+  if (reqs.state === 'failed') return unknown;
+  if (kinds.state === 'loading') return reading;
+  if (kinds.state === 'failed' && reqs.state === 'ok') return unknown;
   return { ...base, value: 'not built', title: 'Requirements graph: not built yet', tone: 'none' };
 }
 
-function runsMark(id: 'domain-runs' | 'runs', label: string, runs: readonly SessionView[], now: number): KnowMark {
+function runsMark(id: 'domain-runs' | 'runs', label: string, runs: readonly SessionView[] | null, now: number): KnowMark {
+  if (runs === null) return { id, label, value: 'unknown', title: `${label}: the job list could not be read just now`, tone: 'unknown', target: { kind: 'none' } };
   const newest = newestFirst(runs)[0];
   if (newest === undefined) {
     return { id, label, value: 'none', title: `${label}: none on record`, tone: 'none', target: { kind: 'none' } };
@@ -195,14 +212,21 @@ function runsMark(id: 'domain-runs' | 'runs', label: string, runs: readonly Sess
   };
 }
 
-/** The five marks for one repository. `runs` may hold every run: the repo's own are picked here. */
-export function knowledgeMarks(repo: Pick<RepoEntry, 'id' | 'findings'>, runs: readonly SessionView[], read: RepoKnowledgeRead, now: number): KnowMark[] {
-  const mine = runs.filter((v) => v.session.repo_ref === repo.id && v.session.archived_at == null);
-  const onboard = repoOnboard(mine, repo.id);
-  const domain = mine.filter((v) => v.session.workflow_id === DOMAIN_EXTRACTION_ID);
-  const other = mine.filter((v) => v.session.workflow_id !== DOMAIN_EXTRACTION_ID && v.session.workflow_id !== 'onboarding');
+/**
+ * The five marks for one repository. `runs` may hold every run: the repo's own are picked here. `null` = the run
+ * list could not be read (its marks say unknown, never none).
+ */
+export function knowledgeMarks(repo: Pick<RepoEntry, 'id' | 'findings'>, runs: readonly SessionView[] | null, read: RepoKnowledgeRead, now: number): KnowMark[] {
+  const mine = (runs ?? []).filter((v) => v.session.repo_ref === repo.id && v.session.archived_at == null);
+  const onboards = mine.filter((v) => runWorkflow(v) === ONBOARDING_WORKFLOW_ID);
+  // repoOnboard reads `workflow_id` and takes the first verdict it meets: a materialized onboarding run is handed to
+  // it under its resolved name, newest first (whatever order the run list came in).
+  const onboard = repoOnboard(newestFirst(onboards).map((v) => ({ ...v, session: { ...v.session, workflow_id: ONBOARDING_WORKFLOW_ID } })), repo.id);
+  const lastIndexed = newestFirst(onboards).find((v) => v.session.status === 'completed') ?? null;
+  const domain = runs === null ? null : mine.filter((v) => runWorkflow(v) === DOMAIN_EXTRACTION_ID);
+  const other = runs === null ? null : mine.filter((v) => runWorkflow(v) !== DOMAIN_EXTRACTION_ID && runWorkflow(v) !== ONBOARDING_WORKFLOW_ID);
   return [
-    codeMark(onboard, repoGraphGap(repo), read.kinds, now),
+    codeMark(onboard, lastIndexed, repoGraphGap(repo), read.kinds, runs !== null, now),
     reqsMark(read.reqs),
     reqGraphMark(read.reqs, read.kinds),
     runsMark('domain-runs', 'Domain runs', domain, now),

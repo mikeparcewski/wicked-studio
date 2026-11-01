@@ -149,7 +149,7 @@ with sync_playwright() as pw:
                docScroll: document.scrollingElement.scrollHeight - document.scrollingElement.clientHeight };
     }""")
     check("understand-chat-layout", side.is_visible() and geo["side"]["left"] >= geo["chat"]["right"] - 1
-          and geo["vh"] - geo["inputBottom"] < 120 and geo["docScroll"] == 0, geo=geo)
+          and 0 <= geo["vh"] - geo["inputBottom"] < 120 and geo["docScroll"] == 0, geo=geo)
     check("understand-side-parts", tid(page, "understand-answer").first.get_attribute("aria-current") == "true"
           and side.locator('[data-testid="understand-graph"]').count() == 1
           and side.locator('[data-testid="understand-compare-toggle"]').count() == 1)
@@ -164,9 +164,19 @@ with sync_playwright() as pw:
     tid(page, "understand-side-toggle").click()
     side.wait_for(state="visible", timeout=5_000)
     page.screenshot(path=str(SHOTS / "desk-page-chat-understand-side-390.png"))
+    focus_in = page.evaluate("() => document.querySelector('[data-testid=understand-side]').contains(document.activeElement)")
     page.keyboard.press("Escape")
     page.wait_for_timeout(300)
-    check("understand-side-drawer", hidden_first and not side.is_visible())
+    back_on_toggle = page.evaluate("() => document.activeElement?.dataset?.testid") == "understand-side-toggle"
+    phone = page.evaluate("""() => {
+      const i = document.querySelector('[data-testid="understand-chat"] [data-testid="assist-input"]').getBoundingClientRect();
+      const send = document.querySelector('[data-testid="understand-chat"] [data-testid="assist-send"]').getBoundingClientRect();
+      return { vh: innerHeight, vw: innerWidth, inputBottom: i.bottom, sendRight: send.right, sendBottom: send.bottom,
+               docScroll: document.scrollingElement.scrollHeight - document.scrollingElement.clientHeight };
+    }""")
+    check("understand-side-drawer", hidden_first and focus_in and back_on_toggle and not side.is_visible())
+    check("understand-phone-composer-in-view", 0 <= phone["vh"] - phone["sendBottom"] < 160 and phone["sendRight"] <= phone["vw"]
+          and phone["docScroll"] == 0, phone=phone)
     page.set_viewport_size({"width": 1440, "height": 900})
 
     # ── 4. Evaluate ───────────────────────────────────────────────────────────────────────────

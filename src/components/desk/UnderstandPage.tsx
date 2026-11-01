@@ -1,5 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, Columns3, ListChecks, MessageSquarePlus, Network, PanelRight, Share2 } from 'lucide-react';
+import { ArrowLeft, Columns3, ListChecks, MessageSquarePlus, Network, PanelRight, Share2, X } from 'lucide-react';
 import { api } from '../../api/client.js';
 import { apiStatus } from '../../api/errors.js';
 import type { RepoEntry, SessionView } from '../../api/types.js';
@@ -21,6 +21,26 @@ import { CoverageView } from '../CoverageView.js';
 import { RepoGraphModal } from '../RepoGraphModal.js';
 import { Skeleton } from '../ui/index.js';
 import { VoiceMicButton } from '../voice/VoiceMicButton.js';
+import { isTopModal, useLayerStore } from '../../store/layers.js';
+import { useVoiceStore } from '../../store/voice.js';
+
+/** Below this the sidebar is a drawer (understand-chat.css uses the same width). */
+const NARROW_QUERY = '(max-width: 1023px)';
+const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+function useNarrow(): boolean {
+  const read = (): boolean => typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia(NARROW_QUERY).matches;
+  const [narrow, setNarrow] = useState(read);
+  useEffect(() => {
+    if (typeof window.matchMedia !== 'function') return undefined;
+    const mq = window.matchMedia(NARROW_QUERY);
+    const on = (): void => setNarrow(mq.matches);
+    on();
+    mq.addEventListener?.('change', on);
+    return () => mq.removeEventListener?.('change', on);
+  }, []);
+  return narrow;
+}
 
 /** Recent answers shows this many; the rest stay remembered. */
 const RECENT_SHOWN = 5;
@@ -34,13 +54,16 @@ type AnswerRead =
   | { phase: 'failed' };
 
 /**
- * UNDERSTAND (the calm page; desk-pages-redesign mockup, operator 2026-10-26: "needs more whitespace,
- * easy to scan … think humans, we get overwhelmed easy"). One column: the title and one sentence, ONE
- * question box with three suggested questions under it, then Recent answers as roomy rows. The
- * question is the operator's own and is sent from here as the first message of a new chat (the
- * answer opens in the chat window, cited by the chat's citation check). Everything else is folded
- * away, closed until asked for: Explore the graph (each repository's code graph with its hotspots
- * and blast radius, and coverage) and Compare side by side (the comparison and its analysis job).
+ * UNDERSTAND, a chat page (operator, round 10: "should look more like a chatgpt chat except with a right sidebar
+ * that allows you to see recent q&a and has quick links to the repo graphs (code and requirements)").
+ *  - Main column: before a question, a greeting with the repository chips and three suggested questions, and the
+ *    question box pinned at the bottom (mic + Ask); once asked (or a recent answer reopened), the page chat
+ *    (`PageChat`, crew's read-only `analyze` workflow on the chosen repositories) fills the column with its own
+ *    composer at the bottom. The chat stays mounted while Compare side by side or Coverage takes the column.
+ *  - Right sidebar: Recent answers (crew's chat history merged with this browser's, each reopening in place, the
+ *    open one marked), the code and requirements graph links of the repositories the conversation is about (all
+ *    of them before any is chosen; their state is read once a minute through store/repoKnowledge), and More.
+ *  - Under 1024 px the sidebar is a modal drawer behind the header's button.
  */
 export function UnderstandPage({ project, navigate, now, compare, runs = [] }: {
   /** The project on screen (a project's page): the chat is scoped to it. */
@@ -57,8 +80,14 @@ export function UnderstandPage({ project, navigate, now, compare, runs = [] }: {
   const moreId = useId();
   const sideId = useId();
   const graphsRef = useRef<HTMLElement | null>(null);
-  /** The sidebar on a phone: a drawer behind the header's button (always shown from 1024 px). */
+  const sideRef = useRef<HTMLElement | null>(null);
+  const toggleRef = useRef<HTMLButtonElement | null>(null);
+  const mainRef = useRef<HTMLDivElement | null>(null);
+  const narrow = useNarrow();
+  /** The sidebar under 1024 px: a drawer behind the header's button (always shown from 1024 px). */
   const [sideOpen, setSideOpen] = useState(false);
+  /** A repository's graph, opened from the sidebar (drawn outside it, so a drawer closing never hides it). */
+  const [graphOf, setGraphOf] = useState<{ repo: RepoEntry; view: 'code' | 'domain' } | null>(null);
   /** The main column: the chat, or one of the sidebar's More views. */
   const [pane, setPane] = useState<'chat' | 'compare' | 'coverage'>('chat');
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -116,6 +145,8 @@ export function UnderstandPage({ project, navigate, now, compare, runs = [] }: {
   // read-only `analyze` workflow on the chosen repositories (a plain chat on a crew that does not run it); the
   // cited answer, the guided "What next?" and follow-ups grow under it here. Recent answers reopen in place.
   const [inline, setInline] = useState(() => readAskSession(pageChatSessionKey('understand')) !== null);
+  /** The conversation on screen (Recent answers marks it): the one reopened or just asked, or the page's kept one. */
+  const [openChat, setOpenChat] = useState<string | null>(() => readAskSession(pageChatSessionKey('understand'))?.chatId ?? null);
   const pendingQuestion = useRef<string | null>(null);
   const scopeRepos = useMemo(() => (repos ?? []).filter((r) => chosen.includes(r.id)).map((r) => ({ id: r.id, name: r.name })), [repos, chosen]);
   const pname = onProject ? project : null;
@@ -126,52 +157,93 @@ export function UnderstandPage({ project, navigate, now, compare, runs = [] }: {
     if (question === '') { inputRef.current?.focus(); return; }
     pendingQuestion.current = question;
     setInline(true);
+    setOpenChat(null);
     askPage('understand', { text: questionMessage(question), send: true, fresh: true });
     setQ('');
   };
   const newQuestion = (): void => {
     usePageChat.getState().fresh('understand');
     setInline(false);
+    setOpenChat(null);
     setPane('chat');
     setTimeout(() => inputRef.current?.focus(), 0);
   };
   const reopen = (a: AskedQuestion): void => {
     usePageChat.getState().resume('understand', a.chatId, a.question);
     setInline(true);
+    setOpenChat(a.chatId);
     setPane('chat');
-    setSideOpen(false);
+    closeSide(null);
   };
   const provider = {
     knows: scopeRepos.length === 0 ? (onProject ? 'Reads this project’s repositories · read-only' : 'Reads all repositories · read-only')
       : `Reads ${scopeRepos.map((r) => r.name).join(', ')} · read-only`,
     data: () => [],
     onSent: (_text: string, chatId: string) => {
+      setOpenChat(chatId);
       const question = pendingQuestion.current;
       pendingQuestion.current = null;
       if (question !== null && !asked.some((x) => x.chatId === chatId)) setAsked(rememberAsked({ chatId, question, at: Date.now() }));
     },
     onMove: (m: string) => {
       if (m !== 'graph') return false;
-      // The sidebar's graph links (a drawer on a phone: it opens).
-      setSideOpen(true);
-      setTimeout(() => { const sec = graphsRef.current; if (sec !== null) { sec.scrollIntoView?.({ block: 'start', behavior: 'smooth' }); sec.focus({ preventScroll: true }); } }, 0);
+      // The sidebar's graph links (under 1024 px the drawer opens on them).
+      if (narrow) setSideOpen(true);
+      setTimeout(() => { const sec = graphsRef.current; if (sec !== null) { sec.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' }); sec.focus({ preventScroll: true }); } }, 0);
       return true;
     },
   };
   const pick = (s: string): void => { setQ(s); inputRef.current?.focus(); };
-  const closeSide = (): void => setSideOpen(false);
+  // The drawer (under 1024 px) is a modal: the modal rung, the page behind inert, focus in and contained, Escape or the
+  // scrim out (focus back to its button); voice mode opening, or the window growing past it, closes it.
+  const focusAfter = useRef<'toggle' | null>(null);
+  const closeSide = (to: 'toggle' | null = 'toggle'): void => { focusAfter.current = to; setSideOpen(false); };
+  const drawer = narrow && sideOpen;
+  useEffect(() => { if (!narrow && sideOpen) setSideOpen(false); }, [narrow, sideOpen]);
+  const voiceOn = useVoiceStore((st) => st.phase !== 'off');
+  useEffect(() => { if (voiceOn && sideOpen) closeSide(null); }, [voiceOn, sideOpen]);
   useEffect(() => {
-    if (!sideOpen) return undefined;
-    const esc = (e: KeyboardEvent): void => { if (e.key === 'Escape') setSideOpen(false); };
-    document.addEventListener('keydown', esc);
-    return () => document.removeEventListener('keydown', esc);
-  }, [sideOpen]);
+    if (!drawer) return undefined;
+    const id = useLayerStore.getState().pushModal();
+    const main = mainRef.current;
+    const tg = toggleRef.current;
+    main?.setAttribute('inert', '');
+    sideRef.current?.querySelector<HTMLElement>(FOCUSABLE)?.focus();
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape' && isTopModal(id)) { e.stopPropagation(); closeSide('toggle'); return; }
+      if (e.key !== 'Tab' || sideRef.current === null) return;
+      const els = [...sideRef.current.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((el) => el.offsetParent !== null || el === document.activeElement);
+      if (els.length === 0) return;
+      const a = els[0]!; const z = els[els.length - 1]!;
+      if (e.shiftKey && document.activeElement === a) { e.preventDefault(); z.focus(); }
+      else if (!e.shiftKey && document.activeElement === z) { e.preventDefault(); a.focus(); }
+    };
+    document.addEventListener('keydown', onKey, true);
+    // A modal opened from the drawer (a repository's graph) takes over: the drawer steps aside.
+    const offRung = useLayerStore.subscribe((st) => {
+      if (st.modalIds.includes(id) && st.modalIds[st.modalIds.length - 1] !== id) { focusAfter.current = null; setSideOpen(false); }
+    });
+    return () => {
+      offRung();
+      document.removeEventListener('keydown', onKey, true);
+      useLayerStore.getState().popModal(id);
+      main?.removeAttribute('inert');
+      const to = focusAfter.current; focusAfter.current = null;
+      if (to === 'toggle') tg?.focus();
+    };
+  }, [drawer]);
+  // The repositories a conversation is about: the open chat's own scope (kept with it), else the page's choice.
+  const graphScope = useMemo(() => {
+    const kept = inline ? readAskSession(pageChatSessionKey('understand')) : null;
+    const repoChips = (kept?.chatId === openChat ? kept?.chips ?? [] : []).filter((c) => c.kind === 'repo' && c.on);
+    return repoChips.length > 0 ? repoChips.map((c) => c.ref ?? c.key.replace(/^repo:/, '')) : scopeRepos.map((r) => r.id);
+  }, [inline, openChat, scopeRepos]);
   // The open conversation, marked in Recent answers.
-  const openChatId = inline ? readAskSession(pageChatSessionKey('understand'))?.chatId ?? null : null;
+  const openChatId = inline ? openChat : null;
 
   return (
     <div className="wk-ue wk-uc" data-testid="understand-page" data-side={sideOpen ? 'open' : 'closed'} data-pane={pane}>
-      <div className="wk-uc-main">
+      <div className="wk-uc-main" ref={mainRef}>
         <header className="wk-uc-head">
           <div className="wk-pagetitle">
             <h1 className="wk-uc-title">Understand</h1>
@@ -181,7 +253,7 @@ export function UnderstandPage({ project, navigate, now, compare, runs = [] }: {
               </button>
             )}
           </div>
-          <button type="button" className="wk-pagechat-titlebtn wk-uc-sidebtn" data-testid="understand-side-toggle" aria-expanded={sideOpen} aria-controls={sideId}
+          <button ref={toggleRef} type="button" className="wk-pagechat-titlebtn wk-uc-sidebtn" data-testid="understand-side-toggle" aria-expanded={sideOpen} aria-controls={sideId}
             aria-label={sideOpen ? 'Hide recent answers and graphs' : 'Recent answers and graphs'} title="Recent answers and graphs" onClick={() => setSideOpen((v) => !v)}>
             <PanelRight size={18} aria-hidden />
           </button>
@@ -211,8 +283,9 @@ export function UnderstandPage({ project, navigate, now, compare, runs = [] }: {
           </div>
         )}
 
-        {pane === 'chat' && inline && (
-          <div className="wk-ue-chat wk-uc-chat" data-testid="understand-chat">
+        {/* Kept mounted while another pane shows: its draft, attachments and an answer on its way survive. */}
+        {inline && (
+          <div className="wk-ue-chat wk-uc-chat" data-testid="understand-chat" hidden={pane !== 'chat'}>
             <PageChat kind="understand" runs={runs as SessionView[]} navigate={navigate} variant="inline" chips={chips} provider={provider} />
           </div>
         )}
@@ -257,8 +330,14 @@ export function UnderstandPage({ project, navigate, now, compare, runs = [] }: {
         </div>
       </div>
 
-      {sideOpen && <div className="wk-uc-scrim" aria-hidden onClick={closeSide} />}
-      <aside id={sideId} className="wk-uc-side" data-testid="understand-side" aria-label="Recent answers and repository graphs">
+      {drawer && <div className="wk-uc-scrim" aria-hidden onClick={() => closeSide('toggle')} />}
+      <aside id={sideId} ref={sideRef} className="wk-uc-side" data-testid="understand-side" aria-label="Recent answers and repository graphs"
+        {...(drawer ? { role: 'dialog', 'aria-modal': true } : {})}>
+        {drawer && (
+          <button type="button" className="wk-uc-sideclose wk-pagechat-titlebtn" data-testid="understand-side-close" aria-label="Close recent answers and graphs" title="Close" onClick={() => closeSide('toggle')}>
+            <X size={18} aria-hidden />
+          </button>
+        )}
         <section className="wk-uc-sec" aria-labelledby={recentId} data-testid="understand-recent">
           <h2 id={recentId} className="wk-uc-label">Recent answers</h2>
           {recent.length === 0 ? (
@@ -289,38 +368,45 @@ export function UnderstandPage({ project, navigate, now, compare, runs = [] }: {
           )}
         </section>
 
-        <RepoGraphLinks repos={repos} failed={reposFailed} scope={scopeRepos.map((r) => r.id)} runs={runs} now={now} navigate={navigate} sectionRef={graphsRef} />
+        <RepoGraphLinks repos={repos} failed={reposFailed} scope={graphScope} runs={runs} now={now} navigate={navigate} sectionRef={graphsRef}
+          onOpen={(repo, view) => { setGraphOf({ repo, view }); }} />
 
         <section className="wk-uc-sec" aria-labelledby={moreId}>
           <h2 id={moreId} className="wk-uc-label">More</h2>
           <ul className="wk-uc-more">
             <li>
-              <button type="button" className="wk-uc-morebtn" data-testid="understand-compare-toggle" aria-pressed={pane === 'compare'} onClick={() => { setPane(pane === 'compare' ? 'chat' : 'compare'); closeSide(); }}>
+              <button type="button" className="wk-uc-morebtn" data-testid="understand-compare-toggle" aria-pressed={pane === 'compare'} onClick={() => { setPane(pane === 'compare' ? 'chat' : 'compare'); closeSide(null); }}>
                 <Columns3 size={16} aria-hidden /><span>Compare side by side</span>
               </button>
             </li>
             <li>
-              <button type="button" className="wk-uc-morebtn" data-testid="understand-coverage-toggle" aria-pressed={pane === 'coverage'} onClick={() => { setPane(pane === 'coverage' ? 'chat' : 'coverage'); closeSide(); }}>
+              <button type="button" className="wk-uc-morebtn" data-testid="understand-coverage-toggle" aria-pressed={pane === 'coverage'} onClick={() => { setPane(pane === 'coverage' ? 'chat' : 'coverage'); closeSide(null); }}>
                 <ListChecks size={16} aria-hidden /><span>Coverage</span>
               </button>
             </li>
           </ul>
         </section>
       </aside>
+      {graphOf !== null && <RepoGraphModal key={`${graphOf.repo.id}:${graphOf.view}`} repo={graphOf.repo} initialView={graphOf.view} onClose={() => setGraphOf(null)} />}
     </div>
   );
 }
 
 /** The sidebar's quick links: each repository in scope (all of them when none is chosen), its code graph and its
  *  requirements graph, each with its state as a dot (board/repoKnowledge.ts). */
-function RepoGraphLinks({ repos, failed, scope, runs, now, navigate, sectionRef }: {
+function RepoGraphLinks({ repos, failed, scope, runs, now, navigate, sectionRef, onOpen }: {
   repos: RepoEntry[] | null; failed: boolean; scope: readonly string[]; runs: readonly SessionView[]; now: number; navigate: Navigate;
   sectionRef: React.MutableRefObject<HTMLElement | null>;
+  onOpen: (repo: RepoEntry, view: 'code' | 'domain') => void;
 }): React.ReactElement {
   const titleId = useId();
   const shown = useMemo(() => graphLinkRepos(repos ?? [], scope), [repos, scope]);
+  const inScope = useMemo(() => (scope.length === 0 ? repos ?? [] : (repos ?? []).filter((r) => scope.includes(r.id))), [repos, scope]);
   const knowledge = useRepoKnowledgeFor(shown.map((r) => r.id));
-  const [graphOf, setGraphOf] = useState<{ repo: RepoEntry; view: 'code' | 'domain' } | null>(null);
+  const go = (path: string) => (e: React.MouseEvent): void => {
+    if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    e.preventDefault(); navigate(path);
+  };
   return (
     <section ref={(el) => { sectionRef.current = el; }} className="wk-uc-sec" aria-labelledby={titleId} data-testid="understand-graph" tabIndex={-1}>
       <h2 id={titleId} className="wk-uc-label">{scope.length > 0 ? 'Graphs for these repositories' : 'Repository graphs'}</h2>
@@ -335,14 +421,15 @@ function RepoGraphLinks({ repos, failed, scope, runs, now, navigate, sectionRef 
             const code = marks.find((m) => m.id === 'code')!;
             const req = marks.find((m) => m.id === 'reqgraph')!;
             const page = `/repo-detail/${encodeURIComponent(r.id)}`;
+            const label = (m: typeof code): string => `${r.name}: ${m.title.replace(/\.$/, '')}. Open it`;
             return (
               <li key={r.id} className="wk-uc-graph" data-testid="understand-graph-repo" data-repo-id={r.id}>
-                <a href={page} className="wk-uc-graph-name" onClick={(e) => { e.preventDefault(); navigate(page); }}>{r.name}</a>
+                <a href={page} className="wk-uc-graph-name" onClick={go(page)}>{r.name}</a>
                 <span className="wk-uc-graph-links">
-                  <button type="button" className="wk-uc-graphbtn" data-testid="understand-graph-open" data-tone={code.tone} title={code.title} onClick={() => setGraphOf({ repo: r, view: 'code' })}>
+                  <button type="button" className="wk-uc-graphbtn" data-testid="understand-graph-open" data-tone={code.tone} title={code.title} aria-label={label(code)} onClick={() => onOpen(r, 'code')}>
                     <span className="wk-know-dot" aria-hidden /><Network size={14} aria-hidden />Code graph
                   </button>
-                  <button type="button" className="wk-uc-graphbtn" data-testid="understand-graph-req" data-tone={req.tone} title={req.title} onClick={() => setGraphOf({ repo: r, view: 'domain' })}>
+                  <button type="button" className="wk-uc-graphbtn" data-testid="understand-graph-req" data-tone={req.tone} title={req.title} aria-label={label(req)} onClick={() => onOpen(r, 'domain')}>
                     <span className="wk-know-dot" aria-hidden /><Share2 size={14} aria-hidden />Requirements graph
                   </button>
                 </span>
@@ -351,10 +438,9 @@ function RepoGraphLinks({ repos, failed, scope, runs, now, navigate, sectionRef 
           })}
         </ul>
       )}
-      {repos !== null && repos.length > shown.length && (
-        <a href="/repos" className="wk-ue-link wk-uc-all" onClick={(e) => { e.preventDefault(); navigate('/repos'); }}>All {repos.length} repositories</a>
+      {inScope.length > shown.length && (
+        <a href="/repos" className="wk-ue-link wk-uc-all" data-testid="understand-graph-all" onClick={go('/repos')}>All {inScope.length} repositories</a>
       )}
-      {graphOf !== null && <RepoGraphModal repo={graphOf.repo} initialView={graphOf.view} onClose={() => setGraphOf(null)} />}
     </section>
   );
 }

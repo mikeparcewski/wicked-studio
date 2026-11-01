@@ -877,7 +877,7 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
         </div>
       </div>
       {graphOf !== null && (
-        <RepoGraphModal repo={graphOf.repo} initialView={graphOf.view} initialFocus={graphOf.focus ?? null} onClose={() => setGraphOf(null)} {...(onSelectRun !== undefined ? { onSelectRun } : {})} />
+        <RepoGraphModal key={`${graphOf.repo.id}:${graphOf.view}`} repo={graphOf.repo} initialView={graphOf.view} initialFocus={graphOf.focus ?? null} onClose={() => setGraphOf(null)} {...(onSelectRun !== undefined ? { onSelectRun } : {})} />
       )}
       {requirementsOf !== null && (
         <RequirementsModal
