@@ -24,6 +24,7 @@
   --control-px: 12px;
   --tap-min: 44px;
   --font-sans: 'Wicked Sans', 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-display: 'Wicked Serif', 'Marcellus', ui-serif, Georgia, serif;
   --font-serif: 'Wicked Serif', 'Marcellus', ui-serif, Georgia, serif;
   --font-script: 'Wicked Script', 'Dancing Script', cursive;
   --font-mono: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;

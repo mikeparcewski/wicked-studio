@@ -1,15 +1,17 @@
 wicked-design is licensed in three parts.
 
-1. Code, tokens and documentation (everything except fonts/, brand/ and the lockups and icons
-   generated from brand/ into dist/brand/ and dist/icons/): the MIT License below.
-2. The type faces in fonts/*.woff2: the SIL Open Font License 1.1, unmodified files from the
-   @fontsource 5.3.0 packages (latin and latin-ext subsets). Each face's full licence text and
-   copyright line is in licenses/LICENSE-<face>.txt:
+1. Code, tokens and documentation (everything except fonts/, brand/, source/wicked-fonts/ and the
+   lockups and icons generated from brand/ into dist/brand/ and dist/icons/): the MIT License below.
+   This includes the font compiler scripts/fonts/build_wicked_fonts.py, but not the faces it draws.
+2. The type faces in fonts/*.woff2 (the top level, not fonts/wicked/): the SIL Open Font License
+   1.1, unmodified files from the @fontsource 5.3.0 packages (latin and latin-ext subsets). Each
+   face's full licence text and copyright line is in licenses/LICENSE-<face>.txt:
      - Inter (variable): The Inter Project Authors. Same files wicked-studio self-hosts.
      - JetBrains Mono (variable): The JetBrains Mono Project Authors. Same files wicked-studio self-hosts.
      - Marcellus (static, 400): Brian J. Bonislawsky (Astigmatic), Reserved Font Name "Marcellus".
      - Dancing Script (variable): The Dancing Script Project Authors, Reserved Font Name "Dancing Script".
-3. The brand lockup and icons (brand/, dist/brand/, dist/icons/): created by the project owner for
+3. The brand lockup and icons (brand/, dist/brand/, dist/icons/) and the Wicked Sans, Wicked Serif
+   and Wicked Script faces (fonts/wicked/, source/wicked-fonts/): created by the project owner for
    the wicked agile brand. The source they were copied from states no licence, and none is granted
    here yet: they are not covered by part 1. Ask the project owner before using them outside the
    wicked products.

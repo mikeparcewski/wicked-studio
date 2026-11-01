@@ -1,0 +1,33 @@
+/* Wicked Agile web fonts: self-hosted woff2 files next to this stylesheet. */
+
+@font-face {
+  font-family: 'Wicked Sans';
+  src: url('./WickedSans-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Wicked Sans';
+  src: url('./WickedSans-SemiBold.woff2') format('woff2');
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Wicked Serif';
+  src: url('./WickedSerif-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Wicked Script';
+  src: url('./WickedScript-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}

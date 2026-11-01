@@ -1,26 +1,21 @@
 /* wicked-design faces, self-hosted: 0 requests to a font CDN, and a face downloads only when text uses it.
  *
- * The brand names three faces of its own: Wicked Sans, Wicked Serif and Wicked Script
- * (fonts/wicked/build_wicked_fonts.py names them; it is a placeholder and builds nothing, so no
- * font file exists yet). Until they ship, each slot falls back to the nearest SIL OFL 1.1 face:
+ * The brand's own faces come first in every stack (fonts/wicked/, drawn in code by
+ * scripts/fonts/build_wicked_fonts.py, v2, approved 2026-11-01):
  *
- *   --font-sans   'Wicked Sans'   -> Inter           the accepted mockup sets every word in Inter
- *   --font-serif  'Wicked Serif'  -> Marcellus       nearest to the lockup's flared 'WICKED' capitals; display sizes only
- *   --font-script 'Wicked Script' -> Dancing Script  nearest to the lockup's rounded 'agile'; brand moments only
- *   --font-mono                      JetBrains Mono  code, ids, data
+ *   --font-sans     'Wicked Sans' 400 + 600  -> Inter           every UI word
+ *   --font-display  'Wicked Serif'           -> Marcellus       display sizes and brand moments
+ *   --font-serif    'Wicked Serif'           -> Marcellus       (the same stack, the older name)
+ *   --font-script   'Wicked Script'          -> Dancing Script  brand moments only
+ *   --font-mono                                 JetBrains Mono  code, ids, data
  *
- * Files: the @fontsource 5.3.0 latin + latin-ext subsets, unmodified (Inter and JetBrains Mono are
- * the files wicked-studio already self-hosts). Licences and copyright lines: licenses/LICENSE-*.txt.
- *
- * When the Wicked faces arrive, put their woff2 files in fonts/wicked/ and uncomment the matching
- * block below: the stacks already list them first, so nothing else changes.
+ * The Wicked faces cover basic Latin, UI punctuation and a few symbols only (no accented letters), so
+ * the browser draws any other character in the next face of the stack. Those fallbacks are the
+ * @fontsource 5.3.0 latin + latin-ext subsets, unmodified (Inter and JetBrains Mono are the files
+ * wicked-studio already self-hosts). Licences and copyright lines: licenses/LICENSE-*.txt and LICENSE.
  */
 
-/*
-@font-face { font-family: 'Wicked Sans';   font-style: normal; font-display: swap; font-weight: 100 900; src: url('./fonts/wicked/WickedSans.woff2') format('woff2'); }
-@font-face { font-family: 'Wicked Serif';  font-style: normal; font-display: swap; font-weight: 100 900; src: url('./fonts/wicked/WickedSerif.woff2') format('woff2'); }
-@font-face { font-family: 'Wicked Script'; font-style: normal; font-display: swap; font-weight: 100 900; src: url('./fonts/wicked/WickedScript.woff2') format('woff2'); }
-*/
+@import "./fonts/wicked/wicked-agile-fonts-selfhost.css";
 
 @font-face {
   font-family: 'Inter';

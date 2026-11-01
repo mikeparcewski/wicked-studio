@@ -14,12 +14,15 @@ approved, consumers take it by git reference or as a vendored copy (below).
 | `src/tokens.source.json` | **The single source.** Every token, its light and dark value, and `from`: where the value came from (`guide`, `brand`, `studio`, `web` or `derived`, with a note). |
 | `dist/tokens.css` | Generated. CSS custom properties: the scale on `:root`; colours for dark (default), light (`prefers-color-scheme: light` when no theme is set), and `[data-theme="light"\|"dark"]` (or studio's `wicked-light`/`wicked-dark`) on the root or on any subtree. All inside `@layer wicked-design`, so a consumer's unlayered rules win. |
 | `dist/tokens.json` | Generated. The same tokens with concrete values (no `var()`), per theme, plus the scale, aliases, provenance and `pluginTokens`. For non-CSS consumers. |
-| `fonts.css`, `fonts/`, `licenses/` | Self-hosted woff2 faces with their SIL OFL 1.1 licences (`licenses/LICENSE-<face>.txt`): Inter, Marcellus, Dancing Script, JetBrains Mono. Slots for Wicked Sans, Serif and Script (see `fonts/wicked/README.md`). |
+| `fonts.css`, `fonts/`, `licenses/` | Self-hosted woff2 faces. The brand's own **Wicked Sans** (400, 600), **Wicked Serif** and **Wicked Script** in `fonts/wicked/`, first in every stack; then the SIL OFL 1.1 fallbacks with their licences (`licenses/LICENSE-<face>.txt`): Inter, Marcellus, Dancing Script, JetBrains Mono. |
+| `fonts/wicked/wicked-agile-fonts-selfhost.css` | The four Wicked `@font-face` rules alone, `url()`s relative to the file (exported as `wicked-design/wicked-fonts.css`). `fonts.css` imports it. |
+| `scripts/fonts/` | The font compiler (`build_wicked_fonts.py`, v2: every outline drawn in code), its check and a page renderer. Repository only. |
+| `source/wicked-fonts/` | The same faces as `.otf` and `.ttf` for desktop use, and `wicked-agile-fonts.css` (the woff2 inlined as base64 data URLs, for self-contained documents). Repository only: not shipped. |
 | `index.css` | `fonts.css` + `dist/tokens.css`. Import this once. |
 | `brand/` | The lockup and icon sheet, byte-identical to `source/`. |
 | `dist/brand/wicked-agile-lockup.{light,dark}.svg` | Generated. The lockup with resolved colours, for `<img>`, favicons, email. |
 | `dist/icons/*.svg` | Generated. One file per icon, drawn in `currentColor`. |
-| `source/` | The operator's design source, unchanged (guide, mockups, marks, the font placeholder). Only in the wicked-web repository (`packages/design-system/source/`): not in the shipped or vendored file set. |
+| `source/` | The operator's design source, unchanged (guide, mockups, marks), plus `source/wicked-fonts/`. Only in the wicked-web repository (`packages/design-system/source/`): not in the shipped or vendored file set. |
 
 ## Commands
 
@@ -28,6 +31,7 @@ No dependencies; Node 20 or later.
 ```sh
 npm run build    # regenerate dist/ from src/tokens.source.json and brand/
 npm test         # dist/ is current, every contrast pair meets WCAG AA, fonts and licences exist
+npm run test:fonts             # the Wicked faces: every glyph present and distinct, tabular digits (needs uv)
 npm run vendor -- <dest-dir>   # copy the shipped files into another repo, pinned to this commit
                                # (refuses a repo root, this package, or a non-empty non-vendored dir)
 node scripts/contrast.mjs      # print every promised colour pair and its ratio
@@ -89,6 +93,9 @@ Interactive renders HTML, PDF and PPTX. It takes a **vendored copy** the same wa
 - HTML and PDF: inline `dist/tokens.css` and `fonts.css` (fonts as data URLs, or files next to
   the document) into the document head, and set `data-theme` on the document root. Rendered
   documents then use the same `var(--ink-body)`, `var(--surface-card)` names as studio.
+  `fonts.css` starts with `@import "./fonts/wicked/wicked-agile-fonts-selfhost.css"`: inline
+  that file's rules in place of the `@import` (each `url('./X.woff2')` is then
+  `fonts/wicked/X.woff2`) before turning the URLs into data URLs, or the Wicked faces are lost.
 - PPTX and any non-CSS output: read `dist/tokens.json` → `themes.light` (or `.dark`) for the
   concrete colours, and `scale` for sizes.
 
@@ -106,25 +113,61 @@ The plan:
 - a plugin sets each received `--name: value` on its own `:root` and styles with the same
   names, so a plugin follows the user's light, dark or personal theme with no code of its own;
 - fonts reach a plugin as family names only. A plugin that wants the faces bundles its own
-  copy of `fonts/` (OFL allows it with the licence files).
+  copy of the OFL fallbacks in `fonts/*.woff2` (OFL allows it with the licence files). The
+  Wicked faces in `fonts/wicked/` are not OFL (`LICENSE` part 3): a plugin outside the wicked
+  products needs the project owner's permission to bundle them.
 
 ## Fonts and licences
 
 | Face | Licence | Copyright (from its licence file) | Why |
 |---|---|---|---|
-| Inter | SIL OFL 1.1 | The Inter Project Authors | `--font-sans`: the accepted mockup sets every word in Inter |
-| Marcellus | SIL OFL 1.1, Reserved Font Name "Marcellus" | Brian J. Bonislawsky (Astigmatic) | `--font-serif`: nearest to the lockup's flared capitals |
-| Dancing Script | SIL OFL 1.1, Reserved Font Name "Dancing Script" | The Dancing Script Project Authors | `--font-script`: nearest to the lockup's rounded script |
+| Wicked Sans 400, 600 | The project owner's (`LICENSE` part 3) | The project owner | `--font-sans`: every UI word |
+| Wicked Serif | The project owner's (`LICENSE` part 3) | The project owner | `--font-display` (and `--font-serif`): display sizes, brand moments |
+| Wicked Script | The project owner's (`LICENSE` part 3) | The project owner | `--font-script`: brand moments |
+| Inter | SIL OFL 1.1 | The Inter Project Authors | `--font-sans` fallback: draws what Wicked Sans lacks |
+| Marcellus | SIL OFL 1.1, Reserved Font Name "Marcellus" | Brian J. Bonislawsky (Astigmatic) | `--font-display` / `--font-serif` fallback |
+| Dancing Script | SIL OFL 1.1, Reserved Font Name "Dancing Script" | The Dancing Script Project Authors | `--font-script` fallback |
 | JetBrains Mono | SIL OFL 1.1 | The JetBrains Mono Project Authors | `--font-mono` |
 
-The files are the unmodified @fontsource 5.3.0 latin and latin-ext subsets. Inter and JetBrains
-Mono are the same files studio already self-hosts.
+The OFL files (`fonts/*.woff2`, not `fonts/wicked/`) are the unmodified @fontsource 5.3.0 latin and
+latin-ext subsets. Inter and JetBrains Mono are the same files studio already self-hosts.
 
-**Wicked Sans, Wicked Serif and Wicked Script** are slots, not files. The operator's
-`source/build_wicked_fonts.py` names them but builds nothing, and no specification of their
-design exists yet (the lockup draws six serif capitals and one script word as outlines). Each
-slot comes first in its stack, so the real faces drop in without a token change.
+### The Wicked faces
 
-**Brand marks**: the lockup and icons were created by the project owner. The source folder
-carries no licence or ownership note for them, and `LICENSE` grants none yet; they are for the
+`scripts/fonts/build_wicked_fonts.py` (v2, approved 2026-11-01) draws all three faces in code with
+fontTools: no font is downloaded or traced. Every face has the Latin letters, ten distinct tabular
+digits, UI punctuation, a few symbols (arrows, check, bullets, currency), and the six brand icons
+in the Private Use Area (U+E000 to U+E005).
+
+**Known gaps** (the browser draws these characters in the next face of the stack, so text never
+goes missing, but it changes face mid-word):
+
+- No accented or non-Latin letters (é, ü, ß, Greek, Cyrillic): Inter, Marcellus or Dancing Script draws them.
+- No hinting: small sizes on low-density Windows screens render softer than Inter.
+- Wicked Sans has two weights, 400 and 600. A 500 (`--weight-label`) renders with the 400 face.
+- Wicked Serif and Wicked Script lowercase is v1: small capitals, not true lowercase. The serif
+  small capitals are narrowed to 86% of their advance but not of their outline, so their ink runs
+  past the advance (`m`: ink to x=670 on a 589 advance) and tight runs can touch. Set lowercase
+  serif runs with positive letter-spacing, or keep Wicked Serif to capitals.
+- No kerning table.
+
+**Rebuilding.** Needs [uv](https://docs.astral.sh/uv/) (or Python 3 with `fonttools` and `brotli`).
+From `packages/design-system/`:
+
+```sh
+pkg="$PWD"; out="$(mktemp -d)"; cd "$out"     # the compiler writes into the current folder
+uv run --with fonttools --with brotli python -I "$pkg/scripts/fonts/build_wicked_fonts.py"
+cp *.woff2 wicked-agile-fonts-selfhost.css "$pkg/fonts/wicked/"
+cp *.otf *.ttf wicked-agile-fonts.css "$pkg/source/wicked-fonts/"
+cd "$pkg" && npm run test:fonts && npm test
+```
+
+Then look at the faces, not only the check: open `dist/specimen.html`, or render any page that
+loads them with `scripts/fonts/render_wicked_fonts_sample.py <page.html> <out.png>` (Playwright).
+CI (`design-system.yml`, job `fonts`) runs the same check on every face and format, and fails a
+face with a missing or empty glyph, letters or digits that collapsed onto one outline, or
+proportional digits.
+
+**Brand marks and the Wicked faces**: the lockup, the icons and the three Wicked faces were created by the project owner. The source folder
+carries no licence for them, and `LICENSE` grants none yet; they are for the
 wicked products until the owner says otherwise.

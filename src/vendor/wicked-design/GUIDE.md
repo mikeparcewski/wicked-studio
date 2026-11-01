@@ -94,9 +94,9 @@ appears; it does not colour the UI. One more exception, outside studio's UI: the
 
 | Slot | Token | Face today | Use |
 |---|---|---|---|
-| Sans | `--font-sans` | Inter (Wicked Sans when it ships) | Every UI word, titles included |
-| Serif | `--font-serif` | Marcellus (Wicked Serif when it ships) | Brand moments only. UI titles are Inter |
-| Script | `--font-script` | Dancing Script (Wicked Script when it ships) | Brand moments only, never UI text |
+| Sans | `--font-sans` | Wicked Sans 400/600, then Inter | Every UI word, titles included |
+| Display | `--font-display` (`--font-serif`) | Wicked Serif, then Marcellus | Display sizes and brand moments only. UI titles are Sans |
+| Script | `--font-script` | Wicked Script, then Dancing Script | Brand moments only, never UI text |
 | Mono | `--font-mono` | JetBrains Mono | Code, ids, paths, data |
 
 The synthesis sets three sizes for the UI: **titles** `--text-title` 20px at `--weight-heading` 600

@@ -15,6 +15,7 @@
     "./tokens.css": "./dist/tokens.css",
     "./tokens.json": "./dist/tokens.json",
     "./fonts.css": "./fonts.css",
+    "./wicked-fonts.css": "./fonts/wicked/wicked-agile-fonts-selfhost.css",
     "./fonts/*": "./fonts/*",
     "./brand/*": "./brand/*",
     "./icons/*": "./dist/icons/*",
@@ -38,6 +39,7 @@
     "build": "node scripts/build.mjs",
     "check": "node scripts/build.mjs --check",
     "test": "node scripts/build.mjs --check && node --test test/tokens.test.mjs test/scripts.test.mjs",
+    "test:fonts": "uv run --with fonttools --with brotli python -I scripts/fonts/check_wicked_fonts.py && uv run --with fonttools --with brotli python -I -m unittest discover -s test -p 'test_*.py'",
     "vendor": "node scripts/vendor.mjs"
   },
   "engines": {

@@ -1,11 +1,19 @@
-# Wicked Serif, Wicked Script, Wicked Sans
+# Wicked Sans, Wicked Serif, Wicked Script
 
-`source/build_wicked_fonts.py` (the operator's file, kept unchanged in the wicked-web repository at
-`packages/design-system/source/`, not shipped) is a placeholder: it imports
-fontTools and prints a message, and builds no font. No design spec for the three faces exists yet
-(the guide and mockups set type in Inter; the lockup draws six serif capitals and one script word as
-outlines, not as a font).
+The brand's own faces, v2 (approved 2026-11-01), drawn in code by
+`scripts/fonts/build_wicked_fonts.py` (in the wicked-web repository; not shipped):
 
-When the real `.woff2` files exist, put them here as `WickedSans.woff2`, `WickedSerif.woff2` and
-`WickedScript.woff2` with their licence, and uncomment the three `@font-face` blocks at the top of
-`../../fonts.css`. The token stacks already list the Wicked faces first.
+| File | Family | Weight |
+|---|---|---|
+| `WickedSans-Regular.woff2` | Wicked Sans | 400 |
+| `WickedSans-SemiBold.woff2` | Wicked Sans | 600 |
+| `WickedSerif-Regular.woff2` | Wicked Serif | 400 |
+| `WickedScript-Regular.woff2` | Wicked Script | 400 |
+
+`wicked-agile-fonts-selfhost.css` declares the four faces with `url('./<file>')`, so it resolves
+wherever this folder is served or bundled. `../../fonts.css` imports it; to load only these
+faces, import `wicked-design/wicked-fonts.css`.
+
+The `.otf`/`.ttf` files and a base64-inlined stylesheet live in `source/wicked-fonts/` (repository
+only). Licence: `../../LICENSE`, part 3. How to rebuild and the known gaps: `../../README.md`,
+"The Wicked faces".
