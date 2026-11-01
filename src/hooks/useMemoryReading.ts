@@ -27,8 +27,20 @@ export function useMemoryReading(enabled: boolean, refreshKey: unknown = null): 
     let live = true;
     // With the coverage: the memory proposals waiting (the Memory page's own count) and the repositories estate has a
     // code graph for, so the Desk says what is actually missing. A side read that fails is left out (never "none").
-    const pending = listProposals({ state: 'pending' }).then((ps) => ps.filter((p) => proposalKind(p) === 'memory').length, () => undefined);
-    const indexed = api.listRepos().then((r) => r.repos.filter((x) => typeof (x as { code_graph_db?: unknown }).code_graph_db === 'string' && (x as { code_graph_db: string }).code_graph_db !== '').length, () => undefined);
+    // Each side read settles to a count or undefined, whatever it answers: a shape it cannot count is left out too, and
+    // nothing rejects unobserved when the coverage read fails first and never awaits them (CI r9b: an answer with no
+    // `repos` threw inside the success callback, past its own rejection handler).
+    const pending = listProposals({ state: 'pending' })
+      .then((ps) => (Array.isArray(ps) ? ps.filter((p) => proposalKind(p) === 'memory').length : undefined))
+      .catch(() => undefined);
+    const indexed = api.listRepos()
+      .then((r) => {
+        const repos = (r as { repos?: unknown } | null | undefined)?.repos;
+        return Array.isArray(repos)
+          ? repos.filter((x) => typeof (x as { code_graph_db?: unknown }).code_graph_db === 'string' && (x as { code_graph_db: string }).code_graph_db !== '').length
+          : undefined;
+      })
+      .catch(() => undefined);
     memoryCoverage().then(
       // A coverage answer without a total says nothing about emptiness.
       async (c) => {
