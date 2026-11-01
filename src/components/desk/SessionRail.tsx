@@ -166,7 +166,8 @@ export function SessionRail({ runs, needRows, navigate, pathname, runsKnown = tr
                 }}
               />
             : <span aria-hidden className="wk-desk-dot wk-desk-dot--waiting" />}
-          <span className="wk-rail-brand-name">{siteName !== null ? <b>{siteName}</b> : <>wicked <b>studio</b></>}</span>
+          {/* The default wordmark is set in the brand face (--font-display); a custom name is the user's words: Inter. */}
+          <span className={`wk-rail-brand-name${siteName === null ? ' wk-wordmark' : ''}`}>{siteName !== null ? <b>{siteName}</b> : <>wicked <b>studio</b></>}</span>
         </span>
         {count > 0 && <span aria-hidden data-testid="desk-rail-badge" data-phase={settled.phase} className="wk-rail-badge wk-rail-badge--home">{badgeText}</span>}
         {count > 0 && <span id={needsId} className="wk-visually-hidden">{needWords}</span>}

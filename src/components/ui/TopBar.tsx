@@ -18,7 +18,7 @@ export function TopBar({ onMenu, menuOpen, badge, toggleRef, ambientProject = nu
       >
         <svg aria-hidden width="20" height="20" viewBox="0 0 20 20"><path d="M3 5h14M3 10h14M3 15h14" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" /></svg>
       </button>
-      <span className="wk-topbar-brand"><span aria-hidden className="wk-desk-dot" /> wicked <b>studio</b></span>
+      <span className="wk-topbar-brand"><span aria-hidden className="wk-desk-dot" /> <span className="wk-wordmark">wicked <b>studio</b></span></span>
       <span className="wk-topbar-badge">{badge}</span>
       <button type="button" data-testid="topbar-new-job" className="wk-btn wk-btn--quiet wk-btn--icon wk-topbar-search" aria-label="New job" onClick={() => startNewJob(ambientProject)}>
         <Plus size={20} aria-hidden />

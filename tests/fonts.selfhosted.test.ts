@@ -54,7 +54,26 @@ describe('fonts are self-hosted', () => {
     }
     expect([...seen].sort()).toEqual([
       'Archivo/normal', 'Inter/italic', 'Inter/normal', 'JetBrains Mono/italic', 'JetBrains Mono/normal',
+      'Wicked Sans/normal', 'Wicked Script/normal', 'Wicked Serif/normal',
     ]);
+  });
+
+  // Operator 2026-10-31: the Wicked faces draw 2-9 as one glyph and most punctuation as a bar, so they are brand faces
+  // only. Text is Inter through --font-sans; Wicked Serif reaches the page through --font-display, on the default
+  // wordmark alone.
+  it('the Wicked faces are bundled, ASCII-only, and only the wordmark uses the display face', () => {
+    const css = readFileSync(FONTS_CSS, 'utf8');
+    for (const f of ['WickedSerif', 'WickedScript', 'WickedSans']) expect(existsSync(join(REPO, 'src', 'assets', 'fonts', 'wicked', `${f}-Regular.woff2`))).toBe(true);
+    expect(css).toMatch(/\.wk-wordmark \{ font-family: var\(--font-display\)/u);
+    const tokens = readFileSync(join(REPO, 'src', 'styles', 'tokens.css'), 'utf8');
+    expect(tokens).toMatch(/--font-sans: 'Inter'/u);
+    expect(tokens).toMatch(/--font-display: 'Wicked Serif'/u);
+    // No stylesheet sets text in a Wicked face directly, and only .wk-wordmark reads --font-display.
+    const all = readdirSync(join(REPO, 'src', 'styles'), { recursive: true }).filter((p) => String(p).endsWith('.css'))
+      .map((p) => readFileSync(join(REPO, 'src', 'styles', String(p)), 'utf8')).join('\n');
+    const uses = [...all.matchAll(/([^{}]+)\{[^}]*var\(--font-display\)/gu)].map((m) => m[1]!.replace(/\/\*[\s\S]*?\*\//gu, '').trim());
+    expect(uses).toEqual(['.wk-wordmark']);
+    expect(all.replace(/@font-face\s*\{[^}]*\}/gu, '')).not.toMatch(/font-family:[^;]*Wicked (Sans|Serif|Script)/u);
   });
 
   it('each font family ships its OFL licence beside the files', () => {

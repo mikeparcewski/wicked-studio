@@ -155,8 +155,11 @@
 
   /* ── Type scale (§2.8) — two faces, one rule: prose/labels in sans,
      data/narration in mono. The face contrast is the product's visual rhythm. */
-  --font-sans: 'Archivo', system-ui, -apple-system, sans-serif; /* the Desk's face (S18c — was set by the desk skin) */
+  /* The three swap points (operator 2026-10-31): text is Inter, code JetBrains Mono, both self-hosted (fonts.css);
+     --font-display is the brand face, on the default wordmark only (Wicked Serif can't set digits or user words). */
+  --font-sans: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-mono: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
+  --font-display: 'Wicked Serif', Georgia, serif;
 
   --text-2xs: 11px;   /* the floor: nothing on a decision surface is smaller (was 10px) */
   --text-xs:  11px;
