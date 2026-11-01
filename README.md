@@ -23,7 +23,9 @@ reasoning in a scrollback you'll never read. wicked-studio flips that:
   chat next time.)
 - **Sign your agents in once.** The **Agents** page signs each agent in, inside a container. Jobs run
   every agent in a hardened sandbox (crew needs a container runtime: Rancher Desktop, Docker,
-  Podman, Colima or OrbStack). Credentials stay in a broker; the sandbox only ever sees placeholders.
+  Podman, Colima or OrbStack). Credentials stay in a broker and the sandbox sees placeholders,
+  except a Claude Code seat on a Claude subscription, which receives its sign-in token (crew guards
+  every diff and the delivery against it).
 - **Rules and memory, kept apart.** **Steering** holds your rules, each with an explicit reach
   (everywhere, one project, or one repo). **Memory** is its own page: what happened and what you told
   it, with your own memories applying across projects. Agents suggest both; you approve. A finished
@@ -55,8 +57,8 @@ reasoning in a scrollback you'll never read. wicked-studio flips that:
   that nothing re-verified is labelled "Unverified delivery", along with whether its tree moved, and
   the delivery shows the QE acceptance check when the run requires one.
 
-  A run that changes the application (`feature`, `bug`, `migration`, `mcp-server`) requires QE
-  acceptance before it delivers. The session header, every gate and the delivery say where that
+  A built-in workflow that changes the application (`feature`, `bug`, `migration`, `mcp-server`,
+  `editor-plugin`) requires QE acceptance before it delivers. The session header, every gate and the delivery say where that
   stands: "QE acceptance: required", "waived (score N)" when the run's change scored in the lowest
   band on every dimension, or "skipped by operator (reason)". The launch form offers **Skip QE
   acceptance**, which needs a reason before it can be sent, and **Force QE acceptance**, which keeps
