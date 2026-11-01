@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   getPersonas, getSetupKnown, isLearnRouteAbsent, PERSONA_HABITS, putPersona, removePersonaOverride,
   type PersonaInput, type PersonaResponse, type PersonaScope,
@@ -39,8 +39,17 @@ export function PersonaTab({ navigate, project }: { navigate: Navigate; project:
   const saved = data === null ? null : project !== null ? data.projects[project] ?? null : data.user;
   const base: PersonaInput = saved ?? (project !== null ? data?.user ?? DEFAULT_PERSONA : DEFAULT_PERSONA);
   const [draft, setDraft] = useState<PersonaInput | null>(null);
-  // A new scope (or the first read) starts the form from what that scope holds.
-  useEffect(() => { setDraft(null); }, [scope, data]);
+  // A new scope starts the form from what that scope holds.
+  useEffect(() => { setDraft(null); }, [scope]);
+  // The read after a save settles the form only when it still holds what was saved: input typed while the save was
+  // out is kept, still unsaved (codex on #937: the refresh reverted a newer name to the one just saved).
+  const savedDraft = useRef<string | null>(null);
+  useEffect(() => {
+    const sent = savedDraft.current;
+    if (sent === null) return;
+    savedDraft.current = null;
+    setDraft((d) => (d !== null && JSON.stringify(d) === sent ? null : d));
+  }, [data]);
   // A note answers the last save or removal; a different scope starts without one.
   useEffect(() => { setNote(null); }, [scope]);
   const form = draft ?? base;
@@ -57,7 +66,9 @@ export function PersonaTab({ navigate, project }: { navigate: Navigate; project:
     setBusy(true);
     setNote(null);
     try {
+      const sent = JSON.stringify(form);
       const r = await putPersona(scope, { ...form, name: form.name.trim() });
+      savedDraft.current = sent;
       setNote({ tone: 'ok', text: `Saved as version ${r.persona.version}. The next chat uses it.` });
       void useFirstRun.getState().markLearnUsed();
       load();
@@ -72,6 +83,7 @@ export function PersonaTab({ navigate, project }: { navigate: Navigate; project:
     setBusy(true);
     try {
       await removePersonaOverride(project);
+      setDraft(null);
       setNote({ tone: 'ok', text: `${projectName ?? 'This project'} uses yours again.` });
       load();
     } catch (e) {
