@@ -150,7 +150,7 @@ const studioVersion = __WICKED_STUDIO_VERSION__;
       <div>
         <div class="sec-head">
           <h2 id="review-h">A different agent checks the work.</h2>
-          <p class="sec-sub">By default the agent that built a change never approves it. Every gate shows its receipt.</p>
+          <p class="sec-sub">By default a different agent reviews the change. A gate’s receipt names who built, reviewed and judged it.</p>
         </div>
         <ol class="flow" aria-label="Who does what on a job">
           <li><span class="flow-who">Builder</span><span class="flow-what">Claude Code writes the change in its sandbox</span></li>
@@ -218,7 +218,7 @@ const studioVersion = __WICKED_STUDIO_VERSION__;
           <ul class="agent-chips" role="list">
             {AGENTS.map((a) => <li>{a}</li>)}
           </ul>
-          <p>Sign each one in once on the Agents page. Jobs run them in containers; credentials stay in a broker and the sandbox sees placeholders (a Claude subscription seat gets its sign-in token, guarded out of every diff).</p>
+          <p>Sign each one in once on the Agents page. Jobs run them in containers; credentials stay in a broker and the sandbox sees placeholders (a Claude subscription seat gets its sign-in token; a step that leaks it fails, and the delivery is blocked).</p>
         </div>
         <div class="reach-card">
           <h3>A project spans repos</h3>
@@ -252,6 +252,7 @@ const studioVersion = __WICKED_STUDIO_VERSION__;
           <ul class="needs" role="list">
             <li>Node 22 or later</li>
             <li>A container runtime: Docker, Podman, Rancher Desktop, Colima or OrbStack</li>
+            <li>wicked-garden 12.40.0 or later, for the skills every agent follows</li>
             <li>The whole family instead? <code>npx wicked-installer</code></li>
           </ul>
         </div>
