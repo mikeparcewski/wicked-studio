@@ -18,7 +18,7 @@
 import { PROTOCOL, ENVELOPE, type Envelope } from '../_shared/v2.js';
 import surfaces from './surfaces.json';
 import { dashboard, emptyReport, foldRows, openGates, panelLine, phaseDashboard, phaseSummary, scopeOf, stepWord, summaryLine, writesDoc, type PhaseScope, type Report, type Row } from './model.js';
-import { SECTION_EFFECT, SECTION_LABELS, SECTIONS, STEER_NOTE, docLines, ownQuestionLines, pluginWritesLines, represents, reconcileSection, sectionAuthor, trailLines, type DocView, type SectionId } from './workingDoc.js';
+import { SECTION_EFFECT, SECTION_LABELS, SECTIONS, STEER_NOTE, addedLines, docLines, ownQuestionLines, pluginWritesLines, represents, reconcileSection, sectionAuthor, trailLines, type DocView, type SectionId } from './workingDoc.js';
 
 const ID = 'wicked-phase-report';
 
@@ -261,12 +261,14 @@ export function start(): void {
         if (refused.has(section)) continue;
         for (let attempt = 0; attempt < 2; attempt += 1) {
           if (doc === null || doc.doc === null || doc.sections === null) return;
+          const added = addedLines(doc.sections[section], wanted[section]);
           const text = reconcileSection(section, doc.sections[section], wanted[section], ownQuestionLines(report), [...wroteNext]);
           if (text === null) break;
           const r = await ask('doc.propose_edit', { base: doc.doc.head, section, text, origin: 'generated' });
           await readDoc();
-          // The follow-ups it wrote are the only Next lines it may take back later (reconcileSection).
-          if (r.ok && section === 'next') for (const l of wanted.next) wroteNext.add(l);
+          // The follow-ups it ADDED are the only Next lines it may take back later (reconcileSection): a line already
+          // there (a person's, even in the plugin's words) is never claimed (codex r7 on #937).
+          if (r.ok && section === 'next') for (const l of added) wroteNext.add(l);
           if (r.ok) break;
           if (r.error?.code !== 'head_moved') { refused.add(section); break; }
         }

@@ -6,7 +6,7 @@ import { builtinDefaults } from '../src/editors/model.js';
 import { steerRowWords, WorkingDocSteerRows } from '../src/components/session/RunThreadPlugin.js';
 import { useWorkingDocs } from '../src/store/workingDocs.js';
 import { RUN_PLUGINS } from '../src/plugins/runPlugins.js';
-import { authorWord, pickedUpStep, reconcileSection, represents, sectionAuthor, steerWords, trailLines, type DocView } from '../src/plugins/wicked-phase-report/workingDoc.js';
+import { addedLines, authorWord, pickedUpStep, reconcileSection, represents, sectionAuthor, steerWords, trailLines, type DocView } from '../src/plugins/wicked-phase-report/workingDoc.js';
 
 /** Power mode spike 3: the working document through the plugin protocol. The HOST decides whose an edit is. */
 
@@ -193,6 +193,17 @@ describe('the words', () => {
     // a saved line that kept a generated line's words stands for it, for the sync and the "not saved" preview alike
     expect(represents('After hand-off round 1 · the checks were skipped — fine for docs', 'After hand-off round 1 · the checks were skipped')).toBe(true);
     expect(represents('After hand-off round 1 · the checks were', 'After hand-off round 1 · the checks were skipped')).toBe(false);
+  });
+
+  it('only the lines a write adds become the plugin\u2019s: a person\u2019s line already there, in its words, is never claimed (codex r7)', () => {
+    const persons = 'After hand-off round 1 · the review was skipped';
+    const qe = 'After hand-off round 1 · QE acceptance did not pass: fix it and hand off again';
+    const current = `${persons}\nCall Sam`;
+    const added = addedLines(current, [persons, qe]);
+    expect(added).toEqual([qe]);
+    // round 2: the plugin takes back only what it added; the person's line stays
+    const afterWrite = reconcileSection('next', current, [persons, qe], [], [])!;
+    expect(reconcileSection('next', afterWrite, [], [], added)).toBe(`${persons}\nCall Sam`);
   });
 
   it('an agent’s text is labelled with its seat, a section names every writer, and neither a plugin nor an agent steers', () => {

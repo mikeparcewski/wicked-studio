@@ -191,6 +191,16 @@ export function represents(saved: string, generated: string): boolean {
 }
 
 /**
+ * The generated lines a write of `wanted` would ADD to a section's saved text: those no saved line stands for. Only
+ * these become the plugin's own (codex r7 on #937): a line already there, a person's even in the plugin's words, is
+ * never claimed.
+ */
+export function addedLines(current: string, wanted: readonly string[]): string[] {
+  const saved = current.split('\n').map((l) => l.trim());
+  return wanted.filter((w) => !saved.some((k) => represents(k, w)));
+}
+
+/**
  * A section's new text with the plugin's lines brought up to date, or null when nothing changes. A person's lines stay
  * as they are, in place. Decisions only ever gain lines; in Open questions and Next, the plugin's own lines that no
  * longer hold are taken out.

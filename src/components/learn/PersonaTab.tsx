@@ -32,15 +32,22 @@ export function PersonaTab({ navigate, project }: { navigate: Navigate; project:
   // Every save or removal that LANDS bumps this: a read that began before it answers with older state and is dropped,
   // so it never overwrites what the write put in (codex + agy r3 on #937); a write that failed invalidates nothing.
   const writes = useRef(0);
+  // Reads are numbered: only the newest one may put its answer (or its failure) on the page (codex r7 on #937).
+  const reads = useRef(0);
   const load = (): void => {
     setError(null);
     const at = writes.current;
+    const id = (reads.current += 1);
     getPersonas().then(
       // A write landed meanwhile: this answer is older than it, so it is not used, and the read is made again (it may
       // be the one that tells another scope's inherited personality; codex r5 on #937).
-      (d) => { if (writes.current === at) setData(d); else load(); },
-      // Likewise a read that failed after a write landed is made again; only a current read's failure is shown.
-      (e: unknown) => { if (writes.current !== at) { load(); return; } if (isLearnRouteAbsent(e)) setAbsent(true); else setError(e); },
+      (d) => { if (writes.current !== at) { if (id === reads.current) load(); return; } if (id === reads.current) setData(d); },
+      // Likewise a read that failed after a write landed is made again; only the newest current read's failure shows.
+      (e: unknown) => {
+        if (writes.current !== at) { if (id === reads.current) load(); return; }
+        if (id !== reads.current) return;
+        if (isLearnRouteAbsent(e)) setAbsent(true); else setError(e);
+      },
     );
   };
   useEffect(() => { load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps -- the first read, once

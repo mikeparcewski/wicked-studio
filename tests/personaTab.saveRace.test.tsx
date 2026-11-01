@@ -208,4 +208,26 @@ describe('PersonaTab save', () => {
     await waitFor(() => expect(nameBox().value).toBe('Grace'));
     expect(screen.queryByTestId('persona-error')).toBeNull();
   });
+
+  it('reads are ordered: an older read neither re-reads nor overwrites once a newer one is out (codex r7)', async () => {
+    getPersonas.mockResolvedValueOnce(response('Ada', 1, { a: saved('Alpha bot', 3), b: saved('Bob', 4) }));
+    removePersonaOverride.mockResolvedValue({ removed: true });
+    let r1!: (v: unknown) => void; let r2!: (v: unknown) => void;
+    const { rerender } = render(<PersonaTab navigate={() => {}} project="a" />);
+    await waitFor(() => expect(nameBox().value).toBe('Alpha bot'));
+    getPersonas.mockReturnValueOnce(new Promise((r) => { r1 = r; }));
+    fireEvent.click(screen.getByTestId('persona-remove-override'));
+    await waitFor(() => expect(nameBox().value).toBe('Ada'));
+    rerender(<PersonaTab navigate={() => {}} project="b" />);
+    await waitFor(() => expect(nameBox().value).toBe('Bob'));
+    getPersonas.mockReturnValueOnce(new Promise((r) => { r2 = r; }));
+    fireEvent.click(screen.getByTestId('persona-remove-override'));
+    await waitFor(() => expect(getPersonas).toHaveBeenCalledTimes(3));
+    // the first removal's read lands late: a newer read is already out, so it starts none and shows nothing
+    getPersonas.mockResolvedValueOnce(response('Zed', 9));
+    await act(async () => { r1(response('Old', 0, { b: saved('Bob', 4) })); });
+    await act(async () => { r2(response('Grace', 2)); });
+    expect(getPersonas).toHaveBeenCalledTimes(3);
+    await waitFor(() => expect(nameBox().value).toBe('Grace'));
+  });
 });
