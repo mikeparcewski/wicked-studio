@@ -155,9 +155,10 @@
 
   /* ── Type scale (§2.8) — two faces, one rule: prose/labels in sans,
      data/narration in mono. The face contrast is the product's visual rhythm. */
-  /* The three swap points (operator 2026-10-31): text is Inter, code JetBrains Mono, both self-hosted (fonts.css);
-     --font-display is the brand face, on the default wordmark only (Wicked Serif can't set digits or user words). */
-  --font-sans: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  /* The three swap points (operator 2026-11-01): text is Wicked Sans v2, with self-hosted Inter as the per-character
+     fallback (Wicked Sans has no accented letters); code JetBrains Mono; --font-display is Wicked Serif, the default
+     wordmark only. All self-hosted (fonts.css), no CDN. */
+  --font-sans: 'Wicked Sans', 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-mono: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
   --font-display: 'Wicked Serif', Georgia, serif;
 

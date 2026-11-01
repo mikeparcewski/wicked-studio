@@ -99,18 +99,32 @@
   unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF;
 }
 
-/* The Wicked faces (operator 2026-10-31; built by program design/design-system-src/build_wicked_fonts.py, Regular
- * only, ASCII only). They are BRAND faces, never text faces: digits 2-9 share one glyph, lowercase is small caps, and
- * most punctuation is a bar, so any number or user word set in them would read wrong. Wicked Serif is the default
- * wordmark ("wicked studio") through --font-display; Wicked Script is for the lockup; Wicked Sans is bundled for the
- * lockup and later use, on nothing yet. A face only downloads when text uses it. */
+/* The Wicked faces, v2 (operator 2026-11-01; program design/design-system-src/fonts-v2). Wicked Sans is the text and
+ * UI face: Regular for weights up to 450, SemiBold for 451 and up (500, 600 and 700 all map to it), so no weight is
+ * ever synthesised. It covers ASCII and common punctuation only: an accented letter falls back, per character, to
+ * Inter (next in --font-sans). Wicked Serif is the default wordmark (--font-display); Wicked Script is for the lockup. */
+@font-face {
+  font-family: 'Wicked Sans';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 450;
+  src: url('../assets/fonts/wicked/WickedSans-Regular.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Wicked Sans';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 451 900;
+  src: url('../assets/fonts/wicked/WickedSans-SemiBold.woff2') format('woff2');
+}
+
 @font-face {
   font-family: 'Wicked Serif';
   font-style: normal;
   font-display: swap;
   font-weight: 400;
   src: url('../assets/fonts/wicked/WickedSerif-Regular.woff2') format('woff2');
-  unicode-range: U+0020-007E;
 }
 
 @font-face {
@@ -119,17 +133,10 @@
   font-display: swap;
   font-weight: 400;
   src: url('../assets/fonts/wicked/WickedScript-Regular.woff2') format('woff2');
-  unicode-range: U+0020-007E;
 }
 
-@font-face {
-  font-family: 'Wicked Sans';
-  font-style: normal;
-  font-display: swap;
-  font-weight: 400;
-  src: url('../assets/fonts/wicked/WickedSans-Regular.woff2') format('woff2');
-  unicode-range: U+0020-007E;
-}
+/* Two weights ship: a bold is never faked (italic may still be slanted; Wicked Sans has no italic). */
+html { font-synthesis-weight: none; }
 
 /* The default wordmark only: the brand face, never synthesised bold (one weight ships). */
 .wk-wordmark { font-family: var(--font-display); font-synthesis: none; letter-spacing: 0.01em; text-transform: capitalize; }

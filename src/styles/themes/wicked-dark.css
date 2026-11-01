@@ -81,9 +81,11 @@
   --shadow-primary: none; --shadow-pressed: none;
   --focus-ring: 0 0 0 2px var(--focus-gap), 0 0 0 4px #ededea;
   --spark: #ffda19; --spark-ink: #0d1117;
+  /* Waiting on you is the warm attention colour "needs you" uses everywhere (operator 2026-11-01): no violet. */
+  --status-gate: #ebc06b; --status-gate-dim: #352c1b;
   --nc-ok-bg: #1a1a1a; --nc-ok-fg: #ededea; --nc-ok-edge: #2e2e2e;
   --nc-ok-hover: #262625; --nc-ok-press: #262625;
-  --font-sans: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-sans: 'Wicked Sans', 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --text-md: 14px;                 /* body copy */
   --radius-sm: 6px; --radius-md: 6px; --radius-lg: 8px; --radius-xl: 12px;
 }
