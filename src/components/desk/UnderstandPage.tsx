@@ -18,6 +18,7 @@ import { fetchReposCached, getCachedRepos } from '../../store/repoCache.js';
 import { CoverageView } from '../CoverageView.js';
 import { RepoGraphModal } from '../RepoGraphModal.js';
 import { Skeleton } from '../ui/index.js';
+import { VoiceMicButton } from '../voice/VoiceMicButton.js';
 
 /** Recent answers shows this many; the rest stay remembered. */
 const RECENT_SHOWN = 5;
@@ -172,6 +173,7 @@ export function UnderstandPage({ project, navigate, now, compare, runs = [] }: {
             <label htmlFor={boxId} className="wk-visually-hidden">Your question</label>
             <input id={boxId} ref={inputRef} type="text" value={q} onChange={(e) => setQ(e.target.value)} autoComplete="off"
               placeholder="e.g. Who calls the deliver step?" className="wk-ue-ask-input" data-testid="understand-ask-input" />
+            <VoiceMicButton size="xs" testId="understand-ask-voice" />
             <button type="submit" className="wk-ue-btn wk-ue-btn--primary" data-testid="understand-ask-send">Ask</button>
           </form>
           {repos !== null && repos.length > 1 && (

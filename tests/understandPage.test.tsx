@@ -181,6 +181,16 @@ describe('the Understand page', () => {
     expect(onRepos()).toEqual(['r1', 'r2']);
   });
 
+  // Operator, round 4: Understand gets voice mode like every composer: the mic beside Ask when crew has voice.
+  it('the mic sits right before Ask when crew has voice', () => {
+    useCapabilities.setState({ chatList: true, loaded: true, voice: true });
+    render(<UnderstandPage project={null} navigate={() => undefined} now={Date.now()} compare={null} />);
+    const mic = screen.getByTestId('understand-ask-voice');
+    expect(mic.getAttribute('aria-keyshortcuts')).toBe('Alt+V');
+    expect(mic.nextElementSibling).toBe(screen.getByTestId('understand-ask-send'));
+    useCapabilities.setState({ voice: false });
+  });
+
   it('an empty Ask sends nothing', async () => {
     await act(async () => { render(<UnderstandPage project={null} navigate={vi.fn()} now={NOW} compare={null} />); });
     await act(async () => { fireEvent.submit(screen.getByTestId('understand-ask')); });

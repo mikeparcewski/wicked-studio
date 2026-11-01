@@ -194,8 +194,11 @@
   .wk-ue-sentence { font-size: 16px; }
   .wk-ue-head { flex-direction: column; align-items: stretch; }
   .wk-ue-head-acts > .wk-ue-btn--primary { flex: 1 1 auto; }
-  .wk-ue-ask { flex-direction: column; align-items: stretch; padding: 8px; }
-  .wk-ue-ask-input { padding: 0 12px; }
+  /* The words on their own row; the mic (its own width) and Ask share the row under them. */
+  .wk-ue-ask { flex-wrap: wrap; align-items: stretch; padding: 8px; }
+  .wk-ue-ask-input { flex: 1 1 100%; padding: 0 12px; }
+  .wk-ue-ask > .wk-voice-micbtn { flex: 0 0 auto; align-self: center; min-width: 44px; min-height: 44px; justify-content: center; }
+  .wk-ue-ask > button[type='submit'] { flex: 1 1 auto; }
   .wk-ue-row { gap: 14px; padding: 14px 12px; margin: 0 -12px; width: calc(100% + 24px); }
   .wk-ue-row-meta { font-size: 13px; }
   /* A phone has the width for the words or the ellipsis, not both: the line wraps. */
