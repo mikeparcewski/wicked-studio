@@ -41,7 +41,7 @@ describe('wicked themes come from the vendored design system', () => {
     });
     it(`wicked-${theme}: Wicked Sans (Inter behind it), 14px body, the synthesis radii`, () => {
       expect(css).toMatch(/--font-sans: 'Wicked Sans', 'Inter'/);
-      expect(css).toContain('--text-md: 14px;');
+      expect(css).toContain('--text-md: var(--text-body);'); // the type scale's body (tokens.css: 14px)
       expect(css).toContain('--radius-lg: 8px;');
     });
   }

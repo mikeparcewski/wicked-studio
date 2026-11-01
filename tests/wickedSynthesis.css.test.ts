@@ -26,7 +26,9 @@ describe('wicked-synthesis.css: sentence-case labels', () => {
       for (const sel of m[1]!.split(',').map((x) => x.trim()).filter((x) => x && !x.startsWith('@'))) upper.push(sel);
     }
   }
-  it('finds the uppercase label rules', () => { expect(upper.length).toBeGreaterThan(20); });
+  // Round 6 (the type scale) removed every uppercase transform from studio's CSS (tests/typeScale.lint.test.ts), so
+  // there is nothing left for the synthesis to turn back into sentence case.
+  it('no uppercase label rules remain', () => { expect(upper).toEqual([]); });
   for (const sel of new Set(upper)) {
     it(`covers ${sel}`, () => { expect(synthesis).toContain(`[data-theme="wicked-dark"]) ${sel}`); });
   }

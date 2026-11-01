@@ -993,6 +993,7 @@
     "session-proposal-more": "session-proposal-choices",
     "session-proposal-menu": "session-proposal-choices",
     "session-proposal-skip-qe-form": "session-proposal-skip-qe-reason",
-    "session-proposal-skip-qe-cancel": "session-proposal-choices"
+    "session-proposal-skip-qe-cancel": "session-proposal-choices",
+    "learn-repo": "learn-topics"
   }
 }

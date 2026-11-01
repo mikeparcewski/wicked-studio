@@ -77,6 +77,8 @@ code, pre, kbd, samp, .font-mono {
 
 /* The browser's own bold (700) is the scale's strong (600): Wicked Sans has two faces, so ask for exactly one of them. */
 h1, h2, h3, h4, h5, h6, b, strong, th, dt { font-weight: var(--weight-strong); }
+/* The browser's own smaller sizes (small: 0.8em, sub, sup) are the scale's caption. */
+small, sub, sup { font-size: var(--text-caption); }
 /* The wordmark has one weight. */
 .wk-wordmark b, .wk-wordmark strong { font-weight: inherit; }
 
