@@ -68,6 +68,8 @@ ${pkg}
   --spark: ${t['accent-wicked']}; --spark-ink: ${t['accent-wicked-ink']};
   /* Waiting on you is the warm attention colour "needs you" uses everywhere (operator 2026-11-01): no violet. */
   --status-gate: ${t['status-warn']}; --status-gate-dim: ${t['status-warn-dim']};
+  /* Ambient's running hue (design/mockups/ambient.html): a desaturated steel-teal, tuned per ground. */
+  --mood-run: ${theme === 'light' ? '#2f5f6b' : '#8fbac4'};
   --nc-ok-bg: ${t['surface-card']}; --nc-ok-fg: ${t['ink-high']}; --nc-ok-edge: ${t.border};
   --nc-ok-hover: ${t['accent-subtle']}; --nc-ok-press: ${t['accent-subtle']};
   --font-sans: 'Wicked Sans', 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;

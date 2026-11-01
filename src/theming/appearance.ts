@@ -26,6 +26,10 @@ export interface StudioAppearance {
   /** A custom product name for the chrome (nav-ui-tweaks). `null` = the default
    *  wordmark (`DEFAULT_SITE_NAME`); a non-empty string overrides it. */
   site_name: string | null;
+  /** Ambient (operator 2026-11-01, design/mockups/ambient.html): the chosen ground (`theme`) plus one quiet mood layer
+   *  that follows the state of the work. Absent = off. `ambient_still`: Ambient without its breathing and settle. */
+  ambient?: boolean;
+  ambient_still?: boolean;
   // The skin keys (`skin`, `skin_migrated`) retired with the classic skins (S18d): the Desk is the
   // one shell. Records from ≤0.6.2 still carry them; sanitizeAppearance ignores them.
 }
@@ -143,6 +147,8 @@ export function sanitizeAppearance(raw: unknown): StudioAppearance {
     logo_url: typeof o.logo_url === 'string' && o.logo_url !== '' ? o.logo_url : null,
     theme: isThemeId(o.theme) ? o.theme : LEGACY_THEMES[String(o.theme)] ?? 'wicked-dark',
     site_name: typeof o.site_name === 'string' && o.site_name.trim() !== '' ? o.site_name.trim() : null,
+    ...(o.ambient === true ? { ambient: true } : {}),
+    ...(o.ambient_still === true ? { ambient_still: true } : {}),
   };
 }
 
@@ -166,6 +172,10 @@ export function applyAppearance(a: StudioAppearance): void {
     root.style.removeProperty('--logo-url');
   }
   root.setAttribute('data-theme', a.theme);
+  if (a.ambient === true) root.setAttribute('data-ambient', 'on');
+  else { root.removeAttribute('data-ambient'); root.removeAttribute('data-mood'); }
+  if (a.ambient_still === true) root.setAttribute('data-ambient-still', 'on');
+  else root.removeAttribute('data-ambient-still');
   if (hasCustomAccent(a)) root.setAttribute('data-accent', 'custom');
   else root.removeAttribute('data-accent');
 }

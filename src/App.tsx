@@ -62,7 +62,7 @@ import { needRunId } from './board/deskModel.js';
 import { markHeld } from './board/heldRuns.js';
 import { objectCommands, type ObjectCommands } from './components/sheets/objectCommands.js';
 import { cmdkObject, trackPointedObject } from './store/sheets.js';
-import { useNeedsClock, useNeedsRows } from './hooks/useNeedsRows.js';
+import { useNeedsClock, useNeedsRows, useSettledNeeds } from './hooks/useNeedsRows.js';
 import { ambientProjectId } from './hooks/ambientProject.js';
 import { useEventStream } from './hooks/useEventStream.js';
 import { publishCoreEvent } from './hooks/eventTap.js';
@@ -109,6 +109,7 @@ import { POWER_CHANGED } from './hooks/usePower.js';
 import { notifyGateIfUnfocused } from './board/desktopNotify.js';
 import { parseSessionId, sessionIdOf, sessionPath } from './board/sessionModel.js';
 import { sizeOf, versionOf } from './board/artifactAddress.js';
+import { useAmbientMood } from './hooks/useAmbientMood.js';
 
 /** Frames that change run-list / unit state → trigger a `GET /runs` reconcile. */
 const LIFECYCLE_EVENTS: ReadonlySet<string> = new Set([
@@ -538,6 +539,9 @@ export function App(): React.ReactElement {
   // studio#805: the Desk's surfaces read a held live run as waiting on you (statusWord reads the mark).
   // Needs-you rows above are folded from the raw runs; gate logic and actions keep the raw runs too.
   const shownRuns = useMemo(() => markHeld(runs, heldByNeeds), [runs, heldByNeeds]);
+  // Ambient (operator 2026-11-01): the mood the work sets, from the runs and the settled needs-you count already held.
+  const ambientNeeds = useSettledNeeds(needRows, runsLoaded, runsError !== null).count ?? 0;
+  useAmbientMood(shownRuns, ambientNeeds);
 
   // ── Studio wave 2a: peek (P), jump (G), back (B) — and the panels "back" reopens ──
   const peek = usePeekJump(runs, navigate, needRows);

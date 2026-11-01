@@ -12,9 +12,9 @@
   "studioVersion": "0.13.0",
   "counts": {
     "files": 283,
-    "occurrences": 3924,
-    "static": 3336,
-    "dynamic": 87,
+    "occurrences": 3931,
+    "static": 3342,
+    "dynamic": 88,
     "computed": 44
   },
   "static": [
@@ -492,6 +492,36 @@
       "testId": "alt-peek",
       "files": [
         "src/components/sheets/AltPeek.tsx"
+      ]
+    },
+    {
+      "testId": "ambient-ground",
+      "files": [
+        "src/components/AppearanceSettings.tsx"
+      ]
+    },
+    {
+      "testId": "ambient-ground-dark",
+      "files": [
+        "src/components/AppearanceSettings.tsx"
+      ]
+    },
+    {
+      "testId": "ambient-ground-light",
+      "files": [
+        "src/components/AppearanceSettings.tsx"
+      ]
+    },
+    {
+      "testId": "ambient-settings",
+      "files": [
+        "src/components/AppearanceSettings.tsx"
+      ]
+    },
+    {
+      "testId": "ambient-still",
+      "files": [
+        "src/components/AppearanceSettings.tsx"
       ]
     },
     {
@@ -18902,6 +18932,12 @@
       ]
     },
     {
+      "testId": "theme-ambient",
+      "files": [
+        "src/components/AppearanceSettings.tsx"
+      ]
+    },
+    {
       "testId": "theme-brand-link",
       "files": [
         "src/components/ThemePage.tsx"
@@ -20631,6 +20667,12 @@
       "pattern": "skills-tab-*",
       "files": [
         "src/components/SkillDrawer.tsx"
+      ]
+    },
+    {
+      "pattern": "theme-*",
+      "files": [
+        "src/components/AppearanceSettings.tsx"
       ]
     },
     {

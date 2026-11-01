@@ -83,6 +83,8 @@
   --spark: #ffda19; --spark-ink: #0d1117;
   /* Waiting on you is the warm attention colour "needs you" uses everywhere (operator 2026-11-01): no violet. */
   --status-gate: #ebc06b; --status-gate-dim: #352c1b;
+  /* Ambient's running hue (design/mockups/ambient.html): a desaturated steel-teal, tuned per ground. */
+  --mood-run: #8fbac4;
   --nc-ok-bg: #1a1a1a; --nc-ok-fg: #ededea; --nc-ok-edge: #2e2e2e;
   --nc-ok-hover: #262625; --nc-ok-press: #262625;
   --font-sans: 'Wicked Sans', 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;

@@ -85,6 +85,22 @@ describe('AppearanceSettings (DES-VISION-001 §3.2)', () => {
     expect(root().style.getPropertyValue('--_accent-h')).toBe('200');
   });
 
+  it('Ambient keeps a ground of its own and a still switch; leaving it turns the mood layer off', () => {
+    render(<AppearanceSettings />);
+    expect(screen.queryByTestId('ambient-settings')).toBeNull();
+    fireEvent.click(screen.getByTestId('theme-ambient'));
+    expect(root().getAttribute('data-ambient')).toBe('on');
+    expect(screen.getByTestId('theme-ambient')).toHaveAttribute('aria-checked', 'true');
+    fireEvent.click(screen.getByTestId('ambient-ground-light'));
+    expect(root().getAttribute('data-theme')).toBe('wicked-light');
+    expect(screen.getByTestId('theme-ambient')).toHaveAttribute('aria-checked', 'true');
+    fireEvent.click(screen.getByRole('switch', { name: /Keep Ambient still/u }));
+    expect(root().getAttribute('data-ambient-still')).toBe('on');
+    fireEvent.click(screen.getByTestId('theme-wicked-dark'));
+    expect(root().hasAttribute('data-ambient')).toBe(false);
+    expect(root().getAttribute('data-theme')).toBe('wicked-dark');
+  });
+
   it('logo by URL: apply sets --logo-url; Remove reverts to the default mark', () => {
     render(<AppearanceSettings />);
     // No custom logo: the thumb shows the default accent-stroked mark, no Remove.
@@ -122,10 +138,10 @@ describe('AppearanceSettings (DES-VISION-001 §3.2)', () => {
     expect(screen.queryByTestId('logo-error')).toBeNull();
   });
 
-  it('theme picker: Wicked Dark and Wicked Light only (operator 2026-10-31); the active choice is checked', () => {
+  it('theme picker: Wicked Dark, Wicked Light and Ambient (operators 2026-10-31, 2026-11-01); the active choice is checked', () => {
     render(<AppearanceSettings />);
     expect(screen.getByRole('radiogroup', { name: 'Theme' })).toHaveClass('wk-segmented');
-    expect(screen.getAllByRole('radio').map((r) => r.textContent)).toEqual(['Wicked Dark', 'Wicked Light']);
+    expect(screen.getAllByRole('radio').map((r) => r.textContent)).toEqual(['Wicked Dark', 'Wicked Light', 'Ambient']);
     expect(screen.queryByTestId('theme-dark')).toBeNull();
     expect(screen.queryByTestId('theme-light')).toBeNull();
     expect(screen.getByTestId('theme-wicked-dark')).toHaveAttribute('aria-checked', 'true');
