@@ -14,14 +14,14 @@ export function RoutingProvenance({ routing }: Props): React.ReactElement | null
     // won against nobody). Say what happened: one seat, no vote.
     if (routing.seated === 1) {
       return (
-        <p className="text-[11px] font-mono" style={{ color: 'var(--ink-muted)' }} data-testid="routing-provenance" data-seats="1">
+        <p className="text-xs font-mono" style={{ color: 'var(--ink-muted)' }} data-testid="routing-provenance" data-seats="1">
           <span className="font-medium" style={{ color: 'var(--ink-muted)' }}>Council:</span>{' '}
           {routing.winner} — single seat, no vote held
         </p>
       );
     }
     return (
-      <p className="text-[11px] font-mono" style={{ color: 'var(--ink-muted)' }} data-testid="routing-provenance">
+      <p className="text-xs font-mono" style={{ color: 'var(--ink-muted)' }} data-testid="routing-provenance">
         <span className="font-medium" style={{ color: 'var(--ink-muted)' }}>Council:</span>{' '}
         {routing.winner} won · {routing.agreement_pct}% agreement · {quorumLabel(routing)} · {routing.dissent} dissent
         {lostQuorum(routing) && <span style={{ color: 'var(--status-gate)' }}> · quorum lost</span>}
@@ -31,7 +31,7 @@ export function RoutingProvenance({ routing }: Props): React.ReactElement | null
 
   if (routing.method === 'degraded') {
     return (
-      <p className="text-[11px] font-mono" style={{ color: 'var(--status-gate)' }} data-testid="routing-provenance">
+      <p className="text-xs font-mono" style={{ color: 'var(--status-gate)' }} data-testid="routing-provenance">
         <span className="font-medium">Degraded:</span> {routing.reason}
       </p>
     );
@@ -39,7 +39,7 @@ export function RoutingProvenance({ routing }: Props): React.ReactElement | null
 
   if (routing.method === 'tool') {
     return (
-      <p className="text-[11px] font-mono" style={{ color: 'var(--ink-dim)' }} data-testid="routing-provenance">
+      <p className="text-xs font-mono" style={{ color: 'var(--ink-dim)' }} data-testid="routing-provenance">
         <span className="font-medium">Tool:</span> direct command — no council
       </p>
     );
@@ -48,7 +48,7 @@ export function RoutingProvenance({ routing }: Props): React.ReactElement | null
   // studio#332: the team model routes deterministically (core#590 S5) — no council, no vote.
   if (routing.method === 'teamed') {
     return (
-      <p className="text-[11px] font-mono" style={{ color: 'var(--ink-muted)' }} data-testid="routing-provenance" data-method="teamed">
+      <p className="text-xs font-mono" style={{ color: 'var(--ink-muted)' }} data-testid="routing-provenance" data-method="teamed">
         <span className="font-medium">Routed:</span> {routing.winner} — team model, no council
       </p>
     );
@@ -56,7 +56,7 @@ export function RoutingProvenance({ routing }: Props): React.ReactElement | null
 
   if (routing.method === 'evaluator_distinct') {
     return (
-      <p className="text-[11px] font-mono" style={{ color: 'var(--accent)' }} data-testid="routing-provenance">
+      <p className="text-xs font-mono" style={{ color: 'var(--accent)' }} data-testid="routing-provenance">
         <span className="font-medium">Evaluator-distinct:</span> {routing.winner} (was {routing.was})
       </p>
     );

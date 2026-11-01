@@ -23,19 +23,19 @@ export function PhasePicker({ model, touch = true, emptyText, hide }: {
       style={{ background: 'var(--surface-rail)', border: '1px solid var(--surface-raised)' }}
     >
       <div className="flex items-center gap-2 flex-wrap">
-        <span className="text-[11px] font-mono uppercase tracking-widest" style={{ color: 'var(--ink-dim)' }}>
+        <span className="text-xs font-mono " style={{ color: 'var(--ink-dim)' }}>
           Phases
         </span>
         {catalog === 'loading' && (
-          <span className="text-[11px]" style={{ color: 'var(--ink-dim)' }}>loading the catalog…</span>
+          <span className="text-xs" style={{ color: 'var(--ink-dim)' }}>loading the catalog…</span>
         )}
         {catalog === 'unsupported' && (
-          <span data-testid="phase-catalog-unsupported" className="text-[11px]" style={{ color: 'var(--status-gate)' }}>
+          <span data-testid="phase-catalog-unsupported" className="text-xs" style={{ color: 'var(--status-gate)' }}>
             This daemon has no phase catalog. Upgrade wicked-crew to compose a plan.
           </span>
         )}
         {catalog === 'error' && (
-          <span data-testid="phase-catalog-error" className="text-[11px]" style={{ color: 'var(--status-fail)' }}>
+          <span data-testid="phase-catalog-error" className="text-xs" style={{ color: 'var(--status-fail)' }}>
             Could not load the phase catalog.
           </span>
         )}
@@ -49,7 +49,7 @@ export function PhasePicker({ model, touch = true, emptyText, hide }: {
               data-catalog={e.id}
               title={[e.description ?? e.id, ...marks].join(' · ')}
               onClick={() => model.add(e.id)}
-              className="rounded-lg px-2 py-0.5 text-[11px] font-mono"
+              className="rounded-lg px-2 py-0.5 text-xs font-mono"
               style={{ background: 'var(--surface-card)', border: '1px solid var(--surface-raised)', color: 'var(--ink-high)' }}
             >
               + {e.id}
@@ -58,7 +58,7 @@ export function PhasePicker({ model, touch = true, emptyText, hide }: {
         })}
       </div>
 
-      <ol data-testid="phase-selection" className="flex items-center gap-1.5 flex-wrap text-[11px] font-mono">
+      <ol data-testid="phase-selection" className="flex items-center gap-1.5 flex-wrap text-xs font-mono">
         {picked.length === 0 ? (
           <li style={{ color: 'var(--ink-dim)' }}>
             {emptyText ?? 'No phases picked: the launch uses the workflow chosen under +.'}
@@ -87,7 +87,7 @@ export function PhasePicker({ model, touch = true, emptyText, hide }: {
         )}
       </ol>
 
-      {touch && <label className="flex flex-col gap-1 text-[11px]" style={{ color: 'var(--ink-muted)' }}>
+      {touch && <label className="flex flex-col gap-1 text-xs" style={{ color: 'var(--ink-muted)' }}>
         Files this will change (optional, one per line). Leave it empty and the PA scopes the plan first.
         <textarea
           data-testid="plan-touch"

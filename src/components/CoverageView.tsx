@@ -114,7 +114,7 @@ function Ledger({ report }: { report: CoverageReport }): React.ReactElement {
           className="rounded p-2 text-center"
           style={{ border: '1px solid var(--surface-raised)', background: 'var(--surface-card)' }}
         >
-          <p className="text-[11px]" style={{ color: 'var(--ink-dim)' }}>{label}</p>
+          <p className="text-xs" style={{ color: 'var(--ink-dim)' }}>{label}</p>
           <p className="text-sm font-semibold" style={{ color: 'var(--ink-high)' }}>{value}</p>
         </div>
       ))}
@@ -125,7 +125,7 @@ function Ledger({ report }: { report: CoverageReport }): React.ReactElement {
 function PerAppTable({ apps }: { apps: CoveragePerApp[] }): React.ReactElement {
   if (apps.length === 0) return <p className="text-xs" style={{ color: 'var(--ink-dim)' }}>No per-app data.</p>;
   return (
-    <table className="w-full text-[11px]">
+    <table className="w-full text-xs">
       <thead>
         <tr className="border-b text-left" style={{ borderColor: 'var(--surface-raised)', color: 'var(--ink-dim)' }}>
           <th className="py-1 pr-3 font-medium">App</th>
@@ -231,14 +231,14 @@ function UnaccountedList({ nodes }: { nodes: UnaccountedNode[] }): React.ReactEl
           placeholder="Search name / file / id…"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          className="rounded px-2 py-1 text-[11px] w-48 focus:outline-none"
+          className="rounded px-2 py-1 text-xs w-48 focus:outline-none"
           style={inputStyle}
         />
         <select
           aria-label="Filter by kind"
           value={kindFilter}
           onChange={(e) => setKindFilter(e.target.value)}
-          className="rounded px-2 py-1 text-[11px] focus:outline-none"
+          className="rounded px-2 py-1 text-xs focus:outline-none"
           style={inputStyle}
         >
           <option value="">All kinds</option>
@@ -248,18 +248,18 @@ function UnaccountedList({ nodes }: { nodes: UnaccountedNode[] }): React.ReactEl
           aria-label="Filter by app"
           value={appFilter}
           onChange={(e) => setAppFilter(e.target.value)}
-          className="rounded px-2 py-1 text-[11px] focus:outline-none"
+          className="rounded px-2 py-1 text-xs focus:outline-none"
           style={inputStyle}
         >
           <option value="">All apps</option>
           {apps.map((a) => <option key={a} value={a}>{a}</option>)}
         </select>
-        <span className="ml-auto text-[11px]" style={{ color: 'var(--ink-dim)' }}>
+        <span className="ml-auto text-xs" style={{ color: 'var(--ink-dim)' }}>
           {filtered.length} / {nodes.length} hole{nodes.length !== 1 ? 's' : ''}
         </span>
       </div>
 
-      <table className="w-full text-[11px]">
+      <table className="w-full text-xs">
         <thead>
           <tr className="border-b" style={{ borderColor: 'var(--surface-raised)' }}>
             <th className="py-1 pr-3">
@@ -355,7 +355,7 @@ export function CoverageView(): React.ReactElement {
             value={repoRef}
             onChange={(e) => setRepoRef(e.target.value)}
             disabled={loading}
-            className="rounded px-2 py-1 text-[11px] disabled:opacity-50"
+            className="rounded px-2 py-1 text-xs disabled:opacity-50"
             style={{ border: '1px solid var(--surface-raised)', color: 'var(--ink-muted)', background: 'transparent' }}
           >
             <option value="">All (daemon)</option>
@@ -367,7 +367,7 @@ export function CoverageView(): React.ReactElement {
             type="button"
             onClick={() => void load()}
             disabled={loading}
-            className="rounded px-2 py-1 text-[11px] disabled:opacity-50"
+            className="rounded px-2 py-1 text-xs disabled:opacity-50"
             style={{ border: '1px solid var(--surface-raised)', color: 'var(--ink-muted)' }}
           >
             {loading ? 'Loading…' : 'Refresh'}
@@ -393,7 +393,7 @@ export function CoverageView(): React.ReactElement {
           repo (the daemon has no repo code graph). */}
       {graphKinds && (
         <section className="flex flex-col gap-1" aria-label="Code graph summary">
-          <p className="text-[11px] font-semibold uppercase tracking-wider font-mono" style={{ color: 'var(--ink-dim)' }}>
+          <p className="text-xs font-semibold font-mono" style={{ color: 'var(--ink-dim)' }}>
             Code graph ({graphKinds.reduce((n, k) => n + k.count, 0)} nodes)
           </p>
           {graphKinds.length === 0 ? (
@@ -426,7 +426,7 @@ export function CoverageView(): React.ReactElement {
 
           {report.per_app.length > 0 && (
             <section className="flex flex-col gap-1">
-              <p className="text-[11px] font-semibold uppercase tracking-wider font-mono" style={{ color: 'var(--ink-dim)' }}>
+              <p className="text-xs font-semibold font-mono" style={{ color: 'var(--ink-dim)' }}>
                 Per-app
               </p>
               <PerAppTable apps={report.per_app} />
@@ -434,7 +434,7 @@ export function CoverageView(): React.ReactElement {
           )}
 
           <section className="flex flex-col gap-2">
-            <p className="text-[11px] font-semibold uppercase tracking-wider font-mono" style={{ color: 'var(--ink-dim)' }}>
+            <p className="text-xs font-semibold font-mono" style={{ color: 'var(--ink-dim)' }}>
               Coverage holes ({report.unaccounted})
             </p>
             <UnaccountedList nodes={report.unaccounted_nodes} />

@@ -88,7 +88,7 @@
   --nc-ok-bg: #ffffff; --nc-ok-fg: #18181a; --nc-ok-edge: #d6d6d1;
   --nc-ok-hover: #ecece9; --nc-ok-press: #ecece9;
   --font-sans: 'Wicked Sans', 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
-  --text-md: 14px;                 /* body copy */
+  --text-md: var(--text-body);                 /* body copy: the scale's body (tokens.css) */
   --radius-sm: 6px; --radius-md: 6px; --radius-lg: 8px; --radius-xl: 12px;
 }
 

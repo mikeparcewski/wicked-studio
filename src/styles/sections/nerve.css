@@ -32,7 +32,7 @@
   background: var(--nc-fg); color: var(--nc-bg);
 }
 .wk-nc-text { display: flex; flex-direction: column; min-width: 0; line-height: 1.2; }
-.wk-nc-name { font-size: var(--text-md, 15px); font-weight: var(--weight-bold, 700); letter-spacing: 0.01em; }
+.wk-nc-name { font-size: var(--text-body); font-weight: var(--weight-bold);  }
 .wk-nc-words { font-size: var(--text-xs); font-weight: var(--weight-semi); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* Red pulses ONCE when the tile turns red (the animation starts when the attribute starts matching)
    and never keeps animating. */
@@ -104,7 +104,7 @@
 .wk-nc-sub { margin-top: var(--space-4); padding-top: var(--space-3); border-top: 1px solid var(--border-subtle); min-width: 0; container-type: inline-size; }
 .wk-nc-sub:first-of-type:first-child { margin-top: 0; padding-top: 0; border-top: none; }
 .wk-nc-panel > .wk-nc-panel-title + .wk-nc-sub { margin-top: 0; padding-top: 0; border-top: none; }
-.wk-nc-sub-title { margin: 0 0 var(--space-2); font-size: var(--text-xs); font-weight: var(--weight-semi); color: var(--ink-muted); text-transform: uppercase; letter-spacing: 0.06em; }
+.wk-nc-sub-title { margin: 0 0 var(--space-2); font-size: var(--text-xs); font-weight: var(--weight-semi); color: var(--ink-muted);   }
 .wk-nc-line { display: block; font-size: var(--text-xs); color: var(--ink-muted); overflow-wrap: anywhere; }
 .wk-nc-why { color: var(--ink-body); }
 .wk-nc-remedy { color: var(--ink-high); }
@@ -119,17 +119,17 @@
 }
 .wk-nc-attention-item[data-level="red"] { border-left-color: var(--status-fail); }
 .wk-nc-attention-body { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; flex: 1; }
-.wk-nc-attention-text { font-size: var(--text-md, 15px); font-weight: var(--weight-semi); color: var(--ink-high); overflow-wrap: anywhere; }
+.wk-nc-attention-text { font-size: var(--text-body); font-weight: var(--weight-semi); color: var(--ink-high); overflow-wrap: anywhere; }
 .wk-nc-attention-line { display: block; font-size: var(--text-sm); overflow-wrap: anywhere; }
 .wk-nc-attention-why { color: var(--ink-muted); }
 .wk-nc-attention-acts { display: flex; flex-direction: column; align-items: flex-end; gap: var(--space-2); flex-shrink: 0; }
 .wk-nc-goto { font-size: var(--text-sm); }
 .wk-nc-glyph {
   display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
-  width: 18px; height: 18px; border-radius: var(--radius-full); font-size: 11px; font-weight: 700; line-height: 1;
+  width: 18px; height: 18px; border-radius: var(--radius-full); font-size: var(--text-caption); font-weight: var(--weight-strong); line-height: 1;
   background: var(--nc-warn-bg); color: var(--nc-warn-fg);
 }
-.wk-nc-attention-item > .wk-nc-glyph { width: 22px; height: 22px; font-size: 12px; margin-top: 1px; }
+.wk-nc-attention-item > .wk-nc-glyph { width: 22px; height: 22px; font-size: var(--text-caption); margin-top: 1px; }
 .wk-nc-glyph[data-level="red"], .wk-nc-glyph[data-state="down"] { background: var(--nc-fail-bg); color: var(--nc-fail-fg); }
 .wk-nc-glyph[data-state="ok"] { background: var(--nc-ok-bg); color: var(--nc-ok-fg); }
 .wk-nc-glyph[data-state="unknown"] { background: var(--surface-raised); color: var(--ink-high); }
@@ -141,7 +141,7 @@
 }
 .wk-nc-clear-mark {
   display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border-radius: var(--radius-full);
-  background: var(--nc-ok-bg); color: var(--nc-ok-fg); font-size: var(--text-lg); font-weight: 700; margin-bottom: var(--space-2);
+  background: var(--nc-ok-bg); color: var(--nc-ok-fg); font-size: var(--text-lg); font-weight: var(--weight-strong); margin-bottom: var(--space-2);
 }
 .wk-nc-clear-mark[data-read="checking"] { background: var(--surface-raised); color: var(--ink-muted); }
 .wk-nc-clear-title { margin: 0; font-size: var(--text-lg); font-weight: var(--weight-semi); color: var(--ink-high); }
@@ -204,7 +204,7 @@
 .wk-nc-govcards { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: var(--space-3); margin-bottom: var(--space-1); }
 .wk-nc-govcard { border: 1px solid var(--border-subtle); background: var(--surface-raised); border-radius: var(--radius-md); padding: var(--space-3) var(--space-4); display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; }
 .wk-nc-govcard-name { font-size: var(--text-xs); color: var(--ink-muted); }
-.wk-nc-govcard-value { display: flex; align-items: center; gap: 6px; font-size: var(--text-md, 15px); font-weight: var(--weight-semi); color: var(--ink-high); font-variant-numeric: tabular-nums; }
+.wk-nc-govcard-value { display: flex; align-items: center; gap: 6px; font-size: var(--text-body); font-weight: var(--weight-semi); color: var(--ink-high); font-variant-numeric: tabular-nums; }
 
 /* The feed under the panels: the embedded Watchtower, scrolled by the dashboard. */
 .wk-nc-feed { background: var(--surface-card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: var(--space-4) var(--space-5); min-width: 0; }
@@ -234,10 +234,10 @@
 /* A tile's hover: a step toward the ink, then a little accent (the rail's recipe), so it shows on every
    ground and with any accent the picker holds, even one close to the tile itself. */
 .wk-ncv { --ncv-tile-hover: color-mix(in oklab, var(--accent) 10%, color-mix(in oklab, var(--ink-high) 14%, var(--surface-card))); }
-.wk-ncv-lead { font-weight: 600; color: var(--ink-high); }
+.wk-ncv-lead { font-weight: var(--weight-strong); color: var(--ink-high); }
 .wk-ncv-lead[data-tone="fail"] { color: var(--status-fail); }
 .wk-ncv-lead[data-tone="warn"] { color: var(--status-warn); }
-.wk-ncv-waiting { margin: -16px 0 0; font-size: 15px; line-height: 1.5; color: var(--ink-muted); }
+.wk-ncv-waiting { margin: -16px 0 0; font-size: var(--text-body); line-height: 1.5; color: var(--ink-muted); }
 
 .wk-ncv-slow-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
 .wk-ncv-slow {
@@ -247,8 +247,8 @@
 .wk-ncv-slow > .wk-calm-dot { width: 12px; height: 12px; }
 .wk-ncv-slow > .wk-calm-dot[data-tone="warn"] { background: var(--status-warn); }
 .wk-ncv-slow-text { display: flex; flex-direction: column; gap: 4px; flex: 1 1 auto; min-width: 0; }
-.wk-ncv-slow-title { font-size: 17px; line-height: 1.4; font-weight: 600; color: var(--ink-high); overflow-wrap: anywhere; }
-.wk-ncv-slow-line { font-size: 14px; line-height: 1.5; color: var(--ink-body); overflow-wrap: anywhere; }
+.wk-ncv-slow-title { font-size: var(--text-lead); line-height: 1.4; font-weight: var(--weight-strong); color: var(--ink-high); overflow-wrap: anywhere; }
+.wk-ncv-slow-line { font-size: var(--text-body); line-height: 1.5; color: var(--ink-body); overflow-wrap: anywhere; }
 .wk-ncv-fix { flex-shrink: 0; }
 .wk-ncv-slow .wk-calm-btn--link:hover:not(:disabled) { background: var(--ncv-tile-hover); }
 
@@ -264,27 +264,27 @@
   border-radius: 16px; color: inherit; text-decoration: none; cursor: pointer;
 }
 .wk-ncv-tile-main:focus-visible { outline: 2px solid transparent; box-shadow: var(--focus-ring); }
-.wk-ncv-tile-name { font-size: 15px; font-weight: 600; color: var(--ink-high); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.wk-ncv-tile-state { font-size: 13px; font-weight: 500; color: var(--ink-muted); }
+.wk-ncv-tile-name { font-size: var(--text-body); font-weight: var(--weight-strong); color: var(--ink-high); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wk-ncv-tile-state { font-size: var(--text-body); font-weight: var(--weight-strong); color: var(--ink-muted); }
 /* A state word wears its tone pulled a little toward the ink, so it keeps AA on the tile's hover in every theme. */
 .wk-ncv-tile-state[data-tone="ok"] { color: color-mix(in oklab, var(--status-ok) 78%, var(--ink-high)); }
 .wk-ncv-tile-state[data-tone="warn"] { color: color-mix(in oklab, var(--status-warn) 78%, var(--ink-high)); }
 .wk-ncv-tile-state[data-tone="fail"] { color: color-mix(in oklab, var(--status-fail) 78%, var(--ink-high)); }
-.wk-ncv-tile-line { font-size: 13px; line-height: 1.4; color: var(--ink-muted); overflow-wrap: anywhere; }
+.wk-ncv-tile-line { font-size: var(--text-body); line-height: 1.4; color: var(--ink-muted); overflow-wrap: anywhere; }
 .wk-ncv-tile-signin {
   align-self: flex-start; margin: -10px 12px 12px; padding: 6px 8px; border: 0; border-radius: var(--radius-sm);
-  background: transparent; color: var(--calm-link); font-family: inherit; font-size: 13px; font-weight: 500; cursor: pointer;
+  background: transparent; color: var(--calm-link); font-family: inherit; font-size: var(--text-body); font-weight: var(--weight-strong); cursor: pointer;
   transition: background-color 0.14s, color 0.14s;
 }
 .wk-ncv-tile-signin:hover { background: var(--calm-hover-ctl); color: var(--ink-high); text-decoration: underline; text-underline-offset: 3px; }
 .wk-ncv-tile-signin:focus-visible { outline: 2px solid transparent; box-shadow: var(--focus-ring); }
 .wk-ncv-foot { display: flex; flex-direction: column; gap: 10px; }
-.wk-ncv-foot .wk-nc-insights { margin: 0; font-size: 14px; }
+.wk-ncv-foot .wk-nc-insights { margin: 0; font-size: var(--text-body); }
 .wk-ncv-foot .wk-nc-insights a { color: var(--calm-link); }
 .wk-ncv-foot .wk-nc-note { margin: 0; }
 
 /* The detail's way back to the overview. */
-.wk-nc-back { display: inline-flex; align-items: center; gap: 6px; align-self: flex-start; font-size: 14px; margin-bottom: 4px; }
+.wk-nc-back { display: inline-flex; align-items: center; gap: 6px; align-self: flex-start; font-size: var(--text-body); margin-bottom: 4px; }
 
 @media (prefers-reduced-motion: reduce) { .wk-ncv-tile, .wk-ncv-tile-signin { transition: none; } }
 @media (max-width: 1023px) { .wk-ncv-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

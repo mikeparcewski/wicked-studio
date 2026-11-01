@@ -68,9 +68,17 @@ html, body, #root {
 /* The legacy --wk-* palette block was retired by DES-VISION-001 slice 6 —
    every color now resolves from src/styles/tokens.css. */
 
-code, pre, .font-mono {
+/* Mono is for real code only (round 6), always at the code size and regular weight, whatever a class asks for. */
+code, pre, kbd, samp, .font-mono {
   font-family: var(--font-mono);
+  font-size: var(--text-code) !important;
+  font-weight: var(--weight-regular) !important;
 }
+
+/* The browser's own bold (700) is the scale's strong (600): Wicked Sans has two faces, so ask for exactly one of them. */
+h1, h2, h3, h4, h5, h6, b, strong, th, dt { font-weight: var(--weight-strong); }
+/* The wordmark has one weight. */
+.wk-wordmark b, .wk-wordmark strong { font-weight: inherit; }
 
 
 
@@ -262,8 +270,8 @@ code, pre, .font-mono {
   border-radius: var(--radius-md);
   background: var(--accent);
   color: var(--accent-fg);
-  font-size: 12px;
-  font-weight: 600;
+  font-size: var(--text-caption);
+  font-weight: var(--weight-strong);
   text-decoration: none;
   transition: top 0.1s ease-out;
 }

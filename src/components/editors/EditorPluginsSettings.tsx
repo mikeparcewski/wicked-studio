@@ -118,7 +118,7 @@ function EditorRow({ e, navigate, compact }: { e: EditorView; navigate: (p: stri
   const elsewhere = opensDocuments && !e.kinds.includes('document') && !e.kinds.includes('deck');
   return (
     <li data-testid="editor-plugin-row" data-editor={e.id} className="py-3 border-b last:border-b-0" style={{ borderColor: 'var(--border-subtle)' }}>
-      <p className="flex flex-wrap items-center gap-2" style={{ fontSize: 'var(--text-md)', color: 'var(--ink-high)', fontWeight: 600 }}>
+      <p className="flex flex-wrap items-center gap-2" style={{ fontSize: 'var(--text-md)', color: 'var(--ink-high)', fontWeight: 'var(--weight-strong)' }}>
         <span>{e.title}</span>
         <span data-testid="editor-plugin-source" className="wk-tag">{e.first_party ? 'Built in' : 'Installed'}</span>
         {!e.enabled && <span data-testid="editor-plugin-off" className="wk-tag">Off</span>}

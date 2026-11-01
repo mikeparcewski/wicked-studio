@@ -73,7 +73,7 @@ ${pkg}
   --nc-ok-bg: ${t['surface-card']}; --nc-ok-fg: ${t['ink-high']}; --nc-ok-edge: ${t.border};
   --nc-ok-hover: ${t['accent-subtle']}; --nc-ok-press: ${t['accent-subtle']};
   --font-sans: 'Wicked Sans', 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
-  --text-md: ${s['text-body']};                 /* body copy */
+  --text-md: var(--text-body);                 /* body copy: the scale's body (tokens.css) */
   --radius-sm: ${s['radius-sm']}; --radius-md: ${s['radius-md']}; --radius-lg: ${s['radius-lg']}; --radius-xl: ${s['radius-xl']};
 }
 

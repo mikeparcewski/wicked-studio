@@ -33,7 +33,7 @@ export function AssumptionsPanel({ model }: Props): React.ReactElement {
   const recorded = useRuntimeStore((s) => s.assumptions[model.session.id]) ?? [];
 
   return (
-    <div data-testid="assumptions" className="flex flex-col gap-2 text-[11px]">
+    <div data-testid="assumptions" className="flex flex-col gap-2 text-xs">
       {recorded.length > 0 && (
         <div className="flex flex-col gap-1">
           <p className="font-mono font-semibold" style={{ color: 'var(--ink-muted)' }}>
@@ -58,7 +58,7 @@ export function AssumptionsPanel({ model }: Props): React.ReactElement {
                   {!a.known && (
                     <span
                       data-testid="needs-review-badge"
-                      className="rounded px-1 text-[9px] font-semibold uppercase"
+                      className="rounded px-1 text-xs font-semibold "
                       style={{ background: 'var(--status-gate-dim)', color: 'var(--status-gate)' }}
                     >
                       needs review

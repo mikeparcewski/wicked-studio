@@ -27,7 +27,7 @@ export function ArtifactCard({
     <div
       data-testid="artifact-card"
       data-artifact-kind={artifact.kind}
-      className={`flex items-center gap-2 rounded-lg font-mono ${compact ? 'px-2 py-1 text-[11px]' : 'px-3 py-1.5 text-xs self-start max-w-[85%]'}`}
+      className={`flex items-center gap-2 rounded-lg font-mono ${compact ? 'px-2 py-1 text-xs' : 'px-3 py-1.5 text-xs self-start max-w-[85%]'}`}
       style={{ background: 'var(--surface-card)', border: '1px solid var(--surface-raised)' }}
     >
       <span aria-hidden="true" className="shrink-0" style={{ color: 'var(--ink-dim)' }}>

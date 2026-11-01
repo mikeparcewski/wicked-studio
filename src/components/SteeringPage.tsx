@@ -402,7 +402,7 @@ export function SteeringPage({ type, navigate, search = '', runs = [] }: {
                 <p className="text-xs font-semibold" style={{ color: 'var(--ink-high)' }}>
                   No steering rules seeded yet.
                 </p>
-                <p className="text-[11px]" style={{ color: 'var(--ink-muted)' }}>
+                <p className="text-xs" style={{ color: 'var(--ink-muted)' }}>
                   Add a row, or open the assistant to import a doctrine doc or author with chat — or
                   run the seed runbook at{' '}
                   <a href={SEED_RUNBOOK_URL} target="_blank" rel="noreferrer" className="underline" style={{ color: 'var(--accent)' }}>
@@ -411,7 +411,7 @@ export function SteeringPage({ type, navigate, search = '', runs = [] }: {
                 </p>
                 <code
                   data-testid="steering-seed-command"
-                  className="overflow-x-auto whitespace-pre rounded px-2 py-1.5 font-mono text-[10px]"
+                  className="overflow-x-auto whitespace-pre rounded px-2 py-1.5 font-mono text-xs"
                   style={{ background: 'var(--surface-base)', border: '1px solid var(--surface-raised)', color: 'var(--ink-high)' }}
                 >
                   {SEED_COMMAND}
@@ -431,7 +431,7 @@ export function SteeringPage({ type, navigate, search = '', runs = [] }: {
             {usageFilterAsked && (
               <p
                 data-testid="steering-usage-filter-note"
-                className="rounded px-3 py-2 text-[11px]"
+                className="rounded px-3 py-2 text-xs"
                 style={{ background: 'var(--surface-rail)', border: '1px solid var(--surface-raised)', color: 'var(--ink-muted)' }}
               >
                 {unusedIds !== null ? (
@@ -459,7 +459,7 @@ export function SteeringPage({ type, navigate, search = '', runs = [] }: {
             {savedNote !== null && (
               <p
                 data-testid="steering-saved-note"
-                className="rounded px-3 py-2 text-[11px]"
+                className="rounded px-3 py-2 text-xs"
                 style={{ background: 'var(--surface-rail)', border: '1px solid var(--surface-raised)', color: 'var(--ink-muted)' }}
               >
                 {savedNote}
@@ -469,7 +469,7 @@ export function SteeringPage({ type, navigate, search = '', runs = [] }: {
             {commitError !== null && (
               <p
                 data-testid="steering-commit-error"
-                className="rounded px-3 py-2 text-[11px]"
+                className="rounded px-3 py-2 text-xs"
                 style={{ background: 'var(--status-fail-dim)', color: 'var(--status-fail)' }}
               >
                 Couldn&rsquo;t save that change, so the cell went back to its saved value.
@@ -480,7 +480,7 @@ export function SteeringPage({ type, navigate, search = '', runs = [] }: {
             {retiredNote !== null && (
               <p
                 data-testid="steering-retired-note"
-                className="rounded px-3 py-2 text-[11px]"
+                className="rounded px-3 py-2 text-xs"
                 style={{ background: 'var(--surface-rail)', border: '1px solid var(--surface-raised)', color: 'var(--ink-muted)' }}
               >
                 Retired {retiredNote.id}. Helpers no longer follow it; it stays listed. Your reason:{' '}

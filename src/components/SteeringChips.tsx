@@ -20,7 +20,7 @@ export const EFFECT_COLOR: Record<SteeringEffect, string> = {
 export function SeverityChip({ severity }: { severity: string }): React.ReactElement {
   return (
     <span
-      className="inline-flex rounded px-1.5 py-0.5 text-[10px] font-semibold font-mono"
+      className="inline-flex rounded px-1.5 py-0.5 text-xs font-semibold font-mono"
       style={{ background: 'var(--surface-raised)', color: SEVERITY_COLOR[severity] ?? 'var(--ink-muted)' }}
     >
       {severity}
@@ -35,7 +35,7 @@ export function EffectBadge({ effect }: { effect: SteeringEffect }): React.React
     <span
       data-testid="steering-effect-badge"
       data-effect={effect}
-      className="inline-flex shrink-0 rounded px-1.5 py-0.5 text-[9px] font-semibold font-mono uppercase"
+      className="inline-flex shrink-0 rounded px-1.5 py-0.5 text-xs font-semibold font-mono "
       style={{ color: EFFECT_COLOR[effect], border: `1px solid ${EFFECT_COLOR[effect]}` }}
     >
       {effect === 'allow_with_conditions' ? 'allow+cond' : effect}

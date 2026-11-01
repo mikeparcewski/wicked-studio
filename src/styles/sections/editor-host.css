@@ -3,7 +3,7 @@
    Tokens only. */
 
 /* ── shared host chrome ── */
-.wk-card-tag { flex: 0 0 auto; padding: 2px 8px; border-radius: var(--radius-sm); background: var(--accent-wash); color: var(--accent); font-size: var(--text-2xs); font-weight: var(--weight-semi); letter-spacing: 0.06em; text-transform: uppercase; }
+.wk-card-tag { flex: 0 0 auto; padding: 2px 8px; border-radius: var(--radius-sm); background: var(--accent-wash); color: var(--accent); font-size: var(--text-2xs); font-weight: var(--weight-semi);   }
 .wk-pill { flex: 0 0 auto; padding: 2px 8px; border-radius: var(--radius-full); font-size: var(--text-xs); background: var(--surface-raised); color: var(--ink-muted); }
 .wk-pill--good { background: var(--status-ok-dim); color: var(--status-ok); }
 .wk-pill--warn { background: var(--status-warn-dim); color: var(--status-warn); }
@@ -88,7 +88,7 @@
 /* ── H7: the editor test page's three surfaces ── */
 .wk-surfaces { display: flex; gap: 0; min-height: 560px; margin: 0 0 var(--space-6); border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; background: var(--surface-base); }
 .wk-surfaces-thread { flex: 1 1 auto; min-width: 0; padding: var(--space-5) var(--space-6); overflow: auto; }
-.wk-surfaces-h { margin: 0 0 var(--space-3); font-size: var(--text-sm); font-weight: var(--weight-semi); color: var(--ink-muted); text-transform: uppercase; letter-spacing: 0.06em; }
+.wk-surfaces-h { margin: 0 0 var(--space-3); font-size: var(--text-sm); font-weight: var(--weight-semi); color: var(--ink-muted);   }
 .wk-surfaces-turn { margin: 0 0 var(--space-3); color: var(--ink-body); }
 .wk-surfaces-run p { margin: 0 0 var(--space-2); color: var(--ink-body); font-size: var(--text-sm); }
 .wk-surfaces-run b { display: inline-block; min-width: 72px; color: var(--ink-muted); font-weight: var(--weight-medium); }

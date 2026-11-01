@@ -107,7 +107,7 @@ function ActivePill({
     <span
       {...attrs}
       title={title}
-      className="flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px]"
+      className="flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs"
       style={{
         background: 'var(--surface-raised)',
         color: 'var(--ink-muted)',
@@ -1023,7 +1023,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
           style={{ borderTop: '1px solid var(--surface-raised)', background: 'var(--surface-rail)' }}
         >
           {steerError && (
-            <p className="text-[11px] font-mono" style={{ color: 'var(--status-fail)' }}>
+            <p className="text-xs font-mono" style={{ color: 'var(--status-fail)' }}>
               {steerError}
             </p>
           )}
@@ -1071,14 +1071,14 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
               data-testid="team-message-receipt"
               role="status"
               title={teamReceipt}
-              className="text-[10px] font-mono text-center truncate"
+              className="text-xs font-mono text-center truncate"
               style={{ color: 'var(--status-run)' }}
             >
               {teamReceipt}
             </p>
           ) : (
             <p
-              className="text-[10px] font-mono text-center"
+              className="text-xs font-mono text-center"
               style={{ color: 'var(--ink-dim)' }}
             >
               {planGate.isPlanGate
@@ -1103,7 +1103,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
           style={{ borderTop: '1px solid var(--surface-raised)', background: 'var(--surface-rail)' }}
         >
           {injectError && (
-            <p className="text-[11px] font-mono" style={{ color: 'var(--status-fail)' }}>
+            <p className="text-xs font-mono" style={{ color: 'var(--status-fail)' }}>
               {injectError}
             </p>
           )}
@@ -1140,21 +1140,21 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
                 into the active worker turn), not launching a new one. */}
             <span
               data-testid="steering-live-chip"
-              className="flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[10px] font-mono shrink-0"
+              className="flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-mono shrink-0"
               style={{ background: 'var(--status-run-dim)', color: 'var(--status-run)', border: '1px solid var(--status-run-dim)' }}
             >
               <span className="inline-block w-1 h-1 rounded-full animate-pulse" style={{ background: 'var(--status-run)' }} />
               steering live run
             </span>
             <p
-              className="text-[10px] font-mono flex-1"
+              className="text-xs font-mono flex-1"
               style={{ color: 'var(--ink-dim)' }}
             >
               Cmd+Enter · Click an agent to target it
             </p>
             {isTargeted && (
               <span
-                className="flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-mono"
+                className="flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-mono"
                 style={{ background: 'var(--accent-subtle)', color: 'var(--accent)', border: '1px solid var(--accent-subtle)' }}
               >
                 → {normalizedTarget}

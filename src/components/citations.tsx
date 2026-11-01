@@ -101,11 +101,11 @@ export function CitationBadge({
       className="inline-flex items-baseline gap-1"
     >
       <span style={item.status === 'unverified' ? { textDecoration: 'line-through' } : undefined}>{children}</span>
-      <span className="text-[9px] font-mono uppercase tracking-wide" style={{ color: MARK_COLOR[item.status] }}>
+      <span className="text-xs font-mono " style={{ color: MARK_COLOR[item.status] }}>
         {MARK_WORD[item.status]}
       </span>
       {item.status === 'corrected' && item.resolved !== undefined && (
-        <span className="text-[10px] font-mono" style={{ color: 'var(--accent)' }}>
+        <span className="text-xs font-mono" style={{ color: 'var(--accent)' }}>
           → {item.resolved}
         </span>
       )}
@@ -128,7 +128,7 @@ export function CitationStrip({ citations }: { citations: ChatCitations }): Reac
       data-unverifiable={citations.unverifiable}
       data-corrected={citations.corrected}
       data-unchecked={citations.unchecked}
-      className="mt-1.5 flex flex-wrap items-center gap-1.5 font-mono text-[10px]"
+      className="mt-1.5 flex flex-wrap items-center gap-1.5 font-mono text-xs"
       style={{ color: 'var(--ink-dim)' }}
       title="The daemon checked every citation in this reply against the repositories this chat can read"
     >

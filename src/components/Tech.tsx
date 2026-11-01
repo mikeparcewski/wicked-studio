@@ -27,7 +27,7 @@ export function Tech({ 'data-testid': testId, parts, block = false, className = 
     <span
       data-testid={testId}
       data-tech="on"
-      className={`font-mono text-[11px] leading-snug tabular-nums truncate ${block ? 'block' : 'inline'} ${className}`}
+      className={`font-mono text-xs leading-snug tabular-nums truncate ${block ? 'block' : 'inline'} ${className}`}
       style={{ color: 'var(--ink-dim)' }}
     >
       {shown.join(' · ')}

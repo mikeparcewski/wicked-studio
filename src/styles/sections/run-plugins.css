@@ -7,7 +7,7 @@
 .wk-runplugin-heading .wk-rp-toggle { flex: 1 1 auto; min-width: 0; align-items: center; }
 .wk-runplugin-mark {
   flex: 0 0 auto; display: inline-flex; align-items: center; gap: 3px; height: 18px; padding: 0 7px; border-radius: var(--radius-full);
-  box-shadow: inset 0 0 0 1px var(--border); color: var(--ink-muted); font-size: 10px; font-weight: var(--weight-semi); letter-spacing: .06em; text-transform: uppercase;
+  box-shadow: inset 0 0 0 1px var(--border); color: var(--ink-muted); font-size: var(--text-caption); font-weight: var(--weight-semi);  
 }
 .wk-runplugin-summary { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; justify-content: flex-end; gap: 6px; color: var(--ink-muted); font-weight: var(--weight-normal); font-size: var(--text-sm); }
 .wk-runplugin-summary-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

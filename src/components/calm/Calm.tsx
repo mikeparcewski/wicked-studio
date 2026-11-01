@@ -88,7 +88,7 @@ export function CalmButton({ children, onClick, disabled, testId, title, ariaLab
   );
 }
 
-/** A list: its quiet uppercase label, the one filter (and quiet tools) on the right, then the rows. */
+/** A list: its quiet  label, the one filter (and quiet tools) on the right, then the rows. */
 export function CalmSection({ label, labelNode, tools, children, 'data-testid': testId, ariaLabel }: {
   label?: string | undefined;
   /** A label that is itself a control (a quiet picker), in place of the plain words. */

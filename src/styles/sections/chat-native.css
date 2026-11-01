@@ -67,7 +67,7 @@
 .wk-chat-md ul, .wk-session-turn--helper .wk-session-text ul { list-style: disc; }
 .wk-chat-md ol, .wk-session-turn--helper .wk-session-text ol { list-style: decimal; }
 .wk-chat-md li, .wk-session-turn--helper .wk-session-text li { margin: 3px 0; }
-.wk-chat-md :not(pre) > code, .wk-session-turn--helper .wk-session-text :not(pre) > code { font-size: 0.88em; padding: 1px 5px; border-radius: 5px; background: var(--surface-raised); }
+.wk-chat-md :not(pre) > code, .wk-session-turn--helper .wk-session-text :not(pre) > code { font-size: var(--text-body); padding: 1px 5px; border-radius: 5px; background: var(--surface-raised); }
 .wk-chat-md pre, .wk-session-turn--helper .wk-session-text pre { position: relative; margin: 8px 0 12px; }
 .wk-session-thread .wk-md-pre {
   margin: 8px 0 12px; border-radius: var(--radius-lg); background: var(--surface-raised); overflow: hidden;
@@ -196,7 +196,7 @@
 }
 .wk-hpanel-handle:hover { color: var(--ink-high); background: var(--surface-raised); }
 .wk-hpanel-handle:focus-visible { outline: 2px solid transparent; outline-offset: -2px; box-shadow: inset var(--focus-ring); color: var(--ink-high); }
-.wk-hpanel-handle-label { writing-mode: vertical-rl; letter-spacing: 0.02em; }
+.wk-hpanel-handle-label { writing-mode: vertical-rl;  }
 /* Below 1200 px the panel opens over the page: the handle is a tab on the right edge, over the thread's gutter. */
 .wk-hpanel-handle--overlay {
   position: fixed; right: 0; top: 50%; transform: translateY(-50%); z-index: 20; width: 28px; padding: 12px 0;
@@ -224,7 +224,7 @@
 .wk-session-thread .wk-md-pre > pre > code { font-size: var(--text-sm); line-height: 1.6; }
 .wk-chat-md li, .wk-session-turn--helper .wk-session-text li { font-size: inherit; }
 .wk-session-thread .wk-who-dot { display: inline-flex; align-items: center; justify-content: center; }
-.wk-session-thread .wk-who-dot::after { content: attr(data-initial); font-size: 11px; font-weight: var(--weight-semi); color: var(--ink-high); line-height: 1; }
+.wk-session-thread .wk-who-dot::after { content: attr(data-initial); font-size: var(--text-caption); font-weight: var(--weight-semi); color: var(--ink-high); line-height: 1; }
 .wk-session-thread .wk-md-pre pre { padding: 0; }
 .wk-md-pre > pre > code { padding: 12px 14px !important; }
 /* Operator 2026-10-17 (answer 1): an agent's turn is a BUBBLE — left-aligned, its speaker named above it with the

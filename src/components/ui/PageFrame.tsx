@@ -25,7 +25,7 @@ export function PageFrame({ title, intro, actions, children, width = 'wide', 'da
   );
 }
 
-/** A section heading inside a page (sentence case; never an uppercase micro-label). */
+/** A section heading inside a page (sentence case; never an  micro-label). */
 export function SectionTitle({ children }: { children: React.ReactNode }): React.ReactElement {
   return <h2 className="wk-section-title">{children}</h2>;
 }

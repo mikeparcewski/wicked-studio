@@ -54,12 +54,12 @@
 .wk-evals-history-list { overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius-lg); }
 .wk-evals-history-row { border-bottom: 1px solid var(--border); }
 .wk-evals-history-row:last-child { border-bottom: none; }
-.wk-evals-history-toggle { display: flex; flex-direction: column; align-items: stretch; gap: 6px; width: 100%; height: auto; padding: 12px; border: none; border-radius: 0; text-align: left; white-space: normal; font-weight: 400; }
+.wk-evals-history-toggle { display: flex; flex-direction: column; align-items: stretch; gap: 6px; width: 100%; height: auto; padding: 12px; border: none; border-radius: 0; text-align: left; white-space: normal; font-weight: var(--weight-regular); }
 .wk-evals-history-toggle[aria-expanded="true"] { background: var(--surface-card); }
 .wk-evals-history-labels { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; min-width: 0; }
-.wk-evals-history-name { color: var(--ink-high); font-weight: 600; overflow-wrap: anywhere; }
-.wk-evals-history-meta { color: var(--ink-muted); font-size: 12px; overflow-wrap: anywhere; }
-.wk-evals-history-stats { color: var(--ink-body); font-size: 12px; font-variant-numeric: tabular-nums; }
+.wk-evals-history-name { color: var(--ink-high); font-weight: var(--weight-strong); overflow-wrap: anywhere; }
+.wk-evals-history-meta { color: var(--ink-muted); font-size: var(--text-caption); overflow-wrap: anywhere; }
+.wk-evals-history-stats { color: var(--ink-body); font-size: var(--text-caption); font-variant-numeric: tabular-nums; }
 .wk-evals-history-detail { padding: 0 12px 12px; background: var(--surface-card); }
 .wk-evals-history-miss { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; color: var(--ink-body); }
 
@@ -141,7 +141,7 @@
 .wk-steer-typechip-sep { align-self: stretch; margin: 0 var(--space-1); border-left: 1px solid var(--border); }
 
 /* steering dashboard + memories (S5) */
-.wk-gk-page { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: var(--space-4); padding: var(--space-5) var(--space-6); overflow-y: auto; color: var(--ink-body); font-family: var(--font-sans); font-size: max(11px, var(--text-xs)); }
+.wk-gk-page { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: var(--space-4); padding: var(--space-5) var(--space-6); overflow-y: auto; color: var(--ink-body); font-family: var(--font-sans); font-size: var(--text-caption); }
 .wk-gk-stack { display: flex; flex-direction: column; align-items: stretch; gap: var(--space-2); min-width: 0; }
 .wk-gk-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); min-width: 0; }
 .wk-gk-row--top { align-items: flex-start; }
@@ -153,7 +153,7 @@
 .wk-gk-content { margin: 0; min-width: 0; overflow-wrap: anywhere; white-space: pre-wrap; }
 .wk-gk-grow { flex: 1 1 12rem; }
 .wk-gk-muted, .wk-gk-count { margin: 0; color: var(--ink-muted); }
-.wk-gk-count { font-weight: 400; }
+.wk-gk-count { font-weight: var(--weight-regular); }
 .wk-gk-list { display: flex; flex-direction: column; gap: var(--space-3); margin: 0; padding: 0; list-style: none; min-width: 0; }
 .wk-gk-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--space-2); }
 .wk-gk-note { margin: 0; padding: var(--space-3); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); background: var(--surface-rail); color: var(--ink-body); overflow-wrap: anywhere; }
@@ -169,8 +169,8 @@
 .wk-gk-page .wk-menu-item { white-space: normal; overflow-wrap: anywhere; }
 .wk-gk-page [role="combobox"] { min-width: 0; }
 .wk-gk-page [role="combobox"] input, .wk-gk-page [role="listbox"] { min-width: 0; max-width: 100%; }
-.wk-gk-page [role="combobox"] .font-mono { font-family: var(--font-sans); font-size: max(11px, var(--text-xs)); }
-.wk-gk-page .wk-section-title, .wk-gk-page .wk-tag, .wk-gk-page .wk-tech-details-summary { font-size: max(11px, var(--text-xs)); text-transform: none; letter-spacing: normal; }
+.wk-gk-page [role="combobox"] .font-mono { font-family: var(--font-sans); font-size: var(--text-caption); }
+.wk-gk-page .wk-section-title, .wk-gk-page .wk-tag, .wk-gk-page .wk-tech-details-summary { font-size: var(--text-caption); text-transform: none;  }
 .wk-gk-page .wk-tech-details { min-width: 0; max-width: 100%; }
 @media (max-width: 600px) {
   .wk-gk-page { padding: var(--space-4); }

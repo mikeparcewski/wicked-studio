@@ -55,7 +55,7 @@
 .wk-pg-repo-kv-value { color: var(--ink-high); font-weight: var(--weight-semi); }
 .wk-pg-repo-commits, .wk-pg-repo-people { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-2); }
 .wk-pg-repo-commit { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 0 var(--space-2); font-size: var(--text-sm); }
-.wk-pg-repo-sha { font-family: var(--font-mono); font-size: var(--text-xs); color: var(--ink-muted); padding-top: 1px; }
+.wk-pg-repo-sha { font-family: var(--font-mono); font-size: var(--text-code); color: var(--ink-muted); padding-top: 1px; }
 .wk-pg-repo-commit-msg { color: var(--ink-body); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .wk-pg-repo-commit-meta { grid-column: 2; color: var(--ink-dim); font-size: var(--text-xs); }
 .wk-pg-repo-person { display: flex; align-items: center; gap: var(--space-2); font-size: var(--text-sm); min-width: 0; }
@@ -94,7 +94,7 @@
 /* The requirements browser reads at the page's small size wherever it sits (a card or the wizard). */
 .wk-reqs { font-size: var(--text-sm); }
 /* "At risk" stands out from the routine id · domain metadata (words, not only weight or colour). */
-.wk-reqs-risk { color: var(--ink-body); font-weight: 600; }
+.wk-reqs-risk { color: var(--ink-body); font-weight: var(--weight-strong); }
 @media (max-width: 767px) {
   .wk-pg-proj-row { grid-template-columns: minmax(0, 1fr); }
   .wk-pg-proj-row .wk-list-row-actions { flex-wrap: wrap; }

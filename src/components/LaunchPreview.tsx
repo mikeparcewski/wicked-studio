@@ -17,10 +17,10 @@ export function LaunchPreview({ model }: { model: LaunchPreviewModel }): React.R
       data-state={state}
       data-of={previewOf ?? ''}
       aria-label="Launch preview"
-      className="flex flex-col gap-1.5 rounded-xl px-3 py-2 text-[11px]"
+      className="flex flex-col gap-1.5 rounded-xl px-3 py-2 text-xs"
       style={{ background: 'var(--surface-rail)', border: '1px solid var(--surface-raised)', color: 'var(--ink-muted)' }}
     >
-      <span className="font-mono uppercase tracking-widest" style={{ color: 'var(--ink-dim)' }}>
+      <span className="font-mono " style={{ color: 'var(--ink-dim)' }}>
         Launch preview{previewOf === 'preset' ? ' · preset' : ''}
       </span>
       {preview.status === 'loading' && <span>Asking the engine what this launch would do…</span>}

@@ -48,21 +48,21 @@ export function GateUnderReview({ runId, units, reviewed, next }: {
         </p>
       )}
       <details className="mt-1" open={open} onToggle={(e) => setOpen((e.currentTarget as HTMLDetailsElement).open)}>
-        <summary data-testid="gate-under-review-toggle" className="text-[11px] font-mono cursor-pointer select-none" style={{ color: 'var(--ink-dim)' }}>
+        <summary data-testid="gate-under-review-toggle" className="text-xs font-mono cursor-pointer select-none" style={{ color: 'var(--ink-dim)' }}>
           read {phase}&apos;s output
         </summary>
         {shown === null ? (
-          open && <p className="text-[11px] font-mono mt-1" style={{ color: 'var(--ink-dim)' }}>reading…</p>
+          open && <p className="text-xs font-mono mt-1" style={{ color: 'var(--ink-dim)' }}>reading…</p>
         ) : shown.text !== null ? (
           <pre
             data-testid="gate-under-review-output"
-            className="text-[11px] font-mono overflow-auto max-h-64 mt-1 p-2 rounded"
+            className="text-xs font-mono overflow-auto max-h-64 mt-1 p-2 rounded"
             style={{ background: 'var(--surface-base)', color: 'var(--ink-body)', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}
           >
             {showText(shown.text)}
           </pre>
         ) : (
-          <p data-testid="gate-under-review-note" className="text-[11px] font-mono mt-1" style={{ color: 'var(--ink-dim)' }}>{showText(shown.note ?? '')}</p>
+          <p data-testid="gate-under-review-note" className="text-xs font-mono mt-1" style={{ color: 'var(--ink-dim)' }}>{showText(shown.note ?? '')}</p>
         )}
       </details>
     </div>

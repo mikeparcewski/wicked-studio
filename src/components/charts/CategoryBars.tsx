@@ -20,7 +20,7 @@ function useReducedMotion(): boolean {
   return r;
 }
 
-const AXIS_TICK = { fill: 'var(--ink-muted)', fontSize: 12 } as const;
+const AXIS_TICK = { fill: 'var(--ink-muted)', fontSize: 'var(--text-caption)' } as const;
 
 function Tip({ active, payload, label, series }: {
   active?: boolean; payload?: readonly { dataKey?: unknown; value?: unknown }[]; label?: unknown; series: readonly CategorySeries[];
@@ -71,10 +71,10 @@ export function CategoryBars({ rows, series, label, onPick, rowHeight = 30, norm
           <BarChart data={data} layout="vertical" margin={{ top: 0, right: 4, bottom: 0, left: 0 }} barCategoryGap="30%" accessibilityLayer
             {...(normalize ? { stackOffset: 'expand' as const } : {})}>
             {!normalize && <CartesianGrid horizontal={false} stroke="var(--border-subtle)" strokeDasharray="2 4" />}
-            <XAxis type="number" domain={normalize ? [0, 1] : [0, max]} allowDecimals={false} hide={normalize} tick={{ ...AXIS_TICK, fontSize: 11, fill: 'var(--ink-dim)' }} tickLine={false} axisLine={false} tickCount={5} />
+            <XAxis type="number" domain={normalize ? [0, 1] : [0, max]} allowDecimals={false} hide={normalize} tick={{ ...AXIS_TICK, fontSize: 'var(--text-caption)', fill: 'var(--ink-dim)' }} tickLine={false} axisLine={false} tickCount={5} />
             {figure !== undefined && (
               <YAxis yAxisId="fig" orientation="right" type="category" dataKey="label" width={figureWidth} tickLine={false} axisLine={false}
-                tick={{ ...AXIS_TICK, fill: 'var(--ink-dim)', fontSize: 12 }}
+                tick={{ ...AXIS_TICK, fill: 'var(--ink-dim)', fontSize: 'var(--text-caption)' }}
                 tickFormatter={(v: string) => { const r = rows.find((x) => x.label === v); return r === undefined ? '' : figure(r); }} />
             )}
             <YAxis type="category" dataKey="label" width={labelWidth} tickLine={false} axisLine={false} tick={AXIS_TICK}

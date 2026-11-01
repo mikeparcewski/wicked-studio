@@ -21,12 +21,12 @@
 .wk-se-stat[data-tone="warn"] .wk-se-stat-icon { background: var(--status-warn-dim); color: var(--status-warn); }
 .wk-se-stat[data-tone="fail"] .wk-se-stat-icon { background: var(--status-fail-dim); color: var(--status-fail); }
 .wk-se-stat-label { font-size: var(--text-xs); color: var(--ink-muted); align-self: end; }
-.wk-se-stat-value { grid-column: 2; font-size: var(--text-2xl); font-weight: 650; color: var(--ink-high); line-height: 1.1; font-variant-numeric: tabular-nums; letter-spacing: -0.015em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wk-se-stat-value { grid-column: 2; font-size: var(--text-2xl); font-weight: var(--weight-strong); color: var(--ink-high); line-height: 1.1; font-variant-numeric: tabular-nums;  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; letter-spacing: var(--tracking-title);}
 .wk-se-stat[data-tone="ok"] .wk-se-stat-value { color: var(--status-ok); }
 .wk-se-stat[data-tone="gate"] .wk-se-stat-value { color: var(--status-gate); }
 .wk-se-stat[data-tone="fail"] .wk-se-stat-value { color: var(--status-fail); }
 .wk-se-stat[data-tone="warn"] .wk-se-stat-value { color: var(--status-warn); }
-.wk-se-stat-of { margin-left: 6px; font-size: var(--text-md); font-weight: var(--weight-semi); color: var(--ink-dim); letter-spacing: 0; }
+.wk-se-stat-of { margin-left: 6px; font-size: var(--text-md); font-weight: var(--weight-semi); color: var(--ink-dim);  }
 .wk-se-stat-wait { color: var(--ink-dim); }
 .wk-se-stat-note { grid-column: 1 / -1; margin-top: var(--space-2); font-size: var(--text-xs); line-height: 1.45; color: var(--ink-dim); overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; }
 
@@ -143,7 +143,7 @@
 .wk-se-format > summary:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-shadow: var(--focus-ring); }
 .wk-se-format > p { margin: var(--space-2) 0 0; }
 .wk-se-format > p code { white-space: nowrap; }
-.wk-se-format > pre { margin: var(--space-2) 0; padding: var(--space-3); border-radius: var(--radius-md); background: var(--surface-base); color: var(--ink-body); font-family: var(--font-mono); font-size: var(--text-xs); line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+.wk-se-format > pre { margin: var(--space-2) 0; padding: var(--space-3); border-radius: var(--radius-md); background: var(--surface-base); color: var(--ink-body); font-family: var(--font-mono); font-size: var(--text-code); line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
 
 /* Evaluate */
 /* What the numbers can and cannot say — a calm card beside the numbers, an amber rail on the left */
@@ -215,7 +215,7 @@
 
 /* Standalone head (the Desk tab names the surface itself) */
 .wk-se-head { display: flex; flex-direction: column; gap: var(--space-1); }
-.wk-se-title { margin: 0; font-size: var(--text-lg); font-weight: var(--weight-semi); color: var(--ink-high); letter-spacing: -0.005em; }
+.wk-se-title { margin: 0; font-size: var(--text-lg); font-weight: var(--weight-semi); color: var(--ink-high);  }
 .wk-se-intro { margin: 0; font-size: var(--text-sm); color: var(--ink-dim); }
 
 /* Fields inside the surface: the shared control height and inner room */

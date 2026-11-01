@@ -21,7 +21,7 @@ export function PlanEditPanel({ view }: { view: SessionView }): React.ReactEleme
   const outcome = edit.status === 'done' ? edit.outcome : null;
 
   return (
-    <div data-testid="plan-edit" data-editable={availability.editable ? 'true' : 'false'} className="flex flex-col gap-2 text-[11px]">
+    <div data-testid="plan-edit" data-editable={availability.editable ? 'true' : 'false'} className="flex flex-col gap-2 text-xs">
       {!availability.editable && (
         <p data-testid="plan-edit-unavailable" style={{ color: 'var(--ink-muted)' }}>{availability.reason}</p>
       )}

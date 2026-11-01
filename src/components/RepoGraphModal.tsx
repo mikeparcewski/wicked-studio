@@ -102,7 +102,7 @@ function NodeDetailPanel({
       >
         <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: color }} />
         <span
-          className="text-[11px] font-semibold truncate flex-1 font-mono"
+          className="text-xs font-semibold truncate flex-1 font-mono"
           style={{ color: T.ink }}
           title={node.name || node.id}
         >
@@ -120,7 +120,7 @@ function NodeDetailPanel({
         </button>
       </div>
 
-      <div className="overflow-y-auto flex-1 p-3 flex flex-col gap-3 text-[11px]">
+      <div className="overflow-y-auto flex-1 p-3 flex flex-col gap-3 text-xs">
         {(onBlast !== undefined || onExpand !== undefined) && (
           <div className="flex gap-2">
             {onBlast !== undefined && (
@@ -152,7 +152,7 @@ function NodeDetailPanel({
             </span>
             {blast.unresolved > 0 && (
               <span
-                className="text-[11px]"
+                className="text-xs"
                 style={{ color: T.deny }}
                 title="References no resolver could bind — repeat call sites of resolved relationships are not counted; 0 is normal for fully-resolved symbols"
               >
@@ -160,7 +160,7 @@ function NodeDetailPanel({
               </span>
             )}
             {blast.unresolved === -1 && (
-              <span className="text-[11px]" style={{ color: T.deny }}>Couldn’t work out the blast radius</span>
+              <span className="text-xs" style={{ color: T.deny }}>Couldn’t work out the blast radius</span>
             )}
             <ul className="flex flex-col gap-0.5 max-h-48 overflow-y-auto">
               {blast.dependents.slice(0, 30).map((d) => (
@@ -168,7 +168,7 @@ function NodeDetailPanel({
                   <button
                     type="button"
                     onClick={() => onFocusDependent?.(d)}
-                    className="w-full text-left text-[10px] font-mono truncate hover:underline"
+                    className="w-full text-left text-xs font-mono truncate hover:underline"
                     style={{ color: T.link }}
                     title={`${d.file}:${d.line}`}
                   >
@@ -177,7 +177,7 @@ function NodeDetailPanel({
                 </li>
               ))}
               {blast.dependents.length > 30 && (
-                <li className="text-[11px]" style={{ color: T.faint }}>+{blast.dependents.length - 30} more</li>
+                <li className="text-xs" style={{ color: T.faint }}>+{blast.dependents.length - 30} more</li>
               )}
             </ul>
           </div>
@@ -197,7 +197,7 @@ function NodeDetailPanel({
         {node.file && (
           <div>
             <p className="text-xs font-medium mb-0.5" style={{ color: T.faint }}>File</p>
-            <p className="font-mono text-[10px] break-all" style={{ color: T.muted }}>{node.file}</p>
+            <p className="font-mono text-xs break-all" style={{ color: T.muted }}>{node.file}</p>
           </div>
         )}
 
@@ -219,9 +219,9 @@ function NodeDetailPanel({
             </p>
             <div className="flex flex-col gap-0.5">
               {calledBy.slice(0, 10).map((e) => (
-                <p key={e.src} className="font-mono text-[10px] truncate" style={{ color: T.muted }} title={e.src}>{shortName(e.src)}</p>
+                <p key={e.src} className="font-mono text-xs truncate" style={{ color: T.muted }} title={e.src}>{shortName(e.src)}</p>
               ))}
-              {calledBy.length > 10 && <p className="text-[11px]" style={{ color: T.faint }}>+{calledBy.length - 10} more</p>}
+              {calledBy.length > 10 && <p className="text-xs" style={{ color: T.faint }}>+{calledBy.length - 10} more</p>}
             </div>
           </div>
         )}
@@ -233,9 +233,9 @@ function NodeDetailPanel({
             </p>
             <div className="flex flex-col gap-0.5">
               {calls.slice(0, 10).map((e) => (
-                <p key={e.tgt} className="font-mono text-[10px] truncate" style={{ color: T.muted }} title={e.tgt}>{shortName(e.tgt)}</p>
+                <p key={e.tgt} className="font-mono text-xs truncate" style={{ color: T.muted }} title={e.tgt}>{shortName(e.tgt)}</p>
               ))}
-              {calls.length > 10 && <p className="text-[11px]" style={{ color: T.faint }}>+{calls.length - 10} more</p>}
+              {calls.length > 10 && <p className="text-xs" style={{ color: T.faint }}>+{calls.length - 10} more</p>}
             </div>
           </div>
         )}
@@ -331,7 +331,7 @@ function DomainGraphView({ graph }: { graph: DomainGraph }): React.ReactElement 
   return (
     <div className="h-full flex flex-col">
       <div className="flex items-center gap-3 px-4 py-2 shrink-0 border-b" style={{ borderColor: T.hairline }}>
-        <span className="text-[11px] shrink-0" style={{ color: T.muted }}>
+        <span className="text-xs shrink-0" style={{ color: T.muted }}>
           {nodes.length} domains · {[...reqCounts.values()].reduce((a, b) => a + b, 0)} requirements
         </span>
         <input
@@ -339,11 +339,11 @@ function DomainGraphView({ graph }: { graph: DomainGraph }): React.ReactElement 
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Filter domains + requirement titles…"
-          className="flex-1 text-[11px] px-3 py-1.5 rounded-lg border outline-none"
+          className="flex-1 text-xs px-3 py-1.5 rounded-lg border outline-none"
           style={{ border: `1px solid ${T.hairlineS}`, background: T.canvas2, color: T.ink }}
         />
         {q !== '' && (
-          <span className="text-[11px] shrink-0" style={{ color: T.faint }}>
+          <span className="text-xs shrink-0" style={{ color: T.faint }}>
             {visible.nodes.length === 1 ? '1 match' : `${visible.nodes.length} matches`}
           </span>
         )}
@@ -386,27 +386,27 @@ function DomainDetailPanel({
       style={{ borderColor: T.hairlineS, background: T.surface2 }}
     >
       <div className="px-4 py-2.5 border-b flex items-center gap-2 shrink-0" style={{ borderColor: T.hairline, background: T.canvas2 }}>
-        <span className="text-[11px] font-semibold font-mono truncate" style={{ color: T.ink }}>{domainId}</span>
-        <span className="text-[11px] ml-auto shrink-0" style={{ color: T.faint }}>{reqs.length} reqs</span>
+        <span className="text-xs font-semibold font-mono truncate" style={{ color: T.ink }}>{domainId}</span>
+        <span className="text-xs ml-auto shrink-0" style={{ color: T.faint }}>{reqs.length} reqs</span>
         <button type="button" onClick={onClose} aria-label="Close domain details" className="text-sm shrink-0 px-1" style={{ color: T.muted }}>
           ×
         </button>
       </div>
       <div className="flex-1 overflow-y-auto">
         {domain.description && (
-          <p className="text-[11px] px-4 pt-3 pb-1" style={{ color: T.muted }}>{domain.description}</p>
+          <p className="text-xs px-4 pt-3 pb-1" style={{ color: T.muted }}>{domain.description}</p>
         )}
         {reqs.length === 0 ? (
-          <p className="text-[11px] px-4 py-3" style={{ color: T.faint }}>No requirements recorded for this domain.</p>
+          <p className="text-xs px-4 py-3" style={{ color: T.faint }}>No requirements recorded for this domain.</p>
         ) : (
           <div className="divide-y" style={{ borderColor: T.hairline }}>
             {reqs.slice(0, REQ_CAP).map(([reqId, req]) => (
               <div key={reqId} className="px-4 py-2.5" style={{ borderColor: T.hairline }}>
                 <div className="flex items-center gap-2 mb-0.5">
-                  <span className="text-[10px] font-mono" style={{ color: T.faint }}>{reqId}</span>
+                  <span className="text-xs font-mono" style={{ color: T.faint }}>{reqId}</span>
                   {req.status && (
                     <span
-                      className="text-[11px] font-semibold px-1.5 py-0.5 rounded"
+                      className="text-xs font-semibold px-1.5 py-0.5 rounded"
                       style={{
                         background: req.status === 'active' ? 'var(--status-run-dim)' : req.status === 'deprecated' ? 'var(--status-fail-dim)' : T.surface,
                         color: req.status === 'active' ? T.ok : req.status === 'deprecated' ? T.deny : T.muted,
@@ -416,14 +416,14 @@ function DomainDetailPanel({
                     </span>
                   )}
                 </div>
-                <p className="text-[11px]" style={{ color: T.ink }}>{req.title}</p>
+                <p className="text-xs" style={{ color: T.ink }}>{req.title}</p>
                 {req.description && req.description !== req.title && (
-                  <p className="text-[10px] mt-0.5" style={{ color: T.muted }}>{req.description.slice(0, 160)}</p>
+                  <p className="text-xs mt-0.5" style={{ color: T.muted }}>{req.description.slice(0, 160)}</p>
                 )}
               </div>
             ))}
             {reqs.length > REQ_CAP && (
-              <p className="text-[11px] px-4 py-2" style={{ color: T.faint }}>
+              <p className="text-xs px-4 py-2" style={{ color: T.faint }}>
                 +{reqs.length - REQ_CAP} more requirements
               </p>
             )}
@@ -609,7 +609,7 @@ export function RepoGraphModal({ repo, onClose, onSelectRun, initialFocus }: Pro
       <button
         type="button"
         onClick={() => onChange(value)}
-        className="rounded px-2.5 py-1 text-[11px] font-medium transition-colors"
+        className="rounded px-2.5 py-1 text-xs font-medium transition-colors"
         style={{
           background: active ? T.surface : 'transparent',
           color: active ? T.ink : T.muted,
@@ -642,7 +642,7 @@ export function RepoGraphModal({ repo, onClose, onSelectRun, initialFocus }: Pro
           style={{ background: T.blue2, borderColor: T.hairline }}
         >
           {/* Repo name */}
-          <span className="text-[13px] font-semibold mr-1" style={{ color: T.ink }}>
+          <span className="text-sm font-semibold mr-1" style={{ color: T.ink }}>
             {repo.name}
           </span>
 
@@ -673,7 +673,7 @@ export function RepoGraphModal({ repo, onClose, onSelectRun, initialFocus }: Pro
             <button
               type="button"
               onClick={() => setHideTests((h) => !h)}
-              className="flex items-center gap-1.5 px-2 py-1 rounded text-[11px] font-medium transition-colors border"
+              className="flex items-center gap-1.5 px-2 py-1 rounded text-xs font-medium transition-colors border"
               style={{
                 borderColor: hideTests ? T.hairline : 'var(--accent-dim)',
                 background:  hideTests ? 'var(--surface-rail)' : 'var(--accent-subtle)',
@@ -689,7 +689,7 @@ export function RepoGraphModal({ repo, onClose, onSelectRun, initialFocus }: Pro
             <span
               data-testid="graph-node-stats"
               data-hidden-tests={hiddenTests}
-              className="text-[11px] px-2 py-0.5 rounded"
+              className="text-xs px-2 py-0.5 rounded"
               style={{ background: 'var(--surface-rail)', color: T.muted }}
             >
               {localNodes.length} nodes
@@ -737,11 +737,11 @@ export function RepoGraphModal({ repo, onClose, onSelectRun, initialFocus }: Pro
                   {domainCoverage ? (
                     <div className="rounded-lg p-4 flex flex-col gap-2 border" style={{ border: `1px solid ${T.hairline}` }}>
                       <div className="flex justify-between items-baseline">
-                        <span className="text-[11px]" style={{ color: T.muted }}>Annotation coverage</span>
+                        <span className="text-xs" style={{ color: T.muted }}>Annotation coverage</span>
                         {/* 0/0 is undefined, not 100% (FINDING-009). The engine documents coverage
                             as "vacuously 1.0 when behavior_bearing == 0", so an unannotated repo
                             rendered here as a full green bar reading 100.0%. */}
-                        <span className="text-[11px] font-bold" style={{ color: T.ink }}>
+                        <span className="text-xs font-bold" style={{ color: T.ink }}>
                           {domainCoverage.behavior_bearing === 0
                             ? 'not extracted'
                             : domainCoverage.coverage < 1 && domainCoverage.coverage * 100 >= 99.95
@@ -761,14 +761,14 @@ export function RepoGraphModal({ repo, onClose, onSelectRun, initialFocus }: Pro
                           }}
                         />
                       </div>
-                      <div className="flex gap-4 mt-1 text-[11px] tabular-nums" style={{ color: T.faint }}>
+                      <div className="flex gap-4 mt-1 text-xs tabular-nums" style={{ color: T.faint }}>
                         <span>{domainCoverage.resolved.toLocaleString()} resolved</span>
                         <span>{domainCoverage.behavior_bearing.toLocaleString()} behavior-bearing</span>
                         <span>{domainCoverage.total.toLocaleString()} total</span>
                       </div>
                     </div>
                   ) : (
-                    <p className="text-[11px]" style={{ color: T.faint }}>
+                    <p className="text-xs" style={{ color: T.faint }}>
                       No coverage data — run onboarding first, or re-run the annotation workflow below after a graph re-index.
                     </p>
                   )}
@@ -782,7 +782,7 @@ export function RepoGraphModal({ repo, onClose, onSelectRun, initialFocus }: Pro
                     {annotating ? 'Starting…' : 'Run annotation workflow →'}
                   </button>
                   {/* §7.8 (slice AC, EC43): the named action's blast radius. */}
-                  <p data-testid="action-preview" className="text-[11px]" style={{ color: T.faint }}>
+                  <p data-testid="action-preview" className="text-xs" style={{ color: T.faint }}>
                     launches the annotation workflow as a governed run — writes behavior
                     annotations into this repo's domain model; typically minutes
                   </p>
@@ -822,11 +822,11 @@ export function RepoGraphModal({ repo, onClose, onSelectRun, initialFocus }: Pro
                     style={{ background: T.canvas, borderColor: T.hairline }}
                   >
                     <PanelDots />
-                    <span className="font-mono text-[10px] ml-1" style={{ color: T.faint }}>
+                    <span className="font-mono text-xs ml-1" style={{ color: T.faint }}>
                       code-graph · <span style={{ color: T.link }}>{repo.name}</span>
                     </span>
                     <span
-                      className="ml-auto font-mono text-[11px] px-2 py-0.5 rounded"
+                      className="ml-auto font-mono text-xs px-2 py-0.5 rounded"
                       style={{ background: T.surface, color: T.muted }}
                     >
                       {localNodes.length} nodes
@@ -859,7 +859,7 @@ export function RepoGraphModal({ repo, onClose, onSelectRun, initialFocus }: Pro
                     style={{ background: T.canvas, borderColor: T.hairline }}
                   >
                     <PanelDots />
-                    <span className="font-mono text-[10px] ml-1" style={{ color: T.faint }}>
+                    <span className="font-mono text-xs ml-1" style={{ color: T.faint }}>
                       hotspots · <span style={{ color: T.link }}>{repo.name}</span>
                     </span>
                   </div>

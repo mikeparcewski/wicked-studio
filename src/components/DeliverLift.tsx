@@ -52,7 +52,7 @@ export function DeliverLift({ view, omitFailure = false }: { view: DeliverLiftVi
       data-outcome={view.outcome ?? 'refused'}
       data-lift-tone={liftTone}
       {...(view.attempt !== null ? { 'data-attempt': view.attempt } : {})}
-      className="rounded-lg p-2.5 flex flex-col gap-1 font-mono text-[11px]"
+      className="rounded-lg p-2.5 flex flex-col gap-1 font-mono text-xs"
       style={{ background: toneDim, border: `1px solid ${toneDim}`, color: 'var(--ink-body)', overflowWrap: 'anywhere' }}
     >
       <p className="text-xs font-semibold" style={{ color: tone }}>
@@ -178,7 +178,7 @@ export function DeliverLift({ view, omitFailure = false }: { view: DeliverLiftVi
                           {t.stream} tail — the check&apos;s own output, verbatim
                         </summary>
                         <pre
-                          className="mt-1 p-1.5 rounded overflow-auto text-[10px] leading-snug"
+                          className="mt-1 p-1.5 rounded overflow-auto text-xs leading-snug"
                           style={{ maxHeight: '12rem', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', background: 'var(--surface-rail)', color: 'var(--ink-high)' }}
                         >
                           {t.text}

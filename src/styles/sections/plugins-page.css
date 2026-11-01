@@ -20,7 +20,7 @@ button.wk-plugcard:focus-visible { outline: 2px solid transparent; box-shadow: v
 .wk-plugcard > .wk-plugcard-prev { margin: 1px 1px 0; border-radius: calc(var(--radius-lg) - 1px) calc(var(--radius-lg) - 1px) 0 0; }
 .wk-plugcard-prev-tag {
   position: absolute; right: 8px; top: 8px; padding: 1px 7px; border-radius: var(--radius-full); background: color-mix(in srgb, var(--surface-base) 80%, transparent);
-  color: var(--ink-muted); font-size: 10px; font-weight: var(--weight-semi); letter-spacing: .04em; text-transform: uppercase;
+  color: var(--ink-muted); font-size: var(--text-caption); font-weight: var(--weight-semi);  
 }
 .wk-plugcard-prev-tag[data-live='true'] { color: var(--status-ok); }
 .wk-plugcard-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
@@ -37,7 +37,7 @@ button.wk-plugcard:focus-visible { outline: 2px solid transparent; box-shadow: v
 .wk-plugcard-title .wk-tag { font-weight: var(--weight-normal); }
 .wk-plugcard-line { color: var(--ink-body); font-size: var(--text-sm); line-height: 1.4; }
 .wk-plugcard-where { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
-.wk-plugcard-where span { padding: 1px 7px; border-radius: var(--radius-full); background: var(--surface-raised); color: var(--ink-muted); font-size: 11px; }
+.wk-plugcard-where span { padding: 1px 7px; border-radius: var(--radius-full); background: var(--surface-raised); color: var(--ink-muted); font-size: var(--text-caption); }
 
 /* Miniatures: CSS-only pictures of what each plugin draws (a card with no preview image). */
 .wk-mini { position: absolute; inset: 12px; display: grid; gap: 6px; }
@@ -84,13 +84,13 @@ button.wk-plugcard:focus-visible { outline: 2px solid transparent; box-shadow: v
 .wk-plugdetail-switch { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px; border-radius: var(--radius-md); background: var(--surface-base); color: var(--ink-high); font-size: var(--text-sm); }
 .wk-plugdetail-muted { color: var(--ink-muted); font-size: var(--text-xs); }
 .wk-plugdetail-bad { margin: 0; color: var(--status-fail); font-size: var(--text-sm); }
-.wk-plugdetail-sec h3 { margin: 0 0 6px; color: var(--ink-muted); font-size: 11px; font-weight: var(--weight-semi); letter-spacing: .05em; text-transform: uppercase; }
+.wk-plugdetail-sec h3 { margin: 0 0 6px; color: var(--ink-muted); font-size: var(--text-caption); font-weight: var(--weight-semi);   }
 .wk-plugdetail-grants { display: flex; flex-direction: column; gap: 6px; margin: 0; padding: 0; list-style: none; }
 .wk-plugdetail-grants li { display: grid; grid-template-columns: 16px minmax(0, 1fr); gap: 8px; color: var(--ink-body); font-size: var(--text-sm); line-height: 1.4; }
 .wk-plugdetail-grants li > svg { margin-top: 3px; color: var(--status-ok); }
 .wk-plugdetail-grants li.wk-plugdetail-never > svg { color: var(--status-fail); }
-.wk-plugdetail-grants code { color: var(--ink-muted); font-size: 11px; overflow-wrap: anywhere; }
-.wk-plugdetail-manifest { margin: 0; padding: 10px 12px; max-height: 260px; overflow: auto; border-radius: var(--radius-md); background: var(--surface-base); color: var(--ink-body); font-family: var(--font-mono); font-size: 11px; line-height: 1.5; white-space: pre; }
+.wk-plugdetail-grants code { color: var(--ink-muted); font-size: var(--text-caption); overflow-wrap: anywhere; }
+.wk-plugdetail-manifest { margin: 0; padding: 10px 12px; max-height: 260px; overflow: auto; border-radius: var(--radius-md); background: var(--surface-base); color: var(--ink-body); font-family: var(--font-mono); font-size: var(--text-code); line-height: 1.5; white-space: pre; }
 @media (max-width: 1199px) {
   .wk-plugpage-layout[data-detail='true'] { grid-template-columns: minmax(0, 1fr); }
   .wk-plugdetail { position: fixed; inset: 0 0 0 auto; z-index: 40; width: min(420px, 100vw); max-height: none; border-radius: 0; box-shadow: var(--shadow-overlay); }

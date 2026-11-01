@@ -130,7 +130,7 @@ function Chip({ repo, source, onRemove }: {
           ? 'Comes with the selected project. Drop it to test the others — the launch then sends the remaining repositories explicitly and still files into the project.'
           : 'Explicit attachment — sent as repoRefs'
       }
-      className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-mono"
+      className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-mono"
       style={{
         border: '1px solid var(--surface-raised)',
         background: source === 'project' ? 'transparent' : 'var(--accent-subtle)',
@@ -350,7 +350,7 @@ export function TestingLaunchPanel({ intent, navigate, onClose, onLaunched, init
       data-testid="testing-launch-fanout-run"
       data-run-id={id}
       onClick={() => navigate(sessionPath(`run:${id}`))}
-      className="font-mono text-[10px] underline"
+      className="font-mono text-xs underline"
       style={{ color: 'var(--accent)' }}
     >
       {runShortId(id)}
@@ -366,14 +366,14 @@ export function TestingLaunchPanel({ intent, navigate, onClose, onLaunched, init
       style={{ border: '1px solid var(--surface-raised)', background: 'var(--surface-rail)' }}
     >
       <div className="flex items-center gap-2">
-        <span className="text-[11px] font-semibold" style={{ color: 'var(--ink-high)' }}>
+        <span className="text-xs font-semibold" style={{ color: 'var(--ink-high)' }}>
           {copy.title}
         </span>
         {governed && (
           <span
             data-testid="testing-launch-workflow"
             data-workflow={QE_AUTHOR_TESTS_WORKFLOW_ID}
-            className="rounded-full px-2 py-0.5 text-[10px] font-mono"
+            className="rounded-full px-2 py-0.5 text-xs font-mono"
             title={`Governed workflow — ${qeWorkflow.phases.length} phases: ${qeWorkflow.phases.map((p) => p.id).join(' → ')}`}
             style={{ border: '1px solid var(--surface-raised)', color: 'var(--accent)' }}
           >
@@ -384,7 +384,7 @@ export function TestingLaunchPanel({ intent, navigate, onClose, onLaunched, init
           data-testid="testing-launch-close"
           type="button"
           onClick={onClose}
-          className="ml-auto text-[10px] hover:underline"
+          className="ml-auto text-xs hover:underline"
           style={{ color: 'var(--ink-dim)' }}
         >
           Close
@@ -396,7 +396,7 @@ export function TestingLaunchPanel({ intent, navigate, onClose, onLaunched, init
         <p
           data-testid="testing-launch-plain-banner"
           data-reason={workflows === 'unavailable' ? 'workflows-unreadable' : 'workflow-absent'}
-          className="rounded px-2 py-1 text-[10px]"
+          className="rounded px-2 py-1 text-xs"
           style={{ background: 'var(--status-gate-dim)', color: 'var(--status-gate)' }}
         >
           {NO_GOVERNED_WORKFLOW_COPY}
@@ -409,7 +409,7 @@ export function TestingLaunchPanel({ intent, navigate, onClose, onLaunched, init
 
       {launched === null ? (
         <>
-          <p className="text-[10px]" style={{ color: 'var(--ink-dim)' }}>
+          <p className="text-xs" style={{ color: 'var(--ink-dim)' }}>
             {governed ? copy.governedBlurb : copy.blurb}
           </p>
           <textarea
@@ -417,19 +417,19 @@ export function TestingLaunchPanel({ intent, navigate, onClose, onLaunched, init
             value={instructions}
             onChange={(e) => setInstructions(e.target.value)}
             placeholder="What should this test cover? Name the surfaces, risks, or behaviors to test."
-            className="min-h-[4rem] resize-y rounded px-2 py-1 text-[11px] focus:outline-none"
+            className="min-h-[4rem] resize-y rounded px-2 py-1 text-xs focus:outline-none"
             style={FIELD_STYLE}
           />
 
           {/* ── The scope: project + explicit codebases (the pinned union, narrowable) ── */}
           <div className="flex flex-wrap items-center gap-2">
-            <label className="flex items-center gap-2 text-[10px]" style={{ color: 'var(--ink-muted)' }}>
+            <label className="flex items-center gap-2 text-xs" style={{ color: 'var(--ink-muted)' }}>
               project
               <select
                 data-testid="testing-launch-project"
                 value={projectId}
                 onChange={(e) => { setProjectId(e.target.value); setUnscoped(false); }}
-                className="rounded px-1 py-0.5 text-[10px] font-mono"
+                className="rounded px-1 py-0.5 text-xs font-mono"
                 style={FIELD_STYLE}
               >
                 <option value="">no project</option>
@@ -438,14 +438,14 @@ export function TestingLaunchPanel({ intent, navigate, onClose, onLaunched, init
                 ))}
               </select>
             </label>
-            <label className="flex items-center gap-2 text-[10px]" style={{ color: 'var(--ink-muted)' }}>
+            <label className="flex items-center gap-2 text-xs" style={{ color: 'var(--ink-muted)' }}>
               attach codebases
               <input
                 data-testid="testing-launch-repo-search"
                 value={repoQuery}
                 onChange={(e) => setRepoQuery(e.target.value)}
                 placeholder="search registered repos…"
-                className="w-48 rounded px-2 py-0.5 text-[10px] font-mono"
+                className="w-48 rounded px-2 py-0.5 text-xs font-mono"
                 style={FIELD_STYLE}
               />
             </label>
@@ -466,7 +466,7 @@ export function TestingLaunchPanel({ intent, navigate, onClose, onLaunched, init
                     setRepoQuery('');
                     setUnscoped(false);
                   }}
-                  className="rounded-full px-2 py-0.5 text-[10px] font-mono"
+                  className="rounded-full px-2 py-0.5 text-xs font-mono"
                   style={{ border: '1px dashed var(--surface-raised)', color: 'var(--ink-muted)', cursor: 'pointer' }}
                 >
                   + {r.name}
@@ -478,7 +478,7 @@ export function TestingLaunchPanel({ intent, navigate, onClose, onLaunched, init
           {(kept.length > 0 || attachedVisible.length > 0 || projectRepos === 'loading') && (
             <div data-testid="testing-launch-chips" className="flex flex-wrap items-center gap-1">
               {projectRepos === 'loading' && (
-                <span className="text-[10px]" style={{ color: 'var(--ink-dim)' }}>resolving project repos…</span>
+                <span className="text-xs" style={{ color: 'var(--ink-dim)' }}>resolving project repos…</span>
               )}
               {kept.map((r) => (
                 <Chip
@@ -502,7 +502,7 @@ export function TestingLaunchPanel({ intent, navigate, onClose, onLaunched, init
           {/* F-076: what was dropped, and the way back — said as a scope fact, with the wire it
               changes (the narrowed fan files into the project through `projectId` on POST /runs). */}
           {dropped.length > 0 && (
-            <p data-testid="testing-launch-dropped" data-count={dropped.length} className="text-[10px]" style={{ color: 'var(--ink-dim)' }}>
+            <p data-testid="testing-launch-dropped" data-count={dropped.length} className="text-xs" style={{ color: 'var(--ink-dim)' }}>
               {dropped.length} of {viaProject.length} project repositor{dropped.length === 1 ? 'y' : 'ies'} dropped ({dropped.join(', ')}) —
               {' '}{willCover.length === 0
                 ? 'nothing left to test: keep one, attach a codebase, or clear the project'
@@ -523,7 +523,7 @@ export function TestingLaunchPanel({ intent, navigate, onClose, onLaunched, init
           {/* The pin's zero-repo 400 applies to projectId ALONE — explicit attachments are
               the named fix, so the warning stands only while none are attached. */}
           {projectId !== '' && projectRepos !== 'loading' && projectRepos.length === 0 && attached.length === 0 && (
-            <p data-testid="testing-launch-project-empty" className="text-[10px]" style={{ color: 'var(--ink-dim)' }}>
+            <p data-testid="testing-launch-project-empty" className="text-xs" style={{ color: 'var(--ink-dim)' }}>
               This project holds no repositories — the daemon will refuse the launch (400) until
               one is attached to the project, or attach codebases here explicitly.
             </p>
@@ -532,7 +532,7 @@ export function TestingLaunchPanel({ intent, navigate, onClose, onLaunched, init
           {/* Scoped work needs a project or a repo; unscoped stays an EXPLICIT choice the
               shipping wire already supports — never a silent default. */}
           {!scoped && (
-            <label className="flex items-center gap-2 text-[10px]" style={{ color: 'var(--ink-muted)' }}>
+            <label className="flex items-center gap-2 text-xs" style={{ color: 'var(--ink-muted)' }}>
               <input
                 data-testid="testing-launch-unscoped"
                 type="checkbox"
@@ -555,21 +555,21 @@ export function TestingLaunchPanel({ intent, navigate, onClose, onLaunched, init
               {testRoster.map((s) => (
                 <span
                   key={s.key}
-                  className="rounded-full px-2 py-0.5 text-[10px] font-mono opacity-40 cursor-not-allowed select-none"
+                  className="rounded-full px-2 py-0.5 text-xs font-mono opacity-40 cursor-not-allowed select-none"
                   style={{ background: 'var(--surface-raised)', color: 'var(--ink-body)', border: '1px solid var(--surface-overlay)' }}
                   title="CLIs selection not yet available for Testing mode (studio#302)"
                 >
                   {s.key}
                 </span>
               ))}
-              <span className="text-[10px]" style={{ color: 'var(--ink-dim)' }}>
+              <span className="text-xs" style={{ color: 'var(--ink-dim)' }}>
                 CLIs not yet configurable here — pending studio#302
               </span>
             </div>
           )}
 
           {error !== null && (
-            <p data-testid="testing-launch-error" className="rounded px-2 py-1 text-[10px]" style={{ background: 'var(--status-fail-dim)', color: 'var(--status-fail)' }}>
+            <p data-testid="testing-launch-error" className="rounded px-2 py-1 text-xs" style={{ background: 'var(--status-fail-dim)', color: 'var(--status-fail)' }}>
               {error}
             </p>
           )}
@@ -579,7 +579,7 @@ export function TestingLaunchPanel({ intent, navigate, onClose, onLaunched, init
               type="button"
               disabled={!canLaunch}
               onClick={() => void launch()}
-              className="rounded px-3 py-1 text-[11px] font-semibold disabled:opacity-40"
+              className="rounded px-3 py-1 text-xs font-semibold disabled:opacity-40"
               style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}
               title={emptyNarrowed
                 ? 'every project repository was dropped — keep one, attach a codebase, or clear the project'
@@ -591,7 +591,7 @@ export function TestingLaunchPanel({ intent, navigate, onClose, onLaunched, init
               {busy ? 'Launching…' : workflowsPending ? 'resolving workflows…' : copy.cta}
             </button>
             {scoped && willCover.length > 1 && (
-              <span data-testid="testing-launch-fan-note" className="text-[10px]" style={{ color: 'var(--ink-dim)' }}>
+              <span data-testid="testing-launch-fan-note" className="text-xs" style={{ color: 'var(--ink-dim)' }}>
                 {willCover.length} repositories → {willCover.length} governed runs — each pauses at its own intake gate; approve them one at a time
               </span>
             )}
@@ -601,7 +601,7 @@ export function TestingLaunchPanel({ intent, navigate, onClose, onLaunched, init
         <div data-testid="testing-launch-launched" data-route={launched.route} className="flex flex-col gap-2">
           {/* ── What launched, honestly: the runs (each a link), the workflow, the wire, the grouping. ── */}
           <div data-testid={launched.ids.length > 1 ? 'testing-launch-fanout' : 'testing-launch-single'} className="flex flex-col gap-1">
-            <p className="text-[11px]" style={{ color: 'var(--ink-high)' }}>
+            <p className="text-xs" style={{ color: 'var(--ink-high)' }}>
               {launched.ids.length === 1 ? (
                 <>Run {runLink(launched.ids[0]!)} launched</>
               ) : (
@@ -622,11 +622,11 @@ export function TestingLaunchPanel({ intent, navigate, onClose, onLaunched, init
               <div className="flex flex-wrap gap-2">{launched.ids.map(runLink)}</div>
             )}
             {launched.scopeNote !== null && (
-              <p data-testid="testing-launch-scope-note" className="rounded px-2 py-1 text-[10px]" style={{ background: 'var(--status-gate-dim)', color: 'var(--status-gate)' }}>
+              <p data-testid="testing-launch-scope-note" className="rounded px-2 py-1 text-xs" style={{ background: 'var(--status-gate-dim)', color: 'var(--status-gate)' }}>
                 ⚠ {launched.scopeNote}
               </p>
             )}
-            <p data-testid="testing-launch-route" className="text-[10px]" style={{ color: 'var(--ink-dim)' }}>
+            <p data-testid="testing-launch-route" className="text-xs" style={{ color: 'var(--ink-dim)' }}>
               {launched.workflow !== null ? (
                 <>workflow <span className="font-mono" data-testid="testing-launch-launched-workflow" style={{ color: 'var(--accent)' }}>{launched.workflow}</span> · </>
               ) : (
@@ -660,12 +660,12 @@ export function TestingLaunchPanel({ intent, navigate, onClose, onLaunched, init
           </div>
 
           {launched.ids.length > 1 ? (
-            <p className="text-[10px]" style={{ color: 'var(--ink-muted)' }}>
+            <p className="text-xs" style={{ color: 'var(--ink-muted)' }}>
               Each sibling stops at its own intake gate — gates surface everywhere gates do, and
               the test&rsquo;s progress lands on this page.
             </p>
           ) : resolved ? (
-            <p data-testid="testing-launch-resolved" className="text-[11px]" style={{ color: 'var(--ink-muted)' }}>
+            <p data-testid="testing-launch-resolved" className="text-xs" style={{ color: 'var(--ink-muted)' }}>
               Intake gate answered — the test&rsquo;s progress lands on{' '}
               <button
                 type="button"
@@ -688,7 +688,7 @@ export function TestingLaunchPanel({ intent, navigate, onClose, onLaunched, init
               .
             </p>
           ) : gate === undefined ? (
-            <p data-testid="testing-launch-waiting" className="text-[11px]" style={{ color: 'var(--ink-muted)' }}>
+            <p data-testid="testing-launch-waiting" className="text-xs" style={{ color: 'var(--ink-muted)' }}>
               Run <span className="font-mono">{gateRunId!.slice(0, 8)}</span> launched — its intake
               gate will appear here the moment the run asks{governed ? `, with the plan (${qeWorkflow.phases.map((p) => p.id).join(' → ')}) above the prompt` : ''}. It also shows up everywhere gates do.
             </p>

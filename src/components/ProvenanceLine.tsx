@@ -9,7 +9,7 @@ import type { Provenance } from '../store/provenance.js';
  * {short-id}" forward where the loaded index shows a child.
  *
  * Token usage (§3.4): `--ink-muted` sans with the actor kind as a `--text-2xs`
- * uppercase badge on `--surface-raised`; "actor unknown" in `--ink-dim`; the
+ *  badge on `--surface-raised`; "actor unknown" in `--ink-dim`; the
  * lineage cross-links are `--accent`. No status colors — provenance is
  * context, not signal.
  */
@@ -69,14 +69,14 @@ export function ProvenanceLine({ provenance, retryOf, retriedAs, onSelectRun, te
   return (
     <div
       data-testid={testId}
-      className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[11px]"
+      className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs"
       style={{ color: 'var(--ink-muted)' }}
     >
       {known ? (
         <>
           <span>launched by {provenance.actorId}</span>
           <span
-            className="rounded px-1 py-px font-mono uppercase tracking-wider"
+            className="rounded px-1 py-px font-mono "
             style={{ fontSize: 'var(--text-2xs)', background: 'var(--surface-raised)', color: 'var(--ink-muted)' }}
           >
             {provenance.actorKind}

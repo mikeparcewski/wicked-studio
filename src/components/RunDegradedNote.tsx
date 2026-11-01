@@ -45,7 +45,7 @@ export function RunDegradedNote({ events }: { events: readonly CoreEvent[] }): R
       data-testid="run-degraded"
       data-units={d.units}
       {...(d.ord !== null ? { 'data-ord': d.ord } : {})}
-      className="px-6 py-1.5 text-[11px] font-mono shrink-0"
+      className="px-6 py-1.5 text-xs font-mono shrink-0"
       style={{
         color: 'var(--status-gate)',
         background: 'var(--status-gate-dim)',

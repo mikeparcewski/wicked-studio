@@ -35,7 +35,7 @@
   background: color-mix(in oklab, var(--accent) 22%, var(--surface-raised)) !important;
 }
 .wk-assist--page [data-testid="assist-chat-msg"].wk-assist-you > span.font-mono { display: none; }
-.wk-assist--page .wk-assist-answer-foot { font-size: 11px; color: var(--ink-muted); }
+.wk-assist--page .wk-assist-answer-foot { font-size: var(--text-caption); color: var(--ink-muted); }
 .wk-assist--page [data-testid="assist-note"] { font-family: inherit; font-size: var(--text-xs); }
 .wk-assist--page textarea[data-testid="assist-input"] { font-size: var(--text-sm); }
 .wk-assist--page [data-testid="assist-send"] { font-size: var(--text-xs); padding: 6px 12px; }
@@ -46,7 +46,7 @@
   padding: 2px 8px; border-radius: var(--radius-full);
   background: color-mix(in oklab, var(--accent) 16%, transparent);
   box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--accent) 45%, var(--border));
-  color: var(--ink-high); font-size: 11px; font-weight: var(--weight-semi);
+  color: var(--ink-high); font-size: var(--text-caption); font-weight: var(--weight-semi);
 }
 .wk-assist-chip { display: flex; width: fit-content; }
 .wk-pagechat-focus { margin: 0; padding-right: 4px; }
@@ -74,7 +74,7 @@
 [data-askable]:hover, [data-askable]:focus-visible { box-shadow: inset 0 0 0 1px var(--accent); outline: none; }
 [data-askable]::after {
   content: 'Ask about this'; position: absolute; right: 10px; top: 10px; padding: 1px 7px; border-radius: 999px;
-  background: var(--accent); color: var(--accent-fg); font-size: 10px; font-weight: var(--weight-semi);
+  background: var(--accent); color: var(--accent-fg); font-size: var(--text-caption); font-weight: var(--weight-semi);
   opacity: 0; transition: opacity .15s; pointer-events: none;
 }
 [data-askable]:hover::after, [data-askable]:focus-visible::after { opacity: 1; }

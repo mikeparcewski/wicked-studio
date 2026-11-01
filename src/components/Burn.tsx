@@ -31,7 +31,7 @@ export function Burn({ model }: Props): React.ReactElement {
   };
 
   return (
-    <div data-testid="burn" className="flex flex-col gap-2 text-[11px]">
+    <div data-testid="burn" className="flex flex-col gap-2 text-xs">
       {!b.hasUsage ? (
         <p style={{ color: 'var(--ink-dim)' }} data-testid="burn-empty">
           Awaiting usage — token/cost burn lights up when a CLI emits <code>cliUsage</code>{' '}
@@ -43,11 +43,11 @@ export function Burn({ model }: Props): React.ReactElement {
             <div style={cardStyle}>
               <p style={{ color: 'var(--ink-dim)' }}>tokens{partialTotals ? ' (partial)' : ''}</p>
               <p className="font-mono text-sm" style={{ color: 'var(--ink-high)' }}>{tokens(b.totalTokens)}</p>
-              <p className="text-[10px]" style={{ color: 'var(--ink-dim)' }}>
+              <p className="text-xs" style={{ color: 'var(--ink-dim)' }}>
                 {tokens(b.totalInput)} in / {tokens(b.totalOutput)} out
               </p>
               {(b.totalCacheRead > 0 || b.totalCacheCreation > 0) && (
-                <p className="text-[10px]" style={{ color: 'var(--ink-muted)' }}>
+                <p className="text-xs" style={{ color: 'var(--ink-muted)' }}>
                   {tokens(b.totalCacheRead)} cached · {tokens(b.totalCacheCreation)} written
                 </p>
               )}
@@ -55,19 +55,19 @@ export function Burn({ model }: Props): React.ReactElement {
             <div style={cardStyle}>
               <p style={{ color: 'var(--ink-dim)' }}>cost{b.costComplete && !partialTotals ? '' : ' (partial)'}</p>
               <p className="font-mono text-sm" style={{ color: 'var(--ink-high)' }}>{cost(b.totalCost)}</p>
-              {b.totalCost === null && <p className="text-[10px]" style={{ color: 'var(--ink-dim)' }}>no cost reported</p>}
+              {b.totalCost === null && <p className="text-xs" style={{ color: 'var(--ink-dim)' }}>no cost reported</p>}
             </div>
             <div style={cardStyle} data-testid="burn-rework">
               <p style={{ color: 'var(--ink-dim)' }}>rework{partialTotals ? ' (prov.)' : ''}</p>
               <p className="font-mono text-sm" style={{ color: 'var(--ink-high)' }}>
                 {partialTotals ? '~' : ''}{b.reworkPct.toFixed(0)}%
               </p>
-              <p className="text-[10px]" style={{ color: 'var(--ink-dim)' }}>{tokens(b.reworkTokens)} tok</p>
+              <p className="text-xs" style={{ color: 'var(--ink-dim)' }}>{tokens(b.reworkTokens)} tok</p>
             </div>
           </div>
 
           {partialTotals && (
-            <p className="text-[10px]" style={{ color: 'var(--ink-dim)' }} data-testid="burn-partial">
+            <p className="text-xs" style={{ color: 'var(--ink-dim)' }} data-testid="burn-partial">
               Token totals and rework% are from connect onward; earlier usage may be missing.
             </p>
           )}

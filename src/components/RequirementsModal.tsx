@@ -212,11 +212,11 @@ export function RequirementsModal({ repoId, repoName, onClose, onNavigateCompone
         {/* Header */}
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-5 py-3 border-b shrink-0" style={{ borderColor: T.hairline, background: T.canvas2 }}>
           <span className="font-mono text-sm font-semibold" style={{ color: T.ink }}>{repoName}</span>
-          <span className="font-mono text-[11px] px-2 py-0.5 rounded" style={{ background: T.surface2, color: T.muted }}>
+          <span className="font-mono text-xs px-2 py-0.5 rounded" style={{ background: T.surface2, color: T.muted }}>
             requirements
           </span>
           {page !== null && (
-            <span className="font-mono text-[11px]" style={{ color: T.faint }}>
+            <span className="font-mono text-xs" style={{ color: T.faint }}>
               {page.total === page.corpus
                 ? `${page.corpus} total`
                 : `${page.total} matching · ${page.corpus} total`}
@@ -245,7 +245,7 @@ export function RequirementsModal({ repoId, repoName, onClose, onNavigateCompone
               setOffset(0);
             }}
             placeholder="Search requirements (server-side: id, domain, title, description)…"
-            className="flex-1 text-[12px] font-mono px-3 py-1.5 rounded-lg border outline-none"
+            className="flex-1 text-xs font-mono px-3 py-1.5 rounded-lg border outline-none"
             style={{ border: `1px solid ${T.hairlineS}`, background: T.canvas2, color: T.ink }}
           />
           <div className="flex items-center gap-1" role="group" aria-label="Category filter">
@@ -255,7 +255,7 @@ export function RequirementsModal({ repoId, repoName, onClose, onNavigateCompone
                 type="button"
                 onClick={() => setCategoryFilter(c)}
                 aria-pressed={category === c}
-                className="px-2.5 py-1 rounded-lg text-[11px] font-mono font-semibold"
+                className="px-2.5 py-1 rounded-lg text-xs font-mono font-semibold"
                 style={{
                   background: category === c ? T.surface2 : 'transparent',
                   color: category === c ? T.ink : T.faint,
@@ -274,7 +274,7 @@ export function RequirementsModal({ repoId, repoName, onClose, onNavigateCompone
                 type="button"
                 onClick={() => setFilter(r)}
                 aria-pressed={risk === r}
-                className="px-2.5 py-1 rounded-lg text-[11px] font-mono font-semibold"
+                className="px-2.5 py-1 rounded-lg text-xs font-mono font-semibold"
                 style={{
                   background: risk === r ? (r === 'risk' ? 'var(--status-fail-dim)' : T.surface2) : 'transparent',
                   color: risk === r ? (r === 'risk' ? T.deny : T.ink) : T.faint,
@@ -294,9 +294,9 @@ export function RequirementsModal({ repoId, repoName, onClose, onNavigateCompone
             {notGenerated !== null ? (
               <NotGenerated repoName={repoName} workflow={notGenerated.workflow} onGenerate={generate} share={notGenerated.share} mapping={mapping} onOpenRun={onOpenRun} onRetryMapping={() => setMappingAsk((n) => n + 1)} />
             ) : loadError !== null ? (
-              <p className="text-[12px] font-mono p-6" style={{ color: T.deny }}>{loadError}</p>
+              <p className="text-xs font-mono p-6" style={{ color: T.deny }}>{loadError}</p>
             ) : page === null ? (
-              <p className="text-[12px] font-mono p-6" style={{ color: T.faint }}>Loading…</p>
+              <p className="text-xs font-mono p-6" style={{ color: T.faint }}>Loading…</p>
             ) : page.corpus === 0 ? (
               // An EMPTY CORPUS is not a failed search. "No requirements match" asserts that
               // something was searched and the filters excluded it — for a repo whose extraction
@@ -305,7 +305,7 @@ export function RequirementsModal({ repoId, repoName, onClose, onNavigateCompone
               // responsible and the distinction is decidable here (FINDING-065).
               <NotGenerated repoName={repoName} workflow={DOMAIN_EXTRACTION_ID} onGenerate={generate} empty />
             ) : page.items.length === 0 ? (
-              <p className="text-[12px] font-mono p-6" style={{ color: T.faint }}>No requirements match.</p>
+              <p className="text-xs font-mono p-6" style={{ color: T.faint }}>No requirements match.</p>
             ) : (
               <div className="divide-y" style={{ borderColor: T.hairline }}>
                 {page.items.map((r) => (
@@ -325,19 +325,19 @@ export function RequirementsModal({ repoId, repoName, onClose, onNavigateCompone
                   type="button"
                   disabled={offset === 0}
                   onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}
-                  className="text-[11px] font-mono px-3 py-1 rounded disabled:opacity-40"
+                  className="text-xs font-mono px-3 py-1 rounded disabled:opacity-40"
                   style={{ color: T.link }}
                 >
                   ← Prev
                 </button>
-                <span className="text-[11px] font-mono" style={{ color: T.faint }}>
+                <span className="text-xs font-mono" style={{ color: T.faint }}>
                   page {pageNo} of {totalPages}
                 </span>
                 <button
                   type="button"
                   disabled={offset + PAGE_SIZE >= page.total}
                   onClick={() => setOffset(offset + PAGE_SIZE)}
-                  className="text-[11px] font-mono px-3 py-1 rounded disabled:opacity-40"
+                  className="text-xs font-mono px-3 py-1 rounded disabled:opacity-40"
                   style={{ color: T.link }}
                 >
                   Next →
@@ -441,7 +441,7 @@ function GraphCoverage({ page }: { page: RequirementsPage }): React.ReactElement
         <span
           data-testid="requirements-coverage"
           data-mapped-pct={cov.mappedPct}
-          className="font-mono text-[11px] px-2 py-0.5 rounded whitespace-nowrap"
+          className="font-mono text-xs px-2 py-0.5 rounded whitespace-nowrap"
           style={{ background: 'var(--status-run-dim)', color: T.ink }}
           title={`Built at a minimum of ${cov.minPct}%: ${cov.mapped} of ${cov.behaviorBearing} behaviours mapped${cov.unmapped > 0 ? `; ${cov.unmapped} not mapped yet, and the next run continues from them` : ''}.`}
         >
@@ -450,7 +450,7 @@ function GraphCoverage({ page }: { page: RequirementsPage }): React.ReactElement
         </span>
       )}
       {counts !== null && (
-        <span data-testid="requirements-corroboration-counts" className="font-mono text-[11px] truncate" style={{ color: T.faint }}>
+        <span data-testid="requirements-corroboration-counts" className="font-mono text-xs truncate" style={{ color: T.faint }}>
           {counts.validated} validated · {counts.unconfirmed} unconfirmed
         </span>
       )}
@@ -467,7 +467,7 @@ function CorroborationMark({ req }: { req: unknown }): React.ReactElement | null
     <span
       data-testid="requirement-corroboration"
       data-status={c.status}
-      className="text-[9px] uppercase font-mono px-1.5 py-0.5 rounded shrink-0"
+      className="text-xs font-mono px-1.5 py-0.5 rounded shrink-0"
       style={{
         background: validated ? 'var(--status-ok-dim)' : 'var(--status-warn-dim)',
         color: validated ? 'var(--status-ok)' : 'var(--status-warn)',
@@ -510,24 +510,24 @@ function RequirementRow({
       className="w-full text-left px-5 py-2.5 flex items-center gap-3 shrink-0"
       style={{ background: selected ? T.canvas2 : 'transparent', borderColor: T.hairline }}
     >
-      <span className="text-[10px] font-mono shrink-0 w-16" style={{ color: T.faint }}>{req.reqId}</span>
+      <span className="text-xs font-mono shrink-0 w-16" style={{ color: T.faint }}>{req.reqId}</span>
       <span className="flex-1 min-w-0">
-        <span className="block text-[12px] truncate" style={{ color: T.ink }}>{req.title}</span>
+        <span className="block text-xs truncate" style={{ color: T.ink }}>{req.title}</span>
         {req.statement.trim() !== '' && (
-          <span className="block text-[11px] truncate" style={{ color: T.muted }}>{req.statement.trim()}</span>
+          <span className="block text-xs truncate" style={{ color: T.muted }}>{req.statement.trim()}</span>
         )}
-        <span className="block text-[10px] font-mono truncate" style={{ color: T.faint }}>{req.domain}</span>
+        <span className="block text-xs font-mono truncate" style={{ color: T.faint }}>{req.domain}</span>
         <UnconfirmedWhy req={req} />
       </span>
       <CorroborationMark req={req} />
       {req.edited && (
-        <span className="text-[9px] uppercase font-mono px-1.5 py-0.5 rounded shrink-0" style={{ background: T.surface2, color: T.link }}>
+        <span className="text-xs font-mono px-1.5 py-0.5 rounded shrink-0" style={{ background: T.surface2, color: T.link }}>
           edited
         </span>
       )}
       {req.risk && (
         <span
-          className="text-[9px] uppercase font-semibold font-mono px-1.5 py-0.5 rounded shrink-0"
+          className="text-xs font-semibold font-mono px-1.5 py-0.5 rounded shrink-0"
           style={{ background: 'var(--status-fail-dim)', color: T.deny }}
           title={req.riskSource === 'operator' ? 'Marked risk by operator' : 'Risk derived from business rules'}
         >
@@ -535,7 +535,7 @@ function RequirementRow({
         </span>
       )}
       <span
-        className="text-[9px] uppercase font-mono px-1.5 py-0.5 rounded shrink-0"
+        className="text-xs font-mono px-1.5 py-0.5 rounded shrink-0"
         style={{
           background: req.status === 'active' ? 'var(--status-run-dim)' : req.status === 'deprecated' ? 'var(--status-fail-dim)' : T.surface2,
           color: req.status === 'active' ? T.ok : req.status === 'deprecated' ? T.deny : T.muted,
@@ -555,7 +555,7 @@ function UnconfirmedWhy({ req }: { req: unknown }): React.ReactElement | null {
     <span
       data-testid="requirement-unconfirmed-why"
       data-code={c.why.code}
-      className="block text-[10px]"
+      className="block text-xs"
       // Two lines, not one: on a phone a one-line clip would cut the reason down to its first word.
       style={{ color: 'var(--status-warn)', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
       title={c.why.text}
@@ -650,52 +650,52 @@ function RequirementEditRail({
   return (
     <div className="w-[420px] shrink-0 border-l flex flex-col" style={{ borderColor: T.hairlineS, background: T.surface2 }}>
       <div className="px-4 py-2.5 border-b flex items-center gap-2 shrink-0" style={{ borderColor: T.hairline, background: T.canvas2 }}>
-        <span className="text-[11px] font-mono truncate" style={{ color: T.ink }}>{reqKey}</span>
+        <span className="text-xs font-mono truncate" style={{ color: T.ink }}>{reqKey}</span>
         <button type="button" onClick={onClose} aria-label="Close requirement editor" className="ml-auto text-sm px-1 shrink-0" style={{ color: T.muted }}>
           ×
         </button>
       </div>
-      {error !== null && <p className="text-[11px] font-mono px-4 py-2" style={{ color: T.deny }}>{error}</p>}
+      {error !== null && <p className="text-xs font-mono px-4 py-2" style={{ color: T.deny }}>{error}</p>}
       {detail === null && error === null ? (
-        <p className="text-[11px] font-mono px-4 py-3" style={{ color: T.faint }}>Loading…</p>
+        <p className="text-xs font-mono px-4 py-3" style={{ color: T.faint }}>Loading…</p>
       ) : detail !== null ? (
         <div className="flex-1 overflow-y-auto px-4 py-3 flex flex-col gap-3">
           <label className="flex flex-col gap-1">
-            <span className="text-[10px] font-mono uppercase" style={{ color: T.faint }}>Title</span>
+            <span className="text-xs font-mono " style={{ color: T.faint }}>Title</span>
             <input
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              className="text-[12px] font-mono px-3 py-1.5 rounded-lg border outline-none"
+              className="text-xs font-mono px-3 py-1.5 rounded-lg border outline-none"
               style={{ border: `1px solid ${T.hairlineS}`, background: T.canvas2, color: T.ink }}
             />
           </label>
           {detail.title !== detail.sourceTitle && (
-            <p className="text-[10px] font-mono" style={{ color: T.faint }}>source title: {detail.sourceTitle}</p>
+            <p className="text-xs font-mono" style={{ color: T.faint }}>source title: {detail.sourceTitle}</p>
           )}
           <div>
-            <span className="text-[10px] font-mono uppercase" style={{ color: T.faint }}>Description (source)</span>
-            <p className="text-[11px] mt-1 whitespace-pre-wrap" style={{ color: T.muted }}>
+            <span className="text-xs font-mono " style={{ color: T.faint }}>Description (source)</span>
+            <p className="text-xs mt-1 whitespace-pre-wrap" style={{ color: T.muted }}>
               {detail.description === '' ? '(none recorded)' : detail.description.slice(0, 1200)}
             </p>
           </div>
           <label className="flex flex-col gap-1">
-            <span className="text-[10px] font-mono uppercase" style={{ color: T.faint }}>Notes (operator)</span>
+            <span className="text-xs font-mono " style={{ color: T.faint }}>Notes (operator)</span>
             <textarea
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               rows={4}
-              className="text-[11px] font-mono px-3 py-1.5 rounded-lg border outline-none resize-y"
+              className="text-xs font-mono px-3 py-1.5 rounded-lg border outline-none resize-y"
               style={{ border: `1px solid ${T.hairlineS}`, background: T.canvas2, color: T.ink }}
             />
           </label>
           <div className="flex items-center gap-3">
             <label className="flex items-center gap-2">
-              <span className="text-[10px] font-mono uppercase" style={{ color: T.faint }}>Status</span>
+              <span className="text-xs font-mono " style={{ color: T.faint }}>Status</span>
               <select
                 value={status}
                 onChange={(e) => setStatus(e.target.value as 'active' | 'deprecated' | 'review')}
-                className="text-[11px] font-mono px-2 py-1 rounded-lg border outline-none"
+                className="text-xs font-mono px-2 py-1 rounded-lg border outline-none"
                 style={{ border: `1px solid ${T.hairlineS}`, background: T.canvas2, color: T.ink }}
               >
                 <option value="active">active</option>
@@ -707,7 +707,7 @@ function RequirementEditRail({
               type="button"
               onClick={toggleRisk}
               disabled={saving}
-              className="text-[11px] font-mono font-semibold px-3 py-1 rounded-lg disabled:opacity-50"
+              className="text-xs font-mono font-semibold px-3 py-1 rounded-lg disabled:opacity-50"
               style={{
                 background: detail.risk ? 'var(--status-fail-dim)' : T.canvas2,
                 color: detail.risk ? T.deny : T.muted,
@@ -718,13 +718,13 @@ function RequirementEditRail({
             </button>
           </div>
           {detail.riskSource === 'data' && (
-            <p className="text-[10px] font-mono" style={{ color: T.faint }}>
+            <p className="text-xs font-mono" style={{ color: T.faint }}>
               risk derived from business rules — an operator toggle overrides it
             </p>
           )}
           {detail.businessRules.length > 0 && (
             <div>
-              <span className="text-[10px] font-mono uppercase" style={{ color: T.faint }}>Business rules</span>
+              <span className="text-xs font-mono " style={{ color: T.faint }}>Business rules</span>
               <ol className="mt-1 flex flex-col gap-1.5">
                 {detail.businessRules.map((r, i) => {
                   const rule = r as { statement?: unknown; confidence?: unknown };
@@ -732,10 +732,10 @@ function RequirementEditRail({
                   const st = raw !== '' ? raw : JSON.stringify(r);
                   const conf = typeof rule.confidence === 'number' ? rule.confidence : null;
                   return (
-                    <li key={i} className="text-[11px] leading-snug" style={{ color: T.ink }}>
+                    <li key={i} className="text-xs leading-snug" style={{ color: T.ink }}>
                       {st}
                       {conf !== null && (
-                        <span className="text-[9px] font-mono ml-1.5" style={{ color: T.faint }}>conf {conf}</span>
+                        <span className="text-xs font-mono ml-1.5" style={{ color: T.faint }}>conf {conf}</span>
                       )}
                     </li>
                   );
@@ -744,7 +744,7 @@ function RequirementEditRail({
             </div>
           )}
           <RailCorroboration detail={detail} />
-          <div className="text-[10px] font-mono flex gap-3 flex-wrap" style={{ color: T.faint }}>
+          <div className="text-xs font-mono flex gap-3 flex-wrap" style={{ color: T.faint }}>
             <span>{detail.ruleCount} rules</span>
             <span>{detail.componentCount} components</span>
             <span>{detail.validationCount} validations</span>
@@ -752,14 +752,14 @@ function RequirementEditRail({
           </div>
           {detail.legacyComponents.length > 0 && (
             <div>
-              <span className="text-[10px] font-mono uppercase" style={{ color: T.faint }}>Components</span>
+              <span className="text-xs font-mono " style={{ color: T.faint }}>Components</span>
               <ul className="mt-1 flex flex-col gap-0.5">
                 {detail.legacyComponents.map((c, i) => {
                   const label = typeof c === 'string' ? c : JSON.stringify(c);
                   // 'path#symbol' components navigate by the symbol part; bare paths by themselves.
                   const symbol = typeof c === 'string' ? (c.includes('#') ? c.split('#')[1]! : c) : '';
                   return (
-                    <li key={i} className="text-[10px] font-mono truncate">
+                    <li key={i} className="text-xs font-mono truncate">
                       {onNavigateComponent !== undefined && symbol !== '' ? (
                         <button
                           type="button"
@@ -784,13 +784,13 @@ function RequirementEditRail({
               type="button"
               onClick={() => save()}
               disabled={saving}
-              className="px-4 py-1.5 rounded-lg text-[12px] font-mono font-semibold disabled:opacity-50"
+              className="px-4 py-1.5 rounded-lg text-xs font-mono font-semibold disabled:opacity-50"
               style={{ background: T.accent, color: 'var(--surface-base)' }}
             >
               {saving ? 'Saving…' : 'Save'}
             </button>
             {savedAt !== null && !saving && (
-              <span className="text-[10px] font-mono" style={{ color: T.ok }}>saved ✓</span>
+              <span className="text-xs font-mono" style={{ color: T.ok }}>saved ✓</span>
             )}
           </div>
         </div>
@@ -804,10 +804,10 @@ function RailCorroboration({ detail }: { detail: unknown }): React.ReactElement 
   if (c === null) return null;
   return (
     <div data-testid="requirement-rail-corroboration" data-status={c.status}>
-      <span className="text-[10px] font-mono uppercase" style={{ color: T.faint }}>
+      <span className="text-xs font-mono " style={{ color: T.faint }}>
         {c.status === 'validated' ? 'Validated' : 'Unconfirmed'}
       </span>
-      <p className="text-[11px] mt-1" style={{ color: c.status === 'validated' ? T.ink : 'var(--status-warn)' }}>
+      <p className="text-xs mt-1" style={{ color: c.status === 'validated' ? T.ink : 'var(--status-warn)' }}>
         {corroborationSentence(c)}
       </p>
     </div>

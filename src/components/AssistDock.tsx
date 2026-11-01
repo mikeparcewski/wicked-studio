@@ -208,7 +208,7 @@ function DockRun({ runId }: { runId: string }): React.ReactElement {
       style={{ border: '1px solid var(--surface-raised)', background: 'var(--surface-card)' }}
     >
       {view === null || session === undefined ? (
-        <p data-testid="assist-run-waiting" className="px-3 py-2 font-mono text-[11px]" style={{ color: 'var(--ink-muted)' }}>
+        <p data-testid="assist-run-waiting" className="px-3 py-2 font-mono text-xs" style={{ color: 'var(--ink-muted)' }}>
           Run <span className="font-semibold">{runId.slice(0, 8)}</span> launched — it narrates here
           the moment its events arrive, and its gates pin below.
         </p>
@@ -508,7 +508,7 @@ function DockChat({ chatId, resumed = false, onResumeProbe, onStatus, answerFoot
       style={{ border: '1px solid var(--surface-raised)', background: 'var(--surface-card)' }}
     >
       <div className="flex flex-wrap items-center gap-1.5">
-        <span className="font-mono text-[9px] uppercase tracking-widest" style={{ color: 'var(--ink-dim)' }}>
+        <span className="font-mono text-xs " style={{ color: 'var(--ink-dim)' }}>
           chat session
         </span>
         {Object.entries(seats).map(([k, st]) => (
@@ -518,7 +518,7 @@ function DockChat({ chatId, resumed = false, onResumeProbe, onStatus, answerFoot
             data-agent={k}
             data-state={st}
             title={st === 'failed' ? `${k} could not hold a session` : `${k} — connected`}
-            className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 font-mono text-[10px]"
+            className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 font-mono text-xs"
             style={{ background: 'var(--surface-raised)', color: 'var(--ink-muted)', opacity: st === 'failed' ? 0.5 : 1 }}
           >
             <span
@@ -532,7 +532,7 @@ function DockChat({ chatId, resumed = false, onResumeProbe, onStatus, answerFoot
       </div>
       <div ref={scrollRef} className="flex max-h-72 flex-col gap-1.5 overflow-y-auto">
         {msgs.length === 0 ? (
-          <p data-testid="assist-chat-waiting" className="font-mono text-[11px]" style={{ color: 'var(--ink-dim)' }}>
+          <p data-testid="assist-chat-waiting" className="font-mono text-xs" style={{ color: 'var(--ink-dim)' }}>
             Sent — the agents answer here as their replies stream in.
           </p>
         ) : (
@@ -540,13 +540,13 @@ function DockChat({ chatId, resumed = false, onResumeProbe, onStatus, answerFoot
             // A helper's reply is a bubble on the left (operator 2026-10-16), the operator's own on the right.
             <div key={i} data-testid="assist-chat-msg" data-agent={m.cliKey} data-pending={m.pending} className={m.cliKey === 'you' ? 'wk-assist-you self-end max-w-[88%] rounded-2xl rounded-tr-md px-3 py-2' : 'self-start max-w-[92%] rounded-2xl rounded-tl-md px-3 py-2'} style={{ background: m.cliKey === 'you' ? 'var(--accent-subtle)' : 'var(--surface-raised)' }}>
               {m.chip !== undefined && <span className="wk-assist-chip" data-testid="assist-msg-chip">{m.chip}</span>}
-              <span className="font-mono text-[10px] font-semibold" style={{ color: 'var(--accent)' }}>
+              <span className="font-mono text-xs font-semibold" style={{ color: 'var(--accent)' }}>
                 {m.cliKey}
               </span>
               {!m.pending && !m.ok ? (
                 // A failed turn's text is the daemon's error prose — it stays
                 // verbatim in the fail ink, never dressed as markdown.
-                <p className="whitespace-pre-wrap text-[11px] leading-relaxed" style={{ color: 'var(--status-fail)' }}>
+                <p className="whitespace-pre-wrap text-xs leading-relaxed" style={{ color: 'var(--status-fail)' }}>
                   {m.text}
                 </p>
               ) : (
@@ -554,7 +554,7 @@ function DockChat({ chatId, resumed = false, onResumeProbe, onStatus, answerFoot
                 // SAME component the chat thread already uses (react-markdown +
                 // GFM; raw HTML is never parsed, so nothing injects), not
                 // dumped as ##-visible raw text.
-                <div className="text-[11px] leading-relaxed">
+                <div className="text-xs leading-relaxed">
                   <Markdown>{m.text}</Markdown>
                   {m.pending && <span aria-hidden className="animate-pulse"> …</span>}
                 </div>
@@ -563,7 +563,7 @@ function DockChat({ chatId, resumed = false, onResumeProbe, onStatus, answerFoot
                 <p data-testid="assist-answer-footer" className="wk-assist-answer-foot">{m.foot}</p>
               )}
               {m.files !== undefined && m.files.length > 0 && (
-                <p data-testid="assist-chat-msg-files" className="mt-1 font-mono text-[10px]" style={{ color: 'var(--ink-muted)' }}>📎 {m.files.join(' · ')}</p>
+                <p data-testid="assist-chat-msg-files" className="mt-1 font-mono text-xs" style={{ color: 'var(--ink-muted)' }}>📎 {m.files.join(' · ')}</p>
               )}
             </div>
           ))
@@ -919,7 +919,7 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
           «
         </button>
         <span
-          className="select-none font-mono text-[10px] uppercase tracking-widest"
+          className="select-none font-mono text-xs "
           style={{ color: 'var(--ink-dim)', writingMode: 'vertical-rl' }}
         >
           {context.title}
@@ -950,12 +950,12 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
       {/* Header */}
       <div {...headerProps} data-testid="assist-header" className="wk-assist-header flex shrink-0 items-center gap-2 px-3 py-2" style={{ borderBottom: '1px solid var(--surface-raised)' }}>
         {headerStart}
-        <span className="text-[11px] font-semibold" style={{ color: 'var(--ink-high)' }}>{context.title}</span>
+        <span className="text-xs font-semibold" style={{ color: 'var(--ink-high)' }}>{context.title}</span>
         {!page && (
         <span
           data-testid="assist-context"
           title={context.contextLabel}
-          className="min-w-0 text-[11px]"
+          className="min-w-0 text-xs"
           style={{ color: 'var(--ink-muted)', minWidth: 0, overflowWrap: 'anywhere' }}
         >
           {context.contextLabel}
@@ -969,7 +969,7 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
             aria-label="Open in full chat"
             title="Open this conversation in the full chat interface"
             onClick={() => onExpandChat(latestChatId)}
-            className={compactHeader ? 'ml-auto wk-chatwin-btn' : 'ml-auto shrink-0 rounded px-1.5 py-0.5 font-mono text-[10px] focus:outline-none focus-visible:ring-1'}
+            className={compactHeader ? 'ml-auto wk-chatwin-btn' : 'ml-auto shrink-0 rounded px-1.5 py-0.5 font-mono text-xs focus:outline-none focus-visible:ring-1'}
             style={compactHeader ? undefined : { color: 'var(--accent)', border: '1px solid var(--surface-overlay)' }}
           >
             {compactHeader ? <ExternalLink size={14} aria-hidden /> : 'Open in full chat ↗'}
@@ -1003,7 +1003,7 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
       <div ref={threadRef} data-testid="assist-thread" className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-3 py-3">
         {items.length === 0 && (
           <>
-            <p data-testid="assist-empty" className="text-[11px] leading-relaxed" style={{ color: 'var(--ink-dim)' }}>
+            <p data-testid="assist-empty" className="text-xs leading-relaxed" style={{ color: 'var(--ink-dim)' }}>
               {context.hint ?? 'Type below, or drop documents here.'}
             </p>
             {context.controls}
@@ -1025,7 +1025,7 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
                       setText(p.text);
                       textareaRef.current?.focus();
                     }}
-                    className="wk-assist-prompt rounded-full px-2.5 py-1 text-left text-[11px] focus:outline-none focus-visible:ring-1"
+                    className="wk-assist-prompt rounded-full px-2.5 py-1 text-left text-xs focus:outline-none focus-visible:ring-1"
                     style={{ border: '1px solid var(--surface-overlay)', color: 'var(--accent)', background: 'transparent' }}
                   >
                     {p.label}
@@ -1040,9 +1040,9 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
             return (
               <div key={i} data-testid="assist-user-msg" className="self-end max-w-[85%] rounded-2xl px-3 py-2" style={{ background: 'var(--accent-subtle)', color: 'var(--ink-high)' }}>
                 {item.chip !== undefined && <span className="wk-assist-chip" data-testid="assist-msg-chip">{item.chip}</span>}
-                <p className="whitespace-pre-wrap text-[11px] leading-relaxed">{item.text}</p>
+                <p className="whitespace-pre-wrap text-xs leading-relaxed">{item.text}</p>
                 {item.files.length > 0 && (
-                  <p className="mt-1 font-mono text-[10px]" style={{ color: 'var(--ink-muted)' }}>
+                  <p className="mt-1 font-mono text-xs" style={{ color: 'var(--ink-muted)' }}>
                     📎 {item.files.join(' · ')}
                   </p>
                 )}
@@ -1051,7 +1051,7 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
           }
           if (item.kind === 'note') {
             return (
-              <p key={i} data-testid="assist-note" data-tone={item.tone} className="font-mono text-[11px] leading-relaxed" style={{ color: TONE_COLOR[item.tone] }}>
+              <p key={i} data-testid="assist-note" data-tone={item.tone} className="font-mono text-xs leading-relaxed" style={{ color: TONE_COLOR[item.tone] }}>
                 · {item.text}
               </p>
             );
@@ -1088,7 +1088,7 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
         <div className="flex shrink-0 flex-col gap-1 px-3 pt-2">
           {attachments.map((a, i) => (
             <div key={`${a.name}-${i}`} data-testid="assist-attachment-chip" data-mode={a.mode} className="flex flex-wrap items-center gap-1.5 rounded px-2 py-1" style={{ background: 'var(--surface-raised)' }}>
-              <span className="min-w-0 flex-1 truncate font-mono text-[10px]" style={{ color: 'var(--ink-muted)' }}>{a.name}</span>
+              <span className="min-w-0 flex-1 truncate font-mono text-xs" style={{ color: 'var(--ink-muted)' }}>{a.name}</span>
               {a.mode === 'ask' ? (
                 <>
                   <button
@@ -1096,7 +1096,7 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
                     data-testid="assist-import-now"
                     title="POST this file through the import wire now — results echo into the thread"
                     onClick={() => importNow(a)}
-                    className="rounded px-1.5 py-0.5 text-[10px] font-semibold focus:outline-none focus-visible:ring-1"
+                    className="rounded px-1.5 py-0.5 text-xs font-semibold focus:outline-none focus-visible:ring-1"
                     style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}
                   >
                     Import directly
@@ -1106,20 +1106,20 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
                     data-testid="assist-analyze"
                     title="Attach as source material for the next message's governed run"
                     onClick={() => setAttachments((cur) => cur.map((x) => (x === a ? { ...x, mode: 'analyze' } : x)))}
-                    className="rounded px-1.5 py-0.5 text-[10px] focus:outline-none focus-visible:ring-1"
+                    className="rounded px-1.5 py-0.5 text-xs focus:outline-none focus-visible:ring-1"
                     style={{ color: 'var(--accent)', border: '1px solid var(--surface-overlay)' }}
                   >
                     Analyze with chat
                   </button>
                 </>
               ) : (
-                <span className="text-[10px]" style={{ color: 'var(--ink-dim)' }}>analysis — rides the next message</span>
+                <span className="text-xs" style={{ color: 'var(--ink-dim)' }}>analysis — rides the next message</span>
               )}
               <button
                 type="button"
                 aria-label={`Remove ${a.name}`}
                 onClick={() => setAttachments((cur) => cur.filter((x) => x !== a))}
-                className="text-[11px] leading-none"
+                className="text-xs leading-none"
                 style={{ color: 'var(--ink-dim)' }}
               >
                 ×
@@ -1177,7 +1177,7 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
             data-testid="assist-input"
             {...(typeTarget !== undefined ? { 'data-type-target': typeTarget } : {})}
             aria-label={context.placeholder}
-            className="min-w-0 flex-1 resize-none border-0 bg-transparent text-[12px] leading-5 outline-none"
+            className="min-w-0 flex-1 resize-none border-0 bg-transparent text-xs leading-5 outline-none"
             style={{ minHeight: '20px', color: 'var(--ink-high)' }}
             placeholder={context.placeholder}
             value={text}
@@ -1206,7 +1206,7 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
             aria-label="Send"
             disabled={text.trim() === '' || sending}
             onClick={() => void send()}
-            className="shrink-0 rounded-lg px-2.5 py-1 text-[11px] font-semibold transition-opacity disabled:opacity-40"
+            className="shrink-0 rounded-lg px-2.5 py-1 text-xs font-semibold transition-opacity disabled:opacity-40"
             style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}
           >
             {sending ? '…' : 'Send'}

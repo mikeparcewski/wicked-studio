@@ -13,7 +13,7 @@ import { RunLink } from './RunLink.js';
  * Archive stays, last.
  */
 
-const BTN = 'rounded-lg px-2 py-1 text-[11px] font-mono shrink-0';
+const BTN = 'rounded-lg px-2 py-1 text-xs font-mono shrink-0';
 const QUIET: React.CSSProperties = { color: 'var(--ink-muted)', border: '1px solid var(--surface-raised)' };
 const NEXT: React.CSSProperties = { color: 'var(--accent)', border: '1px solid var(--surface-raised)' };
 
@@ -50,7 +50,7 @@ export function FinishedRunRow({ view, selectedRunId, onSelect, onArchive }: {
           </button>
         )}
         {s.phase === 'saved' && (
-          <span data-testid="run-reuse-saved" className="text-[11px] font-mono shrink-0" style={{ color: 'var(--status-done)' }}>
+          <span data-testid="run-reuse-saved" className="text-xs font-mono shrink-0" style={{ color: 'var(--status-done)' }}>
             {`Saved as preset “${s.name}” — launch it with /workflow-${s.name}`}
           </span>
         )}
@@ -100,7 +100,7 @@ export function ReusePresetPanel({ reuse }: { reuse: ReusePreset }): React.React
       <p
         data-testid="run-reuse-consequence"
         data-blocked={String(reuse.consequence.blocked)}
-        className="text-[11px] font-mono"
+        className="text-xs font-mono"
         style={{ margin: 0, color: reuse.consequence.blocked && reuse.consequence.waiting !== true ? 'var(--status-fail)' : 'var(--ink-body)' }}
       >
         {reuse.consequence.text}
@@ -112,7 +112,7 @@ export function ReusePresetPanel({ reuse }: { reuse: ReusePreset }): React.React
           value={s.name}
           maxLength={64}
           onChange={(e) => reuse.setName(e.target.value)}
-          className="rounded-md px-2 py-1 text-[11px] font-mono"
+          className="rounded-md px-2 py-1 text-xs font-mono"
           style={{ minWidth: '16rem', background: 'var(--surface-base)', color: 'var(--ink-body)', border: '1px solid var(--surface-raised)' }}
         />
         <button
@@ -130,7 +130,7 @@ export function ReusePresetPanel({ reuse }: { reuse: ReusePreset }): React.React
         </button>
       </span>
       {s.phase === 'error' && (
-        <p role="alert" data-testid="run-reuse-error" className="text-[11px] font-mono" style={{ margin: 0, color: 'var(--status-fail)' }}>
+        <p role="alert" data-testid="run-reuse-error" className="text-xs font-mono" style={{ margin: 0, color: 'var(--status-fail)' }}>
           {`Not saved: ${s.message}`}
         </p>
       )}

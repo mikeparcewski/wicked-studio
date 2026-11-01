@@ -125,7 +125,7 @@ function TruncationBanner({ text }: { text: string }): React.ReactElement {
   return (
     <div
       data-testid="viewer-truncation-banner"
-      className="px-3 py-1.5 text-[11px] font-mono shrink-0"
+      className="px-3 py-1.5 text-xs font-mono shrink-0"
       style={{ color: 'var(--status-gate)', background: 'var(--surface-raised)', borderBottom: '1px solid var(--surface-raised)' }}
     >
       {text}
@@ -293,7 +293,7 @@ export function FileViewer({ runId, path, defaultTab, base, onClose, onUnsupport
                 aria-selected={tab === 'file'}
                 data-testid="viewer-tab-file"
                 onClick={() => setTab('file')}
-                className="px-2 py-1 text-[11px] font-mono"
+                className="px-2 py-1 text-xs font-mono"
                 style={{
                   color: tab === 'file' ? 'var(--ink-high)' : 'var(--ink-muted)',
                   borderBottom: tab === 'file' ? '2px solid var(--accent)' : '2px solid transparent',
@@ -308,7 +308,7 @@ export function FileViewer({ runId, path, defaultTab, base, onClose, onUnsupport
               aria-selected={tab === 'diff'}
               data-testid="viewer-tab-diff"
               onClick={() => setTab('diff')}
-              className="px-2 py-1 text-[11px] font-mono"
+              className="px-2 py-1 text-xs font-mono"
               style={{
                 color: tab === 'diff' ? 'var(--ink-high)' : 'var(--ink-muted)',
                 borderBottom: tab === 'diff' ? '2px solid var(--accent)' : '2px solid transparent',
@@ -325,7 +325,7 @@ export function FileViewer({ runId, path, defaultTab, base, onClose, onUnsupport
                   onClick={handleOpenExternally}
                   aria-label={`Open externally: ${title}`}
                   title={`Open with system default app: ${title}`}
-                  className="text-[11px] font-mono transition-opacity hover:opacity-70"
+                  className="text-xs font-mono transition-opacity hover:opacity-70"
                   style={{ color: 'var(--ink-dim)' }}
                 >
                   ↗ open
@@ -335,7 +335,7 @@ export function FileViewer({ runId, path, defaultTab, base, onClose, onUnsupport
                   onClick={handleCopy}
                   aria-label={`Copy path ${title}`}
                   title="Copy path"
-                  className="text-[11px] font-mono transition-opacity hover:opacity-70"
+                  className="text-xs font-mono transition-opacity hover:opacity-70"
                   style={{ color: 'var(--ink-dim)' }}
                 >
                   ⧉
@@ -388,7 +388,7 @@ function FileBody({ file, onOpenExternally }: {
         <button
           type="button"
           onClick={onOpenExternally}
-          className="text-[11px] font-mono transition-opacity hover:opacity-70"
+          className="text-xs font-mono transition-opacity hover:opacity-70"
           style={{ color: 'var(--accent)' }}
         >
           ↗ open externally
