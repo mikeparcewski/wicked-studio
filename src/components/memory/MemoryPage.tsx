@@ -251,8 +251,10 @@ export function MemoryPage({ search, navigate, address = (p) => p, project = nul
         { value: 'not-accepted', label: 'Not accepted', testId: 'memory-view-not-accepted' },
       ]} />
   );
-  const searchTools = view === 'memories' ? (
+  // The pills keep one place in the tree on every view, so the focused pill keeps focus when the address changes.
+  const searchTools = (
     <>
+    {view === 'memories' && (
     <CalmSearch value={queryInput} onChange={setQueryInput} onSubmit={applyQuery} placeholder="Search what was learned" label="Search memories"
       testId="memories-search" buttonTestId={/* testid */ 'memories-search-open'} startOpen={filtered}
       extra={<>
@@ -260,9 +262,10 @@ export function MemoryPage({ search, navigate, address = (p) => p, project = nul
         {kindPick}
         {facetPairs.length > 0 && <FacetAutocomplete testId="memories-facet-filter" options={facetPairs} value={facet} onChange={setFacet} label="Filter memories by tags" placeholder="Filter by tag" />}
       </>} />
+    )}
     {pills}
     </>
-  ) : pills;
+  );
 
   const list = (
     <CalmSection label={view === 'proposals' ? 'Waiting for you' : view === 'not-accepted' ? 'Not accepted' : 'Recently learned'} tools={searchTools} data-testid="memory-list-card" ariaLabel="Memories">

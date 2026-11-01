@@ -47,7 +47,7 @@ import { DeskHappening } from './DeskHappening.js';
 import { DeskStat, RefineSelect } from './DeskParts.js';
 import { DeskRuleLine } from './DeskRuleLine.js';
 import { DeskRuns } from './DeskRuns.js';
-import { needHolds } from '../../board/deskRuns.js';
+import { needHolds, projectWord } from '../../board/deskRuns.js';
 import { startNewJob } from './SessionRail.js';
 import { scrollBehavior } from '../ui/motion.js';
 import type { MenuItem } from '../ui/index.js';
@@ -193,7 +193,10 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
   // The refine bar's choices: only what the data holds.
   const live = useMemo(() => runs.filter((v) => v.session.archived_at == null), [runs]);
   const projectIdsKnown = useMemo(() => projects.map((p) => p.id), [projects]);
-  const projectOpts = useMemo(() => [...new Set(live.map(projectOf))].map((id) => ({ value: id, label: projectName(id) })).sort((a, b) => a.label.localeCompare(b.label)), [live, projectName]);
+  // Report's Project select: the projects the jobs are in, plus the one picked on Jobs (it may hold none in the
+  // range), so the select always shows the filter in force. Unfiled is "No project", as on Jobs.
+  const projectOpts = useMemo(() => [...new Set([...live.map(projectOf), ...(refine.project !== null ? [refine.project] : [])])]
+    .map((id) => ({ value: id, label: projectWord(id, projectName) })).sort((a, b) => a.label.localeCompare(b.label)), [live, projectName, refine.project]);
   const agentOpts = useMemo(() => [...new Set([...displaySeats(roster).map((s) => s.key), ...live.flatMap(agentsOf)])].map((k) => ({ value: k, label: agentName(k) })).sort((a, b) => a.label.localeCompare(b.label)), [roster, live, agentName]);
   const workflowOpts = useMemo(() => {
     const m = new Map<string, string>();

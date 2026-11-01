@@ -90,6 +90,7 @@ type Severity = (typeof SEVERITIES)[number];
 const PAGE = 20;
 
 type ListView = 'live' | 'proposals' | 'not-accepted' | 'retired';
+const NOT_ACCEPTED = 'not-accepted';
 
 type RulesRead = { kind: 'loading' } | { kind: 'ok'; rules: SteeringRule[] } | { kind: 'failed'; error: unknown };
 
@@ -194,8 +195,23 @@ export function SteerSurface({ pathname, search, navigate: navigateRaw, runs = [
   // ── Page state ───────────────────────────────────────────────────────────────────────────────
   // `/steering/proposals` (Needs you's Review, ⌘K) opens on the Proposals view.
   const askedProposals = pathname === steerProposalsPath();
-  const [view, setView] = useState<ListView>(askedProposals ? 'proposals' : 'live');
-  useEffect(() => { if (askedProposals) setView('proposals'); }, [askedProposals]);
+  // `?view=not-accepted` opens (and a reload or Back keeps) the Not accepted list.
+  const askedNotAccepted = query.get('view') === NOT_ACCEPTED;
+  const [view, setView] = useState<ListView>(askedNotAccepted ? 'not-accepted' : askedProposals ? 'proposals' : 'live');
+  useEffect(() => { if (askedProposals && !askedNotAccepted) setView('proposals'); }, [askedProposals, askedNotAccepted]);
+  useEffect(() => {
+    if (askedNotAccepted) setView('not-accepted');
+    else setView((v) => (v === 'not-accepted' ? (askedProposals ? 'proposals' : 'live') : v));
+  }, [askedNotAccepted, askedProposals]);
+  /** A pill: Not accepted is written to the address (`?view=not-accepted`); leaving it takes it back out. */
+  const pickView = (v: ListView): void => {
+    setView(v);
+    if ((v === 'not-accepted') === askedNotAccepted) return;
+    const n = new URLSearchParams(search);
+    if (v === 'not-accepted') n.set('view', NOT_ACCEPTED); else n.delete('view');
+    const qs = n.toString();
+    navigate(`${pathname}${qs === '' ? '' : `?${qs}`}`);
+  };
   const [q, setQ] = useState('');
   const [facet, setFacet] = useState<string | null>(null);
   const [shown, setShown] = useState(PAGE);
@@ -363,8 +379,8 @@ export function SteerSurface({ pathname, search, navigate: navigateRaw, runs = [
     { id: 'mcp', label: 'Add an MCP policy', testId: 'steering-add-mcp', onSelect: addMcp, disabled: read.kind === 'ok' ? null : 'Once the rules have loaded' },
     { id: 'table', label: 'Edit as a table', testId: 'steer-table', onSelect: () => navigate(tableHref) },
     view === 'retired'
-      ? { id: 'live', label: 'Show the rules in force', testId: 'steer-view-retired', onSelect: () => setView('live') }
-      : { id: 'retired', label: counts.retired !== null && counts.retired > 0 ? `Show retired rules (${counts.retired})` : 'Show retired rules', testId: 'steer-view-retired', onSelect: () => setView('retired') },
+      ? { id: 'live', label: 'Show the rules in force', testId: 'steer-view-retired', onSelect: () => pickView('live') }
+      : { id: 'retired', label: counts.retired !== null && counts.retired > 0 ? `Show retired rules (${counts.retired})` : 'Show retired rules', testId: 'steer-view-retired', onSelect: () => pickView('retired') },
     { id: 'refresh', label: 'Refresh', testId: 'steer-refresh', onSelect: refreshAll },
   ];
   const action = <CalmMenu menu={moreMoves} menuLabel="More ways to add and manage rules" menuTestId={/* testid */ 'steer-more'} />;
@@ -415,19 +431,21 @@ export function SteerSurface({ pathname, search, navigate: navigateRaw, runs = [
     );
   };
 
+  // The rule filters (unused, MCP) narrow the rules in force and the retired ones, not the proposals.
+  const listView = view === 'live' || view === 'retired';
   const filterNotes = (
     <>
-      {usageAsked && (
+      {usageAsked && listView && (
         <CalmNote data-testid="steering-usage-filter-note">
           {unusedIds !== null ? `Only the ${unusedIds.length} rules no run has cited.` : 'Studio’s service can’t say which rules are unused yet, so all rules are shown.'}{' '}
           <a href={at(steerHref(type, mcpOnly, false))} onClick={go(steerHref(type, mcpOnly, false))} className="wk-link" data-testid="steering-usage-filter-clear">Show all</a>
         </CalmNote>
       )}
-      {mcpOnly && (
+      {mcpOnly && listView && (
         <CalmNote data-testid="steer-mcp-note">Only rules that govern MCP calls. <a href={at(steerHref(type, false, usageAsked))} onClick={go(steerHref(type, false, usageAsked))} className="wk-link" data-testid="steer-mcp-clear">Show all</a></CalmNote>
       )}
       {view === 'retired' && (
-        <CalmNote data-testid="steer-retired-note">Retired rules: helpers no longer follow them; they stay listed here, never deleted. <button type="button" className="wk-link wk-se-linkbtn" onClick={() => setView('live')}>Back to the rules in force</button></CalmNote>
+        <CalmNote data-testid="steer-retired-note">Retired rules: helpers no longer follow them; they stay listed here, never deleted. <button type="button" className="wk-link wk-se-linkbtn" onClick={() => pickView('live')}>Back to the rules in force</button></CalmNote>
       )}
       {refreshFailed !== null && read.kind === 'ok' && (
         <CalmNote tone="fail" data-testid="steer-refresh-failed" role="status">
@@ -444,12 +462,12 @@ export function SteerSurface({ pathname, search, navigate: navigateRaw, runs = [
 
   const tools = (
     <>
-      {(view === 'live' || view === 'retired') && (
+      {listView && (
         <CalmSearch value={q} onChange={setQ} placeholder="Search rules" label="Search rules" testId="steer-search" buttonTestId={/* testid */ 'steer-search-open'}
           startOpen={facet !== null}
           extra={facetPairs.length > 0 ? <FacetAutocomplete testId="steer-facet" options={facetPairs} value={facet} onChange={setFacet} label="Filter rules by tags" placeholder="Filter by tag" /> : undefined} />
       )}
-      <CalmSeg label="Which rules" value={view} onChange={setView} data-testid="steer-view"
+      <CalmSeg label="Which rules" value={view} onChange={pickView} data-testid="steer-view"
         options={[
           { value: 'live', label: 'Active', testId: 'steer-view-live' },
           { value: 'proposals', label: typeof pending === 'number' ? `Proposed (${pending})` : 'Proposed', testId: 'steer-view-proposals' },
@@ -488,7 +506,7 @@ export function SteerSurface({ pathname, search, navigate: navigateRaw, runs = [
       ) : (
         <CalmRows data-testid="steer-rule-list" label="Rules">{listed.slice(0, shown).map(ruleRow)}</CalmRows>
       )}
-      {(view === 'live' || view === 'retired') && read.kind === 'ok' && listed.length > shown && (
+      {listView && read.kind === 'ok' && listed.length > shown && (
         <button type="button" className="wk-calm-more" data-testid="steer-show-all" onClick={() => setShown(listed.length)}>Show all {listed.length}</button>
       )}
       {read.kind === 'ok' && routedRule !== null && !rules.some((r) => r.id === routedRule) && (

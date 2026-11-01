@@ -87,7 +87,7 @@ export function DeskRuns({ runs, runsShown, refine, refineBar, now, navigate, pa
     status !== 'all' ? RUN_STATUS_FILTERS[group].find((f) => f.value === status)?.label ?? null : null,
     group === 'finished' && allTime ? 'all time' : null,
   ].filter((x): x is string => x !== null);
-  const clear = (): void => { setQuery(''); setStatus('all'); setAllTime(false); setShown(PAGE); onClearRefine?.(); };
+  const clear = (): void => { setQuery(''); setStatus('all'); setAllTime(false); setShown(PAGE); onProject?.(null); onClearRefine?.(); };
   const sentence = jobsSentence(runsShown ? s : null, win, runs.length > 0);
   const listLabel = group === 'active' ? 'Active' : 'Finished';
 
@@ -105,11 +105,11 @@ export function DeskRuns({ runs, runsShown, refine, refineBar, now, navigate, pa
                 <h2 id="desk-runs-title" className="wk-sr-only">{`${listLabel} jobs`}</h2>
                 <label className="wk-calm-typepick">
                   <span className="wk-sr-only">Project</span>
-                  <select className="wk-calm-pick" data-testid="desk-runs-project" aria-label="Project" value={refine.project ?? 'all'}
-                    data-active={refine.project !== null ? 'true' : undefined}
-                    onChange={(e) => { onProject?.(e.target.value === 'all' ? null : e.target.value); setShown(PAGE); }}>
-                    <option value="all">{`All projects (${everyProject.length})`}</option>
-                    {choices.map((c) => <option key={c.value} value={c.value}>{`${c.label} (${c.count})`}</option>)}
+                  {/* "" is every project (no project id is empty); counts only once the jobs are read. */}
+                  <select className="wk-calm-pick" data-testid="desk-runs-project" aria-label="Project" value={refine.project ?? ''}
+                    onChange={(e) => { onProject?.(e.target.value === '' ? null : e.target.value); setShown(PAGE); }}>
+                    <option value="">{runsShown ? `All projects (${everyProject.length})` : 'All projects'}</option>
+                    {choices.map((c) => <option key={c.value} value={c.value}>{runsShown ? `${c.label} (${c.count})` : c.label}</option>)}
                   </select>
                 </label>
               </>

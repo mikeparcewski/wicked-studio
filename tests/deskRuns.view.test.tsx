@@ -124,13 +124,17 @@ describe('Jobs page', () => {
 });
 
 describe('Jobs by project (operator 2026-11-01: "display (and allow for filtering) by project")', () => {
+  const projectName = (id: string): string => ({ studio: 'Studio Desk', crew: 'Crew Engine', empty: 'Empty Project' } as Record<string, string>)[id] ?? 'A project';
   function stateful(extra: Partial<ReturnType<typeof props>> = {}) {
-    const base = props();
+    const base = { ...props(), projectName };
     const runs = [...base.runs, deskRun('loose', { project_id: null, status: 'executing' }), deskRun('crew', { project_id: 'crew', status: 'executing' })];
     let refine = DEFAULT_REFINE;
-    const onProject = vi.fn((id: string | null) => { refine = { ...refine, project: id }; view.rerender(<DeskRuns {...base} {...extra} runs={runs} refine={refine} projectIds={['studio', 'crew', 'empty']} onProject={onProject} />); });
-    const view = render(<DeskRuns {...base} {...extra} runs={runs} refine={refine} projectIds={['studio', 'crew', 'empty']} onProject={onProject} />);
-    return { onProject };
+    const draw = (): React.ReactElement => <DeskRuns {...base} {...extra} runs={runs} refine={refine} projectIds={['studio', 'crew', 'empty']} onProject={onProject} onClearRefine={onClearRefine} />;
+    const onProject = vi.fn((id: string | null) => { refine = { ...refine, project: id }; view.rerender(draw()); });
+    // The Desk's clear: project, agent and workflow back to every one.
+    const onClearRefine = vi.fn(() => { refine = { ...refine, project: null }; view.rerender(draw()); });
+    const view = render(draw());
+    return { onProject, onClearRefine };
   }
   const pickOptions = (): string[] => [...screen.getByTestId('desk-runs-project').querySelectorAll('option')].map((o) => o.textContent ?? '');
 
@@ -146,23 +150,32 @@ describe('Jobs by project (operator 2026-11-01: "display (and allow for filterin
   it('the list head picks a project, with counts for the list as shown; No project selects the unfiled jobs', () => {
     const { onProject } = stateful();
     // Active: working + waiting (studio), loose (none), crew. "empty" is known but holds no job; No project is last.
-    expect(pickOptions()).toEqual(['All projects (4)', 'Crew Engine (1)', 'Crew Engine (0)', 'Studio Desk (2)', 'No project (1)']);
+    expect(pickOptions()).toEqual(['All projects (4)', 'Crew Engine (1)', 'Empty Project (0)', 'Studio Desk (2)', 'No project (1)']);
     fireEvent.change(screen.getByTestId('desk-runs-project'), { target: { value: 'default' } });
     expect(onProject).toHaveBeenLastCalledWith('default');
     expect(rowIds()).toEqual(['loose']);
     expect(screen.getByTestId('desk-runs-filtered')).toHaveTextContent('Showing only No project');
     fireEvent.change(screen.getByTestId('desk-runs-project'), { target: { value: 'studio' } });
     expect(rowIds()).toEqual(['working', 'waiting']);
-    fireEvent.change(screen.getByTestId('desk-runs-project'), { target: { value: 'all' } });
+    fireEvent.change(screen.getByTestId('desk-runs-project'), { target: { value: '' } });
     expect(onProject).toHaveBeenLastCalledWith(null);
     expect(rowIds()).toHaveLength(4);
   });
 
   it('a project picked that holds no job says the filters match nothing, and Clear clears them', () => {
-    stateful();
+    const { onProject } = stateful();
     fireEvent.change(screen.getByTestId('desk-runs-project'), { target: { value: 'empty' } });
     expect(rowIds()).toEqual([]);
     expect(screen.getByTestId('desk-runs-empty')).toHaveTextContent('No job matches these filters.');
+    fireEvent.click(screen.getByRole('button', { name: 'Clear the filters' }));
+    expect(onProject).toHaveBeenLastCalledWith(null);
+    expect((screen.getByTestId('desk-runs-project') as HTMLSelectElement).value).toBe('');
+    expect(rowIds()).toHaveLength(4);
+  });
+
+  it('says no counts before the jobs are read (never "All projects (0)")', () => {
+    stateful({ runsShown: false });
+    expect(pickOptions()).toEqual(['All projects', 'Crew Engine', 'Empty Project', 'Studio Desk', 'No project']);
   });
 
   it('a project\'s own page shows no picker and no project in the line', () => {

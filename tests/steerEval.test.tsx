@@ -660,4 +660,28 @@ describe('Steer header and pills (operator 2026-11-01)', () => {
     expect(screen.queryByTestId('steer-search-open')).toBeNull();
     expect(screen.queryByTestId('steer-show-all')).toBeNull();
   });
+
+  it('Not accepted round-trips through the address; the MCP filter note stays with the rules it filters', async () => {
+    wire();
+    const navigate = vi.fn();
+    const user = userEvent.setup();
+    const { rerender } = render(<SteerSurface pathname="/steering/policies" search="?mcp=1" runs={[]} navigate={navigate} />);
+    await screen.findByTestId('steer-mcp-note');
+    await user.click(screen.getByTestId('steer-view-not-accepted'));
+    expect(navigate).toHaveBeenLastCalledWith('/steering/policies?mcp=1&view=not-accepted');
+    rerender(<SteerSurface pathname="/steering/policies" search="?mcp=1&view=not-accepted" runs={[]} navigate={navigate} />);
+    expect(screen.getByTestId('steer-view-not-accepted')).toHaveAttribute('aria-checked', 'true');
+    expect(screen.queryByTestId('steer-mcp-note')).toBeNull();
+    // Back (the address loses the view): the rules in force again.
+    rerender(<SteerSurface pathname="/steering/policies" search="?mcp=1" runs={[]} navigate={navigate} />);
+    expect(screen.getByTestId('steer-view-live')).toHaveAttribute('aria-checked', 'true');
+    // Choosing Active from Not accepted takes the view back out of the address.
+    rerender(<SteerSurface pathname="/steering/policies" search="?mcp=1&view=not-accepted" runs={[]} navigate={navigate} />);
+    await user.click(screen.getByTestId('steer-view-live'));
+    expect(navigate).toHaveBeenLastCalledWith('/steering/policies?mcp=1');
+    cleanup();
+    // A direct visit (or a reload) opens on Not accepted.
+    render(<SteerSurface pathname="/rules" search="?view=not-accepted" runs={[]} navigate={vi.fn()} />);
+    expect(screen.getByTestId('steer-view-not-accepted')).toHaveAttribute('aria-checked', 'true');
+  });
 });

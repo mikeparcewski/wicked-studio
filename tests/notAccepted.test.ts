@@ -16,19 +16,19 @@ describe('notAccepted', () => {
     expect(notAccepted(all, 'memory')).toEqual({ rows: [all[1], all[0]], replaced: 0 });
     expect(notAccepted(all, 'policy').rows.map((x) => x.id)).toEqual(['r2', 'r1']);
   });
-  it('leaves out an accepted edit\'s original (counted) and a withdrawn edit copy (not counted)', () => {
+  it('leaves out (and counts) an accepted edit\'s original; a rejected edited copy is listed, the wire can\'t say who rejected it', () => {
     const all = [
-      p('orig', 'rejected', 'memory', { content: 'serial tests' }),
-      p('copy', 'approved', 'memory', { content: 'tests with --runInBand', edited_from: 'orig' }),
-      p('stray', 'rejected', 'memory', { content: 'withdrawn copy', edited_from: 'still-pending' }),
+      p('orig', 'rejected', 'memory', { content: 'serial tests' }, 1),
+      p('copy', 'approved', 'memory', { content: 'tests with --runInBand', edited_from: 'orig' }, 2),
+      p('stray', 'rejected', 'memory', { content: 'withdrawn or rejected copy', edited_from: 'still-pending' }, 3),
       p('still-pending', 'pending', 'memory'),
-      p('real', 'rejected', 'memory', { content: 'turned down' }),
+      p('real', 'rejected', 'memory', { content: 'turned down' }, 4),
     ];
-    expect(notAccepted(all, 'memory')).toEqual({ rows: [all[4]], replaced: 1 });
+    expect(notAccepted(all, 'memory')).toEqual({ rows: [all[4], all[2]], replaced: 1 });
   });
   it('a rejected copy naming an original does not make that original "replaced"', () => {
-    const all = [p('orig', 'rejected', 'memory'), p('copy', 'rejected', 'memory', { edited_from: 'orig' })];
-    expect(notAccepted(all, 'memory')).toEqual({ rows: [all[0]], replaced: 0 });
+    const all = [p('orig', 'rejected', 'memory', {}, 1), p('copy', 'rejected', 'memory', { edited_from: 'orig' }, 2)];
+    expect(notAccepted(all, 'memory')).toEqual({ rows: [all[1], all[0]], replaced: 0 });
   });
   it('reads edited_from defensively', () => {
     expect(editedFrom(p('a', 'approved', 'memory', { edited_from: 'x' }))).toBe('x');

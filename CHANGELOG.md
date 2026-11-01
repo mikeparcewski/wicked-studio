@@ -17,11 +17,14 @@ npm publish dates. Every version listed here exists on
   - **Memory:** the header's Review proposals and Add a memory buttons are gone. Pills over the list, like Steer's,
     switch between Active, Proposed (N) and Not accepted. Add a memory is the first item in the header's ⋯ menu.
   - **Steer:** the header's Add a rule button is gone; Add a rule is the first item in the ⋯ menu (disabled until the
-    rules have loaded). The pills gain Not accepted.
-  - **Not accepted** lists the proposals you rejected. The store keeps a rejected proposal (estate marks it
+    rules have loaded). The pills gain Not accepted. The pills (here and on Memory) are one tab stop; the arrow keys
+    move between them.
+  - **Not accepted** lists the rejected proposals. The store keeps a rejected proposal (estate marks it
     `rejected`), and crew's `GET /proposals` returns it. Not listed: an original that crew rejected because you
-    accepted an edited copy (the foot line counts these), and a copy withdrawn when its approve failed. The list is
-    read-only, because crew can't reopen a rejected proposal. No crew change is needed.
+    accepted an edited copy (the foot line counts these). A rejected edited copy is listed and labelled as one: crew
+    also rejects a copy itself when approving it failed, and the wire can't tell the two apart. The list is
+    read-only, because crew can't reopen a rejected proposal. `?view=not-accepted` opens it on either page. No crew
+    change is needed.
   - **Jobs:** each row's line starts with the job's project, or "No project" for an unfiled job. A project picker in
     the list head (All projects / each project / No project, with counts for the list as shown) replaces the
     Project select that was hidden under Search and filter.

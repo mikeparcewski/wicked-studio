@@ -85,13 +85,20 @@ function wire(initial: MemoryItem[], proposals: Proposal[] = []): { calls: strin
     if (approve !== null) {
       const p = queue.find((x) => x.id === decodeURIComponent(approve[1]!) && x.state === 'pending');
       if (p === undefined) return Promise.reject(new ApiError(404, 'not pending'));
-      queue = queue.map((x) => (x === p ? { ...x, state: 'approved' } : x));
-      const content = typeof body?.content === 'string' ? body.content : (p.payload as { content: string }).content;
+      if (typeof body?.content === 'string') {
+        // crew's accept-with-edit (api/capture.ts): an edited COPY naming the original is approved, the original rejected.
+        const copy: Proposal = { ...p, id: `${p.id}-edit`, payload: { ...(p.payload as object), content: body.content, edited_from: p.id }, state: 'approved' };
+        queue = [...queue.map((x) => (x === p ? { ...x, state: 'rejected' as const } : x)), copy];
+        rows = [...rows, { id: `proposal:${copy.id}`, content: body.content, tier: 'semantic', scope: '', facets: p.facets, created_at: 1_700_000_400 }];
+        return Promise.resolve({ outcome: 'promoted', active_id: `proposal:${copy.id}`, edited: { from: p.id, to: copy.id } });
+      }
+      queue = queue.map((x) => (x === p ? { ...x, state: 'approved' as const } : x));
+      const content = (p.payload as { content: string }).content;
       rows = [...rows, { id: `proposal:${p.id}`, content, tier: 'semantic', scope: '', facets: p.facets, created_at: 1_700_000_400 }];
       return Promise.resolve({ outcome: 'promoted', active_id: `proposal:${p.id}` });
     }
     const reject = /^\/proposals\/([^/]+)\/reject$/.exec(s);
-    if (reject !== null) { queue = queue.map((x) => (x.id === decodeURIComponent(reject[1]!) ? { ...x, state: 'rejected' } : x)); return Promise.resolve({ ok: true }); }
+    if (reject !== null) { queue = queue.map((x) => (x.id === decodeURIComponent(reject[1]!) && x.state === 'pending' ? { ...x, state: 'rejected' as const } : x)); return Promise.resolve({ ok: true }); }
     if (s.startsWith('/proposals')) {
       const state = new URLSearchParams(s.split('?')[1] ?? '').get('state');
       return Promise.resolve({ proposals: state === null ? queue : queue.filter((x) => x.state === state) });
@@ -466,21 +473,22 @@ describe('MemoryPage — Not accepted (what was turned down, kept by the store)'
   // An accept-with-edit: the original is rejected, the approved copy names it.
   const EDIT_ORIG: Proposal = { ...REJ, id: 'orig', payload: { content: 'tests run serially' } };
   const EDIT_COPY: Proposal = { ...REJ, id: 'copy', payload: { content: 'tests run with --runInBand', edited_from: 'orig' }, state: 'approved' };
-  // A withdrawn copy (its approve failed): rejected, carries edited_from; its original is still pending.
-  const WITHDRAWN: Proposal = { ...REJ, id: 'wd', payload: { content: 'stray copy', edited_from: 'pm1' } };
+  // A rejected edited copy (crew withdraws one when its approve fails): listed, said to be an edited copy.
+  const WITHDRAWN: Proposal = { ...REJ, id: 'wd', payload: { content: 'stray copy', edited_from: 'pm1' }, created_at: 1_700_000_030 };
   const REJ_POLICY: Proposal = { ...PP, id: 'rp', state: 'rejected' };
 
-  it('lists the rejected memory proposals newest first, read only; leaves out accepted-edit originals and withdrawn copies', async () => {
+  it('lists the rejected memory proposals newest first, read only; leaves out (and counts) accepted-edit originals', async () => {
     const { calls } = wire([M1], [PM, REJ_OLD, REJ, EDIT_ORIG, EDIT_COPY, WITHDRAWN, REJ_POLICY]);
     page('?view=not-accepted');
     const rows = await screen.findAllByTestId('not-accepted-row');
-    expect(rows.map((r) => r.getAttribute('data-proposal-id'))).toEqual(['rj1', 'rj0']);
+    expect(rows.map((r) => r.getAttribute('data-proposal-id'))).toEqual(['rj1', 'wd', 'rj0']);
+    expect(within(rows[1]!).getByTestId('not-accepted-line')).toHaveTextContent('Memory · an edited copy');
     expect(screen.getByTestId('memory-view-not-accepted')).toHaveAttribute('aria-checked', 'true');
     // One read of every state (the fold needs the approved copies to know which originals they replaced).
     expect(calls).toContain('/proposals');
     expect(within(rows[0]!).getByTestId('not-accepted-text')).toHaveTextContent('always squash-merge on Fridays');
     expect(within(rows[0]!).getByTestId('not-accepted-line')).toHaveTextContent('Memory · proposed by codex · Wicked');
-    expect(screen.getByTestId('not-accepted-count')).toHaveTextContent('2 not accepted · 1 proposal you accepted with an edit is not listed');
+    expect(screen.getByTestId('not-accepted-count')).toHaveTextContent('3 not accepted · 1 proposal you accepted with an edit is not listed');
     // Read only: no approve / reject / edit on a turned-down row, and no search over the memories.
     expect(within(rows[0]!).queryByRole('button', { name: /approve|reject/i })).toBeNull();
     expect(screen.queryByTestId('memories-search-open')).toBeNull();
@@ -499,6 +507,59 @@ describe('MemoryPage — Not accepted (what was turned down, kept by the store)'
     view.rerender(<MemoryPage search="?view=not-accepted" navigate={navigate} address={(p) => `/?tab=memory&at=${encodeURIComponent(p)}`} />);
     const rows = await screen.findAllByTestId('not-accepted-row');
     expect(rows.map((r) => r.getAttribute('data-proposal-id'))).toEqual(['pm1']);
+  });
+
+  it('an accept-with-edit in Proposed is not a turn-down: Not accepted stays empty and says why', async () => {
+    wire([], [PM]);
+    const view = page('?view=proposals');
+    const user = userEvent.setup();
+    const card = await screen.findByTestId('proposal-card');
+    await user.click(within(card).getByTestId('proposal-edit'));
+    await user.clear(within(card).getByTestId('proposal-edit-text'));
+    await user.type(within(card).getByTestId('proposal-edit-text'), 'tests run serially on CI');
+    await user.click(within(card).getByTestId('proposal-approve-edited'));
+    await screen.findByTestId('proposals-section-note');
+    view.rerender(<MemoryPage search="?view=not-accepted" navigate={navigate} address={(p) => `/?tab=memory&at=${encodeURIComponent(p)}`} />);
+    const empty = await screen.findByTestId('not-accepted-empty');
+    expect(empty).toHaveTextContent('No memory proposal was turned down.');
+    expect(empty).toHaveTextContent('1 proposal you accepted with an edit is not listed: its edited words were kept.');
+  });
+
+  it('a failed read says so (never the empty verdict) and Try again recovers; a failed refresh keeps the rows', async () => {
+    const { calls } = wire([M1], [{ ...PM, state: 'rejected' }]);
+    const base = apiFetch.getMockImplementation()!;
+    let fail = true;
+    apiFetch.mockImplementation((path: unknown, init?: { body?: string; method?: string }) =>
+      (String(path) === '/proposals' && fail ? Promise.reject(new ApiError(500, 'estate unreachable')) : base(path, init)));
+    page('?view=not-accepted');
+    const user = userEvent.setup();
+    expect(await screen.findByTestId('not-accepted-error')).toHaveTextContent('estate unreachable');
+    expect(screen.queryByTestId('not-accepted-empty')).toBeNull();
+    fail = false;
+    await user.click(within(screen.getByTestId('not-accepted-error')).getByRole('button', { name: /try again|retry/i }));
+    expect((await screen.findAllByTestId('not-accepted-row')).map((r) => r.getAttribute('data-proposal-id'))).toEqual(['pm1']);
+    // Refresh (the ⋯ menu) fails now: the rows stay, and the page says it showed the last read.
+    fail = true;
+    await user.click(screen.getByTestId('memory-more-button'));
+    await user.click(screen.getByTestId('memories-refresh'));
+    expect(await screen.findByTestId('not-accepted-stale')).toBeInTheDocument();
+    expect(screen.getAllByTestId('not-accepted-row')).toHaveLength(1);
+    expect(calls.filter((c) => c === '/proposals').length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('the pills are one tab stop and the arrows move and choose', async () => {
+    wire([M1], [PM]);
+    page();
+    const user = userEvent.setup();
+    await screen.findAllByTestId('memory-row');
+    const radios = within(screen.getByTestId('memory-view')).getAllByRole('radio');
+    expect(radios.map((r) => r.tabIndex)).toEqual([0, -1, -1]);
+    radios[0]!.focus();
+    await user.keyboard('{ArrowRight}');
+    expect(navigate).toHaveBeenLastCalledWith('/?tab=memory&at=%2Fmemory%3Fview%3Dproposals');
+    expect(radios[1]).toHaveFocus();
+    await user.keyboard('{ArrowLeft}{ArrowLeft}');
+    expect(navigate).toHaveBeenLastCalledWith('/?tab=memory&at=%2Fmemory%3Fview%3Dnot-accepted');
   });
 
   it('nothing turned down is said plainly; an older crew is said honestly, never an empty list', async () => {

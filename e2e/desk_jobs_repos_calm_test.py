@@ -227,24 +227,6 @@ with sync_playwright() as p:
         page.mouse.move(*PARK)
         page.evaluate("() => document.activeElement && document.activeElement.blur()")
         page.screenshot(path=str(SHOTS / f"jobs-repos-jobs-{theme}.png"))
-        # BY PROJECT (operator 2026-11-01): the list head picks a project; each row's line leads with its project,
-        # "No project" for an unfiled job, and picking No project keeps exactly those.
-        pick = page.get_by_test_id("desk-runs-project")
-        options = pick.locator("option").evaluate_all("os => os.map(o => [o.value, o.textContent])")
-        lines = page.locator('[data-testid="desk-runs-row"]').evaluate_all(
-            "rs => rs.map(r => [r.dataset.project, r.querySelector('[data-testid=desk-runs-line]').textContent])")
-        led = all((ln.startswith("No project · ") if proj == "default" else not ln.startswith("No project")) for proj, ln in lines)
-        pick.select_option("default")
-        page.wait_for_timeout(200)
-        only = page.locator('[data-testid="desk-runs-row"]').evaluate_all("rs => rs.map(r => r.dataset.project)")
-        unfiled = sum(1 for proj, _ in lines if proj == "default")
-        pick.select_option("all")
-        page.wait_for_timeout(200)
-        back = page.get_by_test_id("desk-runs-row").count()
-        check(f"{theme}:jobs-by-project", pick.is_visible() and options[0][0] == "all" and options[-1][0] == "default"
-              and options[-1][1].startswith("No project (") and led and all(p == "default" for p in only)
-              and (len(only) == unfiled or len(lines) >= 40) and back == len(lines),
-              options=options, lines=lines[:4], only=only, back=back)
 
         # ── Repositories ──
         page.goto(f"{origin}/repos", wait_until="networkidle")
@@ -284,11 +266,52 @@ with sync_playwright() as p:
         page.screenshot(path=str(SHOTS / f"jobs-repos-repos-{theme}.png"))
         ctx.close()
 
+    # ── By project (operator 2026-11-01): the project_dto corpus files most jobs in projects and leaves r-unfiled
+    #    in none. Each row's line leads with its project's name ("No project" when unfiled); each choice in the list
+    #    head's picker keeps exactly the rows of that project, and its count says how many. ──
+    ctx = browser.new_context(viewport={"width": W, "height": H}, device_scale_factor=1)
+    page = ctx.new_page()
+    page.on("pageerror", lambda e: errors.append(str(e)))
+    set_fixture(origin, wave1=False, repo=False, repo_refs=False, project_dto=True, appearance={**DEFAULT_APPEARANCE, **HARBOR, "theme": "wicked-dark"})
+    page.goto(f"{origin}/?tab=runs", wait_until="networkidle")
+    page.get_by_test_id("desk-runs-row").first.wait_for(state="visible", timeout=15000)
+    pick = page.get_by_test_id("desk-runs-project")
+    ROWS = "rs => rs.map(r => [r.dataset.runId, r.dataset.project, r.querySelector('[data-testid=desk-runs-line]').textContent])"
+    by_group = {}
+    for group in ("active", "finished"):
+        page.get_by_test_id(f"desk-runs-group-{group}").click()
+        page.wait_for_timeout(200)
+        options = pick.locator("option").evaluate_all("os => os.map(o => [o.value, o.textContent])")
+        label = {v: re.sub(r" \(\d+\)$", "", t) for v, t in options}
+        count = {v: int(m.group(1)) for v, t in options if (m := re.search(r"\((\d+)\)$", t))}
+        rows = page.locator('[data-testid="desk-runs-row"]').evaluate_all(ROWS)
+        picked = {}
+        for value, _ in options[1:]:
+            pick.select_option(value)
+            page.wait_for_timeout(150)
+            picked[value] = sorted(r[0] for r in page.locator('[data-testid="desk-runs-row"]').evaluate_all(ROWS))
+        pick.select_option("")
+        page.wait_for_timeout(150)
+        by_group[group] = {"options": options, "rows": rows, "picked": picked,
+                           "led": all(line.startswith(label[proj] + " · ") for _, proj, line in rows),
+                           "exact": all(picked[v] == sorted(r[0] for r in rows if r[1] == v) and count[v] == len(picked[v]) for v in picked),
+                           "all": count.get("", -1) == len(rows) and len(rows) < 40,
+                           "back": page.get_by_test_id("desk-runs-row").count() == len(rows)}
+    every = [r for g in by_group.values() for r in g["rows"]]
+    check("jobs-by-project", all(g["led"] and g["exact"] and g["all"] and g["back"] for g in by_group.values())
+          and any(r[1] == "default" for r in every) and any(r[1] != "default" for r in every)
+          and all(g["options"][0][0] == "" and g["options"][-1][0] == "default" and g["options"][-1][1].startswith("No project (")
+                  for g in by_group.values()),
+          **{g: {k: v for k, v in d.items() if k != "rows"} | {"rows": d["rows"][:6]} for g, d in by_group.items()})
+    page.get_by_test_id("desk-runs-group-active").click()
+    page.screenshot(path=str(SHOTS / "jobs-repos-jobs-by-project.png"))
+    ctx.close()
+
     # ── A phone ──
     ctx = browser.new_context(viewport={"width": 390, "height": 844}, device_scale_factor=1, is_mobile=True, has_touch=True)
     page = ctx.new_page()
     page.on("pageerror", lambda e: errors.append(str(e)))
-    set_fixture(origin, wave1=True, repo=True, repo_refs=True, appearance={**DEFAULT_APPEARANCE, **HARBOR, "theme": "wicked-dark"})
+    set_fixture(origin, wave1=True, repo=True, repo_refs=True, project_dto=False, appearance={**DEFAULT_APPEARANCE, **HARBOR, "theme": "wicked-dark"})
     page.goto(f"{origin}/?tab=runs", wait_until="networkidle")
     page.get_by_test_id("desk-runs").wait_for(state="visible", timeout=15000)
     page.wait_for_timeout(500)

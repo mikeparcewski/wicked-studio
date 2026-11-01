@@ -1,4 +1,4 @@
-import { useId, useState } from 'react';
+import { useId, useRef, useState } from 'react';
 import { ChevronDown, Search } from 'lucide-react';
 import { OverflowMenu, type MenuItem } from '../ui/OverflowMenu.js';
 
@@ -127,7 +127,8 @@ export function CalmSection({ label, labelNode, tools, children, 'data-testid': 
   );
 }
 
-/** The one filter: two (or three) words in a quiet pill track. */
+/** The one filter: two (or three) words in a quiet pill track. A radio group: one tab stop (the chosen
+ *  word, else the first), and the arrows move and choose (Segmented's pattern). */
 export function CalmSeg<V extends string>({ label, value, onChange, options, 'data-testid': testId }: {
   label: string;
   value: V;
@@ -135,11 +136,26 @@ export function CalmSeg<V extends string>({ label, value, onChange, options, 'da
   options: readonly { value: V; label: string; testId?: string }[];
   'data-testid'?: string | undefined;
 }): React.ReactElement {
+  const refs = useRef<(HTMLButtonElement | null)[]>([]);
+  const chosen = options.findIndex((o) => o.value === value);
+  const tabStop = chosen >= 0 ? chosen : 0;
+  const move = (from: number, step: number): void => {
+    const n = options.length;
+    if (n === 0) return;
+    const to = (((from + step) % n) + n) % n;
+    onChange(options[to]!.value);
+    refs.current[to]?.focus();
+  };
   return (
     <div className="wk-calm-seg" role="radiogroup" aria-label={label} data-testid={testId}>
-      {options.map((o) => (
-        <button key={o.value} type="button" role="radio" aria-checked={o.value === value} data-testid={o.testId}
-          className={`wk-calm-seg-btn${o.value === value ? ' is-on' : ''}`} onClick={() => onChange(o.value)}>{o.label}</button>
+      {options.map((o, i) => (
+        <button key={o.value} ref={(el) => { refs.current[i] = el; }} type="button" role="radio" aria-checked={o.value === value} data-testid={o.testId}
+          tabIndex={i === tabStop ? 0 : -1}
+          className={`wk-calm-seg-btn${o.value === value ? ' is-on' : ''}`} onClick={() => onChange(o.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'ArrowRight' || e.key === 'ArrowDown') { e.preventDefault(); move(i, 1); }
+            if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') { e.preventDefault(); move(i, -1); }
+          }}>{o.label}</button>
       ))}
     </div>
   );

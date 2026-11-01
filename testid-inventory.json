@@ -12,8 +12,8 @@
   "studioVersion": "0.13.0",
   "counts": {
     "files": 285,
-    "occurrences": 3952,
-    "static": 3361,
+    "occurrences": 3953,
+    "static": 3362,
     "dynamic": 90,
     "computed": 44
   },
@@ -9974,6 +9974,12 @@
     },
     {
       "testId": "not-accepted-run",
+      "files": [
+        "src/components/NotAcceptedList.tsx"
+      ]
+    },
+    {
+      "testId": "not-accepted-stale",
       "files": [
         "src/components/NotAcceptedList.tsx"
       ]

@@ -199,5 +199,6 @@
   .wk-jr-refine { padding: 16px; }
   /* The project picker and the Active / Finished filter: two lines when one is too narrow. */
   .wk-jr-sec-head { flex-wrap: wrap; row-gap: 8px; }
-  .wk-jr-sec-head .wk-calm-pick { margin-left: 0; max-width: 100%; }
+  /* A long project name stays inside the phone's width (the column's 16 px gutters, the pick's -12 px pull). */
+  .wk-jr-sec-head select.wk-calm-pick { max-width: calc(100vw - 20px); text-overflow: ellipsis; }
 }
