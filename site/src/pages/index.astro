@@ -11,7 +11,7 @@
  * knowledge, agents + projects) → the family map → get it. One voice: plain words, second person,
  * no paragraph past ~3 lines.
  *
- * ACCURACY (studio 0.10.1 / crew 0.14.1). Every label in the demo is a real studio label:
+ * ACCURACY (studio 0.14 / crew 0.16.12, the ui-v3 line). Every label in the demo is a real studio label:
  *  - A run's page is a chat: your messages right-aligned, each agent's turn under its name, the
  *    plan card's "Approve plan" / "Not now", one "Working on Build…" line, and the final message
  *    "Done. Tests pass (38), and codex reviewed and approved it. Pull request #12 is open." with
@@ -19,7 +19,9 @@
  *  - Gate choices: "Approve", "Approve with a note for the next step", "Send back"
  *    (src/components/session/GateRow.tsx, gateMoveModel.ts).
  *  - A question card names the agent that asked (0.9.3). "Needs you" is the inbox (0.10.0).
- *  - Desk tabs = DESK_TABS in src/components/desk/DeskV2.tsx.
+ *  - Sidebar pages = NAV_GROUPS + LEARN_ITEM in src/board/navModel.ts (names: src/board/pageNames.ts).
+ *  - Themes: Wicked Light, Wicked Dark, Ambient (src/theming/appearance.ts, AppearanceSettings.tsx).
+ *  - Voice: the mic beside Send when crew has voice, local transcription (src/components/voice/).
  *  - Review on the builder's own agent is refused unless the job is launched with reduced
  *    assurance, labelled on the run, every gate and the delivery (crew 0.9.0 / core-ts 0.7.46).
  *  - The assurance receipt: required vs ran, who built / reviewed / judged, what was skipped.
@@ -42,20 +44,21 @@ const title = 'wicked-studio — the IDE for running a team of coding agents';
 // What search results and social cards show. Same attribution boundary as the page: the crew
 // daemon runs the agents; studio is the screen you run them from.
 const description =
-  'The IDE for running a team of coding agents. Chat with Claude Code, Codex, Copilot, OpenCode and Pi, watch the work happen live, answer the gates that need you, and approve what changed. A different agent reviews every change, and the wicked-crew daemon on your machine runs each agent in a sandbox.';
+  'The IDE for running a team of coding agents. Chat with Claude Code, Codex, Copilot, OpenCode and Pi, watch the work happen live, answer the gates that need you, and approve what changed. By default a different agent reviews every change, and the wicked-crew daemon on your machine runs each agent in a sandbox.';
 const repo = 'https://github.com/mikeparcewski/wicked-studio';
 
-// The Desk's real tabs (DESK_TABS in src/components/desk/DeskV2.tsx), one plain line each.
+// Nine of the sidebar's real pages (NAV_GROUPS + LEARN_ITEM in src/board/navModel.ts; Report left out to keep
+// three rows), one plain line each.
 const TABS = [
-  { name: 'Work', line: 'What needs you first, then what is running. Start a new job here.' },
-  { name: 'Runs', line: 'Every job as one chat: the live record and the gates you answer.' },
-  { name: 'Repositories', line: 'Your repos, their onboarding and their code graphs.' },
-  { name: 'Report', line: 'What your agents did lately: outcomes and spend, by project.' },
-  { name: 'Understand', line: 'Compare jobs, repos or agents side by side.' },
-  { name: 'Steer', line: 'Your rules, each scoped to everywhere, one project or one repo.' },
-  { name: 'Memory', line: 'What happened and what you told it. Edit or erase any of it.' },
+  { name: 'Learn', line: 'Teach it how you work: docs, rules, personality, brand.' },
+  { name: 'Projects', line: 'Group repos and jobs; one code graph over the repos.' },
+  { name: 'Jobs', line: 'Every job as one chat, with the gates you answer.' },
+  { name: 'Repositories', line: 'Code graphs, and how much is mapped to requirements.' },
+  { name: 'Understand', line: 'Ask how your code fits together. Answers cite the code.' },
+  { name: 'Evaluate', line: 'Test your rules against examples first.' },
+  { name: 'Steering', line: 'Your rules: everywhere, one project or one repo.' },
+  { name: 'Memory', line: 'What happened, what you said, what jobs learned.' },
   { name: 'Agents', line: 'Sign each agent in once. It runs in a sandbox.' },
-  { name: 'Evaluate', line: 'Test your rules against examples before they check real work.' },
 ];
 
 const AGENTS = ['Claude Code', 'Codex', 'Copilot', 'OpenCode', 'Pi'];
@@ -81,8 +84,8 @@ const studioVersion = __WICKED_STUDIO_VERSION__;
       <div class="ide" data-ide aria-label="A working demo of wicked-studio: three jobs, one of them yours to drive">
         <div class="ide-bar">
           <span class="ide-dots" aria-hidden="true"><i></i><i></i><i></i></span>
-          <nav class="ide-tabs" aria-label="Desk tabs (illustration)">
-            <span class="is-on">Work</span><span>Runs</span><span>Repositories</span><span>Steer</span><span>Memory</span><span>Agents</span>
+          <nav class="ide-tabs" aria-label="Sidebar pages (illustration)">
+            <span>Projects</span><span class="is-on">Jobs</span><span>Repositories</span><span>Steering</span><span>Memory</span><span>Agents</span>
           </nav>
           <span class="ide-url" data-demo-note>scripted demo · press Send, then make the calls</span>
         </div>
@@ -135,7 +138,8 @@ const studioVersion = __WICKED_STUDIO_VERSION__;
         <li>⌘K command palette</li>
         <li>Batch triage from the keyboard</li>
         <li>Desktop alerts when a job needs you</li>
-        <li>Light and dark themes</li>
+        <li>Voice mode</li>
+        <li>Wicked Light, Wicked Dark and Ambient themes</li>
       </ul>
     </div>
   </section>
@@ -146,7 +150,7 @@ const studioVersion = __WICKED_STUDIO_VERSION__;
       <div>
         <div class="sec-head">
           <h2 id="review-h">A different agent checks the work.</h2>
-          <p class="sec-sub">The agent that built a change never approves it. Every gate shows its receipt.</p>
+          <p class="sec-sub">By default the agent that built a change never approves it. Every gate shows its receipt.</p>
         </div>
         <ol class="flow" aria-label="Who does what on a job">
           <li><span class="flow-who">Builder</span><span class="flow-what">Claude Code writes the change in its sandbox</span></li>
@@ -186,12 +190,12 @@ const studioVersion = __WICKED_STUDIO_VERSION__;
         <div class="trio-card">
           <h3>Rules</h3>
           <p>What a gate checks. Each rule reaches everywhere, one project or one repo.</p>
-          <span class="trio-where">Steer tab</span>
+          <span class="trio-where">Steering page</span>
         </div>
         <div class="trio-card">
           <h3>Memory</h3>
           <p>What happened and what you told it. See, edit or erase any of it.</p>
-          <span class="trio-where">Memory tab</span>
+          <span class="trio-where">Memory page</span>
         </div>
         <div class="trio-card">
           <h3>Knowledge</h3>
@@ -214,7 +218,7 @@ const studioVersion = __WICKED_STUDIO_VERSION__;
           <ul class="agent-chips" role="list">
             {AGENTS.map((a) => <li>{a}</li>)}
           </ul>
-          <p>Sign each one in once on the Agents tab. Jobs run them in containers; credentials stay in a broker, and the sandbox only sees placeholders.</p>
+          <p>Sign each one in once on the Agents page. Jobs run them in containers; credentials stay in a broker and the sandbox sees placeholders (a Claude subscription seat gets its sign-in token, guarded out of every diff).</p>
         </div>
         <div class="reach-card">
           <h3>A project spans repos</h3>
