@@ -3,10 +3,11 @@
  * The brand's own faces come first in every stack (fonts/wicked/, drawn in code by
  * scripts/fonts/build_wicked_fonts.py, v2, approved 2026-11-01):
  *
- *   --font-sans     'Wicked Sans' 400 + 600  -> Inter           every UI word
+ *   --font-sans     'Wicked Sans' 400 + 600  -> Inter           every UI word (500 and up draw the 600)
  *   --font-display  'Wicked Serif'           -> Marcellus       display sizes and brand moments
  *   --font-serif    'Wicked Serif'           -> Marcellus       (the same stack, the older name)
  *   --font-script   'Wicked Script'          -> Dancing Script  brand moments only
+ *   (Wicked Serif and Wicked Script have one face each, drawn at every weight: never faux-bolded.)
  *   --font-mono                                 JetBrains Mono  code, ids, data
  *
  * The Wicked faces cover basic Latin, UI punctuation and a few symbols only (no accented letters), so

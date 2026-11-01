@@ -144,7 +144,10 @@ goes missing, but it changes face mid-word):
 
 - No accented or non-Latin letters (é, ü, ß, Greek, Cyrillic): Inter, Marcellus or Dancing Script draws them.
 - No hinting: small sizes on low-density Windows screens render softer than Inter.
-- Wicked Sans has two weights, 400 and 600. A 500 (`--weight-label`) renders with the 400 face.
+- Wicked Sans has two faces, Regular (400) and SemiBold (600). Their `@font-face` rules claim weight
+  ranges, so every weight picks one of them: 100 to 499 draw Regular, 500 to 900 (including
+  `--weight-label` 500) draw SemiBold. Wicked Serif and Wicked Script have one face each, which
+  claims 100 to 900, so a bold request draws the regular face rather than a faux bold.
 - Wicked Serif and Wicked Script lowercase is v1: small capitals, not true lowercase. The serif
   small capitals are narrowed to 86% of their advance but not of their outline, so their ink runs
   past the advance (`m`: ink to x=670 on a 589 advance) and tight runs can touch. Set lowercase
@@ -159,14 +162,17 @@ pkg="$PWD"; out="$(mktemp -d)"; cd "$out"     # the compiler writes into the cur
 uv run --with fonttools --with brotli python -I "$pkg/scripts/fonts/build_wicked_fonts.py"
 cp *.woff2 wicked-agile-fonts-selfhost.css "$pkg/fonts/wicked/"
 cp *.otf *.ttf wicked-agile-fonts.css "$pkg/source/wicked-fonts/"
-cd "$pkg" && npm run test:fonts && npm test
+cd "$pkg" && npm run test:fonts && npm run test:fonts:chromium && npm test
 ```
 
 Then look at the faces, not only the check: open `dist/specimen.html`, or render any page that
 loads them with `scripts/fonts/render_wicked_fonts_sample.py <page.html> <out.png>` (Playwright).
 CI (`design-system.yml`, job `fonts`) runs the same check on every face and format, and fails a
 face with a missing or empty glyph, letters or digits that collapsed onto one outline, or
-proportional digits.
+proportional digits, and a stylesheet whose `font-weight` ranges are not the ones above. It then
+checks in Chromium, through `fonts.css` and both Wicked stylesheets, which face draws each weight:
+Wicked Sans 500 must draw SemiBold, and every weight of a face must draw the same pixels as the
+face's own weight, so nothing is faux-bolded (`scripts/fonts/check_wicked_fonts_chromium.py`).
 
 **Brand marks and the Wicked faces**: the lockup, the icons and the three Wicked faces were created by the project owner. The source folder
 carries no licence for them, and `LICENSE` grants none yet; they are for the

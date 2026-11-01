@@ -100,9 +100,9 @@
 }
 
 /* The Wicked faces (operator 2026-11-01): ONE source, the vendored design package (src/vendor/wicked-design,
- * wicked-web packages/design-system/fonts/wicked, re-vendored from wicked-web 0600118). Wicked Sans is the text and UI
- * face: Regular serves weights up to 499, SemiBold 500 and up (so a 500 label is SemiBold, never a lighter Regular);
- * Serif and Script take any weight (100-900; the ranges lane design-fonts-2 is adding to the package's own CSS).
+ * wicked-web packages/design-system/fonts/wicked, re-vendored from wicked-web a05beb7, #42). Wicked Sans is the text and
+ * UI face: Regular serves weights up to 499, SemiBold 500 and up; Serif and Script take any weight (100-900), the same
+ * ranges as the package's own wicked-fonts.css.
  * Wicked Sans covers ASCII and common punctuation: an accented letter falls back, per character, to Inter (next in
  * --font-sans). Wicked Serif is the default wordmark (--font-display); Wicked Script is for the lockup. */
 @font-face {
