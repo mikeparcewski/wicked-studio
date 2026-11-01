@@ -55,7 +55,8 @@ describe('load (§3.3 startup)', () => {
     expect(root().style.getPropertyValue('--_accent-s')).toBe('60%');
     expect(root().style.getPropertyValue('--_accent-l')).toBe('55%');
     expect(root().style.getPropertyValue('--logo-url')).toBe('url("https://example.test/logo.svg")');
-    expect(root().getAttribute('data-theme')).toBe('light');
+    // A stored retired 'light' reads as Wicked Light (operator 2026-10-31); its own accent stays.
+    expect(root().getAttribute('data-theme')).toBe('wicked-light');
     expect(useAppearanceStore.getState().loaded).toBe(true);
     // Reading never writes: startup applies, it does not persist (§3.3).
     vi.advanceTimersByTime(5000);
@@ -89,7 +90,7 @@ describe('sanitizeAppearance (external store — never trusted)', () => {
 
   it('clamps channels, defaults junk, and empties logo/theme correctly', () => {
     expect(sanitizeAppearance({ accent_h: 999, accent_s: -4, accent_l: 'x', logo_url: '', theme: 'sepia' }))
-      .toEqual({ accent_h: 359, accent_s: 0, accent_l: 68, logo_url: null, theme: 'dark', site_name: null });
+      .toEqual({ accent_h: 359, accent_s: 0, accent_l: 25, logo_url: null, theme: 'wicked-dark', site_name: null });
     expect(sanitizeAppearance(null)).toEqual(NEW_INSTALL_APPEARANCE);
     expect(sanitizeAppearance({ accent_h: 179.6 }).accent_h).toBe(180);
     // site_name: a blank/whitespace value is the default (null); a real name is kept.
@@ -139,25 +140,25 @@ describe('update (§3.4 live preview + §3.3 debounced persistence)', () => {
     expect(useAppearanceStore.getState().appearance.logo_url).toBeNull();
   });
 
-  it('theme rides the data-theme attribute: light sets it, dark removes it (§2.14)', () => {
-    useAppearanceStore.getState().update({ theme: 'light' });
-    expect(root().getAttribute('data-theme')).toBe('light');
-    useAppearanceStore.getState().update({ theme: 'dark' });
-    expect(root().hasAttribute('data-theme')).toBe(false);
+  it('theme rides the data-theme attribute: always one of the Wicked pair (operator 2026-10-31)', () => {
+    useAppearanceStore.getState().update({ theme: 'wicked-light' });
+    expect(root().getAttribute('data-theme')).toBe('wicked-light');
+    useAppearanceStore.getState().update({ theme: 'wicked-dark' });
+    expect(root().getAttribute('data-theme')).toBe('wicked-dark');
   });
 });
 
 describe('resets (§3.5 — two, independent)', () => {
-  it('resetAccent restores 230/74/68, persists, and never touches the logo', () => {
+  it('resetAccent restores the Wicked preset 200/47/25, persists, and never touches the logo', () => {
     useAppearanceStore.getState().update({ accent_h: 10, accent_s: 20, accent_l: 30, logo_url: '/l.png' });
     vi.advanceTimersByTime(400);
     putApp.mockClear();
 
     useAppearanceStore.getState().resetAccent();
     const a = useAppearanceStore.getState().appearance;
-    expect([a.accent_h, a.accent_s, a.accent_l]).toEqual([230, 74, 68]);
+    expect([a.accent_h, a.accent_s, a.accent_l]).toEqual([200, 47, 25]);
     expect(a.logo_url).toBe('/l.png');
-    expect(root().style.getPropertyValue('--_accent-h')).toBe('230');
+    expect(root().style.getPropertyValue('--_accent-h')).toBe('200');
 
     vi.advanceTimersByTime(400);
     expect(putApp).toHaveBeenCalledTimes(1);

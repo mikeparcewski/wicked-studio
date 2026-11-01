@@ -21,9 +21,9 @@ import { WickedLogo } from './WickedLogo.js';
  * (EC12: accent vs status, side by side). Reset restores 258/72/62 (§3.5) and
  * persists; the logo is independent of the accent reset.
  *
- * Theme (§2.14): dark is tokens.css itself; light, wicked-light and wicked-dark are theme
- * instances, applied as `data-theme` on <html> and persisted with the rest. A wicked theme
- * writes the harbor accent preset (DES-STUDIO-REBUILD-001 S1); the wheel owns it after.
+ * Theme: Wicked Dark and Wicked Light (operator 2026-10-31), applied as `data-theme` on <html> and persisted with
+ * the rest; a stored dark / light reads as its Wicked counterpart. The wheel owns the accent (the Wicked preset by
+ * default).
  *
  * Status colors are FIXED semantic signals (§2.6) — deliberately absent here.
  */

@@ -212,7 +212,7 @@ describe('BrandLearn — the restored /theme extraction flow', () => {
     expect(root().style.getPropertyValue('--_accent-l')).toBe('58%');
     expect(root().style.getPropertyValue('--logo-url')).toBe(''); // logo NEVER touched
     // …but NOTHING persisted: the store still holds the defaults, no PUT fired.
-    expect(useAppearanceStore.getState().appearance.accent_h).toBe(230);
+    expect(useAppearanceStore.getState().appearance.accent_h).toBe(200);
     await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
     expect(api.putAppearanceSettings).not.toHaveBeenCalled();
     expect(screen.getByTestId('learn-preview-chip').textContent).toContain('217');
@@ -249,8 +249,8 @@ describe('BrandLearn — the restored /theme extraction flow', () => {
     await learnFrom();
     expect(root().style.getPropertyValue('--_accent-h')).toBe('217');
     fireEvent.click(screen.getByTestId('learn-discard'));
-    expect(root().style.getPropertyValue('--_accent-h')).toBe('230');
-    expect(useAppearanceStore.getState().appearance.accent_h).toBe(230);
+    expect(root().style.getPropertyValue('--_accent-h')).toBe('200');
+    expect(useAppearanceStore.getState().appearance.accent_h).toBe(200);
     await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
     expect(api.putAppearanceSettings).not.toHaveBeenCalled();
     expect(screen.queryByTestId('learn-apply')).toBeNull();

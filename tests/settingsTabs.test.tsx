@@ -66,9 +66,9 @@ describe('the Settings page', () => {
     expect(screen.getAllByRole('tab')[1]).toHaveAttribute('aria-selected', 'true');
     expect(within(panel).getByRole('radiogroup', { name: 'Theme' })).toBeInTheDocument();
     expect(screen.getByText('Choose the colors and branding for your workspace.')).toBeInTheDocument();
-    fireEvent.click(within(panel).getByTestId('theme-light'));
-    expect(root().getAttribute('data-theme')).toBe('light');
-    await waitFor(() => expect(client.api.putAppearanceSettings).toHaveBeenCalledWith(expect.objectContaining({ theme: 'light' })), { timeout: 3000 });
+    fireEvent.click(within(panel).getByTestId('theme-wicked-light'));
+    expect(root().getAttribute('data-theme')).toBe('wicked-light');
+    await waitFor(() => expect(client.api.putAppearanceSettings).toHaveBeenCalledWith(expect.objectContaining({ theme: 'wicked-light' })), { timeout: 3000 });
   });
 
   it('picking a tab puts it in the address', () => {
