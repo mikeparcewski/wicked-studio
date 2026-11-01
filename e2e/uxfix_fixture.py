@@ -545,6 +545,13 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          #                 the repos named here; every other repo answers the 404 a repo
          #                 with no requirements read does. Default None (no repo is served).
          "requirements": None,
+         # Round 10 (what we know about a repository):
+         #   requirements_header — {repoId: {coverage, graphBuild}}: merged into a served RequirementsPage
+         #                         (the real share against the minimum, the requirements graph's build).
+         #   graph_kinds         — {repoId: [{kind, count}, …]}: GET /governance/graph?repo=<id> answers
+         #                         {kinds}; any other repo answers 404 (no code graph read). Default None.
+         "requirements_header": None,
+         "graph_kinds": None,
          # EP-P3 (the page editor's acts + the checks panel):
          #   doc_checks — {docId: [DocCheck, …]}: GET /projects/<pid>/interactive/docs/<doc>/checks
          #                serves crew's DocChecksResponse (EP-C2) for a listed doc (200 {checks: []}
@@ -6626,8 +6633,21 @@ class W2Handler(SimpleHTTPRequestHandler):
                       "category": "functional", "statement": r["title"], "status": "active",
                       "risk": bool(r.get("risk")), "riskSource": "data" if r.get("risk") else None,
                       "edited": False} for r in served]
+            with state_lock:
+                header = (state["requirements_header"] or {}).get(rid) or {}
             self._json(200, {"total": len(items), "corpus": len(items), "offset": offset, "limit": limit,
-                             "items": items[offset:offset + limit], "source": "store"})
+                             "items": items[offset:offset + limit], "source": "store", **header})
+            return True
+        # Round 10: GET /api/v1/governance/graph?repo=<id> — a repo's node counts by kind.
+        if path == "/api/v1/governance/graph":
+            qs = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            rid = (qs.get("repo") or [""])[0]
+            with state_lock:
+                kinds = (state["graph_kinds"] or {}).get(rid)
+            if kinds is None:
+                self._json(404, {"error": f"no code graph for {rid}"})
+            else:
+                self._json(200, {"kinds": kinds})
             return True
         if path == "/api/v1/repos":
             with state_lock:

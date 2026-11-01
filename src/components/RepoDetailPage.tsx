@@ -15,13 +15,17 @@ import { useMembershipStore } from '../store/membership.js';
 import { readErrorKind } from '../api/errors.js';
 import { useDisplayText } from '../hooks/useHomePath.js';
 import { announceHistoryChange, keepEntryState, useHistoryEntryValue } from '../hooks/useHistoryState.js';
+import { knowledgeMarks } from '../board/repoKnowledge.js';
+import { knowledgeOf, useRepoKnowledgeFor } from '../store/repoKnowledge.js';
+import { KnowMarks } from './RepoKnowledge.js';
 import { EmptyState, PageFrame, SectionTitle, Skeleton, StateBanner, StatLine, TechDetails } from './ui/index.js';
 
 interface Props {
   repoId: string;
   onSelectRun: (id: string) => void;
   navigate: (path: string) => void;
-  onOpenGraph: (focus?: string) => void;
+  /** Opens the repository's graph: the code graph (optionally focused on a symbol) or its requirements graph. */
+  onOpenGraph: (focus?: string, view?: 'code' | 'domain') => void;
 }
 
 const TERMINAL_STATUSES = new Set(['completed', 'failed', 'cancelled']);
@@ -78,6 +82,8 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph }: P
   const [rerunError, setRerunError] = useState<unknown>(null);
   const entryOnboardError = useHistoryEntryValue('onboardError');
   const registrationError = typeof entryOnboardError === 'string' && entryOnboardError.trim() !== '' ? entryOnboardError : null;
+  // What we know about it (round 10): the same marks as its row on Repositories, as a band of tiles.
+  const knowledge = useRepoKnowledgeFor([repoId]);
 
   useEffect(() => {
     setRerunError(null);
@@ -312,6 +318,21 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph }: P
         {graphFailedHere && (
           <StateBanner data-testid="repo-graph" kind={readErrorKind(graphFailed)} what="the code map" error={graphFailed} onRetry={retryGraph} />
         )}
+
+        <section className="wk-card wk-know-sec" aria-labelledby="repo-know-title" data-testid="repo-know-band">
+          <h2 id="repo-know-title" className="wk-section-title">What we know</h2>
+          <KnowMarks
+            variant="band"
+            testId="repo-know"
+            marks={knowledgeMarks(repo, runs, knowledgeOf(knowledge, repo.id), Date.now())}
+            onOpen={(t) => {
+              if (t.kind === 'code-graph') onOpenGraph();
+              else if (t.kind === 'req-graph') onOpenGraph(undefined, 'domain');
+              else if (t.kind === 'requirements') setRequirementsOpen(true);
+              else if (t.kind === 'run') onSelectRun(t.runId);
+            }}
+          />
+        </section>
 
         <StatLine
           data-testid="repo-detail-stats"

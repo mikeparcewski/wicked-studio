@@ -1,0 +1,72 @@
+/* ── WHAT WE KNOW about a repository (round 10; components/RepoKnowledge.tsx) ──────────────────────────────
+ * Small marks, each a link: a tone dot (or the requirements' meter), the mark's name and its short value.
+ * `strip`: pills under a repository's row on Repositories; `band`: tiles on the repository's own page.
+ * Type: 12 px names, 14 px values on the band, 12 px on the strip; weights 400/600; tokens only. */
+
+.wk-know { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; min-width: 0;
+  --know-hover: color-mix(in oklab, var(--ink-high) 12%, transparent);
+  --know-press: color-mix(in oklab, var(--ink-high) 20%, transparent); }
+.wk-know > li { display: flex; min-width: 0; }
+
+.wk-know-mark {
+  display: inline-flex; align-items: center; gap: 7px; min-width: 0; min-height: 30px; padding: 4px 11px 4px 10px;
+  border-radius: 999px; border: 1px solid var(--border-subtle); background: transparent; color: var(--ink-body);
+  font-family: inherit; font-size: var(--text-caption); line-height: 1.3; text-align: left; white-space: nowrap;
+  transition: background-color 0.14s, border-color 0.14s;
+}
+button.wk-know-mark { cursor: pointer; }
+button.wk-know-mark:hover { background: var(--know-hover); border-color: color-mix(in oklab, var(--accent) 60%, var(--ink-high)); }
+button.wk-know-mark:active { background: var(--know-press); }
+button.wk-know-mark:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-shadow: var(--focus-ring); }
+.wk-know-mark[data-link="false"] { border-style: dashed; color: var(--ink-muted); }
+
+.wk-know-words { display: inline-flex; align-items: baseline; gap: 6px; min-width: 0; }
+.wk-know-label { color: var(--ink-muted); }
+.wk-know-value { color: var(--ink-high); font-weight: var(--weight-semi); overflow: hidden; text-overflow: ellipsis; }
+.wk-know-mark[data-tone="none"] .wk-know-value, .wk-know-mark[data-tone="unknown"] .wk-know-value { color: var(--ink-muted); font-weight: var(--weight-regular); }
+.wk-know-flag {
+  padding: 0 6px; border-radius: 999px; font-size: var(--text-caption); font-weight: var(--weight-semi); line-height: 18px;
+  color: var(--status-warn); background: color-mix(in oklab, var(--status-warn) 16%, transparent);
+}
+
+/* The tone dot. */
+.wk-know-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; background: var(--ink-dim); }
+.wk-know-mark[data-tone="ok"] .wk-know-dot { background: var(--status-ok); }
+.wk-know-mark[data-tone="run"] .wk-know-dot { background: var(--status-run); }
+.wk-know-mark[data-tone="gate"] .wk-know-dot { background: var(--status-gate); }
+.wk-know-mark[data-tone="warn"] .wk-know-dot { background: var(--status-warn); }
+.wk-know-mark[data-tone="fail"] .wk-know-dot { background: var(--status-fail); }
+.wk-know-mark[data-tone="none"] .wk-know-dot { background: transparent; box-shadow: inset 0 0 0 1.5px var(--ink-dim); }
+.wk-know-mark[data-tone="unknown"] .wk-know-dot { background: transparent; box-shadow: inset 0 0 0 1.5px var(--ink-dim); opacity: 0.6; }
+
+/* The requirements meter: the real share filled, the minimum a tick. */
+.wk-know-meter {
+  position: relative; flex-shrink: 0; width: 36px; height: 6px; border-radius: 3px;
+  background: color-mix(in oklab, var(--ink-high) 14%, transparent);
+}
+.wk-know-meter-fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 3px; background: var(--status-ok); }
+.wk-know-mark[data-tone="warn"] .wk-know-meter-fill { background: var(--status-warn); }
+.wk-know-meter-min { position: absolute; top: -3px; bottom: -3px; width: 2px; margin-left: -1px; border-radius: 1px; background: var(--ink-high); }
+
+/* On a repository's row: under its name, lined up with the words (20 px pad + 10 px dot + 20 px gap). */
+.wk-jr-item > .wk-know--strip { padding: 0 20px 14px 50px; margin-top: -6px; }
+
+/* The band: one tile per mark, the value bigger. */
+.wk-know-sec { display: flex; flex-direction: column; gap: 12px; }
+.wk-know--band { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
+.wk-know--band .wk-know-mark {
+  width: 100%; height: 100%; flex-direction: column; align-items: flex-start; gap: 10px; padding: 14px 16px;
+  border-radius: var(--radius-lg); white-space: normal;
+}
+.wk-know--band .wk-know-words { flex-direction: column; align-items: flex-start; gap: 4px; }
+.wk-know--band .wk-know-value { font-size: var(--text-body); white-space: normal; overflow-wrap: anywhere; }
+.wk-know--band .wk-know-meter { width: 100%; max-width: 140px; }
+.wk-know--band .wk-know-dot { width: 10px; height: 10px; }
+
+@media (max-width: 1199px) { .wk-know--band { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 767px) {
+  .wk-jr-item > .wk-know--strip { padding: 0 12px 12px 20px; margin-top: -4px; }
+  .wk-know--band { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .wk-know-mark { white-space: normal; }
+}
+@media (prefers-reduced-motion: reduce) { .wk-know-mark { transition: none; } }

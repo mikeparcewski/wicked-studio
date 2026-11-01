@@ -24,6 +24,11 @@ import { RepoFindings } from './RepoFindings.js';
 import { useNeedsSources } from '../store/needsSources.js';
 import type { Navigate } from '../hooks/useRoute.js';
 import { PageAskButton, usePageChatFor } from './chat/PageChat.js';
+import { knowledgeMarks, type MarkTarget } from '../board/repoKnowledge.js';
+import { knowledgeOf, useRepoKnowledgeFor } from '../store/repoKnowledge.js';
+import { KnowMarks } from './RepoKnowledge.js';
+import { RepoGraphModal } from './RepoGraphModal.js';
+import { RequirementsModal } from './RequirementsModal.js';
 
 type SourceMode = 'local' | 'remote';
 
@@ -398,6 +403,17 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
     || m.repo.root_path.toLowerCase().includes(q));
   const visible = searched.filter((m) => matchesRepoChip(m, chip));
 
+  // ── What we know about each repository (round 10): its marks, read for the rows on screen ──
+  const knowledge = useRepoKnowledgeFor(visible.map((m) => m.repo.id));
+  const [graphOf, setGraphOf] = useState<{ repo: RepoEntry; view: 'code' | 'domain'; focus?: string } | null>(null);
+  const [requirementsOf, setRequirementsOf] = useState<RepoEntry | null>(null);
+  const openMark = (repo: RepoEntry, t: MarkTarget): void => {
+    if (t.kind === 'code-graph') setGraphOf({ repo, view: 'code' });
+    else if (t.kind === 'req-graph') setGraphOf({ repo, view: 'domain' });
+    else if (t.kind === 'requirements') setRequirementsOf(repo);
+    else if (t.kind === 'run') onSelectRun?.(t.runId);
+  };
+
   const chipCounts = useMemo(() => {
     const counts: Record<RepoChip, number> = { all: 0, 'needs-you': 0, active: 0, failing: 0, ready: 0, never: 0, 'graph-missing': 0 };
     for (const m of searched) {
@@ -763,6 +779,8 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
                           )}
                         </div>
 
+                        <KnowMarks repoName={repo.name} marks={knowledgeMarks(repo, repoRuns, knowledgeOf(knowledge, repo.id), now)} onOpen={(t) => openMark(repo, t)} />
+
                         <div id={detailsId} className="wk-jr-details" data-testid="repo-details" hidden={!open}>
                           <ul className="wk-jr-facts">
                             {/* The graph state — the run history, corrected by the engine's findings (F-2R2-003). */}
@@ -858,6 +876,18 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
           )}
         </div>
       </div>
+      {graphOf !== null && (
+        <RepoGraphModal repo={graphOf.repo} initialView={graphOf.view} initialFocus={graphOf.focus ?? null} onClose={() => setGraphOf(null)} {...(onSelectRun !== undefined ? { onSelectRun } : {})} />
+      )}
+      {requirementsOf !== null && (
+        <RequirementsModal
+          repoId={requirementsOf.id}
+          repoName={requirementsOf.name}
+          onClose={() => setRequirementsOf(null)}
+          onNavigateComponent={(symbol) => { const r = requirementsOf; setRequirementsOf(null); setGraphOf({ repo: r, view: 'code', focus: symbol }); }}
+          {...(onSelectRun !== undefined ? { onOpenRun: (runId: string) => { setRequirementsOf(null); onSelectRun(runId); } } : {})}
+        />
+      )}
     </div>
   );
 }

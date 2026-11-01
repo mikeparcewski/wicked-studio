@@ -11,9 +11,9 @@
   "version": 1,
   "studioVersion": "0.13.0",
   "counts": {
-    "files": 284,
-    "occurrences": 3939,
-    "static": 3345,
+    "files": 285,
+    "occurrences": 3950,
+    "static": 3356,
     "dynamic": 90,
     "computed": 44
   },
@@ -12601,6 +12601,43 @@
       ]
     },
     {
+      "testId": "repo-know",
+      "files": [
+        "src/components/RepoDetailPage.tsx",
+        "src/components/RepoKnowledge.tsx"
+      ]
+    },
+    {
+      "testId": "repo-know-band",
+      "files": [
+        "src/components/RepoDetailPage.tsx"
+      ]
+    },
+    {
+      "testId": "repo-know-flag",
+      "files": [
+        "src/components/RepoKnowledge.tsx"
+      ]
+    },
+    {
+      "testId": "repo-know-mark",
+      "files": [
+        "src/components/RepoKnowledge.tsx"
+      ]
+    },
+    {
+      "testId": "repo-know-meter",
+      "files": [
+        "src/components/RepoKnowledge.tsx"
+      ]
+    },
+    {
+      "testId": "repo-know-value",
+      "files": [
+        "src/components/RepoKnowledge.tsx"
+      ]
+    },
+    {
       "testId": "repo-name",
       "files": [
         "src/components/RepositoriesPanel.tsx"
@@ -19100,6 +19137,12 @@
       ]
     },
     {
+      "testId": "understand-back",
+      "files": [
+        "src/components/desk/UnderstandPage.tsx"
+      ]
+    },
+    {
       "testId": "understand-chat",
       "files": [
         "src/components/desk/UnderstandPage.tsx"
@@ -19107,6 +19150,12 @@
     },
     {
       "testId": "understand-compare",
+      "files": [
+        "src/components/desk/UnderstandPage.tsx"
+      ]
+    },
+    {
+      "testId": "understand-compare-toggle",
       "files": [
         "src/components/desk/UnderstandPage.tsx"
       ]
@@ -19143,6 +19192,12 @@
     },
     {
       "testId": "understand-graph-repo",
+      "files": [
+        "src/components/desk/UnderstandPage.tsx"
+      ]
+    },
+    {
+      "testId": "understand-graph-req",
       "files": [
         "src/components/desk/UnderstandPage.tsx"
       ]
@@ -19185,6 +19240,18 @@
     },
     {
       "testId": "understand-scope-words",
+      "files": [
+        "src/components/desk/UnderstandPage.tsx"
+      ]
+    },
+    {
+      "testId": "understand-side",
+      "files": [
+        "src/components/desk/UnderstandPage.tsx"
+      ]
+    },
+    {
+      "testId": "understand-side-toggle",
       "files": [
         "src/components/desk/UnderstandPage.tsx"
       ]
@@ -20838,6 +20905,7 @@
         "src/components/QeRefusalWarning.tsx",
         "src/components/RepoDetailPage.tsx",
         "src/components/RepoFindings.tsx",
+        "src/components/RepoKnowledge.tsx",
         "src/components/RequirementsCoverageSummary.tsx",
         "src/components/RunSparkline.tsx",
         "src/components/SkillChips.tsx",
@@ -20855,7 +20923,6 @@
         "src/components/dashboardKit.tsx",
         "src/components/desk/DeskHome.tsx",
         "src/components/desk/DeskParts.tsx",
-        "src/components/desk/UnderstandPage.tsx",
         "src/components/editors/PluginLivePreview.tsx",
         "src/components/everything/FinishedRunMenu.tsx",
         "src/components/insights/InsightsLine.tsx",
@@ -21061,7 +21128,6 @@
     {
       "expression": "toggleId",
       "files": [
-        "src/components/desk/UnderstandPage.tsx",
         "src/components/steer/EvaluateSurface.tsx"
       ]
     },

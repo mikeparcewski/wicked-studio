@@ -17,14 +17,17 @@ const mocks = vi.hoisted(() => ({
   members: vi.fn(),
   // Crew's chat history (Recent answers lists Understand's chats from it too): none by default.
   history: vi.fn(() => Promise.resolve({ chats: [], items: [] })),
+  // What we know about each repository (the sidebar's graph links show its state).
+  kinds: vi.fn(),
+  reqs: vi.fn(),
 }));
 vi.mock('../src/api/client.js', () => ({
-  api: { getChatMessages: mocks.messages, listRepos: mocks.listRepos, listProjectMembers: mocks.members, listChatHistory: mocks.history },
+  api: { getChatMessages: mocks.messages, listRepos: mocks.listRepos, listProjectMembers: mocks.members, listChatHistory: mocks.history, getGraphKindsForRepo: mocks.kinds, listRequirements: mocks.reqs },
   apiBase: () => '/api/v1',
 }));
 // The folded views are their own surfaces (with their own tests); here they only need to be reachable.
 vi.mock('../src/components/CoverageView.js', () => ({ CoverageView: () => <div data-testid="coverage-view-stub" /> }));
-vi.mock('../src/components/RepoGraphModal.js', () => ({ RepoGraphModal: ({ repo }: { repo: { name: string } }) => <div data-testid="repo-graph-stub">{repo.name}</div> }));
+vi.mock('../src/components/RepoGraphModal.js', () => ({ RepoGraphModal: ({ repo, initialView }: { repo: { name: string }; initialView?: string }) => <div data-testid="repo-graph-stub" data-view={initialView ?? 'code'}>{repo.name}</div> }));
 // The page chat (DES-LEARN §6.2) has its own tests (pageChat.test.tsx); here it is a stub that shows what the page
 // hands it: its scope chips and its provider (which the page's Recent answers learn the chat id from).
 const chat = vi.hoisted(() => ({ props: null as null | { chips?: Array<{ key: string; on: boolean }>; provider?: { knows: string; onSent?: (t: string, id: string) => void } } }));
@@ -37,6 +40,7 @@ const { UnderstandPage } = await import('../src/components/desk/UnderstandPage.j
 const { usePageChat } = await import('../src/store/pageChat.js');
 const onRepos = (): string[] => (chat.props?.chips ?? []).filter((c) => c.on && c.key.startsWith('repo:')).map((c) => c.key.slice(5));
 const { clearRepoCache } = await import('../src/store/repoCache.js');
+const { resetRepoKnowledge } = await import('../src/store/repoKnowledge.js');
 
 const NOW = Date.UTC(2026, 9, 26, 12, 0, 0);
 
@@ -57,6 +61,11 @@ beforeEach(() => {
   usePageChat.setState({ open: {}, focus: {}, seed: {}, gen: {} });
   sessionStorage.clear();
   chat.props = null;
+  resetRepoKnowledge();
+  mocks.kinds.mockReset();
+  mocks.kinds.mockImplementation(async (id: string) => ({ kinds: id === 'r1' ? [{ kind: 'File', count: 4 }, { kind: 'Function', count: 20 }] : [] }));
+  mocks.reqs.mockReset();
+  mocks.reqs.mockImplementation(async () => ({ total: 1, coverage: { realPct: 90, minPct: 80, behaviorBearing: 10, real: 9, placeholders: 1, unmapped: 0, notProduct: 0 }, graphBuild: { generation: 2, coverage: null, behind: false } }));
 });
 afterEach(() => cleanup());
 
@@ -100,19 +109,23 @@ describe('Understand words (pure)', () => {
 });
 
 describe('the Understand page', () => {
-  it('leads with one question box and three suggestions; the graph and the comparison are folded away', async () => {
+  it('a chat page: the greeting and the composer, a sidebar with Recent answers, the graph links and More', async () => {
     await act(async () => { render(<UnderstandPage project={null} navigate={vi.fn()} now={NOW} compare={<div data-testid="compare-stub" />} />); });
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Understand');
     expect(screen.getByText('Ask how your code fits together. Answers cite the code they come from, right here.')).toBeInTheDocument();
-    // Nothing asked yet: the box, not a chat.
+    // Nothing asked yet: the composer, not a chat; New question only once there is something to leave.
     expect(screen.queryByTestId('understand-chat')).toBeNull();
+    expect(screen.getByTestId('understand-ask')).toBeVisible();
+    expect(screen.queryByTestId('understand-new-question')).toBeNull();
     // No project and no job this week: nothing is chosen, so the questions name no repository.
     expect(screen.getAllByTestId('understand-suggest').map((b) => b.textContent)).toEqual(suggestedQuestions([]));
-    expect(screen.getByTestId('understand-recent-empty')).toHaveTextContent('Nothing asked yet');
-    expect(screen.getByTestId('understand-graph')).not.toHaveAttribute('open');
-    expect(screen.getByTestId('understand-compare')).not.toHaveAttribute('open');
-    // Nothing is read for the closed graph fold until it opens.
-    expect(screen.queryByTestId('understand-graph-repo')).toBeNull();
+    const side = screen.getByTestId('understand-side');
+    expect(within(side).getByTestId('understand-recent-empty')).toHaveTextContent('Nothing asked yet');
+    // None chosen = the question reads every repository, so every repository's graphs are linked.
+    expect(within(side).getAllByTestId('understand-graph-repo').map((r) => r.getAttribute('data-repo-id'))).toEqual(['r1', 'r2']);
+    // The comparison is mounted (its picks survive) but not shown until asked for.
+    expect(screen.getByTestId('understand-compare')).not.toBeVisible();
+    expect(screen.queryByTestId('understand-coverage')).toBeNull();
     expect(mocks.messages).not.toHaveBeenCalled();
   });
 
@@ -227,15 +240,66 @@ describe('the Understand page', () => {
     expect(mocks.messages).not.toHaveBeenCalled();
   });
 
-  it('Explore the graph lists each repository with its graph when opened', async () => {
-    await act(async () => { render(<UnderstandPage project={null} navigate={vi.fn()} now={NOW} compare={null} />); });
-    const fold = screen.getByTestId('understand-graph');
-    await act(async () => { (fold as HTMLDetailsElement).open = true; fireEvent(fold, new Event('toggle')); });
-    expect(screen.getAllByTestId('understand-graph-repo').map((r) => r.textContent)).toEqual([expect.stringContaining('wicked-core'), expect.stringContaining('wicked-crew')]);
-    fireEvent.click(screen.getAllByTestId('understand-graph-open')[1]!);
-    expect(screen.getByTestId('repo-graph-stub')).toHaveTextContent('wicked-crew');
+  it('the graph links: each repository in scope, its code graph and its requirements graph, each with its state', async () => {
+    const navigate = vi.fn();
+    await act(async () => { render(<UnderstandPage project="proj-1" navigate={navigate} now={NOW} compare={null} />); });
+    // On a project's page the project's repository is chosen: only its graphs are linked.
+    const rows = screen.getAllByTestId('understand-graph-repo');
+    expect(rows.map((r) => r.getAttribute('data-repo-id'))).toEqual(['r1']);
+    expect(screen.getByTestId('understand-graph')).toHaveTextContent('Graphs for these repositories');
+    // r1 has a code graph (24 nodes in 4 files) and a requirements graph at build 2.
+    expect(within(rows[0]!).getByTestId('understand-graph-open')).toHaveAttribute('data-tone', 'ok');
+    expect(within(rows[0]!).getByTestId('understand-graph-req')).toHaveAttribute('data-tone', 'ok');
+    expect(within(rows[0]!).getByTestId('understand-graph-req').getAttribute('title')).toContain('build 2');
+    fireEvent.click(within(rows[0]!).getByTestId('understand-graph-req'));
+    expect(screen.getByTestId('repo-graph-stub')).toHaveAttribute('data-view', 'domain');
+    expect(screen.getByTestId('repo-graph-stub')).toHaveTextContent('wicked-core');
+    // The name is the repository's page.
+    fireEvent.click(within(rows[0]!).getByRole('link', { name: 'wicked-core' }));
+    expect(navigate).toHaveBeenCalledWith('/repo-detail/r1');
+    // Choosing the other one too links both.
+    fireEvent.click(screen.getAllByTestId('understand-scope-repo')[1]!);
+    expect(screen.getAllByTestId('understand-graph-repo').map((r) => r.getAttribute('data-repo-id'))).toEqual(['r1', 'r2']);
+  });
+
+  it('More: Compare side by side and Coverage take the main column; Back returns to the chat', async () => {
+    await act(async () => { render(<UnderstandPage project={null} navigate={vi.fn()} now={NOW} compare={<div data-testid="compare-stub" />} />); });
+    fireEvent.click(screen.getByTestId('understand-compare-toggle'));
+    expect(screen.getByTestId('understand-compare')).toBeVisible();
+    expect(screen.getByTestId('compare-stub')).toBeInTheDocument();
+    expect(screen.getByTestId('understand-ask')).not.toBeVisible();
+    expect(screen.getByTestId('understand-compare-toggle')).toHaveAttribute('aria-pressed', 'true');
     fireEvent.click(screen.getByTestId('understand-coverage-toggle'));
     expect(screen.getByTestId('coverage-view-stub')).toBeInTheDocument();
+    expect(screen.getByTestId('understand-compare')).not.toBeVisible();
+    fireEvent.click(screen.getByTestId('understand-back'));
+    expect(screen.queryByTestId('understand-coverage')).toBeNull();
+    expect(screen.getByTestId('understand-ask')).toBeVisible();
+  });
+
+  it('a phone: the sidebar is behind the header button; Escape closes it, a reopened answer closes it, and the chat’s graph move opens it', async () => {
+    rememberAsked({ chatId: 'c-1', question: 'Q?', at: NOW });
+    mocks.messages.mockResolvedValue({ chat: { id: 'c-1', status: 'closed' }, messages: [seat('An answer.')], attachments: [] });
+    await act(async () => { render(<UnderstandPage project={null} navigate={vi.fn()} now={NOW} compare={null} />); });
+    const page = screen.getByTestId('understand-page');
+    const toggle = screen.getByTestId('understand-side-toggle');
+    expect(page).toHaveAttribute('data-side', 'closed');
+    expect(toggle).toHaveAttribute('aria-controls', screen.getByTestId('understand-side').id);
+    fireEvent.click(toggle);
+    expect(page).toHaveAttribute('data-side', 'open');
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(page).toHaveAttribute('data-side', 'closed');
+    fireEvent.click(toggle);
+    // Reopening an answer shows it in the main column, closes the drawer and marks the row as the open one.
+    await act(async () => { fireEvent.click(screen.getByTestId('understand-answer')); });
+    expect(page).toHaveAttribute('data-side', 'closed');
+    expect(screen.getByTestId('understand-chat')).toBeInTheDocument();
+    expect(screen.getByTestId('understand-answer')).toHaveAttribute('aria-current', 'true');
+    expect(screen.getByTestId('understand-new-question')).toBeInTheDocument();
+    // The chat's "explore the graph" next move: the drawer opens on the graph links.
+    await act(async () => { (chat.props!.provider as unknown as { onMove: (m: string) => boolean }).onMove('graph'); });
+    expect(page).toHaveAttribute('data-side', 'open');
   });
 });
 

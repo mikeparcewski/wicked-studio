@@ -29,6 +29,7 @@
 @import './sections/decision-dock.css';
 @import './sections/ask-card.css';
 @import './sections/page-chat.css';
+@import './sections/understand-chat.css';
 @import './sections/ambient.css';
 @import './sections/eval-plan.css';
 @import './sections/voice.css';
@@ -50,6 +51,7 @@
 @import './sections/editor-host.css';
 @import './sections/layout.css';
 @import './sections/jobs-repos.css';
+@import './sections/repo-know.css';
 
 @tailwind base;
 @tailwind components;
