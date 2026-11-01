@@ -83,16 +83,17 @@ def de(a, b) -> float:
 
 HARBOR = {"accent_h": 200, "accent_s": 47, "accent_l": 25}
 IRIS = {"accent_h": 230, "accent_s": 74, "accent_l": 68}
-# (case, data-theme, appearance): each theme with the accent it writes, then with an accent near its rail.
+# (case, data-theme, appearance): each theme with the accent it writes, then with an accent near its rail. A legacy
+# "dark"/"light" choice renders as Wicked Dark/Light (appearance.ts LEGACY_THEMES, round 4).
 CASES = [
     ("wicked-dark", "wicked-dark", {"theme": "wicked-dark", **HARBOR}),
     ("wicked-light", "wicked-light", {"theme": "wicked-light", **HARBOR}),
-    ("dark", None, {"theme": "dark", **IRIS}),
-    ("light", "light", {"theme": "light", **IRIS}),
+    ("dark", "wicked-dark", {"theme": "dark", **IRIS}),
+    ("light", "wicked-light", {"theme": "light", **IRIS}),
     ("wicked-dark-custom", "wicked-dark", {"theme": "wicked-dark", "accent_h": 240, "accent_s": 50, "accent_l": 0}),
     ("wicked-light-custom", "wicked-light", {"theme": "wicked-light", "accent_h": 0, "accent_s": 0, "accent_l": 88}),
-    ("dark-custom", None, {"theme": "dark", "accent_h": 210, "accent_s": 25, "accent_l": 8}),
-    ("light-custom", "light", {"theme": "light", "accent_h": 60, "accent_s": 100, "accent_l": 68}),
+    ("dark-custom", "wicked-dark", {"theme": "dark", "accent_h": 210, "accent_s": 25, "accent_l": 8}),
+    ("light-custom", "wicked-light", {"theme": "light", "accent_h": 60, "accent_s": 100, "accent_l": 68}),
 ]
 # (name, selector, kind): kind "button" = an icon button (accent edge), "nc" = the Nerve Center tile.
 ITEMS = [
@@ -190,7 +191,9 @@ with sync_playwright() as p:
         page.wait_for_function(
             "([t, l]) => document.documentElement.getAttribute('data-theme') === t"
             " && document.documentElement.style.getPropertyValue('--_accent-l') === l",
-            arg=[want, f"{appearance['accent_l']}%"], timeout=10000)
+            # a legacy theme's untouched default accent (IRIS) moves to the Wicked preset (appearance.ts sanitizeAppearance)
+            arg=[want, f"{HARBOR['accent_l'] if appearance['theme'] in ('dark', 'light') and all(appearance[k] == IRIS[k] for k in IRIS) else appearance['accent_l']}%"],
+            timeout=10000)
         page.locator('[data-testid="rail-session"]').first.wait_for(state="visible", timeout=10000)
         rail_bg = page.get_by_test_id("session-rail").evaluate("e => getComputedStyle(e).backgroundColor")
         ink_high = page.evaluate(INK_HIGH)

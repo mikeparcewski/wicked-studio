@@ -39,9 +39,10 @@ MIN_ROW = 64
 # hover or link that only reads under one accent. `paired` = the accent that theme writes when chosen.
 HARBOR = {"accent_h": 200, "accent_s": 47, "accent_l": 25}
 IRIS = {"accent_h": 230, "accent_s": 74, "accent_l": 68}
+# A legacy "dark"/"light" choice renders as Wicked Dark/Light (appearance.ts LEGACY_THEMES, round 4).
 CASES = [("wicked-dark", "wicked-dark", HARBOR, True), ("wicked-light", "wicked-light", HARBOR, True),
-         ("dark", None, IRIS, True), ("light", "light", IRIS, True),
-         ("dark-harbor", None, HARBOR, False), ("light-harbor", "light", HARBOR, False)]
+         ("dark", "wicked-dark", IRIS, True), ("light", "wicked-light", IRIS, True),
+         ("dark-harbor", "wicked-dark", HARBOR, False), ("light-harbor", "wicked-light", HARBOR, False)]
 MIN_TEXT = 4.5
 FACE_IDS = re.compile(r"run:|[0-9a-f]{8}-[0-9a-f]{4}-|(?:^|\s)/\w+/\w+")  # a run id, a uuid, an absolute path
 
@@ -183,7 +184,7 @@ with sync_playwright() as p:
         page.add_init_script(
             "document.addEventListener('DOMContentLoaded', () => { const s = document.createElement('style'); "
             f"s.textContent = {json.dumps(HIDE_GATE_TOASTS)}; document.head.appendChild(s); }});")
-        set_fixture(origin, wave1=True, repo=True, repo_refs=True, appearance={**DEFAULT_APPEARANCE, **accent, "theme": want or "dark"})
+        set_fixture(origin, wave1=True, repo=True, repo_refs=True, appearance={**DEFAULT_APPEARANCE, **accent, "theme": theme.removesuffix("-harbor")})
 
         # ── Jobs ──
         page.goto(f"{origin}/?tab=runs", wait_until="networkidle")
