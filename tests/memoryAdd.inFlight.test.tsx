@@ -82,9 +82,12 @@ describe('a table save clears only what it saved', () => {
     // m2 failed: its draft stays; m3 was never sent: it stays
     expect(rows()[1]!.value).toBe('use pnpm 10');
     expect(rows()[2]!.value).toBe('owner is Sam and Ana');
-    // m1 was replaced by m1b: the newer words follow it there
-    rerender(<MemoryTable memories={[mem('m1b', 'deploy Tuesdays and Thursdays'), memories[1]!, memories[2]!]} onSaved={() => {}} onClose={() => {}} />);
+    // before the list is read again, m1's row still shows the newer words (never the old memory's)
     expect(rows()[0]!.value).toBe('deploy Tuesdays and Thursdays, never Friday');
+    // typed while the list is being read again: kept, and it is the new memory it will save
+    fireEvent.change(rows()[0]!, { target: { value: 'deploy Tuesdays and Thursdays, never Friday or Monday' } });
+    rerender(<MemoryTable memories={[mem('m1b', 'deploy Tuesdays and Thursdays'), memories[1]!, memories[2]!]} onSaved={() => {}} onClose={() => {}} />);
+    expect(rows()[0]!.value).toBe('deploy Tuesdays and Thursdays, never Friday or Monday');
   });
 
   it('a row saved and not touched again goes back to the saved words', async () => {
@@ -93,8 +96,16 @@ describe('a table save clears only what it saved', () => {
     fireEvent.change(screen.getByTestId('memory-table-text'), { target: { value: 'deploy Thursdays' } });
     fireEvent.click(screen.getByTestId('memory-table-save'));
     await waitFor(() => expect(screen.getByTestId('memory-table-note').textContent).toBe('Saved 1 change.'));
-    rerender(<MemoryTable memories={[mem('m1b', 'deploy Thursdays')]} onSaved={() => {}} onClose={() => {}} />);
+    // before the refresh the row shows the saved words, and is not a change to save again (its memory was retired)
     expect((screen.getByTestId('memory-table-text') as HTMLTextAreaElement).value).toBe('deploy Thursdays');
+    expect(screen.getByTestId('memory-table-save').textContent).toBe('Save changes');
+    // a further edit before the refresh saves the NEW memory
+    fireEvent.change(screen.getByTestId('memory-table-text'), { target: { value: 'deploy Thursdays only' } });
+    editMemory.mockResolvedValue({ memory_id: 'm1c', retired: 'm1b' });
+    fireEvent.click(screen.getByTestId('memory-table-save'));
+    await waitFor(() => expect(editMemory).toHaveBeenLastCalledWith({ memory_id: 'm1b', content: 'deploy Thursdays only' }));
+    rerender(<MemoryTable memories={[mem('m1c', 'deploy Thursdays only')]} onSaved={() => {}} onClose={() => {}} />);
+    expect((screen.getByTestId('memory-table-text') as HTMLTextAreaElement).value).toBe('deploy Thursdays only');
     expect(screen.getByTestId('memory-table-save').textContent).toBe('Save changes');
   });
 });

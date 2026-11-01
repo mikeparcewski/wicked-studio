@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   getPersonas, getSetupKnown, isLearnRouteAbsent, PERSONA_HABITS, putPersona, removePersonaOverride,
-  type PersonaInput, type PersonaResponse, type PersonaScope,
+  type Persona, type PersonaInput, type PersonaResponse, type PersonaScope,
 } from '../../api/learn.js';
 import { readErrorKind } from '../../api/errors.js';
 import {
@@ -41,53 +41,59 @@ export function PersonaTab({ navigate, project }: { navigate: Navigate; project:
   const [draft, setDraft] = useState<PersonaInput | null>(null);
   // A new scope starts the form from what that scope holds.
   useEffect(() => { setDraft(null); }, [scope]);
-  // The read after a save settles the form only when it still holds what was saved: input typed while the save was
-  // out is kept, still unsaved (codex on #937: the refresh reverted a newer name to the one just saved).
-  const savedDraft = useRef<string | null>(null);
-  useEffect(() => {
-    const sent = savedDraft.current;
-    if (sent === null) return;
-    savedDraft.current = null;
-    setDraft((d) => (d !== null && JSON.stringify(d) === sent ? null : d));
-  }, [data]);
+  // A save or a removal finishes after the person may have moved on: it answers on the scope it was made on only.
+  const scopeNow = useRef(scope);
+  scopeNow.current = scope;
   // A note answers the last save or removal; a different scope starts without one.
   useEffect(() => { setNote(null); }, [scope]);
   const form = draft ?? base;
-  const set = (patch: Partial<PersonaInput>): void => setDraft({ ...form, ...patch });
+  const set = (patch: Partial<PersonaInput>): void => setDraft({ ...inputOf(form), ...patch });
   const [q, setQ] = useState<0 | 1 | 2>(0);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<{ tone: 'ok' | 'fail'; text: string } | null>(null);
   const answer = useMemo(() => previewAnswer(form, q, person), [form, q, person]);
   const initial = (form.name.trim().charAt(0) || '?').toUpperCase();
-  const dirty = draft !== null && JSON.stringify(draft) !== JSON.stringify(base);
+  const dirty = draft !== null && !sameInput(draft, base);
 
+  /**
+   * Save, and settle the form from the saved answer itself: the form clears only if it still holds what was sent, so
+   * input typed while the save was out stays, still unsaved (codex + agy on #937: a refresh reverted newer input, and
+   * an older refresh could settle a later save).
+   */
   const save = async (): Promise<void> => {
     if (busy || form.name.trim() === '') return;
+    const at = scope;
+    const sent = inputOf(form);
     setBusy(true);
     setNote(null);
     try {
-      const sent = JSON.stringify(form);
-      const r = await putPersona(scope, { ...form, name: form.name.trim() });
-      savedDraft.current = sent;
-      setNote({ tone: 'ok', text: `Saved as version ${r.persona.version}. The next chat uses it.` });
+      const r = await putPersona(at, { ...sent, name: sent.name.trim() });
+      setData((d) => withSaved(d, at, r.persona, r.voice));
       void useFirstRun.getState().markLearnUsed();
-      load();
+      if (scopeNow.current !== at) return;
+      setDraft((cur) => (cur !== null && sameInput(cur, sent) ? null : cur));
+      setNote({ tone: 'ok', text: `Saved as version ${r.persona.version}. The next chat uses it.` });
     } catch (e) {
-      setNote({ tone: 'fail', text: e instanceof Error ? e.message : String(e) });
+      if (scopeNow.current === at) setNote({ tone: 'fail', text: e instanceof Error ? e.message : String(e) });
     } finally {
       setBusy(false);
     }
   };
   const removeOverride = async (): Promise<void> => {
     if (project === null || busy) return;
+    const id = project;
+    const at = scope;
+    const before = draft;
     setBusy(true);
     try {
-      await removePersonaOverride(project);
-      setDraft(null);
+      await removePersonaOverride(id);
+      setData((d) => withoutOverride(d, id));
+      if (scopeNow.current !== at) return;
+      // The form clears unless the person changed it while the removal was out.
+      setDraft((cur) => (cur === null || (before !== null && sameInput(cur, before)) ? null : cur));
       setNote({ tone: 'ok', text: `${projectName ?? 'This project'} uses yours again.` });
-      load();
     } catch (e) {
-      setNote({ tone: 'fail', text: e instanceof Error ? e.message : String(e) });
+      if (scopeNow.current === at) setNote({ tone: 'fail', text: e instanceof Error ? e.message : String(e) });
     } finally {
       setBusy(false);
     }
@@ -201,4 +207,29 @@ function PreviewPart({ b }: { b: PreviewBlock }): React.ReactElement {
   }
   if (b.kind === 'quiet') return <p className="wk-learn-quiet">{b.text}</p>;
   return <p>{b.text}{b.cite !== undefined && <> (<code className="wk-learn-cite">{b.cite}</code>)</>}</p>;
+}
+
+/** A personality's editable fields only: a saved one also carries its version and time, which are never input. */
+function inputOf(p: PersonaInput): PersonaInput {
+  return { name: p.name, colour: p.colour, dials: { ...p.dials }, habits: [...p.habits], ...(p.notes !== undefined ? { notes: p.notes } : {}) };
+}
+
+function sameInput(a: PersonaInput, b: PersonaInput): boolean {
+  return JSON.stringify(inputOf(a)) === JSON.stringify(inputOf(b));
+}
+
+/** The read with a save's answer in it (the PUT answers with the saved personality and its voice). */
+function withSaved(d: PersonaResponse | null, at: PersonaScope, persona: Persona, voice: string): PersonaResponse | null {
+  if (d === null) return d;
+  if (at === 'user') return { ...d, user: persona, voice: { ...d.voice, user: voice } };
+  const id = at.slice('project:'.length);
+  return { ...d, projects: { ...d.projects, [id]: persona }, voice: { ...d.voice, projects: { ...d.voice.projects, [id]: voice } } };
+}
+
+/** The read without a project's override. */
+function withoutOverride(d: PersonaResponse | null, id: string): PersonaResponse | null {
+  if (d === null) return d;
+  const projects = Object.fromEntries(Object.entries(d.projects).filter(([k]) => k !== id));
+  const voices = Object.fromEntries(Object.entries(d.voice.projects).filter(([k]) => k !== id));
+  return { ...d, projects, voice: { ...d.voice, projects: voices } };
 }

@@ -173,33 +173,41 @@ export function docLines(r: Report): { decisions: string[]; questions: string[];
 }
 
 const escapeRe = (t: string): string => t.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
-const CLOCK = '(?:\\d{2}:\\d{2}|—)';
-const PAUSE_ASK = escapeRe(': split it, switch to phased steps, continue at high rigor, or stop? · since ');
 const HANDOFF_PHRASES = Object.values(HANDOFF_WORDS).flatMap((w) => [w.failed, w.skipped]).map(escapeRe).join('|');
+/** A hand-off follow-up, WHOLE, as the plugin writes it: the round number is the only part that varies. */
+const NEXT_MINE = new RegExp(`^After hand-off round \\d+ · (?:${HANDOFF_PHRASES})$`, 'u');
 
 /**
- * The plugin's own lines in a section (the ones it may take back): an open question or a hand-off follow-up, WHOLE, as
- * the plugin writes them. A line a person edited no longer matches and is theirs from then on: a prefix alone is not
- * ownership (codex on #937: an edited "After hand-off round 1 · …" line was taken back and rewritten).
+ * Every open-question line the plugin has written or would write for this run, exactly: one per decision and per
+ * checkpoint pause it has seen, open or answered. A question line is the plugin's only when it is one of these: a line
+ * a person edited, even inside the gate's name or the pause's reason, is theirs (codex + agy on #937).
  */
-const MINE: Readonly<Record<'questions' | 'next', readonly RegExp[]>> = {
-  questions: [
-    new RegExp(`^Waiting on you · [^·]+ · since ${CLOCK}$`, 'u'),
-    new RegExp(`^Waiting on you · checkpoint \\d+ paused(?: \\([^)]*\\))?${PAUSE_ASK}${CLOCK}$`, 'u'),
-  ],
-  next: [new RegExp(`^After hand-off round \\d+ · (?:${HANDOFF_PHRASES})$`, 'u')],
-};
+export function ownQuestionLines(r: Report): string[] {
+  const out = r.gates.map((g) => `Waiting on you · ${gateWord(g.kind)} · since ${clockOf(g.openedAt)}`);
+  for (const pz of r.power?.pauses ?? []) {
+    out.push(`Waiting on you · checkpoint ${pz.n} paused${why(pz.kinds)}: split it, switch to phased steps, continue at high rigor, or stop? · since ${clockOf(pz.at)}`);
+  }
+  return out;
+}
+
+/** Whether a saved line stands for a generated one: it is that line, or a person's edit that kept its words. */
+export function represents(saved: string, generated: string): boolean {
+  return saved === generated || saved.startsWith(generated);
+}
 
 /**
  * A section's new text with the plugin's lines brought up to date, or null when nothing changes. A person's lines stay
  * as they are, in place. Decisions only ever gain lines; in Open questions and Next, the plugin's own lines that no
  * longer hold are taken out.
  */
-export function reconcileSection(section: 'decisions' | 'questions' | 'next', current: string, wanted: readonly string[]): string | null {
+export function reconcileSection(
+  section: 'decisions' | 'questions' | 'next', current: string, wanted: readonly string[], ownQuestions: readonly string[] = [],
+): string | null {
   const lines = current.split('\n').map((l) => l.trim()).filter((l) => l !== '');
-  const kept = section === 'decisions' ? lines : lines.filter((l) => !MINE[section].some((re) => re.test(l)) || wanted.includes(l));
+  const mine = (l: string): boolean => (section === 'next' ? NEXT_MINE.test(l) : ownQuestions.includes(l));
+  const kept = section === 'decisions' ? lines : lines.filter((l) => !mine(l) || wanted.includes(l));
   // A person's edit that kept the line's words ("After hand-off round 1 · … — check the retry path first") stands for it.
-  const add = wanted.filter((w) => !kept.some((k) => k === w || k.startsWith(w)));
+  const add = wanted.filter((w) => !kept.some((k) => represents(k, w)));
   const out = [...kept, ...add];
   return out.join('\n') === lines.join('\n') ? null : out.join('\n');
 }

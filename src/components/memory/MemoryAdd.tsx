@@ -174,9 +174,23 @@ function CaptureTurn({ turn, onDecided }: { turn: Turn; onDecided: (line: string
 /** Edit as a table: every memory's words in one editable column; Save changes edits the changed ones. */
 export function MemoryTable({ memories, onSaved, onClose }: { memories: readonly MemoryItem[]; onSaved: () => void; onClose: () => void }): React.ReactElement {
   const [edits, setEdits] = useState<Record<string, string>>({});
+  // An edit retires the memory and files a new one. Until the list is read again the row on screen keeps the old id:
+  // it shows the saved words, and further typing (and a further save) goes to the new memory (codex + agy on #937).
+  const [replaced, setReplaced] = useState<Record<string, { id: string; words: string }>>({});
+  useEffect(() => {
+    // Rows the refreshed list no longer has are gone: their aliases go with them.
+    setReplaced((cur) => {
+      const ids = new Set(memories.map((m) => m.id));
+      const kept = Object.entries(cur).filter(([row]) => ids.has(row));
+      return kept.length === Object.keys(cur).length ? cur : Object.fromEntries(kept);
+    });
+  }, [memories]);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<{ tone: 'ok' | 'fail'; text: string } | null>(null);
-  const changed = memories.filter((m) => edits[m.id] !== undefined && edits[m.id]!.trim() !== '' && edits[m.id]!.trim() !== m.content);
+  const liveId = (m: MemoryItem): string => replaced[m.id]?.id ?? m.id;
+  const baseOf = (m: MemoryItem): string => replaced[m.id]?.words ?? m.content;
+  const draftOf = (m: MemoryItem): string | undefined => edits[liveId(m)];
+  const changed = memories.filter((m) => { const d = draftOf(m); return d !== undefined && d.trim() !== '' && d.trim() !== baseOf(m); });
   const save = async (): Promise<void> => {
     if (busy || changed.length === 0) return;
     setBusy(true);
@@ -184,31 +198,37 @@ export function MemoryTable({ memories, onSaved, onClose }: { memories: readonly
     let ok = 0;
     const failed: string[] = [];
     // What this save sends, and what came of it: the table stays editable while it runs (codex on #937).
-    const sent: Record<string, string> = Object.fromEntries(changed.map((m) => [m.id, edits[m.id]!]));
+    const sent: Record<string, string> = Object.fromEntries(changed.map((m) => [liveId(m), draftOf(m)!]));
+    const rowOf: Record<string, string> = Object.fromEntries(changed.map((m) => [liveId(m), m.id]));
     const replacedBy: Record<string, string> = {};
     const failedIds = new Set<string>();
-    for (const m of changed) {
+    for (const id of Object.keys(sent)) {
       try {
-        const r = await editMemory({ memory_id: m.id, content: sent[m.id]!.trim() });
-        replacedBy[m.id] = r.memory_id;
+        const r = await editMemory({ memory_id: id, content: sent[id]!.trim() });
+        replacedBy[id] = r.memory_id;
         ok += 1;
       } catch (e) {
-        failedIds.add(m.id);
+        failedIds.add(id);
         failed.push(isMemoryEditUnsupported(e) ? 'this crew cannot edit a memory' : e instanceof Error ? e.message : String(e));
       }
     }
     setBusy(false);
     // Clear only what was saved. A failed row keeps its draft; a row changed again during the save keeps the newer
-    // words, moved to the memory's new id (an edit retires the old memory and files a new one); other rows are untouched.
+    // words, moved to the memory's new id; other rows are untouched.
     setEdits((cur) => {
       const next = { ...cur };
       for (const [id, words] of Object.entries(sent)) {
-        if (failedIds.has(id)) continue;
+        const newId = replacedBy[id];
+        if (newId === undefined) continue;
         const now = next[id];
         delete next[id];
-        const newId = replacedBy[id];
-        if (now !== undefined && now !== words && newId !== undefined) next[newId] = now;
+        if (now !== undefined && now !== words) next[newId] = now;
       }
+      return next;
+    });
+    setReplaced((cur) => {
+      const next = { ...cur };
+      for (const [id, newId] of Object.entries(replacedBy)) next[rowOf[id]!] = { id: newId, words: sent[id]!.trim() };
       return next;
     });
     setNote(failed.length === 0 ? { tone: 'ok', text: `Saved ${ok} ${ok === 1 ? 'change' : 'changes'}.` } : { tone: 'fail', text: `Saved ${ok}; ${failed.length} did not: ${[...new Set(failed)].join('; ')}` });
@@ -231,8 +251,8 @@ export function MemoryTable({ memories, onSaved, onClose }: { memories: readonly
           <tbody>
             {memories.map((m) => (
               <tr key={m.id} data-testid="memory-table-row" data-changed={changed.includes(m) ? 'true' : undefined}>
-                <td><textarea aria-label={`Words of memory ${m.id}`} rows={2} value={edits[m.id] ?? m.content} data-testid="memory-table-text"
-                  onChange={(e) => setEdits((x) => ({ ...x, [m.id]: e.target.value }))} /></td>
+                <td><textarea aria-label={`Words of memory ${m.id}`} rows={2} value={draftOf(m) ?? baseOf(m)} data-testid="memory-table-text"
+                  onChange={(e) => { const id = liveId(m); const v = e.target.value; setEdits((x) => ({ ...x, [id]: v })); }} /></td>
                 <td>{m.tier}</td>
                 <td>{m.facets.project ?? (m.scope === '' ? 'Everywhere' : m.scope)}</td>
               </tr>

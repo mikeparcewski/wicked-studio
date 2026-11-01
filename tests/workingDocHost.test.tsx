@@ -6,7 +6,7 @@ import { builtinDefaults } from '../src/editors/model.js';
 import { steerRowWords, WorkingDocSteerRows } from '../src/components/session/RunThreadPlugin.js';
 import { useWorkingDocs } from '../src/store/workingDocs.js';
 import { RUN_PLUGINS } from '../src/plugins/runPlugins.js';
-import { authorWord, pickedUpStep, reconcileSection, sectionAuthor, steerWords, trailLines, type DocView } from '../src/plugins/wicked-phase-report/workingDoc.js';
+import { authorWord, pickedUpStep, reconcileSection, represents, sectionAuthor, steerWords, trailLines, type DocView } from '../src/plugins/wicked-phase-report/workingDoc.js';
 
 /** Power mode spike 3: the working document through the plugin protocol. The HOST decides whose an edit is. */
 
@@ -155,7 +155,7 @@ describe('the words', () => {
     // Decisions only gain lines.
     expect(reconcileSection('decisions', 'Keep JPY at 0 decimals\nApprove the plan · answered 20:02', [])).toBeNull();
     // An answered question goes; the person's own question stays where it was.
-    expect(reconcileSection('questions', 'Does the PDF need the symbol?\nWaiting on you · Plan approval · since 20:01', [])).toBe('Does the PDF need the symbol?');
+    expect(reconcileSection('questions', 'Does the PDF need the symbol?\nWaiting on you · Plan approval · since 20:01', [], ['Waiting on you · Plan approval · since 20:01'])).toBe('Does the PDF need the symbol?');
     expect(reconcileSection('next', 'After hand-off round 1 · the review asked for changes: make them and hand off again', ['After hand-off round 2 · QE acceptance did not pass: fix it and hand off again']))
       .toBe('After hand-off round 2 · QE acceptance did not pass: fix it and hand off again');
   });
@@ -172,10 +172,19 @@ describe('the words', () => {
     expect(reconcileSection('next', 'After hand-off round 1 · the review asked for changes — ask Sam first', [gen]))
       .toBe(`After hand-off round 1 · the review asked for changes — ask Sam first\n${gen}`);
     // an edited open question stays once its gate is answered; the plugin's own exact line still goes
-    expect(reconcileSection('questions', 'Waiting on you · Plan approval · since 20:01 (Sam to decide)\nWaiting on you · Deliver · since 21:00', []))
+    const own = ['Waiting on you · Plan approval · since 20:01', 'Waiting on you · Deliver · since 21:00',
+      'Waiting on you · checkpoint 2 paused (the tests kept failing): split it, switch to phased steps, continue at high rigor, or stop? · since 20:05'];
+    expect(reconcileSection('questions', 'Waiting on you · Plan approval · since 20:01 (Sam to decide)\nWaiting on you · Deliver · since 21:00', [], own))
       .toBe('Waiting on you · Plan approval · since 20:01 (Sam to decide)');
-    expect(reconcileSection('questions', 'Waiting on you · checkpoint 2 paused (the tests kept failing): split it, switch to phased steps, continue at high rigor, or stop? · since 20:05', []))
-      .toBe('');
+    expect(reconcileSection('questions', own[2]!, [], own)).toBe('');
+    // an edit INSIDE the gate's name, or inside the pause's reason, is the person's too (codex + agy on the fix)
+    expect(reconcileSection('questions', 'Waiting on you · Deliver (ask Sam first) · since 21:00', ['Waiting on you · Deliver · since 21:00'], own))
+      .toBe('Waiting on you · Deliver (ask Sam first) · since 21:00\nWaiting on you · Deliver · since 21:00');
+    const pause = 'Waiting on you · checkpoint 2 paused (flaky, Sam is looking): split it, switch to phased steps, continue at high rigor, or stop? · since 20:05';
+    expect(reconcileSection('questions', pause, [], own)).toBeNull();
+    // a saved line that kept a generated line's words stands for it, for the sync and the "not saved" preview alike
+    expect(represents('After hand-off round 1 · the checks were skipped — fine for docs', 'After hand-off round 1 · the checks were skipped')).toBe(true);
+    expect(represents('After hand-off round 1 · the checks were', 'After hand-off round 1 · the checks were skipped')).toBe(false);
   });
 
   it('an agent’s text is labelled with its seat, a section names every writer, and neither a plugin nor an agent steers', () => {

@@ -280,6 +280,57 @@ describe('voice mode', () => {
     expect(asked).toEqual([]);
   });
 
+  it('words transcribed after voice closed act on nothing, and the next session keeps its own recording (codex + agy on the fix)', async () => {
+    await enterFull();
+    await speak('space bar');
+    let release!: (t: string) => void;
+    const calls: string[] = [];
+    setVoiceDeps({ stt: { transcribe: async () => {
+      calls.push('t');
+      const words = heard.shift() ?? '';
+      if (calls.length === 1) return new Promise<string>((r) => { release = r; });
+      return words;
+    } } });
+    await holdAndSay('What is running right now?');
+    await waitFor(() => expect(calls.length).toBe(1));
+    await act(async () => { closeVoice(); });
+    await act(async () => { await openVoice(); });
+    // the new session's own "yes" is recorded while the old transcription is still out
+    await speak('yes');
+    await act(async () => { release('What is running right now?'); await new Promise((r) => setTimeout(r, 0)); });
+    await waitFor(() => expect(useVoiceStore.getState().phase).toBe('full'));
+    expect(asked).toEqual([]);
+  });
+
+  it('two recordings finished while the first is being transcribed are both heard, in order', async () => {
+    await enterFull();
+    await speak('space bar');
+    const gates: Array<() => void> = [];
+    const order: string[] = [];
+    setVoiceDeps({ stt: { transcribe: async () => {
+      const words = heard.shift() ?? '';
+      order.push(words);
+      if (order.length === 1) await new Promise<void>((r) => { gates.push(r); });
+      return words;
+    } } });
+    await holdAndSay('What is running right now?');
+    await holdAndSay('What failed today?');
+    await waitFor(() => expect(order).toEqual(['What is running right now?']));
+    await act(async () => { gates[0]!(); await new Promise((r) => setTimeout(r, 0)); });
+    await waitFor(() => expect(order).toEqual(['What is running right now?', 'What failed today?']));
+    await waitFor(() => expect(asked).toEqual(['What is running right now?', 'What failed today?']));
+  });
+
+  it('a slow chat answer does not hold up the next recording: "leave voice" still leaves', async () => {
+    await enterFull();
+    await speak('space bar');
+    setVoiceDeps({ ask: async (q) => { asked.push(q); return new Promise<string>(() => undefined); } });
+    await holdAndSay('What is running right now?');
+    await waitFor(() => expect(asked).toEqual(['What is running right now?']));
+    await holdAndSay('leave voice');
+    await waitFor(() => expect(useVoiceStore.getState().phase).toBe('off'));
+  });
+
   it('typing reaches everything: words typed go where spoken words go', async () => {
     render(<VoiceRoot />);
     await act(async () => { await openVoice(); });

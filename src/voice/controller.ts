@@ -335,9 +335,11 @@ async function partial(): Promise<void> {
   } catch { /* a skipped partial says nothing; the final transcription reports */ } finally { partialBusy = false; }
 }
 
-/** Finished recordings not yet turned into text, oldest first: kept until transcribed or reported lost. */
+/** Finished recordings not yet turned into text, oldest first: kept until transcribed or reported lost. The queue is
+ *  the current voice session's: opening or closing voice empties it. */
 const finals: Blob[] = [];
-let draining = false;
+/** The session whose queue is being drained, or null. */
+let drainingGen: number | null = null;
 /** How often, and how long apart, a busy speech engine is asked again for one recording. */
 const BUSY_TRIES = 4;
 const BUSY_WAIT_MS = 1500;
@@ -347,29 +349,30 @@ async function finishTurn(): Promise<void> {
   const wav = mic?.take() ?? null;
   if (wav === null) return;
   finals.push(wav);
+  set({ transcribing: true });
   await drainFinals();
 }
 
 /**
- * Turn the queued recordings into text, one at a time. crew's speech engine takes one transcription and one waiting
- * (429 voice_busy past that): a busy answer keeps the recording and asks again a little later; when the engine stays
- * busy the person is told the words were lost and asked to say them again, never silently dropped (codex on #937).
+ * Turn the queued recordings into text, one at a time, in order. crew's speech engine takes one transcription and one
+ * waiting (429 voice_busy past that): a busy answer keeps the recording and asks again a little later; when the engine
+ * stays busy the person is told the words were lost and asked to say them again, never silently dropped (codex on
+ * #937). The words each recording held are acted on without waiting for that action (a chat answer, a read-aloud), so
+ * the next recording, "stop listening" included, is never held up behind it. A drain belongs to one session: once
+ * voice closes or opens again it touches nothing more.
  */
 async function drainFinals(): Promise<void> {
-  if (draining) return;
-  draining = true;
   const gen = generation;
+  if (drainingGen === gen) return;
+  drainingGen = gen;
   try {
     while (finals.length > 0) {
-      if (gen !== generation) return;
       const wav = finals[0]!;
-      set({ transcribing: true });
       let text: string | null = null;
       let failure: string | null = null;
       for (let tries = 1; ; tries++) {
         try {
           text = (await deps.stt.transcribe(wav)).trim();
-          break;
         } catch (e) {
           if (gen !== generation) return;
           if (voiceErrorCode(e) === 'voice_busy') {
@@ -383,22 +386,22 @@ async function drainFinals(): Promise<void> {
           } else {
             failure = `I couldn’t turn that into text: ${e instanceof Error ? e.message : String(e)}`;
           }
-          break;
         }
+        break;
       }
-      finals.shift();
+      // Voice closed (or opened again) while this was being transcribed: its words act on nothing now.
+      if (gen !== generation) return;
+      if (finals[0] === wav) finals.shift();
       set({ transcribing: finals.length > 0 });
       if (failure !== null) {
         dropPartial();
-        await sayError(failure);
+        void sayError(failure);
         continue;
       }
-      await hear(text ?? '');
+      void hear(text ?? '');
     }
   } finally {
-    draining = false;
-    // A session that started while this one was draining has its own recordings: they go next.
-    if (gen !== generation && finals.length > 0) void drainFinals();
+    if (drainingGen === gen) drainingGen = null;
   }
 }
 
