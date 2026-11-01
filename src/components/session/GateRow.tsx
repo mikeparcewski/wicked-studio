@@ -901,11 +901,10 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
         testIds={{ root: /* testid */ 'session-gate-ask', group: /* testid */ 'session-gate-choices', option: /* testid */ 'session-gate-choice', consequence: /* testid */ 'session-gate-consequence', confirm: /* testid */ 'session-gate-confirm', send: /* testid */ 'session-gate-send', reason: /* testid */ 'session-gate-note', reasonLabel: /* testid */ 'session-gate-note-label' }}
         optionProps={(o) => ({ 'data-choice-key': o.id, 'data-recommended': o.id === engineRec ? 'true' : 'false' })}
         optionExtra={(o) => {
-          const c = choices.find((x) => x.key === o.id);
+          // core#820: the producer's default is MARKED, never preselected; the card draws that mark once, from the
+          // option's meta (askModel), so it is not drawn again here (operator 2026-11-01: "default" twice).
           return (
             <>
-              {/* core#820: the producer's default is MARKED, never preselected. */}
-              {c?.isDefault === true && <span data-testid="session-gate-choice-default" className="wk-ask-meta">default</span>}
               {/* S16a-1b: the creator seat's record rides Approve as neutral text — never a tone. */}
               {o.id === recordOn && seat !== null && seat.record !== null && <span data-testid="session-gate-track-record" className="wk-ask-opt-sub">{seat.record}</span>}
             </>

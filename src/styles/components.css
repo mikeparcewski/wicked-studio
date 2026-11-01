@@ -2069,6 +2069,16 @@ button.wk-who-name:hover { text-decoration: underline; }
 .wk-req-none-title { margin: 0; font-size: var(--text-md); font-weight: var(--weight-semi); color: var(--ink-high); }
 .wk-req-none-body { margin: 0; font-size: var(--text-sm); line-height: 1.5; color: var(--ink-body); }
 .wk-req-none-share { margin: 0; font-size: var(--text-sm); line-height: 1.5; color: var(--ink-high); overflow-wrap: anywhere; }
+/* A requirement row: id, title block, chips. Below 640px the chips drop under the title instead of squeezing it
+   (operator 2026-11-01: titles collapsed to a few px beside the chips at 390). */
+.wk-req-row { width: 100%; text-align: left; display: grid; grid-template-columns: 4.5rem minmax(0, 1fr) auto; align-items: center; column-gap: 12px; row-gap: 6px; padding: 10px 20px; }
+.wk-req-row-id { align-self: start; padding-top: 2px; }
+.wk-req-row-main { min-width: 0; }
+.wk-req-row-chips { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 6px; }
+@media (max-width: 640px) {
+  .wk-req-row { grid-template-columns: 4.5rem minmax(0, 1fr); padding: 10px 16px; }
+  .wk-req-row-chips { grid-column: 2; justify-content: flex-start; }
+}
 /* Real-requirements coverage (domain-real WIRE 2026-11-01): the share counts real requirements only; placeholders are
    marked unconfirmed in the warn ink, and the bar fills the real share with the minimum ticked. */
 .wk-reqcov { display: flex; flex-direction: column; gap: 4px; min-width: 0; }

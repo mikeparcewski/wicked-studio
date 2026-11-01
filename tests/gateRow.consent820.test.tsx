@@ -113,7 +113,10 @@ describe('core#820 — the row', () => {
     expect(buttons.every((b) => b.dataset['recommended'] === 'false')).toBe(true);
     // The producer's default is marked, never preselected: consent is asked every time.
     expect(buttons.every((b) => b.getAttribute('aria-checked') === 'false')).toBe(true);
-    expect(screen.getAllByTestId('session-gate-choice-default')).toHaveLength(1);
+    // the default is marked exactly once, on its own card
+    const marks = screen.getAllByTestId('ask-option-meta');
+    expect(marks.map((m) => m.textContent)).toEqual(['default']);
+    expect(buttons.map((b) => (b.textContent ?? '').match(/default/g)?.length ?? 0).reduce((x, y) => x + y, 0)).toBe(1);
     const lists = screen.getAllByTestId('session-gate-consent-writes');
     expect(lists.map((l) => l.dataset['choiceKey'])).toEqual(['consent:worker', 'consent:operator']);
     const own = screen.getAllByTestId('session-gate-consent-write').filter((li) => li.dataset['own'] === 'true');

@@ -121,6 +121,15 @@ export function coverageBreakdown(c: RequirementsCoverage): string {
   return coverageParts(c).map((p) => p.text).join(' · ');
 }
 
+/**
+ * Whether a listed requirement is a placeholder rather than a real requirement: its statement is the engine's risk
+ * floor ("[RISK] devDependencies: empty statement (model could not state a rule)", or a statement below the
+ * confidence threshold). A placeholder is unconfirmed by definition, so it never shows as validated.
+ */
+export function isPlaceholder(req: { statement: string }): boolean {
+  return /^\[RISK\]/u.test(req.statement.trim());
+}
+
 /** What a placeholder is, said wherever the count shows: unconfirmed, never progress. */
 export const PLACEHOLDER_NOTE = 'Placeholders are unconfirmed: no real requirement has been stated for them yet, so they do not count toward the share.';
 

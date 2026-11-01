@@ -12,8 +12,8 @@
   "studioVersion": "0.13.0",
   "counts": {
     "files": 284,
-    "occurrences": 3936,
-    "static": 3343,
+    "occurrences": 3938,
+    "static": 3344,
     "dynamic": 90,
     "computed": 44
   },
@@ -13075,7 +13075,19 @@
       ]
     },
     {
+      "testId": "requirement-placeholder",
+      "files": [
+        "src/components/RequirementsModal.tsx"
+      ]
+    },
+    {
       "testId": "requirement-rail-corroboration",
+      "files": [
+        "src/components/RequirementsModal.tsx"
+      ]
+    },
+    {
+      "testId": "requirement-row",
       "files": [
         "src/components/RequirementsModal.tsx"
       ]
@@ -13096,12 +13108,6 @@
       "testId": "requirements-browser",
       "files": [
         "src/components/product/RequirementsBrowser.tsx"
-      ]
-    },
-    {
-      "testId": "requirements-corroboration-counts",
-      "files": [
-        "src/components/RequirementsModal.tsx"
       ]
     },
     {
@@ -13180,6 +13186,12 @@
       "testId": "requirements-prev",
       "files": [
         "src/components/product/RequirementsBrowser.tsx"
+      ]
+    },
+    {
+      "testId": "requirements-range",
+      "files": [
+        "src/components/RequirementsModal.tsx"
       ]
     },
     {
@@ -14565,12 +14577,6 @@
     },
     {
       "testId": "session-gate-choice",
-      "files": [
-        "src/components/session/GateRow.tsx"
-      ]
-    },
-    {
-      "testId": "session-gate-choice-default",
       "files": [
         "src/components/session/GateRow.tsx"
       ]

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ApiError } from '../src/api/errors.js';
 import { resetLaunchWizard, useLaunchWizard } from '../src/store/launchWizard.js';
@@ -102,7 +102,9 @@ describe('RequirementsModal — coverage label and corroboration (operator rulin
     expect(ph).toHaveAttribute('data-unconfirmed', 'true');
     expect(ph).toHaveAttribute('title', expect.stringContaining('do not count toward the share'));
     expect(label).not.toHaveTextContent(/\bmapped\b/);
-    expect(screen.getByTestId('requirements-corroboration-counts')).toHaveTextContent('1 validated · 1 unconfirmed');
+    // one set of numbers (operator 2026-11-01): no validated/unconfirmed pair, no "matching · total" in the header
+    expect(screen.queryByTestId('requirements-corroboration-counts')).not.toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent(/\d+ validated · \d+ unconfirmed|matching ·|\d+ total/);
     const marks = screen.getAllByTestId('requirement-corroboration');
     expect(marks.map((m) => [m.dataset['status'], m.textContent])).toEqual([
       ['validated', 'validated · 3'],
@@ -113,6 +115,40 @@ describe('RequirementsModal — coverage label and corroboration (operator rulin
     const why = screen.getByTestId('requirement-unconfirmed-why');
     expect(why).toHaveAttribute('data-code', 'unindexed_file');
     expect(why).toHaveTextContent('Unconfirmed: src/actor.rs names it, but the code index skipped that file');
+  });
+
+  it('a placeholder is marked a placeholder, never validated; mono is for the id only; chips sit in their own cell', async () => {
+    const placeholder = { ...validated, key: 'd::REQ-9', reqId: 'REQ-9', title: 'private',
+      statement: '[RISK] private: empty statement (model could not state a rule)', status: 'review', risk: true, riskSource: 'data' };
+    listRequirements.mockReset().mockResolvedValue({
+      ...page([validated, placeholder] as unknown as RequirementsPage['items'], 2, 2),
+      coverage: { realPct: 54, minPct: 80, behaviorBearing: 5786, real: 3182, placeholders: 2577, unmapped: 27, notProduct: 2380 },
+    });
+    render(<RequirementsModal repoId="r1" repoName="repo" onClose={() => {}} />);
+    await screen.findByText('private');
+    const rows = screen.getAllByTestId('requirement-row');
+    expect(rows.map((r) => r.dataset['placeholder'])).toEqual(['false', 'true']);
+    // the validated item keeps its corroboration; the placeholder shows "placeholder" and no corroboration at all
+    expect(within(rows[0]!).getByTestId('requirement-corroboration')).toHaveTextContent('validated · 3');
+    expect(within(rows[1]!).queryByTestId('requirement-corroboration')).not.toBeInTheDocument();
+    expect(within(rows[1]!).queryByTestId('requirement-unconfirmed-why')).not.toBeInTheDocument();
+    expect(within(rows[1]!).getByTestId('requirement-placeholder')).toHaveAttribute('title', expect.stringContaining('unconfirmed'));
+    expect(rows[1]).not.toHaveTextContent(/validated/);
+    // mono only for the REQ id
+    for (const r of rows) {
+      expect([...r.querySelectorAll('.font-mono')].map((e) => e.textContent)).toEqual([r.querySelector('.wk-req-row-id')!.textContent]);
+      expect(r.querySelector('.wk-req-row-chips')).not.toBeNull();
+    }
+  });
+
+  it('the range under the list counts the list shown, not the corpus', async () => {
+    listRequirements.mockReset().mockResolvedValue({
+      ...page([validated] as unknown as RequirementsPage['items'], 7285, 7300),
+      coverage: { realPct: 54, minPct: 80, behaviorBearing: 5786, real: 3182, placeholders: 2577, unmapped: 27, notProduct: 2380 },
+    });
+    render(<RequirementsModal repoId="r1" repoName="repo" onClose={() => {}} />);
+    expect(await screen.findByTestId('requirements-range')).toHaveTextContent('Requirements 1–50 of 7,285');
+    expect(document.body).not.toHaveTextContent(/7,?300/);
   });
 
   it('the edit rail says why an item is unconfirmed', async () => {
@@ -157,7 +193,7 @@ describe('RequirementsModal', () => {
     const user = userEvent.setup();
     render(<RequirementsModal repoId="r1" repoName="repo" onClose={() => {}} />);
     await screen.findByText('Totals include tax');
-    await user.type(screen.getByPlaceholderText(/Search requirements/), 'tax');
+    await user.type(screen.getByPlaceholderText(/Search id, domain, title or statement/), 'tax');
     await waitFor(() =>
       expect(listRequirements).toHaveBeenCalledWith('r1', { offset: 0, limit: 50, q: 'tax', category: 'functional' }),
     );

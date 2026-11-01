@@ -75,3 +75,13 @@ describe('corroboration + coverage readers (operator ruling 2026-10-31)', () => 
     expect(coverageOf({ coverage: LIVE })).toEqual(LIVE);
   });
 });
+
+describe('a placeholder in the list (operator 2026-11-01)', () => {
+  it('is a statement on the engine\'s risk floor, nothing else', async () => {
+    const { isPlaceholder } = await import('../src/board/requirementsState.js');
+    expect(isPlaceholder({ statement: '[RISK] devDependencies: empty statement (model could not state a rule)' })).toBe(true);
+    expect(isPlaceholder({ statement: ' [RISK] x: below confidence threshold — y' })).toBe(true);
+    expect(isPlaceholder({ statement: 'RISK: approval threshold unverified' })).toBe(false);
+    expect(isPlaceholder({ statement: 'The workspace requires Node.js 22.12.0 or newer.' })).toBe(false);
+  });
+});
