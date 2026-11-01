@@ -17,11 +17,16 @@ import {
   DOMAIN_EXTRACTION_ID,
   corroborationOf,
   corroborationSentence,
+  configDataCountOf,
   coverageOf,
   graphBuildNote,
   graphBuildOf,
   isPlaceholder,
+  pageUncountedOf,
   PLACEHOLDER_NOTE,
+  UNCOUNTED_TITLE,
+  uncountedLine,
+  uncountedOf,
   requirementsNotGenerated,
   type RequirementsCoverage,
 } from '../board/requirementsState.js';
@@ -93,6 +98,10 @@ export function RequirementsModal({ repoId, repoName, onClose, onNavigateCompone
   const [category, setCategory] = useState<'functional' | 'config-data' | 'all'>('functional');
   const [offset, setOffset] = useState(0);
   const [page, setPage] = useState<RequirementsPage | null>(null);
+  // "Config & data" is a filter only when the corpus holds some (crew 0.167.0 categories); a daemon from before the
+  // count keeps it, and nothing shows before the first read.
+  const configData = configDataCountOf(page);
+  const hasConfigData = page !== null && (configData === null || configData > 0);
   const [loadError, setLoadError] = useState<string | null>(null);
   // Lane repo-page: no requirements graph yet is a state with its own panel, never a red refusal.
   // Holds the workflow that generates it (crew's typed 404 names it).
@@ -244,7 +253,7 @@ export function RequirementsModal({ repoId, repoName, onClose, onNavigateCompone
             style={{ border: `1px solid ${T.hairlineS}`, background: T.canvas2, color: T.ink }}
           />
           <div className="flex items-center gap-1" role="group" aria-label="Category filter">
-            {(['functional', 'config-data', 'all'] as const).map((c) => (
+            {(['functional', 'config-data', 'all'] as const).filter((c) => c !== 'config-data' || hasConfigData).map((c) => (
               <button
                 key={c}
                 type="button"
@@ -430,6 +439,8 @@ function GraphCoverage({ page }: { page: RequirementsPage }): React.ReactElement
   if (cov === null) return null;
   // When the list is an older graph build than the store the header counts, it says so (crew 0.165.0 graphBuild).
   const behind = graphBuildNote(cov, graphBuildOf(page));
+  // Rules and placeholders on type shapes are listed but not in the share (crew 0.167.0): said once, here.
+  const uncounted = uncountedLine(pageUncountedOf(page));
   // Its own row under the title row, at every width: the breakdown is a sentence, not a chip.
   return (
     <div className="order-last basis-full min-w-0">
@@ -437,6 +448,7 @@ function GraphCoverage({ page }: { page: RequirementsPage }): React.ReactElement
       {behind !== null && (
         <p data-testid="requirements-graph-behind" className="text-xs mt-1" style={{ color: 'var(--status-warn)' }}>{behind}</p>
       )}
+      {uncounted !== null && <p data-testid="requirements-uncounted" className="text-xs mt-1" style={{ color: T.muted }}>{uncounted}</p>}
     </div>
   );
 }
@@ -487,6 +499,7 @@ function RequirementRow({
   onSelect: () => void;
 }): React.ReactElement {
   const placeholder = isPlaceholder(req);
+  const uncounted = uncountedOf(req);
   return (
     <button
       type="button"
@@ -503,11 +516,11 @@ function RequirementRow({
           <span className="block text-xs truncate" style={{ color: T.muted }}>{req.statement.trim()}</span>
         )}
         <span className="block text-xs truncate" style={{ color: T.faint }}>{req.domain}</span>
-        {!placeholder && <UnconfirmedWhy req={req} />}
+        {!placeholder && uncounted === null && <UnconfirmedWhy req={req} />}
       </span>
       {/* The chips stack under the title on a narrow screen (operator 2026-11-01: titles collapsed beside them). */}
       <span className="wk-req-row-chips">
-        {placeholder ? <PlaceholderMark /> : <CorroborationMark req={req} />}
+        {uncounted !== null ? <NotCountedMark why={uncounted} /> : placeholder ? <PlaceholderMark /> : <CorroborationMark req={req} />}
         {req.edited && (
           <span className="text-xs px-1.5 py-0.5 rounded shrink-0" style={{ background: T.surface2, color: T.link }}>
             edited
@@ -517,7 +530,7 @@ function RequirementRow({
           <span
             className="text-xs font-semibold px-1.5 py-0.5 rounded shrink-0"
             style={{ background: 'var(--status-fail-dim)', color: T.deny }}
-            title={req.riskSource === 'operator' ? 'Marked risk by operator' : 'Risk derived from business rules'}
+            title={req.riskSource === 'operator' ? 'Marked risk by operator' : 'placeholder: the engine does not resolve it'}
           >
             risk{req.riskSource === 'operator' ? ' ●' : ''}
           </span>
@@ -533,6 +546,22 @@ function RequirementRow({
         </span>
       </span>
     </button>
+  );
+}
+
+/** Not counted in the coverage share (crew 0.167.0): a type shape, code that is not the product, or an unindexed
+ *  file. It stands instead of any corroboration or placeholder mark, which would be about a share it is not in. */
+function NotCountedMark({ why }: { why: keyof typeof UNCOUNTED_TITLE }): React.ReactElement {
+  return (
+    <span
+      data-testid="requirement-not-counted"
+      data-why={why}
+      className="text-xs px-1.5 py-0.5 rounded shrink-0"
+      style={{ background: T.surface2, color: T.muted }}
+      title={UNCOUNTED_TITLE[why]}
+    >
+      not counted
+    </span>
   );
 }
 

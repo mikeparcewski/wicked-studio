@@ -12,8 +12,8 @@
   "studioVersion": "0.13.0",
   "counts": {
     "files": 284,
-    "occurrences": 3939,
-    "static": 3345,
+    "occurrences": 3941,
+    "static": 3347,
     "dynamic": 90,
     "computed": 44
   },
@@ -13069,6 +13069,12 @@
       ]
     },
     {
+      "testId": "requirement-not-counted",
+      "files": [
+        "src/components/RequirementsModal.tsx"
+      ]
+    },
+    {
       "testId": "requirement-pick",
       "files": [
         "src/components/product/RequirementsBrowser.tsx"
@@ -13234,6 +13240,12 @@
       "testId": "requirements-totals",
       "files": [
         "src/components/product/RequirementsBrowser.tsx"
+      ]
+    },
+    {
+      "testId": "requirements-uncounted",
+      "files": [
+        "src/components/RequirementsModal.tsx"
       ]
     },
     {

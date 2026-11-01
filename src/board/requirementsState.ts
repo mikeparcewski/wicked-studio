@@ -163,6 +163,48 @@ export function graphBuildNote(live: RequirementsCoverage, b: GraphBuild | null)
   return `The repository changed since this graph was built: ${next.replace('list them', 'list what it holds now')}.`;
 }
 
+/**
+ * Why a listed requirement is not counted in the coverage share (crew api-types 0.167.0 `uncounted`): it sits on a type
+ * shape, on code that is not the product, or in a file the code index skipped. null when it counts, or when the daemon
+ * predates the field.
+ */
+export type Uncounted = 'structural' | 'not_product' | 'unindexed';
+export function uncountedOf(item: unknown): Uncounted | null {
+  const u = (item as { uncounted?: unknown } | null)?.uncounted;
+  return u === 'structural' || u === 'not_product' || u === 'unindexed' ? u : null;
+}
+
+/** What a "not counted" mark says, per reason. */
+export const UNCOUNTED_TITLE: Readonly<Record<Uncounted, string>> = {
+  structural: 'A type shape, not a behaviour: the coverage share does not count it.',
+  not_product: 'Not product code (a test, data, a manifest or a doc): the coverage share does not count it.',
+  unindexed: 'In a file the code index skipped: the coverage share does not count it.',
+};
+
+/** The page's counts of stated rules and placeholders on type shapes (0.167.0 `page.uncounted`), or null. */
+export function pageUncountedOf(page: unknown): { stated: number; placeholders: number } | null {
+  const u = (page as { uncounted?: unknown } | null)?.uncounted as Record<string, unknown> | null | undefined;
+  if (u === null || u === undefined || typeof u !== 'object' || !isCount(u['stated']) || !isCount(u['placeholders'])) return null;
+  return { stated: u['stated'], placeholders: u['placeholders'] };
+}
+
+/** "441 stated rules and 1,017 placeholders sit on type shapes and are not counted.", or null when there are none. */
+export function uncountedLine(u: { stated: number; placeholders: number } | null): string | null {
+  if (u === null || u.stated + u.placeholders === 0) return null;
+  const parts = [
+    ...(u.stated > 0 ? [`${count(u.stated)} stated ${u.stated === 1 ? 'rule' : 'rules'}`] : []),
+    ...(u.placeholders > 0 ? [`${count(u.placeholders)} ${u.placeholders === 1 ? 'placeholder' : 'placeholders'}`] : []),
+  ];
+  const verb = u.stated + u.placeholders === 1 ? 'sits on a type shape and is' : 'sit on type shapes and are';
+  return `${parts.join(' and ')} ${verb} not counted.`;
+}
+
+/** How many config-and-data requirements the corpus holds (0.167.0 `page.categories.configData`), or null. */
+export function configDataCountOf(page: unknown): number | null {
+  const c = (page as { categories?: unknown } | null)?.categories as Record<string, unknown> | null | undefined;
+  return c !== null && c !== undefined && typeof c === 'object' && isCount(c['configData']) ? c['configData'] : null;
+}
+
 /** What a placeholder is, said wherever the count shows: unconfirmed, never progress. */
 export const PLACEHOLDER_NOTE = 'Placeholders are unconfirmed: no real requirement has been stated for them yet, so they do not count toward the share.';
 

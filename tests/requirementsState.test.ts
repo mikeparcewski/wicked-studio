@@ -123,3 +123,21 @@ describe('a placeholder follows the engine when crew says so', () => {
     expect(isPlaceholder({ statement: '[RISK] x: empty statement (model could not state a rule)', placeholder: false })).toBe(false);
   });
 });
+
+describe('not counted (crew api-types 0.167.0)', () => {
+  it('reads the reason and the page counts, and says them in one line', async () => {
+    const { uncountedOf, pageUncountedOf, uncountedLine, configDataCountOf } = await import('../src/board/requirementsState.js');
+    expect(uncountedOf({ uncounted: 'structural' })).toBe('structural');
+    expect(uncountedOf({ uncounted: null })).toBeNull();
+    expect(uncountedOf({ uncounted: 'whatever' })).toBeNull();
+    expect(uncountedOf({})).toBeNull();
+    expect(pageUncountedOf({ uncounted: { stated: 441, placeholders: 1017 } })).toEqual({ stated: 441, placeholders: 1017 });
+    expect(pageUncountedOf({ uncounted: { stated: -1, placeholders: 2 } })).toBeNull();
+    expect(uncountedLine({ stated: 441, placeholders: 1017 })).toBe('441 stated rules and 1,017 placeholders sit on type shapes and are not counted.');
+    expect(uncountedLine({ stated: 0, placeholders: 1 })).toBe('1 placeholder sits on a type shape and is not counted.');
+    expect(uncountedLine({ stated: 2, placeholders: 0 })).toBe('2 stated rules sit on type shapes and are not counted.');
+    expect(uncountedLine({ stated: 0, placeholders: 0 })).toBeNull();
+    expect(configDataCountOf({ categories: { functional: 5770, configData: 0 } })).toBe(0);
+    expect(configDataCountOf({})).toBeNull();
+  });
+});

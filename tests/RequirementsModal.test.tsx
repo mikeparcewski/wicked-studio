@@ -160,6 +160,50 @@ describe('RequirementsModal — coverage label and corroboration (operator rulin
     expect(screen.queryByTestId('requirements-graph-behind')).not.toBeInTheDocument();
   });
 
+  it('crew 0.167.0: a row on a type shape is "not counted", the page says how many, and an empty Config & data filter is gone', async () => {
+    const live = { realPct: 80, minPct: 80, behaviorBearing: 4333, real: 3476, placeholders: 836, unmapped: 21, notProduct: 2256 };
+    const shape = { ...validated, key: 'chat::REQ-061', reqId: 'REQ-061', title: 'ChatAttachmentError', uncounted: 'structural',
+      statement: 'Attachment refusals must use one of attachment_too_large or attachment_type.', risk: true, riskSource: 'data' };
+    listRequirements.mockReset().mockResolvedValue({
+      ...page([validated, shape] as unknown as RequirementsPage['items'], 2, 2), coverage: live,
+      uncounted: { stated: 441, placeholders: 1017 }, categories: { functional: 5770, configData: 0 },
+    });
+    render(<RequirementsModal repoId="r1" repoName="wicked-crew" onClose={() => {}} />);
+    await screen.findByText('ChatAttachmentError');
+    const rows = screen.getAllByTestId('requirement-row');
+    const mark = within(rows[1]!).getByTestId('requirement-not-counted');
+    expect(mark).toHaveTextContent('not counted');
+    expect(mark).toHaveAttribute('title', 'A type shape, not a behaviour: the coverage share does not count it.');
+    expect(within(rows[1]!).queryByTestId('requirement-corroboration')).not.toBeInTheDocument();
+    expect(within(rows[1]!).queryByTestId('requirement-placeholder')).not.toBeInTheDocument();
+    expect(within(rows[1]!).queryByTestId('requirement-unconfirmed-why')).not.toBeInTheDocument();
+    // "risk" now means a placeholder the engine does not resolve
+    expect(within(rows[1]!).getByText('risk')).toHaveAttribute('title', 'placeholder: the engine does not resolve it');
+    // the counted row keeps its own mark
+    expect(within(rows[0]!).getByTestId('requirement-corroboration')).toBeInTheDocument();
+    expect(screen.getByTestId('requirements-uncounted')).toHaveTextContent('441 stated rules and 1,017 placeholders sit on type shapes and are not counted.');
+    const filters = screen.getByRole('group', { name: 'Category filter' });
+    expect(within(filters).queryByText('Config & data')).not.toBeInTheDocument();
+    expect(within(filters).getByText('Functional')).toBeInTheDocument();
+  });
+
+  it('crew 0.167.0 fields absent (an older daemon) or zero: nothing extra, and Config & data stays', async () => {
+    listRequirements.mockReset().mockResolvedValue({ ...page([validated] as unknown as RequirementsPage['items'], 1, 1) });
+    const { unmount } = render(<RequirementsModal repoId="r1" repoName="repo" onClose={() => {}} />);
+    await screen.findByTestId('requirement-row');
+    expect(screen.queryByTestId('requirements-uncounted')).not.toBeInTheDocument();
+    expect(within(screen.getByRole('group', { name: 'Category filter' })).getByText('Config & data')).toBeInTheDocument();
+    unmount();
+    listRequirements.mockReset().mockResolvedValue({
+      ...page([validated] as unknown as RequirementsPage['items'], 1, 1), coverage: { realPct: 100, minPct: 80, behaviorBearing: 3, real: 3, placeholders: 0, unmapped: 0, notProduct: 117 },
+      uncounted: { stated: 0, placeholders: 0 }, categories: { functional: 3, configData: 4 },
+    });
+    render(<RequirementsModal repoId="r2" repoName="pi-governance" onClose={() => {}} />);
+    await screen.findByTestId('requirement-row');
+    expect(screen.queryByTestId('requirements-uncounted')).not.toBeInTheDocument();
+    expect(within(screen.getByRole('group', { name: 'Category filter' })).getByText('Config & data')).toBeInTheDocument();
+  });
+
   it('the range under the list counts the list shown, not the corpus', async () => {
     listRequirements.mockReset().mockResolvedValue({
       ...page([validated] as unknown as RequirementsPage['items'], 7285, 7300),
